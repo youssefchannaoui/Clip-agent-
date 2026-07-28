@@ -4,336 +4,326 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Clip Agent</title>
-<meta name="theme-color" content="#060A12">
+<meta name="theme-color" content="#0B0B0C">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Clip Agent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --void:#060A12;
-  --deck:#0D1524;
-  --deck-2:#111B2E;
-  --ridge:#1C2A42;
-  --ridge-soft:#152238;
-  --signal:#3B82F6;
-  --signal-deep:#1D4ED8;
-  --glow:#67E8F9;
-  --paper:#E6EDF9;
-  --dim:#7A8CA6;
-  --dimmer:#4E5F79;
-  --amber:#F5A524;
-  --rose:#FB7185;
-  --mint:#34D399;
+  --bg:#0B0B0C;
+  --surface:#131315;
+  --surface-2:#1A1A1D;
+  --line:#26262A;
+  --line-lit:#35353B;
 
-  --r:14px;
-  --r-sm:9px;
-  --pad:20px;
-  --ui:'Space Grotesk',system-ui,-apple-system,sans-serif;
-  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,monospace;
+  --text:#FAFAFA;
+  --text-2:#B4B4BB;
+  --mute:#87878F;
+  --mute-2:#5C5C64;
+
+  --blue:#2F6BFF;
+  --blue-soft:#8FB3FF;
+  --red:#FF5566;
+
+  --gutter:24px;
+  --r:6px;
+  --font:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
 body{
-  background:var(--void);
-  color:var(--paper);
-  font-family:var(--ui);
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font);
   font-size:15px;
-  line-height:1.55;
+  line-height:1.6;
   min-height:100vh;
   -webkit-font-smoothing:antialiased;
+  font-variant-numeric:tabular-nums;
   padding-bottom:env(safe-area-inset-bottom);
-}
-body::before{
-  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
-  background:
-    radial-gradient(900px 520px at 12% -8%, rgba(59,130,246,.16), transparent 62%),
-    radial-gradient(700px 460px at 92% 4%, rgba(103,232,249,.08), transparent 60%);
 }
 .hide{display:none !important}
 
 button,input,textarea{font-family:inherit;font-size:inherit;color:inherit}
 button{cursor:pointer;border:0;background:none}
-a{color:var(--glow)}
+a{color:var(--blue-soft)}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:4px}
 
-:focus-visible{outline:2px solid var(--glow);outline-offset:2px;border-radius:6px}
-
-.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+/* small grey label — plain sentence case, easy to read */
+.code{font-size:13px;color:var(--mute);font-weight:450;letter-spacing:0;text-transform:none}
 
 /* ---------- shell ---------- */
-.wrap{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:0 var(--pad) 72px}
+.wrap{max-width:1080px;margin:0 auto;padding:0 var(--gutter) 96px}
 
 /* ---------- gate / connect ---------- */
 .center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
 .card-lock{
-  width:100%;max-width:400px;background:var(--deck);
-  border:1px solid var(--ridge);border-radius:20px;padding:32px;
-  box-shadow:0 30px 80px rgba(0,0,0,.55);
+  width:100%;max-width:380px;background:var(--surface);
+  border:1px solid var(--line);border-radius:10px;overflow:hidden;
 }
-.mark{display:flex;align-items:center;gap:11px;margin-bottom:26px}
+.lock-head{border-bottom:1px solid var(--line);padding:22px 26px}
+.lock-body{padding:26px}
+
+.mark{display:flex;align-items:center;gap:12px}
 .mark-dot{
-  width:34px;height:34px;border-radius:11px;flex:none;
-  background:linear-gradient(150deg,var(--signal),var(--signal-deep));
-  position:relative;box-shadow:0 0 26px rgba(59,130,246,.5);
+  width:24px;height:24px;flex:none;border-radius:6px;
+  background:var(--blue);position:relative;
 }
 .mark-dot::after{
-  content:'';position:absolute;inset:11px;border-radius:3px;background:var(--glow);
+  content:'';position:absolute;left:8.5px;top:8.5px;width:7px;height:7px;
+  border-radius:2px;background:#fff;
 }
-.mark-name{font-weight:700;letter-spacing:-.02em;font-size:18px}
-.mark-sub{font-size:11px;color:var(--dim);letter-spacing:.16em;text-transform:uppercase;font-family:var(--mono)}
+.mark-name{font-size:17px;font-weight:600;letter-spacing:-.015em;line-height:1.3}
+.mark-sub{margin-top:0}
 
-label.field{display:block;font-size:12px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;font-family:var(--mono)}
+label.field{display:block;margin-bottom:8px}
 input[type=password],input[type=text],textarea{
-  width:100%;background:var(--void);border:1px solid var(--ridge);
-  border-radius:var(--r-sm);padding:13px 14px;color:var(--paper);
-  transition:border-color .15s,box-shadow .15s;
+  width:100%;background:var(--bg);border:1px solid var(--line);
+  border-radius:var(--r);padding:11px 13px;color:var(--text);
+  transition:border-color .12s;
 }
-input:focus,textarea:focus{outline:none;border-color:var(--signal);box-shadow:0 0 0 3px rgba(59,130,246,.18)}
-textarea{resize:vertical;line-height:1.6}
+input::placeholder,textarea::placeholder{color:var(--mute-2)}
+input:focus,textarea:focus{outline:none;border-color:var(--blue)}
+textarea{resize:vertical;line-height:1.65}
 
 .btn{
-  display:inline-flex;align-items:center;justify-content:center;gap:8px;
-  padding:12px 18px;border-radius:var(--r-sm);font-weight:600;font-size:14px;
-  background:var(--signal);color:#fff;transition:filter .15s,transform .08s;
-  white-space:nowrap;
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  padding:10px 17px;border-radius:var(--r);font-weight:500;font-size:14px;
+  background:var(--blue);color:#fff;transition:background .12s;white-space:nowrap;
 }
-.btn:hover{filter:brightness(1.1)}
-.btn:active{transform:translateY(1px)}
-.btn[disabled]{opacity:.5;cursor:default;transform:none;filter:none}
+.btn:hover{background:#4179FF}
+.btn:active{background:#2559DB}
+.btn[disabled]{opacity:.45;cursor:default}
 .btn-wide{width:100%;margin-top:18px}
-.btn-ghost{background:transparent;border:1px solid var(--ridge);color:var(--paper)}
-.btn-ghost:hover{border-color:var(--signal);filter:none;background:rgba(59,130,246,.08)}
-.btn-quiet{background:transparent;color:var(--dim);padding:10px 12px}
-.btn-quiet:hover{color:var(--paper);filter:none}
-.btn-sm{padding:9px 13px;font-size:13px}
-.btn-danger:hover{color:var(--rose);border-color:var(--rose)}
+.btn-ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
+.btn-ghost:hover{background:var(--surface-2);border-color:var(--line-lit)}
+.btn-sm{padding:7px 13px;font-size:13.5px}
+.btn-danger:hover{color:var(--red);border-color:rgba(255,85,102,.5);background:transparent}
 
-.err{color:var(--rose);font-size:13.5px;margin-top:14px;min-height:1px}
-.hint{color:var(--dim);font-size:13.5px;margin:14px 0 0;line-height:1.6}
+.err{color:var(--red);font-size:13.5px;margin-top:14px;min-height:1px}
+.hint{color:var(--mute);font-size:13.5px;margin:16px 0 0;line-height:1.65}
 
-/* ---------- top bar ---------- */
+/* ---------- masthead ---------- */
 .top{
   position:sticky;top:0;z-index:20;
-  background:rgba(6,10,18,.82);backdrop-filter:blur(16px);
-  border-bottom:1px solid var(--ridge-soft);
-  margin:0 calc(var(--pad) * -1);padding:0 var(--pad);
+  background:rgba(11,11,12,.9);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);
+  margin:0 calc(var(--gutter) * -1);padding:0 var(--gutter);
 }
-.top-in{display:flex;align-items:center;gap:16px;padding:15px 0;flex-wrap:wrap}
-.top-status{margin-left:auto;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.top-in{display:flex;align-items:center;gap:20px;padding:16px 0;flex-wrap:wrap}
+.readout{margin-left:auto;display:flex;align-items:center;gap:28px;flex-wrap:wrap}
+.dial{text-align:right}
+.dial-v{font-size:20px;font-weight:600;letter-spacing:-.02em;line-height:1.25}
+.dial-k{margin-top:-1px}
+.dial.live .dial-v{color:var(--blue-soft)}
 
-.live{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--dim)}
-.live-dot{width:7px;height:7px;border-radius:50%;background:var(--mint);box-shadow:0 0 10px var(--mint)}
-.live-dot.off{background:var(--rose);box-shadow:0 0 10px var(--rose)}
-
-.countdown{text-align:right;line-height:1.2}
-.countdown-num{font-family:var(--mono);font-size:19px;font-weight:700;color:var(--glow);letter-spacing:-.01em}
-.countdown-lab{font-size:10.5px;color:var(--dim);letter-spacing:.14em;text-transform:uppercase;font-family:var(--mono)}
+.lamp{
+  display:inline-block;width:6px;height:6px;border-radius:50%;
+  background:var(--blue);margin-right:7px;vertical-align:1px;
+}
+.lamp.off{background:var(--red)}
 
 /* ---------- tabs ---------- */
-.tabs{display:flex;gap:4px;overflow-x:auto;padding:0 0 2px;scrollbar-width:none}
+.tabs{display:flex;gap:26px;overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
 .tab{
-  padding:11px 15px;font-size:14px;font-weight:500;color:var(--dim);
-  border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s;
+  padding:0 0 12px;font-size:14.5px;font-weight:450;color:var(--mute);
+  white-space:nowrap;position:relative;transition:color .12s;
 }
-.tab:hover{color:var(--paper)}
-.tab.on{color:var(--paper);border-bottom-color:var(--signal)}
+.tab:hover{color:var(--text)}
+.tab.on{color:var(--text);font-weight:500}
+.tab.on::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--blue)}
 .tab-count{
-  font-family:var(--mono);font-size:11px;margin-left:7px;padding:1px 6px;
-  border-radius:20px;background:var(--ridge);color:var(--dim);
+  font-size:12px;margin-left:7px;padding:1px 6px;border-radius:20px;
+  background:var(--line);color:var(--mute);font-weight:500;
 }
-.tab.on .tab-count{background:var(--signal);color:#fff}
-.tab-count.urgent{background:var(--amber);color:#221703}
+.tab.on .tab-count{background:var(--surface-2);color:var(--text-2)}
+.tab-count.urgent{background:var(--blue);color:#fff}
 
-/* ---------- panels ---------- */
-.panel{padding-top:26px}
-.panel-head{display:flex;align-items:baseline;gap:12px;margin-bottom:16px;flex-wrap:wrap}
-h2{font-size:20px;font-weight:600;letter-spacing:-.02em;margin:0}
-.panel-note{font-size:13px;color:var(--dim)}
+/* ---------- sections ---------- */
+.panel{padding-top:34px}
+.head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.35}
+.head .btn{margin-left:auto}
+.note{color:var(--mute);font-size:13.5px}
 
-.box{background:var(--deck);border:1px solid var(--ridge);border-radius:var(--r);padding:var(--pad)}
-.box + .box{margin-top:16px}
+.slab{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:var(--gutter)}
 
 /* ---------- intake ---------- */
-.intake textarea{min-height:88px;font-size:14.5px}
-.intake-row{display:flex;align-items:center;gap:12px;margin-top:13px;flex-wrap:wrap}
-.intake-note{font-size:12.5px;color:var(--dimmer);margin-left:auto}
+.intake textarea{min-height:80px}
+.intake-row{display:flex;align-items:center;gap:14px;margin-top:14px;flex-wrap:wrap}
+.intake-note{color:var(--mute);margin-left:auto;font-size:13px}
 
 /* ---------- clip cards ---------- */
 .clip{
-  background:var(--deck);border:1px solid var(--ridge);border-radius:var(--r);
-  padding:18px;margin-bottom:14px;transition:border-color .18s;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:19px;margin-bottom:12px;
 }
-.clip:hover{border-color:var(--ridge)}
-.clip.needs{border-left:2px solid var(--amber)}
-.clip.set{border-left:2px solid var(--signal)}
-.clip.done{border-left:2px solid var(--mint);opacity:.82}
-.clip.bad{border-left:2px solid var(--rose)}
+.clip.needs{border-color:var(--line-lit)}
+.clip.bad{border-color:rgba(255,85,102,.35)}
+.clip.done{opacity:.62}
 
-.clip-top{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
-.pill{
-  font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
-  padding:4px 9px;border-radius:20px;border:1px solid var(--ridge);color:var(--dim);
+.clip-top{display:flex;align-items:center;gap:11px;margin-bottom:12px;flex-wrap:wrap}
+.stamp{
+  font-size:12.5px;font-weight:500;padding:2px 9px;border-radius:20px;
+  background:var(--surface-2);color:var(--mute);border:1px solid var(--line);
 }
-.pill.needs{border-color:rgba(245,165,36,.4);color:var(--amber);background:rgba(245,165,36,.09)}
-.pill.set{border-color:rgba(59,130,246,.4);color:#93BBFB;background:rgba(59,130,246,.1)}
-.pill.done{border-color:rgba(52,211,153,.35);color:var(--mint);background:rgba(52,211,153,.09)}
-.pill.bad{border-color:rgba(251,113,133,.4);color:var(--rose);background:rgba(251,113,133,.09)}
-.clip-meta{font-family:var(--mono);font-size:12px;color:var(--dimmer);margin-left:auto}
+.stamp.needs{color:var(--blue-soft);border-color:rgba(47,107,255,.4);background:rgba(47,107,255,.1)}
+.stamp.set{color:var(--text-2)}
+.stamp.done{color:var(--mute)}
+.stamp.bad{color:var(--red);border-color:rgba(255,85,102,.4);background:rgba(255,85,102,.08)}
+.clip-meta{font-size:12.5px;color:var(--mute-2);margin-left:auto}
 
 .clip-title{
-  font-size:16.5px;font-weight:600;line-height:1.4;letter-spacing:-.01em;
-  width:100%;background:transparent;border:1px solid transparent;border-radius:var(--r-sm);
-  padding:8px 10px;margin:0 -10px 2px;
+  font-size:16px;font-weight:600;line-height:1.45;letter-spacing:-.012em;
+  width:100%;background:transparent;border:1px solid transparent;border-radius:var(--r);
+  padding:7px 10px;margin:0 -10px 2px;display:block;
 }
-.clip-title:hover{border-color:var(--ridge-soft)}
-.clip-title:focus{background:var(--void);border-color:var(--signal);box-shadow:0 0 0 3px rgba(59,130,246,.16);outline:none}
+.clip-title:hover{border-color:var(--line)}
+.clip-title:focus{background:var(--bg);border-color:var(--blue);outline:none}
 
 .clip-body{
-  font-size:14px;color:#B9C6DA;line-height:1.65;width:100%;min-height:62px;
-  background:transparent;border:1px solid transparent;border-radius:var(--r-sm);
-  padding:8px 10px;margin:0 -10px;
+  font-size:14.5px;color:var(--text-2);line-height:1.7;width:100%;min-height:56px;
+  background:transparent;border:1px solid transparent;border-radius:var(--r);
+  padding:7px 10px;margin:0 -10px;display:block;
 }
-.clip-body:hover{border-color:var(--ridge-soft)}
-.clip-body:focus{background:var(--void);border-color:var(--signal);box-shadow:0 0 0 3px rgba(59,130,246,.16);outline:none}
+.clip-body:hover{border-color:var(--line)}
+.clip-body:focus{background:var(--bg);border-color:var(--blue);outline:none}
 
 .clip-tags{
-  font-family:var(--mono);font-size:12.5px;color:#7FB1F5;width:100%;
-  background:transparent;border:1px solid transparent;border-radius:var(--r-sm);
-  padding:7px 10px;margin:0 -10px;
+  font-size:13.5px;color:var(--blue-soft);width:100%;
+  background:transparent;border:1px solid transparent;border-radius:var(--r);
+  padding:6px 10px;margin:0 -10px;display:block;
 }
-.clip-tags:hover{border-color:var(--ridge-soft)}
-.clip-tags:focus{background:var(--void);border-color:var(--signal);box-shadow:0 0 0 3px rgba(59,130,246,.16);outline:none}
+.clip-tags:hover{border-color:var(--line)}
+.clip-tags:focus{background:var(--bg);border-color:var(--blue);outline:none}
 
-.clip-title.locked,.clip-body.locked,.clip-tags.locked{
-  border-color:transparent;cursor:default;min-height:0;
-}
+.clip-title.locked,.clip-body.locked,.clip-tags.locked{border-color:transparent;cursor:default;min-height:0}
 .clip-title.locked:hover,.clip-body.locked:hover,.clip-tags.locked:hover{border-color:transparent}
 .clip-body.locked{white-space:pre-wrap}
 
-.clip-foot{display:flex;align-items:center;gap:9px;margin-top:15px;flex-wrap:wrap}
-.counter{font-family:var(--mono);font-size:11.5px;color:var(--dimmer);margin-right:auto}
-.counter.over{color:var(--rose)}
-.saved{font-family:var(--mono);font-size:11.5px;color:var(--mint);opacity:0;transition:opacity .2s}
+.clip-foot{
+  display:flex;align-items:center;gap:8px;margin-top:16px;padding-top:14px;
+  border-top:1px solid var(--line);flex-wrap:wrap;
+}
+.counter{font-size:12.5px;color:var(--mute-2);margin-right:auto}
+.counter.over{color:var(--red)}
+.saved{font-size:12.5px;color:var(--blue-soft);opacity:0;transition:opacity .2s}
 .saved.on{opacity:1}
 
-.targets{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
-.target{
-  font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
-  padding:3px 8px;border-radius:5px;background:var(--ridge-soft);color:var(--dim);
+.dests{display:flex;gap:6px;flex-wrap:wrap;margin-top:13px}
+.dest{
+  font-size:12px;padding:2px 9px;border-radius:20px;
+  border:1px solid var(--line);color:var(--mute);
 }
-.target.bad{background:rgba(251,113,133,.13);color:var(--rose)}
-.target.done{background:rgba(52,211,153,.12);color:var(--mint)}
+.dest.bad{color:var(--red);border-color:rgba(255,85,102,.35)}
+.dest.done{color:var(--text-2)}
 
-/* ---------- day rail (signature) ---------- */
-.rail{position:relative;padding-left:2px}
-.rail-day{margin-bottom:8px}
-.rail-date{
-  font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
-  color:var(--dimmer);padding:16px 0 10px 42px;
+/* ---------- the board ---------- */
+.board{border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden}
+.board-day{
+  display:flex;align-items:center;gap:12px;padding:11px 18px;
+  background:var(--surface-2);border-bottom:1px solid var(--line);
 }
-.rail-date.today{color:var(--glow)}
-.slot{
-  position:relative;display:flex;align-items:flex-start;gap:16px;
-  padding:11px 0 11px 42px;min-height:52px;
-}
-.slot::before{
-  content:'';position:absolute;left:12px;top:0;bottom:0;width:1px;background:var(--ridge-soft);
-}
-.slot:last-child::before{bottom:50%}
-.rail-day:first-child .slot:first-of-type::before{top:50%}
-.node{
-  position:absolute;left:6px;top:50%;transform:translateY(-50%);
-  width:13px;height:13px;border-radius:50%;
-  background:var(--void);border:2px solid var(--ridge);z-index:1;
-}
-.slot.filled .node{background:var(--signal);border-color:var(--signal);box-shadow:0 0 14px rgba(59,130,246,.55)}
-.slot.gone .node{background:var(--ridge);border-color:var(--ridge)}
-.slot.next .node{
-  background:var(--glow);border-color:var(--glow);
-  box-shadow:0 0 0 0 rgba(103,232,249,.55);animation:ping 2.4s ease-out infinite;
-}
-@keyframes ping{
-  0%{box-shadow:0 0 0 0 rgba(103,232,249,.5)}
-  70%{box-shadow:0 0 0 13px rgba(103,232,249,0)}
-  100%{box-shadow:0 0 0 0 rgba(103,232,249,0)}
-}
-.slot-time{
-  font-family:var(--mono);font-size:13.5px;font-weight:500;color:var(--dim);
-  width:58px;flex:none;padding-top:1px;
-}
-.slot.next .slot-time{color:var(--glow)}
-.slot.gone .slot-time{color:var(--dimmer)}
-.slot-what{flex:1;min-width:0}
-.slot-title{font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.slot-empty{font-size:13.5px;color:var(--dimmer);font-style:italic}
-.slot-from{font-size:12px;color:var(--dimmer);margin-top:2px}
+.board-day + .dep{border-top:0}
+.board-day .code{color:var(--text-2);font-weight:500}
+.board-day.today .code{color:var(--text)}
+.board-day-n{color:var(--mute-2);font-size:12.5px;margin-left:auto}
 
-/* ---------- insights ---------- */
-.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(168px,1fr))}
-.stat{background:var(--deck);border:1px solid var(--ridge);border-radius:var(--r);padding:17px}
-.stat-num{font-family:var(--mono);font-size:29px;font-weight:700;letter-spacing:-.03em;line-height:1.1}
-.stat-lab{font-size:12px;color:var(--dim);margin-top:5px}
-.stat-sub{font-size:11.5px;color:var(--dimmer);margin-top:7px;font-family:var(--mono)}
-.stat.warn .stat-num{color:var(--amber)}
-.stat.good .stat-num{color:var(--mint)}
-.stat.cool .stat-num{color:var(--glow)}
+.dep{
+  display:flex;align-items:center;gap:18px;padding:13px 18px;
+  border-bottom:1px solid var(--line);position:relative;
+}
+.dep:last-child{border-bottom:0}
+.dep-time{
+  font-size:15px;font-weight:600;letter-spacing:-.01em;
+  width:66px;flex:none;color:var(--mute);
+}
+.dep-what{flex:1;min-width:0}
+.dep-title{font-size:14.5px;font-weight:450;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dep-from{color:var(--mute-2);font-size:12.5px;margin-top:1px}
+.dep-stat{flex:none;font-size:12.5px;color:var(--mute-2)}
 
-.bars{margin-top:6px}
-.bar-row{display:flex;align-items:center;gap:12px;padding:8px 0}
-.bar-lab{font-family:var(--mono);font-size:12px;color:var(--dim);width:104px;flex:none;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bar-track{flex:1;height:7px;background:var(--ridge-soft);border-radius:4px;overflow:hidden}
-.bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--signal-deep),var(--signal));transition:width .5s ease}
-.bar-num{font-family:var(--mono);font-size:12px;color:var(--paper);width:34px;text-align:right;flex:none}
+.dep.open .dep-title{color:var(--mute-2)}
+.dep.gone{opacity:.4}
+.dep.loaded .dep-time{color:var(--text)}
+.dep.next{background:rgba(47,107,255,.06)}
+.dep.next .dep-time,.dep.next .dep-stat{color:var(--blue-soft)}
+.dep.next::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--blue)}
+
+/* ---------- figures ---------- */
+.figs{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(158px,1fr))}
+.fig{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
+.fig-v{font-size:28px;font-weight:600;letter-spacing:-.03em;line-height:1.15}
+.fig-k{color:var(--text-2);font-size:13.5px;margin-top:5px}
+.fig-s{color:var(--mute-2);font-size:12.5px;margin-top:3px}
+.fig.warn .fig-v{color:var(--blue-soft)}
+.fig.good .fig-v,.fig.cool .fig-v{color:var(--text)}
+
+.bars{margin-top:0}
+.bar-row{display:flex;align-items:center;gap:16px;padding:10px 0;border-bottom:1px solid var(--line)}
+.bar-row:last-child{border-bottom:0}
+.bar-lab{
+  font-size:13.5px;color:var(--text-2);width:134px;flex:none;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.bar-track{flex:1;height:4px;background:var(--line);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;background:var(--blue);border-radius:3px;transition:width .45s ease}
+.bar-num{font-size:14px;font-weight:600;color:var(--text);width:30px;text-align:right;flex:none}
 
 /* ---------- accounts + log ---------- */
-.acct{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--ridge-soft)}
+.acct{display:flex;align-items:center;gap:13px;padding:12px 0;border-bottom:1px solid var(--line)}
 .acct:last-child{border-bottom:0}
 .acct-badge{
-  width:32px;height:32px;border-radius:9px;flex:none;display:grid;place-items:center;
-  background:var(--ridge-soft);font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);
+  width:34px;height:34px;flex:none;display:grid;place-items:center;border-radius:8px;
+  background:var(--surface-2);border:1px solid var(--line);
+  font-size:11.5px;font-weight:600;color:var(--mute);
 }
 .acct-name{font-size:14.5px;font-weight:500}
-.acct-plat{font-family:var(--mono);font-size:11px;color:var(--dimmer);letter-spacing:.1em;text-transform:uppercase}
+.acct-plat{margin-top:-2px}
 
-.log-line{display:flex;gap:13px;padding:8px 0;font-size:13.5px;border-bottom:1px solid var(--ridge-soft)}
+.log-line{display:flex;gap:16px;padding:9px 0;font-size:13.5px;border-bottom:1px solid var(--line)}
 .log-line:last-child{border-bottom:0}
-.log-time{font-family:var(--mono);font-size:11.5px;color:var(--dimmer);width:58px;flex:none;padding-top:2px}
-.log-msg{color:#B9C6DA;line-height:1.5}
-.log-line.error .log-msg{color:var(--rose)}
-.log-line.warn .log-msg{color:var(--amber)}
+.log-time{font-size:12.5px;color:var(--mute-2);width:60px;flex:none;padding-top:2px}
+.log-msg{color:var(--text-2);line-height:1.55}
+.log-line.error .log-msg{color:var(--red)}
+.log-line.warn .log-msg{color:var(--text)}
 
 /* ---------- empty ---------- */
-.empty{text-align:center;padding:56px 22px;color:var(--dim)}
-.empty-title{font-size:16px;font-weight:600;color:var(--paper);margin-bottom:7px}
+.empty{padding:48px 20px;text-align:center;color:var(--mute)}
+.empty-title{font-size:15.5px;font-weight:600;color:var(--text);margin-bottom:7px}
 .empty-note{font-size:13.5px;max-width:340px;margin:0 auto;line-height:1.65}
 
 /* ---------- toast ---------- */
-.toasts{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:80;
-  display:flex;flex-direction:column;gap:9px;align-items:center;pointer-events:none;
-  width:calc(100% - 32px);max-width:440px}
+.toasts{
+  position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:80;
+  display:flex;flex-direction:column;gap:8px;align-items:stretch;pointer-events:none;
+  width:calc(100% - 32px);max-width:420px;
+}
 .toast{
-  background:var(--deck-2);border:1px solid var(--ridge);border-radius:11px;
-  padding:12px 17px;font-size:14px;box-shadow:0 16px 44px rgba(0,0,0,.6);
-  animation:rise .22s ease-out;width:100%;
+  background:var(--surface-2);border:1px solid var(--line-lit);border-radius:8px;
+  padding:12px 16px;font-size:14px;animation:slide .18s ease-out;
+  box-shadow:0 12px 32px rgba(0,0,0,.5);
 }
-.toast.bad{border-color:rgba(251,113,133,.45);color:#FFD5DB}
-.toast.good{border-color:rgba(52,211,153,.4);color:#C6F5E3}
-@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.toast.bad{border-color:rgba(255,85,102,.45);color:#FFC0C7}
+.toast.good{border-color:rgba(47,107,255,.45)}
+@keyframes slide{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
-@media (prefers-reduced-motion:reduce){
-  *{animation:none !important;transition:none !important}
-}
-@media (max-width:640px){
-  :root{--pad:15px}
-  .top-status{width:100%;margin-left:0;justify-content:space-between}
-  .stat-num{font-size:25px}
-  .bar-lab{width:82px}
-  .slot-time{width:52px}
+@media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
+
+@media (max-width:720px){
+  :root{--gutter:16px}
+  .readout{width:100%;margin-left:0;justify-content:space-between;gap:16px}
+  .dial{text-align:left}
+  .tabs{gap:20px}
+  .dep{gap:12px;padding:12px 14px}
+  .dep-time{width:56px}
+  .dep-stat{display:none}
+  .bar-lab{width:96px}
 }
 </style>
 </head>
@@ -342,35 +332,43 @@ h2{font-size:20px;font-weight:600;letter-spacing:-.02em;margin:0}
 <!-- ============ password ============ -->
 <section id="gate" class="center">
   <div class="card-lock">
-    <div class="mark">
-      <div class="mark-dot"></div>
-      <div>
-        <div class="mark-name">Clip Agent</div>
-        <div class="mark-sub">Transmission deck</div>
+    <div class="lock-head">
+      <div class="mark">
+        <div class="mark-dot"></div>
+        <div>
+          <div class="mark-name">Clip Agent</div>
+          <div class="mark-sub code">Sign in to continue</div>
+        </div>
       </div>
     </div>
-    <label class="field" for="pw">Password</label>
-    <input id="pw" type="password" autocomplete="current-password" placeholder="••••••••">
-    <button class="btn btn-wide" id="unlock">Unlock</button>
-    <div class="err" id="gateErr"></div>
+    <div class="lock-body">
+      <label class="field code" for="pw">Password</label>
+      <input id="pw" type="password" autocomplete="current-password" placeholder="Your password">
+      <button class="btn btn-wide" id="unlock">Unlock</button>
+      <div class="err" id="gateErr"></div>
+    </div>
   </div>
 </section>
 
 <!-- ============ connect opus ============ -->
 <section id="connect" class="center hide">
   <div class="card-lock">
-    <div class="mark">
-      <div class="mark-dot"></div>
-      <div>
-        <div class="mark-name">Connect Opus</div>
-        <div class="mark-sub">One key, one time</div>
+    <div class="lock-head">
+      <div class="mark">
+        <div class="mark-dot"></div>
+        <div>
+          <div class="mark-name">Connect Opus</div>
+          <div class="mark-sub code">One key, one time</div>
+        </div>
       </div>
     </div>
-    <label class="field" for="key">Opus API key</label>
-    <input id="key" type="password" autocomplete="off" placeholder="Paste your key">
-    <button class="btn btn-wide" id="save">Connect</button>
-    <div class="err" id="connErr"></div>
-    <p class="hint">Find it in the lower left of your Opus dashboard. Your plan needs API access, and social posting may need switching on by Opus support.</p>
+    <div class="lock-body">
+      <label class="field code" for="key">Opus API key</label>
+      <input id="key" type="password" autocomplete="off" placeholder="Paste your key">
+      <button class="btn btn-wide" id="save">Connect</button>
+      <div class="err" id="connErr"></div>
+      <p class="hint">Find it in the lower left of your Opus dashboard. Your plan needs API access, and social posting may need switching on by Opus support.</p>
+    </div>
   </div>
 </section>
 
@@ -380,33 +378,36 @@ h2{font-size:20px;font-weight:600;letter-spacing:-.02em;margin:0}
 
     <div class="top">
       <div class="top-in">
-        <div class="mark" style="margin:0">
+        <div class="mark">
           <div class="mark-dot"></div>
           <div>
             <div class="mark-name">Clip Agent</div>
-            <div class="mark-sub" id="tzLabel">—</div>
+            <div class="mark-sub code"><span class="lamp" id="liveDot"></span><span id="liveText">Checking</span></div>
           </div>
         </div>
-        <div class="top-status">
-          <div class="live"><span class="live-dot" id="liveDot"></span><span id="liveText">Checking</span></div>
-          <div class="countdown">
-            <div class="countdown-num" id="cdNum">—</div>
-            <div class="countdown-lab">Next post</div>
+        <div class="readout">
+          <div class="dial">
+            <div class="dial-v" id="clock">--:--</div>
+            <div class="dial-k code" id="tzLabel">Local time</div>
+          </div>
+          <div class="dial live">
+            <div class="dial-v" id="cdNum">--</div>
+            <div class="dial-k code">Next post</div>
           </div>
         </div>
       </div>
       <nav class="tabs">
         <button class="tab on" data-view="queue">Queue<span class="tab-count" id="cQueue">0</span></button>
         <button class="tab" data-view="schedule">Schedule<span class="tab-count" id="cSched">0</span></button>
-        <button class="tab" data-view="insights">Insights</button>
-        <button class="tab" data-view="activity">Activity</button>
+        <button class="tab" data-view="insights">Record</button>
+        <button class="tab" data-view="activity">Accounts</button>
       </nav>
     </div>
 
     <!-- queue -->
     <section class="panel" id="view-queue">
-      <div class="box intake">
-        <label class="field" for="urls">Add lectures</label>
+      <div class="head"><h2>Add lectures</h2></div>
+      <div class="slab intake">
         <textarea id="urls" placeholder="Paste one or more video links, one per line"></textarea>
         <div class="intake-row">
           <button class="btn" id="send">Send to Opus</button>
@@ -414,65 +415,56 @@ h2{font-size:20px;font-weight:600;letter-spacing:-.02em;margin:0}
         </div>
       </div>
 
-      <div class="panel-head" style="margin-top:30px">
+      <div class="head" style="margin-top:38px">
         <h2>Waiting for you</h2>
-        <span class="panel-note" id="waitNote"></span>
-        <button class="btn btn-ghost btn-sm hide" id="approveAll" style="margin-left:auto">Approve all</button>
+        <span class="note" id="waitNote"></span>
+        <button class="btn btn-ghost btn-sm hide" id="approveAll">Approve all</button>
       </div>
       <div id="waitList"></div>
     </section>
 
     <!-- schedule -->
     <section class="panel hide" id="view-schedule">
-      <div class="panel-head">
+      <div class="head">
         <h2>The next five days</h2>
-        <span class="panel-note" id="railNote"></span>
+        <span class="note" id="railNote"></span>
       </div>
-      <div class="box"><div class="rail" id="rail"></div></div>
+      <div class="board" id="rail"></div>
 
-      <div class="panel-head" style="margin-top:30px">
+      <div class="head" style="margin-top:38px">
         <h2>Queued clips</h2>
-        <span class="panel-note" id="schedNote"></span>
+        <span class="note" id="schedNote"></span>
       </div>
       <div id="schedList"></div>
     </section>
 
-    <!-- insights -->
+    <!-- record -->
     <section class="panel hide" id="view-insights">
-      <div class="panel-head">
-        <h2>Insights</h2>
-        <span class="panel-note">From your own posting record</span>
-      </div>
-      <div class="grid" id="stats"></div>
+      <div class="head"><h2>The record</h2><span class="note">What has gone out</span></div>
+      <div class="figs" id="stats"></div>
 
-      <div class="box" style="margin-top:22px">
-        <div class="panel-head" style="margin-bottom:6px"><h2 style="font-size:16px">Posts by platform</h2></div>
-        <div class="bars" id="byPlatform"></div>
-      </div>
+      <div class="head" style="margin-top:38px"><h2>By platform</h2></div>
+      <div class="slab"><div class="bars" id="byPlatform"></div></div>
 
-      <div class="box">
-        <div class="panel-head" style="margin-bottom:6px"><h2 style="font-size:16px">Posts by time of day</h2></div>
-        <div class="bars" id="bySlot"></div>
-      </div>
+      <div class="head" style="margin-top:38px"><h2>By time of day</h2></div>
+      <div class="slab"><div class="bars" id="bySlot"></div></div>
 
-      <div class="box">
-        <div class="panel-head" style="margin-bottom:6px"><h2 style="font-size:16px">Clips per lecture</h2></div>
-        <div class="bars" id="bySource"></div>
-      </div>
+      <div class="head" style="margin-top:38px"><h2>By lecture</h2></div>
+      <div class="slab"><div class="bars" id="bySource"></div></div>
 
       <p class="hint">Opus doesn't return views or likes through its API, so nothing here is engagement data — it's a record of what went out, when, and where. To see how posts performed, check each platform's own analytics.</p>
     </section>
 
-    <!-- activity -->
+    <!-- accounts -->
     <section class="panel hide" id="view-activity">
-      <div class="panel-head">
+      <div class="head">
         <h2>Connected accounts</h2>
-        <button class="btn btn-ghost btn-sm" id="refreshAcc" style="margin-left:auto">Refresh</button>
+        <button class="btn btn-ghost btn-sm" id="refreshAcc">Refresh</button>
       </div>
-      <div class="box" id="accounts"></div>
+      <div class="slab" id="accounts"></div>
 
-      <div class="panel-head" style="margin-top:30px"><h2>Recent activity</h2></div>
-      <div class="box" id="log"></div>
+      <div class="head" style="margin-top:38px"><h2>Recent activity</h2></div>
+      <div class="slab" id="log"></div>
     </section>
 
   </div>
@@ -480,6 +472,113 @@ h2{font-size:20px;font-weight:600;letter-spacing:-.02em;margin:0}
 
 <div class="toasts" id="toasts"></div>
 
+
+<script>
+/* PREVIEW ONLY - fake data, no server. The real file talks to your agent. */
+(function () {
+  var HOUR = 3600000, DAY = 86400000, now = Date.now();
+
+  function off(d) {
+    var q = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Australia/Perth', hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    }).formatToParts(d).reduce(function (a, x) {
+      if (x.type !== 'literal') a[x.type] = +x.value; return a;
+    }, {});
+    return Date.UTC(q.year, q.month - 1, q.day, q.hour % 24, q.minute, q.second) - d.getTime();
+  }
+  function slot(o, hh, mm) {
+    var p = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Australia/Perth', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).format(new Date()).split('-').map(Number);
+    var g = Date.UTC(p[0], p[1] - 1, p[2] + o, hh, mm);
+    var ms = g - off(new Date(g));
+    return g - off(new Date(ms));
+  }
+  function lbl(ms) {
+    return new Intl.DateTimeFormat('en-AU', {
+      timeZone: 'Australia/Perth', weekday: 'short', day: 'numeric',
+      month: 'short', hour: 'numeric', minute: '2-digit'
+    }).format(new Date(ms));
+  }
+  function done(t) { var x = {}; for (var k in t) x[k] = t[k]; x.status = 'posted'; return x; }
+
+  var T = [
+    { postAccountId: 'y', platform: 'YOUTUBE', name: 'Daily Reminders', status: 'scheduled' },
+    { postAccountId: 'i', platform: 'INSTAGRAM_BUSINESS', name: 'daily.reminders', status: 'scheduled' },
+    { postAccountId: 't', platform: 'TIKTOK_BUSINESS', name: 'dailyreminders', status: 'scheduled' },
+    { postAccountId: 'f', platform: 'FACEBOOK_PAGE', name: 'Daily Reminders', status: 'scheduled' }
+  ];
+
+  var failedSet = [done(T[0]), done(T[1]), { postAccountId: 't', platform: 'TIKTOK_BUSINESS', name: 'dailyreminders', status: 'failed', error: 'Opus returned 429' }, done(T[3])];
+
+  var S = {
+    connected: true,
+    autoApprove: false,
+    postTimes: ['07:00', '12:00', '17:00', '20:30'],
+    timezone: 'Australia/Perth',
+    accounts: [
+      { platform: 'YOUTUBE', name: 'Daily Reminders' },
+      { platform: 'INSTAGRAM_BUSINESS', name: 'daily.reminders' },
+      { platform: 'TIKTOK_BUSINESS', name: 'dailyreminders' },
+      { platform: 'FACEBOOK_PAGE', name: 'Daily Reminders' }
+    ],
+    projects: [{ id: 'p1', title: 'The weight of patience', status: 'done' }],
+    clips: [
+      { id: 'a', title: 'What patience actually costs',
+        description: 'A short reminder on holding steady when the answer is slow in coming.',
+        hashtags: '#patience #reminder', projectTitle: 'The weight of patience',
+        durationMs: 47000, status: 'waiting', scheduledAt: null, scheduledLabel: null, targets: [] },
+      { id: 'b', title: 'The tongue is a trust',
+        description: 'On guarding what we say, and why silence is sometimes the stronger answer.',
+        hashtags: '#speech #adab', projectTitle: 'The weight of patience',
+        durationMs: 63000, status: 'waiting', scheduledAt: null, scheduledLabel: null, targets: [] },
+      { id: 'c', title: 'Gratitude before the gift',
+        description: 'Thankfulness is not a reaction. It is a posture.',
+        hashtags: '#gratitude', projectTitle: 'The weight of patience',
+        durationMs: 52000, status: 'scheduled', scheduledAt: slot(0, 20, 30),
+        scheduledLabel: lbl(slot(0, 20, 30)), targets: T.slice() },
+      { id: 'd', title: 'Quiet acts outlast loud ones',
+        description: 'On sincerity, and the deeds nobody sees.',
+        hashtags: '#sincerity', projectTitle: 'The weight of patience',
+        durationMs: 41000, status: 'scheduled', scheduledAt: slot(1, 7, 0),
+        scheduledLabel: lbl(slot(1, 7, 0)), targets: T.slice() },
+      { id: 'e', title: 'Begin before you feel ready',
+        description: 'Went out earlier today.', hashtags: '#action',
+        projectTitle: 'Gratitude and hardship', durationMs: 38000,
+        status: 'scheduled', scheduledAt: now - 4 * HOUR, scheduledLabel: 'earlier today',
+        targets: T.map(done) },
+      { id: 'f', title: 'The narrow road is the road',
+        description: 'Went out two days ago.', hashtags: '#sabr',
+        projectTitle: 'Gratitude and hardship', durationMs: 55000,
+        status: 'posted', scheduledAt: now - 2 * DAY, scheduledLabel: 'two days ago',
+        targets: failedSet },
+      { id: 'g', title: 'Small and steady wins',
+        description: 'Went out three days ago.', hashtags: '#consistency',
+        projectTitle: 'Gratitude and hardship', durationMs: 44000,
+        status: 'posted', scheduledAt: now - 3 * DAY, scheduledLabel: 'three days ago',
+        targets: T.map(done) }
+    ],
+    log: [
+      { at: now - 90000, level: 'info', message: '4 clips ready from The weight of patience - waiting for your approval' },
+      { at: now - 260000, level: 'info', message: 'Scheduled Gratitude before the gift across 4 accounts' },
+      { at: now - 900000, level: 'error', message: 'Could not schedule to dailyreminders. Opus returned 429' },
+      { at: now - 1800000, level: 'info', message: 'Sent to Opus for clipping: The weight of patience' }
+    ]
+  };
+
+  window.fetch = function (u) {
+    return Promise.resolve({
+      ok: true, status: 200,
+      json: function () {
+        return Promise.resolve(String(u).indexOf('/api/state') >= 0 ? S : { ok: true, accounts: S.accounts });
+      }
+    });
+  };
+  try { localStorage.setItem('clipAgentPw', 'preview'); } catch (e) {}
+})();
+</script>
 <script>
 'use strict';
 
@@ -514,7 +613,7 @@ function toast(msg, kind = '') {
   setTimeout(() => t.remove(), 4200);
 }
 
-/* ---------- time helpers, in the agent's own timezone ---------- */
+/* ---------- time, in the agent's own zone ---------- */
 
 const TZ = () => DATA?.timezone || 'Australia/Perth';
 
@@ -552,6 +651,10 @@ const clockLabel = ms => new Intl.DateTimeFormat('en-AU', {
   timeZone: TZ(), hour: 'numeric', minute: '2-digit',
 }).format(new Date(ms));
 
+const clockNow = () => new Intl.DateTimeFormat('en-AU', {
+  timeZone: TZ(), hour: 'numeric', minute: '2-digit',
+}).format(new Date());
+
 function countdown(ms) {
   const s = Math.max(0, Math.floor((ms - Date.now()) / 1000));
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
@@ -570,7 +673,7 @@ function slotsAhead(days = 5) {
   for (let i = 0; i < days; i++) {
     const base = new Date(Date.UTC(y, m - 1, d + i));
     const day = { y: base.getUTCFullYear(), m: base.getUTCMonth() + 1, d: base.getUTCDate() };
-    const row = { key: `${day.y}-${day.m}-${day.d}`, slots: [] };
+    const row = { slots: [] };
     for (const t of times) {
       const [hh, mm] = t.split(':').map(Number);
       if (!Number.isFinite(hh) || !Number.isFinite(mm)) continue;
@@ -582,7 +685,7 @@ function slotsAhead(days = 5) {
   return out;
 }
 
-/* ---------- clip status, treating passed schedules as sent ---------- */
+/* ---------- clip status ---------- */
 
 function statusOf(c) {
   if (c.status === 'scheduled' && c.scheduledAt && c.scheduledAt <= Date.now()) return 'posted';
@@ -643,7 +746,7 @@ function render() {
   const waiting = clips.filter(c => statusOf(c) === 'waiting');
   const queued = clips.filter(c => ['approved', 'scheduled'].includes(statusOf(c)));
 
-  $('#tzLabel').textContent = TZ().split('/').pop().replace(/_/g, ' ');
+  $('#tzLabel').textContent = TZ().split('/').pop().replace(/_/g, ' ') + ' time';
   $('#cQueue').textContent = waiting.length;
   $('#cQueue').classList.toggle('urgent', waiting.length > 0);
   $('#cSched').textContent = queued.length;
@@ -651,22 +754,23 @@ function render() {
   const ok = (DATA.accounts || []).length > 0;
   $('#liveDot').classList.toggle('off', !ok);
   $('#liveText').textContent = ok
-    ? `${DATA.accounts.length} account${DATA.accounts.length === 1 ? '' : 's'} linked`
-    : 'No accounts linked';
+    ? `${DATA.accounts.length} account${DATA.accounts.length === 1 ? '' : 's'} connected`
+    : 'No accounts connected';
 
   tickClock();
   renderQueue(waiting);
-  renderSchedule(queued);
-  renderInsights(clips);
-  renderActivity();
+  renderBoard(queued);
+  renderRecord(clips);
+  renderAccounts();
 }
 
 function tickClock() {
   if (!DATA) return;
+  $('#clock').textContent = clockNow();
   const next = (DATA.clips || [])
     .filter(c => statusOf(c) === 'scheduled' && c.scheduledAt > Date.now())
     .sort((a, b) => a.scheduledAt - b.scheduledAt)[0];
-  $('#cdNum').textContent = next ? countdown(next.scheduledAt) : 'Nothing queued';
+  $('#cdNum').textContent = next ? countdown(next.scheduledAt) : 'None';
 }
 
 /* ---------- queue ---------- */
@@ -683,10 +787,10 @@ function renderQueue(waiting) {
 
   if (!waiting.length) {
     if (!list.querySelector('.empty')) {
-      list.innerHTML = `<div class="empty">
+      list.innerHTML = `<div class="slab"><div class="empty">
         <div class="empty-title">Nothing waiting</div>
         <div class="empty-note">Paste a lecture above. Opus will cut it into clips and they'll land here for you to read before anything goes out.</div>
-      </div>`;
+      </div></div>`;
     }
     return;
   }
@@ -703,16 +807,17 @@ function renderQueue(waiting) {
 function clipCard(c) {
   const st = statusOf(c);
   const failed = (c.targets || []).some(t => t.status === 'failed');
-  const node = el('div', 'clip ' + (failed ? 'bad' : STATUS_CLASS[st] || ''));
+  const kind = failed ? 'bad' : (STATUS_CLASS[st] || '');
+  const node = el('div', 'clip ' + kind);
   node.dataset.id = c.id;
 
   const top = el('div', 'clip-top');
-  const pill = el('span', 'pill ' + (failed ? 'bad' : STATUS_CLASS[st] || ''));
-  pill.textContent = failed ? 'Some failed' : (STATUS_TEXT[st] || st);
-  top.append(pill);
+  const stamp = el('span', 'stamp ' + kind);
+  stamp.textContent = failed ? 'Some failed' : (STATUS_TEXT[st] || st);
+  top.append(stamp);
 
   if (c.scheduledLabel && st !== 'waiting') {
-    const when = el('span', 'pill');
+    const when = el('span', 'stamp');
     when.textContent = c.scheduledLabel;
     top.append(when);
   }
@@ -802,7 +907,7 @@ function clipCard(c) {
           body: JSON.stringify({ title: title.value, description: body.value, hashtags: tags.value, status: 'approved' }),
         });
         editing.delete(c.id);
-        toast('Approved — it will go out at the next free slot', 'good');
+        toast('Approved — it will go out at the next open slot', 'good');
         refresh();
       } catch (err) { toast(err.message, 'bad'); approve.disabled = false; }
     };
@@ -810,7 +915,7 @@ function clipCard(c) {
     const now = el('button', 'btn btn-ghost btn-sm');
     now.textContent = 'Post now';
     now.onclick = async () => {
-      if (!confirm('Post this clip to every linked account right now?')) return;
+      if (!confirm('Post this clip to every connected account right now?')) return;
       now.disabled = true;
       try {
         await api('/api/clips/' + encodeURIComponent(c.id) + '/now', { method: 'POST' });
@@ -835,7 +940,7 @@ function clipCard(c) {
         await api('/api/clips/' + encodeURIComponent(c.id), {
           method: 'PATCH', body: JSON.stringify({ status: 'waiting' }),
         });
-        toast('Pulled back — it is out of the schedule');
+        toast('Pulled back — its slot is open again');
         refresh();
       } catch (err) { toast(err.message, 'bad'); }
     };
@@ -844,9 +949,9 @@ function clipCard(c) {
   node.append(foot);
 
   if ((c.targets || []).length) {
-    const row = el('div', 'targets');
+    const row = el('div', 'dests');
     c.targets.forEach(t => {
-      const tag = el('span', 'target ' + (t.status === 'failed' ? 'bad' : t.status === 'posted' ? 'done' : ''));
+      const tag = el('span', 'dest ' + (t.status === 'failed' ? 'bad' : t.status === 'posted' ? 'done' : ''));
       tag.textContent = platformName(t.platform);
       if (t.error) tag.title = t.error;
       row.append(tag);
@@ -867,23 +972,26 @@ function autoGrow(field) {
 const platformName = p => String(p || '')
   .replace('_BUSINESS', '').replace('_PAGE', '').replace(/_/g, ' ');
 
-/* ---------- schedule ---------- */
+/* ---------- the board ---------- */
 
-function renderSchedule(queued) {
+function renderBoard(queued) {
   const byTime = new Map();
   queued.forEach(c => { if (c.scheduledAt) byTime.set(c.scheduledAt, c); });
 
-  const rail = $('#rail');
-  rail.innerHTML = '';
+  const board = $('#rail');
+  board.innerHTML = '';
   const days = slotsAhead(5);
   const now = Date.now();
   let nextMarked = false;
 
   days.forEach((day, di) => {
-    const wrap = el('div', 'rail-day');
-    const head = el('div', 'rail-date' + (di === 0 ? ' today' : ''));
-    head.textContent = di === 0 ? 'Today · ' + dayLabel(day.slots[0]) : dayLabel(day.slots[0]);
-    wrap.append(head);
+    const head = el('div', 'board-day' + (di === 0 ? ' today' : ''));
+    const label = el('span', 'code');
+    label.textContent = di === 0 ? 'Today, ' + dayLabel(day.slots[0]) : dayLabel(day.slots[0]);
+    const n = el('span', 'board-day-n');
+    n.textContent = day.slots.filter(ms => byTime.has(ms)).length + ' of ' + day.slots.length + ' filled';
+    head.append(label, n);
+    board.append(head);
 
     day.slots.forEach(ms => {
       const clip = byTime.get(ms);
@@ -891,52 +999,58 @@ function renderSchedule(queued) {
       const isNext = !past && !nextMarked;
       if (isNext) nextMarked = true;
 
-      const row = el('div', 'slot ' + (clip && !past ? 'filled ' : '') + (past ? 'gone ' : '') + (isNext ? 'next' : ''));
-      row.append(el('div', 'node'));
+      const row = el('div', 'dep '
+        + (clip && !past ? 'loaded ' : '')
+        + (past ? 'gone ' : '')
+        + (!clip ? 'open ' : '')
+        + (isNext ? 'next' : ''));
 
-      const t = el('div', 'slot-time');
+      const t = el('div', 'dep-time');
       t.textContent = clockLabel(ms);
       row.append(t);
 
-      const what = el('div', 'slot-what');
+      const what = el('div', 'dep-what');
+      const ti = el('div', 'dep-title');
+      ti.textContent = clip ? (clip.title || 'Untitled clip') : (past ? 'Nothing went out' : 'Open');
+      what.append(ti);
       if (clip) {
-        const ti = el('div', 'slot-title');
-        ti.textContent = clip.title || 'Untitled clip';
-        const from = el('div', 'slot-from');
-        from.textContent = past ? 'Sent' : 'From ' + (clip.projectTitle || 'a lecture');
-        what.append(ti, from);
-      } else {
-        const e = el('div', 'slot-empty');
-        e.textContent = past ? 'Passed, nothing queued' : 'Open';
-        what.append(e);
+        const from = el('div', 'dep-from');
+        from.textContent = (past ? 'Sent, from ' : 'From ') + (clip.projectTitle || 'a lecture');
+        what.append(from);
       }
       row.append(what);
-      wrap.append(row);
+
+      const stat = el('div', 'dep-stat');
+      stat.textContent = past ? (clip ? 'Sent' : '') : isNext ? 'Next' : clip ? 'Ready' : 'Open';
+      row.append(stat);
+
+      board.append(row);
     });
-    rail.append(wrap);
   });
 
   const open = days.flatMap(d => d.slots).filter(ms => ms > now && !byTime.has(ms)).length;
-  $('#railNote').textContent = open ? `${open} open slots in the next five days` : 'Every slot is spoken for';
+  $('#railNote').textContent = open
+    ? `${open} open slots in the next five days`
+    : 'Every slot is spoken for';
 
   const list = $('#schedList');
   list.innerHTML = '';
-  $('#schedNote').textContent = queued.length ? '' : '';
+  $('#schedNote').textContent = '';
   if (!queued.length) {
-    list.innerHTML = `<div class="empty">
-      <div class="empty-title">Nothing queued yet</div>
+    list.innerHTML = `<div class="slab"><div class="empty">
+      <div class="empty-title">Nothing queued</div>
       <div class="empty-note">Approved clips land here and fill the slots above, one at a time, in order.</div>
-    </div>`;
+    </div></div>`;
     return;
   }
   queued.slice().sort((a, b) => (a.scheduledAt || 0) - (b.scheduledAt || 0))
     .forEach(c => list.append(clipCard(c)));
 }
 
-/* ---------- insights ---------- */
+/* ---------- the record ---------- */
 
-function renderInsights(clips) {
-  const posted = clips.filter(c => statusOf(c) === 'posted');
+function renderRecord(clips) {
+  const sent = clips.filter(c => statusOf(c) === 'posted');
   const queued = clips.filter(c => ['approved', 'scheduled'].includes(statusOf(c)));
   const waiting = clips.filter(c => statusOf(c) === 'waiting');
   const perDay = (DATA.postTimes || []).length || 1;
@@ -946,36 +1060,37 @@ function renderInsights(clips) {
   const avgLen = durations.length
     ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
 
-  const sends = posted.reduce((n, c) =>
+  const uploads = sent.reduce((n, c) =>
     n + (c.targets || []).filter(t => t.status !== 'failed').length, 0);
   const fails = clips.reduce((n, c) =>
     n + (c.targets || []).filter(t => t.status === 'failed').length, 0);
 
-  const cards = [
-    { n: posted.length, lab: 'Clips posted', sub: sends + ' individual uploads', cls: 'good' },
-    { n: queued.length, lab: 'Queued and ready', sub: perDay + ' slots a day', cls: 'cool' },
+  const figs = [
+    { v: sent.length, k: 'Clips posted', s: uploads + ' uploads in total', cls: 'good' },
+    { v: queued.length, k: 'Queued and ready', s: perDay + ' slots a day', cls: 'cool' },
     {
-      n: daysLeft < 1 ? '<1' : Math.floor(daysLeft),
-      lab: 'Days of runway', cls: daysLeft < 1.5 ? 'warn' : '',
-      sub: daysLeft < 1.5 ? 'Add another lecture soon' : 'Before the queue runs dry',
+      v: daysLeft < 1 ? '<1' : Math.floor(daysLeft),
+      k: 'Days of runway', cls: daysLeft < 1.5 ? 'warn' : '',
+      s: daysLeft < 1.5 ? 'Add a lecture soon' : 'Before the queue empties',
     },
-    { n: waiting.length, lab: 'Awaiting your read', cls: waiting.length ? 'warn' : '', sub: waiting.length ? 'Sitting in the queue tab' : 'All caught up' },
-    { n: avgLen ? avgLen + 's' : '—', lab: 'Average clip length', sub: 'Across every clip pulled in' },
-    { n: fails, lab: 'Failed uploads', cls: fails ? 'warn' : '', sub: fails ? 'Check the activity tab' : 'None so far' },
+    { v: waiting.length, k: 'Awaiting your read', cls: waiting.length ? 'warn' : '',
+      s: waiting.length ? 'In the queue tab' : 'All caught up' },
+    { v: avgLen ? avgLen + 's' : '—', k: 'Average clip length', s: 'Across every clip' },
+    { v: fails, k: 'Failed uploads', cls: fails ? 'warn' : '', s: fails ? 'See recent activity' : 'None so far' },
   ];
 
-  const grid = $('#stats');
-  grid.innerHTML = '';
-  cards.forEach(c => {
-    const box = el('div', 'stat ' + (c.cls || ''));
-    box.innerHTML = `<div class="stat-num">${esc(c.n)}</div>
-      <div class="stat-lab">${esc(c.lab)}</div>
-      <div class="stat-sub">${esc(c.sub)}</div>`;
-    grid.append(box);
+  const host = $('#stats');
+  host.innerHTML = '';
+  figs.forEach(f => {
+    const box = el('div', 'fig ' + (f.cls || ''));
+    box.innerHTML = `<div class="fig-v">${esc(f.v)}</div>
+      <div class="fig-k">${esc(f.k)}</div>
+      <div class="fig-s">${esc(f.s)}</div>`;
+    host.append(box);
   });
 
   const plat = {};
-  posted.forEach(c => (c.targets || []).forEach(t => {
+  sent.forEach(c => (c.targets || []).forEach(t => {
     if (t.status === 'failed') return;
     const k = platformName(t.platform) || 'unknown';
     plat[k] = (plat[k] || 0) + 1;
@@ -983,7 +1098,7 @@ function renderInsights(clips) {
   bars('#byPlatform', plat, 'Nothing has gone out yet.');
 
   const slot = {};
-  posted.forEach(c => {
+  sent.forEach(c => {
     if (!c.scheduledAt) return;
     const k = clockLabel(c.scheduledAt);
     slot[k] = (slot[k] || 0) + 1;
@@ -1003,7 +1118,7 @@ function bars(sel, counts, emptyNote) {
   host.innerHTML = '';
   const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
   if (!rows.length) {
-    host.innerHTML = `<div class="empty" style="padding:22px 0"><div class="empty-note">${esc(emptyNote)}</div></div>`;
+    host.innerHTML = `<div class="empty" style="padding:16px 0"><div class="empty-note">${esc(emptyNote)}</div></div>`;
     return;
   }
   const top = Math.max(...rows.map(r => r[1]));
@@ -1016,15 +1131,15 @@ function bars(sel, counts, emptyNote) {
   });
 }
 
-/* ---------- activity ---------- */
+/* ---------- accounts ---------- */
 
-function renderActivity() {
+function renderAccounts() {
   const box = $('#accounts');
   box.innerHTML = '';
   const accounts = DATA.accounts || [];
   if (!accounts.length) {
-    box.innerHTML = `<div class="empty" style="padding:28px 0">
-      <div class="empty-title">No accounts linked</div>
+    box.innerHTML = `<div class="empty" style="padding:24px 0">
+      <div class="empty-title">No accounts connected</div>
       <div class="empty-note">Link your YouTube, Instagram, Facebook and TikTok accounts inside Opus, then refresh here.</div>
     </div>`;
   } else {
@@ -1034,7 +1149,7 @@ function renderActivity() {
       badge.textContent = platformName(a.platform).slice(0, 2).toUpperCase();
       const who = el('div');
       who.innerHTML = `<div class="acct-name">${esc(a.name || 'Account')}</div>
-        <div class="acct-plat">${esc(platformName(a.platform))}</div>`;
+        <div class="acct-plat code">${esc(platformName(a.platform))}</div>`;
       row.append(badge, who);
       box.append(row);
     });
@@ -1044,7 +1159,7 @@ function renderActivity() {
   logBox.innerHTML = '';
   const lines = DATA.log || [];
   if (!lines.length) {
-    logBox.innerHTML = `<div class="empty" style="padding:28px 0"><div class="empty-note">Nothing has happened yet.</div></div>`;
+    logBox.innerHTML = `<div class="empty" style="padding:24px 0"><div class="empty-note">Nothing has happened yet.</div></div>`;
     return;
   }
   lines.forEach(l => {
@@ -1109,7 +1224,7 @@ $('#send').onclick = async () => {
 $('#approveAll').onclick = async () => {
   const waiting = (DATA.clips || []).filter(c => statusOf(c) === 'waiting');
   if (!waiting.length) return;
-  if (!confirm(`Approve all ${waiting.length} clips? They will be scheduled into the next free slots.`)) return;
+  if (!confirm(`Approve all ${waiting.length} clips? They will fill the next open slots.`)) return;
   $('#approveAll').disabled = true;
   let done = 0;
   for (const c of waiting) {
@@ -1129,7 +1244,7 @@ $('#refreshAcc').onclick = async () => {
   $('#refreshAcc').disabled = true;
   try {
     const res = await api('/api/accounts/refresh', { method: 'POST' });
-    toast(`${(res.accounts || []).length} accounts linked`, 'good');
+    toast(`${(res.accounts || []).length} accounts connected`, 'good');
     refresh();
   } catch (err) { toast(err.message, 'bad'); }
   $('#refreshAcc').disabled = false;
