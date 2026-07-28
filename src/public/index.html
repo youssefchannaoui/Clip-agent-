@@ -4,46 +4,43 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Clip Agent</title>
-<meta name="theme-color" content="#0B0B0C">
+<meta name="theme-color" content="#0C0A08">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Clip Agent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#0B0B0C;
-  --surface:#131315;
-  --surface-2:#1A1A1D;
-  --line:#26262A;
-  --line-lit:#35353B;
+  --bg:#0C0A08;
+  --surface:#141110;
+  --surface-2:#1C1815;
+  --line:#2A2420;
+  --line-lit:#3B332B;
 
-  --text:#FAFAFA;
-  --text-2:#B4B4BB;
-  --mute:#87878F;
-  --mute-2:#5C5C64;
+  --text:#F4EFE7;
+  --text-2:#BFB5A6;
+  --mute:#8C8377;
+  --mute-2:#5F5850;
 
-  --blue:#2F6BFF;
-  --blue-soft:#8FB3FF;
-  --red:#FF5566;
+  /* the channel's gold, standing in for the old blue */
+  --blue:#C9A87C;
+  --blue-soft:#E3CBA8;
+  --red:#E0736F;
 
   --gutter:24px;
   --r:6px;
   --font:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --brand:'Outfit','Inter',system-ui,sans-serif;
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
 body{
-  background:var(--bg);
-  color:var(--text);
-  font-family:var(--font);
-  font-size:15px;
-  line-height:1.6;
-  min-height:100vh;
-  -webkit-font-smoothing:antialiased;
-  font-variant-numeric:tabular-nums;
+  background:var(--bg);color:var(--text);font-family:var(--font);
+  font-size:15px;line-height:1.6;min-height:100vh;
+  -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;
   padding-bottom:env(safe-area-inset-bottom);
 }
 .hide{display:none !important}
@@ -53,38 +50,27 @@ button{cursor:pointer;border:0;background:none}
 a{color:var(--blue-soft)}
 :focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:4px}
 
-/* small grey label — plain sentence case, easy to read */
-.code{font-size:13px;color:var(--mute);font-weight:450;letter-spacing:0;text-transform:none}
+.code{font-size:13px;color:var(--mute);font-weight:450}
 
 /* ---------- shell ---------- */
-.wrap{max-width:1080px;margin:0 auto;padding:0 var(--gutter) 96px}
+.wrap{max-width:1240px;margin:0 auto;padding:0 var(--gutter) 96px}
+.shell{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:34px;align-items:start;padding-top:30px}
 
 /* ---------- gate / connect ---------- */
 .center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-.card-lock{
-  width:100%;max-width:380px;background:var(--surface);
-  border:1px solid var(--line);border-radius:10px;overflow:hidden;
-}
+.card-lock{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .lock-head{border-bottom:1px solid var(--line);padding:22px 26px}
 .lock-body{padding:26px}
 
 .mark{display:flex;align-items:center;gap:12px}
-.mark-dot{
-  width:24px;height:24px;flex:none;border-radius:6px;
-  background:var(--blue);position:relative;
-}
-.mark-dot::after{
-  content:'';position:absolute;left:8.5px;top:8.5px;width:7px;height:7px;
-  border-radius:2px;background:#fff;
-}
-.mark-name{font-size:17px;font-weight:600;letter-spacing:-.015em;line-height:1.3}
-.mark-sub{margin-top:0}
+.mark-dot{width:26px;height:26px;flex:none;display:block;color:var(--blue)}
+.mark-name{font-family:var(--brand);font-size:18px;font-weight:600;letter-spacing:-.01em;line-height:1.3}
+.mark-name em{font-style:normal;color:var(--blue)}
 
 label.field{display:block;margin-bottom:8px}
 input[type=password],input[type=text],textarea{
   width:100%;background:var(--bg);border:1px solid var(--line);
-  border-radius:var(--r);padding:11px 13px;color:var(--text);
-  transition:border-color .12s;
+  border-radius:var(--r);padding:11px 13px;color:var(--text);transition:border-color .12s;
 }
 input::placeholder,textarea::placeholder{color:var(--mute-2)}
 input:focus,textarea:focus{outline:none;border-color:var(--blue)}
@@ -93,64 +79,51 @@ textarea{resize:vertical;line-height:1.65}
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:7px;
   padding:10px 17px;border-radius:var(--r);font-weight:500;font-size:14px;
-  background:var(--blue);color:#fff;transition:background .12s;white-space:nowrap;
+  background:var(--blue);color:#241B10;transition:background .12s;white-space:nowrap;
 }
-.btn:hover{background:#4179FF}
-.btn:active{background:#2559DB}
+.btn:hover{background:#D9BC93}
+.btn:active{background:#B4926A}
 .btn[disabled]{opacity:.45;cursor:default}
 .btn-wide{width:100%;margin-top:18px}
 .btn-ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
 .btn-ghost:hover{background:var(--surface-2);border-color:var(--line-lit)}
 .btn-sm{padding:7px 13px;font-size:13.5px}
-.btn-danger:hover{color:var(--red);border-color:rgba(255,85,102,.5);background:transparent}
+.btn-danger:hover{color:var(--red);border-color:rgba(224,115,111,.5);background:transparent}
 
 .err{color:var(--red);font-size:13.5px;margin-top:14px;min-height:1px}
 .hint{color:var(--mute);font-size:13.5px;margin:16px 0 0;line-height:1.65}
 
 /* ---------- masthead ---------- */
 .top{
-  position:sticky;top:0;z-index:20;
-  background:rgba(11,11,12,.9);backdrop-filter:blur(12px);
-  border-bottom:1px solid var(--line);
-  margin:0 calc(var(--gutter) * -1);padding:0 var(--gutter);
+  position:sticky;top:0;z-index:20;background:rgba(11,11,12,.9);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);margin:0 calc(var(--gutter) * -1);padding:0 var(--gutter);
 }
 .top-in{display:flex;align-items:center;gap:20px;padding:16px 0;flex-wrap:wrap}
 .readout{margin-left:auto;display:flex;align-items:center;gap:28px;flex-wrap:wrap}
 .dial{text-align:right}
 .dial-v{font-size:20px;font-weight:600;letter-spacing:-.02em;line-height:1.25}
-.dial-k{margin-top:-1px}
 .dial.live .dial-v{color:var(--blue-soft)}
 
-.lamp{
-  display:inline-block;width:6px;height:6px;border-radius:50%;
-  background:var(--blue);margin-right:7px;vertical-align:1px;
-}
+.lamp{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--blue);margin-right:7px;vertical-align:1px}
 .lamp.off{background:var(--red)}
 
 /* ---------- tabs ---------- */
 .tabs{display:flex;gap:26px;overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
-.tab{
-  padding:0 0 12px;font-size:14.5px;font-weight:450;color:var(--mute);
-  white-space:nowrap;position:relative;transition:color .12s;
-}
+.tab{padding:0 0 12px;font-size:14.5px;font-weight:450;color:var(--mute);white-space:nowrap;position:relative;transition:color .12s}
 .tab:hover{color:var(--text)}
 .tab.on{color:var(--text);font-weight:500}
 .tab.on::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--blue)}
-.tab-count{
-  font-size:12px;margin-left:7px;padding:1px 6px;border-radius:20px;
-  background:var(--line);color:var(--mute);font-weight:500;
-}
+.tab-count{font-size:12px;margin-left:7px;padding:1px 6px;border-radius:20px;background:var(--line);color:var(--mute);font-weight:500}
 .tab.on .tab-count{background:var(--surface-2);color:var(--text-2)}
-.tab-count.urgent{background:var(--blue);color:#fff}
+.tab-count.urgent{background:var(--blue);color:#241B10}
 
 /* ---------- sections ---------- */
-.panel{padding-top:34px}
+.panel{padding:0}
 .head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}
 h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.35}
 .head .btn{margin-left:auto}
 .note{color:var(--mute);font-size:13.5px}
-
 .slab{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:var(--gutter)}
 
 /* ---------- intake ---------- */
@@ -158,29 +131,41 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .intake-row{display:flex;align-items:center;gap:14px;margin-top:14px;flex-wrap:wrap}
 .intake-note{color:var(--mute);margin-left:auto;font-size:13px}
 
-/* ---------- clip cards ---------- */
-.clip{
-  background:var(--surface);border:1px solid var(--line);border-radius:10px;
-  padding:19px;margin-bottom:12px;
+/* ---------- live progress ---------- */
+.spin{
+  display:inline-block;width:12px;height:12px;flex:none;border-radius:50%;
+  border:2px solid var(--line-lit);border-top-color:var(--blue);
+  animation:turn .8s linear infinite;
 }
+@keyframes turn{to{transform:rotate(360deg)}}
+
+.stage{
+  display:flex;align-items:center;gap:10px;margin-top:13px;
+  padding:11px 13px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r);
+}
+.stage-text{font-size:13.5px;color:var(--text-2);flex:1;min-width:0}
+.stage-step{font-size:12.5px;color:var(--mute-2);flex:none}
+.stage-bar{height:2px;background:var(--line);margin-top:9px;border-radius:2px;overflow:hidden}
+.stage-fill{height:100%;background:var(--blue);border-radius:2px;transition:width .4s ease}
+
+/* ---------- clip cards ---------- */
+.clip{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:19px;margin-bottom:12px}
 .clip.needs{border-color:var(--line-lit)}
-.clip.bad{border-color:rgba(255,85,102,.35)}
+.clip.bad{border-color:rgba(224,115,111,.35)}
 .clip.done{opacity:.62}
+.clip.busy{border-color:rgba(201,168,124,.4)}
 
 .clip-top{display:flex;align-items:center;gap:11px;margin-bottom:12px;flex-wrap:wrap}
-.stamp{
-  font-size:12.5px;font-weight:500;padding:2px 9px;border-radius:20px;
-  background:var(--surface-2);color:var(--mute);border:1px solid var(--line);
-}
-.stamp.needs{color:var(--blue-soft);border-color:rgba(47,107,255,.4);background:rgba(47,107,255,.1)}
+.stamp{font-size:12.5px;font-weight:500;padding:2px 9px;border-radius:20px;background:var(--surface-2);color:var(--mute);border:1px solid var(--line)}
+.stamp.needs{color:var(--blue-soft);border-color:rgba(201,168,124,.4);background:rgba(201,168,124,.1)}
 .stamp.set{color:var(--text-2)}
 .stamp.done{color:var(--mute)}
-.stamp.bad{color:var(--red);border-color:rgba(255,85,102,.4);background:rgba(255,85,102,.08)}
+.stamp.bad{color:var(--red);border-color:rgba(224,115,111,.4);background:rgba(224,115,111,.08)}
 .clip-meta{font-size:12.5px;color:var(--mute-2);margin-left:auto}
 
 .clip-title{
-  font-size:16px;font-weight:600;line-height:1.45;letter-spacing:-.012em;
-  width:100%;background:transparent;border:1px solid transparent;border-radius:var(--r);
+  font-size:16px;font-weight:600;line-height:1.45;letter-spacing:-.012em;width:100%;
+  background:transparent;border:1px solid transparent;border-radius:var(--r);
   padding:7px 10px;margin:0 -10px 2px;display:block;
 }
 .clip-title:hover{border-color:var(--line)}
@@ -195,9 +180,8 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .clip-body:focus{background:var(--bg);border-color:var(--blue);outline:none}
 
 .clip-tags{
-  font-size:13.5px;color:var(--blue-soft);width:100%;
-  background:transparent;border:1px solid transparent;border-radius:var(--r);
-  padding:6px 10px;margin:0 -10px;display:block;
+  font-size:13.5px;color:var(--blue-soft);width:100%;background:transparent;
+  border:1px solid transparent;border-radius:var(--r);padding:6px 10px;margin:0 -10px;display:block;
 }
 .clip-tags:hover{border-color:var(--line)}
 .clip-tags:focus{background:var(--bg);border-color:var(--blue);outline:none}
@@ -206,95 +190,101 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .clip-title.locked:hover,.clip-body.locked:hover,.clip-tags.locked:hover{border-color:transparent}
 .clip-body.locked{white-space:pre-wrap}
 
-.clip-foot{
-  display:flex;align-items:center;gap:8px;margin-top:16px;padding-top:14px;
-  border-top:1px solid var(--line);flex-wrap:wrap;
-}
+.clip-foot{display:flex;align-items:center;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line);flex-wrap:wrap}
 .counter{font-size:12.5px;color:var(--mute-2);margin-right:auto}
 .counter.over{color:var(--red)}
 .saved{font-size:12.5px;color:var(--blue-soft);opacity:0;transition:opacity .2s}
 .saved.on{opacity:1}
 
 .dests{display:flex;gap:6px;flex-wrap:wrap;margin-top:13px}
-.dest{
-  font-size:12px;padding:2px 9px;border-radius:20px;
-  border:1px solid var(--line);color:var(--mute);
-}
-.dest.bad{color:var(--red);border-color:rgba(255,85,102,.35)}
+.dest{font-size:12px;padding:2px 9px;border-radius:20px;border:1px solid var(--line);color:var(--mute)}
+.dest.bad{color:var(--red);border-color:rgba(224,115,111,.35)}
 .dest.done{color:var(--text-2)}
+
+/* ---------- processing lectures ---------- */
+.proc{
+  display:flex;align-items:center;gap:13px;padding:14px 18px;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:10px;
+}
+.proc-what{flex:1;min-width:0}
+.proc-title{font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.proc-stage{font-size:13px;color:var(--mute);margin-top:1px}
 
 /* ---------- the board ---------- */
 .board{border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden}
-.board-day{
-  display:flex;align-items:center;gap:12px;padding:11px 18px;
-  background:var(--surface-2);border-bottom:1px solid var(--line);
-}
-.board-day + .dep{border-top:0}
+.board-day{display:flex;align-items:center;gap:12px;padding:11px 18px;background:var(--surface-2);border-bottom:1px solid var(--line)}
 .board-day .code{color:var(--text-2);font-weight:500}
 .board-day.today .code{color:var(--text)}
 .board-day-n{color:var(--mute-2);font-size:12.5px;margin-left:auto}
 
-.dep{
-  display:flex;align-items:center;gap:18px;padding:13px 18px;
-  border-bottom:1px solid var(--line);position:relative;
-}
+.dep{display:flex;align-items:center;gap:18px;padding:13px 18px;border-bottom:1px solid var(--line);position:relative}
 .dep:last-child{border-bottom:0}
-.dep-time{
-  font-size:15px;font-weight:600;letter-spacing:-.01em;
-  width:66px;flex:none;color:var(--mute);
-}
+.dep-time{font-size:15px;font-weight:600;letter-spacing:-.01em;width:66px;flex:none;color:var(--mute)}
 .dep-what{flex:1;min-width:0}
 .dep-title{font-size:14.5px;font-weight:450;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dep-from{color:var(--mute-2);font-size:12.5px;margin-top:1px}
 .dep-stat{flex:none;font-size:12.5px;color:var(--mute-2)}
-
 .dep.open .dep-title{color:var(--mute-2)}
 .dep.gone{opacity:.4}
 .dep.loaded .dep-time{color:var(--text)}
-.dep.next{background:rgba(47,107,255,.06)}
+.dep.next{background:rgba(201,168,124,.06)}
 .dep.next .dep-time,.dep.next .dep-stat{color:var(--blue-soft)}
 .dep.next::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--blue)}
 
 /* ---------- figures ---------- */
-.figs{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(158px,1fr))}
+.figs{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 .fig{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
 .fig-v{font-size:28px;font-weight:600;letter-spacing:-.03em;line-height:1.15}
 .fig-k{color:var(--text-2);font-size:13.5px;margin-top:5px}
 .fig-s{color:var(--mute-2);font-size:12.5px;margin-top:3px}
 .fig.warn .fig-v{color:var(--blue-soft)}
-.fig.good .fig-v,.fig.cool .fig-v{color:var(--text)}
 
-.bars{margin-top:0}
 .bar-row{display:flex;align-items:center;gap:16px;padding:10px 0;border-bottom:1px solid var(--line)}
 .bar-row:last-child{border-bottom:0}
-.bar-lab{
-  font-size:13.5px;color:var(--text-2);width:134px;flex:none;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-}
+.bar-lab{font-size:13.5px;color:var(--text-2);width:130px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bar-track{flex:1;height:4px;background:var(--line);border-radius:3px;overflow:hidden}
 .bar-fill{height:100%;background:var(--blue);border-radius:3px;transition:width .45s ease}
 .bar-num{font-size:14px;font-weight:600;color:var(--text);width:30px;text-align:right;flex:none}
 
-/* ---------- accounts + log ---------- */
-.acct{display:flex;align-items:center;gap:13px;padding:12px 0;border-bottom:1px solid var(--line)}
-.acct:last-child{border-bottom:0}
-.acct-badge{
-  width:34px;height:34px;flex:none;display:grid;place-items:center;border-radius:8px;
-  background:var(--surface-2);border:1px solid var(--line);
-  font-size:11.5px;font-weight:600;color:var(--mute);
+/* ---------- side rail ---------- */
+.side{position:sticky;top:104px;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.card-head{
+  display:flex;align-items:center;gap:9px;padding:12px 16px;
+  border-bottom:1px solid var(--line);font-size:13.5px;font-weight:600;letter-spacing:-.01em;
 }
-.acct-name{font-size:14.5px;font-weight:500}
-.acct-plat{margin-top:-2px}
+.card-head .btn{margin-left:auto}
+.card-body{padding:14px 16px}
+.card-body.tight{padding:6px 16px}
 
-.log-line{display:flex;gap:16px;padding:9px 0;font-size:13.5px;border-bottom:1px solid var(--line)}
+.now-item{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+.now-item:last-child{border-bottom:0}
+.now-what{flex:1;min-width:0}
+.now-title{font-size:13.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.now-stage{font-size:12.5px;color:var(--blue-soft);margin-top:1px}
+.now-idle{font-size:13.5px;color:var(--mute);padding:2px 0}
+
+.next-time{font-size:19px;font-weight:600;letter-spacing:-.02em}
+.next-title{font-size:13.5px;color:var(--text-2);margin-top:4px;line-height:1.45}
+.next-when{font-size:12.5px;color:var(--mute-2);margin-top:3px}
+
+.mini{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.mini:last-child{border-bottom:0}
+.mini-badge{
+  width:26px;height:26px;flex:none;display:grid;place-items:center;border-radius:6px;
+  background:var(--surface-2);border:1px solid var(--line);font-size:10px;font-weight:600;color:var(--mute);
+}
+.mini-name{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.log-line{display:flex;gap:12px;padding:8px 0;font-size:13px;border-bottom:1px solid var(--line)}
 .log-line:last-child{border-bottom:0}
-.log-time{font-size:12.5px;color:var(--mute-2);width:60px;flex:none;padding-top:2px}
-.log-msg{color:var(--text-2);line-height:1.55}
+.log-time{font-size:12px;color:var(--mute-2);width:52px;flex:none;padding-top:1px}
+.log-msg{color:var(--text-2);line-height:1.5}
 .log-line.error .log-msg{color:var(--red)}
 .log-line.warn .log-msg{color:var(--text)}
 
 /* ---------- empty ---------- */
-.empty{padding:48px 20px;text-align:center;color:var(--mute)}
+.empty{padding:44px 20px;text-align:center;color:var(--mute)}
 .empty-title{font-size:15.5px;font-weight:600;color:var(--text);margin-bottom:7px}
 .empty-note{font-size:13.5px;max-width:340px;margin:0 auto;line-height:1.65}
 
@@ -306,15 +296,20 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 }
 .toast{
   background:var(--surface-2);border:1px solid var(--line-lit);border-radius:8px;
-  padding:12px 16px;font-size:14px;animation:slide .18s ease-out;
-  box-shadow:0 12px 32px rgba(0,0,0,.5);
+  padding:12px 16px;font-size:14px;animation:slide .18s ease-out;box-shadow:0 12px 32px rgba(0,0,0,.5);
 }
-.toast.bad{border-color:rgba(255,85,102,.45);color:#FFC0C7}
-.toast.good{border-color:rgba(47,107,255,.45)}
+.toast.bad{border-color:rgba(224,115,111,.45);color:#FFC0C7}
+.toast.good{border-color:rgba(201,168,124,.45)}
 @keyframes slide{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
 @media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
 
+@media (max-width:1000px){
+  .shell{grid-template-columns:1fr;gap:26px}
+  .side{position:static}
+  /* when the agent is mid-job, the live panel comes first */
+  .side.busy{order:-1}
+}
 @media (max-width:720px){
   :root{--gutter:16px}
   .readout{width:100%;margin-left:0;justify-content:space-between;gap:16px}
@@ -334,10 +329,10 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
   <div class="card-lock">
     <div class="lock-head">
       <div class="mark">
-        <div class="mark-dot"></div>
+        <svg class="mark-dot" viewBox="0 0 24 26" fill="none" aria-hidden="true"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg>
         <div>
-          <div class="mark-name">Clip Agent</div>
-          <div class="mark-sub code">Sign in to continue</div>
+          <div class="mark-name">Deen<em>Clipped</em></div>
+          <div class="code">Sign in to continue</div>
         </div>
       </div>
     </div>
@@ -355,10 +350,10 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
   <div class="card-lock">
     <div class="lock-head">
       <div class="mark">
-        <div class="mark-dot"></div>
+        <svg class="mark-dot" viewBox="0 0 24 26" fill="none" aria-hidden="true"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg>
         <div>
           <div class="mark-name">Connect Opus</div>
-          <div class="mark-sub code">One key, one time</div>
+          <div class="code">One key, one time</div>
         </div>
       </div>
     </div>
@@ -379,20 +374,20 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
     <div class="top">
       <div class="top-in">
         <div class="mark">
-          <div class="mark-dot"></div>
+          <svg class="mark-dot" viewBox="0 0 24 26" fill="none" aria-hidden="true"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg>
           <div>
-            <div class="mark-name">Clip Agent</div>
-            <div class="mark-sub code"><span class="lamp" id="liveDot"></span><span id="liveText">Checking</span></div>
+            <div class="mark-name">Deen<em>Clipped</em></div>
+            <div class="code"><span class="lamp" id="liveDot"></span><span id="liveText">Checking</span></div>
           </div>
         </div>
         <div class="readout">
           <div class="dial">
             <div class="dial-v" id="clock">--:--</div>
-            <div class="dial-k code" id="tzLabel">Local time</div>
+            <div class="code" id="tzLabel">Local time</div>
           </div>
           <div class="dial live">
             <div class="dial-v" id="cdNum">--</div>
-            <div class="dial-k code">Next post</div>
+            <div class="code">Next post</div>
           </div>
         </div>
       </div>
@@ -400,72 +395,93 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
         <button class="tab on" data-view="queue">Queue<span class="tab-count" id="cQueue">0</span></button>
         <button class="tab" data-view="schedule">Schedule<span class="tab-count" id="cSched">0</span></button>
         <button class="tab" data-view="insights">Record</button>
-        <button class="tab" data-view="activity">Accounts</button>
       </nav>
     </div>
 
-    <!-- queue -->
-    <section class="panel" id="view-queue">
-      <div class="head"><h2>Add lectures</h2></div>
-      <div class="slab intake">
-        <textarea id="urls" placeholder="Paste one or more video links, one per line"></textarea>
-        <div class="intake-row">
-          <button class="btn" id="send">Send to Opus</button>
-          <span class="intake-note" id="intakeNote"></span>
+    <div class="shell">
+      <div>
+
+        <!-- queue -->
+        <section class="panel" id="view-queue">
+          <div class="head"><h2>Add lectures</h2></div>
+          <div class="slab intake">
+            <textarea id="urls" placeholder="Paste one or more video links, one per line"></textarea>
+            <div class="intake-row">
+              <button class="btn" id="send">Send to Opus</button>
+              <span class="intake-note" id="intakeNote"></span>
+            </div>
+          </div>
+
+          <div class="head hide" id="procHead" style="margin-top:34px"><h2>Being clipped</h2></div>
+          <div id="procList"></div>
+
+          <div class="head" style="margin-top:34px">
+            <h2>Waiting for you</h2>
+            <span class="note" id="waitNote"></span>
+            <button class="btn btn-ghost btn-sm hide" id="approveAll">Approve all</button>
+          </div>
+          <div id="waitList"></div>
+        </section>
+
+        <!-- schedule -->
+        <section class="panel hide" id="view-schedule">
+          <div class="head">
+            <h2>The next five days</h2>
+            <span class="note" id="railNote"></span>
+          </div>
+          <div class="board" id="rail"></div>
+
+          <div class="head" style="margin-top:34px">
+            <h2>Queued clips</h2>
+            <span class="note" id="schedNote"></span>
+          </div>
+          <div id="schedList"></div>
+        </section>
+
+        <!-- record -->
+        <section class="panel hide" id="view-insights">
+          <div class="head"><h2>The record</h2><span class="note">What has gone out</span></div>
+          <div class="figs" id="stats"></div>
+
+          <div class="head" style="margin-top:34px"><h2>By platform</h2></div>
+          <div class="slab"><div id="byPlatform"></div></div>
+
+          <div class="head" style="margin-top:34px"><h2>By time of day</h2></div>
+          <div class="slab"><div id="bySlot"></div></div>
+
+          <div class="head" style="margin-top:34px"><h2>By lecture</h2></div>
+          <div class="slab"><div id="bySource"></div></div>
+
+          <p class="hint">Opus doesn't return views or likes through its API, so nothing here is engagement data — it's a record of what went out, when, and where. To see how posts performed, check each platform's own analytics.</p>
+        </section>
+
+      </div>
+
+      <!-- side rail -->
+      <aside class="side" id="side">
+        <div class="card">
+          <div class="card-head"><span id="nowIcon"></span>Happening now</div>
+          <div class="card-body tight" id="nowList"></div>
         </div>
-      </div>
 
-      <div class="head" style="margin-top:38px">
-        <h2>Waiting for you</h2>
-        <span class="note" id="waitNote"></span>
-        <button class="btn btn-ghost btn-sm hide" id="approveAll">Approve all</button>
-      </div>
-      <div id="waitList"></div>
-    </section>
+        <div class="card">
+          <div class="card-head">Next post</div>
+          <div class="card-body" id="nextBox"></div>
+        </div>
 
-    <!-- schedule -->
-    <section class="panel hide" id="view-schedule">
-      <div class="head">
-        <h2>The next five days</h2>
-        <span class="note" id="railNote"></span>
-      </div>
-      <div class="board" id="rail"></div>
+        <div class="card">
+          <div class="card-head">Accounts
+            <button class="btn btn-ghost btn-sm" id="refreshAcc">Refresh</button>
+          </div>
+          <div class="card-body tight" id="accounts"></div>
+        </div>
 
-      <div class="head" style="margin-top:38px">
-        <h2>Queued clips</h2>
-        <span class="note" id="schedNote"></span>
-      </div>
-      <div id="schedList"></div>
-    </section>
-
-    <!-- record -->
-    <section class="panel hide" id="view-insights">
-      <div class="head"><h2>The record</h2><span class="note">What has gone out</span></div>
-      <div class="figs" id="stats"></div>
-
-      <div class="head" style="margin-top:38px"><h2>By platform</h2></div>
-      <div class="slab"><div class="bars" id="byPlatform"></div></div>
-
-      <div class="head" style="margin-top:38px"><h2>By time of day</h2></div>
-      <div class="slab"><div class="bars" id="bySlot"></div></div>
-
-      <div class="head" style="margin-top:38px"><h2>By lecture</h2></div>
-      <div class="slab"><div class="bars" id="bySource"></div></div>
-
-      <p class="hint">Opus doesn't return views or likes through its API, so nothing here is engagement data — it's a record of what went out, when, and where. To see how posts performed, check each platform's own analytics.</p>
-    </section>
-
-    <!-- accounts -->
-    <section class="panel hide" id="view-activity">
-      <div class="head">
-        <h2>Connected accounts</h2>
-        <button class="btn btn-ghost btn-sm" id="refreshAcc">Refresh</button>
-      </div>
-      <div class="slab" id="accounts"></div>
-
-      <div class="head" style="margin-top:38px"><h2>Recent activity</h2></div>
-      <div class="slab" id="log"></div>
-    </section>
+        <div class="card">
+          <div class="card-head">Recent activity</div>
+          <div class="card-body tight" id="log"></div>
+        </div>
+      </aside>
+    </div>
 
   </div>
 </main>
@@ -484,7 +500,8 @@ let PW = localStorage.getItem('clipAgentPw') || '';
 let DATA = null;
 let VIEW = 'queue';
 let editing = new Set();   // clip ids being typed into, so refreshes don't clobber them
-let timer = null;
+let pollTimer = null;
+let pollEvery = 0;
 
 /* ---------- network ---------- */
 
@@ -544,10 +561,6 @@ const clockLabel = ms => new Intl.DateTimeFormat('en-AU', {
   timeZone: TZ(), hour: 'numeric', minute: '2-digit',
 }).format(new Date(ms));
 
-const clockNow = () => new Intl.DateTimeFormat('en-AU', {
-  timeZone: TZ(), hour: 'numeric', minute: '2-digit',
-}).format(new Date());
-
 function countdown(ms) {
   const s = Math.max(0, Math.floor((ms - Date.now()) / 1000));
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
@@ -584,7 +597,7 @@ function statusOf(c) {
   if (c.status === 'scheduled' && c.scheduledAt && c.scheduledAt <= Date.now()) return 'posted';
   return c.status;
 }
-const STATUS_TEXT = { waiting: 'Needs you', approved: 'Queueing', scheduled: 'Scheduled', posted: 'Posted' };
+const STATUS_TEXT = { waiting: 'Needs you', approved: 'Working on it', scheduled: 'Scheduled', posted: 'Posted' };
 const STATUS_CLASS = { waiting: 'needs', approved: 'set', scheduled: 'set', posted: 'done' };
 
 /* ---------- boot ---------- */
@@ -615,9 +628,18 @@ async function boot() {
   $('#connect').classList.add('hide');
   $('#app').classList.remove('hide');
   render();
-  if (!timer) timer = setInterval(refresh, 15000);
+  setPolling();
   setInterval(tickClock, 1000);
   return true;
+}
+
+/** Check often while the agent is mid-job, rarely when it is idle. */
+function setPolling() {
+  const want = DATA && DATA.working ? 2500 : 15000;
+  if (pollEvery === want && pollTimer) return;
+  pollEvery = want;
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(refresh, want);
 }
 
 async function refresh() {
@@ -629,6 +651,7 @@ async function refresh() {
       return;
     }
     render();
+    setPolling();
   } catch { /* keep the last good view on a blip */ }
 }
 
@@ -651,19 +674,85 @@ function render() {
     : 'No accounts connected';
 
   tickClock();
+  renderProcessing();
   renderQueue(waiting);
   renderBoard(queued);
   renderRecord(clips);
-  renderAccounts();
+  renderSide();
 }
 
 function tickClock() {
   if (!DATA) return;
-  $('#clock').textContent = clockNow();
-  const next = (DATA.clips || [])
-    .filter(c => statusOf(c) === 'scheduled' && c.scheduledAt > Date.now())
-    .sort((a, b) => a.scheduledAt - b.scheduledAt)[0];
+  $('#clock').textContent = clockLabel(Date.now());
+  const next = nextPost();
   $('#cdNum').textContent = next ? countdown(next.scheduledAt) : 'None';
+  const t = $('#nextCd');
+  if (t && next) t.textContent = countdown(next.scheduledAt);
+}
+
+const nextPost = () => (DATA?.clips || [])
+  .filter(c => statusOf(c) === 'scheduled' && c.scheduledAt > Date.now())
+  .sort((a, b) => a.scheduledAt - b.scheduledAt)[0];
+
+/* ---------- live steps ---------- */
+
+/** Everything the agent is working on right now, clips and lectures alike. */
+function liveWork() {
+  const out = [];
+  (DATA?.clips || []).forEach(c => {
+    if (c.stage) out.push({ title: c.title || 'Untitled clip', stage: c.stage.text, step: c.stage.step, total: c.stage.total });
+    else if (c.status === 'approved') out.push({ title: c.title || 'Untitled clip', stage: 'Queued for the agent', step: 0, total: 0 });
+  });
+  (DATA?.projects || []).forEach(p => {
+    if (p.status === 'clipping') out.push({ title: p.title, stage: p.stage || 'Opus is clipping', step: 0, total: 0 });
+  });
+  return out;
+}
+
+function stageBlock(stage) {
+  const box = el('div', 'stage');
+  box.append(el('span', 'spin'));
+  const text = el('span', 'stage-text');
+  text.textContent = stage.text;
+  box.append(text);
+  if (stage.total > 1) {
+    const step = el('span', 'stage-step');
+    step.textContent = stage.step + ' of ' + stage.total;
+    box.append(step);
+  }
+  const wrap = el('div');
+  wrap.append(box);
+  if (stage.total > 1) {
+    const bar = el('div', 'stage-bar');
+    const fill = el('div', 'stage-fill');
+    fill.style.width = Math.round((stage.step / stage.total) * 100) + '%';
+    bar.append(fill);
+    wrap.append(bar);
+  }
+  return wrap;
+}
+
+/* ---------- lectures being clipped ---------- */
+
+function renderProcessing() {
+  const host = $('#procList');
+  host.innerHTML = '';
+  const busy = (DATA.projects || []).filter(p => p.status === 'clipping' || p.status === 'stalled');
+  $('#procHead').classList.toggle('hide', busy.length === 0);
+  if (!busy.length) return;
+
+  busy.forEach(p => {
+    const row = el('div', 'proc');
+    if (p.status === 'clipping') row.append(el('span', 'spin'));
+    const what = el('div', 'proc-what');
+    const t = el('div', 'proc-title');
+    t.textContent = p.title;
+    const s = el('div', 'proc-stage');
+    s.textContent = p.stage || (p.status === 'stalled' ? 'Opus has not returned anything' : 'Working');
+    what.append(t, s);
+    row.append(what);
+    host.append(row);
+  });
 }
 
 /* ---------- queue ---------- */
@@ -701,7 +790,7 @@ function clipCard(c) {
   const st = statusOf(c);
   const failed = (c.targets || []).some(t => t.status === 'failed');
   const kind = failed ? 'bad' : (STATUS_CLASS[st] || '');
-  const node = el('div', 'clip ' + kind);
+  const node = el('div', 'clip ' + kind + (c.stage ? ' busy' : ''));
   node.dataset.id = c.id;
 
   const top = el('div', 'clip-top');
@@ -789,6 +878,12 @@ function clipCard(c) {
     foot.append(count, saved);
   }
 
+  // While the agent is mid-job on this clip, show the step instead of buttons.
+  if (c.stage) {
+    node.append(stageBlock(c.stage));
+    return node;
+  }
+
   if (st === 'waiting') {
     const approve = el('button', 'btn btn-sm');
     approve.textContent = 'Approve';
@@ -800,7 +895,7 @@ function clipCard(c) {
           body: JSON.stringify({ title: title.value, description: body.value, hashtags: tags.value, status: 'approved' }),
         });
         editing.delete(c.id);
-        toast('Approved — it will go out at the next open slot', 'good');
+        toast('Approved — watch it move through the steps', 'good');
         refresh();
       } catch (err) { toast(err.message, 'bad'); approve.disabled = false; }
     };
@@ -810,32 +905,41 @@ function clipCard(c) {
     now.onclick = async () => {
       if (!confirm('Post this clip to every connected account right now?')) return;
       now.disabled = true;
+      now.textContent = 'Posting…';
+      refresh();
       try {
         await api('/api/clips/' + encodeURIComponent(c.id) + '/now', { method: 'POST' });
-        toast('Posting now', 'good');
-        refresh();
-      } catch (err) { toast(err.message, 'bad'); now.disabled = false; }
+        toast('Posted', 'good');
+      } catch (err) { toast(err.message, 'bad'); }
+      refresh();
     };
 
     const drop = el('button', 'btn btn-ghost btn-sm btn-danger');
     drop.textContent = 'Discard';
     drop.onclick = async () => {
       if (!confirm('Discard this clip? It stays in Opus, it just leaves this queue.')) return;
-      try { await api('/api/clips/' + encodeURIComponent(c.id), { method: 'DELETE' }); refresh(); }
-      catch (err) { toast(err.message, 'bad'); }
+      drop.disabled = true;
+      drop.textContent = 'Discarding…';
+      try {
+        await api('/api/clips/' + encodeURIComponent(c.id), { method: 'DELETE' });
+        toast('Discarded');
+      } catch (err) { toast(err.message, 'bad'); drop.disabled = false; drop.textContent = 'Discard'; }
+      refresh();
     };
     foot.append(approve, now, drop);
   } else if (st !== 'posted') {
     const back = el('button', 'btn btn-ghost btn-sm');
     back.textContent = 'Pull back';
     back.onclick = async () => {
+      back.disabled = true;
+      back.textContent = 'Pulling back…';
       try {
         await api('/api/clips/' + encodeURIComponent(c.id), {
           method: 'PATCH', body: JSON.stringify({ status: 'waiting' }),
         });
         toast('Pulled back — its slot is open again');
-        refresh();
       } catch (err) { toast(err.message, 'bad'); }
+      refresh();
     };
     foot.append(back);
   }
@@ -959,8 +1063,8 @@ function renderRecord(clips) {
     n + (c.targets || []).filter(t => t.status === 'failed').length, 0);
 
   const figs = [
-    { v: sent.length, k: 'Clips posted', s: uploads + ' uploads in total', cls: 'good' },
-    { v: queued.length, k: 'Queued and ready', s: perDay + ' slots a day', cls: 'cool' },
+    { v: sent.length, k: 'Clips posted', s: uploads + ' uploads in total' },
+    { v: queued.length, k: 'Queued and ready', s: perDay + ' slots a day' },
     {
       v: daysLeft < 1 ? '<1' : Math.floor(daysLeft),
       k: 'Days of runway', cls: daysLeft < 1.5 ? 'warn' : '',
@@ -1024,35 +1128,80 @@ function bars(sel, counts, emptyNote) {
   });
 }
 
-/* ---------- accounts ---------- */
+/* ---------- side rail ---------- */
 
-function renderAccounts() {
-  const box = $('#accounts');
+function renderSide() {
+  const work = liveWork();
+  $('#side').classList.toggle('busy', work.length > 0);
+
+  const icon = $('#nowIcon');
+  icon.innerHTML = '';
+  if (work.length) icon.append(el('span', 'spin'));
+
+  const now = $('#nowList');
+  now.innerHTML = '';
+  if (!work.length) {
+    const idle = el('div', 'now-idle');
+    idle.textContent = 'Nothing running. The agent checks every 20 seconds.';
+    now.append(idle);
+  } else {
+    work.forEach(w => {
+      const item = el('div', 'now-item');
+      const what = el('div', 'now-what');
+      const t = el('div', 'now-title');
+      t.textContent = w.title;
+      const s = el('div', 'now-stage');
+      s.textContent = w.total > 1 ? `${w.stage} (${w.step} of ${w.total})` : w.stage;
+      what.append(t, s);
+      item.append(what);
+      now.append(item);
+    });
+  }
+
+  const box = $('#nextBox');
   box.innerHTML = '';
+  const next = nextPost();
+  if (!next) {
+    const idle = el('div', 'now-idle');
+    idle.textContent = 'Nothing scheduled yet.';
+    box.append(idle);
+  } else {
+    const cd = el('div', 'next-time');
+    cd.id = 'nextCd';
+    cd.textContent = countdown(next.scheduledAt);
+    const ti = el('div', 'next-title');
+    ti.textContent = next.title || 'Untitled clip';
+    const wh = el('div', 'next-when');
+    wh.textContent = next.scheduledLabel || '';
+    box.append(cd, ti, wh);
+  }
+
+  const acc = $('#accounts');
+  acc.innerHTML = '';
   const accounts = DATA.accounts || [];
   if (!accounts.length) {
-    box.innerHTML = `<div class="empty" style="padding:24px 0">
-      <div class="empty-title">No accounts connected</div>
-      <div class="empty-note">Link your YouTube, Instagram, Facebook and TikTok accounts inside Opus, then refresh here.</div>
-    </div>`;
+    const idle = el('div', 'now-idle');
+    idle.textContent = 'None connected. Link them inside Opus, then refresh.';
+    acc.append(idle);
   } else {
     accounts.forEach(a => {
-      const row = el('div', 'acct');
-      const badge = el('div', 'acct-badge');
+      const row = el('div', 'mini');
+      const badge = el('div', 'mini-badge');
       badge.textContent = platformName(a.platform).slice(0, 2).toUpperCase();
-      const who = el('div');
-      who.innerHTML = `<div class="acct-name">${esc(a.name || 'Account')}</div>
-        <div class="acct-plat code">${esc(platformName(a.platform))}</div>`;
-      row.append(badge, who);
-      box.append(row);
+      const name = el('div', 'mini-name');
+      name.textContent = a.name || platformName(a.platform);
+      row.append(badge, name);
+      acc.append(row);
     });
   }
 
   const logBox = $('#log');
   logBox.innerHTML = '';
-  const lines = DATA.log || [];
+  const lines = (DATA.log || []).slice(0, 10);
   if (!lines.length) {
-    logBox.innerHTML = `<div class="empty" style="padding:24px 0"><div class="empty-note">Nothing has happened yet.</div></div>`;
+    const idle = el('div', 'now-idle');
+    idle.textContent = 'Nothing has happened yet.';
+    logBox.append(idle);
     return;
   }
   lines.forEach(l => {
@@ -1098,14 +1247,14 @@ $('#send').onclick = async () => {
   const urls = $('#urls').value.trim();
   if (!urls) { toast('Paste a video link first', 'bad'); return; }
   $('#send').disabled = true;
-  $('#intakeNote').textContent = 'Sending…';
+  $('#intakeNote').textContent = 'Sending to Opus…';
   try {
     const res = await api('/api/videos', { method: 'POST', body: JSON.stringify({ urls }) });
     const good = (res.results || []).filter(r => r.ok).length;
     const bad = (res.results || []).filter(r => r.error);
-    if (good) { $('#urls').value = ''; toast(`${good} sent to Opus — clips take a few minutes`, 'good'); }
+    if (good) { $('#urls').value = ''; toast(`${good} sent — follow the progress above`, 'good'); }
     bad.forEach(b => toast(b.error, 'bad'));
-    $('#intakeNote').textContent = good ? 'Opus is clipping. They will appear below.' : '';
+    $('#intakeNote').textContent = '';
     refresh();
   } catch (err) {
     toast(err.message, 'bad');
@@ -1119,6 +1268,7 @@ $('#approveAll').onclick = async () => {
   if (!waiting.length) return;
   if (!confirm(`Approve all ${waiting.length} clips? They will fill the next open slots.`)) return;
   $('#approveAll').disabled = true;
+  $('#approveAll').textContent = 'Approving…';
   let done = 0;
   for (const c of waiting) {
     try {
@@ -1126,10 +1276,12 @@ $('#approveAll').onclick = async () => {
         method: 'PATCH', body: JSON.stringify({ status: 'approved' }),
       });
       done++;
+      $('#approveAll').textContent = `Approving… ${done} of ${waiting.length}`;
     } catch (err) { toast(err.message, 'bad'); }
   }
-  toast(`${done} approved`, 'good');
+  toast(`${done} approved — the agent is working through them`, 'good');
   $('#approveAll').disabled = false;
+  $('#approveAll').textContent = 'Approve all';
   refresh();
 };
 
@@ -1147,7 +1299,7 @@ document.querySelectorAll('.tab').forEach(tab => {
   tab.onclick = () => {
     VIEW = tab.dataset.view;
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t === tab));
-    ['queue', 'schedule', 'insights', 'activity'].forEach(v => {
+    ['queue', 'schedule', 'insights'].forEach(v => {
       $('#view-' + v).classList.toggle('hide', v !== VIEW);
     });
   };
