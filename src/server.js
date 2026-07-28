@@ -84,13 +84,26 @@ async function route(req, res, url) {
     const clips = [...state.clips].sort((a, b) =>
       rank(a.status) - rank(b.status) || (a.scheduledAt || a.addedAt) - (b.scheduledAt || b.addedAt));
 
+    // True while the agent is mid-job, so the page can refresh more often.
+    const working = state.clips.some(c => c.stage || c.status === 'approved')
+      || state.projects.some(p => p.status === 'clipping');
+
     return send(res, 200, {
       connected: Boolean(opusKey()),
       autoApprove: config.autoApprove,
       postTimes: config.postTimes,
       timezone: config.timezone,
+      working,
       accounts: state.accounts,
-      projects: state.projects.slice(0, 12),
+      projects: state.projects.slice(0, 12).map(p => ({
+        id: p.id,
+        title: p.title,
+        status: p.status,
+        stage: p.stage || null,
+        submittedAt: p.submittedAt,
+        imported: p.imported,
+        clipCount: p.clipCount,
+      })),
       clips: clips.map(c => ({
         id: c.id,
         title: c.editedTitle ?? c.copy?.title ?? c.title,
@@ -99,6 +112,7 @@ async function route(req, res, url) {
         projectTitle: c.projectTitle,
         durationMs: c.durationMs,
         status: c.status,
+        stage: c.stage || null,
         scheduledAt: c.scheduledAt,
         scheduledLabel: c.scheduledAt ? formatLocal(c.scheduledAt) : null,
         targets: c.targets,
