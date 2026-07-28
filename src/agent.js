@@ -38,6 +38,7 @@ export async function submitVideo(url, title) {
   state.projects.unshift({
     id, url, title: title || url,
     status: 'clipping',
+    stage: 'Sent to Opus, waiting for it to start',
     submittedAt: Date.now(),
     imported: 0,
     // Short lectures can be ready quickly, so look soon, then ease off.
@@ -63,14 +64,22 @@ async function importClips(project) {
   if (!clips.length) {
     // Still clipping. Back off gradually, but keep checking for a day.
     const waited = Date.now() - project.submittedAt;
+    const mins = Math.floor(waited / MINUTE);
+    project.stage = mins < 1
+      ? 'Opus is clipping'
+      : `Opus is clipping, ${mins} minute${mins === 1 ? '' : 's'} so far`;
     project.checkAfter = Date.now() + Math.min(2 * MINUTE, 15_000 + waited / 10);
     if (waited > 24 * 60 * MINUTE) {
       project.status = 'stalled';
+      project.stage = 'Opus has not returned anything for a day';
       log(`Opus has not returned clips for ${project.title} after a day.`, 'warn');
     }
     save();
     return;
   }
+
+  project.stage = 'Bringing the clips in';
+  save();
 
   // Opus returns its own ranking; use the score when it is present.
   const ranked = clips.slice().sort((a, b) => {
@@ -95,8 +104,21 @@ async function importClips(project) {
   project.imported = fresh.length;
   project.clipCount = clips.length;
   project.status = 'done';
+  delete project.stage;
   save();
   log(`${fresh.length} clips ready from ${project.title}${config.autoApprove ? '' : ' — waiting for your approval'}`);
+}
+
+/**
+ * Record what the agent is doing to a clip right now, so the interface can
+ * show it step by step instead of sitting silent for a minute.
+ */
+function stage(clip, text, step = 0, total = 0) {
+  clip.stage = { text, step, total, at: Date.now() };
+  save();
+}
+function clearStage(clip) {
+  if (clip.stage) { delete clip.stage; save(); }
 }
 
 /** Ask Opus to write the caption, then wait for it. */
@@ -107,7 +129,7 @@ async function generateCopy(clip, account) {
     });
     if (!jobId) return null;
     for (let i = 0; i < 20; i++) {
-      await new Promise(r => setTimeout(r, 3000));
+      await new Promise(r => setTimeout(r, Number(process.env.COPY_POLL_MS) || 3000));
       const res = await opus.getCopy(jobId);
       if (res?.status === 'COMPLETED') return res;
       if (res?.status === 'FAILED') return null;
@@ -120,21 +142,29 @@ async function generateCopy(clip, account) {
 
 /** Schedule one approved clip across every connected account. */
 async function scheduleClip(clip) {
+  stage(clip, 'Checking your connected accounts');
   const accounts = await refreshAccounts();
   if (!accounts.length) {
+    clearStage(clip);
     log('No social accounts are connected inside Opus yet, so nothing can be scheduled.', 'warn');
     return;
   }
 
+  stage(clip, 'Finding the next free slot');
   const taken = state.clips.map(c => c.scheduledAt).filter(Boolean);
   const at = clip.scheduledAt || nextSlot(taken);
   clip.scheduledAt = at;
 
+  const total = accounts.length;
+  let step = 0;
+
   for (const account of accounts) {
+    step++;
     if (clip.targets.some(t => t.postAccountId === account.postAccountId && t.status !== 'failed')) continue;
 
     let copy = clip.copy;
     if (!copy) {
+      stage(clip, 'Writing the caption', step, total);
       copy = await generateCopy(clip, account) || {
         title: clip.title,
         description: clip.description,
@@ -144,6 +174,7 @@ async function scheduleClip(clip) {
       save();
     }
 
+    stage(clip, `Scheduling to ${account.name}`, step, total);
     try {
       const scheduleId = await opus.schedulePost({
         projectId: clip.projectId,
@@ -155,6 +186,7 @@ async function scheduleClip(clip) {
         publishAt: at,
       });
       upsertTarget(clip, account, { status: 'scheduled', scheduleId });
+      log(`Scheduled to ${account.name}`);
     } catch (err) {
       upsertTarget(clip, account, { status: 'failed', error: err.message });
       log(`Could not schedule to ${account.name}. ${err.message}`, 'error');
@@ -165,8 +197,10 @@ async function scheduleClip(clip) {
 
   const anyGood = clip.targets.some(t => t.status === 'scheduled');
   clip.status = anyGood ? 'scheduled' : 'waiting';
+  clearStage(clip);
   save();
   if (anyGood) log(`Scheduled "${clip.editedTitle || clip.title}" across ${clip.targets.filter(t => t.status === 'scheduled').length} accounts`);
+  else log(`Could not schedule "${clip.editedTitle || clip.title}" anywhere. It is back in your queue.`, 'error');
 }
 
 function upsertTarget(clip, account, patch) {
@@ -184,10 +218,19 @@ function upsertTarget(clip, account, patch) {
 export async function postNow(clipId) {
   const clip = state.clips.find(c => c.id === clipId);
   if (!clip) throw new Error('That clip is no longer in the queue.');
+  stage(clip, 'Checking your connected accounts');
   const accounts = await refreshAccounts();
-  if (!accounts.length) throw new Error('No social accounts are connected inside Opus.');
+  if (!accounts.length) {
+    clearStage(clip);
+    throw new Error('No social accounts are connected inside Opus.');
+  }
+
+  const total = accounts.length;
+  let step = 0;
 
   for (const account of accounts) {
+    step++;
+    stage(clip, `Uploading to ${account.name}`, step, total);
     try {
       const copy = clip.copy || {};
       await opus.publishNow({
@@ -199,25 +242,31 @@ export async function postNow(clipId) {
         hashtags: clip.editedHashtags ?? copy.hashtags ?? clip.hashtags,
       });
       upsertTarget(clip, account, { status: 'posted', scheduleId: undefined });
+      log(`Posted to ${account.name}`);
     } catch (err) {
       upsertTarget(clip, account, { status: 'failed', error: err.message });
+      log(`Could not post to ${account.name}. ${err.message}`, 'error');
     }
     await new Promise(r => setTimeout(r, 1200));
   }
   clip.status = clip.targets.some(t => t.status === 'posted') ? 'posted' : 'waiting';
+  clearStage(clip);
   save();
   log(`Posted "${clip.editedTitle || clip.title}" now`);
 }
 
 /** Cancel anything already queued inside Opus for this clip. */
 export async function unschedule(clip) {
-  for (const t of clip.targets) {
-    if (t.status === 'scheduled' && t.scheduleId) {
-      try { await opus.cancelSchedule(t.scheduleId); } catch { /* already gone */ }
-    }
+  const queued = clip.targets.filter(t => t.status === 'scheduled' && t.scheduleId);
+  let step = 0;
+  for (const t of queued) {
+    step++;
+    stage(clip, `Cancelling in Opus`, step, queued.length);
+    try { await opus.cancelSchedule(t.scheduleId); } catch { /* already gone */ }
   }
   clip.targets = [];
   clip.scheduledAt = null;
+  clearStage(clip);
   save();
 }
 
