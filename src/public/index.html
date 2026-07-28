@@ -1,402 +1,1151 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="default" />
-<meta name="apple-mobile-web-app-title" content="Reminders" />
-<meta name="theme-color" content="#FBF9F4" />
-<title>Reminders</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Clip Agent</title>
+<meta name="theme-color" content="#060A12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Clip Agent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500&family=Karla:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --paper:#FBF9F4; --card:#FFFFFF; --ink:#16202B; --slate:#5D6A76;
-    --rule:#E5DFD2; --brass:#A67C2E; --sage:#3F6E52; --rust:#A34B3C;
-    --top:env(safe-area-inset-top,0px); --bot:env(safe-area-inset-bottom,0px);
-  }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html{-webkit-text-size-adjust:100%}
-  body{margin:0;background:var(--paper);color:var(--ink);
-    font:16px/1.55 Karla,-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased;
-    padding:calc(var(--top) + 22px) 18px calc(var(--bot) + 72px)}
-  .wrap{max-width:680px;margin:0 auto}
+:root{
+  --void:#060A12;
+  --deck:#0D1524;
+  --deck-2:#111B2E;
+  --ridge:#1C2A42;
+  --ridge-soft:#152238;
+  --signal:#3B82F6;
+  --signal-deep:#1D4ED8;
+  --glow:#67E8F9;
+  --paper:#E6EDF9;
+  --dim:#7A8CA6;
+  --dimmer:#4E5F79;
+  --amber:#F5A524;
+  --rose:#FB7185;
+  --mint:#34D399;
 
-  .eyebrow{font:400 11px/1 "Space Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--slate)}
-  h1{font-family:Fraunces,Georgia,serif;font-weight:300;font-size:38px;line-height:1.05;
-    letter-spacing:-.02em;margin:8px 0 0}
-  h2{font-family:Fraunces,serif;font-weight:500;font-size:15px;letter-spacing:.01em;margin:0 0 14px}
-  header{padding-bottom:22px;border-bottom:1.5px solid var(--ink);margin-bottom:26px}
-  .status{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:var(--slate);flex-wrap:wrap}
-  .pip{width:6px;height:6px;border-radius:99px;background:var(--sage);flex:none}
-  .pip.off{background:var(--rust)}
+  --r:14px;
+  --r-sm:9px;
+  --pad:20px;
+  --ui:'Space Grotesk',system-ui,-apple-system,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,monospace;
+}
 
-  .panel{background:var(--card);border:1px solid var(--rule);border-radius:3px;padding:18px;margin-bottom:26px}
-  label{display:block;font:400 11px/1 "Space Mono",monospace;letter-spacing:.12em;
-    text-transform:uppercase;color:var(--slate);margin:0 0 8px}
-  input,textarea{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--paper);
-    border:1px solid var(--rule);border-radius:2px;padding:12px}
-  textarea{min-height:86px;resize:vertical}
-  input:focus,textarea:focus{outline:2px solid var(--brass);outline-offset:1px;border-color:transparent}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--void);
+  color:var(--paper);
+  font-family:var(--ui);
+  font-size:15px;
+  line-height:1.55;
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(900px 520px at 12% -8%, rgba(59,130,246,.16), transparent 62%),
+    radial-gradient(700px 460px at 92% 4%, rgba(103,232,249,.08), transparent 60%);
+}
+.hide{display:none !important}
 
-  button{font:500 15px/1 Karla,sans-serif;min-height:44px;padding:12px 18px;border-radius:2px;
-    border:1px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer}
-  button.solid{background:var(--ink);color:var(--paper)}
-  button.quiet{border-color:var(--rule);color:var(--slate)}
-  button:disabled{opacity:.4;cursor:default}
-  button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
-  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+button,input,textarea{font-family:inherit;font-size:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+a{color:var(--glow)}
 
-  /* the day rail — the fixed times are the structure */
-  .day{margin-bottom:30px}
-  .dayhead{font:700 11px/1 "Space Mono",monospace;letter-spacing:.16em;text-transform:uppercase;
-    color:var(--slate);padding-bottom:10px;border-bottom:1px solid var(--rule);margin-bottom:4px}
-  .slot{position:relative;display:grid;grid-template-columns:58px 1fr;gap:16px;padding:16px 0}
-  .slot + .slot{border-top:1px solid var(--rule)}
-  .slot time{font:400 13px/1.4 "Space Mono",monospace;color:var(--slate);padding-top:3px}
-  .slot::before{content:"";position:absolute;left:47px;top:0;bottom:0;width:1px;background:var(--rule)}
-  .slot:first-of-type::before{top:16px}
-  .slot:last-child::before{bottom:calc(100% - 26px)}
-  .slot::after{content:"";position:absolute;left:44px;top:20px;width:7px;height:7px;border-radius:99px;
-    background:var(--paper);border:1.5px solid var(--slate)}
-  .slot.filled::after{background:var(--brass);border-color:var(--brass)}
-  .slot.posted::after{background:var(--sage);border-color:var(--sage)}
-  .slot.open .title{color:var(--slate);font-style:italic}
+:focus-visible{outline:2px solid var(--glow);outline-offset:2px;border-radius:6px}
 
-  .title{font-family:Fraunces,serif;font-weight:500;font-size:19px;line-height:1.25;margin:0 0 6px}
-  .meta{font:400 12px/1.5 "Space Mono",monospace;color:var(--slate);margin-bottom:10px}
-  .body{font-size:14.5px;color:#2C3946;margin:0 0 12px;white-space:pre-wrap}
-  .tags{font-size:13.5px;color:var(--brass);word-break:break-word}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 
-  .dests{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
-  .dest{font:400 11px/1 "Space Mono",monospace;letter-spacing:.08em;text-transform:uppercase;
-    border:1px solid var(--rule);border-radius:99px;padding:7px 11px;color:var(--slate)}
-  .dest.scheduled{border-color:var(--brass);color:var(--brass)}
-  .dest.posted{border-color:var(--sage);color:var(--sage);background:rgba(63,110,82,.07)}
-  .dest.failed{border-color:var(--rust);color:var(--rust)}
+/* ---------- shell ---------- */
+.wrap{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:0 var(--pad) 72px}
 
-  .needs{border-left:3px solid var(--brass);padding-left:16px;margin-bottom:14px}
-  .err{color:var(--rust);font-size:13.5px;margin-top:10px}
-  .empty{font-family:Fraunces,serif;font-size:17px;font-weight:300;color:var(--slate);
-    padding:34px 0;text-align:center}
-  .logline{display:grid;grid-template-columns:56px 1fr;gap:12px;font-size:13px;
-    padding:8px 0;border-bottom:1px solid var(--rule);color:var(--slate)}
-  .logline span{font:400 11px/1.5 "Space Mono",monospace}
-  .logline.error b,.logline.warn b{color:var(--rust)}
-  .logline b{color:var(--ink);font-weight:500}
+/* ---------- gate / connect ---------- */
+.center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.card-lock{
+  width:100%;max-width:400px;background:var(--deck);
+  border:1px solid var(--ridge);border-radius:20px;padding:32px;
+  box-shadow:0 30px 80px rgba(0,0,0,.55);
+}
+.mark{display:flex;align-items:center;gap:11px;margin-bottom:26px}
+.mark-dot{
+  width:34px;height:34px;border-radius:11px;flex:none;
+  background:linear-gradient(150deg,var(--signal),var(--signal-deep));
+  position:relative;box-shadow:0 0 26px rgba(59,130,246,.5);
+}
+.mark-dot::after{
+  content:'';position:absolute;inset:11px;border-radius:3px;background:var(--glow);
+}
+.mark-name{font-weight:700;letter-spacing:-.02em;font-size:18px}
+.mark-sub{font-size:11px;color:var(--dim);letter-spacing:.16em;text-transform:uppercase;font-family:var(--mono)}
 
-  .gate{max-width:400px;margin:12vh auto 0}
-  .note{background:var(--card);border:1px solid var(--rule);padding:14px;margin-top:20px;
-    font-size:13.5px;color:var(--slate);border-radius:2px}
-  .hide{display:none}
-  @media (prefers-reduced-motion:no-preference){
-    .slot{animation:rise .32s ease both}
-    @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-  }
-  @media (max-width:480px){
-    h1{font-size:31px}
-    .slot{grid-template-columns:46px 1fr;gap:12px}
-    .slot::before{left:37px} .slot::after{left:34px}
-  }
+label.field{display:block;font-size:12px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;font-family:var(--mono)}
+input[type=password],input[type=text],textarea{
+  width:100%;background:var(--void);border:1px solid var(--ridge);
+  border-radius:var(--r-sm);padding:13px 14px;color:var(--paper);
+  transition:border-color .15s,box-shadow .15s;
+}
+input:focus,textarea:focus{outline:none;border-color:var(--signal);box-shadow:0 0 0 3px rgba(59,130,246,.18)}
+textarea{resize:vertical;line-height:1.6}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:12px 18px;border-radius:var(--r-sm);font-weight:600;font-size:14px;
+  background:var(--signal);color:#fff;transition:filter .15s,transform .08s;
+  white-space:nowrap;
+}
+.btn:hover{filter:brightness(1.1)}
+.btn:active{transform:translateY(1px)}
+.btn[disabled]{opacity:.5;cursor:default;transform:none;filter:none}
+.btn-wide{width:100%;margin-top:18px}
+.btn-ghost{background:transparent;border:1px solid var(--ridge);color:var(--paper)}
+.btn-ghost:hover{border-color:var(--signal);filter:none;background:rgba(59,130,246,.08)}
+.btn-quiet{background:transparent;color:var(--dim);padding:10px 12px}
+.btn-quiet:hover{color:var(--paper);filter:none}
+.btn-sm{padding:9px 13px;font-size:13px}
+.btn-danger:hover{color:var(--rose);border-color:var(--rose)}
+
+.err{color:var(--rose);font-size:13.5px;margin-top:14px;min-height:1px}
+.hint{color:var(--dim);font-size:13.5px;margin:14px 0 0;line-height:1.6}
+
+/* ---------- top bar ---------- */
+.top{
+  position:sticky;top:0;z-index:20;
+  background:rgba(6,10,18,.82);backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--ridge-soft);
+  margin:0 calc(var(--pad) * -1);padding:0 var(--pad);
+}
+.top-in{display:flex;align-items:center;gap:16px;padding:15px 0;flex-wrap:wrap}
+.top-status{margin-left:auto;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+
+.live{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--dim)}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--mint);box-shadow:0 0 10px var(--mint)}
+.live-dot.off{background:var(--rose);box-shadow:0 0 10px var(--rose)}
+
+.countdown{text-align:right;line-height:1.2}
+.countdown-num{font-family:var(--mono);font-size:19px;font-weight:700;color:var(--glow);letter-spacing:-.01em}
+.countdown-lab{font-size:10.5px;color:var(--dim);letter-spacing:.14em;text-transform:uppercase;font-family:var(--mono)}
+
+/* ---------- tabs ---------- */
+.tabs{display:flex;gap:4px;overflow-x:auto;padding:0 0 2px;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{
+  padding:11px 15px;font-size:14px;font-weight:500;color:var(--dim);
+  border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s;
+}
+.tab:hover{color:var(--paper)}
+.tab.on{color:var(--paper);border-bottom-color:var(--signal)}
+.tab-count{
+  font-family:var(--mono);font-size:11px;margin-left:7px;padding:1px 6px;
+  border-radius:20px;background:var(--ridge);color:var(--dim);
+}
+.tab.on .tab-count{background:var(--signal);color:#fff}
+.tab-count.urgent{background:var(--amber);color:#221703}
+
+/* ---------- panels ---------- */
+.panel{padding-top:26px}
+.panel-head{display:flex;align-items:baseline;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+h2{font-size:20px;font-weight:600;letter-spacing:-.02em;margin:0}
+.panel-note{font-size:13px;color:var(--dim)}
+
+.box{background:var(--deck);border:1px solid var(--ridge);border-radius:var(--r);padding:var(--pad)}
+.box + .box{margin-top:16px}
+
+/* ---------- intake ---------- */
+.intake textarea{min-height:88px;font-size:14.5px}
+.intake-row{display:flex;align-items:center;gap:12px;margin-top:13px;flex-wrap:wrap}
+.intake-note{font-size:12.5px;color:var(--dimmer);margin-left:auto}
+
+/* ---------- clip cards ---------- */
+.clip{
+  background:var(--deck);border:1px solid var(--ridge);border-radius:var(--r);
+  padding:18px;margin-bottom:14px;transition:border-color .18s;
+}
+.clip:hover{border-color:var(--ridge)}
+.clip.needs{border-left:2px solid var(--amber)}
+.clip.set{border-left:2px solid var(--signal)}
+.clip.done{border-left:2px solid var(--mint);opacity:.82}
+.clip.bad{border-left:2px solid var(--rose)}
+
+.clip-top{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.pill{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+  padding:4px 9px;border-radius:20px;border:1px solid var(--ridge);color:var(--dim);
+}
+.pill.needs{border-color:rgba(245,165,36,.4);color:var(--amber);background:rgba(245,165,36,.09)}
+.pill.set{border-color:rgba(59,130,246,.4);color:#93BBFB;background:rgba(59,130,246,.1)}
+.pill.done{border-color:rgba(52,211,153,.35);color:var(--mint);background:rgba(52,211,153,.09)}
+.pill.bad{border-color:rgba(251,113,133,.4);color:var(--rose);background:rgba(251,113,133,.09)}
+.clip-meta{font-family:var(--mono);font-size:12px;color:var(--dimmer);margin-left:auto}
+
+.clip-title{
+  font-size:16.5px;font-weight:600;line-height:1.4;letter-spacing:-.01em;
+  width:100%;background:transparent;border:1px solid transparent;border-radius:var(--r-sm);
+  padding:8px 10px;margin:0 -10px 2px;
+}
+.clip-title:hover{border-color:var(--ridge-soft)}
+.clip-title:focus{background:var(--void);border-color:var(--signal);box-shadow:0 0 0 3px rgba(59,130,246,.16);outline:none}
+
+.clip-body{
+  font-size:14px;color:#B9C6DA;line-height:1.65;width:100%;min-height:62px;
+  background:transparent;border:1px solid transparent;border-radius:var(--r-sm);
+  padding:8px 10px;margin:0 -10px;
+}
+.clip-body:hover{border-color:var(--ridge-soft)}
+.clip-body:focus{background:var(--void);border-color:var(--signal);box-shadow:0 0 0 3px rgba(59,130,246,.16);outline:none}
+
+.clip-tags{
+  font-family:var(--mono);font-size:12.5px;color:#7FB1F5;width:100%;
+  background:transparent;border:1px solid transparent;border-radius:var(--r-sm);
+  padding:7px 10px;margin:0 -10px;
+}
+.clip-tags:hover{border-color:var(--ridge-soft)}
+.clip-tags:focus{background:var(--void);border-color:var(--signal);box-shadow:0 0 0 3px rgba(59,130,246,.16);outline:none}
+
+.clip-title.locked,.clip-body.locked,.clip-tags.locked{
+  border-color:transparent;cursor:default;min-height:0;
+}
+.clip-title.locked:hover,.clip-body.locked:hover,.clip-tags.locked:hover{border-color:transparent}
+.clip-body.locked{white-space:pre-wrap}
+
+.clip-foot{display:flex;align-items:center;gap:9px;margin-top:15px;flex-wrap:wrap}
+.counter{font-family:var(--mono);font-size:11.5px;color:var(--dimmer);margin-right:auto}
+.counter.over{color:var(--rose)}
+.saved{font-family:var(--mono);font-size:11.5px;color:var(--mint);opacity:0;transition:opacity .2s}
+.saved.on{opacity:1}
+
+.targets{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.target{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  padding:3px 8px;border-radius:5px;background:var(--ridge-soft);color:var(--dim);
+}
+.target.bad{background:rgba(251,113,133,.13);color:var(--rose)}
+.target.done{background:rgba(52,211,153,.12);color:var(--mint)}
+
+/* ---------- day rail (signature) ---------- */
+.rail{position:relative;padding-left:2px}
+.rail-day{margin-bottom:8px}
+.rail-date{
+  font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--dimmer);padding:16px 0 10px 42px;
+}
+.rail-date.today{color:var(--glow)}
+.slot{
+  position:relative;display:flex;align-items:flex-start;gap:16px;
+  padding:11px 0 11px 42px;min-height:52px;
+}
+.slot::before{
+  content:'';position:absolute;left:12px;top:0;bottom:0;width:1px;background:var(--ridge-soft);
+}
+.slot:last-child::before{bottom:50%}
+.rail-day:first-child .slot:first-of-type::before{top:50%}
+.node{
+  position:absolute;left:6px;top:50%;transform:translateY(-50%);
+  width:13px;height:13px;border-radius:50%;
+  background:var(--void);border:2px solid var(--ridge);z-index:1;
+}
+.slot.filled .node{background:var(--signal);border-color:var(--signal);box-shadow:0 0 14px rgba(59,130,246,.55)}
+.slot.gone .node{background:var(--ridge);border-color:var(--ridge)}
+.slot.next .node{
+  background:var(--glow);border-color:var(--glow);
+  box-shadow:0 0 0 0 rgba(103,232,249,.55);animation:ping 2.4s ease-out infinite;
+}
+@keyframes ping{
+  0%{box-shadow:0 0 0 0 rgba(103,232,249,.5)}
+  70%{box-shadow:0 0 0 13px rgba(103,232,249,0)}
+  100%{box-shadow:0 0 0 0 rgba(103,232,249,0)}
+}
+.slot-time{
+  font-family:var(--mono);font-size:13.5px;font-weight:500;color:var(--dim);
+  width:58px;flex:none;padding-top:1px;
+}
+.slot.next .slot-time{color:var(--glow)}
+.slot.gone .slot-time{color:var(--dimmer)}
+.slot-what{flex:1;min-width:0}
+.slot-title{font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot-empty{font-size:13.5px;color:var(--dimmer);font-style:italic}
+.slot-from{font-size:12px;color:var(--dimmer);margin-top:2px}
+
+/* ---------- insights ---------- */
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(168px,1fr))}
+.stat{background:var(--deck);border:1px solid var(--ridge);border-radius:var(--r);padding:17px}
+.stat-num{font-family:var(--mono);font-size:29px;font-weight:700;letter-spacing:-.03em;line-height:1.1}
+.stat-lab{font-size:12px;color:var(--dim);margin-top:5px}
+.stat-sub{font-size:11.5px;color:var(--dimmer);margin-top:7px;font-family:var(--mono)}
+.stat.warn .stat-num{color:var(--amber)}
+.stat.good .stat-num{color:var(--mint)}
+.stat.cool .stat-num{color:var(--glow)}
+
+.bars{margin-top:6px}
+.bar-row{display:flex;align-items:center;gap:12px;padding:8px 0}
+.bar-lab{font-family:var(--mono);font-size:12px;color:var(--dim);width:104px;flex:none;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-track{flex:1;height:7px;background:var(--ridge-soft);border-radius:4px;overflow:hidden}
+.bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--signal-deep),var(--signal));transition:width .5s ease}
+.bar-num{font-family:var(--mono);font-size:12px;color:var(--paper);width:34px;text-align:right;flex:none}
+
+/* ---------- accounts + log ---------- */
+.acct{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--ridge-soft)}
+.acct:last-child{border-bottom:0}
+.acct-badge{
+  width:32px;height:32px;border-radius:9px;flex:none;display:grid;place-items:center;
+  background:var(--ridge-soft);font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);
+}
+.acct-name{font-size:14.5px;font-weight:500}
+.acct-plat{font-family:var(--mono);font-size:11px;color:var(--dimmer);letter-spacing:.1em;text-transform:uppercase}
+
+.log-line{display:flex;gap:13px;padding:8px 0;font-size:13.5px;border-bottom:1px solid var(--ridge-soft)}
+.log-line:last-child{border-bottom:0}
+.log-time{font-family:var(--mono);font-size:11.5px;color:var(--dimmer);width:58px;flex:none;padding-top:2px}
+.log-msg{color:#B9C6DA;line-height:1.5}
+.log-line.error .log-msg{color:var(--rose)}
+.log-line.warn .log-msg{color:var(--amber)}
+
+/* ---------- empty ---------- */
+.empty{text-align:center;padding:56px 22px;color:var(--dim)}
+.empty-title{font-size:16px;font-weight:600;color:var(--paper);margin-bottom:7px}
+.empty-note{font-size:13.5px;max-width:340px;margin:0 auto;line-height:1.65}
+
+/* ---------- toast ---------- */
+.toasts{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:80;
+  display:flex;flex-direction:column;gap:9px;align-items:center;pointer-events:none;
+  width:calc(100% - 32px);max-width:440px}
+.toast{
+  background:var(--deck-2);border:1px solid var(--ridge);border-radius:11px;
+  padding:12px 17px;font-size:14px;box-shadow:0 16px 44px rgba(0,0,0,.6);
+  animation:rise .22s ease-out;width:100%;
+}
+.toast.bad{border-color:rgba(251,113,133,.45);color:#FFD5DB}
+.toast.good{border-color:rgba(52,211,153,.4);color:#C6F5E3}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation:none !important;transition:none !important}
+}
+@media (max-width:640px){
+  :root{--pad:15px}
+  .top-status{width:100%;margin-left:0;justify-content:space-between}
+  .stat-num{font-size:25px}
+  .bar-lab{width:82px}
+  .slot-time{width:52px}
+}
 </style>
 </head>
 <body>
-<div class="wrap">
 
-  <!-- password -->
-  <section id="gate" class="gate">
-    <p class="eyebrow">Clip agent</p>
-    <h1>Reminders</h1>
-    <div class="panel" style="margin-top:24px">
-      <label for="pw">Password</label>
-      <input id="pw" type="password" autocomplete="current-password" />
-      <div class="row"><button class="solid" id="unlock" style="flex:1">Unlock</button></div>
-      <div class="err" id="gateErr"></div>
-    </div>
-  </section>
-
-  <!-- connect opus -->
-  <section id="connect" class="gate hide">
-    <p class="eyebrow">One time setup</p>
-    <h1>Connect Opus</h1>
-    <div class="panel" style="margin-top:24px">
-      <label for="key">Opus API key</label>
-      <input id="key" type="password" placeholder="Paste from the Opus dashboard" autocomplete="off" />
-      <label for="org" style="margin-top:16px">Organisation ID <span style="text-transform:none;letter-spacing:0">— only if you have more than one</span></label>
-      <input id="org" type="text" placeholder="Optional" autocomplete="off" />
-      <div class="row"><button class="solid" id="saveKey" style="flex:1">Connect</button></div>
-      <div class="err" id="connectErr"></div>
-    </div>
-    <div class="note">
-      Find the key in the lower left of your Opus dashboard. Whatever accounts you
-      have already linked inside Opus become the destinations here.
-    </div>
-  </section>
-
-  <!-- main -->
-  <section id="app" class="hide">
-    <header>
-      <p class="eyebrow">Clip agent</p>
-      <h1>Reminders</h1>
-      <div class="status" id="status"></div>
-    </header>
-
-    <div class="panel">
-      <label for="urls">Add lectures</label>
-      <textarea id="urls" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"
-        placeholder="Paste a video link. One per line."></textarea>
-      <div class="row">
-        <button class="solid" id="send">Send for clipping</button>
-        <button class="quiet" id="refresh">Refresh</button>
+<!-- ============ password ============ -->
+<section id="gate" class="center">
+  <div class="card-lock">
+    <div class="mark">
+      <div class="mark-dot"></div>
+      <div>
+        <div class="mark-name">Clip Agent</div>
+        <div class="mark-sub">Transmission deck</div>
       </div>
-      <div class="err" id="sendErr"></div>
-      <div id="projects" style="margin-top:14px"></div>
+    </div>
+    <label class="field" for="pw">Password</label>
+    <input id="pw" type="password" autocomplete="current-password" placeholder="••••••••">
+    <button class="btn btn-wide" id="unlock">Unlock</button>
+    <div class="err" id="gateErr"></div>
+  </div>
+</section>
+
+<!-- ============ connect opus ============ -->
+<section id="connect" class="center hide">
+  <div class="card-lock">
+    <div class="mark">
+      <div class="mark-dot"></div>
+      <div>
+        <div class="mark-name">Connect Opus</div>
+        <div class="mark-sub">One key, one time</div>
+      </div>
+    </div>
+    <label class="field" for="key">Opus API key</label>
+    <input id="key" type="password" autocomplete="off" placeholder="Paste your key">
+    <button class="btn btn-wide" id="save">Connect</button>
+    <div class="err" id="connErr"></div>
+    <p class="hint">Find it in the lower left of your Opus dashboard. Your plan needs API access, and social posting may need switching on by Opus support.</p>
+  </div>
+</section>
+
+<!-- ============ app ============ -->
+<main id="app" class="hide">
+  <div class="wrap">
+
+    <div class="top">
+      <div class="top-in">
+        <div class="mark" style="margin:0">
+          <div class="mark-dot"></div>
+          <div>
+            <div class="mark-name">Clip Agent</div>
+            <div class="mark-sub" id="tzLabel">—</div>
+          </div>
+        </div>
+        <div class="top-status">
+          <div class="live"><span class="live-dot" id="liveDot"></span><span id="liveText">Checking</span></div>
+          <div class="countdown">
+            <div class="countdown-num" id="cdNum">—</div>
+            <div class="countdown-lab">Next post</div>
+          </div>
+        </div>
+      </div>
+      <nav class="tabs">
+        <button class="tab on" data-view="queue">Queue<span class="tab-count" id="cQueue">0</span></button>
+        <button class="tab" data-view="schedule">Schedule<span class="tab-count" id="cSched">0</span></button>
+        <button class="tab" data-view="insights">Insights</button>
+        <button class="tab" data-view="activity">Activity</button>
+      </nav>
     </div>
 
-    <div id="needs"></div>
-    <div id="rail"></div>
+    <!-- queue -->
+    <section class="panel" id="view-queue">
+      <div class="box intake">
+        <label class="field" for="urls">Add lectures</label>
+        <textarea id="urls" placeholder="Paste one or more video links, one per line"></textarea>
+        <div class="intake-row">
+          <button class="btn" id="send">Send to Opus</button>
+          <span class="intake-note" id="intakeNote"></span>
+        </div>
+      </div>
 
-    <div class="panel" style="margin-top:30px">
-      <h2>Activity</h2>
-      <div id="log"></div>
-    </div>
-  </section>
-</div>
+      <div class="panel-head" style="margin-top:30px">
+        <h2>Waiting for you</h2>
+        <span class="panel-note" id="waitNote"></span>
+        <button class="btn btn-ghost btn-sm hide" id="approveAll" style="margin-left:auto">Approve all</button>
+      </div>
+      <div id="waitList"></div>
+    </section>
+
+    <!-- schedule -->
+    <section class="panel hide" id="view-schedule">
+      <div class="panel-head">
+        <h2>The next five days</h2>
+        <span class="panel-note" id="railNote"></span>
+      </div>
+      <div class="box"><div class="rail" id="rail"></div></div>
+
+      <div class="panel-head" style="margin-top:30px">
+        <h2>Queued clips</h2>
+        <span class="panel-note" id="schedNote"></span>
+      </div>
+      <div id="schedList"></div>
+    </section>
+
+    <!-- insights -->
+    <section class="panel hide" id="view-insights">
+      <div class="panel-head">
+        <h2>Insights</h2>
+        <span class="panel-note">From your own posting record</span>
+      </div>
+      <div class="grid" id="stats"></div>
+
+      <div class="box" style="margin-top:22px">
+        <div class="panel-head" style="margin-bottom:6px"><h2 style="font-size:16px">Posts by platform</h2></div>
+        <div class="bars" id="byPlatform"></div>
+      </div>
+
+      <div class="box">
+        <div class="panel-head" style="margin-bottom:6px"><h2 style="font-size:16px">Posts by time of day</h2></div>
+        <div class="bars" id="bySlot"></div>
+      </div>
+
+      <div class="box">
+        <div class="panel-head" style="margin-bottom:6px"><h2 style="font-size:16px">Clips per lecture</h2></div>
+        <div class="bars" id="bySource"></div>
+      </div>
+
+      <p class="hint">Opus doesn't return views or likes through its API, so nothing here is engagement data — it's a record of what went out, when, and where. To see how posts performed, check each platform's own analytics.</p>
+    </section>
+
+    <!-- activity -->
+    <section class="panel hide" id="view-activity">
+      <div class="panel-head">
+        <h2>Connected accounts</h2>
+        <button class="btn btn-ghost btn-sm" id="refreshAcc" style="margin-left:auto">Refresh</button>
+      </div>
+      <div class="box" id="accounts"></div>
+
+      <div class="panel-head" style="margin-top:30px"><h2>Recent activity</h2></div>
+      <div class="box" id="log"></div>
+    </section>
+
+  </div>
+</main>
+
+<div class="toasts" id="toasts"></div>
 
 <script>
-const $ = s => document.querySelector(s);
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const mem = {};
-const keep = (k,v) => { try{ sessionStorage.setItem(k,v); }catch{ mem[k]=v; } };
-const recall = k => { try{ return sessionStorage.getItem(k) ?? mem[k] ?? ''; }catch{ return mem[k]||''; } };
+'use strict';
 
-let PW = recall('pw'), data = null, editing = null;
+const $ = s => document.querySelector(s);
+const el = (t, c) => { const n = document.createElement(t); if (c) n.className = c; return n; };
+const esc = s => String(s ?? '').replace(/[&<>"']/g, m =>
+  ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+
+let PW = localStorage.getItem('clipAgentPw') || '';
+let DATA = null;
+let VIEW = 'queue';
+let editing = new Set();   // clip ids being typed into, so refreshes don't clobber them
+let timer = null;
+
+/* ---------- network ---------- */
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
     ...opts,
-    headers: { 'Content-Type':'application/json', 'x-app-password': PW, ...(opts.headers||{}) },
+    headers: { 'Content-Type': 'application/json', 'x-app-password': PW, ...(opts.headers || {}) },
   });
-  if (res.status === 401) { const e = new Error('locked'); e.locked = true; throw e; }
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
-  return json;
+  let body = null;
+  try { body = await res.json(); } catch { /* empty body */ }
+  if (!res.ok) throw new Error(body?.error || `Request failed (${res.status})`);
+  return body;
 }
 
-function showOnly(id) {
-  for (const s of ['gate','connect','app']) $('#'+s).classList.toggle('hide', s !== id);
+function toast(msg, kind = '') {
+  const t = el('div', 'toast ' + kind);
+  t.textContent = msg;
+  $('#toasts').append(t);
+  setTimeout(() => t.remove(), 4200);
 }
+
+/* ---------- time helpers, in the agent's own timezone ---------- */
+
+const TZ = () => DATA?.timezone || 'Australia/Perth';
+
+function zoneOffset(date, tz) {
+  const p = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(date).reduce((a, x) => {
+    if (x.type !== 'literal') a[x.type] = Number(x.value);
+    return a;
+  }, {});
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute, p.second) - date.getTime();
+}
+
+/** A wall-clock time in the agent's zone, as a real instant. */
+function wallToInstant(y, m, d, hh, mm, tz) {
+  const guess = Date.UTC(y, m - 1, d, hh, mm, 0);
+  let ms = guess - zoneOffset(new Date(guess), tz);
+  return guess - zoneOffset(new Date(ms), tz);
+}
+
+function localParts(ms, tz) {
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(ms)).split('-').map(Number);
+  return { y: p[0], m: p[1], d: p[2] };
+}
+
+const dayLabel = ms => new Intl.DateTimeFormat('en-AU', {
+  timeZone: TZ(), weekday: 'long', day: 'numeric', month: 'short',
+}).format(new Date(ms));
+
+const clockLabel = ms => new Intl.DateTimeFormat('en-AU', {
+  timeZone: TZ(), hour: 'numeric', minute: '2-digit',
+}).format(new Date(ms));
+
+function countdown(ms) {
+  const s = Math.max(0, Math.floor((ms - Date.now()) / 1000));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  if (h >= 24) return Math.floor(h / 24) + 'd ' + (h % 24) + 'h';
+  if (h) return h + 'h ' + String(m).padStart(2, '0') + 'm';
+  return m + 'm ' + String(s % 60).padStart(2, '0') + 's';
+}
+
+const secs = ms => Math.round((ms || 0) / 1000);
+
+/** Every slot instant across the next `days` days, oldest first. */
+function slotsAhead(days = 5) {
+  const tz = TZ(), times = DATA?.postTimes || [];
+  const { y, m, d } = localParts(Date.now(), tz);
+  const out = [];
+  for (let i = 0; i < days; i++) {
+    const base = new Date(Date.UTC(y, m - 1, d + i));
+    const day = { y: base.getUTCFullYear(), m: base.getUTCMonth() + 1, d: base.getUTCDate() };
+    const row = { key: `${day.y}-${day.m}-${day.d}`, slots: [] };
+    for (const t of times) {
+      const [hh, mm] = t.split(':').map(Number);
+      if (!Number.isFinite(hh) || !Number.isFinite(mm)) continue;
+      row.slots.push(wallToInstant(day.y, day.m, day.d, hh, mm, tz));
+    }
+    row.slots.sort((a, b) => a - b);
+    if (row.slots.length) out.push(row);
+  }
+  return out;
+}
+
+/* ---------- clip status, treating passed schedules as sent ---------- */
+
+function statusOf(c) {
+  if (c.status === 'scheduled' && c.scheduledAt && c.scheduledAt <= Date.now()) return 'posted';
+  return c.status;
+}
+const STATUS_TEXT = { waiting: 'Needs you', approved: 'Queueing', scheduled: 'Scheduled', posted: 'Posted' };
+const STATUS_CLASS = { waiting: 'needs', approved: 'set', scheduled: 'set', posted: 'done' };
+
+/* ---------- boot ---------- */
 
 async function boot() {
   try {
-    data = await api('/api/state');
-    keep('pw', PW);
-    showOnly(data.connected ? 'app' : 'connect');
-    if (data.connected) render();
-    return true;
+    DATA = await api('/api/state');
   } catch (err) {
-    if (err.locked) { showOnly('gate'); $('#gateErr').textContent = ''; }
-    else { showOnly('gate'); $('#gateErr').textContent = err.message; }
+    if (/password/i.test(err.message) || /401/.test(err.message)) {
+      PW = '';
+      localStorage.removeItem('clipAgentPw');
+      $('#gate').classList.remove('hide');
+      $('#app').classList.add('hide');
+      $('#connect').classList.add('hide');
+      $('#gateErr').textContent = 'That password was not accepted.';
+    } else {
+      $('#gateErr').textContent = err.message;
+    }
     return false;
   }
-}
 
-/* ---------- rendering ---------- */
-
-function dayKey(ms) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: data.timezone, year:'numeric', month:'2-digit', day:'2-digit' })
-    .format(new Date(ms));
-}
-function dayLabel(ms) {
-  return new Intl.DateTimeFormat('en-AU', { timeZone: data.timezone, weekday:'long', day:'numeric', month:'long' })
-    .format(new Date(ms));
-}
-function timeLabel(ms) {
-  return new Intl.DateTimeFormat('en-GB', { timeZone: data.timezone, hour:'2-digit', minute:'2-digit', hour12:false })
-    .format(new Date(ms));
-}
-
-function destChip(t) {
-  const label = t.platform.replace('_BUSINESS','').replace('_PAGE','').replace('TIKTOK','TikTok');
-  return `<span class="dest ${t.status}" title="${esc(t.error||'')}">${esc(label)}${
-    t.status==='posted'?' ✓':t.status==='failed'?' ✕':''}</span>`;
-}
-
-function clipBody(c, editable) {
-  if (editing === c.id) {
-    return `
-      <label for="t-${c.id}">Title</label>
-      <input id="t-${c.id}" type="text" value="${esc(c.title)}" />
-      <label for="d-${c.id}" style="margin-top:14px">Caption</label>
-      <textarea id="d-${c.id}">${esc(c.description)}</textarea>
-      <label for="h-${c.id}" style="margin-top:14px">Hashtags</label>
-      <input id="h-${c.id}" type="text" value="${esc(c.hashtags)}" />
-      <div class="row">
-        <button class="solid" data-save="${c.id}">Save</button>
-        <button class="quiet" data-cancel="1">Cancel</button>
-      </div>`;
+  $('#gate').classList.add('hide');
+  if (!DATA.connected) {
+    $('#connect').classList.remove('hide');
+    $('#app').classList.add('hide');
+    return true;
   }
-  const secs = Math.round((c.durationMs||0)/1000);
-  return `
-    <p class="title">${esc(c.title || 'Untitled clip')}</p>
-    <p class="meta">${secs ? secs+'s' : ''}${c.projectTitle ? ' · '+esc(c.projectTitle) : ''}</p>
-    ${c.description ? `<p class="body">${esc(c.description)}</p>` : ''}
-    ${c.hashtags ? `<p class="tags">${esc(c.hashtags)}</p>` : ''}
-    ${c.targets.length ? `<div class="dests">${c.targets.map(destChip).join('')}</div>` : ''}
-    ${c.targets.filter(t=>t.error).map(t=>`<p class="err">${esc(t.name)}: ${esc(t.error)}</p>`).join('')}
-    <div class="row">
-      ${editable ? `<button data-edit="${c.id}">Edit words</button>` : ''}
-      ${c.status === 'waiting' ? `<button class="solid" data-approve="${c.id}">Approve</button>` : ''}
-      ${c.status === 'scheduled' ? `<button class="quiet" data-hold="${c.id}">Hold</button>` : ''}
-      ${c.status !== 'posted' ? `<button class="quiet" data-now="${c.id}">Post now</button>` : ''}
-      ${c.status !== 'posted' ? `<button class="quiet" data-drop="${c.id}">Discard</button>` : ''}
-    </div>`;
+  $('#connect').classList.add('hide');
+  $('#app').classList.remove('hide');
+  render();
+  if (!timer) timer = setInterval(refresh, 15000);
+  setInterval(tickClock, 1000);
+  return true;
 }
+
+async function refresh() {
+  try {
+    DATA = await api('/api/state');
+    if (!DATA.connected) {
+      $('#app').classList.add('hide');
+      $('#connect').classList.remove('hide');
+      return;
+    }
+    render();
+  } catch { /* keep the last good view on a blip */ }
+}
+
+/* ---------- render ---------- */
 
 function render() {
-  const accounts = data.accounts || [];
-  $('#status').innerHTML =
-    `<span class="pip ${accounts.length?'':'off'}"></span>` +
-    (accounts.length
-      ? `${accounts.length} account${accounts.length>1?'s':''} · ${esc(accounts.map(a=>a.name).join(', '))}`
-      : 'No accounts linked inside Opus yet') +
-    ` &nbsp;·&nbsp; ${data.postTimes.join('  ')} ${esc(data.timezone.split('/').pop().replace('_',' '))}` +
-    (data.autoApprove ? ' &nbsp;·&nbsp; posting unattended' : '');
+  const clips = DATA.clips || [];
+  const waiting = clips.filter(c => statusOf(c) === 'waiting');
+  const queued = clips.filter(c => ['approved', 'scheduled'].includes(statusOf(c)));
 
-  const clipping = (data.projects||[]).filter(p => p.status === 'clipping');
-  $('#projects').innerHTML = clipping.length
-    ? clipping.map(p => `<div class="logline"><span>clipping</span><b>${esc(p.title)}</b></div>`).join('')
-    : '';
+  $('#tzLabel').textContent = TZ().split('/').pop().replace(/_/g, ' ');
+  $('#cQueue').textContent = waiting.length;
+  $('#cQueue').classList.toggle('urgent', waiting.length > 0);
+  $('#cSched').textContent = queued.length;
 
-  // waiting on you
-  const waiting = data.clips.filter(c => c.status === 'waiting');
-  $('#needs').innerHTML = waiting.length ? `
-    <h2>Waiting for you — ${waiting.length}</h2>
-    ${waiting.map(c => `<div class="panel needs" data-clip="${c.id}">${clipBody(c, true)}</div>`).join('')}
-  ` : '';
+  const ok = (DATA.accounts || []).length > 0;
+  $('#liveDot').classList.toggle('off', !ok);
+  $('#liveText').textContent = ok
+    ? `${DATA.accounts.length} account${DATA.accounts.length === 1 ? '' : 's'} linked`
+    : 'No accounts linked';
 
-  // the rail: every posting time, filled or open
-  const placed = data.clips.filter(c => c.scheduledAt);
-  const byDay = new Map();
-  for (const c of placed) {
-    const k = dayKey(c.scheduledAt);
-    if (!byDay.has(k)) byDay.set(k, []);
-    byDay.get(k).push(c);
-  }
-
-  // show today plus the next two days even when empty, so gaps are visible
-  const now = Date.now();
-  for (let i = 0; i < 3; i++) {
-    const k = dayKey(now + i*86400000);
-    if (!byDay.has(k)) byDay.set(k, []);
-  }
-
-  const days = [...byDay.entries()].sort((a,b) => a[0].localeCompare(b[0]));
-  $('#rail').innerHTML = days.map(([key, clips]) => {
-    const anchor = clips[0]?.scheduledAt ?? Date.parse(key + 'T12:00:00Z');
-    const slots = new Map(clips.map(c => [timeLabel(c.scheduledAt), c]));
-    const times = [...new Set([...data.postTimes, ...slots.keys()])].sort();
-
-    return `<section class="day">
-      <div class="dayhead">${esc(dayLabel(anchor))}</div>
-      ${times.map(t => {
-        const c = slots.get(t);
-        if (!c) return `<div class="slot open"><time>${t}</time><div><p class="title">Open</p></div></div>`;
-        return `<div class="slot ${c.status === 'posted' ? 'posted' : 'filled'}" data-clip="${c.id}">
-          <time>${t}</time><div>${clipBody(c, c.status !== 'posted')}</div></div>`;
-      }).join('')}
-    </section>`;
-  }).join('');
-
-  $('#log').innerHTML = (data.log||[]).map(l => `
-    <div class="logline ${l.level}">
-      <span>${new Date(l.at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</span>
-      <b>${esc(l.message)}</b>
-    </div>`).join('') || '<p class="empty" style="padding:12px 0">Nothing yet.</p>';
+  tickClock();
+  renderQueue(waiting);
+  renderSchedule(queued);
+  renderInsights(clips);
+  renderActivity();
 }
 
-/* ---------- actions ---------- */
+function tickClock() {
+  if (!DATA) return;
+  const next = (DATA.clips || [])
+    .filter(c => statusOf(c) === 'scheduled' && c.scheduledAt > Date.now())
+    .sort((a, b) => a.scheduledAt - b.scheduledAt)[0];
+  $('#cdNum').textContent = next ? countdown(next.scheduledAt) : 'Nothing queued';
+}
 
-document.addEventListener('click', async e => {
-  const b = e.target.closest('button'); if (!b) return;
-  const d = b.dataset;
-  try {
-    if (d.edit)   { editing = d.edit; render(); return; }
-    if (d.cancel) { editing = null; render(); return; }
-    if (d.save) {
-      await api(`/api/clips/${d.save}`, { method:'PATCH', body: JSON.stringify({
-        title: $(`#t-${d.save}`).value,
-        description: $(`#d-${d.save}`).value,
-        hashtags: $(`#h-${d.save}`).value,
-      })});
-      editing = null; await load(); return;
+/* ---------- queue ---------- */
+
+function renderQueue(waiting) {
+  const list = $('#waitList');
+  $('#waitNote').textContent = waiting.length
+    ? `${waiting.length} clip${waiting.length === 1 ? '' : 's'} to read through`
+    : '';
+  $('#approveAll').classList.toggle('hide', waiting.length < 2);
+
+  const keep = new Set(waiting.map(c => c.id));
+  [...list.children].forEach(n => { if (!keep.has(n.dataset.id)) n.remove(); });
+
+  if (!waiting.length) {
+    if (!list.querySelector('.empty')) {
+      list.innerHTML = `<div class="empty">
+        <div class="empty-title">Nothing waiting</div>
+        <div class="empty-note">Paste a lecture above. Opus will cut it into clips and they'll land here for you to read before anything goes out.</div>
+      </div>`;
     }
-    if (d.approve) { b.disabled = true; await api(`/api/clips/${d.approve}`, {method:'PATCH', body: JSON.stringify({status:'approved'})}); await load(); return; }
-    if (d.hold)    { b.disabled = true; await api(`/api/clips/${d.hold}`, {method:'PATCH', body: JSON.stringify({status:'waiting'})}); await load(); return; }
-    if (d.now) {
-      if (!confirm('Post this now, to every connected account?')) return;
-      b.disabled = true; await api(`/api/clips/${d.now}/now`, {method:'POST'}); await load(); return;
-    }
-    if (d.drop) {
-      if (!confirm('Discard this clip? Anything already scheduled for it is cancelled.')) return;
-      await api(`/api/clips/${d.drop}`, {method:'DELETE'}); await load(); return;
-    }
-  } catch (err) {
-    if (err.locked) return showOnly('gate');
-    alert(err.message);
-    b.disabled = false;
+    return;
   }
-});
+  const blank = list.querySelector('.empty');
+  if (blank) blank.remove();
 
-$('#unlock').onclick = async () => {
-  const btn = $('#unlock');
-  PW = $('#pw').value;
+  waiting.forEach(c => {
+    const existing = list.querySelector(`[data-id="${CSS.escape(c.id)}"]`);
+    if (existing) { if (!editing.has(c.id)) existing.replaceWith(clipCard(c)); return; }
+    list.append(clipCard(c));
+  });
+}
+
+function clipCard(c) {
+  const st = statusOf(c);
+  const failed = (c.targets || []).some(t => t.status === 'failed');
+  const node = el('div', 'clip ' + (failed ? 'bad' : STATUS_CLASS[st] || ''));
+  node.dataset.id = c.id;
+
+  const top = el('div', 'clip-top');
+  const pill = el('span', 'pill ' + (failed ? 'bad' : STATUS_CLASS[st] || ''));
+  pill.textContent = failed ? 'Some failed' : (STATUS_TEXT[st] || st);
+  top.append(pill);
+
+  if (c.scheduledLabel && st !== 'waiting') {
+    const when = el('span', 'pill');
+    when.textContent = c.scheduledLabel;
+    top.append(when);
+  }
+  const meta = el('span', 'clip-meta');
+  meta.textContent = `${secs(c.durationMs)}s · ${c.projectTitle || 'lecture'}`;
+  top.append(meta);
+  node.append(top);
+
+  const foot = el('div', 'clip-foot');
+  const count = el('span', 'counter');
+  const saved = el('span', 'saved');
+  saved.textContent = 'Saved';
+
+  // Once a clip is queued inside Opus the wording is locked in over there,
+  // so editing it here would be a lie. Show it plainly instead.
+  const locked = st !== 'waiting';
+  let title, body, tags;
+
+  if (locked) {
+    title = el('div', 'clip-title locked');
+    title.textContent = c.title || 'Untitled clip';
+    body = el('div', 'clip-body locked');
+    body.textContent = c.description || '';
+    tags = el('div', 'clip-tags locked');
+    tags.textContent = c.hashtags || '';
+    node.append(title, body);
+    if (c.hashtags) node.append(tags);
+    count.textContent = st === 'posted' ? 'Already sent' : 'Pull back to change the wording';
+    foot.append(count);
+  } else {
+    title = el('textarea', 'clip-title');
+    title.rows = 1;
+    title.value = c.title || '';
+    title.setAttribute('aria-label', 'Clip title');
+
+    body = el('textarea', 'clip-body');
+    body.value = c.description || '';
+    body.setAttribute('aria-label', 'Description');
+
+    tags = el('textarea', 'clip-tags');
+    tags.rows = 1;
+    tags.value = c.hashtags || '';
+    tags.setAttribute('aria-label', 'Hashtags');
+
+    node.append(title, body, tags);
+
+    const updateCount = () => {
+      const t = title.value.length;
+      const d = (body.value + '\n\n' + tags.value).trim().length;
+      count.textContent = `title ${t}/100 · text ${d}/2000`;
+      count.classList.toggle('over', t > 100 || d > 2000);
+    };
+    updateCount();
+
+    let saveTimer = null;
+    const onEdit = () => {
+      editing.add(c.id);
+      updateCount();
+      autoGrow(title); autoGrow(tags);
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(async () => {
+        try {
+          await api('/api/clips/' + encodeURIComponent(c.id), {
+            method: 'PATCH',
+            body: JSON.stringify({ title: title.value, description: body.value, hashtags: tags.value }),
+          });
+          saved.classList.add('on');
+          setTimeout(() => saved.classList.remove('on'), 1600);
+        } catch (err) { toast(err.message, 'bad'); }
+        editing.delete(c.id);
+      }, 900);
+    };
+    [title, body, tags].forEach(f => f.addEventListener('input', onEdit));
+    [title, tags].forEach(f => f.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); }));
+
+    foot.append(count, saved);
+  }
+
+  if (st === 'waiting') {
+    const approve = el('button', 'btn btn-sm');
+    approve.textContent = 'Approve';
+    approve.onclick = async () => {
+      approve.disabled = true;
+      try {
+        await api('/api/clips/' + encodeURIComponent(c.id), {
+          method: 'PATCH',
+          body: JSON.stringify({ title: title.value, description: body.value, hashtags: tags.value, status: 'approved' }),
+        });
+        editing.delete(c.id);
+        toast('Approved — it will go out at the next free slot', 'good');
+        refresh();
+      } catch (err) { toast(err.message, 'bad'); approve.disabled = false; }
+    };
+
+    const now = el('button', 'btn btn-ghost btn-sm');
+    now.textContent = 'Post now';
+    now.onclick = async () => {
+      if (!confirm('Post this clip to every linked account right now?')) return;
+      now.disabled = true;
+      try {
+        await api('/api/clips/' + encodeURIComponent(c.id) + '/now', { method: 'POST' });
+        toast('Posting now', 'good');
+        refresh();
+      } catch (err) { toast(err.message, 'bad'); now.disabled = false; }
+    };
+
+    const drop = el('button', 'btn btn-ghost btn-sm btn-danger');
+    drop.textContent = 'Discard';
+    drop.onclick = async () => {
+      if (!confirm('Discard this clip? It stays in Opus, it just leaves this queue.')) return;
+      try { await api('/api/clips/' + encodeURIComponent(c.id), { method: 'DELETE' }); refresh(); }
+      catch (err) { toast(err.message, 'bad'); }
+    };
+    foot.append(approve, now, drop);
+  } else if (st !== 'posted') {
+    const back = el('button', 'btn btn-ghost btn-sm');
+    back.textContent = 'Pull back';
+    back.onclick = async () => {
+      try {
+        await api('/api/clips/' + encodeURIComponent(c.id), {
+          method: 'PATCH', body: JSON.stringify({ status: 'waiting' }),
+        });
+        toast('Pulled back — it is out of the schedule');
+        refresh();
+      } catch (err) { toast(err.message, 'bad'); }
+    };
+    foot.append(back);
+  }
+  node.append(foot);
+
+  if ((c.targets || []).length) {
+    const row = el('div', 'targets');
+    c.targets.forEach(t => {
+      const tag = el('span', 'target ' + (t.status === 'failed' ? 'bad' : t.status === 'posted' ? 'done' : ''));
+      tag.textContent = platformName(t.platform);
+      if (t.error) tag.title = t.error;
+      row.append(tag);
+    });
+    node.append(row);
+  }
+
+  if (!locked) requestAnimationFrame(() => { autoGrow(title); autoGrow(tags); });
+  return node;
+}
+
+function autoGrow(field) {
+  if (!field || field.tagName !== 'TEXTAREA') return;
+  field.style.height = 'auto';
+  field.style.height = field.scrollHeight + 'px';
+}
+
+const platformName = p => String(p || '')
+  .replace('_BUSINESS', '').replace('_PAGE', '').replace(/_/g, ' ');
+
+/* ---------- schedule ---------- */
+
+function renderSchedule(queued) {
+  const byTime = new Map();
+  queued.forEach(c => { if (c.scheduledAt) byTime.set(c.scheduledAt, c); });
+
+  const rail = $('#rail');
+  rail.innerHTML = '';
+  const days = slotsAhead(5);
+  const now = Date.now();
+  let nextMarked = false;
+
+  days.forEach((day, di) => {
+    const wrap = el('div', 'rail-day');
+    const head = el('div', 'rail-date' + (di === 0 ? ' today' : ''));
+    head.textContent = di === 0 ? 'Today · ' + dayLabel(day.slots[0]) : dayLabel(day.slots[0]);
+    wrap.append(head);
+
+    day.slots.forEach(ms => {
+      const clip = byTime.get(ms);
+      const past = ms <= now;
+      const isNext = !past && !nextMarked;
+      if (isNext) nextMarked = true;
+
+      const row = el('div', 'slot ' + (clip && !past ? 'filled ' : '') + (past ? 'gone ' : '') + (isNext ? 'next' : ''));
+      row.append(el('div', 'node'));
+
+      const t = el('div', 'slot-time');
+      t.textContent = clockLabel(ms);
+      row.append(t);
+
+      const what = el('div', 'slot-what');
+      if (clip) {
+        const ti = el('div', 'slot-title');
+        ti.textContent = clip.title || 'Untitled clip';
+        const from = el('div', 'slot-from');
+        from.textContent = past ? 'Sent' : 'From ' + (clip.projectTitle || 'a lecture');
+        what.append(ti, from);
+      } else {
+        const e = el('div', 'slot-empty');
+        e.textContent = past ? 'Passed, nothing queued' : 'Open';
+        what.append(e);
+      }
+      row.append(what);
+      wrap.append(row);
+    });
+    rail.append(wrap);
+  });
+
+  const open = days.flatMap(d => d.slots).filter(ms => ms > now && !byTime.has(ms)).length;
+  $('#railNote').textContent = open ? `${open} open slots in the next five days` : 'Every slot is spoken for';
+
+  const list = $('#schedList');
+  list.innerHTML = '';
+  $('#schedNote').textContent = queued.length ? '' : '';
+  if (!queued.length) {
+    list.innerHTML = `<div class="empty">
+      <div class="empty-title">Nothing queued yet</div>
+      <div class="empty-note">Approved clips land here and fill the slots above, one at a time, in order.</div>
+    </div>`;
+    return;
+  }
+  queued.slice().sort((a, b) => (a.scheduledAt || 0) - (b.scheduledAt || 0))
+    .forEach(c => list.append(clipCard(c)));
+}
+
+/* ---------- insights ---------- */
+
+function renderInsights(clips) {
+  const posted = clips.filter(c => statusOf(c) === 'posted');
+  const queued = clips.filter(c => ['approved', 'scheduled'].includes(statusOf(c)));
+  const waiting = clips.filter(c => statusOf(c) === 'waiting');
+  const perDay = (DATA.postTimes || []).length || 1;
+  const daysLeft = queued.length / perDay;
+
+  const durations = clips.map(c => secs(c.durationMs)).filter(Boolean);
+  const avgLen = durations.length
+    ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
+
+  const sends = posted.reduce((n, c) =>
+    n + (c.targets || []).filter(t => t.status !== 'failed').length, 0);
+  const fails = clips.reduce((n, c) =>
+    n + (c.targets || []).filter(t => t.status === 'failed').length, 0);
+
+  const cards = [
+    { n: posted.length, lab: 'Clips posted', sub: sends + ' individual uploads', cls: 'good' },
+    { n: queued.length, lab: 'Queued and ready', sub: perDay + ' slots a day', cls: 'cool' },
+    {
+      n: daysLeft < 1 ? '<1' : Math.floor(daysLeft),
+      lab: 'Days of runway', cls: daysLeft < 1.5 ? 'warn' : '',
+      sub: daysLeft < 1.5 ? 'Add another lecture soon' : 'Before the queue runs dry',
+    },
+    { n: waiting.length, lab: 'Awaiting your read', cls: waiting.length ? 'warn' : '', sub: waiting.length ? 'Sitting in the queue tab' : 'All caught up' },
+    { n: avgLen ? avgLen + 's' : '—', lab: 'Average clip length', sub: 'Across every clip pulled in' },
+    { n: fails, lab: 'Failed uploads', cls: fails ? 'warn' : '', sub: fails ? 'Check the activity tab' : 'None so far' },
+  ];
+
+  const grid = $('#stats');
+  grid.innerHTML = '';
+  cards.forEach(c => {
+    const box = el('div', 'stat ' + (c.cls || ''));
+    box.innerHTML = `<div class="stat-num">${esc(c.n)}</div>
+      <div class="stat-lab">${esc(c.lab)}</div>
+      <div class="stat-sub">${esc(c.sub)}</div>`;
+    grid.append(box);
+  });
+
+  const plat = {};
+  posted.forEach(c => (c.targets || []).forEach(t => {
+    if (t.status === 'failed') return;
+    const k = platformName(t.platform) || 'unknown';
+    plat[k] = (plat[k] || 0) + 1;
+  }));
+  bars('#byPlatform', plat, 'Nothing has gone out yet.');
+
+  const slot = {};
+  posted.forEach(c => {
+    if (!c.scheduledAt) return;
+    const k = clockLabel(c.scheduledAt);
+    slot[k] = (slot[k] || 0) + 1;
+  });
+  bars('#bySlot', slot, 'Time-of-day splits appear once posts have gone out.');
+
+  const src = {};
+  clips.forEach(c => {
+    const k = c.projectTitle || 'Unknown lecture';
+    src[k] = (src[k] || 0) + 1;
+  });
+  bars('#bySource', src, 'Send a lecture to Opus to see this.');
+}
+
+function bars(sel, counts, emptyNote) {
+  const host = $(sel);
+  host.innerHTML = '';
+  const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  if (!rows.length) {
+    host.innerHTML = `<div class="empty" style="padding:22px 0"><div class="empty-note">${esc(emptyNote)}</div></div>`;
+    return;
+  }
+  const top = Math.max(...rows.map(r => r[1]));
+  rows.forEach(([label, n]) => {
+    const row = el('div', 'bar-row');
+    row.innerHTML = `<div class="bar-lab" title="${esc(label)}">${esc(label)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.round((n / top) * 100)}%"></div></div>
+      <div class="bar-num">${n}</div>`;
+    host.append(row);
+  });
+}
+
+/* ---------- activity ---------- */
+
+function renderActivity() {
+  const box = $('#accounts');
+  box.innerHTML = '';
+  const accounts = DATA.accounts || [];
+  if (!accounts.length) {
+    box.innerHTML = `<div class="empty" style="padding:28px 0">
+      <div class="empty-title">No accounts linked</div>
+      <div class="empty-note">Link your YouTube, Instagram, Facebook and TikTok accounts inside Opus, then refresh here.</div>
+    </div>`;
+  } else {
+    accounts.forEach(a => {
+      const row = el('div', 'acct');
+      const badge = el('div', 'acct-badge');
+      badge.textContent = platformName(a.platform).slice(0, 2).toUpperCase();
+      const who = el('div');
+      who.innerHTML = `<div class="acct-name">${esc(a.name || 'Account')}</div>
+        <div class="acct-plat">${esc(platformName(a.platform))}</div>`;
+      row.append(badge, who);
+      box.append(row);
+    });
+  }
+
+  const logBox = $('#log');
+  logBox.innerHTML = '';
+  const lines = DATA.log || [];
+  if (!lines.length) {
+    logBox.innerHTML = `<div class="empty" style="padding:28px 0"><div class="empty-note">Nothing has happened yet.</div></div>`;
+    return;
+  }
+  lines.forEach(l => {
+    const row = el('div', 'log-line ' + (l.level || 'info'));
+    row.innerHTML = `<div class="log-time">${esc(clockLabel(l.at))}</div>
+      <div class="log-msg">${esc(l.message)}</div>`;
+    logBox.append(row);
+  });
+}
+
+/* ---------- events ---------- */
+
+$('#unlock').onclick = unlock;
+$('#pw').addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
+
+async function unlock() {
+  const value = $('#pw').value.trim();
+  if (!value) { $('#gateErr').textContent = 'Enter your password.'; return; }
   $('#gateErr').textContent = '';
-  btn.disabled = true;
+  $('#unlock').disabled = true;
+  PW = value;
   const ok = await boot();
-  btn.disabled = false;
-  if (!ok && !$('#gateErr').textContent) $('#gateErr').textContent = 'That password did not work.';
-};
-$('#pw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#unlock').click(); });
+  if (ok) localStorage.setItem('clipAgentPw', PW);
+  $('#unlock').disabled = false;
+}
 
-$('#saveKey').onclick = async () => {
-  $('#connectErr').textContent = '';
-  $('#saveKey').disabled = true;
+$('#save').onclick = async () => {
+  const key = $('#key').value.trim();
+  if (!key) { $('#connErr').textContent = 'Paste your Opus key first.'; return; }
+  $('#connErr').textContent = '';
+  $('#save').disabled = true;
   try {
-    await api('/api/connect', { method:'POST', body: JSON.stringify({
-      key: $('#key').value.trim(), orgId: $('#org').value.trim(),
-    })});
+    const res = await api('/api/connect', { method: 'POST', body: JSON.stringify({ key }) });
+    toast(`Connected — ${(res.accounts || []).length} accounts found`, 'good');
     await boot();
   } catch (err) {
-    $('#connectErr').textContent = err.message;
-  } finally { $('#saveKey').disabled = false; }
+    $('#connErr').textContent = err.message;
+  }
+  $('#save').disabled = false;
 };
 
 $('#send').onclick = async () => {
   const urls = $('#urls').value.trim();
-  if (!urls) return;
-  $('#send').disabled = true; $('#sendErr').textContent = '';
+  if (!urls) { toast('Paste a video link first', 'bad'); return; }
+  $('#send').disabled = true;
+  $('#intakeNote').textContent = 'Sending…';
   try {
-    const r = await api('/api/videos', { method:'POST', body: JSON.stringify({ urls }) });
-    const bad = r.results.filter(x => x.error);
-    $('#urls').value = bad.map(x => x.url).join('\n');
-    if (bad.length) $('#sendErr').textContent = `${bad.length} could not be sent. ${bad[0].error}`;
-    await load();
+    const res = await api('/api/videos', { method: 'POST', body: JSON.stringify({ urls }) });
+    const good = (res.results || []).filter(r => r.ok).length;
+    const bad = (res.results || []).filter(r => r.error);
+    if (good) { $('#urls').value = ''; toast(`${good} sent to Opus — clips take a few minutes`, 'good'); }
+    bad.forEach(b => toast(b.error, 'bad'));
+    $('#intakeNote').textContent = good ? 'Opus is clipping. They will appear below.' : '';
+    refresh();
   } catch (err) {
-    $('#sendErr').textContent = err.message;
-  } finally { $('#send').disabled = false; }
+    toast(err.message, 'bad');
+    $('#intakeNote').textContent = '';
+  }
+  $('#send').disabled = false;
 };
 
-$('#refresh').onclick = () => load();
+$('#approveAll').onclick = async () => {
+  const waiting = (DATA.clips || []).filter(c => statusOf(c) === 'waiting');
+  if (!waiting.length) return;
+  if (!confirm(`Approve all ${waiting.length} clips? They will be scheduled into the next free slots.`)) return;
+  $('#approveAll').disabled = true;
+  let done = 0;
+  for (const c of waiting) {
+    try {
+      await api('/api/clips/' + encodeURIComponent(c.id), {
+        method: 'PATCH', body: JSON.stringify({ status: 'approved' }),
+      });
+      done++;
+    } catch (err) { toast(err.message, 'bad'); }
+  }
+  toast(`${done} approved`, 'good');
+  $('#approveAll').disabled = false;
+  refresh();
+};
 
-async function load() {
-  try { data = await api('/api/state'); if (data.connected) { showOnly('app'); render(); } else showOnly('connect'); }
-  catch (err) { if (err.locked) showOnly('gate'); }
-}
+$('#refreshAcc').onclick = async () => {
+  $('#refreshAcc').disabled = true;
+  try {
+    const res = await api('/api/accounts/refresh', { method: 'POST' });
+    toast(`${(res.accounts || []).length} accounts linked`, 'good');
+    refresh();
+  } catch (err) { toast(err.message, 'bad'); }
+  $('#refreshAcc').disabled = false;
+};
 
-setInterval(() => { if (!document.hidden && !editing) load(); }, 45000);
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.onclick = () => {
+    VIEW = tab.dataset.view;
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t === tab));
+    ['queue', 'schedule', 'insights', 'activity'].forEach(v => {
+      $('#view-' + v).classList.toggle('hide', v !== VIEW);
+    });
+  };
+});
+
+$('#key').addEventListener('keydown', e => { if (e.key === 'Enter') $('#save').click(); });
 
 if (PW) boot(); else $('#pw').focus();
 </script>
