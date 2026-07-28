@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Clip Agent</title>
-<meta name="theme-color" content="#0C0A08">
+<meta name="theme-color" content="#09090A">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Clip Agent">
@@ -13,21 +13,21 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#0C0A08;
-  --surface:#141110;
-  --surface-2:#1C1815;
-  --line:#2A2420;
-  --line-lit:#3B332B;
+  --bg:#09090A;
+  --surface:#121214;
+  --surface-2:#19191C;
+  --line:#26262A;
+  --line-lit:#37373D;
 
-  --text:#F4EFE7;
-  --text-2:#BFB5A6;
-  --mute:#8C8377;
-  --mute-2:#5F5850;
+  --text:#F8F8F9;
+  --text-2:#BCBCC3;
+  --mute:#8B8B93;
+  --mute-2:#5E5E66;
 
-  /* the channel's gold, standing in for the old blue */
-  --blue:#C9A87C;
-  --blue-soft:#E3CBA8;
-  --red:#E0736F;
+  /* the channel's gold, used only as an accent */
+  --blue:#D9B478;
+  --blue-soft:#F0D6A6;
+  --red:#FF5566;
 
   --gutter:24px;
   --r:6px;
@@ -79,23 +79,23 @@ textarea{resize:vertical;line-height:1.65}
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:7px;
   padding:10px 17px;border-radius:var(--r);font-weight:500;font-size:14px;
-  background:var(--blue);color:#241B10;transition:background .12s;white-space:nowrap;
+  background:var(--blue);color:#1A1206;transition:background .12s;white-space:nowrap;
 }
-.btn:hover{background:#D9BC93}
-.btn:active{background:#B4926A}
+.btn:hover{background:#E6C68F}
+.btn:active{background:#C29E63}
 .btn[disabled]{opacity:.45;cursor:default}
 .btn-wide{width:100%;margin-top:18px}
 .btn-ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
 .btn-ghost:hover{background:var(--surface-2);border-color:var(--line-lit)}
 .btn-sm{padding:7px 13px;font-size:13.5px}
-.btn-danger:hover{color:var(--red);border-color:rgba(224,115,111,.5);background:transparent}
+.btn-danger:hover{color:var(--red);border-color:rgba(255,85,102,.5);background:transparent}
 
 .err{color:var(--red);font-size:13.5px;margin-top:14px;min-height:1px}
 .hint{color:var(--mute);font-size:13.5px;margin:16px 0 0;line-height:1.65}
 
 /* ---------- masthead ---------- */
 .top{
-  position:sticky;top:0;z-index:20;background:rgba(11,11,12,.9);backdrop-filter:blur(12px);
+  position:sticky;top:0;z-index:20;background:rgba(9,9,10,.9);backdrop-filter:blur(12px);
   border-bottom:1px solid var(--line);margin:0 calc(var(--gutter) * -1);padding:0 var(--gutter);
 }
 .top-in{display:flex;align-items:center;gap:20px;padding:16px 0;flex-wrap:wrap}
@@ -116,7 +116,7 @@ textarea{resize:vertical;line-height:1.65}
 .tab.on::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--blue)}
 .tab-count{font-size:12px;margin-left:7px;padding:1px 6px;border-radius:20px;background:var(--line);color:var(--mute);font-weight:500}
 .tab.on .tab-count{background:var(--surface-2);color:var(--text-2)}
-.tab-count.urgent{background:var(--blue);color:#241B10}
+.tab-count.urgent{background:var(--blue);color:#1A1206}
 
 /* ---------- sections ---------- */
 .panel{padding:0}
@@ -151,16 +151,16 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 /* ---------- clip cards ---------- */
 .clip{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:19px;margin-bottom:12px}
 .clip.needs{border-color:var(--line-lit)}
-.clip.bad{border-color:rgba(224,115,111,.35)}
+.clip.bad{border-color:rgba(255,85,102,.35)}
 .clip.done{opacity:.62}
-.clip.busy{border-color:rgba(201,168,124,.4)}
+.clip.busy{border-color:rgba(217,180,120,.4)}
 
 .clip-top{display:flex;align-items:center;gap:11px;margin-bottom:12px;flex-wrap:wrap}
 .stamp{font-size:12.5px;font-weight:500;padding:2px 9px;border-radius:20px;background:var(--surface-2);color:var(--mute);border:1px solid var(--line)}
-.stamp.needs{color:var(--blue-soft);border-color:rgba(201,168,124,.4);background:rgba(201,168,124,.1)}
+.stamp.needs{color:var(--blue-soft);border-color:rgba(217,180,120,.4);background:rgba(217,180,120,.1)}
 .stamp.set{color:var(--text-2)}
 .stamp.done{color:var(--mute)}
-.stamp.bad{color:var(--red);border-color:rgba(224,115,111,.4);background:rgba(224,115,111,.08)}
+.stamp.bad{color:var(--red);border-color:rgba(255,85,102,.4);background:rgba(255,85,102,.08)}
 .clip-meta{font-size:12.5px;color:var(--mute-2);margin-left:auto}
 
 .clip-title{
@@ -198,7 +198,7 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 
 .dests{display:flex;gap:6px;flex-wrap:wrap;margin-top:13px}
 .dest{font-size:12px;padding:2px 9px;border-radius:20px;border:1px solid var(--line);color:var(--mute)}
-.dest.bad{color:var(--red);border-color:rgba(224,115,111,.35)}
+.dest.bad{color:var(--red);border-color:rgba(255,85,102,.35)}
 .dest.done{color:var(--text-2)}
 
 /* ---------- processing lectures ---------- */
@@ -227,7 +227,7 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .dep.open .dep-title{color:var(--mute-2)}
 .dep.gone{opacity:.4}
 .dep.loaded .dep-time{color:var(--text)}
-.dep.next{background:rgba(201,168,124,.06)}
+.dep.next{background:rgba(217,180,120,.06)}
 .dep.next .dep-time,.dep.next .dep-stat{color:var(--blue-soft)}
 .dep.next::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--blue)}
 
@@ -298,8 +298,8 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
   background:var(--surface-2);border:1px solid var(--line-lit);border-radius:8px;
   padding:12px 16px;font-size:14px;animation:slide .18s ease-out;box-shadow:0 12px 32px rgba(0,0,0,.5);
 }
-.toast.bad{border-color:rgba(224,115,111,.45);color:#FFC0C7}
-.toast.good{border-color:rgba(201,168,124,.45)}
+.toast.bad{border-color:rgba(255,85,102,.45);color:#FFC0C7}
+.toast.good{border-color:rgba(217,180,120,.45)}
 @keyframes slide{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
 @media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
