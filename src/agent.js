@@ -221,6 +221,34 @@ export async function unschedule(clip) {
   save();
 }
 
+/**
+ * Opus does the publishing, so once a scheduled slot has passed the clip has
+ * gone out. Move it to posted, and keep the history from growing forever.
+ */
+function retirePassed() {
+  const now = Date.now();
+  let changed = false;
+
+  for (const c of state.clips) {
+    if (c.status !== 'scheduled' || !c.scheduledAt || c.scheduledAt > now) continue;
+    c.status = 'posted';
+    c.postedAt = c.scheduledAt;
+    c.targets = c.targets.map(t => (t.status === 'scheduled' ? { ...t, status: 'posted' } : t));
+    changed = true;
+  }
+
+  const posted = state.clips.filter(c => c.status === 'posted');
+  if (posted.length > 400) {
+    const cutoff = posted
+      .map(c => c.postedAt || c.addedAt || 0)
+      .sort((a, b) => b - a)[400];
+    state.clips = state.clips.filter(c => c.status !== 'posted' || (c.postedAt || c.addedAt || 0) > cutoff);
+    changed = true;
+  }
+
+  if (changed) save();
+}
+
 /** One pass of the agent: check projects, then schedule whatever is approved. */
 export async function tick() {
   if (running || !opusKey()) return;
@@ -234,6 +262,7 @@ export async function tick() {
     for (const c of state.clips) {
       if (c.status === 'approved') await scheduleClip(c);
     }
+    retirePassed();
   } catch (err) {
     log(`Agent pass failed: ${err.message}`, 'error');
   } finally {
