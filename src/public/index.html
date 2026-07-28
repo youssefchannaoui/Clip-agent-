@@ -1,1 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Reminders" />
+<meta name="theme-color" content="#FBF9F4" />
+<title>Reminders</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500&family=Karla:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBF9F4; --card:#FFFFFF; --ink:#16202B; --slate:#5D6A76;
+    --rule:#E5DFD2; --brass:#A67C2E; --sage:#3F6E52; --rust:#A34B3C;
+    --top:env(safe-area-inset-top,0px); --bot:env(safe-area-inset-bottom,0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:16px/1.55 Karla,-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased;
+    padding:calc(var(--top) + 22px) 18px calc(var(--bot) + 72px)}
+  .wrap{max-width:680px;margin:0 auto}
 
+  .eyebrow{font:400 11px/1 "Space Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--slate)}
+  h1{font-family:Fraunces,Georgia,serif;font-weight:300;font-size:38px;line-height:1.05;
+    letter-spacing:-.02em;margin:8px 0 0}
+  h2{font-family:Fraunces,serif;font-weight:500;font-size:15px;letter-spacing:.01em;margin:0 0 14px}
+  header{padding-bottom:22px;border-bottom:1.5px solid var(--ink);margin-bottom:26px}
+  .status{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:var(--slate);flex-wrap:wrap}
+  .pip{width:6px;height:6px;border-radius:99px;background:var(--sage);flex:none}
+  .pip.off{background:var(--rust)}
+
+  .panel{background:var(--card);border:1px solid var(--rule);border-radius:3px;padding:18px;margin-bottom:26px}
+  label{display:block;font:400 11px/1 "Space Mono",monospace;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--slate);margin:0 0 8px}
+  input,textarea{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--paper);
+    border:1px solid var(--rule);border-radius:2px;padding:12px}
+  textarea{min-height:86px;resize:vertical}
+  input:focus,textarea:focus{outline:2px solid var(--brass);outline-offset:1px;border-color:transparent}
+
+  button{font:500 15px/1 Karla,sans-serif;min-height:44px;padding:12px 18px;border-radius:2px;
+    border:1px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer}
+  button.solid{background:var(--ink);color:var(--paper)}
+  button.quiet{border-color:var(--rule);color:var(--slate)}
+  button:disabled{opacity:.4;cursor:default}
+  button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+
+  /* the day rail — the fixed times are the structure */
+  .day{margin-bottom:30px}
+  .dayhead{font:700 11px/1 "Space Mono",monospace;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--slate);padding-bottom:10px;border-bottom:1px solid var(--rule);margin-bottom:4px}
+  .slot{position:relative;display:grid;grid-template-columns:58px 1fr;gap:16px;padding:16px 0}
+  .slot + .slot{border-top:1px solid var(--rule)}
+  .slot time{font:400 13px/1.4 "Space Mono",monospace;color:var(--slate);padding-top:3px}
+  .slot::before{content:"";position:absolute;left:47px;top:0;bottom:0;width:1px;background:var(--rule)}
+  .slot:first-of-type::before{top:16px}
+  .slot:last-child::before{bottom:calc(100% - 26px)}
+  .slot::after{content:"";position:absolute;left:44px;top:20px;width:7px;height:7px;border-radius:99px;
+    background:var(--paper);border:1.5px solid var(--slate)}
+  .slot.filled::after{background:var(--brass);border-color:var(--brass)}
+  .slot.posted::after{background:var(--sage);border-color:var(--sage)}
+  .slot.open .title{color:var(--slate);font-style:italic}
+
+  .title{font-family:Fraunces,serif;font-weight:500;font-size:19px;line-height:1.25;margin:0 0 6px}
+  .meta{font:400 12px/1.5 "Space Mono",monospace;color:var(--slate);margin-bottom:10px}
+  .body{font-size:14.5px;color:#2C3946;margin:0 0 12px;white-space:pre-wrap}
+  .tags{font-size:13.5px;color:var(--brass);word-break:break-word}
+
+  .dests{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+  .dest{font:400 11px/1 "Space Mono",monospace;letter-spacing:.08em;text-transform:uppercase;
+    border:1px solid var(--rule);border-radius:99px;padding:7px 11px;color:var(--slate)}
+  .dest.scheduled{border-color:var(--brass);color:var(--brass)}
+  .dest.posted{border-color:var(--sage);color:var(--sage);background:rgba(63,110,82,.07)}
+  .dest.failed{border-color:var(--rust);color:var(--rust)}
+
+  .needs{border-left:3px solid var(--brass);padding-left:16px;margin-bottom:14px}
+  .err{color:var(--rust);font-size:13.5px;margin-top:10px}
+  .empty{font-family:Fraunces,serif;font-size:17px;font-weight:300;color:var(--slate);
+    padding:34px 0;text-align:center}
+  .logline{display:grid;grid-template-columns:56px 1fr;gap:12px;font-size:13px;
+    padding:8px 0;border-bottom:1px solid var(--rule);color:var(--slate)}
+  .logline span{font:400 11px/1.5 "Space Mono",monospace}
+  .logline.error b,.logline.warn b{color:var(--rust)}
+  .logline b{color:var(--ink);font-weight:500}
+
+  .gate{max-width:400px;margin:12vh auto 0}
+  .note{background:var(--card);border:1px solid var(--rule);padding:14px;margin-top:20px;
+    font-size:13.5px;color:var(--slate);border-radius:2px}
+  .hide{display:none}
+  @media (prefers-reduced-motion:no-preference){
+    .slot{animation:rise .32s ease both}
+    @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  }
+  @media (max-width:480px){
+    h1{font-size:31px}
+    .slot{grid-template-columns:46px 1fr;gap:12px}
+    .slot::before{left:37px} .slot::after{left:34px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- password -->
+  <section id="gate" class="gate">
+    <p class="eyebrow">Clip agent</p>
+    <h1>Reminders</h1>
+    <div class="panel" style="margin-top:24px">
+      <label for="pw">Password</label>
+      <input id="pw" type="password" autocomplete="current-password" />
+      <div class="row"><button class="solid" id="unlock" style="flex:1">Unlock</button></div>
+      <div class="err" id="gateErr"></div>
+    </div>
+  </section>
+
+  <!-- connect opus -->
+  <section id="connect" class="gate hide">
+    <p class="eyebrow">One time setup</p>
+    <h1>Connect Opus</h1>
+    <div class="panel" style="margin-top:24px">
+      <label for="key">Opus API key</label>
+      <input id="key" type="password" placeholder="Paste from the Opus dashboard" autocomplete="off" />
+      <label for="org" style="margin-top:16px">Organisation ID <span style="text-transform:none;letter-spacing:0">— only if you have more than one</span></label>
+      <input id="org" type="text" placeholder="Optional" autocomplete="off" />
+      <div class="row"><button class="solid" id="saveKey" style="flex:1">Connect</button></div>
+      <div class="err" id="connectErr"></div>
+    </div>
+    <div class="note">
+      Find the key in the lower left of your Opus dashboard. Whatever accounts you
+      have already linked inside Opus become the destinations here.
+    </div>
+  </section>
+
+  <!-- main -->
+  <section id="app" class="hide">
+    <header>
+      <p class="eyebrow">Clip agent</p>
+      <h1>Reminders</h1>
+      <div class="status" id="status"></div>
+    </header>
+
+    <div class="panel">
+      <label for="urls">Add lectures</label>
+      <textarea id="urls" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"
+        placeholder="Paste a video link. One per line."></textarea>
+      <div class="row">
+        <button class="solid" id="send">Send for clipping</button>
+        <button class="quiet" id="refresh">Refresh</button>
+      </div>
+      <div class="err" id="sendErr"></div>
+      <div id="projects" style="margin-top:14px"></div>
+    </div>
+
+    <div id="needs"></div>
+    <div id="rail"></div>
+
+    <div class="panel" style="margin-top:30px">
+      <h2>Activity</h2>
+      <div id="log"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const mem = {};
+const keep = (k,v) => { try{ sessionStorage.setItem(k,v); }catch{ mem[k]=v; } };
+const recall = k => { try{ return sessionStorage.getItem(k) ?? mem[k] ?? ''; }catch{ return mem[k]||''; } };
+
+let PW = recall('pw'), data = null, editing = null;
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: { 'Content-Type':'application/json', 'x-app-password': PW, ...(opts.headers||{}) },
+  });
+  if (res.status === 401) { const e = new Error('locked'); e.locked = true; throw e; }
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
+  return json;
+}
+
+function showOnly(id) {
+  for (const s of ['gate','connect','app']) $('#'+s).classList.toggle('hide', s !== id);
+}
+
+async function boot() {
+  try {
+    data = await api('/api/state');
+    keep('pw', PW);
+    showOnly(data.connected ? 'app' : 'connect');
+    if (data.connected) render();
+    return true;
+  } catch (err) {
+    if (err.locked) { showOnly('gate'); $('#gateErr').textContent = ''; }
+    else { showOnly('gate'); $('#gateErr').textContent = err.message; }
+    return false;
+  }
+}
+
+/* ---------- rendering ---------- */
+
+function dayKey(ms) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: data.timezone, year:'numeric', month:'2-digit', day:'2-digit' })
+    .format(new Date(ms));
+}
+function dayLabel(ms) {
+  return new Intl.DateTimeFormat('en-AU', { timeZone: data.timezone, weekday:'long', day:'numeric', month:'long' })
+    .format(new Date(ms));
+}
+function timeLabel(ms) {
+  return new Intl.DateTimeFormat('en-GB', { timeZone: data.timezone, hour:'2-digit', minute:'2-digit', hour12:false })
+    .format(new Date(ms));
+}
+
+function destChip(t) {
+  const label = t.platform.replace('_BUSINESS','').replace('_PAGE','').replace('TIKTOK','TikTok');
+  return `<span class="dest ${t.status}" title="${esc(t.error||'')}">${esc(label)}${
+    t.status==='posted'?' ✓':t.status==='failed'?' ✕':''}</span>`;
+}
+
+function clipBody(c, editable) {
+  if (editing === c.id) {
+    return `
+      <label for="t-${c.id}">Title</label>
+      <input id="t-${c.id}" type="text" value="${esc(c.title)}" />
+      <label for="d-${c.id}" style="margin-top:14px">Caption</label>
+      <textarea id="d-${c.id}">${esc(c.description)}</textarea>
+      <label for="h-${c.id}" style="margin-top:14px">Hashtags</label>
+      <input id="h-${c.id}" type="text" value="${esc(c.hashtags)}" />
+      <div class="row">
+        <button class="solid" data-save="${c.id}">Save</button>
+        <button class="quiet" data-cancel="1">Cancel</button>
+      </div>`;
+  }
+  const secs = Math.round((c.durationMs||0)/1000);
+  return `
+    <p class="title">${esc(c.title || 'Untitled clip')}</p>
+    <p class="meta">${secs ? secs+'s' : ''}${c.projectTitle ? ' · '+esc(c.projectTitle) : ''}</p>
+    ${c.description ? `<p class="body">${esc(c.description)}</p>` : ''}
+    ${c.hashtags ? `<p class="tags">${esc(c.hashtags)}</p>` : ''}
+    ${c.targets.length ? `<div class="dests">${c.targets.map(destChip).join('')}</div>` : ''}
+    ${c.targets.filter(t=>t.error).map(t=>`<p class="err">${esc(t.name)}: ${esc(t.error)}</p>`).join('')}
+    <div class="row">
+      ${editable ? `<button data-edit="${c.id}">Edit words</button>` : ''}
+      ${c.status === 'waiting' ? `<button class="solid" data-approve="${c.id}">Approve</button>` : ''}
+      ${c.status === 'scheduled' ? `<button class="quiet" data-hold="${c.id}">Hold</button>` : ''}
+      ${c.status !== 'posted' ? `<button class="quiet" data-now="${c.id}">Post now</button>` : ''}
+      ${c.status !== 'posted' ? `<button class="quiet" data-drop="${c.id}">Discard</button>` : ''}
+    </div>`;
+}
+
+function render() {
+  const accounts = data.accounts || [];
+  $('#status').innerHTML =
+    `<span class="pip ${accounts.length?'':'off'}"></span>` +
+    (accounts.length
+      ? `${accounts.length} account${accounts.length>1?'s':''} · ${esc(accounts.map(a=>a.name).join(', '))}`
+      : 'No accounts linked inside Opus yet') +
+    ` &nbsp;·&nbsp; ${data.postTimes.join('  ')} ${esc(data.timezone.split('/').pop().replace('_',' '))}` +
+    (data.autoApprove ? ' &nbsp;·&nbsp; posting unattended' : '');
+
+  const clipping = (data.projects||[]).filter(p => p.status === 'clipping');
+  $('#projects').innerHTML = clipping.length
+    ? clipping.map(p => `<div class="logline"><span>clipping</span><b>${esc(p.title)}</b></div>`).join('')
+    : '';
+
+  // waiting on you
+  const waiting = data.clips.filter(c => c.status === 'waiting');
+  $('#needs').innerHTML = waiting.length ? `
+    <h2>Waiting for you — ${waiting.length}</h2>
+    ${waiting.map(c => `<div class="panel needs" data-clip="${c.id}">${clipBody(c, true)}</div>`).join('')}
+  ` : '';
+
+  // the rail: every posting time, filled or open
+  const placed = data.clips.filter(c => c.scheduledAt);
+  const byDay = new Map();
+  for (const c of placed) {
+    const k = dayKey(c.scheduledAt);
+    if (!byDay.has(k)) byDay.set(k, []);
+    byDay.get(k).push(c);
+  }
+
+  // show today plus the next two days even when empty, so gaps are visible
+  const now = Date.now();
+  for (let i = 0; i < 3; i++) {
+    const k = dayKey(now + i*86400000);
+    if (!byDay.has(k)) byDay.set(k, []);
+  }
+
+  const days = [...byDay.entries()].sort((a,b) => a[0].localeCompare(b[0]));
+  $('#rail').innerHTML = days.map(([key, clips]) => {
+    const anchor = clips[0]?.scheduledAt ?? Date.parse(key + 'T12:00:00Z');
+    const slots = new Map(clips.map(c => [timeLabel(c.scheduledAt), c]));
+    const times = [...new Set([...data.postTimes, ...slots.keys()])].sort();
+
+    return `<section class="day">
+      <div class="dayhead">${esc(dayLabel(anchor))}</div>
+      ${times.map(t => {
+        const c = slots.get(t);
+        if (!c) return `<div class="slot open"><time>${t}</time><div><p class="title">Open</p></div></div>`;
+        return `<div class="slot ${c.status === 'posted' ? 'posted' : 'filled'}" data-clip="${c.id}">
+          <time>${t}</time><div>${clipBody(c, c.status !== 'posted')}</div></div>`;
+      }).join('')}
+    </section>`;
+  }).join('');
+
+  $('#log').innerHTML = (data.log||[]).map(l => `
+    <div class="logline ${l.level}">
+      <span>${new Date(l.at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</span>
+      <b>${esc(l.message)}</b>
+    </div>`).join('') || '<p class="empty" style="padding:12px 0">Nothing yet.</p>';
+}
+
+/* ---------- actions ---------- */
+
+document.addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const d = b.dataset;
+  try {
+    if (d.edit)   { editing = d.edit; render(); return; }
+    if (d.cancel) { editing = null; render(); return; }
+    if (d.save) {
+      await api(`/api/clips/${d.save}`, { method:'PATCH', body: JSON.stringify({
+        title: $(`#t-${d.save}`).value,
+        description: $(`#d-${d.save}`).value,
+        hashtags: $(`#h-${d.save}`).value,
+      })});
+      editing = null; await load(); return;
+    }
+    if (d.approve) { b.disabled = true; await api(`/api/clips/${d.approve}`, {method:'PATCH', body: JSON.stringify({status:'approved'})}); await load(); return; }
+    if (d.hold)    { b.disabled = true; await api(`/api/clips/${d.hold}`, {method:'PATCH', body: JSON.stringify({status:'waiting'})}); await load(); return; }
+    if (d.now) {
+      if (!confirm('Post this now, to every connected account?')) return;
+      b.disabled = true; await api(`/api/clips/${d.now}/now`, {method:'POST'}); await load(); return;
+    }
+    if (d.drop) {
+      if (!confirm('Discard this clip? Anything already scheduled for it is cancelled.')) return;
+      await api(`/api/clips/${d.drop}`, {method:'DELETE'}); await load(); return;
+    }
+  } catch (err) {
+    if (err.locked) return showOnly('gate');
+    alert(err.message);
+    b.disabled = false;
+  }
+});
+
+$('#unlock').onclick = async () => {
+  const btn = $('#unlock');
+  PW = $('#pw').value;
+  $('#gateErr').textContent = '';
+  btn.disabled = true;
+  const ok = await boot();
+  btn.disabled = false;
+  if (!ok && !$('#gateErr').textContent) $('#gateErr').textContent = 'That password did not work.';
+};
+$('#pw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#unlock').click(); });
+
+$('#saveKey').onclick = async () => {
+  $('#connectErr').textContent = '';
+  $('#saveKey').disabled = true;
+  try {
+    await api('/api/connect', { method:'POST', body: JSON.stringify({
+      key: $('#key').value.trim(), orgId: $('#org').value.trim(),
+    })});
+    await boot();
+  } catch (err) {
+    $('#connectErr').textContent = err.message;
+  } finally { $('#saveKey').disabled = false; }
+};
+
+$('#send').onclick = async () => {
+  const urls = $('#urls').value.trim();
+  if (!urls) return;
+  $('#send').disabled = true; $('#sendErr').textContent = '';
+  try {
+    const r = await api('/api/videos', { method:'POST', body: JSON.stringify({ urls }) });
+    const bad = r.results.filter(x => x.error);
+    $('#urls').value = bad.map(x => x.url).join('\n');
+    if (bad.length) $('#sendErr').textContent = `${bad.length} could not be sent. ${bad[0].error}`;
+    await load();
+  } catch (err) {
+    $('#sendErr').textContent = err.message;
+  } finally { $('#send').disabled = false; }
+};
+
+$('#refresh').onclick = () => load();
+
+async function load() {
+  try { data = await api('/api/state'); if (data.connected) { showOnly('app'); render(); } else showOnly('connect'); }
+  catch (err) { if (err.locked) showOnly('gate'); }
+}
+
+setInterval(() => { if (!document.hidden && !editing) load(); }, 45000);
+
+if (PW) boot(); else $('#pw').focus();
+</script>
+</body>
+</html>
