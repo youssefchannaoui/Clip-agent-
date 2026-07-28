@@ -1,0 +1,247 @@
+import { config } from './config.js';
+import { state, save, log, opusKey } from './store.js';
+import * as opus from './opus.js';
+import { nextSlot } from './slots.js';
+
+const MINUTE = 60_000;
+let running = false;
+
+/**
+ * Refresh the list of accounts linked inside Opus, at most every 10 minutes.
+ * During background passes a failure is only logged, so one bad response
+ * doesn't stall the queue. When `strict` is set — checking a key someone just
+ * pasted — the error is thrown so it can be shown to them.
+ */
+export async function refreshAccounts(force = false, strict = false) {
+  if (!opusKey()) {
+    if (strict) throw new Error('No Opus API key to check.');
+    return state.accounts;
+  }
+  if (!force && Date.now() - state.accountsCheckedAt < 10 * MINUTE) return state.accounts;
+  try {
+    state.accounts = await opus.getSocialAccounts();
+    state.accountsCheckedAt = Date.now();
+    save();
+  } catch (err) {
+    if (strict) throw err;
+    log(`Could not read your connected accounts. ${err.message}`, 'error');
+  }
+  return state.accounts;
+}
+
+/** Hand a video to Opus for clipping. */
+export async function submitVideo(url, title) {
+  const project = await opus.createProject(url, title);
+  const id = project?.projectId || project?.id;
+  if (!id) throw new Error('Opus accepted the video but did not return a project id.');
+
+  state.projects.unshift({
+    id, url, title: title || url,
+    status: 'clipping',
+    submittedAt: Date.now(),
+    imported: 0,
+    // Short lectures can be ready quickly, so look soon, then ease off.
+    checkAfter: Date.now() + 20_000,
+  });
+  save();
+  log(`Sent to Opus for clipping: ${title || url}`);
+  return id;
+}
+
+/** Pull finished clips into the queue. */
+async function importClips(project) {
+  let clips;
+  try {
+    clips = await opus.getClips(project.id);
+  } catch (err) {
+    log(`Could not fetch clips for ${project.title}. ${err.message}`, 'error');
+    project.checkAfter = Date.now() + 2 * MINUTE;
+    save();
+    return;
+  }
+
+  if (!clips.length) {
+    // Still clipping. Back off gradually, but keep checking for a day.
+    const waited = Date.now() - project.submittedAt;
+    project.checkAfter = Date.now() + Math.min(2 * MINUTE, 15_000 + waited / 10);
+    if (waited > 24 * 60 * MINUTE) {
+      project.status = 'stalled';
+      log(`Opus has not returned clips for ${project.title} after a day.`, 'warn');
+    }
+    save();
+    return;
+  }
+
+  // Opus returns its own ranking; use the score when it is present.
+  const ranked = clips.slice().sort((a, b) => {
+    if (a.score != null && b.score != null) return b.score - a.score;
+    return 0;
+  });
+
+  const known = new Set(state.clips.map(c => c.id));
+  const fresh = ranked.filter(c => !known.has(c.id)).slice(0, config.clipsPerVideo);
+
+  for (const c of fresh) {
+    state.clips.push({
+      ...c,
+      projectTitle: project.title,
+      status: config.autoApprove ? 'approved' : 'waiting',
+      targets: [],                 // one entry per destination once scheduled
+      addedAt: Date.now(),
+      scheduledAt: null,
+    });
+  }
+
+  project.imported = fresh.length;
+  project.clipCount = clips.length;
+  project.status = 'done';
+  save();
+  log(`${fresh.length} clips ready from ${project.title}${config.autoApprove ? '' : ' — waiting for your approval'}`);
+}
+
+/** Ask Opus to write the caption, then wait for it. */
+async function generateCopy(clip, account) {
+  try {
+    const jobId = await opus.requestCopy({
+      projectId: clip.projectId, clipId: clip.clipId, account,
+    });
+    if (!jobId) return null;
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 3000));
+      const res = await opus.getCopy(jobId);
+      if (res?.status === 'COMPLETED') return res;
+      if (res?.status === 'FAILED') return null;
+    }
+  } catch (err) {
+    log(`Caption generation failed, using the clip's own title instead. ${err.message}`, 'warn');
+  }
+  return null;
+}
+
+/** Schedule one approved clip across every connected account. */
+async function scheduleClip(clip) {
+  const accounts = await refreshAccounts();
+  if (!accounts.length) {
+    log('No social accounts are connected inside Opus yet, so nothing can be scheduled.', 'warn');
+    return;
+  }
+
+  const taken = state.clips.map(c => c.scheduledAt).filter(Boolean);
+  const at = clip.scheduledAt || nextSlot(taken);
+  clip.scheduledAt = at;
+
+  for (const account of accounts) {
+    if (clip.targets.some(t => t.postAccountId === account.postAccountId && t.status !== 'failed')) continue;
+
+    let copy = clip.copy;
+    if (!copy) {
+      copy = await generateCopy(clip, account) || {
+        title: clip.title,
+        description: clip.description,
+        hashtags: clip.hashtags,
+      };
+      clip.copy = copy;
+      save();
+    }
+
+    try {
+      const scheduleId = await opus.schedulePost({
+        projectId: clip.projectId,
+        clipId: clip.clipId,
+        account,
+        title: clip.editedTitle || copy.title || clip.title,
+        description: clip.editedDescription || copy.description || clip.description,
+        hashtags: clip.editedHashtags ?? copy.hashtags ?? clip.hashtags,
+        publishAt: at,
+      });
+      upsertTarget(clip, account, { status: 'scheduled', scheduleId });
+    } catch (err) {
+      upsertTarget(clip, account, { status: 'failed', error: err.message });
+      log(`Could not schedule to ${account.name}. ${err.message}`, 'error');
+    }
+    // The publish endpoints allow one request a second.
+    await new Promise(r => setTimeout(r, 1200));
+  }
+
+  const anyGood = clip.targets.some(t => t.status === 'scheduled');
+  clip.status = anyGood ? 'scheduled' : 'waiting';
+  save();
+  if (anyGood) log(`Scheduled "${clip.editedTitle || clip.title}" across ${clip.targets.filter(t => t.status === 'scheduled').length} accounts`);
+}
+
+function upsertTarget(clip, account, patch) {
+  const existing = clip.targets.find(t => t.postAccountId === account.postAccountId);
+  const next = {
+    postAccountId: account.postAccountId,
+    platform: account.platform,
+    name: account.name,
+    ...existing, ...patch,
+  };
+  clip.targets = [...clip.targets.filter(t => t.postAccountId !== account.postAccountId), next];
+}
+
+/** Post one clip immediately, ignoring the schedule. */
+export async function postNow(clipId) {
+  const clip = state.clips.find(c => c.id === clipId);
+  if (!clip) throw new Error('That clip is no longer in the queue.');
+  const accounts = await refreshAccounts();
+  if (!accounts.length) throw new Error('No social accounts are connected inside Opus.');
+
+  for (const account of accounts) {
+    try {
+      const copy = clip.copy || {};
+      await opus.publishNow({
+        projectId: clip.projectId,
+        clipId: clip.clipId,
+        account,
+        title: clip.editedTitle || copy.title || clip.title,
+        description: clip.editedDescription || copy.description || clip.description,
+        hashtags: clip.editedHashtags ?? copy.hashtags ?? clip.hashtags,
+      });
+      upsertTarget(clip, account, { status: 'posted', scheduleId: undefined });
+    } catch (err) {
+      upsertTarget(clip, account, { status: 'failed', error: err.message });
+    }
+    await new Promise(r => setTimeout(r, 1200));
+  }
+  clip.status = clip.targets.some(t => t.status === 'posted') ? 'posted' : 'waiting';
+  save();
+  log(`Posted "${clip.editedTitle || clip.title}" now`);
+}
+
+/** Cancel anything already queued inside Opus for this clip. */
+export async function unschedule(clip) {
+  for (const t of clip.targets) {
+    if (t.status === 'scheduled' && t.scheduleId) {
+      try { await opus.cancelSchedule(t.scheduleId); } catch { /* already gone */ }
+    }
+  }
+  clip.targets = [];
+  clip.scheduledAt = null;
+  save();
+}
+
+/** One pass of the agent: check projects, then schedule whatever is approved. */
+export async function tick() {
+  if (running || !opusKey()) return;
+  running = true;
+  try {
+    for (const p of state.projects) {
+      if (p.status !== 'clipping') continue;
+      if (Date.now() < (p.checkAfter || 0)) continue;
+      await importClips(p);
+    }
+    for (const c of state.clips) {
+      if (c.status === 'approved') await scheduleClip(c);
+    }
+  } catch (err) {
+    log(`Agent pass failed: ${err.message}`, 'error');
+  } finally {
+    running = false;
+  }
+}
+
+export function start() {
+  setInterval(() => { tick().catch(() => {}); }, 20_000);
+  setTimeout(() => { tick().catch(() => {}); }, 3000);
+}
