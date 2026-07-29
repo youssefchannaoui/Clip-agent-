@@ -551,6 +551,40 @@ async function processThumbnails(maxPerTick = 12, concurrency = 3) {
   await Promise.all(Array.from({ length: Math.min(concurrency, pending.length) }, worker));
 }
 
+/**
+ * Write each clip's title, description and hashtags early — right after
+ * import, before anyone has approved anything — so what shows up in the
+ * queue is already the AI-written version (in whatever language or tone
+ * the prompt asks for), not Opus's own raw text that later gets silently
+ * swapped out at posting time. Once this has run for a clip, the existing
+ * per-account scheduling step just reuses the same result instead of
+ * generating it again.
+ */
+async function processCopy(maxPerTick = 8, concurrency = 2) {
+  const accounts = state.accounts || [];
+  if (!accounts.length) return; // nothing to ask Opus to write for yet
+
+  const pending = state.clips.filter(c => c.status === 'waiting' && !c.copy && c.copyState !== 'skipped').slice(0, maxPerTick);
+  if (!pending.length) return;
+  let index = 0;
+
+  async function worker() {
+    while (index < pending.length) {
+      const clip = pending[index++];
+      try {
+        const copy = await generateCopy(clip, accounts[0]);
+        if (copy) { clip.copy = copy; clip.copyState = 'done'; }
+        else clip.copyState = 'skipped'; // don't retry every tick if Opus had nothing to say
+      } catch {
+        clip.copyState = 'skipped';
+      }
+      save();
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, pending.length) }, worker));
+}
+
 export async function tick() {
   if (running || !opusKey()) return;
   running = true;
@@ -561,6 +595,7 @@ export async function tick() {
       await importClips(p);
     }
     await processThumbnails();
+    await processCopy();
     for (const c of state.clips) {
       if (c.status === 'approved') await scheduleClip(c);
     }
