@@ -227,6 +227,21 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .music-tag.off{color:var(--mute)}
 .music-tag.bad{color:var(--red);border-color:rgba(255,85,102,.35)}
 
+.lec{
+  padding:16px 18px;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:10px;
+}
+.lec-top{display:flex;align-items:flex-start;gap:14px}
+.lec-what{flex:1;min-width:0}
+.lec-title{font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lec-meta{color:var(--mute-2);font-size:12.5px;margin-top:3px}
+.lec-link{color:var(--mute);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;margin-top:4px}
+.lec-warn{
+  font-size:12px;margin-top:8px;padding:7px 10px;border-radius:8px;
+  background:rgba(217,180,120,.09);border:1px solid rgba(217,180,120,.3);color:var(--blue-soft);
+}
+.lec-foot{display:flex;align-items:center;gap:10px;margin-top:12px}
+
 .proc{
   display:flex;align-items:center;gap:13px;padding:14px 18px;
   background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:10px;
@@ -435,6 +450,7 @@ select:focus{outline:none;border-color:var(--blue)}
         <button class="tab" data-view="schedule">Schedule<span class="tab-count" id="cSched">0</span></button>
         <button class="tab" data-view="insights">Record</button>
         <button class="tab" data-view="music">Music</button>
+        <button class="tab" data-view="library">Library</button>
       </nav>
     </div>
 
@@ -474,6 +490,7 @@ select:focus{outline:none;border-color:var(--blue)}
           <div class="head" style="margin-top:34px">
             <h2>Queued clips</h2>
             <span class="note" id="schedNote"></span>
+            <button class="btn btn-ghost btn-sm hide" id="pullBackAll">Pull back all</button>
           </div>
           <div id="schedList"></div>
         </section>
@@ -542,6 +559,16 @@ select:focus{outline:none;border-color:var(--blue)}
             <span class="note" id="musicNote"></span>
           </div>
           <div id="musicList"></div>
+        </section>
+
+        <!-- library -->
+        <section class="panel hide" id="view-library">
+          <div class="head">
+            <h2>Past lectures</h2>
+            <span class="note">Pull in more clips from something already sent to Opus, at no extra credit cost</span>
+          </div>
+          <p class="hint">Getting more clips from an old lecture doesn't cost extra Opus credits — it's already been clipped. It does carry whatever caption style was active when you first sent it, though — not your current settings. Resubmitting the link fresh applies your current style, but does cost credits again.</p>
+          <div id="libraryList"></div>
         </section>
 
       </div>
@@ -1114,7 +1141,21 @@ function clipCard(c) {
       } catch (err) { toast(err.message, 'bad'); }
       refresh();
     };
-    foot.append(back);
+
+    const cancel = el('button', 'btn btn-ghost btn-sm btn-danger');
+    cancel.textContent = 'Cancel & discard';
+    cancel.onclick = async () => {
+      if (!confirm('Cancel this and remove it completely? Its slot opens up for whatever you approve next.')) return;
+      cancel.disabled = true;
+      cancel.textContent = 'Cancelling…';
+      try {
+        await api('/api/clips/' + encodeURIComponent(c.id), { method: 'DELETE' });
+        toast('Cancelled — its slot is open again');
+      } catch (err) { toast(err.message, 'bad'); cancel.disabled = false; cancel.textContent = 'Cancel & discard'; }
+      refresh();
+    };
+
+    foot.append(back, cancel);
   }
   content.append(foot);
 
@@ -1212,6 +1253,7 @@ function renderBoard(allClips) {
   const list = $('#schedList');
   list.innerHTML = '';
   $('#schedNote').textContent = '';
+  $('#pullBackAll').classList.toggle('hide', pending.length < 1);
   if (!pending.length) {
     list.innerHTML = `<div class="slab"><div class="empty">
       <div class="empty-title">Nothing queued</div>
@@ -1488,6 +1530,23 @@ $('#approveAll').onclick = async () => {
   refresh();
 };
 
+$('#pullBackAll').onclick = async () => {
+  const queued = (DATA.clips || []).filter(c => ['approved', 'scheduled'].includes(statusOf(c)));
+  if (!queued.length) return;
+  if (!confirm(`Pull back all ${queued.length} queued clips? They'll return to your Queue tab for you to review before going out again.`)) return;
+  $('#pullBackAll').disabled = true;
+  $('#pullBackAll').textContent = 'Pulling back…';
+  try {
+    const res = await api('/api/clips/pull-back-all', { method: 'POST' });
+    toast(`${res.count} clip${res.count === 1 ? '' : 's'} pulled back to the queue`, 'good');
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+  $('#pullBackAll').disabled = false;
+  $('#pullBackAll').textContent = 'Pull back all';
+  refresh();
+};
+
 let templates = null;   // fetched once, on demand
 let clipSettingsDirty = false;   // true while the count/duration form differs from the last save
 
@@ -1728,6 +1787,88 @@ function renderMusicList(tracks) {
   });
 }
 
+/* ---------- library ---------- */
+
+async function loadLibrary() {
+  const host = $('#libraryList');
+  try {
+    const res = await api('/api/projects');
+    renderLibrary(res.projects || []);
+  } catch (err) {
+    host.innerHTML = `<div class="slab"><div class="empty-note">${esc(err.message)}</div></div>`;
+  }
+}
+
+function renderLibrary(projects) {
+  const host = $('#libraryList');
+  host.innerHTML = '';
+
+  if (!projects.length) {
+    host.innerHTML = `<div class="slab"><div class="empty">
+      <div class="empty-title">Nothing here yet</div>
+      <div class="empty-note">Every lecture you send to Opus shows up here afterward, so you can come back and pull more clips from it later without spending credits again.</div>
+    </div></div>`;
+    return;
+  }
+
+  // Newest first.
+  projects.slice().sort((a, b) => (b.submittedAt || 0) - (a.submittedAt || 0)).forEach(p => {
+    const card = el('div', 'lec');
+    const top = el('div', 'lec-top');
+    const what = el('div', 'lec-what');
+
+    const title = el('div', 'lec-title');
+    title.textContent = p.title || p.url;
+    const meta = el('div', 'lec-meta');
+    const remaining = Math.max(0, (p.clipCount || 0) - (p.imported || 0));
+    meta.textContent = p.status === 'clipping' ? 'Still being clipped by Opus'
+      : p.clipCount ? `${p.imported} of ${p.clipCount} clips in your queue${remaining ? `, ${remaining} more available` : ''}`
+      : p.status === 'stalled' ? 'Opus never returned clips for this one' : 'No clips yet';
+    what.append(title, meta);
+
+    if (p.url) {
+      const link = el('a', 'lec-link');
+      link.href = p.url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = p.url;
+      what.append(link);
+    }
+    top.append(what);
+    card.append(top);
+
+    if (p.styleChanged === true) {
+      const warn = el('div', 'lec-warn');
+      warn.textContent = 'Clipped with an older clip style — more clips from this one will keep that same style, not your current one.';
+      card.append(warn);
+    }
+
+    const foot = el('div', 'lec-foot');
+    const more = el('button', 'btn btn-ghost btn-sm');
+    more.textContent = remaining > 0 ? `Get ${remaining} more clip${remaining === 1 ? '' : 's'}` : 'Check for more clips';
+    more.disabled = p.status === 'clipping';
+    more.onclick = async () => {
+      more.disabled = true;
+      more.textContent = 'Checking…';
+      try {
+        const res = await api('/api/projects/' + encodeURIComponent(p.id) + '/more-clips', { method: 'POST' });
+        toast(res.added > 0 ? `${res.added} more clip${res.added === 1 ? '' : 's'} added to your queue` : 'Nothing new — you already have everything Opus made for this one', 'good');
+        loadLibrary();
+        refresh();
+      } catch (err) {
+        toast(err.message, 'bad');
+        more.disabled = false;
+        more.textContent = remaining > 0 ? `Get ${remaining} more clip${remaining === 1 ? '' : 's'}` : 'Check for more clips';
+      }
+    };
+    foot.append(more);
+    card.append(foot);
+
+    host.append(card);
+  });
+}
+
+
 $('#refreshAcc').onclick = async () => {
   $('#refreshAcc').disabled = true;
   try {
@@ -1742,10 +1883,11 @@ document.querySelectorAll('.tab').forEach(tab => {
   tab.onclick = () => {
     VIEW = tab.dataset.view;
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t === tab));
-    ['queue', 'schedule', 'insights', 'music'].forEach(v => {
+    ['queue', 'schedule', 'insights', 'music', 'library'].forEach(v => {
       $('#view-' + v).classList.toggle('hide', v !== VIEW);
     });
     if (VIEW === 'music' && !musicLoaded) loadMusic();
+    if (VIEW === 'library') loadLibrary();
   };
 });
 
