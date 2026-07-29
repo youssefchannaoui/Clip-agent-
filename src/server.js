@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { state, save, log, opusKey, brandTemplateId, clipSettings, setClipSettings } from './store.js';
 import * as agent from './agent.js';
 import * as opus from './opus.js';
+import * as audio from './audio.js';
 import { formatLocal } from './slots.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -77,6 +78,16 @@ async function route(req, res, url) {
     return;
   }
 
+  // Opus fetches the mixed file from here to re-import it, so this has to
+  // be reachable without the app password — same reasoning as the webhook.
+  if (method === 'GET' && pathname.startsWith('/media/mixed/')) {
+    const file = audio.mixedFilePath(pathname.slice('/media/mixed/'.length));
+    if (!file) return send(res, 404, { error: 'Not found.' });
+    const buf = fs.readFileSync(file);
+    res.writeHead(200, { 'Content-Type': 'video/mp4', 'Content-Length': buf.length, 'Cache-Control': 'no-store' });
+    return res.end(buf);
+  }
+
   if (!pathname.startsWith('/api/')) return send(res, 404, { error: 'Not found.' });
   if (!authed(req, url)) return send(res, 401, { error: 'Wrong password.' });
 
@@ -97,6 +108,7 @@ async function route(req, res, url) {
       working,
       brandTemplateId: brandTemplateId(),
       clipSettings: clipSettings(),
+      musicSettings: audio.musicSettings(),
       accounts: state.accounts,
       projects: state.projects.slice(0, 12).map(p => ({
         id: p.id,
@@ -119,6 +131,8 @@ async function route(req, res, url) {
         scheduledAt: c.scheduledAt,
         scheduledLabel: c.scheduledAt ? formatLocal(c.scheduledAt) : null,
         targets: c.targets,
+        musicMixed: c.musicMixed || null,
+        musicNote: c.musicNote || null,
       })),
       log: state.log.slice(0, 40),
     });
@@ -187,6 +201,49 @@ async function route(req, res, url) {
     const applied = clipSettings();
     log(`Clip settings updated: ${applied.clipsPerVideo > 0 ? applied.clipsPerVideo + ' per video' : 'keep all'}, ${applied.clipMinSeconds}-${applied.clipMaxSeconds}s`);
     return send(res, 200, { ok: true, clipSettings: applied });
+  }
+
+  // The nasheed library — upload, list, remove, and the mix settings.
+  if (method === 'GET' && pathname === '/api/music') {
+    return send(res, 200, { tracks: audio.listNasheeds(), settings: audio.musicSettings() });
+  }
+
+  if (method === 'POST' && pathname === '/api/music') {
+    // A full-length nasheed as base64 is easily tens of megabytes, so this
+    // needs a much larger body limit than the usual small JSON requests.
+    const body = await readBody(req, 45 * 1024 * 1024);
+    try {
+      const entry = await audio.saveNasheed(body.name, body.data, body.mimeType);
+      log(`Added "${entry.name}" to the nasheed library.`);
+      return send(res, 200, { ok: true, track: entry });
+    } catch (err) {
+      return send(res, 400, { error: err.message });
+    }
+  }
+
+  if (method === 'DELETE' && pathname.startsWith('/api/music/')) {
+    const id = pathname.slice('/api/music/'.length);
+    const removed = audio.deleteNasheed(decodeURIComponent(id));
+    if (!removed) return send(res, 404, { error: 'That track is not in the library.' });
+    log('Removed a track from the nasheed library.');
+    return send(res, 200, { ok: true });
+  }
+
+  if (method === 'POST' && pathname === '/api/music-settings') {
+    const body = await readBody(req);
+    const clean = {};
+    if ('enabled' in body) clean.enabled = Boolean(body.enabled);
+    if ('volumePercent' in body) {
+      const n = Math.round(Number(body.volumePercent));
+      if (!Number.isFinite(n) || n < 0 || n > 100) {
+        return send(res, 400, { error: 'Volume must be between 0 and 100.' });
+      }
+      clean.volumePercent = n;
+    }
+    audio.setMusicSettings(clean);
+    const applied = audio.musicSettings();
+    log(`Music settings updated: ${applied.enabled ? 'on' : 'off'}, volume ${applied.volumePercent}%`);
+    return send(res, 200, { ok: true, settings: applied });
   }
 
   if (method === 'POST' && pathname === '/api/accounts/refresh') {
