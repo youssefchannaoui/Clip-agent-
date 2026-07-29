@@ -8,6 +8,7 @@ const blank = () => ({
   opusKey: '',
   opusOrgId: '',
   brandTemplateId: '',   // which Opus clip style to use, chosen in the app
+  clipSettings: {},      // clipsPerVideo / clipMinSeconds / clipMaxSeconds overrides
   accounts: [],          // connected social accounts, mirrored from Opus
   accountsCheckedAt: 0,
   projects: [],          // videos sent to Opus
@@ -49,3 +50,22 @@ export function log(message, level = 'info') {
 export const opusKey = () => state.opusKey || config.opusKey;
 export const opusOrgId = () => state.opusOrgId || config.opusOrgId;
 export const brandTemplateId = () => state.brandTemplateId || config.brandTemplateId;
+
+/**
+ * How many clips to keep per video, and how long each should be.
+ * A saved value of 0 for clipsPerVideo means "keep everything Opus finds" —
+ * that's also the default, since silently discarding clips was the bug.
+ */
+export function clipSettings() {
+  const s = state.clipSettings || {};
+  return {
+    clipsPerVideo: s.clipsPerVideo ?? config.clipsPerVideo,
+    clipMinSeconds: s.clipMinSeconds ?? config.clipMinSeconds,
+    clipMaxSeconds: s.clipMaxSeconds ?? config.clipMaxSeconds,
+  };
+}
+
+export function setClipSettings(next) {
+  state.clipSettings = { ...state.clipSettings, ...next };
+  save();
+}
