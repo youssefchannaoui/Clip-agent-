@@ -8,6 +8,23 @@ import { nextSlot } from './slots.js';
 const MINUTE = 60_000;
 // Opus allows about one request a second on the publish endpoints.
 const RATE_GAP = Number(process.env.RATE_MS) || 1200;
+
+/**
+ * Several clips from the same lecture can all be missing their export link
+ * at once — calling Opus separately for each one would be several requests
+ * asking the exact identical question. Cache the answer briefly so they
+ * share a single fetch instead of risking Opus's own rate limits.
+ */
+const exportUrlCacheTtl = 15_000;
+const exportUrlCache = new Map(); // projectId -> { at, promise }
+
+async function fetchProjectClipsCached(projectId) {
+  const hit = exportUrlCache.get(projectId);
+  if (hit && Date.now() - hit.at < exportUrlCacheTtl) return hit.promise;
+  const promise = opus.getClips(projectId).catch(err => { exportUrlCache.delete(projectId); throw err; });
+  exportUrlCache.set(projectId, { at: Date.now(), promise });
+  return promise;
+}
 let running = false;
 
 /**
@@ -246,7 +263,7 @@ async function ensureMusic(clip) {
     if (!exportUrl) {
       stage(clip, 'Checking Opus for the finished clip');
       try {
-        const latest = await opus.getClips(clip.projectId);
+        const latest = await fetchProjectClipsCached(clip.projectId);
         const match = latest.find(c => c.id === clip.id);
         if (match?.exportUrl) {
           exportUrl = match.exportUrl;
@@ -521,7 +538,7 @@ async function processThumbnails(maxPerTick = 12, concurrency = 3) {
         // the same empty link forever would never succeed, so check for a
         // fresher one before each attempt.
         try {
-          const latest = await opus.getClips(clip.projectId);
+          const latest = await fetchProjectClipsCached(clip.projectId);
           const match = latest.find(c => c.id === clip.id);
           if (match?.exportUrl) clip.exportUrl = match.exportUrl;
         } catch { /* fall through and let this attempt fail normally */ }
