@@ -2,6 +2,7 @@ import { config } from './config.js';
 import { state, save, log, opusKey, clipSettings } from './store.js';
 import * as opus from './opus.js';
 import * as audio from './audio.js';
+import * as thumbs from './thumbs.js';
 import { nextSlot } from './slots.js';
 
 const MINUTE = 60_000;
@@ -103,6 +104,7 @@ async function importClips(project) {
       targets: [],                 // one entry per destination once scheduled
       addedAt: Date.now(),
       scheduledAt: null,
+      thumbState: 'pending',
     });
   }
 
@@ -350,7 +352,10 @@ function retirePassed() {
     const cutoff = posted
       .map(c => c.postedAt || c.addedAt || 0)
       .sort((a, b) => b - a)[400];
-    state.clips = state.clips.filter(c => c.status !== 'posted' || (c.postedAt || c.addedAt || 0) > cutoff);
+    const keep = state.clips.filter(c => c.status !== 'posted' || (c.postedAt || c.addedAt || 0) > cutoff);
+    const dropped = state.clips.filter(c => !keep.includes(c));
+    dropped.forEach(c => thumbs.deleteThumbnail(c.id));
+    state.clips = keep;
     changed = true;
   }
 
@@ -358,6 +363,21 @@ function retirePassed() {
 }
 
 /** One pass of the agent: check projects, then schedule whatever is approved. */
+/**
+ * Grab a real frame from each clip's own video as a thumbnail, a few at a
+ * time so a big batch of clips doesn't stall the rest of the tick. Runs
+ * one at a time (not in parallel) — a small Render instance doesn't have
+ * the CPU to spare for several ffmpeg processes at once.
+ */
+async function processThumbnails(maxPerTick = 4) {
+  const pending = state.clips.filter(c => c.thumbState === 'pending').slice(0, maxPerTick);
+  for (const clip of pending) {
+    const success = await thumbs.generateThumbnail(clip.id, clip.exportUrl).catch(() => false);
+    clip.thumbState = success ? 'ready' : 'failed';
+    save();
+  }
+}
+
 export async function tick() {
   if (running || !opusKey()) return;
   running = true;
@@ -367,6 +387,7 @@ export async function tick() {
       if (Date.now() < (p.checkAfter || 0)) continue;
       await importClips(p);
     }
+    await processThumbnails();
     for (const c of state.clips) {
       if (c.status === 'approved') await scheduleClip(c);
     }
