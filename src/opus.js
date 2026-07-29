@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { opusKey, opusOrgId, brandTemplateId, clipSettings } from './store.js';
+import { opusKey, opusOrgId, brandTemplateId, clipSettings, copyPrompt } from './store.js';
 
 const BASE = process.env.OPUS_BASE || 'https://api.opus.pro/api';
 
@@ -95,6 +95,12 @@ export async function importMixedClip(videoUrl, title) {
     curationPref: { skipCurate: true },
   };
   if (title) body.uploadedVideoAttr = { title };
+  // This re-import creates a whole new Opus render, separate from the
+  // original clip — without this, Opus fell back to its own account
+  // default template for it, regardless of whatever the person actually
+  // has selected. That's exactly why captions could show up on a mixed
+  // clip even with a captions-off template chosen.
+  if (brandTemplateId()) body.brandTemplateId = brandTemplateId();
   const res = await call('/clip-projects', { method: 'POST', body });
   return res?.data ?? res;
 }
@@ -154,7 +160,7 @@ export async function requestCopy({ projectId, clipId, account }) {
       projectId, clipId,
       postAccountId: account.postAccountId,
       subAccountId: account.subAccountId,
-      prompt: config.copyPrompt,
+      prompt: copyPrompt(),
     },
   });
   return res?.data?.jobId;
