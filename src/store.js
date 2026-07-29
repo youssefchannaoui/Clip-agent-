@@ -10,6 +10,9 @@ const blank = () => ({
   brandTemplateId: '',   // which Opus clip style to use, chosen in the app
   clipSettings: {},      // clipsPerVideo / clipMinSeconds / clipMaxSeconds overrides
   musicSettings: {},     // enabled / volumePercent overrides for the nasheed mixer
+  copyPrompt: '',        // instructions for the AI-written title/caption/hashtags — blank means use the default
+  vapidKeys: null,       // generated once, kept forever — see push.js
+  pushSubscriptions: [], // one entry per browser/device with notifications on
   accounts: [],          // connected social accounts, mirrored from Opus
   accountsCheckedAt: 0,
   projects: [],          // videos sent to Opus
@@ -68,5 +71,19 @@ export function clipSettings() {
 
 export function setClipSettings(next) {
   state.clipSettings = { ...state.clipSettings, ...next };
+  save();
+}
+
+/**
+ * The instructions sent to Opus for writing each clip's title, description
+ * and hashtags. Editable in the app — this is exactly how someone changes
+ * the language or tone of what gets generated, without needing to redeploy.
+ */
+export function copyPrompt() {
+  return state.copyPrompt || config.copyPrompt;
+}
+
+export function setCopyPrompt(prompt) {
+  state.copyPrompt = String(prompt || '').trim();
   save();
 }
