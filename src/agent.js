@@ -4,6 +4,8 @@ import * as opus from './opus.js';
 import { nextSlot } from './slots.js';
 
 const MINUTE = 60_000;
+// Opus allows about one request a second on the publish endpoints.
+const RATE_GAP = Number(process.env.RATE_MS) || 1200;
 let running = false;
 
 /**
@@ -191,8 +193,7 @@ async function scheduleClip(clip) {
       upsertTarget(clip, account, { status: 'failed', error: err.message });
       log(`Could not schedule to ${account.name}. ${err.message}`, 'error');
     }
-    // The publish endpoints allow one request a second.
-    await new Promise(r => setTimeout(r, 1200));
+    await new Promise(r => setTimeout(r, RATE_GAP));
   }
 
   const anyGood = clip.targets.some(t => t.status === 'scheduled');
@@ -247,7 +248,7 @@ export async function postNow(clipId) {
       upsertTarget(clip, account, { status: 'failed', error: err.message });
       log(`Could not post to ${account.name}. ${err.message}`, 'error');
     }
-    await new Promise(r => setTimeout(r, 1200));
+    await new Promise(r => setTimeout(r, RATE_GAP));
   }
   clip.status = clip.targets.some(t => t.status === 'posted') ? 'posted' : 'waiting';
   clearStage(clip);
@@ -320,6 +321,8 @@ export async function tick() {
 }
 
 export function start() {
-  setInterval(() => { tick().catch(() => {}); }, 20_000);
-  setTimeout(() => { tick().catch(() => {}); }, 3000);
+  // How often the agent wakes up. Overridable so tests don't wait on it.
+  const every = Number(process.env.TICK_MS) || 20_000;
+  setInterval(() => { tick().catch(() => {}); }, every);
+  setTimeout(() => { tick().catch(() => {}); }, Math.min(3000, every));
 }
