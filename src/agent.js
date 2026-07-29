@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { state, save, log, opusKey } from './store.js';
+import { state, save, log, opusKey, clipSettings } from './store.js';
 import * as opus from './opus.js';
 import { nextSlot } from './slots.js';
 
@@ -90,7 +90,9 @@ async function importClips(project) {
   });
 
   const known = new Set(state.clips.map(c => c.id));
-  const fresh = ranked.filter(c => !known.has(c.id)).slice(0, config.clipsPerVideo);
+  const { clipsPerVideo } = clipSettings();
+  const unknown = ranked.filter(c => !known.has(c.id));
+  const fresh = clipsPerVideo > 0 ? unknown.slice(0, clipsPerVideo) : unknown;
 
   for (const c of fresh) {
     state.clips.push({
