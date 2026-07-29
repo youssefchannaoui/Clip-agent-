@@ -31,7 +31,9 @@ export const config = {
     .split(',').map(s => s.trim()).filter(Boolean),
   timezone: process.env.TIMEZONE || 'Australia/Perth',
 
-  clipsPerVideo: num(process.env.CLIPS_PER_VIDEO, 4),
+  // 0 means "keep every clip Opus returns" — this used to default to 4 and
+  // quietly discard the rest, which was never the intent.
+  clipsPerVideo: num(process.env.CLIPS_PER_VIDEO, 0),
   clipMinSeconds: num(process.env.CLIP_MIN_SECONDS, 20),
   clipMaxSeconds: num(process.env.CLIP_MAX_SECONDS, 90),
   autoApprove: bool(process.env.AUTO_APPROVE, false),
