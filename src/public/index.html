@@ -202,6 +202,21 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .dest.done{color:var(--text-2)}
 
 /* ---------- processing lectures ---------- */
+.track{
+  display:flex;align-items:center;gap:14px;padding:14px 18px;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:10px;
+}
+.track-what{flex:1;min-width:0}
+.track-name{font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.track-meta{color:var(--mute-2);font-size:12.5px;margin-top:1px}
+
+.music-tag{
+  font-size:12px;padding:2px 9px;border-radius:20px;border:1px solid var(--line);color:var(--mute);
+}
+.music-tag.on{color:var(--blue-soft);border-color:rgba(217,180,120,.4);background:rgba(217,180,120,.09)}
+.music-tag.off{color:var(--mute)}
+.music-tag.bad{color:var(--red);border-color:rgba(255,85,102,.35)}
+
 .proc{
   display:flex;align-items:center;gap:13px;padding:14px 18px;
   background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:10px;
@@ -408,6 +423,7 @@ select:focus{outline:none;border-color:var(--blue)}
         <button class="tab on" data-view="queue">Queue<span class="tab-count" id="cQueue">0</span></button>
         <button class="tab" data-view="schedule">Schedule<span class="tab-count" id="cSched">0</span></button>
         <button class="tab" data-view="insights">Record</button>
+        <button class="tab" data-view="music">Music</button>
       </nav>
     </div>
 
@@ -466,6 +482,47 @@ select:focus{outline:none;border-color:var(--blue)}
           <div class="slab"><div id="bySource"></div></div>
 
           <p class="hint">Opus doesn't return views or likes through its API, so nothing here is engagement data — it's a record of what went out, when, and where. To see how posts performed, check each platform's own analytics.</p>
+        </section>
+
+        <!-- music -->
+        <section class="panel hide" id="view-music">
+          <div class="head"><h2>Add music</h2></div>
+          <div class="slab intake">
+            <input id="musicFile" type="file" accept="audio/*" class="hide">
+            <div class="intake-row" style="margin-top:0">
+              <button class="btn btn-ghost" id="pickMusic">Choose an audio file</button>
+              <span class="intake-note" id="musicPicked">No file chosen</span>
+            </div>
+            <div class="intake-row">
+              <input id="musicName" type="text" placeholder="Name this track" style="flex:1;min-width:160px">
+              <button class="btn" id="uploadMusic" disabled>Upload</button>
+            </div>
+            <div class="style-note" id="uploadNote"></div>
+          </div>
+
+          <div class="head" style="margin-top:34px">
+            <h2>Mixing</h2>
+          </div>
+          <div class="slab">
+            <label class="field code" for="musicEnabled">Add music automatically</label>
+            <select id="musicEnabled" aria-label="Add music automatically">
+              <option value="1">On — every clip gets a random track mixed in</option>
+              <option value="0">Off — clips post with their own audio only</option>
+            </select>
+
+            <div style="margin-top:16px">
+              <label class="field code" for="musicVolume">Volume — <span id="volumeLabel">15</span>%</label>
+              <input id="musicVolume" type="range" min="0" max="100" value="15" style="width:100%">
+              <div class="style-note">How loud the nasheed sits under the speaker's voice. Around 10–20% keeps it in the background.</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="saveMusicSettings" style="margin-top:14px">Save</button>
+          </div>
+
+          <div class="head" style="margin-top:34px">
+            <h2>Your library</h2>
+            <span class="note" id="musicNote"></span>
+          </div>
+          <div id="musicList"></div>
         </section>
 
       </div>
@@ -850,6 +907,14 @@ function clipCard(c) {
     const when = el('span', 'stamp');
     when.textContent = c.scheduledLabel;
     top.append(when);
+  }
+  if (c.musicMixed) {
+    const tag = el('span', 'music-tag ' + (c.musicMixed === 'done' ? 'on' : c.musicMixed === 'failed' ? 'bad' : 'off'));
+    tag.textContent = c.musicMixed === 'done' ? '♪ ' + (c.musicNote || 'Mixed')
+      : c.musicMixed === 'failed' ? 'No music — ' + (c.musicNote || 'failed')
+      : 'No music';
+    if (c.musicNote) tag.title = c.musicNote;
+    top.append(tag);
   }
   const meta = el('span', 'clip-meta');
   meta.textContent = `${secs(c.durationMs)}s · ${c.projectTitle || 'lecture'}`;
@@ -1436,6 +1501,149 @@ $('#saveCount').onclick = async () => {
   $('#saveCount').disabled = false;
 };
 
+/* ---------- music ---------- */
+
+let musicSettingsDirty = false;
+let musicLoaded = false;
+let pickedFile = null;
+
+function fmtDuration(sec) {
+  const s = Math.round(sec || 0);
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+function fmtSize(bytes) {
+  return bytes > 1024 * 1024 ? (bytes / 1024 / 1024).toFixed(1) + 'MB' : Math.round(bytes / 1024) + 'KB';
+}
+
+/** Chunked, so large files don't blow the call stack turning bytes into base64. */
+function bytesToBase64(bytes) {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+$('#pickMusic').onclick = () => $('#musicFile').click();
+
+$('#musicFile').addEventListener('change', () => {
+  const file = $('#musicFile').files?.[0] || null;
+  pickedFile = file;
+  $('#musicPicked').textContent = file ? file.name : 'No file chosen';
+  $('#uploadMusic').disabled = !file;
+  if (file && !$('#musicName').value.trim()) {
+    $('#musicName').value = file.name.replace(/\.[^.]+$/, '');
+  }
+});
+
+$('#uploadMusic').onclick = async () => {
+  if (!pickedFile) return;
+  const name = $('#musicName').value.trim() || pickedFile.name;
+  $('#uploadMusic').disabled = true;
+  $('#uploadNote').textContent = 'Uploading…';
+  try {
+    const buf = await pickedFile.arrayBuffer();
+    const data = bytesToBase64(new Uint8Array(buf));
+    await api('/api/music', {
+      method: 'POST',
+      body: JSON.stringify({ name, data, mimeType: pickedFile.type }),
+    });
+    toast(`Added "${name}" to the library`, 'good');
+    pickedFile = null;
+    $('#musicFile').value = '';
+    $('#musicName').value = '';
+    $('#musicPicked').textContent = 'No file chosen';
+    $('#uploadNote').textContent = '';
+    musicLoaded = false;
+    loadMusic();
+  } catch (err) {
+    toast(err.message, 'bad');
+    $('#uploadNote').textContent = '';
+  }
+  $('#uploadMusic').disabled = !pickedFile;
+};
+
+['#musicEnabled', '#musicVolume'].forEach(sel => {
+  $(sel).addEventListener('input', () => { musicSettingsDirty = true; });
+  $(sel).addEventListener('change', () => { musicSettingsDirty = true; });
+});
+$('#musicVolume').addEventListener('input', () => {
+  $('#volumeLabel').textContent = $('#musicVolume').value;
+});
+
+$('#saveMusicSettings').onclick = async () => {
+  const enabled = $('#musicEnabled').value === '1';
+  const volumePercent = Number($('#musicVolume').value);
+  $('#saveMusicSettings').disabled = true;
+  try {
+    await api('/api/music-settings', {
+      method: 'POST',
+      body: JSON.stringify({ enabled, volumePercent }),
+    });
+    musicSettingsDirty = false;
+    toast('Saved', 'good');
+    refresh();
+  } catch (err) { toast(err.message, 'bad'); }
+  $('#saveMusicSettings').disabled = false;
+};
+
+async function loadMusic() {
+  try {
+    const res = await api('/api/music');
+    renderMusicList(res.tracks || []);
+    if (!musicSettingsDirty) applyMusicSettings(res.settings || {});
+    musicLoaded = true;
+  } catch (err) {
+    $('#musicNote').textContent = err.message;
+  }
+}
+
+function applyMusicSettings(s) {
+  $('#musicEnabled').value = s.enabled === false ? '0' : '1';
+  $('#musicVolume').value = s.volumePercent ?? 15;
+  $('#volumeLabel').textContent = $('#musicVolume').value;
+}
+
+function renderMusicList(tracks) {
+  const host = $('#musicList');
+  host.innerHTML = '';
+  $('#musicNote').textContent = tracks.length
+    ? `${tracks.length} track${tracks.length === 1 ? '' : 's'} — a random one is picked for each clip`
+    : '';
+
+  if (!tracks.length) {
+    host.innerHTML = `<div class="slab"><div class="empty">
+      <div class="empty-title">No nasheeds yet</div>
+      <div class="empty-note">Upload a few tracks above. One is picked at random and mixed quietly under each clip's own audio.</div>
+    </div></div>`;
+    return;
+  }
+
+  tracks.forEach(t => {
+    const row = el('div', 'track');
+    const what = el('div', 'track-what');
+    const name = el('div', 'track-name');
+    name.textContent = t.name;
+    const meta = el('div', 'track-meta');
+    meta.textContent = `${fmtDuration(t.durationSec)} · ${fmtSize(t.sizeBytes)}`;
+    what.append(name, meta);
+    row.append(what);
+
+    const del = el('button', 'btn btn-ghost btn-sm btn-danger');
+    del.textContent = 'Remove';
+    del.onclick = async () => {
+      if (!confirm(`Remove "${t.name}" from the library?`)) return;
+      try {
+        await api('/api/music/' + encodeURIComponent(t.id), { method: 'DELETE' });
+        loadMusic();
+      } catch (err) { toast(err.message, 'bad'); }
+    };
+    row.append(del);
+    host.append(row);
+  });
+}
+
 $('#refreshAcc').onclick = async () => {
   $('#refreshAcc').disabled = true;
   try {
@@ -1450,9 +1658,10 @@ document.querySelectorAll('.tab').forEach(tab => {
   tab.onclick = () => {
     VIEW = tab.dataset.view;
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t === tab));
-    ['queue', 'schedule', 'insights'].forEach(v => {
+    ['queue', 'schedule', 'insights', 'music'].forEach(v => {
       $('#view-' + v).classList.toggle('hide', v !== VIEW);
     });
+    if (VIEW === 'music' && !musicLoaded) loadMusic();
   };
 });
 
