@@ -4,27 +4,13 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { config } from './config.js';
 import { state, save } from './store.js';
+import { ffmpegPath } from './ffmpeg.js';
 
 const musicDir = path.join(config.dataDir, 'music');
 const mixedDir = path.join(config.dataDir, 'mixed');
 const libraryFile = path.join(musicDir, 'library.json');
 
 for (const dir of [musicDir, mixedDir]) fs.mkdirSync(dir, { recursive: true });
-
-/**
- * Render's build servers have real internet access, so `ffmpeg-static`
- * (a portable prebuilt binary) installs fine there via npm install. This
- * machine, and possibly others, may not have that package — in which case
- * fall back to a plain `ffmpeg` already on the PATH, which is how this was
- * built and tested.
- */
-async function ffmpegPath() {
-  try {
-    const mod = await import('ffmpeg-static');
-    if (mod?.default) return mod.default;
-  } catch { /* not installed here — fall through */ }
-  return process.env.FFMPEG_PATH || 'ffmpeg';
-}
 
 function run(bin, args) {
   return new Promise((resolve, reject) => {
