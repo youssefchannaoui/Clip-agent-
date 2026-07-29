@@ -497,7 +497,15 @@ select:focus{outline:none;border-color:var(--blue)}
 
         <!-- music -->
         <section class="panel hide" id="view-music">
-          <div class="head"><h2>Add music</h2></div>
+          <div class="head">
+            <h2>System check</h2>
+            <button class="btn btn-ghost btn-sm" id="checkFfmpeg">Check ffmpeg</button>
+          </div>
+          <div class="slab" id="ffmpegStatus">
+            <div class="style-note">Both background music and thumbnails depend on ffmpeg running on this server. Tap the button to check directly, instead of guessing from what does or doesn't appear.</div>
+          </div>
+
+          <div class="head" style="margin-top:34px"><h2>Add music</h2></div>
           <div class="slab intake">
             <input id="musicFile" type="file" accept="audio/*" class="hide">
             <div class="intake-row" style="margin-top:0">
@@ -1638,6 +1646,30 @@ $('#saveMusicSettings').onclick = async () => {
     refresh();
   } catch (err) { toast(err.message, 'bad'); }
   $('#saveMusicSettings').disabled = false;
+};
+
+$('#checkFfmpeg').onclick = async () => {
+  const btn = $('#checkFfmpeg');
+  const box = $('#ffmpegStatus');
+  btn.disabled = true;
+  box.innerHTML = '<div class="style-note">Checking…</div>';
+  try {
+    const r = await api('/api/diagnostics/ffmpeg');
+    if (r.ok) {
+      box.innerHTML = `
+        <div class="style-note" style="color:var(--blue-soft)">ffmpeg is working.</div>
+        <div class="style-note">${esc(r.version)}</div>
+        <div class="style-note">${r.usingStatic ? 'Using the ffmpeg-static package.' : 'Using a system ffmpeg, not the ffmpeg-static package.'}</div>`;
+    } else {
+      box.innerHTML = `
+        <div class="style-note" style="color:var(--red)">ffmpeg is not working — this is why music and thumbnails aren't showing up.</div>
+        <div class="style-note">${esc(r.error || '')}</div>
+        <div class="style-note">${esc(r.hint || '')}</div>`;
+    }
+  } catch (err) {
+    box.innerHTML = `<div class="style-note" style="color:var(--red)">${esc(err.message)}</div>`;
+  }
+  btn.disabled = false;
 };
 
 async function loadMusic() {
