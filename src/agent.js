@@ -370,7 +370,7 @@ function retirePassed() {
  * one at a time (not in parallel) — a small Render instance doesn't have
  * the CPU to spare for several ffmpeg processes at once.
  */
-async function processThumbnails(maxPerTick = 4) {
+async function processThumbnails(maxPerTick = 12) {
   const pending = state.clips.filter(c => c.thumbState === 'pending').slice(0, maxPerTick);
   for (const clip of pending) {
     const success = await thumbs.generateThumbnail(clip.id, clip.exportUrl).catch(() => false);
