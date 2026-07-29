@@ -7,6 +7,7 @@ const file = path.join(config.dataDir, 'state.json');
 const blank = () => ({
   opusKey: '',
   opusOrgId: '',
+  brandTemplateId: '',   // which Opus clip style to use, chosen in the app
   accounts: [],          // connected social accounts, mirrored from Opus
   accountsCheckedAt: 0,
   projects: [],          // videos sent to Opus
@@ -47,3 +48,4 @@ export function log(message, level = 'info') {
 /** The Opus key comes from the environment, or from what was saved in the app. */
 export const opusKey = () => state.opusKey || config.opusKey;
 export const opusOrgId = () => state.opusOrgId || config.opusOrgId;
+export const brandTemplateId = () => state.brandTemplateId || config.brandTemplateId;
