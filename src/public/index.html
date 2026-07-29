@@ -268,6 +268,16 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .next-title{font-size:13.5px;color:var(--text-2);margin-top:4px;line-height:1.45}
 .next-when{font-size:12.5px;color:var(--mute-2);margin-top:3px}
 
+select{
+  width:100%;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);
+  padding:9px 11px;color:var(--text);font-size:13.5px;appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,var(--mute) 50%),linear-gradient(135deg,var(--mute) 50%,transparent 50%);
+  background-position:calc(100% - 16px) 51%,calc(100% - 11px) 51%;
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat;
+}
+select:focus{outline:none;border-color:var(--blue)}
+.style-note{font-size:12.5px;color:var(--mute);margin-top:9px;line-height:1.5}
+
 .mini{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
 .mini:last-child{border-bottom:0}
 .mini-badge{
@@ -467,6 +477,14 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
         <div class="card">
           <div class="card-head">Next post</div>
           <div class="card-body" id="nextBox"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">Clip style</div>
+          <div class="card-body">
+            <select id="tplPick" aria-label="Clip style"></select>
+            <div class="style-note" id="tplNote"></div>
+          </div>
         </div>
 
         <div class="card">
@@ -1176,6 +1194,13 @@ function renderSide() {
     box.append(cd, ti, wh);
   }
 
+  if (templates === null) { templates = []; loadTemplates(); }
+  else if (!editing.size) {
+    const pick = $('#tplPick');
+    const want = DATA.brandTemplateId || '';
+    if (pick.value !== want && pick.children.length) pick.value = want;
+  }
+
   const acc = $('#accounts');
   acc.innerHTML = '';
   const accounts = DATA.accounts || [];
@@ -1283,6 +1308,50 @@ $('#approveAll').onclick = async () => {
   $('#approveAll').disabled = false;
   $('#approveAll').textContent = 'Approve all';
   refresh();
+};
+
+let templates = null;   // fetched once, on demand
+
+async function loadTemplates() {
+  const pick = $('#tplPick');
+  try {
+    const res = await api('/api/brand-templates');
+    templates = res.templates || [];
+  } catch (err) {
+    templates = [];
+    $('#tplNote').textContent = err.message;
+    return;
+  }
+  pick.innerHTML = '';
+  const none = el('option');
+  none.value = '';
+  none.textContent = 'Opus account default';
+  pick.append(none);
+  templates.forEach(t => {
+    const o = el('option');
+    o.value = t.id;
+    o.textContent = t.name;
+    pick.append(o);
+  });
+  pick.value = DATA?.brandTemplateId || '';
+  showTplNote();
+}
+
+function showTplNote() {
+  const chosen = $('#tplPick').value;
+  $('#tplNote').textContent = chosen
+    ? 'Applied to every new lecture. Turn captions off inside this template in Opus.'
+    : 'Using whichever template is default in your Opus account.';
+}
+
+$('#tplPick').onchange = async () => {
+  const id = $('#tplPick').value;
+  try {
+    await api('/api/brand-template', { method: 'POST', body: JSON.stringify({ id }) });
+    toast(id ? 'Clip style saved' : 'Back to your Opus default', 'good');
+    showTplNote();
+    refresh();
+  } catch (err) { toast(err.message, 'bad'); }
 };
 
 $('#refreshAcc').onclick = async () => {
