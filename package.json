@@ -9,5 +9,8 @@
   "scripts": {
     "start": "node src/server.js"
   },
+  "dependencies": {
+    "ffmpeg-static": "^5.2.0"
+  },
   "description": "Paste lectures, Opus clips them, they post themselves."
 }
