@@ -3,8 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
-import { state, save, log, opusKey } from './store.js';
+import { state, save, log, opusKey, brandTemplateId } from './store.js';
 import * as agent from './agent.js';
+import * as opus from './opus.js';
 import { formatLocal } from './slots.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -94,6 +95,7 @@ async function route(req, res, url) {
       postTimes: config.postTimes,
       timezone: config.timezone,
       working,
+      brandTemplateId: brandTemplateId(),
       accounts: state.accounts,
       projects: state.projects.slice(0, 12).map(p => ({
         id: p.id,
@@ -139,6 +141,22 @@ async function route(req, res, url) {
       state.opusOrgId = previous.org;
       return send(res, 400, { error: err.message });
     }
+  }
+
+  // The clip style — captions on or off, fonts, logo — lives in Opus.
+  // List them here so one can be picked without hunting for its id.
+  if (method === 'GET' && pathname === '/api/brand-templates') {
+    try { return send(res, 200, { templates: await opus.getBrandTemplates() }); }
+    catch (err) { return send(res, 400, { error: err.message }); }
+  }
+
+  if (method === 'POST' && pathname === '/api/brand-template') {
+    const body = await readBody(req);
+    const id = String(body.id ?? '').trim();
+    state.brandTemplateId = id;
+    save();
+    log(id ? `Clip style set. New lectures will use it.` : 'Clip style cleared. Opus will use your account default.');
+    return send(res, 200, { ok: true, brandTemplateId: brandTemplateId() });
   }
 
   if (method === 'POST' && pathname === '/api/accounts/refresh') {
