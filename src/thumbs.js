@@ -2,22 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { config } from './config.js';
+import { ffmpegPath } from './ffmpeg.js';
 
 const thumbsDir = path.join(config.dataDir, 'thumbs');
 fs.mkdirSync(thumbsDir, { recursive: true });
-
-/**
- * Same resolution strategy as audio.js: prefer the portable `ffmpeg-static`
- * binary (installed via npm on Render), fall back to plain `ffmpeg` on the
- * PATH for local development and testing.
- */
-async function ffmpegPath() {
-  try {
-    const mod = await import('ffmpeg-static');
-    if (mod?.default) return mod.default;
-  } catch { /* not installed here — fall through */ }
-  return process.env.FFMPEG_PATH || 'ffmpeg';
-}
 
 function run(bin, args, timeoutMs = 30_000) {
   return new Promise((resolve, reject) => {
