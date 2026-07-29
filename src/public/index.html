@@ -278,6 +278,9 @@ select{
 select:focus{outline:none;border-color:var(--blue)}
 .style-note{font-size:12.5px;color:var(--mute);margin-top:9px;line-height:1.5}
 
+.dur-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.dur-row input{text-align:center}
+
 .mini{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
 .mini:last-child{border-bottom:0}
 .mini-badge{
@@ -484,6 +487,33 @@ select:focus{outline:none;border-color:var(--blue)}
           <div class="card-body">
             <select id="tplPick" aria-label="Clip style"></select>
             <div class="style-note" id="tplNote"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">Clips per video</div>
+          <div class="card-body">
+            <select id="countPick" aria-label="Clips per video">
+              <option value="0">Everything Opus finds</option>
+              <option value="8">Up to 8</option>
+              <option value="12">Up to 12</option>
+              <option value="20">Up to 20</option>
+              <option value="30">Up to 30</option>
+            </select>
+            <div class="style-note">How many clips come out of one lecture. Opus decides which moments; this only caps how many you keep.</div>
+
+            <div class="dur-row">
+              <div>
+                <label class="field code" for="durMin">Shortest</label>
+                <input id="durMin" type="text" inputmode="numeric" value="20">
+              </div>
+              <div>
+                <label class="field code" for="durMax">Longest</label>
+                <input id="durMax" type="text" inputmode="numeric" value="90">
+              </div>
+            </div>
+            <div class="style-note">Seconds. Applies to lectures sent after you save.</div>
+            <button class="btn btn-ghost btn-sm" id="saveCount" style="margin-top:11px">Save</button>
           </div>
         </div>
 
@@ -1207,6 +1237,23 @@ function renderSide() {
     if (pick.value !== want && pick.children.length) pick.value = want;
   }
 
+  if (!clipSettingsDirty) {
+    const cs = DATA.clipSettings || {};
+    const countPick = $('#countPick');
+    const want = String(cs.clipsPerVideo ?? 0);
+    if (![...countPick.children].some(o => o.value === want)) {
+      // A saved cap that isn't one of the presets — say 15 — still needs
+      // somewhere to live, so add it rather than silently rounding away.
+      const extra = el('option');
+      extra.value = want;
+      extra.textContent = want === '0' ? 'Everything Opus finds' : `Up to ${want}`;
+      countPick.prepend(extra);
+    }
+    countPick.value = want;
+    $('#durMin').value = cs.clipMinSeconds ?? 20;
+    $('#durMax').value = cs.clipMaxSeconds ?? 90;
+  }
+
   const acc = $('#accounts');
   acc.innerHTML = '';
   const accounts = DATA.accounts || [];
@@ -1317,6 +1364,7 @@ $('#approveAll').onclick = async () => {
 };
 
 let templates = null;   // fetched once, on demand
+let clipSettingsDirty = false;   // true while the count/duration form differs from the last save
 
 async function loadTemplates() {
   const pick = $('#tplPick');
@@ -1358,6 +1406,34 @@ $('#tplPick').onchange = async () => {
     showTplNote();
     refresh();
   } catch (err) { toast(err.message, 'bad'); }
+};
+
+['#countPick', '#durMin', '#durMax'].forEach(sel => {
+  $(sel).addEventListener('input', () => { clipSettingsDirty = true; });
+  $(sel).addEventListener('change', () => { clipSettingsDirty = true; });
+});
+
+$('#saveCount').onclick = async () => {
+  const clipsPerVideo = Number($('#countPick').value);
+  const clipMinSeconds = Number($('#durMin').value);
+  const clipMaxSeconds = Number($('#durMax').value);
+
+  if (!Number.isFinite(clipMinSeconds) || !Number.isFinite(clipMaxSeconds) || clipMinSeconds < 3 || clipMaxSeconds > 600 || clipMinSeconds >= clipMaxSeconds) {
+    toast('Shortest must be a smaller number than longest, both between 3 and 600 seconds', 'bad');
+    return;
+  }
+
+  $('#saveCount').disabled = true;
+  try {
+    await api('/api/clip-settings', {
+      method: 'POST',
+      body: JSON.stringify({ clipsPerVideo, clipMinSeconds, clipMaxSeconds }),
+    });
+    clipSettingsDirty = false;
+    toast('Saved — applies to lectures sent from now on', 'good');
+    refresh();
+  } catch (err) { toast(err.message, 'bad'); }
+  $('#saveCount').disabled = false;
 };
 
 $('#refreshAcc').onclick = async () => {
