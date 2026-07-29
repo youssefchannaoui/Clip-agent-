@@ -119,7 +119,6 @@ async function importClips(project) {
 
   addClipsToQueue(fresh, project);
 
-  project.imported = (project.imported || 0) + fresh.length;
   project.clipCount = clips.length;
   project.status = 'done';
   delete project.stage;
@@ -176,12 +175,12 @@ export async function importSelectedClips(projectId, clipIds) {
 
   addClipsToQueue(fresh, project);
 
-  project.imported = (project.imported || 0) + fresh.length;
   project.clipCount = Math.max(project.clipCount || 0, clips.length);
   save();
 
+  const imported = state.clips.filter(c => c.projectId === projectId).length;
   if (fresh.length) log(`Added ${fresh.length} chosen clip${fresh.length === 1 ? '' : 's'} from ${project.title}, no extra Opus credits used`);
-  return { added: fresh.length, imported: project.imported, clipCount: project.clipCount };
+  return { added: fresh.length, imported, clipCount: project.clipCount };
 }
 
 /**
@@ -203,12 +202,12 @@ export async function refreshProjectClips(projectId) {
 
   addClipsToQueue(fresh, project);
 
-  project.imported = (project.imported || 0) + fresh.length;
   project.clipCount = Math.max(project.clipCount || 0, clips.length);
   save();
 
+  const imported = state.clips.filter(c => c.projectId === projectId).length;
   if (fresh.length) log(`Pulled in ${fresh.length} more clip${fresh.length === 1 ? '' : 's'} from ${project.title}, no extra Opus credits used`);
-  return { added: fresh.length, imported: project.imported, clipCount: project.clipCount };
+  return { added: fresh.length, imported, clipCount: project.clipCount };
 }
 
 /**
