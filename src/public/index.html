@@ -504,6 +504,7 @@ select:focus{outline:none;border-color:var(--blue)}
           <div class="head" style="margin-top:34px">
             <h2>Waiting for you</h2>
             <span class="note" id="waitNote"></span>
+            <button class="btn btn-ghost btn-sm hide" id="discardAll">Discard all</button>
             <button class="btn btn-ghost btn-sm hide" id="approveAll">Approve all</button>
           </div>
           <div id="waitList"></div>
@@ -647,6 +648,15 @@ select:focus{outline:none;border-color:var(--blue)}
             </div>
             <div class="style-note">Seconds. Applies to lectures sent after you save.</div>
             <button class="btn btn-ghost btn-sm" id="saveCount" style="margin-top:11px">Save</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">Caption prompt</div>
+          <div class="card-body">
+            <textarea id="copyPromptField" rows="5" style="width:100%;resize:vertical" placeholder="e.g. Write titles and captions in English, not Arabic. Keep them short and respectful."></textarea>
+            <div class="style-note">Instructions Opus follows when writing each clip's title, description and hashtags — this is how you get English instead of Arabic, or any other tone. Applies to clips written from now on; clips already written keep their existing wording.</div>
+            <button class="btn btn-ghost btn-sm" id="saveCopyPrompt" style="margin-top:11px">Save</button>
           </div>
         </div>
 
@@ -959,6 +969,7 @@ function renderQueue(waiting) {
     ? `${waiting.length} clip${waiting.length === 1 ? '' : 's'} to read through`
     : '';
   $('#approveAll').classList.toggle('hide', waiting.length < 2);
+  $('#discardAll').classList.toggle('hide', waiting.length < 1);
 
   const keep = new Set(waiting.map(c => c.id));
   [...list.children].forEach(n => { if (!keep.has(n.dataset.id)) n.remove(); });
@@ -1032,6 +1043,14 @@ function clipCard(c) {
       : 'No music' + (c.musicNote ? ' — ' + c.musicNote : '');
     if (c.musicNote) tag.title = c.musicNote;
     top.append(tag);
+  }
+  if (c.templateChanged !== null && c.templateChanged !== undefined) {
+    const tTag = el('span', 'music-tag ' + (c.templateChanged ? 'bad' : 'on'));
+    tTag.textContent = c.templateChanged ? 'Older clip style' : 'Current clip style';
+    tTag.title = c.templateChanged
+      ? 'Clipped before your current clip style was set — captions may differ from what you expect now.'
+      : 'Clipped using the clip style that is currently active.';
+    top.append(tTag);
   }
   const meta = el('span', 'clip-meta');
   meta.textContent = `${secs(c.durationMs)}s · ${c.projectTitle || 'lecture'}`;
@@ -1451,6 +1470,10 @@ function renderSide() {
     $('#durMax').value = cs.clipMaxSeconds ?? 90;
   }
 
+  if (!copyPromptDirty) {
+    $('#copyPromptField').value = DATA.copyPrompt || '';
+  }
+
   const acc = $('#accounts');
   acc.innerHTML = '';
   const accounts = DATA.accounts || [];
@@ -1538,6 +1561,23 @@ $('#send').onclick = async () => {
   $('#send').disabled = false;
 };
 
+$('#discardAll').onclick = async () => {
+  const waiting = (DATA.clips || []).filter(c => statusOf(c) === 'waiting');
+  if (!waiting.length) return;
+  if (!confirm(`Discard all ${waiting.length} clips waiting for review? They stay in Opus, they just leave this queue.`)) return;
+  $('#discardAll').disabled = true;
+  $('#discardAll').textContent = 'Discarding…';
+  try {
+    const res = await api('/api/clips/discard-all', { method: 'POST' });
+    toast(`${res.count} clip${res.count === 1 ? '' : 's'} discarded`, 'good');
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+  $('#discardAll').disabled = false;
+  $('#discardAll').textContent = 'Discard all';
+  refresh();
+};
+
 $('#approveAll').onclick = async () => {
   const waiting = (DATA.clips || []).filter(c => statusOf(c) === 'waiting');
   if (!waiting.length) return;
@@ -1579,6 +1619,7 @@ $('#pullBackAll').onclick = async () => {
 
 let templates = null;   // fetched once, on demand
 let clipSettingsDirty = false;   // true while the count/duration form differs from the last save
+let copyPromptDirty = false;     // true while the prompt field differs from the last save
 
 async function loadTemplates() {
   const pick = $('#tplPick');
@@ -1648,6 +1689,20 @@ $('#saveCount').onclick = async () => {
     refresh();
   } catch (err) { toast(err.message, 'bad'); }
   $('#saveCount').disabled = false;
+};
+
+$('#copyPromptField').addEventListener('input', () => { copyPromptDirty = true; });
+
+$('#saveCopyPrompt').onclick = async () => {
+  const prompt = $('#copyPromptField').value;
+  $('#saveCopyPrompt').disabled = true;
+  try {
+    await api('/api/copy-prompt', { method: 'POST', body: JSON.stringify({ prompt }) });
+    copyPromptDirty = false;
+    toast('Saved — applies to clips written from now on', 'good');
+    refresh();
+  } catch (err) { toast(err.message, 'bad'); }
+  $('#saveCopyPrompt').disabled = false;
 };
 
 /* ---------- music ---------- */
