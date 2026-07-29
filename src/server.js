@@ -1,243 +1,195 @@
-import http from 'node:http';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
-import { state, save, log, opusKey, brandTemplateId } from './store.js';
-import * as agent from './agent.js';
-import * as opus from './opus.js';
-import { formatLocal } from './slots.js';
+import { opusKey, opusOrgId, brandTemplateId } from './store.js';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const page = path.join(here, 'public', 'index.html');
+const BASE = process.env.OPUS_BASE || 'https://api.opus.pro/api';
 
-/* ---- helpers ------------------------------------------------------- */
-
-const send = (res, code, obj) => {
-  const body = JSON.stringify(obj);
-  res.writeHead(code, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Content-Length': Buffer.byteLength(body),
-    'Cache-Control': 'no-store',
-  });
-  res.end(body);
-};
-
-function readBody(req, limit = 1_000_000) {
-  return new Promise((resolve, reject) => {
-    let raw = '', size = 0;
-    req.on('data', chunk => {
-      size += chunk.length;
-      if (size > limit) { reject(new Error('Body too large.')); req.destroy(); return; }
-      raw += chunk;
-    });
-    req.on('end', () => {
-      if (!raw) return resolve({});
-      try { resolve(JSON.parse(raw)); } catch { reject(new Error('Body was not valid JSON.')); }
-    });
-    req.on('error', reject);
-  });
+class OpusError extends Error {
+  constructor(message, status) { super(message); this.status = status; }
 }
 
-/** Length-independent comparison, so the password can't be guessed by timing. */
-function sameSecret(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
+async function call(pathname, { method = 'GET', body, retries = 2 } = {}) {
+  const key = opusKey();
+  if (!key) throw new OpusError('No Opus API key connected yet.', 401);
 
-const authed = (req, url) =>
-  !config.password ||
-  sameSecret(req.headers['x-app-password'] || url.searchParams.get('pw') || '', config.password);
+  const headers = { Authorization: `Bearer ${key}` };
+  if (opusOrgId()) headers['x-opus-org-id'] = opusOrgId();
+  if (body) headers['Content-Type'] = 'application/json';
 
-/* ---- routes -------------------------------------------------------- */
-
-async function route(req, res, url) {
-  const { pathname } = url;
-  const method = req.method;
-
-  if (pathname === '/healthz') return send(res, 200, { ok: true });
-
-  if (method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
-    const html = fs.readFileSync(page);
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': html.length });
-    return res.end(html);
-  }
-
-  // Opus calls this when clipping finishes. It carries no secrets and only
-  // nudges the agent to look sooner than its next scheduled pass.
-  if (method === 'POST' && pathname === '/webhooks/opus') {
-    const body = await readBody(req).catch(() => ({}));
-    send(res, 200, { ok: true });
-    const id = body?.projectId || body?.data?.projectId;
-    const project = state.projects.find(p => p.id === id);
-    if (project) { project.checkAfter = 0; save(); log(`Opus finished clipping ${project.title}`); }
-    agent.tick().catch(() => {});
-    return;
-  }
-
-  if (!pathname.startsWith('/api/')) return send(res, 404, { error: 'Not found.' });
-  if (!authed(req, url)) return send(res, 401, { error: 'Wrong password.' });
-
-  if (method === 'GET' && pathname === '/api/state') {
-    const rank = s => ({ waiting: 0, approved: 1, scheduled: 2, posted: 3 }[s] ?? 4);
-    const clips = [...state.clips].sort((a, b) =>
-      rank(a.status) - rank(b.status) || (a.scheduledAt || a.addedAt) - (b.scheduledAt || b.addedAt));
-
-    // True while the agent is mid-job, so the page can refresh more often.
-    const working = state.clips.some(c => c.stage || c.status === 'approved')
-      || state.projects.some(p => p.status === 'clipping');
-
-    return send(res, 200, {
-      connected: Boolean(opusKey()),
-      autoApprove: config.autoApprove,
-      postTimes: config.postTimes,
-      timezone: config.timezone,
-      working,
-      brandTemplateId: brandTemplateId(),
-      accounts: state.accounts,
-      projects: state.projects.slice(0, 12).map(p => ({
-        id: p.id,
-        title: p.title,
-        status: p.status,
-        stage: p.stage || null,
-        submittedAt: p.submittedAt,
-        imported: p.imported,
-        clipCount: p.clipCount,
-      })),
-      clips: clips.map(c => ({
-        id: c.id,
-        title: c.editedTitle ?? c.copy?.title ?? c.title,
-        description: c.editedDescription ?? c.copy?.description ?? c.description,
-        hashtags: c.editedHashtags ?? c.copy?.hashtags ?? c.hashtags,
-        projectTitle: c.projectTitle,
-        durationMs: c.durationMs,
-        status: c.status,
-        stage: c.stage || null,
-        scheduledAt: c.scheduledAt,
-        scheduledLabel: c.scheduledAt ? formatLocal(c.scheduledAt) : null,
-        targets: c.targets,
-      })),
-      log: state.log.slice(0, 40),
-    });
-  }
-
-  if (method === 'POST' && pathname === '/api/connect') {
-    const body = await readBody(req);
-    const key = String(body.key || '').trim();
-    if (!key) return send(res, 400, { error: 'Paste your Opus API key first.' });
-
-    const previous = { key: state.opusKey, org: state.opusOrgId };
-    state.opusKey = key;
-    state.opusOrgId = String(body.orgId || '').trim();
+  for (let attempt = 0; ; attempt++) {
+    let res;
     try {
-      const accounts = await agent.refreshAccounts(true, true);
-      save();
-      log(`Connected to Opus. ${accounts.length} social accounts found.`);
-      return send(res, 200, { ok: true, accounts });
+      res = await fetch(BASE + pathname, {
+        method, headers,
+        body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(60000),
+      });
     } catch (err) {
-      state.opusKey = previous.key;
-      state.opusOrgId = previous.org;
-      return send(res, 400, { error: err.message });
-    }
-  }
-
-  // The clip style — captions on or off, fonts, logo — lives in Opus.
-  // List them here so one can be picked without hunting for its id.
-  if (method === 'GET' && pathname === '/api/brand-templates') {
-    try { return send(res, 200, { templates: await opus.getBrandTemplates() }); }
-    catch (err) { return send(res, 400, { error: err.message }); }
-  }
-
-  if (method === 'POST' && pathname === '/api/brand-template') {
-    const body = await readBody(req);
-    const id = String(body.id ?? '').trim();
-    state.brandTemplateId = id;
-    save();
-    log(id ? `Clip style set. New lectures will use it.` : 'Clip style cleared. Opus will use your account default.');
-    return send(res, 200, { ok: true, brandTemplateId: brandTemplateId() });
-  }
-
-  if (method === 'POST' && pathname === '/api/accounts/refresh') {
-    try { return send(res, 200, { accounts: await agent.refreshAccounts(true, true) }); }
-    catch (err) { return send(res, 400, { error: err.message }); }
-  }
-
-  if (method === 'POST' && pathname === '/api/videos') {
-    const body = await readBody(req);
-    const urls = String(body.urls || '').split(/[\n,\s]+/).map(s => s.trim()).filter(Boolean);
-    if (!urls.length) return send(res, 400, { error: 'No links found.' });
-
-    const results = [];
-    for (const u of urls) {
-      if (!/^https?:\/\//i.test(u)) { results.push({ url: u, error: 'That is not a link.' }); continue; }
-      try { await agent.submitVideo(u); results.push({ url: u, ok: true }); }
-      catch (err) { results.push({ url: u, error: err.message }); }
-    }
-    if (results.some(r => r.ok)) setTimeout(() => agent.tick().catch(() => {}), 20_000);
-    return send(res, 200, { results });
-  }
-
-  const clipMatch = pathname.match(/^\/api\/clips\/([^/]+)(\/now)?$/);
-  if (clipMatch) {
-    const id = decodeURIComponent(clipMatch[1]);
-
-    if (clipMatch[2] === '/now' && method === 'POST') {
-      try { await agent.postNow(id); return send(res, 200, { ok: true }); }
-      catch (err) { return send(res, 400, { error: err.message }); }
+      if (attempt < retries) { await sleep(1500 * (attempt + 1)); continue; }
+      throw new OpusError(`Could not reach Opus: ${err.message}`, 0);
     }
 
-    const clip = state.clips.find(c => c.id === id);
-    if (!clip) return send(res, 404, { error: 'That clip is no longer in the queue.' });
-
-    if (method === 'PATCH') {
-      const body = await readBody(req);
-      if (typeof body.title === 'string') clip.editedTitle = body.title;
-      if (typeof body.description === 'string') clip.editedDescription = body.description;
-      if (typeof body.hashtags === 'string') clip.editedHashtags = body.hashtags;
-
-      if (body.status === 'approved' && clip.status === 'waiting') {
-        clip.status = 'approved';
-        save();
-        send(res, 200, { ok: true });
-        agent.tick().catch(() => {});
-        return;
-      }
-      if (body.status === 'waiting' && clip.status !== 'posted') {
-        await agent.unschedule(clip);
-        clip.status = 'waiting';
-      }
-      save();
-      return send(res, 200, { ok: true });
+    // Opus rate limits some endpoints to 1 request a second.
+    if ((res.status === 429 || res.status >= 500) && attempt < retries) {
+      await sleep(2000 * (attempt + 1));
+      continue;
     }
 
-    if (method === 'DELETE') {
-      await agent.unschedule(clip);
-      state.clips = state.clips.filter(c => c.id !== id);
-      save();
-      return send(res, 200, { ok: true });
+    const text = await res.text();
+    let parsed = null;
+    try { parsed = text ? JSON.parse(text) : null; } catch {}
+
+    if (!res.ok) {
+      const detail = parsed?.message || parsed?.error || text.slice(0, 300) || res.statusText;
+      throw new OpusError(explain(res.status, detail), res.status);
     }
+    return parsed;
   }
-
-  return send(res, 404, { error: 'Not found.' });
 }
 
-/* ---- server -------------------------------------------------------- */
+function explain(status, detail) {
+  if (status === 401 || status === 403) {
+    return `Opus rejected the key (${status}). Check it is correct, that your plan includes API access, and that social posting is enabled on your account. Detail: ${detail}`;
+  }
+  if (status === 402) return `Opus says you are out of credits. Detail: ${detail}`;
+  return `Opus returned ${status}: ${detail}`;
+}
 
-const server = http.createServer((req, res) => {
-  let url;
-  try { url = new URL(req.url, `http://${req.headers.host || 'localhost'}`); }
-  catch { return send(res, 400, { error: 'Bad request.' }); }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-  route(req, res, url).catch(err => {
-    console.error(err);
-    if (!res.headersSent) send(res, 500, { error: err.message || 'Something went wrong.' });
+/* ------------------------------------------------------------------ */
+
+/** Send a long video off to be clipped. Returns the new project. */
+export async function createProject(videoUrl, title) {
+  const body = {
+    videoUrl,
+    curationPref: {
+      model: 'ClipBasic',                       // lectures are talking-head footage
+      genre: 'Auto',
+      clipDurations: [[config.clipMinSeconds, config.clipMaxSeconds]],
+    },
+    renderPref: { layoutAspectRatio: 'portrait' },
+  };
+  if (title) body.uploadedVideoAttr = { title };
+  if (brandTemplateId()) body.brandTemplateId = brandTemplateId();
+  if (config.publicBaseUrl) {
+    body.conclusionActions = [{
+      type: 'WEBHOOK',
+      notifyFailure: true,
+      url: `${config.publicBaseUrl}/webhooks/opus`,
+    }];
+  }
+  const res = await call('/clip-projects', { method: 'POST', body });
+  return res?.data ?? res;
+}
+
+/** Clips produced for a project. Empty until Opus finishes. */
+export async function getClips(projectId) {
+  const res = await call(`/exportable-clips?q=findByProjectId&projectId=${encodeURIComponent(projectId)}&pageNum=1&pageSize=50`);
+  const list = Array.isArray(res) ? res : (res?.data ?? []);
+  return list.map(c => ({
+    id: c.id,                                        // "{projectId}.{curationId}"
+    clipId: c.curationId || String(c.id).split('.').pop(),
+    projectId: c.projectId || projectId,
+    title: c.title || '',
+    description: c.description || '',
+    hashtags: c.hashtags || '',
+    durationMs: c.durationMs || 0,
+    preview: c.uriForPreview || c.uriForExport || '',
+    // Virality score is not in the documented schema, so fall back gracefully.
+    score: firstNumber(c.viralityScore, c.score, c.viralScore),
+  }));
+}
+
+function firstNumber(...vals) {
+  for (const v of vals) if (typeof v === 'number' && Number.isFinite(v)) return v;
+  return null;
+}
+
+/** The clip styles saved in the Opus account, so one can be picked here. */
+export async function getBrandTemplates() {
+  const res = await call('/brand-templates?q=mine');
+  const list = Array.isArray(res) ? res : (res?.data ?? []);
+  return list.map(t => ({
+    id: t.templateId || t.id,
+    name: t.name || 'Untitled template',
+  })).filter(t => t.id);
+}
+
+/** Social destinations already linked inside the Opus account. */
+export async function getSocialAccounts() {
+  const res = await call('/social-accounts?q=mine');
+  return (res?.data ?? []).map(a => ({
+    postAccountId: a.postAccountId,
+    subAccountId: a.subAccountId || undefined,
+    platform: a.platform,
+    name: a.extUserName || a.platform,
+    avatar: a.extUserPictureLink || '',
+    profile: a.extUserProfileLink || '',
+  }));
+}
+
+/** Ask Opus to write the caption for one clip on one destination. */
+export async function requestCopy({ projectId, clipId, account }) {
+  const res = await call('/social-copy-jobs', {
+    method: 'POST',
+    body: {
+      projectId, clipId,
+      postAccountId: account.postAccountId,
+      subAccountId: account.subAccountId,
+      prompt: config.copyPrompt,
+    },
   });
-});
+  return res?.data?.jobId;
+}
 
-server.listen(config.port, () => {
-  console.log(`Clip agent listening on http://localhost:${config.port}`);
-  if (config.publicBaseUrl) console.log(`Opus webhook: ${config.publicBaseUrl}/webhooks/opus`);
-  agent.start();
-});
+export async function getCopy(jobId) {
+  const res = await call(`/social-copy-jobs/${encodeURIComponent(jobId)}`);
+  return res?.data ?? null;
+}
+
+function postDetail({ title, description, hashtags, platform }) {
+  const body = [description, hashtags].filter(Boolean).join('\n\n').trim();
+  return {
+    title: (title || 'Reminder').slice(0, 100),
+    mediaType: 'video',
+    custom: {
+      description: body.slice(0, 2000),
+      ...(platform === 'YOUTUBE' ? { privacy: 'public' } : {}),
+    },
+  };
+}
+
+/** Queue a clip to go out at a future time. Opus does the posting. */
+export async function schedulePost({ projectId, clipId, account, title, description, hashtags, publishAt }) {
+  const res = await call('/publish-schedules', {
+    method: 'POST',
+    body: {
+      projectId, clipId,
+      postAccountId: account.postAccountId,
+      subAccountId: account.subAccountId,
+      postDetail: postDetail({ title, description, hashtags, platform: account.platform }),
+      publishAt: new Date(publishAt).toISOString(),
+    },
+  });
+  return res?.data?.scheduleId;
+}
+
+/** Push a clip out right now. */
+export async function publishNow({ projectId, clipId, account, title, description, hashtags }) {
+  const res = await call('/post-tasks', {
+    method: 'POST',
+    body: {
+      projectId, clipId,
+      postAccountId: account.postAccountId,
+      subAccountId: account.subAccountId,
+      postDetail: postDetail({ title, description, hashtags, platform: account.platform }),
+    },
+  });
+  return res?.data ?? { ok: true };
+}
+
+export async function cancelSchedule(scheduleId) {
+  return call(`/publish-schedules/${encodeURIComponent(scheduleId)}`, { method: 'DELETE' });
+}
+
+export { OpusError };
