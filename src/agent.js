@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { state, save, log, opusKey, clipSettings } from './store.js';
 import * as opus from './opus.js';
+import * as audio from './audio.js';
 import { nextSlot } from './slots.js';
 
 const MINUTE = 60_000;
@@ -144,8 +145,61 @@ async function generateCopy(clip, account) {
   return null;
 }
 
+/**
+ * Mix a random nasheed into the clip and swap Opus's ids to point at that
+ * mixed version, before anything gets scheduled. Runs once per clip. If it
+ * fails for any reason, the clip still goes out — just without music,
+ * rather than sitting stuck forever.
+ */
+async function ensureMusic(clip) {
+  if (clip.musicMixed) return;
+
+  stage(clip, 'Adding background music');
+  try {
+    const result = await audio.mixClipMusic(clip.exportUrl, text => stage(clip, text));
+
+    if (result.skipped) {
+      clip.musicMixed = 'skipped';
+      clip.musicNote = result.skipped;
+    } else {
+      stage(clip, 'Bringing the mixed clip back into Opus');
+      const project = await opus.importMixedClip(result.publicUrl, clip.title);
+      const newProjectId = project?.projectId || project?.id;
+      if (!newProjectId) throw new Error('Opus did not return a project id for the mixed clip.');
+
+      stage(clip, 'Waiting for Opus to finish importing it');
+      const newClip = await waitForImportedClip(newProjectId);
+      if (!newClip) throw new Error('Opus did not return the imported clip in time.');
+
+      clip.originalProjectId = clip.projectId;
+      clip.originalClipId = clip.clipId;
+      clip.projectId = newClip.projectId;
+      clip.clipId = newClip.clipId;
+      clip.musicMixed = 'done';
+      clip.musicNote = `Mixed with "${result.nasheedName}"`;
+    }
+  } catch (err) {
+    clip.musicMixed = 'failed';
+    clip.musicNote = err.message;
+    log(`Could not add music to "${clip.title}", posting without it. ${err.message}`, 'warn');
+  }
+  save();
+}
+
+async function waitForImportedClip(projectId, timeoutMs = 120_000) {
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    const clips = await opus.getClips(projectId);
+    if (clips.length) return clips[0];
+    await new Promise(r => setTimeout(r, 3000));
+  }
+  return null;
+}
+
 /** Schedule one approved clip across every connected account. */
 async function scheduleClip(clip) {
+  await ensureMusic(clip);
+
   stage(clip, 'Checking your connected accounts');
   const accounts = await refreshAccounts();
   if (!accounts.length) {
@@ -221,6 +275,8 @@ function upsertTarget(clip, account, patch) {
 export async function postNow(clipId) {
   const clip = state.clips.find(c => c.id === clipId);
   if (!clip) throw new Error('That clip is no longer in the queue.');
+  await ensureMusic(clip);
+
   stage(clip, 'Checking your connected accounts');
   const accounts = await refreshAccounts();
   if (!accounts.length) {
