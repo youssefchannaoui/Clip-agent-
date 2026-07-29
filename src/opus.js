@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { opusKey, opusOrgId, brandTemplateId } from './store.js';
+import { opusKey, opusOrgId, brandTemplateId, clipSettings } from './store.js';
 
 const BASE = process.env.OPUS_BASE || 'https://api.opus.pro/api';
 
@@ -60,12 +60,13 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /** Send a long video off to be clipped. Returns the new project. */
 export async function createProject(videoUrl, title) {
+  const { clipMinSeconds, clipMaxSeconds } = clipSettings();
   const body = {
     videoUrl,
     curationPref: {
       model: 'ClipBasic',                       // lectures are talking-head footage
       genre: 'Auto',
-      clipDurations: [[config.clipMinSeconds, config.clipMaxSeconds]],
+      clipDurations: [[clipMinSeconds, clipMaxSeconds]],
     },
     renderPref: { layoutAspectRatio: 'portrait' },
   };
