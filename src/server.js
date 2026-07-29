@@ -140,7 +140,7 @@ async function route(req, res, url) {
         status: p.status,
         stage: p.stage || null,
         submittedAt: p.submittedAt,
-        imported: p.imported,
+        imported: state.clips.filter(c => c.projectId === p.id).length,
         clipCount: p.clipCount,
       })),
       clips: clips.map(c => ({
@@ -285,14 +285,19 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/api/projects') {
     const currentTemplate = brandTemplateId();
     const projects = state.projects.map(p => {
-      const cover = state.clips.find(c => c.projectId === p.id && c.thumbState === 'ready');
+      const ownClips = state.clips.filter(c => c.projectId === p.id);
+      const cover = ownClips.find(c => c.thumbState === 'ready');
       return {
         id: p.id,
         title: p.title,
         url: p.url,
         status: p.status,
         submittedAt: p.submittedAt,
-        imported: p.imported || 0,
+        // Derived fresh from what's actually in the queue right now, not a
+        // running total — a total would only ever grow, even for clips
+        // that were later discarded, eventually claiming more clips were
+        // "imported" than Opus even reported existing for the lecture.
+        imported: ownClips.length,
         clipCount: p.clipCount || 0,
         coverClipId: cover ? cover.id : null,
         // Only claim a style mismatch when we actually know what this
