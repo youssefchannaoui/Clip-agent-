@@ -54,6 +54,19 @@ const authed = (req, url) =>
   !config.password ||
   sameSecret(req.headers['x-app-password'] || url.searchParams.get('pw') || '', config.password);
 
+/**
+ * Give a clip a genuine second chance at music when it's pulled back —
+ * but only if nothing actually got mixed in last time. A clip that's
+ * already carrying real music keeps it; re-mixing it again would just
+ * spend Opus credits a second time for no benefit.
+ */
+function pullBackMusic(clip) {
+  if (clip.musicMixed && clip.musicMixed !== 'done') {
+    delete clip.musicMixed;
+    delete clip.musicNote;
+  }
+}
+
 /* ---- routes -------------------------------------------------------- */
 
 async function route(req, res, url) {
@@ -264,6 +277,40 @@ async function route(req, res, url) {
     return send(res, 200, await checkFfmpeg());
   }
 
+  // Every lecture ever sent to Opus, not just the recent ones /api/state
+  // shows for the live "being clipped" list. This is what lets someone
+  // pull more clips from something they already paid Opus to process,
+  // instead of resubmitting the same video and spending credits again.
+  if (method === 'GET' && pathname === '/api/projects') {
+    const currentTemplate = brandTemplateId();
+    const projects = state.projects.map(p => ({
+      id: p.id,
+      title: p.title,
+      url: p.url,
+      status: p.status,
+      submittedAt: p.submittedAt,
+      imported: p.imported || 0,
+      clipCount: p.clipCount || 0,
+      // Only claim a style mismatch when we actually know what this
+      // project used — older projects predate this being tracked at all,
+      // and a confident wrong guess is worse than admitting we don't know.
+      styleChanged: p.brandTemplateIdUsed !== undefined
+        ? p.brandTemplateIdUsed !== currentTemplate
+        : null,
+    }));
+    return send(res, 200, { projects });
+  }
+
+  if (method === 'POST' && pathname.startsWith('/api/projects/') && pathname.endsWith('/more-clips')) {
+    const id = decodeURIComponent(pathname.slice('/api/projects/'.length, -'/more-clips'.length));
+    try {
+      const result = await agent.refreshProjectClips(id);
+      return send(res, 200, { ok: true, ...result });
+    } catch (err) {
+      return send(res, 400, { error: err.message });
+    }
+  }
+
   if (method === 'POST' && pathname === '/api/accounts/refresh') {
     try { return send(res, 200, { accounts: await agent.refreshAccounts(true, true) }); }
     catch (err) { return send(res, 400, { error: err.message }); }
@@ -282,6 +329,21 @@ async function route(req, res, url) {
     }
     if (results.some(r => r.ok)) setTimeout(() => agent.tick().catch(() => {}), 20_000);
     return send(res, 200, { results });
+  }
+
+  // Pull every currently loaded clip back to waiting at once — useful
+  // after a settings change, so old clips scheduled under the previous
+  // setup don't quietly go out wrong.
+  if (method === 'POST' && pathname === '/api/clips/pull-back-all') {
+    const targets = state.clips.filter(c => ['approved', 'scheduled'].includes(c.status));
+    for (const clip of targets) {
+      await agent.unschedule(clip);
+      clip.status = 'waiting';
+      pullBackMusic(clip);
+    }
+    save();
+    if (targets.length) log(`Pulled back ${targets.length} clip${targets.length === 1 ? '' : 's'} to the queue.`);
+    return send(res, 200, { ok: true, count: targets.length });
   }
 
   const clipMatch = pathname.match(/^\/api\/clips\/([^/]+)(\/now)?$/);
@@ -312,6 +374,7 @@ async function route(req, res, url) {
       if (body.status === 'waiting' && clip.status !== 'posted') {
         await agent.unschedule(clip);
         clip.status = 'waiting';
+        pullBackMusic(clip);
       }
       save();
       return send(res, 200, { ok: true });
