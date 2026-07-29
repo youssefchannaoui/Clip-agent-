@@ -855,6 +855,21 @@ function renderProcessing() {
   host.innerHTML = '';
   const busy = (DATA.projects || []).filter(p => p.status === 'clipping' || p.status === 'stalled');
   $('#procHead').classList.toggle('hide', busy.length === 0);
+
+  // The intake area is where attention already is right after clicking
+  // Send, so it should keep showing real progress there too, not just in
+  // the separate list further down. Skip this while a submit is actually
+  // in flight, so it doesn't fight with that button's own status text.
+  if (!$('#send').disabled) {
+    if (busy.length) {
+      const latest = busy[0];
+      const stageText = latest.stage || (latest.status === 'stalled' ? 'Opus has not returned anything yet' : 'Opus is working on it');
+      $('#intakeNote').textContent = busy.length > 1 ? `${stageText} (+${busy.length - 1} more clipping)` : stageText;
+    } else {
+      $('#intakeNote').textContent = '';
+    }
+  }
+
   if (!busy.length) return;
 
   busy.forEach(p => {
@@ -949,7 +964,7 @@ function clipCard(c) {
     const tag = el('span', 'music-tag ' + (c.musicMixed === 'done' ? 'on' : c.musicMixed === 'failed' ? 'bad' : 'off'));
     tag.textContent = c.musicMixed === 'done' ? '♪ ' + (c.musicNote || 'Mixed')
       : c.musicMixed === 'failed' ? 'No music — ' + (c.musicNote || 'failed')
-      : 'No music';
+      : 'No music' + (c.musicNote ? ' — ' + c.musicNote : '');
     if (c.musicNote) tag.title = c.musicNote;
     top.append(tag);
   }
