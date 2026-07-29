@@ -7,6 +7,7 @@ import { state, save, log, opusKey, brandTemplateId, clipSettings, setClipSettin
 import * as agent from './agent.js';
 import * as opus from './opus.js';
 import * as audio from './audio.js';
+import * as thumbs from './thumbs.js';
 import { formatLocal } from './slots.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -91,6 +92,15 @@ async function route(req, res, url) {
   if (!pathname.startsWith('/api/')) return send(res, 404, { error: 'Not found.' });
   if (!authed(req, url)) return send(res, 401, { error: 'Wrong password.' });
 
+  if (method === 'GET' && pathname.startsWith('/api/clips/thumb/')) {
+    const id = decodeURIComponent(pathname.slice('/api/clips/thumb/'.length).replace(/\.jpg$/, ''));
+    const file = thumbs.thumbPath(id);
+    if (!file) return send(res, 404, { error: 'No thumbnail yet.' });
+    const buf = fs.readFileSync(file);
+    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': buf.length, 'Cache-Control': 'private, max-age=86400' });
+    return res.end(buf);
+  }
+
   if (method === 'GET' && pathname === '/api/state') {
     const rank = s => ({ waiting: 0, approved: 1, scheduled: 2, posted: 3 }[s] ?? 4);
     const clips = [...state.clips].sort((a, b) =>
@@ -133,6 +143,7 @@ async function route(req, res, url) {
         targets: c.targets,
         musicMixed: c.musicMixed || null,
         musicNote: c.musicNote || null,
+        thumbState: c.thumbState || null,
       })),
       log: state.log.slice(0, 40),
     });
@@ -302,6 +313,7 @@ async function route(req, res, url) {
     if (method === 'DELETE') {
       await agent.unschedule(clip);
       state.clips = state.clips.filter(c => c.id !== id);
+      thumbs.deleteThumbnail(id);
       save();
       return send(res, 200, { ok: true });
     }
