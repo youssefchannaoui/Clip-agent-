@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
-import { state, save, log, opusKey, brandTemplateId, clipSettings, setClipSettings } from './store.js';
+import { state, save, log, opusKey, brandTemplateId, clipSettings, setClipSettings, copyPrompt, setCopyPrompt } from './store.js';
 import * as agent from './agent.js';
 import * as opus from './opus.js';
 import * as audio from './audio.js';
@@ -132,6 +132,7 @@ async function route(req, res, url) {
       working,
       brandTemplateId: brandTemplateId(),
       clipSettings: clipSettings(),
+      copyPrompt: copyPrompt(),
       musicSettings: audio.musicSettings(),
       accounts: state.accounts,
       projects: state.projects.slice(0, 12).map(p => ({
@@ -143,23 +144,34 @@ async function route(req, res, url) {
         imported: state.clips.filter(c => c.projectId === p.id).length,
         clipCount: p.clipCount,
       })),
-      clips: clips.map(c => ({
-        id: c.id,
-        title: c.editedTitle ?? c.copy?.title ?? c.title,
-        description: c.editedDescription ?? c.copy?.description ?? c.description,
-        hashtags: c.editedHashtags ?? c.copy?.hashtags ?? c.hashtags,
-        projectTitle: c.projectTitle,
-        durationMs: c.durationMs,
-        status: c.status,
-        stage: c.stage || null,
-        scheduledAt: c.scheduledAt,
-        scheduledLabel: c.scheduledAt ? formatLocal(c.scheduledAt) : null,
-        targets: c.targets,
-        musicMixed: c.musicMixed || null,
-        musicNote: c.musicNote || null,
-        thumbState: c.thumbState || null,
-        thumbAttempts: c.thumbAttempts || 0,
-      })),
+      clips: (() => {
+        const currentTemplate = brandTemplateId();
+        const projectsById = new Map(state.projects.map(p => [p.id, p]));
+        return clips.map(c => {
+          const project = projectsById.get(c.projectId);
+          const templateChanged = project?.brandTemplateIdUsed !== undefined
+            ? project.brandTemplateIdUsed !== currentTemplate
+            : null; // older clips predate this being tracked — admit we don't know, rather than guess
+          return {
+            id: c.id,
+            title: c.editedTitle ?? c.copy?.title ?? c.title,
+            description: c.editedDescription ?? c.copy?.description ?? c.description,
+            hashtags: c.editedHashtags ?? c.copy?.hashtags ?? c.hashtags,
+            projectTitle: c.projectTitle,
+            durationMs: c.durationMs,
+            status: c.status,
+            stage: c.stage || null,
+            scheduledAt: c.scheduledAt,
+            scheduledLabel: c.scheduledAt ? formatLocal(c.scheduledAt) : null,
+            targets: c.targets,
+            musicMixed: c.musicMixed || null,
+            musicNote: c.musicNote || null,
+            thumbState: c.thumbState || null,
+            thumbAttempts: c.thumbAttempts || 0,
+            templateChanged,
+          };
+        });
+      })(),
       log: state.log.slice(0, 40),
     });
   }
@@ -227,6 +239,20 @@ async function route(req, res, url) {
     const applied = clipSettings();
     log(`Clip settings updated: ${applied.clipsPerVideo > 0 ? applied.clipsPerVideo + ' per video' : 'keep all'}, ${applied.clipMinSeconds}-${applied.clipMaxSeconds}s`);
     return send(res, 200, { ok: true, clipSettings: applied });
+  }
+
+  // The instructions sent to Opus for writing each clip's title, caption
+  // and hashtags — this is how someone changes the language or tone of
+  // what gets generated, without needing to redeploy anything.
+  if (method === 'POST' && pathname === '/api/copy-prompt') {
+    const body = await readBody(req);
+    const prompt = String(body.prompt ?? '').trim();
+    if (prompt.length > 2000) {
+      return send(res, 400, { error: 'Keep the prompt under 2000 characters.' });
+    }
+    setCopyPrompt(prompt);
+    log('Caption prompt updated. Applies to clips written from now on.');
+    return send(res, 200, { ok: true, copyPrompt: copyPrompt() });
   }
 
   // The nasheed library — upload, list, remove, and the mix settings.
