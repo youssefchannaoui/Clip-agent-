@@ -83,6 +83,22 @@ export async function createProject(videoUrl, title) {
   return res?.data ?? res;
 }
 
+/**
+ * Re-import a clip we've already rendered ourselves (with the nasheed mixed
+ * in) so Opus treats it as one finished, postable clip rather than clipping
+ * it again. This costs a second, small amount of Opus credit for the clip's
+ * own short duration — the trade-off for automatic background music.
+ */
+export async function importMixedClip(videoUrl, title) {
+  const body = {
+    videoUrl,
+    curationPref: { skipCurate: true },
+  };
+  if (title) body.uploadedVideoAttr = { title };
+  const res = await call('/clip-projects', { method: 'POST', body });
+  return res?.data ?? res;
+}
+
 /** Clips produced for a project. Empty until Opus finishes. */
 export async function getClips(projectId) {
   const res = await call(`/exportable-clips?q=findByProjectId&projectId=${encodeURIComponent(projectId)}&pageNum=1&pageSize=50`);
@@ -95,6 +111,7 @@ export async function getClips(projectId) {
     description: c.description || '',
     hashtags: c.hashtags || '',
     durationMs: c.durationMs || 0,
+    exportUrl: c.uriForExport || c.uriForPreview || '',
     preview: c.uriForPreview || c.uriForExport || '',
     // Virality score is not in the documented schema, so fall back gracefully.
     score: firstNumber(c.viralityScore, c.score, c.viralScore),
