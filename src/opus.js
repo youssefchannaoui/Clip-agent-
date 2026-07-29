@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { opusKey, opusOrgId } from './store.js';
+import { opusKey, opusOrgId, brandTemplateId } from './store.js';
 
 const BASE = process.env.OPUS_BASE || 'https://api.opus.pro/api';
 
@@ -70,7 +70,7 @@ export async function createProject(videoUrl, title) {
     renderPref: { layoutAspectRatio: 'portrait' },
   };
   if (title) body.uploadedVideoAttr = { title };
-  if (config.brandTemplateId) body.brandTemplateId = config.brandTemplateId;
+  if (brandTemplateId()) body.brandTemplateId = brandTemplateId();
   if (config.publicBaseUrl) {
     body.conclusionActions = [{
       type: 'WEBHOOK',
@@ -103,6 +103,16 @@ export async function getClips(projectId) {
 function firstNumber(...vals) {
   for (const v of vals) if (typeof v === 'number' && Number.isFinite(v)) return v;
   return null;
+}
+
+/** The clip styles saved in the Opus account, so one can be picked here. */
+export async function getBrandTemplates() {
+  const res = await call('/brand-templates?q=mine');
+  const list = Array.isArray(res) ? res : (res?.data ?? []);
+  return list.map(t => ({
+    id: t.templateId || t.id,
+    name: t.name || 'Untitled template',
+  })).filter(t => t.id);
 }
 
 /** Social destinations already linked inside the Opus account. */
