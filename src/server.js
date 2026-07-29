@@ -158,6 +158,7 @@ async function route(req, res, url) {
         musicMixed: c.musicMixed || null,
         musicNote: c.musicNote || null,
         thumbState: c.thumbState || null,
+        thumbAttempts: c.thumbAttempts || 0,
       })),
       log: state.log.slice(0, 40),
     });
@@ -283,21 +284,25 @@ async function route(req, res, url) {
   // instead of resubmitting the same video and spending credits again.
   if (method === 'GET' && pathname === '/api/projects') {
     const currentTemplate = brandTemplateId();
-    const projects = state.projects.map(p => ({
-      id: p.id,
-      title: p.title,
-      url: p.url,
-      status: p.status,
-      submittedAt: p.submittedAt,
-      imported: p.imported || 0,
-      clipCount: p.clipCount || 0,
-      // Only claim a style mismatch when we actually know what this
-      // project used — older projects predate this being tracked at all,
-      // and a confident wrong guess is worse than admitting we don't know.
-      styleChanged: p.brandTemplateIdUsed !== undefined
-        ? p.brandTemplateIdUsed !== currentTemplate
-        : null,
-    }));
+    const projects = state.projects.map(p => {
+      const cover = state.clips.find(c => c.projectId === p.id && c.thumbState === 'ready');
+      return {
+        id: p.id,
+        title: p.title,
+        url: p.url,
+        status: p.status,
+        submittedAt: p.submittedAt,
+        imported: p.imported || 0,
+        clipCount: p.clipCount || 0,
+        coverClipId: cover ? cover.id : null,
+        // Only claim a style mismatch when we actually know what this
+        // project used — older projects predate this being tracked at all,
+        // and a confident wrong guess is worse than admitting we don't know.
+        styleChanged: p.brandTemplateIdUsed !== undefined
+          ? p.brandTemplateIdUsed !== currentTemplate
+          : null,
+      };
+    });
     return send(res, 200, { projects });
   }
 
@@ -305,6 +310,30 @@ async function route(req, res, url) {
     const id = decodeURIComponent(pathname.slice('/api/projects/'.length, -'/more-clips'.length));
     try {
       const result = await agent.refreshProjectClips(id);
+      return send(res, 200, { ok: true, ...result });
+    } catch (err) {
+      return send(res, 400, { error: err.message });
+    }
+  }
+
+  // Every clip Opus has for a lecture, so someone can see exactly what's
+  // there and pick specific ones, rather than only an automatic next batch.
+  if (method === 'GET' && pathname.startsWith('/api/projects/') && pathname.endsWith('/available-clips')) {
+    const id = decodeURIComponent(pathname.slice('/api/projects/'.length, -'/available-clips'.length));
+    try {
+      return send(res, 200, { clips: await agent.listAvailableClips(id) });
+    } catch (err) {
+      return send(res, 400, { error: err.message });
+    }
+  }
+
+  if (method === 'POST' && pathname.startsWith('/api/projects/') && pathname.endsWith('/import-clips')) {
+    const id = decodeURIComponent(pathname.slice('/api/projects/'.length, -'/import-clips'.length));
+    const body = await readBody(req);
+    const clipIds = Array.isArray(body.clipIds) ? body.clipIds.map(String) : [];
+    if (!clipIds.length) return send(res, 400, { error: 'No clips were selected.' });
+    try {
+      const result = await agent.importSelectedClips(id, clipIds);
       return send(res, 200, { ok: true, ...result });
     } catch (err) {
       return send(res, 400, { error: err.message });
@@ -329,6 +358,22 @@ async function route(req, res, url) {
     }
     if (results.some(r => r.ok)) setTimeout(() => agent.tick().catch(() => {}), 20_000);
     return send(res, 200, { results });
+  }
+
+  // Discard everything still waiting for review at once — the queue
+  // equivalent of "pull back all", for clearing out a big batch you've
+  // decided not to bother reading through individually.
+  if (method === 'POST' && pathname === '/api/clips/discard-all') {
+    const targets = state.clips.filter(c => c.status === 'waiting');
+    for (const clip of targets) {
+      await agent.unschedule(clip);
+      thumbs.deleteThumbnail(clip.id);
+    }
+    const ids = new Set(targets.map(c => c.id));
+    state.clips = state.clips.filter(c => !ids.has(c.id));
+    save();
+    if (targets.length) log(`Discarded ${targets.length} waiting clip${targets.length === 1 ? '' : 's'}.`);
+    return send(res, 200, { ok: true, count: targets.length });
   }
 
   // Pull every currently loaded clip back to waiting at once — useful
