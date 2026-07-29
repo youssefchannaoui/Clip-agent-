@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { state, save, log, opusKey, clipSettings } from './store.js';
+import { state, save, log, opusKey, clipSettings, brandTemplateId } from './store.js';
 import * as opus from './opus.js';
 import * as audio from './audio.js';
 import * as thumbs from './thumbs.js';
@@ -45,6 +45,10 @@ export async function submitVideo(url, title) {
     stage: 'Sent to Opus, waiting for it to start',
     submittedAt: Date.now(),
     imported: 0,
+    clipCount: 0,
+    // So we can honestly tell later whether the clip style has since
+    // changed, rather than assuming old clips match current settings.
+    brandTemplateIdUsed: brandTemplateId(),
     // Short lectures can be ready quickly, so look soon, then ease off.
     checkAfter: Date.now() + 20_000,
   });
@@ -96,7 +100,18 @@ async function importClips(project) {
   const unknown = ranked.filter(c => !known.has(c.id));
   const fresh = clipsPerVideo > 0 ? unknown.slice(0, clipsPerVideo) : unknown;
 
-  for (const c of fresh) {
+  addClipsToQueue(fresh, project);
+
+  project.imported = (project.imported || 0) + fresh.length;
+  project.clipCount = clips.length;
+  project.status = 'done';
+  delete project.stage;
+  save();
+  log(`${fresh.length} clips ready from ${project.title}${config.autoApprove ? '' : ' — waiting for your approval'}`);
+}
+
+function addClipsToQueue(clipsToAdd, project) {
+  for (const c of clipsToAdd) {
     state.clips.push({
       ...c,
       projectTitle: project.title,
@@ -107,13 +122,33 @@ async function importClips(project) {
       thumbState: 'pending',
     });
   }
+}
 
-  project.imported = fresh.length;
-  project.clipCount = clips.length;
-  project.status = 'done';
-  delete project.stage;
+/**
+ * Pull in any clips Opus generated for a project that never made it into
+ * the queue — because the clips-per-video cap left them out at the time,
+ * or because they were discarded and are no longer tracked here. Opus
+ * already did the clipping work, so this costs no extra credits — it's
+ * just asking for the same finished job again. A manual request like this
+ * is not capped: the person is explicitly asking for everything that's
+ * left, not an automatic batch that needs limiting.
+ */
+export async function refreshProjectClips(projectId) {
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) throw new Error('That lecture is no longer in your history.');
+
+  const clips = await opus.getClips(projectId);
+  const known = new Set(state.clips.map(c => c.id));
+  const fresh = clips.filter(c => !known.has(c.id));
+
+  addClipsToQueue(fresh, project);
+
+  project.imported = (project.imported || 0) + fresh.length;
+  project.clipCount = Math.max(project.clipCount || 0, clips.length);
   save();
-  log(`${fresh.length} clips ready from ${project.title}${config.autoApprove ? '' : ' — waiting for your approval'}`);
+
+  if (fresh.length) log(`Pulled in ${fresh.length} more clip${fresh.length === 1 ? '' : 's'} from ${project.title}, no extra Opus credits used`);
+  return { added: fresh.length, imported: project.imported, clipCount: project.clipCount };
 }
 
 /**
