@@ -67,6 +67,22 @@ function pullBackMusic(clip) {
   }
 }
 
+/**
+ * Give the AI-written caption a genuine fresh shot too. Unlike music,
+ * writing a caption is a lightweight text request, not a full re-render —
+ * there's no real cost to trying again, so this always resets it, not
+ * only when it was previously skipped. Without this, a clip whose caption
+ * was marked "skipped" once (say, before any accounts were connected, or
+ * before a caption prompt was ever set) would stay stuck that way
+ * forever, no matter how many times it's pulled back and re-approved.
+ * The person's own manual edits (editedTitle etc.) are untouched either
+ * way, since those always take priority over the AI suggestion.
+ */
+function pullBackCopy(clip) {
+  delete clip.copy;
+  delete clip.copyState;
+}
+
 /* ---- routes -------------------------------------------------------- */
 
 async function route(req, res, url) {
@@ -416,6 +432,7 @@ async function route(req, res, url) {
       await agent.unschedule(clip);
       clip.status = 'waiting';
       pullBackMusic(clip);
+      pullBackCopy(clip);
     }
     save();
     if (targets.length) log(`Pulled back ${targets.length} clip${targets.length === 1 ? '' : 's'} to the queue.`);
@@ -451,6 +468,7 @@ async function route(req, res, url) {
         await agent.unschedule(clip);
         clip.status = 'waiting';
         pullBackMusic(clip);
+        pullBackCopy(clip);
       }
       save();
       return send(res, 200, { ok: true });
