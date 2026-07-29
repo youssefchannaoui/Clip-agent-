@@ -38,6 +38,9 @@ export const config = {
   clipMaxSeconds: num(process.env.CLIP_MAX_SECONDS, 90),
   autoApprove: bool(process.env.AUTO_APPROVE, false),
 
+  musicEnabled: bool(process.env.MUSIC_ENABLED, true),
+  musicVolumePercent: num(process.env.MUSIC_VOLUME_PERCENT, 15),
+
   copyPrompt: process.env.COPY_PROMPT
     || 'Write a plain, respectful caption for a short Islamic reminder. No hype, no clickbait, no emojis. Never paraphrase or invent Quran or hadith wording. If a source is unclear, describe the topic only.',
 };
