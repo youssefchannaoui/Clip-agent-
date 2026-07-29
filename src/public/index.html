@@ -227,11 +227,25 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .music-tag.off{color:var(--mute)}
 .music-tag.bad{color:var(--red);border-color:rgba(255,85,102,.35)}
 
-.lec{
-  padding:16px 18px;
-  background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:10px;
+.lec-grid{
+  display:grid;gap:16px;
+  grid-template-columns:repeat(auto-fill,minmax(230px,1fr));
 }
-.lec-top{display:flex;align-items:flex-start;gap:14px}
+.lec{
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;
+  display:flex;flex-direction:column;
+}
+.lec-cover{
+  width:100%;aspect-ratio:16/9;background:var(--surface-2);position:relative;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;
+}
+.lec-cover img{width:100%;height:100%;object-fit:cover;display:block}
+.lec-cover-ph{color:var(--mute-2);font-size:24px}
+.lec-badge{
+  position:absolute;top:9px;right:9px;font-size:11px;padding:2px 8px;border-radius:20px;
+  background:rgba(9,9,10,.72);border:1px solid var(--line-lit);color:var(--text-2);
+}
+.lec-body{padding:14px 16px;display:flex;flex-direction:column;gap:4px;flex:1}
 .lec-what{flex:1;min-width:0}
 .lec-title{font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lec-meta{color:var(--mute-2);font-size:12.5px;margin-top:3px}
@@ -240,7 +254,23 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
   font-size:12px;margin-top:8px;padding:7px 10px;border-radius:8px;
   background:rgba(217,180,120,.09);border:1px solid rgba(217,180,120,.3);color:var(--blue-soft);
 }
-.lec-foot{display:flex;align-items:center;gap:10px;margin-top:12px}
+.lec-foot{margin-top:12px;display:flex;gap:8px}
+.lec-foot .btn{flex:1}
+
+.pick-panel{
+  border-top:1px solid var(--line);background:var(--bg);padding:12px 16px 14px;
+  display:flex;flex-direction:column;gap:2px;max-height:280px;overflow-y:auto;
+}
+.pick-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)}
+.pick-row:last-child{border-bottom:0}
+.pick-row input[type=checkbox]{flex:none;width:16px;height:16px;accent-color:var(--blue)}
+.pick-what{flex:1;min-width:0}
+.pick-title{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pick-meta{font-size:11.5px;color:var(--mute-2)}
+.pick-row.done{opacity:.5}
+.pick-row.done .pick-title::after{content:' — already in queue';color:var(--mute-2);font-weight:400}
+.pick-foot{display:flex;gap:8px;padding-top:10px;align-items:center}
+.pick-count{font-size:12px;color:var(--mute);margin-right:auto}
 
 .proc{
   display:flex;align-items:center;gap:13px;padding:14px 18px;
@@ -1811,10 +1841,30 @@ function renderLibrary(projects) {
     return;
   }
 
+  const grid = el('div', 'lec-grid');
+
   // Newest first.
   projects.slice().sort((a, b) => (b.submittedAt || 0) - (a.submittedAt || 0)).forEach(p => {
     const card = el('div', 'lec');
-    const top = el('div', 'lec-top');
+
+    const cover = el('div', 'lec-cover');
+    if (p.coverClipId) {
+      const img = el('img');
+      img.src = '/api/clips/thumb/' + encodeURIComponent(p.coverClipId) + '.jpg?pw=' + encodeURIComponent(PW);
+      img.alt = p.title || 'Lecture preview';
+      img.onerror = () => { img.remove(); cover.append(coverPlaceholder()); };
+      cover.append(img);
+    } else {
+      cover.append(coverPlaceholder());
+    }
+    if (p.status === 'clipping') {
+      const badge = el('span', 'lec-badge');
+      badge.textContent = 'Clipping…';
+      cover.append(badge);
+    }
+    card.append(cover);
+
+    const body = el('div', 'lec-body');
     const what = el('div', 'lec-what');
 
     const title = el('div', 'lec-title');
@@ -1834,13 +1884,12 @@ function renderLibrary(projects) {
       link.textContent = p.url;
       what.append(link);
     }
-    top.append(what);
-    card.append(top);
+    body.append(what);
 
     if (p.styleChanged === true) {
       const warn = el('div', 'lec-warn');
       warn.textContent = 'Clipped with an older clip style — more clips from this one will keep that same style, not your current one.';
-      card.append(warn);
+      body.append(warn);
     }
 
     const foot = el('div', 'lec-foot');
@@ -1861,12 +1910,117 @@ function renderLibrary(projects) {
         more.textContent = remaining > 0 ? `Get ${remaining} more clip${remaining === 1 ? '' : 's'}` : 'Check for more clips';
       }
     };
-    foot.append(more);
-    card.append(foot);
 
-    host.append(card);
+    const pick = el('button', 'btn btn-ghost btn-sm');
+    pick.textContent = 'Pick clips';
+    pick.disabled = p.status === 'clipping';
+    let panel = null;
+    pick.onclick = async () => {
+      if (panel) { panel.remove(); panel = null; pick.textContent = 'Pick clips'; return; }
+      pick.disabled = true;
+      pick.textContent = 'Loading…';
+      try {
+        const res = await api('/api/projects/' + encodeURIComponent(p.id) + '/available-clips');
+        panel = buildPickPanel(p, res.clips || []);
+        card.append(panel);
+        pick.textContent = 'Hide clips';
+      } catch (err) {
+        toast(err.message, 'bad');
+        pick.textContent = 'Pick clips';
+      }
+      pick.disabled = false;
+    };
+
+    foot.append(more, pick);
+    body.append(foot);
+    card.append(body);
+
+    grid.append(card);
   });
+
+  host.append(grid);
 }
+
+/**
+ * A checklist of every clip Opus has for one lecture, so someone can pick
+ * exactly which ones to bring in — real thumbnails aren't available for
+ * these yet, since that only happens once a clip is actually imported, but
+ * title and length are enough to judge by.
+ */
+function buildPickPanel(project, clips) {
+  const panel = el('div', 'pick-panel');
+
+  if (!clips.length) {
+    const empty = el('div', 'pick-meta');
+    empty.textContent = 'Opus has nothing for this one yet.';
+    panel.append(empty);
+    return panel;
+  }
+
+  const boxes = [];
+  clips.forEach(c => {
+    const row = el('div', 'pick-row' + (c.imported ? ' done' : ''));
+    const box = el('input');
+    box.type = 'checkbox';
+    box.disabled = c.imported;
+    if (!c.imported) boxes.push({ box, id: c.id });
+
+    const what = el('div', 'pick-what');
+    const title = el('div', 'pick-title');
+    title.textContent = c.title || 'Untitled clip';
+    const meta = el('div', 'pick-meta');
+    meta.textContent = secs(c.durationMs) + 's';
+    what.append(title, meta);
+
+    row.append(box, what);
+    panel.append(row);
+  });
+
+  const foot = el('div', 'pick-foot');
+  const count = el('span', 'pick-count');
+  const updateCount = () => {
+    const n = boxes.filter(b => b.box.checked).length;
+    count.textContent = n ? `${n} selected` : 'Nothing selected yet';
+  };
+  boxes.forEach(b => b.box.addEventListener('change', updateCount));
+  updateCount();
+
+  const allBtn = el('button', 'btn btn-ghost btn-sm');
+  allBtn.textContent = 'Select all';
+  allBtn.onclick = () => { boxes.forEach(b => { b.box.checked = true; }); updateCount(); };
+
+  const importBtn = el('button', 'btn btn-sm');
+  importBtn.textContent = 'Import selected';
+  importBtn.onclick = async () => {
+    const chosen = boxes.filter(b => b.box.checked).map(b => b.id);
+    if (!chosen.length) { toast('Pick at least one clip first', 'bad'); return; }
+    importBtn.disabled = true;
+    importBtn.textContent = 'Importing…';
+    try {
+      const res = await api('/api/projects/' + encodeURIComponent(project.id) + '/import-clips', {
+        method: 'POST', body: JSON.stringify({ clipIds: chosen }),
+      });
+      toast(`${res.added} clip${res.added === 1 ? '' : 's'} added to your queue`, 'good');
+      loadLibrary();
+      refresh();
+    } catch (err) {
+      toast(err.message, 'bad');
+      importBtn.disabled = false;
+      importBtn.textContent = 'Import selected';
+    }
+  };
+
+  foot.append(count, allBtn, importBtn);
+  panel.append(foot);
+  return panel;
+}
+
+function coverPlaceholder() {
+  const ph = el('div', 'lec-cover-ph');
+  ph.textContent = '—';
+  return ph;
+}
+
 
 
 $('#refreshAcc').onclick = async () => {
