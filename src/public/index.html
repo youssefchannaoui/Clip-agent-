@@ -150,6 +150,16 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 
 /* ---------- clip cards ---------- */
 .clip{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:19px;margin-bottom:12px}
+
+.clip-main{display:flex;gap:16px;align-items:flex-start}
+.clip-content{flex:1;min-width:0}
+.clip-thumb{
+  flex:none;width:104px;height:104px;border-radius:8px;overflow:hidden;
+  background:var(--surface-2);border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;
+}
+.clip-thumb-img{width:100%;height:100%;object-fit:cover;display:block}
+.clip-thumb-ph{color:var(--mute-2);font-size:20px;display:flex;align-items:center;justify-content:center}
 .clip.needs{border-color:var(--line-lit)}
 .clip.bad{border-color:rgba(255,85,102,.35)}
 .clip.done{opacity:.62}
@@ -347,6 +357,7 @@ select:focus{outline:none;border-color:var(--blue)}
   .dep-time{width:56px}
   .dep-stat{display:none}
   .bar-lab{width:96px}
+  .clip-thumb{width:76px;height:76px}
 }
 </style>
 </head>
@@ -891,12 +902,38 @@ function renderQueue(waiting) {
   });
 }
 
+function clipThumb(c) {
+  const box = el('div', 'clip-thumb');
+  if (c.thumbState === 'ready') {
+    const img = el('img', 'clip-thumb-img');
+    img.src = '/api/clips/thumb/' + encodeURIComponent(c.id) + '.jpg?pw=' + encodeURIComponent(PW);
+    img.alt = c.title || 'Clip preview';
+    img.onerror = () => { img.remove(); box.append(thumbPlaceholder(c)); };
+    box.append(img);
+  } else {
+    box.append(thumbPlaceholder(c));
+  }
+  return box;
+}
+
+function thumbPlaceholder(c) {
+  const ph = el('div', 'clip-thumb-ph');
+  if (c.thumbState === 'failed') ph.textContent = '—';
+  else ph.append(el('span', 'spin'));
+  return ph;
+}
+
 function clipCard(c) {
   const st = statusOf(c);
   const failed = (c.targets || []).some(t => t.status === 'failed');
   const kind = failed ? 'bad' : (STATUS_CLASS[st] || '');
   const node = el('div', 'clip ' + kind + (c.stage ? ' busy' : ''));
   node.dataset.id = c.id;
+
+  const main = el('div', 'clip-main');
+  const content = el('div', 'clip-content');
+  main.append(clipThumb(c), content);
+  node.append(main);
 
   const top = el('div', 'clip-top');
   const stamp = el('span', 'stamp ' + kind);
@@ -919,7 +956,7 @@ function clipCard(c) {
   const meta = el('span', 'clip-meta');
   meta.textContent = `${secs(c.durationMs)}s · ${c.projectTitle || 'lecture'}`;
   top.append(meta);
-  node.append(top);
+  content.append(top);
 
   const foot = el('div', 'clip-foot');
   const count = el('span', 'counter');
@@ -938,8 +975,8 @@ function clipCard(c) {
     body.textContent = c.description || '';
     tags = el('div', 'clip-tags locked');
     tags.textContent = c.hashtags || '';
-    node.append(title, body);
-    if (c.hashtags) node.append(tags);
+    content.append(title, body);
+    if (c.hashtags) content.append(tags);
     count.textContent = st === 'posted' ? 'Already sent' : 'Pull back to change the wording';
     foot.append(count);
   } else {
@@ -957,7 +994,7 @@ function clipCard(c) {
     tags.value = c.hashtags || '';
     tags.setAttribute('aria-label', 'Hashtags');
 
-    node.append(title, body, tags);
+    content.append(title, body, tags);
 
     const updateCount = () => {
       const t = title.value.length;
@@ -993,7 +1030,7 @@ function clipCard(c) {
 
   // While the agent is mid-job on this clip, show the step instead of buttons.
   if (c.stage) {
-    node.append(stageBlock(c.stage));
+    content.append(stageBlock(c.stage));
     return node;
   }
 
@@ -1056,7 +1093,7 @@ function clipCard(c) {
     };
     foot.append(back);
   }
-  node.append(foot);
+  content.append(foot);
 
   if ((c.targets || []).length) {
     const row = el('div', 'dests');
@@ -1066,7 +1103,7 @@ function clipCard(c) {
       if (t.error) tag.title = t.error;
       row.append(tag);
     });
-    node.append(row);
+    content.append(row);
   }
 
   if (!locked) requestAnimationFrame(() => { autoGrow(title); autoGrow(tags); });
