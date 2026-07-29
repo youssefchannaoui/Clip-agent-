@@ -125,6 +125,49 @@ function addClipsToQueue(clipsToAdd, project) {
 }
 
 /**
+ * Every clip Opus has for a project, flagged with whether it's already in
+ * the queue — lets someone see exactly what's available and choose, rather
+ * than only ever getting an automatic "next batch".
+ */
+export async function listAvailableClips(projectId) {
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) throw new Error('That lecture is no longer in your history.');
+
+  const clips = await opus.getClips(projectId);
+  const known = new Set(state.clips.map(c => c.id));
+  return clips
+    .slice()
+    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
+    .map(c => ({
+      id: c.id,
+      title: c.title,
+      durationMs: c.durationMs,
+      score: c.score,
+      imported: known.has(c.id),
+    }));
+}
+
+/** Import exactly the clips someone picked, by id — no extra Opus credits, same as refreshProjectClips. */
+export async function importSelectedClips(projectId, clipIds) {
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) throw new Error('That lecture is no longer in your history.');
+
+  const wanted = new Set(clipIds);
+  const clips = await opus.getClips(projectId);
+  const known = new Set(state.clips.map(c => c.id));
+  const fresh = clips.filter(c => wanted.has(c.id) && !known.has(c.id));
+
+  addClipsToQueue(fresh, project);
+
+  project.imported = (project.imported || 0) + fresh.length;
+  project.clipCount = Math.max(project.clipCount || 0, clips.length);
+  save();
+
+  if (fresh.length) log(`Added ${fresh.length} chosen clip${fresh.length === 1 ? '' : 's'} from ${project.title}, no extra Opus credits used`);
+  return { added: fresh.length, imported: project.imported, clipCount: project.clipCount };
+}
+
+/**
  * Pull in any clips Opus generated for a project that never made it into
  * the queue — because the clips-per-video cap left them out at the time,
  * or because they were discarded and are no longer tracked here. Opus
@@ -193,7 +236,27 @@ async function ensureMusic(clip) {
 
   stage(clip, 'Adding background music');
   try {
-    const result = await audio.mixClipMusic(clip.exportUrl, text => stage(clip, text));
+    // A clip's export link might not have been ready yet the moment it was
+    // first imported — Opus can still be finishing the actual render even
+    // after the title and description are available. A clip approved and
+    // scheduled quickly can beat that; one read over and posted later
+    // naturally gives Opus more time, which is why this seemed to depend
+    // on which path a clip took. Check for a fresher link before giving up.
+    let exportUrl = clip.exportUrl;
+    if (!exportUrl) {
+      stage(clip, 'Checking Opus for the finished clip');
+      try {
+        const latest = await opus.getClips(clip.projectId);
+        const match = latest.find(c => c.id === clip.id);
+        if (match?.exportUrl) {
+          exportUrl = match.exportUrl;
+          clip.exportUrl = exportUrl;
+          save();
+        }
+      } catch { /* fall through with whatever we already had */ }
+    }
+
+    const result = await audio.mixClipMusic(exportUrl, text => stage(clip, text));
 
     if (result.skipped) {
       clip.musicMixed = 'skipped';
@@ -405,13 +468,71 @@ function retirePassed() {
  * one at a time (not in parallel) — a small Render instance doesn't have
  * the CPU to spare for several ffmpeg processes at once.
  */
-async function processThumbnails(maxPerTick = 12) {
-  const pending = state.clips.filter(c => c.thumbState === 'pending').slice(0, maxPerTick);
-  for (const clip of pending) {
-    const success = await thumbs.generateThumbnail(clip.id, clip.exportUrl).catch(() => false);
-    clip.thumbState = success ? 'ready' : 'failed';
-    save();
+/**
+ * Grabbing a frame is mostly spent waiting on the network (fetching from
+ * Opus's video), not actual CPU work, so a few can safely run at once
+ * without meaningfully loading a small server — unlike the music mixing
+ * step, which does real ffmpeg encoding and stays strictly one at a time.
+ */
+const THUMB_MAX_ATTEMPTS = 4;
+const THUMB_RETRY_BASE_MS = Number(process.env.THUMB_RETRY_MS) || 15_000;
+
+/**
+ * Update a clip's thumbnail bookkeeping after one generation attempt.
+ * Exported and pure (aside from mutating the clip) so this decision logic
+ * can be tested directly and fast, without depending on real ffmpeg or
+ * network behaviour — ffmpeg's own protocol-level resilience can silently
+ * absorb a transient HTTP error before it ever reaches this code, which
+ * makes black-box HTTP failure injection an unreliable way to exercise it.
+ */
+export function recordThumbAttempt(clip, success) {
+  if (success) {
+    clip.thumbState = 'ready';
+    delete clip.thumbNextTryAt;
+    delete clip.thumbAttempts;
+    return;
   }
+  // A brand-new clip's export URL can genuinely not be ready yet on
+  // Opus's own CDN the instant it appears — give it a few spaced-out
+  // retries before treating it as a real, permanent failure.
+  clip.thumbAttempts = (clip.thumbAttempts || 0) + 1;
+  if (clip.thumbAttempts < THUMB_MAX_ATTEMPTS) {
+    clip.thumbState = 'pending';
+    clip.thumbNextTryAt = Date.now() + clip.thumbAttempts * THUMB_RETRY_BASE_MS;
+  } else {
+    clip.thumbState = 'failed';
+    delete clip.thumbNextTryAt;
+  }
+}
+
+async function processThumbnails(maxPerTick = 12, concurrency = 3) {
+  const now = Date.now();
+  const pending = state.clips
+    .filter(c => c.thumbState === 'pending' && (!c.thumbNextTryAt || c.thumbNextTryAt <= now))
+    .slice(0, maxPerTick);
+  let index = 0;
+
+  async function worker() {
+    while (index < pending.length) {
+      const clip = pending[index++];
+      if (!clip.exportUrl) {
+        // Same situation as the music path: Opus may still be finishing
+        // the actual render even after clip metadata is available. Retrying
+        // the same empty link forever would never succeed, so check for a
+        // fresher one before each attempt.
+        try {
+          const latest = await opus.getClips(clip.projectId);
+          const match = latest.find(c => c.id === clip.id);
+          if (match?.exportUrl) clip.exportUrl = match.exportUrl;
+        } catch { /* fall through and let this attempt fail normally */ }
+      }
+      const success = await thumbs.generateThumbnail(clip.id, clip.exportUrl).catch(() => false);
+      recordThumbAttempt(clip, success);
+      save();
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, pending.length) }, worker));
 }
 
 export async function tick() {
