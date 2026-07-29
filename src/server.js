@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
-import { state, save, log, opusKey, brandTemplateId } from './store.js';
+import { state, save, log, opusKey, brandTemplateId, clipSettings, setClipSettings } from './store.js';
 import * as agent from './agent.js';
 import * as opus from './opus.js';
 import { formatLocal } from './slots.js';
@@ -96,6 +96,7 @@ async function route(req, res, url) {
       timezone: config.timezone,
       working,
       brandTemplateId: brandTemplateId(),
+      clipSettings: clipSettings(),
       accounts: state.accounts,
       projects: state.projects.slice(0, 12).map(p => ({
         id: p.id,
@@ -157,6 +158,35 @@ async function route(req, res, url) {
     save();
     log(id ? `Clip style set. New lectures will use it.` : 'Clip style cleared. Opus will use your account default.');
     return send(res, 200, { ok: true, brandTemplateId: brandTemplateId() });
+  }
+
+  // How many clips to keep per video, and how long each one should run.
+  if (method === 'POST' && pathname === '/api/clip-settings') {
+    const body = await readBody(req);
+    const clean = {};
+
+    if ('clipsPerVideo' in body) {
+      const n = Math.round(Number(body.clipsPerVideo));
+      if (!Number.isFinite(n) || n < 0 || n > 60) {
+        return send(res, 400, { error: 'Clips per video must be between 0 (keep all) and 60.' });
+      }
+      clean.clipsPerVideo = n;
+    }
+    if ('clipMinSeconds' in body || 'clipMaxSeconds' in body) {
+      const cur = clipSettings();
+      const min = Math.round(Number(body.clipMinSeconds ?? cur.clipMinSeconds));
+      const max = Math.round(Number(body.clipMaxSeconds ?? cur.clipMaxSeconds));
+      if (!Number.isFinite(min) || !Number.isFinite(max) || min < 3 || max > 600 || min >= max) {
+        return send(res, 400, { error: 'Clip length needs a minimum below the maximum, both between 3 and 600 seconds.' });
+      }
+      clean.clipMinSeconds = min;
+      clean.clipMaxSeconds = max;
+    }
+
+    setClipSettings(clean);
+    const applied = clipSettings();
+    log(`Clip settings updated: ${applied.clipsPerVideo > 0 ? applied.clipsPerVideo + ' per video' : 'keep all'}, ${applied.clipMinSeconds}-${applied.clipMaxSeconds}s`);
+    return send(res, 200, { ok: true, clipSettings: applied });
   }
 
   if (method === 'POST' && pathname === '/api/accounts/refresh') {
