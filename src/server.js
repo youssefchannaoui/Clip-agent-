@@ -8,6 +8,7 @@ import * as agent from './agent.js';
 import * as opus from './opus.js';
 import * as audio from './audio.js';
 import * as thumbs from './thumbs.js';
+import { checkFfmpeg } from './ffmpeg.js';
 import { formatLocal } from './slots.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -255,6 +256,12 @@ async function route(req, res, url) {
     const applied = audio.musicSettings();
     log(`Music settings updated: ${applied.enabled ? 'on' : 'off'}, volume ${applied.volumePercent}%`);
     return send(res, 200, { ok: true, settings: applied });
+  }
+
+  // A direct, no-guessing answer to "is ffmpeg actually working here" —
+  // both music mixing and thumbnails depend on it.
+  if (method === 'GET' && pathname === '/api/diagnostics/ffmpeg') {
+    return send(res, 200, await checkFfmpeg());
   }
 
   if (method === 'POST' && pathname === '/api/accounts/refresh') {
