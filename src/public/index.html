@@ -694,7 +694,7 @@ function render() {
   tickClock();
   renderProcessing();
   renderQueue(waiting);
-  renderBoard(queued);
+  renderBoard(clips);
   renderRecord(clips);
   renderSide();
 }
@@ -989,9 +989,15 @@ const platformName = p => String(p || '')
 
 /* ---------- the board ---------- */
 
-function renderBoard(queued) {
+function renderBoard(allClips) {
+  // The board itself should show what actually happened in every slot,
+  // including ones already sent — otherwise a passed slot looks empty
+  // the moment its clip flips from "scheduled" to "posted".
   const byTime = new Map();
-  queued.forEach(c => { if (c.scheduledAt) byTime.set(c.scheduledAt, c); });
+  allClips.forEach(c => { if (c.scheduledAt) byTime.set(c.scheduledAt, c); });
+
+  // The list underneath the board is only for clips still pending a slot.
+  const pending = allClips.filter(c => ['approved', 'scheduled'].includes(statusOf(c)));
 
   const board = $('#rail');
   board.innerHTML = '';
@@ -1051,14 +1057,14 @@ function renderBoard(queued) {
   const list = $('#schedList');
   list.innerHTML = '';
   $('#schedNote').textContent = '';
-  if (!queued.length) {
+  if (!pending.length) {
     list.innerHTML = `<div class="slab"><div class="empty">
       <div class="empty-title">Nothing queued</div>
       <div class="empty-note">Approved clips land here and fill the slots above, one at a time, in order.</div>
     </div></div>`;
     return;
   }
-  queued.slice().sort((a, b) => (a.scheduledAt || 0) - (b.scheduledAt || 0))
+  pending.slice().sort((a, b) => (a.scheduledAt || 0) - (b.scheduledAt || 0))
     .forEach(c => list.append(clipCard(c)));
 }
 
