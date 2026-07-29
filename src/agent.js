@@ -163,6 +163,7 @@ async function ensureMusic(clip) {
     if (result.skipped) {
       clip.musicMixed = 'skipped';
       clip.musicNote = result.skipped;
+      log(`No music added to "${clip.title}". ${result.skipped}`, 'warn');
     } else {
       stage(clip, 'Bringing the mixed clip back into Opus');
       const project = await opus.importMixedClip(result.publicUrl, clip.title);
