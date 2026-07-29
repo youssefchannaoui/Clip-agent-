@@ -9,6 +9,7 @@ const blank = () => ({
   opusOrgId: '',
   brandTemplateId: '',   // which Opus clip style to use, chosen in the app
   clipSettings: {},      // clipsPerVideo / clipMinSeconds / clipMaxSeconds overrides
+  musicSettings: {},     // enabled / volumePercent overrides for the nasheed mixer
   accounts: [],          // connected social accounts, mirrored from Opus
   accountsCheckedAt: 0,
   projects: [],          // videos sent to Opus
