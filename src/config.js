@@ -43,6 +43,11 @@ export const config = {
   musicEnabled: bool(process.env.MUSIC_ENABLED, true),
   musicVolumePercent: num(process.env.MUSIC_VOLUME_PERCENT, 15),
 
+  // Optional YouTube analytics. Add these in Render if you want automatic
+  // public Shorts/video stats to refresh without typing numbers manually.
+  youtubeApiKey: process.env.YOUTUBE_API_KEY || '',
+  youtubeChannelId: process.env.YOUTUBE_CHANNEL_ID || '',
+
   copyPrompt: process.env.COPY_PROMPT
     || 'Write the title, description and hashtags in clear natural English only. Translate any Arabic speech or source wording into English and do not use Arabic script. Keep the title short and respectful. No hype, no clickbait, no emojis. Never paraphrase or invent Quran or hadith wording. If a source is unclear, describe the topic only.',
 };
