@@ -56,11 +56,40 @@ a{color:var(--blue-soft)}
 .code{font-size:13px;color:var(--mute);font-weight:450}
 
 /* ---------- shell ---------- */
-.wrap{max-width:1240px;margin:0 auto;padding:0 var(--gutter) 96px}
-.shell{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:34px;align-items:start;padding-top:30px}
+#app{width:100%}
+
+.wrap{
+  width:100%;
+  max-width:1240px;
+  margin:0 auto;
+  padding:0 var(--gutter) 96px;
+}
+
+.shell{
+  width:100%;
+  min-width:0;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 300px;
+  gap:34px;
+  align-items:start;
+  padding-top:30px;
+}
+
+.main-col{
+  width:100%;
+  min-width:0;
+}
 
 @media (min-width:1001px){
-  .side{max-height:calc(100vh - 130px);overflow-y:auto;overflow-x:hidden;padding-right:2px}
+  .side{
+    width:300px;
+    min-width:300px;
+    justify-self:end;
+    max-height:calc(100vh - 130px);
+    overflow-y:auto;
+    overflow-x:hidden;
+    padding-right:2px;
+  }
 }
 
 /* ---------- gate / connect ---------- */
