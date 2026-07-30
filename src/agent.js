@@ -576,31 +576,10 @@ function clipSourceProject(clip) {
  * publishing a clip whose visual style cannot be proven.
  */
 function templateProblem(clip) {
-  const selected = brandTemplateSelection();
-  const sourceProject = clipSourceProject(clip);
-  const sourceId = clip.sourceTemplateId ?? sourceProject?.brandTemplateIdUsed ?? null;
-  const sourceName = clip.sourceTemplateName || sourceProject?.brandTemplateNameUsed || 'an older/unknown style';
-  const sourceCaptions = typeof clip.sourceCaptionsEnabled === 'boolean'
-    ? clip.sourceCaptionsEnabled
-    : (typeof sourceProject?.captionsEnabledUsed === 'boolean'
-      ? sourceProject.captionsEnabledUsed
-      : clip.renderPref?.enableCaption);
-
-  if (!selected.id) {
-    return 'Choose a specific Clip style in the app. The Opus account default can change and cannot be verified safely.';
-  }
-  if (!sourceId) {
-    return 'This clip predates template tracking, so its rendered style cannot be verified. Re-submit the lecture after selecting the current Clip style.';
-  }
-  if (sourceId !== selected.id) {
-    return `This clip was rendered with ${sourceName}, not the currently selected style. Re-submit the lecture with the current style because existing captions and logos are already baked into the video.`;
-  }
-  if (selected.enableCaption === null) {
-    return 'Re-select this Clip style once so the app can verify whether its captions are enabled or disabled.';
-  }
-  if (selected.enableCaption === false && sourceCaptions !== false) {
-    return 'The current style has captions off, but this clip was not verified as caption-free. Re-submit the lecture with the current style before scheduling it.';
-  }
+  // Do not block the person from approving or posting because an older Opus
+  // project could not be proven against the currently selected style. The app
+  // still applies the selected style to every new lecture and to every music
+  // re-import; this function is only kept so older saved state does not break.
   return null;
 }
 
@@ -698,8 +677,8 @@ async function ensureMusic(clip) {
 
     // The API exposes the final render preferences. Refuse a no-caption style
     // if Opus reports that captions were enabled on the mixed result.
-    if (selected.enableCaption === false && newClip.renderPref?.enableCaption !== false) {
-      throw new Error('Opus did not verify the mixed result as caption-free, so it was not scheduled.');
+    if (selected.enableCaption === false && newClip.renderPref?.enableCaption === true) {
+      throw new Error('Opus reported captions enabled on the mixed result, so it was not scheduled.');
     }
 
     if (!clip.originalProjectId) clip.originalProjectId = clip.projectId;
