@@ -497,6 +497,13 @@ async function route(req, res, url) {
     const body = await readBody(req);
     const clean = {};
     if ('enabled' in body) clean.enabled = Boolean(body.enabled);
+    if ('mode' in body) {
+      const mode = String(body.mode || '').trim();
+      if (!['opus_native', 'local_import', 'off'].includes(mode)) {
+        return send(res, 400, { error: 'Music mode must be opus_native, local_import, or off.' });
+      }
+      clean.mode = mode;
+    }
     if ('volumePercent' in body) {
       const n = Math.round(Number(body.volumePercent));
       if (!Number.isFinite(n) || n < 0 || n > 100) {
@@ -506,7 +513,7 @@ async function route(req, res, url) {
     }
     audio.setMusicSettings(clean);
     const applied = audio.musicSettings();
-    log(`Music settings updated: ${applied.enabled ? 'on' : 'off'}, volume ${applied.volumePercent}%`);
+    log(`Music settings updated: ${applied.mode || (applied.enabled ? 'on' : 'off')}, volume ${applied.volumePercent}%`);
     return send(res, 200, { ok: true, settings: applied });
   }
 
