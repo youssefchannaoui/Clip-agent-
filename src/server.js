@@ -2,6 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Readable } from 'node:stream';
 import { config } from './config.js';
 import { state, save, log, opusKey, brandTemplateId, brandTemplateSelection, setBrandTemplateSelection, clipSettings, setClipSettings, copyPrompt, setCopyPrompt } from './store.js';
 import * as agent from './agent.js';
@@ -56,6 +57,96 @@ const authed = (req, url) =>
 
 const sourceProjectIdForClip = clip =>
   clip.sourceProjectId || clip.originalProjectId || clip.projectId;
+
+function updateClipFromOpus(clip, fresh) {
+  if (!fresh) return;
+  if (fresh.exportUrl) clip.exportUrl = fresh.exportUrl;
+  if (fresh.preview) clip.preview = fresh.preview;
+  if (fresh.renderPref) clip.renderPref = fresh.renderPref;
+  if (Array.isArray(fresh.timeRanges)) clip.timeRanges = fresh.timeRanges;
+  clip.mediaRefreshedAt = Date.now();
+}
+
+async function refreshClipMediaUrl(clip) {
+  const projectIds = [...new Set([clip.projectId, sourceProjectIdForClip(clip)].filter(Boolean))];
+  for (const projectId of projectIds) {
+    try {
+      const clips = await opus.getClips(projectId);
+      const fresh = clips.find(c =>
+        c.id === clip.id ||
+        c.clipId === clip.clipId ||
+        c.clipId === clip.originalClipId ||
+        c.id === `${projectId}.${clip.clipId}`
+      );
+      if (!fresh) continue;
+      updateClipFromOpus(clip, fresh);
+      save();
+      return fresh.preview || fresh.exportUrl || '';
+    } catch {
+      // Try the next known project id, then fall back to the stored URL.
+    }
+  }
+  return clip.preview || clip.exportUrl || '';
+}
+
+async function refreshProjectClipMediaUrl(projectId, clipId) {
+  const clips = await opus.getClips(projectId);
+  const fresh = clips.find(c =>
+    c.id === clipId ||
+    c.clipId === clipId ||
+    c.id === `${projectId}.${clipId}`
+  );
+  return fresh?.preview || fresh?.exportUrl || '';
+}
+
+function mediaHeaders(upstream) {
+  const h = {
+    'Content-Type': upstream.headers.get('content-type') || 'video/mp4',
+    'Cache-Control': 'private, no-store',
+    'Accept-Ranges': upstream.headers.get('accept-ranges') || 'bytes',
+  };
+  for (const k of ['content-length', 'content-range', 'last-modified', 'etag']) {
+    const v = upstream.headers.get(k);
+    if (v) h[k.replace(/(^|-)(.)/g, (_, dash, ch) => dash + ch.toUpperCase())] = v;
+  }
+  return h;
+}
+
+async function pipeRemoteMedia(req, res, initialUrl, refreshUrl) {
+  let url = initialUrl;
+  let refreshed = false;
+
+  for (;;) {
+    if (!url) {
+      url = await refreshUrl?.();
+      refreshed = true;
+    }
+    if (!url) return send(res, 404, { error: 'No preview URL is available yet.' });
+
+    const headers = {};
+    if (req.headers.range) headers.Range = req.headers.range;
+
+    let upstream;
+    try {
+      upstream = await fetch(url, { headers, signal: AbortSignal.timeout(120_000) });
+    } catch (err) {
+      if (!refreshed && refreshUrl) { url = ''; continue; }
+      return send(res, 502, { error: `Could not load preview: ${err.message}` });
+    }
+
+    if (!upstream.ok && upstream.status !== 206 && !refreshed && refreshUrl) {
+      url = '';
+      continue;
+    }
+    if (!upstream.ok && upstream.status !== 206) {
+      return send(res, upstream.status || 502, { error: `Preview could not be loaded (${upstream.status}).` });
+    }
+
+    res.writeHead(upstream.status, mediaHeaders(upstream));
+    if (!upstream.body) return res.end();
+    return Readable.fromWeb(upstream.body).on('error', () => res.destroy()).pipe(res);
+  }
+}
 
 /**
  * Give a clip a genuine second chance at music when it's pulled back —
@@ -137,6 +228,24 @@ async function route(req, res, url) {
     return res.end(buf);
   }
 
+  // Same-origin video previews. Opus preview/export links are signed and can
+  // expire, so each browser asks this app; if the stored URL fails, the app
+  // refreshes the clip from Opus and streams the fresh media back.
+  if (method === 'GET' && pathname.startsWith('/api/clips/preview/')) {
+    const raw = pathname.slice('/api/clips/preview/'.length).replace(/\.mp4$/i, '');
+    const id = decodeURIComponent(raw);
+    const clip = state.clips.find(c => c.id === id);
+    if (!clip) return send(res, 404, { error: 'That clip is no longer in the queue.' });
+    return pipeRemoteMedia(req, res, clip.preview || clip.exportUrl || '', () => refreshClipMediaUrl(clip));
+  }
+
+  const projectPreviewMatch = pathname.match(/^\/api\/projects\/([^/]+)\/clips\/([^/]+)\/preview(?:\.mp4)?$/);
+  if (method === 'GET' && projectPreviewMatch) {
+    const projectId = decodeURIComponent(projectPreviewMatch[1]);
+    const clipId = decodeURIComponent(projectPreviewMatch[2]);
+    return pipeRemoteMedia(req, res, '', () => refreshProjectClipMediaUrl(projectId, clipId));
+  }
+
   if (method === 'GET' && pathname === '/api/state') {
     const rank = s => ({ waiting: 0, approved: 1, scheduled: 2, posted: 3 }[s] ?? 4);
     const clips = [...state.clips].sort((a, b) =>
@@ -206,7 +315,7 @@ async function route(req, res, url) {
             thumbAttempts: c.thumbAttempts || 0,
             // The browser can show the actual clip immediately while the
             // server-generated JPEG is still pending or unavailable.
-            previewUrl: c.preview || c.exportUrl || '',
+            previewUrl: c.id ? `/api/clips/preview/${encodeURIComponent(c.id)}.mp4` : (c.preview || c.exportUrl || ''),
             templateChanged,
           };
         });
@@ -398,7 +507,7 @@ async function route(req, res, url) {
     const projects = state.projects.map(p => {
       const ownClips = state.clips.filter(c => sourceProjectIdForClip(c) === p.id);
       const hidden = new Set(Array.isArray(p.hiddenClipIds) ? p.hiddenClipIds : []);
-      const cover = ownClips.find(c => c.thumbState === 'ready');
+      const cover = ownClips.find(c => c.preview || c.exportUrl) || ownClips.find(c => c.thumbState === 'ready');
       return {
         id: p.id,
         title: p.title,
