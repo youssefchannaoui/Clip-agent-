@@ -1,0 +1,16 @@
+{
+  "name": "deenclipped-ai",
+  "version": "2.2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "check": "node --check src/server.js && node --check src/agent.js && node --check src/social.js && node --check src/local-engine.js && node scripts/check-ui.mjs && python3 -m py_compile worker/clip_worker.py",
+    "doctor": "python3 worker/clip_worker.py --doctor",
+    "test": "node --test && python3 -m unittest discover -s test -p 'test_*.py'"
+  },
+  "description": "Self-hosted AI lecture clipper with verified templates, mandatory nasheed mixing and automatic social publishing."
+}
