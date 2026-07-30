@@ -1,6 +1,17 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>DeenClipped AI</title><meta name="theme-color" content="#09090A"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="DeenClipped"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet"><style>
-
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DeenClipped AI</title>
+<meta name="theme-color" content="#09090A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="DeenClipped AI">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
 :root{
   --bg:#09090A;
   --surface:#121214;
@@ -634,6 +645,14 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .analytics-action strong{font-size:14px}
 .analytics-action span{font-size:12.5px;color:var(--mute)}
 .analytics-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:18px}
+.social-analytics{margin-top:18px;display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;align-items:start}
+.social-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px}
+.social-metric{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:13px;min-height:82px}
+.social-metric strong{display:block;font-size:24px;letter-spacing:-.04em;line-height:1}
+.social-metric span{display:block;color:var(--mute);font-size:12px;margin-top:6px;line-height:1.3}
+.social-tools{display:grid;gap:10px}.social-tools .hint{margin-top:0}.social-empty{color:var(--mute);font-size:13px;line-height:1.45}
+.metric-row{display:grid;grid-template-columns:minmax(0,1.1fr) repeat(5,78px) auto;gap:8px;align-items:end;padding:11px 0;border-bottom:1px solid var(--line)}
+.metric-row:last-child{border-bottom:0}.metric-row label{font-size:11px;color:var(--mute);display:block;margin-bottom:4px}.metric-row input{width:100%;height:34px;padding:7px 8px;border-radius:8px;font-size:13px}.metric-row-title{min-width:0}.metric-row-title strong{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.metric-row-title span{display:block;color:var(--mute);font-size:12px;margin-top:4px}
 .analytics-card{min-height:210px}
 .mini-head{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-bottom:10px}
 .mini-head h3{font-size:15px;font-weight:600;letter-spacing:-.02em}
@@ -653,7 +672,7 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .quality-pill.good{color:#d8f8df;border-color:rgba(216,248,223,.25)}
 .quality-pill.warn{color:var(--blue-soft);border-color:rgba(247,197,110,.3)}
 .quality-pill.bad{color:var(--danger);border-color:rgba(255,120,120,.25)}
-@media (max-width:900px){.analytics-hero,.analytics-grid{grid-template-columns:1fr}.analytics-post{grid-template-columns:70px minmax(0,1fr)}.analytics-post .clip-thumb{width:70px;height:96px}.post-when{grid-column:2;text-align:left}}
+@media (max-width:900px){.analytics-hero,.analytics-grid,.social-analytics{grid-template-columns:1fr}.social-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.metric-row{grid-template-columns:1fr 1fr;gap:10px}.metric-row-title{grid-column:1/-1}.metric-row .btn{grid-column:1/-1}.analytics-post{grid-template-columns:70px minmax(0,1fr)}.analytics-post .clip-thumb{width:70px;height:96px}.post-when{grid-column:2;text-align:left}}
 
 .bar-row{display:flex;align-items:center;gap:16px;padding:10px 0;border-bottom:1px solid var(--line)}
 .bar-row:last-child{border-bottom:0}
@@ -799,135 +818,685 @@ select:focus{outline:none;border-color:var(--blue)}
   .clip-thumb{width:76px;aspect-ratio:9/16}
 }
 
+/* ---------- self-hosted extensions using the original visual system ---------- */
+:root{--good:#8EE0AE;--warn:#F0D6A6;--danger:#FF7785}
+.status-good{color:var(--good)}.status-warn{color:var(--warn)}.status-bad{color:var(--danger)}
+.btn.good{background:#8ed8a9;color:#07150d}.btn.good:hover:not([disabled]){background:#a4e6ba}
+.template-shell{display:grid;grid-template-columns:340px minmax(0,1fr);gap:18px;align-items:start}
+.template-preview-wrap{position:sticky;top:92px}
+.template-phone{width:292px;aspect-ratio:9/16;margin:0 auto;background:#050505;border:1px solid var(--line-lit);border-radius:24px;overflow:hidden;position:relative;box-shadow:0 18px 45px rgba(0,0,0,.34)}
+.template-preview-video{position:absolute;inset:0;background:linear-gradient(145deg,#354253,#131417 55%,#241d14);transform:scale(1.03)}
+.template-preview-person{position:absolute;width:58%;height:65%;left:21%;top:18%;border-radius:45% 45% 15% 15%;background:radial-gradient(circle at 50% 20%,#c9a078 0 12%,#35291f 13% 25%,#202126 26% 100%);opacity:.86}
+.template-safe{position:absolute;inset:6% 5% 10%;border:1px dashed rgba(255,255,255,.18);pointer-events:none}
+.template-caption{position:absolute;left:8%;right:8%;z-index:5;text-align:center;font-weight:700;line-height:1.14;text-shadow:0 2px 0 #000,2px 0 0 #000,-2px 0 0 #000}
+.template-caption.bottom{bottom:13%}.template-caption.middle{top:45%}.template-caption.top{top:18%}.template-caption .active{color:var(--blue)}
+.template-hook{position:absolute;top:7%;left:9%;right:9%;z-index:5;padding:8px 10px;border-radius:7px;text-align:center;font-weight:700}
+.template-watermark{position:absolute;z-index:5;font-family:var(--brand);font-weight:700;letter-spacing:.08em}.template-watermark.top-center{top:4%;left:0;right:0;text-align:center}.template-watermark.top-left{top:4%;left:5%}.template-watermark.top-right{top:4%;right:5%}.template-watermark.bottom-center{bottom:4%;left:0;right:0;text-align:center}.template-watermark.bottom-left{bottom:4%;left:5%}.template-watermark.bottom-right{bottom:4%;right:5%}
+.template-brandline{position:absolute;left:0;right:0;bottom:0;z-index:6}
+.editor-stack{display:grid;gap:12px}.editor-group{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}.editor-group summary{list-style:none;cursor:pointer;padding:13px 15px;background:var(--surface-2);font-weight:600}.editor-group summary::-webkit-details-marker{display:none}.editor-group summary:after{content:'▾';float:right;color:var(--mute)}.editor-group:not([open]) summary:after{transform:rotate(-90deg)}.editor-body{padding:15px;display:grid;gap:12px}
+.editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.editor-row{display:grid;gap:7px}.editor-row label{font-size:12.5px;color:var(--mute);font-weight:500}.editor-row input[type=range]{width:100%}.editor-row input[type=color]{height:40px;padding:3px}.editor-toggle{display:flex;align-items:center;gap:9px;color:var(--text-2);font-size:13.5px}.editor-toggle input{width:auto}
+.platform-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.platform-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}.platform-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}.platform-head strong{text-transform:capitalize}.platform-head .spacer{margin-left:auto}.platform-body{padding:16px;display:grid;gap:12px}.account-pick{display:flex;align-items:center;gap:10px}.account-pick img{width:38px;height:38px;border-radius:50%;object-fit:cover;background:var(--surface-2)}
+.target-line{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px}.target-line .spacer{margin-left:auto}.target-dot{width:7px;height:7px;border-radius:50%;background:var(--mute-2)}.target-dot.posted{background:var(--good)}.target-dot.failed{background:var(--danger)}.target-dot.processing,.target-dot.publishing{background:var(--blue)}.target-dot.retrying{background:var(--warn)}
+.system-json{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--text-2);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;max-height:360px;overflow:auto}
+.video-modal{position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.86);display:grid;place-items:center;padding:20px}.video-modal-card{width:min(430px,100%);background:var(--surface);border:1px solid var(--line-lit);border-radius:14px;padding:14px;box-shadow:0 24px 80px rgba(0,0,0,.55)}.video-modal video{display:block;width:100%;max-height:76vh;background:#000;border-radius:10px}.video-modal-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}.video-modal-head strong{flex:1}
+.template-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.template-actions .btn{flex:1 1 auto}
+.publish-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+@media(max-width:1000px){.template-shell{grid-template-columns:1fr}.template-preview-wrap{position:static}.platform-grid{grid-template-columns:1fr}.publish-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.editor-grid{grid-template-columns:1fr}.template-phone{width:260px}.publish-summary{grid-template-columns:1fr 1fr}}
 
-/* ===== v2.2 compatibility in the original DeenClipped design system ===== */
-:root{--panel:var(--surface);--panel2:var(--surface-2);--muted:var(--mute);--gold:var(--blue);--gold2:var(--blue-soft);--green:#72D5A1;--orange:#FFB45C;--r:6px;color-scheme:dark}
-.panel{display:none}.panel.on{display:block;animation:panel-fwd .34s cubic-bezier(.2,.8,.2,1)}
-.panel.on>.head{animation:panel-child .3s .04s both cubic-bezier(.2,.8,.2,1)}
-.panel.on>.card,.panel.on>.template-layout,.panel.on>.social-grid{animation:panel-child .32s .07s both cubic-bezier(.2,.8,.2,1)}
-.head{align-items:flex-start}.head>div:first-child{min-width:0}.head h1{font-size:22px;font-weight:600;letter-spacing:-.025em;margin:0;line-height:1.25}.head h3{margin:0;font-size:15px}.head p{margin:5px 0 0;color:var(--mute);font-size:13.5px;line-height:1.55}.head .spacer{margin-left:auto}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:var(--gutter)}.card+.card{margin-top:14px}.card:hover{border-color:var(--line-lit)}
-.btn.secondary{background:transparent;border:1px solid var(--line);color:var(--text)}.btn.secondary:hover{background:var(--surface-2);border-color:var(--line-lit)}.btn.danger{background:transparent;color:var(--red);border:1px solid rgba(255,85,102,.35)}.btn.danger:hover{border-color:rgba(255,85,102,.6);background:rgba(255,85,102,.04)}.btn.sm{padding:7px 13px;font-size:13.5px}
-.actions{display:flex;gap:8px;flex-wrap:wrap}.small{font-size:12.5px}.muted{color:var(--mute)}.good{color:var(--green)}.bad{color:var(--red)}.warn{color:var(--orange)}.empty{text-align:center;color:var(--mute);padding:38px}
-.field{display:grid;gap:7px}.field label,.label{font-size:12.5px;color:var(--mute);font-weight:500}.field input,.field textarea,.field select,input,textarea,select{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;outline:none}.field input:focus,.field textarea:focus,.field select:focus,input:focus,textarea:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(217,180,120,.08)}select{appearance:auto}.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-.intake{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:end}.intake textarea{min-height:84px}.project{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;margin-bottom:12px}.progress{height:5px;background:var(--surface-2);border-radius:99px;overflow:hidden;margin-top:11px}.progress span{display:block;height:100%;background:var(--blue);border-radius:99px;transition:width .35s ease}
-.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--line);padding:4px 8px;border-radius:99px;color:var(--mute)}.pill.good{color:var(--green);border-color:rgba(114,213,161,.35);background:rgba(114,213,161,.06)}
-.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.metric{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:12px}.metric b{display:block;font-size:20px;font-weight:600}.metric span{color:var(--mute);font-size:11.5px}
-.clip{padding:0;overflow:hidden;margin-bottom:16px}.clip-grid{display:grid;grid-template-columns:230px minmax(0,1fr)}.video-wrap{background:#000;min-height:410px}.video-wrap video{display:block;width:100%;height:100%;max-height:550px;object-fit:contain;background:#000}.clip-body{padding:20px}.clip-top{display:flex;align-items:flex-start;gap:13px}.score-ring{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--blue) calc(var(--score)*1%),var(--line) 0);position:relative;flex:none}.score-ring:after{content:'';position:absolute;inset:6px;background:var(--surface);border-radius:50%}.score-ring b{z-index:1;font-weight:600}.flags{display:flex;gap:6px;flex-wrap:wrap}.flag{font-size:11.5px;border:1px solid var(--line);border-radius:99px;padding:3px 7px;color:var(--mute)}.flag.good{color:var(--green);border-color:rgba(114,213,161,.3)}.flag.warn{color:var(--orange);border-color:rgba(255,180,92,.3)}.quality-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin:14px 0}.q{background:var(--surface-2);border:1px solid transparent;border-radius:7px;padding:8px;text-align:center}.q b{display:block;font-weight:600}.q span{font-size:10px;color:var(--mute)}.clip-fields{display:grid;gap:10px}.clip-fields input,.clip-fields textarea{background:var(--bg)}.version-note{padding:9px 10px;border-radius:7px;background:rgba(255,180,92,.07);border:1px solid rgba(255,180,92,.24);font-size:12px;color:var(--orange);margin:10px 0}
-.template-layout{display:grid;grid-template-columns:390px minmax(0,1fr);gap:22px;align-items:start}.preview-wrap{position:sticky;top:110px}.phone{width:315px;aspect-ratio:9/16;margin:auto;border:8px solid #242429;border-radius:32px;overflow:hidden;background:#111;position:relative;box-shadow:0 22px 60px rgba(0,0,0,.42)}.preview-video{position:absolute;inset:0;background:linear-gradient(145deg,#354253,#131417 55%,#241d14);transform:scale(1.02)}.preview-person{position:absolute;width:58%;height:65%;left:21%;top:18%;border-radius:45% 45% 15% 15%;background:radial-gradient(circle at 50% 20%,#c9a078 0 12%,#35291f 13% 25%,#202126 26% 100%);opacity:.86}.preview-caption{position:absolute;left:8%;right:8%;text-align:center;font-weight:900;line-height:1.15;text-shadow:0 2px 0 #000,2px 0 0 #000,-2px 0 0 #000;z-index:4}.preview-caption.bottom{bottom:13%}.preview-caption.middle{top:45%}.preview-caption.top{top:18%}.preview-caption .active{color:var(--highlight,#d9b478)}.preview-hook{position:absolute;top:7%;left:9%;right:9%;padding:8px;border-radius:5px;text-align:center;font-weight:900;z-index:5}.preview-watermark{position:absolute;z-index:5;font-weight:850;letter-spacing:.08em}.preview-watermark.top-center{top:4%;left:0;right:0;text-align:center}.preview-watermark.top-left{top:4%;left:5%}.preview-watermark.top-right{top:4%;right:5%}.preview-watermark.bottom-center{bottom:4%;left:0;right:0;text-align:center}.preview-watermark.bottom-left{bottom:4%;left:5%}.preview-watermark.bottom-right{bottom:4%;right:5%}.preview-brandline{position:absolute;left:0;right:0;bottom:0;z-index:6}.safe-zone{position:absolute;left:5%;right:5%;top:6%;bottom:10%;border:1px dashed rgba(255,255,255,.14);pointer-events:none}.editor-sections{display:grid;gap:12px}.edit-section{border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--surface)}.edit-section summary{padding:13px 14px;font-weight:500;cursor:pointer;background:var(--surface-2)}.edit-body{padding:14px;display:grid;gap:12px}.range-row{display:grid;grid-template-columns:1fr 70px;gap:10px;align-items:center}.range-row input[type=range]{padding:0}.color-row{display:grid;grid-template-columns:1fr 54px;gap:10px;align-items:center}.color-row input[type=color]{padding:3px;height:40px}.toggle{display:flex;align-items:center;gap:9px;color:var(--text-2);font-size:13.5px}.toggle input{width:auto}
-.track{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,320px) auto;gap:12px;align-items:center;margin-bottom:12px}.social-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}.social-card{display:grid;gap:12px}.social-head{display:flex;align-items:center;gap:10px}.social-head h3{margin:0}.social-head .spacer{margin-left:auto}.account-line{display:flex;gap:10px;align-items:center}.account-line img{width:38px;height:38px;border-radius:50%;object-fit:cover;background:var(--surface-2)}.target-list{display:grid;gap:7px;margin:12px 0}.target-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px}.target-row b{text-transform:capitalize}.target-row .spacer{margin-left:auto}.status-dot{width:7px;height:7px;border-radius:50%;background:var(--mute)}.status-dot.posted{background:var(--green)}.status-dot.failed{background:var(--red)}.status-dot.processing,.status-dot.publishing{background:var(--blue)}.status-dot.retrying{background:var(--orange)}
-.side-card h3{margin:0 0 10px;font-size:13.5px;font-weight:600}.side-list{display:grid;gap:8px}.side-row{display:flex;justify-content:space-between;gap:10px;font-size:13px}.log{max-height:280px;overflow:auto}.log-line{padding:9px 0;border-bottom:1px solid var(--line);font-size:12px;color:var(--mute)}
-.modal{position:fixed;inset:0;background:rgba(0,0,0,.74);z-index:80;display:grid;place-items:center;padding:20px;backdrop-filter:blur(4px)}.modal-card{width:min(520px,100%);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:22px}.toastbox,.toasts{position:fixed;right:18px;bottom:18px;z-index:100;display:grid;gap:8px}.toast{background:var(--surface-2);border:1px solid var(--line);padding:11px 14px;border-radius:7px;box-shadow:0 12px 35px rgba(0,0,0,.35)}.toast.good{border-color:rgba(114,213,161,.35)}.toast.bad{border-color:rgba(255,85,102,.35)}
-#diagnostics{background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:13px;max-height:360px;overflow:auto}
-@media(max-width:1100px){.template-layout{grid-template-columns:1fr}.preview-wrap{position:static}.clip-grid{grid-template-columns:220px 1fr}}@media(max-width:900px){.social-grid{grid-template-columns:1fr}}@media(max-width:720px){.grid2,.grid3,.metrics,.quality-grid{grid-template-columns:1fr 1fr}.intake,.clip-grid,.project,.track{grid-template-columns:1fr}.video-wrap{min-height:480px}.template-layout{display:block}.phone{width:270px;margin-bottom:18px}.actions .btn{flex:1}}
+</style>
+</head>
+<body>
 
-</style></head><body><div id="splash">
+<!-- ============ opening screen ============ -->
+<div id="splash">
   <svg class="splash-mark" viewBox="0 0 24 26" fill="none" aria-hidden="true">
-    <path class="splash-arch" d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+    <path class="splash-arch" d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z"
+      stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
     <path class="splash-play" d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/>
   </svg>
   <div class="splash-word">Deen<em>Clipped</em></div>
   <div class="splash-dots"><span></span><span></span><span></span></div>
 </div>
+
+<!-- ============ password ============ -->
 <section id="gate" class="center hide">
   <div class="card-lock">
-    <div class="lock-head"><div class="mark"><svg class="mark-dot" viewBox="0 0 24 26" fill="none" aria-hidden="true"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg><div><div class="mark-name">Deen<em>Clipped</em></div><div class="code">Sign in to continue</div></div></div></div>
-    <div class="lock-body"><label class="field code" for="password">Password</label><input id="password" type="password" autocomplete="current-password" placeholder="Your password"><button class="btn btn-wide" id="unlock">Unlock</button><div class="err" id="gateError"></div></div>
-  </div>
-</section>
-<main id="app" class="hide"><div class="wrap"><div class="top">
-  <div class="top-in">
-    <div class="mark"><svg class="mark-dot" viewBox="0 0 24 26" fill="none" aria-hidden="true"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg><div><div class="mark-name">Deen<em>Clipped</em></div><div class="code"><span class="lamp" id="liveDot"></span><span id="liveText">Self-hosted engine</span></div></div></div>
-    <div class="readout">
-      <div class="dial"><div class="dial-v" id="clock">--:--</div><div class="code" id="tzLabel">Australia/Perth</div></div>
-      <div class="dial live"><div class="dial-v" id="cdNum">--</div><div class="code">Next post</div></div>
+    <div class="lock-head">
+      <div class="mark">
+        <svg class="mark-dot" viewBox="0 0 24 26" fill="none" aria-hidden="true"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg>
+        <div>
+          <div class="mark-name">Deen<em>Clipped</em></div>
+          <div class="code">Sign in to continue</div>
+        </div>
+      </div>
+    </div>
+    <div class="lock-body">
+      <label class="field code" for="pw">Password</label>
+      <input id="pw" type="password" autocomplete="current-password" placeholder="Your password">
+      <button class="btn btn-wide" id="unlock">Unlock</button>
+      <div class="err" id="gateErr"></div>
     </div>
   </div>
-  <nav class="tabs">
-    <button class="tab on" data-tab="dashboard">Queue</button>
-    <button class="tab" data-tab="review">Review <span class="tab-count" id="reviewCount">0</span></button>
-    <button class="tab" data-tab="schedule">Schedule</button>
-    <button class="tab" data-tab="templates">Template Studio</button>
-    <button class="tab" data-tab="music">Music</button>
-    <button class="tab" data-tab="publishing">Publishing</button>
-    <button class="tab" data-tab="settings">Automation</button>
-  </nav>
-</div><div class="shell"><div class="main-col">
-<section class="panel on" id="dashboard"><div class="head"><div><h1>Automated clipping</h1><p>Paste a lecture link. The app transcribes, scores, styles, mixes music, verifies and queues the strongest clips.</p></div></div><div class="card"><div class="intake"><div class="field"><label>Video links</label><textarea id="sourceUrls" placeholder="Paste one or more YouTube or direct video links" rows="3"></textarea></div><button class="btn" id="submitSources">Create clips</button></div><div class="small muted" id="readinessNote" style="margin-top:10px"></div></div><div class="head" style="margin-top:24px"><div><h2>Processing library</h2><p>Heavy AI jobs and template re-renders continue through server refreshes.</p></div></div><div id="projects"></div></section>
-<section class="panel" id="review"><div class="head"><div><h1>Review queue</h1><p>Quality-gated clips not automatically scheduled stay here.</p></div><div class="spacer actions"><button class="btn secondary" id="approveAll">Approve all verified</button></div></div><div id="reviewClips"></div></section>
-<section class="panel" id="schedule"><div class="head"><div><h1>Schedule &amp; exports</h1><p>Scheduled clips keep their exact template version. Re-render before posting when you want a different style.</p></div></div><div id="scheduledClips"></div></section>
-<section class="panel" id="templates"><div class="head"><div><h1>Template Studio</h1><p>Create reusable app-owned styles. Saved presets are applied automatically to all future clips.</p></div><div class="spacer actions"><button class="btn secondary" id="newTemplate">New</button><button class="btn secondary" id="duplicateTemplate">Duplicate</button><button class="btn" id="saveTemplate">Save template</button></div></div><div class="template-layout"><div class="preview-wrap"><div class="card"><div class="field" style="margin-bottom:12px"><label>Editing template</label><select id="editorTemplateSelect"></select></div><div class="phone"><div class="preview-video" id="previewVideo"></div><div class="preview-person"></div><div class="safe-zone"></div><div class="preview-hook" id="previewHook">A REMINDER THAT CHANGES YOUR HEART</div><div class="preview-caption bottom" id="previewCaption">Never lose <span class="active">hope</span> in Allah's mercy</div><div class="preview-watermark top-center" id="previewWatermark">DEENCLIPPED</div><div class="preview-brandline" id="previewBrandLine"></div></div><div class="small muted" style="margin-top:12px">The preview is approximate. The worker verifies the real MP4 after rendering.</div><div class="actions" style="margin-top:12px"><button class="btn" id="useTemplate">Use for automation</button><button class="btn danger" id="deleteTemplate">Delete</button></div></div></div><div class="editor-sections">
-<details class="edit-section" open=""><summary>Identity &amp; layout</summary><div class="edit-body"><div class="grid2"><div class="field"><label>Name</label><input data-tpl="name"/></div><div class="field"><label>Video fit</label><select data-tpl="fitMode"><option value="blur">Blurred background</option><option value="crop">Full crop</option></select></div></div><div class="field"><label>Description</label><input data-tpl="description"/></div><div class="grid2"><div class="field"><label>Width</label><input data-tpl="width" type="number"/></div><div class="field"><label>Height</label><input data-tpl="height" type="number"/></div></div><div class="range-row"><div class="field"><label>Background blur</label><input data-tpl="blurStrength" max="60" min="0" step="1" type="range"/></div><output data-out="blurStrength"></output></div></div></details>
-<details class="edit-section" open=""><summary>Captions</summary><div class="edit-body"><div class="grid2"><div class="field"><label>Caption animation</label><select data-tpl="captionMode"><option value="word">Word highlight</option><option value="phrase">Phrase captions</option></select></div><div class="field"><label>Position</label><select data-tpl="captionPosition"><option value="top">Top</option><option value="middle">Middle</option><option value="bottom">Bottom</option></select></div></div><div class="grid2"><div class="field"><label>Font</label><input data-tpl="captionFont"/></div><div class="field"><label>Words per line</label><input data-tpl="captionMaxWords" max="12" min="2" type="number"/></div></div><div class="range-row"><div class="field"><label>Font size</label><input data-tpl="captionFontSize" max="140" min="24" type="range"/></div><output data-out="captionFontSize"></output></div><div class="range-row"><div class="field"><label>Vertical margin</label><input data-tpl="captionMarginV" max="800" min="20" type="range"/></div><output data-out="captionMarginV"></output></div><div class="grid3"><div class="field"><label>Text</label><input data-tpl="captionPrimary" type="color"/></div><div class="field"><label>Highlight</label><input data-tpl="captionHighlight" type="color"/></div><div class="field"><label>Outline</label><input data-tpl="captionOutline" type="color"/></div></div><div class="grid2"><div class="range-row"><div class="field"><label>Outline</label><input data-tpl="captionOutlineWidth" max="14" min="0" step="1" type="range"/></div><output data-out="captionOutlineWidth"></output></div><div class="range-row"><div class="field"><label>Shadow</label><input data-tpl="captionShadow" max="8" min="0" step="1" type="range"/></div><output data-out="captionShadow"></output></div></div><div class="grid2"><div class="field"><label>Caption box colour</label><input data-tpl="captionBackground" type="color"/></div><div class="range-row"><div class="field"><label>Box opacity</label><input data-tpl="captionBackgroundOpacity" max="100" min="0" type="range"/></div><output data-out="captionBackgroundOpacity"></output></div></div><label class="toggle"><input data-tpl="captionUppercase" type="checkbox"/> Uppercase captions</label></div></details>
-<details class="edit-section"><summary>Hook card</summary><div class="edit-body"><label class="toggle"><input data-tpl="hookEnabled" type="checkbox"/> Show title hook at the start</label><div class="grid2"><div class="range-row"><div class="field"><label>Duration</label><input data-tpl="hookDuration" max="8" min="0.5" step="0.1" type="range"/></div><output data-out="hookDuration"></output></div><div class="range-row"><div class="field"><label>Font size</label><input data-tpl="hookFontSize" max="120" min="24" type="range"/></div><output data-out="hookFontSize"></output></div></div><div class="grid2"><div class="field"><label>Text colour</label><input data-tpl="hookColor" type="color"/></div><div class="field"><label>Background</label><input data-tpl="hookBackground" type="color"/></div></div><div class="range-row"><div class="field"><label>Background opacity</label><input data-tpl="hookBackgroundOpacity" max="100" min="0" type="range"/></div><output data-out="hookBackgroundOpacity"></output></div></div></details>
-<details class="edit-section"><summary>Video filters &amp; voice</summary><div class="edit-body"><div class="field"><label>Filter preset</label><select data-tpl="filterPreset"><option value="natural">Natural</option><option value="crisp">Crisp</option><option value="warm">Warm</option><option value="cinematic">Cinematic</option><option value="monochrome">Monochrome</option><option value="custom">Custom sliders</option></select></div><div class="grid2"><div class="range-row"><div class="field"><label>Brightness</label><input data-tpl="brightness" max="1" min="-1" step="0.01" type="range"/></div><output data-out="brightness"></output></div><div class="range-row"><div class="field"><label>Contrast</label><input data-tpl="contrast" max="2" min="0.5" step="0.01" type="range"/></div><output data-out="contrast"></output></div><div class="range-row"><div class="field"><label>Saturation</label><input data-tpl="saturation" max="3" min="0" step="0.01" type="range"/></div><output data-out="saturation"></output></div><div class="range-row"><div class="field"><label>Gamma</label><input data-tpl="gamma" max="2" min="0.5" step="0.01" type="range"/></div><output data-out="gamma"></output></div><div class="range-row"><div class="field"><label>Sharpen</label><input data-tpl="sharpen" max="2" min="0" step="0.05" type="range"/></div><output data-out="sharpen"></output></div><div class="range-row"><div class="field"><label>Vignette</label><input data-tpl="vignette" max="1" min="0" step="0.05" type="range"/></div><output data-out="vignette"></output></div></div><label class="toggle"><input data-tpl="voiceEnhance" type="checkbox"/> Enhance and compress the speaker voice automatically</label></div></details>
-<details class="edit-section"><summary>Watermark &amp; branding</summary><div class="edit-body"><div class="grid2"><div class="field"><label>Watermark text</label><input data-tpl="watermark"/></div><div class="field"><label>Position</label><select data-tpl="watermarkPosition"><option value="top-left">Top left</option><option value="top-center">Top centre</option><option value="top-right">Top right</option><option value="bottom-left">Bottom left</option><option value="bottom-center">Bottom centre</option><option value="bottom-right">Bottom right</option></select></div></div><div class="grid2"><div class="field"><label>Colour</label><input data-tpl="watermarkColor" type="color"/></div><div class="range-row"><div class="field"><label>Opacity</label><input data-tpl="watermarkOpacity" max="100" min="0" type="range"/></div><output data-out="watermarkOpacity"></output></div></div><div class="range-row"><div class="field"><label>Watermark size</label><input data-tpl="watermarkFontSize" max="90" min="12" type="range"/></div><output data-out="watermarkFontSize"></output></div><label class="toggle"><input data-tpl="brandLineEnabled" type="checkbox"/> Add bottom brand line</label><div class="grid2"><div class="field"><label>Brand line colour</label><input data-tpl="brandLineColor" type="color"/></div><div class="range-row"><div class="field"><label>Line height</label><input data-tpl="brandLineHeight" max="30" min="2" type="range"/></div><output data-out="brandLineHeight"></output></div></div></div></details>
-</div></div></section>
-<section class="panel" id="music"><div class="head"><div><h1>Nasheed library</h1><p>Music is mandatory and physically mixed into every final MP4.</p></div></div><div class="card"><div class="grid2"><div class="field"><label>Audio file</label><input accept="audio/*" id="musicFile" type="file"/></div><div class="field"><label>Display name</label><input id="musicName" placeholder="Track name"/></div></div><div class="actions" style="margin-top:12px"><button class="btn" id="uploadMusic">Upload nasheed</button><div class="range-row" style="min-width:280px"><div class="field"><label>Automatic background level</label><input id="musicVolume" max="50" min="1" type="range"/></div><output id="musicVolumeOut"></output></div><button class="btn secondary" id="saveMusic">Save volume</button></div></div><div id="musicTracks" style="margin-top:14px"></div></section>
-<section class="panel" id="publishing"><div class="head"><div><h1>Automatic publishing</h1><p>Connect official platform accounts, choose destinations, then enable the master switch. Nothing posts until both steps are complete.</p></div></div><div class="card" id="publishingReadiness"></div><div class="card"><label class="toggle"><input id="publishingEnabled" type="checkbox"/> Automatically upload approved clips when their scheduled time arrives</label><div class="small muted" style="margin-top:8px">Manual approval counts as TikTok consent. TikTok is excluded from silent AI auto-approval because its API requires explicit creator consent.</div></div><div class="social-grid"><div class="card social-card"><div class="social-head"><h3>YouTube Shorts</h3><div class="spacer" id="youtubeConnect"></div></div><div id="youtubeAccount"></div><label class="toggle"><input id="youtubeEnabled" type="checkbox"/> Publish to YouTube</label><div class="field"><label>Channel</label><select id="youtubeAccountId"></select></div><div class="grid2"><div class="field"><label>Privacy</label><select id="youtubePrivacy"><option value="private">Private</option><option value="unlisted">Unlisted</option><option value="public">Public</option></select></div><div class="field"><label>Category</label><select id="youtubeCategory"><option value="22">People &amp; Blogs</option><option value="27">Education</option><option value="26">Howto &amp; Style</option></select></div></div><div class="small muted">New or unaudited Google API projects can be forced to private by YouTube until the project passes its compliance audit.</div></div><div class="card social-card"><div class="social-head"><h3>Meta</h3><div class="spacer" id="metaConnect"></div></div><div id="metaAccount"></div><label class="toggle"><input id="instagramEnabled" type="checkbox"/> Publish Instagram Reels</label><div class="field"><label>Instagram professional account</label><select id="instagramAccountId"></select></div><label class="toggle"><input id="instagramFeed" type="checkbox"/> Also share Reel to Instagram feed</label><hr style="border:0;border-top:1px solid var(--line);width:100%"/><label class="toggle"><input id="facebookEnabled" type="checkbox"/> Publish Facebook Reels</label><div class="field"><label>Facebook Page</label><select id="facebookAccountId"></select></div><div class="small muted">Instagram must be a professional account connected to a Facebook Page. Facebook automatic publishing requires your generation maximum to be 60 seconds or less.</div></div><div class="card social-card"><div class="social-head"><h3>TikTok</h3><div class="spacer" id="tiktokConnect"></div></div><div id="tiktokAccount"></div><label class="toggle"><input id="tiktokEnabled" type="checkbox"/> Publish manually approved clips to TikTok</label><div class="field"><label>TikTok account</label><select id="tiktokAccountId"></select></div><div class="field"><label>Privacy</label><select id="tiktokPrivacy"><option value="SELF_ONLY">Only me</option><option value="MUTUAL_FOLLOW_FRIENDS">Friends</option><option value="FOLLOWER_OF_CREATOR">Followers</option><option value="PUBLIC_TO_EVERYONE">Public</option></select></div><div class="grid3"><label class="toggle"><input id="tiktokComments" type="checkbox"/> Comments</label><label class="toggle"><input id="tiktokDuet" type="checkbox"/> Duet</label><label class="toggle"><input id="tiktokStitch" type="checkbox"/> Stitch</label></div><div class="small muted">Unaudited TikTok clients are restricted to private posts. Public Direct Post access requires TikTok approval.</div></div><div class="card social-card"><div class="head"><div><h3>Publishing behaviour</h3><p>Uploads retry with exponential backoff and preserve each platform's real post ID.</p></div></div><div class="small muted">Instagram and TikTok processing is polled after upload. A clip is marked Posted only when every selected destination reports success. Failed destinations can be retried without reposting successful ones.</div><button class="btn" id="savePublishing">Save publishing settings</button></div></div></section><section class="panel" id="settings"><div class="head"><div><h1>Automation &amp; quality gates</h1><p>The app can automatically schedule only clips that pass your content and render standards.</p></div></div><div class="card"><div class="grid2"><label class="toggle"><input id="autoEnabled" type="checkbox"/> Automatically approve and schedule strong verified clips</label><label class="toggle"><input id="skipQuotes" type="checkbox"/> Always hold possible Quran/hadith quotations for review</label></div><div class="grid3" style="margin-top:14px"><div class="field"><label>Minimum content score</label><input id="minimumScore" max="100" min="1" type="number"/></div><div class="field"><label>Minimum quality score</label><input id="minimumQuality" max="100" min="1" type="number"/></div><div class="field"><label>Maximum automatic clips per lecture</label><input id="maxPerProject" max="20" min="1" type="number"/></div></div><button class="btn" id="saveAutomation" style="margin-top:14px">Save automation</button></div><div class="card"><div class="head"><div><h2>Clip generation</h2><p>Controls how many candidate clips the local AI renders from each lecture.</p></div></div><div class="grid3"><div class="field"><label>Clips per video</label><input id="clipCount" max="30" min="1" type="number"/></div><div class="field"><label>Minimum seconds</label><input id="clipMin" max="179" min="3" type="number"/></div><div class="field"><label>Maximum seconds</label><input id="clipMax" max="180" min="4" type="number"/></div></div><button class="btn" id="saveClipSettings" style="margin-top:14px">Save generation settings</button></div><div class="card"><div class="head"><div><h2>System diagnostics</h2><p>Checks FFmpeg, Python, Whisper dependencies and current readiness.</p></div><div class="spacer"><button class="btn secondary" id="runDiagnostics">Run system check</button></div></div><pre class="small muted" id="diagnostics" style="white-space:pre-wrap"></pre></div></section>
-</div><aside class="side"><div class="side-scroll"><div class="card side-card"><h3>Automation status</h3><div class="small" id="engineStatus"></div></div><div class="card side-card"><h3>Today</h3><div class="metrics"><div class="metric"><b id="metricWaiting">0</b><span>Review</span></div><div class="metric"><b id="metricScheduled">0</b><span>Scheduled</span></div><div class="metric"><b id="metricReady">0</b><span>Ready</span></div><div class="metric"><b id="metricPosted">0</b><span>Posted</span></div></div></div><div class="card side-card"><h3>Current template</h3><div class="small" id="sideTemplate"></div></div><div class="card side-card"><h3>Recent activity</h3><div class="log" id="activityLog"></div></div></div></aside></div></div></main>
-<div class="modal hide" id="rerenderModal"><div class="modal-card"><div class="head"><div><h2>Apply saved template</h2><p id="rerenderHelp"></p></div></div><div class="field"><label>Template</label><select id="rerenderTemplate"></select></div><label class="toggle" id="variantRow" style="margin:14px 0"><input id="rerenderVariant" type="checkbox"/> Create a new re-post variant instead of replacing this queued render</label><div class="actions"><button class="btn" id="confirmRerender">Queue re-render</button><button class="btn secondary" id="cancelRerender">Cancel</button></div></div></div>
-<div class="toastbox" id="toasts"></div>
-<script>
+</section>
 
+<!-- ============ connect opus ============ -->
+<section id="connect" class="center hide" style="display:none">
+  <div class="card-lock">
+    <div class="lock-head">
+      <div class="mark">
+        <svg class="mark-dot" viewBox="0 0 24 26" fill="none" aria-hidden="true"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg>
+        <div>
+          <div class="mark-name">Connect Opus</div>
+          <div class="code">One key, one time</div>
+        </div>
+      </div>
+    </div>
+    <div class="lock-body">
+      <label class="field code" for="key">Opus API key</label>
+      <input id="key" type="password" autocomplete="off" placeholder="Paste your key">
+      <button class="btn btn-wide" id="save">Connect</button>
+      <div class="err" id="connErr"></div>
+      <p class="hint">Find it in the lower left of your Opus dashboard. Your plan needs API access, and social posting may need switching on by Opus support.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ app ============ -->
+<main id="app" class="hide">
+  <div class="wrap">
+
+    <div class="top">
+      <div class="top-in">
+        <div class="mark">
+          <svg class="mark-dot" viewBox="0 0 24 26" fill="none" aria-hidden="true"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg>
+          <div>
+            <div class="mark-name">Deen<em>Clipped</em></div>
+            <div class="code"><span class="lamp" id="liveDot"></span><span id="liveText">Checking</span></div>
+          </div>
+        </div>
+        <div class="readout">
+          <div class="dial">
+            <div class="dial-v" id="clock">--:--</div>
+            <div class="code" id="tzLabel">Local time</div>
+          </div>
+          <div class="dial live">
+            <div class="dial-v" id="cdNum">--</div>
+            <div class="code">Next post</div>
+          </div>
+        </div>
+      </div>
+      <nav class="tabs">
+        <button class="tab on" data-view="queue">Queue<span class="tab-count" id="cQueue">0</span></button>
+        <button class="tab" data-view="schedule">Schedule<span class="tab-count" id="cSched">0</span></button>
+        <button class="tab" data-view="insights">Analytics</button>
+        <button class="tab" data-view="music">Music</button>
+        <button class="tab" data-view="library">Library</button>
+        <button class="tab" data-view="templates">Templates</button>
+        <button class="tab" data-view="publishing">Publishing</button>
+        <button class="tab" data-view="automation">Automation</button>
+      </nav>
+    </div>
+
+    <div class="shell">
+      <div class="main-col">
+
+        <!-- queue -->
+        <section class="panel" id="view-queue">
+          <div class="head"><h2>Add lectures</h2></div>
+          <div class="slab intake">
+            <textarea id="urls" placeholder="Paste one or more video links, one per line"></textarea>
+            <div class="intake-row">
+              <button class="btn" id="send">Create clips</button>
+              <span class="intake-note" id="intakeNote"></span>
+            </div>
+          </div>
+
+          <div class="head hide" id="procHead" style="margin-top:34px"><h2>Being clipped</h2></div>
+          <div id="procList"></div>
+
+          <div class="head" style="margin-top:34px">
+            <h2>Waiting for you</h2>
+            <span class="note" id="waitNote"></span>
+            <button class="btn btn-ghost btn-sm hide" id="discardAll">Discard all</button>
+            <button class="btn btn-ghost btn-sm hide" id="approveAll">Approve all</button>
+          </div>
+          <div id="waitList"></div>
+        </section>
+
+        <!-- schedule -->
+        <section class="panel hide" id="view-schedule">
+          <div class="head sched-head">
+            <div>
+              <h2>Schedule control</h2>
+              <span class="note" id="railNote"></span>
+            </div>
+            <div class="sched-range" aria-label="Schedule range">
+              <button class="range-btn" data-sched-days="1">Today</button>
+              <button class="range-btn on" data-sched-days="5">5 days</button>
+              <button class="range-btn" data-sched-days="14">2 weeks</button>
+            </div>
+          </div>
+
+          <div class="sched-health" id="schedHealth"></div>
+          <div class="board schedule-board" id="rail"></div>
+
+          <div class="head" style="margin-top:34px">
+            <div>
+              <h2>Pipeline</h2>
+              <span class="note" id="schedNote"></span>
+            </div>
+            <button class="btn btn-ghost btn-sm hide" id="pullBackAll">Pull back all</button>
+          </div>
+          <div id="schedList"></div>
+        </section>
+
+        <!-- analytics -->
+        <section class="panel hide" id="view-insights">
+          <div class="head">
+            <div>
+              <h2>Analytics</h2>
+              <span class="note" id="analyticsNote">Operational analytics from your queue, schedule and post history</span>
+            </div>
+          </div>
+
+          <div class="analytics-hero">
+            <div class="analytics-score slab">
+              <div class="score-ring"><span id="healthScore">—</span></div>
+              <div>
+                <div class="score-title" id="healthTitle">System health</div>
+                <div class="score-note" id="healthNote">Waiting for data</div>
+              </div>
+            </div>
+            <div class="analytics-actions slab" id="analyticsActions"></div>
+          </div>
+
+          <div class="figs analytics-figs" id="stats"></div>
+
+          <div class="social-analytics">
+            <div class="slab">
+              <div class="mini-head"><h3>Social performance</h3><span id="socialPerfNote">Views, likes and engagement</span></div>
+              <div class="social-summary" id="socialSummary"></div>
+              <div id="socialTopPosts" style="margin-top:14px"></div>
+            </div>
+            <div class="slab social-tools">
+              <div class="mini-head"><h3>Update stats</h3><span>Manual for now</span></div>
+              <p class="hint">Paste the numbers from YouTube Studio, TikTok/Instagram insights or Opus after a post goes live. Automatic refresh can be added later once those platform API connections are set up.</p>
+              <button class="btn btn-sm" id="openMetricUpdater" type="button">Update recent post stats</button>
+              <button class="btn btn-ghost btn-sm" id="clearMetricForm" type="button">Clear inputs</button>
+            </div>
+          </div>
+          <div class="slab" id="metricUpdater" style="display:none;margin-top:14px"></div>
+
+          <div class="analytics-grid">
+            <div class="slab analytics-card">
+              <div class="mini-head"><h3>Platforms</h3><span id="platformNote">Successful uploads</span></div>
+              <div id="byPlatform"></div>
+            </div>
+            <div class="slab analytics-card">
+              <div class="mini-head"><h3>Time slots</h3><span>Posted by time</span></div>
+              <div id="bySlot"></div>
+            </div>
+            <div class="slab analytics-card">
+              <div class="mini-head"><h3>Content sources</h3><span>Clips by lecture</span></div>
+              <div id="bySource"></div>
+            </div>
+            <div class="slab analytics-card">
+              <div class="mini-head"><h3>Quality checks</h3><span>Music, copy and style</span></div>
+              <div id="byQuality"></div>
+            </div>
+          </div>
+
+          <div class="head" style="margin-top:34px">
+            <div>
+              <h2>Recent post history</h2>
+              <span class="note" id="recentNote">What actually went out</span>
+            </div>
+          </div>
+          <div id="recentPosts" class="analytics-feed"></div>
+
+          <p class="hint">This page now supports social-performance tracking too. Manual stats work immediately; automatic views/likes require YouTube, Meta/Instagram and TikTok API/OAuth connections.</p>
+        </section>
+
+        <!-- music -->
+        <section class="panel hide" id="view-music">
+          <div class="head sched-head">
+            <div>
+              <h2>Music</h2>
+              <span class="note">Upload, preview and control the nasheed mixer before clips are scheduled</span>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="checkFfmpeg">Check ffmpeg</button>
+          </div>
+
+          <div class="music-hero" id="musicHero"></div>
+
+          <div class="music-grid">
+            <div>
+              <div class="slab">
+                <div class="music-card-title">
+                  <h3>Mixing mode</h3>
+                  <span id="musicSettingsState">Waiting for settings</span>
+                </div>
+                <label class="field code" for="musicEnabled">Mode</label>
+                <select id="musicEnabled" aria-label="Add music automatically" class="hide">
+                  <option value="1">On — music guaranteed locally</option>
+                  <option value="0">Off — unavailable</option>
+                </select>
+                <div class="music-mode-picker" role="group" aria-label="Music mode">
+                  <button class="music-mode-option" type="button" data-music-mode="1">
+                    <strong>Required local mix</strong>
+                    <span>Music is physically mixed into every clip before scheduling.</span>
+                  </button>
+                  <button class="music-mode-option" type="button" data-music-mode="0">
+                    <strong>Cannot be disabled</strong>
+                    <span>The app blocks submission when the nasheed library is empty.</span>
+                  </button>
+                </div>
+
+                <div style="margin-top:6px">
+                  <label class="field code" for="musicVolume">Background volume — <span id="volumeLabel">15</span>%</label>
+                  <input id="musicVolume" type="range" min="0" max="100" value="15" style="width:100%">
+                  <div class="style-note" id="volumeHint">10–20% normally keeps the nasheed under the speaker's voice.</div>
+                </div>
+                <button class="btn btn-sm" id="saveMusicSettings" style="margin-top:14px;width:100%">Save music settings</button>
+                <div class="credit-warning" id="musicCreditNote">
+                  <strong>No Opus credits:</strong> nasheeds are mixed locally into the final MP4 and are mandatory on every clip.
+                </div>
+              </div>
+
+              <div class="slab" style="margin-top:18px">
+                <div class="music-card-title">
+                  <h3>Add track</h3>
+                  <span>MP3, M4A, WAV or OGG · max 30MB</span>
+                </div>
+                <input id="musicFile" type="file" accept="audio/*" class="hide">
+                <div class="music-drop" id="musicDrop">
+                  <div class="music-drop-title">Drop a nasheed here</div>
+                  <div class="music-drop-note">Or choose a file. The app validates duration with ffmpeg before saving it.</div>
+                  <button class="btn btn-ghost" id="pickMusic" type="button">Choose audio file</button>
+                  <div class="intake-note" id="musicPicked" style="margin:10px 0 0">No file chosen</div>
+                </div>
+                <div class="music-upload-row">
+                  <input id="musicName" type="text" placeholder="Name this track">
+                  <button class="btn" id="uploadMusic" disabled>Upload track</button>
+                </div>
+                <div class="style-note" id="uploadNote"></div>
+              </div>
+
+              <div class="head" style="margin-top:28px">
+                <div>
+                  <h2>Your music library</h2>
+                  <span class="note" id="musicNote"></span>
+                </div>
+              </div>
+              <div class="music-tools">
+                <input id="musicSearch" class="music-search" type="text" placeholder="Search tracks">
+                <button class="btn btn-ghost btn-sm" id="refreshMusic" type="button">Refresh</button>
+              </div>
+              <div id="musicList"></div>
+            </div>
+
+            <div>
+              <div class="slab" id="ffmpegStatus">
+                <div class="music-card-title"><h3>System check</h3><span>Music + thumbnails</span></div>
+                <div class="style-note">Both background music and thumbnails depend on ffmpeg running on this server. Tap Check ffmpeg if music or thumbnails look wrong.</div>
+              </div>
+
+              <div class="slab" style="margin-top:18px">
+                <div class="music-card-title"><h3>Music pipeline</h3><span>What happens per clip</span></div>
+                <div class="music-pipeline">
+                  <div class="music-step"><div class="music-step-dot">1</div><div><strong>Render the selected moment</strong><span>The local worker creates the vertical clip from the original lecture.</span></div></div>
+                  <div class="music-step"><div class="music-step-dot">2</div><div><strong>Mix random track</strong><span>Your clip voice stays full volume. Music loops quietly underneath.</span></div></div>
+                  <div class="music-step"><div class="music-step-dot">3</div><div><strong>Verify the final MP4</strong><span>The app confirms video, audio, music, captions and template output.</span></div></div>
+                  <div class="music-step"><div class="music-step-dot">4</div><div><strong>Schedule or post</strong><span>The app blocks posting until required music is ready.</span></div></div>
+                </div>
+              </div>
+
+              <div class="slab" style="margin-top:18px">
+                <div class="music-card-title"><h3>Current music health</h3><span>From queue + schedule</span></div>
+                <div class="music-health-list" id="musicHealthList"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- library -->
+        <section class="panel hide" id="view-library">
+          <div class="head sched-head">
+            <div>
+              <h2>Library</h2>
+              <span class="note">Every lecture, generated clip, thumbnail and render in one place</span>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="refreshLibrary">Refresh library</button>
+          </div>
+
+          <div class="library-hero" id="libraryStats"></div>
+
+          <div class="library-controls">
+            <input class="library-search" id="librarySearch" type="search" placeholder="Search title, link, or project ID">
+            <div class="library-filter" id="libraryFilters">
+              <button class="btn btn-ghost btn-sm on" data-library-filter="all">All</button>
+              <button class="btn btn-ghost btn-sm" data-library-filter="available">Has clips left</button>
+              <button class="btn btn-ghost btn-sm" data-library-filter="working">Clipping</button>
+              <button class="btn btn-ghost btn-sm" data-library-filter="external">Imported</button>
+              <button class="btn btn-ghost btn-sm" data-library-filter="issues">Issues</button>
+            </div>
+            <select class="library-select" id="librarySort">
+              <option value="newest">Newest first</option>
+              <option value="available">Most clips left</option>
+              <option value="progress">Most imported</option>
+              <option value="az">A to Z</option>
+            </select>
+          </div>
+
+          <details class="slab library-tools">
+            <summary><span class="code">Self-hosted library information</span></summary>
+            <div class="library-tools-body">
+              <div class="intake-row">
+                <input id="existingProjectRef" type="text" placeholder="Self-hosted lectures appear here automatically" style="flex:1" disabled>
+                <input id="existingProjectTitle" type="text" placeholder="No external import needed" style="flex:1" disabled>
+                <button class="btn btn-ghost btn-sm" id="attachExistingProject" disabled>Automatic</button>
+              </div>
+              <div class="library-limit">Lectures submitted through this app appear automatically. Removing a lecture here deletes its local source, transcript and generated clips.</div>
+            </div>
+          </details>
+
+          <div id="libraryList"></div>
+        </section>
+
+
+        <!-- template studio -->
+        <section class="panel hide" id="view-templates">
+          <div class="head sched-head">
+            <div><h2>Template Studio</h2><span class="note">Saved designs are applied automatically to every new render</span></div>
+            <select id="templatePreset" style="width:auto;min-width:220px"></select>
+          </div>
+          <div class="template-shell">
+            <div class="template-preview-wrap">
+              <div class="slab">
+                <div class="mini-head"><h3>Live preview</h3><span>Final MP4 is rendered by FFmpeg</span></div>
+                <div class="template-phone">
+                  <div class="template-preview-video" id="templatePreviewVideo"></div>
+                  <div class="template-preview-person"></div>
+                  <div class="template-safe"></div>
+                  <div class="template-hook" id="templateHook">A reminder that changes your perspective</div>
+                  <div class="template-caption bottom" id="templateCaption">THE BEST <span class="active">REMINDER</span> IS CLEAR</div>
+                  <div class="template-watermark top-center" id="templateWatermark">DEENCLIPPED</div>
+                  <div class="template-brandline" id="templateBrandLine"></div>
+                </div>
+                <div class="template-actions">
+                  <button class="btn btn-ghost btn-sm" id="newTemplate">New</button>
+                  <button class="btn btn-ghost btn-sm" id="duplicateTemplate">Duplicate</button>
+                  <button class="btn btn-sm" id="saveTemplate">Save</button>
+                  <button class="btn btn-ghost btn-sm" id="useTemplate">Use automatically</button>
+                  <button class="btn btn-ghost btn-sm btn-danger" id="deleteTemplate">Delete</button>
+                </div>
+              </div>
+            </div>
+            <div class="editor-stack" id="templateEditor"></div>
+          </div>
+        </section>
+
+        <!-- publishing -->
+        <section class="panel hide" id="view-publishing">
+          <div class="head sched-head"><div><h2>Automatic publishing</h2><span class="note">Official OAuth connections, retries and confirmed platform post IDs</span></div><button class="btn" id="savePublishing">Save publishing</button></div>
+          <div class="slab" style="margin-bottom:18px">
+            <label class="editor-toggle"><input type="checkbox" id="publishingEnabled">Enable automatic publishing globally</label>
+            <div class="style-note">Connecting an account does not publish anything by itself. A platform must also be enabled here.</div>
+            <div id="publishingIssues" style="margin-top:10px"></div>
+          </div>
+          <div class="platform-grid" id="platformGrid"></div>
+          <div class="head" style="margin-top:34px"><div><h2>Publishing activity</h2><span class="note">Uploads, processing, retries and confirmed posts</span></div></div>
+          <div class="slab" id="publishHistory"></div>
+        </section>
+
+        <!-- automation -->
+        <section class="panel hide" id="view-automation">
+          <div class="head"><div><h2>Automation</h2><span class="note">Set the quality gates once; the full workflow runs without manual editing</span></div></div>
+          <div id="automationSummary" style="margin-bottom:18px"></div>
+          <div class="analytics-grid">
+            <div class="slab">
+              <div class="mini-head"><h3>Approval rules</h3><span>Quality gate</span></div>
+              <div class="editor-stack">
+                <label class="editor-toggle"><input type="checkbox" id="autoEnabled">Automatically approve and schedule strong clips</label>
+                <label class="editor-toggle"><input type="checkbox" id="skipQuotes">Hold possible Quran or hadith quotations for review</label>
+                <div class="editor-grid">
+                  <div class="editor-row"><label>Minimum content score</label><input id="minimumScore" type="number" min="1" max="100"></div>
+                  <div class="editor-row"><label>Minimum rendered quality</label><input id="minimumQuality" type="number" min="1" max="100"></div>
+                  <div class="editor-row"><label>Maximum automatic clips per lecture</label><input id="maxPerProject" type="number" min="1" max="20"></div>
+                </div>
+                <button class="btn" id="saveAutomation">Save automation</button>
+              </div>
+            </div>
+            <div class="slab">
+              <div class="mini-head"><h3>Generation limits</h3><span>Per lecture</span></div>
+              <div class="editor-grid">
+                <div class="editor-row"><label>Clips per lecture</label><input id="clipCount" type="number" min="1" max="30"></div>
+                <div class="editor-row"><label>Minimum seconds</label><input id="clipMin" type="number" min="3" max="179"></div>
+                <div class="editor-row"><label>Maximum seconds</label><input id="clipMax" type="number" min="4" max="180"></div>
+              </div>
+              <button class="btn btn-ghost" id="saveClipSettings" style="margin-top:14px">Save generation settings</button>
+            </div>
+          </div>
+          <div class="head" style="margin-top:34px"><div><h2>System check</h2><span class="note">FFmpeg, yt-dlp, Faster-Whisper and renderer readiness</span></div><button class="btn btn-ghost btn-sm" id="runDiagnostics">Run system check</button></div>
+          <pre class="system-json" id="diagnostics">Run the check after every new deployment.</pre>
+        </section>
+
+      </div>
+
+      <!-- side rail -->
+      <aside class="side" id="side">
+        <div class="side-scroll">
+        <div class="side-section-title">Control centre</div>
+
+        <div class="card side-card-muted">
+          <div class="card-head">Next post <span id="nextStatusPill" class="side-pill"></span></div>
+          <div class="card-body" id="nextBox"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">Today status</div>
+          <div class="card-body" id="sideToday"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span id="nowIcon"></span>Happening now</div>
+          <div class="card-body tight" id="nowList"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">Needs attention</div>
+          <div class="card-body" id="sideAttention"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">Music mode</div>
+          <div class="card-body" id="musicModeBox"></div>
+        </div>
+
+        <details class="card side-details" open>
+          <summary class="card-head">Clip style</summary>
+          <div class="card-body">
+            <select id="tplPick" aria-label="Clip style"></select>
+            <div class="style-note" id="tplNote"></div>
+          </div>
+        </details>
+
+        <details class="card side-details">
+          <summary class="card-head">Clips per video</summary>
+          <div class="card-body">
+            <select id="countPick" aria-label="Clips per video">
+              <option value="0">Everything Opus finds</option>
+              <option value="8">Up to 8</option>
+              <option value="12">Up to 12</option>
+              <option value="20">Up to 20</option>
+              <option value="30">Up to 30</option>
+            </select>
+            <div class="style-note">How many clips come out of one lecture. Opus decides which moments; this only caps how many you keep.</div>
+
+            <div class="dur-row">
+              <div>
+                <label class="field code" for="durMin">Shortest</label>
+                <input id="durMin" type="text" inputmode="numeric" value="20">
+              </div>
+              <div>
+                <label class="field code" for="durMax">Longest</label>
+                <input id="durMax" type="text" inputmode="numeric" value="90">
+              </div>
+            </div>
+            <div class="style-note">Seconds. Applies to lectures sent after you save.</div>
+            <button class="btn btn-ghost btn-sm" id="saveCount" style="margin-top:11px;width:100%">Save clip settings</button>
+          </div>
+        </details>
+        <details class="card side-details">
+          <summary class="card-head">Caption & template</summary>
+          <div class="card-body">
+            <div class="style-note">Captions, hook cards, filters, watermark and layout are saved inside your selected template and rendered automatically.</div>
+            <button class="btn btn-ghost btn-sm" type="button" style="margin-top:11px;width:100%" onclick="showView('templates')">Open Template Studio</button>
+          </div>
+        </details>
+
+        <details class="card side-details">
+          <summary class="card-head">Accounts</summary>
+          <div class="card-body tight">
+            <div style="padding:8px 0"><button class="btn btn-ghost btn-sm" id="refreshAcc" style="width:100%">Refresh accounts</button></div>
+            <div id="accounts"></div>
+          </div>
+        </details>
+
+        <details class="card side-details">
+          <summary class="card-head">Recent activity</summary>
+          <div class="card-body tight" id="log"></div>
+        </details>
+        </div>
+      </aside>
+    </div>
+
+  </div>
+</main>
+
+
+<div class="video-modal hide" id="videoModal"><div class="video-modal-card"><div class="video-modal-head"><strong id="previewTitle">Clip preview</strong><button class="btn btn-ghost btn-sm" id="closePreview">Close</button></div><video id="previewVideo" controls playsinline></video></div></div>
+<div class="video-modal hide" id="rerenderModal"><div class="card-lock" style="max-width:470px"><div class="lock-head"><div class="mark"><svg class="mark-dot" viewBox="0 0 24 26" fill="none"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg><div><div class="mark-name">Apply template</div><div class="code" id="rerenderHelp"></div></div></div></div><div class="lock-body"><input type="hidden" id="rerenderClipId"><label class="field code">Saved template</label><select id="rerenderTemplate"></select><label class="editor-toggle" style="margin-top:13px"><input type="checkbox" id="rerenderVariant">Create a separate variant</label><div style="display:flex;gap:8px;margin-top:18px"><button class="btn btn-ghost" id="cancelRerender" style="flex:1">Cancel</button><button class="btn" id="confirmRerender" style="flex:1">Render</button></div></div></div></div>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
 'use strict';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-let PW=localStorage.getItem('deenPw')||'', DATA=null, ACTIVE_TAB='dashboard', TEMPLATE_DRAFT=null, EDITING_ID='', RERENDER_CLIP='';
 const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-function toast(message,type=''){const n=document.createElement('div');n.className='toast '+type;n.textContent=message;$('#toasts').append(n);setTimeout(()=>n.remove(),3500)}
-async function api(url,options={}){const r=await fetch(url,{...options,headers:{'Content-Type':'application/json','x-app-password':PW,...(options.headers||{})}});let body={};try{body=await r.json()}catch{}if(!r.ok)throw new Error(body.error||`Request failed (${r.status})`);return body}
-function withPw(url){return `${url}${url.includes('?')?'&':'?'}pw=${encodeURIComponent(PW)}`}
-function fmtDuration(ms){const s=Math.round((ms||0)/1000);return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}
-function fmtTrack(sec){const s=Math.round(sec||0);return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}
-function dateLabel(ms){return new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}).format(new Date(ms))}
-async function boot(){try{DATA=await api('/api/state');localStorage.setItem('deenPw',PW);$('#gate').classList.add('hide');$('#app').classList.remove('hide');renderAll();return true}catch(e){$('#app').classList.add('hide');$('#gate').classList.remove('hide');$('#gateError').textContent=e.message;return false}}
-$('#unlock').onclick=async()=>{PW=$('#password').value;await boot()};$('#password').onkeydown=e=>{if(e.key==='Enter')$('#unlock').click()};
-$$('.tab').forEach(b=>b.onclick=()=>{const previous=$('.panel.on');ACTIVE_TAB=b.dataset.tab;$$('.tab').forEach(x=>x.classList.toggle('on',x===b));$$('.panel').forEach(x=>{x.classList.toggle('on',x.id===ACTIVE_TAB);x.classList.remove('slide-fwd','slide-back')});const next=$('#'+CSS.escape(ACTIVE_TAB));if(next&&next!==previous){next.classList.add('slide-fwd');setTimeout(()=>next.classList.remove('slide-fwd'),380)}if(ACTIVE_TAB==='templates')loadEditor(DATA.selectedTemplate?.id)});
-function renderAll(){renderDashboard();renderClips();renderMusic();renderPublishing();renderSettings();renderSide();renderTopReadout();if(ACTIVE_TAB==='templates'&&!TEMPLATE_DRAFT)loadEditor(DATA.selectedTemplate?.id)}
-async function refresh(){try{DATA=await api('/api/state');renderAll()}catch(e){console.error(e)}}
-function renderDashboard(){const r=DATA.readiness;$('#submitSources').disabled=!r.ready;$('#readinessNote').innerHTML=r.ready?`<span class="good">Ready:</span> ${esc(r.template.name)} · ${r.musicTrackCount} nasheed${r.musicTrackCount===1?'':'s'} · ${esc(r.model)} model`:`<span class="bad">Blocked:</span> ${!r.templateReady?'Choose a template. ':''}${!r.musicReady?'Upload a nasheed.':''}`;$('#projects').innerHTML=DATA.projects.length?DATA.projects.map(p=>`<div class="card project"><div><b>${esc(p.title)}</b><div class="small muted">${esc(p.stage||p.status)} · Template ${esc(p.templateNameUsed||'')}</div>${p.error?`<div class="small bad">${esc(p.error)}</div>`:''}<div class="progress"><span style="width:${Number(p.progress||0)}%"></span></div></div><div class="actions">${p.status==='failed'?`<button class="btn secondary sm" data-retry-project="${esc(p.id)}">Retry</button>`:''}<button class="btn danger sm" data-delete-project="${esc(p.id)}">Delete</button></div></div>`).join(''):'<div class="card empty">No lectures submitted yet.</div>';$$('[data-retry-project]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api(`/api/projects/${encodeURIComponent(b.dataset.retryProject)}/retry`,{method:'POST'});toast('Project queued again','good');refresh()}catch(e){toast(e.message,'bad')}b.disabled=false});$$('[data-delete-project]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete the project, transcript and rendered clips?'))return;try{await api(`/api/projects/${encodeURIComponent(b.dataset.deleteProject)}`,{method:'DELETE'});toast('Project deleted');refresh()}catch(e){toast(e.message,'bad')}})}
-function qBox(name,value){return `<div class="q"><b>${Number(value||0)}</b><span>${name}</span></div>`}
-function targetRows(c){if(!c.targets?.length)return'';return `<div class="target-list">${c.targets.map(t=>`<div class="target-row"><span class="status-dot ${esc(t.status)}"></span><b>${esc(t.provider)}</b><span>${esc(t.accountName||'')}</span><span class="spacer ${t.status==='failed'?'bad':t.status==='posted'?'good':'muted'}">${esc(t.status)}${t.error?` · ${esc(t.error)}`:''}</span>${t.postUrl?`<a href="${esc(t.postUrl)}" target="_blank" rel="noopener">Open</a>`:''}</div>`).join('')}</div>`}
-function clipCard(c,review){const q=c.quality||{};const editing=review;const rerendering=c.rerender&&['queued','processing'].includes(c.rerender.status);const failed=c.targets?.some(t=>t.status==='failed');const active=c.targets?.some(t=>['publishing','processing'].includes(t.status));const publishButton=DATA.publishingSettings?.enabled&&c.status!=='posted'&&!active?`<button class="btn" data-publish-now="${esc(c.id)}">${failed?'Retry & post now':'Post now'}</button>`:'';const approveLabel=DATA.publishingSettings?.enabled&&DATA.publishingSettings?.tiktok?.enabled?'Approve, consent & schedule':'Approve & schedule';const actions=review?`<button class="btn" data-approve="${esc(c.id)}">${approveLabel}</button><button class="btn secondary" data-export="${esc(c.id)}">Export only</button><button class="btn secondary" data-rerender="${esc(c.id)}">Apply template</button><button class="btn danger" data-delete-clip="${esc(c.id)}">Discard</button>`:`${publishButton}<button class="btn" data-download="${esc(c.id)}">Download MP4</button><button class="btn secondary" data-copy="${esc(c.id)}">Copy caption</button><button class="btn secondary" data-rerender="${esc(c.id)}">${c.status==='posted'?'Create repost variant':'Apply template'}</button>${c.status!=='posted'&&!active?`<button class="btn secondary" data-posted="${esc(c.id)}">Mark posted manually</button><button class="btn danger" data-pullback="${esc(c.id)}">Pull back</button>`:''}`;return `<article class="card clip"><div class="clip-grid"><div class="video-wrap"><video controls preload="metadata" poster="${withPw(c.thumbUrl)}" src="${withPw(c.videoUrl)}"></video></div><div class="clip-body"><div class="clip-top"><div class="score-ring" style="--score:${Number(c.score||0)}"><b>${Number(c.score||0)}</b></div><div><div class="flags"><span class="flag good">Music: ${esc(c.musicName)}</span><span class="flag good">${esc(c.templateName)} v${c.templateVersion||1}</span><span class="flag">${fmtDuration(c.durationMs)}</span><span class="flag ${c.status==='posted'?'good':''}">${esc(c.status)}</span>${c.approvedBy==='automation'?'<span class="flag good">Auto-selected</span>':''}${c.reviewRequired?'<span class="flag warn">Check quotation</span>':''}${c.variantOf?'<span class="flag">Repost variant</span>':''}</div><div class="small muted" style="margin-top:7px">${esc((c.scoreReasons||[]).join(' · '))}</div></div></div><div class="quality-grid">${qBox('Overall',q.overall)}${qBox('Hook',q.hook)}${qBox('Pacing',q.pacing)}${qBox('Captions',q.readability)}${qBox('Context',q.context)}</div>${c.templateOutdated?'<div class="version-note">A newer version of this saved template exists. This clip remains locked to its original render until you explicitly re-render it.</div>':''}${rerendering?`<div class="version-note">${esc(c.rerender.stage)} · ${c.rerender.progress||0}%</div>`:''}${targetRows(c)}<div class="clip-fields"><div class="field"><label>Title</label><input data-title="${esc(c.id)}" value="${esc(c.title)}" ${editing?'':'readonly'}></div><div class="field"><label>Caption</label><textarea data-description="${esc(c.id)}" rows="4" ${editing?'':'readonly'}>${esc(c.description)}</textarea></div><div class="field"><label>Hashtags</label><input data-hashtags="${esc(c.id)}" value="${esc(c.hashtags)}" ${editing?'':'readonly'}></div>${c.scheduledLabel?`<div class="small muted">Scheduled: ${esc(c.scheduledLabel)}</div>`:''}</div><div class="actions" style="margin-top:13px">${actions}</div></div></div></article>`}
-function renderClips(){const waiting=DATA.clips.filter(c=>c.status==='waiting');const scheduled=DATA.clips.filter(c=>c.status!=='waiting');$('#reviewCount').textContent=waiting.length?`(${waiting.length})`:'';$('#reviewClips').innerHTML=waiting.length?waiting.map(c=>clipCard(c,true)).join(''):'<div class="card empty">No clips need manual review.</div>';$('#scheduledClips').innerHTML=scheduled.length?scheduled.sort((a,b)=>(a.scheduledAt||a.readyAt||a.postedAt||0)-(b.scheduledAt||b.readyAt||b.postedAt||0)).map(c=>clipCard(c,false)).join(''):'<div class="card empty">No scheduled or exported clips yet.</div>';bindClipButtons()}
-function edited(id){return{title:$(`[data-title="${CSS.escape(id)}"]`)?.value||'',description:$(`[data-description="${CSS.escape(id)}"]`)?.value||'',hashtags:$(`[data-hashtags="${CSS.escape(id)}"]`)?.value||''}}
-function bindClipButtons(){$$('[data-approve]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api(`/api/clips/${encodeURIComponent(b.dataset.approve)}`,{method:'PATCH',body:JSON.stringify({...edited(b.dataset.approve),status:'approved'})});toast('Approved and scheduled','good');refresh()}catch(e){toast(e.message,'bad')}b.disabled=false});$$('[data-export]').forEach(b=>b.onclick=async()=>{const id=b.dataset.export;b.disabled=true;try{await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(edited(id))});await api(`/api/clips/${encodeURIComponent(id)}/ready`,{method:'POST'});downloadClip(id);toast('Clip prepared','good');refresh()}catch(e){toast(e.message,'bad')}b.disabled=false});$$('[data-download]').forEach(b=>b.onclick=()=>downloadClip(b.dataset.download));$$('[data-copy]').forEach(b=>b.onclick=async()=>{const c=DATA.clips.find(x=>x.id===b.dataset.copy);await navigator.clipboard.writeText([c.title,c.description,c.hashtags].filter(Boolean).join('\n\n'));toast('Caption copied','good')});$$('[data-posted]').forEach(b=>b.onclick=async()=>{try{await api(`/api/clips/${encodeURIComponent(b.dataset.posted)}/posted`,{method:'POST'});refresh()}catch(e){toast(e.message,'bad')}});$$('[data-pullback]').forEach(b=>b.onclick=async()=>{try{await api(`/api/clips/${encodeURIComponent(b.dataset.pullback)}`,{method:'PATCH',body:JSON.stringify({status:'waiting'})});refresh()}catch(e){toast(e.message,'bad')}});$$('[data-delete-clip]').forEach(b=>b.onclick=async()=>{if(!confirm('Discard this rendered clip?'))return;try{await api(`/api/clips/${encodeURIComponent(b.dataset.deleteClip)}`,{method:'DELETE'});refresh()}catch(e){toast(e.message,'bad')}});$$('[data-publish-now]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api(`/api/clips/${encodeURIComponent(b.dataset.publishNow)}/publish`,{method:'POST'});toast('Publishing started','good');refresh()}catch(e){toast(e.message,'bad')}b.disabled=false});$$('[data-rerender]').forEach(b=>b.onclick=()=>openRerender(b.dataset.rerender))}
-function downloadClip(id){const a=document.createElement('a');a.href=withPw(`/api/clips/${encodeURIComponent(id)}/download`);a.click()}
-$('#approveAll').onclick=async()=>{const items=DATA.clips.filter(c=>c.status==='waiting'&&c.musicVerified&&c.renderVerified);for(const c of items){try{await api(`/api/clips/${encodeURIComponent(c.id)}`,{method:'PATCH',body:JSON.stringify({status:'approved'})})}catch(e){toast(e.message,'bad')}}toast(`${items.length} clips approved`,'good');refresh()};
-$('#submitSources').onclick=async()=>{const urls=$('#sourceUrls').value.trim();if(!urls)return toast('Paste a link first','bad');const b=$('#submitSources');b.disabled=true;try{const r=await api('/api/videos',{method:'POST',body:JSON.stringify({urls})});const good=r.results.filter(x=>x.ok).length;r.results.filter(x=>x.error).forEach(x=>toast(x.error,'bad'));if(good){$('#sourceUrls').value='';toast(`${good} source${good===1?'':'s'} queued`,'good')}refresh()}catch(e){toast(e.message,'bad')}b.disabled=!DATA.readiness.ready};
-function renderMusic(){$('#musicVolume').value=DATA.musicSettings.volumePercent;$('#musicVolumeOut').textContent=DATA.musicSettings.volumePercent+'%';$('#musicTracks').innerHTML=DATA.tracks.length?DATA.tracks.map(t=>`<div class="card track"><div><b>${esc(t.name)}</b><div class="small muted">${fmtTrack(t.durationSec)} · ${(t.sizeBytes/1024/1024).toFixed(1)} MB</div></div><audio controls preload="none" src="${withPw(`/api/music/${encodeURIComponent(t.id)}/audio`)}"></audio><button class="btn danger sm" data-delete-track="${esc(t.id)}">Delete</button></div>`).join(''):'<div class="card empty">Upload at least one nasheed. New jobs are blocked without music.</div>';$$('[data-delete-track]').forEach(b=>b.onclick=async()=>{if(DATA.tracks.length===1&&!confirm('This is the only track. Delete it and block new renders?'))return;try{await api(`/api/music/${encodeURIComponent(b.dataset.deleteTrack)}`,{method:'DELETE'});refresh()}catch(e){toast(e.message,'bad')}})}
-$('#musicVolume').oninput=()=>$('#musicVolumeOut').textContent=$('#musicVolume').value+'%';$('#saveMusic').onclick=async()=>{try{await api('/api/music-settings',{method:'POST',body:JSON.stringify({volumePercent:Number($('#musicVolume').value)})});toast('Music level saved','good');refresh()}catch(e){toast(e.message,'bad')}};$('#uploadMusic').onclick=async()=>{const f=$('#musicFile').files?.[0];if(!f)return toast('Choose an audio file','bad');if(f.size>55*1024*1024)return toast('Keep the track below 55 MB','bad');const bytes=new Uint8Array(await f.arrayBuffer());let binary='';for(let i=0;i<bytes.length;i+=32768)binary+=String.fromCharCode(...bytes.subarray(i,i+32768));try{await api('/api/music',{method:'POST',body:JSON.stringify({name:$('#musicName').value||f.name,data:btoa(binary),mimeType:f.type})});$('#musicFile').value='';$('#musicName').value='';toast('Nasheed uploaded','good');refresh()}catch(e){toast(e.message,'bad')}};
-function accountOptions(accounts){return accounts?.length?accounts.map(a=>`<option value="${esc(a.id)}">${esc(a.name)}</option>`).join(''):'<option value="">No connected account</option>'}
-function connectionButton(provider,connected){const label=provider==='meta'?'Meta':provider[0].toUpperCase()+provider.slice(1);return connected?`<div class="actions"><button class="btn secondary sm" data-social-test="${provider}">Test connection</button><button class="btn danger sm" data-social-disconnect="${provider}">Disconnect</button></div>`:`<button class="btn secondary sm" data-social-connect="${provider}">Connect ${label}</button>`}
-function accountSummary(accounts){if(!accounts?.length)return'<div class="small muted">Not connected</div>';const a=accounts[0];return `<div class="account-line">${a.avatar?`<img src="${esc(a.avatar)}" alt="">`:''}<div><b>${esc(a.name)}</b><div class="small muted">${accounts.length>1?`${accounts.length} accounts available`:'Connected'}</div></div></div>`}
-function renderPublishing(){const status=DATA.social||{providers:{}};const p=DATA.publishingSettings||{};const y=status.providers.youtube||{},i=status.providers.instagram||{},f=status.providers.facebook||{},t=status.providers.tiktok||{};$('#publishingReadiness').innerHTML=status.securityReady&&status.publicBaseUrlReady&&status.globalAvailable?`<span class="good"><b>Publishing engine ready.</b></span> Connect accounts, test each connection, choose destinations and enable the master switch.`:`<span class="bad"><b>Deployment setup required.</b></span> ${(status.issues||[]).map(esc).join(' ')}`;$('#youtubeConnect').innerHTML=connectionButton('youtube',y.connected);$('#metaConnect').innerHTML=connectionButton('meta',f.connected||i.connected);$('#tiktokConnect').innerHTML=connectionButton('tiktok',t.connected);$('#youtubeAccount').innerHTML=accountSummary(y.accounts);$('#metaAccount').innerHTML=accountSummary([...(f.accounts||[]),...(i.accounts||[])]);$('#tiktokAccount').innerHTML=accountSummary(t.accounts);$('#publishingEnabled').checked=Boolean(p.enabled);$('#youtubeEnabled').checked=Boolean(p.youtube?.enabled);$('#instagramEnabled').checked=Boolean(p.instagram?.enabled);$('#facebookEnabled').checked=Boolean(p.facebook?.enabled);$('#tiktokEnabled').checked=Boolean(p.tiktok?.enabled);$('#youtubeAccountId').innerHTML=accountOptions(y.accounts);$('#instagramAccountId').innerHTML=accountOptions(i.accounts);$('#facebookAccountId').innerHTML=accountOptions(f.accounts);$('#tiktokAccountId').innerHTML=accountOptions(t.accounts);$('#youtubeAccountId').value=p.youtube?.accountId||y.accounts?.[0]?.id||'';$('#instagramAccountId').value=p.instagram?.accountId||i.accounts?.[0]?.id||'';$('#facebookAccountId').value=p.facebook?.accountId||f.accounts?.[0]?.id||'';$('#tiktokAccountId').value=p.tiktok?.accountId||t.accounts?.[0]?.id||'';const creator=t.accounts?.find(a=>a.id===$('#tiktokAccountId').value)?.creatorInfo||t.accounts?.[0]?.creatorInfo||null;const privacyLabels={SELF_ONLY:'Only me',MUTUAL_FOLLOW_FRIENDS:'Friends',FOLLOWER_OF_CREATOR:'Followers',PUBLIC_TO_EVERYONE:'Public'};const privacyOptions=creator?.privacy_level_options?.length?creator.privacy_level_options:['SELF_ONLY','MUTUAL_FOLLOW_FRIENDS','FOLLOWER_OF_CREATOR','PUBLIC_TO_EVERYONE'];$('#tiktokPrivacy').innerHTML=privacyOptions.map(v=>`<option value="${esc(v)}">${esc(privacyLabels[v]||v)}</option>`).join('');$('#youtubePrivacy').value=p.youtube?.privacy||'private';$('#youtubeCategory').value=p.youtube?.categoryId||'22';$('#instagramFeed').checked=p.instagram?.shareToFeed!==false;$('#tiktokPrivacy').value=privacyOptions.includes(p.tiktok?.privacy)?p.tiktok.privacy:privacyOptions[0];$('#tiktokComments').disabled=Boolean(creator?.comment_disabled);$('#tiktokDuet').disabled=Boolean(creator?.duet_disabled);$('#tiktokStitch').disabled=Boolean(creator?.stitch_disabled);$('#tiktokComments').checked=!creator?.comment_disabled&&p.tiktok?.allowComments!==false;$('#tiktokDuet').checked=!creator?.duet_disabled&&Boolean(p.tiktok?.allowDuet);$('#tiktokStitch').checked=!creator?.stitch_disabled&&Boolean(p.tiktok?.allowStitch);$$('[data-social-connect]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{const r=await api(`/api/social/${b.dataset.socialConnect}/connect`,{method:'POST'});location.href=r.url}catch(e){toast(e.message,'bad');b.disabled=false}});$$('[data-social-test]').forEach(b=>b.onclick=async()=>{b.disabled=true;const old=b.textContent;b.textContent='Testing…';try{await api(`/api/social/${b.dataset.socialTest}/test`,{method:'POST',body:JSON.stringify({})});toast(`${b.dataset.socialTest} connection is working`,'good');refresh()}catch(e){toast(e.message,'bad')}b.disabled=false;b.textContent=old});$$('[data-social-disconnect]').forEach(b=>b.onclick=async()=>{if(!confirm(`Disconnect ${b.dataset.socialDisconnect}? New uploads to it will be disabled.`))return;try{await api(`/api/social/${b.dataset.socialDisconnect}/disconnect`,{method:'POST'});toast('Account disconnected');refresh()}catch(e){toast(e.message,'bad')}})}
-$('#savePublishing').onclick=async()=>{const button=$('#savePublishing');const body={enabled:$('#publishingEnabled').checked,youtube:{enabled:$('#youtubeEnabled').checked,accountId:$('#youtubeAccountId').value,privacy:$('#youtubePrivacy').value,categoryId:$('#youtubeCategory').value},instagram:{enabled:$('#instagramEnabled').checked,accountId:$('#instagramAccountId').value,shareToFeed:$('#instagramFeed').checked},facebook:{enabled:$('#facebookEnabled').checked,accountId:$('#facebookAccountId').value},tiktok:{enabled:$('#tiktokEnabled').checked,accountId:$('#tiktokAccountId').value,privacy:$('#tiktokPrivacy').value,allowComments:$('#tiktokComments').checked,allowDuet:$('#tiktokDuet').checked,allowStitch:$('#tiktokStitch').checked}};button.disabled=true;const old=button.textContent;button.textContent='Saving…';try{await api('/api/publishing-settings',{method:'POST',body:JSON.stringify(body)});toast(body.enabled?'Automatic publishing enabled':'Publishing settings saved','good');refresh()}catch(e){toast(e.message,'bad')}button.disabled=false;button.textContent=old};
-const templateInputs=()=>$$('[data-tpl]');function loadEditor(id){const t=DATA.templates.find(x=>x.id===id)||DATA.templateDraft;TEMPLATE_DRAFT=structuredClone(t);EDITING_ID=t.id;$('#editorTemplateSelect').innerHTML=DATA.templates.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}${x.builtIn?' · built-in':''}</option>`).join('');if(DATA.templates.some(x=>x.id===t.id))$('#editorTemplateSelect').value=t.id;templateInputs().forEach(input=>{const k=input.dataset.tpl;if(input.type==='checkbox')input.checked=Boolean(TEMPLATE_DRAFT[k]);else input.value=TEMPLATE_DRAFT[k]??''});updateTemplatePreview()}
-$('#editorTemplateSelect').onchange=()=>loadEditor($('#editorTemplateSelect').value);templateInputs().forEach(input=>{input.oninput=()=>{const k=input.dataset.tpl;TEMPLATE_DRAFT[k]=input.type==='checkbox'?input.checked:input.type==='number'||input.type==='range'?Number(input.value):input.value;if(['brightness','contrast','saturation','gamma'].includes(k))TEMPLATE_DRAFT.filterPreset='custom';updateTemplatePreview()}});
-function output(key,suffix=''){const n=$(`[data-out="${key}"]`);if(n)n.textContent=`${TEMPLATE_DRAFT[key]}${suffix}`}
-function updateTemplatePreview(){if(!TEMPLATE_DRAFT)return;['blurStrength','captionFontSize','captionMarginV','captionOutlineWidth','captionShadow','captionBackgroundOpacity','hookDuration','hookFontSize','hookBackgroundOpacity','brightness','contrast','saturation','gamma','sharpen','vignette','watermarkOpacity','watermarkFontSize','brandLineHeight'].forEach(k=>output(k));const p=$('#previewVideo');let b=TEMPLATE_DRAFT.brightness||0,c=TEMPLATE_DRAFT.contrast||1,s=TEMPLATE_DRAFT.saturation??1,g=TEMPLATE_DRAFT.gamma||1;if(TEMPLATE_DRAFT.filterPreset==='crisp'){b=.015;c=1.09;s=1.08}else if(TEMPLATE_DRAFT.filterPreset==='warm'){b=.025;c=1.04;s=1.12}else if(TEMPLATE_DRAFT.filterPreset==='cinematic'){b=-.015;c=1.13;s=.88}else if(TEMPLATE_DRAFT.filterPreset==='monochrome'){s=0;c=1.08}p.style.filter=`brightness(${1+b}) contrast(${c}) saturate(${s})`;p.style.transform=`scale(${TEMPLATE_DRAFT.fitMode==='crop'?1.18:1.02})`;const cap=$('#previewCaption');cap.className=`preview-caption ${TEMPLATE_DRAFT.captionPosition}`;cap.style.fontFamily=TEMPLATE_DRAFT.captionFont;cap.style.fontSize=Math.max(14,TEMPLATE_DRAFT.captionFontSize/3.4)+'px';cap.style.color=TEMPLATE_DRAFT.captionPrimary;cap.style.setProperty('--highlight',TEMPLATE_DRAFT.captionHighlight);cap.style.textTransform=TEMPLATE_DRAFT.captionUppercase?'uppercase':'none';cap.style.background=TEMPLATE_DRAFT.captionBackgroundOpacity?hexAlpha(TEMPLATE_DRAFT.captionBackground,TEMPLATE_DRAFT.captionBackgroundOpacity):'transparent';cap.style.padding=TEMPLATE_DRAFT.captionBackgroundOpacity?'6px 8px':'0';const hook=$('#previewHook');hook.style.display=TEMPLATE_DRAFT.hookEnabled?'block':'none';hook.style.color=TEMPLATE_DRAFT.hookColor;hook.style.background=hexAlpha(TEMPLATE_DRAFT.hookBackground,TEMPLATE_DRAFT.hookBackgroundOpacity);hook.style.fontSize=Math.max(12,TEMPLATE_DRAFT.hookFontSize/4)+'px';const w=$('#previewWatermark');w.textContent=TEMPLATE_DRAFT.watermark;w.className=`preview-watermark ${TEMPLATE_DRAFT.watermarkPosition}`;w.style.color=hexAlpha(TEMPLATE_DRAFT.watermarkColor,TEMPLATE_DRAFT.watermarkOpacity);w.style.fontSize=Math.max(9,TEMPLATE_DRAFT.watermarkFontSize/3.2)+'px';const line=$('#previewBrandLine');line.style.display=TEMPLATE_DRAFT.brandLineEnabled?'block':'none';line.style.background=TEMPLATE_DRAFT.brandLineColor;line.style.height=Math.max(2,TEMPLATE_DRAFT.brandLineHeight/2)+'px';$('#deleteTemplate').disabled=Boolean(TEMPLATE_DRAFT.builtIn)}
-function hexAlpha(hex,percent){const a=Math.round(Math.max(0,Math.min(100,percent))*2.55).toString(16).padStart(2,'0');return `${hex}${a}`}
-$('#newTemplate').onclick=()=>{TEMPLATE_DRAFT=structuredClone(DATA.templateDraft);TEMPLATE_DRAFT.name='New DeenClipped Template';EDITING_ID='';templateInputs().forEach(i=>{const k=i.dataset.tpl;i.type==='checkbox'?i.checked=Boolean(TEMPLATE_DRAFT[k]):i.value=TEMPLATE_DRAFT[k]??''});updateTemplatePreview()};$('#duplicateTemplate').onclick=async()=>{if(!EDITING_ID)return;try{const r=await api(`/api/templates/${encodeURIComponent(EDITING_ID)}/duplicate`,{method:'POST',body:JSON.stringify({name:`${TEMPLATE_DRAFT.name} Copy`})});toast('Template duplicated','good');await refresh();loadEditor(r.template.id)}catch(e){toast(e.message,'bad')}};$('#saveTemplate').onclick=async()=>{try{let r;if(EDITING_ID&&DATA.templates.find(x=>x.id===EDITING_ID&&!x.builtIn))r=await api(`/api/templates/${encodeURIComponent(EDITING_ID)}`,{method:'PUT',body:JSON.stringify({template:TEMPLATE_DRAFT})});else r=await api('/api/templates',{method:'POST',body:JSON.stringify({template:{...TEMPLATE_DRAFT,id:''},select:true})});toast(`Saved ${r.template.name} v${r.template.version}`,'good');await refresh();loadEditor(r.template.id)}catch(e){toast(e.message,'bad')}};$('#deleteTemplate').onclick=async()=>{if(!EDITING_ID||TEMPLATE_DRAFT.builtIn)return;if(!confirm('Delete this saved template? Existing clips keep their locked render.'))return;try{await api(`/api/templates/${encodeURIComponent(EDITING_ID)}`,{method:'DELETE'});toast('Template deleted');await refresh();loadEditor(DATA.selectedTemplate?.id)}catch(e){toast(e.message,'bad')}};$('#useTemplate').onclick=async()=>{if(!EDITING_ID)return toast('Save the template first','bad');try{await api('/api/template',{method:'POST',body:JSON.stringify({id:EDITING_ID})});toast('This template now runs automatically','good');refresh()}catch(e){toast(e.message,'bad')}};
-function renderSettings(){const a=DATA.automationSettings;$('#autoEnabled').checked=a.enabled;$('#skipQuotes').checked=a.skipReviewRequired;$('#minimumScore').value=a.minimumScore;$('#minimumQuality').value=a.minimumQuality;$('#maxPerProject').value=a.maxPerProject;$('#clipCount').value=DATA.clipSettings.clipsPerVideo;$('#clipMin').value=DATA.clipSettings.clipMinSeconds;$('#clipMax').value=DATA.clipSettings.clipMaxSeconds}
-$('#saveAutomation').onclick=async()=>{try{await api('/api/automation-settings',{method:'POST',body:JSON.stringify({enabled:$('#autoEnabled').checked,skipReviewRequired:$('#skipQuotes').checked,minimumScore:Number($('#minimumScore').value),minimumQuality:Number($('#minimumQuality').value),maxPerProject:Number($('#maxPerProject').value)})});toast('Automation saved','good');refresh()}catch(e){toast(e.message,'bad')}};$('#saveClipSettings').onclick=async()=>{try{await api('/api/clip-settings',{method:'POST',body:JSON.stringify({clipsPerVideo:Number($('#clipCount').value),clipMinSeconds:Number($('#clipMin').value),clipMaxSeconds:Number($('#clipMax').value)})});toast('Generation settings saved','good');refresh()}catch(e){toast(e.message,'bad')}};$('#runDiagnostics').onclick=async()=>{const b=$('#runDiagnostics');b.disabled=true;$('#diagnostics').textContent='Checking…';try{$('#diagnostics').textContent=JSON.stringify(await api('/api/diagnostics'),null,2)}catch(e){$('#diagnostics').textContent=e.message}b.disabled=false};
-function renderSide(){const counts=s=>DATA.clips.filter(c=>c.status===s).length;$('#metricWaiting').textContent=counts('waiting');$('#metricScheduled').textContent=DATA.clips.filter(c=>['scheduled','publishing','publish_failed'].includes(c.status)).length;$('#metricReady').textContent=counts('ready');$('#metricPosted').textContent=counts('posted');const a=DATA.automationSettings;$('#engineStatus').innerHTML=DATA.readiness.ready?`<span class="good">Ready</span><br>${a.enabled?`Auto-scheduling ${a.minimumScore}+ score / ${a.minimumQuality}+ quality`:'Automation paused'}<br>${DATA.activeJobs} active worker${DATA.activeJobs===1?'':'s'}<br>${DATA.publishingSettings?.enabled?'Automatic publishing ON':'Automatic publishing off'}`:`<span class="bad">Blocked</span><br>Add a saved template and nasheed.`;const t=DATA.selectedTemplate;$('#sideTemplate').innerHTML=t?`<b>${esc(t.name)}</b><br>Version ${t.version||1} · ${esc(t.captionMode)} captions · ${esc(t.filterPreset)} filter`:'No template';$('#activityLog').innerHTML=DATA.log.length?DATA.log.map(l=>`<div class="log-line"><b>${dateLabel(l.at)}</b><br>${esc(l.message)}</div>`).join(''):'<div class="small muted">No activity yet.</div>'}
-function openRerender(id){RERENDER_CLIP=id;const c=DATA.clips.find(x=>x.id===id);$('#rerenderTemplate').innerHTML=DATA.templates.map(t=>`<option value="${esc(t.id)}">${esc(t.name)} v${t.version||1}</option>`).join('');$('#rerenderTemplate').value=DATA.selectedTemplate?.id||c.templateId;$('#rerenderVariant').checked=c.status==='posted';$('#rerenderVariant').disabled=c.status==='posted';$('#variantRow').style.display='flex';$('#rerenderHelp').textContent=c.status==='posted'?'Already-posted media cannot be changed on the platform. This creates a new reviewable re-post variant.':'Replace this queued render while preserving its schedule, or create a separate variant.';$('#rerenderModal').classList.remove('hide')}
-$('#cancelRerender').onclick=()=>$('#rerenderModal').classList.add('hide');$('#confirmRerender').onclick=async()=>{const b=$('#confirmRerender');b.disabled=true;try{await api(`/api/clips/${encodeURIComponent(RERENDER_CLIP)}/rerender`,{method:'POST',body:JSON.stringify({templateId:$('#rerenderTemplate').value,asVariant:$('#rerenderVariant').checked})});toast('Re-render queued','good');$('#rerenderModal').classList.add('hide');refresh()}catch(e){toast(e.message,'bad')}b.disabled=false};
+let PW=localStorage.getItem('deenPw')||'', DATA=null, ACTIVE_VIEW='queue', SCHED_DAYS=5, LIB_FILTER='all', LIB_SORT='newest', MUSIC_FILE=null, TEMPLATE_DRAFT=null, EDITING_TEMPLATE_ID='';
+const fmtDuration=ms=>{const s=Math.max(0,Math.round(Number(ms||0)/1000));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`};
+const when=ms=>ms?new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}).format(new Date(ms)):'—';
+const age=ms=>{if(!ms)return'';const d=Date.now()-ms;if(d<60000)return'now';if(d<3600000)return`${Math.floor(d/60000)}m ago`;if(d<86400000)return`${Math.floor(d/3600000)}h ago`;return`${Math.floor(d/86400000)}d ago`};
+function toast(message,type=''){const box=$('#toasts');if(!box)return;const n=document.createElement('div');n.className=`toast ${type}`;n.textContent=message;box.append(n);setTimeout(()=>n.remove(),3600)}
+async function api(url,options={}){const r=await fetch(url,{...options,headers:{'Content-Type':'application/json','x-app-password':PW,...(options.headers||{})}});let b={};try{b=await r.json()}catch{}if(!r.ok)throw new Error(b.error||`Request failed (${r.status})`);return b}
+function withPw(url){if(!url)return'';return `${url}${url.includes('?')?'&':'?'}pw=${encodeURIComponent(PW)}`}
+function setBusy(button,on,label='Working…'){if(!button)return;button.disabled=on;button.classList.toggle('is-loading',on);if(on){button.dataset.oldText=button.textContent;button.textContent=label}else if(button.dataset.oldText){button.textContent=button.dataset.oldText;delete button.dataset.oldText}}
+function clipById(id){return DATA?.clips?.find(c=>c.id===id)}
+function projectClips(projectId){return (DATA?.clips||[]).filter(c=>c.projectId===projectId)}
+function firstProjectClip(projectId){return projectClips(projectId).find(c=>c.renderVerified)||projectClips(projectId)[0]}
+function statusLabel(c){return ({waiting:'Needs review',approved:'Approved',scheduled:'Scheduled',publishing:'Publishing',publish_failed:'Publish failed',ready:'Ready',posted:'Posted'}[c.status]||c.status||'Waiting')}
+function statusClass(c){if(c.status==='posted')return'done';if(c.status==='publish_failed')return'bad';if(['publishing','approved'].includes(c.status))return'needs';if(c.status==='waiting')return'needs';return'set'}
+function clipCaption(c){return [c.description,c.hashtags].filter(Boolean).join('\n\n')}
+function downloadClip(id){location.href=withPw(`/api/clips/${encodeURIComponent(id)}/download`)}
+async function copyText(text){await navigator.clipboard.writeText(text);toast('Copied','good')}
 
-function renderTopReadout(){
-  if(!DATA)return;
-  const ready=Boolean(DATA.readiness?.ready);
-  $('#liveDot')?.classList.toggle('off',!ready);
-  if($('#liveText')) $('#liveText').textContent=ready?'Automation ready':'Setup required';
-  if($('#tzLabel')) $('#tzLabel').textContent=DATA.timezone||'Australia/Perth';
-  const future=DATA.clips.filter(c=>c.scheduledAt&&c.scheduledAt>Date.now()&&!['posted','ready'].includes(c.status)).sort((a,b)=>a.scheduledAt-b.scheduledAt)[0];
-  if($('#cdNum')) $('#cdNum').textContent=future?countdownShort(future.scheduledAt):'—';
+async function boot(){try{DATA=await api('/api/state');localStorage.setItem('deenPw',PW);$('#gate')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#app')?.classList.remove('hide');renderAll();handleOAuthResult();return true}catch(e){$('#app')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#gate')?.classList.remove('hide');if($('#gateErr'))$('#gateErr').textContent=e.message;return false}}
+async function refresh({quiet=true}={}){try{DATA=await api('/api/state');renderAll()}catch(e){if(!quiet)toast(e.message,'bad')}}
+function handleOAuthResult(){const q=new URLSearchParams(location.search);if(!q.get('social'))return;toast(q.get('social')==='connected'?`${q.get('provider')} connected`:q.get('message')||'Connection failed',q.get('social')==='connected'?'good':'bad');history.replaceState({},'',location.pathname)}
+
+function showView(name,direction=1){const previous=$('.panel:not(.hide)');ACTIVE_VIEW=name;$$('.tab').forEach(b=>b.classList.toggle('on',b.dataset.view===name));$$('.panel').forEach(p=>p.classList.toggle('hide',p.id!==`view-${name}`));const next=$(`#view-${CSS.escape(name)}`);if(next&&next!==previous){next.classList.remove('slide-fwd','slide-back');void next.offsetWidth;next.classList.add(direction>=0?'slide-fwd':'slide-back');setTimeout(()=>next.classList.remove('slide-fwd','slide-back'),380)}if(name==='templates')loadTemplateEditor(DATA?.selectedTemplate?.id);if(name==='publishing')renderPublishing();if(name==='automation')renderAutomation()}
+
+function renderAll(){renderHeader();renderQueue();renderSchedule();renderAnalytics();renderMusic();renderLibrary();renderTemplateSelect();renderPublishing();renderAutomation();renderSide();updateClock()}
+function renderHeader(){if(!DATA)return;const ready=Boolean(DATA.readiness?.ready);$('#liveDot')?.classList.toggle('off',!ready);if($('#liveText'))$('#liveText').textContent=ready?'Self-hosted AI ready':'Setup required';if($('#tzLabel'))$('#tzLabel').textContent=DATA.timezone||'Australia/Perth';const q=(DATA.clips||[]).filter(c=>c.status==='waiting').length;const s=(DATA.clips||[]).filter(c=>['approved','scheduled','publishing','publish_failed'].includes(c.status)).length;if($('#cQueue')){$('#cQueue').textContent=q;$('#cQueue').classList.toggle('urgent',q>0)}if($('#cSched'))$('#cSched').textContent=s;const next=nextScheduledClip();if($('#cdNum'))$('#cdNum').textContent=next?countdown(next.scheduledAt):'—'}
+function nextScheduledClip(){return (DATA?.clips||[]).filter(c=>c.scheduledAt>Date.now()&&!['posted','ready'].includes(c.status)).sort((a,b)=>a.scheduledAt-b.scheduledAt)[0]}
+function countdown(at){const d=Math.max(0,Number(at)-Date.now());const h=Math.floor(d/3600000),m=Math.floor((d%3600000)/60000);return h?`${h}h ${m}m`:`${m}m`}
+function updateClock(){const tz=DATA?.timezone||'Australia/Perth';if($('#clock'))try{$('#clock').textContent=new Intl.DateTimeFormat('en-AU',{timeZone:tz,hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date())}catch{$('#clock').textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}if(DATA){const n=nextScheduledClip();if($('#cdNum'))$('#cdNum').textContent=n?countdown(n.scheduledAt):'—'}}
+
+function projectProgress(p){return `<div class="proc"><span class="spin"></span><div class="proc-what"><div class="proc-title">${esc(p.title||'Lecture')}</div><div class="proc-stage">${esc(p.stage||p.status)} · ${Number(p.progress||0)}%</div><div class="stage-bar"><div class="stage-fill" style="width:${Math.max(0,Math.min(100,Number(p.progress||0)))}%"></div></div>${p.error?`<div class="style-note status-bad">${esc(p.error)}</div>`:''}</div><div style="display:flex;gap:7px;flex-wrap:wrap">${p.status==='failed'?`<button class="btn btn-ghost btn-sm" data-project-retry="${esc(p.id)}">Retry</button>`:''}<button class="btn btn-ghost btn-sm project-remove" data-project-delete="${esc(p.id)}">Remove</button></div></div>`}
+function targetBadges(c){return (c.targets||[]).map(t=>`<span class="dest ${t.status==='failed'?'bad':t.status==='posted'?'done':''}">${esc(t.provider)} · ${esc(t.status)}</span>`).join('')}
+function clipCard(c,mode='review'){
+  const editable=mode==='review'; const cls=statusClass(c); const active=c.targets?.some(t=>['publishing','processing'].includes(t.status)); const failed=c.targets?.some(t=>t.status==='failed');
+  const actions=editable?
+    `<button class="btn btn-sm" data-approve="${esc(c.id)}">Approve & schedule</button><button class="btn btn-ghost btn-sm" data-export="${esc(c.id)}">Export only</button><button class="btn btn-ghost btn-sm" data-rerender="${esc(c.id)}">Apply template</button><button class="btn btn-ghost btn-sm btn-danger" data-clip-delete="${esc(c.id)}">Discard</button>`:
+    `${DATA.publishingSettings?.enabled&&c.status!=='posted'&&!active?`<button class="btn btn-sm" data-publish="${esc(c.id)}">${failed?'Retry posting':'Post now'}</button>`:''}<button class="btn btn-ghost btn-sm" data-download="${esc(c.id)}">Download</button><button class="btn btn-ghost btn-sm" data-copy="${esc(c.id)}">Copy caption</button><button class="btn btn-ghost btn-sm" data-rerender="${esc(c.id)}">${c.status==='posted'?'Repost variant':'Apply template'}</button>${c.status!=='posted'&&!active?`<button class="btn btn-ghost btn-sm" data-pullback="${esc(c.id)}">Pull back</button>`:''}`;
+  return `<article class="clip ${c.status==='posted'?'done':''} ${active?'busy':''}"><div class="clip-main"><button class="clip-thumb" data-preview="${esc(c.id)}" aria-label="Preview clip"><img class="clip-thumb-img" src="${withPw(c.thumbUrl)}" alt="${esc(c.title||'Clip thumbnail')}"><span class="lec-badge">${fmtDuration(c.durationMs)}</span></button><div class="clip-content"><div class="clip-top"><span class="stamp ${cls}">${esc(statusLabel(c))}</span><span class="stamp set">${Number(c.score||0)}/100</span>${c.musicVerified?'<span class="stamp set">Music verified</span>':'<span class="stamp bad">Music missing</span>'}${c.reviewRequired?'<span class="stamp needs">Check quotation</span>':''}<span class="clip-meta">${esc(c.templateName||'Template')} v${Number(c.templateVersion||1)}</span></div><input class="clip-title ${editable?'':'locked'}" data-title="${esc(c.id)}" value="${esc(c.title||'')}" ${editable?'':'readonly'}><textarea class="clip-body ${editable?'':'locked'}" data-description="${esc(c.id)}" rows="3" ${editable?'':'readonly'}>${esc(c.description||'')}</textarea><input class="clip-tags ${editable?'':'locked'}" data-hashtags="${esc(c.id)}" value="${esc(c.hashtags||'')}" ${editable?'':'readonly'}><div class="dests">${targetBadges(c)}${c.quality?`<span class="dest">Quality ${Number(c.quality.overall||0)}</span><span class="dest">Hook ${Number(c.quality.hook||0)}</span>`:''}</div>${c.rerender?`<div class="stage"><span class="spin"></span><span class="stage-text">${esc(c.rerender.stage||c.rerender.status)}</span><span class="stage-step">${Number(c.rerender.progress||0)}%</span></div>`:''}<div class="clip-foot"><span class="counter">${c.scheduledLabel?`Scheduled ${esc(c.scheduledLabel)}`:esc((c.scoreReasons||[]).slice(0,2).join(' · '))}</span>${actions}</div></div></div></article>`
 }
-function countdownShort(at){const diff=Math.max(0,Number(at)-Date.now());const h=Math.floor(diff/3600000),m=Math.floor(diff%3600000/60000);return h?`${h}h ${m}m`:`${m}m`}
-function updateClock(){const tz=DATA?.timezone||'Australia/Perth';try{$('#clock').textContent=new Intl.DateTimeFormat('en-AU',{timeZone:tz,hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date())}catch{$('#clock').textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}if(DATA)renderTopReadout()}
-setInterval(updateClock,1000);updateClock();
-setTimeout(()=>$('#splash')?.classList.add('out'),1550);setTimeout(()=>$('#splash')?.remove(),2150);
+function editedClip(id){return{title:$(`[data-title="${CSS.escape(id)}"]`)?.value||'',description:$(`[data-description="${CSS.escape(id)}"]`)?.value||'',hashtags:$(`[data-hashtags="${CSS.escape(id)}"]`)?.value||''}}
+function renderQueue(){if(!DATA)return;const processing=DATA.projects.filter(p=>['queued','processing'].includes(p.status));const waiting=DATA.clips.filter(c=>c.status==='waiting');$('#procHead')?.classList.toggle('hide',!processing.length);if($('#procList'))$('#procList').innerHTML=processing.map(projectProgress).join('');if($('#waitNote'))$('#waitNote').textContent=waiting.length?`${waiting.length} clip${waiting.length===1?'':'s'} ready to review`:'Nothing needs review';if($('#waitList'))$('#waitList').innerHTML=waiting.length?waiting.map(c=>clipCard(c,'review')).join(''):'<div class="slab"><span class="note">No clips are waiting. Strong clips can move directly into the schedule when automation is enabled.</span></div>';$('#approveAll')?.classList.toggle('hide',!waiting.length);$('#discardAll')?.classList.toggle('hide',!waiting.length);const r=DATA.readiness;if($('#send'))$('#send').disabled=!r.ready;if($('#intakeNote'))$('#intakeNote').innerHTML=r.ready?`${esc(r.template?.name||'Template')} · ${Number(r.musicTrackCount||0)} nasheeds · ${esc(r.model||'AI')}`:`<span class="status-bad">${!r.templateReady?'Choose a template. ':''}${!r.musicReady?'Upload a nasheed. ':''}</span>`;bindQueueActions()}
+function bindQueueActions(){
+  $$('[data-project-retry]').forEach(b=>b.onclick=async()=>{setBusy(b,true);try{await api(`/api/projects/${encodeURIComponent(b.dataset.projectRetry)}/retry`,{method:'POST'});toast('Lecture queued again','good');await refresh()}catch(e){toast(e.message,'bad')}setBusy(b,false)});
+  $$('[data-project-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('Remove this lecture, transcript and its generated clips?'))return;try{await api(`/api/projects/${encodeURIComponent(b.dataset.projectDelete)}`,{method:'DELETE'});toast('Lecture removed');await refresh()}catch(e){toast(e.message,'bad')}});
+  $$('[data-preview]').forEach(b=>b.onclick=()=>openPreview(b.dataset.preview));
+  $$('[data-approve]').forEach(b=>b.onclick=async()=>{const id=b.dataset.approve;setBusy(b,true);try{await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({...editedClip(id),status:'approved'})});toast('Approved and scheduled','good');await refresh()}catch(e){toast(e.message,'bad')}setBusy(b,false)});
+  $$('[data-export]').forEach(b=>b.onclick=async()=>{const id=b.dataset.export;setBusy(b,true);try{await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(editedClip(id))});await api(`/api/clips/${encodeURIComponent(id)}/ready`,{method:'POST'});downloadClip(id);toast('Clip prepared','good');await refresh()}catch(e){toast(e.message,'bad')}setBusy(b,false)});
+  $$('[data-clip-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('Discard this clip permanently?'))return;try{await api(`/api/clips/${encodeURIComponent(b.dataset.clipDelete)}`,{method:'DELETE'});toast('Clip discarded');await refresh()}catch(e){toast(e.message,'bad')}});
+  bindCommonClipActions();
+}
+function bindCommonClipActions(){
+  $$('[data-download]').forEach(b=>b.onclick=()=>downloadClip(b.dataset.download));
+  $$('[data-copy]').forEach(b=>b.onclick=()=>copyText(clipCaption(clipById(b.dataset.copy))));
+  $$('[data-publish]').forEach(b=>b.onclick=async()=>{setBusy(b,true,'Posting…');try{await api(`/api/clips/${encodeURIComponent(b.dataset.publish)}/publish`,{method:'POST'});toast('Publishing started','good');await refresh()}catch(e){toast(e.message,'bad')}setBusy(b,false)});
+  $$('[data-pullback]').forEach(b=>b.onclick=async()=>{try{await api(`/api/clips/${encodeURIComponent(b.dataset.pullback)}`,{method:'PATCH',body:JSON.stringify({status:'waiting'})});toast('Returned to review');await refresh()}catch(e){toast(e.message,'bad')}});
+  $$('[data-rerender]').forEach(b=>b.onclick=()=>openRerender(b.dataset.rerender));
+}
+function openPreview(id){const c=clipById(id);if(!c)return;$('#previewTitle').textContent=c.title||'Clip preview';$('#previewVideo').poster=withPw(c.thumbUrl);$('#previewVideo').src=withPw(c.videoUrl);$('#videoModal').classList.remove('hide');$('#previewVideo').play().catch(()=>{})}
 
-const socialResult=new URLSearchParams(location.search);if(PW)boot().then(ok=>{if(ok&&socialResult.get('social')){toast(socialResult.get('social')==='connected'?`${socialResult.get('provider')} connected`:socialResult.get('message')||'Connection failed',socialResult.get('social')==='connected'?'good':'bad');history.replaceState({},'',location.pathname)}});else{$('#gate').classList.remove('hide')}setInterval(()=>{if(DATA&&(DATA.activeJobs||DATA.projects.some(p=>['queued','processing'].includes(p.status))||DATA.rerenderJobs.some(j=>['queued','processing'].includes(j.status))||DATA.clips.some(c=>['scheduled','publishing'].includes(c.status)||c.targets?.some(t=>['scheduled','retrying','publishing','processing'].includes(t.status)))))refresh()},5000);
+function scheduleSlots(days){const out=[];const zone=DATA.timezone||'Australia/Perth';const parts=date=>Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(date).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));const today=parts(new Date());for(let d=0;d<days;d++){const base=new Date(`${today.year}-${today.month}-${today.day}T00:00:00+08:00`);base.setUTCDate(base.getUTCDate()+d);const dateKey=new Intl.DateTimeFormat('en-CA',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).format(base);for(const time of DATA.postTimes||[]){const [hh,mm]=time.split(':').map(Number);const at=new Date(`${dateKey}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00+08:00`).getTime();out.push({dateKey,time,at})}}return out}
+function clipAtSlot(slot){return DATA.clips.find(c=>c.scheduledAt&&Math.abs(c.scheduledAt-slot.at)<90000&&!['waiting','ready'].includes(c.status))}
+function renderSchedule(){if(!DATA)return;const scheduled=DATA.clips.filter(c=>c.status!=='waiting');if($('#railNote'))$('#railNote').textContent=`${DATA.timezone} · ${DATA.postTimes.join(', ')}`;const due=scheduled.filter(c=>['scheduled','approved'].includes(c.status)).length, publishing=scheduled.filter(c=>c.status==='publishing').length, failed=scheduled.filter(c=>c.status==='publish_failed').length, ready=scheduled.filter(c=>c.status==='ready').length;if($('#schedHealth'))$('#schedHealth').innerHTML=`<div class="health-card"><div class="health-k">Scheduled</div><div class="health-v">${due}</div><div class="health-s">Awaiting posting time</div></div><div class="health-card ${publishing?'warn':''}"><div class="health-k">Publishing</div><div class="health-v">${publishing}</div><div class="health-s">Active platform transfers</div></div><div class="health-card ${failed?'bad':''}"><div class="health-k">Failed</div><div class="health-v">${failed}</div><div class="health-s">Retry required</div></div><div class="health-card"><div class="health-k">Export ready</div><div class="health-v">${ready}</div><div class="health-s">Manual posting files</div></div>`;
+  const slots=scheduleSlots(SCHED_DAYS);let html='',last='';for(const slot of slots){if(slot.dateKey!==last){const label=new Intl.DateTimeFormat('en-AU',{weekday:'long',day:'numeric',month:'long',timeZone:DATA.timezone}).format(new Date(slot.at));html+=`<div class="board-day ${slot.dateKey===slots[0]?.dateKey?'today':''}"><span class="code">${esc(label)}</span><span class="board-day-n">${slots.filter(x=>x.dateKey===slot.dateKey).length} posting windows</span></div>`;last=slot.dateKey}const c=clipAtSlot(slot);const isNext=c&&c===nextScheduledClip();html+=`<div class="slot-card ${c?'':'open'} ${isNext?'next':''} ${slot.at<Date.now()?'past':''}"><div class="slot-time">${esc(slot.time)}</div><button class="slot-media ${c?'':'empty'}" ${c?`data-preview="${esc(c.id)}"`:''}>${c?`<img src="${withPw(c.thumbUrl)}" alt="${esc(c.title)}">`:'<span class="slot-open-icon">+</span>'}</button><div class="slot-what"><div class="slot-title">${c?esc(c.title):'Open posting slot'}</div><div class="slot-from">${c?esc(c.projectTitle||'Lecture'):'Automation fills this with an approved clip'}</div>${c?`<div class="slot-badges"><span class="safe-badge ${c.musicVerified?'good':'bad'}">Music</span><span class="safe-badge ${c.renderVerified?'good':'bad'}">Render</span><span class="safe-badge">${esc(c.templateName||'Template')}</span></div>`:''}</div><div class="slot-actions">${c?`${DATA.publishingSettings?.enabled&&c.status!=='posted'?`<button class="btn btn-sm" data-publish="${esc(c.id)}">Post now</button>`:''}<button class="btn btn-ghost btn-sm" data-download="${esc(c.id)}">Download</button>`:`<span class="slot-status">Available</span>`}</div></div>`}if($('#rail'))$('#rail').innerHTML=html||'<div class="empty">No posting slots configured.</div>';if($('#schedNote'))$('#schedNote').textContent=`${scheduled.length} clip${scheduled.length===1?'':'s'} outside the review queue`;if($('#schedList'))$('#schedList').innerHTML=scheduled.length?scheduled.sort((a,b)=>(a.scheduledAt||a.readyAt||a.postedAt||0)-(b.scheduledAt||b.readyAt||b.postedAt||0)).map(c=>clipCard(c,'scheduled')).join(''):'<div class="slab"><span class="note">No scheduled, ready or posted clips yet.</span></div>';$('#pullBackAll')?.classList.toggle('hide',!scheduled.some(c=>['approved','scheduled','ready','publish_failed'].includes(c.status)));$$('[data-preview]').forEach(b=>b.onclick=()=>openPreview(b.dataset.preview));bindCommonClipActions()}
 
-</script></body></html>
+function metric(title,value,sub='',cls=''){return `<div class="fig ${cls}"><div class="fig-v">${esc(value)}</div><div class="fig-k">${esc(title)}</div><div class="fig-s">${esc(sub)}</div></div>`}
+function barRows(entries){const max=Math.max(1,...entries.map(x=>x[1]));return entries.length?entries.map(([name,val])=>`<div class="bar-row"><div class="bar-lab">${esc(name)}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round(val/max*100)}%"></div></div><div class="bar-num">${val}</div></div>`).join(''):'<span class="note">No data yet.</span>'}
+function renderAnalytics(){if(!DATA)return;const clips=DATA.clips,waiting=clips.filter(c=>c.status==='waiting').length,posted=clips.filter(c=>c.status==='posted').length,verified=clips.filter(c=>c.musicVerified&&c.renderVerified).length,avg=clips.length?Math.round(clips.reduce((a,c)=>a+Number(c.score||0),0)/clips.length):0;const health=Math.round((DATA.readiness.ready?35:0)+(verified/Math.max(1,clips.length))*35+(DATA.publishingSettings?.enabled?15:5)+(DATA.automationSettings?.enabled?15:5));if($('#healthScore'))$('#healthScore').textContent=health;if($('#healthTitle'))$('#healthTitle').textContent=health>=85?'Automation is healthy':health>=60?'Almost ready':'Setup needs attention';if($('#healthNote'))$('#healthNote').textContent=DATA.readiness.ready?'Templates, music and renderer are ready.':'Complete the missing setup checks before processing lectures.';if($('#stats'))$('#stats').innerHTML=metric('Generated clips',clips.length,'All self-hosted renders')+metric('Average score',avg,'AI content ranking')+metric('Waiting',waiting,'Manual review required',waiting?'warn':'')+metric('Posted',posted,'Confirmed platform posts','good');if($('#analyticsActions'))$('#analyticsActions').innerHTML=`<button class="analytics-action" data-go="queue"><div><strong>Review queue</strong><span>${waiting} waiting</span></div><span>›</span></button><button class="analytics-action" data-go="publishing"><div><strong>Publishing</strong><span>${DATA.publishingSettings?.enabled?'Automatic uploads enabled':'Set up accounts'}</span></div><span>›</span></button><button class="analytics-action" data-go="automation"><div><strong>System check</strong><span>${DATA.readiness.ready?'Ready':'Action required'}</span></div><span>›</span></button>`;
+  const platform={};clips.forEach(c=>(c.targets||[]).filter(t=>t.status==='posted').forEach(t=>platform[t.provider]=(platform[t.provider]||0)+1));if($('#byPlatform'))$('#byPlatform').innerHTML=barRows(Object.entries(platform));const slots={};clips.filter(c=>c.postedAt).forEach(c=>{const h=new Intl.DateTimeFormat('en-AU',{timeZone:DATA.timezone,hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(c.postedAt));slots[h]=(slots[h]||0)+1});if($('#bySlot'))$('#bySlot').innerHTML=barRows(Object.entries(slots));const source={};clips.forEach(c=>source[c.projectTitle||'Lecture']=(source[c.projectTitle||'Lecture']||0)+1);if($('#bySource'))$('#bySource').innerHTML=barRows(Object.entries(source).sort((a,b)=>b[1]-a[1]).slice(0,8));if($('#byQuality'))$('#byQuality').innerHTML=`<div class="quality-row"><span class="quality-label">Music verified</span><span class="quality-pill ${verified===clips.length?'good':'warn'}">${verified}/${clips.length}</span></div><div class="quality-row"><span class="quality-label">Renderer ready</span><span class="quality-pill ${DATA.readiness.ready?'good':'bad'}">${DATA.readiness.ready?'Ready':'Blocked'}</span></div><div class="quality-row"><span class="quality-label">Automation</span><span class="quality-pill ${DATA.automationSettings.enabled?'good':'warn'}">${DATA.automationSettings.enabled?'On':'Paused'}</span></div>`;
+  const recent=clips.filter(c=>c.status==='posted').sort((a,b)=>(b.postedAt||0)-(a.postedAt||0)).slice(0,8);if($('#recentPosts'))$('#recentPosts').innerHTML=recent.length?recent.map(c=>`<div class="analytics-post"><button class="clip-thumb" data-preview="${esc(c.id)}"><img class="clip-thumb-img" src="${withPw(c.thumbUrl)}" alt="${esc(c.title)}"></button><div><div class="post-title">${esc(c.title)}</div><div class="post-sub">${esc(c.projectTitle||'Lecture')}</div><div class="post-tags">${(c.targets||[]).filter(t=>t.status==='posted').map(t=>`<span class="dest done">${esc(t.provider)}</span>`).join('')}</div></div><div class="post-when">${when(c.postedAt)}</div></div>`).join(''):'<div class="slab"><span class="note">No confirmed platform posts yet.</span></div>';if($('#socialSummary'))$('#socialSummary').innerHTML=metric('Platforms',Object.keys(platform).length,'Connected destinations')+metric('Successful posts',posted,'Confirmed by platform')+metric('Verified media',verified,'Music + template')+metric('Projects',DATA.projects.length,'Lecture sources');if($('#socialTopPosts'))$('#socialTopPosts').innerHTML='<span class="note">Platform view and retention analytics can be added after API permissions are approved.</span>';$$('[data-go]').forEach(b=>b.onclick=()=>showView(b.dataset.go));$$('[data-preview]').forEach(b=>b.onclick=()=>openPreview(b.dataset.preview))}
+
+function renderMusic(){if(!DATA)return;const tracks=DATA.tracks||[],vol=Number(DATA.musicSettings?.volumePercent||13),verified=DATA.clips.filter(c=>c.musicVerified).length;if($('#musicHero'))$('#musicHero').innerHTML=`<div class="music-stat"><strong>${tracks.length}</strong><span>Nasheeds uploaded</span></div><div class="music-stat"><strong>${vol}%</strong><span>Background level</span></div><div class="music-stat"><strong>${verified}</strong><span>Clips verified</span></div><div class="music-stat"><strong>Required</strong><span>Music cannot be skipped</span></div>`;if($('#musicSettingsState'))$('#musicSettingsState').textContent='Required on every clip';if($('#musicEnabled'))$('#musicEnabled').value='1';$$('[data-music-mode]').forEach((b,i)=>{b.classList.toggle('on',i===0);b.disabled=i===1});if($('#musicVolume'))$('#musicVolume').value=vol;if($('#volumeLabel'))$('#volumeLabel').textContent=vol;if($('#musicCreditNote'))$('#musicCreditNote').innerHTML='<strong>No Opus credits:</strong> every nasheed is mixed locally into the final MP4 and verified before scheduling.';if($('#musicNote'))$('#musicNote').textContent=`${tracks.length} track${tracks.length===1?'':'s'} · shuffled automatically`;const search=($('#musicSearch')?.value||'').toLowerCase();const filtered=tracks.filter(t=>String(t.name||'').toLowerCase().includes(search));if($('#musicList'))$('#musicList').innerHTML=filtered.length?`<div class="track-grid">${filtered.map(t=>`<div class="track-card"><div class="track-top"><div class="track-icon">♪</div><div class="track-what"><div class="track-name">${esc(t.name)}</div><div class="track-meta">${esc(t.fileName||'Audio')} · ${t.durationSec?`${Math.round(t.durationSec)} sec`:'Ready'}</div></div></div><audio class="track-audio" controls preload="none" src="${withPw(`/api/music/${encodeURIComponent(t.id)}/audio`)}"></audio><div class="track-actions"><button class="btn btn-ghost btn-sm btn-danger" data-track-delete="${esc(t.id)}">Delete</button></div></div>`).join('')}</div>`:'<div class="slab"><span class="note">No nasheeds uploaded. Add at least one before submitting a lecture.</span></div>';if($('#musicHealthList'))$('#musicHealthList').innerHTML=`<div class="music-health-row"><b>Library</b><span class="${tracks.length?'status-good':'status-bad'}">${tracks.length?'Ready':'Missing'}</span></div><div class="music-health-row"><b>Required mix</b><span class="status-good">Always on</span></div><div class="music-health-row"><b>Verified clips</b><span>${verified}/${DATA.clips.length}</span></div><div class="music-health-row"><b>Shuffle</b><span class="status-good">Enabled</span></div>`;if($('#ffmpegStatus'))$('#ffmpegStatus').innerHTML='<div class="music-card-title"><h3>System check</h3><span>FFmpeg + yt-dlp + Whisper</span></div><div class="style-note">Run the full diagnostic from this page or Automation. Thumbnail generation and music mixing both use FFmpeg.</div>';bindMusicActions()}
+function bindMusicActions(){$$('[data-track-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this nasheed?'))return;try{await api(`/api/music/${encodeURIComponent(b.dataset.trackDelete)}`,{method:'DELETE'});toast('Track deleted');await refresh()}catch(e){toast(e.message,'bad')}})}
+
+function projectCard(p){const clips=projectClips(p.id),cover=firstProjectClip(p.id),waiting=clips.filter(c=>c.status==='waiting').length,posted=clips.filter(c=>c.status==='posted').length;return `<article class="lec"><button class="lec-cover" ${cover?`data-preview="${esc(cover.id)}"`:''}>${cover?`<img src="${withPw(cover.thumbUrl)}" alt="${esc(p.title)}">`:'<span class="lec-cover-ph">▻</span>'}<span class="lec-badge">${esc(p.status)}</span></button><div class="lec-body"><div class="lec-topline"><span class="lec-chip ${p.status==='completed'?'good':p.status==='failed'?'bad':'warn'}">${esc(p.stage||p.status)}</span><span class="lec-chip dim">${clips.length} clips</span></div><div class="lec-what"><div class="lec-title">${esc(p.title)}</div><div class="lec-meta">${p.durationSec?`${Math.round(p.durationSec/60)} min · `:''}${age(p.submittedAt)}</div><span class="lec-link">${esc(p.url||p.id)}</span></div><div class="lec-progress"><span style="width:${Math.max(0,Math.min(100,Number(p.progress||0)))}%"></span></div><div class="lec-stats"><div class="lec-stat"><strong>${clips.length}</strong><span>clips</span></div><div class="lec-stat"><strong>${waiting}</strong><span>review</span></div><div class="lec-stat"><strong>${posted}</strong><span>posted</span></div></div>${p.error?`<div class="lec-warn">${esc(p.error)}</div>`:''}<div class="lec-actions">${p.status==='failed'?`<button class="btn btn-ghost btn-sm" data-project-retry="${esc(p.id)}">Retry</button>`:''}${waiting?`<button class="btn btn-ghost btn-sm" data-project-review="${esc(p.id)}">Review clips</button>`:''}<button class="btn btn-ghost btn-sm project-remove" data-project-delete="${esc(p.id)}">Remove lecture</button></div></div></article>`}
+function renderLibrary(){if(!DATA)return;let projects=[...DATA.projects];const query=($('#librarySearch')?.value||'').toLowerCase();projects=projects.filter(p=>!query||`${p.title} ${p.url} ${p.id}`.toLowerCase().includes(query));if(LIB_FILTER==='working')projects=projects.filter(p=>['queued','processing'].includes(p.status));if(LIB_FILTER==='issues')projects=projects.filter(p=>p.status==='failed'||p.error);if(LIB_FILTER==='available')projects=projects.filter(p=>projectClips(p.id).some(c=>c.status==='waiting'));if(LIB_FILTER==='external')projects=[];if(LIB_SORT==='az')projects.sort((a,b)=>String(a.title).localeCompare(String(b.title)));else if(LIB_SORT==='progress')projects.sort((a,b)=>Number(b.progress||0)-Number(a.progress||0));else if(LIB_SORT==='available')projects.sort((a,b)=>projectClips(b.id).filter(c=>c.status==='waiting').length-projectClips(a.id).filter(c=>c.status==='waiting').length);else projects.sort((a,b)=>Number(b.submittedAt||0)-Number(a.submittedAt||0));const complete=DATA.projects.filter(p=>p.status==='completed').length,working=DATA.projects.filter(p=>['queued','processing'].includes(p.status)).length,issues=DATA.projects.filter(p=>p.status==='failed').length;if($('#libraryStats'))$('#libraryStats').innerHTML=`<div class="library-stat"><strong>${DATA.projects.length}</strong><span>Lectures</span></div><div class="library-stat"><strong>${DATA.clips.length}</strong><span>Generated clips</span></div><div class="library-stat"><strong>${working}</strong><span>Processing</span></div><div class="library-stat"><strong>${issues}</strong><span>Issues</span></div>`;if($('#libraryList'))$('#libraryList').innerHTML=projects.length?`<div class="lec-grid">${projects.map(projectCard).join('')}</div>`:'<div class="slab"><span class="note">No lectures match this filter.</span></div>';$$('[data-project-review]').forEach(b=>b.onclick=()=>{showView('queue');setTimeout(()=>document.querySelector(`[data-title="${CSS.escape(projectClips(b.dataset.projectReview).find(c=>c.status==='waiting')?.id||'')}"`)?.scrollIntoView({behavior:'smooth',block:'center'}),100)});$$('[data-preview]').forEach(b=>b.onclick=()=>openPreview(b.dataset.preview));bindQueueActions()}
+
+function renderTemplateSelect(){if(!DATA)return;if($('#tplPick')){$('#tplPick').innerHTML=DATA.templates.map(t=>`<option value="${esc(t.id)}">${esc(t.name)} · v${Number(t.version||1)}</option>`).join('');$('#tplPick').value=DATA.selectedTemplate?.id||''}if($('#tplNote'))$('#tplNote').textContent=DATA.selectedTemplate?`${DATA.selectedTemplate.captionMode} captions · ${DATA.selectedTemplate.filterPreset} filter · saved version ${DATA.selectedTemplate.version}`:'Choose a saved template before processing.'}
+function editorField(label,key,type='text',opts=''){const v=TEMPLATE_DRAFT?.[key];if(type==='checkbox')return `<label class="editor-toggle"><input type="checkbox" data-template="${key}" ${v?'checked':''}>${esc(label)}</label>`;return `<div class="editor-row"><label>${esc(label)}</label><input type="${type}" data-template="${key}" value="${esc(v??'')}" ${opts}></div>`}
+function editorSelect(label,key,options){const v=TEMPLATE_DRAFT?.[key];return `<div class="editor-row"><label>${esc(label)}</label><select data-template="${key}">${options.map(x=>`<option value="${esc(x[0])}" ${x[0]===v?'selected':''}>${esc(x[1])}</option>`).join('')}</select></div>`}
+function loadTemplateEditor(id){if(!DATA)return;const t=DATA.templates.find(x=>x.id===id)||DATA.selectedTemplate||DATA.templates[0]||DATA.templateDraft;TEMPLATE_DRAFT=structuredClone(t||DATA.templateDraft);EDITING_TEMPLATE_ID=t?.id||'';renderTemplateEditor()}
+function renderTemplateEditor(){if(!TEMPLATE_DRAFT||!$('#templateEditor'))return;$('#templatePreset').innerHTML=DATA.templates.map(t=>`<option value="${esc(t.id)}">${esc(t.name)} v${Number(t.version||1)}</option>`).join('');$('#templatePreset').value=EDITING_TEMPLATE_ID;$('#templateEditor').innerHTML=`<details class="editor-group" open><summary>Identity & output</summary><div class="editor-body"><div class="editor-grid">${editorField('Template name','name')}${editorSelect('Video fit','fitMode',[['blur','Blurred background'],['crop','Full crop']])}${editorSelect('Filter','filterPreset',[['natural','Natural'],['crisp','Crisp'],['warm','Warm'],['cinematic','Cinematic'],['monochrome','Monochrome']])}${editorField('Voice enhancement','voiceEnhance','checkbox')}</div></div></details><details class="editor-group" open><summary>Captions</summary><div class="editor-body"><div class="editor-grid">${editorSelect('Caption mode','captionMode',[['word','Word highlight'],['phrase','Phrase captions']])}${editorSelect('Position','captionPosition',[['bottom','Bottom'],['middle','Middle'],['top','Top']])}${editorField('Font','captionFont')}${editorField('Font size','captionFontSize','number','min="24" max="110"')}${editorField('Primary colour','captionPrimary','color')}${editorField('Highlight colour','captionHighlight','color')}${editorField('Outline colour','captionOutline','color')}${editorField('Outline width','captionOutlineWidth','number','min="0" max="12"')}${editorField('Words per caption','captionMaxWords','number','min="1" max="12"')}${editorField('Uppercase','captionUppercase','checkbox')}</div></div></details><details class="editor-group"><summary>Opening hook</summary><div class="editor-body"><div class="editor-grid">${editorField('Enable hook card','hookEnabled','checkbox')}${editorField('Duration seconds','hookDuration','number','step="0.1" min="0.5" max="8"')}${editorField('Font size','hookFontSize','number','min="24" max="100"')}${editorField('Text colour','hookColor','color')}${editorField('Background','hookBackground','color')}${editorField('Background opacity','hookBackgroundOpacity','number','min="0" max="100"')}</div></div></details><details class="editor-group"><summary>Watermark & brand line</summary><div class="editor-body"><div class="editor-grid">${editorField('Watermark text','watermark')}${editorSelect('Position','watermarkPosition',[['top-center','Top centre'],['top-left','Top left'],['top-right','Top right'],['bottom-center','Bottom centre'],['bottom-left','Bottom left'],['bottom-right','Bottom right']])}${editorField('Text colour','watermarkColor','color')}${editorField('Opacity','watermarkOpacity','number','min="0" max="100"')}${editorField('Font size','watermarkFontSize','number','min="12" max="80"')}${editorField('Brand line','brandLineEnabled','checkbox')}${editorField('Brand line colour','brandLineColor','color')}${editorField('Brand line height','brandLineHeight','number','min="1" max="24"')}</div></div></details>`;$$('[data-template]').forEach(i=>i.oninput=()=>{const key=i.dataset.template;TEMPLATE_DRAFT[key]=i.type==='checkbox'?i.checked:i.type==='number'?Number(i.value):i.value;updateTemplatePreview()});updateTemplatePreview()}
+function rgba(hex,pct){const h=String(hex||'#000000').replace('#','');const n=parseInt(h.length===3?h.split('').map(x=>x+x).join(''):h,16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${Math.max(0,Math.min(100,Number(pct||0)))/100})`}
+function updateTemplatePreview(){const t=TEMPLATE_DRAFT;if(!t)return;const cap=$('#templateCaption');cap.className=`template-caption ${t.captionPosition||'bottom'}`;cap.style.fontFamily=t.captionFont||'Inter';cap.style.fontSize=`${Math.max(14,Number(t.captionFontSize||62)/3.3)}px`;cap.style.color=t.captionPrimary||'#fff';cap.style.textTransform=t.captionUppercase?'uppercase':'none';cap.querySelector('.active').style.color=t.captionHighlight||'#D9B478';const hook=$('#templateHook');hook.style.display=t.hookEnabled?'block':'none';hook.style.color=t.hookColor||'#fff';hook.style.background=rgba(t.hookBackground,t.hookBackgroundOpacity);hook.style.fontSize=`${Math.max(12,Number(t.hookFontSize||56)/4)}px`;const w=$('#templateWatermark');w.textContent=t.watermark||'';w.className=`template-watermark ${t.watermarkPosition||'top-center'}`;w.style.color=rgba(t.watermarkColor,t.watermarkOpacity);w.style.fontSize=`${Math.max(9,Number(t.watermarkFontSize||28)/3)}px`;const line=$('#templateBrandLine');line.style.display=t.brandLineEnabled?'block':'none';line.style.background=t.brandLineColor||'#D9B478';line.style.height=`${Math.max(2,Number(t.brandLineHeight||7)/2)}px`;const vid=$('#templatePreviewVideo');const filters={natural:'brightness(1) contrast(1) saturate(1)',crisp:'brightness(1.02) contrast(1.09) saturate(1.08)',warm:'brightness(1.03) contrast(1.04) saturate(1.12)',cinematic:'brightness(.99) contrast(1.13) saturate(.88)',monochrome:'grayscale(1) contrast(1.08)'};vid.style.filter=filters[t.filterPreset]||filters.natural;vid.style.transform=`scale(${t.fitMode==='crop'?1.18:1.03})`;if($('#deleteTemplate'))$('#deleteTemplate').disabled=Boolean(t.builtIn)}
+
+function providerCard(name){const provider=DATA.social?.providers?.[name]||{},setting=DATA.publishingSettings?.[name]||{},oauth=name==='instagram'||name==='facebook'?'meta':name,accounts=provider.accounts||[];const selected=accounts.find(a=>a.id===setting.accountId)||accounts[0];return `<div class="platform-card"><div class="platform-head"><strong>${esc(name)}</strong><span class="side-pill ${provider.connected?'good':provider.configured?'warn':'bad'}">${provider.connected?'Connected':provider.configured?'Ready to connect':'Credentials missing'}</span></div><div class="platform-body">${selected?`<div class="account-pick">${selected.avatar?`<img src="${esc(selected.avatar)}" alt="">`:''}<div><strong>${esc(selected.name)}</strong><div class="code">${esc(selected.id)}</div></div></div>`:'<div class="style-note">No connected account.</div>'}<label class="editor-toggle"><input type="checkbox" data-publish-enabled="${name}" ${setting.enabled?'checked':''} ${!provider.connected?'disabled':''}>Publish automatically to ${esc(name)}</label>${accounts.length?`<div class="editor-row"><label>Account</label><select data-publish-account="${name}">${accounts.map(a=>`<option value="${esc(a.id)}" ${a.id===setting.accountId?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div>`:''}${name==='youtube'?`<div class="editor-row"><label>Privacy</label><select id="youtubePrivacy"><option value="private" ${setting.privacy==='private'?'selected':''}>Private</option><option value="unlisted" ${setting.privacy==='unlisted'?'selected':''}>Unlisted</option><option value="public" ${setting.privacy==='public'?'selected':''}>Public</option></select></div>`:''}${name==='tiktok'?`<div class="editor-row"><label>Privacy</label><select id="tiktokPrivacy"><option value="SELF_ONLY" ${setting.privacy==='SELF_ONLY'?'selected':''}>Only me</option><option value="MUTUAL_FOLLOW_FRIENDS" ${setting.privacy==='MUTUAL_FOLLOW_FRIENDS'?'selected':''}>Friends</option><option value="FOLLOWER_OF_CREATOR" ${setting.privacy==='FOLLOWER_OF_CREATOR'?'selected':''}>Followers</option><option value="PUBLIC_TO_EVERYONE" ${setting.privacy==='PUBLIC_TO_EVERYONE'?'selected':''}>Public</option></select></div><div class="style-note">TikTok clips always require explicit manual approval before upload.</div>`:''}<div style="display:flex;gap:8px;flex-wrap:wrap">${provider.connected?`<button class="btn btn-ghost btn-sm" data-social-test="${name}">Test</button><button class="btn btn-ghost btn-sm btn-danger" data-social-disconnect="${oauth}">Disconnect</button>`:`<button class="btn btn-sm" data-social-connect="${oauth}" ${!provider.configured?'disabled':''}>Connect ${oauth==='meta'?'Meta':name}</button>`}</div>${provider.lastTestError?`<div class="style-note status-bad">${esc(provider.lastTestError)}</div>`:''}</div></div>`}
+function renderPublishing(){if(!DATA||!$('#platformGrid'))return;const p=DATA.publishingSettings||{},social=DATA.social||{};$('#publishingEnabled').checked=Boolean(p.enabled);$('#platformGrid').innerHTML=['youtube','instagram','facebook','tiktok'].map(providerCard).join('');const targets=DATA.clips.flatMap(c=>(c.targets||[]).map(t=>({...t,title:c.title,clipId:c.id}))).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));$('#publishHistory').innerHTML=targets.length?targets.slice(0,30).map(t=>`<div class="target-line"><span class="target-dot ${esc(t.status)}"></span><strong>${esc(t.provider)}</strong><span>${esc(t.title)}</span><span class="spacer ${t.status==='failed'?'status-bad':t.status==='posted'?'status-good':'code'}">${esc(t.stage||t.status)}</span>${t.postUrl?`<a href="${esc(t.postUrl)}" target="_blank" rel="noopener">Open</a>`:''}${t.status==='failed'?`<button class="btn btn-ghost btn-sm" data-retry-target="${esc(t.clipId)}" data-provider="${esc(t.provider)}">Retry</button>`:''}</div>`).join(''):'<span class="note">No platform transfers yet.</span>';if($('#publishingIssues'))$('#publishingIssues').innerHTML=(social.issues||[]).length?(social.issues||[]).map(x=>`<div class="lec-warn">${esc(x)}</div>`).join(''):'<div class="style-note status-good">Publishing security and public URL checks passed.</div>';bindPublishingActions()}
+function bindPublishingActions(){$$('[data-social-connect]').forEach(b=>b.onclick=async()=>{setBusy(b,true,'Opening…');try{const r=await api(`/api/social/${b.dataset.socialConnect}/connect`,{method:'POST'});location.href=r.url}catch(e){toast(e.message,'bad');setBusy(b,false)}});$$('[data-social-disconnect]').forEach(b=>b.onclick=async()=>{if(!confirm('Disconnect this account and disable future uploads?'))return;try{await api(`/api/social/${b.dataset.socialDisconnect}/disconnect`,{method:'POST'});toast('Account disconnected');await refresh()}catch(e){toast(e.message,'bad')}});$$('[data-social-test]').forEach(b=>b.onclick=async()=>{const name=b.dataset.socialTest,account=$(`[data-publish-account="${name}"]`)?.value||'';setBusy(b,true,'Testing…');try{await api(`/api/social/${name}/test`,{method:'POST',body:JSON.stringify({accountId:account})});toast(`${name} connection works`,'good');await refresh()}catch(e){toast(e.message,'bad')}setBusy(b,false)});$$('[data-retry-target]').forEach(b=>b.onclick=async()=>{try{await api(`/api/clips/${encodeURIComponent(b.dataset.retryTarget)}/retry-publish`,{method:'POST',body:JSON.stringify({provider:b.dataset.provider})});toast('Publishing retry queued','good');await refresh()}catch(e){toast(e.message,'bad')}})}
+
+function renderAutomation(){if(!DATA||!$('#autoEnabled'))return;const a=DATA.automationSettings||{},c=DATA.clipSettings||{};$('#autoEnabled').checked=Boolean(a.enabled);$('#skipQuotes').checked=Boolean(a.skipReviewRequired);$('#minimumScore').value=a.minimumScore;$('#minimumQuality').value=a.minimumQuality;$('#maxPerProject').value=a.maxPerProject;$('#clipCount').value=c.clipsPerVideo;$('#clipMin').value=c.clipMinSeconds;$('#clipMax').value=c.clipMaxSeconds;$('#automationSummary').innerHTML=`<div class="figs">${metric('AI model',DATA.readiness?.model||'—','Local transcription')}${metric('Active jobs',DATA.activeJobs,'Processing workers')}${metric('Auto score',`${a.minimumScore}+`,'Content threshold')}${metric('Quality',`${a.minimumQuality}+`,'Render threshold')}</div>`}
+
+function renderSide(){if(!DATA)return;const next=nextScheduledClip();if($('#nextStatusPill')){$('#nextStatusPill').textContent=next?'Scheduled':'Open';$('#nextStatusPill').className=`side-pill ${next?'good':'warn'}`}if($('#nextBox'))$('#nextBox').innerHTML=next?`<div class="side-next"><button class="side-next-media" data-preview="${esc(next.id)}"><img src="${withPw(next.thumbUrl)}" alt="${esc(next.title)}"></button><div><div class="side-next-count">${countdown(next.scheduledAt)}</div><div class="side-next-title">${esc(next.title)}</div><div class="side-next-meta">${esc(next.scheduledLabel||when(next.scheduledAt))}</div></div></div><div class="side-action-row"><button class="btn btn-sm" data-publish="${esc(next.id)}">Post now</button><button class="btn btn-ghost btn-sm" data-preview="${esc(next.id)}">Preview</button></div>`:'<div class="now-idle">No future clip is scheduled. Approve a verified clip or enable automation.</div>';const today=new Date().toLocaleDateString('en-CA',{timeZone:DATA.timezone});const todayClips=DATA.clips.filter(c=>c.scheduledAt&&new Date(c.scheduledAt).toLocaleDateString('en-CA',{timeZone:DATA.timezone})===today);if($('#sideToday'))$('#sideToday').innerHTML=`<div class="side-stats"><div class="side-stat"><strong>${todayClips.length}</strong><span>scheduled today</span></div><div class="side-stat"><strong>${todayClips.filter(c=>c.status==='posted').length}</strong><span>posted today</span></div><div class="side-stat"><strong>${DATA.clips.filter(c=>c.status==='waiting').length}</strong><span>need review</span></div><div class="side-stat"><strong>${DATA.activeJobs}</strong><span>active jobs</span></div></div>`;const active=DATA.projects.filter(p=>['queued','processing'].includes(p.status)).map(p=>({title:p.title,stage:p.stage})).concat(DATA.clips.filter(c=>['publishing'].includes(c.status)).map(c=>({title:c.title,stage:'Publishing'})));if($('#nowList'))$('#nowList').innerHTML=active.length?active.slice(0,6).map(x=>`<div class="now-item"><span class="spin"></span><div class="now-what"><div class="now-title">${esc(x.title)}</div><div class="now-stage">${esc(x.stage)}</div></div></div>`).join(''):'<div class="now-idle">Nothing is processing right now.</div>';const issues=[['Nasheeds',DATA.tracks.length?`${DATA.tracks.length} ready`:'Upload one',!DATA.tracks.length],['Template',DATA.selectedTemplate?.name||'Choose one',!DATA.selectedTemplate],['Publishing',DATA.publishingSettings?.enabled?'On':'Optional',false],['Failed posts',DATA.clips.filter(c=>c.status==='publish_failed').length,DATA.clips.some(c=>c.status==='publish_failed')]];if($('#sideAttention'))$('#sideAttention').innerHTML=issues.map(([k,v,bad])=>`<div class="attention-row"><span>${esc(k)}</span><strong class="${bad?'bad':''}">${esc(v)}</strong></div>`).join('');if($('#musicModeBox'))$('#musicModeBox').innerHTML=`<div class="side-mode-line"><div><div class="side-mode-name">Required local mix</div><div class="side-mode-note">A shuffled nasheed is physically mixed into every final MP4.</div></div><span class="side-pill ${DATA.tracks.length?'good':'bad'}">${DATA.tracks.length?'Ready':'Blocked'}</span></div><div class="side-badge-row"><span class="side-pill">${DATA.musicSettings.volumePercent}% volume</span><span class="side-pill">Voice ducking</span><span class="side-pill">Verified</span></div>`;if($('#accounts')){$('#accounts').innerHTML=['youtube','instagram','facebook','tiktok'].map(n=>{const p=DATA.social?.providers?.[n];return `<div class="attention-row"><span>${esc(n)}</span><strong class="${p?.connected?'status-good':p?.configured?'status-warn':'status-bad'}">${p?.connected?'Connected':p?.configured?'Not connected':'Not configured'}</strong></div>`}).join('')}if($('#log'))$('#log').innerHTML=DATA.log.length?DATA.log.slice(0,20).map(l=>`<div class="now-item"><div class="now-what"><div class="now-title">${esc(l.message)}</div><div class="now-stage">${when(l.at)}</div></div></div>`).join(''):'<div class="now-idle">No activity yet.</div>';$$('[data-preview]').forEach(b=>b.onclick=()=>openPreview(b.dataset.preview));bindCommonClipActions()}
+
+function openRerender(id){const c=clipById(id);if(!c)return;$('#rerenderClipId').value=id;$('#rerenderTemplate').innerHTML=DATA.templates.map(t=>`<option value="${esc(t.id)}">${esc(t.name)} v${Number(t.version||1)}</option>`).join('');$('#rerenderTemplate').value=DATA.selectedTemplate?.id||c.templateId;$('#rerenderVariant').checked=c.status==='posted';$('#rerenderVariant').disabled=c.status==='posted';$('#rerenderHelp').textContent=c.status==='posted'?'A posted video cannot be changed. This creates a new reviewable repost variant.':'The scheduled time is preserved when the render is replaced.';$('#rerenderModal').classList.remove('hide')}
+
+// global controls
+$('#unlock').onclick=async()=>{PW=$('#pw').value;await boot()};$('#pw').onkeydown=e=>{if(e.key==='Enter')$('#unlock').click()};
+$$('.tab').forEach((b,i)=>b.onclick=()=>{const order=$$('.tab').map(x=>x.dataset.view);showView(b.dataset.view,order.indexOf(b.dataset.view)>=order.indexOf(ACTIVE_VIEW)?1:-1)});
+$('#send').onclick=async()=>{const urls=$('#urls').value.trim();if(!urls)return toast('Paste at least one lecture link','bad');setBusy($('#send'),true,'Creating…');try{const r=await api('/api/videos',{method:'POST',body:JSON.stringify({urls})});const failed=r.results?.filter(x=>!x.ok);toast(failed?.length?`${r.results.length-failed.length} queued, ${failed.length} failed`:'Lecture queued','good');$('#urls').value='';await refresh()}catch(e){toast(e.message,'bad')}setBusy($('#send'),false)};
+$('#approveAll').onclick=async()=>{const waiting=DATA.clips.filter(c=>c.status==='waiting'&&c.musicVerified&&c.renderVerified);if(!waiting.length)return;setBusy($('#approveAll'),true);for(const c of waiting){try{await api(`/api/clips/${encodeURIComponent(c.id)}`,{method:'PATCH',body:JSON.stringify({status:'approved'})})}catch(e){toast(`${c.title}: ${e.message}`,'bad')}}toast('Verified clips approved','good');await refresh();setBusy($('#approveAll'),false)};
+$('#discardAll').onclick=async()=>{if(!confirm('Discard every clip currently waiting for review?'))return;for(const c of DATA.clips.filter(c=>c.status==='waiting'))try{await api(`/api/clips/${encodeURIComponent(c.id)}`,{method:'DELETE'})}catch{}toast('Waiting queue cleared');await refresh()};
+$('#pullBackAll').onclick=async()=>{for(const c of DATA.clips.filter(c=>['approved','scheduled','ready','publish_failed'].includes(c.status)))try{await api(`/api/clips/${encodeURIComponent(c.id)}`,{method:'PATCH',body:JSON.stringify({status:'waiting'})})}catch{}toast('Clips returned to review');await refresh()};
+$$('[data-sched-days]').forEach(b=>b.onclick=()=>{SCHED_DAYS=Number(b.dataset.schedDays);$$('[data-sched-days]').forEach(x=>x.classList.toggle('on',x===b));renderSchedule()});
+$('#musicVolume').oninput=()=>{$('#volumeLabel').textContent=$('#musicVolume').value};$('#saveMusicSettings').onclick=async()=>{try{await api('/api/music-settings',{method:'POST',body:JSON.stringify({volumePercent:Number($('#musicVolume').value)})});toast('Music settings saved','good');await refresh()}catch(e){toast(e.message,'bad')}};
+$('#pickMusic').onclick=()=>$('#musicFile').click();$('#musicFile').onchange=()=>selectMusicFile($('#musicFile').files[0]);function selectMusicFile(file){MUSIC_FILE=file||null;$('#musicPicked').textContent=file?`${file.name} · ${(file.size/1024/1024).toFixed(1)} MB`:'No file chosen';$('#musicName').value=file?.name?.replace(/\.[^.]+$/,'')||'';$('#uploadMusic').disabled=!file}$('#musicDrop').ondragover=e=>{e.preventDefault();$('#musicDrop').classList.add('drag')};$('#musicDrop').ondragleave=()=>$('#musicDrop').classList.remove('drag');$('#musicDrop').ondrop=e=>{e.preventDefault();$('#musicDrop').classList.remove('drag');selectMusicFile(e.dataTransfer.files[0])};$('#uploadMusic').onclick=async()=>{if(!MUSIC_FILE)return;setBusy($('#uploadMusic'),true,'Uploading…');try{const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=reject;r.readAsDataURL(MUSIC_FILE)});await api('/api/music',{method:'POST',body:JSON.stringify({name:$('#musicName').value||MUSIC_FILE.name,data,mimeType:MUSIC_FILE.type})});toast('Nasheed uploaded','good');MUSIC_FILE=null;$('#musicFile').value='';$('#musicName').value='';$('#musicPicked').textContent='No file chosen';await refresh()}catch(e){toast(e.message,'bad')}setBusy($('#uploadMusic'),false)};$('#musicSearch').oninput=renderMusic;$('#refreshMusic').onclick=()=>refresh({quiet:false});$('#checkFfmpeg').onclick=async()=>{setBusy($('#checkFfmpeg'),true,'Checking…');try{const r=await api('/api/diagnostics');$('#ffmpegStatus').innerHTML=`<div class="music-card-title"><h3>System check</h3><span class="${r.ok?'status-good':'status-bad'}">${r.ok?'Passed':'Failed'}</span></div><div class="system-json">${esc(JSON.stringify(r,null,2))}</div>`;toast(r.ok?'Everything is installed':'A dependency is missing',r.ok?'good':'bad')}catch(e){toast(e.message,'bad')}setBusy($('#checkFfmpeg'),false)};
+$('#refreshLibrary').onclick=()=>refresh({quiet:false});$('#librarySearch').oninput=renderLibrary;$('#librarySort').onchange=()=>{LIB_SORT=$('#librarySort').value;renderLibrary()};$$('[data-library-filter]').forEach(b=>b.onclick=()=>{LIB_FILTER=b.dataset.libraryFilter;$$('[data-library-filter]').forEach(x=>x.classList.toggle('on',x===b));renderLibrary()});
+$('#tplPick').onchange=async()=>{try{await api('/api/template',{method:'POST',body:JSON.stringify({id:$('#tplPick').value})});toast('Automatic template changed','good');await refresh()}catch(e){toast(e.message,'bad')}};$('#countPick').onchange=()=>{$('#clipCount').value=$('#countPick').value||8};$('#saveCount').onclick=async()=>{const count=Number($('#countPick').value||8),min=Number($('#durMin').value),max=Number($('#durMax').value);try{await api('/api/clip-settings',{method:'POST',body:JSON.stringify({clipsPerVideo:count,clipMinSeconds:min,clipMaxSeconds:max})});toast('Clip settings saved','good');await refresh()}catch(e){toast(e.message,'bad')}};$('#refreshAcc').onclick=()=>showView('publishing');
+$('#templatePreset').onchange=()=>loadTemplateEditor($('#templatePreset').value);$('#newTemplate').onclick=()=>{TEMPLATE_DRAFT=structuredClone(DATA.templateDraft);TEMPLATE_DRAFT.name='New DeenClipped Template';EDITING_TEMPLATE_ID='';renderTemplateEditor()};$('#duplicateTemplate').onclick=async()=>{if(!EDITING_TEMPLATE_ID)return;try{const r=await api(`/api/templates/${encodeURIComponent(EDITING_TEMPLATE_ID)}/duplicate`,{method:'POST',body:JSON.stringify({name:`${TEMPLATE_DRAFT.name} Copy`})});toast('Template duplicated','good');await refresh();loadTemplateEditor(r.template.id)}catch(e){toast(e.message,'bad')}};$('#saveTemplate').onclick=async()=>{try{let r;if(EDITING_TEMPLATE_ID&&!TEMPLATE_DRAFT.builtIn)r=await api(`/api/templates/${encodeURIComponent(EDITING_TEMPLATE_ID)}`,{method:'PUT',body:JSON.stringify({template:TEMPLATE_DRAFT})});else r=await api('/api/templates',{method:'POST',body:JSON.stringify({template:{...TEMPLATE_DRAFT,id:''},select:true})});toast('Template saved','good');await refresh();loadTemplateEditor(r.template.id)}catch(e){toast(e.message,'bad')}};$('#deleteTemplate').onclick=async()=>{if(!EDITING_TEMPLATE_ID||TEMPLATE_DRAFT.builtIn)return;if(!confirm('Delete this template? Existing rendered videos remain unchanged.'))return;try{await api(`/api/templates/${encodeURIComponent(EDITING_TEMPLATE_ID)}`,{method:'DELETE'});toast('Template deleted');await refresh();loadTemplateEditor(DATA.selectedTemplate?.id)}catch(e){toast(e.message,'bad')}};$('#useTemplate').onclick=async()=>{if(!EDITING_TEMPLATE_ID)return toast('Save this template first','bad');try{await api('/api/template',{method:'POST',body:JSON.stringify({id:EDITING_TEMPLATE_ID})});toast('Template selected for all new clips','good');await refresh()}catch(e){toast(e.message,'bad')}};
+$('#savePublishing').onclick=async()=>{const current=DATA.publishingSettings;const body={enabled:$('#publishingEnabled').checked};for(const n of ['youtube','instagram','facebook','tiktok'])body[n]={...current[n],enabled:Boolean($(`[data-publish-enabled="${n}"]`)?.checked),accountId:$(`[data-publish-account="${n}"]`)?.value||current[n]?.accountId||''};body.youtube.privacy=$('#youtubePrivacy')?.value||current.youtube.privacy;body.tiktok.privacy=$('#tiktokPrivacy')?.value||current.tiktok.privacy;try{await api('/api/publishing-settings',{method:'POST',body:JSON.stringify(body)});toast('Publishing settings saved','good');await refresh()}catch(e){toast(e.message,'bad')}};
+$('#saveAutomation').onclick=async()=>{try{await api('/api/automation-settings',{method:'POST',body:JSON.stringify({enabled:$('#autoEnabled').checked,minimumScore:Number($('#minimumScore').value),minimumQuality:Number($('#minimumQuality').value),maxPerProject:Number($('#maxPerProject').value),skipReviewRequired:$('#skipQuotes').checked})});toast('Automation saved','good');await refresh()}catch(e){toast(e.message,'bad')}};$('#saveClipSettings').onclick=async()=>{try{await api('/api/clip-settings',{method:'POST',body:JSON.stringify({clipsPerVideo:Number($('#clipCount').value),clipMinSeconds:Number($('#clipMin').value),clipMaxSeconds:Number($('#clipMax').value)})});toast('Generation settings saved','good');await refresh()}catch(e){toast(e.message,'bad')}};$('#runDiagnostics').onclick=async()=>{setBusy($('#runDiagnostics'),true,'Checking…');$('#diagnostics').textContent='Running checks…';try{const r=await api('/api/diagnostics');$('#diagnostics').textContent=JSON.stringify(r,null,2);toast(r.ok?'System check passed':'System check found a problem',r.ok?'good':'bad')}catch(e){$('#diagnostics').textContent=e.message;toast(e.message,'bad')}setBusy($('#runDiagnostics'),false)};
+$('#cancelRerender').onclick=()=>$('#rerenderModal').classList.add('hide');$('#confirmRerender').onclick=async()=>{const id=$('#rerenderClipId').value;setBusy($('#confirmRerender'),true,'Queueing…');try{await api(`/api/clips/${encodeURIComponent(id)}/rerender`,{method:'POST',body:JSON.stringify({templateId:$('#rerenderTemplate').value,asVariant:$('#rerenderVariant').checked})});toast('New render queued','good');$('#rerenderModal').classList.add('hide');await refresh()}catch(e){toast(e.message,'bad')}setBusy($('#confirmRerender'),false)};$('#closePreview').onclick=()=>{$('#previewVideo').pause();$('#previewVideo').removeAttribute('src');$('#videoModal').classList.add('hide')};
+
+setInterval(updateClock,1000);setTimeout(()=>$('#splash')?.classList.add('out'),1550);setTimeout(()=>$('#splash')?.remove(),2150);if(PW)boot();else $('#gate').classList.remove('hide');setInterval(()=>{if(DATA&&(DATA.activeJobs||DATA.projects.some(p=>['queued','processing'].includes(p.status))||DATA.rerenderJobs?.some(j=>['queued','processing'].includes(j.status))||DATA.clips.some(c=>['scheduled','publishing'].includes(c.status)||c.targets?.some(t=>['scheduled','retrying','publishing','processing'].includes(t.status)))))refresh()},5000);
+
+</script>
+</body>
+</html>
