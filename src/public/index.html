@@ -266,6 +266,7 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
   background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:19px;margin-bottom:12px;
   transition:border-color .16s ease,transform .18s cubic-bezier(.2,.8,.2,1),box-shadow .18s ease;
   transform:translateZ(0);
+  content-visibility:auto;contain-intrinsic-size:190px 420px;
 }
 .clip:hover{border-color:var(--line-lit);transform:translateY(-1px);box-shadow:0 8px 22px rgba(0,0,0,.13)}
 .clip.busy{animation:busy-breathe 1.8s ease-in-out infinite}
@@ -601,6 +602,19 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .safe-badge.good{border-color:rgba(95,206,139,.28);color:#adeac4;background:rgba(35,110,61,.16)}
 .safe-badge.warn{border-color:rgba(217,180,120,.32);color:var(--blue-soft);background:rgba(120,90,30,.16)}
 .safe-badge.bad{border-color:rgba(255,85,102,.32);color:#ffb0b8;background:rgba(110,25,25,.18)}
+.preflight{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:12px}
+.preflight.compact{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.preflight-item{border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.025);padding:8px 9px;min-width:0}
+.preflight.compact .preflight-item{padding:6px 8px;border-radius:999px;display:inline-flex;align-items:center;gap:6px}
+.preflight-icon{font-size:12px;line-height:1;color:var(--mute)}
+.preflight-label{display:block;font-size:11px;line-height:1;color:var(--mute-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.preflight-text{display:block;margin-top:4px;font-size:12px;line-height:1.25;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.preflight.compact .preflight-label{display:none}.preflight.compact .preflight-text{margin:0;font-size:11.5px;max-width:140px}
+.preflight-item.good{border-color:rgba(95,206,139,.25);background:rgba(35,110,61,.10)}.preflight-item.good .preflight-icon,.preflight-item.good .preflight-text{color:#adeac4}
+.preflight-item.warn{border-color:rgba(217,180,120,.30);background:rgba(120,90,30,.14)}.preflight-item.warn .preflight-icon,.preflight-item.warn .preflight-text{color:var(--blue-soft)}
+.preflight-item.bad{border-color:rgba(255,85,102,.32);background:rgba(110,25,25,.16)}.preflight-item.bad .preflight-icon,.preflight-item.bad .preflight-text{color:#ffb0b8}
+.social-auto-status{display:grid;gap:8px;margin:10px 0 12px}.auto-row{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.025);padding:9px 10px}.auto-row span{color:var(--mute);font-size:12.5px}.auto-row strong{font-size:13px}.metric-link{grid-column:1/-1}.metric-link input{width:100%}
+@media (max-width:760px){.preflight{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .slot-actions{display:flex;gap:7px;justify-content:flex-end;align-items:center;flex-wrap:wrap;max-width:240px}
 .slot-actions .btn{white-space:nowrap}
 .slot-status{font-size:12.5px;color:var(--mute-2);margin-left:auto;white-space:nowrap}
@@ -658,7 +672,7 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .mini-head h3{font-size:15px;font-weight:600;letter-spacing:-.02em}
 .mini-head span{font-size:12px;color:var(--mute)}
 .analytics-feed{display:grid;gap:12px}
-.analytics-post{display:grid;grid-template-columns:82px minmax(0,1fr) auto;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px;transition:transform .18s ease,border-color .18s ease}
+.analytics-post{display:grid;grid-template-columns:82px minmax(0,1fr) auto;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px;transition:transform .18s ease,border-color .18s ease;content-visibility:auto;contain-intrinsic-size:120px 460px}
 .analytics-post:hover{transform:translateY(-1px);border-color:var(--line-2)}
 .analytics-post .clip-thumb{width:82px;height:112px;border-radius:10px}
 .post-title{font-weight:600;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
@@ -990,9 +1004,10 @@ select:focus{outline:none;border-color:var(--blue)}
               <div id="socialTopPosts" style="margin-top:14px"></div>
             </div>
             <div class="slab social-tools">
-              <div class="mini-head"><h3>Update stats</h3><span>Manual for now</span></div>
-              <p class="hint">Paste the numbers from YouTube Studio, TikTok/Instagram insights or Opus after a post goes live. Automatic refresh can be added later once those platform API connections are set up.</p>
-              <button class="btn btn-sm" id="openMetricUpdater" type="button">Update recent post stats</button>
+              <div class="mini-head"><h3>Auto stats</h3><span id="autoAnalyticsState">YouTube first</span></div>
+              <div class="social-auto-status" id="socialAutoStatus"></div>
+              <button class="btn btn-sm" id="refreshYoutubeStats" type="button">Refresh YouTube stats</button>
+              <button class="btn btn-ghost btn-sm" id="openMetricUpdater" type="button">Link / edit post stats</button>
               <button class="btn btn-ghost btn-sm" id="clearMetricForm" type="button">Clear inputs</button>
             </div>
           </div>
@@ -1025,7 +1040,7 @@ select:focus{outline:none;border-color:var(--blue)}
           </div>
           <div id="recentPosts" class="analytics-feed"></div>
 
-          <p class="hint">This page now supports social-performance tracking too. Manual stats work immediately; automatic views/likes require YouTube, Meta/Instagram and TikTok API/OAuth connections.</p>
+          <p class="hint">This page now supports automatic YouTube stats when YOUTUBE_API_KEY is set. TikTok, Instagram and Facebook still need their own platform connections later.</p>
         </section>
 
         <!-- music -->
@@ -1316,6 +1331,34 @@ function projectClipPreviewUrl(projectId, clipId) {
   return projectId && clipId
     ? withPw('/api/projects/' + encodeURIComponent(projectId) + '/clips/' + encodeURIComponent(clipId) + '/preview.mp4')
     : '';
+}
+
+let mediaObserver = null;
+function lazyMedia(node, src) {
+  if (!node || !src) return;
+  node.dataset.src = src;
+  if (node.tagName === 'IMG') {
+    node.loading = 'lazy';
+    node.decoding = 'async';
+  }
+  if (!('IntersectionObserver' in window)) {
+    node.src = src;
+    return;
+  }
+  if (!mediaObserver) {
+    mediaObserver = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const target = entry.target;
+        mediaObserver.unobserve(target);
+        if (target.dataset.src && !target.src) {
+          target.src = target.dataset.src;
+          if (target.tagName === 'VIDEO') target.load();
+        }
+      });
+    }, { rootMargin: '700px 0px' });
+  }
+  mediaObserver.observe(node);
 }
 
 function musicPreviewUrl(id) {
@@ -1622,8 +1665,8 @@ function appendVideoPreview(box, c, className = 'clip-thumb-video') {
   const src = queuePreviewUrl(c);
   if (!src) { box.append(thumbPlaceholder(c)); return; }
   const video = el('video', className);
-  video.src = src;
-  video.preload = 'metadata';
+  video.preload = 'none';
+  lazyMedia(video, src);
   video.muted = true;
   video.playsInline = true;
   video.loop = true;
@@ -1642,7 +1685,7 @@ function clipThumb(c) {
   const box = el('div', 'clip-thumb');
   if (c.thumbState === 'ready') {
     const img = el('img', 'clip-thumb-img');
-    img.src = '/api/clips/thumb/' + encodeURIComponent(c.id) + '.jpg?pw=' + encodeURIComponent(PW);
+    lazyMedia(img, '/api/clips/thumb/' + encodeURIComponent(c.id) + '.jpg?pw=' + encodeURIComponent(PW));
     img.alt = c.title || 'Clip preview';
     img.onerror = () => { img.remove(); appendVideoPreview(box, c); };
     box.append(img);
@@ -1729,6 +1772,7 @@ function clipCard(c) {
     tags.textContent = c.hashtags || '';
     content.append(title, body);
     if (c.hashtags) content.append(tags);
+    content.append(preflightPanel(c));
     count.textContent = st === 'posted' ? 'Already sent' : 'Pull back to change the wording';
     foot.append(count);
   } else {
@@ -1777,6 +1821,7 @@ function clipCard(c) {
     [title, body, tags].forEach(f => f.addEventListener('input', onEdit));
     [title, tags].forEach(f => f.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); }));
 
+    content.append(preflightPanel(c));
     foot.append(count, saved);
   }
 
@@ -1922,7 +1967,7 @@ function scheduleSafetyBadges(c) {
 
   if (c.templateChanged === false) out.push({ text: 'Current style', cls: 'good' });
   else if (c.templateChanged === true) out.push({ text: 'Older style', cls: 'warn' });
-  else out.push({ text: 'Style unverified', cls: '' });
+  else out.push({ text: 'Style not recorded', cls: '' });
 
   if ((c.targets || []).some(t => t.status === 'failed')) out.push({ text: 'Upload failed', cls: 'bad' });
   else if ((c.targets || []).some(t => t.status === 'scheduled')) out.push({ text: 'In Opus', cls: 'good' });
@@ -1940,6 +1985,57 @@ function safetyBadges(c) {
   return row;
 }
 
+const ARABIC_TEXT = /[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]/;
+function preflightChecks(c) {
+  const musicOn = DATA?.musicSettings?.enabled !== false;
+  const text = [c.title, c.description, c.hashtags].filter(Boolean).join(' ');
+  const failedTarget = (c.targets || []).some(t => t.status === 'failed');
+  return [
+    musicOn
+      ? c.musicMixed === 'done'
+        ? { label: 'Music', text: 'Ready', cls: 'good', icon: '✓' }
+        : c.musicMixed === 'retrying'
+          ? { label: 'Music', text: 'Retrying', cls: 'warn', icon: '!' }
+          : c.musicMixed === 'failed'
+            ? { label: 'Music', text: 'Blocked', cls: 'bad', icon: '×' }
+            : { label: 'Music', text: statusOf(c) === 'waiting' ? 'Will mix after approve' : 'Pending', cls: 'warn', icon: '…' }
+      : { label: 'Music', text: 'Credit saver', cls: '', icon: '–' },
+    ARABIC_TEXT.test(text)
+      ? { label: 'Caption', text: 'Arabic found', cls: 'bad', icon: '×' }
+      : c.copyState === 'failed'
+        ? { label: 'Caption', text: 'Rewrite failed', cls: 'bad', icon: '×' }
+        : c.copyState === 'done'
+          ? { label: 'Caption', text: 'English ready', cls: 'good', icon: '✓' }
+          : { label: 'Caption', text: 'Editable', cls: '', icon: '•' },
+    c.templateChanged === false
+      ? { label: 'Style', text: 'Current style', cls: 'good', icon: '✓' }
+      : c.templateChanged === true
+        ? { label: 'Style', text: 'Older style', cls: 'warn', icon: '!' }
+        : { label: 'Style', text: 'Not recorded', cls: '', icon: '?' },
+    failedTarget
+      ? { label: 'Posting', text: 'Upload failed', cls: 'bad', icon: '×' }
+      : (c.targets || []).some(t => ['scheduled','posted'].includes(t.status))
+        ? { label: 'Posting', text: 'In Opus', cls: 'good', icon: '✓' }
+        : c.previewUrl || c.thumbState === 'ready'
+          ? { label: 'Preview', text: 'Preview ready', cls: 'good', icon: '✓' }
+          : { label: 'Preview', text: 'Loading soon', cls: 'warn', icon: '…' },
+  ];
+}
+
+function preflightPanel(c, compact = false) {
+  const row = el('div', 'preflight' + (compact ? ' compact' : ''));
+  preflightChecks(c).forEach(item => {
+    const box = el('div', 'preflight-item ' + (item.cls || ''));
+    const icon = el('span', 'preflight-icon'); icon.textContent = item.icon;
+    const label = el('span', 'preflight-label'); label.textContent = item.label;
+    const text = el('span', 'preflight-text'); text.textContent = item.text;
+    box.title = `${item.label}: ${item.text}`;
+    box.append(icon, label, text);
+    row.append(box);
+  });
+  return row;
+}
+
 function slotPreview(c) {
   const box = el('div', 'slot-media');
   if (!c) {
@@ -1951,7 +2047,7 @@ function slotPreview(c) {
   }
   if (c.thumbState === 'ready') {
     const img = el('img');
-    img.src = withPw('/api/clips/thumb/' + encodeURIComponent(c.id) + '.jpg');
+    lazyMedia(img, withPw('/api/clips/thumb/' + encodeURIComponent(c.id) + '.jpg'));
     img.alt = c.title || 'Scheduled clip preview';
     img.onerror = () => { img.remove(); appendVideoPreview(box, c, 'slot-video'); };
     box.append(img);
@@ -2084,7 +2180,7 @@ function renderBoard(allClips) {
       else from.textContent = past ? 'No clip was scheduled here' : 'Approve a clip to let the agent fill this automatically';
       what.append(from);
 
-      if (clip) what.append(safetyBadges(clip));
+      if (clip) what.append(preflightPanel(clip, true));
       else if (!past && isNext) {
         const note = el('div', 'schedule-empty-note');
         note.textContent = 'The next approved clip will land here.';
@@ -2327,9 +2423,11 @@ function renderSocialAnalytics(sent) {
     socialMetricCard(engagementRate(totals) ? engagementRate(totals).toFixed(1) + '%' : '—', 'Engagement rate', 'Total engagement / views'),
   ].join('');
 
+  const ytCfg = DATA?.analyticsConfig || {};
   $('#socialPerfNote').textContent = tracked.length
-    ? `${compact(totals.views)} views from ${tracked.length} post${tracked.length === 1 ? '' : 's'}`
-    : 'Add stats manually after posts go live';
+    ? `${compact(totals.views)} views from ${tracked.length} tracked post${tracked.length === 1 ? '' : 's'}`
+    : ytCfg.youtubeConnected ? 'YouTube auto refresh is ready once posts are linked or matched' : 'Add YOUTUBE_API_KEY for automatic YouTube stats';
+  renderAutoAnalyticsStatus(sent);
 
   const topHost = $('#socialTopPosts');
   topHost.innerHTML = '';
@@ -2341,6 +2439,9 @@ function renderSocialAnalytics(sent) {
     top.forEach(c => { data[(c.title || 'Untitled').slice(0, 34)] = clipMetric(c, 'views'); });
     bars('#socialTopPosts', data, 'No social stats saved yet.');
   }
+
+  const refreshBtn = $('#refreshYoutubeStats');
+  if (refreshBtn) refreshBtn.onclick = () => refreshYoutubeStats(refreshBtn);
 
   const btn = $('#openMetricUpdater');
   if (btn) btn.onclick = () => {
@@ -2354,6 +2455,43 @@ function renderSocialAnalytics(sent) {
   };
 }
 
+function renderAutoAnalyticsStatus(sent) {
+  const host = $('#socialAutoStatus');
+  const state = $('#autoAnalyticsState');
+  if (!host) return;
+  const cfg = DATA?.analyticsConfig || {};
+  const linked = sent.filter(c => analyticsEntries(c).some(a => a.videoId || a.url)).length;
+  const last = cfg.lastRefresh ? `${dayLabel(cfg.lastRefresh)} ${clockLabel(cfg.lastRefresh)}` : 'Not refreshed yet';
+  const rows = [
+    ['YouTube API', cfg.youtubeConnected ? 'Connected' : 'Add YOUTUBE_API_KEY', cfg.youtubeConnected ? 'good' : 'warn'],
+    ['Channel matching', cfg.youtubeChannelId ? 'On' : 'Optional', cfg.youtubeChannelId ? 'good' : ''],
+    ['Linked posts', `${linked}/${sent.length || 0}`, linked ? 'good' : 'warn'],
+    ['Last refresh', last, cfg.lastRefresh ? 'good' : ''],
+  ];
+  host.innerHTML = rows.map(([k,v,cls]) => `<div class="auto-row"><span>${esc(k)}</span><strong class="${esc(cls)}">${esc(v)}</strong></div>`).join('');
+  if (state) state.textContent = cfg.youtubeConnected ? 'Auto every 6h' : 'Setup needed';
+  const btn = $('#refreshYoutubeStats');
+  if (btn) btn.disabled = !cfg.youtubeConnected || !sent.length;
+}
+
+async function refreshYoutubeStats(btn) {
+  btn.disabled = true;
+  btn.classList.add('is-loading');
+  btn.textContent = 'Refreshing…';
+  try {
+    const res = await api('/api/analytics/youtube/refresh', { method: 'POST' });
+    const extra = res.matched ? ` · matched ${res.matched}` : '';
+    toast(res.updated ? `YouTube stats updated for ${res.updated} clip${res.updated === 1 ? '' : 's'}${extra}` : (res.message || 'No YouTube posts found yet'), res.updated ? 'good' : 'bad');
+    await refresh();
+  } catch (err) {
+    toast(err.message, 'bad');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('is-loading');
+    btn.textContent = 'Refresh YouTube stats';
+  }
+}
+
 function renderMetricUpdater(sent) {
   const host = $('#metricUpdater');
   if (!host) return;
@@ -2362,11 +2500,14 @@ function renderMetricUpdater(sent) {
     host.innerHTML = `<div class="empty"><div class="empty-title">No posted clips yet</div><div class="empty-note">Once a post is live, come back here and enter views, likes, comments, shares and saves.</div></div>`;
     return;
   }
-  host.innerHTML = `<div class="mini-head"><h3>Manual social stats</h3><span>Recent posted clips</span></div>`;
+  host.innerHTML = `<div class="mini-head"><h3>Link / edit social stats</h3><span>Paste YouTube URL once, then auto refresh can update it</span></div>`;
   rows.forEach(c => {
     const current = analyticsEntries(c)[0] || {};
     const row = el('div', 'metric-row');
     row.innerHTML = `<div class="metric-row-title"><strong>${esc(c.title || 'Untitled clip')}</strong><span>${esc(c.projectTitle || 'Lecture')} · ${c.postedAt ? dayLabel(c.postedAt) + ' ' + clockLabel(c.postedAt) : 'Posted'}</span></div>`;
+    const linkWrap = el('div', 'metric-link');
+    linkWrap.innerHTML = `<label>YouTube link / video ID</label><input data-social-url value="${esc(current.url || current.videoId || '')}" placeholder="https://youtube.com/shorts/...">`;
+    row.append(linkWrap);
     for (const field of SOCIAL_METRICS) {
       const wrap = el('div');
       wrap.innerHTML = `<label>${esc(metricLabel[field])}</label><input inputmode="numeric" pattern="[0-9]*" data-field="${field}" value="${current[field] ? esc(current[field]) : ''}" placeholder="0">`;
@@ -2378,14 +2519,15 @@ function renderMetricUpdater(sent) {
     save.onclick = async () => {
       const metrics = {};
       row.querySelectorAll('input[data-field]').forEach(input => { metrics[input.dataset.field] = input.value || 0; });
+      const url = row.querySelector('input[data-social-url]')?.value || '';
       save.disabled = true;
       save.textContent = 'Saving…';
       try {
         await api('/api/clips/' + encodeURIComponent(c.id) + '/analytics', {
           method: 'POST',
-          body: JSON.stringify({ platform: 'manual', label: 'Manual stats', metrics }),
+          body: JSON.stringify({ targetKey: url ? 'youtube' : 'manual', platform: url ? 'YOUTUBE' : 'manual', label: url ? 'YouTube' : 'Manual stats', url, metrics }),
         });
-        toast('Social stats saved', 'good');
+        toast(url ? 'Social link/stats saved — YouTube can auto refresh this now' : 'Social stats saved', 'good');
         await refresh();
         $('#metricUpdater').style.display = 'block';
       } catch (err) {
@@ -2533,13 +2675,13 @@ function sidePreview(c) {
   // Try our stable same-origin thumbnail first, even for older/imported clips.
   // If it is not ready, fall back to the refreshed preview video route.
   const img = el('img');
-  img.src = withPw('/api/clips/thumb/' + encodeURIComponent(c.id) + '.jpg');
+  lazyMedia(img, withPw('/api/clips/thumb/' + encodeURIComponent(c.id) + '.jpg'));
   img.alt = c.title || 'Next post preview';
   img.onerror = () => {
     img.remove();
     const video = el('video');
-    video.src = queuePreviewUrl(c);
-    video.preload = 'metadata';
+    video.preload = 'none';
+    lazyMedia(video, queuePreviewUrl(c));
     video.muted = true;
     video.playsInline = true;
     video.title = 'Click to preview this clip';
@@ -3373,8 +3515,8 @@ async function hydrateLectureCover(cover, project) {
     if (!clip) return;
     cover.innerHTML = '';
     const video = el('video');
-    video.src = projectClipPreviewUrl(project.id, clip.id) || clip.previewUrl;
-    video.preload = 'metadata';
+    video.preload = 'none';
+    lazyMedia(video, projectClipPreviewUrl(project.id, clip.id) || clip.previewUrl);
     video.muted = true;
     video.playsInline = true;
     video.loop = true;
@@ -3402,8 +3544,8 @@ function mountLectureCover(cover, project) {
 
   if (!youtubeId && project.coverClipId) {
     const video = el('video');
-    video.src = queuePreviewUrl({ id: project.coverClipId });
-    video.preload = 'metadata';
+    video.preload = 'none';
+    lazyMedia(video, queuePreviewUrl({ id: project.coverClipId }));
     video.muted = true;
     video.playsInline = true;
     video.loop = true;
@@ -3700,8 +3842,8 @@ function buildPickPanel(project, clips) {
     const previewSrc = projectClipPreviewUrl(project.id, c.id) || c.previewUrl;
     if (previewSrc) {
       const video = el('video');
-      video.src = previewSrc;
-      video.preload = 'metadata';
+      video.preload = 'none';
+      lazyMedia(video, previewSrc);
       video.playsInline = true;
       video.muted = true;
       video.controls = true;
