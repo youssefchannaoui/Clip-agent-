@@ -505,6 +505,42 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .fig-k{color:var(--text-2);font-size:13.5px;margin-top:5px}
 .fig-s{color:var(--mute-2);font-size:12.5px;margin-top:3px}
 .fig.warn .fig-v{color:var(--blue-soft)}
+.fig.good .fig-v{color:#d8f8df}
+.fig.bad .fig-v{color:var(--danger)}
+
+/* analytics */
+.analytics-hero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(280px,.85fr);gap:14px;margin-bottom:14px}
+.analytics-score{display:flex;align-items:center;gap:18px;min-height:128px}
+.score-ring{width:92px;height:92px;border-radius:50%;display:grid;place-items:center;flex:none;background:radial-gradient(circle at center,var(--surface) 0 55%,transparent 56%),conic-gradient(var(--blue) var(--score,0%),var(--line) 0);box-shadow:inset 0 0 0 1px var(--line)}
+.score-ring span{font-size:25px;font-weight:650;letter-spacing:-.04em}
+.score-title{font-size:22px;font-weight:600;letter-spacing:-.03em}
+.score-note{color:var(--mute);line-height:1.45;margin-top:5px;max-width:680px}
+.analytics-actions{display:grid;gap:10px;align-content:center}
+.analytics-action{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);transition:transform .18s ease,border-color .18s ease}
+.analytics-action:hover{transform:translateY(-1px);border-color:var(--line-2)}
+.analytics-action strong{font-size:14px}
+.analytics-action span{font-size:12.5px;color:var(--mute)}
+.analytics-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:18px}
+.analytics-card{min-height:210px}
+.mini-head{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-bottom:10px}
+.mini-head h3{font-size:15px;font-weight:600;letter-spacing:-.02em}
+.mini-head span{font-size:12px;color:var(--mute)}
+.analytics-feed{display:grid;gap:12px}
+.analytics-post{display:grid;grid-template-columns:82px minmax(0,1fr) auto;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px;transition:transform .18s ease,border-color .18s ease}
+.analytics-post:hover{transform:translateY(-1px);border-color:var(--line-2)}
+.analytics-post .clip-thumb{width:82px;height:112px;border-radius:10px}
+.post-title{font-weight:600;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.post-sub{color:var(--mute);font-size:12.5px;margin-top:5px}
+.post-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.post-when{text-align:right;color:var(--text-2);font-size:13px;white-space:nowrap}
+.quality-row{display:grid;grid-template-columns:minmax(110px,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.quality-row:last-child{border-bottom:0}
+.quality-label{color:var(--text-2);font-size:13.5px}
+.quality-pill{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:4px 9px;color:var(--mute);background:var(--surface-2)}
+.quality-pill.good{color:#d8f8df;border-color:rgba(216,248,223,.25)}
+.quality-pill.warn{color:var(--blue-soft);border-color:rgba(247,197,110,.3)}
+.quality-pill.bad{color:var(--danger);border-color:rgba(255,120,120,.25)}
+@media (max-width:900px){.analytics-hero,.analytics-grid{grid-template-columns:1fr}.analytics-post{grid-template-columns:70px minmax(0,1fr)}.analytics-post .clip-thumb{width:70px;height:96px}.post-when{grid-column:2;text-align:left}}
 
 .bar-row{display:flex;align-items:center;gap:16px;padding:10px 0;border-bottom:1px solid var(--line)}
 .bar-row:last-child{border-bottom:0}
@@ -690,7 +726,7 @@ select:focus{outline:none;border-color:var(--blue)}
       <nav class="tabs">
         <button class="tab on" data-view="queue">Queue<span class="tab-count" id="cQueue">0</span></button>
         <button class="tab" data-view="schedule">Schedule<span class="tab-count" id="cSched">0</span></button>
-        <button class="tab" data-view="insights">Record</button>
+        <button class="tab" data-view="insights">Analytics</button>
         <button class="tab" data-view="music">Music</button>
         <button class="tab" data-view="library">Library</button>
       </nav>
@@ -749,21 +785,56 @@ select:focus{outline:none;border-color:var(--blue)}
           <div id="schedList"></div>
         </section>
 
-        <!-- record -->
+        <!-- analytics -->
         <section class="panel hide" id="view-insights">
-          <div class="head"><h2>The record</h2><span class="note">What has gone out</span></div>
-          <div class="figs" id="stats"></div>
+          <div class="head">
+            <div>
+              <h2>Analytics</h2>
+              <span class="note" id="analyticsNote">Operational analytics from your queue, schedule and post history</span>
+            </div>
+          </div>
 
-          <div class="head" style="margin-top:34px"><h2>By platform</h2></div>
-          <div class="slab"><div id="byPlatform"></div></div>
+          <div class="analytics-hero">
+            <div class="analytics-score slab">
+              <div class="score-ring"><span id="healthScore">—</span></div>
+              <div>
+                <div class="score-title" id="healthTitle">System health</div>
+                <div class="score-note" id="healthNote">Waiting for data</div>
+              </div>
+            </div>
+            <div class="analytics-actions slab" id="analyticsActions"></div>
+          </div>
 
-          <div class="head" style="margin-top:34px"><h2>By time of day</h2></div>
-          <div class="slab"><div id="bySlot"></div></div>
+          <div class="figs analytics-figs" id="stats"></div>
 
-          <div class="head" style="margin-top:34px"><h2>By lecture</h2></div>
-          <div class="slab"><div id="bySource"></div></div>
+          <div class="analytics-grid">
+            <div class="slab analytics-card">
+              <div class="mini-head"><h3>Platforms</h3><span id="platformNote">Successful uploads</span></div>
+              <div id="byPlatform"></div>
+            </div>
+            <div class="slab analytics-card">
+              <div class="mini-head"><h3>Time slots</h3><span>Posted by time</span></div>
+              <div id="bySlot"></div>
+            </div>
+            <div class="slab analytics-card">
+              <div class="mini-head"><h3>Content sources</h3><span>Clips by lecture</span></div>
+              <div id="bySource"></div>
+            </div>
+            <div class="slab analytics-card">
+              <div class="mini-head"><h3>Quality checks</h3><span>Music, copy and style</span></div>
+              <div id="byQuality"></div>
+            </div>
+          </div>
 
-          <p class="hint">Opus doesn't return views or likes through its API, so nothing here is engagement data — it's a record of what went out, when, and where. To see how posts performed, check each platform's own analytics.</p>
+          <div class="head" style="margin-top:34px">
+            <div>
+              <h2>Recent post history</h2>
+              <span class="note" id="recentNote">What actually went out</span>
+            </div>
+          </div>
+          <div id="recentPosts" class="analytics-feed"></div>
+
+          <p class="hint">These are operational analytics from this app: schedule health, posted history, platform counts, music/template/caption status and estimated extra Opus processing from music re-imports. Opus does not expose views or likes here, so engagement analytics still live inside each platform.</p>
         </section>
 
         <!-- music -->
@@ -1781,36 +1852,76 @@ function renderBoard(allClips) {
     .forEach(c => list.append(clipCard(c)));
 }
 
-/* ---------- the record ---------- */
+/* ---------- analytics ---------- */
+
+function analyticsStatus(c) {
+  const st = statusOf(c);
+  if ((c.targets || []).some(t => t.status === 'failed')) return 'Upload failed';
+  if (c.musicMixed === 'retrying' || c.musicMixed === 'failed') return 'Music attention';
+  if (c.copyState === 'failed') return 'Copy attention';
+  if (st === 'posted') return 'Posted';
+  if (st === 'scheduled') return 'Scheduled';
+  if (st === 'approved') return 'Processing';
+  return 'Waiting review';
+}
+
+function isAttention(c) {
+  return analyticsStatus(c).includes('attention')
+    || analyticsStatus(c).includes('failed')
+    || Boolean(c.templateError);
+}
+
+function goodTarget(t) {
+  return t && t.status !== 'failed';
+}
+
+function countTargets(clips, predicate = goodTarget) {
+  return clips.reduce((n, c) => n + (c.targets || []).filter(predicate).length, 0);
+}
 
 function renderRecord(clips) {
   const sent = clips.filter(c => statusOf(c) === 'posted');
-  const queued = clips.filter(c => ['approved', 'scheduled'].includes(statusOf(c)));
+  const scheduled = clips.filter(c => statusOf(c) === 'scheduled');
+  const processing = clips.filter(c => statusOf(c) === 'approved');
   const waiting = clips.filter(c => statusOf(c) === 'waiting');
+  const active = clips.filter(c => statusOf(c) !== 'posted');
   const perDay = (DATA.postTimes || []).length || 1;
-  const daysLeft = queued.length / perDay;
+  const daysLeft = (scheduled.length + processing.length) / perDay;
 
   const durations = clips.map(c => secs(c.durationMs)).filter(Boolean);
   const avgLen = durations.length
     ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
 
-  const uploads = sent.reduce((n, c) =>
-    n + (c.targets || []).filter(t => t.status !== 'failed').length, 0);
-  const fails = clips.reduce((n, c) =>
-    n + (c.targets || []).filter(t => t.status === 'failed').length, 0);
+  const postedUploads = countTargets(sent);
+  const scheduledUploads = countTargets(scheduled, t => t.status === 'scheduled' || t.status === 'posted');
+  const failedUploads = countTargets(clips, t => t.status === 'failed');
+  const attention = active.filter(isAttention).length;
+  const totalActive = Math.max(1, active.length);
+  const health = clips.length ? Math.max(0, Math.round(((totalActive - attention) / totalActive) * 100)) : 100;
+  const musicDone = clips.filter(c => c.musicMixed === 'done').length;
+  const musicRetry = clips.filter(c => c.musicMixed === 'retrying' || c.musicMixed === 'failed').length;
+  const aiDone = clips.filter(c => c.copyState === 'done').length;
+  const aiFailed = clips.filter(c => c.copyState === 'failed').length;
+  const extraCreditClips = clips.filter(c => c.musicImportProjectId || c.musicMixed === 'done').length;
+
+  const score = $('#healthScore');
+  score.textContent = clips.length ? health + '%' : '—';
+  score.parentElement.style.setProperty('--score', clips.length ? health + '%' : '0%');
+  $('#healthTitle').textContent = attention ? `${attention} thing${attention === 1 ? '' : 's'} need attention` : 'Everything looks clean';
+  $('#healthNote').textContent = clips.length
+    ? `${sent.length} posted, ${scheduled.length} scheduled, ${processing.length} processing and ${waiting.length} waiting. This is app reliability, not views or likes.`
+    : 'Send a lecture or attach an Opus project and analytics will start filling automatically.';
+  $('#analyticsNote').textContent = `${clips.length} clip${clips.length === 1 ? '' : 's'} tracked · ${postedUploads + scheduledUploads} platform upload${postedUploads + scheduledUploads === 1 ? '' : 's'}`;
 
   const figs = [
-    { v: sent.length, k: 'Clips posted', s: uploads + ' uploads in total' },
-    { v: queued.length, k: 'Queued and ready', s: perDay + ' slots a day' },
-    {
-      v: daysLeft < 1 ? '<1' : Math.floor(daysLeft),
-      k: 'Days of runway', cls: daysLeft < 1.5 ? 'warn' : '',
-      s: daysLeft < 1.5 ? 'Add a lecture soon' : 'Before the queue empties',
-    },
-    { v: waiting.length, k: 'Awaiting your read', cls: waiting.length ? 'warn' : '',
-      s: waiting.length ? 'In the queue tab' : 'All caught up' },
-    { v: avgLen ? avgLen + 's' : '—', k: 'Average clip length', s: 'Across every clip' },
-    { v: fails, k: 'Failed uploads', cls: fails ? 'warn' : '', s: fails ? 'See recent activity' : 'None so far' },
+    { v: sent.length, k: 'Clips posted', s: `${postedUploads} platform upload${postedUploads === 1 ? '' : 's'}`, cls: sent.length ? 'good' : '' },
+    { v: scheduled.length, k: 'Scheduled', s: `${scheduledUploads} queued inside Opus`, cls: scheduled.length ? 'good' : '' },
+    { v: waiting.length, k: 'Waiting review', s: waiting.length ? 'Needs your approval' : 'Queue is clear', cls: waiting.length ? 'warn' : '' },
+    { v: attention, k: 'Needs attention', s: attention ? 'Fix before trusting schedule' : 'No blockers showing', cls: attention ? 'bad' : 'good' },
+    { v: daysLeft < 1 ? '<1' : Math.floor(daysLeft), k: 'Days of runway', s: `${perDay} slot${perDay === 1 ? '' : 's'} per day`, cls: daysLeft < 1.5 ? 'warn' : '' },
+    { v: avgLen ? avgLen + 's' : '—', k: 'Average length', s: 'Across tracked clips' },
+    { v: extraCreditClips, k: 'Music imports', s: 'Approx. extra Opus processing clips', cls: extraCreditClips ? 'warn' : '' },
+    { v: failedUploads, k: 'Upload failures', s: failedUploads ? 'Check logs / targets' : 'None currently', cls: failedUploads ? 'bad' : 'good' },
   ];
 
   const host = $('#stats');
@@ -1823,28 +1934,125 @@ function renderRecord(clips) {
     host.append(box);
   });
 
+  renderAnalyticsActions({ waiting, scheduled, processing, attention, musicRetry, aiFailed });
+
   const plat = {};
-  sent.forEach(c => (c.targets || []).forEach(t => {
-    if (t.status === 'failed') return;
-    const k = platformName(t.platform) || 'unknown';
+  clips.forEach(c => (c.targets || []).forEach(t => {
+    if (!goodTarget(t)) return;
+    const k = platformName(t.platform) || 'Unknown';
     plat[k] = (plat[k] || 0) + 1;
   }));
-  bars('#byPlatform', plat, 'Nothing has gone out yet.');
+  bars('#byPlatform', plat, 'No successful platform uploads yet.');
+  $('#platformNote').textContent = `${Object.values(plat).reduce((a,b)=>a+b,0)} successful target${Object.values(plat).reduce((a,b)=>a+b,0) === 1 ? '' : 's'}`;
 
   const slot = {};
-  sent.forEach(c => {
+  [...sent, ...scheduled].forEach(c => {
     if (!c.scheduledAt) return;
     const k = clockLabel(c.scheduledAt);
     slot[k] = (slot[k] || 0) + 1;
   });
-  bars('#bySlot', slot, 'Time-of-day splits appear once posts have gone out.');
+  bars('#bySlot', slot, 'Scheduled and posted time slots will appear here.');
 
   const src = {};
   clips.forEach(c => {
     const k = c.projectTitle || 'Unknown lecture';
     src[k] = (src[k] || 0) + 1;
   });
-  bars('#bySource', src, 'Send a lecture to Opus to see this.');
+  bars('#bySource', src, 'Send or attach a lecture to see source analytics.');
+
+  renderQualityAnalytics({ clips, musicDone, musicRetry, aiDone, aiFailed, failedUploads });
+  renderRecentPosts(sent);
+}
+
+function renderAnalyticsActions(summary) {
+  const host = $('#analyticsActions');
+  host.innerHTML = '';
+  const actions = [
+    { title: summary.attention ? 'Review attention items' : 'Schedule is healthy', sub: summary.attention ? `${summary.attention} clip${summary.attention === 1 ? '' : 's'} need checking` : 'No urgent blockers showing', view: summary.attention ? 'queue' : 'schedule' },
+    { title: summary.waiting.length ? 'Approve waiting clips' : 'Queue clear', sub: summary.waiting.length ? `${summary.waiting.length} waiting for you` : 'Nothing waiting for review', view: 'queue' },
+    { title: summary.scheduled.length ? 'Open scheduled posts' : 'Fill schedule', sub: summary.scheduled.length ? `${summary.scheduled.length} already scheduled` : 'No scheduled clips yet', view: 'schedule' },
+  ];
+  actions.forEach(a => {
+    const btn = el('button', 'analytics-action');
+    btn.type = 'button';
+    btn.innerHTML = `<div><strong>${esc(a.title)}</strong><span>${esc(a.sub)}</span></div><span>Open</span>`;
+    btn.onclick = () => switchView(a.view);
+    host.append(btn);
+  });
+}
+
+function renderQualityAnalytics({ clips, musicDone, musicRetry, aiDone, aiFailed, failedUploads }) {
+  const total = clips.length || 0;
+  const rows = [
+    ['Music ready', musicDone, total, musicRetry ? 'warn' : 'good'],
+    ['Music retrying / blocked', musicRetry, total, musicRetry ? 'bad' : 'good'],
+    ['English AI wording', aiDone, total, aiFailed ? 'warn' : 'good'],
+    ['English rewrite failed', aiFailed, total, aiFailed ? 'bad' : 'good'],
+    ['Upload failures', failedUploads, total, failedUploads ? 'bad' : 'good'],
+    ['Older clip style warnings', clips.filter(c => c.templateChanged).length, total, clips.some(c => c.templateChanged) ? 'warn' : 'good'],
+  ];
+  const host = $('#byQuality');
+  host.innerHTML = '';
+  rows.forEach(([label, n, t, kind]) => {
+    const row = el('div', 'quality-row');
+    const pct = t ? Math.round((n / t) * 100) : 0;
+    row.innerHTML = `<div class="quality-label">${esc(label)}</div><div class="quality-pill ${kind}">${n}${t ? ` · ${pct}%` : ''}</div>`;
+    host.append(row);
+  });
+}
+
+function renderRecentPosts(sent) {
+  const host = $('#recentPosts');
+  host.innerHTML = '';
+  const rows = sent.slice().sort((a, b) => (b.postedAt || b.scheduledAt || 0) - (a.postedAt || a.scheduledAt || 0)).slice(0, 10);
+  $('#recentNote').textContent = rows.length ? `${rows.length} most recent posted clip${rows.length === 1 ? '' : 's'}` : 'Nothing posted yet';
+  if (!rows.length) {
+    host.innerHTML = `<div class="slab"><div class="empty"><div class="empty-title">No posted history yet</div><div class="empty-note">Once a scheduled slot passes, clips move here with the exact title, platform targets, music and style notes.</div></div></div>`;
+    return;
+  }
+  rows.forEach(c => host.append(analyticsPostCard(c)));
+}
+
+function analyticsPostCard(c) {
+  const node = el('div', 'analytics-post');
+  node.append(clipThumb(c));
+
+  const mid = el('div');
+  const title = el('div', 'post-title');
+  title.textContent = c.title || 'Untitled clip';
+  const sub = el('div', 'post-sub');
+  const good = (c.targets || []).filter(goodTarget);
+  sub.textContent = `${c.projectTitle || 'Lecture'} · ${good.length || 0} target${good.length === 1 ? '' : 's'}`;
+  const tags = el('div', 'post-tags');
+  if (c.musicMixed === 'done') {
+    const t = el('span', 'music-tag on');
+    t.textContent = '♪ Music';
+    if (c.musicNote) t.title = c.musicNote;
+    tags.append(t);
+  }
+  if (c.copyState === 'done') {
+    const t = el('span', 'music-tag on');
+    t.textContent = 'English copy';
+    tags.append(t);
+  }
+  if (c.templateChanged) {
+    const t = el('span', 'music-tag bad');
+    t.textContent = 'Older style';
+    tags.append(t);
+  }
+  good.slice(0, 4).forEach(target => {
+    const t = el('span', 'stamp');
+    t.textContent = platformName(target.platform) || target.name || 'Platform';
+    tags.append(t);
+  });
+  mid.append(title, sub, tags);
+  node.append(mid);
+
+  const when = el('div', 'post-when');
+  const t = c.postedAt || c.scheduledAt;
+  when.textContent = t ? `${dayLabel(t)}\n${clockLabel(t)}` : 'Posted';
+  node.append(when);
+  return node;
 }
 
 function bars(sel, counts, emptyNote) {
@@ -2807,22 +3015,26 @@ document.querySelectorAll('[data-sched-days]').forEach(btn => {
 });
 
 const TAB_ORDER = ['queue', 'schedule', 'insights', 'music', 'library'];
+function switchView(view) {
+  const tab = document.querySelector(`.tab[data-view="${view}"]`);
+  if (!tab || view === VIEW) return;
+  const fromIndex = TAB_ORDER.indexOf(VIEW);
+  const toIndex = TAB_ORDER.indexOf(view);
+  VIEW = view;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t === tab));
+  TAB_ORDER.forEach(v => {
+    const panel = $('#view-' + v);
+    panel.classList.toggle('hide', v !== VIEW);
+    panel.classList.remove('slide-fwd', 'slide-back');
+  });
+  const shown = $('#view-' + VIEW);
+  shown.classList.add(toIndex >= fromIndex ? 'slide-fwd' : 'slide-back');
+  if (VIEW === 'music' && !musicLoaded) loadMusic();
+  if (VIEW === 'library') loadLibrary();
+}
+
 document.querySelectorAll('.tab').forEach(tab => {
-  tab.onclick = () => {
-    const fromIndex = TAB_ORDER.indexOf(VIEW);
-    const toIndex = TAB_ORDER.indexOf(tab.dataset.view);
-    VIEW = tab.dataset.view;
-    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t === tab));
-    TAB_ORDER.forEach(v => {
-      const panel = $('#view-' + v);
-      panel.classList.toggle('hide', v !== VIEW);
-      panel.classList.remove('slide-fwd', 'slide-back');
-    });
-    const shown = $('#view-' + VIEW);
-    shown.classList.add(toIndex >= fromIndex ? 'slide-fwd' : 'slide-back');
-    if (VIEW === 'music' && !musicLoaded) loadMusic();
-    if (VIEW === 'library') loadLibrary();
-  };
+  tab.onclick = () => switchView(tab.dataset.view);
 });
 
 $('#key').addEventListener('keydown', e => { if (e.key === 'Enter') $('#save').click(); });
