@@ -221,7 +221,7 @@ export async function schedulePost({ projectId, clipId, account, title, descript
       publishAt: new Date(publishAt).toISOString(),
     },
   });
-  return res?.data ?? res;
+  return res?.data?.scheduleId;
 }
 
 /** Push a clip out right now. */
