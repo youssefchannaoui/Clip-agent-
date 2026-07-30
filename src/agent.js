@@ -864,6 +864,7 @@ export async function postNow(clipId) {
     await new Promise(r => setTimeout(r, RATE_GAP));
   }
   clip.status = clip.targets.some(t => t.status === 'posted') ? 'posted' : 'waiting';
+  if (clip.status === 'posted' && !clip.postedAt) clip.postedAt = Date.now();
   clearStage(clip);
   save();
   log(`Posted "${clip.editedTitle || clip.title}" now`);
