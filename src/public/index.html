@@ -378,7 +378,17 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .pick-card:hover{border-color:var(--line-lit);transform:translateY(-1px)}
 .pick-card.selected{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue);animation:pick-pop .2s cubic-bezier(.2,.8,.2,1)}
 @keyframes pick-pop{50%{transform:translateY(-1px) scale(.985)}}
-.pick-card.done{opacity:.52;cursor:default}
+.pick-card.done{opacity:.78;cursor:default}
+.pick-delete{
+  position:absolute;z-index:4;left:9px;bottom:9px;width:31px;height:31px;
+  display:grid;place-items:center;border-radius:8px;border:1px solid rgba(255,255,255,.17);
+  background:rgba(9,9,10,.82);color:var(--text-2);cursor:pointer;
+  transition:transform .14s ease,border-color .14s ease,background .14s ease,color .14s ease;
+}
+.pick-delete:hover{transform:translateY(-1px) scale(1.04);border-color:rgba(255,105,105,.55);background:rgba(120,25,25,.72);color:#fff}
+.pick-delete:active{transform:scale(.94)}
+.pick-delete svg{width:15px;height:15px;pointer-events:none}
+.pick-delete.is-loading{pointer-events:none;opacity:.55}
 .pick-preview{aspect-ratio:9/16;background:#050505;position:relative;display:grid;place-items:center;overflow:hidden}
 .pick-preview video{width:100%;height:100%;object-fit:cover;display:block;background:#000}
 .pick-preview-ph{color:var(--mute-2);font-size:13px;text-align:center;padding:12px}
@@ -399,6 +409,20 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
   backdrop-filter:blur(10px);border-top:1px solid var(--line);
 }
 .pick-count{font-size:12.5px;color:var(--mute);margin-right:auto}
+.credit-warning{
+  margin-top:14px;padding:11px 13px;border:1px solid rgba(217,180,120,.32);
+  border-radius:9px;background:rgba(217,180,120,.075);color:var(--text-2);
+  font-size:12.5px;line-height:1.55;
+}
+.credit-warning strong{color:var(--blue-soft);font-weight:600}
+.library-tools{margin:14px 0 18px}
+.library-tools .intake-row{align-items:stretch}
+.library-tools input{min-width:180px}
+.library-limit{
+  margin-top:10px;color:var(--mute-2);font-size:12.5px;line-height:1.55
+}
+.project-remove{margin-left:auto}
+.project-remove:hover{border-color:rgba(255,105,105,.45);color:#ffd2d2;background:rgba(110,25,25,.28)}
 
 .proc{
   display:flex;align-items:center;gap:13px;padding:14px 18px;
@@ -716,8 +740,8 @@ select:focus{outline:none;border-color:var(--blue)}
           <div class="slab">
             <label class="field code" for="musicEnabled">Add music automatically</label>
             <select id="musicEnabled" aria-label="Add music automatically">
-              <option value="1">On — every clip gets a random track mixed in</option>
-              <option value="0">Off — clips post with their own audio only</option>
+              <option value="1">On — music guaranteed (usually +1 Opus credit per clip)</option>
+              <option value="0">Off — credit saver, original clip audio only</option>
             </select>
 
             <div style="margin-top:16px">
@@ -726,6 +750,9 @@ select:focus{outline:none;border-color:var(--blue)}
               <div class="style-note">How loud the nasheed sits under the speaker's voice. Around 10–20% keeps it in the background.</div>
             </div>
             <button class="btn btn-ghost btn-sm" id="saveMusicSettings" style="margin-top:14px">Save</button>
+            <div class="credit-warning">
+              <strong>Why music uses extra Opus credits:</strong> Opus scheduling only accepts an existing Opus project and clip ID. The app mixes the audio locally, then imports that finished short back into Opus once so Opus can schedule it. Opus rounds processed videos up to whole minutes, so a short clip normally costs at least 1 extra credit. Turning music off avoids that extra processing charge.
+            </div>
           </div>
 
           <div class="head" style="margin-top:34px">
@@ -742,6 +769,15 @@ select:focus{outline:none;border-color:var(--blue)}
             <span class="note">Pull in more clips from something already sent to Opus, at no extra credit cost</span>
           </div>
           <p class="hint">Getting more clips from an old lecture doesn't cost extra Opus credits — it's already been clipped. It does carry whatever caption style was active when you first sent it, though — not your current settings. Resubmitting the link fresh applies your current style, but does cost credits again.</p>
+          <div class="slab library-tools">
+            <div class="code" style="margin-bottom:9px">Add a project made directly in Opus</div>
+            <div class="intake-row">
+              <input id="existingProjectRef" type="text" placeholder="Opus project ID or project link" style="flex:1">
+              <input id="existingProjectTitle" type="text" placeholder="Optional display name" style="flex:1">
+              <button class="btn btn-ghost btn-sm" id="attachExistingProject">Add to library</button>
+            </div>
+            <div class="library-limit">Opus's public API does not currently provide a supported endpoint to automatically list or delete every dashboard project. Projects sent through this app appear automatically; paste the ID/link once for projects created directly in Opus. Removing a lecture here removes it from this app and cancels its future schedules, but does not delete it from the Opus dashboard.</div>
+          </div>
           <div id="libraryList"></div>
         </section>
 
@@ -1211,10 +1247,12 @@ function clipCard(c) {
     top.append(when);
   }
   if (c.musicMixed) {
+    const retrying = c.musicMixed === 'retrying';
     const tag = el('span', 'music-tag ' + (c.musicMixed === 'done' ? 'on' : c.musicMixed === 'failed' ? 'bad' : 'off'));
-    tag.textContent = c.musicMixed === 'done' ? '♪ ' + (c.musicNote || 'Mixed')
-      : c.musicMixed === 'failed' ? 'No music — ' + (c.musicNote || 'failed')
-      : 'No music' + (c.musicNote ? ' — ' + c.musicNote : '');
+    tag.textContent = c.musicMixed === 'done' ? '♪ ' + (c.musicNote || 'Music verified')
+      : retrying ? `Music required — retrying${c.musicAttempts ? ` (${c.musicAttempts})` : ''}`
+      : c.musicMixed === 'failed' ? 'Music failed — blocked'
+      : 'Music not added';
     if (c.musicNote) tag.title = c.musicNote;
     top.append(tag);
   }
@@ -1223,6 +1261,12 @@ function clipCard(c) {
     aiTag.textContent = c.copyState === 'done' ? 'Opus AI wording' : c.copyState === 'failed' ? 'English rewrite failed' : 'AI wording pending';
     if (c.copyError) aiTag.title = c.copyError;
     top.append(aiTag);
+  }
+  if (c.templateError) {
+    const blocked = el('span', 'music-tag bad');
+    blocked.textContent = 'Clip style blocked';
+    blocked.title = c.templateError;
+    top.append(blocked);
   }
   if (c.templateChanged !== null && c.templateChanged !== undefined) {
     const tTag = el('span', 'music-tag ' + (c.templateChanged ? 'bad' : 'on'));
@@ -1836,7 +1880,10 @@ async function loadTemplates() {
   templates.forEach(t => {
     const o = el('option');
     o.value = t.id;
-    o.textContent = t.name;
+    const captionState = t.enableCaption === false ? 'captions off'
+      : t.enableCaption === true ? 'captions on'
+      : 'caption setting unknown';
+    o.textContent = `${t.name} · ${captionState}`;
     pick.append(o);
   });
   pick.value = DATA?.brandTemplateId || '';
@@ -1844,10 +1891,11 @@ async function loadTemplates() {
 }
 
 function showTplNote() {
-  const chosen = $('#tplPick').value;
+  const chosenId = $('#tplPick').value;
+  const chosen = (templates || []).find(t => t.id === chosenId);
   $('#tplNote').textContent = chosen
-    ? 'Applied to every new lecture. Turn captions off inside this template in Opus.'
-    : 'Using whichever template is default in your Opus account.';
+    ? `Verified: ${chosen.name}. Captions are ${chosen.enableCaption === false ? 'OFF' : chosen.enableCaption === true ? 'ON' : 'unknown'}. New lectures and mixed re-imports are locked to this style.`
+    : 'Select a specific Clip style. The Opus account default cannot be strictly verified.';
 }
 
 $('#tplPick').onchange = async () => {
@@ -2168,7 +2216,7 @@ function renderLibrary(projects) {
     const title = el('div', 'lec-title');
     title.textContent = p.title || p.url;
     const meta = el('div', 'lec-meta');
-    const remaining = Math.max(0, (p.clipCount || 0) - (p.imported || 0));
+    const remaining = Number.isFinite(p.available) ? p.available : Math.max(0, (p.clipCount || 0) - (p.imported || 0) - (p.hidden || 0));
     meta.textContent = p.status === 'clipping' ? 'Still being clipped by Opus'
       : p.clipCount ? `${p.imported} of ${p.clipCount} clips in your queue${remaining ? `, ${remaining} more available` : ''}`
       : p.status === 'stalled' ? 'Opus never returned clips for this one' : 'No clips yet';
@@ -2230,7 +2278,34 @@ function renderLibrary(projects) {
       pick.disabled = false;
     };
 
-    foot.append(more, pick);
+    const removeProjectBtn = el('button', 'btn btn-ghost btn-sm project-remove');
+    removeProjectBtn.textContent = 'Remove';
+    removeProjectBtn.title = 'Remove this lecture from the app library';
+    removeProjectBtn.onclick = async () => {
+      const warning = 'Remove this entire lecture from the app? Any future schedules from it will be cancelled. Already-published posts and the project inside Opus will not be deleted.';
+      if (!confirm(warning)) return;
+      removeProjectBtn.disabled = true;
+      removeProjectBtn.classList.add('is-loading');
+      try {
+        const res = await api('/api/projects/' + encodeURIComponent(p.id), { method: 'DELETE' });
+        card.style.pointerEvents = 'none';
+        card.animate(
+          [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(.975)' }],
+          { duration: 180, easing: 'ease', fill: 'forwards' }
+        ).finished.finally(() => card.remove());
+        const extra = res.postedRemain
+          ? ` ${res.postedRemain} already-published post${res.postedRemain === 1 ? '' : 's'} remain online.`
+          : '';
+        toast(`Removed from the app.${extra}`, 'good');
+        refresh();
+      } catch (err) {
+        toast(err.message, 'bad');
+        removeProjectBtn.disabled = false;
+        removeProjectBtn.classList.remove('is-loading');
+      }
+    };
+
+    foot.append(more, pick, removeProjectBtn);
     body.append(foot);
     card.append(body);
 
@@ -2242,9 +2317,8 @@ function renderLibrary(projects) {
 
 /**
  * A checklist of every clip Opus has for one lecture, so someone can pick
- * exactly which ones to bring in — real thumbnails aren't available for
- * these yet, since that only happens once a clip is actually imported, but
- * title and length are enough to judge by.
+ * exactly which ones to bring in, with Opus's own playable previews and
+ * a local remove action for results the person does not want to see again.
  */
 function buildPickPanel(project, clips) {
   const panel = el('div', 'pick-panel');
@@ -2258,7 +2332,7 @@ function buildPickPanel(project, clips) {
 
   const intro = el('div', 'pick-intro');
   const note = el('div', 'note');
-  note.textContent = 'Preview the actual clips, then tick only the ones you want in your queue.';
+  note.textContent = 'Preview the actual clips, tick the ones you want, or use the bin to remove unwanted results from this app.';
   intro.append(note);
   panel.append(intro);
 
@@ -2273,7 +2347,7 @@ function buildPickPanel(project, clips) {
     box.type = 'checkbox';
     box.disabled = c.imported;
     box.setAttribute('aria-label', `Select ${c.title || 'clip'}`);
-    preview.append(box);
+    if (!c.imported) preview.append(box);
 
     if (c.imported) {
       const queued = el('span', 'pick-queued');
@@ -2290,6 +2364,18 @@ function buildPickPanel(project, clips) {
     const duration = el('span', 'pick-duration');
     duration.textContent = secs(c.durationMs) + 's';
     preview.append(duration);
+
+    const del = el('button', 'pick-delete');
+    del.type = 'button';
+    del.title = c.imported
+      ? 'Remove this clip from the queue and cancel any schedule'
+      : 'Hide this clip from this app';
+    del.setAttribute('aria-label', del.title);
+    del.innerHTML = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5"
+        stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+    preview.append(del);
 
     if (c.previewUrl) {
       const video = el('video');
@@ -2315,6 +2401,43 @@ function buildPickPanel(project, clips) {
     body.append(title, meta);
     card.append(preview, body);
 
+    del.onclick = async e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const action = c.imported
+        ? 'Remove this clip from the app and cancel it if it is scheduled?'
+        : 'Hide this unwanted clip from the app?';
+      if (!confirm(action)) return;
+
+      del.disabled = true;
+      del.classList.add('is-loading');
+      try {
+        const res = await api('/api/projects/' + encodeURIComponent(project.id) + '/clips/' + encodeURIComponent(c.id), {
+          method: 'DELETE',
+        });
+        card.style.pointerEvents = 'none';
+        card.animate(
+          [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(.96)' }],
+          { duration: 170, easing: 'ease', fill: 'forwards' }
+        ).finished.finally(() => card.remove());
+        const boxIndex = boxes.findIndex(item => item.id === c.id);
+        if (boxIndex >= 0) boxes.splice(boxIndex, 1);
+        updateCount();
+        toast(
+          res.previousStatus === 'posted'
+            ? 'Removed from the app. The already-published social post was not deleted.'
+            : c.imported ? 'Clip removed and any schedule cancelled' : 'Clip hidden from this app',
+          'good'
+        );
+        loadLibrary();
+        refresh();
+      } catch (err) {
+        toast(err.message, 'bad');
+        del.disabled = false;
+        del.classList.remove('is-loading');
+      }
+    };
+
     if (!c.imported) {
       boxes.push({ box, id: c.id, card });
       const setSelected = value => {
@@ -2323,7 +2446,7 @@ function buildPickPanel(project, clips) {
       };
       box.addEventListener('change', () => { setSelected(box.checked); updateCount(); });
       card.addEventListener('click', e => {
-        if (e.target.closest('video') || e.target.closest('input')) return;
+        if (e.target.closest('video') || e.target.closest('input') || e.target.closest('.pick-delete')) return;
         setSelected(!box.checked);
         updateCount();
       });
@@ -2383,6 +2506,42 @@ function coverPlaceholder() {
 }
 
 
+
+$('#attachExistingProject').onclick = async () => {
+  const btn = $('#attachExistingProject');
+  const projectRef = $('#existingProjectRef').value.trim();
+  const title = $('#existingProjectTitle').value.trim();
+  if (!projectRef) { toast('Paste an Opus project ID or project link first', 'bad'); return; }
+
+  btn.disabled = true;
+  btn.classList.add('is-loading');
+  btn.textContent = 'Checking Opus…';
+  try {
+    const res = await api('/api/projects/import-existing', {
+      method: 'POST',
+      body: JSON.stringify({ projectRef, title }),
+    });
+    $('#existingProjectRef').value = '';
+    $('#existingProjectTitle').value = '';
+    toast(
+      res.added
+        ? `Added project with ${res.clipCount} finished clip${res.clipCount === 1 ? '' : 's'}`
+        : 'That project is already in your app library',
+      'good'
+    );
+    loadLibrary();
+  } catch (err) {
+    toast(err.message, 'bad');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('is-loading');
+    btn.textContent = 'Add to library';
+  }
+};
+
+$('#existingProjectRef').addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('#attachExistingProject').click();
+});
 
 $('#refreshAcc').onclick = async () => {
   $('#refreshAcc').disabled = true;
