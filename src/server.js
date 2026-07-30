@@ -180,6 +180,38 @@ function pullBackCopy(clip) {
   delete clip.copyError;
 }
 
+const ANALYTIC_FIELDS = ['views', 'likes', 'comments', 'shares', 'saves'];
+function cleanAnalyticsMetrics(raw = {}) {
+  const out = {};
+  for (const key of ANALYTIC_FIELDS) {
+    if (!(key in raw)) continue;
+    const n = Math.round(Number(raw[key]));
+    out[key] = Number.isFinite(n) && n >= 0 ? Math.min(n, 1_000_000_000_000) : 0;
+  }
+  return out;
+}
+
+function targetKeyFrom(body = {}) {
+  return String(body.targetKey || body.postAccountId || body.platform || 'manual').trim().slice(0, 90) || 'manual';
+}
+
+function upsertClipAnalytics(clip, body = {}) {
+  const key = targetKeyFrom(body);
+  const metrics = cleanAnalyticsMetrics(body.metrics || body);
+  if (!Object.keys(metrics).length) throw new Error('Add at least one metric: views, likes, comments, shares or saves.');
+  clip.analytics = clip.analytics || {};
+  const prev = clip.analytics[key] || {};
+  clip.analytics[key] = {
+    ...prev,
+    ...metrics,
+    platform: String(body.platform || prev.platform || key).slice(0, 60),
+    label: String(body.label || prev.label || body.name || '').slice(0, 120),
+    source: String(body.source || 'manual').slice(0, 40),
+    updatedAt: Date.now(),
+  };
+  return clip.analytics[key];
+}
+
 /* ---- routes -------------------------------------------------------- */
 
 async function route(req, res, url) {
@@ -298,6 +330,8 @@ async function route(req, res, url) {
             scheduledAt: c.scheduledAt,
             scheduledLabel: c.scheduledAt ? formatLocal(c.scheduledAt) : null,
             targets: c.targets,
+            analytics: c.analytics || null,
+            postedAt: c.postedAt || null,
             musicMixed: c.musicMixed || null,
             musicNote: c.musicNote || null,
             musicAttempts: c.musicAttempts || 0,
@@ -465,6 +499,24 @@ async function route(req, res, url) {
     } catch (err) {
       return send(res, 400, { error: err.message });
     }
+  }
+
+  const musicAudioMatch = pathname.match(/^\/api\/music\/([^/]+)\/audio$/);
+  if (method === 'GET' && musicAudioMatch) {
+    const found = audio.nasheedFilePath(decodeURIComponent(musicAudioMatch[1]));
+    if (!found) return send(res, 404, { error: 'That track is not in the library.' });
+    const ext = path.extname(found.path).toLowerCase();
+    const type = ext === '.wav' ? 'audio/wav'
+      : ext === '.m4a' || ext === '.mp4' ? 'audio/mp4'
+      : ext === '.ogg' ? 'audio/ogg'
+      : 'audio/mpeg';
+    const stat = fs.statSync(found.path);
+    res.writeHead(200, {
+      'Content-Type': type,
+      'Content-Length': stat.size,
+      'Cache-Control': 'private, no-store',
+    });
+    return fs.createReadStream(found.path).pipe(res);
   }
 
   if (method === 'DELETE' && pathname.startsWith('/api/music/')) {
@@ -663,6 +715,22 @@ async function route(req, res, url) {
     try {
       const copy = await agent.regenerateCopy(id);
       return send(res, 200, { ok: true, copy });
+    } catch (err) {
+      return send(res, 400, { error: err.message });
+    }
+  }
+
+  const analyticsMatch = pathname.match(/^\/api\/clips\/([^/]+)\/analytics$/);
+  if (analyticsMatch && method === 'POST') {
+    const id = decodeURIComponent(analyticsMatch[1]);
+    const clip = state.clips.find(c => c.id === id);
+    if (!clip) return send(res, 404, { error: 'That clip is no longer in the app history.' });
+    try {
+      const body = await readBody(req);
+      const savedMetric = upsertClipAnalytics(clip, body);
+      save();
+      log(`Updated social analytics for "${clip.editedTitle || clip.copy?.title || clip.title}".`);
+      return send(res, 200, { ok: true, analytics: clip.analytics, saved: savedMetric });
     } catch (err) {
       return send(res, 400, { error: err.message });
     }
