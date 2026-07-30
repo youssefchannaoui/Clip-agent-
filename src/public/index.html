@@ -433,26 +433,70 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .proc-title{font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .proc-stage{font-size:13px;color:var(--mute);margin-top:1px}
 
-/* ---------- the board ---------- */
-.board{border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden}
-.board-day{display:flex;align-items:center;gap:12px;padding:11px 18px;background:var(--surface-2);border-bottom:1px solid var(--line)}
-.board-day .code{color:var(--text-2);font-weight:500}
+/* ---------- schedule board ---------- */
+.sched-head{align-items:flex-end;gap:16px;flex-wrap:wrap}
+.sched-head>div:first-child{min-width:0}
+.sched-range{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto;background:rgba(255,255,255,.035);border:1px solid var(--line);padding:4px;border-radius:999px}
+.range-btn{font-size:12.5px;color:var(--mute);padding:7px 11px;border-radius:999px;transition:background .16s ease,color .16s ease,transform .16s ease}
+.range-btn:hover{color:var(--text);background:rgba(255,255,255,.05);transform:translateY(-1px)}
+.range-btn.on{background:var(--blue);color:#1A1206;font-weight:650}
+
+.sched-health{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.health-card{background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.02));border:1px solid var(--line);border-radius:12px;padding:15px 16px;min-width:0;position:relative;overflow:hidden}
+.health-card::after{content:'';position:absolute;inset:auto 0 0 0;height:1px;background:linear-gradient(90deg,transparent,rgba(217,180,120,.55),transparent);opacity:.55}
+.health-k{font-size:12.5px;color:var(--mute-2);font-weight:550;text-transform:uppercase;letter-spacing:.04em}
+.health-v{font-size:24px;font-weight:700;letter-spacing:-.04em;margin-top:3px;color:var(--text)}
+.health-s{font-size:12.5px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.health-card.warn .health-v{color:var(--blue-soft)}
+.health-card.bad .health-v{color:#ff8d98}
+
+.board{border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
+.board-day{display:flex;align-items:center;gap:12px;padding:12px 18px;background:var(--surface-2);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:1}
+.board-day .code{color:var(--text-2);font-weight:650}
 .board-day.today .code{color:var(--text)}
 .board-day-n{color:var(--mute-2);font-size:12.5px;margin-left:auto}
 
-.dep{display:flex;align-items:center;gap:18px;padding:13px 18px;border-bottom:1px solid var(--line);position:relative}
-.dep:last-child{border-bottom:0}
-.dep-time{font-size:15px;font-weight:600;letter-spacing:-.01em;width:66px;flex:none;color:var(--mute)}
-.dep-what{flex:1;min-width:0}
-.dep-title{font-size:14.5px;font-weight:450;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dep-from{color:var(--mute-2);font-size:12.5px;margin-top:1px}
-.dep-stat{flex:none;font-size:12.5px;color:var(--mute-2)}
-.dep.open .dep-title{color:var(--mute-2)}
-.dep.gone{opacity:.4}
-.dep.loaded .dep-time{color:var(--text)}
-.dep.next{background:rgba(217,180,120,.06)}
-.dep.next .dep-time,.dep.next .dep-stat{color:var(--blue-soft)}
-.dep.next::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--blue)}
+.slot-card{display:grid;grid-template-columns:82px minmax(0,104px) minmax(0,1fr) auto;gap:14px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line);position:relative;min-width:0;transition:background .18s ease,transform .18s ease}
+.slot-card:last-child{border-bottom:0}
+.slot-card:hover{background:rgba(255,255,255,.025)}
+.slot-card.next{background:rgba(217,180,120,.065)}
+.slot-card.next::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--blue)}
+.slot-card.past{opacity:.55}
+.slot-card.open .slot-title{color:var(--mute-2)}
+.slot-time{font-size:15px;font-weight:700;letter-spacing:-.02em;color:var(--mute);white-space:nowrap}
+.slot-card.next .slot-time{color:var(--blue-soft)}
+.slot-media{width:104px;aspect-ratio:9/16;border:1px solid var(--line);border-radius:10px;background:#070707;overflow:hidden;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 26px rgba(0,0,0,.22)}
+.slot-media.empty{background:linear-gradient(135deg,rgba(255,255,255,.055),rgba(255,255,255,.015));box-shadow:none}
+.slot-media img,.slot-video{width:100%;height:100%;object-fit:cover;display:block}
+.slot-open-icon{font-size:26px;color:rgba(217,180,120,.55);font-weight:250;line-height:1}
+.slot-what{min-width:0}
+.slot-title{font-size:15px;font-weight:650;letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot-from{color:var(--mute-2);font-size:12.5px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot-badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.safe-badge{font-size:11.5px;line-height:1;padding:6px 7px;border-radius:999px;border:1px solid var(--line);color:var(--mute);background:rgba(255,255,255,.025);white-space:nowrap}
+.safe-badge.good{border-color:rgba(95,206,139,.28);color:#adeac4;background:rgba(35,110,61,.16)}
+.safe-badge.warn{border-color:rgba(217,180,120,.32);color:var(--blue-soft);background:rgba(120,90,30,.16)}
+.safe-badge.bad{border-color:rgba(255,85,102,.32);color:#ffb0b8;background:rgba(110,25,25,.18)}
+.slot-actions{display:flex;gap:7px;justify-content:flex-end;align-items:center;flex-wrap:wrap;max-width:240px}
+.slot-actions .btn{white-space:nowrap}
+.slot-status{font-size:12.5px;color:var(--mute-2);margin-left:auto;white-space:nowrap}
+.slot-card.next .slot-status{color:var(--blue-soft)}
+.schedule-empty-note{font-size:12.5px;color:var(--mute-2);margin-top:4px}
+
+@media (max-width:860px){
+  .sched-health{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .slot-card{grid-template-columns:72px 78px minmax(0,1fr);align-items:start}
+  .slot-media{width:78px}
+  .slot-actions{grid-column:2 / -1;justify-content:flex-start;max-width:none;margin-top:-4px}
+  .slot-status{display:none}
+}
+@media (max-width:560px){
+  .sched-health{grid-template-columns:1fr}
+  .slot-card{grid-template-columns:1fr;gap:10px}
+  .slot-time{font-size:13px;color:var(--blue-soft)}
+  .slot-media{width:100%;max-width:190px;justify-self:start}
+  .slot-actions{grid-column:auto}
+}
 
 /* ---------- figures ---------- */
 .figs{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
@@ -680,15 +724,26 @@ select:focus{outline:none;border-color:var(--blue)}
 
         <!-- schedule -->
         <section class="panel hide" id="view-schedule">
-          <div class="head">
-            <h2>The next five days</h2>
-            <span class="note" id="railNote"></span>
+          <div class="head sched-head">
+            <div>
+              <h2>Schedule control</h2>
+              <span class="note" id="railNote"></span>
+            </div>
+            <div class="sched-range" aria-label="Schedule range">
+              <button class="range-btn" data-sched-days="1">Today</button>
+              <button class="range-btn on" data-sched-days="5">5 days</button>
+              <button class="range-btn" data-sched-days="14">2 weeks</button>
+            </div>
           </div>
-          <div class="board" id="rail"></div>
+
+          <div class="sched-health" id="schedHealth"></div>
+          <div class="board schedule-board" id="rail"></div>
 
           <div class="head" style="margin-top:34px">
-            <h2>Queued clips</h2>
-            <span class="note" id="schedNote"></span>
+            <div>
+              <h2>Pipeline</h2>
+              <span class="note" id="schedNote"></span>
+            </div>
             <button class="btn btn-ghost btn-sm hide" id="pullBackAll">Pull back all</button>
           </div>
           <div id="schedList"></div>
@@ -873,6 +928,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, m =>
 let PW = localStorage.getItem('clipAgentPw') || '';
 let DATA = null;
 let VIEW = 'queue';
+let SCHEDULE_DAYS = Number(localStorage.getItem('clipAgentScheduleDays') || 5);
 let editing = new Set();   // clip ids being typed into, so refreshes don't clobber them
 let pollTimer = null;
 let pollEvery = 0;
@@ -1486,28 +1542,157 @@ const platformName = p => String(p || '')
 
 /* ---------- the board ---------- */
 
+function scheduleSafetyBadges(c) {
+  const out = [];
+  const musicOn = DATA?.musicSettings?.enabled !== false;
+  if (musicOn) {
+    if (c.musicMixed === 'done') out.push({ text: 'Music ready', cls: 'good' });
+    else if (c.musicMixed === 'retrying') out.push({ text: 'Music retrying', cls: 'warn' });
+    else if (c.musicMixed === 'failed') out.push({ text: 'Music failed', cls: 'bad' });
+    else out.push({ text: 'Music pending', cls: statusOf(c) === 'approved' ? 'warn' : '' });
+  } else {
+    out.push({ text: 'Music off', cls: '' });
+  }
+
+  if (c.copyState === 'done') out.push({ text: 'English copy', cls: 'good' });
+  else if (c.copyState === 'failed') out.push({ text: 'Copy needs retry', cls: 'bad' });
+  else out.push({ text: 'Copy pending', cls: '' });
+
+  if (c.templateChanged === false) out.push({ text: 'Current style', cls: 'good' });
+  else if (c.templateChanged === true) out.push({ text: 'Older style', cls: 'warn' });
+  else out.push({ text: 'Style unverified', cls: '' });
+
+  if ((c.targets || []).some(t => t.status === 'failed')) out.push({ text: 'Upload failed', cls: 'bad' });
+  else if ((c.targets || []).some(t => t.status === 'scheduled')) out.push({ text: 'In Opus', cls: 'good' });
+
+  return out;
+}
+
+function safetyBadges(c) {
+  const row = el('div', 'slot-badges');
+  scheduleSafetyBadges(c).forEach(b => {
+    const tag = el('span', 'safe-badge ' + (b.cls || ''));
+    tag.textContent = b.text;
+    row.append(tag);
+  });
+  return row;
+}
+
+function slotPreview(c) {
+  const box = el('div', 'slot-media');
+  if (!c) {
+    box.classList.add('empty');
+    const plus = el('div', 'slot-open-icon');
+    plus.textContent = '+';
+    box.append(plus);
+    return box;
+  }
+  if (c.thumbState === 'ready') {
+    const img = el('img');
+    img.src = withPw('/api/clips/thumb/' + encodeURIComponent(c.id) + '.jpg');
+    img.alt = c.title || 'Scheduled clip preview';
+    img.onerror = () => { img.remove(); appendVideoPreview(box, c, 'slot-video'); };
+    box.append(img);
+  } else {
+    appendVideoPreview(box, c, 'slot-video');
+  }
+  return box;
+}
+
+function scheduleHealth(allClips, days, byTime) {
+  const now = Date.now();
+  const allSlots = days.flatMap(d => d.slots);
+  const futureSlots = allSlots.filter(ms => ms > now);
+  const filledFuture = futureSlots.filter(ms => byTime.has(ms));
+  const waiting = allClips.filter(c => statusOf(c) === 'waiting').length;
+  const approved = allClips.filter(c => statusOf(c) === 'approved').length;
+  const scheduled = allClips.filter(c => statusOf(c) === 'scheduled').length;
+  const attention = allClips.filter(c =>
+    c.templateError || c.copyState === 'failed' || ['retrying', 'failed'].includes(c.musicMixed)
+    || (c.targets || []).some(t => t.status === 'failed')).length;
+
+  const next = nextPost();
+  const cards = [
+    { k: 'Next post', v: next ? clockLabel(next.scheduledAt) : 'None', s: next ? (next.title || 'Untitled clip') : 'No future post yet', cls: next ? '' : 'warn' },
+    { k: 'Slots filled', v: `${filledFuture.length}/${futureSlots.length || 0}`, s: `${SCHEDULE_DAYS === 1 ? 'Today' : SCHEDULE_DAYS + ' days'} in ${TZ().split('/').pop().replace(/_/g, ' ')}` },
+    { k: 'Pipeline', v: approved + scheduled, s: `${waiting} waiting review`, cls: waiting ? 'warn' : '' },
+    { k: 'Needs attention', v: attention, s: attention ? 'Open the cards below' : 'Everything looks clean', cls: attention ? 'bad' : '' },
+  ];
+
+  const host = $('#schedHealth');
+  host.innerHTML = '';
+  cards.forEach(c => {
+    const card = el('div', 'health-card ' + (c.cls || ''));
+    card.innerHTML = `<div class="health-k">${esc(c.k)}</div><div class="health-v">${esc(c.v)}</div><div class="health-s" title="${esc(c.s)}">${esc(c.s)}</div>`;
+    host.append(card);
+  });
+}
+
+async function pullBackClipFromSchedule(c, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Pulling back…';
+  try {
+    await api('/api/clips/' + encodeURIComponent(c.id), {
+      method: 'PATCH', body: JSON.stringify({ status: 'waiting' }),
+    });
+    toast('Pulled back — its slot is open again');
+  } catch (err) { toast(err.message, 'bad'); }
+  refresh();
+}
+
+async function postNowFromSchedule(c, btn) {
+  if (!confirm('Post this clip to every connected account right now?')) return;
+  btn.disabled = true;
+  btn.classList.add('is-loading');
+  btn.textContent = 'Posting…';
+  try {
+    await api('/api/clips/' + encodeURIComponent(c.id) + '/now', { method: 'POST' });
+    toast('Posted', 'good');
+  } catch (err) { toast(err.message, 'bad'); }
+  refresh();
+}
+
+async function approveNextWaiting(btn) {
+  const next = (DATA?.clips || []).find(c => statusOf(c) === 'waiting');
+  if (!next) { toast('No waiting clips to approve', 'bad'); return; }
+  btn.disabled = true;
+  btn.classList.add('is-loading');
+  btn.textContent = 'Approving…';
+  try {
+    await api('/api/clips/' + encodeURIComponent(next.id), {
+      method: 'PATCH',
+      body: JSON.stringify({ title: next.title || '', description: next.description || '', hashtags: next.hashtags || '', status: 'approved' }),
+    });
+    toast('Approved next clip — the agent will fill the earliest open slot', 'good');
+  } catch (err) { toast(err.message, 'bad'); }
+  refresh();
+}
+
 function renderBoard(allClips) {
-  // The board itself should show what actually happened in every slot,
-  // including ones already sent — otherwise a passed slot looks empty
-  // the moment its clip flips from "scheduled" to "posted".
+  // The board itself shows what is actually attached to every slot, including
+  // older posted clips, so a passed slot does not disappear after it goes out.
   const byTime = new Map();
   allClips.forEach(c => { if (c.scheduledAt) byTime.set(c.scheduledAt, c); });
 
-  // The list underneath the board is only for clips still pending a slot.
   const pending = allClips.filter(c => ['approved', 'scheduled'].includes(statusOf(c)));
-
   const board = $('#rail');
   board.innerHTML = '';
-  const days = slotsAhead(5);
+  const days = slotsAhead(SCHEDULE_DAYS || 5);
   const now = Date.now();
   let nextMarked = false;
+
+  scheduleHealth(allClips, days, byTime);
+  document.querySelectorAll('[data-sched-days]').forEach(b => {
+    b.classList.toggle('on', Number(b.dataset.schedDays) === (SCHEDULE_DAYS || 5));
+  });
 
   days.forEach((day, di) => {
     const head = el('div', 'board-day' + (di === 0 ? ' today' : ''));
     const label = el('span', 'code');
     label.textContent = di === 0 ? 'Today, ' + dayLabel(day.slots[0]) : dayLabel(day.slots[0]);
+    const filled = day.slots.filter(ms => byTime.has(ms)).length;
     const n = el('span', 'board-day-n');
-    n.textContent = day.slots.filter(ms => byTime.has(ms)).length + ' of ' + day.slots.length + ' filled';
+    n.textContent = filled + ' of ' + day.slots.length + ' filled';
     head.append(label, n);
     board.append(head);
 
@@ -1517,28 +1702,56 @@ function renderBoard(allClips) {
       const isNext = !past && !nextMarked;
       if (isNext) nextMarked = true;
 
-      const row = el('div', 'dep '
-        + (clip && !past ? 'loaded ' : '')
-        + (past ? 'gone ' : '')
-        + (!clip ? 'open ' : '')
-        + (isNext ? 'next' : ''));
+      const row = el('div', 'slot-card '
+        + (clip ? 'loaded ' : 'open ')
+        + (past ? 'past ' : '')
+        + (isNext ? 'next ' : ''));
 
-      const t = el('div', 'dep-time');
-      t.textContent = clockLabel(ms);
-      row.append(t);
+      const time = el('div', 'slot-time');
+      time.textContent = clockLabel(ms);
+      row.append(time);
+      row.append(slotPreview(clip));
 
-      const what = el('div', 'dep-what');
-      const ti = el('div', 'dep-title');
-      ti.textContent = clip ? (clip.title || 'Untitled clip') : (past ? 'Nothing went out' : 'Open');
-      what.append(ti);
-      if (clip) {
-        const from = el('div', 'dep-from');
-        from.textContent = (past ? 'Sent, from ' : 'From ') + (clip.projectTitle || 'a lecture');
-        what.append(from);
+      const what = el('div', 'slot-what');
+      const title = el('div', 'slot-title');
+      title.textContent = clip ? (clip.title || 'Untitled clip') : (past ? 'Nothing went out' : isNext ? 'Next open slot' : 'Open slot');
+      what.append(title);
+
+      const from = el('div', 'slot-from');
+      if (clip) from.textContent = `${statusOf(clip) === 'posted' || past ? 'From' : 'From'} ${clip.projectTitle || 'a lecture'}`;
+      else from.textContent = past ? 'No clip was scheduled here' : 'Approve a clip to let the agent fill this automatically';
+      what.append(from);
+
+      if (clip) what.append(safetyBadges(clip));
+      else if (!past && isNext) {
+        const note = el('div', 'schedule-empty-note');
+        note.textContent = 'The next approved clip will land here.';
+        what.append(note);
       }
       row.append(what);
 
-      const stat = el('div', 'dep-stat');
+      const actions = el('div', 'slot-actions');
+      if (clip && statusOf(clip) === 'scheduled') {
+        const nowBtn = el('button', 'btn btn-ghost btn-sm');
+        nowBtn.textContent = 'Post now';
+        nowBtn.onclick = () => postNowFromSchedule(clip, nowBtn);
+        const back = el('button', 'btn btn-ghost btn-sm');
+        back.textContent = 'Pull back';
+        back.onclick = () => pullBackClipFromSchedule(clip, back);
+        actions.append(nowBtn, back);
+      } else if (clip && statusOf(clip) === 'approved') {
+        const tag = el('span', 'safe-badge warn');
+        tag.textContent = clip.musicMixed === 'retrying' ? 'Music retrying' : 'Processing';
+        actions.append(tag);
+      } else if (!clip && !past && isNext && allClips.some(c => statusOf(c) === 'waiting')) {
+        const fill = el('button', 'btn btn-ghost btn-sm');
+        fill.textContent = 'Approve next';
+        fill.onclick = () => approveNextWaiting(fill);
+        actions.append(fill);
+      }
+      row.append(actions);
+
+      const stat = el('div', 'slot-status');
       stat.textContent = past ? (clip ? 'Sent' : '') : isNext ? 'Next' : clip ? 'Ready' : 'Open';
       row.append(stat);
 
@@ -1548,21 +1761,23 @@ function renderBoard(allClips) {
 
   const open = days.flatMap(d => d.slots).filter(ms => ms > now && !byTime.has(ms)).length;
   $('#railNote').textContent = open
-    ? `${open} open slots in the next five days`
+    ? `${open} open slot${open === 1 ? '' : 's'} in the selected range`
     : 'Every slot is spoken for';
 
   const list = $('#schedList');
   list.innerHTML = '';
-  $('#schedNote').textContent = '';
   $('#pullBackAll').classList.toggle('hide', pending.length < 1);
+  $('#schedNote').textContent = pending.length
+    ? `${pending.length} clip${pending.length === 1 ? '' : 's'} approved, scheduled, or processing`
+    : '';
   if (!pending.length) {
     list.innerHTML = `<div class="slab"><div class="empty">
-      <div class="empty-title">Nothing queued</div>
-      <div class="empty-note">Approved clips land here and fill the slots above, one at a time, in order.</div>
+      <div class="empty-title">Nothing in the pipeline</div>
+      <div class="empty-note">Approved clips land here, then move through music, Opus import, and scheduling.</div>
     </div></div>`;
     return;
   }
-  pending.slice().sort((a, b) => (a.scheduledAt || 0) - (b.scheduledAt || 0))
+  pending.slice().sort((a, b) => (a.scheduledAt || Infinity) - (b.scheduledAt || Infinity))
     .forEach(c => list.append(clipCard(c)));
 }
 
@@ -2581,6 +2796,15 @@ $('#refreshAcc').onclick = async () => {
   } catch (err) { toast(err.message, 'bad'); }
   $('#refreshAcc').disabled = false;
 };
+
+document.querySelectorAll('[data-sched-days]').forEach(btn => {
+  btn.onclick = () => {
+    SCHEDULE_DAYS = Number(btn.dataset.schedDays) || 5;
+    localStorage.setItem('clipAgentScheduleDays', String(SCHEDULE_DAYS));
+    document.querySelectorAll('[data-sched-days]').forEach(b => b.classList.toggle('on', b === btn));
+    if (DATA) renderBoard(DATA.clips || []);
+  };
+});
 
 const TAB_ORDER = ['queue', 'schedule', 'insights', 'music', 'library'];
 document.querySelectorAll('.tab').forEach(tab => {
