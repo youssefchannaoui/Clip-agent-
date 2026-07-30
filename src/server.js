@@ -81,6 +81,7 @@ function pullBackMusic(clip) {
 function pullBackCopy(clip) {
   delete clip.copy;
   delete clip.copyState;
+  delete clip.copyError;
 }
 
 /* ---- routes -------------------------------------------------------- */
@@ -183,6 +184,7 @@ async function route(req, res, url) {
             musicMixed: c.musicMixed || null,
             musicNote: c.musicNote || null,
             copyState: c.copyState || null,
+            copyError: c.copyError || null,
             thumbState: c.thumbState || null,
             thumbAttempts: c.thumbAttempts || 0,
             // The browser can show the actual clip immediately while the
@@ -281,6 +283,7 @@ async function route(req, res, url) {
       if (clip.status !== 'waiting') continue;
       delete clip.copy;
       delete clip.copyState;
+      delete clip.copyError;
       delete clip.editedTitle;
       delete clip.editedDescription;
       delete clip.editedHashtags;
