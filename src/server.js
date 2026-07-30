@@ -15,6 +15,7 @@ import { formatLocal } from './slots.js';
 import { checkFfmpeg } from './ffmpeg.js';
 
 const page = path.join(config.root, 'src', 'public', 'index.html');
+const youtubeCookiesFile = path.join(config.dataDir, 'youtube-cookies.txt');
 
 function json(res, status, value) {
   const body = JSON.stringify(value);
@@ -288,6 +289,29 @@ async function route(req, res, url) {
   }
   const musicDelete = pathname.match(/^\/api\/music\/([^/]+)$/);
   if (method === 'DELETE' && musicDelete) return audio.deleteNasheed(decodeURIComponent(musicDelete[1])) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'Track not found.' });
+
+  if (method === 'GET' && pathname === '/api/admin/youtube-cookies') {
+    return json(res, 200, { connected: fs.existsSync(youtubeCookiesFile) });
+  }
+  if (method === 'POST' && pathname === '/api/admin/youtube-cookies') {
+    const body = await readBody(req, 5 * 1024 * 1024);
+    const contents = String(body.contents || '');
+    const headerValid = contents.includes('# Netscape HTTP Cookie File') || contents.includes('# HTTP Cookie File');
+    if (!headerValid) return json(res, 400, { error: 'Upload a valid Netscape-format cookies.txt file.' });
+    if (!/(^|\n)(?:#HttpOnly_)?\.?youtube\.com\t/im.test(contents) && !contents.includes('.youtube.com')) {
+      return json(res, 400, { error: 'The file does not contain YouTube cookies.' });
+    }
+    fs.mkdirSync(config.dataDir, { recursive: true });
+    fs.writeFileSync(youtubeCookiesFile, contents, { encoding: 'utf8', mode: 0o600 });
+    log('YouTube downloader cookies were updated through the admin panel.');
+    return json(res, 200, { ok: true, connected: true });
+  }
+  if (method === 'DELETE' && pathname === '/api/admin/youtube-cookies') {
+    try { fs.unlinkSync(youtubeCookiesFile); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    log('YouTube downloader cookies were removed.');
+    return json(res, 200, { ok: true, connected: false });
+  }
 
   if (method === 'GET' && pathname === '/api/diagnostics') {
     const [ffmpeg, worker] = await Promise.all([checkFfmpeg(), runDoctor()]);
