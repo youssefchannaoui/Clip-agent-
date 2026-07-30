@@ -605,21 +605,20 @@ async function ensureMusic(clip) {
 
   const selected = brandTemplateSelection();
 
-  if (settings.mode === 'opus_native') {
-    // This is the no-extra-credit path. Opus's editor can add/upload music
-    // natively without creating another clipping project; the public API does
-    // not expose the editor timeline/music-track operation, so the app must not
-    // create a second Opus project here. Keep the Music tab library active as
-    // the source of truth for the tracks/volume you want to use, and schedule
-    // the original Opus clip directly.
+  if (settings.mode === 'opus_library' || settings.mode === 'opus_native') {
+    // This is the no-extra-credit path. The user's nasheeds are already in
+    // Opus Brand Kit / Media. Opus's public API exposes brand templates and
+    // project creation, but not a documented timeline/music-track endpoint for
+    // picking an uploaded audio asset per clip, so the app must not create a
+    // second Opus project here. It schedules the original Opus clip directly.
     const track = audio.pickNasheed?.();
-    clip.musicMode = 'opus_native';
-    clip.musicMixed = 'opus_native';
+    clip.musicMode = 'opus_library';
+    clip.musicMixed = 'opus_library';
     clip.musicTemplateId = selected.id || '';
     clip.musicTemplateName = selected.name || '';
     clip.musicNote = track
-      ? `Opus-native music mode: use "${track.name}" from your Music tab / Opus music library. No second Opus import was created.`
-      : 'Opus-native music mode: no second Opus import was created. Upload/select music in Opus if this clip needs background music.';
+      ? `Opus library music mode: use "${track.name}" if you also uploaded it in Opus Media. No second Opus import was created.`
+      : 'Opus library music mode: no second Opus import was created. Upload/select your nasheed in Opus Media if this clip needs background music.';
     clip.musicVerifiedAt = Date.now();
     delete clip.musicNextTryAt;
     delete clip.musicAttempts;
