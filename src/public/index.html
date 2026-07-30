@@ -636,6 +636,21 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
   .slot-actions{grid-column:auto}
 }
 
+
+/* ---------- clean compact UI rollback ---------- */
+.clip .preflight{display:none}
+.clip .slot-badges{margin-top:8px}
+.slot-card{grid-template-columns:72px 58px minmax(0,1fr) auto;gap:12px;padding:10px 14px;min-height:92px}
+.slot-card.next{background:rgba(217,180,120,.035)}
+.slot-media{width:58px;border-radius:9px;box-shadow:none}
+.slot-title{font-size:14.5px}
+.slot-from{font-size:12px;max-width:100%}
+.slot-badges{gap:5px;margin-top:6px}
+.safe-badge{font-size:11px;padding:5px 6px}
+.slot-actions{max-width:190px}.slot-actions .btn{padding:8px 11px}
+.slot-status{font-size:12px}
+@media (max-width:860px){.slot-card{grid-template-columns:62px 52px minmax(0,1fr)}.slot-media{width:52px}.slot-actions{grid-column:3 / -1;margin-top:2px}.safe-badge{font-size:10.5px}}
+
 /* ---------- figures ---------- */
 .figs{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 .fig{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
@@ -1772,7 +1787,7 @@ function clipCard(c) {
     tags.textContent = c.hashtags || '';
     content.append(title, body);
     if (c.hashtags) content.append(tags);
-    content.append(preflightPanel(c));
+    content.append(safetyBadges(c));
     count.textContent = st === 'posted' ? 'Already sent' : 'Pull back to change the wording';
     foot.append(count);
   } else {
@@ -1821,7 +1836,7 @@ function clipCard(c) {
     [title, body, tags].forEach(f => f.addEventListener('input', onEdit));
     [title, tags].forEach(f => f.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); }));
 
-    content.append(preflightPanel(c));
+    content.append(safetyBadges(c));
     foot.append(count, saved);
   }
 
@@ -1967,7 +1982,6 @@ function scheduleSafetyBadges(c) {
 
   if (c.templateChanged === false) out.push({ text: 'Current style', cls: 'good' });
   else if (c.templateChanged === true) out.push({ text: 'Older style', cls: 'warn' });
-  else out.push({ text: 'Style not recorded', cls: '' });
 
   if ((c.targets || []).some(t => t.status === 'failed')) out.push({ text: 'Upload failed', cls: 'bad' });
   else if ((c.targets || []).some(t => t.status === 'scheduled')) out.push({ text: 'In Opus', cls: 'good' });
@@ -2011,7 +2025,7 @@ function preflightChecks(c) {
       ? { label: 'Style', text: 'Current style', cls: 'good', icon: '✓' }
       : c.templateChanged === true
         ? { label: 'Style', text: 'Older style', cls: 'warn', icon: '!' }
-        : { label: 'Style', text: 'Not recorded', cls: '', icon: '?' },
+        : { label: 'Style', text: 'Unknown', cls: '', icon: '?' },
     failedTarget
       ? { label: 'Posting', text: 'Upload failed', cls: 'bad', icon: '×' }
       : (c.targets || []).some(t => ['scheduled','posted'].includes(t.status))
@@ -2180,7 +2194,7 @@ function renderBoard(allClips) {
       else from.textContent = past ? 'No clip was scheduled here' : 'Approve a clip to let the agent fill this automatically';
       what.append(from);
 
-      if (clip) what.append(preflightPanel(clip, true));
+      if (clip) what.append(safetyBadges(clip));
       else if (!past && isNext) {
         const note = el('div', 'schedule-empty-note');
         note.textContent = 'The next approved clip will land here.';
