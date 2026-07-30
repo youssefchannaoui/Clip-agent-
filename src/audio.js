@@ -110,10 +110,21 @@ export function deleteNasheed(id) {
   return true;
 }
 
+export function nasheedFilePath(id) {
+  const entry = loadLibrary().find(t => t.id === id);
+  if (!entry) return null;
+  const full = path.join(musicDir, path.basename(entry.filename));
+  return full.startsWith(musicDir) && fs.existsSync(full) ? { path: full, entry } : null;
+}
+
 function pickRandomNasheed() {
   const list = loadLibrary();
   if (!list.length) return null;
   return list[Math.floor(Math.random() * list.length)];
+}
+
+export function pickNasheed() {
+  return pickRandomNasheed();
 }
 
 /* ------------------------------------------------------------------ */
@@ -122,13 +133,23 @@ function pickRandomNasheed() {
 
 export function musicSettings() {
   const s = state.musicSettings || {};
+  const configuredMode = s.mode || config.musicMode || null;
+  const enabled = s.enabled ?? config.musicEnabled;
+  const mode = configuredMode || (enabled ? 'opus_native' : 'off');
   return {
-    enabled: s.enabled ?? config.musicEnabled,
+    enabled: mode !== 'off' && enabled !== false,
+    // opus_native = no extra Opus import credits. The app keeps your Music tab
+    // library for choosing/previewing tracks, while Opus handles music natively.
+    // local_import = old guaranteed local mix + re-import path.
+    mode: ['opus_native', 'local_import', 'off'].includes(mode) ? mode : 'opus_native',
     volumePercent: s.volumePercent ?? config.musicVolumePercent,
   };
 }
 export function setMusicSettings(next) {
-  state.musicSettings = { ...state.musicSettings, ...next };
+  const clean = { ...next };
+  if (clean.mode === 'off') clean.enabled = false;
+  else if (clean.mode === 'opus_native' || clean.mode === 'local_import') clean.enabled = true;
+  state.musicSettings = { ...state.musicSettings, ...clean };
   save();
 }
 
