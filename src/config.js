@@ -42,7 +42,7 @@ export const config = {
   musicVolumePercent: num(process.env.MUSIC_VOLUME_PERCENT, 15),
 
   copyPrompt: process.env.COPY_PROMPT
-    || 'Write a plain, respectful caption for a short Islamic reminder. No hype, no clickbait, no emojis. Never paraphrase or invent Quran or hadith wording. If a source is unclear, describe the topic only.',
+    || 'Write the title, description and hashtags in clear natural English only. Translate any Arabic speech or source wording into English and do not use Arabic script. Keep the title short and respectful. No hype, no clickbait, no emojis. Never paraphrase or invent Quran or hadith wording. If a source is unclear, describe the topic only.',
 };
 
 if (!config.password) {
