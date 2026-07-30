@@ -56,9 +56,7 @@ a{color:var(--blue-soft)}
 .code{font-size:13px;color:var(--mute);font-weight:450}
 
 /* ---------- shell ---------- */
-#app{
-  width:100%;
-}
+#app{width:100%}
 
 .wrap{
   width:100%;
@@ -77,10 +75,7 @@ a{color:var(--blue-soft)}
   padding-top:30px;
 }
 
-.main-col{
-  width:100%;
-  min-width:0;
-}
+.main-col{width:100%;min-width:0}
 
 @media (min-width:1001px){
   .side{
@@ -92,7 +87,7 @@ a{color:var(--blue-soft)}
     padding-right:0;
   }
 }
-  
+
 /* ---------- gate / connect ---------- */
 .center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
 .card-lock{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
@@ -234,11 +229,12 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .clip-main{display:flex;gap:16px;align-items:flex-start}
 .clip-content{flex:1;min-width:0}
 .clip-thumb{
-  flex:none;width:104px;height:104px;border-radius:8px;overflow:hidden;
+  flex:none;width:112px;aspect-ratio:9/16;border-radius:8px;overflow:hidden;
   background:var(--surface-2);border:1px solid var(--line);
-  display:flex;align-items:center;justify-content:center;
+  display:flex;align-items:center;justify-content:center;position:relative;
 }
-.clip-thumb-img{width:100%;height:100%;object-fit:cover;display:block}
+.clip-thumb-img,.clip-thumb-video{width:100%;height:100%;object-fit:cover;display:block}
+.clip-thumb-video{cursor:pointer;background:#000}
 .clip-thumb-ph{color:var(--mute-2);font-size:20px;display:flex;align-items:center;justify-content:center}
 .clip.needs{border-color:var(--line-lit)}
 .clip.bad{border-color:rgba(255,85,102,.35)}
@@ -337,20 +333,38 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .lec-foot{margin-top:12px;display:flex;gap:8px}
 .lec-foot .btn{flex:1}
 
-.pick-panel{
-  border-top:1px solid var(--line);background:var(--bg);padding:12px 16px 14px;
-  display:flex;flex-direction:column;gap:2px;max-height:280px;overflow-y:auto;
+.lec.picking{grid-column:1/-1}
+.lec.picking>.lec-cover{max-height:240px}
+.pick-panel{border-top:1px solid var(--line);background:var(--bg);padding:18px}
+.pick-intro{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.pick-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px}
+.pick-card{
+  position:relative;overflow:hidden;border:1px solid var(--line);border-radius:9px;
+  background:var(--surface);cursor:pointer;transition:border-color .12s,transform .12s;
 }
-.pick-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)}
-.pick-row:last-child{border-bottom:0}
-.pick-row input[type=checkbox]{flex:none;width:16px;height:16px;accent-color:var(--blue)}
-.pick-what{flex:1;min-width:0}
-.pick-title{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pick-meta{font-size:11.5px;color:var(--mute-2)}
-.pick-row.done{opacity:.5}
-.pick-row.done .pick-title::after{content:' — already in queue';color:var(--mute-2);font-weight:400}
-.pick-foot{display:flex;gap:8px;padding-top:10px;align-items:center}
-.pick-count{font-size:12px;color:var(--mute);margin-right:auto}
+.pick-card:hover{border-color:var(--line-lit);transform:translateY(-1px)}
+.pick-card.selected{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
+.pick-card.done{opacity:.52;cursor:default}
+.pick-preview{aspect-ratio:9/16;background:#050505;position:relative;display:grid;place-items:center;overflow:hidden}
+.pick-preview video{width:100%;height:100%;object-fit:cover;display:block;background:#000}
+.pick-preview-ph{color:var(--mute-2);font-size:13px;text-align:center;padding:12px}
+.pick-check{position:absolute;top:9px;left:9px;z-index:2;width:19px;height:19px;accent-color:var(--blue)}
+.pick-score,.pick-duration,.pick-queued{
+  position:absolute;z-index:2;top:9px;padding:3px 7px;border-radius:20px;
+  background:rgba(9,9,10,.78);border:1px solid rgba(255,255,255,.14);font-size:11px;
+}
+.pick-score{right:9px;color:var(--blue-soft)}
+.pick-duration{right:9px;top:auto;bottom:9px;color:var(--text-2)}
+.pick-queued{left:9px;right:auto;color:var(--text-2)}
+.pick-card-body{padding:10px 11px 12px}
+.pick-title{font-size:13px;font-weight:500;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pick-meta{font-size:11.5px;color:var(--mute-2);margin-top:4px}
+.pick-foot{
+  position:sticky;bottom:0;z-index:4;display:flex;gap:8px;align-items:center;
+  margin:18px -18px -18px;padding:13px 18px;background:rgba(9,9,10,.94);
+  backdrop-filter:blur(10px);border-top:1px solid var(--line);
+}
+.pick-count{font-size:12.5px;color:var(--mute);margin-right:auto}
 
 .proc{
   display:flex;align-items:center;gap:13px;padding:14px 18px;
@@ -482,7 +496,7 @@ select:focus{outline:none;border-color:var(--blue)}
   .dep-time{width:56px}
   .dep-stat{display:none}
   .bar-lab{width:96px}
-  .clip-thumb{width:76px;height:76px}
+  .clip-thumb{width:76px;aspect-ratio:9/16}
 }
 </style>
 </head>
@@ -745,9 +759,12 @@ select:focus{outline:none;border-color:var(--blue)}
         <div class="card">
           <div class="card-head">Caption prompt</div>
           <div class="card-body">
-            <textarea id="copyPromptField" rows="5" style="width:100%;resize:vertical" placeholder="e.g. Write titles and captions in English, not Arabic. Keep them short and respectful."></textarea>
-            <div class="style-note">Instructions Opus follows when writing each clip's title, description and hashtags — this is how you get English instead of Arabic, or any other tone. Applies to clips written from now on; clips already written keep their existing wording.</div>
-            <button class="btn btn-ghost btn-sm" id="saveCopyPrompt" style="margin-top:11px">Save</button>
+            <textarea id="copyPromptField" rows="6" style="width:100%;resize:vertical" placeholder="Write the title, description and hashtags in English only. Translate Arabic speech naturally into English. Do not use Arabic script."></textarea>
+            <div class="style-note">This is sent directly to Opus AI. Saving now also rewrites every clip still waiting for review; scheduled clips stay untouched.</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">
+              <button class="btn btn-ghost btn-sm" id="englishPrompt">Use English preset</button>
+              <button class="btn btn-sm" id="saveCopyPrompt">Save & rewrite waiting</button>
+            </div>
           </div>
         </div>
 
@@ -1086,16 +1103,42 @@ function renderQueue(waiting) {
   });
 }
 
+function primeVideoFrame(video) {
+  video.addEventListener('loadedmetadata', () => {
+    const target = Math.min(0.8, Math.max(0, (video.duration || 1) / 4));
+    try { video.currentTime = target; } catch {}
+  }, { once: true });
+}
+
+function appendVideoPreview(box, c, className = 'clip-thumb-video') {
+  if (!c.previewUrl) { box.append(thumbPlaceholder(c)); return; }
+  const video = el('video', className);
+  video.src = c.previewUrl;
+  video.preload = 'metadata';
+  video.muted = true;
+  video.playsInline = true;
+  video.loop = true;
+  video.title = 'Click to preview this clip';
+  primeVideoFrame(video);
+  video.onerror = () => { video.remove(); if (!box.children.length) box.append(thumbPlaceholder(c)); };
+  video.onclick = e => {
+    e.stopPropagation();
+    if (video.paused) video.play().catch(() => {});
+    else video.pause();
+  };
+  box.append(video);
+}
+
 function clipThumb(c) {
   const box = el('div', 'clip-thumb');
   if (c.thumbState === 'ready') {
     const img = el('img', 'clip-thumb-img');
     img.src = '/api/clips/thumb/' + encodeURIComponent(c.id) + '.jpg?pw=' + encodeURIComponent(PW);
     img.alt = c.title || 'Clip preview';
-    img.onerror = () => { img.remove(); box.append(thumbPlaceholder(c)); };
+    img.onerror = () => { img.remove(); appendVideoPreview(box, c); };
     box.append(img);
   } else {
-    box.append(thumbPlaceholder(c));
+    appendVideoPreview(box, c);
   }
   return box;
 }
@@ -1136,6 +1179,11 @@ function clipCard(c) {
       : 'No music' + (c.musicNote ? ' — ' + c.musicNote : '');
     if (c.musicNote) tag.title = c.musicNote;
     top.append(tag);
+  }
+  if (c.copyState) {
+    const aiTag = el('span', 'music-tag ' + (c.copyState === 'done' ? 'on' : c.copyState === 'failed' ? 'bad' : 'off'));
+    aiTag.textContent = c.copyState === 'done' ? 'Opus AI wording' : c.copyState === 'failed' ? 'AI rewrite needs retry' : 'AI wording pending';
+    top.append(aiTag);
   }
   if (c.templateChanged !== null && c.templateChanged !== undefined) {
     const tTag = el('span', 'music-tag ' + (c.templateChanged ? 'bad' : 'on'));
@@ -1227,6 +1275,20 @@ function clipCard(c) {
   }
 
   if (st === 'waiting') {
+    const rewrite = el('button', 'btn btn-ghost btn-sm');
+    rewrite.textContent = 'Rewrite with Opus AI';
+    rewrite.onclick = async () => {
+      rewrite.disabled = true;
+      rewrite.textContent = 'Rewriting…';
+      try {
+        await api('/api/clips/' + encodeURIComponent(c.id) + '/rewrite', { method: 'POST' });
+        toast('Opus AI rewrote the title and description', 'good');
+      } catch (err) {
+        toast(err.message, 'bad');
+      }
+      refresh();
+    };
+
     const approve = el('button', 'btn btn-sm');
     approve.textContent = 'Approve';
     approve.onclick = async () => {
@@ -1268,7 +1330,7 @@ function clipCard(c) {
       } catch (err) { toast(err.message, 'bad'); drop.disabled = false; drop.textContent = 'Discard'; }
       refresh();
     };
-    foot.append(approve, now, drop);
+    foot.append(rewrite, approve, now, drop);
   } else if (st !== 'posted') {
     const back = el('button', 'btn btn-ghost btn-sm');
     back.textContent = 'Pull back';
@@ -1784,18 +1846,28 @@ $('#saveCount').onclick = async () => {
   $('#saveCount').disabled = false;
 };
 
+const ENGLISH_COPY_PRESET = 'Write the title, description and hashtags in clear natural English only. Translate any Arabic speech or source wording into English and do not use Arabic script. Keep the title short, respectful and specific to the clip. Write a concise description that explains the reminder without inventing Quran or hadith wording. Use a small number of relevant English hashtags. No hype, clickbait or emojis.';
+
 $('#copyPromptField').addEventListener('input', () => { copyPromptDirty = true; });
+$('#englishPrompt').onclick = () => {
+  $('#copyPromptField').value = ENGLISH_COPY_PRESET;
+  copyPromptDirty = true;
+  $('#copyPromptField').focus();
+};
 
 $('#saveCopyPrompt').onclick = async () => {
-  const prompt = $('#copyPromptField').value;
+  const prompt = $('#copyPromptField').value.trim();
   $('#saveCopyPrompt').disabled = true;
+  $('#saveCopyPrompt').textContent = 'Saving…';
   try {
-    await api('/api/copy-prompt', { method: 'POST', body: JSON.stringify({ prompt }) });
+    const res = await api('/api/copy-prompt', { method: 'POST', body: JSON.stringify({ prompt }) });
     copyPromptDirty = false;
-    toast('Saved — applies to clips written from now on', 'good');
+    const n = res.queuedForRewrite || 0;
+    toast(n ? `Saved — rewriting ${n} waiting clip${n === 1 ? '' : 's'} with Opus AI` : 'Caption prompt saved', 'good');
     refresh();
   } catch (err) { toast(err.message, 'bad'); }
   $('#saveCopyPrompt').disabled = false;
+  $('#saveCopyPrompt').textContent = 'Save & rewrite waiting';
 };
 
 /* ---------- music ---------- */
@@ -1976,92 +2048,51 @@ async function loadLibrary() {
     host.innerHTML = `<div class="slab"><div class="empty-note">${esc(err.message)}</div></div>`;
   }
 }
+
 function youtubeVideoId(rawUrl) {
   try {
     const url = new URL(String(rawUrl || ''));
     const host = url.hostname.toLowerCase().replace(/^www\./, '');
-
-    // https://youtu.be/VIDEO_ID
-    if (host === 'youtu.be') {
-      return url.pathname.split('/').filter(Boolean)[0] || null;
-    }
-
+    if (host === 'youtu.be') return url.pathname.split('/').filter(Boolean)[0] || null;
     if (host === 'youtube.com' || host.endsWith('.youtube.com')) {
-      // https://youtube.com/watch?v=VIDEO_ID
-      if (url.pathname === '/watch') {
-        return url.searchParams.get('v');
-      }
-
-      // Shorts, live streams and embedded links
-      const match = url.pathname.match(
-        /^\/(?:shorts|embed|live)\/([^/?#]+)/
-      );
-
+      if (url.pathname === '/watch') return url.searchParams.get('v');
+      const match = url.pathname.match(/^\/(?:shorts|embed|live)\/([^/?#]+)/);
       return match ? match[1] : null;
     }
-  } catch {
-    // Invalid or unsupported URL
-  }
-
+  } catch {}
   return null;
 }
 
 function mountLectureCover(cover, project) {
   const candidates = [];
   const youtubeId = youtubeVideoId(project.url);
-
   if (youtubeId) {
-    // 16:9 YouTube thumbnail — available even with zero imported clips.
-    candidates.push(
-      `https://i.ytimg.com/vi/${encodeURIComponent(youtubeId)}/mqdefault.jpg`
-    );
-
-    // Second YouTube fallback.
-    candidates.push(
-      `https://i.ytimg.com/vi/${encodeURIComponent(youtubeId)}/hqdefault.jpg`
-    );
+    candidates.push(`https://i.ytimg.com/vi/${encodeURIComponent(youtubeId)}/mqdefault.jpg`);
+    candidates.push(`https://i.ytimg.com/vi/${encodeURIComponent(youtubeId)}/hqdefault.jpg`);
   }
-
-  // Existing generated clip thumbnail remains the fallback for other sources.
   if (project.coverClipId) {
-    candidates.push(
-      '/api/clips/thumb/' +
-      encodeURIComponent(project.coverClipId) +
-      '.jpg?pw=' +
-      encodeURIComponent(PW)
-    );
+    candidates.push('/api/clips/thumb/' + encodeURIComponent(project.coverClipId) + '.jpg?pw=' + encodeURIComponent(PW));
   }
-
-  if (!candidates.length) {
-    cover.append(coverPlaceholder());
-    return;
-  }
+  if (!candidates.length) { cover.append(coverPlaceholder()); return; }
 
   const img = el('img');
   img.alt = project.title || 'Lecture preview';
   img.loading = 'lazy';
   img.referrerPolicy = 'no-referrer';
-
   let nextIndex = 0;
-
   const tryNextSource = () => {
     if (nextIndex >= candidates.length) {
       img.remove();
-
-      if (!cover.querySelector('.lec-cover-ph')) {
-        cover.append(coverPlaceholder());
-      }
-
+      if (!cover.querySelector('.lec-cover-ph')) cover.append(coverPlaceholder());
       return;
     }
-
     img.src = candidates[nextIndex++];
   };
-
   img.onerror = tryNextSource;
   cover.append(img);
   tryNextSource();
 }
+
 function renderLibrary(projects) {
   const host = $('#libraryList');
   host.innerHTML = '';
@@ -2080,9 +2111,8 @@ function renderLibrary(projects) {
   projects.slice().sort((a, b) => (b.submittedAt || 0) - (a.submittedAt || 0)).forEach(p => {
     const card = el('div', 'lec');
 
- const cover = el('div', 'lec-cover');
-mountLectureCover(cover, p);
-    
+    const cover = el('div', 'lec-cover');
+    mountLectureCover(cover, p);
     if (p.status === 'clipping') {
       const badge = el('span', 'lec-badge');
       badge.textContent = 'Clipping…';
@@ -2142,12 +2172,13 @@ mountLectureCover(cover, p);
     pick.disabled = p.status === 'clipping';
     let panel = null;
     pick.onclick = async () => {
-      if (panel) { panel.remove(); panel = null; pick.textContent = 'Pick clips'; return; }
+      if (panel) { panel.remove(); panel = null; card.classList.remove('picking'); pick.textContent = 'Pick clips'; return; }
       pick.disabled = true;
       pick.textContent = 'Loading…';
       try {
         const res = await api('/api/projects/' + encodeURIComponent(p.id) + '/available-clips');
         panel = buildPickPanel(p, res.clips || []);
+        card.classList.add('picking');
         card.append(panel);
         pick.textContent = 'Hide clips';
       } catch (err) {
@@ -2183,56 +2214,117 @@ function buildPickPanel(project, clips) {
     return panel;
   }
 
+  const intro = el('div', 'pick-intro');
+  const note = el('div', 'note');
+  note.textContent = 'Preview the actual clips, then tick only the ones you want in your queue.';
+  intro.append(note);
+  panel.append(intro);
+
+  const grid = el('div', 'pick-grid');
   const boxes = [];
+
   clips.forEach(c => {
-    const row = el('div', 'pick-row' + (c.imported ? ' done' : ''));
-    const box = el('input');
+    const card = el('div', 'pick-card' + (c.imported ? ' done' : ''));
+    const preview = el('div', 'pick-preview');
+
+    const box = el('input', 'pick-check');
     box.type = 'checkbox';
     box.disabled = c.imported;
-    if (!c.imported) boxes.push({ box, id: c.id });
+    box.setAttribute('aria-label', `Select ${c.title || 'clip'}`);
+    preview.append(box);
 
-    const what = el('div', 'pick-what');
+    if (c.imported) {
+      const queued = el('span', 'pick-queued');
+      queued.textContent = 'In queue';
+      preview.append(queued);
+    }
+
+    if (Number.isFinite(c.score)) {
+      const score = el('span', 'pick-score');
+      score.textContent = Math.round(c.score) + ' score';
+      preview.append(score);
+    }
+
+    const duration = el('span', 'pick-duration');
+    duration.textContent = secs(c.durationMs) + 's';
+    preview.append(duration);
+
+    if (c.previewUrl) {
+      const video = el('video');
+      video.src = c.previewUrl;
+      video.preload = 'metadata';
+      video.playsInline = true;
+      video.muted = true;
+      video.controls = true;
+      video.title = c.title || 'Clip preview';
+      primeVideoFrame(video);
+      preview.prepend(video);
+    } else {
+      const ph = el('div', 'pick-preview-ph');
+      ph.textContent = 'Preview is still rendering in Opus';
+      preview.prepend(ph);
+    }
+
+    const body = el('div', 'pick-card-body');
     const title = el('div', 'pick-title');
     title.textContent = c.title || 'Untitled clip';
     const meta = el('div', 'pick-meta');
-    meta.textContent = secs(c.durationMs) + 's';
-    what.append(title, meta);
+    meta.textContent = c.imported ? 'Already imported' : 'Available to import';
+    body.append(title, meta);
+    card.append(preview, body);
 
-    row.append(box, what);
-    panel.append(row);
+    if (!c.imported) {
+      boxes.push({ box, id: c.id, card });
+      const setSelected = value => {
+        box.checked = value;
+        card.classList.toggle('selected', value);
+      };
+      box.addEventListener('change', () => { setSelected(box.checked); updateCount(); });
+      card.addEventListener('click', e => {
+        if (e.target.closest('video') || e.target.closest('input')) return;
+        setSelected(!box.checked);
+        updateCount();
+      });
+    }
+
+    grid.append(card);
   });
+  panel.append(grid);
 
   const foot = el('div', 'pick-foot');
   const count = el('span', 'pick-count');
   const updateCount = () => {
     const n = boxes.filter(b => b.box.checked).length;
-    count.textContent = n ? `${n} selected` : 'Nothing selected yet';
+    count.textContent = n ? `${n} clip${n === 1 ? '' : 's'} selected` : 'Nothing selected yet';
   };
-  boxes.forEach(b => b.box.addEventListener('change', updateCount));
   updateCount();
 
   const allBtn = el('button', 'btn btn-ghost btn-sm');
-  allBtn.textContent = 'Select all';
-  allBtn.onclick = () => { boxes.forEach(b => { b.box.checked = true; }); updateCount(); };
+  allBtn.textContent = 'Select all available';
+  allBtn.onclick = () => {
+    boxes.forEach(b => { b.box.checked = true; b.card.classList.add('selected'); });
+    updateCount();
+  };
 
   const importBtn = el('button', 'btn btn-sm');
-  importBtn.textContent = 'Import selected';
+  importBtn.textContent = 'Add selected to queue';
   importBtn.onclick = async () => {
     const chosen = boxes.filter(b => b.box.checked).map(b => b.id);
     if (!chosen.length) { toast('Pick at least one clip first', 'bad'); return; }
     importBtn.disabled = true;
-    importBtn.textContent = 'Importing…';
+    importBtn.textContent = `Adding ${chosen.length}…`;
     try {
       const res = await api('/api/projects/' + encodeURIComponent(project.id) + '/import-clips', {
         method: 'POST', body: JSON.stringify({ clipIds: chosen }),
       });
-      toast(`${res.added} clip${res.added === 1 ? '' : 's'} added to your queue`, 'good');
-      loadLibrary();
+      toast(`${res.added} visual clip${res.added === 1 ? '' : 's'} added to your queue`, 'good');
+      VIEW = 'queue';
+      document.querySelector('[data-view="queue"]').click();
       refresh();
     } catch (err) {
       toast(err.message, 'bad');
       importBtn.disabled = false;
-      importBtn.textContent = 'Import selected';
+      importBtn.textContent = 'Add selected to queue';
     }
   };
 
