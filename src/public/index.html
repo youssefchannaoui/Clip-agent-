@@ -266,7 +266,6 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
   background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:19px;margin-bottom:12px;
   transition:border-color .16s ease,transform .18s cubic-bezier(.2,.8,.2,1),box-shadow .18s ease;
   transform:translateZ(0);
-  content-visibility:auto;contain-intrinsic-size:190px 420px;
 }
 .clip:hover{border-color:var(--line-lit);transform:translateY(-1px);box-shadow:0 8px 22px rgba(0,0,0,.13)}
 .clip.busy{animation:busy-breathe 1.8s ease-in-out infinite}
@@ -602,19 +601,6 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .safe-badge.good{border-color:rgba(95,206,139,.28);color:#adeac4;background:rgba(35,110,61,.16)}
 .safe-badge.warn{border-color:rgba(217,180,120,.32);color:var(--blue-soft);background:rgba(120,90,30,.16)}
 .safe-badge.bad{border-color:rgba(255,85,102,.32);color:#ffb0b8;background:rgba(110,25,25,.18)}
-.preflight{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:12px}
-.preflight.compact{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
-.preflight-item{border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.025);padding:8px 9px;min-width:0}
-.preflight.compact .preflight-item{padding:6px 8px;border-radius:999px;display:inline-flex;align-items:center;gap:6px}
-.preflight-icon{font-size:12px;line-height:1;color:var(--mute)}
-.preflight-label{display:block;font-size:11px;line-height:1;color:var(--mute-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.preflight-text{display:block;margin-top:4px;font-size:12px;line-height:1.25;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.preflight.compact .preflight-label{display:none}.preflight.compact .preflight-text{margin:0;font-size:11.5px;max-width:140px}
-.preflight-item.good{border-color:rgba(95,206,139,.25);background:rgba(35,110,61,.10)}.preflight-item.good .preflight-icon,.preflight-item.good .preflight-text{color:#adeac4}
-.preflight-item.warn{border-color:rgba(217,180,120,.30);background:rgba(120,90,30,.14)}.preflight-item.warn .preflight-icon,.preflight-item.warn .preflight-text{color:var(--blue-soft)}
-.preflight-item.bad{border-color:rgba(255,85,102,.32);background:rgba(110,25,25,.16)}.preflight-item.bad .preflight-icon,.preflight-item.bad .preflight-text{color:#ffb0b8}
-.social-auto-status{display:grid;gap:8px;margin:10px 0 12px}.auto-row{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.025);padding:9px 10px}.auto-row span{color:var(--mute);font-size:12.5px}.auto-row strong{font-size:13px}.metric-link{grid-column:1/-1}.metric-link input{width:100%}
-@media (max-width:760px){.preflight{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .slot-actions{display:flex;gap:7px;justify-content:flex-end;align-items:center;flex-wrap:wrap;max-width:240px}
 .slot-actions .btn{white-space:nowrap}
 .slot-status{font-size:12.5px;color:var(--mute-2);margin-left:auto;white-space:nowrap}
@@ -635,21 +621,6 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
   .slot-media{width:100%;max-width:190px;justify-self:start}
   .slot-actions{grid-column:auto}
 }
-
-
-/* ---------- clean compact UI rollback ---------- */
-.clip .preflight{display:none}
-.clip .slot-badges{margin-top:8px}
-.slot-card{grid-template-columns:72px 58px minmax(0,1fr) auto;gap:12px;padding:10px 14px;min-height:92px}
-.slot-card.next{background:rgba(217,180,120,.035)}
-.slot-media{width:58px;border-radius:9px;box-shadow:none}
-.slot-title{font-size:14.5px}
-.slot-from{font-size:12px;max-width:100%}
-.slot-badges{gap:5px;margin-top:6px}
-.safe-badge{font-size:11px;padding:5px 6px}
-.slot-actions{max-width:190px}.slot-actions .btn{padding:8px 11px}
-.slot-status{font-size:12px}
-@media (max-width:860px){.slot-card{grid-template-columns:62px 52px minmax(0,1fr)}.slot-media{width:52px}.slot-actions{grid-column:3 / -1;margin-top:2px}.safe-badge{font-size:10.5px}}
 
 /* ---------- figures ---------- */
 .figs{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
@@ -674,20 +645,12 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .analytics-action strong{font-size:14px}
 .analytics-action span{font-size:12.5px;color:var(--mute)}
 .analytics-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:18px}
-.social-analytics{margin-top:18px;display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;align-items:start}
-.social-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px}
-.social-metric{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:13px;min-height:82px}
-.social-metric strong{display:block;font-size:24px;letter-spacing:-.04em;line-height:1}
-.social-metric span{display:block;color:var(--mute);font-size:12px;margin-top:6px;line-height:1.3}
-.social-tools{display:grid;gap:10px}.social-tools .hint{margin-top:0}.social-empty{color:var(--mute);font-size:13px;line-height:1.45}
-.metric-row{display:grid;grid-template-columns:minmax(0,1.1fr) repeat(5,78px) auto;gap:8px;align-items:end;padding:11px 0;border-bottom:1px solid var(--line)}
-.metric-row:last-child{border-bottom:0}.metric-row label{font-size:11px;color:var(--mute);display:block;margin-bottom:4px}.metric-row input{width:100%;height:34px;padding:7px 8px;border-radius:8px;font-size:13px}.metric-row-title{min-width:0}.metric-row-title strong{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.metric-row-title span{display:block;color:var(--mute);font-size:12px;margin-top:4px}
 .analytics-card{min-height:210px}
 .mini-head{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-bottom:10px}
 .mini-head h3{font-size:15px;font-weight:600;letter-spacing:-.02em}
 .mini-head span{font-size:12px;color:var(--mute)}
 .analytics-feed{display:grid;gap:12px}
-.analytics-post{display:grid;grid-template-columns:82px minmax(0,1fr) auto;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px;transition:transform .18s ease,border-color .18s ease;content-visibility:auto;contain-intrinsic-size:120px 460px}
+.analytics-post{display:grid;grid-template-columns:82px minmax(0,1fr) auto;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px;transition:transform .18s ease,border-color .18s ease}
 .analytics-post:hover{transform:translateY(-1px);border-color:var(--line-2)}
 .analytics-post .clip-thumb{width:82px;height:112px;border-radius:10px}
 .post-title{font-weight:600;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
@@ -701,7 +664,7 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .quality-pill.good{color:#d8f8df;border-color:rgba(216,248,223,.25)}
 .quality-pill.warn{color:var(--blue-soft);border-color:rgba(247,197,110,.3)}
 .quality-pill.bad{color:var(--danger);border-color:rgba(255,120,120,.25)}
-@media (max-width:900px){.analytics-hero,.analytics-grid,.social-analytics{grid-template-columns:1fr}.social-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.metric-row{grid-template-columns:1fr 1fr;gap:10px}.metric-row-title{grid-column:1/-1}.metric-row .btn{grid-column:1/-1}.analytics-post{grid-template-columns:70px minmax(0,1fr)}.analytics-post .clip-thumb{width:70px;height:96px}.post-when{grid-column:2;text-align:left}}
+@media (max-width:900px){.analytics-hero,.analytics-grid{grid-template-columns:1fr}.analytics-post{grid-template-columns:70px minmax(0,1fr)}.analytics-post .clip-thumb{width:70px;height:96px}.post-when{grid-column:2;text-align:left}}
 
 .bar-row{display:flex;align-items:center;gap:16px;padding:10px 0;border-bottom:1px solid var(--line)}
 .bar-row:last-child{border-bottom:0}
@@ -1012,22 +975,6 @@ select:focus{outline:none;border-color:var(--blue)}
 
           <div class="figs analytics-figs" id="stats"></div>
 
-          <div class="social-analytics">
-            <div class="slab">
-              <div class="mini-head"><h3>Social performance</h3><span id="socialPerfNote">Views, likes and engagement</span></div>
-              <div class="social-summary" id="socialSummary"></div>
-              <div id="socialTopPosts" style="margin-top:14px"></div>
-            </div>
-            <div class="slab social-tools">
-              <div class="mini-head"><h3>Auto stats</h3><span id="autoAnalyticsState">YouTube first</span></div>
-              <div class="social-auto-status" id="socialAutoStatus"></div>
-              <button class="btn btn-sm" id="refreshYoutubeStats" type="button">Refresh YouTube stats</button>
-              <button class="btn btn-ghost btn-sm" id="openMetricUpdater" type="button">Link / edit post stats</button>
-              <button class="btn btn-ghost btn-sm" id="clearMetricForm" type="button">Clear inputs</button>
-            </div>
-          </div>
-          <div class="slab" id="metricUpdater" style="display:none;margin-top:14px"></div>
-
           <div class="analytics-grid">
             <div class="slab analytics-card">
               <div class="mini-head"><h3>Platforms</h3><span id="platformNote">Successful uploads</span></div>
@@ -1055,7 +1002,7 @@ select:focus{outline:none;border-color:var(--blue)}
           </div>
           <div id="recentPosts" class="analytics-feed"></div>
 
-          <p class="hint">This page now supports automatic YouTube stats when YOUTUBE_API_KEY is set. TikTok, Instagram and Facebook still need their own platform connections later.</p>
+          <p class="hint">These are operational analytics from this app: schedule health, posted history, platform counts, music/template/caption status and estimated extra Opus processing from music re-imports. Opus does not expose views or likes here, so engagement analytics still live inside each platform.</p>
         </section>
 
         <!-- music -->
@@ -1346,34 +1293,6 @@ function projectClipPreviewUrl(projectId, clipId) {
   return projectId && clipId
     ? withPw('/api/projects/' + encodeURIComponent(projectId) + '/clips/' + encodeURIComponent(clipId) + '/preview.mp4')
     : '';
-}
-
-let mediaObserver = null;
-function lazyMedia(node, src) {
-  if (!node || !src) return;
-  node.dataset.src = src;
-  if (node.tagName === 'IMG') {
-    node.loading = 'lazy';
-    node.decoding = 'async';
-  }
-  if (!('IntersectionObserver' in window)) {
-    node.src = src;
-    return;
-  }
-  if (!mediaObserver) {
-    mediaObserver = new IntersectionObserver(entries => {
-      entries.forEach(entry => {
-        if (!entry.isIntersecting) return;
-        const target = entry.target;
-        mediaObserver.unobserve(target);
-        if (target.dataset.src && !target.src) {
-          target.src = target.dataset.src;
-          if (target.tagName === 'VIDEO') target.load();
-        }
-      });
-    }, { rootMargin: '700px 0px' });
-  }
-  mediaObserver.observe(node);
 }
 
 function musicPreviewUrl(id) {
@@ -1680,8 +1599,8 @@ function appendVideoPreview(box, c, className = 'clip-thumb-video') {
   const src = queuePreviewUrl(c);
   if (!src) { box.append(thumbPlaceholder(c)); return; }
   const video = el('video', className);
-  video.preload = 'none';
-  lazyMedia(video, src);
+  video.src = src;
+  video.preload = 'metadata';
   video.muted = true;
   video.playsInline = true;
   video.loop = true;
@@ -1700,7 +1619,7 @@ function clipThumb(c) {
   const box = el('div', 'clip-thumb');
   if (c.thumbState === 'ready') {
     const img = el('img', 'clip-thumb-img');
-    lazyMedia(img, '/api/clips/thumb/' + encodeURIComponent(c.id) + '.jpg?pw=' + encodeURIComponent(PW));
+    img.src = '/api/clips/thumb/' + encodeURIComponent(c.id) + '.jpg?pw=' + encodeURIComponent(PW);
     img.alt = c.title || 'Clip preview';
     img.onerror = () => { img.remove(); appendVideoPreview(box, c); };
     box.append(img);
@@ -1787,7 +1706,6 @@ function clipCard(c) {
     tags.textContent = c.hashtags || '';
     content.append(title, body);
     if (c.hashtags) content.append(tags);
-    content.append(safetyBadges(c));
     count.textContent = st === 'posted' ? 'Already sent' : 'Pull back to change the wording';
     foot.append(count);
   } else {
@@ -1836,7 +1754,6 @@ function clipCard(c) {
     [title, body, tags].forEach(f => f.addEventListener('input', onEdit));
     [title, tags].forEach(f => f.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); }));
 
-    content.append(safetyBadges(c));
     foot.append(count, saved);
   }
 
@@ -1982,6 +1899,7 @@ function scheduleSafetyBadges(c) {
 
   if (c.templateChanged === false) out.push({ text: 'Current style', cls: 'good' });
   else if (c.templateChanged === true) out.push({ text: 'Older style', cls: 'warn' });
+  else out.push({ text: 'Style unverified', cls: '' });
 
   if ((c.targets || []).some(t => t.status === 'failed')) out.push({ text: 'Upload failed', cls: 'bad' });
   else if ((c.targets || []).some(t => t.status === 'scheduled')) out.push({ text: 'In Opus', cls: 'good' });
@@ -1999,57 +1917,6 @@ function safetyBadges(c) {
   return row;
 }
 
-const ARABIC_TEXT = /[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]/;
-function preflightChecks(c) {
-  const musicOn = DATA?.musicSettings?.enabled !== false;
-  const text = [c.title, c.description, c.hashtags].filter(Boolean).join(' ');
-  const failedTarget = (c.targets || []).some(t => t.status === 'failed');
-  return [
-    musicOn
-      ? c.musicMixed === 'done'
-        ? { label: 'Music', text: 'Ready', cls: 'good', icon: '✓' }
-        : c.musicMixed === 'retrying'
-          ? { label: 'Music', text: 'Retrying', cls: 'warn', icon: '!' }
-          : c.musicMixed === 'failed'
-            ? { label: 'Music', text: 'Blocked', cls: 'bad', icon: '×' }
-            : { label: 'Music', text: statusOf(c) === 'waiting' ? 'Will mix after approve' : 'Pending', cls: 'warn', icon: '…' }
-      : { label: 'Music', text: 'Credit saver', cls: '', icon: '–' },
-    ARABIC_TEXT.test(text)
-      ? { label: 'Caption', text: 'Arabic found', cls: 'bad', icon: '×' }
-      : c.copyState === 'failed'
-        ? { label: 'Caption', text: 'Rewrite failed', cls: 'bad', icon: '×' }
-        : c.copyState === 'done'
-          ? { label: 'Caption', text: 'English ready', cls: 'good', icon: '✓' }
-          : { label: 'Caption', text: 'Editable', cls: '', icon: '•' },
-    c.templateChanged === false
-      ? { label: 'Style', text: 'Current style', cls: 'good', icon: '✓' }
-      : c.templateChanged === true
-        ? { label: 'Style', text: 'Older style', cls: 'warn', icon: '!' }
-        : { label: 'Style', text: 'Unknown', cls: '', icon: '?' },
-    failedTarget
-      ? { label: 'Posting', text: 'Upload failed', cls: 'bad', icon: '×' }
-      : (c.targets || []).some(t => ['scheduled','posted'].includes(t.status))
-        ? { label: 'Posting', text: 'In Opus', cls: 'good', icon: '✓' }
-        : c.previewUrl || c.thumbState === 'ready'
-          ? { label: 'Preview', text: 'Preview ready', cls: 'good', icon: '✓' }
-          : { label: 'Preview', text: 'Loading soon', cls: 'warn', icon: '…' },
-  ];
-}
-
-function preflightPanel(c, compact = false) {
-  const row = el('div', 'preflight' + (compact ? ' compact' : ''));
-  preflightChecks(c).forEach(item => {
-    const box = el('div', 'preflight-item ' + (item.cls || ''));
-    const icon = el('span', 'preflight-icon'); icon.textContent = item.icon;
-    const label = el('span', 'preflight-label'); label.textContent = item.label;
-    const text = el('span', 'preflight-text'); text.textContent = item.text;
-    box.title = `${item.label}: ${item.text}`;
-    box.append(icon, label, text);
-    row.append(box);
-  });
-  return row;
-}
-
 function slotPreview(c) {
   const box = el('div', 'slot-media');
   if (!c) {
@@ -2061,7 +1928,7 @@ function slotPreview(c) {
   }
   if (c.thumbState === 'ready') {
     const img = el('img');
-    lazyMedia(img, withPw('/api/clips/thumb/' + encodeURIComponent(c.id) + '.jpg'));
+    img.src = withPw('/api/clips/thumb/' + encodeURIComponent(c.id) + '.jpg');
     img.alt = c.title || 'Scheduled clip preview';
     img.onerror = () => { img.remove(); appendVideoPreview(box, c, 'slot-video'); };
     box.append(img);
@@ -2280,47 +2147,6 @@ function countTargets(clips, predicate = goodTarget) {
   return clips.reduce((n, c) => n + (c.targets || []).filter(predicate).length, 0);
 }
 
-const SOCIAL_METRICS = ['views', 'likes', 'comments', 'shares', 'saves'];
-const metricLabel = { views: 'Views', likes: 'Likes', comments: 'Comments', shares: 'Shares', saves: 'Saves' };
-function compact(n) {
-  n = Number(n) || 0;
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1).replace(/\.0$/, '') + 'M';
-  if (n >= 1000) return (n / 1000).toFixed(n >= 100_000 ? 0 : 1).replace(/\.0$/, '') + 'K';
-  return String(Math.round(n));
-}
-function metricNum(v) {
-  const n = Math.round(Number(v));
-  return Number.isFinite(n) && n > 0 ? n : 0;
-}
-function analyticsEntries(c) {
-  return Object.values(c.analytics || {}).filter(Boolean);
-}
-function clipMetric(c, field) {
-  return analyticsEntries(c).reduce((n, row) => n + metricNum(row[field]), 0);
-}
-function totalMetrics(clips) {
-  const out = { views: 0, likes: 0, comments: 0, shares: 0, saves: 0 };
-  clips.forEach(c => SOCIAL_METRICS.forEach(k => { out[k] += clipMetric(c, k); }));
-  return out;
-}
-function engagementRate(metrics) {
-  const views = metricNum(metrics.views);
-  if (!views) return 0;
-  return ((metricNum(metrics.likes) + metricNum(metrics.comments) + metricNum(metrics.shares) + metricNum(metrics.saves)) / views) * 100;
-}
-function clipEngagementRate(c) {
-  return engagementRate({
-    views: clipMetric(c, 'views'), likes: clipMetric(c, 'likes'), comments: clipMetric(c, 'comments'), shares: clipMetric(c, 'shares'), saves: clipMetric(c, 'saves'),
-  });
-}
-function hasSocialStats(c) {
-  return SOCIAL_METRICS.some(k => clipMetric(c, k));
-}
-function postedClipRows(clips) {
-  return clips.filter(c => statusOf(c) === 'posted')
-    .sort((a, b) => (b.postedAt || b.scheduledAt || 0) - (a.postedAt || a.scheduledAt || 0));
-}
-
 function renderRecord(clips) {
   const sent = clips.filter(c => statusOf(c) === 'posted');
   const scheduled = clips.filter(c => statusOf(c) === 'scheduled');
@@ -2345,23 +2171,17 @@ function renderRecord(clips) {
   const aiDone = clips.filter(c => c.copyState === 'done').length;
   const aiFailed = clips.filter(c => c.copyState === 'failed').length;
   const extraCreditClips = clips.filter(c => c.musicImportProjectId || c.musicMixed === 'done').length;
-  const socialTotals = totalMetrics(sent);
-  const clipsWithStats = sent.filter(hasSocialStats).length;
-  const socialEr = engagementRate(socialTotals);
 
   const score = $('#healthScore');
   score.textContent = clips.length ? health + '%' : '—';
   score.parentElement.style.setProperty('--score', clips.length ? health + '%' : '0%');
   $('#healthTitle').textContent = attention ? `${attention} thing${attention === 1 ? '' : 's'} need attention` : 'Everything looks clean';
   $('#healthNote').textContent = clips.length
-    ? `${sent.length} posted, ${scheduled.length} scheduled, ${processing.length} processing and ${waiting.length} waiting. ${clipsWithStats ? compact(socialTotals.views) + ' tracked views so far.' : 'Add stats after posts go live.'}`
+    ? `${sent.length} posted, ${scheduled.length} scheduled, ${processing.length} processing and ${waiting.length} waiting. This is app reliability, not views or likes.`
     : 'Send a lecture or attach an Opus project and analytics will start filling automatically.';
-  $('#analyticsNote').textContent = `${clips.length} clip${clips.length === 1 ? '' : 's'} tracked · ${postedUploads + scheduledUploads} platform upload${postedUploads + scheduledUploads === 1 ? '' : 's'} · ${clipsWithStats} post${clipsWithStats === 1 ? '' : 's'} with social stats`;
+  $('#analyticsNote').textContent = `${clips.length} clip${clips.length === 1 ? '' : 's'} tracked · ${postedUploads + scheduledUploads} platform upload${postedUploads + scheduledUploads === 1 ? '' : 's'}`;
 
   const figs = [
-    { v: compact(socialTotals.views), k: 'Total views', s: clipsWithStats ? `${clipsWithStats} post${clipsWithStats === 1 ? '' : 's'} tracked` : 'Add social stats after posting', cls: socialTotals.views ? 'good' : '' },
-    { v: socialEr ? socialEr.toFixed(1) + '%' : '—', k: 'Engagement rate', s: 'Likes + comments + shares + saves / views', cls: socialEr >= 5 ? 'good' : socialEr ? 'warn' : '' },
-    { v: compact(socialTotals.likes), k: 'Likes', s: `${compact(socialTotals.comments)} comments · ${compact(socialTotals.shares)} shares`, cls: socialTotals.likes ? 'good' : '' },
     { v: sent.length, k: 'Clips posted', s: `${postedUploads} platform upload${postedUploads === 1 ? '' : 's'}`, cls: sent.length ? 'good' : '' },
     { v: scheduled.length, k: 'Scheduled', s: `${scheduledUploads} queued inside Opus`, cls: scheduled.length ? 'good' : '' },
     { v: waiting.length, k: 'Waiting review', s: waiting.length ? 'Needs your approval' : 'Queue is clear', cls: waiting.length ? 'warn' : '' },
@@ -2383,7 +2203,6 @@ function renderRecord(clips) {
   });
 
   renderAnalyticsActions({ waiting, scheduled, processing, attention, musicRetry, aiFailed });
-  renderSocialAnalytics(sent);
 
   const plat = {};
   clips.forEach(c => (c.targets || []).forEach(t => {
@@ -2391,15 +2210,8 @@ function renderRecord(clips) {
     const k = platformName(t.platform) || 'Unknown';
     plat[k] = (plat[k] || 0) + 1;
   }));
-  const platformViews = {};
-  sent.forEach(c => analyticsEntries(c).forEach(row => {
-    const k = platformName(row.platform) || row.label || row.platform || 'Manual';
-    platformViews[k] = (platformViews[k] || 0) + metricNum(row.views);
-  }));
-  const anyPlatformViews = Object.values(platformViews).some(Boolean);
-  bars('#byPlatform', anyPlatformViews ? platformViews : plat, anyPlatformViews ? 'Add stats to posted clips to compare platforms.' : 'No successful platform uploads yet.');
-  const platTotal = Object.values(anyPlatformViews ? platformViews : plat).reduce((a,b)=>a+b,0);
-  $('#platformNote').textContent = anyPlatformViews ? `${compact(platTotal)} tracked views by platform` : `${platTotal} successful target${platTotal === 1 ? '' : 's'}`;
+  bars('#byPlatform', plat, 'No successful platform uploads yet.');
+  $('#platformNote').textContent = `${Object.values(plat).reduce((a,b)=>a+b,0)} successful target${Object.values(plat).reduce((a,b)=>a+b,0) === 1 ? '' : 's'}`;
 
   const slot = {};
   [...sent, ...scheduled].forEach(c => {
@@ -2418,142 +2230,6 @@ function renderRecord(clips) {
 
   renderQualityAnalytics({ clips, musicDone, musicRetry, aiDone, aiFailed, failedUploads });
   renderRecentPosts(sent);
-}
-
-
-function socialMetricCard(value, label, sub = '') {
-  return `<div class="social-metric"><strong>${esc(value)}</strong><span>${esc(label)}${sub ? '<br>' + esc(sub) : ''}</span></div>`;
-}
-
-function renderSocialAnalytics(sent) {
-  const totals = totalMetrics(sent);
-  const tracked = sent.filter(hasSocialStats);
-  const host = $('#socialSummary');
-  if (!host) return;
-  host.innerHTML = [
-    socialMetricCard(compact(totals.views), 'Total views', `${tracked.length} tracked post${tracked.length === 1 ? '' : 's'}`),
-    socialMetricCard(compact(totals.likes), 'Likes', `${compact(totals.comments)} comments`),
-    socialMetricCard(compact(totals.shares), 'Shares', `${compact(totals.saves)} saves`),
-    socialMetricCard(engagementRate(totals) ? engagementRate(totals).toFixed(1) + '%' : '—', 'Engagement rate', 'Total engagement / views'),
-  ].join('');
-
-  const ytCfg = DATA?.analyticsConfig || {};
-  $('#socialPerfNote').textContent = tracked.length
-    ? `${compact(totals.views)} views from ${tracked.length} tracked post${tracked.length === 1 ? '' : 's'}`
-    : ytCfg.youtubeConnected ? 'YouTube auto refresh is ready once posts are linked or matched' : 'Add YOUTUBE_API_KEY for automatic YouTube stats';
-  renderAutoAnalyticsStatus(sent);
-
-  const topHost = $('#socialTopPosts');
-  topHost.innerHTML = '';
-  const top = tracked.slice().sort((a, b) => clipMetric(b, 'views') - clipMetric(a, 'views')).slice(0, 5);
-  if (!top.length) {
-    topHost.innerHTML = `<div class="social-empty">No social stats saved yet. Use <strong>Update recent post stats</strong> after a clip goes live, then this area will show your best-performing posts.</div>`;
-  } else {
-    const data = {};
-    top.forEach(c => { data[(c.title || 'Untitled').slice(0, 34)] = clipMetric(c, 'views'); });
-    bars('#socialTopPosts', data, 'No social stats saved yet.');
-  }
-
-  const refreshBtn = $('#refreshYoutubeStats');
-  if (refreshBtn) refreshBtn.onclick = () => refreshYoutubeStats(refreshBtn);
-
-  const btn = $('#openMetricUpdater');
-  if (btn) btn.onclick = () => {
-    const box = $('#metricUpdater');
-    box.style.display = box.style.display === 'none' ? 'block' : 'none';
-    renderMetricUpdater(sent);
-  };
-  const clear = $('#clearMetricForm');
-  if (clear) clear.onclick = () => {
-    document.querySelectorAll('#metricUpdater input').forEach(i => { i.value = ''; });
-  };
-}
-
-function renderAutoAnalyticsStatus(sent) {
-  const host = $('#socialAutoStatus');
-  const state = $('#autoAnalyticsState');
-  if (!host) return;
-  const cfg = DATA?.analyticsConfig || {};
-  const linked = sent.filter(c => analyticsEntries(c).some(a => a.videoId || a.url)).length;
-  const last = cfg.lastRefresh ? `${dayLabel(cfg.lastRefresh)} ${clockLabel(cfg.lastRefresh)}` : 'Not refreshed yet';
-  const rows = [
-    ['YouTube API', cfg.youtubeConnected ? 'Connected' : 'Add YOUTUBE_API_KEY', cfg.youtubeConnected ? 'good' : 'warn'],
-    ['Channel matching', cfg.youtubeChannelId ? 'On' : 'Optional', cfg.youtubeChannelId ? 'good' : ''],
-    ['Linked posts', `${linked}/${sent.length || 0}`, linked ? 'good' : 'warn'],
-    ['Last refresh', last, cfg.lastRefresh ? 'good' : ''],
-  ];
-  host.innerHTML = rows.map(([k,v,cls]) => `<div class="auto-row"><span>${esc(k)}</span><strong class="${esc(cls)}">${esc(v)}</strong></div>`).join('');
-  if (state) state.textContent = cfg.youtubeConnected ? 'Auto every 6h' : 'Setup needed';
-  const btn = $('#refreshYoutubeStats');
-  if (btn) btn.disabled = !cfg.youtubeConnected || !sent.length;
-}
-
-async function refreshYoutubeStats(btn) {
-  btn.disabled = true;
-  btn.classList.add('is-loading');
-  btn.textContent = 'Refreshing…';
-  try {
-    const res = await api('/api/analytics/youtube/refresh', { method: 'POST' });
-    const extra = res.matched ? ` · matched ${res.matched}` : '';
-    toast(res.updated ? `YouTube stats updated for ${res.updated} clip${res.updated === 1 ? '' : 's'}${extra}` : (res.message || 'No YouTube posts found yet'), res.updated ? 'good' : 'bad');
-    await refresh();
-  } catch (err) {
-    toast(err.message, 'bad');
-  } finally {
-    btn.disabled = false;
-    btn.classList.remove('is-loading');
-    btn.textContent = 'Refresh YouTube stats';
-  }
-}
-
-function renderMetricUpdater(sent) {
-  const host = $('#metricUpdater');
-  if (!host) return;
-  const rows = postedClipRows(sent).slice(0, 8);
-  if (!rows.length) {
-    host.innerHTML = `<div class="empty"><div class="empty-title">No posted clips yet</div><div class="empty-note">Once a post is live, come back here and enter views, likes, comments, shares and saves.</div></div>`;
-    return;
-  }
-  host.innerHTML = `<div class="mini-head"><h3>Link / edit social stats</h3><span>Paste YouTube URL once, then auto refresh can update it</span></div>`;
-  rows.forEach(c => {
-    const current = analyticsEntries(c)[0] || {};
-    const row = el('div', 'metric-row');
-    row.innerHTML = `<div class="metric-row-title"><strong>${esc(c.title || 'Untitled clip')}</strong><span>${esc(c.projectTitle || 'Lecture')} · ${c.postedAt ? dayLabel(c.postedAt) + ' ' + clockLabel(c.postedAt) : 'Posted'}</span></div>`;
-    const linkWrap = el('div', 'metric-link');
-    linkWrap.innerHTML = `<label>YouTube link / video ID</label><input data-social-url value="${esc(current.url || current.videoId || '')}" placeholder="https://youtube.com/shorts/...">`;
-    row.append(linkWrap);
-    for (const field of SOCIAL_METRICS) {
-      const wrap = el('div');
-      wrap.innerHTML = `<label>${esc(metricLabel[field])}</label><input inputmode="numeric" pattern="[0-9]*" data-field="${field}" value="${current[field] ? esc(current[field]) : ''}" placeholder="0">`;
-      row.append(wrap);
-    }
-    const save = el('button', 'btn btn-sm');
-    save.type = 'button';
-    save.textContent = 'Save';
-    save.onclick = async () => {
-      const metrics = {};
-      row.querySelectorAll('input[data-field]').forEach(input => { metrics[input.dataset.field] = input.value || 0; });
-      const url = row.querySelector('input[data-social-url]')?.value || '';
-      save.disabled = true;
-      save.textContent = 'Saving…';
-      try {
-        await api('/api/clips/' + encodeURIComponent(c.id) + '/analytics', {
-          method: 'POST',
-          body: JSON.stringify({ targetKey: url ? 'youtube' : 'manual', platform: url ? 'YOUTUBE' : 'manual', label: url ? 'YouTube' : 'Manual stats', url, metrics }),
-        });
-        toast(url ? 'Social link/stats saved — YouTube can auto refresh this now' : 'Social stats saved', 'good');
-        await refresh();
-        $('#metricUpdater').style.display = 'block';
-      } catch (err) {
-        toast(err.message, 'bad');
-      } finally {
-        save.disabled = false;
-        save.textContent = 'Save';
-      }
-    };
-    row.append(save);
-    host.append(row);
-  });
 }
 
 function renderAnalyticsActions(summary) {
@@ -2614,12 +2290,7 @@ function analyticsPostCard(c) {
   title.textContent = c.title || 'Untitled clip';
   const sub = el('div', 'post-sub');
   const good = (c.targets || []).filter(goodTarget);
-  const views = clipMetric(c, 'views');
-  const likes = clipMetric(c, 'likes');
-  const comments = clipMetric(c, 'comments');
-  sub.textContent = views
-    ? `${compact(views)} views · ${compact(likes)} likes · ${compact(comments)} comments`
-    : `${c.projectTitle || 'Lecture'} · ${good.length || 0} target${good.length === 1 ? '' : 's'} · no social stats yet`;
+  sub.textContent = `${c.projectTitle || 'Lecture'} · ${good.length || 0} target${good.length === 1 ? '' : 's'}`;
   const tags = el('div', 'post-tags');
   if (c.musicMixed === 'done') {
     const t = el('span', 'music-tag on');
@@ -2636,17 +2307,6 @@ function analyticsPostCard(c) {
     const t = el('span', 'music-tag bad');
     t.textContent = 'Older style';
     tags.append(t);
-  }
-  if (views) {
-    const v = el('span', 'music-tag on');
-    v.textContent = compact(views) + ' views';
-    tags.append(v);
-    const er = clipEngagementRate(c);
-    if (er) {
-      const r = el('span', 'stamp');
-      r.textContent = er.toFixed(1) + '% ER';
-      tags.append(r);
-    }
   }
   good.slice(0, 4).forEach(target => {
     const t = el('span', 'stamp');
@@ -2689,13 +2349,13 @@ function sidePreview(c) {
   // Try our stable same-origin thumbnail first, even for older/imported clips.
   // If it is not ready, fall back to the refreshed preview video route.
   const img = el('img');
-  lazyMedia(img, withPw('/api/clips/thumb/' + encodeURIComponent(c.id) + '.jpg'));
+  img.src = withPw('/api/clips/thumb/' + encodeURIComponent(c.id) + '.jpg');
   img.alt = c.title || 'Next post preview';
   img.onerror = () => {
     img.remove();
     const video = el('video');
-    video.preload = 'none';
-    lazyMedia(video, queuePreviewUrl(c));
+    video.src = queuePreviewUrl(c);
+    video.preload = 'metadata';
     video.muted = true;
     video.playsInline = true;
     video.title = 'Click to preview this clip';
@@ -3529,8 +3189,8 @@ async function hydrateLectureCover(cover, project) {
     if (!clip) return;
     cover.innerHTML = '';
     const video = el('video');
-    video.preload = 'none';
-    lazyMedia(video, projectClipPreviewUrl(project.id, clip.id) || clip.previewUrl);
+    video.src = projectClipPreviewUrl(project.id, clip.id) || clip.previewUrl;
+    video.preload = 'metadata';
     video.muted = true;
     video.playsInline = true;
     video.loop = true;
@@ -3558,8 +3218,8 @@ function mountLectureCover(cover, project) {
 
   if (!youtubeId && project.coverClipId) {
     const video = el('video');
-    video.preload = 'none';
-    lazyMedia(video, queuePreviewUrl({ id: project.coverClipId }));
+    video.src = queuePreviewUrl({ id: project.coverClipId });
+    video.preload = 'metadata';
     video.muted = true;
     video.playsInline = true;
     video.loop = true;
@@ -3856,8 +3516,8 @@ function buildPickPanel(project, clips) {
     const previewSrc = projectClipPreviewUrl(project.id, c.id) || c.previewUrl;
     if (previewSrc) {
       const video = el('video');
-      video.preload = 'none';
-      lazyMedia(video, previewSrc);
+      video.src = previewSrc;
+      video.preload = 'metadata';
       video.playsInline = true;
       video.muted = true;
       video.controls = true;
