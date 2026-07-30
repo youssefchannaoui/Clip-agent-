@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { opusKey, opusOrgId, brandTemplateId, clipSettings, copyPrompt } from './store.js';
+import { opusKey, opusOrgId, brandTemplateId, brandTemplateSelection, clipSettings, copyPrompt } from './store.js';
 
 const BASE = process.env.OPUS_BASE || 'https://api.opus.pro/api';
 
@@ -58,8 +58,26 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /* ------------------------------------------------------------------ */
 
+function applyTemplate(body, selection = brandTemplateSelection()) {
+  const id = selection?.id || brandTemplateId();
+  if (id) body.brandTemplateId = id;
+
+  // A no-caption template is especially important for the music re-import:
+  // the account default must never be allowed to add captions accidentally.
+  if (selection?.enableCaption === false) {
+    body.renderPref = {
+      ...(body.renderPref || {}),
+      enableCaption: false,
+      enableHighlight: false,
+      enableEmoji: false,
+      enableBroll: false,
+    };
+  }
+  return body;
+}
+
 /** Send a long video off to be clipped. Returns the new project. */
-export async function createProject(videoUrl, title) {
+export async function createProject(videoUrl, title, selection = brandTemplateSelection()) {
   const { clipMinSeconds, clipMaxSeconds } = clipSettings();
   const body = {
     videoUrl,
@@ -71,7 +89,7 @@ export async function createProject(videoUrl, title) {
     renderPref: { layoutAspectRatio: 'portrait' },
   };
   if (title) body.uploadedVideoAttr = { title };
-  if (brandTemplateId()) body.brandTemplateId = brandTemplateId();
+  applyTemplate(body, selection);
   if (config.publicBaseUrl) {
     body.conclusionActions = [{
       type: 'WEBHOOK',
@@ -89,18 +107,16 @@ export async function createProject(videoUrl, title) {
  * it again. This costs a second, small amount of Opus credit for the clip's
  * own short duration — the trade-off for automatic background music.
  */
-export async function importMixedClip(videoUrl, title) {
+export async function importMixedClip(videoUrl, title, selection = brandTemplateSelection()) {
   const body = {
     videoUrl,
     curationPref: { skipCurate: true },
   };
   if (title) body.uploadedVideoAttr = { title };
-  // This re-import creates a whole new Opus render, separate from the
-  // original clip — without this, Opus fell back to its own account
-  // default template for it, regardless of whatever the person actually
-  // has selected. That's exactly why captions could show up on a mixed
-  // clip even with a captions-off template chosen.
-  if (brandTemplateId()) body.brandTemplateId = brandTemplateId();
+  // This re-import creates a new Opus project. Lock it to the verified
+  // selection and explicitly disable caption overlays for no-caption styles,
+  // otherwise the account default can leak into scheduled mixed clips.
+  applyTemplate(body, selection);
   const res = await call('/clip-projects', { method: 'POST', body });
   return res?.data ?? res;
 }
@@ -120,6 +136,8 @@ export async function getClips(projectId) {
     durationMs: c.durationMs || 0,
     exportUrl: c.uriForExport || c.uriForPreview || '',
     preview: c.uriForPreview || c.uriForExport || '',
+    renderPref: c.renderPref || null,
+    timeRanges: Array.isArray(c.timeRanges) ? c.timeRanges : [],
     // Virality score is not in the documented schema, so fall back gracefully.
     score: firstNumber(c.viralityScore, c.score, c.viralScore),
   }));
@@ -137,6 +155,10 @@ export async function getBrandTemplates() {
   return list.map(t => ({
     id: t.templateId || t.id,
     name: t.name || 'Untitled template',
+    isDefault: Boolean(t.isDefault),
+    enableCaption: typeof t.preferences?.enableCaption === 'boolean'
+      ? t.preferences.enableCaption
+      : null,
   })).filter(t => t.id);
 }
 
