@@ -1,0 +1,57 @@
+{
+  "engineVersion": 3,
+  "selectedTemplateId": "deenclipped-gold",
+  "clipSettings": {
+    "clipsPerVideo": 8,
+    "clipMinSeconds": 20,
+    "clipMaxSeconds": 90
+  },
+  "musicSettings": {
+    "required": true,
+    "volumePercent": 13,
+    "shuffle": true
+  },
+  "automationSettings": {
+    "enabled": true,
+    "minimumScore": 80,
+    "minimumQuality": 72,
+    "maxPerProject": 4,
+    "skipReviewRequired": true
+  },
+  "projects": [],
+  "clips": [],
+  "rerenderJobs": [],
+  "socialConnections": {},
+  "oauthStates": {},
+  "publishingSettings": {
+    "enabled": false,
+    "youtube": {
+      "enabled": false,
+      "accountId": "",
+      "privacy": "private",
+      "categoryId": "22",
+      "notifySubscribers": true,
+      "madeForKids": false
+    },
+    "instagram": {
+      "enabled": false,
+      "accountId": "",
+      "shareToFeed": true
+    },
+    "facebook": {
+      "enabled": false,
+      "accountId": ""
+    },
+    "tiktok": {
+      "enabled": false,
+      "accountId": "",
+      "privacy": "SELF_ONLY",
+      "allowComments": true,
+      "allowDuet": false,
+      "allowStitch": false
+    }
+  },
+  "publishJobs": [],
+  "log": [],
+  "legacyState": null
+}
