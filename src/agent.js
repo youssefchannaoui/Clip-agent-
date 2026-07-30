@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { state, save, log, opusKey, clipSettings, brandTemplateId, copyPrompt } from './store.js';
+import { state, save, log, opusKey, clipSettings, brandTemplateId, brandTemplateSelection, copyPrompt } from './store.js';
 import * as opus from './opus.js';
 import * as audio from './audio.js';
 import * as thumbs from './thumbs.js';
@@ -52,7 +52,8 @@ export async function refreshAccounts(force = false, strict = false) {
 
 /** Hand a video to Opus for clipping. */
 export async function submitVideo(url, title) {
-  const project = await opus.createProject(url, title);
+  const template = brandTemplateSelection();
+  const project = await opus.createProject(url, title, template);
   const id = project?.projectId || project?.id;
   if (!id) throw new Error('Opus accepted the video but did not return a project id.');
 
@@ -63,15 +64,29 @@ export async function submitVideo(url, title) {
     submittedAt: Date.now(),
     imported: 0,
     clipCount: 0,
-    // So we can honestly tell later whether the clip style has since
-    // changed, rather than assuming old clips match current settings.
-    brandTemplateIdUsed: brandTemplateId(),
+    // Snapshot the exact verified style used for the first render. Captions,
+    // logos and layouts are burned into Opus exports and cannot be removed later.
+    brandTemplateIdUsed: template.id,
+    brandTemplateNameUsed: template.name || '',
+    captionsEnabledUsed: template.enableCaption,
     // Short lectures can be ready quickly, so look soon, then ease off.
     checkAfter: Date.now() + 20_000,
   });
   save();
   log(`Sent to Opus for clipping: ${title || url}`);
   return id;
+}
+
+function sourceProjectIdForClip(clip) {
+  return clip.sourceProjectId || clip.originalProjectId || clip.projectId;
+}
+
+function hiddenClipSet(project) {
+  return new Set(Array.isArray(project?.hiddenClipIds) ? project.hiddenClipIds : []);
+}
+
+function importedClipsForProject(projectId) {
+  return state.clips.filter(c => sourceProjectIdForClip(c) === projectId);
 }
 
 /** Pull finished clips into the queue. */
@@ -113,8 +128,9 @@ async function importClips(project) {
   });
 
   const known = new Set(state.clips.map(c => c.id));
+  const hidden = hiddenClipSet(project);
   const { clipsPerVideo } = clipSettings();
-  const unknown = ranked.filter(c => !known.has(c.id));
+  const unknown = ranked.filter(c => !known.has(c.id) && !hidden.has(c.id));
   const fresh = clipsPerVideo > 0 ? unknown.slice(0, clipsPerVideo) : unknown;
 
   addClipsToQueue(fresh, project);
@@ -131,6 +147,12 @@ function addClipsToQueue(clipsToAdd, project) {
     state.clips.push({
       ...c,
       projectTitle: project.title,
+      sourceProjectId: project.id,
+      sourceTemplateId: project.brandTemplateIdUsed ?? null,
+      sourceTemplateName: project.brandTemplateNameUsed || '',
+      sourceCaptionsEnabled: typeof project.captionsEnabledUsed === 'boolean'
+        ? project.captionsEnabledUsed
+        : null,
       status: config.autoApprove ? 'approved' : 'waiting',
       targets: [],                 // one entry per destination once scheduled
       addedAt: Date.now(),
@@ -150,20 +172,26 @@ export async function listAvailableClips(projectId) {
   if (!project) throw new Error('That lecture is no longer in your history.');
 
   const clips = await opus.getClips(projectId);
-  const known = new Set(state.clips.map(c => c.id));
+  const hidden = hiddenClipSet(project);
+  const known = new Map(state.clips.map(c => [c.id, c]));
   return clips
+    .filter(c => !hidden.has(c.id))
     .slice()
     .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
-    .map(c => ({
-      id: c.id,
-      title: c.title,
-      description: c.description,
-      hashtags: c.hashtags,
-      durationMs: c.durationMs,
-      score: c.score,
-      previewUrl: c.preview || c.exportUrl || '',
-      imported: known.has(c.id),
-    }));
+    .map(c => {
+      const local = known.get(c.id);
+      return {
+        id: c.id,
+        title: c.title,
+        description: c.description,
+        hashtags: c.hashtags,
+        durationMs: c.durationMs,
+        score: c.score,
+        previewUrl: c.preview || c.exportUrl || '',
+        imported: Boolean(local),
+        status: local?.status || null,
+      };
+    });
 }
 
 /** Import exactly the clips someone picked, by id — no extra Opus credits, same as refreshProjectClips. */
@@ -174,14 +202,15 @@ export async function importSelectedClips(projectId, clipIds) {
   const wanted = new Set(clipIds);
   const clips = await opus.getClips(projectId);
   const known = new Set(state.clips.map(c => c.id));
-  const fresh = clips.filter(c => wanted.has(c.id) && !known.has(c.id));
+  const hidden = hiddenClipSet(project);
+  const fresh = clips.filter(c => wanted.has(c.id) && !known.has(c.id) && !hidden.has(c.id));
 
   addClipsToQueue(fresh, project);
 
   project.clipCount = Math.max(project.clipCount || 0, clips.length);
   save();
 
-  const imported = state.clips.filter(c => c.projectId === projectId).length;
+  const imported = importedClipsForProject(projectId).length;
   if (fresh.length) log(`Added ${fresh.length} chosen clip${fresh.length === 1 ? '' : 's'} from ${project.title}, no extra Opus credits used`);
   return { added: fresh.length, imported, clipCount: project.clipCount };
 }
@@ -201,16 +230,131 @@ export async function refreshProjectClips(projectId) {
 
   const clips = await opus.getClips(projectId);
   const known = new Set(state.clips.map(c => c.id));
-  const fresh = clips.filter(c => !known.has(c.id));
+  const hidden = hiddenClipSet(project);
+  const fresh = clips.filter(c => !known.has(c.id) && !hidden.has(c.id));
 
   addClipsToQueue(fresh, project);
 
   project.clipCount = Math.max(project.clipCount || 0, clips.length);
   save();
 
-  const imported = state.clips.filter(c => c.projectId === projectId).length;
+  const imported = importedClipsForProject(projectId).length;
   if (fresh.length) log(`Pulled in ${fresh.length} more clip${fresh.length === 1 ? '' : 's'} from ${project.title}, no extra Opus credits used`);
   return { added: fresh.length, imported, clipCount: project.clipCount };
+}
+
+
+function normaliseOpusProjectId(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const match = text.match(/\bP[A-Za-z0-9_-]+\b/);
+  return match ? match[0] : text;
+}
+
+/**
+ * Add a project that was created directly in the Opus dashboard. Opus's
+ * documented API can fetch clips when a project id is known, but it does not
+ * expose an endpoint that lists every dashboard project for the organisation.
+ */
+export async function attachExistingProject(projectRef, title = '') {
+  const id = normaliseOpusProjectId(projectRef);
+  if (!id) throw new Error('Paste an Opus project ID or project link.');
+
+  const existing = state.projects.find(p => p.id === id);
+  if (existing) {
+    return { added: false, projectId: id, clipCount: existing.clipCount || 0 };
+  }
+
+  const clips = await opus.getClips(id);
+  if (!clips.length) {
+    throw new Error('Opus returned no finished clips for that project. Check the ID and make sure processing is complete.');
+  }
+
+  const project = {
+    id,
+    url: '',
+    title: String(title || '').trim() || `Opus project ${id}`,
+    status: 'done',
+    submittedAt: Date.now(),
+    imported: 0,
+    clipCount: clips.length,
+    external: true,
+    hiddenClipIds: [],
+    // The public API does not reveal which template was selected for the
+    // source project at library-list level, so do not pretend to know.
+    brandTemplateIdUsed: undefined,
+  };
+
+  state.projects.unshift(project);
+  save();
+  log(`Added existing Opus project ${id} to the app library.`);
+  return { added: true, projectId: id, clipCount: clips.length };
+}
+
+/**
+ * Remove an entire lecture from this app. This cancels future schedules and
+ * deletes local queue records/thumbnails. The documented Opus API has no
+ * delete-project endpoint, so the project still exists in the Opus dashboard
+ * until the person deletes it there.
+ */
+export async function removeProject(projectId) {
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) throw new Error('That lecture is no longer in your app library.');
+
+  const related = state.clips.filter(c => sourceProjectIdForClip(c) === projectId);
+  let scheduled = 0;
+  let posted = 0;
+
+  for (const clip of related) {
+    if (clip.status === 'scheduled') scheduled++;
+    if (clip.status === 'posted') posted++;
+    await unschedule(clip);
+    thumbs.deleteThumbnail(clip.id);
+  }
+
+  state.clips = state.clips.filter(c => sourceProjectIdForClip(c) !== projectId);
+  state.projects = state.projects.filter(p => p.id !== projectId);
+  exportUrlCache.delete(projectId);
+  save();
+
+  log(`Removed ${project.title} from the app library${scheduled ? ` and cancelled ${scheduled} future schedule${scheduled === 1 ? '' : 's'}` : ''}${posted ? `. ${posted} already-published post${posted === 1 ? '' : 's'} remain online` : ''}.`);
+  return { removed: true, clipsRemoved: related.length, schedulesCancelled: scheduled, postedRemain: posted };
+}
+
+/**
+ * Remove one Opus result from this app. Opus's public API does not expose a
+ * delete-exportable-clip endpoint, so unimported results are hidden locally.
+ * Imported results are also unscheduled and removed from the local queue.
+ */
+export async function removeProjectClip(projectId, clipId) {
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) throw new Error('That lecture is no longer in your history.');
+
+  const id = String(clipId || '');
+  if (!id) throw new Error('No clip was selected.');
+
+  const clip = state.clips.find(c => c.id === id && sourceProjectIdForClip(c) === projectId);
+  const previousStatus = clip?.status || null;
+
+  if (clip) {
+    await unschedule(clip);
+    state.clips = state.clips.filter(c => c !== clip);
+    thumbs.deleteThumbnail(clip.id);
+  }
+
+  const hidden = hiddenClipSet(project);
+  hidden.add(id);
+  project.hiddenClipIds = [...hidden];
+  save();
+
+  log(`${clip ? 'Removed' : 'Hidden'} a clip from ${project.title}${previousStatus === 'posted' ? ' (the already-published social post was not deleted)' : ''}.`);
+  return {
+    removed: true,
+    wasImported: Boolean(clip),
+    previousStatus,
+    imported: importedClipsForProject(projectId).length,
+    hidden: project.hiddenClipIds.length,
+  };
 }
 
 /**
@@ -420,66 +564,169 @@ export async function regenerateCopy(clipId) {
   }
 }
 
+function clipSourceProject(clip) {
+  const sourceId = clip.sourceProjectId || clip.originalProjectId || clip.projectId;
+  return state.projects.find(p => p.id === sourceId) || null;
+}
+
 /**
- * Mix a random nasheed into the clip and swap Opus's ids to point at that
- * mixed version, before anything gets scheduled. Runs once per clip. If it
- * fails for any reason, the clip still goes out — just without music,
- * rather than sitting stuck forever.
+ * Opus burns captions, logos and layouts into each exported clip. A later
+ * music re-import can add another template, but it cannot remove pixels that
+ * were already rendered by an older one. Block scheduling rather than quietly
+ * publishing a clip whose visual style cannot be proven.
+ */
+function templateProblem(clip) {
+  const selected = brandTemplateSelection();
+  const sourceProject = clipSourceProject(clip);
+  const sourceId = clip.sourceTemplateId ?? sourceProject?.brandTemplateIdUsed ?? null;
+  const sourceName = clip.sourceTemplateName || sourceProject?.brandTemplateNameUsed || 'an older/unknown style';
+  const sourceCaptions = typeof clip.sourceCaptionsEnabled === 'boolean'
+    ? clip.sourceCaptionsEnabled
+    : (typeof sourceProject?.captionsEnabledUsed === 'boolean'
+      ? sourceProject.captionsEnabledUsed
+      : clip.renderPref?.enableCaption);
+
+  if (!selected.id) {
+    return 'Choose a specific Clip style in the app. The Opus account default can change and cannot be verified safely.';
+  }
+  if (!sourceId) {
+    return 'This clip predates template tracking, so its rendered style cannot be verified. Re-submit the lecture after selecting the current Clip style.';
+  }
+  if (sourceId !== selected.id) {
+    return `This clip was rendered with ${sourceName}, not the currently selected style. Re-submit the lecture with the current style because existing captions and logos are already baked into the video.`;
+  }
+  if (selected.enableCaption === null) {
+    return 'Re-select this Clip style once so the app can verify whether its captions are enabled or disabled.';
+  }
+  if (selected.enableCaption === false && sourceCaptions !== false) {
+    return 'The current style has captions off, but this clip was not verified as caption-free. Re-submit the lecture with the current style before scheduling it.';
+  }
+  return null;
+}
+
+const MUSIC_RETRY_BASE_MS = Number(process.env.MUSIC_RETRY_MS) || 60_000;
+
+function musicRetryDelay(attempts) {
+  return Math.min(15 * MINUTE, MUSIC_RETRY_BASE_MS * Math.max(1, attempts));
+}
+
+/**
+ * Add music before scheduling. When music is enabled this is deliberately
+ * fail-closed: no successful mix means no post. Transient failures are retried
+ * with backoff instead of being marked forever and silently posted unmixed.
  */
 async function ensureMusic(clip) {
-  if (clip.musicMixed) return;
+  const settings = audio.musicSettings();
+  if (!settings.enabled) {
+    delete clip.musicNextTryAt;
+    delete clip.musicAttempts;
+    return { ok: true, required: false };
+  }
+
+  const selected = brandTemplateSelection();
+  if (clip.musicMixed === 'done') {
+    if (clip.musicTemplateId && clip.musicTemplateId !== selected.id) {
+      clip.musicMixed = 'retrying';
+      clip.musicNote = 'The selected Clip style changed after this music render. Pull back and re-submit the lecture with the current style.';
+      return { ok: false, reason: clip.musicNote };
+    }
+    return { ok: true, required: true };
+  }
+
+  if (clip.musicNextTryAt && Date.now() < clip.musicNextTryAt) {
+    return { ok: false, reason: clip.musicNote || 'Waiting to retry the music mix.' };
+  }
 
   stage(clip, 'Adding background music');
   try {
-    // A clip's export link might not have been ready yet the moment it was
-    // first imported — Opus can still be finishing the actual render even
-    // after the title and description are available. A clip approved and
-    // scheduled quickly can beat that; one read over and posted later
-    // naturally gives Opus more time, which is why this seemed to depend
-    // on which path a clip took. Check for a fresher link before giving up.
-    let exportUrl = clip.exportUrl;
-    if (!exportUrl) {
-      stage(clip, 'Checking Opus for the finished clip');
-      try {
-        const latest = await fetchProjectClipsCached(clip.projectId);
-        const match = latest.find(c => c.id === clip.id);
-        if (match?.exportUrl) {
-          exportUrl = match.exportUrl;
-          clip.exportUrl = exportUrl;
-          save();
-        }
-      } catch { /* fall through with whatever we already had */ }
-    }
+    let importProjectId = clip.musicImportProjectId || null;
+    let nasheedName = clip.musicImportNasheedName || '';
 
-    const result = await audio.mixClipMusic(exportUrl, text => stage(clip, text));
-
-    if (result.skipped) {
-      clip.musicMixed = 'skipped';
-      clip.musicNote = result.skipped;
-      log(`No music added to "${clip.title}". ${result.skipped}`, 'warn');
+    if (importProjectId) {
+      // Creating an Opus project consumes processing credits. Once that call
+      // succeeds, every retry must resume the same project rather than create
+      // another one and charge the same clip again.
+      if (clip.musicImportTemplateId && clip.musicImportTemplateId !== selected.id) {
+        throw new Error('The Clip style changed after Opus started the paid music import. Re-select the previous style or remove and re-submit this clip.');
+      }
+      stage(clip, 'Resuming the existing Opus music render');
     } else {
+      // Always refresh against the original Opus project before the first mix.
+      // A newly generated clip can expose metadata before its export URL is ready.
+      let exportUrl = clip.exportUrl;
+      const lookupProjectId = sourceProjectIdForClip(clip);
+      if (!exportUrl) {
+        stage(clip, 'Checking Opus for the finished clip');
+        try {
+          const latest = await fetchProjectClipsCached(lookupProjectId);
+          const match = latest.find(c => c.id === clip.id || c.clipId === clip.originalClipId || c.clipId === clip.clipId);
+          if (match?.exportUrl) {
+            exportUrl = match.exportUrl;
+            clip.exportUrl = exportUrl;
+            clip.preview = match.preview || exportUrl;
+            clip.renderPref = match.renderPref || clip.renderPref || null;
+            save();
+          }
+        } catch { /* the mixer below will return the useful error */ }
+      }
+
+      const result = await audio.mixClipMusic(exportUrl, text => stage(clip, text));
+      if (result.skipped) throw new Error(result.skipped);
+
       stage(clip, 'Bringing the mixed clip back into Opus');
-      const project = await opus.importMixedClip(result.publicUrl, clip.title);
-      const newProjectId = project?.projectId || project?.id;
-      if (!newProjectId) throw new Error('Opus did not return a project id for the mixed clip.');
+      const project = await opus.importMixedClip(result.publicUrl, clip.title, selected);
+      importProjectId = project?.projectId || project?.id;
+      if (!importProjectId) throw new Error('Opus did not return a project id for the mixed clip.');
 
-      stage(clip, 'Waiting for Opus to finish importing it');
-      const newClip = await waitForImportedClip(newProjectId);
-      if (!newClip) throw new Error('Opus did not return the imported clip in time.');
-
-      clip.originalProjectId = clip.projectId;
-      clip.originalClipId = clip.clipId;
-      clip.projectId = newClip.projectId;
-      clip.clipId = newClip.clipId;
-      clip.musicMixed = 'done';
-      clip.musicNote = `Mixed with "${result.nasheedName}"`;
+      // Save immediately after the chargeable create-project call. If Render
+      // restarts or Opus takes longer than expected, the next pass resumes this
+      // exact project instead of creating and charging for a duplicate.
+      clip.musicImportProjectId = importProjectId;
+      clip.musicImportTemplateId = selected.id;
+      clip.musicImportTemplateName = selected.name || '';
+      clip.musicImportNasheedName = result.nasheedName || '';
+      clip.musicImportCreatedAt = Date.now();
+      nasheedName = result.nasheedName || '';
+      save();
     }
+
+    stage(clip, 'Waiting for Opus to finish the mixed clip');
+    const newClip = await waitForImportedClip(importProjectId);
+    if (!newClip) {
+      throw new Error('Opus is still processing the already-paid music import. The app will resume the same project later without another charge.');
+    }
+
+    // The API exposes the final render preferences. Refuse a no-caption style
+    // if Opus reports that captions were enabled on the mixed result.
+    if (selected.enableCaption === false && newClip.renderPref?.enableCaption !== false) {
+      throw new Error('Opus did not verify the mixed result as caption-free, so it was not scheduled.');
+    }
+
+    if (!clip.originalProjectId) clip.originalProjectId = clip.projectId;
+    if (!clip.originalClipId) clip.originalClipId = clip.clipId;
+    clip.projectId = newClip.projectId;
+    clip.clipId = newClip.clipId;
+    clip.exportUrl = newClip.exportUrl || clip.exportUrl;
+    clip.preview = newClip.preview || newClip.exportUrl || clip.preview;
+    clip.renderPref = newClip.renderPref || clip.renderPref || null;
+    clip.musicMixed = 'done';
+    clip.musicNote = `Mixed with "${nasheedName || 'your music library'}"`;
+    clip.musicTemplateId = selected.id;
+    clip.musicTemplateName = selected.name || '';
+    clip.musicVerifiedAt = Date.now();
+    delete clip.musicNextTryAt;
+    delete clip.musicAttempts;
+    return { ok: true, required: true };
   } catch (err) {
-    clip.musicMixed = 'failed';
+    clip.musicAttempts = (clip.musicAttempts || 0) + 1;
+    clip.musicMixed = 'retrying';
     clip.musicNote = err.message;
-    log(`Could not add music to "${clip.title}", posting without it. ${err.message}`, 'warn');
+    clip.musicNextTryAt = Date.now() + musicRetryDelay(clip.musicAttempts);
+    log(`Music is required, so "${clip.title}" was not scheduled. Retry ${clip.musicAttempts}: ${err.message}`, 'warn');
+    return { ok: false, reason: err.message };
+  } finally {
+    save();
   }
-  save();
 }
 
 async function waitForImportedClip(projectId, timeoutMs = 120_000) {
@@ -494,7 +741,23 @@ async function waitForImportedClip(projectId, timeoutMs = 120_000) {
 
 /** Schedule one approved clip across every connected account. */
 async function scheduleClip(clip) {
-  await ensureMusic(clip);
+  const styleProblem = templateProblem(clip);
+  if (styleProblem) {
+    clip.templateError = styleProblem;
+    clip.status = 'waiting';
+    clearStage(clip);
+    save();
+    log(`Blocked "${clip.title}" because its Clip style could not be verified. ${styleProblem}`, 'error');
+    return;
+  }
+  delete clip.templateError;
+
+  const music = await ensureMusic(clip);
+  if (!music.ok) {
+    clearStage(clip);
+    save();
+    return;
+  }
 
   stage(clip, 'Checking your connected accounts');
   const accounts = await refreshAccounts();
@@ -574,7 +837,21 @@ function upsertTarget(clip, account, patch) {
 export async function postNow(clipId) {
   const clip = state.clips.find(c => c.id === clipId);
   if (!clip) throw new Error('That clip is no longer in the queue.');
-  await ensureMusic(clip);
+
+  const styleProblem = templateProblem(clip);
+  if (styleProblem) {
+    clip.templateError = styleProblem;
+    save();
+    throw new Error(styleProblem);
+  }
+  delete clip.templateError;
+
+  const music = await ensureMusic(clip);
+  if (!music.ok) {
+    clearStage(clip);
+    save();
+    throw new Error(`This clip was not posted because music is required. ${music.reason || 'The mix will be retried.'}`);
+  }
 
   stage(clip, 'Checking your connected accounts');
   const accounts = await refreshAccounts();
