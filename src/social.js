@@ -511,26 +511,21 @@ async function uploadYouTube(clip, target, file) {
     save();
   }
 
-  for (let attempt = 0; attempt < 6; attempt++) {
-    if (offset >= stat.size) {
-      const status = await youtubeUploadStatus(uploadUrl, accessToken, stat.size);
-      if (status.complete && status.data?.id) {
-        target.externalId = status.data.id;
-        target.providerState = { stage: 'completed', totalSize: stat.size, offset: stat.size };
-        save();
-        return { postId: status.data.id, postUrl: `https://youtu.be/${status.data.id}` };
-      }
-      offset = status.offset || 0;
-    }
+  const chunkSize = 8 * 1024 * 1024; // YouTube resumable chunks; multiple of 256 KiB.
+  let failures = 0;
+  while (offset < stat.size) {
+    const endExclusive = Math.min(stat.size, offset + chunkSize);
+    const body = bytes.subarray(offset, endExclusive);
+    target.providerState = { ...target.providerState, stage: 'uploading', totalSize: stat.size, offset };
+    save();
     try {
-      const body = bytes.subarray(offset);
       const res = await fetch(uploadUrl, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'video/mp4',
           'Content-Length': String(body.length),
-          'Content-Range': `bytes ${offset}-${stat.size - 1}/${stat.size}`,
+          'Content-Range': `bytes ${offset}-${endExclusive - 1}/${stat.size}`,
         },
         body,
         signal: AbortSignal.timeout(10 * 60_000),
@@ -545,36 +540,40 @@ async function uploadYouTube(clip, target, file) {
       }
       if (res.status === 308) {
         const match = res.headers.get('range')?.match(/bytes=0-(\d+)/i);
-        offset = match ? Number(match[1]) + 1 : offset;
-        target.providerState.offset = offset;
+        offset = match ? Number(match[1]) + 1 : endExclusive;
+        target.providerState = { ...target.providerState, stage: 'uploading', totalSize: stat.size, offset };
         save();
+        failures = 0;
         continue;
       }
       const { data, text } = await parseResponse(res);
       if (!RETRYABLE_STATUS.has(res.status)) {
         throw new SocialError(`YouTube upload failed: ${data?.error?.message || text || res.statusText}`, { status: res.status, provider: 'youtube' });
       }
+      throw new SocialError(`YouTube upload temporarily failed: ${data?.error?.message || text || res.statusText}`, { retryable: true, status: res.status, provider: 'youtube' });
     } catch (error) {
       if (error instanceof SocialError && !error.retryable) throw error;
-    }
-    await sleep(1500 * (attempt + 1));
-    const status = await youtubeUploadStatus(uploadUrl, accessToken, stat.size);
-    if (status.complete && status.data?.id) {
-      target.externalId = status.data.id;
-      target.providerState = { stage: 'completed', totalSize: stat.size, offset: stat.size };
+      failures += 1;
+      if (failures >= 6) throw new SocialError(`YouTube upload was interrupted repeatedly: ${error.message}`, { retryable: true, provider: 'youtube' });
+      await sleep(1500 * failures);
+      const status = await youtubeUploadStatus(uploadUrl, accessToken, stat.size);
+      if (status.complete && status.data?.id) {
+        target.externalId = status.data.id;
+        target.providerState = { stage: 'completed', totalSize: stat.size, offset: stat.size };
+        save();
+        return { postId: status.data.id, postUrl: `https://youtu.be/${status.data.id}` };
+      }
+      if (status.expired) {
+        target.providerState = {};
+        save();
+        throw new SocialError('The YouTube resumable upload session expired and will restart.', { retryable: true, provider: 'youtube' });
+      }
+      offset = status.offset;
+      target.providerState = { ...target.providerState, stage: 'uploading', totalSize: stat.size, offset };
       save();
-      return { postId: status.data.id, postUrl: `https://youtu.be/${status.data.id}` };
     }
-    if (status.expired) {
-      target.providerState = {};
-      save();
-      throw new SocialError('The YouTube resumable upload session expired and will restart.', { retryable: true, provider: 'youtube' });
-    }
-    offset = status.offset;
-    target.providerState.offset = offset;
-    save();
   }
-  throw new SocialError('YouTube upload did not complete after retries.', { retryable: true, provider: 'youtube' });
+  throw new SocialError('YouTube upload ended without a video ID.', { retryable: true, provider: 'youtube' });
 }
 
 function metaPage(accountId, kind) {
@@ -857,6 +856,12 @@ export function targetPublic(target) {
     status: target.status, stage: target.stage || '', attempts: target.attempts || 0,
     nextTryAt: target.nextTryAt || null, error: target.error || null,
     postId: target.postId || null, postUrl: target.postUrl || null, updatedAt: target.updatedAt || null,
+    createdAt: target.createdAt || null,
+    progressPercent: target.providerState?.totalSize
+      ? Math.max(0, Math.min(100, Math.round(Number(target.providerState.offset || 0) / Number(target.providerState.totalSize) * 100)))
+      : null,
+    uploadedBytes: target.providerState?.offset || null, totalBytes: target.providerState?.totalSize || null,
+    platformStatus: target.providerState?.platformStatus || target.providerState?.stage || '',
   };
 }
 
