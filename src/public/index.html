@@ -78,21 +78,32 @@ a{color:var(--blue-soft)}
 .main-col{width:100%;min-width:0}
 
 @media (min-width:1001px){
+  .shell{grid-template-columns:minmax(0,1fr) 344px}
   .side{
-    width:320px;
-    min-width:320px;
+    width:344px;
+    min-width:344px;
     justify-self:end;
-    height:calc(100vh - 118px);
-    max-height:calc(100vh - 118px);
+    align-self:start;
+    height:calc(100vh - 94px);
+    max-height:calc(100vh - 94px);
+    overflow:hidden;
+    z-index:5;
+  }
+  .side-scroll{
+    height:100%;
     overflow-y:auto;
+    overflow-x:hidden;
     overscroll-behavior:contain;
-    padding-right:6px;
+    padding:8px 10px 24px 0;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
     scrollbar-width:thin;
     scrollbar-color:var(--line-lit) transparent;
   }
-  .side::-webkit-scrollbar{width:7px}
-  .side::-webkit-scrollbar-track{background:transparent}
-  .side::-webkit-scrollbar-thumb{background:var(--line-lit);border-radius:999px}
+  .side-scroll::-webkit-scrollbar{width:7px}
+  .side-scroll::-webkit-scrollbar-track{background:transparent}
+  .side-scroll::-webkit-scrollbar-thumb{background:var(--line-lit);border-radius:999px}
 }
 
 /* ---------- gate / connect ---------- */
@@ -557,35 +568,40 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .bar-num{font-size:14px;font-weight:600;color:var(--text);width:30px;text-align:right;flex:none}
 
 /* ---------- side rail ---------- */
-.side{position:sticky;top:104px;display:flex;flex-direction:column;gap:14px;min-height:0}
+.side{position:sticky;top:82px;min-height:0}
+.side-scroll{display:flex;flex-direction:column;gap:12px;min-height:0}
 .side-section-title{font-family:var(--brand);font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);padding:0 2px 1px}
+.side .card{min-width:0;flex:0 0 auto}
+.side .card-head{min-height:45px}
+.side .card-body{min-height:0}
 .card{
   background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;
   transition:border-color .16s ease,transform .18s cubic-bezier(.2,.8,.2,1);transform:translateZ(0);
 }
 .card:hover{border-color:var(--line-lit);transform:translateY(-1px)}
+.side .card:hover{transform:none}
 .card-head{
   display:flex;align-items:center;gap:9px;padding:12px 16px;
   border-bottom:1px solid var(--line);font-size:13.5px;font-weight:600;letter-spacing:-.01em;
 }
 .card-head .btn{margin-left:auto}
 .card-body{padding:14px 16px}
-.card-body.tight{padding:6px 16px}
+.card-body.tight{padding:10px 16px}
 .side-card-muted{background:linear-gradient(180deg,rgba(217,180,120,.055),rgba(18,18,20,0) 70%),var(--surface)}
 .side-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:4px 8px;font-size:11.5px;color:var(--mute);white-space:nowrap}
 .side-pill.good{color:#d8f8df;border-color:rgba(145,220,160,.25);background:rgba(35,110,61,.12)}
 .side-pill.warn{color:var(--blue-soft);border-color:rgba(217,180,120,.28);background:rgba(217,180,120,.10)}
 .side-pill.bad{color:#ffb0b8;border-color:rgba(255,85,102,.30);background:rgba(255,85,102,.09)}
-.side-next{display:grid;grid-template-columns:62px minmax(0,1fr);gap:12px;align-items:center}
-.side-next-media{width:62px;height:86px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line);overflow:hidden;display:grid;place-items:center;color:var(--mute)}
+.side-next{display:grid;grid-template-columns:66px minmax(0,1fr);gap:12px;align-items:center;min-width:0}
+.side-next-media{width:66px;height:92px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line);overflow:hidden;display:grid;place-items:center;color:var(--mute)}
 .side-next-media img,.side-next-media video{width:100%;height:100%;object-fit:cover;display:block}
 .side-next-title{font-weight:650;font-size:14px;line-height:1.28;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .side-next-meta{font-size:12.5px;color:var(--mute);margin-top:4px;line-height:1.35}
 .side-next-count{font-family:var(--brand);font-size:24px;font-weight:700;letter-spacing:-.04em;line-height:1;margin-bottom:6px;color:var(--text)}
-.side-action-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.side-action-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
 .side-action-row .btn{width:100%;justify-content:center}
 .side-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.side-stat{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 11px;min-width:0}
+.side-stat{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 10px;min-width:0}
 .side-stat strong{display:block;font-family:var(--brand);font-size:19px;line-height:1.1;letter-spacing:-.03em;color:var(--text)}
 .side-stat span{display:block;margin-top:4px;font-size:11.8px;line-height:1.25;color:var(--mute)}
 .attention-list{display:grid;gap:8px}
@@ -614,7 +630,7 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .now-what{flex:1;min-width:0}
 .now-title{font-size:13.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .now-stage{font-size:12.5px;color:var(--blue-soft);margin-top:1px}
-.now-idle{font-size:13.5px;color:var(--mute);padding:2px 0}
+.now-idle{font-size:13.5px;color:var(--mute);padding:2px 0;line-height:1.45;overflow-wrap:anywhere}
 
 .next-time{font-size:19px;font-weight:600;letter-spacing:-.02em}
 .next-title{font-size:13.5px;color:var(--text-2);margin-top:4px;line-height:1.45}
@@ -672,6 +688,7 @@ select:focus{outline:none;border-color:var(--blue)}
 @media (max-width:1000px){
   .shell{grid-template-columns:1fr;gap:26px}
   .side{position:static;height:auto;max-height:none;overflow:visible;padding-right:0}
+  .side-scroll{height:auto;max-height:none;overflow:visible;padding:0;display:flex;flex-direction:column;gap:12px}
   /* when the agent is mid-job, the live panel comes first */
   .side.busy{order:-1}
 }
@@ -957,6 +974,7 @@ select:focus{outline:none;border-color:var(--blue)}
 
       <!-- side rail -->
       <aside class="side" id="side">
+        <div class="side-scroll">
         <div class="side-section-title">Control centre</div>
 
         <div class="card side-card-muted">
@@ -1043,6 +1061,7 @@ select:focus{outline:none;border-color:var(--blue)}
           <summary class="card-head">Recent activity</summary>
           <div class="card-body tight" id="log"></div>
         </details>
+        </div>
       </aside>
     </div>
 
@@ -2141,15 +2160,24 @@ function bars(sel, counts, emptyNote) {
 function sidePreview(c) {
   const box = el('div', 'side-next-media');
   if (!c) { box.textContent = '—'; return box; }
-  if (c.thumbState === 'ready') {
-    const img = el('img');
-    img.src = withPw('/api/clips/thumb/' + encodeURIComponent(c.id) + '.jpg');
-    img.alt = c.title || 'Next post preview';
-    img.onerror = () => { img.remove(); appendVideoPreview(box, c, ''); };
-    box.append(img);
-  } else {
-    appendVideoPreview(box, c, '');
-  }
+  // Try our stable same-origin thumbnail first, even for older/imported clips.
+  // If it is not ready, fall back to the refreshed preview video route.
+  const img = el('img');
+  img.src = withPw('/api/clips/thumb/' + encodeURIComponent(c.id) + '.jpg');
+  img.alt = c.title || 'Next post preview';
+  img.onerror = () => {
+    img.remove();
+    const video = el('video');
+    video.src = queuePreviewUrl(c);
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    video.title = 'Click to preview this clip';
+    video.onerror = () => { video.remove(); if (!box.children.length) box.append(thumbPlaceholder(c)); };
+    primeVideoFrame(video);
+    box.append(video);
+  };
+  box.append(img);
   return box;
 }
 
@@ -2178,7 +2206,7 @@ function renderSideToday(clips) {
   host.append(grid);
   const row = el('div', 'side-action-row');
   const open = el('button', 'btn btn-ghost btn-sm');
-  open.textContent = 'Open schedule';
+  open.textContent = 'Schedule';
   open.onclick = () => { setTab('schedule'); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   const approve = el('button', 'btn btn-sm');
   approve.textContent = 'Approve next';
