@@ -180,203 +180,6 @@ function pullBackCopy(clip) {
   delete clip.copyError;
 }
 
-const ANALYTIC_FIELDS = ['views', 'likes', 'comments', 'shares', 'saves'];
-function cleanAnalyticsMetrics(raw = {}) {
-  const out = {};
-  for (const key of ANALYTIC_FIELDS) {
-    if (!(key in raw)) continue;
-    const n = Math.round(Number(raw[key]));
-    out[key] = Number.isFinite(n) && n >= 0 ? Math.min(n, 1_000_000_000_000) : 0;
-  }
-  return out;
-}
-
-function targetKeyFrom(body = {}) {
-  return String(body.targetKey || body.postAccountId || body.platform || 'manual').trim().slice(0, 90) || 'manual';
-}
-
-function youtubeVideoId(raw) {
-  try {
-    const value = String(raw || '').trim();
-    if (!value) return '';
-    if (/^[A-Za-z0-9_-]{11}$/.test(value)) return value;
-    const u = new URL(value);
-    const host = u.hostname.replace(/^www\./, '').toLowerCase();
-    if (host === 'youtu.be') return u.pathname.split('/').filter(Boolean)[0] || '';
-    if (host === 'youtube.com' || host.endsWith('.youtube.com')) {
-      if (u.searchParams.get('v')) return u.searchParams.get('v') || '';
-      const parts = u.pathname.split('/').filter(Boolean);
-      const marker = parts.findIndex(x => ['shorts', 'embed', 'live'].includes(x));
-      if (marker >= 0) return parts[marker + 1] || '';
-    }
-  } catch { /* not a URL */ }
-  return '';
-}
-
-function normalTitle(s = '') {
-  return String(s).toLowerCase()
-    .replace(/#[\p{L}\p{N}_-]+/gu, ' ')
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim();
-}
-
-function titleConfidence(a, b) {
-  const aa = new Set(normalTitle(a).split(/\s+/).filter(w => w.length > 2));
-  const bb = new Set(normalTitle(b).split(/\s+/).filter(w => w.length > 2));
-  if (!aa.size || !bb.size) return 0;
-  let hit = 0;
-  for (const w of aa) if (bb.has(w)) hit++;
-  return hit / Math.max(aa.size, bb.size);
-}
-
-function upsertClipAnalytics(clip, body = {}) {
-  const url = String(body.url || body.postUrl || '').trim().slice(0, 300);
-  const videoId = String(body.videoId || youtubeVideoId(url) || '').trim().slice(0, 32);
-  const key = targetKeyFrom(body || (videoId ? { platform: 'YOUTUBE' } : {}));
-  const metrics = cleanAnalyticsMetrics(body.metrics || body);
-  if (!Object.keys(metrics).length && !url && !videoId) {
-    throw new Error('Add at least one metric or a YouTube post link.');
-  }
-  clip.analytics = clip.analytics || {};
-  const prev = clip.analytics[key] || {};
-  clip.analytics[key] = {
-    ...prev,
-    ...metrics,
-    ...(url ? { url } : {}),
-    ...(videoId ? { videoId } : {}),
-    platform: String(body.platform || prev.platform || (videoId ? 'YOUTUBE' : key)).slice(0, 60),
-    label: String(body.label || prev.label || body.name || (videoId ? 'YouTube' : '')).slice(0, 120),
-    source: String(body.source || (Object.keys(metrics).length ? 'manual' : 'link')).slice(0, 40),
-    updatedAt: Date.now(),
-  };
-  return clip.analytics[key];
-}
-
-function youtubeKeyOrThrow() {
-  if (!config.youtubeApiKey) throw new Error('Add YOUTUBE_API_KEY in Render first, then redeploy.');
-  return config.youtubeApiKey;
-}
-
-async function youtubeGet(pathname, params = {}) {
-  const key = youtubeKeyOrThrow();
-  const u = new URL(`https://www.googleapis.com/youtube/v3/${pathname}`);
-  for (const [k, v] of Object.entries({ ...params, key })) {
-    if (v !== undefined && v !== null && v !== '') u.searchParams.set(k, String(v));
-  }
-  const res = await fetch(u, { signal: AbortSignal.timeout(30_000) });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body?.error?.message || `YouTube API failed (${res.status}).`);
-  return body;
-}
-
-function youtubeIdsFromClip(clip) {
-  const ids = new Set();
-  for (const row of Object.values(clip.analytics || {})) {
-    const id = row?.videoId || youtubeVideoId(row?.url);
-    if (id) ids.add(id);
-  }
-  for (const t of clip.targets || []) {
-    const id = youtubeVideoId(t.postUrl || t.url || t.permalink || t.externalUrl || '');
-    if (id) ids.add(id);
-  }
-  return [...ids];
-}
-
-async function findYouTubeVideoForClip(clip) {
-  if (!config.youtubeChannelId) return null;
-  const searched = clip.youtubeSearchTriedAt || 0;
-  if (Date.now() - searched < 12 * 60 * 60 * 1000) return null;
-  clip.youtubeSearchTriedAt = Date.now();
-
-  const q = String(clip.editedTitle || clip.copy?.title || clip.title || '').replace(/#\S+/g, '').trim().slice(0, 80);
-  if (!q) return null;
-  const data = await youtubeGet('search', {
-    part: 'snippet', type: 'video', order: 'date', maxResults: 8,
-    channelId: config.youtubeChannelId, q,
-  });
-  const items = Array.isArray(data.items) ? data.items : [];
-  let best = null;
-  for (const item of items) {
-    const id = item?.id?.videoId;
-    if (!id) continue;
-    const title = item?.snippet?.title || '';
-    const score = titleConfidence(q, title);
-    if (!best || score > best.score) best = { id, title, score };
-  }
-  // Avoid pairing the wrong post if the title match is weak. Manual URL linking
-  // still works for anything not confidently found by channel search.
-  return best && best.score >= 0.34 ? best : null;
-}
-
-async function refreshYouTubeAnalytics({ quiet = false } = {}) {
-  const posted = state.clips.filter(c => c.status === 'posted');
-  const wanted = new Map();
-  const matchedBySearch = [];
-  const errors = [];
-
-  for (const clip of posted) {
-    let ids = youtubeIdsFromClip(clip);
-    if (!ids.length && config.youtubeChannelId) {
-      try {
-        const found = await findYouTubeVideoForClip(clip);
-        if (found?.id) {
-          ids = [found.id];
-          matchedBySearch.push({ clipId: clip.id, videoId: found.id, title: found.title });
-          clip.analytics = clip.analytics || {};
-          clip.analytics.youtube = {
-            ...(clip.analytics.youtube || {}),
-            videoId: found.id,
-            label: 'YouTube',
-            platform: 'YOUTUBE',
-            source: 'youtube-search',
-            matchedTitle: found.title,
-            matchedAt: Date.now(),
-          };
-        }
-      } catch (err) {
-        errors.push(err.message);
-      }
-    }
-    for (const id of ids) wanted.set(id, clip);
-  }
-
-  const ids = [...wanted.keys()];
-  if (!ids.length) {
-    save();
-    return { updated: 0, matched: matchedBySearch.length, errors, message: 'No YouTube video IDs found yet. Paste a YouTube URL for a posted clip, or add YOUTUBE_CHANNEL_ID so the app can match by title.' };
-  }
-
-  let updated = 0;
-  for (let i = 0; i < ids.length; i += 50) {
-    const chunk = ids.slice(i, i + 50);
-    const data = await youtubeGet('videos', { part: 'statistics,snippet', id: chunk.join(',') });
-    for (const item of data.items || []) {
-      const clip = wanted.get(item.id);
-      if (!clip) continue;
-      const st = item.statistics || {};
-      upsertClipAnalytics(clip, {
-        targetKey: 'youtube',
-        platform: 'YOUTUBE',
-        label: 'YouTube',
-        source: 'youtube',
-        videoId: item.id,
-        url: `https://www.youtube.com/watch?v=${item.id}`,
-        metrics: {
-          views: st.viewCount ?? 0,
-          likes: st.likeCount ?? 0,
-          comments: st.commentCount ?? 0,
-        },
-      });
-      updated++;
-    }
-  }
-
-  state.analyticsLastRefresh = Date.now();
-  save();
-  if (updated && !quiet) log(`Refreshed YouTube analytics for ${updated} posted clip${updated === 1 ? '' : 's'}.`);
-  return { updated, matched: matchedBySearch.length, errors };
-}
-
 /* ---- routes -------------------------------------------------------- */
 
 async function route(req, res, url) {
@@ -464,11 +267,6 @@ async function route(req, res, url) {
       copyPrompt: copyPrompt(),
       musicSettings: audio.musicSettings(),
       accounts: state.accounts,
-      analyticsConfig: {
-        youtubeConnected: Boolean(config.youtubeApiKey),
-        youtubeChannelId: config.youtubeChannelId || '',
-        lastRefresh: state.analyticsLastRefresh || null,
-      },
       projects: state.projects.slice(0, 12).map(p => ({
         id: p.id,
         title: p.title,
@@ -500,9 +298,6 @@ async function route(req, res, url) {
             scheduledAt: c.scheduledAt,
             scheduledLabel: c.scheduledAt ? formatLocal(c.scheduledAt) : null,
             targets: c.targets,
-            analytics: c.analytics || null,
-            youtubeSearchTriedAt: c.youtubeSearchTriedAt || null,
-            postedAt: c.postedAt || null,
             musicMixed: c.musicMixed || null,
             musicNote: c.musicNote || null,
             musicAttempts: c.musicAttempts || 0,
@@ -891,53 +686,6 @@ async function route(req, res, url) {
     }
   }
 
-  const analyticsMatch = pathname.match(/^\/api\/clips\/([^/]+)\/analytics$/);
-  if (analyticsMatch && method === 'POST') {
-    const id = decodeURIComponent(analyticsMatch[1]);
-    const clip = state.clips.find(c => c.id === id);
-    if (!clip) return send(res, 404, { error: 'That clip is no longer in the app history.' });
-    try {
-      const body = await readBody(req);
-      const savedMetric = upsertClipAnalytics(clip, body);
-      save();
-      log(`Updated social analytics for "${clip.editedTitle || clip.copy?.title || clip.title}".`);
-      return send(res, 200, { ok: true, analytics: clip.analytics, saved: savedMetric });
-    } catch (err) {
-      return send(res, 400, { error: err.message });
-    }
-  }
-
-  const analyticsLinkMatch = pathname.match(/^\/api\/clips\/([^/]+)\/social-link$/);
-  if (analyticsLinkMatch && method === 'POST') {
-    const id = decodeURIComponent(analyticsLinkMatch[1]);
-    const clip = state.clips.find(c => c.id === id);
-    if (!clip) return send(res, 404, { error: 'That clip is no longer in the app history.' });
-    try {
-      const body = await readBody(req);
-      const savedMetric = upsertClipAnalytics(clip, {
-        ...body,
-        platform: body.platform || 'YOUTUBE',
-        label: body.label || 'YouTube',
-        source: 'link',
-        metrics: body.metrics || {},
-      });
-      save();
-      log(`Linked social post for "${clip.editedTitle || clip.copy?.title || clip.title}".`);
-      return send(res, 200, { ok: true, analytics: clip.analytics, saved: savedMetric });
-    } catch (err) {
-      return send(res, 400, { error: err.message });
-    }
-  }
-
-  if (method === 'POST' && pathname === '/api/analytics/youtube/refresh') {
-    try {
-      const result = await refreshYouTubeAnalytics();
-      return send(res, 200, { ok: true, ...result });
-    } catch (err) {
-      return send(res, 400, { error: err.message });
-    }
-  }
-
   const clipMatch = pathname.match(/^\/api\/clips\/([^/]+)(\/now)?$/);
   if (clipMatch) {
     const id = decodeURIComponent(clipMatch[1]);
@@ -1002,11 +750,4 @@ server.listen(config.port, () => {
   console.log(`Clip agent listening on http://localhost:${config.port}`);
   if (config.publicBaseUrl) console.log(`Opus webhook: ${config.publicBaseUrl}/webhooks/opus`);
   agent.start();
-
-  // Automatic YouTube stats are deliberately low-frequency to avoid wasting API
-  // quota. Manual refresh from the Analytics page can still be used any time.
-  if (config.youtubeApiKey) {
-    setTimeout(() => refreshYouTubeAnalytics({ quiet: true }).catch(err => log(`YouTube analytics refresh skipped. ${err.message}`, 'warn')), 2 * 60_000);
-    setInterval(() => refreshYouTubeAnalytics({ quiet: true }).catch(err => log(`YouTube analytics refresh skipped. ${err.message}`, 'warn')), 6 * 60 * 60_000);
-  }
 });
