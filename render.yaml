@@ -15,10 +15,6 @@ services:
         sync: false
       - key: OPUS_API_KEY
         sync: false
-      - key: YOUTUBE_API_KEY
-        sync: false
-      - key: YOUTUBE_CHANNEL_ID
-        sync: false
       - key: TIMEZONE
         value: Australia/Perth
       - key: POST_TIMES
