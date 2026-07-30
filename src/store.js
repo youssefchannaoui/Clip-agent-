@@ -2,118 +2,138 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 
-const file = path.join(config.dataDir, 'state.json');
+const stateFile = path.join(config.dataDir, 'state.json');
 
-const blank = () => ({
-  opusKey: '',
-  opusOrgId: '',
-  brandTemplateId: '',   // which Opus clip style to use, chosen in the app
-  brandTemplateMeta: null, // verified name/caption setting for the selected Opus template
-  clipSettings: {},      // clipsPerVideo / clipMinSeconds / clipMaxSeconds overrides
-  musicSettings: {},     // enabled / volumePercent overrides for the nasheed mixer
-  copyPrompt: '',        // instructions for the AI-written title/caption/hashtags — blank means use the default
-  vapidKeys: null,       // generated once, kept forever — see push.js
-  pushSubscriptions: [], // one entry per browser/device with notifications on
-  accounts: [],          // connected social accounts, mirrored from Opus
-  accountsCheckedAt: 0,
-  projects: [],          // videos sent to Opus
-  clips: [],             // clips waiting, scheduled or posted
-  log: [],
-});
+function blankState() {
+  return {
+    engineVersion: 3,
+    selectedTemplateId: config.defaultTemplateId,
+    clipSettings: {
+      clipsPerVideo: config.clipsPerVideo,
+      clipMinSeconds: config.clipMinSeconds,
+      clipMaxSeconds: config.clipMaxSeconds,
+    },
+    musicSettings: {
+      required: true,
+      volumePercent: config.musicVolumePercent,
+      shuffle: true,
+    },
+    automationSettings: {
+      enabled: true,
+      minimumScore: 80,
+      minimumQuality: 72,
+      maxPerProject: 4,
+      skipReviewRequired: true,
+    },
+    projects: [],
+    clips: [],
+    rerenderJobs: [],
+    socialConnections: {},
+    oauthStates: {},
+    publishingSettings: {
+      enabled: false,
+      youtube: { enabled: false, accountId: '', privacy: 'private', categoryId: '22', notifySubscribers: true, madeForKids: false },
+      instagram: { enabled: false, accountId: '', shareToFeed: true },
+      facebook: { enabled: false, accountId: '' },
+      tiktok: { enabled: false, accountId: '', privacy: 'SELF_ONLY', allowComments: true, allowDuet: false, allowStitch: false },
+    },
+    publishJobs: [],
+    log: [],
+    legacyState: null,
+  };
+}
+
+function migrate(parsed) {
+  const fresh = blankState();
+  if (parsed?.engineVersion === 2 || parsed?.engineVersion === 3) {
+    return {
+      ...fresh,
+      ...parsed,
+      engineVersion: 3,
+      clipSettings: { ...fresh.clipSettings, ...(parsed.clipSettings || {}) },
+      musicSettings: { ...fresh.musicSettings, ...(parsed.musicSettings || {}), required: true },
+      automationSettings: { ...fresh.automationSettings, ...(parsed.automationSettings || {}) },
+      rerenderJobs: Array.isArray(parsed.rerenderJobs) ? parsed.rerenderJobs : [],
+      socialConnections: parsed.socialConnections && typeof parsed.socialConnections === 'object' ? parsed.socialConnections : {},
+      oauthStates: parsed.oauthStates && typeof parsed.oauthStates === 'object' ? parsed.oauthStates : {},
+      publishingSettings: {
+        ...fresh.publishingSettings,
+        ...(parsed.publishingSettings || {}),
+        youtube: { ...fresh.publishingSettings.youtube, ...(parsed.publishingSettings?.youtube || {}) },
+        instagram: { ...fresh.publishingSettings.instagram, ...(parsed.publishingSettings?.instagram || {}) },
+        facebook: { ...fresh.publishingSettings.facebook, ...(parsed.publishingSettings?.facebook || {}) },
+        tiktok: { ...fresh.publishingSettings.tiktok, ...(parsed.publishingSettings?.tiktok || {}) },
+      },
+      publishJobs: Array.isArray(parsed.publishJobs) ? parsed.publishJobs : [],
+    };
+  }
+
+  if (parsed && typeof parsed === 'object') {
+    fresh.legacyState = {
+      migratedAt: Date.now(),
+      projects: Array.isArray(parsed.projects) ? parsed.projects.length : 0,
+      clips: Array.isArray(parsed.clips) ? parsed.clips.length : 0,
+      note: 'Previous state was preserved during the self-hosted engine migration.',
+    };
+    if (parsed.musicSettings?.volumePercent != null) fresh.musicSettings.volumePercent = parsed.musicSettings.volumePercent;
+  }
+  return fresh;
+}
 
 function load() {
-  try {
-    return { ...blank(), ...JSON.parse(fs.readFileSync(file, 'utf8')) };
-  } catch {
-    return blank();
-  }
+  try { return migrate(JSON.parse(fs.readFileSync(stateFile, 'utf8'))); }
+  catch { return blankState(); }
 }
 
 export const state = load();
+let writing = false;
+let dirty = false;
 
-let writing = false, dirty = false;
 export function save() {
   if (writing) { dirty = true; return; }
   writing = true;
-  fs.mkdirSync(config.dataDir, { recursive: true });
-  const tmp = file + '.tmp';
-  fs.writeFile(tmp, JSON.stringify(state, null, 2), err => {
-    if (!err) { try { fs.renameSync(tmp, file); } catch {} }
+  fs.mkdirSync(path.dirname(stateFile), { recursive: true });
+  const tmp = `${stateFile}.tmp`;
+  fs.writeFile(tmp, JSON.stringify(state, null, 2), error => {
+    if (!error) { try { fs.renameSync(tmp, stateFile); } catch {} }
     writing = false;
     if (dirty) { dirty = false; save(); }
   });
 }
 
 export function log(message, level = 'info') {
-  state.log.unshift({ at: Date.now(), level, message });
-  state.log.length = Math.min(state.log.length, 200);
+  state.log.unshift({ at: Date.now(), level, message: String(message) });
+  state.log.length = Math.min(200, state.log.length);
   console.log(`[${level}] ${message}`);
   save();
 }
 
-/** The Opus key comes from the environment, or from what was saved in the app. */
-export const opusKey = () => state.opusKey || config.opusKey;
-export const opusOrgId = () => state.opusOrgId || config.opusOrgId;
-export const brandTemplateId = () => state.brandTemplateId || config.brandTemplateId;
+export function clipSettings() { return { ...blankState().clipSettings, ...(state.clipSettings || {}) }; }
+export function setClipSettings(next) { state.clipSettings = { ...clipSettings(), ...next }; save(); }
+export function musicSettings() { return { ...blankState().musicSettings, ...(state.musicSettings || {}), required: true }; }
+export function setMusicSettings(next) { state.musicSettings = { ...musicSettings(), ...next, required: true }; save(); }
+export function automationSettings() { return { ...blankState().automationSettings, ...(state.automationSettings || {}) }; }
+export function setAutomationSettings(next) { state.automationSettings = { ...automationSettings(), ...next }; save(); }
 
-export function brandTemplateSelection() {
-  const id = brandTemplateId();
-  const meta = state.brandTemplateMeta;
+export function publishingSettings() {
+  const fresh = blankState().publishingSettings;
+  const current = state.publishingSettings || {};
   return {
-    id,
-    name: meta?.id === id ? (meta.name || '') : '',
-    enableCaption: meta?.id === id && typeof meta.enableCaption === 'boolean'
-      ? meta.enableCaption
-      : null,
+    ...fresh, ...current,
+    youtube: { ...fresh.youtube, ...(current.youtube || {}) },
+    instagram: { ...fresh.instagram, ...(current.instagram || {}) },
+    facebook: { ...fresh.facebook, ...(current.facebook || {}) },
+    tiktok: { ...fresh.tiktok, ...(current.tiktok || {}) },
   };
 }
-
-export function setBrandTemplateSelection(template) {
-  if (!template?.id) {
-    state.brandTemplateId = '';
-    state.brandTemplateMeta = null;
-  } else {
-    state.brandTemplateId = String(template.id);
-    state.brandTemplateMeta = {
-      id: String(template.id),
-      name: String(template.name || ''),
-      enableCaption: typeof template.enableCaption === 'boolean'
-        ? template.enableCaption
-        : null,
-    };
-  }
-  save();
-}
-
-/**
- * How many clips to keep per video, and how long each should be.
- * A saved value of 0 for clipsPerVideo means "keep everything Opus finds" —
- * that's also the default, since silently discarding clips was the bug.
- */
-export function clipSettings() {
-  const s = state.clipSettings || {};
-  return {
-    clipsPerVideo: s.clipsPerVideo ?? config.clipsPerVideo,
-    clipMinSeconds: s.clipMinSeconds ?? config.clipMinSeconds,
-    clipMaxSeconds: s.clipMaxSeconds ?? config.clipMaxSeconds,
+export function setPublishingSettings(next) {
+  const current = publishingSettings();
+  state.publishingSettings = {
+    ...current, ...next,
+    youtube: { ...current.youtube, ...(next.youtube || {}) },
+    instagram: { ...current.instagram, ...(next.instagram || {}) },
+    facebook: { ...current.facebook, ...(next.facebook || {}) },
+    tiktok: { ...current.tiktok, ...(next.tiktok || {}) },
   };
-}
-
-export function setClipSettings(next) {
-  state.clipSettings = { ...state.clipSettings, ...next };
-  save();
-}
-
-/**
- * The instructions sent to Opus for writing each clip's title, description
- * and hashtags. Editable in the app — this is exactly how someone changes
- * the language or tone of what gets generated, without needing to redeploy.
- */
-export function copyPrompt() {
-  return state.copyPrompt || config.copyPrompt;
-}
-
-export function setCopyPrompt(prompt) {
-  state.copyPrompt = String(prompt || '').trim();
   save();
 }

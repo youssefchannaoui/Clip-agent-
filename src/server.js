@@ -1,761 +1,353 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { Readable } from 'node:stream';
+import { spawn } from 'node:child_process';
 import { config } from './config.js';
-import { state, save, log, opusKey, brandTemplateId, brandTemplateSelection, setBrandTemplateSelection, clipSettings, setClipSettings, copyPrompt, setCopyPrompt } from './store.js';
-import * as agent from './agent.js';
-import * as opus from './opus.js';
+import {
+  state, save, log, clipSettings, setClipSettings, musicSettings, setMusicSettings,
+  automationSettings, setAutomationSettings, publishingSettings, setPublishingSettings,
+} from './store.js';
 import * as audio from './audio.js';
-import * as thumbs from './thumbs.js';
-import { checkFfmpeg } from './ffmpeg.js';
+import * as templates from './templates.js';
+import * as agent from './agent.js';
+import * as social from './social.js';
 import { formatLocal } from './slots.js';
+import { checkFfmpeg } from './ffmpeg.js';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const page = path.join(here, 'public', 'index.html');
+const page = path.join(config.root, 'src', 'public', 'index.html');
 
-/* ---- helpers ------------------------------------------------------- */
-
-const send = (res, code, obj) => {
-  const body = JSON.stringify(obj);
-  res.writeHead(code, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Content-Length': Buffer.byteLength(body),
-    'Cache-Control': 'no-store',
-  });
+function json(res, status, value) {
+  const body = JSON.stringify(value);
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
   res.end(body);
-};
-
+}
+function redirect(res, location) { res.writeHead(302, { Location: location, 'Cache-Control': 'no-store' }); res.end(); }
+function sameSecret(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let difference = 0; for (let index = 0; index < a.length; index++) difference |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  return difference === 0;
+}
+function authed(req, url) { return !config.password || sameSecret(req.headers['x-app-password'] || url.searchParams.get('pw') || '', config.password); }
 function readBody(req, limit = 1_000_000) {
   return new Promise((resolve, reject) => {
     let raw = '', size = 0;
-    req.on('data', chunk => {
-      size += chunk.length;
-      if (size > limit) { reject(new Error('Body too large.')); req.destroy(); return; }
-      raw += chunk;
-    });
-    req.on('end', () => {
-      if (!raw) return resolve({});
-      try { resolve(JSON.parse(raw)); } catch { reject(new Error('Body was not valid JSON.')); }
-    });
+    req.on('data', chunk => { size += chunk.length; if (size > limit) { reject(new Error('Request body is too large.')); req.destroy(); return; } raw += chunk; });
+    req.on('end', () => { if (!raw) return resolve({}); try { resolve(JSON.parse(raw)); } catch { reject(new Error('Request body was not valid JSON.')); } });
     req.on('error', reject);
   });
 }
-
-/** Length-independent comparison, so the password can't be guessed by timing. */
-function sameSecret(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
-const authed = (req, url) =>
-  !config.password ||
-  sameSecret(req.headers['x-app-password'] || url.searchParams.get('pw') || '', config.password);
-
-const sourceProjectIdForClip = clip =>
-  clip.sourceProjectId || clip.originalProjectId || clip.projectId;
-
-function updateClipFromOpus(clip, fresh) {
-  if (!fresh) return;
-  if (fresh.exportUrl) clip.exportUrl = fresh.exportUrl;
-  if (fresh.preview) clip.preview = fresh.preview;
-  if (fresh.renderPref) clip.renderPref = fresh.renderPref;
-  if (Array.isArray(fresh.timeRanges)) clip.timeRanges = fresh.timeRanges;
-  clip.mediaRefreshedAt = Date.now();
-}
-
-async function refreshClipMediaUrl(clip) {
-  const projectIds = [...new Set([clip.projectId, sourceProjectIdForClip(clip)].filter(Boolean))];
-  for (const projectId of projectIds) {
-    try {
-      const clips = await opus.getClips(projectId);
-      const fresh = clips.find(c =>
-        c.id === clip.id ||
-        c.clipId === clip.clipId ||
-        c.clipId === clip.originalClipId ||
-        c.id === `${projectId}.${clip.clipId}`
-      );
-      if (!fresh) continue;
-      updateClipFromOpus(clip, fresh);
-      save();
-      return fresh.preview || fresh.exportUrl || '';
-    } catch {
-      // Try the next known project id, then fall back to the stored URL.
+function streamFile(req, res, file, { downloadName = '', contentType = '', cacheControl = 'private, no-store' } = {}) {
+  if (!file || !fs.existsSync(file)) return json(res, 404, { error: 'File not found.' });
+  const stat = fs.statSync(file); const range = req.headers.range;
+  const headers = { 'Content-Type': contentType || (path.extname(file).toLowerCase() === '.jpg' ? 'image/jpeg' : 'video/mp4'), 'Accept-Ranges': 'bytes', 'Cache-Control': cacheControl };
+  if (downloadName) headers['Content-Disposition'] = `attachment; filename="${downloadName.replace(/["\r\n]/g, '')}"`;
+  if (range) {
+    const match = range.match(/bytes=(\d*)-(\d*)/);
+    if (match) {
+      const start = match[1] ? Number(match[1]) : 0; const end = match[2] ? Number(match[2]) : stat.size - 1;
+      if (start >= stat.size || end < start) { res.writeHead(416, { 'Content-Range': `bytes */${stat.size}` }); return res.end(); }
+      const finalEnd = Math.min(end, stat.size - 1);
+      res.writeHead(206, { ...headers, 'Content-Range': `bytes ${start}-${finalEnd}/${stat.size}`, 'Content-Length': finalEnd - start + 1 });
+      return fs.createReadStream(file, { start, end: finalEnd }).pipe(res);
     }
   }
-  return clip.preview || clip.exportUrl || '';
+  res.writeHead(200, { ...headers, 'Content-Length': stat.size }); return fs.createReadStream(file).pipe(res);
 }
 
-async function refreshProjectClipMediaUrl(projectId, clipId) {
-  const clips = await opus.getClips(projectId);
-  const fresh = clips.find(c =>
-    c.id === clipId ||
-    c.clipId === clipId ||
-    c.id === `${projectId}.${clipId}`
-  );
-  return fresh?.preview || fresh?.exportUrl || '';
-}
-
-function mediaHeaders(upstream) {
-  const h = {
-    'Content-Type': upstream.headers.get('content-type') || 'video/mp4',
-    'Cache-Control': 'private, no-store',
-    'Accept-Ranges': upstream.headers.get('accept-ranges') || 'bytes',
+function latestRerender(clipId) { return state.rerenderJobs.find(job => job.clipId === clipId) || null; }
+function publicClip(clip) {
+  const currentTemplate = templates.templateById(clip.templateId);
+  const rerender = latestRerender(clip.id);
+  return {
+    id: clip.id, projectId: clip.projectId, projectTitle: clip.projectTitle,
+    title: clip.title, description: clip.description, hashtags: clip.hashtags, transcript: clip.transcript,
+    score: clip.score, scoreReasons: clip.scoreReasons || [], quality: clip.quality || null,
+    reviewRequired: Boolean(clip.reviewRequired), startSec: clip.startSec, endSec: clip.endSec, durationMs: clip.durationMs,
+    status: clip.status, approvedBy: clip.approvedBy || null,
+    scheduledAt: clip.scheduledAt, scheduledLabel: clip.scheduledAt ? formatLocal(clip.scheduledAt) : null,
+    readyAt: clip.readyAt || null, postedAt: clip.postedAt,
+    musicName: clip.musicName, musicVerified: Boolean(clip.musicVerified),
+    templateId: clip.templateId, templateName: clip.templateName, templateVersion: clip.templateVersion || 1,
+    templateOutdated: Boolean(currentTemplate && Number(currentTemplate.version || 1) > Number(clip.templateVersion || 1)),
+    renderVersion: clip.renderVersion || 1, renderVerified: Boolean(clip.renderVerified),
+    renderedWidth: clip.renderedWidth || null, renderedHeight: clip.renderedHeight || null,
+    variantOf: clip.variantOf || null, addedAt: clip.addedAt,
+    targets: (clip.targets || []).map(social.targetPublic),
+    rerender: rerender ? { id: rerender.id, status: rerender.status, stage: rerender.stage, progress: rerender.progress, error: rerender.error || null, asVariant: rerender.asVariant } : null,
+    videoUrl: `/api/clips/${encodeURIComponent(clip.id)}/video`, thumbUrl: `/api/clips/${encodeURIComponent(clip.id)}/thumb`,
   };
-  for (const k of ['content-length', 'content-range', 'last-modified', 'etag']) {
-    const v = upstream.headers.get(k);
-    if (v) h[k.replace(/(^|-)(.)/g, (_, dash, ch) => dash + ch.toUpperCase())] = v;
-  }
-  return h;
 }
 
-async function pipeRemoteMedia(req, res, initialUrl, refreshUrl) {
-  let url = initialUrl;
-  let refreshed = false;
-
-  for (;;) {
-    if (!url) {
-      url = await refreshUrl?.();
-      refreshed = true;
-    }
-    if (!url) return send(res, 404, { error: 'No preview URL is available yet.' });
-
-    const headers = {};
-    if (req.headers.range) headers.Range = req.headers.range;
-
-    let upstream;
-    try {
-      upstream = await fetch(url, { headers, signal: AbortSignal.timeout(120_000) });
-    } catch (err) {
-      if (!refreshed && refreshUrl) { url = ''; continue; }
-      return send(res, 502, { error: `Could not load preview: ${err.message}` });
-    }
-
-    if (!upstream.ok && upstream.status !== 206 && !refreshed && refreshUrl) {
-      url = '';
-      continue;
-    }
-    if (!upstream.ok && upstream.status !== 206) {
-      return send(res, upstream.status || 502, { error: `Preview could not be loaded (${upstream.status}).` });
-    }
-
-    res.writeHead(upstream.status, mediaHeaders(upstream));
-    if (!upstream.body) return res.end();
-    return Readable.fromWeb(upstream.body).on('error', () => res.destroy()).pipe(res);
-  }
+function appState() {
+  const readiness = agent.engine.readiness();
+  return {
+    engine: 'self-hosted', readiness, clipSettings: clipSettings(), musicSettings: musicSettings(), automationSettings: automationSettings(),
+    selectedTemplate: templates.selectedTemplate(), templates: templates.listTemplates(), templateDraft: templates.defaultTemplateDraft(),
+    tracks: audio.listNasheeds(),
+    projects: state.projects.map(project => ({
+      id: project.id, title: project.title, url: project.url, engine: project.engine, status: project.status,
+      stage: project.stage, progress: project.progress || 0, error: project.error || null,
+      submittedAt: project.submittedAt, completedAt: project.completedAt || null, clipCount: project.clipCount || 0,
+      durationSec: project.durationSec || null, templateIdUsed: project.templateIdUsed,
+      templateNameUsed: project.templateNameUsed, templateVersionUsed: project.templateVersionUsed || 1, musicRequired: true,
+    })),
+    clips: state.clips.map(publicClip),
+    rerenderJobs: state.rerenderJobs.slice(0, 30),
+    postTimes: config.postTimes, timezone: config.timezone, activeJobs: agent.engine.activeJobCount(),
+    log: state.log.slice(0, 60), directPublishingEnabled: config.socialPublishEnabled,
+    publishingSettings: publishingSettings(), social: social.connectionStatus(),
+  };
 }
 
-/**
- * Give a clip a genuine second chance at music when it's pulled back —
- * but only if nothing actually got mixed in last time. A clip that's
- * already carrying real music keeps it; re-mixing it again would just
- * spend Opus credits a second time for no benefit.
- */
-function pullBackMusic(clip) {
-  if (clip.musicMixed && clip.musicMixed !== 'done') {
-    delete clip.musicMixed;
-    delete clip.musicNote;
-    delete clip.musicAttempts;
-    delete clip.musicNextTryAt;
-  }
+function runDoctor() {
+  return new Promise(resolve => {
+    const child = spawn(config.pythonBin, [config.workerScript, '--doctor'], {
+      cwd: config.root, env: { ...process.env, FFMPEG_PATH: config.ffmpegPath, FFPROBE_PATH: config.ffprobePath }, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '', stderr = ''; const timer = setTimeout(() => child.kill('SIGKILL'), 30_000);
+    child.stdout.on('data', chunk => { stdout += chunk; }); child.stderr.on('data', chunk => { stderr += chunk; });
+    child.on('close', code => { clearTimeout(timer); let details = null; try { details = JSON.parse(stdout.trim()); } catch {} resolve({ ok: code === 0, details, error: stderr.trim() || (!details ? stdout.trim() : '') }); });
+    child.on('error', error => { clearTimeout(timer); resolve({ ok: false, error: error.message }); });
+  });
 }
-
-/**
- * Give the AI-written caption a genuine fresh shot too. Unlike music,
- * writing a caption is a lightweight text request, not a full re-render —
- * there's no real cost to trying again, so this always resets it, not
- * only when it was previously skipped. Without this, a clip whose caption
- * was marked "skipped" once (say, before any accounts were connected, or
- * before a caption prompt was ever set) would stay stuck that way
- * forever, no matter how many times it's pulled back and re-approved.
- * The person's own manual edits (editedTitle etc.) are untouched either
- * way, since those always take priority over the AI suggestion.
- */
-function pullBackCopy(clip) {
-  delete clip.copy;
-  delete clip.copyState;
-  delete clip.copyError;
-}
-
-/* ---- routes -------------------------------------------------------- */
 
 async function route(req, res, url) {
-  const { pathname } = url;
-  const method = req.method;
-
-  if (pathname === '/healthz') return send(res, 200, { ok: true });
-
+  const { pathname } = url; const method = req.method || 'GET';
+  if (pathname === '/healthz') return json(res, 200, { ok: true, engine: 'self-hosted' });
   if (method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
-    const html = fs.readFileSync(page);
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': html.length });
-    return res.end(html);
+    const body = fs.readFileSync(page); res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' }); return res.end(body);
   }
-
-  // Opus calls this when clipping finishes. It carries no secrets and only
-  // nudges the agent to look sooner than its next scheduled pass.
-  if (method === 'POST' && pathname === '/webhooks/opus') {
-    const body = await readBody(req).catch(() => ({}));
-    send(res, 200, { ok: true });
-    const id = body?.projectId || body?.data?.projectId;
-    const project = state.projects.find(p => p.id === id);
-    if (project) { project.checkAfter = 0; save(); log(`Opus finished clipping ${project.title}`); }
-    agent.tick().catch(() => {});
-    return;
-  }
-
-  // Opus fetches the mixed file from here to re-import it, so this has to
-  // be reachable without the app password — same reasoning as the webhook.
-  if (method === 'GET' && pathname.startsWith('/media/mixed/')) {
-    const file = audio.mixedFilePath(pathname.slice('/media/mixed/'.length));
-    if (!file) return send(res, 404, { error: 'Not found.' });
-    const buf = fs.readFileSync(file);
-    res.writeHead(200, { 'Content-Type': 'video/mp4', 'Content-Length': buf.length, 'Cache-Control': 'no-store' });
-    return res.end(buf);
-  }
-
-  if (!pathname.startsWith('/api/')) return send(res, 404, { error: 'Not found.' });
-  if (!authed(req, url)) return send(res, 401, { error: 'Wrong password.' });
-
-  if (method === 'GET' && pathname.startsWith('/api/clips/thumb/')) {
-    const id = decodeURIComponent(pathname.slice('/api/clips/thumb/'.length).replace(/\.jpg$/, ''));
-    const file = thumbs.thumbPath(id);
-    if (!file) return send(res, 404, { error: 'No thumbnail yet.' });
-    const buf = fs.readFileSync(file);
-    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': buf.length, 'Cache-Control': 'private, max-age=86400' });
-    return res.end(buf);
-  }
-
-  // Same-origin video previews. Opus preview/export links are signed and can
-  // expire, so each browser asks this app; if the stored URL fails, the app
-  // refreshes the clip from Opus and streams the fresh media back.
-  if (method === 'GET' && pathname.startsWith('/api/clips/preview/')) {
-    const raw = pathname.slice('/api/clips/preview/'.length).replace(/\.mp4$/i, '');
-    const id = decodeURIComponent(raw);
-    const clip = state.clips.find(c => c.id === id);
-    if (!clip) return send(res, 404, { error: 'That clip is no longer in the queue.' });
-    return pipeRemoteMedia(req, res, clip.preview || clip.exportUrl || '', () => refreshClipMediaUrl(clip));
-  }
-
-  const projectPreviewMatch = pathname.match(/^\/api\/projects\/([^/]+)\/clips\/([^/]+)\/preview(?:\.mp4)?$/);
-  if (method === 'GET' && projectPreviewMatch) {
-    const projectId = decodeURIComponent(projectPreviewMatch[1]);
-    const clipId = decodeURIComponent(projectPreviewMatch[2]);
-    return pipeRemoteMedia(req, res, '', () => refreshProjectClipMediaUrl(projectId, clipId));
-  }
-
-  if (method === 'GET' && pathname === '/api/state') {
-    const rank = s => ({ waiting: 0, approved: 1, scheduled: 2, posted: 3 }[s] ?? 4);
-    const clips = [...state.clips].sort((a, b) =>
-      rank(a.status) - rank(b.status) || (a.scheduledAt || a.addedAt) - (b.scheduledAt || b.addedAt));
-
-    // True while the agent is mid-job, so the page can refresh more often.
-    const working = state.clips.some(c => c.stage || c.status === 'approved')
-      || state.projects.some(p => p.status === 'clipping');
-
-    return send(res, 200, {
-      connected: Boolean(opusKey()),
-      autoApprove: config.autoApprove,
-      postTimes: config.postTimes,
-      timezone: config.timezone,
-      working,
-      brandTemplateId: brandTemplateId(),
-      brandTemplate: brandTemplateSelection(),
-      clipSettings: clipSettings(),
-      copyPrompt: copyPrompt(),
-      musicSettings: audio.musicSettings(),
-      accounts: state.accounts,
-      projects: state.projects.slice(0, 12).map(p => ({
-        id: p.id,
-        title: p.title,
-        status: p.status,
-        stage: p.stage || null,
-        submittedAt: p.submittedAt,
-        imported: state.clips.filter(c => sourceProjectIdForClip(c) === p.id).length,
-        clipCount: p.clipCount,
-      })),
-      clips: (() => {
-        const currentTemplate = brandTemplateId();
-        const projectsById = new Map(state.projects.map(p => [p.id, p]));
-        return clips.map(c => {
-          const sourceProjectId = c.sourceProjectId || c.originalProjectId || c.projectId;
-          const project = projectsById.get(sourceProjectId);
-          const sourceTemplateId = c.sourceTemplateId ?? project?.brandTemplateIdUsed;
-          const templateChanged = sourceTemplateId !== undefined && sourceTemplateId !== null
-            ? sourceTemplateId !== currentTemplate
-            : null; // older clips predate this being tracked — admit we don't know, rather than guess
-          return {
-            id: c.id,
-            title: c.editedTitle ?? c.copy?.title ?? c.title,
-            description: c.editedDescription ?? c.copy?.description ?? c.description,
-            hashtags: c.editedHashtags ?? c.copy?.hashtags ?? c.hashtags,
-            projectTitle: c.projectTitle,
-            durationMs: c.durationMs,
-            status: c.status,
-            stage: c.stage || null,
-            scheduledAt: c.scheduledAt,
-            scheduledLabel: c.scheduledAt ? formatLocal(c.scheduledAt) : null,
-            targets: c.targets,
-            musicMixed: c.musicMixed || null,
-            musicNote: c.musicNote || null,
-            musicAttempts: c.musicAttempts || 0,
-            musicNextTryAt: c.musicNextTryAt || null,
-            musicTemplateId: c.musicTemplateId || null,
-            templateError: c.templateError || null,
-            sourceTemplateId: sourceTemplateId ?? null,
-            sourceTemplateName: c.sourceTemplateName || project?.brandTemplateNameUsed || '',
-            sourceCaptionsEnabled: typeof c.sourceCaptionsEnabled === 'boolean'
-              ? c.sourceCaptionsEnabled
-              : (typeof project?.captionsEnabledUsed === 'boolean' ? project.captionsEnabledUsed : null),
-            copyState: c.copyState || null,
-            copyError: c.copyError || null,
-            thumbState: c.thumbState || null,
-            thumbAttempts: c.thumbAttempts || 0,
-            // The browser can show the actual clip immediately while the
-            // server-generated JPEG is still pending or unavailable.
-            previewUrl: c.id ? `/api/clips/preview/${encodeURIComponent(c.id)}.mp4` : (c.preview || c.exportUrl || ''),
-            templateChanged,
-          };
-        });
-      })(),
-      log: state.log.slice(0, 40),
-    });
-  }
-
-  if (method === 'POST' && pathname === '/api/connect') {
-    const body = await readBody(req);
-    const key = String(body.key || '').trim();
-    if (!key) return send(res, 400, { error: 'Paste your Opus API key first.' });
-
-    const previous = { key: state.opusKey, org: state.opusOrgId };
-    state.opusKey = key;
-    state.opusOrgId = String(body.orgId || '').trim();
+  const oauthCallback = pathname.match(/^\/auth\/(youtube|meta|tiktok)\/callback$/);
+  if (method === 'GET' && oauthCallback) {
+    const provider = oauthCallback[1];
     try {
-      const accounts = await agent.refreshAccounts(true, true);
-      save();
-      log(`Connected to Opus. ${accounts.length} social accounts found.`);
-      return send(res, 200, { ok: true, accounts });
-    } catch (err) {
-      state.opusKey = previous.key;
-      state.opusOrgId = previous.org;
-      return send(res, 400, { error: err.message });
+      await social.completeOAuth(provider, url);
+      return redirect(res, `/?social=connected&provider=${encodeURIComponent(provider)}`);
+    } catch (error) {
+      console.error(error);
+      return redirect(res, `/?social=error&provider=${encodeURIComponent(provider)}&message=${encodeURIComponent(error.message)}`);
     }
   }
+  const socialMedia = pathname.match(/^\/media\/social\/([^/]+)\.mp4$/);
+  if (method === 'GET' && socialMedia) {
+    const clipId = decodeURIComponent(socialMedia[1]);
+    let allowed = false;
+    try { allowed = social.verifyMediaSignature(clipId, url.searchParams.get('exp'), url.searchParams.get('sig')); } catch {}
+    if (!allowed) return json(res, 403, { error: 'This media link is invalid or expired.' });
+    const file = agent.engine.clipFilePath(clipId, 'video');
+    return streamFile(req, res, file, { cacheControl: 'public, max-age=3600, immutable' });
+  }
+  if (!pathname.startsWith('/api/')) return json(res, 404, { error: 'Not found.' });
+  if (!authed(req, url)) return json(res, 401, { error: 'Wrong password.' });
 
-  // The clip style — captions on or off, fonts, logo — lives in Opus.
-  // List them here so one can be picked without hunting for its id.
-  if (method === 'GET' && pathname === '/api/brand-templates') {
+  if (method === 'GET' && pathname === '/api/state') return json(res, 200, appState());
+
+  const socialConnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok)\/connect$/);
+  if (method === 'POST' && socialConnect) {
+    try { return json(res, 200, { url: social.oauthStartUrl(socialConnect[1]) }); }
+    catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  const socialDisconnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok)\/disconnect$/);
+  if (method === 'POST' && socialDisconnect) {
+    try { social.disconnect(socialDisconnect[1]); return json(res, 200, { ok: true }); }
+    catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  const socialTest = pathname.match(/^\/api\/social\/(youtube|meta|tiktok)\/test$/);
+  if (method === 'POST' && socialTest) {
+    const body = await readBody(req);
+    try { return json(res, 200, { ok: true, result: await social.testConnection(socialTest[1], String(body.accountId || '')), social: social.connectionStatus() }); }
+    catch (error) { return json(res, 400, { error: error.message, social: social.connectionStatus() }); }
+  }
+  if (method === 'POST' && pathname === '/api/publishing-settings') {
+    const body = await readBody(req);
     try {
-      const templates = await opus.getBrandTemplates();
-      const currentId = brandTemplateId();
-      const current = currentId ? templates.find(t => t.id === currentId) : null;
-      // Automatically hydrate older saved selections that predate template
-      // metadata tracking, so a normal page load is enough to verify them.
-      if (current) setBrandTemplateSelection(current);
-      return send(res, 200, { templates, brandTemplate: brandTemplateSelection() });
-    } catch (err) {
-      return send(res, 400, { error: err.message });
-    }
-  }
-
-  if (method === 'POST' && pathname === '/api/brand-template') {
-    const body = await readBody(req);
-    const id = String(body.id ?? '').trim();
-
-    if (!id) {
-      setBrandTemplateSelection(null);
-      log('Clip style cleared. Opus will use your account default, which cannot be strictly verified.');
-      return send(res, 200, { ok: true, brandTemplateId: '', brandTemplate: brandTemplateSelection() });
-    }
-
-    try {
-      const templates = await opus.getBrandTemplates();
-      const chosen = templates.find(t => t.id === id);
-      if (!chosen) return send(res, 400, { error: 'That Clip style is no longer available in your Opus account. Refresh the list and choose it again.' });
-
-      setBrandTemplateSelection(chosen);
-      log(`Clip style set to "${chosen.name}" (${chosen.enableCaption === false ? 'captions off' : chosen.enableCaption === true ? 'captions on' : 'caption setting unknown'}).`);
-      return send(res, 200, {
-        ok: true,
-        brandTemplateId: chosen.id,
-        brandTemplate: brandTemplateSelection(),
-      });
-    } catch (err) {
-      return send(res, 400, { error: err.message });
-    }
-  }
-
-  // How many clips to keep per video, and how long each one should run.
-  if (method === 'POST' && pathname === '/api/clip-settings') {
-    const body = await readBody(req);
-    const clean = {};
-
-    if ('clipsPerVideo' in body) {
-      const n = Math.round(Number(body.clipsPerVideo));
-      if (!Number.isFinite(n) || n < 0 || n > 60) {
-        return send(res, 400, { error: 'Clips per video must be between 0 (keep all) and 60.' });
-      }
-      clean.clipsPerVideo = n;
-    }
-    if ('clipMinSeconds' in body || 'clipMaxSeconds' in body) {
-      const cur = clipSettings();
-      const min = Math.round(Number(body.clipMinSeconds ?? cur.clipMinSeconds));
-      const max = Math.round(Number(body.clipMaxSeconds ?? cur.clipMaxSeconds));
-      if (!Number.isFinite(min) || !Number.isFinite(max) || min < 3 || max > 600 || min >= max) {
-        return send(res, 400, { error: 'Clip length needs a minimum below the maximum, both between 3 and 600 seconds.' });
-      }
-      clean.clipMinSeconds = min;
-      clean.clipMaxSeconds = max;
-    }
-
-    setClipSettings(clean);
-    const applied = clipSettings();
-    log(`Clip settings updated: ${applied.clipsPerVideo > 0 ? applied.clipsPerVideo + ' per video' : 'keep all'}, ${applied.clipMinSeconds}-${applied.clipMaxSeconds}s`);
-    return send(res, 200, { ok: true, clipSettings: applied });
-  }
-
-  // The instructions sent to Opus for writing each clip's title, caption
-  // and hashtags — this is how someone changes the language or tone of
-  // what gets generated, without needing to redeploy anything.
-  if (method === 'POST' && pathname === '/api/copy-prompt') {
-    const body = await readBody(req);
-    const prompt = String(body.prompt ?? '').trim();
-    if (prompt.length > 2000) {
-      return send(res, 400, { error: 'Keep the prompt under 2000 characters.' });
-    }
-
-    setCopyPrompt(prompt);
-
-    // A new prompt should visibly affect the clips the person is currently
-    // reviewing, not only clips imported in the future. This button explicitly
-    // says rewrite, so it replaces both previous AI copy and unsaved wording.
-    let queuedForRewrite = 0;
-    for (const clip of state.clips) {
-      if (clip.status !== 'waiting') continue;
-      delete clip.copy;
-      delete clip.copyState;
-      delete clip.copyError;
-      delete clip.editedTitle;
-      delete clip.editedDescription;
-      delete clip.editedHashtags;
-      queuedForRewrite++;
-    }
-    save();
-    log(`Caption prompt updated. ${queuedForRewrite} waiting clip${queuedForRewrite === 1 ? '' : 's'} queued for fresh Opus AI copy.`);
-    send(res, 200, { ok: true, copyPrompt: copyPrompt(), queuedForRewrite });
-    agent.tick().catch(() => {});
-    return;
-  }
-
-  // The nasheed library — upload, list, remove, and the mix settings.
-  if (method === 'GET' && pathname === '/api/music') {
-    return send(res, 200, { tracks: audio.listNasheeds(), settings: audio.musicSettings() });
-  }
-
-  if (method === 'POST' && pathname === '/api/music') {
-    // A full-length nasheed as base64 is easily tens of megabytes, so this
-    // needs a much larger body limit than the usual small JSON requests.
-    const body = await readBody(req, 45 * 1024 * 1024);
-    try {
-      const entry = await audio.saveNasheed(body.name, body.data, body.mimeType);
-      log(`Added "${entry.name}" to the nasheed library.`);
-      return send(res, 200, { ok: true, track: entry });
-    } catch (err) {
-      return send(res, 400, { error: err.message });
-    }
-  }
-
-  const musicAudioMatch = pathname.match(/^\/api\/music\/([^/]+)\/audio$/);
-  if (method === 'GET' && musicAudioMatch) {
-    const found = audio.nasheedFilePath(decodeURIComponent(musicAudioMatch[1]));
-    if (!found) return send(res, 404, { error: 'That track is not in the library.' });
-    const ext = path.extname(found.path).toLowerCase();
-    const type = ext === '.wav' ? 'audio/wav'
-      : ext === '.m4a' || ext === '.mp4' ? 'audio/mp4'
-      : ext === '.ogg' ? 'audio/ogg'
-      : 'audio/mpeg';
-    const stat = fs.statSync(found.path);
-    res.writeHead(200, {
-      'Content-Type': type,
-      'Content-Length': stat.size,
-      'Cache-Control': 'private, no-store',
-    });
-    return fs.createReadStream(found.path).pipe(res);
-  }
-
-  if (method === 'DELETE' && pathname.startsWith('/api/music/')) {
-    const id = pathname.slice('/api/music/'.length);
-    const removed = audio.deleteNasheed(decodeURIComponent(id));
-    if (!removed) return send(res, 404, { error: 'That track is not in the library.' });
-    log('Removed a track from the nasheed library.');
-    return send(res, 200, { ok: true });
-  }
-
-  if (method === 'POST' && pathname === '/api/music-settings') {
-    const body = await readBody(req);
-    const clean = {};
-    if ('enabled' in body) clean.enabled = Boolean(body.enabled);
-    if ('mode' in body) {
-      const mode = String(body.mode || '').trim();
-      const cleanMode = mode === 'opus_native' ? 'opus_library' : mode;
-      if (!['opus_library', 'local_import', 'off'].includes(cleanMode)) {
-        return send(res, 400, { error: 'Music mode must be opus_library, local_import, or off.' });
-      }
-      clean.mode = cleanMode;
-    }
-    if ('volumePercent' in body) {
-      const n = Math.round(Number(body.volumePercent));
-      if (!Number.isFinite(n) || n < 0 || n > 100) {
-        return send(res, 400, { error: 'Volume must be between 0 and 100.' });
-      }
-      clean.volumePercent = n;
-    }
-    audio.setMusicSettings(clean);
-    const applied = audio.musicSettings();
-    log(`Music settings updated: ${applied.mode || (applied.enabled ? 'on' : 'off')}, volume ${applied.volumePercent}%`);
-    return send(res, 200, { ok: true, settings: applied });
-  }
-
-  // A direct, no-guessing answer to "is ffmpeg actually working here" —
-  // both music mixing and thumbnails depend on it.
-  if (method === 'GET' && pathname === '/api/diagnostics/ffmpeg') {
-    return send(res, 200, await checkFfmpeg());
-  }
-
-  // Every lecture ever sent to Opus, not just the recent ones /api/state
-  // shows for the live "being clipped" list. This is what lets someone
-  // pull more clips from something they already paid Opus to process,
-  // instead of resubmitting the same video and spending credits again.
-  if (method === 'GET' && pathname === '/api/projects') {
-    const currentTemplate = brandTemplateId();
-    const projects = state.projects.map(p => {
-      const ownClips = state.clips.filter(c => sourceProjectIdForClip(c) === p.id);
-      const hidden = new Set(Array.isArray(p.hiddenClipIds) ? p.hiddenClipIds : []);
-      const cover = ownClips.find(c => c.preview || c.exportUrl) || ownClips.find(c => c.thumbState === 'ready');
-      return {
-        id: p.id,
-        title: p.title,
-        url: p.url,
-        external: Boolean(p.external),
-        status: p.status,
-        submittedAt: p.submittedAt,
-        // Derived fresh from what's actually in the queue right now, not a
-        // running total — a total would only ever grow, even for clips
-        // that were later discarded, eventually claiming more clips were
-        // "imported" than Opus even reported existing for the lecture.
-        imported: ownClips.length,
-        hidden: hidden.size,
-        clipCount: p.clipCount || 0,
-        available: Math.max(0, (p.clipCount || 0) - ownClips.length - hidden.size),
-        coverClipId: cover ? cover.id : null,
-        // Only claim a style mismatch when we actually know what this
-        // project used — older projects predate this being tracked at all,
-        // and a confident wrong guess is worse than admitting we don't know.
-        styleChanged: p.brandTemplateIdUsed !== undefined
-          ? p.brandTemplateIdUsed !== currentTemplate
-          : null,
+      const current = publishingSettings();
+      const next = {
+        enabled: Boolean(body.enabled),
+        youtube: { ...current.youtube, ...(body.youtube || {}), enabled: Boolean(body.youtube?.enabled) },
+        instagram: { ...current.instagram, ...(body.instagram || {}), enabled: Boolean(body.instagram?.enabled), shareToFeed: body.instagram?.shareToFeed !== false },
+        facebook: { ...current.facebook, ...(body.facebook || {}), enabled: Boolean(body.facebook?.enabled) },
+        tiktok: {
+          ...current.tiktok, ...(body.tiktok || {}), enabled: Boolean(body.tiktok?.enabled),
+          allowComments: body.tiktok?.allowComments !== false,
+          allowDuet: Boolean(body.tiktok?.allowDuet), allowStitch: Boolean(body.tiktok?.allowStitch),
+        },
       };
-    });
-    return send(res, 200, { projects });
-  }
-
-  // Opus's documented API cannot enumerate an organisation's full dashboard
-  // library. This lets someone attach an existing project when they know its
-  // project ID (or paste a dashboard link containing that ID).
-  if (method === 'POST' && pathname === '/api/projects/import-existing') {
-    const body = await readBody(req);
-    try {
-      const result = await agent.attachExistingProject(body.projectRef, body.title);
-      return send(res, 200, { ok: true, ...result });
-    } catch (err) {
-      return send(res, 400, { error: err.message });
-    }
-  }
-
-  const projectDeleteMatch = pathname.match(/^\/api\/projects\/([^/]+)$/);
-  if (method === 'DELETE' && projectDeleteMatch) {
-    const projectId = decodeURIComponent(projectDeleteMatch[1]);
-    try {
-      const result = await agent.removeProject(projectId);
-      return send(res, 200, { ok: true, ...result });
-    } catch (err) {
-      return send(res, 400, { error: err.message });
-    }
-  }
-
-  if (method === 'POST' && pathname.startsWith('/api/projects/') && pathname.endsWith('/more-clips')) {
-    const id = decodeURIComponent(pathname.slice('/api/projects/'.length, -'/more-clips'.length));
-    try {
-      const result = await agent.refreshProjectClips(id);
-      return send(res, 200, { ok: true, ...result });
-    } catch (err) {
-      return send(res, 400, { error: err.message });
-    }
-  }
-
-  // Every clip Opus has for a lecture, so someone can see exactly what's
-  // there and pick specific ones, rather than only an automatic next batch.
-  if (method === 'GET' && pathname.startsWith('/api/projects/') && pathname.endsWith('/available-clips')) {
-    const id = decodeURIComponent(pathname.slice('/api/projects/'.length, -'/available-clips'.length));
-    try {
-      return send(res, 200, { clips: await agent.listAvailableClips(id) });
-    } catch (err) {
-      return send(res, 400, { error: err.message });
-    }
-  }
-
-  if (method === 'POST' && pathname.startsWith('/api/projects/') && pathname.endsWith('/import-clips')) {
-    const id = decodeURIComponent(pathname.slice('/api/projects/'.length, -'/import-clips'.length));
-    const body = await readBody(req);
-    const clipIds = Array.isArray(body.clipIds) ? body.clipIds.map(String) : [];
-    if (!clipIds.length) return send(res, 400, { error: 'No clips were selected.' });
-    try {
-      const result = await agent.importSelectedClips(id, clipIds);
-      return send(res, 200, { ok: true, ...result });
-    } catch (err) {
-      return send(res, 400, { error: err.message });
-    }
-  }
-
-  const projectClipMatch = pathname.match(/^\/api\/projects\/([^/]+)\/clips\/([^/]+)$/);
-  if (method === 'DELETE' && projectClipMatch) {
-    const projectId = decodeURIComponent(projectClipMatch[1]);
-    const clipId = decodeURIComponent(projectClipMatch[2]);
-    try {
-      const result = await agent.removeProjectClip(projectId, clipId);
-      return send(res, 200, { ok: true, ...result });
-    } catch (err) {
-      return send(res, 400, { error: err.message });
-    }
-  }
-
-  if (method === 'POST' && pathname === '/api/accounts/refresh') {
-    try { return send(res, 200, { accounts: await agent.refreshAccounts(true, true) }); }
-    catch (err) { return send(res, 400, { error: err.message }); }
+      social.validatePublishingSettings(next);
+      if (next.facebook.enabled && clipSettings().clipMaxSeconds > 60) {
+        throw new Error('Facebook Reels currently requires clips of 60 seconds or less. Set Maximum seconds to 60 before enabling Facebook.');
+      }
+      setPublishingSettings(next);
+      log(`Automatic publishing ${next.enabled ? 'enabled' : 'paused'} for ${['youtube','instagram','facebook','tiktok'].filter(provider => next[provider].enabled).join(', ') || 'no destinations'}.`);
+      agent.tick().catch(() => {});
+      return json(res, 200, { ok: true, settings: publishingSettings(), social: social.connectionStatus() });
+    } catch (error) { return json(res, 400, { error: error.message }); }
   }
 
   if (method === 'POST' && pathname === '/api/videos') {
-    const body = await readBody(req);
-    const urls = String(body.urls || '').split(/[\n,\s]+/).map(s => s.trim()).filter(Boolean);
-    if (!urls.length) return send(res, 400, { error: 'No links found.' });
-
+    const body = await readBody(req); const urls = String(body.urls || '').split(/[\n,]+/).map(value => value.trim()).filter(Boolean);
+    if (!urls.length) return json(res, 400, { error: 'Paste at least one video link.' });
     const results = [];
-    for (const u of urls) {
-      if (!/^https?:\/\//i.test(u)) { results.push({ url: u, error: 'That is not a link.' }); continue; }
-      try { await agent.submitVideo(u); results.push({ url: u, ok: true }); }
-      catch (err) { results.push({ url: u, error: err.message }); }
+    for (const source of urls) {
+      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '') }); }
+      catch (error) { results.push({ url: source, error: error.message }); }
     }
-    if (results.some(r => r.ok)) setTimeout(() => agent.tick().catch(() => {}), 20_000);
-    return send(res, 200, { results });
+    return json(res, 200, { results });
   }
 
-  // Discard everything still waiting for review at once — the queue
-  // equivalent of "pull back all", for clearing out a big batch you've
-  // decided not to bother reading through individually.
-  if (method === 'POST' && pathname === '/api/clips/discard-all') {
-    const targets = state.clips.filter(c => c.status === 'waiting');
-    for (const clip of targets) {
-      await agent.unschedule(clip);
-      thumbs.deleteThumbnail(clip.id);
-    }
-    const ids = new Set(targets.map(c => c.id));
-    state.clips = state.clips.filter(c => !ids.has(c.id));
-    save();
-    if (targets.length) log(`Discarded ${targets.length} waiting clip${targets.length === 1 ? '' : 's'}.`);
-    return send(res, 200, { ok: true, count: targets.length });
+  const projectRetry = pathname.match(/^\/api\/projects\/([^/]+)\/retry$/);
+  if (method === 'POST' && projectRetry) {
+    try { return json(res, 200, { ok: true, project: agent.engine.retryProject(decodeURIComponent(projectRetry[1])) }); }
+    catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  const projectMatch = pathname.match(/^\/api\/projects\/([^/]+)$/);
+  if (method === 'DELETE' && projectMatch) {
+    try { agent.engine.deleteProject(decodeURIComponent(projectMatch[1])); return json(res, 200, { ok: true }); }
+    catch (error) { return json(res, 400, { error: error.message }); }
   }
 
-  // Pull every currently loaded clip back to waiting at once — useful
-  // after a settings change, so old clips scheduled under the previous
-  // setup don't quietly go out wrong.
-  if (method === 'POST' && pathname === '/api/clips/pull-back-all') {
-    const targets = state.clips.filter(c => ['approved', 'scheduled'].includes(c.status));
-    for (const clip of targets) {
-      await agent.unschedule(clip);
-      clip.status = 'waiting';
-      pullBackMusic(clip);
-      pullBackCopy(clip);
-    }
-    save();
-    if (targets.length) log(`Pulled back ${targets.length} clip${targets.length === 1 ? '' : 's'} to the queue.`);
-    return send(res, 200, { ok: true, count: targets.length });
-  }
-
-  const rewriteMatch = pathname.match(/^\/api\/clips\/([^/]+)\/rewrite$/);
-  if (rewriteMatch && method === 'POST') {
-    const id = decodeURIComponent(rewriteMatch[1]);
+  if (method === 'GET' && pathname === '/api/templates') return json(res, 200, { templates: templates.listTemplates(), selectedTemplate: templates.selectedTemplate(), draft: templates.defaultTemplateDraft() });
+  if (method === 'POST' && pathname === '/api/templates') {
+    const body = await readBody(req);
     try {
-      const copy = await agent.regenerateCopy(id);
-      return send(res, 200, { ok: true, copy });
-    } catch (err) {
-      return send(res, 400, { error: err.message });
-    }
+      const template = templates.createTemplate(body.template || body);
+      if (body.select !== false) templates.setSelectedTemplate(template.id);
+      log(`Created template "${template.name}". It is ready for automated renders.`);
+      return json(res, 200, { ok: true, template });
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  const duplicateTemplate = pathname.match(/^\/api\/templates\/([^/]+)\/duplicate$/);
+  if (method === 'POST' && duplicateTemplate) {
+    const body = await readBody(req);
+    try {
+      const template = templates.duplicateTemplate(decodeURIComponent(duplicateTemplate[1]), body.name);
+      templates.setSelectedTemplate(template.id);
+      return json(res, 200, { ok: true, template });
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  const templateMatch = pathname.match(/^\/api\/templates\/([^/]+)$/);
+  if (method === 'PUT' && templateMatch) {
+    const body = await readBody(req);
+    try {
+      const template = templates.updateTemplate(decodeURIComponent(templateMatch[1]), body.template || body);
+      log(`Saved template "${template.name}" version ${template.version}. New renders use it automatically.`);
+      return json(res, 200, { ok: true, template });
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  if (method === 'DELETE' && templateMatch) {
+    try { templates.deleteTemplate(decodeURIComponent(templateMatch[1])); return json(res, 200, { ok: true }); }
+    catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  if (method === 'POST' && pathname === '/api/template') {
+    const body = await readBody(req);
+    try {
+      const template = templates.setSelectedTemplate(String(body.id || ''));
+      log(`Automation template set to "${template.name}". Every new clip is locked to this saved version.`);
+      return json(res, 200, { ok: true, template });
+    } catch (error) { return json(res, 400, { error: error.message }); }
   }
 
-  const clipMatch = pathname.match(/^\/api\/clips\/([^/]+)(\/now)?$/);
-  if (clipMatch) {
-    const id = decodeURIComponent(clipMatch[1]);
-
-    if (clipMatch[2] === '/now' && method === 'POST') {
-      try { await agent.postNow(id); return send(res, 200, { ok: true }); }
-      catch (err) { return send(res, 400, { error: err.message }); }
-    }
-
-    const clip = state.clips.find(c => c.id === id);
-    if (!clip) return send(res, 404, { error: 'That clip is no longer in the queue.' });
-
-    if (method === 'PATCH') {
-      const body = await readBody(req);
-      if (typeof body.title === 'string') clip.editedTitle = body.title;
-      if (typeof body.description === 'string') clip.editedDescription = body.description;
-      if (typeof body.hashtags === 'string') clip.editedHashtags = body.hashtags;
-
-      if (body.status === 'approved' && clip.status === 'waiting') {
-        clip.status = 'approved';
-        save();
-        send(res, 200, { ok: true });
-        agent.tick().catch(() => {});
-        return;
-      }
-      if (body.status === 'waiting' && clip.status !== 'posted') {
-        await agent.unschedule(clip);
-        clip.status = 'waiting';
-        pullBackMusic(clip);
-        pullBackCopy(clip);
-      }
-      save();
-      return send(res, 200, { ok: true });
-    }
-
-    if (method === 'DELETE') {
-      await agent.unschedule(clip);
-      state.clips = state.clips.filter(c => c.id !== id);
-      thumbs.deleteThumbnail(id);
-      save();
-      return send(res, 200, { ok: true });
-    }
+  if (method === 'POST' && pathname === '/api/clip-settings') {
+    const body = await readBody(req); const count = Math.round(Number(body.clipsPerVideo));
+    const minimum = Math.round(Number(body.clipMinSeconds)); const maximum = Math.round(Number(body.clipMaxSeconds));
+    if (!Number.isFinite(count) || count < 1 || count > 30) return json(res, 400, { error: 'Clips per video must be between 1 and 30.' });
+    if (!Number.isFinite(minimum) || !Number.isFinite(maximum) || minimum < 3 || maximum > 180 || minimum >= maximum) return json(res, 400, { error: 'Choose a valid clip range between 3 and 180 seconds.' });
+    setClipSettings({ clipsPerVideo: count, clipMinSeconds: minimum, clipMaxSeconds: maximum });
+    return json(res, 200, { ok: true, clipSettings: clipSettings() });
+  }
+  if (method === 'POST' && pathname === '/api/automation-settings') {
+    const body = await readBody(req);
+    const clean = {
+      enabled: Boolean(body.enabled), minimumScore: Math.round(Number(body.minimumScore)), minimumQuality: Math.round(Number(body.minimumQuality)),
+      maxPerProject: Math.round(Number(body.maxPerProject)), skipReviewRequired: body.skipReviewRequired !== false,
+    };
+    if (!Number.isFinite(clean.minimumScore) || clean.minimumScore < 1 || clean.minimumScore > 100) return json(res, 400, { error: 'Minimum score must be 1–100.' });
+    if (!Number.isFinite(clean.minimumQuality) || clean.minimumQuality < 1 || clean.minimumQuality > 100) return json(res, 400, { error: 'Minimum quality must be 1–100.' });
+    if (!Number.isFinite(clean.maxPerProject) || clean.maxPerProject < 1 || clean.maxPerProject > 20) return json(res, 400, { error: 'Automatic clips per source must be 1–20.' });
+    setAutomationSettings(clean); log(`Automation ${clean.enabled ? 'enabled' : 'paused'}: score ${clean.minimumScore}+, quality ${clean.minimumQuality}+, up to ${clean.maxPerProject} per source.`);
+    agent.tick().catch(() => {});
+    return json(res, 200, { ok: true, settings: automationSettings() });
   }
 
-  return send(res, 404, { error: 'Not found.' });
+  if (method === 'GET' && pathname === '/api/music') return json(res, 200, { tracks: audio.listNasheeds(), settings: musicSettings() });
+  if (method === 'POST' && pathname === '/api/music') {
+    const body = await readBody(req, 60 * 1024 * 1024);
+    try { const track = await audio.saveNasheed(body.name, body.data, body.mimeType); log(`Added "${track.name}". The renderer can rotate it across clips.`); return json(res, 200, { ok: true, track }); }
+    catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  if (method === 'POST' && pathname === '/api/music-settings') {
+    const body = await readBody(req); const volumePercent = Math.round(Number(body.volumePercent));
+    if (!Number.isFinite(volumePercent) || volumePercent < 1 || volumePercent > 50) return json(res, 400, { error: 'Background music volume must be between 1% and 50%.' });
+    setMusicSettings({ volumePercent, required: true, shuffle: true }); return json(res, 200, { ok: true, settings: musicSettings() });
+  }
+  const musicAudio = pathname.match(/^\/api\/music\/([^/]+)\/audio$/);
+  if (method === 'GET' && musicAudio) {
+    const found = audio.nasheedFilePath(decodeURIComponent(musicAudio[1])); if (!found) return json(res, 404, { error: 'Track not found.' });
+    const extension = path.extname(found.file).toLowerCase(); const contentType = extension === '.wav' ? 'audio/wav' : extension === '.ogg' ? 'audio/ogg' : extension === '.m4a' ? 'audio/mp4' : 'audio/mpeg';
+    return streamFile(req, res, found.file, { contentType });
+  }
+  const musicDelete = pathname.match(/^\/api\/music\/([^/]+)$/);
+  if (method === 'DELETE' && musicDelete) return audio.deleteNasheed(decodeURIComponent(musicDelete[1])) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'Track not found.' });
+
+  if (method === 'GET' && pathname === '/api/diagnostics') {
+    const [ffmpeg, worker] = await Promise.all([checkFfmpeg(), runDoctor()]);
+    return json(res, 200, { ok: ffmpeg.ok && worker.ok, ffmpeg, worker, readiness: agent.engine.readiness(), python: config.pythonBin, model: config.aiModel, note: 'The first real transcription downloads the selected Whisper model once.' });
+  }
+
+  const clipVideo = pathname.match(/^\/api\/clips\/([^/]+)\/(video|download|thumb)$/);
+  if (method === 'GET' && clipVideo) {
+    const id = decodeURIComponent(clipVideo[1]); const kind = clipVideo[2];
+    const file = agent.engine.clipFilePath(id, kind === 'thumb' ? 'thumb' : 'video'); if (!file) return json(res, 404, { error: 'Rendered file not found.' });
+    if (kind === 'thumb') return streamFile(req, res, file, { contentType: 'image/jpeg' });
+    const clip = state.clips.find(item => item.id === id); const filename = `${(clip?.title || 'deenclipped').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 70) || 'deenclipped'}.mp4`;
+    return streamFile(req, res, file, kind === 'download' ? { downloadName: filename } : {});
+  }
+
+  const rerenderClip = pathname.match(/^\/api\/clips\/([^/]+)\/rerender$/);
+  if (method === 'POST' && rerenderClip) {
+    const body = await readBody(req);
+    try { return json(res, 202, { ok: true, job: agent.engine.queueClipRerender(decodeURIComponent(rerenderClip[1]), String(body.templateId || ''), { asVariant: Boolean(body.asVariant) }) }); }
+    catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  const clipPublish = pathname.match(/^\/api\/clips\/([^/]+)\/publish$/);
+  if (method === 'POST' && clipPublish) {
+    try { return json(res, 200, { ok: true, clip: publicClip(await agent.publishNow(decodeURIComponent(clipPublish[1]))) }); }
+    catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  const clipRetryPublish = pathname.match(/^\/api\/clips\/([^/]+)\/retry-publish$/);
+  if (method === 'POST' && clipRetryPublish) {
+    const body = await readBody(req);
+    try { return json(res, 200, { ok: true, clip: publicClip(agent.retryPublishing(decodeURIComponent(clipRetryPublish[1]), String(body.provider || ''))) }); }
+    catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  const clipReady = pathname.match(/^\/api\/clips\/([^/]+)\/ready$/);
+  if (method === 'POST' && clipReady) {
+    try { return json(res, 200, { ok: true, clip: publicClip(agent.readyNow(decodeURIComponent(clipReady[1]))) }); }
+    catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  const clipPosted = pathname.match(/^\/api\/clips\/([^/]+)\/posted$/);
+  if (method === 'POST' && clipPosted) {
+    try { return json(res, 200, { ok: true, clip: publicClip(agent.markPosted(decodeURIComponent(clipPosted[1]))) }); }
+    catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  const clipMatch = pathname.match(/^\/api\/clips\/([^/]+)$/);
+  if (clipMatch && method === 'PATCH') {
+    const id = decodeURIComponent(clipMatch[1]); const body = await readBody(req);
+    try {
+      agent.updateClip(id, body); let clip;
+      if (body.status === 'approved') clip = agent.approveClip(id); else if (body.status === 'waiting') clip = agent.pullBack(id); else clip = state.clips.find(item => item.id === id);
+      return json(res, 200, { ok: true, clip: publicClip(clip) });
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  if (clipMatch && method === 'DELETE') {
+    try { agent.deleteClip(decodeURIComponent(clipMatch[1])); return json(res, 200, { ok: true }); }
+    catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  return json(res, 404, { error: 'Not found.' });
 }
 
-/* ---- server -------------------------------------------------------- */
-
 const server = http.createServer((req, res) => {
-  let url;
-  try { url = new URL(req.url, `http://${req.headers.host || 'localhost'}`); }
-  catch { return send(res, 400, { error: 'Bad request.' }); }
-
-  route(req, res, url).catch(err => {
-    console.error(err);
-    if (!res.headersSent) send(res, 500, { error: err.message || 'Something went wrong.' });
-  });
+  let url; try { url = new URL(req.url, `http://${req.headers.host || 'localhost'}`); } catch { return json(res, 400, { error: 'Bad request.' }); }
+  route(req, res, url).catch(error => { console.error(error); if (!res.headersSent) json(res, 500, { error: error.message || 'Unexpected server error.' }); });
 });
-
-server.listen(config.port, () => {
-  console.log(`Clip agent listening on http://localhost:${config.port}`);
-  if (config.publicBaseUrl) console.log(`Opus webhook: ${config.publicBaseUrl}/webhooks/opus`);
-  agent.start();
-});
+server.listen(config.port, () => { console.log(`DeenClipped self-hosted engine listening on http://localhost:${config.port}`); agent.start(); });

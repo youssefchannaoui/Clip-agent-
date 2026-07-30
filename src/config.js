@@ -3,54 +3,95 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-
-// Minimal .env reader so there's no extra dependency.
 const envFile = path.join(root, '.env');
 if (fs.existsSync(envFile)) {
   for (const line of fs.readFileSync(envFile, 'utf8').split('\n')) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/);
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
+    const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/);
+    if (match && !process.env[match[1]]) {
+      process.env[match[1]] = match[2].trim().replace(/^["']|["']$/g, '');
+    }
   }
 }
 
-const bool = (v, fallback) => (v === undefined || v === '' ? fallback : /^(1|true|yes)$/i.test(v));
-const num = (v, fallback) => (Number.isFinite(Number(v)) && v !== '' ? Number(v) : fallback);
+const number = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+const boolean = (value, fallback) => {
+  if (value === undefined || value === '') return fallback;
+  return /^(1|true|yes|on)$/i.test(String(value));
+};
 
 export const config = {
   root,
-  dataDir: path.join(root, 'data'),
-  port: num(process.env.PORT, 3000),
+  dataDir: process.env.DATA_DIR || path.join(root, 'data'),
+  port: number(process.env.PORT, 3000),
   password: process.env.APP_PASSWORD || '',
-  // Render exposes the live service URL automatically. Keep PUBLIC_BASE_URL
-  // as an override for custom domains/local tunnels, but do not require it.
   publicBaseUrl: (process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/+$/, ''),
-
-  opusKey: process.env.OPUS_API_KEY || '',
-  opusOrgId: process.env.OPUS_ORG_ID || '',
-  brandTemplateId: process.env.OPUS_BRAND_TEMPLATE_ID || '',
-
-  postTimes: (process.env.POST_TIMES || '07:00,12:00,17:00,20:30')
-    .split(',').map(s => s.trim()).filter(Boolean),
   timezone: process.env.TIMEZONE || 'Australia/Perth',
+  postTimes: (process.env.POST_TIMES || '07:00,12:00,17:00,20:30')
+    .split(',').map(value => value.trim()).filter(Boolean),
 
-  // 0 means "keep every clip Opus returns" — this used to default to 4 and
-  // quietly discard the rest, which was never the intent.
-  clipsPerVideo: num(process.env.CLIPS_PER_VIDEO, 0),
-  clipMinSeconds: num(process.env.CLIP_MIN_SECONDS, 20),
-  clipMaxSeconds: num(process.env.CLIP_MAX_SECONDS, 90),
-  autoApprove: bool(process.env.AUTO_APPROVE, false),
+  pythonBin: process.env.PYTHON_BIN || 'python3',
+  workerScript: path.join(root, 'worker', 'clip_worker.py'),
+  ffmpegPath: process.env.FFMPEG_PATH || 'ffmpeg',
+  ffprobePath: process.env.FFPROBE_PATH || 'ffprobe',
+  aiModel: process.env.CLIP_AI_MODEL || 'small',
+  aiDevice: process.env.CLIP_AI_DEVICE || 'auto',
+  aiComputeType: process.env.CLIP_AI_COMPUTE_TYPE || 'int8',
+  aiTask: process.env.CLIP_AI_TASK || 'translate',
+  aiLanguage: process.env.CLIP_AI_LANGUAGE || '',
+  maxConcurrentJobs: Math.max(1, Math.round(number(process.env.MAX_CONCURRENT_JOBS, 1))),
+  maxSourceMinutes: Math.max(5, number(process.env.MAX_SOURCE_MINUTES, 180)),
+  keepSourceFiles: boolean(process.env.KEEP_SOURCE_FILES, true),
 
-  musicEnabled: bool(process.env.MUSIC_ENABLED, true),
-  // opus_library avoids the old second Opus project per clip by relying on the
-  // user's uploaded Opus Brand Kit / Media music assets. local_import keeps the
-  // guaranteed app Music tab mixer for people who accept the extra credit.
-  musicMode: process.env.MUSIC_MODE || 'opus_library',
-  musicVolumePercent: num(process.env.MUSIC_VOLUME_PERCENT, 15),
+  defaultTemplateId: process.env.DEFAULT_TEMPLATE_ID || 'deenclipped-gold',
+  clipsPerVideo: Math.max(1, Math.round(number(process.env.CLIPS_PER_VIDEO, 8))),
+  clipMinSeconds: Math.max(3, Math.round(number(process.env.CLIP_MIN_SECONDS, 20))),
+  clipMaxSeconds: Math.max(5, Math.round(number(process.env.CLIP_MAX_SECONDS, 90))),
+  musicVolumePercent: Math.max(1, Math.min(50, Math.round(number(process.env.MUSIC_VOLUME_PERCENT, 13)))),
 
-  copyPrompt: process.env.COPY_PROMPT
-    || 'Write the title, description and hashtags in clear natural English only. Translate any Arabic speech or source wording into English and do not use Arabic script. Keep the title short and respectful. No hype, no clickbait, no emojis. Never paraphrase or invent Quran or hadith wording. If a source is unclear, describe the topic only.',
+  ollamaUrl: (process.env.OLLAMA_URL || '').replace(/\/+$/, ''),
+  ollamaModel: process.env.OLLAMA_MODEL || 'qwen3:4b',
+
+  socialTokenKey: process.env.SOCIAL_TOKEN_KEY || '',
+  socialPublishEnabled: boolean(process.env.SOCIAL_PUBLISH_ENABLED, true),
+  socialMaxAttempts: Math.max(1, Math.round(number(process.env.SOCIAL_MAX_ATTEMPTS, 5))),
+  socialPollIntervalMs: Math.max(5_000, Math.round(number(process.env.SOCIAL_POLL_INTERVAL_MS, 15_000))),
+  socialProcessingTimeoutMs: Math.max(10 * 60_000, Math.round(number(process.env.SOCIAL_PROCESSING_TIMEOUT_MS, 2 * 60 * 60_000))),
+  socialMediaUrlTtlMs: Math.max(60 * 60_000, Math.round(number(process.env.SOCIAL_MEDIA_URL_TTL_MS, 24 * 60 * 60_000))),
+
+  googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+  googleRedirectUri: process.env.GOOGLE_REDIRECT_URI || '',
+  googleAuthBase: (process.env.GOOGLE_AUTH_BASE || 'https://accounts.google.com').replace(/\/+$/, ''),
+  googleTokenUrl: process.env.GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token',
+  youtubeApiBase: (process.env.YOUTUBE_API_BASE || 'https://www.googleapis.com').replace(/\/+$/, ''),
+
+  metaAppId: process.env.META_APP_ID || '',
+  metaAppSecret: process.env.META_APP_SECRET || '',
+  metaRedirectUri: process.env.META_REDIRECT_URI || '',
+  metaGraphVersion: process.env.META_GRAPH_VERSION || 'v23.0',
+  metaGraphBase: (process.env.META_GRAPH_BASE || 'https://graph.facebook.com').replace(/\/+$/, ''),
+  metaDialogBase: (process.env.META_DIALOG_BASE || 'https://www.facebook.com').replace(/\/+$/, ''),
+
+  tiktokClientKey: process.env.TIKTOK_CLIENT_KEY || '',
+  tiktokClientSecret: process.env.TIKTOK_CLIENT_SECRET || '',
+  tiktokRedirectUri: process.env.TIKTOK_REDIRECT_URI || '',
+  tiktokAuthBase: (process.env.TIKTOK_AUTH_BASE || 'https://www.tiktok.com').replace(/\/+$/, ''),
+  tiktokApiBase: (process.env.TIKTOK_API_BASE || 'https://open.tiktokapis.com').replace(/\/+$/, ''),
 };
 
+for (const dir of [
+  config.dataDir,
+  path.join(config.dataDir, 'jobs'),
+  path.join(config.dataDir, 'sources'),
+  path.join(config.dataDir, 'clips'),
+  path.join(config.dataDir, 'music'),
+]) {
+  fs.mkdirSync(dir, { recursive: true });
+}
+
 if (!config.password) {
-  console.warn('[warn] APP_PASSWORD is not set — anyone with the link can use this app.');
+  console.warn('[warn] APP_PASSWORD is not set. Anyone with the link can use the app.');
 }
