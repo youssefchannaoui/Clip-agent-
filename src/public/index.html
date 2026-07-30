@@ -60,13 +60,7 @@ a{color:var(--blue-soft)}
 .shell{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:34px;align-items:start;padding-top:30px}
 
 @media (min-width:1001px){
-  html,body{height:100%}
-  #app{height:100vh;display:flex;flex-direction:column;overflow:hidden}
-  #app .wrap{flex:1;display:flex;flex-direction:column;min-height:0;padding-bottom:0;overflow:hidden}
-  #app .top{flex:none;position:static}
-  #app .shell{flex:1;min-height:0;padding-top:0;margin-top:30px;overflow:hidden;grid-template-rows:1fr;align-items:stretch}
-  #app .main-col{height:100%;overflow-y:auto;padding-bottom:96px}
-  #app .side{height:100%;overflow-y:auto;overflow-x:hidden;padding-bottom:24px;position:static}
+  .side{max-height:calc(100vh - 130px);overflow-y:auto;overflow-x:hidden;padding-right:2px}
 }
 
 /* ---------- gate / connect ---------- */
@@ -170,8 +164,10 @@ textarea{resize:vertical;line-height:1.65}
 
 /* ---------- sections ---------- */
 .panel{padding:0}
-.panel:not(.hide){animation:panel-in .25s ease-out}
-@keyframes panel-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.panel.slide-fwd{animation:panel-fwd .28s ease-out}
+.panel.slide-back{animation:panel-back .28s ease-out}
+@keyframes panel-fwd{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+@keyframes panel-back{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:none}}
 .head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}
 h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.35}
 .head .btn{margin-left:auto}
@@ -2155,13 +2151,20 @@ $('#refreshAcc').onclick = async () => {
   $('#refreshAcc').disabled = false;
 };
 
+const TAB_ORDER = ['queue', 'schedule', 'insights', 'music', 'library'];
 document.querySelectorAll('.tab').forEach(tab => {
   tab.onclick = () => {
+    const fromIndex = TAB_ORDER.indexOf(VIEW);
+    const toIndex = TAB_ORDER.indexOf(tab.dataset.view);
     VIEW = tab.dataset.view;
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t === tab));
-    ['queue', 'schedule', 'insights', 'music', 'library'].forEach(v => {
-      $('#view-' + v).classList.toggle('hide', v !== VIEW);
+    TAB_ORDER.forEach(v => {
+      const panel = $('#view-' + v);
+      panel.classList.toggle('hide', v !== VIEW);
+      panel.classList.remove('slide-fwd', 'slide-back');
     });
+    const shown = $('#view-' + VIEW);
+    shown.classList.add(toIndex >= fromIndex ? 'slide-fwd' : 'slide-back');
     if (VIEW === 'music' && !musicLoaded) loadMusic();
     if (VIEW === 'library') loadLibrary();
   };
