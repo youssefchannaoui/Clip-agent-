@@ -152,15 +152,18 @@ export async function getSocialAccounts() {
   }));
 }
 
-/** Ask Opus to write the caption for one clip on one destination. */
-export async function requestCopy({ projectId, clipId, account }) {
+/** Ask Opus to write the title, description and hashtags for one clip. */
+export async function requestCopy({ projectId, clipId, account, prompt, forceRegenerate = false }) {
   const res = await call('/social-copy-jobs', {
     method: 'POST',
     body: {
       projectId, clipId,
       postAccountId: account.postAccountId,
       subAccountId: account.subAccountId,
-      prompt: copyPrompt(),
+      prompt: String(prompt ?? copyPrompt()).trim(),
+      // Opus otherwise may return an older cached result created before the
+      // prompt changed, which is how Arabic copy could survive an English prompt.
+      forceRegenerate: Boolean(forceRegenerate),
     },
   });
   return res?.data?.jobId;
