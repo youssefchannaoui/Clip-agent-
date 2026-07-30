@@ -8,6 +8,7 @@ const blank = () => ({
   opusKey: '',
   opusOrgId: '',
   brandTemplateId: '',   // which Opus clip style to use, chosen in the app
+  brandTemplateMeta: null, // verified name/caption setting for the selected Opus template
   clipSettings: {},      // clipsPerVideo / clipMinSeconds / clipMaxSeconds overrides
   musicSettings: {},     // enabled / volumePercent overrides for the nasheed mixer
   copyPrompt: '',        // instructions for the AI-written title/caption/hashtags — blank means use the default
@@ -54,6 +55,35 @@ export function log(message, level = 'info') {
 export const opusKey = () => state.opusKey || config.opusKey;
 export const opusOrgId = () => state.opusOrgId || config.opusOrgId;
 export const brandTemplateId = () => state.brandTemplateId || config.brandTemplateId;
+
+export function brandTemplateSelection() {
+  const id = brandTemplateId();
+  const meta = state.brandTemplateMeta;
+  return {
+    id,
+    name: meta?.id === id ? (meta.name || '') : '',
+    enableCaption: meta?.id === id && typeof meta.enableCaption === 'boolean'
+      ? meta.enableCaption
+      : null,
+  };
+}
+
+export function setBrandTemplateSelection(template) {
+  if (!template?.id) {
+    state.brandTemplateId = '';
+    state.brandTemplateMeta = null;
+  } else {
+    state.brandTemplateId = String(template.id);
+    state.brandTemplateMeta = {
+      id: String(template.id),
+      name: String(template.name || ''),
+      enableCaption: typeof template.enableCaption === 'boolean'
+        ? template.enableCaption
+        : null,
+    };
+  }
+  save();
+}
 
 /**
  * How many clips to keep per video, and how long each should be.
