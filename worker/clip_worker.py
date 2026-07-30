@@ -706,15 +706,16 @@ def render_clip(
 
     volume = max(0.01, min(0.5, float(settings.get("musicVolumePercent", 13)) / 100.0))
     voice_chain = "highpass=f=75,lowpass=f=15000,acompressor=threshold=-18dB:ratio=2.5:attack=12:release=160," if bool(template.get("voiceEnhance", True)) else ""
-    filter_complex = (
-        build_video_filter(template, ass_file)
-        + ";"
-        + f"[0:a]{voice_chain}asetpts=PTS-STARTPTS[voice];"
-        + f"[1:a]volume={volume:.3f}[music];"
-        + "[music][voice]sidechaincompress=threshold=0.025:ratio=10:attack=15:release=650[ducked];"
-        + "[voice][ducked]amix=inputs=2:duration=first:dropout_transition=2,"
-        + "loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
-    )
+filter_complex = (
+    build_video_filter(template, ass_file)
+    + ";"
+    + f"[0:a]{voice_chain}asetpts=PTS-STARTPTS,asplit=2[voice_mix][voice_sidechain];"
+    + f"[1:a]volume={volume:.3f}[music];"
+    + "[music][voice_sidechain]sidechaincompress="
+      "threshold=0.025:ratio=10:attack=15:release=650[ducked];"
+    + "[voice_mix][ducked]amix=inputs=2:duration=first:dropout_transition=2,"
+    + "loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
+)
 
     run([
         ffmpeg, "-y", "-ss", f"{candidate.start:.3f}", "-t", f"{candidate.duration:.3f}",
