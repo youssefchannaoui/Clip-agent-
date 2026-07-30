@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { state, save, log, opusKey, clipSettings, brandTemplateId } from './store.js';
+import { state, save, log, opusKey, clipSettings, brandTemplateId, copyPrompt } from './store.js';
 import * as opus from './opus.js';
 import * as audio from './audio.js';
 import * as thumbs from './thumbs.js';
@@ -157,8 +157,11 @@ export async function listAvailableClips(projectId) {
     .map(c => ({
       id: c.id,
       title: c.title,
+      description: c.description,
+      hashtags: c.hashtags,
       durationMs: c.durationMs,
       score: c.score,
+      previewUrl: c.preview || c.exportUrl || '',
       imported: known.has(c.id),
     }));
 }
@@ -222,23 +225,93 @@ function clearStage(clip) {
   if (clip.stage) { delete clip.stage; save(); }
 }
 
-/** Ask Opus to write the caption, then wait for it. */
-async function generateCopy(clip, account) {
-  try {
-    const jobId = await opus.requestCopy({
-      projectId: clip.projectId, clipId: clip.clipId, account,
-    });
-    if (!jobId) return null;
-    for (let i = 0; i < 20; i++) {
-      await new Promise(r => setTimeout(r, Number(process.env.COPY_POLL_MS) || 3000));
-      const res = await opus.getCopy(jobId);
-      if (res?.status === 'COMPLETED') return res;
-      if (res?.status === 'FAILED') return null;
+const ARABIC_SCRIPT = /[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]/;
+
+function wantsEnglish(prompt) {
+  return /\benglish\b/i.test(String(prompt || ''));
+}
+
+function containsArabicCopy(copy) {
+  return ARABIC_SCRIPT.test([copy?.title, copy?.description, copy?.hashtags].filter(Boolean).join(' '));
+}
+
+function strengthenedCopyPrompt() {
+  const prompt = copyPrompt();
+  if (!wantsEnglish(prompt)) return prompt;
+  return `${prompt}
+
+CRITICAL: Return the title, description and hashtags in English only. Translate the meaning naturally. Do not output any Arabic letters or Arabic-script hashtags.`;
+}
+
+/** Ask Opus to write the title, description and hashtags, then wait for it. */
+async function generateCopy(clip, account, forceRegenerate = true) {
+  const prompt = strengthenedCopyPrompt();
+
+  // Give Opus one second attempt when an English-only prompt still returns
+  // Arabic text. This is deliberately limited so a bad API response cannot
+  // trap the agent in an endless regeneration loop.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const jobId = await opus.requestCopy({
+        projectId: clip.projectId,
+        clipId: clip.clipId,
+        account,
+        prompt,
+        forceRegenerate: forceRegenerate || attempt > 0,
+      });
+      if (!jobId) return null;
+
+      for (let i = 0; i < 20; i++) {
+        await new Promise(r => setTimeout(r, Number(process.env.COPY_POLL_MS) || 3000));
+        const res = await opus.getCopy(jobId);
+        if (res?.status === 'FAILED') break;
+        if (res?.status !== 'COMPLETED') continue;
+
+        if (wantsEnglish(prompt) && containsArabicCopy(res)) {
+          if (attempt === 0) {
+            log(`Opus returned Arabic copy for "${clip.title}" despite the English prompt. Regenerating once.`, 'warn');
+            break;
+          }
+          log(`Opus still returned Arabic copy for "${clip.title}" after regeneration. The clip was left for review instead of silently accepting it.`, 'error');
+          return null;
+        }
+        return res;
+      }
+    } catch (err) {
+      if (attempt === 1) {
+        log(`Caption generation failed, using the clip's own title instead. ${err.message}`, 'warn');
+      }
     }
-  } catch (err) {
-    log(`Caption generation failed, using the clip's own title instead. ${err.message}`, 'warn');
   }
   return null;
+}
+
+/** Rewrite one waiting clip immediately with the currently saved Opus prompt. */
+export async function regenerateCopy(clipId) {
+  const clip = state.clips.find(c => c.id === clipId);
+  if (!clip) throw new Error('That clip is no longer in the queue.');
+  if (clip.status !== 'waiting') throw new Error('Pull the clip back before rewriting its title and description.');
+
+  const accounts = await refreshAccounts();
+  if (!accounts.length) throw new Error('Connect at least one social account in Opus first.');
+
+  delete clip.copy;
+  delete clip.copyState;
+  delete clip.editedTitle;
+  delete clip.editedDescription;
+  delete clip.editedHashtags;
+  stage(clip, 'Rewriting title and caption with Opus AI');
+
+  try {
+    const copy = await generateCopy(clip, accounts[0], true);
+    if (!copy) throw new Error('Opus did not return new copy. Try again in a moment.');
+    clip.copy = copy;
+    clip.copyState = 'done';
+    return copy;
+  } finally {
+    clearStage(clip);
+    save();
+  }
 }
 
 /**
@@ -560,7 +633,7 @@ async function processThumbnails(maxPerTick = 12, concurrency = 3) {
  * per-account scheduling step just reuses the same result instead of
  * generating it again.
  */
-async function processCopy(maxPerTick = 8, concurrency = 2) {
+async function processCopy(maxPerTick = 8, concurrency = 1) {
   const accounts = state.accounts || [];
   if (!accounts.length) return; // nothing to ask Opus to write for yet
 
@@ -571,14 +644,19 @@ async function processCopy(maxPerTick = 8, concurrency = 2) {
   async function worker() {
     while (index < pending.length) {
       const clip = pending[index++];
+      stage(clip, wantsEnglish(copyPrompt())
+        ? 'Writing an English title and description with Opus AI'
+        : 'Writing the title and description with Opus AI');
       try {
-        const copy = await generateCopy(clip, accounts[0]);
+        const copy = await generateCopy(clip, accounts[0], true);
         if (copy) { clip.copy = copy; clip.copyState = 'done'; }
-        else clip.copyState = 'skipped'; // don't retry every tick if Opus had nothing to say
+        else clip.copyState = 'failed';
       } catch {
-        clip.copyState = 'skipped';
+        clip.copyState = 'failed';
+      } finally {
+        clearStage(clip);
+        save();
       }
-      save();
     }
   }
 
