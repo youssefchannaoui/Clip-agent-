@@ -434,6 +434,56 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
   font-size:12.5px;line-height:1.55;
 }
 .credit-warning strong{color:var(--blue-soft);font-weight:600}
+
+.music-hero{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0 18px;
+}
+.music-stat{
+  padding:15px 16px;border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025));
+  border:1px solid var(--line);min-width:0;
+}
+.music-stat strong{display:block;font-size:24px;letter-spacing:-.04em;line-height:1;color:var(--text)}
+.music-stat span{display:block;margin-top:6px;color:var(--mute);font-size:12.5px}
+.music-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(280px,.85fr);gap:18px;align-items:start}
+.music-card-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.music-card-title h3{font-size:15px;margin:0;font-weight:650;letter-spacing:-.01em}
+.music-card-title span{font-size:12.5px;color:var(--mute)}
+.music-mode-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.music-mode-option{
+  text-align:left;padding:14px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.025);
+  transition:border-color .15s ease,background .15s ease,transform .16s ease;
+}
+.music-mode-option:hover{transform:translateY(-1px);border-color:var(--line-lit)}
+.music-mode-option.on{border-color:rgba(217,180,120,.48);background:rgba(217,180,120,.09)}
+.music-mode-option strong{display:block;font-size:14px;color:var(--text);margin-bottom:4px}
+.music-mode-option span{display:block;font-size:12.5px;color:var(--mute);line-height:1.45}
+.music-drop{
+  border:1px dashed rgba(217,180,120,.36);border-radius:14px;padding:22px;text-align:center;
+  background:linear-gradient(180deg,rgba(217,180,120,.075),rgba(255,255,255,.025));
+  transition:border-color .15s ease,background .15s ease,transform .16s ease;
+}
+.music-drop.drag{border-color:var(--blue);background:rgba(217,180,120,.12);transform:scale(.995)}
+.music-drop-title{font-size:15px;font-weight:650;margin-bottom:5px}
+.music-drop-note{font-size:12.5px;color:var(--mute);line-height:1.5;margin-bottom:14px}
+.music-upload-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;margin-top:12px;align-items:center}
+.music-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:18px 0 14px}
+.music-search{flex:1 1 240px;min-width:0}
+.track-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.track-card{
+  background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0;
+  display:flex;flex-direction:column;gap:11px;transition:border-color .16s ease,transform .18s cubic-bezier(.2,.8,.2,1),box-shadow .18s ease;
+}
+.track-card:hover{border-color:var(--line-lit);transform:translateY(-1px);box-shadow:0 8px 22px rgba(0,0,0,.13)}
+.track-top{display:flex;gap:10px;align-items:flex-start}
+.track-icon{width:42px;height:42px;border-radius:11px;border:1px solid rgba(217,180,120,.35);background:rgba(217,180,120,.08);display:flex;align-items:center;justify-content:center;color:var(--blue-soft);font-size:18px;flex:none}
+.track-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}.track-actions .btn{flex:1 1 auto;min-width:94px}
+.track-audio{width:100%;height:34px;filter:invert(1) hue-rotate(180deg);opacity:.82}
+.music-pipeline{display:grid;gap:10px}
+.music-step{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.music-step:last-child{border-bottom:0}.music-step-dot{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(217,180,120,.12);border:1px solid rgba(217,180,120,.25);color:var(--blue-soft);font-size:12px;flex:none}.music-step strong{font-size:13.5px;color:var(--text)}.music-step span{display:block;font-size:12.3px;color:var(--mute);line-height:1.45;margin-top:2px}
+.music-health-list{display:grid;gap:8px}.music-health-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}.music-health-row:last-child{border-bottom:0}.music-health-row b{font-size:13px;color:var(--text)}.music-health-row span{color:var(--mute)}
+@media (max-width:1000px){.music-grid{grid-template-columns:1fr}.music-hero{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.music-hero{grid-template-columns:1fr 1fr;gap:9px}.music-stat{padding:12px}.music-stat strong{font-size:20px}.music-mode-picker{grid-template-columns:1fr}.music-upload-row{grid-template-columns:1fr}.track-grid{grid-template-columns:1fr}}
 .library-tools{margin:14px 0 18px}
 .library-tools .intake-row{align-items:stretch}
 .library-tools input{min-width:180px}
@@ -957,54 +1007,104 @@ select:focus{outline:none;border-color:var(--blue)}
 
         <!-- music -->
         <section class="panel hide" id="view-music">
-          <div class="head">
-            <h2>System check</h2>
+          <div class="head sched-head">
+            <div>
+              <h2>Music</h2>
+              <span class="note">Upload, preview and control the nasheed mixer before clips are scheduled</span>
+            </div>
             <button class="btn btn-ghost btn-sm" id="checkFfmpeg">Check ffmpeg</button>
           </div>
-          <div class="slab" id="ffmpegStatus">
-            <div class="style-note">Both background music and thumbnails depend on ffmpeg running on this server. Tap the button to check directly, instead of guessing from what does or doesn't appear.</div>
-          </div>
 
-          <div class="head" style="margin-top:34px"><h2>Add music</h2></div>
-          <div class="slab intake">
-            <input id="musicFile" type="file" accept="audio/*" class="hide">
-            <div class="intake-row" style="margin-top:0">
-              <button class="btn btn-ghost" id="pickMusic">Choose an audio file</button>
-              <span class="intake-note" id="musicPicked">No file chosen</span>
-            </div>
-            <div class="intake-row">
-              <input id="musicName" type="text" placeholder="Name this track" style="flex:1;min-width:160px">
-              <button class="btn" id="uploadMusic" disabled>Upload</button>
-            </div>
-            <div class="style-note" id="uploadNote"></div>
-          </div>
+          <div class="music-hero" id="musicHero"></div>
 
-          <div class="head" style="margin-top:34px">
-            <h2>Mixing</h2>
-          </div>
-          <div class="slab">
-            <label class="field code" for="musicEnabled">Add music automatically</label>
-            <select id="musicEnabled" aria-label="Add music automatically">
-              <option value="1">On — music guaranteed (usually +1 Opus credit per clip)</option>
-              <option value="0">Off — credit saver, original clip audio only</option>
-            </select>
+          <div class="music-grid">
+            <div>
+              <div class="slab">
+                <div class="music-card-title">
+                  <h3>Mixing mode</h3>
+                  <span id="musicSettingsState">Waiting for settings</span>
+                </div>
+                <label class="field code" for="musicEnabled">Mode</label>
+                <select id="musicEnabled" aria-label="Add music automatically" class="hide">
+                  <option value="1">On — music guaranteed (usually +1 Opus credit per clip)</option>
+                  <option value="0">Off — credit saver, original clip audio only</option>
+                </select>
+                <div class="music-mode-picker" role="group" aria-label="Music mode">
+                  <button class="music-mode-option" type="button" data-music-mode="1">
+                    <strong>Best quality</strong>
+                    <span>Music is required before scheduling. Uses one mixed Opus re-import per clip.</span>
+                  </button>
+                  <button class="music-mode-option" type="button" data-music-mode="0">
+                    <strong>Credit saver</strong>
+                    <span>No second Opus import. Clips keep their original audio only.</span>
+                  </button>
+                </div>
 
-            <div style="margin-top:16px">
-              <label class="field code" for="musicVolume">Volume — <span id="volumeLabel">15</span>%</label>
-              <input id="musicVolume" type="range" min="0" max="100" value="15" style="width:100%">
-              <div class="style-note">How loud the nasheed sits under the speaker's voice. Around 10–20% keeps it in the background.</div>
-            </div>
-            <button class="btn btn-ghost btn-sm" id="saveMusicSettings" style="margin-top:14px">Save</button>
-            <div class="credit-warning">
-              <strong>Why music uses extra Opus credits:</strong> Opus scheduling only accepts an existing Opus project and clip ID. The app mixes the audio locally, then imports that finished short back into Opus once so Opus can schedule it. Opus rounds processed videos up to whole minutes, so a short clip normally costs at least 1 extra credit. Turning music off avoids that extra processing charge.
-            </div>
-          </div>
+                <div style="margin-top:6px">
+                  <label class="field code" for="musicVolume">Background volume — <span id="volumeLabel">15</span>%</label>
+                  <input id="musicVolume" type="range" min="0" max="100" value="15" style="width:100%">
+                  <div class="style-note" id="volumeHint">10–20% normally keeps the nasheed under the speaker's voice.</div>
+                </div>
+                <button class="btn btn-sm" id="saveMusicSettings" style="margin-top:14px;width:100%">Save music settings</button>
+                <div class="credit-warning" id="musicCreditNote">
+                  <strong>Credit note:</strong> Best quality mode mixes music locally, then imports that short finished clip back into Opus so Opus can schedule it. Credit saver turns that off.
+                </div>
+              </div>
 
-          <div class="head" style="margin-top:34px">
-            <h2>Your library</h2>
-            <span class="note" id="musicNote"></span>
+              <div class="slab" style="margin-top:18px">
+                <div class="music-card-title">
+                  <h3>Add track</h3>
+                  <span>MP3, M4A, WAV or OGG · max 30MB</span>
+                </div>
+                <input id="musicFile" type="file" accept="audio/*" class="hide">
+                <div class="music-drop" id="musicDrop">
+                  <div class="music-drop-title">Drop a nasheed here</div>
+                  <div class="music-drop-note">Or choose a file. The app validates duration with ffmpeg before saving it.</div>
+                  <button class="btn btn-ghost" id="pickMusic" type="button">Choose audio file</button>
+                  <div class="intake-note" id="musicPicked" style="margin:10px 0 0">No file chosen</div>
+                </div>
+                <div class="music-upload-row">
+                  <input id="musicName" type="text" placeholder="Name this track">
+                  <button class="btn" id="uploadMusic" disabled>Upload track</button>
+                </div>
+                <div class="style-note" id="uploadNote"></div>
+              </div>
+
+              <div class="head" style="margin-top:28px">
+                <div>
+                  <h2>Your music library</h2>
+                  <span class="note" id="musicNote"></span>
+                </div>
+              </div>
+              <div class="music-tools">
+                <input id="musicSearch" class="music-search" type="text" placeholder="Search tracks">
+                <button class="btn btn-ghost btn-sm" id="refreshMusic" type="button">Refresh</button>
+              </div>
+              <div id="musicList"></div>
+            </div>
+
+            <div>
+              <div class="slab" id="ffmpegStatus">
+                <div class="music-card-title"><h3>System check</h3><span>Music + thumbnails</span></div>
+                <div class="style-note">Both background music and thumbnails depend on ffmpeg running on this server. Tap Check ffmpeg if music or thumbnails look wrong.</div>
+              </div>
+
+              <div class="slab" style="margin-top:18px">
+                <div class="music-card-title"><h3>Music pipeline</h3><span>What happens per clip</span></div>
+                <div class="music-pipeline">
+                  <div class="music-step"><div class="music-step-dot">1</div><div><strong>Download Opus clip</strong><span>The app fetches the rendered clip from Opus.</span></div></div>
+                  <div class="music-step"><div class="music-step-dot">2</div><div><strong>Mix random track</strong><span>Your clip voice stays full volume. Music loops quietly underneath.</span></div></div>
+                  <div class="music-step"><div class="music-step-dot">3</div><div><strong>Re-import to Opus</strong><span>The finished music clip returns to Opus so scheduled posting still works.</span></div></div>
+                  <div class="music-step"><div class="music-step-dot">4</div><div><strong>Schedule or post</strong><span>The app blocks posting until required music is ready.</span></div></div>
+                </div>
+              </div>
+
+              <div class="slab" style="margin-top:18px">
+                <div class="music-card-title"><h3>Current music health</h3><span>From queue + schedule</span></div>
+                <div class="music-health-list" id="musicHealthList"></div>
+              </div>
+            </div>
           </div>
-          <div id="musicList"></div>
         </section>
 
         <!-- library -->
@@ -1195,6 +1295,10 @@ function projectClipPreviewUrl(projectId, clipId) {
     : '';
 }
 
+function musicPreviewUrl(id) {
+  return id ? withPw('/api/music/' + encodeURIComponent(id) + '/audio') : '';
+}
+
 function toast(msg, kind = '') {
   const t = el('div', 'toast ' + kind);
   t.textContent = msg;
@@ -1357,6 +1461,7 @@ function render() {
   renderQueue(waiting);
   renderBoard(clips);
   renderRecord(clips);
+  if (musicLoaded) renderMusicPage();
   renderSide();
 }
 
@@ -2706,6 +2811,8 @@ $('#saveCopyPrompt').onclick = async () => {
 let musicSettingsDirty = false;
 let musicLoaded = false;
 let pickedFile = null;
+let MUSIC_TRACKS = [];
+let MUSIC_QUERY = '';
 
 function fmtDuration(sec) {
   const s = Math.round(sec || 0);
@@ -2714,6 +2821,7 @@ function fmtDuration(sec) {
 function fmtSize(bytes) {
   return bytes > 1024 * 1024 ? (bytes / 1024 / 1024).toFixed(1) + 'MB' : Math.round(bytes / 1024) + 'KB';
 }
+function plural(n, one, many = one + 's') { return `${n} ${n === 1 ? one : many}`; }
 
 /** Chunked, so large files don't blow the call stack turning bytes into base64. */
 function bytesToBase64(bytes) {
@@ -2725,23 +2833,41 @@ function bytesToBase64(bytes) {
   return btoa(binary);
 }
 
+function setPickedMusicFile(file) {
+  pickedFile = file || null;
+  $('#musicPicked').textContent = pickedFile ? `${pickedFile.name} · ${fmtSize(pickedFile.size || 0)}` : 'No file chosen';
+  $('#uploadMusic').disabled = !pickedFile;
+  if (pickedFile && !$('#musicName').value.trim()) $('#musicName').value = pickedFile.name.replace(/\.[^.]+$/, '');
+}
+
 $('#pickMusic').onclick = () => $('#musicFile').click();
+$('#refreshMusic').onclick = () => { musicLoaded = false; loadMusic(); };
 
 $('#musicFile').addEventListener('change', () => {
-  const file = $('#musicFile').files?.[0] || null;
-  pickedFile = file;
-  $('#musicPicked').textContent = file ? file.name : 'No file chosen';
-  $('#uploadMusic').disabled = !file;
-  if (file && !$('#musicName').value.trim()) {
-    $('#musicName').value = file.name.replace(/\.[^.]+$/, '');
-  }
+  setPickedMusicFile($('#musicFile').files?.[0] || null);
+});
+
+const musicDrop = $('#musicDrop');
+['dragenter', 'dragover'].forEach(type => musicDrop.addEventListener(type, e => {
+  e.preventDefault();
+  musicDrop.classList.add('drag');
+}));
+['dragleave', 'drop'].forEach(type => musicDrop.addEventListener(type, e => {
+  e.preventDefault();
+  musicDrop.classList.remove('drag');
+}));
+musicDrop.addEventListener('drop', e => {
+  const file = [...(e.dataTransfer?.files || [])].find(f => f.type.startsWith('audio/')) || null;
+  if (!file) return toast('Drop an audio file, not a video or document.', 'bad');
+  $('#musicFile').value = '';
+  setPickedMusicFile(file);
 });
 
 $('#uploadMusic').onclick = async () => {
   if (!pickedFile) return;
   const name = $('#musicName').value.trim() || pickedFile.name;
   $('#uploadMusic').disabled = true;
-  $('#uploadNote').textContent = 'Uploading…';
+  $('#uploadNote').textContent = 'Uploading and checking duration…';
   try {
     const buf = await pickedFile.arrayBuffer();
     const data = bytesToBase64(new Uint8Array(buf));
@@ -2749,7 +2875,7 @@ $('#uploadMusic').onclick = async () => {
       method: 'POST',
       body: JSON.stringify({ name, data, mimeType: pickedFile.type }),
     });
-    toast(`Added "${name}" to the library`, 'good');
+    toast(`Added "${name}" to the music library`, 'good');
     pickedFile = null;
     $('#musicFile').value = '';
     $('#musicName').value = '';
@@ -2765,11 +2891,29 @@ $('#uploadMusic').onclick = async () => {
 };
 
 ['#musicEnabled', '#musicVolume'].forEach(sel => {
-  $(sel).addEventListener('input', () => { musicSettingsDirty = true; });
-  $(sel).addEventListener('change', () => { musicSettingsDirty = true; });
+  $(sel).addEventListener('input', () => { musicSettingsDirty = true; updateMusicModeUi(); });
+  $(sel).addEventListener('change', () => { musicSettingsDirty = true; updateMusicModeUi(); });
 });
 $('#musicVolume').addEventListener('input', () => {
   $('#volumeLabel').textContent = $('#musicVolume').value;
+  const n = Number($('#musicVolume').value);
+  $('#volumeHint').textContent = n === 0 ? '0% means the added music will be silent.'
+    : n <= 20 ? 'Good background range. The speaker should stay clear.'
+    : n <= 35 ? 'Noticeable music. Check one clip before batch scheduling.'
+    : 'Very loud. This may fight the speaker voice.';
+});
+
+document.querySelectorAll('[data-music-mode]').forEach(btn => {
+  btn.onclick = () => {
+    $('#musicEnabled').value = btn.dataset.musicMode;
+    musicSettingsDirty = true;
+    updateMusicModeUi();
+  };
+});
+
+$('#musicSearch').addEventListener('input', e => {
+  MUSIC_QUERY = e.target.value || '';
+  renderMusicList(MUSIC_TRACKS);
 });
 
 $('#saveMusicSettings').onclick = async () => {
@@ -2777,12 +2921,13 @@ $('#saveMusicSettings').onclick = async () => {
   const volumePercent = Number($('#musicVolume').value);
   $('#saveMusicSettings').disabled = true;
   try {
-    await api('/api/music-settings', {
+    const res = await api('/api/music-settings', {
       method: 'POST',
       body: JSON.stringify({ enabled, volumePercent }),
     });
     musicSettingsDirty = false;
-    toast('Saved', 'good');
+    applyMusicSettings(res.settings || { enabled, volumePercent });
+    toast('Music settings saved', 'good');
     refresh();
   } catch (err) { toast(err.message, 'bad'); }
   $('#saveMusicSettings').disabled = false;
@@ -2797,11 +2942,13 @@ $('#checkFfmpeg').onclick = async () => {
     const r = await api('/api/diagnostics/ffmpeg');
     if (r.ok) {
       box.innerHTML = `
-        <div class="style-note" style="color:var(--blue-soft)">ffmpeg is working.</div>
+        <div class="music-card-title"><h3>System check</h3><span style="color:var(--blue-soft)">Working</span></div>
+        <div class="style-note" style="color:var(--blue-soft)">ffmpeg is working. Music mixing and thumbnails can run.</div>
         <div class="style-note">${esc(r.version)}</div>
         <div class="style-note">${r.usingStatic ? 'Using the ffmpeg-static package.' : 'Using a system ffmpeg, not the ffmpeg-static package.'}</div>`;
     } else {
       box.innerHTML = `
+        <div class="music-card-title"><h3>System check</h3><span style="color:var(--red)">Broken</span></div>
         <div class="style-note" style="color:var(--red)">ffmpeg is not working — this is why music and thumbnails aren't showing up.</div>
         <div class="style-note">${esc(r.error || '')}</div>
         <div class="style-note">${esc(r.hint || '')}</div>`;
@@ -2815,8 +2962,9 @@ $('#checkFfmpeg').onclick = async () => {
 async function loadMusic() {
   try {
     const res = await api('/api/music');
-    renderMusicList(res.tracks || []);
+    MUSIC_TRACKS = res.tracks || [];
     if (!musicSettingsDirty) applyMusicSettings(res.settings || {});
+    renderMusicPage();
     musicLoaded = true;
   } catch (err) {
     $('#musicNote').textContent = err.message;
@@ -2827,14 +2975,71 @@ function applyMusicSettings(s) {
   $('#musicEnabled').value = s.enabled === false ? '0' : '1';
   $('#musicVolume').value = s.volumePercent ?? 15;
   $('#volumeLabel').textContent = $('#musicVolume').value;
+  updateMusicModeUi();
+}
+
+function updateMusicModeUi() {
+  const enabled = $('#musicEnabled').value === '1';
+  document.querySelectorAll('[data-music-mode]').forEach(b => b.classList.toggle('on', b.dataset.musicMode === (enabled ? '1' : '0')));
+  const state = $('#musicSettingsState');
+  if (state) state.textContent = enabled ? 'Best quality mode' : 'Credit saver mode';
+  const note = $('#musicCreditNote');
+  if (note) note.innerHTML = enabled
+    ? '<strong>Best quality:</strong> music is required before scheduling, so each mixed clip normally needs one extra short Opus import.'
+    : '<strong>Credit saver:</strong> clips schedule without the local music re-import, so you avoid the extra Opus processing credit.';
+}
+
+function renderMusicPage() {
+  renderMusicHero(MUSIC_TRACKS);
+  renderMusicHealth(MUSIC_TRACKS);
+  renderMusicList(MUSIC_TRACKS);
+}
+
+function renderMusicHero(tracks) {
+  const host = $('#musicHero');
+  if (!host) return;
+  const clips = DATA?.clips || [];
+  const settings = { enabled: $('#musicEnabled')?.value !== '0', volumePercent: Number($('#musicVolume')?.value || 15) };
+  const totalSec = tracks.reduce((n, t) => n + (t.durationSec || 0), 0);
+  const retry = clips.filter(c => ['retrying', 'failed'].includes(c.musicMixed)).length;
+  const mixed = clips.filter(c => c.musicMixed === 'done').length;
+  const imports = clips.filter(c => c.musicImportProjectId || c.musicMixed === 'done').length;
+  host.innerHTML = `
+    <div class="music-stat"><strong>${tracks.length}</strong><span>Tracks uploaded</span></div>
+    <div class="music-stat"><strong>${fmtDuration(totalSec)}</strong><span>Total music length</span></div>
+    <div class="music-stat"><strong>${settings.enabled ? settings.volumePercent + '%' : 'Off'}</strong><span>${settings.enabled ? 'Background volume' : 'Credit saver active'}</span></div>
+    <div class="music-stat"><strong>${retry || mixed}</strong><span>${retry ? 'Needs music attention' : 'Mixed clips ready'}</span></div>`;
+  const note = $('#musicNote');
+  if (note) note.textContent = tracks.length
+    ? `${plural(tracks.length, 'track')} ready · ${imports} music import${imports === 1 ? '' : 's'} used so far`
+    : 'No tracks uploaded yet';
+}
+
+function renderMusicHealth(tracks) {
+  const host = $('#musicHealthList');
+  if (!host) return;
+  const clips = DATA?.clips || [];
+  const enabled = $('#musicEnabled').value !== '0';
+  const waiting = clips.filter(c => statusOf(c) === 'waiting').length;
+  const approved = clips.filter(c => statusOf(c) === 'approved').length;
+  const retry = clips.filter(c => ['retrying', 'failed'].includes(c.musicMixed)).length;
+  const ready = clips.filter(c => c.musicMixed === 'done').length;
+  const lines = [
+    ['Mode', enabled ? 'Best quality' : 'Credit saver'],
+    ['Tracks available', tracks.length ? plural(tracks.length, 'track') : 'None uploaded'],
+    ['Queued for music', enabled ? plural(approved, 'clip') : 'Music off'],
+    ['Music ready', plural(ready, 'clip')],
+    ['Needs retry', retry ? plural(retry, 'clip') : 'None'],
+    ['Waiting review', plural(waiting, 'clip')],
+  ];
+  host.innerHTML = lines.map(([k, v]) => `<div class="music-health-row"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('');
 }
 
 function renderMusicList(tracks) {
   const host = $('#musicList');
   host.innerHTML = '';
-  $('#musicNote').textContent = tracks.length
-    ? `${tracks.length} track${tracks.length === 1 ? '' : 's'} — a random one is picked for each clip`
-    : '';
+  const q = MUSIC_QUERY.trim().toLowerCase();
+  const shown = q ? tracks.filter(t => [t.name, t.filename].filter(Boolean).join(' ').toLowerCase().includes(q)) : tracks;
 
   if (!tracks.length) {
     host.innerHTML = `<div class="slab"><div class="empty">
@@ -2843,29 +3048,60 @@ function renderMusicList(tracks) {
     </div></div>`;
     return;
   }
+  if (!shown.length) {
+    host.innerHTML = `<div class="slab"><div class="empty-note">No tracks match that search.</div></div>`;
+    return;
+  }
 
-  tracks.forEach(t => {
-    const row = el('div', 'track');
+  const grid = el('div', 'track-grid');
+  shown.forEach(t => {
+    const card = el('div', 'track-card');
+    const top = el('div', 'track-top');
+    const icon = el('div', 'track-icon'); icon.textContent = '♪';
     const what = el('div', 'track-what');
-    const name = el('div', 'track-name');
-    name.textContent = t.name;
+    const name = el('div', 'track-name'); name.textContent = t.name;
     const meta = el('div', 'track-meta');
-    meta.textContent = `${fmtDuration(t.durationSec)} · ${fmtSize(t.sizeBytes)}`;
+    meta.textContent = `${fmtDuration(t.durationSec)} · ${fmtSize(t.sizeBytes)}${t.addedAt ? ' · added ' + new Date(t.addedAt).toLocaleDateString([], { day:'numeric', month:'short' }) : ''}`;
     what.append(name, meta);
-    row.append(what);
+    top.append(icon, what);
+    card.append(top);
+
+    const audio = el('audio', 'track-audio');
+    audio.controls = true;
+    audio.preload = 'none';
+    audio.src = musicPreviewUrl(t.id);
+    card.append(audio);
+
+    const actions = el('div', 'track-actions');
+    const play = el('button', 'btn btn-ghost btn-sm');
+    play.textContent = 'Preview';
+    play.onclick = () => {
+      if (audio.paused) { audio.play().catch(err => toast(err.message, 'bad')); play.textContent = 'Pause'; }
+      else { audio.pause(); play.textContent = 'Preview'; }
+    };
+    audio.addEventListener('pause', () => { play.textContent = 'Preview'; });
+    audio.addEventListener('play', () => {
+      document.querySelectorAll('audio.track-audio').forEach(a => { if (a !== audio) a.pause(); });
+      play.textContent = 'Pause';
+    });
 
     const del = el('button', 'btn btn-ghost btn-sm btn-danger');
     del.textContent = 'Remove';
     del.onclick = async () => {
-      if (!confirm(`Remove "${t.name}" from the library?`)) return;
+      if (!confirm(`Remove "${t.name}" from the music library?`)) return;
+      del.disabled = true;
       try {
         await api('/api/music/' + encodeURIComponent(t.id), { method: 'DELETE' });
+        toast('Track removed', 'good');
+        musicLoaded = false;
         loadMusic();
-      } catch (err) { toast(err.message, 'bad'); }
+      } catch (err) { toast(err.message, 'bad'); del.disabled = false; }
     };
-    row.append(del);
-    host.append(row);
+    actions.append(play, del);
+    card.append(actions);
+    grid.append(card);
   });
+  host.append(grid);
 }
 
 /* ---------- library ---------- */
