@@ -41,9 +41,10 @@ export const config = {
   autoApprove: bool(process.env.AUTO_APPROVE, false),
 
   musicEnabled: bool(process.env.MUSIC_ENABLED, true),
-  // opus_native avoids the old second Opus project per clip. local_import keeps
-  // the old guaranteed local music mixer for people who accept the extra credit.
-  musicMode: process.env.MUSIC_MODE || 'opus_native',
+  // opus_library avoids the old second Opus project per clip by relying on the
+  // user's uploaded Opus Brand Kit / Media music assets. local_import keeps the
+  // guaranteed app Music tab mixer for people who accept the extra credit.
+  musicMode: process.env.MUSIC_MODE || 'opus_library',
   musicVolumePercent: num(process.env.MUSIC_VOLUME_PERCENT, 15),
 
   copyPrompt: process.env.COPY_PROMPT
