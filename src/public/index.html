@@ -1976,7 +1976,92 @@ async function loadLibrary() {
     host.innerHTML = `<div class="slab"><div class="empty-note">${esc(err.message)}</div></div>`;
   }
 }
+function youtubeVideoId(rawUrl) {
+  try {
+    const url = new URL(String(rawUrl || ''));
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
 
+    // https://youtu.be/VIDEO_ID
+    if (host === 'youtu.be') {
+      return url.pathname.split('/').filter(Boolean)[0] || null;
+    }
+
+    if (host === 'youtube.com' || host.endsWith('.youtube.com')) {
+      // https://youtube.com/watch?v=VIDEO_ID
+      if (url.pathname === '/watch') {
+        return url.searchParams.get('v');
+      }
+
+      // Shorts, live streams and embedded links
+      const match = url.pathname.match(
+        /^\/(?:shorts|embed|live)\/([^/?#]+)/
+      );
+
+      return match ? match[1] : null;
+    }
+  } catch {
+    // Invalid or unsupported URL
+  }
+
+  return null;
+}
+
+function mountLectureCover(cover, project) {
+  const candidates = [];
+  const youtubeId = youtubeVideoId(project.url);
+
+  if (youtubeId) {
+    // 16:9 YouTube thumbnail — available even with zero imported clips.
+    candidates.push(
+      `https://i.ytimg.com/vi/${encodeURIComponent(youtubeId)}/mqdefault.jpg`
+    );
+
+    // Second YouTube fallback.
+    candidates.push(
+      `https://i.ytimg.com/vi/${encodeURIComponent(youtubeId)}/hqdefault.jpg`
+    );
+  }
+
+  // Existing generated clip thumbnail remains the fallback for other sources.
+  if (project.coverClipId) {
+    candidates.push(
+      '/api/clips/thumb/' +
+      encodeURIComponent(project.coverClipId) +
+      '.jpg?pw=' +
+      encodeURIComponent(PW)
+    );
+  }
+
+  if (!candidates.length) {
+    cover.append(coverPlaceholder());
+    return;
+  }
+
+  const img = el('img');
+  img.alt = project.title || 'Lecture preview';
+  img.loading = 'lazy';
+  img.referrerPolicy = 'no-referrer';
+
+  let nextIndex = 0;
+
+  const tryNextSource = () => {
+    if (nextIndex >= candidates.length) {
+      img.remove();
+
+      if (!cover.querySelector('.lec-cover-ph')) {
+        cover.append(coverPlaceholder());
+      }
+
+      return;
+    }
+
+    img.src = candidates[nextIndex++];
+  };
+
+  img.onerror = tryNextSource;
+  cover.append(img);
+  tryNextSource();
+}
 function renderLibrary(projects) {
   const host = $('#libraryList');
   host.innerHTML = '';
@@ -1995,16 +2080,9 @@ function renderLibrary(projects) {
   projects.slice().sort((a, b) => (b.submittedAt || 0) - (a.submittedAt || 0)).forEach(p => {
     const card = el('div', 'lec');
 
-    const cover = el('div', 'lec-cover');
-    if (p.coverClipId) {
-      const img = el('img');
-      img.src = '/api/clips/thumb/' + encodeURIComponent(p.coverClipId) + '.jpg?pw=' + encodeURIComponent(PW);
-      img.alt = p.title || 'Lecture preview';
-      img.onerror = () => { img.remove(); cover.append(coverPlaceholder()); };
-      cover.append(img);
-    } else {
-      cover.append(coverPlaceholder());
-    }
+ const cover = el('div', 'lec-cover');
+mountLectureCover(cover, p);
+    
     if (p.status === 'clipping') {
       const badge = el('span', 'lec-badge');
       badge.textContent = 'Clipping…';
