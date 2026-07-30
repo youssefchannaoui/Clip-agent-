@@ -56,21 +56,23 @@ a{color:var(--blue-soft)}
 .code{font-size:13px;color:var(--mute);font-weight:450}
 
 /* ---------- shell ---------- */
-#app{width:100%}
+#app{
+  width:100%;
+}
 
 .wrap{
   width:100%;
-  max-width:1240px;
+  max-width:1460px;
   margin:0 auto;
-  padding:0 var(--gutter) 96px;
+  padding:0 24px 96px;
 }
 
 .shell{
   width:100%;
   min-width:0;
   display:grid;
-  grid-template-columns:minmax(0,1fr) 300px;
-  gap:34px;
+  grid-template-columns:minmax(0,1fr) 320px;
+  gap:28px;
   align-items:start;
   padding-top:30px;
 }
@@ -82,8 +84,8 @@ a{color:var(--blue-soft)}
 
 @media (min-width:1001px){
   .side{
-    width:300px;
-    min-width:300px;
+    width:320px;
+    min-width:320px;
     justify-self:end;
     max-height:none;
     overflow:visible;
