@@ -775,7 +775,7 @@ async function scheduleClip(clip) {
 
     stage(clip, `Scheduling to ${account.name}`, step, total);
     try {
-      const scheduled = await opus.schedulePost({
+      const scheduleId = await opus.schedulePost({
         projectId: clip.projectId,
         clipId: clip.clipId,
         account,
@@ -784,13 +784,7 @@ async function scheduleClip(clip) {
         hashtags: clip.editedHashtags ?? copy.hashtags ?? clip.hashtags,
         publishAt: at,
       });
-      const scheduleId = typeof scheduled === 'string' ? scheduled : (scheduled?.scheduleId || scheduled?.id);
-      upsertTarget(clip, account, {
-        status: 'scheduled',
-        scheduleId,
-        postUrl: scheduled?.postUrl || scheduled?.url || scheduled?.permalink || scheduled?.shareUrl,
-        postTaskId: scheduled?.postTaskId || scheduled?.taskId || scheduled?.id,
-      });
+      upsertTarget(clip, account, { status: 'scheduled', scheduleId });
       log(`Scheduled to ${account.name}`);
     } catch (err) {
       upsertTarget(clip, account, { status: 'failed', error: err.message });
@@ -853,7 +847,7 @@ export async function postNow(clipId) {
     stage(clip, `Uploading to ${account.name}`, step, total);
     try {
       const copy = clip.copy || {};
-      const posted = await opus.publishNow({
+      await opus.publishNow({
         projectId: clip.projectId,
         clipId: clip.clipId,
         account,
@@ -861,12 +855,7 @@ export async function postNow(clipId) {
         description: clip.editedDescription || copy.description || clip.description,
         hashtags: clip.editedHashtags ?? copy.hashtags ?? clip.hashtags,
       });
-      upsertTarget(clip, account, {
-        status: 'posted',
-        scheduleId: undefined,
-        postUrl: posted?.postUrl || posted?.url || posted?.permalink || posted?.shareUrl,
-        postTaskId: posted?.postTaskId || posted?.taskId || posted?.id,
-      });
+      upsertTarget(clip, account, { status: 'posted', scheduleId: undefined });
       log(`Posted to ${account.name}`);
     } catch (err) {
       upsertTarget(clip, account, { status: 'failed', error: err.message });
@@ -875,7 +864,6 @@ export async function postNow(clipId) {
     await new Promise(r => setTimeout(r, RATE_GAP));
   }
   clip.status = clip.targets.some(t => t.status === 'posted') ? 'posted' : 'waiting';
-  if (clip.status === 'posted' && !clip.postedAt) clip.postedAt = Date.now();
   clearStage(clip);
   save();
   log(`Posted "${clip.editedTitle || clip.title}" now`);
