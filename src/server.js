@@ -182,8 +182,12 @@ async function route(req, res, url) {
             targets: c.targets,
             musicMixed: c.musicMixed || null,
             musicNote: c.musicNote || null,
+            copyState: c.copyState || null,
             thumbState: c.thumbState || null,
             thumbAttempts: c.thumbAttempts || 0,
+            // The browser can show the actual clip immediately while the
+            // server-generated JPEG is still pending or unavailable.
+            previewUrl: c.preview || c.exportUrl || '',
             templateChanged,
           };
         });
@@ -266,9 +270,27 @@ async function route(req, res, url) {
     if (prompt.length > 2000) {
       return send(res, 400, { error: 'Keep the prompt under 2000 characters.' });
     }
+
     setCopyPrompt(prompt);
-    log('Caption prompt updated. Applies to clips written from now on.');
-    return send(res, 200, { ok: true, copyPrompt: copyPrompt() });
+
+    // A new prompt should visibly affect the clips the person is currently
+    // reviewing, not only clips imported in the future. This button explicitly
+    // says rewrite, so it replaces both previous AI copy and unsaved wording.
+    let queuedForRewrite = 0;
+    for (const clip of state.clips) {
+      if (clip.status !== 'waiting') continue;
+      delete clip.copy;
+      delete clip.copyState;
+      delete clip.editedTitle;
+      delete clip.editedDescription;
+      delete clip.editedHashtags;
+      queuedForRewrite++;
+    }
+    save();
+    log(`Caption prompt updated. ${queuedForRewrite} waiting clip${queuedForRewrite === 1 ? '' : 's'} queued for fresh Opus AI copy.`);
+    send(res, 200, { ok: true, copyPrompt: copyPrompt(), queuedForRewrite });
+    agent.tick().catch(() => {});
+    return;
   }
 
   // The nasheed library — upload, list, remove, and the mix settings.
@@ -437,6 +459,17 @@ async function route(req, res, url) {
     save();
     if (targets.length) log(`Pulled back ${targets.length} clip${targets.length === 1 ? '' : 's'} to the queue.`);
     return send(res, 200, { ok: true, count: targets.length });
+  }
+
+  const rewriteMatch = pathname.match(/^\/api\/clips\/([^/]+)\/rewrite$/);
+  if (rewriteMatch && method === 'POST') {
+    const id = decodeURIComponent(rewriteMatch[1]);
+    try {
+      const copy = await agent.regenerateCopy(id);
+      return send(res, 200, { ok: true, copy });
+    } catch (err) {
+      return send(res, 400, { error: err.message });
+    }
   }
 
   const clipMatch = pathname.match(/^\/api\/clips\/([^/]+)(\/now)?$/);
