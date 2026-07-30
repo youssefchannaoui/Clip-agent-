@@ -231,58 +231,159 @@ function wantsEnglish(prompt) {
   return /\benglish\b/i.test(String(prompt || ''));
 }
 
+function normaliseCopy(copy) {
+  if (!copy) return null;
+  const clean = {
+    title: String(copy.title || '').trim(),
+    description: String(copy.description || '').trim(),
+    hashtags: String(copy.hashtags || '').trim(),
+  };
+  return clean.title || clean.description || clean.hashtags ? clean : null;
+}
+
 function containsArabicCopy(copy) {
   return ARABIC_SCRIPT.test([copy?.title, copy?.description, copy?.hashtags].filter(Boolean).join(' '));
 }
 
-function strengthenedCopyPrompt() {
-  const prompt = copyPrompt();
-  if (!wantsEnglish(prompt)) return prompt;
-  return `${prompt}
+function clipSourceText(clip) {
+  const parts = [
+    clip.title && `SOURCE TITLE:\n${clip.title}`,
+    clip.description && `SOURCE DESCRIPTION:\n${clip.description}`,
+    clip.hashtags && `SOURCE HASHTAGS:\n${clip.hashtags}`,
+    clip.text && `SOURCE TRANSCRIPT EXCERPT:\n${String(clip.text).slice(0, 1100)}`,
+  ].filter(Boolean);
+  return parts.join('\n\n').slice(0, 1700);
+}
 
-CRITICAL: Return the title, description and hashtags in English only. Translate the meaning naturally. Do not output any Arabic letters or Arabic-script hashtags.`;
+async function hydrateCopySource(clip) {
+  if (clip.text) return;
+  try {
+    const latest = await fetchProjectClipsCached(clip.projectId);
+    const match = latest.find(c => c.id === clip.id || c.clipId === clip.clipId);
+    if (!match) return;
+    if (match.text) clip.text = match.text;
+    if (!clip.description && match.description) clip.description = match.description;
+    if (!clip.hashtags && match.hashtags) clip.hashtags = match.hashtags;
+    save();
+  } catch {
+    // The copy endpoint can still work from the clip itself, so source hydration
+    // is helpful rather than mandatory.
+  }
+}
+
+function preferredCopyAccounts(accounts) {
+  const priority = {
+    YOUTUBE: 0,
+    TIKTOK_BUSINESS: 1,
+    INSTAGRAM_BUSINESS: 2,
+    FACEBOOK_PAGE: 3,
+    LINKEDIN: 4,
+    TWITTER: 5,
+  };
+  return [...accounts].sort((a, b) =>
+    (priority[a.platform] ?? 99) - (priority[b.platform] ?? 99));
+}
+
+function copyPromptForAttempt(clip, attempt, rejectedCopy) {
+  const savedPrompt = copyPrompt();
+  if (!wantsEnglish(savedPrompt)) return savedPrompt;
+
+  const source = clipSourceText(clip);
+  const rejected = rejectedCopy
+    ? [rejectedCopy.title, rejectedCopy.description, rejectedCopy.hashtags].filter(Boolean).join('\n').slice(0, 1200)
+    : '';
+
+  if (attempt === 0) {
+    return `${savedPrompt}
+
+OUTPUT LANGUAGE RULE: Write every character of the title, description and hashtags in natural English only. The spoken/source language may be Arabic; translate the meaning rather than copying its wording. Do not include Arabic letters, transliterated Arabic phrases, or Arabic-script hashtags.
+
+Use this source material to understand the exact topic:
+${source || 'Use the clip audio and visuals as the source.'}`.slice(0, 3900);
+  }
+
+  return `Translate and rewrite the material below as accurate social-media copy in ENGLISH ONLY.
+
+Return:
+- one concise English title
+- one clear English description
+- relevant English hashtags
+
+ABSOLUTE RULES:
+- no Arabic characters anywhere
+- do not preserve the source-language title
+- do not invent Quran or hadith quotations
+- keep the meaning respectful and accurate
+
+${rejected ? `YOUR PREVIOUS RESULT WAS REJECTED BECAUSE IT STILL CONTAINED ARABIC:\n${rejected}\n\n` : ''}${source || 'Use the clip audio and visuals as the source.'}`.slice(0, 3900);
 }
 
 /** Ask Opus to write the title, description and hashtags, then wait for it. */
-async function generateCopy(clip, account, forceRegenerate = true) {
-  const prompt = strengthenedCopyPrompt();
+async function generateCopy(clip, accountList, forceRegenerate = true) {
+  const accounts = preferredCopyAccounts(Array.isArray(accountList) ? accountList : [accountList].filter(Boolean));
+  if (!accounts.length) return null;
 
-  // Give Opus one second attempt when an English-only prompt still returns
-  // Arabic text. This is deliberately limited so a bad API response cannot
-  // trap the agent in an endless regeneration loop.
-  for (let attempt = 0; attempt < 2; attempt++) {
+  await hydrateCopySource(clip);
+  const englishOnly = wantsEnglish(copyPrompt());
+  // Try several Opus destinations because its social-copy model can tailor the
+  // response to the connected account/platform. A different destination plus
+  // an explicit translation correction often succeeds when the first one
+  // mirrors the Arabic source language.
+  const maxAttempts = englishOnly ? Math.min(4, Math.max(2, accounts.length + 1)) : 2;
+  let rejectedCopy = null;
+  let lastError = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const account = accounts[attempt % accounts.length];
+    const prompt = copyPromptForAttempt(clip, attempt, rejectedCopy);
+
     try {
       const jobId = await opus.requestCopy({
         projectId: clip.projectId,
         clipId: clip.clipId,
         account,
         prompt,
-        forceRegenerate: forceRegenerate || attempt > 0,
+        forceRegenerate: Boolean(forceRegenerate || attempt > 0),
       });
-      if (!jobId) return null;
+      if (!jobId) {
+        lastError = 'Opus did not create a copy job.';
+        continue;
+      }
 
-      for (let i = 0; i < 20; i++) {
+      for (let i = 0; i < 24; i++) {
         await new Promise(r => setTimeout(r, Number(process.env.COPY_POLL_MS) || 3000));
         const res = await opus.getCopy(jobId);
-        if (res?.status === 'FAILED') break;
+        if (res?.status === 'FAILED') {
+          lastError = 'Opus marked the copy job as failed.';
+          break;
+        }
         if (res?.status !== 'COMPLETED') continue;
 
-        if (wantsEnglish(prompt) && containsArabicCopy(res)) {
-          if (attempt === 0) {
-            log(`Opus returned Arabic copy for "${clip.title}" despite the English prompt. Regenerating once.`, 'warn');
-            break;
-          }
-          log(`Opus still returned Arabic copy for "${clip.title}" after regeneration. The clip was left for review instead of silently accepting it.`, 'error');
-          return null;
+        const clean = normaliseCopy(res);
+        if (!clean) {
+          lastError = 'Opus completed the job without returning usable wording.';
+          break;
         }
-        return res;
+
+        if (englishOnly && containsArabicCopy(clean)) {
+          rejectedCopy = clean;
+          lastError = 'Opus returned Arabic wording despite the English-only prompt.';
+          log(`Opus returned Arabic copy for "${clip.title}" using ${account.name || account.platform}. Trying a stricter English translation request.`, 'warn');
+          break;
+        }
+
+        return clean;
       }
     } catch (err) {
-      if (attempt === 1) {
-        log(`Caption generation failed, using the clip's own title instead. ${err.message}`, 'warn');
-      }
+      lastError = err.message;
     }
+
+    // POST /social-copy-jobs is limited to roughly one request per second.
+    if (attempt + 1 < maxAttempts) await new Promise(r => setTimeout(r, 1300));
   }
+
+  clip.copyError = lastError || 'Opus could not create English wording.';
+  log(`English caption rewrite failed for "${clip.title}" after ${maxAttempts} Opus attempts. ${clip.copyError}`, 'error');
   return null;
 }
 
@@ -297,16 +398,21 @@ export async function regenerateCopy(clipId) {
 
   delete clip.copy;
   delete clip.copyState;
+  delete clip.copyError;
   delete clip.editedTitle;
   delete clip.editedDescription;
   delete clip.editedHashtags;
   stage(clip, 'Rewriting title and caption with Opus AI');
 
   try {
-    const copy = await generateCopy(clip, accounts[0], true);
-    if (!copy) throw new Error('Opus did not return new copy. Try again in a moment.');
+    const copy = await generateCopy(clip, accounts, true);
+    if (!copy) {
+      clip.copyState = 'failed';
+      throw new Error(clip.copyError || 'Opus did not return new English copy. Try again in a moment.');
+    }
     clip.copy = copy;
     clip.copyState = 'done';
+    delete clip.copyError;
     return copy;
   } finally {
     clearStage(clip);
@@ -413,12 +519,15 @@ async function scheduleClip(clip) {
     let copy = clip.copy;
     if (!copy) {
       stage(clip, 'Writing the caption', step, total);
-      copy = await generateCopy(clip, account) || {
+      const generated = await generateCopy(clip, accounts);
+      copy = generated || {
         title: clip.title,
         description: clip.description,
         hashtags: clip.hashtags,
       };
       clip.copy = copy;
+      clip.copyState = generated ? 'done' : 'failed';
+      if (generated) delete clip.copyError;
       save();
     }
 
@@ -637,7 +746,7 @@ async function processCopy(maxPerTick = 8, concurrency = 1) {
   const accounts = state.accounts || [];
   if (!accounts.length) return; // nothing to ask Opus to write for yet
 
-  const pending = state.clips.filter(c => c.status === 'waiting' && !c.copy && c.copyState !== 'skipped').slice(0, maxPerTick);
+  const pending = state.clips.filter(c => c.status === 'waiting' && !c.copy && !c.copyState).slice(0, maxPerTick);
   if (!pending.length) return;
   let index = 0;
 
@@ -648,11 +757,17 @@ async function processCopy(maxPerTick = 8, concurrency = 1) {
         ? 'Writing an English title and description with Opus AI'
         : 'Writing the title and description with Opus AI');
       try {
-        const copy = await generateCopy(clip, accounts[0], true);
-        if (copy) { clip.copy = copy; clip.copyState = 'done'; }
-        else clip.copyState = 'failed';
-      } catch {
+        const copy = await generateCopy(clip, accounts, true);
+        if (copy) {
+          clip.copy = copy;
+          clip.copyState = 'done';
+          delete clip.copyError;
+        } else {
+          clip.copyState = 'failed';
+        }
+      } catch (err) {
         clip.copyState = 'failed';
+        clip.copyError = err.message || clip.copyError || 'Opus AI rewrite failed.';
       } finally {
         clearStage(clip);
         save();
