@@ -1025,18 +1025,23 @@ select:focus{outline:none;border-color:var(--blue)}
                   <span id="musicSettingsState">Waiting for settings</span>
                 </div>
                 <label class="field code" for="musicEnabled">Mode</label>
-                <select id="musicEnabled" aria-label="Add music automatically" class="hide">
-                  <option value="1">On — music guaranteed (usually +1 Opus credit per clip)</option>
-                  <option value="0">Off — credit saver, original clip audio only</option>
+                <select id="musicEnabled" aria-label="Music mode" class="hide">
+                  <option value="opus_native">Opus-native — no extra import credits</option>
+                  <option value="local_import">Guaranteed local mix — uses your Music tab, costs extra Opus import</option>
+                  <option value="off">Off — original clip audio only</option>
                 </select>
                 <div class="music-mode-picker" role="group" aria-label="Music mode">
-                  <button class="music-mode-option" type="button" data-music-mode="1">
-                    <strong>Best quality</strong>
-                    <span>Music is required before scheduling. Uses one mixed Opus re-import per clip.</span>
+                  <button class="music-mode-option" type="button" data-music-mode="opus_native">
+                    <strong>Opus-native</strong>
+                    <span>No second Opus project. Use Opus music/editor while this app keeps your Music tab library.</span>
                   </button>
-                  <button class="music-mode-option" type="button" data-music-mode="0">
-                    <strong>Credit saver</strong>
-                    <span>No second Opus import. Clips keep their original audio only.</span>
+                  <button class="music-mode-option" type="button" data-music-mode="local_import">
+                    <strong>Guaranteed local mix</strong>
+                    <span>Uses tracks uploaded here and re-imports the finished clip to Opus.</span>
+                  </button>
+                  <button class="music-mode-option" type="button" data-music-mode="off">
+                    <strong>Off</strong>
+                    <span>Credit saver. Clips keep original audio only.</span>
                   </button>
                 </div>
 
@@ -1047,7 +1052,7 @@ select:focus{outline:none;border-color:var(--blue)}
                 </div>
                 <button class="btn btn-sm" id="saveMusicSettings" style="margin-top:14px;width:100%">Save music settings</button>
                 <div class="credit-warning" id="musicCreditNote">
-                  <strong>Credit note:</strong> Best quality mode mixes music locally, then imports that short finished clip back into Opus so Opus can schedule it. Credit saver turns that off.
+                  <strong>Credit note:</strong> Opus-native mode avoids the second Opus project. Guaranteed local mix is the old fully automatic app-mixing path and may use extra Opus processing credit.
                 </div>
               </div>
 
@@ -1092,10 +1097,10 @@ select:focus{outline:none;border-color:var(--blue)}
               <div class="slab" style="margin-top:18px">
                 <div class="music-card-title"><h3>Music pipeline</h3><span>What happens per clip</span></div>
                 <div class="music-pipeline">
-                  <div class="music-step"><div class="music-step-dot">1</div><div><strong>Download Opus clip</strong><span>The app fetches the rendered clip from Opus.</span></div></div>
-                  <div class="music-step"><div class="music-step-dot">2</div><div><strong>Mix random track</strong><span>Your clip voice stays full volume. Music loops quietly underneath.</span></div></div>
-                  <div class="music-step"><div class="music-step-dot">3</div><div><strong>Re-import to Opus</strong><span>The finished music clip returns to Opus so scheduled posting still works.</span></div></div>
-                  <div class="music-step"><div class="music-step-dot">4</div><div><strong>Schedule or post</strong><span>The app blocks posting until required music is ready.</span></div></div>
+                  <div class="music-step"><div class="music-step-dot">1</div><div><strong>Opus-native default</strong><span>No second Opus project is created, so you avoid the extra import credit.</span></div></div>
+                  <div class="music-step"><div class="music-step-dot">2</div><div><strong>Your Music tab stays</strong><span>Upload and preview the nasheeds you want to use or keep synced with Opus.</span></div></div>
+                  <div class="music-step"><div class="music-step-dot">3</div><div><strong>Optional guaranteed mix</strong><span>Only use local mix mode when you accept the extra Opus re-import credit.</span></div></div>
+                  <div class="music-step"><div class="music-step-dot">4</div><div><strong>Schedule or post</strong><span>Opus-native schedules the original Opus clip directly; local mix schedules the re-imported clip.</span></div></div>
                 </div>
               </div>
 
@@ -1660,8 +1665,9 @@ function clipCard(c) {
   }
   if (c.musicMixed) {
     const retrying = c.musicMixed === 'retrying';
-    const tag = el('span', 'music-tag ' + (c.musicMixed === 'done' ? 'on' : c.musicMixed === 'failed' ? 'bad' : 'off'));
+    const tag = el('span', 'music-tag ' + (c.musicMixed === 'done' || c.musicMixed === 'opus_native' ? 'on' : c.musicMixed === 'failed' ? 'bad' : 'off'));
     tag.textContent = c.musicMixed === 'done' ? '♪ ' + (c.musicNote || 'Music verified')
+      : c.musicMixed === 'opus_native' ? 'Opus-native music'
       : retrying ? `Music required — retrying${c.musicAttempts ? ` (${c.musicAttempts})` : ''}`
       : c.musicMixed === 'failed' ? 'Music failed — blocked'
       : 'Music not added';
@@ -1883,14 +1889,16 @@ const platformName = p => String(p || '')
 
 function scheduleSafetyBadges(c) {
   const out = [];
-  const musicOn = DATA?.musicSettings?.enabled !== false;
-  if (musicOn) {
+  const musicMode = DATA?.musicSettings?.mode || (DATA?.musicSettings?.enabled === false ? 'off' : 'opus_native');
+  if (musicMode === 'off') {
+    out.push({ text: 'Music off', cls: '' });
+  } else if (musicMode === 'opus_native') {
+    out.push({ text: c.musicMixed === 'opus_native' ? 'Opus-native music' : 'No extra import', cls: 'good' });
+  } else {
     if (c.musicMixed === 'done') out.push({ text: 'Music ready', cls: 'good' });
     else if (c.musicMixed === 'retrying') out.push({ text: 'Music retrying', cls: 'warn' });
     else if (c.musicMixed === 'failed') out.push({ text: 'Music failed', cls: 'bad' });
     else out.push({ text: 'Music pending', cls: statusOf(c) === 'approved' ? 'warn' : '' });
-  } else {
-    out.push({ text: 'Music off', cls: '' });
   }
 
   if (c.copyState === 'done') out.push({ text: 'English copy', cls: 'good' });
@@ -1899,7 +1907,7 @@ function scheduleSafetyBadges(c) {
 
   if (c.templateChanged === false) out.push({ text: 'Current style', cls: 'good' });
   else if (c.templateChanged === true) out.push({ text: 'Older style', cls: 'warn' });
-  else out.push({ text: 'Style unverified', cls: '' });
+  else out.push({ text: 'Style not recorded', cls: '' });
 
   if ((c.targets || []).some(t => t.status === 'failed')) out.push({ text: 'Upload failed', cls: 'bad' });
   else if ((c.targets || []).some(t => t.status === 'scheduled')) out.push({ text: 'In Opus', cls: 'good' });
@@ -2166,11 +2174,11 @@ function renderRecord(clips) {
   const attention = active.filter(isAttention).length;
   const totalActive = Math.max(1, active.length);
   const health = clips.length ? Math.max(0, Math.round(((totalActive - attention) / totalActive) * 100)) : 100;
-  const musicDone = clips.filter(c => c.musicMixed === 'done').length;
+  const musicDone = clips.filter(c => c.musicMixed === 'done' || c.musicMixed === 'opus_native').length;
   const musicRetry = clips.filter(c => c.musicMixed === 'retrying' || c.musicMixed === 'failed').length;
   const aiDone = clips.filter(c => c.copyState === 'done').length;
   const aiFailed = clips.filter(c => c.copyState === 'failed').length;
-  const extraCreditClips = clips.filter(c => c.musicImportProjectId || c.musicMixed === 'done').length;
+  const extraCreditClips = clips.filter(c => c.musicImportProjectId || c.musicMode === 'local_import').length;
 
   const score = $('#healthScore');
   score.textContent = clips.length ? health + '%' : '—';
@@ -2188,7 +2196,7 @@ function renderRecord(clips) {
     { v: attention, k: 'Needs attention', s: attention ? 'Fix before trusting schedule' : 'No blockers showing', cls: attention ? 'bad' : 'good' },
     { v: daysLeft < 1 ? '<1' : Math.floor(daysLeft), k: 'Days of runway', s: `${perDay} slot${perDay === 1 ? '' : 's'} per day`, cls: daysLeft < 1.5 ? 'warn' : '' },
     { v: avgLen ? avgLen + 's' : '—', k: 'Average length', s: 'Across tracked clips' },
-    { v: extraCreditClips, k: 'Music imports', s: 'Approx. extra Opus processing clips', cls: extraCreditClips ? 'warn' : '' },
+    { v: extraCreditClips, k: 'Local music imports', s: extraCreditClips ? 'Extra Opus imports used' : 'Native mode avoided extra imports', cls: extraCreditClips ? 'warn' : 'good' },
     { v: failedUploads, k: 'Upload failures', s: failedUploads ? 'Check logs / targets' : 'None currently', cls: failedUploads ? 'bad' : 'good' },
   ];
 
@@ -2292,9 +2300,9 @@ function analyticsPostCard(c) {
   const good = (c.targets || []).filter(goodTarget);
   sub.textContent = `${c.projectTitle || 'Lecture'} · ${good.length || 0} target${good.length === 1 ? '' : 's'}`;
   const tags = el('div', 'post-tags');
-  if (c.musicMixed === 'done') {
+  if (c.musicMixed === 'done' || c.musicMixed === 'opus_native') {
     const t = el('span', 'music-tag on');
-    t.textContent = '♪ Music';
+    t.textContent = c.musicMixed === 'opus_native' ? 'Opus-native music' : '♪ Music';
     if (c.musicNote) t.title = c.musicNote;
     tags.append(t);
   }
@@ -2431,19 +2439,24 @@ function renderMusicMode(clips) {
   if (!host) return;
   host.innerHTML = '';
   const settings = DATA.musicSettings || {};
-  const enabled = settings.enabled !== false;
-  const done = clips.filter(c => c.musicMixed === 'done').length;
+  const mode = settings.mode || (settings.enabled === false ? 'off' : 'opus_native');
+  const done = clips.filter(c => c.musicMixed === 'done' || c.musicMixed === 'opus_native').length;
   const retry = clips.filter(c => ['retrying','failed'].includes(c.musicMixed)).length;
   const line = el('div', 'side-mode-line');
   const text = el('div');
-  text.innerHTML = `<div class="side-mode-name">${enabled ? 'Best quality' : 'Credit saver'}</div>
-    <div class="side-mode-note">${enabled ? 'Music is required before scheduling. Mixed clips usually need one extra Opus import.' : 'Music is off, so clips schedule without the second Opus import.'}</div>`;
-  const pill = el('span', 'side-pill ' + (enabled ? 'warn' : 'good'));
-  pill.textContent = enabled ? '+ credits' : 'saving';
+  const modeName = mode === 'local_import' ? 'Guaranteed local mix' : mode === 'off' ? 'Music off' : 'Opus-native';
+  const modeNote = mode === 'local_import'
+    ? 'Uses your Music tab and re-imports the finished clip. Only use when you accept extra credits.'
+    : mode === 'off'
+      ? 'Clips schedule without app-added music.'
+      : 'No second Opus project. Use Opus native music/editor and keep your Music tab as your track library.';
+  text.innerHTML = `<div class="side-mode-name">${modeName}</div><div class="side-mode-note">${modeNote}</div>`;
+  const pill = el('span', 'side-pill ' + (mode === 'local_import' ? 'warn' : 'good'));
+  pill.textContent = mode === 'local_import' ? '+ credits' : mode === 'off' ? 'off' : 'no import';
   line.append(text, pill);
   host.append(line);
   const badges = el('div', 'side-badge-row');
-  const a = el('span', 'side-pill good'); a.textContent = `${done} mixed`;
+  const a = el('span', 'side-pill good'); a.textContent = `${done} ready`;
   const b = el('span', 'side-pill ' + (retry ? 'bad' : 'good')); b.textContent = `${retry} retrying`;
   badges.append(a, b);
   host.append(badges);
@@ -2917,16 +2930,17 @@ $('#musicSearch').addEventListener('input', e => {
 });
 
 $('#saveMusicSettings').onclick = async () => {
-  const enabled = $('#musicEnabled').value === '1';
+  const mode = $('#musicEnabled').value || 'opus_native';
+  const enabled = mode !== 'off';
   const volumePercent = Number($('#musicVolume').value);
   $('#saveMusicSettings').disabled = true;
   try {
     const res = await api('/api/music-settings', {
       method: 'POST',
-      body: JSON.stringify({ enabled, volumePercent }),
+      body: JSON.stringify({ mode, enabled, volumePercent }),
     });
     musicSettingsDirty = false;
-    applyMusicSettings(res.settings || { enabled, volumePercent });
+    applyMusicSettings(res.settings || { mode, enabled, volumePercent });
     toast('Music settings saved', 'good');
     refresh();
   } catch (err) { toast(err.message, 'bad'); }
@@ -2972,21 +2986,23 @@ async function loadMusic() {
 }
 
 function applyMusicSettings(s) {
-  $('#musicEnabled').value = s.enabled === false ? '0' : '1';
+  $('#musicEnabled').value = s.mode || (s.enabled === false ? 'off' : 'opus_native');
   $('#musicVolume').value = s.volumePercent ?? 15;
   $('#volumeLabel').textContent = $('#musicVolume').value;
   updateMusicModeUi();
 }
 
 function updateMusicModeUi() {
-  const enabled = $('#musicEnabled').value === '1';
-  document.querySelectorAll('[data-music-mode]').forEach(b => b.classList.toggle('on', b.dataset.musicMode === (enabled ? '1' : '0')));
+  const mode = $('#musicEnabled').value || 'opus_native';
+  document.querySelectorAll('[data-music-mode]').forEach(b => b.classList.toggle('on', b.dataset.musicMode === mode));
   const state = $('#musicSettingsState');
-  if (state) state.textContent = enabled ? 'Best quality mode' : 'Credit saver mode';
+  if (state) state.textContent = mode === 'opus_native' ? 'No extra Opus import' : mode === 'local_import' ? 'Guaranteed local mix' : 'Music off';
   const note = $('#musicCreditNote');
-  if (note) note.innerHTML = enabled
-    ? '<strong>Best quality:</strong> music is required before scheduling, so each mixed clip normally needs one extra short Opus import.'
-    : '<strong>Credit saver:</strong> clips schedule without the local music re-import, so you avoid the extra Opus processing credit.';
+  if (note) note.innerHTML = mode === 'opus_native'
+    ? '<strong>Opus-native:</strong> schedules the original Opus clip and avoids the second Opus project. Keep the same tracks in your Music tab / Opus music library.'
+    : mode === 'local_import'
+      ? '<strong>Guaranteed local mix:</strong> uses tracks uploaded here and re-imports the finished clip to Opus, which can use extra processing credit.'
+      : '<strong>Off:</strong> clips schedule without app-added music.';
 }
 
 function renderMusicPage() {
@@ -2999,19 +3015,20 @@ function renderMusicHero(tracks) {
   const host = $('#musicHero');
   if (!host) return;
   const clips = DATA?.clips || [];
-  const settings = { enabled: $('#musicEnabled')?.value !== '0', volumePercent: Number($('#musicVolume')?.value || 15) };
+  const mode = $('#musicEnabled')?.value || 'opus_native';
+  const settings = { mode, enabled: mode !== 'off', volumePercent: Number($('#musicVolume')?.value || 15) };
   const totalSec = tracks.reduce((n, t) => n + (t.durationSec || 0), 0);
   const retry = clips.filter(c => ['retrying', 'failed'].includes(c.musicMixed)).length;
-  const mixed = clips.filter(c => c.musicMixed === 'done').length;
-  const imports = clips.filter(c => c.musicImportProjectId || c.musicMixed === 'done').length;
+  const mixed = clips.filter(c => c.musicMixed === 'done' || c.musicMixed === 'opus_native').length;
+  const imports = clips.filter(c => c.musicImportProjectId || c.musicMode === 'local_import').length;
   host.innerHTML = `
     <div class="music-stat"><strong>${tracks.length}</strong><span>Tracks uploaded</span></div>
     <div class="music-stat"><strong>${fmtDuration(totalSec)}</strong><span>Total music length</span></div>
-    <div class="music-stat"><strong>${settings.enabled ? settings.volumePercent + '%' : 'Off'}</strong><span>${settings.enabled ? 'Background volume' : 'Credit saver active'}</span></div>
-    <div class="music-stat"><strong>${retry || mixed}</strong><span>${retry ? 'Needs music attention' : 'Mixed clips ready'}</span></div>`;
+    <div class="music-stat"><strong>${settings.mode === 'local_import' ? settings.volumePercent + '%' : settings.mode === 'opus_native' ? 'Native' : 'Off'}</strong><span>${settings.mode === 'local_import' ? 'Local mix volume' : settings.mode === 'opus_native' ? 'No extra import' : 'Music disabled'}</span></div>
+    <div class="music-stat"><strong>${retry || mixed}</strong><span>${retry ? 'Needs music attention' : settings.mode === 'local_import' ? 'Mixed clips ready' : 'Native-mode clips'}</span></div>`;
   const note = $('#musicNote');
   if (note) note.textContent = tracks.length
-    ? `${plural(tracks.length, 'track')} ready · ${imports} music import${imports === 1 ? '' : 's'} used so far`
+    ? `${plural(tracks.length, 'track')} ready · ${settings.mode === 'local_import' ? `${imports} music import${imports === 1 ? '' : 's'} used so far` : 'no extra Opus imports in native mode'}`
     : 'No tracks uploaded yet';
 }
 
@@ -3019,15 +3036,16 @@ function renderMusicHealth(tracks) {
   const host = $('#musicHealthList');
   if (!host) return;
   const clips = DATA?.clips || [];
-  const enabled = $('#musicEnabled').value !== '0';
+  const mode = $('#musicEnabled').value || 'opus_native';
+  const enabled = mode !== 'off';
   const waiting = clips.filter(c => statusOf(c) === 'waiting').length;
   const approved = clips.filter(c => statusOf(c) === 'approved').length;
   const retry = clips.filter(c => ['retrying', 'failed'].includes(c.musicMixed)).length;
-  const ready = clips.filter(c => c.musicMixed === 'done').length;
+  const ready = clips.filter(c => c.musicMixed === 'done' || c.musicMixed === 'opus_native').length;
   const lines = [
-    ['Mode', enabled ? 'Best quality' : 'Credit saver'],
+    ['Mode', mode === 'opus_native' ? 'Opus-native' : mode === 'local_import' ? 'Guaranteed local mix' : 'Off'],
     ['Tracks available', tracks.length ? plural(tracks.length, 'track') : 'None uploaded'],
-    ['Queued for music', enabled ? plural(approved, 'clip') : 'Music off'],
+    ['Queued for music', enabled ? (mode === 'opus_native' ? 'No extra import' : plural(approved, 'clip')) : 'Music off'],
     ['Music ready', plural(ready, 'clip')],
     ['Needs retry', retry ? plural(retry, 'clip') : 'None'],
     ['Waiting review', plural(waiting, 'clip')],
@@ -3044,7 +3062,7 @@ function renderMusicList(tracks) {
   if (!tracks.length) {
     host.innerHTML = `<div class="slab"><div class="empty">
       <div class="empty-title">No nasheeds yet</div>
-      <div class="empty-note">Upload a few tracks above. One is picked at random and mixed quietly under each clip's own audio.</div>
+      <div class="empty-note">Upload a few tracks above. In Opus-native mode this keeps your music library organised; in guaranteed local mix mode one is picked at random and mixed under the clip.</div>
     </div></div>`;
     return;
   }
