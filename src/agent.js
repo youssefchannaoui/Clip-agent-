@@ -596,13 +596,37 @@ function musicRetryDelay(attempts) {
  */
 async function ensureMusic(clip) {
   const settings = audio.musicSettings();
-  if (!settings.enabled) {
+  if (!settings.enabled || settings.mode === 'off') {
     delete clip.musicNextTryAt;
     delete clip.musicAttempts;
+    clip.musicMode = 'off';
     return { ok: true, required: false };
   }
 
   const selected = brandTemplateSelection();
+
+  if (settings.mode === 'opus_native') {
+    // This is the no-extra-credit path. Opus's editor can add/upload music
+    // natively without creating another clipping project; the public API does
+    // not expose the editor timeline/music-track operation, so the app must not
+    // create a second Opus project here. Keep the Music tab library active as
+    // the source of truth for the tracks/volume you want to use, and schedule
+    // the original Opus clip directly.
+    const track = audio.pickNasheed?.();
+    clip.musicMode = 'opus_native';
+    clip.musicMixed = 'opus_native';
+    clip.musicTemplateId = selected.id || '';
+    clip.musicTemplateName = selected.name || '';
+    clip.musicNote = track
+      ? `Opus-native music mode: use "${track.name}" from your Music tab / Opus music library. No second Opus import was created.`
+      : 'Opus-native music mode: no second Opus import was created. Upload/select music in Opus if this clip needs background music.';
+    clip.musicVerifiedAt = Date.now();
+    delete clip.musicNextTryAt;
+    delete clip.musicAttempts;
+    save();
+    return { ok: true, required: true };
+  }
+
   if (clip.musicMixed === 'done') {
     if (clip.musicTemplateId && clip.musicTemplateId !== selected.id) {
       clip.musicMixed = 'retrying';
@@ -665,6 +689,7 @@ async function ensureMusic(clip) {
       clip.musicImportTemplateName = selected.name || '';
       clip.musicImportNasheedName = result.nasheedName || '';
       clip.musicImportCreatedAt = Date.now();
+      clip.musicMode = 'local_import';
       nasheedName = result.nasheedName || '';
       save();
     }
@@ -676,7 +701,7 @@ async function ensureMusic(clip) {
     }
 
     // The API exposes the final render preferences. Refuse a no-caption style
-    // if Opus reports that captions were enabled on the mixed result.
+    // only if Opus explicitly reports captions were enabled on the mixed result.
     if (selected.enableCaption === false && newClip.renderPref?.enableCaption === true) {
       throw new Error('Opus reported captions enabled on the mixed result, so it was not scheduled.');
     }
@@ -689,6 +714,7 @@ async function ensureMusic(clip) {
     clip.preview = newClip.preview || newClip.exportUrl || clip.preview;
     clip.renderPref = newClip.renderPref || clip.renderPref || null;
     clip.musicMixed = 'done';
+    clip.musicMode = 'local_import';
     clip.musicNote = `Mixed with "${nasheedName || 'your music library'}"`;
     clip.musicTemplateId = selected.id;
     clip.musicTemplateName = selected.name || '';
@@ -699,6 +725,7 @@ async function ensureMusic(clip) {
   } catch (err) {
     clip.musicAttempts = (clip.musicAttempts || 0) + 1;
     clip.musicMixed = 'retrying';
+    clip.musicMode = 'local_import';
     clip.musicNote = err.message;
     clip.musicNextTryAt = Date.now() + musicRetryDelay(clip.musicAttempts);
     log(`Music is required, so "${clip.title}" was not scheduled. Retry ${clip.musicAttempts}: ${err.message}`, 'warn');
