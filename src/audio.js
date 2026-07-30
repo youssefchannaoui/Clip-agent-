@@ -135,20 +135,24 @@ export function musicSettings() {
   const s = state.musicSettings || {};
   const configuredMode = s.mode || config.musicMode || null;
   const enabled = s.enabled ?? config.musicEnabled;
-  const mode = configuredMode || (enabled ? 'opus_native' : 'off');
+  const rawMode = configuredMode || (enabled ? 'opus_library' : 'off');
+  // Backwards compatibility with the earlier name for the same no-extra-import mode.
+  const mode = rawMode === 'opus_native' ? 'opus_library' : rawMode;
   return {
     enabled: mode !== 'off' && enabled !== false,
-    // opus_native = no extra Opus import credits. The app keeps your Music tab
-    // library for choosing/previewing tracks, while Opus handles music natively.
-    // local_import = old guaranteed local mix + re-import path.
-    mode: ['opus_native', 'local_import', 'off'].includes(mode) ? mode : 'opus_native',
+    // opus_library = no extra Opus import credits. Use the nasheeds/audio you
+    // already uploaded in Opus Brand Kit / Media, while the app schedules the
+    // original Opus clip.
+    // local_import = old guaranteed app Music tab mix + Opus re-import path.
+    mode: ['opus_library', 'local_import', 'off'].includes(mode) ? mode : 'opus_library',
     volumePercent: s.volumePercent ?? config.musicVolumePercent,
   };
 }
 export function setMusicSettings(next) {
   const clean = { ...next };
+  if (clean.mode === 'opus_native') clean.mode = 'opus_library';
   if (clean.mode === 'off') clean.enabled = false;
-  else if (clean.mode === 'opus_native' || clean.mode === 'local_import') clean.enabled = true;
+  else if (clean.mode === 'opus_library' || clean.mode === 'local_import') clean.enabled = true;
   state.musicSettings = { ...state.musicSettings, ...clean };
   save();
 }
