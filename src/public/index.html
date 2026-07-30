@@ -443,6 +443,62 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .project-remove{}
 .project-remove:hover{border-color:rgba(255,105,105,.45);color:#ffd2d2;background:rgba(110,25,25,.28)}
 
+.library-hero{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0 18px;
+}
+.library-stat{
+  padding:15px 16px;border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025));
+  border:1px solid var(--line);min-width:0;
+}
+.library-stat strong{display:block;font-size:24px;letter-spacing:-.04em;line-height:1;color:var(--text)}
+.library-stat span{display:block;margin-top:6px;color:var(--mute);font-size:12.5px}
+.library-controls{
+  display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 16px;
+}
+.library-search{flex:1 1 280px;min-width:0}
+.library-select{flex:0 0 auto;min-width:165px}
+.library-filter{
+  display:flex;gap:6px;flex-wrap:wrap;background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:999px;padding:4px;
+}
+.library-filter .btn{border-radius:999px;padding:7px 11px}
+.library-filter .btn.on{background:rgba(217,180,120,.16);border-color:rgba(217,180,120,.36);color:var(--blue-soft)}
+.library-tools summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.library-tools summary::-webkit-details-marker{display:none}
+.library-tools summary::after{content:'›';color:var(--mute-2);transform:rotate(90deg);transition:transform .14s ease}
+.library-tools:not([open]) summary::after{transform:none}
+.library-tools .library-tools-body{margin-top:13px}
+.lec-topline{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:9px}
+.lec-chip{
+  display:inline-flex;align-items:center;gap:4px;min-height:21px;padding:2px 8px;border-radius:999px;
+  border:1px solid var(--line);font-size:11.5px;color:var(--mute);background:rgba(255,255,255,.025);
+}
+.lec-chip.good{border-color:rgba(107,255,174,.28);color:#b8ffd4;background:rgba(53,160,100,.08)}
+.lec-chip.warn{border-color:rgba(217,180,120,.34);color:var(--blue-soft);background:rgba(217,180,120,.08)}
+.lec-chip.bad{border-color:rgba(255,85,102,.34);color:#ffd2d2;background:rgba(110,25,25,.15)}
+.lec-chip.dim{opacity:.75}
+.lec-progress{height:7px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;margin:10px 0 8px}
+.lec-progress span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,rgba(217,180,120,.75),rgba(255,232,190,.95));width:0%}
+.lec-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 0}
+.lec-stat{border:1px solid var(--line);border-radius:9px;padding:8px 9px;background:rgba(255,255,255,.024);min-width:0}
+.lec-stat strong{display:block;font-size:15px;line-height:1;color:var(--text)}
+.lec-stat span{display:block;margin-top:3px;color:var(--mute-2);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lec-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:13px}
+.lec-actions .project-remove{grid-column:1/-1}
+.lec-actions .btn{min-width:0;white-space:normal;line-height:1.25}
+.lec-card-note{margin-top:8px;color:var(--mute-2);font-size:11.8px;line-height:1.45}
+.pick-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.pick-toolbar .note{margin-right:auto}
+.pick-panel-title{font-size:14px;font-weight:600;color:var(--text);margin-right:8px}
+@media (max-width:900px){
+  .library-hero{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .library-controls{align-items:stretch}.library-search,.library-select{flex:1 1 100%}
+  .library-filter{border-radius:12px}.library-filter .btn{flex:1 1 auto}
+}
+@media (max-width:560px){
+  .library-hero{grid-template-columns:1fr 1fr;gap:9px}.library-stat{padding:12px}.library-stat strong{font-size:20px}
+  .lec-grid{grid-template-columns:1fr}.lec-actions{grid-template-columns:1fr}.lec-stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.lec-stat{padding:7px 6px}
+}
+
 .proc{
   display:flex;align-items:center;gap:13px;padding:14px 18px;
   background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:10px;
@@ -953,20 +1009,45 @@ select:focus{outline:none;border-color:var(--blue)}
 
         <!-- library -->
         <section class="panel hide" id="view-library">
-          <div class="head">
-            <h2>Past lectures</h2>
-            <span class="note">Pull in more clips from something already sent to Opus, at no extra credit cost</span>
-          </div>
-          <p class="hint">Getting more clips from an old lecture doesn't cost extra Opus credits — it's already been clipped. It does carry whatever caption style was active when you first sent it, though — not your current settings. Resubmitting the link fresh applies your current style, but does cost credits again.</p>
-          <div class="slab library-tools">
-            <div class="code" style="margin-bottom:9px">Add a project made directly in Opus</div>
-            <div class="intake-row">
-              <input id="existingProjectRef" type="text" placeholder="Opus project ID or project link" style="flex:1">
-              <input id="existingProjectTitle" type="text" placeholder="Optional display name" style="flex:1">
-              <button class="btn btn-ghost btn-sm" id="attachExistingProject">Add to library</button>
+          <div class="head sched-head">
+            <div>
+              <h2>Library</h2>
+              <span class="note">Find old Opus projects, pull more clips, and avoid paying twice for the same lecture</span>
             </div>
-            <div class="library-limit">Opus's public API does not currently provide a supported endpoint to automatically list or delete every dashboard project. Projects sent through this app appear automatically; paste the ID/link once for projects created directly in Opus. Removing a lecture here removes it from this app and cancels its future schedules, but does not delete it from the Opus dashboard.</div>
+            <button class="btn btn-ghost btn-sm" id="refreshLibrary">Refresh library</button>
           </div>
+
+          <div class="library-hero" id="libraryStats"></div>
+
+          <div class="library-controls">
+            <input class="library-search" id="librarySearch" type="search" placeholder="Search title, link, or project ID">
+            <div class="library-filter" id="libraryFilters">
+              <button class="btn btn-ghost btn-sm on" data-library-filter="all">All</button>
+              <button class="btn btn-ghost btn-sm" data-library-filter="available">Has clips left</button>
+              <button class="btn btn-ghost btn-sm" data-library-filter="working">Clipping</button>
+              <button class="btn btn-ghost btn-sm" data-library-filter="external">Imported</button>
+              <button class="btn btn-ghost btn-sm" data-library-filter="issues">Issues</button>
+            </div>
+            <select class="library-select" id="librarySort">
+              <option value="newest">Newest first</option>
+              <option value="available">Most clips left</option>
+              <option value="progress">Most imported</option>
+              <option value="az">A to Z</option>
+            </select>
+          </div>
+
+          <details class="slab library-tools">
+            <summary><span class="code">Add a project made directly in Opus</span></summary>
+            <div class="library-tools-body">
+              <div class="intake-row">
+                <input id="existingProjectRef" type="text" placeholder="Opus project ID or project link" style="flex:1">
+                <input id="existingProjectTitle" type="text" placeholder="Optional display name" style="flex:1">
+                <button class="btn btn-ghost btn-sm" id="attachExistingProject">Add to library</button>
+              </div>
+              <div class="library-limit">Projects sent through this app appear automatically. Paste the ID/link once for projects created directly in Opus. Removing a lecture here removes it from this app and cancels its future schedules, but does not delete it from the Opus dashboard.</div>
+            </div>
+          </details>
+
           <div id="libraryList"></div>
         </section>
 
@@ -2789,14 +2870,64 @@ function renderMusicList(tracks) {
 
 /* ---------- library ---------- */
 
+let LIBRARY_PROJECTS = [];
+let LIBRARY_FILTER = 'all';
+let LIBRARY_QUERY = '';
+let LIBRARY_SORT = 'newest';
+
 async function loadLibrary() {
   const host = $('#libraryList');
   try {
     const res = await api('/api/projects');
-    renderLibrary(res.projects || []);
+    LIBRARY_PROJECTS = res.projects || [];
+    renderLibrary();
   } catch (err) {
     host.innerHTML = `<div class="slab"><div class="empty-note">${esc(err.message)}</div></div>`;
   }
+}
+
+function projectRemaining(p) {
+  return Number.isFinite(p.available) ? p.available : Math.max(0, (p.clipCount || 0) - (p.imported || 0) - (p.hidden || 0));
+}
+function projectProgress(p) {
+  const total = p.clipCount || 0;
+  return total ? Math.max(0, Math.min(100, Math.round(((p.imported || 0) / total) * 100))) : 0;
+}
+function projectIssueCount(p) {
+  return (p.status === 'stalled' ? 1 : 0) + (p.styleChanged === true ? 1 : 0);
+}
+function projectMatches(p) {
+  const q = LIBRARY_QUERY.trim().toLowerCase();
+  const remaining = projectRemaining(p);
+  const hasIssue = projectIssueCount(p) > 0;
+  const inText = !q || [p.title, p.url, p.id].filter(Boolean).join(' ').toLowerCase().includes(q);
+  if (!inText) return false;
+  if (LIBRARY_FILTER === 'available') return remaining > 0 && p.status !== 'clipping';
+  if (LIBRARY_FILTER === 'working') return p.status === 'clipping';
+  if (LIBRARY_FILTER === 'external') return Boolean(p.external);
+  if (LIBRARY_FILTER === 'issues') return hasIssue;
+  return true;
+}
+function sortedLibraryProjects(projects) {
+  const arr = projects.slice();
+  if (LIBRARY_SORT === 'available') return arr.sort((a, b) => projectRemaining(b) - projectRemaining(a) || (b.submittedAt || 0) - (a.submittedAt || 0));
+  if (LIBRARY_SORT === 'progress') return arr.sort((a, b) => projectProgress(b) - projectProgress(a) || (b.submittedAt || 0) - (a.submittedAt || 0));
+  if (LIBRARY_SORT === 'az') return arr.sort((a, b) => String(a.title || a.url || '').localeCompare(String(b.title || b.url || '')));
+  return arr.sort((a, b) => (b.submittedAt || 0) - (a.submittedAt || 0));
+}
+function renderLibraryStats(projects) {
+  const host = $('#libraryStats');
+  if (!host) return;
+  const total = projects.length;
+  const clips = projects.reduce((n, p) => n + (p.clipCount || 0), 0);
+  const available = projects.reduce((n, p) => n + projectRemaining(p), 0);
+  const queued = projects.reduce((n, p) => n + (p.imported || 0), 0);
+  const issues = projects.reduce((n, p) => n + projectIssueCount(p), 0);
+  host.innerHTML = `
+    <div class="library-stat"><strong>${total}</strong><span>Projects saved</span></div>
+    <div class="library-stat"><strong>${clips}</strong><span>Total Opus clips found</span></div>
+    <div class="library-stat"><strong>${available}</strong><span>Clips still available</span></div>
+    <div class="library-stat"><strong>${issues}</strong><span>Needs attention</span></div>`;
 }
 
 function youtubeVideoId(rawUrl) {
@@ -2811,6 +2942,34 @@ function youtubeVideoId(rawUrl) {
     }
   } catch {}
   return null;
+}
+
+async function hydrateLectureCover(cover, project) {
+  if (!project?.id || cover.dataset.hydratingCover === '1' || cover.dataset.coverHydrated === '1') return;
+  cover.dataset.hydratingCover = '1';
+  try {
+    const res = await api('/api/projects/' + encodeURIComponent(project.id) + '/available-clips');
+    const clip = (res.clips || []).find(c => c.id || c.previewUrl);
+    if (!clip) return;
+    cover.innerHTML = '';
+    const video = el('video');
+    video.src = projectClipPreviewUrl(project.id, clip.id) || clip.previewUrl;
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    video.loop = true;
+    video.autoplay = true;
+    video.title = project.title || 'Lecture preview';
+    primeVideoFrame(video);
+    video.onerror = () => { video.remove(); if (!cover.children.length) cover.append(coverPlaceholder()); };
+    cover.append(video);
+    video.play?.().catch(() => {});
+    cover.dataset.coverHydrated = '1';
+  } catch {
+    if (!cover.children.length) cover.append(coverPlaceholder());
+  } finally {
+    cover.dataset.hydratingCover = '0';
+  }
 }
 
 function mountLectureCover(cover, project) {
@@ -2831,7 +2990,7 @@ function mountLectureCover(cover, project) {
     video.autoplay = true;
     video.title = project.title || 'Lecture preview';
     primeVideoFrame(video);
-    video.onerror = () => { video.remove(); if (!cover.children.length) cover.append(coverPlaceholder()); };
+    video.onerror = () => { video.remove(); if (!cover.children.length) { cover.append(coverPlaceholder()); hydrateLectureCover(cover, project); } };
     cover.append(video);
     video.play?.().catch(() => {});
     return;
@@ -2840,7 +2999,7 @@ function mountLectureCover(cover, project) {
   if (project.coverClipId) {
     candidates.push('/api/clips/thumb/' + encodeURIComponent(project.coverClipId) + '.jpg?pw=' + encodeURIComponent(PW));
   }
-  if (!candidates.length) { cover.append(coverPlaceholder()); return; }
+  if (!candidates.length) { cover.append(coverPlaceholder()); hydrateLectureCover(cover, project); return; }
 
   const img = el('img');
   img.alt = project.title || 'Lecture preview';
@@ -2851,6 +3010,7 @@ function mountLectureCover(cover, project) {
     if (nextIndex >= candidates.length) {
       img.remove();
       if (!cover.querySelector('.lec-cover-ph')) cover.append(coverPlaceholder());
+      hydrateLectureCover(cover, project);
       return;
     }
     img.src = candidates[nextIndex++];
@@ -2860,9 +3020,10 @@ function mountLectureCover(cover, project) {
   tryNextSource();
 }
 
-function renderLibrary(projects) {
+function renderLibrary(projects = LIBRARY_PROJECTS) {
   const host = $('#libraryList');
   host.innerHTML = '';
+  renderLibraryStats(projects);
 
   if (!projects.length) {
     host.innerHTML = `<div class="slab"><div class="empty">
@@ -2872,31 +3033,59 @@ function renderLibrary(projects) {
     return;
   }
 
+  const shown = sortedLibraryProjects(projects.filter(projectMatches));
+  if (!shown.length) {
+    host.innerHTML = `<div class="slab"><div class="empty">
+      <div class="empty-title">No projects match that view</div>
+      <div class="empty-note">Try clearing the search or changing the filter.</div>
+    </div></div>`;
+    return;
+  }
+
   const grid = el('div', 'lec-grid');
 
-  // Newest first.
-  projects.slice().sort((a, b) => (b.submittedAt || 0) - (a.submittedAt || 0)).forEach(p => {
+  shown.forEach(p => {
+    const remaining = projectRemaining(p);
+    const progress = projectProgress(p);
+    const issues = projectIssueCount(p);
     const card = el('div', 'lec');
 
     const cover = el('div', 'lec-cover');
     mountLectureCover(cover, p);
-    if (p.status === 'clipping') {
-      const badge = el('span', 'lec-badge');
-      badge.textContent = 'Clipping…';
-      cover.append(badge);
-    }
+    const badge = el('span', 'lec-badge');
+    badge.textContent = p.status === 'clipping' ? 'Clipping…'
+      : remaining > 0 ? `${remaining} left`
+      : p.clipCount ? 'All imported' : 'No clips';
+    cover.append(badge);
     card.append(cover);
 
     const body = el('div', 'lec-body');
-    const what = el('div', 'lec-what');
+    const top = el('div', 'lec-topline');
+    const sourceChip = el('span', 'lec-chip ' + (p.external ? 'warn' : 'good'));
+    sourceChip.textContent = p.external ? 'Imported from Opus' : 'Made in app';
+    const statusChip = el('span', 'lec-chip ' + (p.status === 'clipping' ? 'warn' : p.status === 'stalled' ? 'bad' : 'good'));
+    statusChip.textContent = p.status === 'clipping' ? 'Still clipping' : p.status === 'stalled' ? 'Stalled' : 'Ready';
+    top.append(sourceChip, statusChip);
+    if (p.styleChanged === true) {
+      const styleChip = el('span', 'lec-chip warn');
+      styleChip.textContent = 'Older style';
+      top.append(styleChip);
+    }
+    if (p.hidden) {
+      const hiddenChip = el('span', 'lec-chip dim');
+      hiddenChip.textContent = `${p.hidden} hidden`;
+      top.append(hiddenChip);
+    }
+    body.append(top);
 
+    const what = el('div', 'lec-what');
     const title = el('div', 'lec-title');
-    title.textContent = p.title || p.url;
+    title.textContent = p.title || p.url || `Opus project ${p.id}`;
+    title.title = p.title || p.url || p.id;
     const meta = el('div', 'lec-meta');
-    const remaining = Number.isFinite(p.available) ? p.available : Math.max(0, (p.clipCount || 0) - (p.imported || 0) - (p.hidden || 0));
-    meta.textContent = p.status === 'clipping' ? 'Still being clipped by Opus'
-      : p.clipCount ? `${p.imported} of ${p.clipCount} clips in your queue${remaining ? `, ${remaining} more available` : ''}`
-      : p.status === 'stalled' ? 'Opus never returned clips for this one' : 'No clips yet';
+    meta.textContent = p.status === 'clipping' ? 'Opus is still generating clips for this lecture'
+      : p.clipCount ? `${p.imported || 0} in queue · ${remaining} available · ${p.clipCount} total`
+      : p.status === 'stalled' ? 'Opus never returned clips for this one' : 'No clips found yet';
     what.append(title, meta);
 
     if (p.url) {
@@ -2906,21 +3095,49 @@ function renderLibrary(projects) {
       link.rel = 'noopener';
       link.textContent = p.url;
       what.append(link);
+    } else {
+      const idLine = el('div', 'lec-link');
+      idLine.textContent = `Opus project ${p.id}`;
+      what.append(idLine);
     }
     body.append(what);
 
+    const bar = el('div', 'lec-progress');
+    const fill = el('span');
+    fill.style.width = progress + '%';
+    bar.append(fill);
+    body.append(bar);
+
+    const stats = el('div', 'lec-stats');
+    const statData = [
+      [p.imported || 0, 'in queue'],
+      [remaining, 'available'],
+      [p.clipCount || 0, 'total'],
+    ];
+    statData.forEach(([value, label]) => {
+      const box = el('div', 'lec-stat');
+      box.innerHTML = `<strong>${value}</strong><span>${label}</span>`;
+      stats.append(box);
+    });
+    body.append(stats);
+
     if (p.styleChanged === true) {
       const warn = el('div', 'lec-warn');
-      warn.textContent = 'Clipped with an older clip style — more clips from this one will keep that same style, not your current one.';
+      warn.textContent = 'This was clipped with an older style. Pulling more clips keeps that original style; re-submit fresh to apply your current style.';
       body.append(warn);
+    } else if (remaining > 0) {
+      const note = el('div', 'lec-card-note');
+      note.textContent = 'These extra clips are already made by Opus, so importing them does not reprocess the lecture.';
+      body.append(note);
     }
 
-    const foot = el('div', 'lec-foot');
+    const actions = el('div', 'lec-actions');
     const more = el('button', 'btn btn-ghost btn-sm');
-    more.textContent = remaining > 0 ? `Get ${remaining} more clip${remaining === 1 ? '' : 's'}` : 'Check for more clips';
+    more.textContent = remaining > 0 ? `Get ${remaining} more` : 'Check again';
     more.disabled = p.status === 'clipping';
     more.onclick = async () => {
       more.disabled = true;
+      more.classList.add('is-loading');
       more.textContent = 'Checking…';
       try {
         const res = await api('/api/projects/' + encodeURIComponent(p.id) + '/more-clips', { method: 'POST' });
@@ -2930,33 +3147,36 @@ function renderLibrary(projects) {
       } catch (err) {
         toast(err.message, 'bad');
         more.disabled = false;
-        more.textContent = remaining > 0 ? `Get ${remaining} more clip${remaining === 1 ? '' : 's'}` : 'Check for more clips';
+        more.classList.remove('is-loading');
+        more.textContent = remaining > 0 ? `Get ${remaining} more` : 'Check again';
       }
     };
 
     const pick = el('button', 'btn btn-ghost btn-sm');
-    pick.textContent = 'Pick clips';
+    pick.textContent = 'Open picker';
     pick.disabled = p.status === 'clipping';
     let panel = null;
     pick.onclick = async () => {
-      if (panel) { panel.remove(); panel = null; card.classList.remove('picking'); pick.textContent = 'Pick clips'; return; }
+      if (panel) { panel.remove(); panel = null; card.classList.remove('picking'); pick.textContent = 'Open picker'; return; }
       pick.disabled = true;
+      pick.classList.add('is-loading');
       pick.textContent = 'Loading…';
       try {
         const res = await api('/api/projects/' + encodeURIComponent(p.id) + '/available-clips');
         panel = buildPickPanel(p, res.clips || []);
         card.classList.add('picking');
         card.append(panel);
-        pick.textContent = 'Hide clips';
+        pick.textContent = 'Hide picker';
       } catch (err) {
         toast(err.message, 'bad');
-        pick.textContent = 'Pick clips';
+        pick.textContent = 'Open picker';
       }
       pick.disabled = false;
+      pick.classList.remove('is-loading');
     };
 
     const removeProjectBtn = el('button', 'btn btn-ghost btn-sm project-remove');
-    removeProjectBtn.textContent = 'Remove';
+    removeProjectBtn.textContent = 'Remove from app';
     removeProjectBtn.title = 'Remove this lecture from the app library';
     removeProjectBtn.onclick = async () => {
       const warning = 'Remove this entire lecture from the app? Any future schedules from it will be cancelled. Already-published posts and the project inside Opus will not be deleted.';
@@ -2974,6 +3194,7 @@ function renderLibrary(projects) {
           ? ` ${res.postedRemain} already-published post${res.postedRemain === 1 ? '' : 's'} remain online.`
           : '';
         toast(`Removed from the app.${extra}`, 'good');
+        loadLibrary();
         refresh();
       } catch (err) {
         toast(err.message, 'bad');
@@ -2982,10 +3203,9 @@ function renderLibrary(projects) {
       }
     };
 
-    foot.append(more, pick, removeProjectBtn);
-    body.append(foot);
+    actions.append(more, pick, removeProjectBtn);
+    body.append(actions);
     card.append(body);
-
     grid.append(card);
   });
 
@@ -3007,10 +3227,13 @@ function buildPickPanel(project, clips) {
     return panel;
   }
 
-  const intro = el('div', 'pick-intro');
+  const intro = el('div', 'pick-toolbar');
+  const title = el('div', 'pick-panel-title');
+  const availableCount = clips.filter(c => !c.imported).length;
+  title.textContent = `${availableCount} available · ${clips.length} total`;
   const note = el('div', 'note');
-  note.textContent = 'Preview the actual clips, tick the ones you want, or use the bin to remove unwanted results from this app.';
-  intro.append(note);
+  note.textContent = 'Preview, tick the clips you want, or use the bin to hide unwanted results from this app.';
+  intro.append(title, note);
   panel.append(intro);
 
   const grid = el('div', 'pick-grid');
@@ -3183,6 +3406,34 @@ function coverPlaceholder() {
   return ph;
 }
 
+
+
+$('#librarySearch')?.addEventListener('input', e => {
+  LIBRARY_QUERY = e.target.value;
+  renderLibrary();
+});
+$('#librarySort')?.addEventListener('change', e => {
+  LIBRARY_SORT = e.target.value;
+  renderLibrary();
+});
+document.querySelectorAll('[data-library-filter]').forEach(btn => {
+  btn.onclick = () => {
+    LIBRARY_FILTER = btn.dataset.libraryFilter || 'all';
+    document.querySelectorAll('[data-library-filter]').forEach(b => b.classList.toggle('on', b === btn));
+    renderLibrary();
+  };
+});
+$('#refreshLibrary')?.addEventListener('click', async () => {
+  const btn = $('#refreshLibrary');
+  btn.disabled = true;
+  btn.classList.add('is-loading');
+  try {
+    await loadLibrary();
+    toast('Library refreshed', 'good');
+  } catch (err) { toast(err.message, 'bad'); }
+  btn.disabled = false;
+  btn.classList.remove('is-loading');
+});
 
 
 $('#attachExistingProject').onclick = async () => {
