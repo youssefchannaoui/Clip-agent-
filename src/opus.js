@@ -114,6 +114,7 @@ export async function getClips(projectId) {
     clipId: c.curationId || String(c.id).split('.').pop(),
     projectId: c.projectId || projectId,
     title: c.title || '',
+    text: c.text || '',
     description: c.description || '',
     hashtags: c.hashtags || '',
     durationMs: c.durationMs || 0,
