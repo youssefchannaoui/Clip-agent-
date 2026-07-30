@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
-import { state, save, log, opusKey, brandTemplateId, clipSettings, setClipSettings, copyPrompt, setCopyPrompt } from './store.js';
+import { state, save, log, opusKey, brandTemplateId, brandTemplateSelection, setBrandTemplateSelection, clipSettings, setClipSettings, copyPrompt, setCopyPrompt } from './store.js';
 import * as agent from './agent.js';
 import * as opus from './opus.js';
 import * as audio from './audio.js';
@@ -54,6 +54,9 @@ const authed = (req, url) =>
   !config.password ||
   sameSecret(req.headers['x-app-password'] || url.searchParams.get('pw') || '', config.password);
 
+const sourceProjectIdForClip = clip =>
+  clip.sourceProjectId || clip.originalProjectId || clip.projectId;
+
 /**
  * Give a clip a genuine second chance at music when it's pulled back —
  * but only if nothing actually got mixed in last time. A clip that's
@@ -64,6 +67,8 @@ function pullBackMusic(clip) {
   if (clip.musicMixed && clip.musicMixed !== 'done') {
     delete clip.musicMixed;
     delete clip.musicNote;
+    delete clip.musicAttempts;
+    delete clip.musicNextTryAt;
   }
 }
 
@@ -148,6 +153,7 @@ async function route(req, res, url) {
       timezone: config.timezone,
       working,
       brandTemplateId: brandTemplateId(),
+      brandTemplate: brandTemplateSelection(),
       clipSettings: clipSettings(),
       copyPrompt: copyPrompt(),
       musicSettings: audio.musicSettings(),
@@ -158,16 +164,18 @@ async function route(req, res, url) {
         status: p.status,
         stage: p.stage || null,
         submittedAt: p.submittedAt,
-        imported: state.clips.filter(c => c.projectId === p.id).length,
+        imported: state.clips.filter(c => sourceProjectIdForClip(c) === p.id).length,
         clipCount: p.clipCount,
       })),
       clips: (() => {
         const currentTemplate = brandTemplateId();
         const projectsById = new Map(state.projects.map(p => [p.id, p]));
         return clips.map(c => {
-          const project = projectsById.get(c.projectId);
-          const templateChanged = project?.brandTemplateIdUsed !== undefined
-            ? project.brandTemplateIdUsed !== currentTemplate
+          const sourceProjectId = c.sourceProjectId || c.originalProjectId || c.projectId;
+          const project = projectsById.get(sourceProjectId);
+          const sourceTemplateId = c.sourceTemplateId ?? project?.brandTemplateIdUsed;
+          const templateChanged = sourceTemplateId !== undefined && sourceTemplateId !== null
+            ? sourceTemplateId !== currentTemplate
             : null; // older clips predate this being tracked — admit we don't know, rather than guess
           return {
             id: c.id,
@@ -183,6 +191,15 @@ async function route(req, res, url) {
             targets: c.targets,
             musicMixed: c.musicMixed || null,
             musicNote: c.musicNote || null,
+            musicAttempts: c.musicAttempts || 0,
+            musicNextTryAt: c.musicNextTryAt || null,
+            musicTemplateId: c.musicTemplateId || null,
+            templateError: c.templateError || null,
+            sourceTemplateId: sourceTemplateId ?? null,
+            sourceTemplateName: c.sourceTemplateName || project?.brandTemplateNameUsed || '',
+            sourceCaptionsEnabled: typeof c.sourceCaptionsEnabled === 'boolean'
+              ? c.sourceCaptionsEnabled
+              : (typeof project?.captionsEnabledUsed === 'boolean' ? project.captionsEnabledUsed : null),
             copyState: c.copyState || null,
             copyError: c.copyError || null,
             thumbState: c.thumbState || null,
@@ -221,17 +238,44 @@ async function route(req, res, url) {
   // The clip style — captions on or off, fonts, logo — lives in Opus.
   // List them here so one can be picked without hunting for its id.
   if (method === 'GET' && pathname === '/api/brand-templates') {
-    try { return send(res, 200, { templates: await opus.getBrandTemplates() }); }
-    catch (err) { return send(res, 400, { error: err.message }); }
+    try {
+      const templates = await opus.getBrandTemplates();
+      const currentId = brandTemplateId();
+      const current = currentId ? templates.find(t => t.id === currentId) : null;
+      // Automatically hydrate older saved selections that predate template
+      // metadata tracking, so a normal page load is enough to verify them.
+      if (current) setBrandTemplateSelection(current);
+      return send(res, 200, { templates, brandTemplate: brandTemplateSelection() });
+    } catch (err) {
+      return send(res, 400, { error: err.message });
+    }
   }
 
   if (method === 'POST' && pathname === '/api/brand-template') {
     const body = await readBody(req);
     const id = String(body.id ?? '').trim();
-    state.brandTemplateId = id;
-    save();
-    log(id ? `Clip style set. New lectures will use it.` : 'Clip style cleared. Opus will use your account default.');
-    return send(res, 200, { ok: true, brandTemplateId: brandTemplateId() });
+
+    if (!id) {
+      setBrandTemplateSelection(null);
+      log('Clip style cleared. Opus will use your account default, which cannot be strictly verified.');
+      return send(res, 200, { ok: true, brandTemplateId: '', brandTemplate: brandTemplateSelection() });
+    }
+
+    try {
+      const templates = await opus.getBrandTemplates();
+      const chosen = templates.find(t => t.id === id);
+      if (!chosen) return send(res, 400, { error: 'That Clip style is no longer available in your Opus account. Refresh the list and choose it again.' });
+
+      setBrandTemplateSelection(chosen);
+      log(`Clip style set to "${chosen.name}" (${chosen.enableCaption === false ? 'captions off' : chosen.enableCaption === true ? 'captions on' : 'caption setting unknown'}).`);
+      return send(res, 200, {
+        ok: true,
+        brandTemplateId: chosen.id,
+        brandTemplate: brandTemplateSelection(),
+      });
+    } catch (err) {
+      return send(res, 400, { error: err.message });
+    }
   }
 
   // How many clips to keep per video, and how long each one should run.
@@ -352,12 +396,14 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/api/projects') {
     const currentTemplate = brandTemplateId();
     const projects = state.projects.map(p => {
-      const ownClips = state.clips.filter(c => c.projectId === p.id);
+      const ownClips = state.clips.filter(c => sourceProjectIdForClip(c) === p.id);
+      const hidden = new Set(Array.isArray(p.hiddenClipIds) ? p.hiddenClipIds : []);
       const cover = ownClips.find(c => c.thumbState === 'ready');
       return {
         id: p.id,
         title: p.title,
         url: p.url,
+        external: Boolean(p.external),
         status: p.status,
         submittedAt: p.submittedAt,
         // Derived fresh from what's actually in the queue right now, not a
@@ -365,7 +411,9 @@ async function route(req, res, url) {
         // that were later discarded, eventually claiming more clips were
         // "imported" than Opus even reported existing for the lecture.
         imported: ownClips.length,
+        hidden: hidden.size,
         clipCount: p.clipCount || 0,
+        available: Math.max(0, (p.clipCount || 0) - ownClips.length - hidden.size),
         coverClipId: cover ? cover.id : null,
         // Only claim a style mismatch when we actually know what this
         // project used — older projects predate this being tracked at all,
@@ -376,6 +424,30 @@ async function route(req, res, url) {
       };
     });
     return send(res, 200, { projects });
+  }
+
+  // Opus's documented API cannot enumerate an organisation's full dashboard
+  // library. This lets someone attach an existing project when they know its
+  // project ID (or paste a dashboard link containing that ID).
+  if (method === 'POST' && pathname === '/api/projects/import-existing') {
+    const body = await readBody(req);
+    try {
+      const result = await agent.attachExistingProject(body.projectRef, body.title);
+      return send(res, 200, { ok: true, ...result });
+    } catch (err) {
+      return send(res, 400, { error: err.message });
+    }
+  }
+
+  const projectDeleteMatch = pathname.match(/^\/api\/projects\/([^/]+)$/);
+  if (method === 'DELETE' && projectDeleteMatch) {
+    const projectId = decodeURIComponent(projectDeleteMatch[1]);
+    try {
+      const result = await agent.removeProject(projectId);
+      return send(res, 200, { ok: true, ...result });
+    } catch (err) {
+      return send(res, 400, { error: err.message });
+    }
   }
 
   if (method === 'POST' && pathname.startsWith('/api/projects/') && pathname.endsWith('/more-clips')) {
@@ -406,6 +478,18 @@ async function route(req, res, url) {
     if (!clipIds.length) return send(res, 400, { error: 'No clips were selected.' });
     try {
       const result = await agent.importSelectedClips(id, clipIds);
+      return send(res, 200, { ok: true, ...result });
+    } catch (err) {
+      return send(res, 400, { error: err.message });
+    }
+  }
+
+  const projectClipMatch = pathname.match(/^\/api\/projects\/([^/]+)\/clips\/([^/]+)$/);
+  if (method === 'DELETE' && projectClipMatch) {
+    const projectId = decodeURIComponent(projectClipMatch[1]);
+    const clipId = decodeURIComponent(projectClipMatch[2]);
+    try {
+      const result = await agent.removeProjectClip(projectId, clipId);
       return send(res, 200, { ok: true, ...result });
     } catch (err) {
       return send(res, 400, { error: err.message });
