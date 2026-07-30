@@ -159,8 +159,11 @@ async function processTarget(clip, target) {
       target.stage = `Checking ${target.provider} processing status`;
       result = await social.pollTarget(clip, target);
     } else {
-      target.status = 'publishing'; target.stage = `Uploading to ${target.provider}`; target.error = null; target.updatedAt = Date.now(); save();
+      target.status = 'publishing'; target.stage = `Preparing ${target.provider} upload`; target.error = null; target.updatedAt = Date.now(); save();
+      log(`Preparing "${clip.title}" for ${target.provider}.`);
       const file = await engine.socialPublishFile(clip.id, target.provider);
+      target.stage = `Uploading video to ${target.provider}`; target.updatedAt = Date.now(); save();
+      log(`Uploading "${clip.title}" to ${target.provider}.`);
       result = await social.publishTarget(clip, target, file);
     }
     if (result?.pending) {
@@ -229,7 +232,11 @@ export async function publishNow(id) {
     for (const target of clip.targets || []) target.nextTryAt = Date.now();
     clip.status = 'scheduled'; save();
   }
-  await publishClip(clip);
+  const providers = (clip.targets || []).filter(target => target.status !== 'posted').map(target => target.provider);
+  log(`Publishing started for "${clip.title}"${providers.length ? ` to ${providers.join(', ')}` : ''}.`);
+  publishClip(clip).catch(error => {
+    log(`Publishing crashed for "${clip.title}": ${error.message}`, 'error');
+  });
   return clip;
 }
 
