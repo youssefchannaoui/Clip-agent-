@@ -82,10 +82,17 @@ a{color:var(--blue-soft)}
     width:320px;
     min-width:320px;
     justify-self:end;
-    max-height:none;
-    overflow:visible;
-    padding-right:0;
+    height:calc(100vh - 118px);
+    max-height:calc(100vh - 118px);
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    padding-right:6px;
+    scrollbar-width:thin;
+    scrollbar-color:var(--line-lit) transparent;
   }
+  .side::-webkit-scrollbar{width:7px}
+  .side::-webkit-scrollbar-track{background:transparent}
+  .side::-webkit-scrollbar-thumb{background:var(--line-lit);border-radius:999px}
 }
 
 /* ---------- gate / connect ---------- */
@@ -550,7 +557,8 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .bar-num{font-size:14px;font-weight:600;color:var(--text);width:30px;text-align:right;flex:none}
 
 /* ---------- side rail ---------- */
-.side{position:sticky;top:104px;display:flex;flex-direction:column;gap:14px}
+.side{position:sticky;top:104px;display:flex;flex-direction:column;gap:14px;min-height:0}
+.side-section-title{font-family:var(--brand);font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);padding:0 2px 1px}
 .card{
   background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;
   transition:border-color .16s ease,transform .18s cubic-bezier(.2,.8,.2,1);transform:translateZ(0);
@@ -563,6 +571,43 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .card-head .btn{margin-left:auto}
 .card-body{padding:14px 16px}
 .card-body.tight{padding:6px 16px}
+.side-card-muted{background:linear-gradient(180deg,rgba(217,180,120,.055),rgba(18,18,20,0) 70%),var(--surface)}
+.side-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:4px 8px;font-size:11.5px;color:var(--mute);white-space:nowrap}
+.side-pill.good{color:#d8f8df;border-color:rgba(145,220,160,.25);background:rgba(35,110,61,.12)}
+.side-pill.warn{color:var(--blue-soft);border-color:rgba(217,180,120,.28);background:rgba(217,180,120,.10)}
+.side-pill.bad{color:#ffb0b8;border-color:rgba(255,85,102,.30);background:rgba(255,85,102,.09)}
+.side-next{display:grid;grid-template-columns:62px minmax(0,1fr);gap:12px;align-items:center}
+.side-next-media{width:62px;height:86px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line);overflow:hidden;display:grid;place-items:center;color:var(--mute)}
+.side-next-media img,.side-next-media video{width:100%;height:100%;object-fit:cover;display:block}
+.side-next-title{font-weight:650;font-size:14px;line-height:1.28;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.side-next-meta{font-size:12.5px;color:var(--mute);margin-top:4px;line-height:1.35}
+.side-next-count{font-family:var(--brand);font-size:24px;font-weight:700;letter-spacing:-.04em;line-height:1;margin-bottom:6px;color:var(--text)}
+.side-action-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.side-action-row .btn{width:100%;justify-content:center}
+.side-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.side-stat{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 11px;min-width:0}
+.side-stat strong{display:block;font-family:var(--brand);font-size:19px;line-height:1.1;letter-spacing:-.03em;color:var(--text)}
+.side-stat span{display:block;margin-top:4px;font-size:11.8px;line-height:1.25;color:var(--mute)}
+.attention-list{display:grid;gap:8px}
+.attention-row{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:8px 0}
+.attention-row:last-child{border-bottom:0}
+.attention-row span{font-size:13px;color:var(--text-2)}
+.attention-row strong{font-size:13px;color:var(--text)}
+
+.attention-row strong.warn{color:var(--blue-soft)}
+.attention-row strong.bad{color:#ffb0b8}
+.side-mode-line{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+.side-mode-name{font-weight:650;font-size:14px;line-height:1.25}
+.side-mode-note{font-size:12.5px;color:var(--mute);line-height:1.45;margin-top:3px}
+.side-badge-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.side-details{padding:0}
+.side-details summary.card-head{cursor:pointer;list-style:none;user-select:none}
+.side-details summary.card-head::-webkit-details-marker{display:none}
+.side-details summary.card-head:after{content:'▾';margin-left:auto;color:var(--mute);font-size:12px;transition:transform .16s ease}
+.side-details:not([open]) summary.card-head{border-bottom:0}
+.side-details:not([open]) summary.card-head:after{transform:rotate(-90deg)}
+.side-details[open] .card-body{animation:side-open .16s ease-out}
+@keyframes side-open{from{opacity:.6;transform:translateY(-2px)}to{opacity:1;transform:none}}
 
 .now-item{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
 .now-item:last-child{border-bottom:0}
@@ -626,7 +671,7 @@ select:focus{outline:none;border-color:var(--blue)}
 
 @media (max-width:1000px){
   .shell{grid-template-columns:1fr;gap:26px}
-  .side{position:static}
+  .side{position:static;height:auto;max-height:none;overflow:visible;padding-right:0}
   /* when the agent is mid-job, the live panel comes first */
   .side.busy{order:-1}
 }
@@ -912,26 +957,43 @@ select:focus{outline:none;border-color:var(--blue)}
 
       <!-- side rail -->
       <aside class="side" id="side">
+        <div class="side-section-title">Control centre</div>
+
+        <div class="card side-card-muted">
+          <div class="card-head">Next post <span id="nextStatusPill" class="side-pill"></span></div>
+          <div class="card-body" id="nextBox"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">Today status</div>
+          <div class="card-body" id="sideToday"></div>
+        </div>
+
         <div class="card">
           <div class="card-head"><span id="nowIcon"></span>Happening now</div>
           <div class="card-body tight" id="nowList"></div>
         </div>
 
         <div class="card">
-          <div class="card-head">Next post</div>
-          <div class="card-body" id="nextBox"></div>
+          <div class="card-head">Needs attention</div>
+          <div class="card-body" id="sideAttention"></div>
         </div>
 
         <div class="card">
-          <div class="card-head">Clip style</div>
+          <div class="card-head">Music mode</div>
+          <div class="card-body" id="musicModeBox"></div>
+        </div>
+
+        <details class="card side-details" open>
+          <summary class="card-head">Clip style</summary>
           <div class="card-body">
             <select id="tplPick" aria-label="Clip style"></select>
             <div class="style-note" id="tplNote"></div>
           </div>
-        </div>
+        </details>
 
-        <div class="card">
-          <div class="card-head">Clips per video</div>
+        <details class="card side-details">
+          <summary class="card-head">Clips per video</summary>
           <div class="card-body">
             <select id="countPick" aria-label="Clips per video">
               <option value="0">Everything Opus finds</option>
@@ -953,12 +1015,12 @@ select:focus{outline:none;border-color:var(--blue)}
               </div>
             </div>
             <div class="style-note">Seconds. Applies to lectures sent after you save.</div>
-            <button class="btn btn-ghost btn-sm" id="saveCount" style="margin-top:11px">Save</button>
+            <button class="btn btn-ghost btn-sm" id="saveCount" style="margin-top:11px;width:100%">Save clip settings</button>
           </div>
-        </div>
+        </details>
 
-        <div class="card">
-          <div class="card-head">Caption prompt</div>
+        <details class="card side-details">
+          <summary class="card-head">Caption prompt</summary>
           <div class="card-body">
             <textarea id="copyPromptField" rows="6" style="width:100%;resize:vertical" placeholder="Write the title, description and hashtags in English only. Translate Arabic speech naturally into English. Do not use Arabic script."></textarea>
             <div class="style-note">This is sent directly to Opus AI. Saving now also rewrites every clip still waiting for review; scheduled clips stay untouched.</div>
@@ -967,19 +1029,20 @@ select:focus{outline:none;border-color:var(--blue)}
               <button class="btn btn-sm" id="saveCopyPrompt">Save & rewrite waiting</button>
             </div>
           </div>
-        </div>
+        </details>
 
-        <div class="card">
-          <div class="card-head">Accounts
-            <button class="btn btn-ghost btn-sm" id="refreshAcc">Refresh</button>
+        <details class="card side-details">
+          <summary class="card-head">Accounts</summary>
+          <div class="card-body tight">
+            <div style="padding:8px 0"><button class="btn btn-ghost btn-sm" id="refreshAcc" style="width:100%">Refresh accounts</button></div>
+            <div id="accounts"></div>
           </div>
-          <div class="card-body tight" id="accounts"></div>
-        </div>
+        </details>
 
-        <div class="card">
-          <div class="card-head">Recent activity</div>
+        <details class="card side-details">
+          <summary class="card-head">Recent activity</summary>
           <div class="card-body tight" id="log"></div>
-        </div>
+        </details>
       </aside>
     </div>
 
@@ -2075,7 +2138,105 @@ function bars(sel, counts, emptyNote) {
 
 /* ---------- side rail ---------- */
 
+function sidePreview(c) {
+  const box = el('div', 'side-next-media');
+  if (!c) { box.textContent = '—'; return box; }
+  if (c.thumbState === 'ready') {
+    const img = el('img');
+    img.src = withPw('/api/clips/thumb/' + encodeURIComponent(c.id) + '.jpg');
+    img.alt = c.title || 'Next post preview';
+    img.onerror = () => { img.remove(); appendVideoPreview(box, c, ''); };
+    box.append(img);
+  } else {
+    appendVideoPreview(box, c, '');
+  }
+  return box;
+}
+
+function renderSideToday(clips) {
+  const host = $('#sideToday');
+  if (!host) return;
+  host.innerHTML = '';
+  const today = slotsAhead(1)[0]?.slots || [];
+  const now = Date.now();
+  const scheduledToday = clips.filter(c => statusOf(c) === 'scheduled' && today.some(ms => Math.abs(ms - c.scheduledAt) < 60_000)).length;
+  const emptyFuture = today.filter(ms => ms > now && !clips.some(c => statusOf(c) === 'scheduled' && Math.abs(ms - c.scheduledAt) < 60_000)).length;
+  const waiting = clips.filter(c => statusOf(c) === 'waiting').length;
+  const failed = clips.filter(c => (c.targets || []).some(t => t.status === 'failed') || c.copyState === 'failed' || ['retrying','failed'].includes(c.musicMixed)).length;
+  const stats = [
+    ['Scheduled', scheduledToday],
+    ['Waiting', waiting],
+    ['Empty slots', emptyFuture],
+    ['Issues', failed],
+  ];
+  const grid = el('div', 'side-stats');
+  stats.forEach(([label, val]) => {
+    const card = el('div', 'side-stat');
+    card.innerHTML = `<strong>${esc(val)}</strong><span>${esc(label)}</span>`;
+    grid.append(card);
+  });
+  host.append(grid);
+  const row = el('div', 'side-action-row');
+  const open = el('button', 'btn btn-ghost btn-sm');
+  open.textContent = 'Open schedule';
+  open.onclick = () => { setTab('schedule'); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  const approve = el('button', 'btn btn-sm');
+  approve.textContent = 'Approve next';
+  approve.onclick = () => approveNextWaiting(approve);
+  row.append(open, approve);
+  host.append(row);
+}
+
+function renderSideAttention(clips) {
+  const host = $('#sideAttention');
+  if (!host) return;
+  host.innerHTML = '';
+  const items = [
+    ['Need approval', clips.filter(c => statusOf(c) === 'waiting').length, 'warn'],
+    ['Music retrying', clips.filter(c => ['retrying','failed'].includes(c.musicMixed)).length, 'bad'],
+    ['AI wording failed', clips.filter(c => c.copyState === 'failed').length, 'bad'],
+    ['Upload failed', clips.filter(c => (c.targets || []).some(t => t.status === 'failed')).length, 'bad'],
+  ];
+  const list = el('div', 'attention-list');
+  items.forEach(([label, n, cls]) => {
+    const row = el('div', 'attention-row');
+    row.innerHTML = `<span>${esc(label)}</span><strong class="${n ? cls : ''}">${esc(n)}</strong>`;
+    list.append(row);
+  });
+  host.append(list);
+  const total = items.reduce((a, x) => a + x[1], 0);
+  const badges = el('div', 'side-badge-row');
+  const pill = el('span', 'side-pill ' + (total ? 'warn' : 'good'));
+  pill.textContent = total ? `${total} item${total === 1 ? '' : 's'} to check` : 'Everything clean';
+  badges.append(pill);
+  host.append(badges);
+}
+
+function renderMusicMode(clips) {
+  const host = $('#musicModeBox');
+  if (!host) return;
+  host.innerHTML = '';
+  const settings = DATA.musicSettings || {};
+  const enabled = settings.enabled !== false;
+  const done = clips.filter(c => c.musicMixed === 'done').length;
+  const retry = clips.filter(c => ['retrying','failed'].includes(c.musicMixed)).length;
+  const line = el('div', 'side-mode-line');
+  const text = el('div');
+  text.innerHTML = `<div class="side-mode-name">${enabled ? 'Best quality' : 'Credit saver'}</div>
+    <div class="side-mode-note">${enabled ? 'Music is required before scheduling. Mixed clips usually need one extra Opus import.' : 'Music is off, so clips schedule without the second Opus import.'}</div>`;
+  const pill = el('span', 'side-pill ' + (enabled ? 'warn' : 'good'));
+  pill.textContent = enabled ? '+ credits' : 'saving';
+  line.append(text, pill);
+  host.append(line);
+  const badges = el('div', 'side-badge-row');
+  const a = el('span', 'side-pill good'); a.textContent = `${done} mixed`;
+  const b = el('span', 'side-pill ' + (retry ? 'bad' : 'good')); b.textContent = `${retry} retrying`;
+  badges.append(a, b);
+  host.append(badges);
+}
+
 function renderSide() {
+  const clips = DATA?.clips || [];
   const work = liveWork();
   $('#side').classList.toggle('busy', work.length > 0);
 
@@ -2087,10 +2248,11 @@ function renderSide() {
   now.innerHTML = '';
   if (!work.length) {
     const idle = el('div', 'now-idle');
-    idle.textContent = 'Nothing running. The agent checks every 20 seconds.';
+    const last = (DATA.log || [])[0]?.message;
+    idle.innerHTML = `Agent idle · next check in 20s${last ? `<br><span style="color:var(--mute-2)">Last: ${esc(String(last).slice(0, 90))}</span>` : ''}`;
     now.append(idle);
   } else {
-    work.forEach(w => {
+    work.slice(0, 4).forEach(w => {
       const item = el('div', 'now-item');
       const what = el('div', 'now-what');
       const t = el('div', 'now-title');
@@ -2103,23 +2265,61 @@ function renderSide() {
     });
   }
 
+  const next = nextPost();
+  const statusPill = $('#nextStatusPill');
+  if (statusPill) {
+    statusPill.className = 'side-pill ' + (next ? 'good' : 'warn');
+    statusPill.textContent = next ? 'Ready' : 'Empty';
+  }
+
   const box = $('#nextBox');
   box.innerHTML = '';
-  const next = nextPost();
   if (!next) {
     const idle = el('div', 'now-idle');
     idle.textContent = 'Nothing scheduled yet.';
     box.append(idle);
+    const row = el('div', 'side-action-row');
+    const fill = el('button', 'btn btn-sm');
+    fill.textContent = 'Approve next';
+    fill.onclick = () => approveNextWaiting(fill);
+    const open = el('button', 'btn btn-ghost btn-sm');
+    open.textContent = 'Schedule';
+    open.onclick = () => setTab('schedule');
+    row.append(fill, open);
+    box.append(row);
   } else {
-    const cd = el('div', 'next-time');
+    const wrap = el('div', 'side-next');
+    wrap.append(sidePreview(next));
+    const info = el('div');
+    const cd = el('div', 'side-next-count');
     cd.id = 'nextCd';
     cd.textContent = countdown(next.scheduledAt);
-    const ti = el('div', 'next-title');
+    const ti = el('div', 'side-next-title');
     ti.textContent = next.title || 'Untitled clip';
-    const wh = el('div', 'next-when');
-    wh.textContent = next.scheduledLabel || '';
-    box.append(cd, ti, wh);
+    const wh = el('div', 'side-next-meta');
+    wh.textContent = next.scheduledLabel || clockLabel(next.scheduledAt);
+    info.append(cd, ti, wh);
+    wrap.append(info);
+    box.append(wrap);
+
+    const badges = safetyBadges(next);
+    badges.classList.add('side-badge-row');
+    box.append(badges);
+
+    const row = el('div', 'side-action-row');
+    const post = el('button', 'btn btn-sm');
+    post.textContent = 'Post now';
+    post.onclick = () => postNowFromSchedule(next, post);
+    const pull = el('button', 'btn btn-ghost btn-sm');
+    pull.textContent = 'Pull back';
+    pull.onclick = () => pullBackClipFromSchedule(next, pull);
+    row.append(post, pull);
+    box.append(row);
   }
+
+  renderSideToday(clips);
+  renderSideAttention(clips);
+  renderMusicMode(clips);
 
   if (templates === null) { templates = []; loadTemplates(); }
   else if (!editing.size) {
@@ -2133,8 +2333,6 @@ function renderSide() {
     const countPick = $('#countPick');
     const want = String(cs.clipsPerVideo ?? 0);
     if (![...countPick.children].some(o => o.value === want)) {
-      // A saved cap that isn't one of the presets — say 15 — still needs
-      // somewhere to live, so add it rather than silently rounding away.
       const extra = el('option');
       extra.value = want;
       extra.textContent = want === '0' ? 'Everything Opus finds' : `Up to ${want}`;
