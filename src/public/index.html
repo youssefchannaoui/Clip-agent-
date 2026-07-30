@@ -335,7 +335,7 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 
 .lec-grid{
   display:grid;gap:16px;
-  grid-template-columns:repeat(auto-fill,minmax(230px,1fr));
+  grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
 }
 .lec{
   background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;
@@ -348,7 +348,7 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
   width:100%;aspect-ratio:16/9;background:var(--surface-2);position:relative;
   display:flex;align-items:center;justify-content:center;overflow:hidden;
 }
-.lec-cover img{width:100%;height:100%;object-fit:cover;display:block}
+.lec-cover img,.lec-cover video{width:100%;height:100%;object-fit:cover;display:block}
 .lec-cover-ph{color:var(--mute-2);font-size:24px}
 .lec-badge{
   position:absolute;top:9px;right:9px;font-size:11px;padding:2px 8px;border-radius:20px;
@@ -363,8 +363,9 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
   font-size:12px;margin-top:8px;padding:7px 10px;border-radius:8px;
   background:rgba(217,180,120,.09);border:1px solid rgba(217,180,120,.3);color:var(--blue-soft);
 }
-.lec-foot{margin-top:12px;display:flex;gap:8px}
-.lec-foot .btn{flex:1}
+.lec-foot{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+.lec-foot .btn{flex:1 1 118px;min-width:0;white-space:nowrap}
+.lec-foot .project-remove{flex:1 1 100%;margin-left:0}
 
 .lec.picking{grid-column:1/-1}
 .lec.picking>.lec-cover{max-height:240px}
@@ -421,7 +422,7 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .library-limit{
   margin-top:10px;color:var(--mute-2);font-size:12.5px;line-height:1.55
 }
-.project-remove{margin-left:auto}
+.project-remove{}
 .project-remove:hover{border-color:rgba(255,105,105,.45);color:#ffd2d2;background:rgba(110,25,25,.28)}
 
 .proc{
@@ -889,6 +890,21 @@ async function api(path, opts = {}) {
   return body;
 }
 
+function withPw(path) {
+  const glue = path.includes('?') ? '&' : '?';
+  return path + glue + 'pw=' + encodeURIComponent(PW);
+}
+
+function queuePreviewUrl(c) {
+  return c?.id ? withPw('/api/clips/preview/' + encodeURIComponent(c.id) + '.mp4') : (c?.previewUrl || '');
+}
+
+function projectClipPreviewUrl(projectId, clipId) {
+  return projectId && clipId
+    ? withPw('/api/projects/' + encodeURIComponent(projectId) + '/clips/' + encodeURIComponent(clipId) + '/preview.mp4')
+    : '';
+}
+
 function toast(msg, kind = '') {
   const t = el('div', 'toast ' + kind);
   t.textContent = msg;
@@ -1185,9 +1201,10 @@ function primeVideoFrame(video) {
 }
 
 function appendVideoPreview(box, c, className = 'clip-thumb-video') {
-  if (!c.previewUrl) { box.append(thumbPlaceholder(c)); return; }
+  const src = queuePreviewUrl(c);
+  if (!src) { box.append(thumbPlaceholder(c)); return; }
   const video = el('video', className);
-  video.src = c.previewUrl;
+  video.src = src;
   video.preload = 'metadata';
   video.muted = true;
   video.playsInline = true;
@@ -1261,12 +1278,6 @@ function clipCard(c) {
     aiTag.textContent = c.copyState === 'done' ? 'Opus AI wording' : c.copyState === 'failed' ? 'English rewrite failed' : 'AI wording pending';
     if (c.copyError) aiTag.title = c.copyError;
     top.append(aiTag);
-  }
-  if (c.templateError) {
-    const blocked = el('span', 'music-tag bad');
-    blocked.textContent = 'Clip style blocked';
-    blocked.title = c.templateError;
-    top.append(blocked);
   }
   if (c.templateChanged !== null && c.templateChanged !== undefined) {
     const tTag = el('span', 'music-tag ' + (c.templateChanged ? 'bad' : 'on'));
@@ -2160,6 +2171,23 @@ function mountLectureCover(cover, project) {
     candidates.push(`https://i.ytimg.com/vi/${encodeURIComponent(youtubeId)}/mqdefault.jpg`);
     candidates.push(`https://i.ytimg.com/vi/${encodeURIComponent(youtubeId)}/hqdefault.jpg`);
   }
+
+  if (!youtubeId && project.coverClipId) {
+    const video = el('video');
+    video.src = queuePreviewUrl({ id: project.coverClipId });
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    video.loop = true;
+    video.autoplay = true;
+    video.title = project.title || 'Lecture preview';
+    primeVideoFrame(video);
+    video.onerror = () => { video.remove(); if (!cover.children.length) cover.append(coverPlaceholder()); };
+    cover.append(video);
+    video.play?.().catch(() => {});
+    return;
+  }
+
   if (project.coverClipId) {
     candidates.push('/api/clips/thumb/' + encodeURIComponent(project.coverClipId) + '.jpg?pw=' + encodeURIComponent(PW));
   }
@@ -2377,9 +2405,10 @@ function buildPickPanel(project, clips) {
     </svg>`;
     preview.append(del);
 
-    if (c.previewUrl) {
+    const previewSrc = projectClipPreviewUrl(project.id, c.id) || c.previewUrl;
+    if (previewSrc) {
       const video = el('video');
-      video.src = c.previewUrl;
+      video.src = previewSrc;
       video.preload = 'metadata';
       video.playsInline = true;
       video.muted = true;
