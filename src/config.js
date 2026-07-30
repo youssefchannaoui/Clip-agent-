@@ -21,7 +21,9 @@ export const config = {
   dataDir: path.join(root, 'data'),
   port: num(process.env.PORT, 3000),
   password: process.env.APP_PASSWORD || '',
-  publicBaseUrl: (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, ''),
+  // Render exposes the live service URL automatically. Keep PUBLIC_BASE_URL
+  // as an override for custom domains/local tunnels, but do not require it.
+  publicBaseUrl: (process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/+$/, ''),
 
   opusKey: process.env.OPUS_API_KEY || '',
   opusOrgId: process.env.OPUS_ORG_ID || '',
