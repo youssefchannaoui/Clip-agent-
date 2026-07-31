@@ -416,6 +416,25 @@ def overlap_ratio(a: Candidate, b: Candidate) -> float:
     return intersection / min(a.duration, b.duration)
 
 
+def overlap_with_existing(candidate: Candidate, item: dict[str, Any]) -> float:
+    start = float(item.get("startSec", item.get("start", 0)) or 0)
+    end = float(item.get("endSec", item.get("end", 0)) or 0)
+    duration = max(0.001, end - start)
+    intersection = max(0.0, min(candidate.end, end) - max(candidate.start, start))
+    if not intersection:
+        return 0.0
+    return intersection / min(candidate.duration, duration)
+
+
+def remove_existing_moments(candidates: list[Candidate], existing: list[dict[str, Any]]) -> list[Candidate]:
+    if not existing:
+        return candidates
+    return [
+        candidate for candidate in candidates
+        if not any(overlap_with_existing(candidate, item) > 0.30 for item in existing)
+    ]
+
+
 def select_candidates(candidates: list[Candidate], limit: int) -> list[Candidate]:
     selected: list[Candidate] = []
     for candidate in sorted(candidates, key=lambda item: (-item.score, item.start)):
@@ -896,10 +915,83 @@ def process_rerender(job: dict[str, Any], job_file: Path) -> None:
     progress("Complete", 100)
     emit("result", resultPath=str(result_file))
 
+def process_more_clips(job: dict[str, Any], job_file: Path) -> None:
+    result_file = Path(job["resultPath"])
+    output_dir = Path(job["outputDir"])
+    source_file = Path(job["sourceFile"])
+    if not source_file.exists():
+        raise RuntimeError("The saved source video is unavailable. Generate-more cannot re-download the lecture because that would create a duplicate project.")
+
+    tracks = [track for track in job.get("musicTracks", []) if Path(track.get("path", "")).exists()]
+    if not tracks:
+        raise RuntimeError("Music is mandatory. Upload at least one nasheed before generating more clips.")
+    if not job.get("template", {}).get("id"):
+        raise RuntimeError("A valid app-owned template is mandatory.")
+
+    segments = job.get("transcriptSegments") or []
+    if not segments:
+        transcript_path = Path(str(job.get("transcriptFile") or ""))
+        if transcript_path.exists():
+            segments = json.loads(transcript_path.read_text(encoding="utf-8"))
+    if not segments:
+        raise RuntimeError("The saved transcript is unavailable. This lecture must be processed again before more clips can be generated.")
+
+    settings = job["settings"]
+    requested = max(1, min(20, int(job.get("requestedCount") or settings.get("clipsPerVideo", 8))))
+    progress("Loading saved lecture and transcript", 5, requestedClips=requested, reusedSource=True, reusedTranscript=True)
+
+    candidates = build_candidates(
+        segments,
+        float(settings.get("clipMinSeconds", 20)),
+        float(settings.get("clipMaxSeconds", 90)),
+    )
+    progress("Removing moments already used", 25, candidateCount=len(candidates), requestedClips=requested)
+    candidates = remove_existing_moments(candidates, list(job.get("existingRanges") or []))
+    progress("Scoring unused moments", 40, candidateCount=len(candidates), requestedClips=requested)
+    candidates = refine_with_ollama(candidates, settings)
+    selected = select_candidates(candidates, requested)
+    if not selected:
+        raise RuntimeError("No unused moments remain within the selected clip-duration range. Try a different duration range.")
+
+    seed = int(hashlib.sha256(str(job["id"]).encode()).hexdigest()[:12], 16)
+    shuffled_tracks = tracks.copy()
+    random.Random(seed).shuffle(shuffled_tracks)
+
+    rendered: list[dict[str, Any]] = []
+    total = len(selected)
+    for index, candidate in enumerate(selected, 1):
+        percent = 50 + int((index - 1) / max(total, 1) * 44)
+        progress(
+            f"Rendering new clip {index} of {total}", percent,
+            currentClip=index, totalClips=total, requestedClips=requested,
+            reusedSource=True, reusedTranscript=True, etaSec=None,
+        )
+        track = shuffled_tracks[(index - 1) % len(shuffled_tracks)]
+        rendered.append(render_clip(job, candidate, index, source_file, track, output_dir))
+
+    result = {
+        "project": {
+            "id": job.get("projectId"),
+            "title": str(job.get("projectTitle") or "Lecture"),
+            "clipCount": len(rendered),
+            "reusedSource": True,
+            "reusedTranscript": True,
+        },
+        "clips": rendered,
+    }
+    progress("Verifying new clips", 96, currentClip=total, totalClips=total, reusedSource=True, reusedTranscript=True)
+    result_file.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    progress("More clips are ready", 100, currentClip=total, totalClips=total, etaSec=0, reusedSource=True, reusedTranscript=True)
+    emit("result", resultPath=str(result_file))
+
+
 def process(job_file: Path) -> None:
     job = json.loads(job_file.read_text(encoding="utf-8"))
     if job.get("mode") == "rerender":
         process_rerender(job, job_file)
+        return
+    if job.get("mode") == "more_clips":
+        process_more_clips(job, job_file)
         return
     job_dir = job_file.parent
     source_dir = Path(job["sourceDir"])
