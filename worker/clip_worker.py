@@ -753,7 +753,7 @@ def description_from_text(text: str) -> str:
     return cleaned
 
 
-def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_width: int, out_height: int, bias: str = "auto") -> dict[str, Any] | None:
+def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_width: int, out_height: int, bias: str = "auto", padding: float = 0.18, zoom: float = 1.0) -> dict[str, Any] | None:
     """Choose one stable crop that keeps the main speaker visible.
 
     This intentionally avoids frame-by-frame camera movement. It samples a few
@@ -772,15 +772,17 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
     source_ratio = src_w / max(1, src_h)
     if source_ratio <= target_ratio:
         return None
-    crop_w = min(src_w, int(round(src_h * target_ratio)))
-    crop_h = src_h
+    zoom = max(0.75, min(1.35, float(zoom)))
+    crop_w = min(src_w, int(round(src_h * target_ratio / zoom)))
+    crop_h = min(src_h, int(round(src_h / zoom)))
     if crop_w >= src_w:
         return None
 
     if bias in {"left", "center", "right"}:
         center = {"left": crop_w * 0.5, "center": src_w * 0.5, "right": src_w - crop_w * 0.5}[bias]
         x = int(max(0, min(src_w - crop_w, round(center - crop_w / 2))))
-        return {"x": x, "w": crop_w, "h": crop_h, "method": f"bias-{bias}"}
+        y = max(0, (src_h - crop_h) // 2)
+        return {"x": x, "y": y, "w": crop_w, "h": crop_h, "method": f"bias-{bias}"}
 
     detector_names = [
         "haarcascade_frontalface_alt2.xml",
@@ -834,14 +836,38 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
     cap.release()
     centers = face_centers if face_centers else body_centers
     if not centers:
+        # Fallback: find the horizontal area with the strongest foreground/edge detail.
+        cap = cv2.VideoCapture(str(source))
+        edge_centers: list[float] = []
+        for fraction in [0.2, 0.5, 0.8]:
+            cap.set(cv2.CAP_PROP_POS_MSEC, max(0.0, candidate.start + candidate.duration * fraction) * 1000.0)
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                continue
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            edges = cv2.Canny(gray, 70, 160)
+            columns = edges.sum(axis=0)
+            if columns.max() > 0:
+                edge_centers.append(float(columns.argmax()))
+        cap.release()
+        centers = edge_centers
+    if not centers:
         return None
     centers.sort()
     center = centers[len(centers) // 2]
     # Add a small look-room bias toward the middle so the face is not pinned
     # against the crop edge.
-    center = center * 0.88 + (src_w / 2) * 0.12
-    x = int(max(0, min(src_w - crop_w, round(center - crop_w / 2))))
-    return {"x": x, "w": crop_w, "h": crop_h, "method": "face" if face_centers else "upper-body"}
+    padding = max(0.05, min(0.45, float(padding)))
+    # Keep a safety zone around the detected subject. The crop stays stable for the whole clip.
+    desired_ratio = 0.5
+    if center < src_w * 0.42:
+        desired_ratio = 0.34 + padding * 0.25
+    elif center > src_w * 0.58:
+        desired_ratio = 0.66 - padding * 0.25
+    x = int(max(0, min(src_w - crop_w, round(center - crop_w * desired_ratio))))
+    y = max(0, min(src_h - crop_h, int(round((src_h - crop_h) * 0.36))))
+    method = "face" if face_centers else ("upper-body" if body_centers else "foreground")
+    return {"x": x, "y": y, "w": crop_w, "h": crop_h, "method": method}
 
 def filter_values(template: dict[str, Any]) -> tuple[float, float, float, float]:
     preset = str(template.get("filterPreset", "natural"))
@@ -872,8 +898,9 @@ def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict
             crop_w = int(crop_plan.get("w") or width)
             crop_h = int(crop_plan.get("h") or height)
             crop_x = int(crop_plan.get("x") or 0)
+            crop_y = int(crop_plan.get("y") or 0)
             graph = (
-                f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:0,"
+                f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:{crop_y},"
                 f"scale={width}:{height},setsar=1[base]"
             )
         else:
@@ -966,6 +993,8 @@ def render_clip(
                 int(template.get("width", 1080)),
                 int(template.get("height", 1920)),
                 str(template.get("smartFramingBias") or "auto"),
+                float(template.get("smartFramingPadding", 0.18)),
+                float(template.get("smartFramingZoom", 1.0)),
             )
         except Exception:
             crop_plan = None
