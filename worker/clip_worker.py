@@ -31,6 +31,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
+try:
+    import cv2  # type: ignore
+except Exception:  # pragma: no cover
+    cv2 = None
+
 
 def emit(kind: str, **payload: Any) -> None:
     print(json.dumps({"type": kind, **payload}, ensure_ascii=False), flush=True)
@@ -748,6 +753,96 @@ def description_from_text(text: str) -> str:
     return cleaned
 
 
+def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_width: int, out_height: int, bias: str = "auto") -> dict[str, Any] | None:
+    """Choose one stable crop that keeps the main speaker visible.
+
+    This intentionally avoids frame-by-frame camera movement. It samples a few
+    frames, finds the dominant face/upper body, and uses the median horizontal
+    position for the whole clip.
+    """
+    if cv2 is None:
+        return None
+    info = ffprobe_json(ffprobe, source)
+    video_stream = next((s for s in info.get("streams", []) if s.get("codec_type") == "video"), {})
+    src_w = int(video_stream.get("width") or 0)
+    src_h = int(video_stream.get("height") or 0)
+    if not src_w or not src_h:
+        return None
+    target_ratio = out_width / max(1, out_height)
+    source_ratio = src_w / max(1, src_h)
+    if source_ratio <= target_ratio:
+        return None
+    crop_w = min(src_w, int(round(src_h * target_ratio)))
+    crop_h = src_h
+    if crop_w >= src_w:
+        return None
+
+    if bias in {"left", "center", "right"}:
+        center = {"left": crop_w * 0.5, "center": src_w * 0.5, "right": src_w - crop_w * 0.5}[bias]
+        x = int(max(0, min(src_w - crop_w, round(center - crop_w / 2))))
+        return {"x": x, "w": crop_w, "h": crop_h, "method": f"bias-{bias}"}
+
+    detector_names = [
+        "haarcascade_frontalface_alt2.xml",
+        "haarcascade_frontalface_default.xml",
+        "haarcascade_profileface.xml",
+    ]
+    detectors = [cv2.CascadeClassifier(cv2.data.haarcascades + name) for name in detector_names]
+    upper_body = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_upperbody.xml")
+    cap = cv2.VideoCapture(str(source))
+    if not cap.isOpened():
+        return None
+    sample_points = [0.10, 0.25, 0.40, 0.55, 0.70, 0.85]
+    face_centers: list[float] = []
+    body_centers: list[float] = []
+    min_face = max(28, min(src_w, src_h) // 24)
+    min_body = max(70, min(src_w, src_h) // 7)
+    for fraction in sample_points:
+        sample_time = max(0.0, candidate.start + candidate.duration * fraction)
+        cap.set(cv2.CAP_PROP_POS_MSEC, sample_time * 1000.0)
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            continue
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        found: list[tuple[int, int, int, int]] = []
+        for detector_index, detector in enumerate(detectors):
+            if detector.empty():
+                continue
+            detections = detector.detectMultiScale(
+                gray,
+                scaleFactor=1.08 if detector_index == 0 else 1.10,
+                minNeighbors=3 if detector_index == 0 else 4,
+                minSize=(min_face, min_face),
+            )
+            found.extend(tuple(map(int, item)) for item in detections)
+        # Profile detector can miss the mirrored orientation.
+        profile = detectors[-1]
+        if not profile.empty():
+            flipped = cv2.flip(gray, 1)
+            mirrored = profile.detectMultiScale(flipped, scaleFactor=1.10, minNeighbors=4, minSize=(min_face, min_face))
+            for x, y, w, h in mirrored:
+                found.append((src_w - int(x) - int(w), int(y), int(w), int(h)))
+        if found:
+            x, y, w, h = max(found, key=lambda item: item[2] * item[3])
+            face_centers.append(float(x + w / 2))
+            continue
+        if not upper_body.empty():
+            bodies = upper_body.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=3, minSize=(min_body, min_body))
+            if len(bodies):
+                x, y, w, h = max(bodies, key=lambda item: item[2] * item[3])
+                body_centers.append(float(x + w / 2))
+    cap.release()
+    centers = face_centers if face_centers else body_centers
+    if not centers:
+        return None
+    centers.sort()
+    center = centers[len(centers) // 2]
+    # Add a small look-room bias toward the middle so the face is not pinned
+    # against the crop edge.
+    center = center * 0.88 + (src_w / 2) * 0.12
+    x = int(max(0, min(src_w - crop_w, round(center - crop_w / 2))))
+    return {"x": x, "w": crop_w, "h": crop_h, "method": "face" if face_centers else "upper-body"}
+
 def filter_values(template: dict[str, Any]) -> tuple[float, float, float, float]:
     preset = str(template.get("filterPreset", "natural"))
     presets = {
@@ -767,16 +862,25 @@ def filter_values(template: dict[str, Any]) -> tuple[float, float, float, float]
     )
 
 
-def build_video_filter(template: dict[str, Any], ass_file: Path) -> str:
+def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict[str, Any] | None = None) -> str:
     width = int(template.get("width", 1080))
     height = int(template.get("height", 1920))
     subtitle = escape_filter_path(ass_file)
     fit_mode = str(template.get("fitMode") or "contain")
     if fit_mode == "crop":
-        graph = (
-            f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{height},setsar=1[base]"
-        )
+        if crop_plan:
+            crop_w = int(crop_plan.get("w") or width)
+            crop_h = int(crop_plan.get("h") or height)
+            crop_x = int(crop_plan.get("x") or 0)
+            graph = (
+                f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:0,"
+                f"scale={width}:{height},setsar=1[base]"
+            )
+        else:
+            graph = (
+                f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
+                f"crop={width}:{height},setsar=1[base]"
+            )
     elif fit_mode == "contain":
         background = str(template.get("frameBackground", "#000000")).replace("#", "0x")
         graph = (
@@ -852,8 +956,21 @@ def render_clip(
 
     volume = max(0.01, min(0.5, float(settings.get("musicVolumePercent", 13)) / 100.0))
     voice_chain = "highpass=f=75,lowpass=f=15000,acompressor=threshold=-18dB:ratio=2.5:attack=12:release=160," if bool(template.get("voiceEnhance", True)) else ""
+    crop_plan = None
+    if bool(template.get("smartFramingEnabled")) and str(template.get("fitMode") or "contain") == "crop":
+        try:
+            crop_plan = detect_main_face_crop(
+                source,
+                ffprobe,
+                candidate,
+                int(template.get("width", 1080)),
+                int(template.get("height", 1920)),
+                str(template.get("smartFramingBias") or "auto"),
+            )
+        except Exception:
+            crop_plan = None
     filter_complex = (
-        build_video_filter(template, ass_file)
+        build_video_filter(template, ass_file, crop_plan=crop_plan)
         + ";"
         + f"[0:a]{voice_chain}asetpts=PTS-STARTPTS,asplit=2[voice_mix][voice_sidechain];"
         + f"[1:a]volume={volume:.3f}[music];"
