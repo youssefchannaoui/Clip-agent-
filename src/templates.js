@@ -13,7 +13,8 @@ const DEFAULTS = Object.freeze({
   description: 'A reusable DeenClipped video style.',
   width: 1080,
   height: 1920,
-  fitMode: 'blur',
+  fitMode: 'contain',
+  frameBackground: '#000000',
   blurStrength: 28,
   filterPreset: 'natural',
   brightness: 0,
@@ -22,9 +23,9 @@ const DEFAULTS = Object.freeze({
   gamma: 1,
   sharpen: 0.45,
   vignette: 0,
-  captionMode: 'word',
+  captionMode: 'dynamic-stack',
   captionFont: 'DejaVu Sans',
-  captionFontSize: 62,
+  captionFontSize: 96,
   captionPrimary: '#FFFFFF',
   captionHighlight: '#D9B478',
   captionOutline: '#09090A',
@@ -32,11 +33,17 @@ const DEFAULTS = Object.freeze({
   captionShadow: 1,
   captionBackground: '#000000',
   captionBackgroundOpacity: 0,
-  captionPosition: 'bottom',
-  captionMarginV: 230,
-  captionMaxWords: 6,
+  captionPosition: 'middle',
+  captionHorizontal: 'right',
+  captionMarginV: 180,
+  captionMarginH: 90,
+  captionMaxWords: 4,
+  captionStackMaxWords: 4,
+  captionStackProbability: 0.42,
+  captionClearPause: 0.42,
+  captionLineHeight: 0.88,
   captionUppercase: false,
-  hookEnabled: true,
+  hookEnabled: false,
   hookDuration: 2.4,
   hookFontSize: 56,
   hookColor: '#FFFFFF',
@@ -56,18 +63,21 @@ const DEFAULTS = Object.freeze({
 });
 
 const ENUMS = {
-  fitMode: ['blur', 'crop'],
+  fitMode: ['contain', 'blur', 'crop'],
   filterPreset: ['natural', 'crisp', 'warm', 'cinematic', 'monochrome', 'custom'],
-  captionMode: ['phrase', 'word'],
+  captionMode: ['phrase', 'word', 'dynamic-stack'],
   captionPosition: ['top', 'middle', 'bottom'],
+  captionHorizontal: ['left', 'center', 'right'],
   watermarkPosition: ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'],
 };
 
 const NUMBER_RANGES = {
-  width: [360, 2160], height: [640, 3840], blurStrength: [0, 60],
+  width: [360, 2160], height: [360, 3840], blurStrength: [0, 60],
   brightness: [-1, 1], contrast: [0.5, 2], saturation: [0, 3], gamma: [0.5, 2], sharpen: [0, 2], vignette: [0, 1],
   captionFontSize: [24, 140], captionOutlineWidth: [0, 14], captionShadow: [0, 8], captionBackgroundOpacity: [0, 100],
-  captionMarginV: [20, 800], captionMaxWords: [2, 12], hookDuration: [0.5, 8], hookFontSize: [24, 120], hookBackgroundOpacity: [0, 100],
+  captionMarginV: [20, 800], captionMarginH: [20, 700], captionMaxWords: [1, 12],
+  captionStackMaxWords: [1, 6], captionStackProbability: [0, 1], captionClearPause: [0.15, 2], captionLineHeight: [0.65, 1.4],
+  hookDuration: [0.5, 8], hookFontSize: [24, 120], hookBackgroundOpacity: [0, 100],
   watermarkFontSize: [12, 90], watermarkOpacity: [0, 100], watermarkMarginV: [10, 500], watermarkMarginH: [10, 500],
   brandLineHeight: [2, 30],
 };
@@ -106,11 +116,17 @@ export function sanitiseTemplate(input = {}, { id = '', builtIn = false } = {}) 
   for (const [key, [minimum, maximum]] of Object.entries(NUMBER_RANGES)) {
     output[key] = clamp(source[key], minimum, maximum, DEFAULTS[key]);
   }
-  for (const key of ['captionPrimary', 'captionHighlight', 'captionOutline', 'captionBackground', 'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor']) {
+  for (const key of ['frameBackground', 'captionPrimary', 'captionHighlight', 'captionOutline', 'captionBackground', 'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor']) {
     output[key] = cleanColor(source[key], DEFAULTS[key]);
   }
-  for (const key of ['captionUppercase', 'hookEnabled', 'brandLineEnabled', 'voiceEnhance']) {
+  for (const key of ['captionUppercase', 'brandLineEnabled', 'voiceEnhance']) {
     output[key] = Boolean(source[key]);
+  }
+  // Opening title cards are intentionally disabled. Clips begin immediately with spoken captions.
+  output.hookEnabled = false;
+  // Upgrade old word-highlight templates to the new viral stacked-caption renderer once.
+  if (input && input.captionMode === 'word' && input.captionStackMaxWords == null && input.captionHorizontal == null) {
+    output.captionMode = 'dynamic-stack';
   }
   output.captionFont = cleanText(source.captionFont, DEFAULTS.captionFont, 80);
   output.watermark = cleanText(source.watermark, DEFAULTS.watermark, 60);
