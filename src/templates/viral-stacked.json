@@ -45,5 +45,7 @@
   "brandLineEnabled": false,
   "brandLineColor": "#D9B478",
   "brandLineHeight": 6,
-  "voiceEnhance": true
+  "voiceEnhance": true,
+  "smartFramingEnabled": true,
+  "smartFramingBias": "auto"
 }
