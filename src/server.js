@@ -89,8 +89,7 @@ function appState() {
     projects: state.projects.map(project => ({
       id: project.id, title: project.title, url: project.url, engine: project.engine, status: project.status,
       stage: project.stage, progress: project.progress || 0, error: project.error || null,
-      submittedAt: project.submittedAt, startedAt: project.startedAt || null,
-      updatedAt: project.updatedAt || null, completedAt: project.completedAt || null, clipCount: project.clipCount || 0,
+      submittedAt: project.submittedAt, completedAt: project.completedAt || null, clipCount: project.clipCount || 0,
       durationSec: project.durationSec || null, templateIdUsed: project.templateIdUsed,
       templateNameUsed: project.templateNameUsed, templateVersionUsed: project.templateVersionUsed || 1, musicRequired: true,
       sourceReusable: Boolean(project.sourceFile && fs.existsSync(project.sourceFile) && project.transcriptFile && fs.existsSync(project.transcriptFile)),
@@ -159,6 +158,47 @@ async function route(req, res, url) {
     const file = agent.engine.clipFilePath(clipId, 'video');
     return streamFile(req, res, file, { cacheControl: 'public, max-age=3600, immutable' });
   }
+  // Serve TikTok's root verification text file before the non-API 404.
+  // This supports TikTok-generated verification filenames without hard-coding one token.
+  if (method === 'GET') {
+    const verificationMatch = pathname.match(/^\/([A-Za-z0-9._-]+\.txt)$/);
+    if (verificationMatch) {
+      const verificationFile = path.resolve(config.root, verificationMatch[1]);
+      const rootPrefix = path.resolve(config.root) + path.sep;
+
+      if (
+        verificationFile.startsWith(rootPrefix) &&
+        fs.existsSync(verificationFile) &&
+        fs.statSync(verificationFile).isFile()
+      ) {
+        const body = fs.readFileSync(verificationFile);
+        res.writeHead(200, {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Content-Length': body.length,
+          'Cache-Control': 'no-store',
+        });
+        return res.end(body);
+      }
+    }
+  }
+
+  // TikTok URL-prefix verification files are uploaded to the repository root.
+  // Serve only root-level TikTok .txt verification files publicly.
+  if (method === 'GET' && /^\/tiktok[^/]*\.txt$/i.test(pathname)) {
+    const verificationName = path.basename(decodeURIComponent(pathname));
+    const verificationFile = path.join(config.root, verificationName);
+    if (!fs.existsSync(verificationFile) || !fs.statSync(verificationFile).isFile()) {
+      return json(res, 404, { error: 'TikTok verification file not found.' });
+    }
+    const body = fs.readFileSync(verificationFile);
+    res.writeHead(200, {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Content-Length': body.length,
+      'Cache-Control': 'no-store',
+    });
+    return res.end(body);
+  }
+
   if (!pathname.startsWith('/api/')) return json(res, 404, { error: 'Not found.' });
   if (!authed(req, url)) return json(res, 401, { error: 'Wrong password.' });
 
