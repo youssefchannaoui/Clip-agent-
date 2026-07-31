@@ -163,6 +163,66 @@ function runProject(project) {
   });
 }
 
+function importMoreResult(project, jobRecord, file) {
+  const result = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const existingIds = new Set(state.clips.map(clip => clip.id));
+  const imported = [];
+  for (const clip of result.clips || []) {
+    if (!clip?.id || existingIds.has(clip.id)) continue;
+    const record = {
+      ...clip, projectId: project.id, projectTitle: project.title,
+      status: 'waiting', targets: [], addedAt: Date.now(), scheduledAt: null, readyAt: null, postedAt: null,
+      engine: 'self-hosted', renderVersion: 1, generatedFromSavedLecture: true,
+    };
+    state.clips.push(record);
+    existingIds.add(record.id);
+    imported.push(record);
+  }
+  if (!imported.length) throw new Error('The worker did not return any new unused clips.');
+  project.clipCount = state.clips.filter(clip => clip.projectId === project.id).length;
+  jobRecord.status = 'done'; jobRecord.stage = `${imported.length} new clips ready`; jobRecord.progress = 100;
+  jobRecord.completedAt = Date.now(); jobRecord.error = null; jobRecord.importedCount = imported.length;
+  project.updatedAt = Date.now();
+  save();
+  log(`${imported.length} more clips were generated inside "${project.title}" using its saved source and transcript.`);
+}
+
+function runMoreClips(project, jobRecord) {
+  return new Promise(resolve => {
+    const file = jobRecord.jobFile;
+    if (!file || !fs.existsSync(file)) {
+      jobRecord.status = 'failed'; jobRecord.stage = 'Generate-more job is missing';
+      jobRecord.error = 'The generate-more job file is missing. Start it again from Library.'; save(); resolve(); return;
+    }
+    jobRecord.status = 'processing'; jobRecord.stage = 'Loading the saved lecture';
+    jobRecord.progress = 1; jobRecord.startedAt = Date.now(); jobRecord.error = null; save();
+    const child = spawn(config.pythonBin, [config.workerScript, file], {
+      cwd: config.root, env: { ...process.env, FFMPEG_PATH: config.ffmpegPath, FFPROBE_PATH: config.ffprobePath },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    running.set(jobRecord.id, child);
+    let stdoutBuffer = '', stderr = '';
+    child.stdout.on('data', chunk => {
+      stdoutBuffer += chunk.toString(); const lines = stdoutBuffer.split(/\r?\n/); stdoutBuffer = lines.pop() || '';
+      for (const line of lines) if (line.trim()) parseWorkerLine(jobRecord, line.trim());
+    });
+    child.stderr.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-8000); });
+    child.on('error', error => { jobRecord.error = error.message; });
+    child.on('close', code => {
+      running.delete(jobRecord.id);
+      if (stdoutBuffer.trim()) parseWorkerLine(jobRecord, stdoutBuffer.trim());
+      try {
+        if (code === 0 && fs.existsSync(jobRecord.resultPath)) importMoreResult(project, jobRecord, jobRecord.resultPath);
+        else { finishFailed(jobRecord, stderr, code, 'Generate more clips'); log(`Could not generate more clips for "${project.title}": ${jobRecord.error}`, 'error'); }
+      } catch (error) {
+        jobRecord.status = 'failed'; jobRecord.stage = 'Could not import the new clips'; jobRecord.error = error.message; save();
+        log(`Could not import more clips for "${project.title}": ${error.message}`, 'error');
+      }
+      resolve(); pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
+    });
+  });
+}
+
 function importRerenderResult(jobRecord, file) {
   const result = JSON.parse(fs.readFileSync(file, 'utf8'));
   const rendered = result.clips?.[0];
@@ -238,6 +298,56 @@ function runRerender(jobRecord) {
   });
 }
 
+export function queueMoreClips(projectId, requestedCount = 8) {
+  const project = projectById(projectId);
+  if (!project) throw new Error('That lecture does not exist.');
+  if (!['done', 'completed'].includes(project.status)) throw new Error('Wait for the lecture to finish processing before generating more clips.');
+  if (project.moreJob && ['queued', 'processing'].includes(project.moreJob.status)) {
+    throw new Error('This lecture is already generating more clips.');
+  }
+  if (!project.sourceFile || !fs.existsSync(project.sourceFile)) {
+    throw new Error('The saved source video is unavailable. Generate more cannot safely re-download it because that would create a duplicate Library lecture.');
+  }
+  if (!project.transcriptFile || !fs.existsSync(project.transcriptFile)) {
+    throw new Error('The saved transcript is unavailable. This lecture must be processed again before more clips can be generated.');
+  }
+  const count = Math.max(1, Math.min(20, Math.round(Number(requestedCount) || 8)));
+  const template = selectedTemplate();
+  if (!template?.id) throw new Error('Choose a valid saved template.');
+  const tracks = workerMusicTracks();
+  if (!tracks.length) throw new Error('Music is mandatory. Upload at least one nasheed first.');
+  const transcriptSegments = JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8'));
+  if (!Array.isArray(transcriptSegments) || !transcriptSegments.length) throw new Error('The saved transcript is empty.');
+  const existingRanges = state.clips
+    .filter(clip => clip.projectId === project.id)
+    .map(clip => ({ id: clip.id, startSec: Number(clip.startSec || 0), endSec: Number(clip.endSec || 0) }));
+
+  const moreId = id('more');
+  const dir = path.join(jobsDir, moreId);
+  fs.mkdirSync(dir, { recursive: true });
+  const resultPath = path.join(dir, 'result.json');
+  const outputDir = path.join(clipsDir, project.id, 'more', moreId);
+  const payload = {
+    mode: 'more_clips', id: moreId, projectId: project.id, projectTitle: project.title, requestedCount: count,
+    sourceFile: project.sourceFile, transcriptFile: project.transcriptFile, transcriptSegments, existingRanges,
+    outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
+    template, musicTracks: tracks, settings: { ...sharedSettings(), clipsPerVideo: count },
+  };
+  const file = path.join(dir, 'job.json');
+  fs.writeFileSync(file, JSON.stringify(payload, null, 2));
+  const record = {
+    id: moreId, status: 'queued', stage: 'Waiting to generate more clips', progress: 0,
+    requestedCount: count, createdAt: Date.now(), updatedAt: Date.now(), jobFile: file, resultPath,
+    reusedSource: true, reusedTranscript: true,
+  };
+  project.moreJob = record;
+  project.updatedAt = Date.now();
+  save();
+  log(`Queued ${count} more clips inside "${project.title}" using the saved source and transcript.`);
+  pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
+  return record;
+}
+
 export function queueClipRerender(clipId, templateId, { asVariant = false } = {}) {
   const clip = clipById(clipId);
   if (!clip) throw new Error('That clip does not exist.');
@@ -288,11 +398,13 @@ export async function pump() {
     while (running.size < config.maxConcurrentJobs) {
       const candidates = [
         ...state.projects.filter(item => item.engine === 'self-hosted' && item.status === 'queued').map(item => ({ type: 'project', item, at: item.submittedAt })),
+        ...state.projects.filter(item => item.moreJob?.status === 'queued').map(item => ({ type: 'more', item: item.moreJob, project: item, at: item.moreJob.createdAt })),
         ...state.rerenderJobs.filter(item => item.status === 'queued').map(item => ({ type: 'rerender', item, at: item.createdAt })),
       ].sort((a, b) => a.at - b.at);
       const next = candidates[0];
       if (!next) break;
       if (next.type === 'project') runProject(next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
+      else if (next.type === 'more') runMoreClips(next.project, next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
       else runRerender(next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
       await new Promise(resolve => setTimeout(resolve, 30));
     }
@@ -407,7 +519,11 @@ export function retryProject(projectId) {
   return project;
 }
 
-export function cancelProject(projectId) { running.get(projectId)?.kill('SIGTERM'); }
+export function cancelProject(projectId) {
+  running.get(projectId)?.kill('SIGTERM');
+  const project = projectById(projectId);
+  if (project?.moreJob?.id) running.get(project.moreJob.id)?.kill('SIGTERM');
+}
 export function deleteProject(projectId) {
   const project = projectById(projectId);
   if (!project) throw new Error('That project does not exist.');
@@ -417,6 +533,7 @@ export function deleteProject(projectId) {
   state.projects = state.projects.filter(item => item.id !== projectId);
   state.rerenderJobs = state.rerenderJobs.filter(item => !clipIds.has(item.clipId));
   fs.rmSync(path.join(jobsDir, projectId), { recursive: true, force: true });
+  if (project.moreJob?.id) fs.rmSync(path.join(jobsDir, project.moreJob.id), { recursive: true, force: true });
   fs.rmSync(path.join(clipsDir, projectId), { recursive: true, force: true });
   if (project.sourceFile) removeDataFile(project.sourceFile);
   save(); log(`Removed "${project.title}" and its local rendered files.`);
@@ -435,6 +552,9 @@ export function recoverInterruptedJobs() {
   for (const project of state.projects) {
     if (project.engine === 'self-hosted' && project.status === 'processing') {
       project.status = 'queued'; project.stage = 'Recovered after server restart'; project.progress = Math.min(project.progress || 0, 95);
+    }
+    if (project.moreJob?.status === 'processing') {
+      project.moreJob.status = 'queued'; project.moreJob.stage = 'Recovered after server restart'; project.moreJob.progress = Math.min(project.moreJob.progress || 0, 95);
     }
   }
   for (const job of state.rerenderJobs) {
