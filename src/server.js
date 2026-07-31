@@ -89,7 +89,8 @@ function appState() {
     projects: state.projects.map(project => ({
       id: project.id, title: project.title, url: project.url, engine: project.engine, status: project.status,
       stage: project.stage, progress: project.progress || 0, error: project.error || null,
-      submittedAt: project.submittedAt, completedAt: project.completedAt || null, clipCount: project.clipCount || 0,
+      submittedAt: project.submittedAt, startedAt: project.startedAt || null,
+      updatedAt: project.updatedAt || null, completedAt: project.completedAt || null, clipCount: project.clipCount || 0,
       durationSec: project.durationSec || null, templateIdUsed: project.templateIdUsed,
       templateNameUsed: project.templateNameUsed, templateVersionUsed: project.templateVersionUsed || 1, musicRequired: true,
       sourceReusable: Boolean(project.sourceFile && fs.existsSync(project.sourceFile) && project.transcriptFile && fs.existsSync(project.transcriptFile)),
