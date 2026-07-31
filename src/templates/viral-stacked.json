@@ -47,5 +47,7 @@
   "brandLineHeight": 6,
   "voiceEnhance": true,
   "smartFramingEnabled": true,
-  "smartFramingBias": "auto"
+  "smartFramingBias": "auto",
+  "smartFramingPadding": 0.18,
+  "smartFramingZoom": 1.0
 }
