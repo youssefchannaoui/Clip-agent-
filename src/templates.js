@@ -14,6 +14,8 @@ const DEFAULTS = Object.freeze({
   width: 1080,
   height: 1920,
   fitMode: 'contain',
+  smartFramingEnabled: true,
+  smartFramingBias: 'auto',
   frameBackground: '#000000',
   blurStrength: 28,
   filterPreset: 'natural',
@@ -64,6 +66,7 @@ const DEFAULTS = Object.freeze({
 
 const ENUMS = {
   fitMode: ['contain', 'blur', 'crop'],
+  smartFramingBias: ['auto', 'left', 'center', 'right'],
   filterPreset: ['natural', 'crisp', 'warm', 'cinematic', 'monochrome', 'custom'],
   captionMode: ['phrase', 'word', 'dynamic-stack'],
   captionPosition: ['top', 'middle', 'bottom'],
@@ -119,7 +122,7 @@ export function sanitiseTemplate(input = {}, { id = '', builtIn = false } = {}) 
   for (const key of ['frameBackground', 'captionPrimary', 'captionHighlight', 'captionOutline', 'captionBackground', 'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor']) {
     output[key] = cleanColor(source[key], DEFAULTS[key]);
   }
-  for (const key of ['captionUppercase', 'brandLineEnabled', 'voiceEnhance']) {
+  for (const key of ['captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled']) {
     output[key] = Boolean(source[key]);
   }
   // Opening title cards are intentionally disabled. Clips begin immediately with spoken captions.
