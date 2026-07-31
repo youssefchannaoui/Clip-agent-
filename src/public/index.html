@@ -799,7 +799,16 @@ select:focus{outline:none;border-color:var(--blue)}
 .toast.good{border-color:rgba(217,180,120,.45)}
 @keyframes slide{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
-@media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
+@media (prefers-reduced-motion:reduce){
+  /* Suppress decorative motion, but not loading indicators. A spinner is
+     information — it's the only signal that work is still happening — so
+     removing it leaves someone staring at a frozen screen with no idea
+     whether the app is working or hung. Slowed down rather than removed. */
+  *{animation:none !important;transition:none !important}
+  .spin{animation:turn 1.6s linear infinite !important}
+  .splash-dots span{animation:splash-dot 1.6s ease-in-out infinite !important}
+  .live-progress i{transition:width .3s linear !important}
+}
 
 @media (max-width:1000px){
   .shell{grid-template-columns:1fr;gap:26px}
