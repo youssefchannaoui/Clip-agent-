@@ -10,13 +10,17 @@ ENV NODE_ENV=production \
     FFPROBE_PATH=ffprobe
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip ffmpeg ca-certificates fonts-dejavu-core \
+    python3 python3-pip ffmpeg ca-certificates fontconfig fonts-dejavu-core \
+    fonts-hosny-amiri fonts-sil-scheherazade \
+    && fc-cache -f -v \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY package.json ./
 COPY worker/requirements.txt ./worker/requirements.txt
-RUN pip3 install --break-system-packages -r worker/requirements.txt
+RUN python3 -m pip install --break-system-packages --upgrade pip setuptools wheel \
+    && python3 -m pip install --break-system-packages -r worker/requirements.txt \
+    && python3 -c "import yt_dlp, faster_whisper, cv2; print('Python AI and framing dependencies verified')"
 COPY . .
 RUN mkdir -p /app/data
 
