@@ -1,0 +1,19 @@
+{
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "a2eac30cd4d4789fc6a83807dd1d409bff79249c5d19bd1bff1c66501ba6d709",
+      "bytes": 812
+    },
+    {
+      "path": "apply-loader.mjs",
+      "sha256": "90ad63eabe161bfe265beb58fd0240956b08967315738b968f74b749e3a42506",
+      "bytes": 3569
+    },
+    {
+      "path": "verify-loader.mjs",
+      "sha256": "982e29c1c66caf7ade168951671a006124ce37a240fffec00f41334e86316286",
+      "bytes": 1241
+    }
+  ]
+}
