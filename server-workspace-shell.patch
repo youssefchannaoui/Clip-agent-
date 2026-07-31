@@ -1,0 +1,36 @@
+diff --git a/src/server.js b/src/server.js
+index 0441873..WORKSPACE 100644
+--- a/src/server.js
++++ b/src/server.js
+@@ -14,8 +14,12 @@ import { checkFfmpeg } from './ffmpeg.js';
+
+ const page = path.join(config.root, 'src', 'public', 'index.html');
+ const activityFixPage = path.join(config.root, 'src', 'public', 'activity-fix.js');
++const workspaceShellCss = path.join(config.root, 'src', 'public', 'workspace-shell.css');
++const workspaceShellJs = path.join(config.root, 'src', 'public', 'workspace-shell.js');
+ const youtubeCookiesFile = path.join(config.dataDir, 'youtube-cookies.txt');
+
++function staticFile(res, file, contentType) {
++  if (!fs.existsSync(file)) return json(res, 404, { error: 'Static file not found.' });
++  const body = fs.readFileSync(file); res.writeHead(200, { 'Content-Type': contentType, 'Content-Length': body.length, 'Cache-Control': 'no-store' }); return res.end(body);
++}
+ function json(res, status, value) {
+   const body = JSON.stringify(value);
+   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
+@@ -139,7 +143,11 @@ async function route(req, res, url) {
+   if (pathname === '/healthz') return json(res, 200, { ok: true, engine: 'self-hosted' });
+   if (method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
+     let html = fs.readFileSync(page, 'utf8');
++    if (!html.includes('/workspace-shell.css')) html = html.replace('</head>', '<link rel="stylesheet" href="/workspace-shell.css">\n</head>');
+     if (!html.includes('/activity-fix.js')) html = html.replace('</body>', '<script src="/activity-fix.js"></script>\n</body>');
++    if (!html.includes('/workspace-shell.js')) html = html.replace('</body>', '<script src="/workspace-shell.js"></script>\n</body>');
+     const body = Buffer.from(html);
+     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
+     return res.end(body);
+@@ -151,6 +159,8 @@ async function route(req, res, url) {
+     res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
+     return res.end(body);
+   }
++  if (method === 'GET' && pathname === '/workspace-shell.css') return staticFile(res, workspaceShellCss, 'text/css; charset=utf-8');
++  if (method === 'GET' && pathname === '/workspace-shell.js') return staticFile(res, workspaceShellJs, 'text/javascript; charset=utf-8');
+   const oauthCallback = pathname.match(/^\/auth\/(youtube|meta|tiktok)\/callback$/);

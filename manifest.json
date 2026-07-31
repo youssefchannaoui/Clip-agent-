@@ -1,0 +1,36 @@
+{
+  "package": "DeenClipped redesign Phase 1",
+  "branch_target": "deenclipped-v2-2",
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "d95fd40a4b9b6aad70f7afcd9f464f1a14a10d6a7ac76652c8b63e47230fa8c1",
+      "bytes": 1795
+    },
+    {
+      "path": "install.sh",
+      "sha256": "6cbbf945281de260e3cf959e99b3e30eeeb30505c4e70fa9495cf1bfd31d8331",
+      "bytes": 621
+    },
+    {
+      "path": "server-workspace-shell.patch",
+      "sha256": "b4d4425be47b90d4e882a44606aa76ec713c02329b94ebe6dbe760c122904645",
+      "bytes": 2606
+    },
+    {
+      "path": "src/public/activity-fix.js",
+      "sha256": "028c4f7fb14647e1383ed26dde336dd79ae8a0cabf4cf739ae92dd51edbf1024",
+      "bytes": 6250
+    },
+    {
+      "path": "src/public/workspace-shell.css",
+      "sha256": "937b084f713e63027555a8b1b94338af6358505bf4e98d554c4b3fcfe74d03fd",
+      "bytes": 14720
+    },
+    {
+      "path": "src/public/workspace-shell.js",
+      "sha256": "df3bac3fc4fa2fb241a39a5f5852d9b7973f069b41c0471681658e6409b09fb7",
+      "bytes": 31801
+    }
+  ]
+}
