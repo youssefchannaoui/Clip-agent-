@@ -15,6 +15,7 @@ import { formatLocal } from './slots.js';
 import { checkFfmpeg } from './ffmpeg.js';
 
 const page = path.join(config.root, 'src', 'public', 'index.html');
+const youtubeCookiesFile = path.join(config.dataDir, 'youtube-cookies.txt');
 
 function json(res, status, value) {
   const body = JSON.stringify(value);
@@ -90,6 +91,15 @@ function appState() {
       submittedAt: project.submittedAt, completedAt: project.completedAt || null, clipCount: project.clipCount || 0,
       durationSec: project.durationSec || null, templateIdUsed: project.templateIdUsed,
       templateNameUsed: project.templateNameUsed, templateVersionUsed: project.templateVersionUsed || 1, musicRequired: true,
+      sourceReusable: Boolean(project.sourceFile && fs.existsSync(project.sourceFile) && project.transcriptFile && fs.existsSync(project.transcriptFile)),
+      moreJob: project.moreJob ? {
+        id: project.moreJob.id, status: project.moreJob.status, stage: project.moreJob.stage,
+        progress: project.moreJob.progress || 0, error: project.moreJob.error || null,
+        requestedCount: project.moreJob.requestedCount || 0, importedCount: project.moreJob.importedCount || 0,
+        createdAt: project.moreJob.createdAt || null, startedAt: project.moreJob.startedAt || null,
+        completedAt: project.moreJob.completedAt || null, updatedAt: project.moreJob.updatedAt || null,
+        reusedSource: true, reusedTranscript: true,
+      } : null,
     })),
     clips: state.clips.map(publicClip),
     rerenderJobs: state.rerenderJobs.slice(0, 30),
@@ -200,6 +210,14 @@ async function route(req, res, url) {
     try { return json(res, 200, { ok: true, project: agent.engine.retryProject(decodeURIComponent(projectRetry[1])) }); }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
+  const projectMore = pathname.match(/^\/api\/projects\/([^/]+)\/more-clips$/);
+  if (method === 'POST' && projectMore) {
+    const body = await readBody(req);
+    try {
+      const job = agent.engine.queueMoreClips(decodeURIComponent(projectMore[1]), Number(body.count || 8));
+      return json(res, 202, { ok: true, job });
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
   const projectMatch = pathname.match(/^\/api\/projects\/([^/]+)$/);
   if (method === 'DELETE' && projectMatch) {
     try { agent.engine.deleteProject(decodeURIComponent(projectMatch[1])); return json(res, 200, { ok: true }); }
@@ -288,6 +306,29 @@ async function route(req, res, url) {
   }
   const musicDelete = pathname.match(/^\/api\/music\/([^/]+)$/);
   if (method === 'DELETE' && musicDelete) return audio.deleteNasheed(decodeURIComponent(musicDelete[1])) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'Track not found.' });
+
+  if (method === 'GET' && pathname === '/api/admin/youtube-cookies') {
+    return json(res, 200, { connected: fs.existsSync(youtubeCookiesFile) });
+  }
+  if (method === 'POST' && pathname === '/api/admin/youtube-cookies') {
+    const body = await readBody(req, 5 * 1024 * 1024);
+    const contents = String(body.contents || '');
+    const headerValid = contents.includes('# Netscape HTTP Cookie File') || contents.includes('# HTTP Cookie File');
+    if (!headerValid) return json(res, 400, { error: 'Upload a valid Netscape-format cookies.txt file.' });
+    if (!/(^|\n)(?:#HttpOnly_)?\.?youtube\.com\t/im.test(contents) && !contents.includes('.youtube.com')) {
+      return json(res, 400, { error: 'The file does not contain YouTube cookies.' });
+    }
+    fs.mkdirSync(config.dataDir, { recursive: true });
+    fs.writeFileSync(youtubeCookiesFile, contents, { encoding: 'utf8', mode: 0o600 });
+    log('YouTube downloader cookies were updated through the admin panel.');
+    return json(res, 200, { ok: true, connected: true });
+  }
+  if (method === 'DELETE' && pathname === '/api/admin/youtube-cookies') {
+    try { fs.unlinkSync(youtubeCookiesFile); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    log('YouTube downloader cookies were removed.');
+    return json(res, 200, { ok: true, connected: false });
+  }
 
   if (method === 'GET' && pathname === '/api/diagnostics') {
     const [ffmpeg, worker] = await Promise.all([checkFfmpeg(), runDoctor()]);
