@@ -25,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import time
+import threading
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,8 +36,37 @@ def emit(kind: str, **payload: Any) -> None:
     print(json.dumps({"type": kind, **payload}, ensure_ascii=False), flush=True)
 
 
-def progress(stage: str, percent: int) -> None:
-    emit("progress", stage=stage, progress=max(0, min(100, int(percent))))
+_progress_state: dict[str, Any] = {
+    "stage": "Starting",
+    "progress": 0,
+    "startedAt": time.time(),
+    "stageStartedAt": time.time(),
+}
+_progress_lock = threading.Lock()
+_heartbeat_stop = threading.Event()
+
+
+def progress(stage: str, percent: int, **details: Any) -> None:
+    now = time.time()
+    bounded = max(0, min(100, int(percent)))
+    with _progress_lock:
+        if stage != _progress_state.get("stage"):
+            _progress_state["stageStartedAt"] = now
+        _progress_state.update({"stage": stage, "progress": bounded, **details})
+        payload = dict(_progress_state)
+    payload["elapsedSec"] = round(now - float(payload.get("startedAt", now)), 1)
+    payload["updatedAt"] = int(now * 1000)
+    emit("progress", **payload)
+
+
+def _heartbeat_loop() -> None:
+    while not _heartbeat_stop.wait(10):
+        now = time.time()
+        with _progress_lock:
+            payload = dict(_progress_state)
+        payload["elapsedSec"] = round(now - float(payload.get("startedAt", now)), 1)
+        payload["updatedAt"] = int(now * 1000)
+        emit("heartbeat", **payload)
 
 
 def run(command: list[str], timeout: int | None = None) -> subprocess.CompletedProcess[str]:
@@ -121,6 +151,13 @@ def copy_or_download(job: dict[str, Any], destination: Path) -> tuple[Path, str]
     }
     # Newer yt-dlp builds can use Node for YouTube's JS challenges. Unknown
     # options are intentionally avoided so older builds still work.
+    cookie_path = os.environ.get("YOUTUBE_COOKIES_PATH", "").strip()
+    if not cookie_path:
+        cookie_path = str(Path(os.environ.get("DATA_DIR", "data")) / "youtube-cookies.txt")
+    cookie_file = Path(cookie_path)
+    if cookie_file.exists() and cookie_file.is_file():
+        options["cookiefile"] = str(cookie_file)
+
     with YoutubeDL(options) as ydl:
         info = ydl.extract_info(source, download=True)
         detected_title = str(info.get("title") or "").strip()
@@ -145,7 +182,7 @@ def extract_audio(ffmpeg: str, source: Path, audio_file: Path) -> None:
     ], timeout=60 * 60)
 
 
-def transcribe(job: dict[str, Any], audio_file: Path) -> list[dict[str, Any]]:
+def transcribe(job: dict[str, Any], audio_file: Path, duration_sec: float) -> list[dict[str, Any]]:
     supplied = job.get("transcriptSegments")
     if isinstance(supplied, list) and supplied:
         return [
@@ -176,6 +213,11 @@ def transcribe(job: dict[str, Any], audio_file: Path) -> list[dict[str, Any]]:
     device = settings.get("device") or "auto"
     compute_type = settings.get("computeType") or "int8"
     model_name = settings.get("model") or "small"
+    progress(
+        "Loading transcription model", 13,
+        model=model_name, device=device, computeType=compute_type,
+        sourceDurationSec=round(duration_sec, 2), etaSec=None,
+    )
     model = WhisperModel(model_name, device=device, compute_type=compute_type)
     kwargs: dict[str, Any] = {
         "beam_size": 5,
@@ -191,7 +233,27 @@ def transcribe(job: dict[str, Any], audio_file: Path) -> list[dict[str, Any]]:
 
     segments, _info = model.transcribe(str(audio_file), **kwargs)
     output: list[dict[str, Any]] = []
+    transcription_started = time.time()
+    last_percent = 15
     for segment in segments:
+        processed_sec = max(0.0, min(duration_sec, float(segment.end or 0.0)))
+        fraction = processed_sec / max(duration_sec, 1.0)
+        current_percent = 16 + int(fraction * 44)
+        current_percent = max(last_percent, min(60, current_percent))
+        elapsed = max(0.1, time.time() - transcription_started)
+        speed = processed_sec / elapsed
+        eta = ((duration_sec - processed_sec) / speed) if speed > 0.01 and processed_sec > 15 else None
+        if current_percent > last_percent or time.time() - float(_progress_state.get("lastDetailAt", 0)) >= 8:
+            progress(
+                "Transcribing speech", current_percent,
+                model=model_name, device=device, computeType=compute_type,
+                sourceDurationSec=round(duration_sec, 2),
+                processedSec=round(processed_sec, 2),
+                transcriptionSpeed=round(speed, 3),
+                etaSec=round(eta, 1) if eta is not None else None,
+                lastDetailAt=time.time(),
+            )
+            last_percent = current_percent
         text = str(segment.text or "").strip()
         if not text:
             continue
@@ -352,6 +414,25 @@ def overlap_ratio(a: Candidate, b: Candidate) -> float:
     if not intersection:
         return 0.0
     return intersection / min(a.duration, b.duration)
+
+
+def overlap_with_existing(candidate: Candidate, item: dict[str, Any]) -> float:
+    start = float(item.get("startSec", item.get("start", 0)) or 0)
+    end = float(item.get("endSec", item.get("end", 0)) or 0)
+    duration = max(0.001, end - start)
+    intersection = max(0.0, min(candidate.end, end) - max(candidate.start, start))
+    if not intersection:
+        return 0.0
+    return intersection / min(candidate.duration, duration)
+
+
+def remove_existing_moments(candidates: list[Candidate], existing: list[dict[str, Any]]) -> list[Candidate]:
+    if not existing:
+        return candidates
+    return [
+        candidate for candidate in candidates
+        if not any(overlap_with_existing(candidate, item) > 0.30 for item in existing)
+    ]
 
 
 def select_candidates(candidates: list[Candidate], limit: int) -> list[Candidate]:
@@ -702,10 +783,11 @@ def render_clip(
     filter_complex = (
         build_video_filter(template, ass_file)
         + ";"
-        + f"[0:a]{voice_chain}asetpts=PTS-STARTPTS[voice];"
+        + f"[0:a]{voice_chain}asetpts=PTS-STARTPTS,asplit=2[voice_mix][voice_sidechain];"
         + f"[1:a]volume={volume:.3f}[music];"
-        + "[music][voice]sidechaincompress=threshold=0.025:ratio=10:attack=15:release=650[ducked];"
-        + "[voice][ducked]amix=inputs=2:duration=first:dropout_transition=2,"
+        + "[music][voice_sidechain]sidechaincompress="
+          "threshold=0.025:ratio=10:attack=15:release=650[ducked];"
+        + "[voice_mix][ducked]amix=inputs=2:duration=first:dropout_transition=2,"
         + "loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
     )
 
@@ -833,10 +915,83 @@ def process_rerender(job: dict[str, Any], job_file: Path) -> None:
     progress("Complete", 100)
     emit("result", resultPath=str(result_file))
 
+def process_more_clips(job: dict[str, Any], job_file: Path) -> None:
+    result_file = Path(job["resultPath"])
+    output_dir = Path(job["outputDir"])
+    source_file = Path(job["sourceFile"])
+    if not source_file.exists():
+        raise RuntimeError("The saved source video is unavailable. Generate-more cannot re-download the lecture because that would create a duplicate project.")
+
+    tracks = [track for track in job.get("musicTracks", []) if Path(track.get("path", "")).exists()]
+    if not tracks:
+        raise RuntimeError("Music is mandatory. Upload at least one nasheed before generating more clips.")
+    if not job.get("template", {}).get("id"):
+        raise RuntimeError("A valid app-owned template is mandatory.")
+
+    segments = job.get("transcriptSegments") or []
+    if not segments:
+        transcript_path = Path(str(job.get("transcriptFile") or ""))
+        if transcript_path.exists():
+            segments = json.loads(transcript_path.read_text(encoding="utf-8"))
+    if not segments:
+        raise RuntimeError("The saved transcript is unavailable. This lecture must be processed again before more clips can be generated.")
+
+    settings = job["settings"]
+    requested = max(1, min(20, int(job.get("requestedCount") or settings.get("clipsPerVideo", 8))))
+    progress("Loading saved lecture and transcript", 5, requestedClips=requested, reusedSource=True, reusedTranscript=True)
+
+    candidates = build_candidates(
+        segments,
+        float(settings.get("clipMinSeconds", 20)),
+        float(settings.get("clipMaxSeconds", 90)),
+    )
+    progress("Removing moments already used", 25, candidateCount=len(candidates), requestedClips=requested)
+    candidates = remove_existing_moments(candidates, list(job.get("existingRanges") or []))
+    progress("Scoring unused moments", 40, candidateCount=len(candidates), requestedClips=requested)
+    candidates = refine_with_ollama(candidates, settings)
+    selected = select_candidates(candidates, requested)
+    if not selected:
+        raise RuntimeError("No unused moments remain within the selected clip-duration range. Try a different duration range.")
+
+    seed = int(hashlib.sha256(str(job["id"]).encode()).hexdigest()[:12], 16)
+    shuffled_tracks = tracks.copy()
+    random.Random(seed).shuffle(shuffled_tracks)
+
+    rendered: list[dict[str, Any]] = []
+    total = len(selected)
+    for index, candidate in enumerate(selected, 1):
+        percent = 50 + int((index - 1) / max(total, 1) * 44)
+        progress(
+            f"Rendering new clip {index} of {total}", percent,
+            currentClip=index, totalClips=total, requestedClips=requested,
+            reusedSource=True, reusedTranscript=True, etaSec=None,
+        )
+        track = shuffled_tracks[(index - 1) % len(shuffled_tracks)]
+        rendered.append(render_clip(job, candidate, index, source_file, track, output_dir))
+
+    result = {
+        "project": {
+            "id": job.get("projectId"),
+            "title": str(job.get("projectTitle") or "Lecture"),
+            "clipCount": len(rendered),
+            "reusedSource": True,
+            "reusedTranscript": True,
+        },
+        "clips": rendered,
+    }
+    progress("Verifying new clips", 96, currentClip=total, totalClips=total, reusedSource=True, reusedTranscript=True)
+    result_file.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    progress("More clips are ready", 100, currentClip=total, totalClips=total, etaSec=0, reusedSource=True, reusedTranscript=True)
+    emit("result", resultPath=str(result_file))
+
+
 def process(job_file: Path) -> None:
     job = json.loads(job_file.read_text(encoding="utf-8"))
     if job.get("mode") == "rerender":
         process_rerender(job, job_file)
+        return
+    if job.get("mode") == "more_clips":
+        process_more_clips(job, job_file)
         return
     job_dir = job_file.parent
     source_dir = Path(job["sourceDir"])
@@ -854,7 +1009,7 @@ def process(job_file: Path) -> None:
     if not job.get("template", {}).get("id"):
         raise RuntimeError("A valid app-owned template is mandatory.")
 
-    progress("Downloading the source video", 4)
+    progress("Downloading source video", 1, etaSec=None)
     source_file, detected_title = copy_or_download(job, source_file)
     duration = media_duration(job["ffprobe"], source_file)
     if duration <= 0:
@@ -862,20 +1017,21 @@ def process(job_file: Path) -> None:
     if duration > float(job["settings"].get("maxSourceMinutes", 180)) * 60:
         raise RuntimeError("The source is longer than the configured processing limit.")
 
-    progress("Extracting speech audio", 14)
+    progress("Extracting speech audio", 9, sourceDurationSec=round(duration, 2), etaSec=None)
     extract_audio(job["ffmpeg"], source_file, audio_file)
 
-    progress("Transcribing and translating speech", 24)
-    segments = transcribe(job, audio_file)
+    progress("Preparing transcription", 12, sourceDurationSec=round(duration, 2), etaSec=None)
+    segments = transcribe(job, audio_file, duration)
     transcript_file.write_text(json.dumps(segments, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    progress("Finding complete important moments", 52)
+    progress("Analysing transcript", 61, sourceDurationSec=round(duration, 2), processedSec=round(duration, 2), etaSec=None)
     settings = job["settings"]
     candidates = build_candidates(
         segments,
         float(settings.get("clipMinSeconds", 20)),
         float(settings.get("clipMaxSeconds", 90)),
     )
+    progress("Finding and scoring clips", 69, candidateCount=len(candidates), etaSec=None)
     candidates = refine_with_ollama(candidates, settings)
     selected = select_candidates(candidates, int(settings.get("clipsPerVideo", 8)))
     if not selected:
@@ -889,8 +1045,8 @@ def process(job_file: Path) -> None:
     rendered: list[dict[str, Any]] = []
     total = len(selected)
     for index, candidate in enumerate(selected, 1):
-        percent = 58 + int((index - 1) / max(total, 1) * 37)
-        progress(f"Rendering clip {index} of {total} with captions and music", percent)
+        percent = 75 + int((index - 1) / max(total, 1) * 20)
+        progress(f"Rendering clip {index} of {total}", percent, currentClip=index, totalClips=total, etaSec=None)
         track = shuffled_tracks[(index - 1) % len(shuffled_tracks)]
         rendered.append(render_clip(job, candidate, index, source_file, track, output_dir))
 
@@ -909,8 +1065,9 @@ def process(job_file: Path) -> None:
         },
         "clips": rendered,
     }
+    progress("Verifying rendered clips", 96, currentClip=total, totalClips=total, etaSec=None)
     result_file.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    progress("Complete", 100)
+    progress("Complete", 100, currentClip=total, totalClips=total, etaSec=0)
     emit("result", resultPath=str(result_file))
 
 
@@ -923,12 +1080,16 @@ def main() -> int:
         return doctor()
     if not args.job:
         parser.error("a job JSON path is required")
+    heartbeat = threading.Thread(target=_heartbeat_loop, name="worker-heartbeat", daemon=True)
+    heartbeat.start()
     try:
         process(args.job.resolve())
         return 0
     except Exception as exc:
         emit("error", error=str(exc))
         return 1
+    finally:
+        _heartbeat_stop.set()
 
 
 if __name__ == "__main__":
