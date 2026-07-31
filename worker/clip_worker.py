@@ -753,6 +753,50 @@ def description_from_text(text: str) -> str:
     return cleaned
 
 
+def crop_origin_from_center(
+    center_x: float,
+    center_y: float | None,
+    src_w: int,
+    src_h: int,
+    crop_w: int,
+    crop_h: int,
+    padding: float = 0.18,
+    vertical_face_ratio: float = 0.38,
+) -> tuple[int, int]:
+    """Given where the subject actually is, compute the crop's top-left corner.
+
+    This is the fix for a real bug: the previous code positioned the crop
+    vertically at a fixed 36% of the source frame no matter where the
+    detected face actually was, so a subject framed differently than that
+    one assumption got their head cut off. Horizontal placement already
+    used the detected position — vertical placement now does too, using
+    the same kind of "keep the subject inboard of the crop edge, not
+    pinned exactly in the middle" logic as horizontal already had.
+
+    When no vertical detection is available at all (e.g. the edge-detection
+    fallback, which only finds a horizontal position), center_y is None and
+    this falls back to the original fixed assumption — a reasonable guess
+    is better than no guess when there's truly nothing to go on, but it
+    should not override a real detection when one exists.
+    """
+    padding = max(0.05, min(0.45, float(padding)))
+
+    desired_ratio = 0.5
+    if center_x < src_w * 0.42:
+        desired_ratio = 0.34 + padding * 0.25
+    elif center_x > src_w * 0.58:
+        desired_ratio = 0.66 - padding * 0.25
+    x = int(max(0, min(src_w - crop_w, round(center_x - crop_w * desired_ratio))))
+
+    if center_y is None:
+        y = int(round((src_h - crop_h) * 0.36))
+    else:
+        y = int(round(center_y - crop_h * vertical_face_ratio))
+    y = max(0, min(src_h - crop_h, y))
+
+    return x, y
+
+
 def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_width: int, out_height: int, bias: str = "auto", padding: float = 0.18, zoom: float = 1.0) -> dict[str, Any] | None:
     """Choose one stable crop that keeps the main speaker visible.
 
@@ -796,7 +840,9 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
         return None
     sample_points = [0.10, 0.25, 0.40, 0.55, 0.70, 0.85]
     face_centers: list[float] = []
+    face_centers_y: list[float] = []
     body_centers: list[float] = []
+    body_centers_y: list[float] = []
     min_face = max(28, min(src_w, src_h) // 24)
     min_body = max(70, min(src_w, src_h) // 7)
     for fraction in sample_points:
@@ -827,16 +873,23 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
         if found:
             x, y, w, h = max(found, key=lambda item: item[2] * item[3])
             face_centers.append(float(x + w / 2))
+            face_centers_y.append(float(y + h / 2))
             continue
         if not upper_body.empty():
             bodies = upper_body.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=3, minSize=(min_body, min_body))
             if len(bodies):
                 x, y, w, h = max(bodies, key=lambda item: item[2] * item[3])
                 body_centers.append(float(x + w / 2))
+                # An upper-body box's own vertical center sits too low for
+                # good headroom — the box spans down to the shoulders/chest,
+                # so bias toward its top edge, closer to where the head is.
+                body_centers_y.append(float(y + h * 0.22))
     cap.release()
     centers = face_centers if face_centers else body_centers
+    centers_y = face_centers_y if face_centers else body_centers_y
     if not centers:
         # Fallback: find the horizontal area with the strongest foreground/edge detail.
+        # This gives no vertical information at all.
         cap = cv2.VideoCapture(str(source))
         edge_centers: list[float] = []
         for fraction in [0.2, 0.5, 0.8]:
@@ -851,21 +904,21 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
                 edge_centers.append(float(columns.argmax()))
         cap.release()
         centers = edge_centers
+        centers_y = []
     if not centers:
         return None
     centers.sort()
     center = centers[len(centers) // 2]
+    center_y = None
+    if centers_y:
+        centers_y_sorted = sorted(centers_y)
+        center_y = centers_y_sorted[len(centers_y_sorted) // 2]
     # Add a small look-room bias toward the middle so the face is not pinned
-    # against the crop edge.
-    padding = max(0.05, min(0.45, float(padding)))
-    # Keep a safety zone around the detected subject. The crop stays stable for the whole clip.
-    desired_ratio = 0.5
-    if center < src_w * 0.42:
-        desired_ratio = 0.34 + padding * 0.25
-    elif center > src_w * 0.58:
-        desired_ratio = 0.66 - padding * 0.25
-    x = int(max(0, min(src_w - crop_w, round(center - crop_w * desired_ratio))))
-    y = max(0, min(src_h - crop_h, int(round((src_h - crop_h) * 0.36))))
+    # against the crop edge, and — critically — actually use the detected
+    # vertical position instead of a fixed guess. The fixed guess used to
+    # apply no matter where the subject really was, which is what cut
+    # heads off when a video's framing didn't match that one assumption.
+    x, y = crop_origin_from_center(center, center_y, src_w, src_h, crop_w, crop_h, padding)
     method = "face" if face_centers else ("upper-body" if body_centers else "foreground")
     return {"x": x, "y": y, "w": crop_w, "h": crop_h, "method": method}
 
