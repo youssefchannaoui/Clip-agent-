@@ -517,6 +517,128 @@ body.dc-side-collapsed .dc-sidebar-live.v3-now{display:none!important}
   body.dc-app #view-schedule .slot-actions{grid-column:2/-1;justify-content:flex-start;max-width:none}
 }
 @media(max-width:560px){body.dc-app #view-schedule .sched-health{grid-template-columns:1fr}body.dc-app #view-schedule .slot-card{grid-template-columns:1fr}body.dc-app #view-schedule .slot-media{width:100%;max-width:170px}.dc-now-mini-stats{grid-template-columns:1fr 1fr}}
+
+
+/* V3K: schedule board repair — keep the old layout, remove the broken overlap */
+body.dc-app #view-schedule .schedule-board{
+  position:relative!important;
+  isolation:isolate!important;
+  overflow:hidden!important;
+  border-radius:24px!important;
+}
+body.dc-app #view-schedule .schedule-board > *{
+  min-width:0!important;
+}
+body.dc-app #view-schedule .board-day{
+  position:relative!important;
+  top:auto!important;
+  z-index:5!important;
+  min-height:64px!important;
+  padding:0 24px!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:14px!important;
+  background:linear-gradient(180deg,#17171b,#121216)!important;
+  border-bottom:1px solid rgba(255,255,255,.085)!important;
+  box-shadow:0 12px 30px rgba(0,0,0,.16)!important;
+}
+body.dc-app #view-schedule .board-day.today::before{
+  content:'';
+  position:absolute;
+  left:0;
+  top:0;
+  bottom:0;
+  width:3px;
+  background:var(--dc-accent);
+  box-shadow:0 0 18px rgba(217,180,120,.35);
+}
+body.dc-app #view-schedule .board-day .code{
+  font-size:15px!important;
+  font-weight:760!important;
+  letter-spacing:-.015em!important;
+}
+body.dc-app #view-schedule .board-day-n{
+  margin-left:auto!important;
+  font-size:10px!important;
+  color:var(--dc-muted)!important;
+}
+body.dc-app #view-schedule .slot-card{
+  min-height:124px!important;
+  grid-template-columns:88px 84px minmax(0,1fr) 210px!important;
+  align-items:center!important;
+  gap:18px!important;
+  padding:16px 24px!important;
+  background:linear-gradient(90deg,rgba(255,255,255,.012),transparent 42%)!important;
+}
+body.dc-app #view-schedule .slot-card.past{
+  opacity:.78!important;
+}
+body.dc-app #view-schedule .slot-card.next{
+  opacity:1!important;
+  background:linear-gradient(90deg,rgba(217,180,120,.135),rgba(217,180,120,.028) 62%,transparent)!important;
+}
+body.dc-app #view-schedule .slot-card.next::before{
+  width:3px!important;
+  background:var(--dc-accent)!important;
+  box-shadow:0 0 16px rgba(217,180,120,.32)!important;
+}
+body.dc-app #view-schedule .slot-time{
+  font-size:18px!important;
+  font-weight:820!important;
+  letter-spacing:-.03em!important;
+}
+body.dc-app #view-schedule .slot-media{
+  width:74px!important;
+  border-radius:13px!important;
+}
+body.dc-app #view-schedule .slot-title{
+  max-width:720px!important;
+  font-size:14px!important;
+  font-weight:760!important;
+  color:var(--dc-text)!important;
+}
+body.dc-app #view-schedule .slot-from{
+  max-width:720px!important;
+  font-size:10px!important;
+  color:var(--dc-muted)!important;
+}
+body.dc-app #view-schedule .slot-actions{
+  max-width:none!important;
+  justify-content:flex-end!important;
+  gap:8px!important;
+}
+body.dc-app #view-schedule .slot-actions .btn,
+body.dc-app #view-schedule .slot-actions .dc-btn{
+  min-height:38px!important;
+  padding:0 16px!important;
+  font-size:10px!important;
+  border-radius:12px!important;
+}
+body.dc-app #view-schedule .slot-card.open{
+  min-height:86px!important;
+}
+body.dc-app #view-schedule .slot-card.open .slot-media{
+  height:58px!important;
+  aspect-ratio:auto!important;
+}
+@media(max-width:980px){
+  body.dc-app #view-schedule .slot-card{
+    grid-template-columns:70px 76px minmax(0,1fr)!important;
+    padding:14px 16px!important;
+  }
+  body.dc-app #view-schedule .slot-actions{
+    grid-column:2 / -1!important;
+    justify-content:flex-start!important;
+    margin-top:2px!important;
+  }
+}
+@media(max-width:620px){
+  body.dc-app #view-schedule .board-day{padding:0 16px!important;min-height:58px!important}
+  body.dc-app #view-schedule .slot-card{grid-template-columns:1fr!important;gap:10px!important}
+  body.dc-app #view-schedule .slot-media{width:96px!important}
+  body.dc-app #view-schedule .slot-actions{grid-column:auto!important;display:grid!important;grid-template-columns:1fr 1fr!important}
+}
+
 `;
 
 function injectShell(){
