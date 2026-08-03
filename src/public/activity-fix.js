@@ -285,13 +285,25 @@ body.dc-project-open .main-col,body.dc-project-open #app>.wrap{overflow-x:hidden
 @media(max-width:1250px){.dc-home-quick{grid-template-columns:repeat(2,minmax(0,1fr))}.dc-home-main-grid{grid-template-columns:1fr}.dc-project-detail-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.dc-project-detail-filter{grid-template-columns:1fr 1fr}.dc-project-detail-filter .dc-btn{justify-self:stretch}.dc-review-actions{grid-column:1/-1;min-width:0!important}}
 @media(max-width:720px){.dc-v3-hero.slim{grid-template-columns:1fr!important;min-height:0!important}.dc-home-quick{grid-template-columns:1fr}.dc-home-metrics.v3.tight,.dc-project-detail-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.dc-project-detail-hero{align-items:flex-start;flex-wrap:wrap}.dc-project-detail-thumb{width:74px}.dc-project-detail-info h1{white-space:normal;font-size:20px}.dc-project-detail-actions{width:100%}.dc-project-detail-actions .dc-btn{flex:1}.dc-project-detail-filter{grid-template-columns:1fr}.dc-project-clip-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important}.dc-clip-card.v3-full .dc-clip-actions{grid-template-columns:1fr!important}.dc-review-actions{grid-template-columns:1fr 1fr!important}}
 @media(max-width:460px){.dc-project-clip-grid,.dc-project-grid{grid-template-columns:1fr!important}}
+
+/* V3G: less boxy home, more cinematic dashboard */
+.dc-home-v3g{display:flex;flex-direction:column;gap:18px}.dc-home-hero-g{position:relative;min-height:330px;display:grid;grid-template-columns:minmax(420px,1.1fr) minmax(320px,.9fr);align-items:center;gap:22px;padding:34px 28px;border:1px solid rgba(217,180,120,.28);border-radius:26px;background:radial-gradient(circle at 12% 6%,rgba(217,180,120,.18),transparent 30%),radial-gradient(circle at 86% 20%,rgba(85,183,255,.12),transparent 32%),linear-gradient(135deg,#17130f,#101114 58%,#0b1118);overflow:hidden}.dc-home-hero-g::after{content:'';position:absolute;right:-150px;top:-180px;width:420px;height:420px;border-radius:50%;border:1px solid rgba(217,180,120,.18);background:rgba(217,180,120,.045);pointer-events:none}.dc-home-hero-copy{position:relative;z-index:1}.dc-home-hero-copy h1{font-size:clamp(36px,4vw,58px);line-height:.94;letter-spacing:-.055em;margin:18px 0 12px;max-width:760px}.dc-home-hero-copy p{max-width:620px;margin:0;color:var(--dc-muted);font-size:14px;line-height:1.55}.dc-stat-ribbon{display:flex;flex-wrap:wrap;gap:8px;margin:17px 0 2px}.dc-tiny-stat{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 10px;border:1px solid rgba(255,255,255,.09);border-radius:999px;background:rgba(0,0,0,.22);color:var(--dc-muted);font-size:10px}.dc-tiny-stat b{color:var(--dc-text);font-size:14px}.dc-hero-stage{position:relative;z-index:1;min-height:250px}.dc-hero-stage .dc-v3-phone-wall{height:100%;min-height:260px}.dc-home-import-g{display:grid;grid-template-columns:44px minmax(320px,1fr) 190px 92px 140px auto;gap:9px;align-items:center;padding:10px;border:1px solid var(--dc-line);border-radius:20px;background:linear-gradient(180deg,#141417,#0d0d10)}.dc-import-icon{width:44px;height:44px;border-radius:15px;display:grid;place-items:center;background:rgba(255,0,51,.12);color:#ff4168}.dc-import-icon svg{width:24px;height:24px}.dc-home-import-g input,.dc-home-import-g select{height:46px;min-height:46px;border:1px solid var(--dc-line);border-radius:14px;background:#09090b;color:var(--dc-text);padding:0 13px}.dc-home-import-g .dc-btn{height:46px;border-radius:14px}.dc-home-flow-g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.dc-flow-card-g{min-height:86px;display:grid;grid-template-columns:42px minmax(0,1fr);grid-template-rows:auto auto;align-content:center;column-gap:12px;padding:14px 15px;border:1px solid var(--dc-line);border-radius:20px;background:linear-gradient(145deg,rgba(255,255,255,.038),rgba(255,255,255,.012));text-align:left;color:var(--dc-text);transition:transform .18s ease,border-color .18s ease,background .18s ease}.dc-flow-card-g:hover{transform:translateY(-2px);border-color:var(--dc-line2);background:linear-gradient(145deg,rgba(217,180,120,.07),rgba(255,255,255,.018))}.dc-flow-card-g>span{grid-row:1/3;width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:rgba(217,180,120,.10);color:var(--dc-accent2)}.dc-flow-card-g svg{width:21px;height:21px}.dc-flow-card-g strong{font-size:14px}.dc-flow-card-g em{font-style:normal;color:var(--dc-muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-home-command-g{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);gap:16px;align-items:start}.dc-home-main-g{display:flex;flex-direction:column;gap:16px}.dc-live-focus-g{min-height:128px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px;border:1px solid rgba(217,180,120,.18);border-radius:24px;background:radial-gradient(circle at 100% 0,rgba(217,180,120,.11),transparent 32%),linear-gradient(145deg,#151519,#0f0f12)}.dc-live-focus-g.busy{border-color:rgba(217,180,120,.42)}.dc-live-left{display:flex;align-items:center;gap:15px;min-width:0}.dc-live-icon{width:56px;height:56px;flex:0 0 56px;border-radius:18px;display:grid;place-items:center;background:rgba(217,180,120,.12);color:var(--dc-accent2)}.dc-live-icon.good{background:rgba(83,199,139,.11);color:var(--dc-green)}.dc-live-icon svg{width:26px;height:26px}.dc-live-focus-g small{display:block;color:var(--dc-accent2);font-size:9px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}.dc-live-focus-g h2{margin:0;font-size:21px;letter-spacing:-.025em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-live-focus-g p{margin:5px 0 0;color:var(--dc-muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-project-gallery-g{padding:20px;border:1px solid var(--dc-line);border-radius:24px;background:linear-gradient(180deg,#131316,#0d0d10)}.dc-simple-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.dc-simple-head h2{margin:0;font-size:18px}.dc-simple-head p{margin:4px 0 0;color:var(--dc-muted);font-size:11px}.dc-project-strip-g{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}.dc-cinema-project{display:flex;flex-direction:column;gap:10px;min-width:0;padding:10px;border:1px solid var(--dc-line);border-radius:18px;background:#0b0b0d;text-align:left;color:var(--dc-text);transition:transform .18s ease,border-color .18s ease}.dc-cinema-project:hover{transform:translateY(-2px);border-color:var(--dc-line2)}.dc-cinema-thumb{height:132px;border-radius:14px;overflow:hidden;background:#050506;display:grid;place-items:center;color:var(--dc-muted)}.dc-cinema-thumb img{width:100%;height:100%;object-fit:cover}.dc-cinema-copy strong,.dc-cinema-copy em{display:block}.dc-cinema-copy strong{font-size:12px;line-height:1.3;min-height:32px}.dc-cinema-copy em{font-style:normal;color:var(--dc-muted);font-size:9px;margin-top:4px}.dc-cinema-project .dc-pill{align-self:flex-start}.dc-home-dock-g{display:flex;flex-direction:column;gap:12px}.dc-dock-card-g{padding:16px;border:1px solid var(--dc-line);border-radius:22px;background:linear-gradient(180deg,#141417,#0d0d10)}.dc-dock-card-g.next{border-color:rgba(217,180,120,.22)}.dc-dock-card-g.warn{border-color:rgba(239,107,122,.24)}.dc-dock-head{display:flex;align-items:center;gap:8px;margin-bottom:12px}.dc-dock-head span{width:34px;height:34px;border-radius:12px;display:grid;place-items:center;background:rgba(217,180,120,.10);color:var(--dc-accent2)}.dc-dock-head svg{width:18px;height:18px}.dc-dock-head b{font-size:14px}.dc-dock-card-g p{margin:0 0 12px;color:var(--dc-muted);font-size:11px;line-height:1.45}.dc-dock-post{display:grid;grid-template-columns:58px minmax(0,1fr);grid-template-rows:auto auto;gap:2px 10px;align-items:center;margin-bottom:12px}.dc-dock-post img{grid-row:1/3;width:58px;height:58px;border-radius:14px;object-fit:cover}.dc-dock-post strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}.dc-dock-post em{font-style:normal;color:var(--dc-muted);font-size:9px}.dc-platform-dots{display:flex;gap:8px;margin-bottom:10px}.dc-platform-dot{width:40px;height:40px;border-radius:14px;display:grid;place-items:center;background:#0b0b0d;color:var(--dc-subtle);border:1px solid var(--dc-line);opacity:.75}.dc-platform-dot svg{width:19px;height:19px}.dc-platform-dot.on{opacity:1;border-color:rgba(83,199,139,.24)}.dc-platform-dot.ready{opacity:1;border-color:rgba(217,180,120,.24)}.dc-platform-dot.youtube{color:#ff4168}.dc-platform-dot.tiktok{color:#3ef4ee}.dc-platform-dot.instagram{color:#ff7ebe}.dc-platform-dot.facebook{color:#7aa7ff}
+@media(max-width:1250px){.dc-home-hero-g,.dc-home-command-g{grid-template-columns:1fr}.dc-project-strip-g{grid-template-columns:repeat(2,minmax(0,1fr))}.dc-home-import-g{grid-template-columns:44px minmax(260px,1fr) 170px 90px}.dc-home-import-g #dcCreateDuration,.dc-home-import-g #dcGenerate{grid-column:auto}.dc-home-flow-g{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.dc-home-hero-g{padding:22px 18px;min-height:0}.dc-home-hero-copy h1{font-size:32px}.dc-hero-stage{display:none}.dc-home-import-g{grid-template-columns:1fr}.dc-import-icon{display:none}.dc-home-flow-g,.dc-project-strip-g{grid-template-columns:1fr}.dc-live-focus-g{align-items:flex-start;flex-direction:column}.dc-live-focus-g .dc-btn{width:100%}}
+
+`;
+
+
+const clipToolsCss = String.raw`
+/* Clip Review feature pass: hook detector + post copy generator. Editor CSS untouched. */
+.dc-review-page-pro{display:grid;gap:16px}.dc-review-hero-pro{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:end;padding:22px;border:1px solid rgba(217,180,120,.20);border-radius:24px;background:radial-gradient(circle at 0 0,rgba(217,180,120,.13),transparent 34%),linear-gradient(145deg,#151519,#0d0d10)}.dc-review-hero-pro h1{font-size:32px;line-height:1;margin:8px 0 8px;letter-spacing:-.035em}.dc-review-hero-pro p{margin:0;color:var(--dc-muted);font-size:12px;max-width:620px;line-height:1.5}.dc-review-kicker{display:inline-flex;align-items:center;gap:8px;min-height:28px;padding:0 10px;border:1px solid rgba(217,180,120,.22);border-radius:999px;background:rgba(217,180,120,.07);color:var(--dc-accent2);font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.dc-review-metrics-pro{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.dc-review-metrics-pro span{min-width:92px;padding:10px 12px;border:1px solid var(--dc-line);border-radius:14px;background:#09090b}.dc-review-metrics-pro b,.dc-review-metrics-pro em{display:block}.dc-review-metrics-pro b{font-size:20px}.dc-review-metrics-pro em{font-style:normal;color:var(--dc-muted);font-size:9px;margin-top:2px}.dc-review-list.pro{display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:14px}.dc-review-item.pro{display:grid;grid-template-columns:118px minmax(0,1fr);gap:14px;align-items:stretch;padding:14px;border:1px solid var(--dc-line);border-radius:22px;background:linear-gradient(145deg,#151519,#0d0d10);box-shadow:0 20px 50px rgba(0,0,0,.18)}.dc-review-item.pro:hover{border-color:var(--dc-line2)}.dc-review-item.pro .dc-review-media{width:118px;border-radius:16px;box-shadow:0 16px 40px #0007}.dc-review-item.pro .dc-review-score{left:8px;bottom:8px;height:28px;min-width:34px;font-size:11px}.dc-review-main{min-width:0;display:flex;flex-direction:column;gap:10px}.dc-review-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.dc-review-title-row h3{font-size:15px;line-height:1.22;margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.dc-review-title-row small{white-space:nowrap;color:var(--dc-muted);font-size:9px;margin-top:3px}.dc-hook-strip{display:grid;grid-template-columns:minmax(130px,.38fr) minmax(0,1fr);gap:8px}.dc-hook-card,.dc-copy-card{border:1px solid var(--dc-line);border-radius:14px;background:#09090b;padding:10px}.dc-hook-card strong,.dc-copy-card strong{display:flex;align-items:center;gap:7px;font-size:10px}.dc-hook-card p,.dc-copy-card p{margin:6px 0 0;color:var(--dc-muted);font-size:9px;line-height:1.45}.dc-hook-badge{display:inline-flex;align-items:center;gap:6px;min-height:24px;padding:0 8px;border-radius:999px;font-size:9px;font-weight:800}.dc-hook-badge.good{background:rgba(83,199,139,.10);color:var(--dc-green)}.dc-hook-badge.warn{background:rgba(229,169,87,.10);color:var(--dc-orange)}.dc-copy-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.dc-copy-mini{padding:9px;border:1px solid var(--dc-line);border-radius:12px;background:#0d0d10;min-width:0}.dc-copy-mini b,.dc-copy-mini span{display:block}.dc-copy-mini b{font-size:8.5px;color:var(--dc-accent2);text-transform:uppercase;letter-spacing:.07em}.dc-copy-mini span{font-size:9.5px;color:var(--dc-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:5px}.dc-review-actions.pro{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;min-width:0}.dc-review-actions.pro .dc-btn{min-width:0;padding:0 8px;font-size:9.5px}.dc-review-actions.pro .wide{grid-column:span 2}.dc-review-empty-pro{min-height:260px;display:grid;place-items:center;padding:30px;border:1px dashed #373740;border-radius:24px;background:radial-gradient(circle at 50% 0,rgba(217,180,120,.10),transparent 42%),#101013;text-align:center}.dc-review-empty-pro .dc-empty-icon{width:58px;height:58px;margin:0 auto 13px;border-radius:20px;background:rgba(217,180,120,.12);display:grid;place-items:center;color:var(--dc-accent2)}.dc-review-empty-pro strong{display:block;font-size:18px}.dc-review-empty-pro p{color:var(--dc-muted);font-size:12px;margin:7px 0 16px}.dc-review-toolbar.pro{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.dc-review-toolbar.pro .spacer{flex:1}@media(max-width:760px){.dc-review-hero-pro{grid-template-columns:1fr}.dc-review-metrics-pro{justify-content:flex-start}.dc-review-list.pro{grid-template-columns:1fr}.dc-review-item.pro{grid-template-columns:94px minmax(0,1fr);padding:11px}.dc-review-item.pro .dc-review-media{width:94px}.dc-hook-strip,.dc-copy-grid{grid-template-columns:1fr}.dc-review-actions.pro{grid-template-columns:1fr 1fr}.dc-review-actions.pro .wide{grid-column:auto}}
 `;
 
 function injectShell(){
   if (shellReady) return;
   shellReady = true;
   const style = document.createElement('style');
-  style.id = 'dcPhase4Styles'; style.textContent = css + v3Css + v3ProjectCss; document.head.appendChild(style);
+  style.id = 'dcPhase4Styles'; style.textContent = css + v3Css + v3ProjectCss + clipToolsCss; document.head.appendChild(style);
   document.body.classList.add('dc-app');
 
   const side = document.createElement('aside'); side.id = 'dcSidebar';
@@ -362,6 +374,9 @@ function handleClick(event){
   const editVideo = event.target.closest('[data-edit-video-clip]'); if (editVideo) { openEditor(editVideo.dataset.editVideoClip, 'canvas'); return; }
   const edit = event.target.closest('[data-edit-clip]'); if (edit) { openEditor(edit.dataset.editClip, 'captions'); return; }
   const download = event.target.closest('[data-download-clip]'); if (download) { location.href = authedUrl(`/api/clips/${encodeURIComponent(download.dataset.downloadClip)}/download`); return; }
+  const regenTitle = event.target.closest('[data-regenerate-title]'); if (regenTitle) { regenerateClipCopy(regenTitle.dataset.regenerateTitle); return; }
+  const shorter = event.target.closest('[data-make-shorter]'); if (shorter) { adjustClipLength(shorter.dataset.makeShorter, 'shorter'); return; }
+  const longer = event.target.closest('[data-make-longer]'); if (longer) { adjustClipLength(longer.dataset.makeLonger, 'longer'); return; }
   const schedule = event.target.closest('[data-schedule-clip]'); if (schedule) { scheduleClip(schedule.dataset.scheduleClip); return; }
   const approve = event.target.closest('[data-approve-clip]'); if (approve) { approveClip(approve.dataset.approveClip); return; }
   const post = event.target.closest('[data-post-clip]'); if (post) { postClip(post.dataset.postClip); return; }
@@ -457,56 +472,101 @@ function renderHome(){
   const scheduled = clips.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length;
   const posted = clips.filter(c=>c.status==='posted').length;
   const selectedTemplate = d.selectedTemplate?.name || d.templateDraft?.name || 'Choose template';
+  const next = nextScheduledClip(clips);
   panel.innerHTML = `
-    <section class="dc-v3-hero slim" data-tour="home-hero">
-      <div>
-        <div class="dc-v3-kicker">${ICON.scissors} V3 workspace</div>
-        <h1 class="dc-v3-title">Create clean dawah clips without hunting through menus.</h1>
-        <p class="dc-v3-copy">Import a lecture, review the best moments, polish the template, then publish from one simple dashboard.</p>
-        <div class="dc-v3-actions">
-          <button class="dc-btn" id="dcHeroCreate">Start with YouTube</button>
-          <button class="dc-btn secondary" id="dcHeroTour">Guided demo</button>
-          <button class="dc-btn secondary" data-dc-nav="review">Open Clip Review</button>
+    <div class="dc-home-v3g">
+      <section class="dc-home-hero-g" data-tour="home-hero">
+        <div class="dc-home-hero-copy">
+          <div class="dc-v3-kicker">${ICON.scissors} V3 workspace</div>
+          <h1>One clean workflow. Import, review, edit, publish.</h1>
+          <p>DeenClipped turns long lectures into captioned vertical clips, then keeps the next action clear.</p>
+          <div class="dc-stat-ribbon" aria-label="Workspace summary">
+            ${tinyStat(projects.length,'lectures')}${tinyStat(clips.length,'clips')}${tinyStat(waiting,'review')}${tinyStat(scheduled,'scheduled')}${tinyStat(posted,'posted')}
+          </div>
+          <div class="dc-v3-actions">
+            <button class="dc-btn" id="dcHeroCreate">Paste a lecture</button>
+            <button class="dc-btn secondary" data-dc-nav="review">Review clips</button>
+            <button class="dc-btn secondary" id="dcHeroTour">Guided demo</button>
+          </div>
         </div>
-      </div>
-      <div class="dc-v3-phone-wall" aria-label="Recent clip thumbnails">${heroThumbs(clips)}</div>
-    </section>
-    <section class="dc-card dc-create-card v3 dc-create-compact" data-tour="create-form">
-      <div class="dc-create-grid">
+        <div class="dc-hero-stage" aria-label="Recent clip previews">${heroThumbs(clips)}</div>
+      </section>
+
+      <section class="dc-home-import-g" data-tour="create-form">
+        <span class="dc-import-icon">${socialSvg('youtube')}</span>
         <input id="dcCreateUrl" placeholder="Paste YouTube or video URL">
         <select id="dcCreateTemplate" data-tour="template-picker">${(d.templates||[]).map(t=>`<option value="${esc(t.id)}" ${t.id===d.selectedTemplate?.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select>
         <select id="dcCreateCount"><option>4</option><option selected>8</option><option>12</option><option>16</option></select>
         <select id="dcCreateDuration"><option value="15,45">15–45 sec</option><option value="30,60" selected>30–60 sec</option><option value="45,90">45–90 sec</option></select>
-        <button class="dc-btn" id="dcGenerate" data-tour="generate-button">Generate clips</button>
-      </div>
-    </section>
-    <div class="dc-home-metrics v3 tight dc-metric-strip">
-      ${metric(projects.length,'Lectures')}${metric(clips.length,'Clips')}${metric(waiting,'Clip review')}${metric(scheduled,'Scheduled')}${metric(posted,'Posted')}
-    </div>
-    <div class="dc-home-quick upgraded">
-      <button class="dc-v3-source" type="button" id="dcSourceYouTube"><span class="dc-v3-platform youtube">${socialSvg('youtube')}</span><strong>Import</strong><span>Paste one or more lecture links.</span></button>
-      <button class="dc-v3-source" type="button" data-dc-nav="review"><span class="dc-v3-platform template">${ICON.review}</span><strong>Review</strong><span>${waiting || 'No'} clips waiting.</span></button>
-      <button class="dc-v3-source" type="button" data-dc-nav="editor"><span class="dc-v3-platform template">${ICON.style}</span><strong>${esc(selectedTemplate)}</strong><span>Template controls every render.</span></button>
-      <button class="dc-v3-source" type="button" data-dc-nav="publishing"><span class="dc-v3-platform publish">${ICON.social}</span><strong>Publish</strong><span>Connect TikTok, Instagram, Facebook and YouTube.</span></button>
-    </div>
-    <section class="dc-command-strip" data-tour="happening-now">
-      ${latestWorkflowCard(d,jobs)}
-      ${nextPostCard(clips)}
-      ${templateLiveCard(selectedTemplate)}
-    </section>
-    <div class="dc-home-main-grid refined">
-      <section class="dc-card dc-card-pad v3-card dc-dashboard-panel">
-        <div class="dc-card-head"><div><h2>Recent projects</h2><p>Click a lecture to continue.</p></div><button class="dc-btn secondary" data-dc-nav="projects">View all</button></div>
-        <div class="dc-feature-list">${recentProjectsV3(projects,clips)}</div>
+        <button class="dc-btn" id="dcGenerate" data-tour="generate-button">Generate</button>
       </section>
-      <div class="dc-home-side-stack">
-        ${platformPanelV3(d)}
-        ${upcomingPanelV3(clips)}
-        ${compactActivityFeed(d,jobs)}
-      </div>
+
+      <section class="dc-home-flow-g" aria-label="Main workflow">
+        ${flowCard('Import','Paste lecture links',socialSvg('youtube'),'dcSourceYouTube')}
+        ${flowCard('Review',waiting ? `${waiting} clips waiting` : 'Nothing waiting',ICON.review,'review')}
+        ${flowCard('Template',selectedTemplate,ICON.style,'editor')}
+        ${flowCard('Publish',scheduled ? `${scheduled} clips scheduled` : 'Connect platforms',ICON.publish,'schedule')}
+      </section>
+
+      <section class="dc-home-command-g" data-tour="happening-now">
+        <div class="dc-home-main-g">
+          ${liveFocusPanel(d,jobs,next,selectedTemplate)}
+          <div class="dc-project-gallery-g">
+            <div class="dc-simple-head"><div><h2>Recent projects</h2><p>Pick up from a lecture without reading a log.</p></div><button class="dc-btn secondary" data-dc-nav="projects">View all</button></div>
+            <div class="dc-project-strip-g">${recentProjectsCinema(projects,clips)}</div>
+          </div>
+        </div>
+        <aside class="dc-home-dock-g">
+          ${nextPostDock(next)}
+          ${platformDock(d)}
+          ${attentionDock(d)}
+        </aside>
+      </section>
     </div>`;
-  $('#dcGenerate').onclick=generateProject; $('#dcHeroCreate').onclick=()=>$('#dcCreateUrl').focus(); $('#dcSourceYouTube').onclick=()=>$('#dcCreateUrl').focus(); $('#dcHeroTour').onclick=()=>openGuidedTour(0);
+  $('#dcGenerate').onclick=generateProject;
+  $('#dcHeroCreate').onclick=()=>$('#dcCreateUrl').focus();
+  const source=$('#dcSourceYouTube'); if(source) source.onclick=()=>$('#dcCreateUrl').focus();
+  $('#dcHeroTour').onclick=()=>openGuidedTour(0);
   requestAnimationFrame(()=>animatePanel(panel));
+}
+function tinyStat(value,label){return `<span class="dc-tiny-stat"><b>${esc(value)}</b>${esc(label)}</span>`}
+function flowCard(title,note,icon,target){
+  const attr = target === 'dcSourceYouTube' ? 'id="dcSourceYouTube"' : `data-dc-nav="${esc(target)}"`;
+  return `<button class="dc-flow-card-g" type="button" ${attr}><span>${icon}</span><strong>${esc(title)}</strong><em>${esc(note)}</em></button>`;
+}
+function liveFocusPanel(d,jobs,next,templateName){
+  const latest=(d.log||[])[0];
+  if(jobs.length){
+    const j=jobs[0];
+    return `<article class="dc-live-focus-g busy"><div class="dc-live-left"><span class="dc-live-icon">${j.kind==='publish'?ICON.publish:j.kind==='render'?ICON.editor:ICON.scissors}</span><div><small>Working now</small><h2>${esc(shortText(j.title,56))}</h2><p>${esc(shortText(j.stage,72))}</p>${Number.isFinite(j.progress)?`<div class="dc-work-progress"><i style="width:${clamp(j.progress,0,100)}%"></i></div>`:''}</div></div><span class="dc-pill warn">${Number.isFinite(j.progress)?`${Math.round(j.progress)}%`:'Live'}</span></article>`;
+  }
+  const message=latest?logItemMessage(latest):'Ready for the next lecture';
+  return `<article class="dc-live-focus-g"><div class="dc-live-left"><span class="dc-live-icon good">${ICON.home}</span><div><small>Workspace ready</small><h2>${esc(shortText(message,58))}</h2><p>${latest?logItemTime(latest):`Template: ${templateName}`}</p></div></div><button class="dc-btn secondary" data-dc-nav="projects">Open projects</button></article>`;
+}
+function recentProjectsCinema(projects,clips){
+  const list=[...projects].sort((a,b)=>Number(b.submittedAt||0)-Number(a.submittedAt||0)).slice(0,3);
+  if(!list.length)return `<div class="dc-empty v3"><div><span class="dc-empty-icon">${ICON.projects}</span><strong>No projects yet</strong><span>Paste a lecture above to start.</span></div></div>`;
+  return list.map(p=>{
+    const own=clips.filter(c=>c.projectId===p.id), thumb=own.find(c=>c.thumbUrl)?.thumbUrl, failed=p.status==='failed'||p.error, scheduled=own.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length;
+    return `<button class="dc-cinema-project" type="button" data-open-project="${esc(p.id)}"><span class="dc-cinema-thumb ${thumb?'':'empty'}">${thumb?`<img src="${authedUrl(thumb)}" alt="${esc(projectDisplayTitle(p))} thumbnail">`:ICON.projects}</span><span class="dc-cinema-copy"><strong>${esc(shortText(projectDisplayTitle(p),46))}</strong><em>${own.length} clips · ${scheduled} scheduled</em></span><b class="dc-pill ${failed?'bad':p.status==='processing'?'warn':'good'}">${failed?'Fix':p.status==='processing'?'Live':'Ready'}</b></button>`;
+  }).join('');
+}
+function nextPostDock(next){
+  if(!next)return `<section class="dc-dock-card-g"><div class="dc-dock-head"><span>${ICON.publish}</span><b>Next post</b></div><p>No scheduled clip.</p><button class="dc-btn secondary" data-dc-nav="review">Open review</button></section>`;
+  return `<section class="dc-dock-card-g next"><div class="dc-dock-head"><span>${ICON.publish}</span><b>Next post</b></div><div class="dc-dock-post">${next.thumbUrl?`<img src="${authedUrl(next.thumbUrl)}" alt="${esc(next.title||'Clip')} thumbnail">`:''}<strong>${esc(shortText(next.title||'Scheduled clip',42))}</strong><em>${formatDate(next.scheduledAt)}</em></div><button class="dc-btn secondary" data-edit-style-clip="${esc(next.id)}">Preview</button></section>`;
+}
+function platformDock(d){
+  const providers=d.social?.providers||{};
+  const items=['youtube','tiktok','instagram','facebook'].map(key=>{const p=providers[key]||{};return `<span class="dc-platform-dot ${key} ${p.connected?'on':p.configured?'ready':'off'}">${socialSvg(key)}</span>`}).join('');
+  const connected=Object.values(providers).filter(p=>p.connected).length;
+  return `<section class="dc-dock-card-g"><div class="dc-dock-head"><span>${ICON.social}</span><b>Platforms</b></div><div class="dc-platform-dots">${items}</div><p>${connected} connected. Finish setup before public posting.</p><button class="dc-btn secondary" data-dc-nav="publishing">Manage</button></section>`;
+}
+function attentionDock(d){
+  const problems=[];
+  (d.projects||[]).filter(p=>p.status==='failed'||p.error).slice(0,1).forEach(p=>problems.push(shortError(p.error||p.stage)));
+  if(!d.readiness?.musicReady) problems.push('Nasheed library needs a track.');
+  if(!problems.length) return `<section class="dc-dock-card-g"><div class="dc-dock-head"><span>${ICON.review}</span><b>Needs attention</b></div><p>Nothing important is blocking the workspace.</p></section>`;
+  return `<section class="dc-dock-card-g warn"><div class="dc-dock-head"><span>!</span><b>Needs attention</b></div><p>${esc(shortText(problems[0],86))}</p><button class="dc-btn secondary" data-dc-nav="projects">Fix</button></section>`;
 }
 function workflowStep(iconName,title,note){return `<div class="dc-v3-step"><i>${ICON[iconName]||ICON.scissors}</i><strong>${esc(title)}</strong><span>${esc(note)}</span></div>`}
 function heroThumbs(clips){
@@ -678,15 +738,79 @@ function clipCard(c,opts={}){
   const sub=c.scheduledAt?`Scheduled · ${formatDate(c.scheduledAt)}`:statusName(c.status);
   return `<article class="dc-clip-card v3-full"><div class="dc-clip-media"><button class="dc-clip-media-button" data-edit-style-clip="${esc(c.id)}" type="button">${clipThumb(c)}</button><span class="dc-score">${Math.round(c.score||0)}</span><span class="dc-duration">${formatDuration(c.durationMs)}</span><span class="dc-clip-state dc-pill ${c.status==='posted'?'good':c.status==='waiting'?'warn':c.status==='publish_failed'?'bad':''}">${statusName(c.status)}</span></div><div class="dc-clip-body"><h3>${esc(title)}</h3><p>${esc(sub)}</p><div class="dc-clip-actions"><button class="dc-btn" data-edit-style-clip="${esc(c.id)}">Edit style</button><button class="dc-btn secondary" data-edit-video-clip="${esc(c.id)}">Edit video</button>${canPost?`<button class="dc-btn secondary" data-post-clip="${esc(c.id)}">Post now</button>`:canSchedule?`<button class="dc-btn secondary" data-schedule-clip="${esc(c.id)}">Schedule</button>`:`<button class="dc-btn secondary" data-download-clip="${esc(c.id)}">Download</button>`}<button class="dc-btn secondary" data-download-clip="${esc(c.id)}">Download</button><button class="dc-btn danger" data-delete-clip="${esc(c.id)}">Delete</button></div></div></article>`;
 }
+
 function renderReview(){
   const panel=$('#view-review'),d=data();if(!panel||!d)return;
   const waiting=[...(d.clips||[])].filter(c=>c.status==='waiting').sort((a,b)=>Number(b.score||0)-Number(a.score||0));
-  panel.innerHTML=`<div class="dc-page-head"><div><h1>Clip Review</h1><p>Approve, edit or discard the AI-selected clips before posting.</p></div></div><div class="dc-review-toolbar"><span class="dc-pill ${waiting.length?'warn':'good'}">${waiting.length} waiting</span><span class="spacer"></span><button class="dc-btn secondary" id="dcApproveVerified" ${!waiting.length?'disabled':''}>Approve verified</button><button class="dc-btn" id="dcScheduleAll" ${!waiting.length?'disabled':''}>Schedule all</button></div><div class="dc-review-list">${waiting.length?waiting.map(reviewRow).join(''):`<div class="dc-empty v3"><div><div class="dc-empty-icon">${ICON.check}</div><strong>Clip review is clear</strong><p>New generated clips will appear here before they are scheduled.</p></div></div>`}</div>`;
+  const strong=waiting.filter(c=>hookInfo(c).strong).length;
+  const avg=waiting.length?Math.round(waiting.reduce((sum,c)=>sum+Number(c.score||0),0)/waiting.length):0;
+  panel.innerHTML=`<div class="dc-review-page-pro"><section class="dc-review-hero-pro"><div><span class="dc-review-kicker">Clip approval</span><h1>Pick winners fast.</h1><p>Every clip shows hook strength, suggested posting copy and quick actions. The editor is untouched unless you choose Edit style or Edit video.</p></div><div class="dc-review-metrics-pro"><span><b>${waiting.length}</b><em>waiting</em></span><span><b>${strong}</b><em>strong hooks</em></span><span><b>${avg}</b><em>avg score</em></span></div></section><div class="dc-review-toolbar pro"><span class="dc-pill ${waiting.length?'warn':'good'}">${waiting.length?`${waiting.length} clips need a decision`:'Review clear'}</span><span class="dc-pill ${strong?'good':'warn'}">${strong} strong hooks</span><span class="spacer"></span><button class="dc-btn secondary" id="dcApproveVerified" ${!waiting.length?'disabled':''}>Approve verified</button><button class="dc-btn" id="dcScheduleAll" ${!waiting.length?'disabled':''}>Schedule all</button></div><div class="dc-review-list pro">${waiting.length?waiting.map(reviewRow).join(''):`<div class="dc-review-empty-pro"><div><div class="dc-empty-icon">${ICON.review}</div><strong>Clip review is clear</strong><p>New AI-selected clips will appear here with hook scores and captions.</p><button class="dc-btn" data-dc-nav="home">Import another lecture</button></div></div>`}</div></div>`;
   $('#dcApproveVerified').onclick=approveVerified;
   $('#dcScheduleAll').onclick=()=>scheduleMany(waiting.map(c=>c.id));
+  requestAnimationFrame(()=>animatePanel(panel));
 }
 function reviewRow(c){
-  return `<article class="dc-review-item"><button class="dc-review-media" type="button" data-edit-clip="${esc(c.id)}">${c.thumbUrl?`<img src="${authedUrl(c.thumbUrl)}" alt="${esc(c.title||'Clip')} thumbnail">`:''}<span class="dc-review-score">${Math.round(c.score||0)}</span></button><div class="dc-review-copy"><h3>${esc(c.title||'Untitled clip')}</h3><p>${formatDuration(c.durationMs)} · quality ${Math.round(c.quality||c.score||0)}/100 · ${statusName(c.status)}</p></div><div class="dc-review-actions"><button class="dc-btn" data-approve-clip="${esc(c.id)}">Approve</button><button class="dc-btn secondary" data-edit-style-clip="${esc(c.id)}">Edit style</button><button class="dc-btn secondary" data-edit-video-clip="${esc(c.id)}">Edit video</button><button class="dc-btn secondary" data-schedule-clip="${esc(c.id)}">Schedule</button><button class="dc-btn danger" data-delete-clip="${esc(c.id)}">Reject</button></div></article>`;
+  const hook=hookInfo(c), copy=socialCopyForClip(c);
+  return `<article class="dc-review-item pro"><button class="dc-review-media" type="button" data-edit-clip="${esc(c.id)}" aria-label="Open ${esc(c.title||'clip')}">${c.thumbUrl?`<img src="${authedUrl(c.thumbUrl)}" alt="${esc(c.title||'Clip')} thumbnail">`:''}<span class="dc-review-score">${Math.round(c.score||0)}</span></button><div class="dc-review-main"><div class="dc-review-title-row"><h3>${esc(c.title||copy.title)}</h3><small>${formatDuration(c.durationMs)} · quality ${Math.round(c.quality||c.score||0)}/100</small></div><div class="dc-hook-strip"><div class="dc-hook-card"><strong><span class="dc-hook-badge ${hook.strong?'good':'warn'}">${hook.strong?'Strong':'Weak'} hook</span></strong><p>${esc(hook.suggestion)}</p></div><div class="dc-copy-card"><strong>Auto posting copy</strong><div class="dc-copy-grid"><div class="dc-copy-mini"><b>TikTok</b><span>${esc(copy.tiktok)}</span></div><div class="dc-copy-mini"><b>Instagram</b><span>${esc(copy.instagram)}</span></div><div class="dc-copy-mini"><b>Shorts title</b><span>${esc(copy.youtube)}</span></div><div class="dc-copy-mini"><b>Hashtags</b><span>${esc(copy.hashtags.join(' '))}</span></div></div></div></div><div class="dc-review-actions pro"><button class="dc-btn" data-approve-clip="${esc(c.id)}">Approve</button><button class="dc-btn secondary" data-edit-style-clip="${esc(c.id)}">Edit style</button><button class="dc-btn secondary" data-edit-video-clip="${esc(c.id)}">Edit video</button><button class="dc-btn secondary" data-regenerate-title="${esc(c.id)}">Regenerate title</button><button class="dc-btn secondary" data-make-shorter="${esc(c.id)}">Make shorter</button><button class="dc-btn secondary" data-make-longer="${esc(c.id)}">Make longer</button><button class="dc-btn danger wide" data-delete-clip="${esc(c.id)}">Delete</button></div></div></article>`;
+}
+function clipReviewText(c){
+  return String(c.transcript||c.description||c.title||'').replace(/\s+/g,' ').trim();
+}
+function wordsFromClip(c){return clipReviewText(c).split(/\s+/).filter(Boolean)}
+function hookInfo(c){
+  const text=clipReviewText(c), first=text.slice(0,180).toLowerCase();
+  const hasQuestion=/\?/.test(first)||/\b(why|what|how|when|do you|did you|have you|can you)\b/i.test(first);
+  const hasHook=/\b(let me|imagine|most of us|the first|this is|if you|when you|you could|without|before|after|never|always)\b/i.test(first);
+  const strong=Number(c.score||0)>=92||hasQuestion||hasHook;
+  const suggestion=strong?'The opening has a clear idea or curiosity gap.':'Start from 2 seconds later — a stronger sentence may begin there.';
+  return {strong,suggestion};
+}
+function cleanTitlePhrase(text){
+  let t=String(text||'').replace(/[“”]/g,'').replace(/\s+/g,' ').trim();
+  t=t.replace(/^(and|but|so|because|like|um|uh|you know)\s+/i,'');
+  t=t.split(/[.!?،؛]/)[0]||t;
+  const words=t.split(/\s+/).filter(Boolean).slice(0,9).join(' ');
+  return words.charAt(0).toUpperCase()+words.slice(1);
+}
+function titleCaseSimple(text){return String(text||'').toLowerCase().replace(/\b\w/g,m=>m.toUpperCase())}
+function socialCopyForClip(c,variant=0){
+  const text=clipReviewText(c), base=cleanTitlePhrase(text||c.title||'Islamic reminder');
+  const ideas=[base,`A reminder about ${base.toLowerCase()}`,`${base} — Islamic reminder`,`${base} in one minute`].filter(Boolean);
+  const title=shortText(ideas[Math.abs(Number(variant)||0)%ideas.length],72);
+  const tiktok=shortText(`${title}. A short reminder to reflect on and act on.`,110);
+  const instagram=shortText(`${title}. Save this reminder and share it with someone who may benefit.`,125);
+  const youtube=shortText(title,80);
+  const hashtags=['#Islam','#MuslimReminder','#Dawah','#Quran','#DeenClipped'];
+  return {title,tiktok,instagram,youtube,hashtags};
+}
+async function regenerateClipCopy(id){
+  const c=(data()?.clips||[]).find(x=>x.id===id);if(!c)return notify('Clip not found','bad');
+  const copy=socialCopyForClip(c,Date.now());
+  try{
+    await callApi(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({title:copy.title,description:copy.tiktok,hashtags:copy.hashtags.join(' ')})});
+    notify('Generated title, caption and hashtags');
+    await refreshData();renderReview();
+  }catch(e){notify(e.message,'bad')}
+}
+async function adjustClipLength(id,mode){
+  const c=(data()?.clips||[]).find(x=>x.id===id);if(!c)return notify('Clip not found','bad');
+  const start=Number(c.startSec)||0, end=Number(c.endSec)||start+(Number(c.durationMs)||0)/1000;
+  const duration=Math.max(0,end-start); if(duration<8)return notify('Clip is already too short to adjust safely','bad');
+  let nextStart=start,nextEnd=end;
+  if(mode==='shorter'){
+    const cut=Math.min(8,Math.max(3,duration*.18));
+    if(duration-cut<12)return notify('This clip is already close to the minimum length','bad');
+    nextStart=start+Math.min(2,cut*.35); nextEnd=end-(cut-Math.min(2,cut*.35));
+  }else{
+    nextStart=Math.max(0,start-2); nextEnd=end+5;
+  }
+  const body={startSec:Number(nextStart.toFixed(2)),endSec:Number(nextEnd.toFixed(2)),durationMs:Math.round((nextEnd-nextStart)*1000)};
+  try{
+    await callApi(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(body)});
+    await callApi(`/api/clips/${encodeURIComponent(id)}/rerender`,{method:'POST',body:JSON.stringify({templateId:c.templateId||'',asVariant:false})});
+    notify(mode==='shorter'?'Shorter version queued':'Longer version queued');
+    await refreshData();renderReview();
+  }catch(e){notify(e.message,'bad')}
 }
 async function approveVerified(){
   const list=(data()?.clips||[]).filter(c=>c.status==='waiting'&&c.musicVerified&&c.renderVerified);if(!list.length)return notify('No verified waiting clips','bad');
