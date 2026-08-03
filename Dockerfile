@@ -22,20 +22,37 @@ RUN python3 -m pip install --break-system-packages --upgrade pip setuptools whee
     && python3 -m pip install --break-system-packages -r worker/requirements.txt \
     && python3 -c "import yt_dlp, faster_whisper; print('yt-dlp and faster-whisper verified')"
 
-# Verify OpenCV is genuinely usable, not merely importable.
+# Try hard to get a working OpenCV, but never fail the build over it.
 #
 # `import cv2` succeeds even when the native bindings fail to load, leaving a
-# module with no CascadeClassifier. That is how a broken framing install
-# reached production silently. If the pip wheel lands incomplete, fall back to
-# Debian's python3-opencv, which is a complete build on this base image.
+# module with no CascadeClassifier — which is how a broken framing install
+# reached production silently. So it is worth checking properly here.
+#
+# Smart framing is one optional feature though. Everything else — captions,
+# rendering, publishing — works without it, and the worker already degrades
+# to manual framing with a clear message when OpenCV is unusable. Blocking
+# the entire deploy over it would be the wrong trade, so this reports the
+# outcome loudly in the build log and carries on.
 COPY scripts/verify-opencv.py ./scripts/verify-opencv.py
-RUN python3 scripts/verify-opencv.py \
-    || ( echo "pip OpenCV is incomplete, falling back to the Debian package" \
-         && python3 -m pip uninstall --break-system-packages -y opencv-python-headless opencv-python || true \
-         && apt-get update \
-         && apt-get install -y --no-install-recommends python3-opencv \
-         && rm -rf /var/lib/apt/lists/* \
-         && python3 scripts/verify-opencv.py )
+RUN set -e; \
+    if python3 scripts/verify-opencv.py; then \
+      echo "=== OpenCV OK from pip, smart framing available ==="; \
+    else \
+      echo "=== pip OpenCV unusable, trying the Debian package ==="; \
+      python3 -m pip uninstall --break-system-packages -y opencv-python-headless opencv-python 2>/dev/null || true; \
+      apt-get update && apt-get install -y --no-install-recommends python3-opencv || true; \
+      rm -rf /var/lib/apt/lists/*; \
+      if python3 scripts/verify-opencv.py; then \
+        echo "=== OpenCV OK from the Debian package, smart framing available ==="; \
+      else \
+        echo "!!! WARNING: OpenCV is unusable. The app will run normally but"; \
+        echo "!!! automatic speaker framing will be unavailable. Use the manual"; \
+        echo "!!! left/centre/right framing controls instead."; \
+        echo "!!! Diagnosis follows:"; \
+        python3 -c "import cv2, sys; print('  cv2 file:', getattr(cv2,'__file__','?')); print('  cv2 version:', getattr(cv2,'__version__','?')); print('  has CascadeClassifier:', hasattr(cv2,'CascadeClassifier'))" 2>&1 || echo "  cv2 cannot be imported at all"; \
+        python3 -c "import numpy; print('  numpy:', numpy.__version__)" 2>&1 || echo "  numpy cannot be imported"; \
+      fi; \
+    fi
 COPY . .
 RUN mkdir -p /app/data
 
