@@ -1386,13 +1386,186 @@ def process(job_file: Path) -> None:
     emit("result", resultPath=str(result_file))
 
 
+def track_speaker_keyframes(
+    source: Path,
+    ffprobe: str,
+    start: float,
+    duration: float,
+    out_width: int,
+    out_height: int,
+    bias: str = "auto",
+    padding: float = 0.18,
+    zoom: float = 1.0,
+    smoothing: float = 0.82,
+    sample_hz: float = 2.0,
+    speech_spans: list[tuple[float, float]] | None = None,
+) -> dict[str, Any]:
+    """Follow the active speaker across a clip and return smoothed keyframes.
+
+    Unlike `detect_main_face_crop`, which picks one static box for the whole
+    clip, this samples repeatedly over time so the crop can move as the
+    speaker moves or as conversation passes between people.
+
+    Choosing who is speaking uses three signals together:
+
+    * **Face position** — Haar cascades locate candidate faces per sample.
+    * **Mouth movement** — the lower half of each face box is compared with
+      the same region in the previous sample. A talking face changes far
+      more than a listening one, which is what separates the speaker from
+      other people in frame.
+    * **Speech activity** — `speech_spans` carries the Whisper word timings.
+      During silence nobody is speaking, so the crop holds its previous
+      position instead of chasing noise in the detector.
+
+    The raw per-sample choice is then run through an exponential smoother so
+    the crop glides rather than snapping between faces on a single bad frame.
+    """
+    if cv2 is None:
+        return {"available": False, "reason": "OpenCV is not installed on this server."}
+
+    try:
+        info = ffprobe_json(ffprobe, source)
+    except Exception:
+        return {"available": False, "reason": "The original video could not be read on this server."}
+    video_stream = next((s for s in info.get("streams", []) if s.get("codec_type") == "video"), {})
+    src_w = int(video_stream.get("width") or 0)
+    src_h = int(video_stream.get("height") or 0)
+    if not src_w or not src_h:
+        return {"available": False, "reason": "The source video dimensions could not be read."}
+
+    target_ratio = out_width / max(1, out_height)
+    if src_w / max(1, src_h) <= target_ratio:
+        return {"available": False, "reason": "This video is already narrower than the output, so no crop is needed."}
+
+    crop_w, crop_h = fitted_crop_size(src_w, src_h, target_ratio, max(0.75, min(1.35, zoom)))
+    if crop_w >= src_w:
+        return {"available": False, "reason": "The whole width is already used."}
+
+    # A fixed bias needs no detection at all.
+    if bias in {"left", "center", "right"}:
+        centre = {"left": crop_w * 0.5, "center": src_w * 0.5, "right": src_w - crop_w * 0.5}[bias]
+        x, y = crop_origin_from_center(centre, None, src_w, src_h, crop_w, crop_h, padding)
+        return {
+            "available": True, "method": f"bias-{bias}", "srcW": src_w, "srcH": src_h,
+            "w": crop_w, "h": crop_h,
+            "keyframes": [{"t": 0.0, "x": x, "y": y, "w": crop_w, "h": crop_h}],
+        }
+
+    detectors = [
+        cv2.CascadeClassifier(cv2.data.haarcascades + name)
+        for name in (
+            "haarcascade_frontalface_alt2.xml",
+            "haarcascade_frontalface_default.xml",
+            "haarcascade_profileface.xml",
+        )
+    ]
+    if all(d.empty() for d in detectors):
+        return {"available": False, "reason": "No face detector is available on this server."}
+
+    cap = cv2.VideoCapture(str(source))
+    if not cap.isOpened():
+        return {"available": False, "reason": "The source video could not be opened."}
+
+    step = 1.0 / max(0.5, min(8.0, sample_hz))
+    samples = max(2, int(duration / step))
+    min_face = max(28, min(src_w, src_h) // 24)
+
+    def speaking_at(t: float) -> bool:
+        if not speech_spans:
+            return True  # no timing info, so assume speech throughout
+        return any(s <= t <= e for s, e in speech_spans)
+
+    raw: list[tuple[float, float, float]] = []  # (t, cx, cy)
+    previous_gray = None
+    for index in range(samples + 1):
+        offset = min(duration, index * step)
+        cap.set(cv2.CAP_PROP_POS_MSEC, (start + offset) * 1000.0)
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            continue
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        faces: list[tuple[int, int, int, int]] = []
+        for i, detector in enumerate(detectors):
+            if detector.empty():
+                continue
+            found = detector.detectMultiScale(
+                gray, scaleFactor=1.08 if i == 0 else 1.10,
+                minNeighbors=3 if i == 0 else 4, minSize=(min_face, min_face),
+            )
+            faces.extend(tuple(map(int, f)) for f in found)
+
+        if faces:
+            best = None
+            best_score = -1.0
+            for (fx, fy, fw, fh) in faces:
+                # Bigger faces are more likely to be the subject.
+                score = float(fw * fh) / float(src_w * src_h)
+                # Mouth movement: compare the lower half of the face with the
+                # same region last sample. A speaking mouth changes more.
+                if previous_gray is not None and speaking_at(offset):
+                    my0, my1 = fy + fh // 2, min(src_h, fy + fh)
+                    mx0, mx1 = max(0, fx), min(src_w, fx + fw)
+                    if my1 > my0 and mx1 > mx0:
+                        now_mouth = gray[my0:my1, mx0:mx1].astype("float32")
+                        was_mouth = previous_gray[my0:my1, mx0:mx1].astype("float32")
+                        if now_mouth.shape == was_mouth.shape and now_mouth.size:
+                            movement = float(abs(now_mouth - was_mouth).mean()) / 255.0
+                            score += movement * 2.5  # weight movement heavily
+                if score > best_score:
+                    best_score = score
+                    best = (fx, fy, fw, fh)
+            if best:
+                fx, fy, fw, fh = best
+                raw.append((offset, fx + fw / 2.0, fy + fh / 2.0))
+        previous_gray = gray
+    cap.release()
+
+    if not raw:
+        return {"available": False, "reason": "No face or speaker could be detected in this clip."}
+
+    # Exponential smoothing so the crop glides instead of snapping.
+    alpha = 1.0 - max(0.0, min(0.98, smoothing))
+    keyframes: list[dict[str, Any]] = []
+    smooth_x, smooth_y = raw[0][1], raw[0][2]
+    for (t, cx, cy) in raw:
+        smooth_x += (cx - smooth_x) * alpha
+        smooth_y += (cy - smooth_y) * alpha
+        x, y = crop_origin_from_center(smooth_x, smooth_y, src_w, src_h, crop_w, crop_h, padding)
+        keyframes.append({"t": round(t, 3), "x": x, "y": y, "w": crop_w, "h": crop_h})
+
+    return {
+        "available": True, "method": "active-speaker", "srcW": src_w, "srcH": src_h,
+        "w": crop_w, "h": crop_h, "keyframes": keyframes,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("job", nargs="?", type=Path)
     parser.add_argument("--doctor", action="store_true")
+    parser.add_argument("--framing", type=Path, help="analyse active-speaker framing from a request JSON file")
     args = parser.parse_args()
     if args.doctor:
         return doctor()
+    if args.framing:
+        request = json.loads(args.framing.read_text(encoding="utf-8"))
+        spans = [(float(a), float(b)) for a, b in (request.get("speechSpans") or [])]
+        plan = track_speaker_keyframes(
+            Path(request["source"]),
+            request.get("ffprobe") or "ffprobe",
+            float(request.get("start") or 0.0),
+            float(request.get("duration") or 0.0),
+            int(request.get("width") or 1080),
+            int(request.get("height") or 1920),
+            str(request.get("bias") or "auto"),
+            float(request.get("padding") or 0.18),
+            float(request.get("zoom") or 1.0),
+            float(request.get("smoothing") or 0.82),
+            speech_spans=spans or None,
+        )
+        print(json.dumps({"plan": plan}))
+        return 0
     if not args.job:
         parser.error("a job JSON path is required")
     heartbeat = threading.Thread(target=_heartbeat_loop, name="worker-heartbeat", daemon=True)
