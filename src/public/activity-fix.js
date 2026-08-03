@@ -662,7 +662,7 @@ function canvasTool(){
 }
 
 function styleTool(){
-  return `<div class="dc-section"><h3>Video look</h3>${selectField('Filter','filterPreset',[['natural','Natural'],['crisp','Crisp'],['warm','Warm'],['cinematic','Cinematic'],['monochrome','Monochrome'],['custom','Custom']])}${rangeField('Brightness','brightness',-1,1,.05)}${rangeField('Contrast','contrast',.5,2,.05)}${rangeField('Saturation','saturation',0,3,.05)}<details class="dc-advanced"><summary>Advanced image controls</summary><div style="margin-top:10px">${rangeField('Sharpen','sharpen',0,2,.05)}${rangeField('Vignette','vignette',0,1,.05)}</div></details></div><div class="dc-section"><h3>Branding</h3>${textField('Watermark','watermark')}${selectField('Watermark position','watermarkPosition',[['top-left','Top left'],['top-center','Top centre'],['top-right','Top right'],['bottom-left','Bottom left'],['bottom-center','Bottom centre'],['bottom-right','Bottom right']])}<details class="dc-advanced"><summary>Advanced branding controls</summary><div style="margin-top:10px">${rangeField('Watermark size','watermarkFontSize',12,90,1)}${rangeField('Watermark opacity','watermarkOpacity',0,100,1)}${colorField('Watermark colour','watermarkColor')}${checkField('Brand line','brandLineEnabled')}${colorField('Brand line colour','brandLineColor')}</div></details></div><button type="button" class="dc-btn secondary" id="dcSavePreset" style="width:100%">Save current look as preset</button>`;
+  return `<div class="dc-section"><h3>Video look</h3>${selectField('Filter','filterPreset',[['natural','Natural'],['crisp','Crisp'],['warm','Warm'],['cinematic','Cinematic'],['monochrome','Monochrome'],['custom','Custom']])}${rangeField('Brightness','brightness',-1,1,.05)}${rangeField('Contrast','contrast',.5,2,.05)}${rangeField('Saturation','saturation',0,3,.05)}<details class="dc-advanced"><summary>Advanced image controls</summary><div style="margin-top:10px">${rangeField('Sharpen','sharpen',0,2,.05)}${rangeField('Vignette','vignette',0,1,.05)}</div></details></div><div class="dc-section"><h3>Branding</h3>${textField('Watermark','watermark')}${selectField('Watermark position','watermarkPosition',[['top-left','Top left'],['top-center','Top centre'],['top-right','Top right'],['bottom-left','Bottom left'],['bottom-center','Bottom centre'],['bottom-right','Bottom right']])}<details class="dc-advanced"><summary>Advanced branding controls</summary><div style="margin-top:10px">${rangeField('Watermark size','watermarkFontSize',12,90,1)}${rangeField('Watermark opacity','watermarkOpacity',0,100,1)}${colorField('Watermark colour','watermarkColor')}${checkField('Brand line','brandLineEnabled')}${colorField('Brand line colour','brandLineColor')}</div></details></div><button type="button" class="dc-btn secondary" id="dcSavePreset" style="width:100%">Save as my template</button><div class="dc-caption-note" style="margin-top:7px">Applies this look to every new clip. Clips already made keep their current look until you re-render them.</div>`;
 }
 
 function audioTool(){
@@ -905,8 +905,31 @@ async function saveAudioSettings(){
   try{await callApi('/api/music-settings',{method:'POST',body:JSON.stringify({volumePercent:Number(editor.draft.musicVolumePercent||13)})});notify('Music level saved');await refreshData()}catch(e){notify(e.message,'bad')}
 }
 async function saveEditorPreset(){
-  const clip=currentClip(),name=prompt('Preset name',`${editor.draft.name||clip?.title||'Caption style'} · Edited`);if(!name)return;
-  try{const result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...cleanDraft(editor.draft),id:'',name},select:false})});editor.draft={...clone(result.template),__clipId:clip.id};markEditorDirty();pushHistory();notify('Preset saved inside Editor');await refreshData();renderEditorTool()}catch(e){notify(e.message,'bad')}
+  const clip=currentClip(),draft=cleanDraft(editor.draft);
+  const current=DATA?.selectedTemplate,isBuiltIn=Boolean(current?.builtIn);
+  // Built-in templates are protected, so the first save has to create your
+  // own copy. After that this keeps updating that same one, which is what
+  // makes a single look apply everywhere rather than piling up presets.
+  const message=isBuiltIn
+    ?'Save this look as your template?\n\nEvery new clip will use it automatically.'
+    :`Update your template "${current?.name||'Custom'}" with this look?\n\nEvery new clip will use it automatically.`;
+  if(!confirm(message))return;
+  const button=$('#dcSavePreset');if(button){button.disabled=true;button.textContent='Saving…'}
+  try{
+    let result;
+    if(isBuiltIn){
+      const name=prompt('Name your template',`${clip?.title?'My style':'My style'}`)||'My style';
+      result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...draft,id:'',name},select:true})});
+    }else{
+      result=await callApi(`/api/templates/${encodeURIComponent(current.id)}`,{method:'PUT',body:JSON.stringify({template:{...draft,id:current.id,name:current.name}})});
+      await callApi('/api/template',{method:'POST',body:JSON.stringify({id:current.id})});
+    }
+    editor.draft={...clone(result.template),__clipId:clip?.id};
+    markEditorDirty(false);pushHistory();
+    notify('Saved. Every new clip now uses this look.');
+    await refreshData();renderEditorTool();
+  }catch(e){notify(e.message,'bad')}
+  if(button){button.disabled=false;button.textContent='Save as my template'}
 }
 async function renderEditedClip(){
   const clip=currentClip(),button=$('#dcRenderClip');if(!clip)return;button.disabled=true;button.textContent='Queueing…';
