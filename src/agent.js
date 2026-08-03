@@ -91,7 +91,33 @@ export function scheduleSelected(ids = []) {
 export function updateClip(id, fields = {}) {
   const clip = clipById(id);
   if (!clip) throw new Error('That clip no longer exists.');
-  for (const key of ['title', 'description', 'hashtags']) if (typeof fields[key] === 'string') clip[key] = fields[key].trim();
+
+  for (const key of ['title', 'description', 'hashtags']) {
+    if (typeof fields[key] === 'string') clip[key] = fields[key].trim();
+  }
+
+  const wantsTrimChange = Object.prototype.hasOwnProperty.call(fields, 'startSec')
+    || Object.prototype.hasOwnProperty.call(fields, 'endSec')
+    || Object.prototype.hasOwnProperty.call(fields, 'durationMs');
+
+  if (wantsTrimChange) {
+    if (clip.status === 'posted' || (clip.targets || []).some(target => target.status === 'posted')) {
+      throw new Error('A posted clip cannot be trimmed. Create a new variant instead.');
+    }
+    const currentStart = Number(clip.startSec) || 0;
+    const currentEnd = Number(clip.endSec) || currentStart + (Number(clip.durationMs) || 0) / 1000;
+    const startSec = Object.prototype.hasOwnProperty.call(fields, 'startSec') ? Number(fields.startSec) : currentStart;
+    const endSec = Object.prototype.hasOwnProperty.call(fields, 'endSec') ? Number(fields.endSec) : currentEnd;
+    if (!Number.isFinite(startSec) || !Number.isFinite(endSec) || startSec < 0 || endSec <= startSec + 3) {
+      throw new Error('Choose a valid clip length of at least 3 seconds.');
+    }
+    clip.startSec = Math.round(startSec * 100) / 100;
+    clip.endSec = Math.round(endSec * 100) / 100;
+    clip.durationMs = Math.round((clip.endSec - clip.startSec) * 1000);
+    clip.renderVerified = false;
+    clip.updatedAt = Date.now();
+  }
+
   save(); return clip;
 }
 
