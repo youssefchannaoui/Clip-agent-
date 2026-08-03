@@ -299,11 +299,20 @@ const clipToolsCss = String.raw`
 .dc-review-page-pro{display:grid;gap:16px}.dc-review-hero-pro{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:end;padding:22px;border:1px solid rgba(217,180,120,.20);border-radius:24px;background:radial-gradient(circle at 0 0,rgba(217,180,120,.13),transparent 34%),linear-gradient(145deg,#151519,#0d0d10)}.dc-review-hero-pro h1{font-size:32px;line-height:1;margin:8px 0 8px;letter-spacing:-.035em}.dc-review-hero-pro p{margin:0;color:var(--dc-muted);font-size:12px;max-width:620px;line-height:1.5}.dc-review-kicker{display:inline-flex;align-items:center;gap:8px;min-height:28px;padding:0 10px;border:1px solid rgba(217,180,120,.22);border-radius:999px;background:rgba(217,180,120,.07);color:var(--dc-accent2);font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.dc-review-metrics-pro{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.dc-review-metrics-pro span{min-width:92px;padding:10px 12px;border:1px solid var(--dc-line);border-radius:14px;background:#09090b}.dc-review-metrics-pro b,.dc-review-metrics-pro em{display:block}.dc-review-metrics-pro b{font-size:20px}.dc-review-metrics-pro em{font-style:normal;color:var(--dc-muted);font-size:9px;margin-top:2px}.dc-review-list.pro{display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:14px}.dc-review-item.pro{display:grid;grid-template-columns:118px minmax(0,1fr);gap:14px;align-items:stretch;padding:14px;border:1px solid var(--dc-line);border-radius:22px;background:linear-gradient(145deg,#151519,#0d0d10);box-shadow:0 20px 50px rgba(0,0,0,.18)}.dc-review-item.pro:hover{border-color:var(--dc-line2)}.dc-review-item.pro .dc-review-media{width:118px;border-radius:16px;box-shadow:0 16px 40px #0007}.dc-review-item.pro .dc-review-score{left:8px;bottom:8px;height:28px;min-width:34px;font-size:11px}.dc-review-main{min-width:0;display:flex;flex-direction:column;gap:10px}.dc-review-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.dc-review-title-row h3{font-size:15px;line-height:1.22;margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.dc-review-title-row small{white-space:nowrap;color:var(--dc-muted);font-size:9px;margin-top:3px}.dc-hook-strip{display:grid;grid-template-columns:minmax(130px,.38fr) minmax(0,1fr);gap:8px}.dc-hook-card,.dc-copy-card{border:1px solid var(--dc-line);border-radius:14px;background:#09090b;padding:10px}.dc-hook-card strong,.dc-copy-card strong{display:flex;align-items:center;gap:7px;font-size:10px}.dc-hook-card p,.dc-copy-card p{margin:6px 0 0;color:var(--dc-muted);font-size:9px;line-height:1.45}.dc-hook-badge{display:inline-flex;align-items:center;gap:6px;min-height:24px;padding:0 8px;border-radius:999px;font-size:9px;font-weight:800}.dc-hook-badge.good{background:rgba(83,199,139,.10);color:var(--dc-green)}.dc-hook-badge.warn{background:rgba(229,169,87,.10);color:var(--dc-orange)}.dc-copy-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.dc-copy-mini{padding:9px;border:1px solid var(--dc-line);border-radius:12px;background:#0d0d10;min-width:0}.dc-copy-mini b,.dc-copy-mini span{display:block}.dc-copy-mini b{font-size:8.5px;color:var(--dc-accent2);text-transform:uppercase;letter-spacing:.07em}.dc-copy-mini span{font-size:9.5px;color:var(--dc-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:5px}.dc-review-actions.pro{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;min-width:0}.dc-review-actions.pro .dc-btn{min-width:0;padding:0 8px;font-size:9.5px}.dc-review-actions.pro .wide{grid-column:span 2}.dc-review-empty-pro{min-height:260px;display:grid;place-items:center;padding:30px;border:1px dashed #373740;border-radius:24px;background:radial-gradient(circle at 50% 0,rgba(217,180,120,.10),transparent 42%),#101013;text-align:center}.dc-review-empty-pro .dc-empty-icon{width:58px;height:58px;margin:0 auto 13px;border-radius:20px;background:rgba(217,180,120,.12);display:grid;place-items:center;color:var(--dc-accent2)}.dc-review-empty-pro strong{display:block;font-size:18px}.dc-review-empty-pro p{color:var(--dc-muted);font-size:12px;margin:7px 0 16px}.dc-review-toolbar.pro{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.dc-review-toolbar.pro .spacer{flex:1}@media(max-width:760px){.dc-review-hero-pro{grid-template-columns:1fr}.dc-review-metrics-pro{justify-content:flex-start}.dc-review-list.pro{grid-template-columns:1fr}.dc-review-item.pro{grid-template-columns:94px minmax(0,1fr);padding:11px}.dc-review-item.pro .dc-review-media{width:94px}.dc-hook-strip,.dc-copy-grid{grid-template-columns:1fr}.dc-review-actions.pro{grid-template-columns:1fr 1fr}.dc-review-actions.pro .wide{grid-column:auto}}
 `;
 
+
+
+const homeRedoCss = String.raw`
+/* Home final redo: keep top/sidebar, rebuild Home content only. */
+.dc-home-redo{display:grid;gap:18px;max-width:1460px;margin:0 auto}.dc-home-redo-hero{position:relative;overflow:hidden;min-height:320px;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(320px,.95fr);gap:24px;align-items:center;padding:28px;border:1px solid rgba(217,180,120,.22);border-radius:28px;background:radial-gradient(circle at 74% 20%,rgba(85,183,255,.13),transparent 28%),radial-gradient(circle at 24% 0,rgba(217,180,120,.18),transparent 36%),linear-gradient(145deg,#191410,#0b0b0d 58%,#071018);box-shadow:0 26px 80px rgba(0,0,0,.34)}.dc-home-redo-hero::after{content:'';position:absolute;right:-90px;top:-150px;width:380px;height:380px;border:1px solid rgba(217,180,120,.18);border-radius:50%;background:rgba(217,180,120,.03);pointer-events:none}.dc-home-redo-copy{position:relative;z-index:2}.dc-home-redo-kicker{display:inline-flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid rgba(217,180,120,.23);border-radius:999px;background:rgba(217,180,120,.08);color:var(--dc-accent2);font-size:10px;font-weight:850;text-transform:uppercase;letter-spacing:.09em}.dc-home-redo-kicker svg{width:16px;height:16px}.dc-home-redo h1{max-width:780px;margin:18px 0 10px;font-size:46px;line-height:1.01;letter-spacing:-.055em}.dc-home-redo-copy p{max-width:630px;margin:0;color:var(--dc-muted);font-size:13px;line-height:1.65}.dc-home-redo-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}.dc-home-primary,.dc-home-secondary{min-height:48px;display:inline-flex;align-items:center;gap:10px;padding:0 16px;border-radius:16px;border:1px solid rgba(255,255,255,.08);font-weight:800;color:var(--dc-text);background:#111115}.dc-home-primary{background:linear-gradient(135deg,var(--dc-accent2),var(--dc-accent));color:#170f05;border-color:rgba(217,180,120,.4);box-shadow:0 16px 36px rgba(217,180,120,.12)}.dc-home-primary span,.dc-home-secondary span{width:28px;height:28px;border-radius:10px;display:grid;place-items:center;background:rgba(0,0,0,.16)}.dc-home-primary svg,.dc-home-secondary svg{width:16px;height:16px}.dc-home-secondary{color:var(--dc-text);background:rgba(255,255,255,.035)}.dc-home-secondary:hover{background:rgba(255,255,255,.065)}.dc-home-secondary em{min-width:22px;height:22px;display:grid;place-items:center;border-radius:999px;background:rgba(217,180,120,.13);color:var(--dc-accent2);font-style:normal;font-size:10px}.dc-home-redo-stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}.dc-home-redo-stats span{display:flex;align-items:baseline;gap:6px;min-height:32px;padding:0 10px;border:1px solid rgba(255,255,255,.065);border-radius:999px;background:rgba(0,0,0,.22);color:var(--dc-muted);font-size:9px}.dc-home-redo-stats b{font-size:15px;color:var(--dc-text)}.dc-home-redo-stage{position:relative;min-height:286px;z-index:2}.dc-home-phone{position:absolute;width:132px;aspect-ratio:9/16;border-radius:22px;overflow:hidden;border:1px solid rgba(255,255,255,.16);background:#070708;box-shadow:0 24px 54px rgba(0,0,0,.44)}.dc-home-phone img{width:100%;height:100%;object-fit:cover}.dc-home-phone-empty{height:100%;display:grid;place-items:center;background:linear-gradient(160deg,#282830,#101013);color:var(--dc-muted)}.dc-home-phone-empty svg{width:36px;height:36px}.dc-home-phone span{position:absolute;left:12px;right:12px;bottom:13px;text-align:center;color:#fff;font-weight:900;font-size:12px;text-shadow:0 2px 12px #000}.dc-home-phone.p1{left:8%;top:20%;transform:rotate(-7deg)}.dc-home-phone.p2{left:38%;top:2%;width:152px;transform:rotate(3deg);z-index:2}.dc-home-phone.p3{right:8%;top:22%;transform:rotate(7deg)}.dc-home-glow-card{position:absolute;left:18%;bottom:0;right:18%;min-height:58px;border:1px solid rgba(217,180,120,.20);border-radius:18px;background:rgba(9,9,11,.78);backdrop-filter:blur(14px);display:flex;align-items:center;justify-content:space-between;padding:0 16px;box-shadow:0 18px 48px rgba(0,0,0,.38);z-index:3}.dc-home-glow-card b{font-size:12px}.dc-home-glow-card em{font-style:normal;font-size:24px;color:var(--dc-accent2);font-weight:900}.dc-home-redo-create{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;align-items:stretch}.dc-create-main-panel,.dc-create-side-panel,.dc-home-focus-panel,.dc-home-project-panel,.dc-home-action-panel{border:1px solid var(--dc-line);border-radius:24px;background:linear-gradient(180deg,#141416,#0c0c0f);box-shadow:0 16px 46px rgba(0,0,0,.18)}.dc-create-main-panel{padding:18px}.dc-create-panel-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}.dc-home-redo-icon{width:44px;height:44px;border-radius:16px;display:grid;place-items:center}.dc-home-redo-icon.youtube{background:rgba(255,0,51,.12);color:#ff4f72}.dc-home-redo-icon svg{width:23px;height:23px}.dc-create-panel-head strong,.dc-create-panel-head span{display:block}.dc-create-panel-head strong{font-size:16px}.dc-create-panel-head span{font-size:10.5px;color:var(--dc-muted);margin-top:4px;line-height:1.45}.dc-create-main-panel textarea{width:100%;min-height:112px;resize:vertical;border:1px solid var(--dc-line);border-radius:18px;background:#070709;color:var(--dc-text);padding:17px;font-size:14px;line-height:1.5;outline:none}.dc-create-main-panel textarea:focus{border-color:rgba(217,180,120,.55);box-shadow:0 0 0 4px rgba(217,180,120,.08)}.dc-create-control-row{display:grid;grid-template-columns:minmax(190px,1fr) 104px 132px auto;gap:9px;margin-top:10px;align-items:end}.dc-create-control-row label span{display:block;color:var(--dc-muted);font-size:9px;margin:0 0 5px 3px}.dc-create-control-row select{width:100%;height:44px;border:1px solid var(--dc-line);border-radius:14px;background:#09090b;color:var(--dc-text);padding:0 11px}.dc-create-submit{height:44px;border-radius:14px}.dc-create-side-panel{padding:14px;display:flex;flex-direction:column;gap:12px}.dc-side-mini-card{border:1px solid var(--dc-line);border-radius:18px;background:#09090b;padding:13px}.dc-side-mini-card.empty strong,.dc-side-mini-card.empty span{display:block}.dc-side-mini-card.empty strong{font-size:13px}.dc-side-mini-card.empty span{font-size:10px;color:var(--dc-muted);margin:5px 0 11px}.dc-side-next{display:grid;grid-template-columns:62px minmax(0,1fr);gap:11px;align-items:center;margin-bottom:11px}.dc-side-next img{width:62px;height:70px;border-radius:14px;object-fit:cover}.dc-side-next small{color:var(--dc-accent2);text-transform:uppercase;letter-spacing:.08em;font-weight:800;font-size:8px}.dc-side-next strong,.dc-side-next span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-side-next strong{font-size:12px;margin-top:3px}.dc-side-next span{font-size:9px;color:var(--dc-muted);margin-top:3px}.dc-platform-line-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.dc-platform-line-head strong{font-size:12px}.dc-platform-line-head button{font-size:9px;color:var(--dc-accent2)}.dc-platform-line{display:flex;gap:8px}.dc-platform-line span{width:42px;height:42px;border:1px solid var(--dc-line);border-radius:15px;display:grid;place-items:center;background:#111115;color:var(--dc-subtle);opacity:.68}.dc-platform-line svg{width:20px;height:20px}.dc-platform-line .on{opacity:1;border-color:rgba(83,199,139,.25)}.dc-platform-line .ready{opacity:1;border-color:rgba(217,180,120,.24)}.dc-platform-line .youtube{color:#ff4f72}.dc-platform-line .tiktok{color:#25f4ee}.dc-platform-line .instagram{color:#ff7ebe}.dc-platform-line .facebook{color:#83a7ff}.dc-home-redo-workflow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.dc-home-step{position:relative;overflow:hidden;min-height:82px;text-align:left;padding:14px;border:1px solid var(--dc-line);border-radius:20px;background:linear-gradient(180deg,#131316,#0b0b0d);color:var(--dc-text)}.dc-home-step span{width:28px;height:28px;border-radius:999px;background:rgba(217,180,120,.10);color:var(--dc-accent2);display:grid;place-items:center;font-weight:900;font-size:10px;margin-bottom:10px}.dc-home-step strong,.dc-home-step em{display:block}.dc-home-step strong{font-size:13px}.dc-home-step em{font-style:normal;color:var(--dc-muted);font-size:9px;margin-top:4px}.dc-home-step.good{border-color:rgba(83,199,139,.18)}.dc-home-step.warn{border-color:rgba(229,169,87,.22)}.dc-home-step i{position:absolute;right:13px;top:13px;width:10px;height:10px;border-radius:50%;background:var(--dc-accent);animation:dcPulse 1s infinite}.dc-home-redo-board{display:grid;grid-template-columns:minmax(0,1.04fr) minmax(320px,.65fr) minmax(280px,.48fr);gap:14px;align-items:stretch}.dc-home-focus-panel{min-height:142px;padding:17px;display:flex;align-items:center;justify-content:space-between;gap:14px}.dc-focus-left{display:flex;align-items:center;gap:14px;min-width:0}.dc-focus-icon{width:54px;height:54px;flex:0 0 54px;border-radius:18px;display:grid;place-items:center;background:rgba(217,180,120,.12);color:var(--dc-accent2);font-weight:900}.dc-focus-icon svg{width:24px;height:24px}.dc-focus-icon.good{background:rgba(83,199,139,.1);color:var(--dc-green)}.dc-focus-icon.warn{background:rgba(229,169,87,.12);color:var(--dc-orange)}.dc-focus-icon.busy{animation:dcPulse 1s infinite}.dc-focus-left small{color:var(--dc-accent2);text-transform:uppercase;letter-spacing:.08em;font-size:8px;font-weight:850}.dc-focus-left h2{margin:4px 0 5px;font-size:18px;line-height:1.2}.dc-focus-left p{margin:0;color:var(--dc-muted);font-size:10.5px;line-height:1.45}.dc-focus-progress{height:4px;margin-top:10px;background:var(--dc-line);border-radius:999px;overflow:hidden}.dc-focus-progress i{display:block;height:100%;background:var(--dc-accent)}.dc-home-project-panel,.dc-home-action-panel{padding:16px}.dc-home-panel-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:13px}.dc-home-panel-title strong,.dc-home-panel-title span{display:block}.dc-home-panel-title strong{font-size:14px}.dc-home-panel-title span{font-size:9px;color:var(--dc-muted);margin-top:3px}.dc-home-project-list{display:flex;flex-direction:column;gap:8px}.dc-home-project-row{min-height:64px;display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px;border:1px solid var(--dc-line);border-radius:16px;background:#09090b;color:var(--dc-text)}.dc-home-project-row:hover{border-color:var(--dc-line2);transform:translateY(-1px)}.dc-home-project-thumb{width:50px;height:48px;flex:0 0 50px;border-radius:13px;display:grid;place-items:center;background:#050506;color:var(--dc-muted);overflow:hidden}.dc-home-project-thumb img{width:100%;height:100%;object-fit:cover}.dc-home-project-copy{flex:1;min-width:0}.dc-home-project-copy strong,.dc-home-project-copy em{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-home-project-copy strong{font-size:11px}.dc-home-project-copy em{font-style:normal;color:var(--dc-muted);font-size:8.5px;margin-top:3px}.dc-home-empty-line{padding:18px;border:1px dashed var(--dc-line);border-radius:16px;text-align:center}.dc-home-empty-line strong,.dc-home-empty-line span{display:block}.dc-home-empty-line span{color:var(--dc-muted);font-size:10px;margin-top:4px}.dc-action-big{min-height:112px;border:1px solid var(--dc-line);border-radius:18px;background:#09090b;padding:14px}.dc-action-big span{width:42px;height:42px;border-radius:15px;display:grid;place-items:center;background:rgba(229,169,87,.12);color:var(--dc-orange);font-weight:900;margin-bottom:12px}.dc-action-big.good span{background:rgba(217,180,120,.10);color:var(--dc-accent2)}.dc-action-big strong,.dc-action-big p{display:block}.dc-action-big strong{font-size:14px}.dc-action-big p{margin:6px 0 0;color:var(--dc-muted);font-size:10px;line-height:1.45}
+@media(max-width:1280px){.dc-home-redo-hero,.dc-home-redo-create,.dc-home-redo-board{grid-template-columns:1fr}.dc-create-side-panel{display:grid;grid-template-columns:1fr 1fr}.dc-home-redo-stage{min-height:250px}.dc-home-redo-workflow{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.dc-home-redo h1{font-size:34px}.dc-home-redo-hero{padding:20px;min-height:0}.dc-home-redo-stage{display:none}.dc-create-control-row,.dc-create-side-panel,.dc-home-redo-workflow{grid-template-columns:1fr}.dc-home-primary,.dc-home-secondary{width:100%;justify-content:center}.dc-home-focus-panel{align-items:flex-start;flex-direction:column}.dc-home-redo-create{gap:12px}}
+`;
+
 function injectShell(){
   if (shellReady) return;
   shellReady = true;
   const style = document.createElement('style');
-  style.id = 'dcPhase4Styles'; style.textContent = css + v3Css + v3ProjectCss + clipToolsCss; document.head.appendChild(style);
+  style.id = 'dcPhase4Styles'; style.textContent = css + v3Css + v3ProjectCss + clipToolsCss + homeRedoCss; document.head.appendChild(style);
   document.body.classList.add('dc-app');
 
   const side = document.createElement('aside'); side.id = 'dcSidebar';
@@ -469,66 +478,127 @@ function renderHome(){
   document.body.classList.remove('dc-project-open');
   const clips = d.clips || [], projects = d.projects || [], jobs = activeJobs();
   const waiting = clips.filter(c=>c.status==='waiting').length;
-  const scheduled = clips.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length;
+  const scheduledClips = clips.filter(c=>['approved','scheduled','publishing'].includes(c.status));
+  const scheduled = scheduledClips.length;
   const posted = clips.filter(c=>c.status==='posted').length;
   const selectedTemplate = d.selectedTemplate?.name || d.templateDraft?.name || 'Choose template';
   const next = nextScheduledClip(clips);
+  const latestProject = [...projects].sort((a,b)=>Number(b.submittedAt||0)-Number(a.submittedAt||0))[0];
+  const pendingIssue = homePrimaryIssue(d);
   panel.innerHTML = `
-    <div class="dc-home-v3g">
-      <section class="dc-home-hero-g" data-tour="home-hero">
-        <div class="dc-home-hero-copy">
-          <div class="dc-v3-kicker">${ICON.scissors} V3 workspace</div>
-          <h1>One clean workflow. Import, review, edit, publish.</h1>
-          <p>DeenClipped turns long lectures into captioned vertical clips, then keeps the next action clear.</p>
-          <div class="dc-stat-ribbon" aria-label="Workspace summary">
-            ${tinyStat(projects.length,'lectures')}${tinyStat(clips.length,'clips')}${tinyStat(waiting,'review')}${tinyStat(scheduled,'scheduled')}${tinyStat(posted,'posted')}
+    <div class="dc-home-redo">
+      <section class="dc-home-redo-hero" data-tour="home-hero">
+        <div class="dc-home-redo-copy">
+          <div class="dc-home-redo-kicker"><span>${ICON.scissors}</span> V3 workspace</div>
+          <h1>Turn lectures into finished clips without jumping through menus.</h1>
+          <p>Paste a link, choose the look, review the strongest moments, then send them to the right platform.</p>
+          <div class="dc-home-redo-actions">
+            <button class="dc-home-primary" id="dcHeroCreate" type="button"><span>${socialSvg('youtube')}</span><b>Start with YouTube</b></button>
+            <button class="dc-home-secondary" data-dc-nav="review" type="button"><span>${ICON.review}</span><b>Review clips</b>${waiting?`<em>${waiting}</em>`:''}</button>
+            <button class="dc-home-secondary" id="dcHeroTour" type="button"><span>${ICON.play}</span><b>Demo tour</b></button>
           </div>
-          <div class="dc-v3-actions">
-            <button class="dc-btn" id="dcHeroCreate">Paste a lecture</button>
-            <button class="dc-btn secondary" data-dc-nav="review">Review clips</button>
-            <button class="dc-btn secondary" id="dcHeroTour">Guided demo</button>
-          </div>
-        </div>
-        <div class="dc-hero-stage" aria-label="Recent clip previews">${heroThumbs(clips)}</div>
-      </section>
-
-      <section class="dc-home-import-g" data-tour="create-form">
-        <span class="dc-import-icon">${socialSvg('youtube')}</span>
-        <input id="dcCreateUrl" placeholder="Paste YouTube or video URL">
-        <select id="dcCreateTemplate" data-tour="template-picker">${(d.templates||[]).map(t=>`<option value="${esc(t.id)}" ${t.id===d.selectedTemplate?.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select>
-        <select id="dcCreateCount"><option>4</option><option selected>8</option><option>12</option><option>16</option></select>
-        <select id="dcCreateDuration"><option value="15,45">15–45 sec</option><option value="30,60" selected>30–60 sec</option><option value="45,90">45–90 sec</option></select>
-        <button class="dc-btn" id="dcGenerate" data-tour="generate-button">Generate</button>
-      </section>
-
-      <section class="dc-home-flow-g" aria-label="Main workflow">
-        ${flowCard('Import','Paste lecture links',socialSvg('youtube'),'dcSourceYouTube')}
-        ${flowCard('Review',waiting ? `${waiting} clips waiting` : 'Nothing waiting',ICON.review,'review')}
-        ${flowCard('Template',selectedTemplate,ICON.style,'editor')}
-        ${flowCard('Publish',scheduled ? `${scheduled} clips scheduled` : 'Connect platforms',ICON.publish,'schedule')}
-      </section>
-
-      <section class="dc-home-command-g" data-tour="happening-now">
-        <div class="dc-home-main-g">
-          ${liveFocusPanel(d,jobs,next,selectedTemplate)}
-          <div class="dc-project-gallery-g">
-            <div class="dc-simple-head"><div><h2>Recent projects</h2><p>Pick up from a lecture without reading a log.</p></div><button class="dc-btn secondary" data-dc-nav="projects">View all</button></div>
-            <div class="dc-project-strip-g">${recentProjectsCinema(projects,clips)}</div>
+          <div class="dc-home-redo-stats" aria-label="Workspace summary">
+            ${homeStatPill(projects.length,'lectures')}${homeStatPill(clips.length,'clips')}${homeStatPill(scheduled,'scheduled')}${homeStatPill(posted,'posted')}
           </div>
         </div>
-        <aside class="dc-home-dock-g">
-          ${nextPostDock(next)}
-          ${platformDock(d)}
-          ${attentionDock(d)}
+        <div class="dc-home-redo-stage" aria-label="Clip previews">
+          ${homePhoneStack(clips)}
+        </div>
+      </section>
+
+      <section class="dc-home-redo-create" data-tour="create-form">
+        <div class="dc-create-main-panel">
+          <div class="dc-create-panel-head">
+            <div><span class="dc-home-redo-icon youtube">${socialSvg('youtube')}</span></div>
+            <div><strong>New lecture</strong><span>Paste one or more links. DeenClipped will handle download, captions, template and clip selection.</span></div>
+          </div>
+          <textarea id="dcCreateUrl" placeholder="Paste YouTube or video URLs here — one per line"></textarea>
+          <div class="dc-create-control-row">
+            <label><span>Template</span><select id="dcCreateTemplate" data-tour="template-picker">${(d.templates||[]).map(t=>`<option value="${esc(t.id)}" ${t.id===d.selectedTemplate?.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select></label>
+            <label><span>Clips</span><select id="dcCreateCount"><option>4</option><option selected>8</option><option>12</option><option>16</option></select></label>
+            <label><span>Length</span><select id="dcCreateDuration"><option value="15,45">15–45 sec</option><option value="30,60" selected>30–60 sec</option><option value="45,90">45–90 sec</option></select></label>
+            <button class="dc-btn dc-create-submit" id="dcGenerate" data-tour="generate-button">Generate clips</button>
+          </div>
+        </div>
+        <aside class="dc-create-side-panel">
+          ${homeNextCard(next)}
+          ${homePlatformLine(d)}
         </aside>
+      </section>
+
+      <section class="dc-home-redo-workflow" aria-label="Workflow">
+        ${homeWorkflowStep('1','Import','Add lecture links',jobs.some(j=>j.kind==='project'))}
+        ${homeWorkflowStep('2','Review',waiting?`${waiting} waiting`:'Ready',false,waiting?'warn':'')}
+        ${homeWorkflowStep('3','Style',selectedTemplate,false)}
+        ${homeWorkflowStep('4','Publish',scheduled?`${scheduled} scheduled`:'Connect platforms',false,scheduled?'good':'')}
+      </section>
+
+      <section class="dc-home-redo-board" data-tour="happening-now">
+        <article class="dc-home-focus-panel ${jobs.length?'busy':''}">
+          ${homeFocusContent(d,jobs,latestProject,pendingIssue)}
+        </article>
+        <article class="dc-home-project-panel">
+          <div class="dc-home-panel-title"><div><strong>Continue</strong><span>Recent projects</span></div><button class="dc-btn secondary" data-dc-nav="projects">View all</button></div>
+          <div class="dc-home-project-list">${homeRecentProjects(projects,clips)}</div>
+        </article>
+        <article class="dc-home-action-panel ${pendingIssue?'warn':''}">
+          ${homeActionPanel(d,pendingIssue)}
+        </article>
       </section>
     </div>`;
   $('#dcGenerate').onclick=generateProject;
   $('#dcHeroCreate').onclick=()=>$('#dcCreateUrl').focus();
-  const source=$('#dcSourceYouTube'); if(source) source.onclick=()=>$('#dcCreateUrl').focus();
   $('#dcHeroTour').onclick=()=>openGuidedTour(0);
   requestAnimationFrame(()=>animatePanel(panel));
 }
+function homeStatPill(value,label){return `<span><b>${esc(value)}</b>${esc(label)}</span>`}
+function homePhoneStack(clips){
+  const recent=[...clips].filter(c=>c.thumbUrl).sort((a,b)=>Number(b.createdAt||b.renderedAt||0)-Number(a.createdAt||a.renderedAt||0)).slice(0,3);
+  const words=['review','style','publish'];
+  return Array.from({length:3}).map((_,i)=>{const c=recent[i];return `<div class="dc-home-phone p${i+1}">${c?.thumbUrl?`<img src="${authedUrl(c.thumbUrl)}" alt="${esc(c.title||'Clip')} thumbnail">`:`<div class="dc-home-phone-empty">${ICON.captions}</div>`}<span>${esc(words[i])}</span></div>`}).join('') + `<div class="dc-home-glow-card"><b>Ready clips</b><em>${clips.length}</em></div>`;
+}
+function homeNextCard(next){
+  if(!next)return `<div class="dc-side-mini-card empty"><strong>No post queued</strong><span>Approve a clip to build your schedule.</span><button class="dc-btn secondary" data-dc-nav="review">Open review</button></div>`;
+  return `<div class="dc-side-mini-card"><div class="dc-side-next"><img src="${authedUrl(next.thumbUrl)}" alt="${esc(next.title||'Clip')} thumbnail"><div><small>Next post</small><strong>${esc(shortText(next.title||'Scheduled clip',44))}</strong><span>${formatDate(next.scheduledAt)}</span></div></div><button class="dc-btn secondary" data-edit-style-clip="${esc(next.id)}">Preview</button></div>`;
+}
+function homePlatformLine(d){
+  const providers=d.social?.providers||{};
+  const names=['youtube','tiktok','instagram','facebook'];
+  return `<div class="dc-side-mini-card"><div class="dc-platform-line-head"><strong>Platforms</strong><button data-dc-nav="publishing" type="button">Manage</button></div><div class="dc-platform-line">${names.map(k=>{const p=providers[k]||{};return `<span class="${k} ${p.connected?'on':p.configured?'ready':'off'}" title="${k}">${socialSvg(k)}</span>`}).join('')}</div></div>`;
+}
+function homeWorkflowStep(num,title,note,busy=false,tone=''){
+  return `<button class="dc-home-step ${busy?'busy':''} ${tone}" type="button" data-dc-nav="${title==='Import'?'home':title==='Review'?'review':title==='Style'?'editor':'schedule'}"><span>${num}</span><strong>${esc(title)}</strong><em>${esc(note)}</em>${busy?'<i></i>':''}</button>`;
+}
+function homeFocusContent(d,jobs,project,issue){
+  if(jobs.length){
+    const j=jobs[0];
+    return `<div class="dc-focus-left"><span class="dc-focus-icon busy">${j.kind==='publish'?ICON.publish:j.kind==='render'?ICON.editor:ICON.scissors}</span><div><small>Working now</small><h2>${esc(shortText(j.title,58))}</h2><p>${esc(shortText(j.stage,78))}</p>${Number.isFinite(j.progress)?`<div class="dc-focus-progress"><i style="width:${clamp(j.progress,0,100)}%"></i></div>`:''}</div></div><span class="dc-pill warn">${Number.isFinite(j.progress)?`${Math.round(j.progress)}%`:'Live'}</span>`;
+  }
+  if(issue){
+    return `<div class="dc-focus-left"><span class="dc-focus-icon warn">!</span><div><small>Needs attention</small><h2>${esc(shortText(issue.title,58))}</h2><p>${esc(shortText(issue.note,84))}</p></div></div><button class="dc-btn secondary" data-dc-nav="${esc(issue.target)}">Fix</button>`;
+  }
+  const latest=(d.log||[])[0];
+  return `<div class="dc-focus-left"><span class="dc-focus-icon good">${ICON.home}</span><div><small>Workspace clear</small><h2>${esc(shortText(latest?logItemMessage(latest):'Ready for the next lecture',62))}</h2><p>${latest?logItemTime(latest):'Nothing is blocking you right now.'}</p></div></div><button class="dc-btn secondary" data-dc-nav="projects">Open projects</button>`;
+}
+function homeRecentProjects(projects,clips){
+  const list=[...projects].sort((a,b)=>Number(b.submittedAt||0)-Number(a.submittedAt||0)).slice(0,3);
+  if(!list.length)return `<div class="dc-home-empty-line"><strong>No projects yet</strong><span>Paste your first lecture above.</span></div>`;
+  return list.map(p=>{const own=clips.filter(c=>c.projectId===p.id);const thumb=own.find(c=>c.thumbUrl)?.thumbUrl;const failed=p.status==='failed'||p.error;return `<button class="dc-home-project-row" data-open-project="${esc(p.id)}" type="button"><span class="dc-home-project-thumb">${thumb?`<img src="${authedUrl(thumb)}" alt="${esc(projectDisplayTitle(p))} thumbnail">`:ICON.projects}</span><span class="dc-home-project-copy"><strong>${esc(shortText(projectDisplayTitle(p),54))}</strong><em>${own.length} clips · ${own.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length} scheduled</em></span><b class="dc-pill ${failed?'bad':p.status==='processing'?'warn':'good'}">${failed?'Fix':p.status==='processing'?'Live':'Ready'}</b></button>`}).join('');
+}
+function homePrimaryIssue(d){
+  const failed=(d.projects||[]).find(p=>p.status==='failed'||p.error);
+  if(failed)return {title:projectDisplayTitle(failed),note:shortError(failed.error||failed.stage),target:'projects'};
+  if(!d.readiness?.musicReady)return {title:'Nasheed library',note:'Add or select audio before scaling scheduled clips.',target:'music'};
+  const providers=d.social?.providers||{};
+  if(!Object.values(providers).some(p=>p.connected))return {title:'Connect a platform',note:'Connect TikTok, YouTube, Instagram or Facebook before publishing.',target:'publishing'};
+  return null;
+}
+function homeActionPanel(d,issue){
+  if(issue)return `<div class="dc-home-panel-title"><div><strong>Fix next</strong><span>One blocker to handle</span></div><button class="dc-btn secondary" data-dc-nav="${esc(issue.target)}">Open</button></div><div class="dc-action-big"><span>!</span><strong>${esc(shortText(issue.title,44))}</strong><p>${esc(shortText(issue.note,90))}</p></div>`;
+  const template=d.selectedTemplate?.name||'Modern Minimal';
+  return `<div class="dc-home-panel-title"><div><strong>Template live</strong><span>Used for new renders</span></div><button class="dc-btn secondary" data-dc-nav="editor">Edit</button></div><div class="dc-action-big good"><span>${ICON.style}</span><strong>${esc(template)}</strong><p>Template controls caption style, framing and watermark for generated clips.</p></div>`;
+}
+
 function tinyStat(value,label){return `<span class="dc-tiny-stat"><b>${esc(value)}</b>${esc(label)}</span>`}
 function flowCard(title,note,icon,target){
   const attr = target === 'dcSourceYouTube' ? 'id="dcSourceYouTube"' : `data-dc-nav="${esc(target)}"`;
