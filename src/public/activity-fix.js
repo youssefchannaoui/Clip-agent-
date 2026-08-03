@@ -77,7 +77,7 @@ const STUDIO_NAV = [
 ];
 const NAV = [...CREATE_NAV, ...PUBLISH_NAV, ...STUDIO_NAV];
 const MANAGE = [];
-const CUSTOM = new Set(['home','projects','review','editor','schedule','publishing','templates','music','automation','insights']);
+const CUSTOM = new Set(['home','projects','review','editor','publishing','templates','music','automation','insights']);
 
 let currentView = 'home';
 let selectedProjectId = '';
@@ -308,18 +308,222 @@ const clipToolsCss = String.raw`
 /* V3H: premium icons, cleaner sidebar and complete manage tabs */
 .dc-nav-icon{border-radius:9px;background:rgba(255,255,255,.035);color:var(--dc-muted);transition:background .18s ease,color .18s ease,transform .18s ease}.dc-nav-button.is-active .dc-nav-icon{background:rgba(217,180,120,.16);box-shadow:0 0 0 1px rgba(217,180,120,.18) inset;color:var(--dc-accent2)}.dc-nav-button:hover .dc-nav-icon{transform:translateY(-1px);background:rgba(255,255,255,.06)}.dc-v3-platform,.dc-social-logo,.dc-mini-job-icon{position:relative;overflow:hidden}.dc-v3-platform::after,.dc-social-logo::after,.dc-mini-job-icon::after{content:'';position:absolute;inset:-40%;background:radial-gradient(circle at 30% 20%,rgba(255,255,255,.20),transparent 38%);pointer-events:none}.dc-v3-platform svg,.dc-social-logo svg,.dc-mini-job-icon svg{position:relative;z-index:1}.dc-v3-platform.youtube,.dc-social-logo.youtube{background:linear-gradient(135deg,rgba(255,0,51,.20),rgba(255,255,255,.045));color:#ff456b}.dc-v3-platform.tiktok,.dc-social-logo.tiktok{background:linear-gradient(135deg,rgba(37,244,238,.18),rgba(254,44,85,.12));color:#4ff5ef}.dc-v3-platform.instagram,.dc-social-logo.instagram{background:linear-gradient(135deg,rgba(252,204,99,.20),rgba(225,48,108,.18),rgba(91,81,216,.16));color:#ff91c4}.dc-v3-platform.facebook,.dc-social-logo.facebook{background:linear-gradient(135deg,rgba(24,119,242,.22),rgba(255,255,255,.045));color:#8bbcff}.dc-sidebar-live{background:radial-gradient(circle at 0 0,rgba(217,180,120,.13),transparent 35%),linear-gradient(180deg,#141418,#0b0b0d)!important;border-color:rgba(217,180,120,.22)!important;box-shadow:0 14px 36px rgba(0,0,0,.24)}.dc-sidebar-live-head{align-items:flex-start}.dc-live-orb{position:relative}.dc-live-orb::after{content:'';position:absolute;inset:-5px;border-radius:50%;border:1px solid currentColor;opacity:.18}.dc-sidebar-status-pills{grid-template-columns:1fr 1fr!important}.dc-side-pill{background:rgba(255,255,255,.035)!important;border-color:rgba(255,255,255,.07)!important}.dc-sidebar-live-foot .dc-btn{border-radius:9px!important}.dc-mini-job{background:rgba(0,0,0,.28)!important;border-color:rgba(255,255,255,.06)!important}.dc-manage-page{display:grid;gap:16px}.dc-manage-hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:end;padding:22px;border:1px solid rgba(217,180,120,.20);border-radius:24px;background:radial-gradient(circle at 4% 0,rgba(217,180,120,.14),transparent 35%),linear-gradient(145deg,#151519,#0d0d10);overflow:hidden}.dc-manage-hero h1{font-size:32px;line-height:1;margin:8px 0 8px;letter-spacing:-.04em}.dc-manage-hero p{margin:0;color:var(--dc-muted);font-size:12px;max-width:650px;line-height:1.55}.dc-manage-kicker{display:inline-flex;align-items:center;gap:8px;min-height:28px;padding:0 10px;border:1px solid rgba(217,180,120,.22);border-radius:999px;background:rgba(217,180,120,.07);color:var(--dc-accent2);font-size:9px;font-weight:850;letter-spacing:.1em;text-transform:uppercase}.dc-manage-metrics{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.dc-manage-metrics span{min-width:98px;padding:10px 12px;border:1px solid var(--dc-line);border-radius:14px;background:#09090b}.dc-manage-metrics b,.dc-manage-metrics em{display:block}.dc-manage-metrics b{font-size:20px}.dc-manage-metrics em{font-style:normal;color:var(--dc-muted);font-size:9px;margin-top:2px}.dc-manage-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px}.dc-manage-card{position:relative;overflow:hidden;padding:16px;border:1px solid var(--dc-line);border-radius:22px;background:linear-gradient(145deg,#151519,#0d0d10);box-shadow:0 18px 45px rgba(0,0,0,.18)}.dc-manage-card::after{content:'';position:absolute;right:-48px;bottom:-60px;width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,.035);pointer-events:none}.dc-manage-card-top{position:relative;z-index:1;display:flex;align-items:flex-start;gap:12px}.dc-manage-logo{width:48px;height:48px;flex:0 0 48px;border-radius:16px;display:grid;place-items:center}.dc-manage-logo svg{width:24px;height:24px;fill:currentColor}.dc-manage-copy{min-width:0;flex:1}.dc-manage-copy strong,.dc-manage-copy span{display:block}.dc-manage-copy strong{font-size:15px}.dc-manage-copy span{color:var(--dc-muted);font-size:10px;line-height:1.45;margin-top:4px}.dc-manage-actions{position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.dc-manage-actions .dc-btn{min-width:0;padding:0 9px}.dc-manage-list{position:relative;z-index:1;margin-top:12px;display:grid;gap:7px}.dc-manage-row{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid rgba(255,255,255,.065);border-radius:12px;background:rgba(0,0,0,.22)}.dc-manage-row strong,.dc-manage-row span{display:block}.dc-manage-row strong{font-size:10.5px}.dc-manage-row span{font-size:8.5px;color:var(--dc-muted);margin-top:2px}.dc-manage-row audio{width:100%;height:32px}.dc-settings-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,.7fr);gap:14px}.dc-settings-panel{padding:16px;border:1px solid var(--dc-line);border-radius:22px;background:linear-gradient(145deg,#151519,#0d0d10)}.dc-settings-panel h2{font-size:16px;margin:0 0 4px}.dc-settings-panel p{font-size:10px;color:var(--dc-muted);margin:0 0 14px;line-height:1.5}.dc-settings-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.dc-settings-form label{display:grid;gap:6px;color:var(--dc-muted);font-size:9px}.dc-settings-form input,.dc-settings-form select{width:100%;height:40px;padding:0 10px;border:1px solid var(--dc-line);border-radius:11px;background:#0b0b0d;color:var(--dc-text)}.dc-settings-form .wide{grid-column:1/-1}.dc-switch-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px;border:1px solid rgba(255,255,255,.065);border-radius:13px;background:rgba(0,0,0,.22)}.dc-switch-row strong,.dc-switch-row span{display:block}.dc-switch-row strong{font-size:11px}.dc-switch-row span{font-size:8.5px;color:var(--dc-muted);margin-top:2px}.dc-switch-row input{width:18px;height:18px}.dc-upload-zone{display:grid;gap:8px;padding:14px;border:1px dashed rgba(217,180,120,.28);border-radius:16px;background:rgba(217,180,120,.045)}.dc-upload-zone input{height:auto;padding:10px}.dc-home-quick .dc-v3-source{border-color:rgba(255,255,255,.08);background:radial-gradient(circle at 100% 0,rgba(255,255,255,.045),transparent 38%),linear-gradient(145deg,#151519,#0d0d10)}.dc-home-quick .dc-v3-source:hover{border-color:rgba(217,180,120,.38);box-shadow:0 16px 42px rgba(0,0,0,.25)}
 .dc-nav-group{margin-bottom:8px}.dc-nav-label{display:flex;align-items:center;gap:8px;padding:13px 10px 7px}.dc-nav-label span{white-space:nowrap}.dc-nav-label i{height:1px;flex:1;background:linear-gradient(90deg,var(--dc-line),transparent)}body.dc-side-collapsed .dc-nav-label i{display:none}.dc-sidebar-live{margin:12px 0 10px!important}.dc-sidebar-live-head{display:flex;align-items:center;justify-content:space-between}.dc-live-orb{width:9px;height:9px;border-radius:50%;background:var(--dc-green);box-shadow:0 0 0 5px rgba(83,199,139,.08)}.dc-live-orb.busy{background:var(--dc-accent);box-shadow:0 0 0 5px rgba(217,180,120,.10);animation:dcPulse 1s infinite}.dc-sidebar-live-foot{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}.dc-sidebar-live-foot .dc-btn{min-height:30px;font-size:8px;padding:0 6px}.dc-studio-hero{position:relative;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:end;padding:24px;border:1px solid rgba(217,180,120,.20);border-radius:26px;background:radial-gradient(circle at 6% 0,rgba(217,180,120,.16),transparent 34%),radial-gradient(circle at 90% 20%,rgba(85,183,255,.10),transparent 30%),linear-gradient(145deg,#151519,#0d0d10)}.dc-studio-hero h1{font-size:34px;line-height:.98;letter-spacing:-.045em;margin:8px 0 7px}.dc-studio-hero p{max-width:650px;margin:0;color:var(--dc-muted);font-size:12px;line-height:1.55}.dc-studio-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.dc-studio-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}.dc-studio-stat{padding:13px;border:1px solid var(--dc-line);border-radius:17px;background:linear-gradient(145deg,#151519,#0d0d10)}.dc-studio-stat strong,.dc-studio-stat span{display:block}.dc-studio-stat strong{font-size:21px}.dc-studio-stat span{font-size:9px;color:var(--dc-muted);margin-top:3px}.dc-template-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}.dc-template-card{overflow:hidden;border:1px solid var(--dc-line);border-radius:23px;background:linear-gradient(145deg,#151519,#0d0d10);box-shadow:0 18px 45px rgba(0,0,0,.18)}.dc-template-preview{height:150px;position:relative;background:linear-gradient(135deg,#111,#222 45%,#09090b);display:grid;place-items:center}.dc-template-preview::before{content:'';position:absolute;inset:18px 42px;border-radius:18px;background:linear-gradient(180deg,#2d2d35,#0e0e10);border:1px solid rgba(255,255,255,.08)}.dc-template-caption{position:relative;text-align:center;font-size:20px;font-weight:900;line-height:1;color:#fff;text-shadow:0 2px 8px #000;-webkit-text-stroke:1px #000}.dc-template-card-body{padding:14px}.dc-template-card-body h3{font-size:14px;margin:0}.dc-template-card-body p{font-size:9px;color:var(--dc-muted);line-height:1.45;margin:5px 0 12px}.dc-template-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}.dc-template-actions .dc-btn{min-width:0;padding:0 8px;font-size:9px}.dc-insight-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(300px,.9fr);gap:14px}.dc-insight-panel{padding:16px;border:1px solid var(--dc-line);border-radius:22px;background:linear-gradient(145deg,#151519,#0d0d10)}.dc-insight-panel h2{font-size:16px;margin:0 0 10px}.dc-quality-row{display:grid;grid-template-columns:110px 1fr 48px;gap:10px;align-items:center;margin:10px 0}.dc-quality-row span,.dc-quality-row b{font-size:9px;color:var(--dc-muted)}.dc-quality-row b{color:var(--dc-text);text-align:right}.dc-quality-bar{height:9px;border-radius:999px;background:#25252a;overflow:hidden}.dc-quality-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--dc-accent),var(--dc-accent2))}.dc-studio-roadmap{display:grid;gap:8px}.dc-road-step{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid rgba(255,255,255,.065);border-radius:14px;background:rgba(0,0,0,.22)}.dc-road-step span{width:30px;height:30px;border-radius:11px;display:grid;place-items:center;background:rgba(217,180,120,.10);color:var(--dc-accent2)}.dc-road-step strong,.dc-road-step em{display:block}.dc-road-step strong{font-size:10.5px}.dc-road-step em{font-style:normal;font-size:8.5px;color:var(--dc-muted);margin-top:2px}.dc-manage-hero{border-radius:26px!important}.dc-manage-kicker svg{width:15px;height:15px}@media(max-width:900px){.dc-studio-hero,.dc-insight-grid{grid-template-columns:1fr}.dc-studio-actions{justify-content:flex-start}.dc-template-actions{grid-template-columns:1fr}}
-
 @media(max-width:900px){.dc-manage-hero,.dc-settings-grid{grid-template-columns:1fr}.dc-manage-metrics{justify-content:flex-start}.dc-manage-actions{grid-template-columns:1fr}.dc-settings-form{grid-template-columns:1fr}.dc-settings-form .wide{grid-column:auto}}
+`;
 
-/* V3I: schedule page and cleaner happening-now sidebar */
-.dc-schedule-page{display:grid;gap:16px;max-width:1480px;margin:0 auto}.dc-schedule-hero{position:relative;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,.72fr);gap:18px;align-items:stretch;padding:24px;border:1px solid rgba(217,180,120,.22);border-radius:28px;background:radial-gradient(circle at 4% 0,rgba(217,180,120,.16),transparent 33%),radial-gradient(circle at 90% 20%,rgba(85,183,255,.11),transparent 30%),linear-gradient(145deg,#151519,#0d0d10)}.dc-schedule-hero h1{font-size:34px;line-height:.98;letter-spacing:-.045em;margin:8px 0}.dc-schedule-hero p{max-width:660px;margin:0;color:var(--dc-muted);font-size:12px;line-height:1.55}.dc-schedule-kicker{display:inline-flex;align-items:center;gap:8px;min-height:28px;padding:0 10px;border:1px solid rgba(217,180,120,.22);border-radius:999px;background:rgba(217,180,120,.07);color:var(--dc-accent2);font-size:9px;font-weight:850;letter-spacing:.1em;text-transform:uppercase}.dc-schedule-hero-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.dc-schedule-board{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-content:stretch}.dc-schedule-stat{position:relative;overflow:hidden;min-height:104px;padding:14px;border:1px solid rgba(255,255,255,.07);border-radius:20px;background:rgba(0,0,0,.24)}.dc-schedule-stat::after{content:'';position:absolute;right:-34px;bottom:-42px;width:105px;height:105px;border-radius:50%;background:rgba(255,255,255,.04)}.dc-schedule-stat span{display:grid;place-items:center;width:34px;height:34px;border-radius:12px;background:rgba(217,180,120,.10);color:var(--dc-accent2);margin-bottom:11px}.dc-schedule-stat span svg{width:18px;height:18px}.dc-schedule-stat b,.dc-schedule-stat em{display:block;position:relative;z-index:1}.dc-schedule-stat b{font-size:24px;line-height:1}.dc-schedule-stat em{font-style:normal;color:var(--dc-muted);font-size:9px;margin-top:4px}.dc-schedule-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(330px,.85fr);gap:16px;align-items:start}.dc-schedule-panel{padding:16px;border:1px solid var(--dc-line);border-radius:24px;background:linear-gradient(145deg,#151519,#0d0d10);box-shadow:0 18px 45px rgba(0,0,0,.16)}.dc-schedule-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.dc-schedule-head h2{font-size:17px;margin:0}.dc-schedule-head p{margin:4px 0 0;color:var(--dc-muted);font-size:10px;line-height:1.45}.dc-schedule-days{display:grid;gap:10px}.dc-schedule-day{display:grid;grid-template-columns:76px minmax(0,1fr);gap:12px;padding:11px;border:1px solid rgba(255,255,255,.065);border-radius:18px;background:rgba(0,0,0,.23)}.dc-schedule-date{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:84px;border-radius:15px;background:rgba(217,180,120,.075);border:1px solid rgba(217,180,120,.14);text-align:center}.dc-schedule-date b{font-size:24px;line-height:1}.dc-schedule-date span{font-size:9px;color:var(--dc-muted);text-transform:uppercase;letter-spacing:.08em;margin-top:5px}.dc-schedule-day-list{display:grid;gap:8px;min-width:0}.dc-scheduled-clip{display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px;border:1px solid rgba(255,255,255,.055);border-radius:14px;background:#09090b}.dc-scheduled-clip img,.dc-scheduled-thumb-empty{width:62px;height:74px;object-fit:cover;border-radius:11px;background:#050506;display:grid;place-items:center;color:var(--dc-muted)}.dc-scheduled-thumb-empty svg{width:20px;height:20px}.dc-scheduled-copy{min-width:0}.dc-scheduled-copy strong,.dc-scheduled-copy span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-scheduled-copy strong{font-size:11px}.dc-scheduled-copy span{font-size:8.5px;color:var(--dc-muted);margin-top:3px}.dc-scheduled-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;min-width:146px}.dc-scheduled-actions .dc-btn{min-height:30px;font-size:8.5px;padding:0 7px}.dc-ready-stack{display:grid;gap:9px}.dc-ready-card{display:grid;grid-template-columns:58px minmax(0,1fr);gap:10px;align-items:center;padding:10px;border:1px solid rgba(255,255,255,.065);border-radius:16px;background:rgba(0,0,0,.22)}.dc-ready-card img,.dc-ready-empty{width:58px;height:72px;border-radius:12px;object-fit:cover;background:#050506;display:grid;place-items:center;color:var(--dc-muted)}.dc-ready-copy{min-width:0}.dc-ready-copy strong,.dc-ready-copy span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-ready-copy strong{font-size:11px}.dc-ready-copy span{font-size:8.5px;color:var(--dc-muted);margin-top:3px}.dc-ready-actions{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.dc-ready-actions .dc-btn{min-width:0;min-height:32px;font-size:8.5px;padding:0 6px}.dc-platform-lanes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}.dc-platform-lane{padding:12px;border:1px solid rgba(255,255,255,.065);border-radius:17px;background:rgba(0,0,0,.22)}.dc-platform-lane-top{display:flex;align-items:center;gap:9px}.dc-platform-lane-top .dc-social-logo{width:34px!important;height:34px!important}.dc-platform-lane strong,.dc-platform-lane span{display:block}.dc-platform-lane strong{font-size:11px}.dc-platform-lane span{font-size:8.5px;color:var(--dc-muted);margin-top:3px}.dc-sidebar-live.clean{padding:10px!important;border-radius:16px!important;background:linear-gradient(180deg,#131318,#09090b)!important;border-color:rgba(255,255,255,.075)!important;box-shadow:none!important}.dc-live-clean-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}.dc-live-clean-title{display:flex;align-items:center;gap:8px;min-width:0}.dc-live-clean-icon{width:28px;height:28px;display:grid;place-items:center;border-radius:10px;background:rgba(217,180,120,.10);color:var(--dc-accent2);flex:0 0 28px}.dc-live-clean-icon svg{width:15px;height:15px}.dc-live-clean-title strong,.dc-live-clean-title span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-live-clean-title strong{font-size:9.5px}.dc-live-clean-title span{font-size:7.6px;color:var(--dc-muted);margin-top:1px}.dc-live-state{min-width:7px;width:7px;height:7px;border-radius:50%;background:var(--dc-green);box-shadow:0 0 0 5px rgba(83,199,139,.08)}.dc-live-state.busy{background:var(--dc-accent);box-shadow:0 0 0 5px rgba(217,180,120,.10);animation:dcPulse 1s infinite}.dc-live-clean-card{padding:9px;border:1px solid rgba(255,255,255,.055);border-radius:13px;background:rgba(0,0,0,.24)}.dc-live-clean-card strong,.dc-live-clean-card span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-live-clean-card strong{font-size:9px}.dc-live-clean-card span{font-size:7.4px;color:var(--dc-muted);margin-top:3px}.dc-live-clean-progress{height:3px;border-radius:99px;background:#222228;margin-top:7px;overflow:hidden}.dc-live-clean-progress i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--dc-accent),var(--dc-accent2))}.dc-live-clean-metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-top:8px}.dc-live-clean-metrics button,.dc-live-clean-metrics span{min-height:34px;border:1px solid rgba(255,255,255,.055);border-radius:11px;background:rgba(255,255,255,.025);color:var(--dc-muted);font-size:7.4px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}.dc-live-clean-metrics b{color:var(--dc-text);font-size:10px}.dc-live-clean-metrics button:hover{background:rgba(255,255,255,.045);color:var(--dc-text)}body.dc-side-collapsed .dc-sidebar-live.clean{display:none!important}@media(max-width:1100px){.dc-schedule-hero,.dc-schedule-grid{grid-template-columns:1fr}.dc-platform-lanes{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:640px){.dc-schedule-hero{padding:18px;border-radius:22px}.dc-schedule-board,.dc-platform-lanes{grid-template-columns:1fr}.dc-schedule-day{grid-template-columns:1fr}.dc-scheduled-clip{grid-template-columns:54px minmax(0,1fr)}.dc-scheduled-actions{grid-column:1/-1;min-width:0;grid-template-columns:repeat(4,minmax(0,1fr))}.dc-ready-actions{grid-template-columns:1fr 1fr}}
+
+const scheduleKeepCss = String.raw`
+/* V3J: keep the original Schedule board, only polish it to match the new app */
+body.dc-app #view-schedule{
+  max-width:1540px;
+  margin:0 auto;
+  overflow-x:hidden;
+}
+body.dc-app #view-schedule .sched-head{
+  position:relative;
+  align-items:center;
+  padding:22px 24px;
+  margin-bottom:14px;
+  border:1px solid rgba(217,180,120,.20);
+  border-radius:26px;
+  background:radial-gradient(circle at 4% 0,rgba(217,180,120,.15),transparent 34%),radial-gradient(circle at 92% 18%,rgba(85,183,255,.10),transparent 32%),linear-gradient(145deg,#151519,#0d0d10);
+  overflow:hidden;
+}
+body.dc-app #view-schedule .sched-head h2{
+  margin:0 0 7px;
+  font-size:clamp(25px,3vw,36px);
+  line-height:1;
+  letter-spacing:-.045em;
+}
+body.dc-app #view-schedule .sched-head .note{
+  display:block;
+  max-width:620px;
+  color:var(--dc-muted);
+  font-size:11px;
+  line-height:1.5;
+}
+body.dc-app #view-schedule .sched-range{
+  margin-left:auto;
+  padding:5px;
+  border-radius:14px;
+  background:rgba(0,0,0,.24);
+  border-color:rgba(255,255,255,.075);
+}
+body.dc-app #view-schedule .range-btn{
+  min-height:36px;
+  padding:0 13px;
+  border-radius:10px;
+  font-size:10px;
+  font-weight:750;
+  letter-spacing:.01em;
+}
+body.dc-app #view-schedule .range-btn.on{
+  background:var(--dc-accent);
+  color:#1a1206;
+  box-shadow:0 10px 26px rgba(217,180,120,.14);
+}
+body.dc-app #view-schedule .sched-health{
+  grid-template-columns:repeat(4,minmax(140px,1fr));
+  gap:10px;
+  margin-bottom:14px;
+}
+body.dc-app #view-schedule .health-card{
+  min-height:94px;
+  padding:14px 15px;
+  border-radius:18px;
+  background:linear-gradient(145deg,#151519,#0d0d10);
+  border-color:rgba(255,255,255,.075);
+  box-shadow:0 18px 42px rgba(0,0,0,.14);
+}
+body.dc-app #view-schedule .health-card::after{
+  height:3px;
+  background:linear-gradient(90deg,var(--dc-accent),transparent);
+  opacity:.65;
+}
+body.dc-app #view-schedule .health-k{
+  font-size:9px;
+  color:var(--dc-muted);
+  letter-spacing:.09em;
+}
+body.dc-app #view-schedule .health-v{
+  font-size:28px;
+  line-height:1;
+  margin-top:7px;
+}
+body.dc-app #view-schedule .health-s{
+  font-size:9px;
+  color:var(--dc-subtle);
+  margin-top:6px;
+}
+body.dc-app #view-schedule .schedule-board{
+  border-radius:24px;
+  background:linear-gradient(180deg,#111114,#0b0b0d);
+  border-color:rgba(255,255,255,.085);
+  box-shadow:0 22px 55px rgba(0,0,0,.22);
+  overflow:hidden;
+}
+body.dc-app #view-schedule .board-day{
+  top:var(--dc-top);
+  padding:13px 18px;
+  background:rgba(17,17,20,.92);
+  backdrop-filter:blur(12px);
+  border-color:rgba(255,255,255,.07);
+}
+body.dc-app #view-schedule .board-day .code{
+  color:var(--dc-text);
+  font-size:12px;
+}
+body.dc-app #view-schedule .board-day-n{
+  font-size:9px;
+  color:var(--dc-subtle);
+}
+body.dc-app #view-schedule .slot-card{
+  grid-template-columns:72px minmax(72px,86px) minmax(0,1fr) minmax(132px,auto);
+  gap:14px;
+  padding:13px 16px;
+  border-color:rgba(255,255,255,.065);
+  min-width:0;
+}
+body.dc-app #view-schedule .slot-card:hover{
+  background:rgba(255,255,255,.035);
+}
+body.dc-app #view-schedule .slot-card.next{
+  background:linear-gradient(90deg,rgba(217,180,120,.10),rgba(217,180,120,.025));
+}
+body.dc-app #view-schedule .slot-time{
+  font-size:14px;
+  color:var(--dc-muted);
+}
+body.dc-app #view-schedule .slot-card.next .slot-time{
+  color:var(--dc-accent2);
+}
+body.dc-app #view-schedule .slot-media{
+  width:78px;
+  border-radius:14px;
+  border-color:rgba(255,255,255,.09);
+  box-shadow:0 12px 30px rgba(0,0,0,.30);
+}
+body.dc-app #view-schedule .slot-media.empty{
+  background:radial-gradient(circle at 50% 15%,rgba(217,180,120,.18),transparent 40%),#101014;
+}
+body.dc-app #view-schedule .slot-title{
+  font-size:13px;
+  letter-spacing:-.015em;
+}
+body.dc-app #view-schedule .slot-from{
+  font-size:10px;
+  margin-top:3px;
+}
+body.dc-app #view-schedule .slot-badges{
+  margin-top:7px;
+  gap:5px;
+}
+body.dc-app #view-schedule .safe-badge{
+  font-size:8px;
+  padding:5px 7px;
+  border-color:rgba(255,255,255,.075);
+  background:rgba(0,0,0,.26);
+}
+body.dc-app #view-schedule .slot-actions{
+  max-width:190px;
+}
+body.dc-app #view-schedule .slot-actions .btn,
+body.dc-app #view-schedule .slot-actions .dc-btn{
+  min-height:32px;
+  padding:0 10px;
+  border-radius:10px;
+  font-size:9px;
+}
+body.dc-app #view-schedule .slot-status{
+  padding:6px 9px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.075);
+  background:rgba(255,255,255,.035);
+  color:var(--dc-muted);
+  font-size:9px;
+}
+body.dc-app #view-schedule #schedNote,
+body.dc-app #view-schedule .schedule-empty-note{
+  margin-top:12px;
+  color:var(--dc-muted);
+  font-size:10px;
+}
+.dc-sidebar-live.v3-now{
+  padding:10px!important;
+  margin:12px 0 10px!important;
+  border-radius:16px!important;
+  background:radial-gradient(circle at 0 0,rgba(217,180,120,.14),transparent 42%),linear-gradient(180deg,#141418,#0b0b0d)!important;
+  border:1px solid rgba(217,180,120,.20)!important;
+  box-shadow:0 14px 36px rgba(0,0,0,.23)!important;
+}
+.dc-now-topline{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}
+.dc-now-chip{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:0 8px;border-radius:999px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.08);color:var(--dc-accent2);font-size:7.5px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.dc-now-chip.good{color:var(--dc-green)}.dc-now-chip.busy{color:var(--dc-accent)}
+.dc-now-title{font-size:8px;color:var(--dc-muted);white-space:nowrap}
+.dc-now-focus{display:grid;grid-template-columns:30px minmax(0,1fr);gap:9px;align-items:center;padding:9px;border:1px solid rgba(255,255,255,.07);border-radius:13px;background:rgba(0,0,0,.28)}
+.dc-now-focus-icon{width:30px;height:30px;border-radius:11px;display:grid;place-items:center;background:rgba(217,180,120,.12);color:var(--dc-accent2);overflow:hidden}
+.dc-now-focus-icon img{width:100%;height:100%;object-fit:cover}.dc-now-focus-icon svg{width:16px;height:16px}
+.dc-now-focus strong,.dc-now-focus span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-now-focus strong{font-size:9.5px}.dc-now-focus span{font-size:7.8px;color:var(--dc-muted);margin-top:2px}
+.dc-now-progress{height:4px;margin-top:8px;border-radius:999px;background:rgba(255,255,255,.075);overflow:hidden}.dc-now-progress i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--dc-accent),var(--dc-accent2));width:0%}
+.dc-now-next{display:flex;align-items:center;gap:7px;margin-top:8px;padding:8px;border-radius:12px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.055);color:var(--dc-muted);font-size:7.8px;min-width:0}.dc-now-next b{color:var(--dc-text);font-size:8px;white-space:nowrap}.dc-now-next span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dc-now-mini-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}.dc-now-mini-stats span{padding:7px;border-radius:11px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06)}.dc-now-mini-stats b,.dc-now-mini-stats em{display:block}.dc-now-mini-stats b{font-size:11px}.dc-now-mini-stats em{font-style:normal;color:var(--dc-subtle);font-size:7px;margin-top:1px}
+body.dc-side-collapsed .dc-sidebar-live.v3-now{display:none!important}
+@media(max-width:900px){
+  body.dc-app #view-schedule .sched-head{grid-template-columns:1fr;padding:18px}
+  body.dc-app #view-schedule .sched-range{margin-left:0;width:100%;justify-content:flex-start}
+  body.dc-app #view-schedule .sched-health{grid-template-columns:repeat(2,minmax(0,1fr))}
+  body.dc-app #view-schedule .slot-card{grid-template-columns:64px 68px minmax(0,1fr);align-items:start}
+  body.dc-app #view-schedule .slot-media{width:68px}
+  body.dc-app #view-schedule .slot-actions{grid-column:2/-1;justify-content:flex-start;max-width:none}
+}
+@media(max-width:560px){body.dc-app #view-schedule .sched-health{grid-template-columns:1fr}body.dc-app #view-schedule .slot-card{grid-template-columns:1fr}body.dc-app #view-schedule .slot-media{width:100%;max-width:170px}.dc-now-mini-stats{grid-template-columns:1fr 1fr}}
 `;
 
 function injectShell(){
   if (shellReady) return;
   shellReady = true;
   const style = document.createElement('style');
-  style.id = 'dcPhase4Styles'; style.textContent = css + v3Css + v3ProjectCss + clipToolsCss; document.head.appendChild(style);
+  style.id = 'dcPhase4Styles'; style.textContent = css + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss; document.head.appendChild(style);
   document.body.classList.add('dc-app');
 
   const side = document.createElement('aside'); side.id = 'dcSidebar';
@@ -335,7 +539,7 @@ function injectShell(){
 
   const main = $('.main-col');
   if (main) {
-    for (const name of ['home','projects','review','editor','schedule','publishing','templates','music','automation','insights']) {
+    for (const name of ['home','projects','review','editor','publishing','templates','music','automation','insights']) {
       if (!$(`#view-${name}`)) {
         const panel = document.createElement('section'); panel.id = `view-${name}`; panel.className = 'panel hide';
         main.prepend(panel);
@@ -460,7 +664,6 @@ function go(view){
     if (view === 'projects') renderProjects();
     if (view === 'review') renderReview();
     if (view === 'editor') ensureEditor();
-    if (view === 'schedule') renderSchedulePage();
     if (view === 'publishing') renderConnections();
     if (view === 'templates') renderTemplatesPage();
     if (view === 'music') renderAudioLibrary();
@@ -1531,45 +1734,6 @@ function renderInsightsPage(){
 }
 function qualityRow(label,value,total){const pct=Math.max(0,Math.min(100,Math.round(Number(value||0)/Math.max(1,Number(total||1))*100)));return `<div class="dc-quality-row"><span>${esc(label)}</span><div class="dc-quality-bar"><i style="width:${pct}%"></i></div><b>${pct}%</b></div>`}
 function connectedPlatformCount(d){const providers=d.social?.providers||{};return ['youtube','tiktok','instagram','facebook'].filter(p=>providerInfo(p).connected||providers[p]?.connected).length}
-function renderSchedulePage(){
-  const panel=$('#view-schedule'),d=data();if(!panel||!d)return;
-  document.body.classList.remove('dc-project-open');
-  const clips=d.clips||[];
-  const scheduled=[...clips].filter(c=>Number(c.scheduledAt)>0||['scheduled','publishing'].includes(c.status)).sort((a,b)=>Number(a.scheduledAt||0)-Number(b.scheduledAt||0));
-  const ready=clips.filter(c=>['waiting','approved','ready','publish_failed'].includes(c.status)&&!Number(c.scheduledAt)).sort((a,b)=>Number(b.score||0)-Number(a.score||0)).slice(0,6);
-  const posted=clips.filter(c=>c.status==='posted').length;
-  const publishing=clips.filter(c=>['publishing','scheduled','approved'].includes(c.status)||Number(c.scheduledAt)>0).length;
-  const next=nextScheduledClip(clips);
-  const providers=d.social?.providers||{};
-  panel.innerHTML=`<div class="dc-schedule-page"><section class="dc-schedule-hero"><div><span class="dc-schedule-kicker">${ICON.clock} Publishing schedule</span><h1>Your weekly posting command centre.</h1><p>Keep approved clips moving without making the schedule page feel like a separate old admin screen.</p><div class="dc-schedule-hero-actions"><button class="dc-btn" data-dc-nav="review">Review clips</button><button class="dc-btn secondary" data-dc-nav="publishing">Platforms</button><button class="dc-btn secondary" data-dc-nav="projects">Open projects</button></div></div><div class="dc-schedule-board">${scheduleStat(scheduled.length,'scheduled',ICON.publish)}${scheduleStat(ready.length,'ready clips',ICON.review)}${scheduleStat(connectedPlatformCount(d),'platforms',ICON.social)}${scheduleStat(posted,'posted',ICON.check)}</div></section><section class="dc-platform-lanes">${['tiktok','instagram','facebook','youtube'].map(p=>schedulePlatformLane(p,providers[p]||{},clips)).join('')}</section><div class="dc-schedule-grid"><section class="dc-schedule-panel"><div class="dc-schedule-head"><div><h2>Upcoming posts</h2><p>${next?`Next clip goes out ${formatDate(next.scheduledAt)}.`:'No scheduled posts yet. Approve clips and build the queue.'}</p></div><span class="dc-pill ${scheduled.length?'good':'warn'}">${scheduled.length} queued</span></div><div class="dc-schedule-days">${scheduleDays(scheduled)}</div></section><aside class="dc-schedule-panel"><div class="dc-schedule-head"><div><h2>Ready to schedule</h2><p>Fast actions for clips that are approved or waiting.</p></div><button class="dc-btn secondary" data-dc-nav="review">All clips</button></div><div class="dc-ready-stack">${ready.length?ready.map(scheduleReadyCard).join(''):`<div class="dc-empty v3"><div><span class="dc-empty-icon">${ICON.review}</span><strong>No clips waiting</strong><span>New approved clips will appear here.</span></div></div>`}</div></aside></div>${publishing?`<section class="dc-schedule-panel"><div class="dc-schedule-head"><div><h2>Posting status</h2><p>Scheduled, publishing and approved clips stay visible here before they go live.</p></div><span class="dc-pill good">${publishing} active</span></div><div class="dc-review-list pro">${scheduled.slice(0,4).map(c=>reviewRow(c)).join('')}</div></section>`:''}</div>`;
-  requestAnimationFrame(()=>animatePanel(panel));
-}
-function scheduleStat(value,label,icon){return `<div class="dc-schedule-stat"><span>${icon}</span><b>${esc(value)}</b><em>${esc(label)}</em></div>`}
-function schedulePlatformLane(provider,info,clips){
-  const count=clips.filter(c=>(c.targets||[]).some(t=>t.provider===provider&&['scheduled','publishing','posted','queued','retrying'].includes(t.status))).length;
-  return `<article class="dc-platform-lane"><div class="dc-platform-lane-top"><span class="dc-social-logo ${provider}">${socialSvg(provider)}</span><div><strong>${esc(providerTitle(provider))}</strong><span>${info.connected?'Connected':info.configured?'Configured':'Not connected'} · ${count} clips</span></div></div></article>`;
-}
-function scheduleDays(clips){
-  if(!clips.length)return `<div class="dc-empty v3"><div><span class="dc-empty-icon">${ICON.clock}</span><strong>No posts scheduled</strong><span>Use Clip Review to approve and schedule your best clips.</span><br><br><button class="dc-btn" data-dc-nav="review">Open Clip Review</button></div></div>`;
-  const groups=[];
-  clips.slice(0,18).forEach(c=>{
-    const stamp=Number(c.scheduledAt||Date.now());
-    const key=new Intl.DateTimeFormat('en-AU',{weekday:'short',day:'numeric',month:'short'}).format(new Date(stamp));
-    let group=groups.find(g=>g.key===key);if(!group){group={key,stamp,clips:[]};groups.push(group)}group.clips.push(c);
-  });
-  return groups.slice(0,7).map(g=>`<article class="dc-schedule-day"><div class="dc-schedule-date"><b>${new Intl.DateTimeFormat('en-AU',{day:'numeric'}).format(new Date(g.stamp))}</b><span>${new Intl.DateTimeFormat('en-AU',{weekday:'short',month:'short'}).format(new Date(g.stamp))}</span></div><div class="dc-schedule-day-list">${g.clips.map(scheduleClipRow).join('')}</div></article>`).join('');
-}
-function scheduleClipRow(c){
-  const img=c.thumbUrl?`<img src="${authedUrl(c.thumbUrl)}" alt="${esc(c.title||'Clip')} thumbnail">`:`<span class="dc-scheduled-thumb-empty">${ICON.play}</span>`;
-  const status=c.status==='publishing'?'Publishing':Number(c.scheduledAt)?formatDate(c.scheduledAt):statusName(c.status);
-  return `<div class="dc-scheduled-clip">${img}<div class="dc-scheduled-copy"><strong>${esc(shortText(c.title||firstWords(c),52))}</strong><span>${esc(status)} · ${formatDuration(c.durationMs)}</span></div><div class="dc-scheduled-actions"><button class="dc-btn secondary" data-edit-style-clip="${esc(c.id)}">Style</button><button class="dc-btn secondary" data-edit-video-clip="${esc(c.id)}">Video</button><button class="dc-btn secondary" data-download-clip="${esc(c.id)}">Download</button><button class="dc-btn danger" data-delete-clip="${esc(c.id)}">Delete</button></div></div>`;
-}
-function scheduleReadyCard(c){
-  const img=c.thumbUrl?`<img src="${authedUrl(c.thumbUrl)}" alt="${esc(c.title||'Clip')} thumbnail">`:`<span class="dc-ready-empty">${ICON.play}</span>`;
-  return `<article class="dc-ready-card">${img}<div class="dc-ready-copy"><strong>${esc(shortText(c.title||firstWords(c),50))}</strong><span>Score ${Math.round(c.score||0)} · ${statusName(c.status)} · ${formatDuration(c.durationMs)}</span></div><div class="dc-ready-actions">${c.status==='waiting'?`<button class="dc-btn secondary" data-approve-clip="${esc(c.id)}">Approve</button>`:''}<button class="dc-btn" data-schedule-clip="${esc(c.id)}">Schedule</button><button class="dc-btn secondary" data-edit-style-clip="${esc(c.id)}">Style</button><button class="dc-btn secondary" data-edit-video-clip="${esc(c.id)}">Video</button><button class="dc-btn danger" data-delete-clip="${esc(c.id)}">Delete</button></div></article>`;
-}
-function firstWords(c){return String(c.transcript||c.caption||c.text||'Clip').split(/\s+/).slice(0,7).join(' ')}
-
 function renderConnections(){
   const panel=$('#view-publishing'),d=data();if(!panel||!d)return;
   const providers=['youtube','tiktok','instagram','facebook'].map(providerInfo);
@@ -1622,15 +1786,21 @@ async function uploadCookiesPanel(){const file=$('#dcCookieFile')?.files?.[0];if
 async function deleteCookiesPanel(){if(!confirm('Remove YouTube downloader cookies?'))return;try{await callApi('/api/admin/youtube-cookies',{method:'DELETE'});notify('YouTube cookies removed')}catch(e){notify(e.message,'bad')}}
 function renderSidebarLive(){
   const box=$('#dcSidebarLive'),d=data();if(!box||!d)return;
-  const jobs=activeJobs();const clips=d.clips||[];const waiting=clips.filter(c=>c.status==='waiting').length;const scheduled=clips.filter(c=>['approved','scheduled','publishing'].includes(c.status)||Number(c.scheduledAt)>0).length;const next=nextScheduledClip(clips);
+  const jobs=activeJobs();const clips=d.clips||[];
+  const waiting=clips.filter(c=>c.status==='waiting').length;
+  const scheduled=clips.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length;
+  const next=clips.filter(c=>Number(c.scheduledAt)>Date.now()&&!['posted','ready'].includes(c.status)).sort((a,b)=>Number(a.scheduledAt)-Number(b.scheduledAt))[0];
   const current=jobs[0];
-  const title=current?shortText(current.title,30):(waiting?`${waiting} clips to review`:(next?'Next post ready':'Workspace clear'));
-  const sub=current?`${shortText(current.stage,28)}${Number.isFinite(current.progress)?` · ${Math.round(current.progress)}%`:''}`:(next?formatDate(next.scheduledAt):'No blockers right now');
-  box.className='dc-sidebar-live clean';
-  box.innerHTML=`<div class="dc-live-clean-top"><div class="dc-live-clean-title"><span class="dc-live-clean-icon">${current?(current.kind==='publish'?ICON.publish:current.kind==='render'?ICON.editor:ICON.scissors):(waiting?ICON.review:ICON.home)}</span><div><strong>Happening now</strong><span>${jobs.length?'Live job':'Studio pulse'}</span></div></div><i class="dc-live-state ${jobs.length?'busy':''}"></i></div><div class="dc-live-clean-card"><strong>${esc(title)}</strong><span>${esc(sub)}</span>${current&&Number.isFinite(current.progress)?`<div class="dc-live-clean-progress"><i style="width:${clamp(current.progress,0,100)}%"></i></div>`:''}</div><div class="dc-live-clean-metrics"><button type="button" data-dc-nav="review"><b>${waiting}</b><span>review</span></button><button type="button" data-dc-nav="schedule"><b>${scheduled}</b><span>queue</span></button><span><b>${connectedPlatformCount(d)}</b><span>live</span></span></div>`;
+  const busy=Boolean(current);
+  const icon=busy?(current.kind==='publish'?ICON.publish:current.kind==='render'?ICON.editor:ICON.scissors):(waiting?ICON.review:ICON.check);
+  const title=busy?shortText(current.title||'Working now',30):(waiting?`${waiting} clips need review`:'Studio is clear');
+  const stage=busy?`${shortText(current.stage||'Processing',28)}${Number.isFinite(current.progress)?` · ${Math.round(current.progress)}%`:''}`:(next?`Next post ${formatDate(next.scheduledAt)}`:'No active render or post');
+  const pct=busy&&Number.isFinite(current.progress)?clamp(current.progress,0,100):(waiting?42:100);
+  const nextLine=next?`<div class="dc-now-next"><b>Next</b><span>${esc(shortText(next.title||'Scheduled clip',26))} · ${formatDate(next.scheduledAt)}</span></div>`:`<div class="dc-now-next"><b>Next</b><span>${waiting?'Review clips to build the schedule':'Approve a clip to start scheduling'}</span></div>`;
+  box.classList.add('v3-now');
+  box.innerHTML=`<div class="dc-now-topline"><span class="dc-now-chip ${busy?'busy':'good'}">${busy?'Live':'Ready'}</span><span class="dc-now-title">Happening now</span></div><div class="dc-now-focus"><span class="dc-now-focus-icon">${icon}</span><div><strong>${esc(title)}</strong><span>${esc(stage)}</span></div></div><div class="dc-now-progress"><i style="width:${pct}%"></i></div>${nextLine}<div class="dc-now-mini-stats"><span><b>${waiting}</b><em>review</em></span><span><b>${scheduled}</b><em>scheduled</em></span></div><div class="dc-sidebar-live-foot"><button class="dc-btn secondary" data-dc-nav="review">Review</button><button class="dc-btn secondary" data-dc-nav="schedule">Schedule</button></div>`;
 }
-
-function renderCurrent(){if(currentView==='home')renderHome();if(currentView==='projects')renderProjects();if(currentView==='review')renderReview();if(currentView==='editor')ensureEditor();if(currentView==='schedule')renderSchedulePage();if(currentView==='publishing')renderConnections();if(currentView==='templates')renderTemplatesPage();if(currentView==='music')renderAudioLibrary();if(currentView==='insights')renderInsightsPage();if(currentView==='automation')renderSettingsPage()}
+function renderCurrent(){if(currentView==='home')renderHome();if(currentView==='projects')renderProjects();if(currentView==='review')renderReview();if(currentView==='editor')ensureEditor();if(currentView==='publishing')renderConnections();if(currentView==='templates')renderTemplatesPage();if(currentView==='music')renderAudioLibrary();if(currentView==='insights')renderInsightsPage();if(currentView==='automation')renderSettingsPage()}
 async function refreshData(){if(typeof refresh==='function')return refresh();try{DATA=await callApi('/api/state')}catch{}}
 function hexAlpha(hex,alpha){const value=String(hex||'#000000').replace('#','');if(!/^[0-9a-fA-F]{6}$/.test(value))return `rgba(0,0,0,${alpha})`;const n=parseInt(value,16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${alpha})`}
 function formatDuration(ms){const s=Math.max(0,Math.round(Number(ms||0)/1000));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}
