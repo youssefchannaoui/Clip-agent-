@@ -696,7 +696,7 @@ function bindGlobal(){
   $('#dcShade').onclick = () => document.body.classList.remove('dc-menu-open');
   $('#dcNewProject').onclick = () => { go('home'); setTimeout(() => $('#dcCreateUrl')?.focus(), 30); };
   $('#dcTourLaunch').onclick = () => openGuidedTour(0);
-  $('#dcWorkClose').onclick = () => { const el=$('#dcWork'); if(el){ el.dataset.dismissed='1'; el.classList.remove('show'); } };
+  $('#dcWorkClose').onclick = () => { const el=$('#dcWork'); if(el){ el.dataset.dismissed='1'; el.dataset.dismissedKey = el.dataset.workKey || ''; el.classList.remove('show'); } };
   $('#dcGlobalSearch').addEventListener('input', renderGlobalSearch);
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') { document.body.classList.remove('dc-menu-open'); $('#dcSearchResults')?.classList.remove('show'); }
@@ -758,7 +758,7 @@ function handleClick(event){
 function onApiStart(event){
   const item = event.detail || {}; const method = String(item.method || 'GET').toUpperCase();
   if (method === 'GET') return;
-  const el=$('#dcWork'); if(el) delete el.dataset.dismissed;
+  const el=$('#dcWork'); if(el){ delete el.dataset.dismissed; delete el.dataset.dismissedKey; }
   requestMap.set(item.id, item); paintWork();
 }
 function onApiEnd(event){
@@ -767,6 +767,13 @@ function onApiEnd(event){
   requestMap.delete(item.id); paintWork(); lastWriteAt = Date.now();
 }
 function workToastCopy(item){
+  if(item?.source === 'job'){
+    const progress = Number.isFinite(Number(item.progress)) ? ` · ${Math.round(Number(item.progress))}%` : '';
+    const stage = shortText(item.stage || 'Working in the background', 44);
+    if(item.kind === 'publish') return {title:'Publishing clip', detail:`${stage}${progress}`};
+    if(item.kind === 'render') return {title:'Rendering clip', detail:`${stage}${progress}`};
+    return {title:'Working now', detail:`${stage}${progress}`};
+  }
   const url=String(item?.url||''), method=String(item?.method||'POST').toUpperCase();
   if(method==='DELETE')return{title:'Removing item',detail:'Cleaning this from your workspace.'};
   if(/youtube-cookies/.test(url))return{title:'Updating YouTube cookies',detail:'Saving downloader access securely on the server.'};
@@ -780,11 +787,21 @@ function workToastCopy(item){
   if(/\/api\/clips/.test(url))return{title:'Saving clip changes',detail:'Updating this clip and refreshing the workspace.'};
   return{title:'Saving changes',detail:'DeenClipped is updating your workspace.'};
 }
+function currentWorkItem(){
+  const pending = [...requestMap.values()].at(-1);
+  if (pending) return {...pending, source:'request', key:`request:${pending.id || pending.url || Date.now()}`};
+  if (currentView === 'home') return null;
+  const job = activeJobs()[0];
+  if (!job) return null;
+  return {...job, source:'job', key:`job:${job.kind}:${job.title}:${job.stage}:${job.at || ''}`};
+}
 function paintWork(){
   const el = $('#dcWork'); if (!el) return;
-  const item = [...requestMap.values()].at(-1);
-  if (!item){ el.classList.remove('show'); delete el.dataset.dismissed; return; }
-  if (el.dataset.dismissed === '1'){ el.classList.remove('show'); return; }
+  const item = currentWorkItem();
+  if (!item){ el.classList.remove('show'); delete el.dataset.dismissed; delete el.dataset.dismissedKey; return; }
+  const key = item.key || `${item.source || 'work'}:${item.id || item.url || item.title || ''}`;
+  if (el.dataset.workKey !== key){ el.dataset.workKey = key; delete el.dataset.dismissed; delete el.dataset.dismissedKey; }
+  if (el.dataset.dismissed === '1' && el.dataset.dismissedKey === key){ el.classList.remove('show'); return; }
   const copy=workToastCopy(item);
   $('strong', el).textContent=copy.title;
   $('.dc-work-toast-copy span', el).textContent=copy.detail;
@@ -1965,6 +1982,7 @@ function sync(){
   const jobs=activeJobs(),health=$('#dcHealth');health.className=`dc-health ${jobs.length?'busy':!data().readiness?.ready?'bad':''}`;$('span',health).textContent=jobs.length?`${jobs.length} active`:data().readiness?.ready?'Ready':'Setup needed';
   const signature=JSON.stringify({p:(data().projects||[]).map(p=>[p.id,p.status,p.progress,p.moreJob?.status,p.moreJob?.progress]),c:(data().clips||[]).map(c=>[c.id,c.status,c.scheduledAt,c.postedAt,c.rerender?.status]),r:(data().rerenderJobs||[]).map(r=>[r.id,r.status,r.progress]),s:data().social?.providers});
   if(signature!==lastDataSignature){lastDataSignature=signature;if(currentView!=='editor'||!editor.dirty)renderCurrent();else{renderTimeline();}}
+  paintWork();
 }
 function boot(){injectShell();setTimeout(()=>go('home'),80);setInterval(sync,900)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
