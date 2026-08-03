@@ -541,6 +541,14 @@ function interpolateFramePlan(time){
 }
 function applyFrameAtTime(time){
   const video=$('#dcEditorVideo'),d=editor.draft;if(!video||!d)return;
+  // The preview stylesheet sets object-fit:contain, which letterboxes the
+  // video and never fills the frame. It also makes object-position a no-op,
+  // so the crop maths below had no visible effect. Fill mode needs cover.
+  video.style.objectFit=d.fitMode==='crop'?'cover':'contain';
+  // The blurred backdrop exists to fill the frame behind a fitted video, so
+  // it should always cover — letterboxing it defeats the point.
+  const backdrop=$('#dcEditorVideoBg');
+  if(backdrop)backdrop.style.objectFit='cover';
   if(d.fitMode!=='crop'){video.style.objectPosition='50% 50%';return}
   if(d.smartFramingEnabled&&editor.framingStatus==='ready'){
     const point=interpolateFramePlan(time),srcW=Number(editor.framingPlan?.srcW||point?.srcW||0),srcH=Number(editor.framingPlan?.srcH||point?.srcH||0);
@@ -795,18 +803,31 @@ function updateEditorPreview(){
   line.style.display=d.brandLineEnabled?'block':'none';line.style.background=d.brandLineColor||'#d9b478';applyFrameAtTime(editor.currentTime);
 }
 function updateCaptionAtTime(time){
-  const overlay=$('#dcCaptionOverlay');if(!overlay)return;const words=editor.captionWords;if(!words.length){overlay.innerHTML='';return}
+  const overlay=$('#dcCaptionOverlay');if(!overlay)return;
+  // Writing innerHTML on every frame re-creates and re-lays-out every word,
+  // which reads as a visible shimmer while speech is running. Build the
+  // markup first, then only touch the DOM when it has genuinely changed.
+  const html=captionHtmlAtTime(time);
+  // Compare against what is actually on screen, not just what was cached.
+  // The overlay is rebuilt when a clip is opened or captions are reloaded,
+  // so trusting a cached string alone could wrongly skip a real render.
+  if(html===editor._lastCaptionHtml&&overlay.innerHTML===html)return;
+  editor._lastCaptionHtml=html;
+  overlay.innerHTML=html;
+}
+function captionHtmlAtTime(time){
+  const words=editor.captionWords;if(!words.length)return'';
   const offset=Number(editor.draft.captionTimingOffsetMs??-120)/1000;
   const speechTime=time-offset;
   const hold=Math.min(.09,Math.max(0,Number(editor.draft.captionHoldSeconds??.06)));
-  const index=words.findIndex(w=>speechTime>=Number(w.start)&&speechTime<Number(w.end)+hold);if(index<0){overlay.innerHTML='';return}
+  const index=words.findIndex(w=>speechTime>=Number(w.start)&&speechTime<Number(w.end)+hold);if(index<0)return'';
   const mode=editor.draft.captionMode||'dynamic-stack',max=Math.max(1,Number(editor.draft.captionMaxWords||4)),groups=speechGroups(words,max),group=groups.find(g=>index>=g.startIndex&&index<=g.endIndex);
-  if(!group){overlay.innerHTML='';return}
+  if(!group)return'';
   const visible=mode==='dynamic-stack'?words.slice(group.startIndex,index+1):words.slice(group.startIndex,group.endIndex+1);
   const html=mode==='dynamic-stack'
     ?visible.map((w,i)=>`<span class="dc-caption-stack-line ${i===visible.length-1?'active':''}">${esc(w.word)}</span>`).join('')
     :visible.map((w,i)=>`<span class="dc-caption-word ${group.startIndex+i===index?'active':''}">${esc(w.word)}</span>`).join(' ');
-  overlay.innerHTML=`<span class="dc-caption-bg">${html}</span>`;
+  return `<span class="dc-caption-bg">${html}</span>`;
 }
 
 function approximateWords(text,duration){
