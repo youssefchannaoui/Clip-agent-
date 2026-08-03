@@ -41,6 +41,59 @@ class WorkerScoringTests(unittest.TestCase):
         self.assertIn("hook", report)
         self.assertIn("readability", report)
 
+class FillModeAspectTests(unittest.TestCase):
+    """Covers the reported Fill-mode bug: video coming out stretched.
+
+    The crop box used to size width and height independently, each clamped
+    to the source separately. At any zoom below 1.0 the height clamped but
+    the width did not, so the box stopped matching the output ratio and the
+    final plain `scale=W:H` distorted the picture by up to 33%.
+    """
+
+    TARGET = 1080 / 1920  # portrait 9:16
+
+    def _assert_ratio_exact(self, crop_w, crop_h, msg=""):
+        actual = crop_w / crop_h
+        drift = abs(actual - self.TARGET) / self.TARGET
+        # Only sub-pixel rounding should ever move the ratio.
+        self.assertLess(drift, 0.01, f"{msg} ratio {actual:.4f} vs target {self.TARGET:.4f}")
+
+    def test_landscape_source_never_stretches_at_any_zoom(self):
+        for zoom in [0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.1, 1.2, 1.35]:
+            crop_w, crop_h = worker.fitted_crop_size(1920, 1080, self.TARGET, zoom)
+            self._assert_ratio_exact(crop_w, crop_h, f"zoom={zoom}")
+
+    def test_zoom_below_one_was_the_broken_case(self):
+        # The specific regression: at 0.75 zoom the old code produced a
+        # 0.75 ratio instead of 0.5625 — a 33% distortion.
+        crop_w, crop_h = worker.fitted_crop_size(1920, 1080, self.TARGET, 0.75)
+        self._assert_ratio_exact(crop_w, crop_h, "zoom=0.75")
+        self.assertNotAlmostEqual(crop_w / crop_h, 0.75, places=2)
+
+    def test_crop_never_exceeds_the_source(self):
+        for src in [(1920, 1080), (1280, 720), (3840, 2160), (1080, 1080)]:
+            for zoom in [0.75, 1.0, 1.35]:
+                crop_w, crop_h = worker.fitted_crop_size(src[0], src[1], self.TARGET, zoom)
+                self.assertLessEqual(crop_w, src[0], f"width overflow for {src} @ {zoom}")
+                self.assertLessEqual(crop_h, src[1], f"height overflow for {src} @ {zoom}")
+
+    def test_dimensions_are_even_for_the_encoder(self):
+        for src in [(1921, 1081), (1920, 1080), (1279, 721)]:
+            for zoom in [0.75, 1.0, 1.33]:
+                crop_w, crop_h = worker.fitted_crop_size(src[0], src[1], self.TARGET, zoom)
+                self.assertEqual(crop_w % 2, 0, f"odd width {crop_w}")
+                self.assertEqual(crop_h % 2, 0, f"odd height {crop_h}")
+
+    def test_square_source_to_portrait_still_matches_ratio(self):
+        crop_w, crop_h = worker.fitted_crop_size(1080, 1080, self.TARGET, 1.0)
+        self._assert_ratio_exact(crop_w, crop_h, "square source")
+
+    def test_zooming_in_selects_a_tighter_box(self):
+        wide, _ = worker.fitted_crop_size(1920, 1080, self.TARGET, 1.0)
+        tight, _ = worker.fitted_crop_size(1920, 1080, self.TARGET, 1.35)
+        self.assertLess(tight, wide, "a higher zoom should crop a smaller region")
+
+
 class CropFramingTests(unittest.TestCase):
     """Covers the actual reported bug: a subject's head getting cut off
     because the vertical crop position ignored where the face detector
