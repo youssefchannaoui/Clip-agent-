@@ -753,6 +753,51 @@ def description_from_text(text: str) -> str:
     return cleaned
 
 
+def fitted_crop_size(
+    src_w: int,
+    src_h: int,
+    target_ratio: float,
+    zoom: float = 1.0,
+) -> tuple[int, int]:
+    """Pick a crop box that exactly matches the output aspect ratio.
+
+    This fixes a real stretching bug. The previous code sized width and
+    height independently and clamped each to the source separately::
+
+        crop_w = min(src_w, round(src_h * target_ratio / zoom))
+        crop_h = min(src_h, round(src_h / zoom))
+
+    With any zoom below 1.0 the wanted height exceeded the source height, so
+    the height clamped to the source while the width kept its larger value.
+    The resulting box no longer matched the output ratio, and because the
+    render then does a plain ``scale=W:H`` (no aspect preservation), the
+    picture came out visibly stretched — up to 33% at the minimum zoom.
+
+    Deriving one dimension from the other, and re-deriving after any clamp,
+    guarantees the box always matches the target ratio, so the later scale
+    is a pure resize and never a distortion.
+    """
+    zoom = max(0.05, float(zoom))
+    target_ratio = max(0.0001, float(target_ratio))
+
+    crop_h = min(src_h, int(round(src_h / zoom)))
+    crop_w = int(round(crop_h * target_ratio))
+
+    # If that width does not fit the source, drive from width instead so the
+    # ratio is still exact rather than clamped into a different shape.
+    if crop_w > src_w:
+        crop_w = src_w
+        crop_h = int(round(crop_w / target_ratio))
+        if crop_h > src_h:
+            crop_h = src_h
+            crop_w = int(round(crop_h * target_ratio))
+
+    # Encoders reject odd dimensions for common pixel formats.
+    crop_w = max(2, crop_w - (crop_w % 2))
+    crop_h = max(2, crop_h - (crop_h % 2))
+    return crop_w, crop_h
+
+
 def crop_origin_from_center(
     center_x: float,
     center_y: float | None,
@@ -817,8 +862,7 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
     if source_ratio <= target_ratio:
         return None
     zoom = max(0.75, min(1.35, float(zoom)))
-    crop_w = min(src_w, int(round(src_h * target_ratio / zoom)))
-    crop_h = min(src_h, int(round(src_h / zoom)))
+    crop_w, crop_h = fitted_crop_size(src_w, src_h, target_ratio, zoom)
     if crop_w >= src_w:
         return None
 
