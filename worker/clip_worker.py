@@ -37,6 +37,36 @@ except Exception:  # pragma: no cover
     cv2 = None
 
 
+def cv2_problem() -> str | None:
+    """Return a readable reason if OpenCV cannot actually be used, else None.
+
+    Importing cv2 successfully is not enough. Some builds — particularly
+    slimmer headless wheels, or an install whose native extension only
+    partially loaded — import fine but are missing the pieces face
+    detection needs. Touching those attributes then raises AttributeError
+    part-way through an analysis, which surfaces to the user as a raw
+    traceback rather than something actionable.
+
+    Checking up front means a broken install degrades to manual framing
+    with an explanation, instead of failing loudly and unhelpfully.
+    """
+    if cv2 is None:
+        return "OpenCV is not installed on this server."
+    for attribute in ("CascadeClassifier", "VideoCapture", "cvtColor"):
+        if not hasattr(cv2, attribute):
+            return (
+                f"The installed OpenCV is incomplete (missing {attribute}). "
+                "Reinstall opencv-python-headless, or rebuild with the build cache cleared."
+            )
+    haarcascades = getattr(getattr(cv2, "data", None), "haarcascades", None)
+    if not haarcascades or not os.path.isdir(haarcascades):
+        return (
+            "OpenCV is installed but its face-detection data files are missing. "
+            "Reinstall opencv-python-headless."
+        )
+    return None
+
+
 def emit(kind: str, **payload: Any) -> None:
     print(json.dumps({"type": kind, **payload}, ensure_ascii=False), flush=True)
 
@@ -849,7 +879,7 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
     frames, finds the dominant face/upper body, and uses the median horizontal
     position for the whole clip.
     """
-    if cv2 is None:
+    if cv2_problem():
         return None
     info = ffprobe_json(ffprobe, source)
     video_stream = next((s for s in info.get("streams", []) if s.get("codec_type") == "video"), {})
@@ -1180,6 +1210,11 @@ def doctor() -> int:
             checks[binary] = first
         except Exception as exc:
             checks[binary] = str(exc)
+    # Smart framing needs more than a successful `import cv2` — verify the
+    # pieces face detection actually uses, so a broken install shows up here
+    # rather than only when someone clicks the button in the editor.
+    problem = cv2_problem()
+    checks["opencv"] = problem if problem else f"{getattr(cv2, '__version__', 'unknown')} (framing available)"
     print(json.dumps(checks, ensure_ascii=False))
     return 0 if checks.get("yt_dlp") is True and checks.get("faster_whisper") is True else 1
 
@@ -1420,8 +1455,9 @@ def track_speaker_keyframes(
     The raw per-sample choice is then run through an exponential smoother so
     the crop glides rather than snapping between faces on a single bad frame.
     """
-    if cv2 is None:
-        return {"available": False, "reason": "OpenCV is not installed on this server."}
+    problem = cv2_problem()
+    if problem:
+        return {"available": False, "reason": problem}
 
     try:
         info = ffprobe_json(ffprobe, source)
