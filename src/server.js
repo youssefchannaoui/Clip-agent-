@@ -9,6 +9,7 @@ import {
 } from './store.js';
 import * as audio from './audio.js';
 import * as templates from './templates.js';
+import { wordsForClip, silenceSpans } from './captions.js';
 import * as agent from './agent.js';
 import * as social from './social.js';
 import { formatLocal } from './slots.js';
@@ -431,6 +432,137 @@ async function route(req, res, url) {
     try { return json(res, 200, { ok: true, clip: publicClip(agent.markPosted(decodeURIComponent(clipPosted[1]))) }); }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
+  // Real speech timing for one clip.
+  //
+  // The editor requests this to place captions on actual spoken words. When
+  // it was missing the request 404'd, the editor fell back to
+  // approximateWords(), and captions were spread evenly across the whole
+  // clip at a fixed cadence — appearing during silence and drifting out of
+  // sync with speech. The worker already stores exact word-level timings
+  // from Faster-Whisper in the project transcript, in absolute source time;
+  // this converts them to clip-relative time for the clip in question.
+  const clipCaptions = pathname.match(/^\/api\/clips\/([^/]+)\/captions$/);
+  if (method === 'GET' && clipCaptions) {
+    const id = decodeURIComponent(clipCaptions[1]);
+    const clip = state.clips.find(item => item.id === id);
+    if (!clip) return json(res, 404, { error: 'Clip not found.' });
+
+    const project = state.projects.find(item => item.id === clip.projectId);
+    const clipStart = Number(clip.startSec) || 0;
+    const clipEnd = Number(clip.endSec) || (clipStart + (Number(clip.durationMs) || 0) / 1000);
+    const duration = Math.max(0, clipEnd - clipStart);
+
+    let words = [];
+    let exact = false;
+    if (project?.transcriptFile && fs.existsSync(project.transcriptFile)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8'));
+        const segments = Array.isArray(parsed) ? parsed : (parsed.segments || []);
+        words = wordsForClip(segments, clipStart, clipEnd);
+        exact = words.length > 0;
+      } catch {
+        words = [];
+      }
+    }
+
+    return json(res, 200, {
+      words,
+      exact,
+      synced: exact,
+      edited: false,
+      transcript: clip.transcript || '',
+      durationSec: duration,
+      silence: silenceSpans(words, duration),
+    });
+  }
+
+  // Re-derive caption timing from the original Whisper transcript.
+  // Backs the editor's "Auto-sync" button, which 404'd before this existed.
+  const clipResync = pathname.match(/^\/api\/clips\/([^/]+)\/captions\/resync$/);
+  if (method === 'POST' && clipResync) {
+    const id = decodeURIComponent(clipResync[1]);
+    const clip = state.clips.find(item => item.id === id);
+    if (!clip) return json(res, 404, { error: 'Clip not found.' });
+    const project = state.projects.find(item => item.id === clip.projectId);
+    if (!project?.transcriptFile || !fs.existsSync(project.transcriptFile)) {
+      return json(res, 400, { error: 'No transcript is stored for this lecture, so speech timing cannot be recovered.' });
+    }
+    const clipStart = Number(clip.startSec) || 0;
+    const clipEnd = Number(clip.endSec) || (clipStart + (Number(clip.durationMs) || 0) / 1000);
+    try {
+      const parsed = JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8'));
+      const segments = Array.isArray(parsed) ? parsed : (parsed.segments || []);
+      const words = wordsForClip(segments, clipStart, clipEnd);
+      if (!words.length) return json(res, 400, { error: 'No speech was found inside this clip.' });
+      return json(res, 200, {
+        words, exact: true, synced: true,
+        transcript: words.map(w => w.word).join(' '),
+        silence: silenceSpans(words, Math.max(0, clipEnd - clipStart)),
+      });
+    } catch (error) {
+      return json(res, 400, { error: `The transcript could not be read: ${error.message}` });
+    }
+  }
+
+  // Active-speaker framing analysis. The editor calls this to preview where
+  // the AI crop will sit over time; it 404'd before this existed, which is
+  // why smart framing reported "Not found".
+  const clipFraming = pathname.match(/^\/api\/clips\/([^/]+)\/framing-preview$/);
+  if (method === 'POST' && clipFraming) {
+    const id = decodeURIComponent(clipFraming[1]);
+    const clip = state.clips.find(item => item.id === id);
+    if (!clip) return json(res, 404, { error: 'Clip not found.' });
+    const project = state.projects.find(item => item.id === clip.projectId);
+    if (!project?.sourceFile || !fs.existsSync(project.sourceFile)) {
+      return json(res, 200, { plan: { available: false, reason: 'The original video is no longer stored, so framing cannot be analysed.' } });
+    }
+
+    const body = await readBody(req);
+    const clipStart = Number(clip.startSec) || 0;
+    const clipEnd = Number(clip.endSec) || (clipStart + (Number(clip.durationMs) || 0) / 1000);
+    const duration = Math.max(0, clipEnd - clipStart);
+
+    // Give the tracker the real speech spans so it holds position during
+    // silence instead of chasing detector noise when nobody is talking.
+    let speechSpans = [];
+    if (project.transcriptFile && fs.existsSync(project.transcriptFile)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8'));
+        const segments = Array.isArray(parsed) ? parsed : (parsed.segments || []);
+        speechSpans = wordsForClip(segments, clipStart, clipEnd).map(w => [w.start, w.end]);
+      } catch { speechSpans = []; }
+    }
+
+    const requestFile = path.join(config.dataDir, `framing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`);
+    fs.writeFileSync(requestFile, JSON.stringify({
+      source: project.sourceFile, ffprobe: config.ffprobePath || 'ffprobe',
+      start: clipStart, duration,
+      width: Number(body.width) || 1080, height: Number(body.height) || 1920,
+      bias: String(body.bias || 'auto'), padding: Number(body.padding ?? 0.18),
+      zoom: Number(body.zoom ?? 1), smoothing: Number(body.smoothing ?? 0.82),
+      speechSpans,
+    }));
+
+    try {
+      const plan = await new Promise((resolve) => {
+        const child = spawn(config.pythonBin, [config.workerScript, '--framing', requestFile], { stdio: ['ignore', 'pipe', 'pipe'] });
+        let out = '', err = '';
+        const timer = setTimeout(() => { child.kill('SIGKILL'); resolve({ available: false, reason: 'Framing analysis took too long and was stopped.' }); }, 120000);
+        child.stdout.on('data', d => { out += d; });
+        child.stderr.on('data', d => { err += d; });
+        child.on('error', e => { clearTimeout(timer); resolve({ available: false, reason: `The analyser could not start: ${e.message}` }); });
+        child.on('close', () => {
+          clearTimeout(timer);
+          try { resolve(JSON.parse(out).plan); }
+          catch { resolve({ available: false, reason: (err.trim().split('\n').pop() || 'The analyser returned no result.').slice(0, 300) }); }
+        });
+      });
+      return json(res, 200, { plan });
+    } finally {
+      try { fs.unlinkSync(requestFile); } catch {}
+    }
+  }
+
   const clipMatch = pathname.match(/^\/api\/clips\/([^/]+)$/);
   if (clipMatch && method === 'PATCH') {
     const id = decodeURIComponent(clipMatch[1]); const body = await readBody(req);
