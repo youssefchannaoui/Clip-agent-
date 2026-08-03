@@ -253,6 +253,18 @@ body.dc-side-collapsed .dc-sidebar-live{display:none}
 @keyframes dcV3Float{0%,100%{transform:translateY(0) rotate(var(--r,0deg))}50%{transform:translateY(-9px) rotate(var(--r,0deg))}}@keyframes dcV3Spin{to{transform:rotate(1turn)}}
 @media(max-width:1180px){.dc-v3-hero{grid-template-columns:1fr}.dc-v3-phone-wall{min-height:240px}.dc-v3-source-row{grid-template-columns:1fr 1fr 1fr}.dc-create-card.v3 .dc-create-grid{grid-template-columns:1fr 1fr}.dc-create-card.v3 input{grid-column:1/-1}.dc-create-card.v3 .dc-btn{grid-column:1/-1}}
 @media(max-width:780px){.dc-v3-title{font-size:28px}.dc-v3-pipeline,.dc-v3-source-row{grid-template-columns:1fr}.dc-v3-phone-wall{display:none}.dc-guide-card{left:14px!important;right:14px;top:auto!important;bottom:16px}.dc-guide-spot{border-radius:12px}.dc-command-card{position:static}}
+
+
+/* V3F home dashboard polish: more visual, less text */
+.dc-create-compact{padding:12px!important}.dc-create-compact .dc-create-grid{align-items:center}
+.dc-home-quick.upgraded{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:14px 0}.dc-home-quick.upgraded .dc-v3-source{min-height:112px;border-radius:18px;background:linear-gradient(145deg,rgba(255,255,255,.045),rgba(255,255,255,.014));border:1px solid #303039}.dc-home-quick.upgraded .dc-v3-source:hover{border-color:rgba(217,180,120,.45);box-shadow:0 18px 50px rgba(0,0,0,.24);transform:translateY(-2px)}
+.dc-command-strip{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,1fr) minmax(280px,.82fr);gap:12px;margin:14px 0}.dc-work-card{position:relative;overflow:hidden;min-height:116px;display:flex;align-items:center;gap:14px;padding:16px;border:1px solid #303039;border-radius:18px;background:radial-gradient(circle at 100% 0,rgba(217,180,120,.10),transparent 36%),linear-gradient(145deg,#151519,#101013)}.dc-work-card::after{content:'';position:absolute;right:-42px;bottom:-54px;width:140px;height:140px;border-radius:50%;background:rgba(255,255,255,.035);pointer-events:none}.dc-work-card.live{border-color:rgba(217,180,120,.42)}.dc-work-icon,.dc-work-thumb{width:58px;height:58px;flex:0 0 58px;border-radius:18px;display:grid;place-items:center;background:rgba(217,180,120,.12);color:var(--dc-accent2)}.dc-work-icon svg{width:26px;height:26px}.dc-work-icon.good{background:rgba(83,199,139,.12);color:var(--dc-green)}.dc-work-icon.template{background:rgba(217,180,120,.14)}.dc-work-thumb{overflow:hidden;background:#000}.dc-work-thumb img{width:100%;height:100%;object-fit:cover}.dc-work-copy{position:relative;z-index:1;flex:1;min-width:0}.dc-work-label{display:block;margin-bottom:4px;color:var(--dc-accent2);font-size:9px;text-transform:uppercase;letter-spacing:.08em}.dc-work-copy strong,.dc-work-copy p{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-work-copy strong{font-size:14px}.dc-work-copy p{margin:5px 0 0;color:var(--dc-muted);font-size:10px}.dc-work-progress{height:4px;margin-top:9px;border-radius:999px;background:var(--dc-line);overflow:hidden}.dc-work-progress i{display:block;height:100%;background:var(--dc-accent);border-radius:999px}
+.dc-home-main-grid.refined{display:grid;grid-template-columns:minmax(480px,1.15fr) minmax(360px,.85fr);gap:14px;margin-top:14px}.dc-dashboard-panel{border-radius:18px;background:linear-gradient(180deg,#151519,#101013);border-color:#303039}.dc-feature-list{display:grid;gap:10px}.dc-feature-row{min-height:78px;display:grid;grid-template-columns:82px minmax(0,1fr) auto 18px;align-items:center;gap:13px;padding:10px;border:1px solid var(--dc-line);border-radius:14px;background:#0b0b0d;text-align:left;color:var(--dc-text)}.dc-feature-row:hover{border-color:rgba(217,180,120,.42);background:#111115}.dc-feature-row>svg{width:17px;height:17px;color:var(--dc-subtle)}.dc-feature-thumb{width:82px;height:52px;border-radius:10px;overflow:hidden;display:grid;place-items:center;background:#050506}.dc-feature-thumb img{width:100%;height:100%;object-fit:cover}.dc-feature-thumb.empty{color:var(--dc-muted);border:1px solid var(--dc-line)}.dc-feature-thumb.empty svg{width:24px;height:24px}.dc-feature-main{min-width:0}.dc-feature-main strong,.dc-feature-main em{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-feature-main strong{font-size:12px;font-style:normal}.dc-feature-main em{margin-top:4px;color:var(--dc-muted);font-size:9px;font-style:normal}
+.dc-platform-panel-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.dc-platform-tile{position:relative;min-height:92px;display:grid;grid-template-columns:42px 1fr auto;grid-template-rows:auto auto;gap:4px 10px;align-items:center;padding:13px;border:1px solid var(--dc-line);border-radius:15px;background:#0b0b0d;text-align:left;color:var(--dc-text)}.dc-platform-tile:hover{border-color:rgba(217,180,120,.35);background:#111115}.dc-platform-tile .dc-social-logo{grid-row:1/3;width:42px!important;height:42px!important;border-radius:14px!important}.dc-platform-tile strong{font-size:12px}.dc-platform-tile em{font-size:9px;color:var(--dc-muted);font-style:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-platform-tile b{grid-column:3;grid-row:1/3;align-self:center}.dc-platform-tile[aria-disabled="true"]{opacity:.78}.dc-mini-post-list,.dc-activity-grid{display:grid;gap:9px}.dc-mini-post{min-height:62px;display:grid;grid-template-columns:56px minmax(0,1fr) auto 18px;align-items:center;gap:10px;padding:9px;border:1px solid var(--dc-line);border-radius:13px;background:#0b0b0d;text-align:left;color:var(--dc-text)}.dc-mini-post:hover{border-color:rgba(217,180,120,.35);background:#111115}.dc-mini-post img,.dc-mini-post>span:first-child{width:56px;height:40px;border-radius:9px;object-fit:cover;background:#050506;display:grid;place-items:center;color:var(--dc-muted)}.dc-mini-post strong,.dc-mini-post em{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-mini-post strong{font-size:10.5px}.dc-mini-post em{font-size:8.5px;color:var(--dc-muted);font-style:normal}.dc-mini-post svg{width:16px;height:16px;color:var(--dc-subtle)}
+.dc-activity-chip{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;min-height:48px;padding:8px 10px;border:1px solid var(--dc-line);border-radius:13px;background:#0b0b0d}.dc-activity-chip span{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:rgba(83,199,139,.10);color:var(--dc-green)}.dc-activity-chip.live span{background:rgba(217,180,120,.11);color:var(--dc-accent2)}.dc-activity-chip span svg{width:18px;height:18px}.dc-activity-chip strong{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10.5px}.dc-activity-chip em{color:var(--dc-muted);font-style:normal;font-size:8.5px;white-space:nowrap}
+.dc-sidebar-live{background:linear-gradient(180deg,#121215,#0b0b0d)!important;border-color:rgba(217,180,120,.22)!important}.dc-sidebar-status-pills{display:none!important}.dc-sidebar-live-foot{grid-template-columns:1fr 1fr!important}.dc-sidebar-live-foot .dc-btn{font-size:8px}.dc-mini-job{border-radius:12px!important;background:#08080a!important}.dc-mini-job strong{font-size:9px!important}.dc-mini-job span{font-size:7.4px!important}
+@media(max-width:1250px){.dc-command-strip,.dc-home-main-grid.refined{grid-template-columns:1fr}.dc-home-quick.upgraded{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:720px){.dc-home-quick.upgraded,.dc-platform-panel-grid{grid-template-columns:1fr}.dc-command-strip{grid-template-columns:1fr}.dc-feature-row{grid-template-columns:66px minmax(0,1fr) auto}.dc-feature-thumb{width:66px;height:44px}.dc-work-card{align-items:flex-start}.dc-work-card .dc-btn{width:auto}.dc-platform-tile{grid-template-columns:38px 1fr}.dc-platform-tile b{grid-column:2;grid-row:auto;justify-self:start}.dc-mini-post{grid-template-columns:50px minmax(0,1fr) 16px}.dc-mini-post em{display:none}}
 `;
 
 
@@ -441,9 +453,58 @@ function renderHome(){
   const panel = $('#view-home'), d = data(); if (!panel || !d) return;
   document.body.classList.remove('dc-project-open');
   const clips = d.clips || [], projects = d.projects || [], jobs = activeJobs();
-  const waiting = clips.filter(c=>c.status==='waiting').length, scheduled = clips.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length, posted = clips.filter(c=>c.status==='posted').length;
-  const selectedTemplate=d.selectedTemplate?.name || d.templateDraft?.name || 'Choose template';
-  panel.innerHTML = `<section class="dc-v3-hero slim" data-tour="home-hero"><div><div class="dc-v3-kicker">${ICON.scissors} V3 workspace</div><h1 class="dc-v3-title">Clean clips, faster review, simpler publishing.</h1><p class="dc-v3-copy">Start with a lecture, review the strongest moments, edit the look, then publish without hunting through walls of text.</p><div class="dc-v3-actions"><button class="dc-btn" id="dcHeroCreate">Start with YouTube</button><button class="dc-btn secondary" id="dcHeroTour">Guided demo</button><button class="dc-btn secondary" data-dc-nav="review">Open Clip Review</button></div></div><div class="dc-v3-phone-wall" aria-label="Recent clip thumbnails">${heroThumbs(clips)}</div></section><section class="dc-card dc-create-card v3" data-tour="create-form"><div class="dc-create-grid"><input id="dcCreateUrl" placeholder="Paste YouTube or video URL"><select id="dcCreateTemplate" data-tour="template-picker">${(d.templates||[]).map(t=>`<option value="${esc(t.id)}" ${t.id===d.selectedTemplate?.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select><select id="dcCreateCount"><option>4</option><option selected>8</option><option>12</option><option>16</option></select><select id="dcCreateDuration"><option value="15,45">15–45 sec</option><option value="30,60" selected>30–60 sec</option><option value="45,90">45–90 sec</option></select><button class="dc-btn" id="dcGenerate" data-tour="generate-button">Generate clips</button></div></section><div class="dc-home-metrics v3 tight">${metric(projects.length,'Lectures')}${metric(clips.length,'Clips')}${metric(waiting,'Review')}${metric(scheduled,'Scheduled')}${metric(posted,'Posted')}</div><div class="dc-home-quick"><button class="dc-v3-source" type="button" id="dcSourceYouTube"><span class="dc-v3-platform youtube">${socialSvg('youtube')}</span><strong>YouTube import</strong><span>Paste one or more lecture links.</span></button><button class="dc-v3-source" type="button" data-dc-nav="review"><span class="dc-v3-platform template">${ICON.review}</span><strong>Clip Review</strong><span>${waiting} clips need approval.</span></button><button class="dc-v3-source" type="button" data-dc-nav="editor"><span class="dc-v3-platform template">${ICON.style}</span><strong>${esc(selectedTemplate)}</strong><span>Default look for renders.</span></button><button class="dc-v3-source" type="button" data-dc-nav="publishing"><span class="dc-v3-platform publish">${ICON.social}</span><strong>Connections</strong><span>TikTok, Instagram, Facebook and YouTube.</span></button></div><div class="dc-home-main-grid"><div class="dc-stack"><section class="dc-card dc-card-pad v3-card" data-tour="happening-now"><div class="dc-card-head"><div><h2>Happening now</h2><p>Only current work and latest result.</p></div><span class="dc-pill ${jobs.length?'warn':'good'}">${jobs.length?`${jobs.length} live`:'All clear'}</span></div><div class="dc-row-list compact">${jobs.length?jobs.slice(0,3).map(jobRow).join(''):latestActivity(d)}</div></section><section class="dc-card dc-card-pad v3-card"><div class="dc-card-head"><div><h2>Recent projects</h2><p>Continue from the last lecture.</p></div><button class="dc-btn secondary" data-dc-nav="projects">View all</button></div><div class="dc-row-list compact">${recentProjects(projects,clips)}</div></section></div><div class="dc-home-side-stack"><section class="dc-card dc-card-pad v3-card" data-tour="platform-cards"><div class="dc-card-head"><div><h2>Platform connections</h2><p>Ready before posting.</p></div><button class="dc-btn secondary" data-dc-nav="publishing">Manage</button></div><div class="dc-social-grid clean">${socialCards(d)}</div></section><section class="dc-card dc-card-pad v3-card"><div class="dc-card-head"><div><h2>Upcoming posts</h2><p>${scheduled} ready or scheduled.</p></div><button class="dc-btn secondary" data-dc-nav="schedule">Open publish</button></div><div class="dc-row-list compact">${upcomingRows(clips)}</div></section><section class="dc-card dc-card-pad v3-card"><div class="dc-card-head"><div><h2>Needs attention</h2><p>Problems only.</p></div></div><div class="dc-row-list compact">${attentionRows(d)}</div></section></div></div>`;
+  const waiting = clips.filter(c=>c.status==='waiting').length;
+  const scheduled = clips.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length;
+  const posted = clips.filter(c=>c.status==='posted').length;
+  const selectedTemplate = d.selectedTemplate?.name || d.templateDraft?.name || 'Choose template';
+  panel.innerHTML = `
+    <section class="dc-v3-hero slim" data-tour="home-hero">
+      <div>
+        <div class="dc-v3-kicker">${ICON.scissors} V3 workspace</div>
+        <h1 class="dc-v3-title">Create clean dawah clips without hunting through menus.</h1>
+        <p class="dc-v3-copy">Import a lecture, review the best moments, polish the template, then publish from one simple dashboard.</p>
+        <div class="dc-v3-actions">
+          <button class="dc-btn" id="dcHeroCreate">Start with YouTube</button>
+          <button class="dc-btn secondary" id="dcHeroTour">Guided demo</button>
+          <button class="dc-btn secondary" data-dc-nav="review">Open Clip Review</button>
+        </div>
+      </div>
+      <div class="dc-v3-phone-wall" aria-label="Recent clip thumbnails">${heroThumbs(clips)}</div>
+    </section>
+    <section class="dc-card dc-create-card v3 dc-create-compact" data-tour="create-form">
+      <div class="dc-create-grid">
+        <input id="dcCreateUrl" placeholder="Paste YouTube or video URL">
+        <select id="dcCreateTemplate" data-tour="template-picker">${(d.templates||[]).map(t=>`<option value="${esc(t.id)}" ${t.id===d.selectedTemplate?.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select>
+        <select id="dcCreateCount"><option>4</option><option selected>8</option><option>12</option><option>16</option></select>
+        <select id="dcCreateDuration"><option value="15,45">15–45 sec</option><option value="30,60" selected>30–60 sec</option><option value="45,90">45–90 sec</option></select>
+        <button class="dc-btn" id="dcGenerate" data-tour="generate-button">Generate clips</button>
+      </div>
+    </section>
+    <div class="dc-home-metrics v3 tight dc-metric-strip">
+      ${metric(projects.length,'Lectures')}${metric(clips.length,'Clips')}${metric(waiting,'Clip review')}${metric(scheduled,'Scheduled')}${metric(posted,'Posted')}
+    </div>
+    <div class="dc-home-quick upgraded">
+      <button class="dc-v3-source" type="button" id="dcSourceYouTube"><span class="dc-v3-platform youtube">${socialSvg('youtube')}</span><strong>Import</strong><span>Paste one or more lecture links.</span></button>
+      <button class="dc-v3-source" type="button" data-dc-nav="review"><span class="dc-v3-platform template">${ICON.review}</span><strong>Review</strong><span>${waiting || 'No'} clips waiting.</span></button>
+      <button class="dc-v3-source" type="button" data-dc-nav="editor"><span class="dc-v3-platform template">${ICON.style}</span><strong>${esc(selectedTemplate)}</strong><span>Template controls every render.</span></button>
+      <button class="dc-v3-source" type="button" data-dc-nav="publishing"><span class="dc-v3-platform publish">${ICON.social}</span><strong>Publish</strong><span>Connect TikTok, Instagram, Facebook and YouTube.</span></button>
+    </div>
+    <section class="dc-command-strip" data-tour="happening-now">
+      ${latestWorkflowCard(d,jobs)}
+      ${nextPostCard(clips)}
+      ${templateLiveCard(selectedTemplate)}
+    </section>
+    <div class="dc-home-main-grid refined">
+      <section class="dc-card dc-card-pad v3-card dc-dashboard-panel">
+        <div class="dc-card-head"><div><h2>Recent projects</h2><p>Click a lecture to continue.</p></div><button class="dc-btn secondary" data-dc-nav="projects">View all</button></div>
+        <div class="dc-feature-list">${recentProjectsV3(projects,clips)}</div>
+      </section>
+      <div class="dc-home-side-stack">
+        ${platformPanelV3(d)}
+        ${upcomingPanelV3(clips)}
+        ${compactActivityFeed(d,jobs)}
+      </div>
+    </div>`;
   $('#dcGenerate').onclick=generateProject; $('#dcHeroCreate').onclick=()=>$('#dcCreateUrl').focus(); $('#dcSourceYouTube').onclick=()=>$('#dcCreateUrl').focus(); $('#dcHeroTour').onclick=()=>openGuidedTour(0);
   requestAnimationFrame(()=>animatePanel(panel));
 }
@@ -499,6 +560,64 @@ function upcomingRows(clips){
   const list=clips.filter(c=>Number(c.scheduledAt)>Date.now()&&!['posted','ready'].includes(c.status)).sort((a,b)=>a.scheduledAt-b.scheduledAt).slice(0,3);
   if(!list.length) return `<div class="dc-empty"><strong>No clips scheduled</strong>Approve clips to fill this.</div>`;
   return list.map(c=>`<button class="dc-list-row" data-edit-style-clip="${esc(c.id)}" type="button"><img class="dc-thumb" src="${authedUrl(c.thumbUrl)}"><div class="dc-list-copy"><strong>${esc(shortText(c.title,46))}</strong><span>${formatDate(c.scheduledAt)} · ${(c.targets||[]).map(t=>t.provider).join(', ')||'Export'}</span></div><span class="dc-svg">${ICON.chevron}</span></button>`).join('');
+}
+
+
+function logItemMessage(item){
+  if(typeof item==='string')return item;
+  return item?.message || item?.text || item?.title || 'Latest activity';
+}
+function logItemTime(item){
+  if(typeof item==='object' && item?.at)return formatRelative(item.at);
+  return 'Latest';
+}
+function nextScheduledClip(clips){
+  return clips.filter(c=>Number(c.scheduledAt)>Date.now()&&!['posted','ready'].includes(c.status)).sort((a,b)=>Number(a.scheduledAt)-Number(b.scheduledAt))[0];
+}
+function latestWorkflowCard(d,jobs){
+  const latest=(d.log||[])[0];
+  if(jobs.length){
+    const job=jobs[0];
+    return `<article class="dc-work-card live"><div class="dc-work-icon">${job.kind==='publish'?ICON.publish:job.kind==='render'?ICON.editor:ICON.scissors}</div><div class="dc-work-copy"><span class="dc-work-label">Live now</span><strong>${esc(shortText(job.title,48))}</strong><p>${esc(shortText(job.stage,60))}</p>${Number.isFinite(job.progress)?`<div class="dc-work-progress"><i style="width:${clamp(job.progress,0,100)}%"></i></div>`:''}</div><span class="dc-pill warn">${Number.isFinite(job.progress)?`${Math.round(job.progress)}%`:'Live'}</span></article>`;
+  }
+  return `<article class="dc-work-card"><div class="dc-work-icon good">${ICON.home}</div><div class="dc-work-copy"><span class="dc-work-label">Latest result</span><strong>${esc(shortText(logItemMessage(latest)||'All clear',58))}</strong><p>${latest?logItemTime(latest):'Nothing is processing right now.'}</p></div><span class="dc-pill good">Ready</span></article>`;
+}
+function nextPostCard(clips){
+  const next=nextScheduledClip(clips);
+  if(!next)return `<article class="dc-work-card"><div class="dc-work-icon">${ICON.publish}</div><div class="dc-work-copy"><span class="dc-work-label">Next post</span><strong>No scheduled post</strong><p>Approve clips to fill the calendar.</p></div><button class="dc-btn secondary" data-dc-nav="review">Review</button></article>`;
+  return `<article class="dc-work-card visual"><div class="dc-work-thumb">${next.thumbUrl?`<img src="${authedUrl(next.thumbUrl)}" alt="${esc(next.title||'Clip')} thumbnail">`:ICON.play}</div><div class="dc-work-copy"><span class="dc-work-label">Next post</span><strong>${esc(shortText(next.title||'Scheduled clip',46))}</strong><p>${formatDate(next.scheduledAt)} · ${(next.targets||[]).map(t=>t.provider).join(', ')||'Export'}</p></div><button class="dc-btn secondary" data-edit-style-clip="${esc(next.id)}">Preview</button></article>`;
+}
+function templateLiveCard(name){
+  return `<article class="dc-work-card"><div class="dc-work-icon template">${ICON.style}</div><div class="dc-work-copy"><span class="dc-work-label">Template live</span><strong>${esc(name)}</strong><p>Used for new clips and global re-renders.</p></div><button class="dc-btn secondary" data-dc-nav="editor">Edit</button></article>`;
+}
+function recentProjectsV3(projects,clips){
+  const list=[...projects].sort((a,b)=>Number(b.submittedAt||0)-Number(a.submittedAt||0)).slice(0,4);
+  if(!list.length)return `<div class="dc-empty v3"><div><span class="dc-empty-icon">${ICON.projects}</span><strong>No lectures yet</strong><span>Paste a lecture above to create the first project.</span></div></div>`;
+  return list.map(p=>{
+    const own=clips.filter(c=>c.projectId===p.id),thumb=own.find(c=>c.thumbUrl)?.thumbUrl,failed=p.status==='failed'||p.error,busy=['queued','processing'].includes(p.status),scheduled=own.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length;
+    return `<button class="dc-feature-row" data-open-project="${esc(p.id)}" type="button"><span class="dc-feature-thumb ${thumb?'':'empty'}">${thumb?`<img src="${authedUrl(thumb)}" alt="${esc(projectDisplayTitle(p))} thumbnail">`:ICON.projects}</span><span class="dc-feature-main"><strong>${esc(shortText(projectDisplayTitle(p),64))}</strong><em>${own.length} clips · ${scheduled} scheduled</em></span><span class="dc-pill ${failed?'bad':busy?'warn':'good'}">${failed?'Issue':busy?'Working':'Ready'}</span>${ICON.chevron}</button>`;
+  }).join('');
+}
+function compactActivityFeed(d,jobs){
+  const logs=(d.log||[]).slice(0,4);
+  const rows=jobs.length?jobs.slice(0,3).map(j=>`<div class="dc-activity-chip live"><span>${j.kind==='publish'?ICON.publish:j.kind==='render'?ICON.editor:ICON.scissors}</span><strong>${esc(shortText(j.title,42))}</strong><em>${esc(shortText(j.stage,32))}</em></div>`).join(''):logs.length?logs.map(item=>`<div class="dc-activity-chip"><span>✓</span><strong>${esc(shortText(logItemMessage(item),42))}</strong><em>${logItemTime(item)}</em></div>`).join(''):`<div class="dc-empty"><strong>All quiet</strong>No current processing.</div>`;
+  return `<section class="dc-card dc-card-pad v3-card dc-dashboard-panel compact"><div class="dc-card-head"><div><h2>Activity</h2><p>Latest only.</p></div><span class="dc-pill ${jobs.length?'warn':'good'}">${jobs.length?'Live':'Clear'}</span></div><div class="dc-activity-grid">${rows}</div></section>`;
+}
+function platformPanelV3(d){
+  return `<section class="dc-card dc-card-pad v3-card dc-dashboard-panel" data-tour="platform-cards"><div class="dc-card-head"><div><h2>Platform connections</h2><p>Connect before publishing.</p></div><button class="dc-btn secondary" data-dc-nav="publishing">Manage</button></div><div class="dc-platform-panel-grid">${platformTilesV3(d)}</div></section>`;
+}
+function platformTilesV3(d){
+  const providers=d.social?.providers||{}, names={youtube:'YouTube',tiktok:'TikTok',instagram:'Instagram',facebook:'Facebook'};
+  return Object.entries(names).map(([key,name])=>{
+    const p=providers[key]||{}, account=p.accounts?.[0]?.name;
+    const status=p.connected?'Connected':p.configured?'Ready':'Missing';
+    return `<button class="dc-platform-tile ${key}" data-dc-nav="publishing" ${!p.configured && !p.connected?'aria-disabled="true"':''}><span class="dc-social-logo ${key}">${socialSvg(key)}</span><strong>${name}</strong><em>${p.connected?esc(account||'Connected'):p.configured?'Ready to connect':'Setup required'}</em><b class="dc-pill ${p.connected?'good':p.configured?'warn':'bad'}">${status}</b></button>`;
+  }).join('');
+}
+function upcomingPanelV3(clips){
+  const next=clips.filter(c=>Number(c.scheduledAt)>Date.now()&&!['posted','ready'].includes(c.status)).sort((a,b)=>Number(a.scheduledAt)-Number(b.scheduledAt)).slice(0,3);
+  const rows=next.length?next.map(c=>`<button class="dc-mini-post" data-edit-style-clip="${esc(c.id)}" type="button">${c.thumbUrl?`<img src="${authedUrl(c.thumbUrl)}" alt="${esc(c.title||'Clip')} thumbnail">`:`<span>${ICON.play}</span>`}<strong>${esc(shortText(c.title||'Scheduled clip',46))}</strong><em>${formatDate(c.scheduledAt)}</em>${ICON.chevron}</button>`).join(''):`<div class="dc-empty"><strong>No scheduled clips</strong>Approve clips from Clip Review.</div>`;
+  return `<section class="dc-card dc-card-pad v3-card dc-dashboard-panel"><div class="dc-card-head"><div><h2>Upcoming posts</h2><p>${next.length} ready or scheduled.</p></div><button class="dc-btn secondary" data-dc-nav="schedule">Open publish</button></div><div class="dc-mini-post-list">${rows}</div></section>`;
 }
 
 async function generateProject(){
