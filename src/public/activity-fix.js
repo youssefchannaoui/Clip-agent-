@@ -663,11 +663,57 @@ body.dc-app #view-schedule .slot-card.open .slot-media{
 
 `;
 
+
+const topbarCleanCss = String.raw`
+/* Phase billing topbar cleanup */
+body.dc-app #dcTopbar{gap:12px;padding:0 18px;background:rgba(10,10,12,.96)}
+body.dc-app .dc-page-title{min-width:150px;max-width:210px}
+body.dc-app .dc-page-title strong{font-size:13px}
+body.dc-app .dc-page-title span{max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.dc-app .dc-global-search{max-width:560px}
+body.dc-app .dc-top-actions{gap:7px;align-items:center;flex-shrink:0}
+body.dc-app .dc-health{height:34px;padding:0 8px;border-radius:999px;background:transparent;color:var(--dc-muted)}
+body.dc-app .dc-health span{font-size:9px}
+body.dc-app .dc-token-pill{min-height:34px;display:inline-flex;align-items:center;gap:6px;padding:0 10px;border:1px solid rgba(217,180,120,.28);border-radius:999px;background:rgba(217,180,120,.07);color:var(--dc-accent2);font-size:10px;font-weight:750;white-space:nowrap;box-shadow:0 0 0 1px rgba(217,180,120,.03) inset}
+body.dc-app .dc-token-pill:hover{background:rgba(217,180,120,.12);border-color:rgba(217,180,120,.45)}
+body.dc-app .dc-token-pill svg{width:15px;height:15px;flex:0 0 15px}
+body.dc-app .dc-token-pill .dc-token-label{display:none}
+body.dc-app .dc-token-pill .dc-token-main{font-size:10px;font-weight:850;color:var(--dc-text)}
+body.dc-app .dc-token-pill .dc-token-rate{font-size:8px;color:var(--dc-muted);font-style:normal;font-weight:700;padding-left:2px}
+body.dc-app .dc-tour-launch{min-height:34px!important;padding:0 12px!important;border-radius:999px!important;font-size:10px!important}
+body.dc-app #dcNewProject{min-height:36px!important;border-radius:11px!important;padding:0 13px!important;font-size:10px!important}
+.dc-user-menu-wrap{position:relative;display:flex;align-items:center}
+.dc-user-menu-button{height:36px;max-width:180px;display:inline-flex;align-items:center;gap:8px;padding:0 10px 0 7px;border:1px solid var(--dc-line);border-radius:999px;background:rgba(255,255,255,.025);color:var(--dc-text);white-space:nowrap}
+.dc-user-menu-button:hover{background:var(--dc-panel2);border-color:var(--dc-line2)}
+.dc-user-menu-button img,.dc-user-avatar{width:24px;height:24px;flex:0 0 24px;border-radius:50%;object-fit:cover;display:grid;place-items:center;background:rgba(217,180,120,.16);color:var(--dc-accent2);font-size:10px;font-weight:850}
+.dc-user-copy{min-width:0;display:flex;flex-direction:column;align-items:flex-start;line-height:1.1}
+.dc-user-copy b,.dc-user-copy small{display:block;max-width:118px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dc-user-copy b{font-size:9.5px;font-weight:750;color:var(--dc-text)}
+.dc-user-copy small{font-size:7.5px;color:var(--dc-subtle);margin-top:2px}
+.dc-user-chevron{width:12px;height:12px;color:var(--dc-subtle);flex:0 0 12px}
+.dc-account-menu{display:none;position:absolute;right:0;top:calc(100% + 9px);width:250px;padding:9px;border:1px solid var(--dc-line2);border-radius:14px;background:rgba(16,16,18,.98);box-shadow:var(--dc-shadow);z-index:240;backdrop-filter:blur(18px)}
+.dc-account-menu.show{display:block;animation:dcViewReveal .16s ease both}
+.dc-account-head{padding:9px 10px 10px;border-bottom:1px solid var(--dc-line);margin-bottom:7px}
+.dc-account-head strong,.dc-account-head span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dc-account-head strong{font-size:11px;color:var(--dc-text)}
+.dc-account-head span{font-size:8.5px;color:var(--dc-muted);margin-top:3px}
+.dc-account-action{width:100%;min-height:36px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 10px;border-radius:9px;color:var(--dc-muted);font-size:10px;text-align:left;background:transparent;border:0}
+.dc-account-action:hover{background:var(--dc-panel2);color:var(--dc-text)}
+.dc-account-action b{font-size:9px;color:var(--dc-accent2);font-weight:800}
+.dc-account-menu form{margin:3px 0 0}
+.dc-logout-btn{width:100%;min-height:36px;border-radius:9px;color:var(--dc-red);font-size:10px;text-align:left;padding:0 10px;background:transparent;border:0}
+.dc-logout-btn:hover{background:rgba(239,107,122,.08)}
+body.dc-app .dc-logout-form{display:none}
+@media(max-width:1160px){body.dc-app .dc-page-title{min-width:125px}.dc-user-copy small,.dc-token-pill .dc-token-rate{display:none}.dc-user-menu-button{max-width:132px}.dc-user-copy b{max-width:82px}}
+@media(max-width:920px){body.dc-app .dc-health span,body.dc-app .dc-tour-launch{display:none}body.dc-app .dc-token-pill{padding:0 9px}.dc-user-menu-button{padding-right:7px}.dc-user-copy{display:none}}
+@media(max-width:720px){body.dc-app .dc-token-pill .dc-token-main{display:none}.dc-account-menu{right:-62px}}
+`;
+
 function injectShell(){
   if (shellReady) return;
   shellReady = true;
   const style = document.createElement('style');
-  style.id = 'dcPhase4Styles'; style.textContent = css + billingCss + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss; document.head.appendChild(style);
+  style.id = 'dcPhase4Styles'; style.textContent = css + billingCss + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss + topbarCleanCss; document.head.appendChild(style);
   document.body.classList.add('dc-app');
 
   const side = document.createElement('aside'); side.id = 'dcSidebar';
@@ -676,7 +722,7 @@ function injectShell(){
   const top = document.createElement('header'); top.id = 'dcTopbar';
   const signedUser = data()?.user || null;
   const avatar = signedUser?.picture ? `<img src="${esc(signedUser.picture)}" alt="">` : `<span class="dc-user-avatar">${esc((signedUser?.name || signedUser?.email || 'D').slice(0,1).toUpperCase())}</span>`;
-  top.innerHTML = `<button class="dc-mobile-menu dc-svg" id="dcMobileMenu" type="button" aria-label="Open menu">${ICON.menu}</button><div class="dc-page-title"><strong id="dcPageName">Home</strong><span id="dcPageSub">Everything important in one place</span></div><div class="dc-global-search">${ICON.search}<input id="dcGlobalSearch" placeholder="Search projects and clips"><div class="dc-search-results" id="dcSearchResults"></div></div><div class="dc-top-actions"><div class="dc-health" id="dcHealth"><i></i><span>Checking</span></div><button class="dc-token-pill" id="dcTokenPill" type="button">${ICON.tokens}<span>Tokens</span></button><button class="dc-btn secondary dc-tour-launch" id="dcTourLaunch" type="button">Guided demo</button>${signedUser ? `<div class="dc-user-pill">${avatar}<span>${esc(signedUser.name || signedUser.email || 'Signed in')}</span></div><form class="dc-logout-form" method="post" action="/auth/logout"><button class="dc-logout-btn" type="submit">Log out</button></form>` : ''}<button class="dc-btn" id="dcNewProject"><span>＋ New project</span></button></div>`;
+  top.innerHTML = `<button class="dc-mobile-menu dc-svg" id="dcMobileMenu" type="button" aria-label="Open menu">${ICON.menu}</button><div class="dc-page-title"><strong id="dcPageName">Home</strong><span id="dcPageSub">Everything important in one place</span></div><div class="dc-global-search">${ICON.search}<input id="dcGlobalSearch" placeholder="Search projects and clips"><div class="dc-search-results" id="dcSearchResults"></div></div><div class="dc-top-actions"><div class="dc-health" id="dcHealth"><i></i><span>Checking</span></div><button class="dc-token-pill" id="dcTokenPill" type="button" aria-label="Open tokens and plans">${ICON.tokens}<span class="dc-token-label">Tokens</span></button><button class="dc-btn secondary dc-tour-launch" id="dcTourLaunch" type="button">Demo</button>${signedUser ? `<div class="dc-user-menu-wrap"><button class="dc-user-menu-button" id="dcUserMenuButton" type="button" aria-haspopup="menu" aria-expanded="false">${avatar}<span class="dc-user-copy"><b>${esc(signedUser.name || signedUser.email || 'Signed in')}</b><small>${esc(signedUser.email || 'Admin account')}</small></span><svg class="dc-user-chevron" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="dc-account-menu" id="dcAccountMenu" role="menu"><div class="dc-account-head"><strong>${esc(signedUser.name || 'DeenClipped account')}</strong><span>${esc(signedUser.email || 'Signed in')}</span></div><button class="dc-account-action" id="dcAccountBilling" type="button">Tokens & billing <b>Open</b></button><form method="post" action="/auth/logout"><button class="dc-logout-btn" type="submit">Log out</button></form></div></div>` : ''}<button class="dc-btn" id="dcNewProject"><span>＋ New</span></button></div>`;
 
   const work = document.createElement('div'); work.id = 'dcWork'; work.setAttribute('role','status'); work.setAttribute('aria-live','polite');
   work.innerHTML = `<span class="dc-work-toast-orb">${ICON.play}</span><div class="dc-work-toast-copy"><strong>Working…</strong><span>Saving changes</span></div><button id="dcWorkClose" type="button" aria-label="Hide progress notification">×</button><div class="dc-work-toast-progress"><i></i></div>`;
@@ -713,6 +759,16 @@ function bindGlobal(){
   $('#dcNewProject').onclick = () => { go('home'); setTimeout(() => $('#dcCreateUrl')?.focus(), 30); };
   $('#dcTourLaunch').onclick = () => openGuidedTour(0);
   $('#dcTokenPill').onclick = openBillingModal;
+  $('#dcUserMenuButton')?.addEventListener('click', event => {
+    event.stopPropagation();
+    const menu = $('#dcAccountMenu');
+    const btn = $('#dcUserMenuButton');
+    const open = !menu?.classList.contains('show');
+    menu?.classList.toggle('show', open);
+    btn?.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  $('#dcAccountBilling')?.addEventListener('click', () => { $('#dcAccountMenu')?.classList.remove('show'); $('#dcUserMenuButton')?.setAttribute('aria-expanded','false'); openBillingModal(); });
+  document.addEventListener('click', event => { if (!event.target.closest?.('.dc-user-menu-wrap')) { $('#dcAccountMenu')?.classList.remove('show'); $('#dcUserMenuButton')?.setAttribute('aria-expanded','false'); } });
   $('#dcWorkClose').onclick = () => { const el=$('#dcWork'); if(el){ el.dataset.dismissed='1'; el.dataset.dismissedKey = el.dataset.workKey || ''; el.classList.remove('show'); } };
   $('#dcGlobalSearch').addEventListener('input', renderGlobalSearch);
   document.addEventListener('keydown', event => {
@@ -1995,10 +2051,12 @@ function billingInfo(){return data()?.billing || {current:{plan:'free',remaining
 function updateTokenPill(){
   const pill=$('#dcTokenPill'); if(!pill)return;
   const bill=billingInfo(),cur=bill.current||{};
-  const label=cur.unlimited?'∞ tokens':`${Math.max(0,Math.round(Number(cur.remaining||0)))} tokens`;
-  const rate=`${Number(bill.tokenRatePerMinute||1)} token/min`;
-  pill.innerHTML=`${ICON.tokens}<span>${esc(label)}</span><em>${esc(rate)}</em>`;
-  pill.title=cur.unlimited?'Admin accounts have unlimited tokens':`${label} left · ${rate} charged for source video minutes`;
+  const rawRemaining=Math.max(0,Math.round(Number(cur.remaining||0)));
+  const label=cur.unlimited?'∞':String(rawRemaining);
+  const spoken=cur.unlimited?'unlimited tokens':`${rawRemaining} tokens`;
+  const rate=`${Number(bill.tokenRatePerMinute||1)}/min`;
+  pill.innerHTML=`${ICON.tokens}<span class="dc-token-label">Tokens</span><strong class="dc-token-main">${esc(label)}</strong><em class="dc-token-rate">${esc(rate)}</em>`;
+  pill.title=cur.unlimited?'Admin accounts have unlimited tokens':`${spoken} left · ${Number(bill.tokenRatePerMinute||1)} token/min charged for source video minutes`;
 }
 function openBillingModal(){
   $('#dcBillingLayer')?.remove();
