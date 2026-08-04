@@ -39,6 +39,60 @@ function html(res, status, value) {
   res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
   res.end(body);
 }
+
+function publicBase(req) {
+  const proto = String(req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim() || 'https';
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || 'deenclipped.online').split(',')[0].trim() || 'deenclipped.online';
+  return (config.publicBaseUrl || `${proto}://${host}`).replace(/\/+$/, '');
+}
+function marketingLayout(req, { title, description, body, canonicalPath = '/' }) {
+  const base = publicBase(req);
+  const canonical = `${base}${canonicalPath === '/' ? '' : canonicalPath}`;
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${title}</title>
+  <meta name="description" content="${description}">
+  <link rel="canonical" href="${canonical}">
+  <style>
+    :root{color-scheme:dark;--bg:#070707;--panel:#101012;--panel2:#171514;--line:rgba(255,255,255,.12);--text:#f7f2ea;--muted:#aaa4a0;--gold:#e3bd75;--gold2:#f4d99a;--green:#63d89a}
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:radial-gradient(circle at 14% 5%,rgba(227,189,117,.18),transparent 32%),linear-gradient(135deg,#050505,#0f1012 55%,#070707);color:var(--text);min-height:100vh;line-height:1.55}a{color:inherit}.site{width:min(1120px,calc(100% - 32px));margin:0 auto}.nav{display:flex;align-items:center;justify-content:space-between;padding:24px 0}.brand{display:flex;align-items:center;gap:12px;text-decoration:none;font-weight:850;letter-spacing:-.02em}.mark{width:38px;height:38px;border-radius:14px;background:linear-gradient(145deg,var(--gold2),var(--gold));box-shadow:0 18px 60px rgba(227,189,117,.20);position:relative}.mark:after{content:"";position:absolute;inset:10px;border-radius:9px;background:#080808}.navlinks{display:flex;gap:10px;align-items:center}.navlinks a,.btn{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:0 16px;border:1px solid var(--line);border-radius:999px;text-decoration:none;font-size:14px;color:var(--muted);background:rgba(255,255,255,.035)}.btn.primary{background:linear-gradient(135deg,var(--gold2),var(--gold));color:#0c0905;border-color:rgba(227,189,117,.55);font-weight:850}.hero{padding:68px 0 74px;display:grid;grid-template-columns:1.05fr .95fr;gap:42px;align-items:center}.kicker{display:inline-flex;gap:8px;align-items:center;padding:8px 12px;border:1px solid rgba(227,189,117,.25);border-radius:999px;background:rgba(227,189,117,.08);color:var(--gold2);font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.hero h1{font-size:clamp(42px,7vw,82px);line-height:.94;letter-spacing:-.075em;margin:22px 0 18px}.hero p{font-size:clamp(17px,2.4vw,22px);color:var(--muted);max-width:720px;margin:0 0 28px}.actions{display:flex;gap:12px;flex-wrap:wrap}.mock{border:1px solid rgba(255,255,255,.10);border-radius:34px;background:linear-gradient(145deg,rgba(255,255,255,.08),rgba(255,255,255,.025));box-shadow:0 30px 120px rgba(0,0,0,.55);padding:18px}.mockbar{display:flex;gap:7px;padding:6px 4px 16px}.dot{width:9px;height:9px;border-radius:99px;background:rgba(255,255,255,.22)}.clipgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.clipcard{min-height:178px;border-radius:24px;border:1px solid rgba(255,255,255,.09);background:linear-gradient(145deg,#171719,#0a0a0b);padding:16px;display:flex;flex-direction:column;justify-content:space-between}.clipcard b{font-size:12px;color:var(--gold2);letter-spacing:.12em;text-transform:uppercase}.clipcard span{color:var(--muted);font-size:13px}.features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding-bottom:64px}.feature{padding:24px;border:1px solid var(--line);border-radius:24px;background:rgba(255,255,255,.04)}.feature h2{margin:0 0 8px;font-size:20px}.feature p{margin:0;color:var(--muted)}.page{padding:42px 0 72px}.pagecard{max-width:900px;padding:34px;border:1px solid var(--line);border-radius:28px;background:rgba(255,255,255,.04)}.pagecard h1{margin:0 0 12px;font-size:42px;letter-spacing:-.05em}.pagecard h2{margin:28px 0 8px;font-size:22px}.pagecard p,.pagecard li{color:var(--muted)}.footer{border-top:1px solid var(--line);padding:24px 0 36px;color:var(--muted);font-size:14px}.footer .site{display:flex;gap:12px;justify-content:space-between;flex-wrap:wrap}.footer a{color:var(--muted);margin-left:14px}@media(max-width:820px){.hero{grid-template-columns:1fr;padding-top:36px}.features{grid-template-columns:1fr}.nav{align-items:flex-start}.navlinks{flex-wrap:wrap;justify-content:flex-end}.mock{display:none}}
+  </style>
+</head>
+<body>
+  <header class="site nav"><a class="brand" href="/"><span class="mark"></span><span>DeenClipped</span></a><nav class="navlinks"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a class="btn primary" href="/login">Sign in</a></nav></header>
+  ${body}
+  <footer class="footer"><div class="site"><span>© ${new Date().getFullYear()} DeenClipped. Create, edit and publish short-form clips from long videos.</span><span><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><a href="mailto:support@deenclipped.online">Contact</a></span></div></footer>
+</body>
+</html>`;
+}
+function marketingHome(req) {
+  return marketingLayout(req, {
+    title: 'DeenClipped — AI short-form clip creator',
+    description: 'DeenClipped helps users create, edit and publish short-form clips from long videos.',
+    canonicalPath: '/',
+    body: `<main class="site hero"><section><span class="kicker">AI clipping studio</span><h1>Create clips from long videos.</h1><p>DeenClipped helps creators turn lectures, podcasts and long videos into short-form clips, review them in a real editor, choose templates, and publish or schedule content to connected social accounts.</p><div class="actions"><a class="btn primary" href="/login">Open DeenClipped</a><a class="btn" href="/terms">Read terms</a></div></section><aside class="mock" aria-label="DeenClipped product preview"><div class="mockbar"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div><div class="clipgrid"><div class="clipcard"><b>Import</b><span>Paste a video link or upload your own file.</span></div><div class="clipcard"><b>Clip</b><span>Pick source range, template and clip settings.</span></div><div class="clipcard"><b>Edit</b><span>Review captions, layout and final clip style.</span></div><div class="clipcard"><b>Publish</b><span>Connect your own channel and schedule posts.</span></div></div></aside></main><section class="site features"><article class="feature"><h2>Source range control</h2><p>Select the exact part of a long video before generating clips.</p></article><article class="feature"><h2>Template-based editing</h2><p>Keep captions, layout and brand style consistent across clips.</p></article><article class="feature"><h2>Social publishing</h2><p>Connect your own accounts and publish clips from DeenClipped.</p></article></section>`
+  });
+}
+function privacyPage(req) {
+  return marketingLayout(req, {
+    title: 'Privacy Policy — DeenClipped',
+    description: 'Privacy Policy for DeenClipped.',
+    canonicalPath: '/privacy',
+    body: `<main class="site page"><article class="pagecard"><h1>Privacy Policy</h1><p>Last updated: 4 August 2026</p><p>DeenClipped helps users create, edit and publish short-form clips from long videos. This Privacy Policy explains what information DeenClipped collects and how it is used.</p><h2>Information we collect</h2><p>We may collect account information such as your name, email address and profile picture when you sign in. We may also store videos, links, generated clips, captions, templates, publishing settings, billing status and connected social account information needed to provide the service.</p><h2>Connected accounts</h2><p>When you connect a platform such as YouTube, DeenClipped stores the connection for your own account so clips can be published to the channel you choose. Tokens are used only to provide requested publishing features and are not sold.</p><h2>How we use information</h2><p>We use information to operate DeenClipped, process videos, generate clips, show projects in your library, provide billing/token features, connect publishing platforms, prevent abuse and improve reliability.</p><h2>Sharing</h2><p>We do not sell personal information. We may share information with service providers used to operate the app, such as hosting, payment processing, authentication and social publishing APIs, only as needed to provide the service.</p><h2>Data security</h2><p>We use reasonable technical measures to protect user data. No online service can guarantee absolute security.</p><h2>Your choices</h2><p>You can disconnect social accounts, delete generated content where available, or contact support about account data.</p><h2>Contact</h2><p>Questions can be sent to <a href="mailto:support@deenclipped.online">support@deenclipped.online</a>.</p></article></main>`
+  });
+}
+function termsPage(req) {
+  return marketingLayout(req, {
+    title: 'Terms of Service — DeenClipped',
+    description: 'Terms of Service for DeenClipped.',
+    canonicalPath: '/terms',
+    body: `<main class="site page"><article class="pagecard"><h1>Terms of Service</h1><p>Last updated: 4 August 2026</p><p>These Terms govern use of DeenClipped, an app for creating, editing and publishing short-form clips from long videos.</p><h2>Use of the service</h2><p>You must use DeenClipped lawfully and only with content you own or have permission to use. You are responsible for the videos, links, clips, captions and posts you create or publish through the service.</p><h2>Source content and copyright</h2><p>Uploading or importing videos you do not own or do not have permission to use may violate copyright or platform rules. By using DeenClipped, you confirm that you have the required rights and permissions for the content you process.</p><h2>Connected platforms</h2><p>When you connect YouTube or another platform, DeenClipped publishes only using the connected account permissions you grant. You remain responsible for complying with each platform's rules.</p><h2>Billing and tokens</h2><p>Some features may require tokens, subscriptions or paid plans. Token usage may be based on selected source video time and other plan rules shown in the app.</p><h2>Service availability</h2><p>DeenClipped may change, pause or remove features over time. We do not guarantee uninterrupted access.</p><h2>Contact</h2><p>Questions can be sent to <a href="mailto:support@deenclipped.online">support@deenclipped.online</a>.</p></article></main>`
+  });
+}
+
 function formBody(req, limit = 1_000_000) {
   return new Promise((resolve, reject) => {
     let raw = '', size = 0;
@@ -281,8 +335,10 @@ async function route(req, res, url) {
     auth.destroySession(req);
     return redirectWithCookies(res, '/login?info=Signed%20out', auth.cookieHeaders('', { clear: true }));
   }
+  if (method === 'GET' && pathname === '/privacy') return html(res, 200, privacyPage(req));
+  if (method === 'GET' && pathname === '/terms') return html(res, 200, termsPage(req));
   if (method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
-    if (auth.enabled() && !currentUser) return redirect(res, `/login?returnTo=${encodeURIComponent(pathname + url.search)}`);
+    if (auth.enabled() && !currentUser) return html(res, 200, marketingHome(req));
     if (auth.enabled() && currentUser && billing.needsPlanChoice(currentUser)) return redirect(res, `/plans?returnTo=${encodeURIComponent(pathname + url.search)}`);
     let html = fs.readFileSync(page, 'utf8');
     if (!html.includes('/activity-fix.js')) html = html.replace('</body>', '<script src="/activity-fix.js"></script>\n</body>');
