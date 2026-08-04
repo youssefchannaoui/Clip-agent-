@@ -714,11 +714,25 @@ body.dc-app .dc-logout-form{display:none}
 @media(max-width:720px){body.dc-app .dc-token-pill .dc-token-main{display:none}.dc-account-menu{right:-62px}}
 `;
 
+
+const trialUxCss = String.raw`
+/* Trial, token confirmation and billing notices */
+body.dc-app .dc-token-pill.trial{background:rgba(83,199,139,.08);border-color:rgba(83,199,139,.34);color:var(--dc-green)}
+body.dc-app .dc-token-pill.warn{background:rgba(229,169,87,.09);border-color:rgba(229,169,87,.34);color:var(--dc-orange)}
+.dc-token-trial-dot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 0 4px color-mix(in srgb,currentColor 16%,transparent)}
+.dc-charge-layer,.dc-billing-notice-layer{position:fixed;inset:0;z-index:520;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,.52);backdrop-filter:blur(14px)}
+.dc-charge-card,.dc-billing-notice-card{width:min(560px,100%);border:1px solid rgba(255,255,255,.10);border-radius:26px;background:linear-gradient(180deg,rgba(22,22,25,.97),rgba(9,9,12,.97));box-shadow:0 24px 90px rgba(0,0,0,.55),0 0 0 1px rgba(217,180,120,.04) inset;overflow:hidden}
+.dc-charge-head,.dc-billing-notice-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:24px 24px 16px;border-bottom:1px solid rgba(255,255,255,.07)}
+.dc-charge-head span,.dc-billing-notice-head span{display:inline-flex;align-items:center;gap:8px;color:var(--dc-accent2);font-size:10px;font-weight:900;letter-spacing:.11em;text-transform:uppercase}.dc-charge-head h2,.dc-billing-notice-head h2{margin:9px 0 0;font-size:26px;line-height:1.05;letter-spacing:-.04em}.dc-charge-head p,.dc-billing-notice-head p{margin:8px 0 0;color:var(--dc-muted);font-size:11px;line-height:1.55}.dc-charge-close,.dc-notice-close{width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,.09);background:#0b0b0d;color:var(--dc-muted);font-size:19px}.dc-charge-close:hover,.dc-notice-close:hover{color:var(--dc-text)}
+.dc-charge-body{padding:18px 24px 24px}.dc-charge-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}.dc-charge-tile{padding:15px;border:1px solid rgba(255,255,255,.08);border-radius:18px;background:rgba(255,255,255,.03)}.dc-charge-tile strong,.dc-charge-tile span{display:block}.dc-charge-tile strong{font-size:26px;letter-spacing:-.04em}.dc-charge-tile span{font-size:10px;color:var(--dc-muted);margin-top:4px}.dc-charge-estimate{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;padding:14px;border:1px solid rgba(217,180,120,.22);border-radius:18px;background:rgba(217,180,120,.06);margin-bottom:14px}.dc-charge-estimate label{display:block;font-size:10px;color:var(--dc-muted)}.dc-charge-estimate input{width:100%;height:42px;margin-top:6px;padding:0 12px;border:1px solid rgba(255,255,255,.10);border-radius:12px;background:#0b0b0d;color:var(--dc-text);font-size:18px;font-weight:850}.dc-charge-estimate b{display:block;font-size:28px;letter-spacing:-.04em;color:var(--dc-accent2)}.dc-charge-estimate small{display:block;color:var(--dc-muted);font-size:9px;margin-top:3px}.dc-charge-terms{display:grid;gap:8px;margin:14px 0}.dc-charge-terms span{display:flex;align-items:center;gap:9px;color:var(--dc-muted);font-size:10px;line-height:1.35}.dc-charge-terms span::before{content:'✓';width:18px;height:18px;flex:0 0 18px;display:grid;place-items:center;border-radius:50%;background:rgba(83,199,139,.10);color:var(--dc-green);font-weight:900}.dc-charge-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:18px}.dc-charge-actions .dc-btn{min-height:44px;border-radius:999px}.dc-charge-actions .dc-btn:first-child{flex:1}.dc-charge-muted{color:var(--dc-muted);font-size:9px;line-height:1.35}.dc-billing-notice-body{padding:20px 24px 24px}.dc-billing-notice-actions{display:flex;gap:10px;align-items:center;justify-content:flex-end;margin-top:18px}.dc-billing-notice-actions .dc-btn{border-radius:999px;min-height:42px}.dc-token-toast{position:fixed;right:22px;bottom:92px;z-index:515;max-width:360px;padding:14px 16px;border:1px solid rgba(217,180,120,.25);border-radius:18px;background:rgba(16,16,19,.88);box-shadow:0 18px 60px rgba(0,0,0,.42),0 0 28px rgba(217,180,120,.13);backdrop-filter:blur(18px);animation:dcViewReveal .22s ease both}.dc-token-toast strong,.dc-token-toast span{display:block}.dc-token-toast strong{font-size:12px}.dc-token-toast span{font-size:10px;color:var(--dc-muted);margin-top:4px;line-height:1.4}.dc-token-toast.good{border-color:rgba(83,199,139,.25)}.dc-token-toast.warn{border-color:rgba(229,169,87,.30)}.dc-trial-mini{display:inline-flex;align-items:center;gap:5px;margin-left:2px;padding-left:6px;border-left:1px solid rgba(255,255,255,.10);font-size:8px;color:inherit;font-weight:850;font-style:normal}
+@media(max-width:720px){.dc-charge-grid{grid-template-columns:1fr}.dc-charge-estimate{grid-template-columns:1fr}.dc-charge-actions,.dc-billing-notice-actions{flex-direction:column;align-items:stretch}.dc-token-toast{left:12px;right:12px;bottom:84px;max-width:none}}
+`;
+
 function injectShell(){
   if (shellReady) return;
   shellReady = true;
   const style = document.createElement('style');
-  style.id = 'dcPhase4Styles'; style.textContent = css + billingCss + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss + topbarCleanCss; document.head.appendChild(style);
+  style.id = 'dcPhase4Styles'; style.textContent = css + billingCss + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss + topbarCleanCss + trialUxCss; document.head.appendChild(style);
   document.body.classList.add('dc-app');
 
   const side = document.createElement('aside'); side.id = 'dcSidebar';
@@ -1156,17 +1170,63 @@ function upcomingPanelV3(clips){
   return `<section class="dc-card dc-card-pad v3-card dc-dashboard-panel"><div class="dc-card-head"><div><h2>Upcoming posts</h2><p>${next.length} ready or scheduled.</p></div><button class="dc-btn secondary" data-dc-nav="schedule">Open publish</button></div><div class="dc-mini-post-list">${rows}</div></section>`;
 }
 
-async function generateProject(){
-  const url=$('#dcCreateUrl')?.value.trim(), button=$('#dcGenerate'); if(!url) return notify('Paste a video link first','bad');
-  const [min,max]=$('#dcCreateDuration').value.split(',').map(Number); button.disabled=true; button.textContent='Queueing…';
+function splitVideoLinks(value=''){
+  return String(value||'').split(/[\n,]+/).map(v=>v.trim()).filter(Boolean);
+}
+async function fetchTokenEstimate(minutes){
+  try{return await callApi('/api/billing/estimate',{method:'POST',body:JSON.stringify({minutes})});}
+  catch(e){
+    const bill=billingInfo(); const rate=Number(bill.tokenRatePerMinute||1);
+    return {estimatedMinutes:Math.max(1,Math.ceil(Number(minutes||0))),estimatedTokens:Math.max(1,Math.ceil(Math.max(1,Number(minutes||0))*rate)),rate,unlimited:bill.current?.unlimited,remaining:bill.current?.remaining,enough:true,terms:bill.terms||[]};
+  }
+}
+function openTokenEstimateModal({urls,onConfirm}){
+  $('#dcChargeLayer')?.remove();
+  const bill=billingInfo(),rate=Number(bill.tokenRatePerMinute||1),links=splitVideoLinks(urls);
+  const defaultMinutes=Math.max(10,links.length*45);
+  const layer=document.createElement('div'); layer.id='dcChargeLayer'; layer.className='dc-charge-layer';
+  const terms=(bill.terms&&bill.terms.length?bill.terms:[`${rate} token/min for source video duration`,'Charged after exact length is known','Template rerenders are free','You can cancel from billing settings']);
+  layer.innerHTML=`<section class="dc-charge-card" role="dialog" aria-modal="true" aria-labelledby="dcChargeTitle"><div class="dc-charge-head"><div><span>${ICON.tokens} Token confirmation</span><h2 id="dcChargeTitle">Confirm before rendering.</h2><p>We estimate first, then charge the exact source-video minutes after DeenClipped reads the lecture duration.</p></div><button class="dc-charge-close" id="dcChargeClose" type="button" aria-label="Close">×</button></div><div class="dc-charge-body"><div class="dc-charge-grid"><div class="dc-charge-tile"><strong>${esc(links.length)}</strong><span>lecture link${links.length===1?'':'s'} queued</span></div><div class="dc-charge-tile"><strong>${esc(rate)}</strong><span>token per source minute</span></div></div><div class="dc-charge-estimate"><label>Estimated total source minutes<input id="dcEstimateMinutes" type="number" min="1" step="1" value="${esc(defaultMinutes)}"></label><div><b id="dcEstimateTokens">${esc(Math.ceil(defaultMinutes*rate))}</b><small id="dcEstimateSub">estimated tokens</small></div></div><div class="dc-charge-terms">${terms.map(t=>`<span>${esc(t)}</span>`).join('')}</div><div class="dc-charge-actions"><button class="dc-btn" id="dcConfirmCharge" type="button">Confirm and create clips</button><button class="dc-btn secondary" id="dcOpenBillingFromCharge" type="button">View plans</button><div class="dc-charge-muted" id="dcChargeBalance">Checking token balance…</div></div></div></section>`;
+  document.body.append(layer);
+  const close=()=>layer.remove();
+  $('#dcChargeClose').onclick=close;
+  layer.addEventListener('click',event=>{if(event.target===layer)close()});
+  const input=$('#dcEstimateMinutes',layer),tokensEl=$('#dcEstimateTokens',layer),subEl=$('#dcEstimateSub',layer),balanceEl=$('#dcChargeBalance',layer),confirm=$('#dcConfirmCharge',layer);
+  let latest={enough:true};
+  const update=async()=>{
+    const minutes=Math.max(1,Math.ceil(Number(input.value||defaultMinutes)));
+    latest=await fetchTokenEstimate(minutes);
+    tokensEl.textContent=latest.unlimited?'∞':String(latest.estimatedTokens||Math.ceil(minutes*rate));
+    subEl.textContent=latest.unlimited?'admin account':`estimated tokens for ${minutes} min`;
+    const remaining=latest.unlimited?'Unlimited':`${Math.max(0,Math.round(Number(latest.remaining||0)))} tokens left`;
+    balanceEl.textContent=latest.enough||latest.unlimited?remaining:`${remaining} · upgrade before rendering`;
+    confirm.textContent=latest.enough||latest.unlimited?'Confirm and create clips':'Not enough tokens — upgrade';
+  };
+  input.addEventListener('input',()=>{clearTimeout(input._timer);input._timer=setTimeout(update,220)});
+  $('#dcOpenBillingFromCharge').onclick=()=>{close();openBillingModal();};
+  confirm.onclick=async()=>{
+    if(!latest.enough&&!latest.unlimited){close();openBillingModal();return;}
+    confirm.disabled=true; confirm.textContent='Queueing…';
+    try{await onConfirm(); close();}
+    catch(e){notify(e.message,'bad');confirm.disabled=false;confirm.textContent='Try again';}
+  };
+  update();
+}
+async function queueProjectImport(url,button){
+  const [min,max]=$('#dcCreateDuration').value.split(',').map(Number);
+  button.disabled=true; button.textContent='Queueing…';
   try{
     await callApi('/api/template',{method:'POST',body:JSON.stringify({id:$('#dcCreateTemplate').value})});
     await callApi('/api/clip-settings',{method:'POST',body:JSON.stringify({clipsPerVideo:Number($('#dcCreateCount').value),clipMinSeconds:min,clipMaxSeconds:max})});
     const result=await callApi('/api/videos',{method:'POST',body:JSON.stringify({urls:url})});
     const failed=(result.results||[]).filter(x=>!x.ok).length;
-    notify(failed?`${result.results.length-failed} queued, ${failed} failed`:'Lecture queued — watch Happening now',failed?'bad':'good');
+    notify(failed?`${result.results.length-failed} queued, ${failed} failed`:'Lecture queued — watch Working now',failed?'bad':'good');
     $('#dcCreateUrl').value=''; await refreshData(); renderHome();
-  }catch(error){notify(error.message,'bad')}finally{button.disabled=false;button.textContent='Generate clips'}
+  }finally{button.disabled=false;button.textContent='Generate clips'}
+}
+async function generateProject(){
+  const url=$('#dcCreateUrl')?.value.trim(), button=$('#dcGenerate'); if(!url) return notify('Paste a video link first','bad');
+  openTokenEstimateModal({urls:url,onConfirm:()=>queueProjectImport(url,button)});
 }
 
 function renderProjects(){
@@ -2055,17 +2115,20 @@ function renderSidebarLive(){
 function billingInfo(){return data()?.billing || {current:{plan:'free',remaining:0,used:0,allowance:0},plans:{},tokenRatePerMinute:1}}
 function updateTokenPill(){
   const pill=$('#dcTokenPill'); if(!pill)return;
-  const bill=billingInfo(),cur=bill.current||{};
+  const bill=billingInfo(),cur=bill.current||{},trial=cur.trial||{};
   const rawRemaining=Math.max(0,Math.round(Number(cur.remaining||0)));
   const label=cur.unlimited?'∞':String(rawRemaining);
   const spoken=cur.unlimited?'unlimited tokens':`${rawRemaining} tokens`;
   const rate=`${Number(bill.tokenRatePerMinute||1)}/min`;
-  pill.innerHTML=`${ICON.tokens}<span class="dc-token-label">Tokens</span><strong class="dc-token-main">${esc(label)}</strong><em class="dc-token-rate">${esc(rate)}</em>`;
-  pill.title=cur.unlimited?'Admin accounts have unlimited tokens':`${spoken} left · ${Number(bill.tokenRatePerMinute||1)} token/min charged for source video minutes`;
+  const trialCopy=trial.active?`<em class="dc-trial-mini"><span class="dc-token-trial-dot"></span>${esc(trial.daysLeft||1)}d trial</em>`:'';
+  pill.classList.toggle('trial',!!trial.active);
+  pill.classList.toggle('warn',!cur.unlimited && !trial.active && rawRemaining<=10);
+  pill.innerHTML=`${ICON.tokens}<span class="dc-token-label">Tokens</span><strong class="dc-token-main">${esc(label)}</strong><em class="dc-token-rate">${esc(rate)}</em>${trialCopy}`;
+  pill.title=cur.unlimited?'Admin accounts have unlimited tokens':`${spoken} left · ${Number(bill.tokenRatePerMinute||1)} token/min charged for source video minutes${trial.active?` · Trial ends in ${trial.daysLeft} day${trial.daysLeft===1?'':'s'}`:''}`;
 }
 function openBillingModal(){
   $('#dcBillingLayer')?.remove();
-  const bill=billingInfo(),cur=bill.current||{},plans=bill.plans||{};
+  const bill=billingInfo(),cur=bill.current||{},plans=bill.plans||{},trial=cur.trial||{};
   const currentPlan=cur.plan||'free';
   const unlimited=!!cur.unlimited;
   const allowance=Math.max(0,Number(cur.allowance||0));
@@ -2077,28 +2140,31 @@ function openBillingModal(){
   const minutesFor=tokens=>Math.max(1,Math.floor(Number(tokens||0)/Math.max(.1,rate)));
   const intervalWord={weekly:'week',monthly:'month',yearly:'year'};
   const sortPlans=['weekly','monthly','yearly'];
+  const trialDays=Math.max(0,Number(bill.trialDays||7));
+  const terms=(bill.terms&&bill.terms.length?bill.terms:[`${rate} token/min for source videos`, 'Charged after duration is known', 'Template rerenders are free', `${trialDays}-day trial on paid plans`]);
   const planCards=sortPlans.map(id=>{
     const plan=plans[id]||{};
-    const isCurrent=currentPlan===id;
+    const isCurrent=currentPlan===id && cur.status!=='free';
     const enabled=plan.enabled!==false&&plan.priceId;
     const featured=id==='monthly';
     const tokens=Number(plan.tokens||0);
-    const label=isCurrent?'Current plan':enabled?`Start ${bill.trialDays||7}-day free trial`:'Stripe price needed';
+    const label=isCurrent?'Current plan':enabled?`Start ${trialDays}-day trial`:'Stripe price needed';
     const featureCopy=id==='weekly'
-      ? ['Great for testing content', `${minutesFor(tokens)} source minutes`, 'Cancel any time']
+      ? ['Small weekly pack', `${minutesFor(tokens)} source minutes`, 'Good for testing']
       : id==='monthly'
-        ? ['Best creator balance', `${minutesFor(tokens)} source minutes`, 'Trial through Stripe']
-        : ['Biggest token bank', `${minutesFor(tokens)} source minutes`, 'Lowest admin effort'];
+        ? ['Best creator balance', `${minutesFor(tokens)} source minutes`, 'Most flexible']
+        : ['Big yearly token bank', `${minutesFor(tokens)} source minutes`, 'Lowest effort'];
     return `<article class="dc-plan-card ${featured?'featured':''} ${isCurrent?'current':''}"><div class="dc-plan-top"><div><h3>${esc(plan.name||id)}</h3></div><span class="badge">${esc(isCurrent?'Active':plan.badge||(featured?'Popular':'Plan'))}</span></div><div class="tokens">${esc(tokens)} <span>tokens / ${esc(intervalWord[id]||id)}</span></div><p>${esc(plan.description||'Token allowance for clipping lectures.')}</p><div class="dc-plan-features">${featureCopy.map(item=>`<span>${esc(item)}</span>`).join('')}</div><button class="dc-btn ${isCurrent?'secondary':''}" data-billing-checkout="${esc(id)}" ${enabled&&!isCurrent?'':'disabled'}>${esc(label)}</button></article>`;
   }).join('');
-  const usageLabel=unlimited?'Unlimited':'Available now';
+  const usageLabel=unlimited?'Unlimited':trial.active?'Trial wallet':'Available now';
   const usageValue=unlimited?'∞':String(Math.round(remaining));
   const usageSub=unlimited?'tokens':'tokens left';
   const allowanceCopy=unlimited?'Owner account':`${Math.round(allowance)} allowance`;
   const spentCopy=unlimited?'No charges':`${Math.round(used)} used${reserved?` · ${Math.round(reserved)} reserved`:''}`;
   const billingReady=!!bill.stripeConfigured;
+  const trialStatus=trial.active?`Trial ends in ${trial.daysLeft} day${trial.daysLeft===1?'':'s'}`:trial.ended?'Trial ended':`${trialDays}-day trial available`;
   const layer=document.createElement('div');layer.id='dcBillingLayer';layer.className='dc-billing-layer show';
-  layer.innerHTML=`<section class="dc-billing-card" role="dialog" aria-modal="true" aria-labelledby="dcBillingTitle"><div class="dc-billing-head"><div><span class="dc-billing-kicker">${ICON.tokens} Tokens & billing</span><h2 id="dcBillingTitle">Choose how many clips you can create.</h2><p>Tokens keep rendering costs fair. Source videos are charged at <b>${esc(rate)} token/min</b>; template rerenders and style fixes do not burn tokens.</p></div><button class="dc-billing-close" id="dcBillingClose" type="button" aria-label="Close">×</button></div><div class="dc-billing-status"><div class="dc-usage-panel"><div class="dc-panel-label"><span>${esc(usageLabel)}</span><span class="dc-status-pill ${unlimited?'warn':''}">${esc(unlimited?'Admin mode':currentPlan)}</span></div><div class="dc-usage-row"><div class="dc-usage-value">${esc(usageValue)}<span>${esc(usageSub)}</span></div><div class="dc-usage-meta"><div class="dc-usage-mini"><b>${esc(allowanceCopy)}</b><span>Current period</span></div><div class="dc-usage-mini"><b>${esc(spentCopy)}</b><span>Usage status</span></div></div></div><div class="dc-usage-bar" aria-hidden="true"><i style="width:${pct}%"></i></div></div><div class="dc-rate-panel"><div class="dc-panel-label"><span>Charge rate</span><span class="dc-status-pill warn">Simple</span></div><div class="dc-rate-big">${esc(rate)} <span>token/min</span></div><p>A 45 minute lecture costs about <b>${Math.ceil(45*rate)} tokens</b> after processing. Editing, template updates and rerenders stay free.</p><div class="dc-rate-steps"><span>1. Import</span><span>2. Render</span><span>3. Tokens charged</span></div></div></div><div class="dc-plan-grid">${planCards}</div><div class="dc-billing-foot"><div class="dc-billing-note"><i class="${billingReady?'':'warn'}"></i><span>${billingReady?'Stripe Checkout is connected.':'Stripe is not configured yet. Add secret key, webhook secret and price IDs in Render.'}</span></div><button class="dc-btn secondary" id="dcBillingPortal" type="button" ${cur.stripeCustomerId?'':'disabled'}>Manage billing</button></div></section>`;
+  layer.innerHTML=`<section class="dc-billing-card" role="dialog" aria-modal="true" aria-labelledby="dcBillingTitle"><div class="dc-billing-head"><div><span class="dc-billing-kicker">${ICON.tokens} Tokens & billing</span><h2 id="dcBillingTitle">Tokens that stay clear before you render.</h2><p>Every import shows an estimate first. Source videos cost <b>${esc(rate)} token/min</b>; template rerenders and style fixes are free.</p></div><button class="dc-billing-close" id="dcBillingClose" type="button" aria-label="Close">×</button></div><div class="dc-billing-status"><div class="dc-usage-panel"><div class="dc-panel-label"><span>${esc(usageLabel)}</span><span class="dc-status-pill ${unlimited?'warn':trial.active?'good':''}">${esc(unlimited?'Admin mode':trialStatus)}</span></div><div class="dc-usage-row"><div class="dc-usage-value">${esc(usageValue)}<span>${esc(usageSub)}</span></div><div class="dc-usage-meta"><div class="dc-usage-mini"><b>${esc(allowanceCopy)}</b><span>Current period</span></div><div class="dc-usage-mini"><b>${esc(spentCopy)}</b><span>Usage status</span></div></div></div><div class="dc-usage-bar" aria-hidden="true"><i style="width:${pct}%"></i></div></div><div class="dc-rate-panel"><div class="dc-panel-label"><span>Charge rules</span><span class="dc-status-pill warn">Transparent</span></div><div class="dc-rate-big">${esc(rate)} <span>token/min</span></div><p>A 45 minute lecture costs about <b>${Math.ceil(45*rate)} tokens</b>. You confirm the estimate before starting.</p><div class="dc-rate-steps"><span>1. Estimate</span><span>2. Render</span><span>3. Charge exact</span></div></div></div><div class="dc-charge-terms" style="margin:0 30px 18px">${terms.map(item=>`<span>${esc(item)}</span>`).join('')}</div><div class="dc-plan-grid">${planCards}</div><div class="dc-billing-foot"><div class="dc-billing-note"><i class="${billingReady?'':'warn'}"></i><span>${billingReady?'Stripe Checkout is connected.':'Stripe is not configured yet. Add secret key, webhook secret and price IDs in Render.'}</span></div><button class="dc-btn secondary" id="dcBillingPortal" type="button" ${cur.stripeCustomerId?'':'disabled'}>Manage billing</button></div></section>`;
   document.body.append(layer);
   $('#dcBillingClose').onclick=()=>layer.remove();
   layer.addEventListener('click',event=>{if(event.target===layer)layer.remove()});
@@ -2108,6 +2174,45 @@ function openBillingModal(){
     catch(e){notify(e.message,'bad');btn.disabled=false;btn.textContent='Try again';}
   }));
   $('#dcBillingPortal')?.addEventListener('click',async()=>{try{const res=await callApi('/api/billing/portal',{method:'POST',body:'{}'}); if(res.url) location.href=res.url;}catch(e){notify(e.message,'bad')}});
+}
+function seenStoreKey(kind,id){
+  const user=(data()?.user?.id || data()?.user?.email || 'anon');
+  return `dc_${kind}_${user}_${id}`;
+}
+function seenGet(kind,id){try{return localStorage.getItem(seenStoreKey(kind,id))==='1'}catch{return false}}
+function seenSet(kind,id){try{localStorage.setItem(seenStoreKey(kind,id),'1')}catch{}}
+function showTokenToast(event){
+  if(!event?.id || seenGet('token_event',event.id))return;
+  seenSet('token_event',event.id);
+  const existing=$('.dc-token-toast'); if(existing) existing.remove();
+  const el=document.createElement('div'); el.className='dc-token-toast good';
+  const amount=Math.round(Number(event.amount||0));
+  const remaining=event.remaining!==undefined?` · ${Math.round(Number(event.remaining||0))} left`:'';
+  el.innerHTML=`<strong>${amount} token${amount===1?'':'s'} used</strong><span>${esc(event.message||'Tokens were charged after processing.')}${esc(remaining)}</span>`;
+  document.body.append(el);
+  setTimeout(()=>{if(el.isConnected)el.remove()},6200);
+}
+function maybeShowTokenEvents(){
+  const bill=billingInfo();
+  const events=(bill.recentEvents||[]).filter(e=>e?.type==='tokens_charged'||Number(e?.amount)>0);
+  if(events[0])showTokenToast(events[0]);
+}
+function showBillingNotice(notice){
+  if(!notice?.id || seenGet('billing_notice',notice.id))return;
+  seenSet('billing_notice',notice.id);
+  $('#dcBillingNoticeLayer')?.remove();
+  const layer=document.createElement('div'); layer.id='dcBillingNoticeLayer'; layer.className='dc-billing-notice-layer';
+  const icon=notice.kind==='trial_ended'?'⚠':notice.kind==='low_tokens'?'◔':'✓';
+  layer.innerHTML=`<section class="dc-billing-notice-card" role="dialog" aria-modal="true"><div class="dc-billing-notice-head"><div><span>${icon} Billing update</span><h2>${esc(notice.title||'Account update')}</h2><p>${esc(notice.message||'Review your tokens and plan.')}</p></div><button class="dc-notice-close" id="dcBillingNoticeClose" type="button" aria-label="Close">×</button></div><div class="dc-billing-notice-body"><div class="dc-charge-terms"><span>Tokens are shown before each import</span><span>Trials last ${esc(billingInfo().trialDays||7)} days on paid plans</span><span>You can manage billing any time from the token button</span></div><div class="dc-billing-notice-actions"><button class="dc-btn secondary" id="dcBillingNoticeLater" type="button">Later</button><button class="dc-btn" id="dcBillingNoticeAction" type="button">${esc(notice.action||'Open billing')}</button></div></div></section>`;
+  document.body.append(layer);
+  const close=()=>layer.remove();
+  $('#dcBillingNoticeClose').onclick=close; $('#dcBillingNoticeLater').onclick=close;
+  $('#dcBillingNoticeAction').onclick=()=>{close();openBillingModal();};
+  layer.addEventListener('click',event=>{if(event.target===layer)close()});
+}
+function maybeShowBillingNotices(){
+  const notices=billingInfo().notices||[];
+  if(notices.length)showBillingNotice(notices[0]);
 }
 function renderCurrent(){if(currentView==='home')renderHome();if(currentView==='projects')renderProjects();if(currentView==='review')renderReview();if(currentView==='editor')ensureEditor();if(currentView==='publishing')renderConnections();if(currentView==='templates')renderTemplatesPage();if(currentView==='music')renderAudioLibrary();if(currentView==='insights')renderInsightsPage();if(currentView==='automation')renderSettingsPage()}
 async function refreshData(){if(typeof refresh==='function')return refresh();try{DATA=await callApi('/api/state')}catch{}}
@@ -2123,7 +2228,7 @@ function sync(){
   const live=Boolean($('#app')&&!$('#app').classList.contains('hide'));
   $('#dcSidebar').style.display=live?'flex':'none';$('#dcTopbar').style.display=live?'flex':'none';
   if(!live||!data())return;
-  const jobs=activeJobs(),health=$('#dcHealth');health.className=`dc-health ${jobs.length?'busy':!data().readiness?.ready?'bad':''}`;$('span',health).textContent=jobs.length?`${jobs.length} active`:data().readiness?.ready?'Ready':'Setup needed';updateTokenPill();
+  const jobs=activeJobs(),health=$('#dcHealth');health.className=`dc-health ${jobs.length?'busy':!data().readiness?.ready?'bad':''}`;$('span',health).textContent=jobs.length?`${jobs.length} active`:data().readiness?.ready?'Ready':'Setup needed';updateTokenPill();maybeShowBillingNotices();maybeShowTokenEvents();
   const signature=JSON.stringify({p:(data().projects||[]).map(p=>[p.id,p.status,p.progress,p.moreJob?.status,p.moreJob?.progress]),c:(data().clips||[]).map(c=>[c.id,c.status,c.scheduledAt,c.postedAt,c.rerender?.status]),r:(data().rerenderJobs||[]).map(r=>[r.id,r.status,r.progress]),s:data().social?.providers});
   if(signature!==lastDataSignature){lastDataSignature=signature;if(currentView!=='editor'||!editor.dirty)renderCurrent();else{renderTimeline();}}
   paintWork();
