@@ -1342,6 +1342,7 @@ function openTokenEstimateModal({urls,onConfirm}){
       </div>
       <div class="dc-source-manual" id="dcSourceManual" hidden>
         <div><strong>Duration could not be verified</strong><span>Enter the full video length so token estimates are not guessed.</span></div>
+        <div class="dc-source-why" id="dcSourceWhy" hidden></div>
         <label><span>Minutes</span><input id="dcManualDurationMin" type="number" min="1" step="0.1" value="20"></label>
       </div>
       <div class="dc-processing-card">
@@ -1391,6 +1392,20 @@ function openTokenEstimateModal({urls,onConfirm}){
     $('#dcSourceSub',layer).textContent=loaded?`${links.length} source${links.length===1?'':'s'} · real video length loaded`:`${links.length} source${links.length===1?'':'s'} · enter duration if the server could not read it`;
     $('#dcSourceDuration',layer).textContent=loaded?clockFromSeconds(maxSec):'Manual';
     if(manualBox) manualBox.hidden=loaded;
+    // Surface why the lookup failed. The backend already records this per
+    // source; without showing it, a fixable cause like a missing API key
+    // looks exactly the same as an unfixable one.
+    const whyBox=$('#dcSourceWhy',layer);
+    if(whyBox){
+      const reasons=[...new Set((sourceInfo?.sources||[])
+        .map(s=>String(s?.warning||s?.error||'').trim())
+        .filter(Boolean)
+        .flatMap(text=>text.split(' | ')))].filter(Boolean);
+      if(!loaded&&reasons.length){
+        whyBox.hidden=false;
+        whyBox.innerHTML=`<strong>Why:</strong> ${reasons.map(r=>esc(r)).join('<br>')}`;
+      }else whyBox.hidden=true;
+    }
   };
   const readRange=()=>{
     let start=Math.max(0,Math.min(maxSec-1,Number(startInput.value||0)));
