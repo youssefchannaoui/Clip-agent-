@@ -71,7 +71,7 @@ function marketingLayout(req, { title, description, body, canonicalPath = '/' })
 function marketingHome(req) {
   return marketingLayout(req, {
     title: 'DeenClipped',
-    description: 'DeenClipped is an AI clipping app that helps users create, edit, and publish short-form clips from long videos.',
+    description: 'DeenClipped helps users create, edit, and publish short-form clips from long videos.',
     canonicalPath: '/',
     body: `<main class="site hero"><section><span class="kicker">AI clipping studio</span><h1>DeenClipped</h1><p><strong>DeenClipped</strong> is an AI clipping app that helps users create, edit, and publish short-form clips from long videos. Users can import a long video or upload their own file, choose a source range, generate clips, review them in the editor, apply templates, and publish or schedule clips to their own connected social accounts.</p><div class="actions"><a class="btn primary" href="/login">Open DeenClipped</a><a class="btn" href="/privacy">Read privacy policy</a></div></section><aside class="mock" aria-label="DeenClipped product preview"><div class="mockbar"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div><div class="clipgrid"><div class="clipcard"><b>Import</b><span>Paste a video link or upload your own video file.</span></div><div class="clipcard"><b>Clip</b><span>Choose the exact source range, template, and clip settings.</span></div><div class="clipcard"><b>Edit</b><span>Review captions, layout, thumbnails, and final clip style.</span></div><div class="clipcard"><b>Publish</b><span>Connect your own YouTube or social account and publish clips.</span></div></div></aside></main><section class="site features"><article class="feature"><h2>What DeenClipped does</h2><p>DeenClipped turns long videos into short-form clips for social media.</p></article><article class="feature"><h2>Create and edit clips</h2><p>Generate clips, review captions, adjust style, and keep templates consistent.</p></article><article class="feature"><h2>Publish to your accounts</h2><p>Connect your own social accounts so clips publish to the right channel.</p></article></section>`
   });
@@ -280,12 +280,12 @@ async function route(req, res, url) {
 
   const currentUser = userRecordForRequest(req);
   if (method === 'GET' && pathname === '/login') {
-    if (currentUser && auth.enabled()) return redirect(res, billing.postLoginRedirect(currentUser, url.searchParams.get('returnTo') || '/'));
-    return html(res, 200, auth.loginPage({ error: url.searchParams.get('error') || '', info: url.searchParams.get('info') || '', returnTo: url.searchParams.get('returnTo') || '/' }));
+    if (currentUser && auth.enabled()) return redirect(res, billing.postLoginRedirect(currentUser, url.searchParams.get('returnTo') || '/app'));
+    return html(res, 200, auth.loginPage({ error: url.searchParams.get('error') || '', info: url.searchParams.get('info') || '', returnTo: url.searchParams.get('returnTo') || '/app' }));
   }
   if (method === 'GET' && pathname === '/plans') {
     if (auth.enabled() && !currentUser) return redirect(res, `/login?returnTo=${encodeURIComponent(pathname + url.search)}`);
-    return html(res, 200, billing.plansPage(currentUser, { error: url.searchParams.get('error') || '', info: url.searchParams.get('info') || '', returnTo: url.searchParams.get('returnTo') || '/' }));
+    return html(res, 200, billing.plansPage(currentUser, { error: url.searchParams.get('error') || '', info: url.searchParams.get('info') || '', returnTo: url.searchParams.get('returnTo') || '/app' }));
   }
   if (method === 'POST' && pathname === '/billing/continue-free') {
     try { const body = await formBody(req); billing.markPlansSeen(currentUser); return redirect(res, body.returnTo || '/'); }
@@ -297,7 +297,7 @@ async function route(req, res, url) {
   }
   const authStart = pathname.match(/^\/auth\/(google|apple)\/start$/);
   if (method === 'GET' && authStart) {
-    try { return redirect(res, auth.oauthStart(authStart[1], req, url.searchParams.get('returnTo') || '/')); }
+    try { return redirect(res, auth.oauthStart(authStart[1], req, url.searchParams.get('returnTo') || '/app')); }
     catch (error) { return redirect(res, `/login?error=${encodeURIComponent(error.message)}`); }
   }
   if (method === 'GET' && pathname === '/auth/google/callback') {
@@ -338,7 +338,11 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/privacy') return html(res, 200, privacyPage(req));
   if (method === 'GET' && pathname === '/terms') return html(res, 200, termsPage(req));
   if (method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
-    if (auth.enabled() && !currentUser) return html(res, 200, marketingHome(req));
+    if (currentUser && auth.enabled()) return redirect(res, `/app${url.search || ''}`);
+    return html(res, 200, marketingHome(req));
+  }
+  if (method === 'GET' && (pathname === '/app' || pathname === '/app/')) {
+    if (auth.enabled() && !currentUser) return redirect(res, `/login?returnTo=${encodeURIComponent(pathname + url.search)}`);
     if (auth.enabled() && currentUser && billing.needsPlanChoice(currentUser)) return redirect(res, `/plans?returnTo=${encodeURIComponent(pathname + url.search)}`);
     let html = fs.readFileSync(page, 'utf8');
     if (!html.includes('/activity-fix.js')) html = html.replace('</body>', '<script src="/activity-fix.js"></script>\n</body>');
@@ -359,10 +363,10 @@ async function route(req, res, url) {
       // The account comes from the signed OAuth state, not from whoever holds
       // a session cookie when the callback lands.
       await social.completeOAuth(provider, url);
-      return redirect(res, `/?social=connected&provider=${encodeURIComponent(provider)}`);
+      return redirect(res, `/app?social=connected&provider=${encodeURIComponent(provider)}`);
     } catch (error) {
       console.error(error);
-      return redirect(res, `/?social=error&provider=${encodeURIComponent(provider)}&message=${encodeURIComponent(error.message)}`);
+      return redirect(res, `/app?social=error&provider=${encodeURIComponent(provider)}&message=${encodeURIComponent(error.message)}`);
     }
   }
   const socialMedia = pathname.match(/^\/media\/social\/([^/]+)\.mp4$/);
