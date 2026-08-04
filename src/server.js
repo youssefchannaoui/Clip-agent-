@@ -70,10 +70,10 @@ function marketingLayout(req, { title, description, body, canonicalPath = '/' })
 }
 function marketingHome(req) {
   return marketingLayout(req, {
-    title: 'DeenClipped — AI short-form clip creator',
-    description: 'DeenClipped helps users create, edit and publish short-form clips from long videos.',
+    title: 'DeenClipped',
+    description: 'DeenClipped is an AI clipping app that helps users create, edit, and publish short-form clips from long videos.',
     canonicalPath: '/',
-    body: `<main class="site hero"><section><span class="kicker">AI clipping studio</span><h1>Create clips from long videos.</h1><p>DeenClipped helps creators turn lectures, podcasts and long videos into short-form clips, review them in a real editor, choose templates, and publish or schedule content to connected social accounts.</p><div class="actions"><a class="btn primary" href="/login">Open DeenClipped</a><a class="btn" href="/terms">Read terms</a></div></section><aside class="mock" aria-label="DeenClipped product preview"><div class="mockbar"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div><div class="clipgrid"><div class="clipcard"><b>Import</b><span>Paste a video link or upload your own file.</span></div><div class="clipcard"><b>Clip</b><span>Pick source range, template and clip settings.</span></div><div class="clipcard"><b>Edit</b><span>Review captions, layout and final clip style.</span></div><div class="clipcard"><b>Publish</b><span>Connect your own channel and schedule posts.</span></div></div></aside></main><section class="site features"><article class="feature"><h2>Source range control</h2><p>Select the exact part of a long video before generating clips.</p></article><article class="feature"><h2>Template-based editing</h2><p>Keep captions, layout and brand style consistent across clips.</p></article><article class="feature"><h2>Social publishing</h2><p>Connect your own accounts and publish clips from DeenClipped.</p></article></section>`
+    body: `<main class="site hero"><section><span class="kicker">AI clipping studio</span><h1>DeenClipped</h1><p><strong>DeenClipped</strong> is an AI clipping app that helps users create, edit, and publish short-form clips from long videos. Users can import a long video or upload their own file, choose a source range, generate clips, review them in the editor, apply templates, and publish or schedule clips to their own connected social accounts.</p><div class="actions"><a class="btn primary" href="/login">Open DeenClipped</a><a class="btn" href="/privacy">Read privacy policy</a></div></section><aside class="mock" aria-label="DeenClipped product preview"><div class="mockbar"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div><div class="clipgrid"><div class="clipcard"><b>Import</b><span>Paste a video link or upload your own video file.</span></div><div class="clipcard"><b>Clip</b><span>Choose the exact source range, template, and clip settings.</span></div><div class="clipcard"><b>Edit</b><span>Review captions, layout, thumbnails, and final clip style.</span></div><div class="clipcard"><b>Publish</b><span>Connect your own YouTube or social account and publish clips.</span></div></div></aside></main><section class="site features"><article class="feature"><h2>What DeenClipped does</h2><p>DeenClipped turns long videos into short-form clips for social media.</p></article><article class="feature"><h2>Create and edit clips</h2><p>Generate clips, review captions, adjust style, and keep templates consistent.</p></article><article class="feature"><h2>Publish to your accounts</h2><p>Connect your own social accounts so clips publish to the right channel.</p></article></section>`
   });
 }
 function privacyPage(req) {
@@ -340,9 +340,9 @@ async function route(req, res, url) {
   if (method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
     if (auth.enabled() && !currentUser) return html(res, 200, marketingHome(req));
     if (auth.enabled() && currentUser && billing.needsPlanChoice(currentUser)) return redirect(res, `/plans?returnTo=${encodeURIComponent(pathname + url.search)}`);
-    let pageHtml = fs.readFileSync(page, 'utf8');
-    if (!pageHtml.includes('/activity-fix.js')) pageHtml = pageHtml.replace('</body>', '<script src="/activity-fix.js"></script>\n</body>');
-    const body = Buffer.from(pageHtml);
+    let html = fs.readFileSync(page, 'utf8');
+    if (!html.includes('/activity-fix.js')) html = html.replace('</body>', '<script src="/activity-fix.js"></script>\n</body>');
+    const body = Buffer.from(html);
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
     return res.end(body);
   }
