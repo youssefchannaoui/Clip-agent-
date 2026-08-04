@@ -1,208 +1,89 @@
-function escapeHtml(value = '') {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
+:root{
+  color-scheme:dark;
+  --bg:#060607;
+  --bg-soft:#0b0b0d;
+  --panel:#101013;
+  --panel-2:#151419;
+  --line:rgba(255,255,255,.105);
+  --line-gold:rgba(228,188,113,.28);
+  --text:#f8f5ef;
+  --muted:#aaa6a0;
+  --muted-2:#78756f;
+  --gold:#e4bc71;
+  --gold-bright:#f2d696;
+  --green:#59d493;
+  --radius:28px;
+  --shadow:0 35px 120px rgba(0,0,0,.62);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;background:var(--bg)}
+body{margin:0;background:
+  radial-gradient(circle at 50% -10%,rgba(228,188,113,.15),transparent 33%),
+  radial-gradient(circle at 4% 28%,rgba(64,110,118,.10),transparent 25%),
+  var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.55;overflow-x:hidden}
+a{color:inherit}.wrap{width:min(1240px,calc(100% - 38px));margin:0 auto}.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.site-header{position:sticky;top:0;z-index:80;border-bottom:1px solid rgba(255,255,255,.07);background:rgba(6,6,7,.78);backdrop-filter:blur(20px)}
+.nav{height:76px;display:flex;align-items:center;gap:34px}.brand{display:flex;align-items:center;gap:11px;text-decoration:none;font-weight:850;letter-spacing:-.035em;font-size:19px;white-space:nowrap}.brand-mark{width:38px;height:38px;border-radius:13px;background:linear-gradient(145deg,#2a251d,#0c0c0e);border:1px solid rgba(228,188,113,.34);display:grid;place-items:center;box-shadow:inset 0 0 22px rgba(228,188,113,.10),0 12px 38px rgba(0,0,0,.4)}.brand-mark:before{content:"";width:16px;height:19px;background:var(--gold);clip-path:polygon(50% 0,100% 25%,100% 100%,0 100%,0 25%);box-shadow:inset 0 0 0 5px #16120d}.nav-links{display:flex;align-items:center;gap:27px;margin-left:auto}.nav-links a{font-size:14px;color:#aaa6a0;text-decoration:none;transition:.2s}.nav-links a:hover{color:#fff}.nav-actions{display:flex;align-items:center;gap:10px;margin-left:8px}.button{min-height:46px;padding:0 20px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.035);color:#eee;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-weight:760;font-size:14px;transition:transform .2s,border-color .2s,background .2s}.button:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.22)}.button.primary{background:linear-gradient(135deg,var(--gold-bright),var(--gold));color:#12100b;border-color:transparent;box-shadow:0 15px 45px rgba(228,188,113,.18)}.button.ghost{background:transparent}.menu-button{display:none;margin-left:auto;width:44px;height:44px;border:1px solid var(--line);border-radius:13px;background:#0e0e10;color:#fff;font-size:20px}
+.hero{padding:66px 0 56px;text-align:center}.eyebrow{display:inline-flex;align-items:center;gap:8px;padding:8px 13px;border-radius:999px;border:1px solid var(--line-gold);background:rgba(228,188,113,.07);font-size:12px;font-weight:850;letter-spacing:.11em;text-transform:uppercase;color:var(--gold-bright)}.eyebrow i{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 16px var(--green)}.hero h1{max-width:1280px;margin:24px auto 18px;font-size:clamp(38px,4.6vw,72px);line-height:.94;letter-spacing:-.078em}.hero h1 span{background:linear-gradient(90deg,#fff 15%,var(--gold-bright) 72%,#fff);background-clip:text;-webkit-background-clip:text;color:transparent}.hero-copy{max-width:820px;margin:0 auto;color:var(--muted);font-size:clamp(16px,1.2vw,19px)}.purpose-line{max-width:860px;margin:11px auto 0;color:#d6d1c8;font-size:14px}.hero-actions{display:flex;justify-content:center;gap:12px;margin-top:28px;flex-wrap:wrap}.hero-actions .button{min-height:52px;padding:0 25px;border-radius:16px}.source-bar{width:min(760px,100%);margin:28px auto 0;padding:7px;border:1px solid rgba(255,255,255,.15);border-radius:19px;background:rgba(255,255,255,.055);display:flex;align-items:center;gap:8px;box-shadow:0 24px 80px rgba(0,0,0,.36)}.source-bar .source-icon{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;color:var(--gold);background:#171512}.source-bar input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:#ddd;font:inherit;padding:0 7px}.source-bar button{border:0;min-height:46px;padding:0 23px;border-radius:14px;background:#f2eee7;color:#121212;font-weight:850;cursor:pointer}.hero-note{font-size:12px;color:var(--muted-2);margin-top:11px}.hero-stage{position:relative;margin:54px auto 0;max-width:1180px;padding:18px;border-radius:34px;border:1px solid rgba(255,255,255,.13);background:linear-gradient(145deg,rgba(255,255,255,.085),rgba(255,255,255,.022));box-shadow:var(--shadow)}.hero-stage:before{content:"";position:absolute;inset:-80px 10% auto;height:220px;background:radial-gradient(ellipse,rgba(228,188,113,.22),transparent 70%);filter:blur(30px);z-index:-1}.browser-bar{height:35px;display:flex;align-items:center;gap:7px;padding:0 4px 10px}.browser-bar i{width:9px;height:9px;border-radius:50%;background:#39393c}.browser-bar span{height:22px;width:42%;border-radius:7px;background:rgba(255,255,255,.045);margin-left:14px}.product-image{display:block;width:100%;border-radius:22px;border:1px solid rgba(255,255,255,.08)}.floating-chip{position:absolute;display:flex;align-items:center;gap:9px;padding:11px 15px;border-radius:14px;border:1px solid rgba(255,255,255,.13);background:rgba(14,14,16,.86);backdrop-filter:blur(15px);box-shadow:0 18px 50px rgba(0,0,0,.5);font-size:13px;font-weight:750}.floating-chip i{width:8px;height:8px;border-radius:50%;background:var(--green)}.chip-one{right:-14px;top:18%}.chip-two{left:-18px;bottom:15%}.platform-strip{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;padding:26px 0 0}.platform-pill{display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.025);font-size:13px;color:#b8b4ae}.platform-pill b{color:#fff}.platform-dot{width:9px;height:9px;border-radius:50%}.yt{background:#ff3b54}.tt{background:#5fe0dd}.ig{background:#df69aa}.fb{background:#5d8dff}
+.section{padding:72px 0}.section-tight{padding:76px 0}.section-head{text-align:center;max-width:850px;margin:0 auto 45px}.section-label{font-size:12px;letter-spacing:.13em;text-transform:uppercase;color:var(--gold-bright);font-weight:850}.section h2,.page-hero h1{margin:12px 0 15px;font-size:clamp(30px,3.4vw,54px);line-height:1;letter-spacing:-.062em}.section-head p,.page-hero p{margin:0;color:var(--muted);font-size:18px}.real-panel{border-radius:var(--radius);border:1px solid var(--line);background:linear-gradient(145deg,#121214,#0a0a0b);padding:16px;box-shadow:var(--shadow);overflow:hidden}.real-panel img{display:block;width:100%;border-radius:20px;border:1px solid rgba(255,255,255,.08)}.split{display:grid;grid-template-columns:.9fr 1.1fr;gap:48px;align-items:center}.split.reverse{grid-template-columns:1.1fr .9fr}.split-copy h2{font-size:clamp(30px,3.2vw,50px);line-height:1.02;letter-spacing:-.06em;margin:12px 0 17px}.split-copy p{font-size:17px;color:var(--muted);margin:0 0 23px}.feature-list{display:grid;gap:12px;margin:26px 0}.feature-list div{display:flex;gap:13px;align-items:flex-start;padding:15px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.025)}.feature-list b{display:block;font-size:14px}.feature-list span{display:block;color:var(--muted-2);font-size:13px;margin-top:2px}.check{width:25px;height:25px;flex:none;border-radius:9px;background:rgba(89,212,147,.12);color:var(--green);display:grid;place-items:center;font-size:13px}.clip-phone-wrap{position:relative}.phone-card{position:absolute;width:21%;max-width:190px;right:-4%;bottom:-9%;transform:rotate(3deg);border-radius:25px;border:7px solid #161619;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.7)}.phone-card img{display:block;width:100%}.workflow-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.workflow-card{position:relative;min-height:270px;padding:25px;border:1px solid var(--line);border-radius:25px;background:linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.018));overflow:hidden}.workflow-card .number{font-size:13px;color:var(--gold);font-weight:850}.workflow-card h3{font-size:23px;margin:22px 0 8px;letter-spacing:-.035em}.workflow-card p{color:var(--muted);font-size:14px;margin:0}.workflow-card:after{content:"";position:absolute;width:130px;height:130px;border-radius:50%;right:-45px;bottom:-55px;background:rgba(228,188,113,.08)}.publish-grid{display:grid;grid-template-columns:1.35fr .65fr;gap:18px;align-items:stretch}.publish-grid .real-panel{height:100%}.publish-grid .portrait img{height:100%;object-fit:contain;object-position:top}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.metric{padding:24px;border-radius:21px;border:1px solid var(--line);background:rgba(255,255,255,.03)}.metric strong{display:block;font-size:31px;letter-spacing:-.05em}.metric span{color:var(--muted);font-size:13px}.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px}.feature-card{padding:25px;border-radius:23px;border:1px solid var(--line);background:#0d0d10}.feature-icon{width:45px;height:45px;border-radius:15px;display:grid;place-items:center;background:rgba(228,188,113,.10);color:var(--gold);font-size:20px}.feature-card h3{margin:20px 0 8px;font-size:21px}.feature-card p{margin:0;color:var(--muted);font-size:14px}.pricing-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.price-card{position:relative;padding:26px;border-radius:24px;border:1px solid var(--line);background:#0d0d10}.price-card.popular{border-color:rgba(228,188,113,.45);background:linear-gradient(160deg,rgba(228,188,113,.11),#0d0d10 45%)}.price-badge{position:absolute;right:18px;top:18px;font-size:10px;font-weight:850;letter-spacing:.08em;text-transform:uppercase;color:#14100a;background:var(--gold);padding:6px 9px;border-radius:999px}.price-card h3{margin:0;font-size:20px}.price{font-size:41px;font-weight:900;letter-spacing:-.06em;margin:20px 0 3px}.price small{font-size:14px;color:var(--muted);font-weight:500;letter-spacing:0}.price-card p{color:var(--muted);font-size:13px;min-height:42px}.price-card ul{list-style:none;margin:20px 0;padding:0;display:grid;gap:10px}.price-card li{font-size:13px;color:#d4d0ca}.price-card li:before{content:"✓";color:var(--green);margin-right:8px}.faq{max-width:900px;margin:0 auto;display:grid;gap:10px}.faq details{border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.025);padding:0 20px}.faq summary{cursor:pointer;list-style:none;padding:20px 0;font-weight:760}.faq summary::-webkit-details-marker{display:none}.faq summary:after{content:"+";float:right;color:var(--gold);font-size:22px}.faq details[open] summary:after{content:"−"}.faq p{margin:0 0 20px;color:var(--muted)}.final-cta{padding:52px;border-radius:32px;border:1px solid rgba(228,188,113,.28);background:radial-gradient(circle at 70% 20%,rgba(228,188,113,.18),transparent 34%),linear-gradient(145deg,#17130f,#0c0c0d);text-align:center}.final-cta h2{margin:0 0 12px}.final-cta p{color:var(--muted);margin:0 auto 25px;max-width:650px}
+.page-hero{padding:62px 0 45px;text-align:center}.page-hero p{max-width:780px;margin:0 auto}.page-content{padding:35px 0 90px}.legal{max-width:930px;margin:0 auto;padding:38px;border:1px solid var(--line);border-radius:26px;background:#0c0c0e}.legal h2{margin:32px 0 8px;font-size:23px}.legal p,.legal li{color:var(--muted)}.contact-card{max-width:740px;margin:0 auto;padding:36px;border-radius:26px;border:1px solid var(--line);background:#0d0d10;text-align:center}.contact-card a{color:var(--gold-bright)}
+.site-footer{border-top:1px solid rgba(255,255,255,.08);padding:48px 0 34px;margin-top:30px}.footer-grid{display:grid;grid-template-columns:1.3fr repeat(3,.7fr);gap:30px}.footer-brand p{max-width:380px;color:var(--muted);font-size:14px}.footer-col h4{margin:0 0 13px;font-size:13px}.footer-col a{display:block;text-decoration:none;color:var(--muted);font-size:13px;margin:9px 0}.footer-bottom{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;color:var(--muted-2);font-size:12px;margin-top:38px;padding-top:22px;border-top:1px solid rgba(255,255,255,.06)}
+.reveal{opacity:0;transform:translateY(28px);transition:opacity .7s ease,transform .7s ease}.reveal.visible{opacity:1;transform:none}
+@media(max-width:1000px){.nav-links{display:none}.menu-button{display:block}.nav-actions{margin-left:0}.nav.mobile-open{height:auto;min-height:76px;flex-wrap:wrap;padding:14px 0}.nav.mobile-open .nav-links{display:flex;order:4;width:100%;flex-direction:column;align-items:flex-start;padding:8px 0 18px}.split,.split.reverse,.publish-grid{grid-template-columns:1fr}.pricing-grid{grid-template-columns:repeat(2,1fr)}.features-grid{grid-template-columns:repeat(2,1fr)}.workflow-grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.phone-card{right:2%;bottom:-5%}.footer-grid{grid-template-columns:1fr 1fr}.chip-one,.chip-two{display:none}}
+@media(max-width:680px){.wrap{width:min(100% - 24px,1240px)}.nav{height:68px}.brand{font-size:17px}.brand-mark{width:34px;height:34px}.nav-actions .ghost{display:none}.hero{padding-top:65px}.hero h1{font-size:48px}.hero-copy{font-size:16px}.source-bar{display:grid;grid-template-columns:auto 1fr}.source-bar button{grid-column:1/-1;width:100%}.hero-stage{padding:8px;border-radius:22px}.browser-bar{height:27px}.product-image{border-radius:15px}.section{padding:56px 0}.section h2,.page-hero h1,.split-copy h2{font-size:39px}.features-grid,.pricing-grid,.metrics{grid-template-columns:1fr}.real-panel{padding:8px;border-radius:21px}.phone-card{display:none}.footer-grid{grid-template-columns:1fr}.legal{padding:24px}.nav-actions .button{padding:0 13px;min-height:42px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.reveal{opacity:1;transform:none;transition:none}.button{transition:none}}
+
+img{max-width:100%;height:auto}
+
+/* ------------------------------------------------------------------
+   Scale and density pass.
+   The page read as oversized and zoomed-in on large screens, and too
+   card-heavy: every screenshot sat inside its own bordered, padded box,
+   which shrank the product shots and added visual noise around them.
+   These overrides calm the scaling, tighten vertical rhythm, and let the
+   screenshots run wider with lighter framing.
+   ------------------------------------------------------------------ */
+
+/* Headings scaled with aggressive vw units, so they ballooned on wide
+   displays. Tighter slopes keep the same feel at laptop size without
+   over-inflating on a large monitor. */
+.hero h1 { font-size: clamp(40px, 3.6vw, 64px); letter-spacing: -0.02em; }
+.section h2 { font-size: clamp(30px, 2.6vw, 46px); letter-spacing: -0.015em; }
+.hero p { font-size: clamp(16px, 1vw, 18px); }
+
+/* Vertical rhythm: generous padding stacked up into large empty gaps. */
+.hero { padding: 52px 0 44px; }
+.section { padding: 56px 0; }
+.section-tight { padding: 56px 0; }
+
+/* Let the product shots breathe. The heavy inner padding plus border made
+   every screenshot feel like a small framed thumbnail rather than the
+   subject of the section. */
+.hero-stage {
+  margin-top: 40px;
+  padding: 6px;
+  max-width: 1240px;
+  border-radius: 16px;
+}
+.hero-stage img { border-radius: 12px; }
+
+/* Screenshots must never crop — the whole point is showing the real
+   interface. Height auto with contain guarantees the full frame is
+   visible whatever the container does. */
+.shot img,
+.section img {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  object-position: center;
+  border-radius: 12px;
 }
 
-function navActions(currentUser) {
-  if (currentUser) {
-    return `<div class="nav-actions"><a class="button primary" href="/app">My dashboard</a></div>`;
-  }
-  return `<div class="nav-actions"><a class="button ghost" href="/login?returnTo=/app">Sign in</a><a class="button primary" href="/login?returnTo=/app">Get started</a></div>`;
-}
+/* Lighter framing throughout: a hairline instead of a card. */
+.section img { border: 1px solid rgba(255, 255, 255, 0.07); }
 
-function layout({ base, currentUser, title, description, canonicalPath = '/', body }) {
-  const canonical = `${String(base || 'https://deenclipped.online').replace(/\/+$/, '')}${canonicalPath === '/' ? '' : canonicalPath}`;
-  const safeTitle = escapeHtml(title);
-  const safeDescription = escapeHtml(description);
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>${safeTitle}</title>
-  <meta name="description" content="${safeDescription}">
-  <meta name="theme-color" content="#060607">
-  <meta property="og:title" content="${safeTitle}">
-  <meta property="og:description" content="${safeDescription}">
-  <meta property="og:type" content="website">
-  <meta property="og:url" content="${canonical}">
-  <link rel="canonical" href="${canonical}">
-  <link rel="stylesheet" href="/marketing.css">
-</head>
-<body>
-  <header class="site-header">
-    <div class="wrap nav">
-      <a class="brand" href="/" aria-label="DeenClipped home"><span class="brand-mark" aria-hidden="true"></span><span>DeenClipped</span></a>
-      <button class="menu-button" type="button" data-menu aria-label="Open navigation">☰</button>
-      <nav class="nav-links" aria-label="Main navigation">
-        <a href="/#how-it-works">How it works</a>
-        <a href="/features">Features</a>
-        <a href="/pricing">Pricing</a>
-        <a href="/#faq">FAQ</a>
-        <a href="/contact">Contact</a>
-      </nav>
-      ${navActions(currentUser)}
-    </div>
-  </header>
-  ${body}
-  <footer class="site-footer">
-    <div class="wrap">
-      <div class="footer-grid">
-        <div class="footer-brand"><a class="brand" href="/"><span class="brand-mark"></span><span>DeenClipped</span></a><p>Turn long lectures and videos into clean short-form clips, review them, and publish to your own connected channels.</p></div>
-        <div class="footer-col"><h4>Product</h4><a href="/features">Features</a><a href="/pricing">Pricing</a><a href="/app">Dashboard</a></div>
-        <div class="footer-col"><h4>Company</h4><a href="/contact">Contact</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a></div>
-        <div class="footer-col"><h4>Start</h4><a href="/login?returnTo=/app">Sign in</a><a href="/login?returnTo=/app">Create free clips</a><a href="mailto:support@deenclipped.online">Support</a></div>
-      </div>
-      <div class="footer-bottom"><span>© ${new Date().getFullYear()} DeenClipped</span><span>Built for clean, controlled short-form publishing.</span></div>
-    </div>
-  </footer>
-  <script src="/marketing.js" defer></script>
-</body>
-</html>`;
-}
-
-function sourceForm() {
-  return `<form class="source-bar" data-source-form><span class="source-icon">↗</span><label class="sr-only" for="source-url">Video URL</label><input id="source-url" name="source" placeholder="Paste a YouTube or video link" autocomplete="off"><button type="submit">Create free clips</button></form>`;
-}
-
-export function home({ base, currentUser }) {
-  const body = `
-  <main>
-    <section class="hero wrap">
-      <span class="eyebrow"><i></i>DeenClipped AI clip workspace</span>
-      <h1><span>One lecture. Ten clean clips.</span><br>Ready to publish.</h1>
-      <p class="hero-copy">Turn long Islamic lectures and videos into short-form clips with AI. DeenClipped finds strong moments, adds captions, gives you full review control, and helps you publish faster.</p>
-      <p class="purpose-line"><strong>DeenClipped</strong> is a web application that helps users create, edit, and publish short-form clips from long videos.</p>
-      ${sourceForm()}
-      <div class="hero-actions"><a class="button ghost" href="/features">Explore features</a><a class="button ghost" href="/pricing">View pricing</a></div>
-      <p class="hero-note">No editing experience required. Review every clip before it goes live.</p>
-      <div class="hero-stage reveal">
-        <div class="browser-bar"><i></i><i></i><i></i><span></span></div>
-        <img class="product-image" src="/marketing-assets/dashboard.webp" alt="DeenClipped dashboard showing video import, clip review, templates and publishing">
-        <div class="floating-chip chip-one"><i></i>4 clips ready to review</div>
-        <div class="floating-chip chip-two"><i></i>Your workflow, in one place</div>
-      </div>
-      <div class="platform-strip">
-        <span class="platform-pill"><i class="platform-dot yt"></i><b>YouTube</b> import & publish</span>
-        <span class="platform-pill"><i class="platform-dot tt"></i><b>TikTok</b> publishing</span>
-        <span class="platform-pill"><i class="platform-dot ig"></i><b>Instagram</b> Reels</span>
-        <span class="platform-pill"><i class="platform-dot fb"></i><b>Facebook</b> Reels</span>
-      </div>
-    </section>
-
-    <section class="section" id="how-it-works">
-      <div class="wrap">
-        <div class="section-head reveal"><span class="section-label">How it works</span><h2>From one long video to a complete clip pipeline.</h2><p>Import once. Choose the source window. Review the strongest moments. Publish on your schedule.</p></div>
-        <div class="workflow-grid reveal">
-          <article class="workflow-card"><span class="number">01 — IMPORT</span><h3>Paste a link or upload</h3><p>Bring in a lecture or video, then select the exact source range you want DeenClipped to process.</p></article>
-          <article class="workflow-card"><span class="number">02 — REVIEW</span><h3>Choose the best clips</h3><p>See real thumbnails, hook scores, titles and captions before approving anything.</p></article>
-          <article class="workflow-card"><span class="number">03 — PUBLISH</span><h3>Post to your channels</h3><p>Connect your own accounts, publish immediately, or place clips into a clean schedule.</p></article>
-        </div>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="wrap split reverse">
-        <div class="real-panel clip-phone-wrap reveal"><img src="/marketing-assets/clip-review.webp" alt="DeenClipped clip review page with real generated clip thumbnails"><div class="phone-card"><img src="/marketing-assets/vertical-clip.webp" alt="A finished vertical short-form clip"></div></div>
-        <div class="split-copy reveal"><span class="section-label">AI clip review</span><h2>See the clips, not a wall of settings.</h2><p>DeenClipped presents generated clips as real visual results. Review the thumbnail, hook strength, title and posting status before you move forward.</p><div class="feature-list"><div><span class="check">✓</span><span><b>Real clip thumbnails</b><span>Know exactly what was generated at a glance.</span></span></div><div><span class="check">✓</span><span><b>Approve before posting</b><span>Nothing is published without your review.</span></span></div><div><span class="check">✓</span><span><b>Regenerate and refine</b><span>Shorten, lengthen, retitle or edit the clip style.</span></span></div></div><a class="button primary" href="/login?returnTo=/app">Generate your first clips</a></div>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="wrap split">
-        <div class="split-copy reveal"><span class="section-label">Real editor control</span><h2>AI starts the edit. You stay in control.</h2><p>Open any clip in the editor, adjust the framing, move captions, change the template and refine the timeline before rendering.</p><div class="feature-list"><div><span class="check">✓</span><span><b>Caption positioning</b><span>Drag, select and snap captions where they belong.</span></span></div><div><span class="check">✓</span><span><b>Vertical framing</b><span>Fit the lecture into a clean short-form layout.</span></span></div><div><span class="check">✓</span><span><b>Template-based rendering</b><span>Keep every clip visually consistent.</span></span></div></div><a class="button ghost" href="/features">See every feature</a></div>
-        <div class="real-panel reveal"><img src="/marketing-assets/editor.webp" alt="DeenClipped video editor with vertical preview, captions and timeline"></div>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="wrap">
-        <div class="section-head reveal"><span class="section-label">Publishing workflow</span><h2>Create once. Publish consistently.</h2><p>Schedule approved clips and keep each customer or creator connected to their own social accounts.</p></div>
-        <div class="publish-grid reveal"><div class="real-panel"><img src="/marketing-assets/schedule.webp" alt="DeenClipped publishing schedule with upcoming short-form clips"></div><div class="real-panel portrait"><img src="/marketing-assets/connections.webp" alt="DeenClipped connected platforms and scheduled posts"></div></div>
-      </div>
-    </section>
-
-    <section class="section-tight">
-      <div class="wrap metrics reveal"><div class="metric"><strong>1 link</strong><span>Start from one lecture or source video.</span></div><div class="metric"><strong>AI clips</strong><span>Find strong moments automatically.</span></div><div class="metric"><strong>Full review</strong><span>Approve and refine before publishing.</span></div><div class="metric"><strong>Your accounts</strong><span>Publish to each user's own channels.</span></div></div>
-    </section>
-
-    <section class="section">
-      <div class="wrap">
-        <div class="section-head reveal"><span class="section-label">Everything in one workspace</span><h2>Built for the full clipping workflow.</h2><p>Not just generation. DeenClipped connects the import, review, edit and publishing stages.</p></div>
-        <div class="features-grid reveal">
-          <article class="feature-card"><span class="feature-icon">✦</span><h3>AI moment detection</h3><p>Find useful, complete moments instead of random cut points.</p></article>
-          <article class="feature-card"><span class="feature-icon">CC</span><h3>Automatic captions</h3><p>Generate readable captions and support bilingual clip styles.</p></article>
-          <article class="feature-card"><span class="feature-icon">⌗</span><h3>Smart reframing</h3><p>Convert landscape source videos into vertical clips built for Shorts and Reels.</p></article>
-          <article class="feature-card"><span class="feature-icon">◇</span><h3>Reusable templates</h3><p>Save a consistent visual style across every render.</p></article>
-          <article class="feature-card"><span class="feature-icon">✓</span><h3>Clip review</h3><p>Approve, delete, retitle and refine clips before they leave the workspace.</p></article>
-          <article class="feature-card"><span class="feature-icon">↗</span><h3>Publish and schedule</h3><p>Send approved clips to connected platforms immediately or later.</p></article>
-        </div>
-      </div>
-    </section>
-
-    <section class="section" id="pricing-preview">
-      <div class="wrap">
-        <div class="section-head reveal"><span class="section-label">Simple plans</span><h2>Choose the amount of source time you need.</h2><p>Tokens are based on selected source-video minutes, so trimming the source window saves tokens.</p></div>
-        ${pricingCards()}
-        <div style="text-align:center;margin-top:24px"><a class="button ghost" href="/pricing">Compare all plans</a></div>
-      </div>
-    </section>
-
-    <section class="section" id="faq">
-      <div class="wrap"><div class="section-head reveal"><span class="section-label">Questions</span><h2>Everything you need to know.</h2></div>${faqBlock()}</div>
-    </section>
-
-    <section class="section-tight"><div class="wrap final-cta reveal"><span class="section-label">Start creating</span><h2>Turn the next lecture into clips people will actually watch.</h2><p>Bring in a source video, choose the range and let DeenClipped build a review-ready set of clips.</p><a class="button primary" href="/login?returnTo=/app">Create free clips</a></div></section>
-  </main>`;
-  return layout({ base, currentUser, title: 'DeenClipped', description: 'DeenClipped is a web application that helps users create, edit, and publish short-form clips from long videos.', canonicalPath: '/', body });
-}
-
-function pricingCards() {
-  return `<div class="pricing-grid reveal">
-    <article class="price-card"><h3>Free</h3><div class="price">$0</div><p>Test the full workflow and create your first clips.</p><ul><li>40 starter tokens</li><li>Clip review and editor</li><li>Template rerenders stay free</li></ul><a class="button ghost" href="/login?returnTo=/app">Start free</a></article>
-    <article class="price-card"><h3>Weekly</h3><div class="price">120 <small>tokens/week</small></div><p>Flexible access for occasional weekly clipping.</p><ul><li>Renews weekly</li><li>All creation tools</li><li>Publishing workflow</li></ul><a class="button ghost" href="/login?returnTo=/app">Choose weekly</a></article>
-    <article class="price-card popular"><span class="price-badge">Popular</span><h3>Monthly</h3><div class="price">650 <small>tokens/month</small></div><p>Best for creators publishing clips consistently.</p><ul><li>More source minutes</li><li>Full review and editor</li><li>Scheduling and connections</li></ul><a class="button primary" href="/login?returnTo=/app">Choose monthly</a></article>
-    <article class="price-card"><h3>Yearly</h3><div class="price">9,000 <small>tokens/year</small></div><p>Maximum value for high-volume long-form content.</p><ul><li>Annual token allocation</li><li>Complete workspace</li><li>Best long-term value</li></ul><a class="button ghost" href="/login?returnTo=/app">Choose yearly</a></article>
-  </div>`;
-}
-
-function faqBlock() {
-  return `<div class="faq reveal">
-    <details><summary>What does DeenClipped do?</summary><p>DeenClipped turns long videos into short-form clips, lets you review and edit them, and helps publish or schedule approved clips.</p></details>
-    <details><summary>Can I paste a YouTube link?</summary><p>Yes. DeenClipped supports URL import when the source can be accessed, with direct video upload available as the reliable alternative.</p></details>
-    <details><summary>Do customers need to upload cookies?</summary><p>No. Customer-facing workflows should not ask users to upload browser cookies. Import handling stays behind the app experience.</p></details>
-    <details><summary>Does publishing go to my own channel?</summary><p>Yes. Each user connects their own social accounts, and publishing uses that user's saved connection.</p></details>
-    <details><summary>Can I review clips before posting?</summary><p>Yes. DeenClipped is built around review-first publishing. You can approve, edit, regenerate or delete clips before posting.</p></details>
-  </div>`;
-}
-
-export function features({ base, currentUser }) {
-  const body = `<main><section class="page-hero wrap"><span class="eyebrow"><i></i>Product features</span><h1>Everything between the long video and the final post.</h1><p>DeenClipped combines AI clipping with the practical controls needed to review, edit, organise and publish short-form content.</p></section><section class="page-content"><div class="wrap"><div class="features-grid">${[
-    ['✦','AI clip detection','Find strong, complete moments from lectures and long-form videos.'],['CC','Captions','Generate readable captions and keep them consistent with saved templates.'],['⌗','Source range control','Choose the exact beginning and end of the source video before processing.'],['◇','Templates','Reuse layouts, fonts, caption styles and framing choices.'],['✓','Clip review','Approve, retitle, shorten, lengthen, edit or remove generated clips.'],['↗','Publishing','Connect each user’s own YouTube and social accounts.'],['◫','Project library','Keep the original source thumbnail at project level and clip thumbnails inside the project.'],['⌁','Scheduling','Place approved clips into publishing windows and post when ready.'],['▣','Editor','Fine-tune framing, captions, video placement and timeline elements.']
-  ].map(([icon,title,text])=>`<article class="feature-card reveal"><span class="feature-icon">${icon}</span><h3>${title}</h3><p>${text}</p></article>`).join('')}</div><div class="section"><div class="real-panel reveal"><img src="/marketing-assets/dashboard.webp" alt="DeenClipped full dashboard"></div></div><div class="final-cta reveal"><h2>See the complete workflow in your own dashboard.</h2><p>Start with a source video and move through generation, review, editing and publishing without leaving DeenClipped.</p><a class="button primary" href="/login?returnTo=/app">Open DeenClipped</a></div></div></section></main>`;
-  return layout({ base, currentUser, title: 'Features — DeenClipped', description: 'Explore DeenClipped AI clipping, captions, templates, review, editing, scheduling and social publishing features.', canonicalPath: '/features', body });
-}
-
-export function pricing({ base, currentUser }) {
-  const body = `<main><section class="page-hero wrap"><span class="eyebrow"><i></i>Pricing</span><h1>Pay for the source time you process.</h1><p>One token represents one selected source-video minute. Full-video processing is selected by default, and trimming the source range reduces usage.</p></section><section class="page-content"><div class="wrap">${pricingCards()}<div class="section-tight"><div class="legal"><h2>How tokens work</h2><p>DeenClipped reads the source duration, lets you select a start and end time, then estimates usage from the selected range. The final charge is based on confirmed source time. Template-only rerenders remain free under the current plan rules.</p><h2>Trials and billing</h2><p>Paid subscriptions may include a seven-day trial when shown during checkout. Current prices and final billing terms are displayed before purchase through Stripe.</p></div></div></div></section></main>`;
-  return layout({ base, currentUser, title: 'Pricing — DeenClipped', description: 'Compare DeenClipped free, weekly, monthly and yearly token plans.', canonicalPath: '/pricing', body });
-}
-
-export function contact({ base, currentUser }) {
-  const body = `<main><section class="page-hero wrap"><span class="eyebrow"><i></i>Contact</span><h1>Talk to DeenClipped.</h1><p>Questions about your account, publishing connections, billing or the clipping workflow can be sent directly to support.</p></section><section class="page-content"><div class="wrap"><div class="contact-card"><h2>Support</h2><p>Email <a href="mailto:support@deenclipped.online">support@deenclipped.online</a></p><p>Include the email attached to your account and a short description of what happened.</p><a class="button primary" href="mailto:support@deenclipped.online">Email support</a></div></div></section></main>`;
-  return layout({ base, currentUser, title: 'Contact — DeenClipped', description: 'Contact DeenClipped support.', canonicalPath: '/contact', body });
-}
-
-export function privacy({ base, currentUser }) {
-  const body = `<main><section class="page-hero wrap"><span class="eyebrow"><i></i>Legal</span><h1>Privacy Policy</h1><p>How DeenClipped handles account, video, billing and connected-platform information.</p></section><section class="page-content"><article class="legal"><p>Last updated: 4 August 2026</p><p>DeenClipped helps users create, edit and publish short-form clips from long videos. This Privacy Policy explains what information is collected and how it is used.</p><h2>Information we collect</h2><p>We may collect account details such as your name, email address and profile picture when you sign in. We may also store project settings, uploaded or imported source information, generated clips, captions, templates, schedules and publishing preferences.</p><h2>Connected accounts</h2><p>When you connect YouTube or another social platform, DeenClipped may receive access and refresh tokens, channel identifiers and basic account information needed to provide the connection. Connections are stored per DeenClipped user and are used only to perform actions requested through the service.</p><h2>Billing</h2><p>Payments are processed by Stripe. DeenClipped may store subscription status, plan, token balance and Stripe customer references, but does not directly store complete payment-card details.</p><h2>How information is used</h2><p>Information is used to operate the service, process videos, generate clips, save account settings, provide publishing and scheduling, manage billing, prevent abuse and support users.</p><h2>Content and retention</h2><p>You are responsible for ensuring you have permission to process and publish source content. Stored content and account data may be retained while your account is active or as reasonably needed to provide the service, resolve disputes and meet legal obligations.</p><h2>Contact</h2><p>Privacy questions can be sent to <a href="mailto:support@deenclipped.online">support@deenclipped.online</a>.</p></article></section></main>`;
-  return layout({ base, currentUser, title: 'Privacy Policy — DeenClipped', description: 'Privacy Policy for DeenClipped.', canonicalPath: '/privacy', body });
-}
-
-export function terms({ base, currentUser }) {
-  const body = `<main><section class="page-hero wrap"><span class="eyebrow"><i></i>Legal</span><h1>Terms of Service</h1><p>The rules for using DeenClipped to create, edit and publish short-form clips.</p></section><section class="page-content"><article class="legal"><p>Last updated: 4 August 2026</p><p>These Terms govern use of DeenClipped, a service for creating, editing and publishing short-form clips from long videos.</p><h2>Use of the service</h2><p>You must use DeenClipped lawfully and only with content you own or have permission to use. You are responsible for the videos, links, clips, captions and posts you create or publish through the service.</p><h2>Source content and copyright</h2><p>Uploading or importing videos you do not own or do not have permission to use may violate copyright or platform rules. By using DeenClipped, you confirm that you have the required rights and permissions.</p><h2>Connected platforms</h2><p>When you connect YouTube or another platform, DeenClipped publishes using the account permissions you grant. You remain responsible for complying with each platform's terms and policies.</p><h2>Billing and tokens</h2><p>Some features require tokens, subscriptions or paid plans. Token usage may be based on selected source-video time and the plan rules displayed in the app. Checkout displays final billing terms before purchase.</p><h2>Service availability</h2><p>Features may change, pause or be removed over time. DeenClipped does not guarantee uninterrupted access or that every external video URL can be imported.</p><h2>Contact</h2><p>Questions can be sent to <a href="mailto:support@deenclipped.online">support@deenclipped.online</a>.</p></article></section></main>`;
-  return layout({ base, currentUser, title: 'Terms of Service — DeenClipped', description: 'Terms of Service for DeenClipped.', canonicalPath: '/terms', body });
+@media (max-width: 900px) {
+  .hero { padding: 40px 0 32px; }
+  .section, .section-tight { padding: 40px 0; }
+  .hero-stage { margin-top: 28px; }
 }
