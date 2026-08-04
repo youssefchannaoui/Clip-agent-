@@ -744,6 +744,37 @@ body.dc-app .dc-token-pill.warn{background:rgba(229,169,87,.09);border-color:rgb
 @media(max-width:720px){.dc-charge-card{width:calc(100vw - 18px)}.dc-charge-grid,.dc-charge-estimate,.dc-charge-steps{grid-template-columns:1fr}.dc-charge-actions,.dc-billing-notice-actions{grid-template-columns:1fr;flex-direction:column;align-items:stretch}.dc-token-toast{left:12px;right:12px;bottom:84px;max-width:none}}
 
 
+/* Source range selector v2: cleaner, homepage-matched, no ugly side scroll */
+body.dc-app .dc-source-range-layer{padding:22px;overflow:hidden;background:rgba(0,0,0,.58);backdrop-filter:blur(18px)}
+body.dc-app .dc-source-range-card{width:min(920px,calc(100vw - 44px));max-height:calc(100dvh - 44px);overflow:hidden;border:1px solid rgba(255,255,255,.12);border-radius:28px;background:radial-gradient(circle at 0 0,rgba(217,180,120,.16),transparent 32%),linear-gradient(180deg,rgba(20,20,23,.98),rgba(8,8,10,.98));box-shadow:0 34px 110px rgba(0,0,0,.62),0 0 0 1px rgba(217,180,120,.05) inset;color:var(--dc-text)}
+body.dc-app .dc-source-range-head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;padding:28px 28px 18px;border-bottom:1px solid rgba(255,255,255,.08)}
+body.dc-app .dc-source-range-head span{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid rgba(217,180,120,.28);border-radius:999px;background:rgba(217,180,120,.07);color:var(--dc-accent2);font-size:9px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}
+body.dc-app .dc-source-range-head h2{margin:14px 0 0;font-size:34px;line-height:.98;letter-spacing:-.055em}
+body.dc-app .dc-source-range-head p{max-width:690px;margin:10px 0 0;color:var(--dc-muted);font-size:12px;line-height:1.55}
+body.dc-app .dc-source-range-body{padding:18px 28px 26px;display:grid;gap:13px;max-height:calc(100dvh - 190px);overflow:auto;scrollbar-width:none}
+body.dc-app .dc-source-range-body::-webkit-scrollbar{width:0;height:0}
+body.dc-app .dc-source-preview-card{display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:14px;align-items:center;padding:13px;border:1px solid rgba(217,180,120,.18);border-radius:20px;background:linear-gradient(135deg,rgba(217,180,120,.095),rgba(255,255,255,.025))}
+body.dc-app .dc-source-thumb{width:96px;height:56px;border-radius:13px;background:#050507;display:grid;place-items:center;overflow:hidden;color:var(--dc-accent2)}
+body.dc-app .dc-source-thumb.loading{background:linear-gradient(110deg,#151519,#25252b,#151519);background-size:220% 100%;animation:dcShimmer 1.1s linear infinite}
+body.dc-app .dc-source-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+body.dc-app .dc-source-preview-copy small,body.dc-app .dc-source-preview-copy strong,body.dc-app .dc-source-preview-copy span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.dc-app .dc-source-preview-copy small{color:var(--dc-accent2);font-size:8.5px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}
+body.dc-app .dc-source-preview-copy strong{font-size:15px;margin-top:3px}.dc-source-preview-copy span{font-size:10px;color:var(--dc-muted);margin-top:3px}
+body.dc-app .dc-source-duration{padding:8px 11px;border:1px solid rgba(255,255,255,.09);border-radius:999px;background:rgba(0,0,0,.22);font-size:12px;color:var(--dc-accent2)}
+body.dc-app .dc-processing-card{padding:18px;border:1px solid rgba(255,255,255,.09);border-radius:22px;background:rgba(255,255,255,.033)}
+body.dc-app .dc-processing-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:18px}
+body.dc-app .dc-processing-head strong,body.dc-app .dc-processing-head span{display:block}.dc-processing-head strong{font-size:16px}.dc-processing-head span{color:var(--dc-muted);font-size:10.5px;margin-top:4px}.dc-processing-head em{font-style:normal;color:var(--dc-muted);font-size:9px;font-weight:900;padding:7px 10px;border:1px solid rgba(255,255,255,.08);border-radius:999px;background:rgba(0,0,0,.2);white-space:nowrap}.dc-processing-head em.good{color:var(--dc-green);border-color:rgba(83,199,139,.24);background:rgba(83,199,139,.08)}
+body.dc-app .dc-dual-range{position:relative;height:46px;margin:4px 0 14px}.dc-dual-track{position:absolute;left:0;right:0;top:21px;height:6px;border-radius:999px;background:rgba(255,255,255,.16);overflow:hidden}.dc-dual-track i{position:absolute;top:0;bottom:0;border-radius:999px;background:linear-gradient(90deg,var(--dc-accent),var(--dc-accent2));box-shadow:0 0 20px rgba(217,180,120,.22)}
+body.dc-app .dc-dual-range input[type=range]{position:absolute;left:0;right:0;top:0;width:100%;height:46px;background:transparent;pointer-events:none;appearance:none;-webkit-appearance:none}
+body.dc-app .dc-dual-range input[type=range]::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:28px;height:28px;border-radius:50%;border:3px solid #f8f0df;background:#0b0b0d;box-shadow:0 4px 18px rgba(0,0,0,.55);pointer-events:auto;cursor:pointer}
+body.dc-app .dc-dual-range input[type=range]::-moz-range-thumb{width:28px;height:28px;border-radius:50%;border:3px solid #f8f0df;background:#0b0b0d;box-shadow:0 4px 18px rgba(0,0,0,.55);pointer-events:auto;cursor:pointer}
+body.dc-app .dc-time-boxes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.dc-time-boxes label{padding:10px 12px;border:1px solid rgba(255,255,255,.075);border-radius:14px;background:rgba(0,0,0,.20);color:var(--dc-muted);font-size:9px}.dc-time-boxes b{display:block;color:var(--dc-text);font-size:17px;margin-top:4px;font-variant-numeric:tabular-nums}
+body.dc-app .dc-import-options-card{display:grid;grid-template-columns:1fr 110px 140px;gap:10px;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:18px;background:rgba(255,255,255,.025)}.dc-import-options-card label{display:block;color:var(--dc-muted);font-size:9px}.dc-import-options-card select{width:100%;height:40px;margin-top:6px;padding:0 10px;border:1px solid rgba(255,255,255,.10);border-radius:12px;background:#0b0b0d;color:var(--dc-text)}
+body.dc-app .dc-token-result-card{display:grid;grid-template-columns:210px minmax(0,1fr);gap:12px;align-items:center}.dc-token-result-card>div,.dc-token-result-card>p{min-height:88px;margin:0;padding:15px;border:1px solid rgba(255,255,255,.08);border-radius:18px;background:rgba(0,0,0,.20)}.dc-token-result-card small,.dc-token-result-card strong,.dc-token-result-card span{display:block}.dc-token-result-card small{color:var(--dc-muted);font-size:9px}.dc-token-result-card strong{font-size:34px;letter-spacing:-.06em;color:var(--dc-accent2);margin-top:3px}.dc-token-result-card span,.dc-token-result-card p{color:var(--dc-muted);font-size:10.5px;line-height:1.45}.dc-token-result-card p{display:flex;align-items:center}.dc-token-result-card p.warn{color:var(--dc-orange);border-color:rgba(229,169,87,.22);background:rgba(229,169,87,.07)}
+body.dc-app .dc-source-range-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px}.dc-source-range-actions .dc-btn{min-height:48px;border-radius:999px}.dc-source-note{margin:0;color:var(--dc-muted);font-size:10px;line-height:1.45;text-align:center}.dc-source-note b{color:var(--dc-text)}
+@media(max-width:760px){body.dc-app .dc-source-range-card{width:calc(100vw - 18px)}body.dc-app .dc-source-range-head{padding:20px 18px 14px}body.dc-app .dc-source-range-head h2{font-size:27px}body.dc-app .dc-source-range-body{padding:14px 18px 18px;max-height:calc(100dvh - 145px)}body.dc-app .dc-source-preview-card{grid-template-columns:74px minmax(0,1fr)}body.dc-app .dc-source-duration{grid-column:1/-1;width:max-content}.dc-source-thumb{width:74px!important;height:46px!important}.dc-time-boxes,.dc-import-options-card,.dc-token-result-card,.dc-source-range-actions{grid-template-columns:1fr!important}}
+
+
 /* Phase billing modal fit + account logout repair */
 body.dc-app .dc-account-menu .dc-logout-form{display:block!important}
 body.dc-app .dc-account-menu .dc-logout-btn{display:flex!important;align-items:center;justify-content:space-between;width:100%;min-height:38px;border-radius:10px;color:var(--dc-red);font-size:10px;text-align:left;padding:0 10px;background:transparent;border:0}
@@ -1086,6 +1117,22 @@ function flowCard(title,note,icon,target){
   const attr = target === 'dcSourceYouTube' ? 'id="dcSourceYouTube"' : `data-dc-nav="${esc(target)}"`;
   return `<button class="dc-flow-card-g" type="button" ${attr}><span>${icon}</span><strong>${esc(title)}</strong><em>${esc(note)}</em></button>`;
 }
+
+function youtubeThumbFromUrl(value){
+  const text=String(value||'');
+  const patterns=[/[?&]v=([^&#]+)/, /youtu\.be\/([^?&#/]+)/, /youtube\.com\/shorts\/([^?&#/]+)/, /youtube\.com\/embed\/([^?&#/]+)/];
+  for(const pattern of patterns){
+    const match=text.match(pattern);
+    if(match?.[1]) return `https://i.ytimg.com/vi/${encodeURIComponent(match[1])}/hqdefault.jpg`;
+  }
+  return '';
+}
+function projectThumbUrl(p,clips=[]){
+  return p?.sourceThumbUrl || p?.thumbnailUrl || p?.youtubeThumbnail || youtubeThumbFromUrl(p?.url) || (clips||[]).find(c=>c.projectId===p?.id&&c.thumbUrl)?.thumbUrl || '';
+}
+function sourceThumbnailFromInfo(info,url){
+  return info?.thumbnail || youtubeThumbFromUrl(url) || '';
+}
 function liveFocusPanel(d,jobs,next,templateName){
   const latest=(d.log||[])[0];
   if(jobs.length){
@@ -1099,7 +1146,7 @@ function recentProjectsCinema(projects,clips){
   const list=[...projects].sort((a,b)=>Number(b.submittedAt||0)-Number(a.submittedAt||0)).slice(0,3);
   if(!list.length)return `<div class="dc-empty v3"><div><span class="dc-empty-icon">${ICON.projects}</span><strong>No projects yet</strong><span>Paste a lecture above to start.</span></div></div>`;
   return list.map(p=>{
-    const own=clips.filter(c=>c.projectId===p.id), thumb=own.find(c=>c.thumbUrl)?.thumbUrl, failed=p.status==='failed'||p.error, scheduled=own.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length;
+    const own=clips.filter(c=>c.projectId===p.id), thumb=projectThumbUrl(p,clips), failed=p.status==='failed'||p.error, scheduled=own.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length;
     return `<button class="dc-cinema-project" type="button" data-open-project="${esc(p.id)}"><span class="dc-cinema-thumb ${thumb?'':'empty'}">${thumb?`<img src="${authedUrl(thumb)}" alt="${esc(projectDisplayTitle(p))} thumbnail">`:ICON.projects}</span><span class="dc-cinema-copy"><strong>${esc(shortText(projectDisplayTitle(p),46))}</strong><em>${own.length} clips · ${scheduled} scheduled</em></span><b class="dc-pill ${failed?'bad':p.status==='processing'?'warn':'good'}">${failed?'Fix':p.status==='processing'?'Live':'Ready'}</b></button>`;
   }).join('');
 }
@@ -1136,7 +1183,7 @@ function socialSvg(key){const map={youtube:'<svg viewBox="0 0 24 24" fill="curre
 function metric(value,label){ return `<div class="dc-metric"><strong>${value}</strong><span>${label}</span></div>`; }
 function jobRow(j){ return `<div class="dc-now-row"><span class="dc-spinner"></span><div class="dc-now-main"><strong>${esc(shortText(j.title,58))}</strong><span>${esc(shortText(j.stage,48))}</span>${Number.isFinite(j.progress)?`<div class="dc-progress"><i style="width:${clamp(j.progress,0,100)}%"></i></div>`:''}</div><span class="dc-pill warn">${Number.isFinite(j.progress)?`${Math.round(j.progress)}%`:'Live'}</span></div>`; }
 function shortText(value, limit=70){const text=String(value||'');return text.length>limit?`${text.slice(0,Math.max(0,limit-1)).trim()}…`:text}
-function projectDisplayTitle(p){return p.title || cleanUrlTitle(p.url) || 'Untitled lecture'}
+function projectDisplayTitle(p){const raw=String(p?.title||'').trim();const url=String(p?.url||'').trim();if(p?.sourceTitle && (!raw || raw===url || /^https?:\/\//i.test(raw)))return p.sourceTitle;return raw || cleanUrlTitle(url) || 'Untitled lecture'}
 function cleanUrlTitle(value){try{const u=new URL(String(value||''));return u.hostname.replace(/^www\./,'') + (u.searchParams.get('v')?` · ${u.searchParams.get('v')}`:'')}catch{return String(value||'').replace(/^https?:\/\//,'').slice(0,70)}}
 function shortError(value){return String(value||'Processing issue').replace(/https?:\/\/\S+/g,'').replace(/\s+/g,' ').trim().slice(0,170)}
 function clipThumb(c){return c?.thumbUrl ? `<img src="${authedUrl(c.thumbUrl)}" alt="${esc(c.title||'Clip')} thumbnail">` : `<div class="dc-project-placeholder">${ICON.play}<span>Clip</span></div>`}
@@ -1206,7 +1253,7 @@ function recentProjectsV3(projects,clips){
   const list=[...projects].sort((a,b)=>Number(b.submittedAt||0)-Number(a.submittedAt||0)).slice(0,4);
   if(!list.length)return `<div class="dc-empty v3"><div><span class="dc-empty-icon">${ICON.projects}</span><strong>No lectures yet</strong><span>Paste a lecture above to create the first project.</span></div></div>`;
   return list.map(p=>{
-    const own=clips.filter(c=>c.projectId===p.id),thumb=own.find(c=>c.thumbUrl)?.thumbUrl,failed=p.status==='failed'||p.error,busy=['queued','processing'].includes(p.status),scheduled=own.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length;
+    const own=clips.filter(c=>c.projectId===p.id),thumb=projectThumbUrl(p,clips),failed=p.status==='failed'||p.error,busy=['queued','processing'].includes(p.status),scheduled=own.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length;
     return `<button class="dc-feature-row" data-open-project="${esc(p.id)}" type="button"><span class="dc-feature-thumb ${thumb?'':'empty'}">${thumb?`<img src="${authedUrl(thumb)}" alt="${esc(projectDisplayTitle(p))} thumbnail">`:ICON.projects}</span><span class="dc-feature-main"><strong>${esc(shortText(projectDisplayTitle(p),64))}</strong><em>${own.length} clips · ${scheduled} scheduled</em></span><span class="dc-pill ${failed?'bad':busy?'warn':'good'}">${failed?'Issue':busy?'Working':'Ready'}</span>${ICON.chevron}</button>`;
   }).join('');
 }
@@ -1242,6 +1289,21 @@ async function fetchTokenEstimate(minutes){
     return {estimatedMinutes:Math.max(1,Math.ceil(Number(minutes||0))),estimatedTokens:Math.max(1,Math.ceil(Math.max(1,Number(minutes||0))*rate)),rate,unlimited:bill.current?.unlimited,remaining:bill.current?.remaining,enough:true,terms:bill.terms||[]};
   }
 }
+async function fetchSourceInfo(urls){
+  try{
+    const result=await callApi('/api/source-info',{method:'POST',body:JSON.stringify({urls})});
+    return result;
+  }catch(e){
+    const links=splitVideoLinks(urls);
+    return {ok:false,error:e.message,sources:links.map(url=>({url,error:e.message,durationSec:null,thumbnail:youtubeThumbFromUrl(url),title:url})),known:false};
+  }
+}
+function clockFromSeconds(value){
+  const total=Math.max(0,Math.round(Number(value||0)));
+  const h=Math.floor(total/3600),m=Math.floor((total%3600)/60),sec=total%60;
+  return h?`${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`:`${m}:${String(sec).padStart(2,'0')}`;
+}
+function minutesFromSeconds(value){return Math.max(0,Number(value||0)/60)}
 function clockFromMinutes(value){
   const total=Math.max(0,Math.round(Number(value||0)*60));
   const h=Math.floor(total/3600),m=Math.floor((total%3600)/60),sec=total%60;
@@ -1251,60 +1313,110 @@ function clockFromMinutes(value){
 function openTokenEstimateModal({urls,onConfirm}){
   $('#dcChargeLayer')?.remove();
   const bill=billingInfo(),rate=Number(bill.tokenRatePerMinute||1),links=splitVideoLinks(urls);
-  const defaultFullMinutes=Math.max(10,45);
-  const layer=document.createElement('div'); layer.id='dcChargeLayer'; layer.className='dc-charge-layer';
-  layer.innerHTML=`<section class="dc-charge-card" role="dialog" aria-modal="true" aria-labelledby="dcChargeTitle"><div class="dc-charge-head"><div><span>${ICON.tokens} Token confirmation</span><h2 id="dcChargeTitle">Choose the part to process.</h2><p>Full video is selected by default. Move the start and end sliders if you only want DeenClipped to analyse one section, then tokens are based on that selected source time.</p></div><button class="dc-charge-close" id="dcChargeClose" type="button" aria-label="Close">×</button></div><div class="dc-charge-body"><div class="dc-charge-range-shell"><div class="dc-charge-summary"><i></i><div><strong>Full source selected first</strong><span>Same idea as big clipping tools: choose the source window before rendering.</span></div><b id="dcRangeSummary">0:00 → 45:00</b></div><div class="dc-charge-range-grid"><div class="dc-charge-tile"><strong>${esc(links.length)}</strong><span>source link${links.length===1?'':'s'} queued</span></div><div class="dc-charge-tile"><strong>${esc(rate)}</strong><span>token per selected source minute</span></div></div><div class="dc-range-picker"><div class="dc-range-top"><div><strong>Source range</strong><span>Set the estimated full video length, then select the beginning and end you want analysed.</span></div><label>Estimated full length / source<input id="dcFullMinutes" type="number" min="1" step="1" value="${esc(defaultFullMinutes)}"></label></div><div class="dc-range-bars"><label>Start<input id="dcRangeStart" type="range" min="0" max="${esc(defaultFullMinutes)}" step="0.5" value="0"><b id="dcStartReadout">0:00</b></label><label>End<input id="dcRangeEnd" type="range" min="0.5" max="${esc(defaultFullMinutes)}" step="0.5" value="${esc(defaultFullMinutes)}"><b id="dcEndReadout">45:00</b></label></div><div class="dc-range-visual" aria-hidden="true"><i class="dc-range-fill" id="dcRangeFill"></i></div><div class="dc-range-readout"><span>Selected: <b id="dcSelectedReadout">45:00</b> per source</span><span id="dcTotalReadout">45 total source minutes</span></div></div><div class="dc-charge-cost-panel"><div class="dc-charge-cost"><b id="dcEstimateTokens">${esc(Math.ceil(defaultFullMinutes*rate*links.length))}</b><span id="dcEstimateSub">estimated tokens for selected range</span></div><div class="dc-charge-muted" id="dcChargeBalance">Checking token balance…</div></div><div class="dc-charge-actions"><button class="dc-btn" id="dcConfirmCharge" type="button">Create clips from selected range</button><button class="dc-btn secondary" id="dcOpenBillingFromCharge" type="button">View plans</button><div class="dc-charge-note">Tokens are charged after the worker confirms the exact selected duration. <b>Template rerenders stay free.</b></div></div></div></div></section>`;
+  const fallbackSec=45*60;
+  const currentTemplate=$('#dcCreateTemplate')?.value || data()?.selectedTemplate?.id || '';
+  const currentCount=$('#dcCreateCount')?.value || '8';
+  const currentDuration=$('#dcCreateDuration')?.value || '30,60';
+  const templateOptions=(data()?.templates||[]).map(t=>`<option value="${esc(t.id)}" ${t.id===currentTemplate?'selected':''}>${esc(t.name)}</option>`).join('');
+  const layer=document.createElement('div'); layer.id='dcChargeLayer'; layer.className='dc-charge-layer dc-source-range-layer';
+  layer.innerHTML=`<section class="dc-source-range-card" role="dialog" aria-modal="true" aria-labelledby="dcChargeTitle">
+    <div class="dc-source-range-head">
+      <div><span>${ICON.tokens} Token check</span><h2 id="dcChargeTitle">Choose the source window.</h2><p>DeenClipped reads the video length first. Full video is selected by default; trim the processing window to save tokens before rendering.</p></div>
+      <button class="dc-charge-close" id="dcChargeClose" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="dc-source-range-body">
+      <div class="dc-source-preview-card" id="dcSourcePreviewCard">
+        <div class="dc-source-thumb loading" id="dcSourceThumb">${ICON.play}</div>
+        <div class="dc-source-preview-copy"><small>Reading source</small><strong id="dcSourceTitle">Checking video duration…</strong><span id="dcSourceSub">Full range will appear here once the source is checked.</span></div>
+        <b class="dc-source-duration" id="dcSourceDuration">--:--</b>
+      </div>
+      <div class="dc-processing-card">
+        <div class="dc-processing-head"><div><strong>Processing timeframe</strong><span>Move the handles to choose exactly what part DeenClipped should analyse.</span></div><em id="dcCreditSaver">Full video selected</em></div>
+        <div class="dc-dual-range" id="dcDualRange"><div class="dc-dual-track"><i id="dcRangeFill"></i></div><input id="dcRangeStart" type="range" min="0" max="${fallbackSec}" step="1" value="0" aria-label="Start time"><input id="dcRangeEnd" type="range" min="1" max="${fallbackSec}" step="1" value="${fallbackSec}" aria-label="End time"></div>
+        <div class="dc-time-boxes"><label>Start<b id="dcStartReadout">0:00</b></label><label>End<b id="dcEndReadout">45:00</b></label><label>Selected<b id="dcSelectedReadout">45:00</b></label></div>
+      </div>
+      <div class="dc-import-options-card">
+        <label>Template<select id="dcChargeTemplate">${templateOptions}</select></label>
+        <label>Clips<select id="dcChargeCount"><option ${currentCount==='4'?'selected':''}>4</option><option ${currentCount==='8'?'selected':''}>8</option><option ${currentCount==='12'?'selected':''}>12</option><option ${currentCount==='16'?'selected':''}>16</option></select></label>
+        <label>Clip length<select id="dcChargeDuration"><option value="15,45" ${currentDuration==='15,45'?'selected':''}>15–45 sec</option><option value="30,60" ${currentDuration==='30,60'?'selected':''}>30–60 sec</option><option value="45,90" ${currentDuration==='45,90'?'selected':''}>45–90 sec</option></select></label>
+      </div>
+      <div class="dc-token-result-card">
+        <div><small>Estimated charge</small><strong id="dcEstimateTokens">…</strong><span id="dcEstimateSub">tokens after exact duration is confirmed</span></div>
+        <p id="dcChargeBalance">Checking your token balance…</p>
+      </div>
+      <div class="dc-source-range-actions"><button class="dc-btn" id="dcConfirmCharge" type="button" disabled>Reading video…</button><button class="dc-btn secondary" id="dcOpenBillingFromCharge" type="button">View plans</button></div>
+      <p class="dc-source-note">Tokens are based on selected source minutes, not output clip count. Template rerenders and style fixes stay free.</p>
+    </div>
+  </section>`;
   document.body.append(layer);
   const close=()=>layer.remove();
-  $('#dcChargeClose').onclick=close;
-  layer.addEventListener('click',event=>{if(event.target===layer)close()});
-  const fullInput=$('#dcFullMinutes',layer),startInput=$('#dcRangeStart',layer),endInput=$('#dcRangeEnd',layer);
-  const fill=$('#dcRangeFill',layer),summary=$('#dcRangeSummary',layer),startRead=$('#dcStartReadout',layer),endRead=$('#dcEndReadout',layer),selectedRead=$('#dcSelectedReadout',layer),totalRead=$('#dcTotalReadout',layer);
+  $('#dcChargeClose').onclick=close; layer.addEventListener('click',event=>{if(event.target===layer)close()});
+  const startInput=$('#dcRangeStart',layer),endInput=$('#dcRangeEnd',layer),fill=$('#dcRangeFill',layer);
+  const startRead=$('#dcStartReadout',layer),endRead=$('#dcEndReadout',layer),selectedRead=$('#dcSelectedReadout',layer),creditSaver=$('#dcCreditSaver',layer);
   const tokensEl=$('#dcEstimateTokens',layer),subEl=$('#dcEstimateSub',layer),balanceEl=$('#dcChargeBalance',layer),confirm=$('#dcConfirmCharge',layer);
-  let latest={enough:true}, selectedMinutes=defaultFullMinutes*links.length, sourceStartMinutes=0, sourceEndMinutes=defaultFullMinutes;
-  const readRange=()=>{
-    let full=Math.max(1,Number(fullInput.value||defaultFullMinutes));
-    startInput.max=String(full); endInput.max=String(full); endInput.min='0.5';
-    let start=Math.max(0,Math.min(full-.5,Number(startInput.value||0)));
-    let end=Math.max(start+.5,Math.min(full,Number(endInput.value||full)));
-    if(end>full) end=full;
-    if(start>=end) start=Math.max(0,end-.5);
-    startInput.value=String(start); endInput.value=String(end);
-    sourceStartMinutes=start; sourceEndMinutes=end; selectedMinutes=Math.max(.5,(end-start)*Math.max(1,links.length));
-    return {full,start,end,total:selectedMinutes};
+  let sourceInfo={sources:links.map(url=>({url,durationSec:null,title:url,thumbnail:youtubeThumbFromUrl(url)})),known:false};
+  let maxSec=fallbackSec, latest={enough:true}, selectedSeconds=fallbackSec*links.length, sourceStartSeconds=0, sourceEndSeconds=fallbackSec;
+  const durations=()=>sourceInfo.sources.map(src=>Number(src.durationSec)||maxSec).filter(v=>v>0);
+  const selectedTotalSeconds=(start,end)=>durations().reduce((sum,dur)=>sum+Math.max(0,Math.min(end,dur)-Math.min(start,dur)),0);
+  const setSourceVisual=()=>{
+    const first=sourceInfo.sources?.[0]||{};
+    const thumb=sourceThumbnailFromInfo(first,links[0]);
+    const thumbEl=$('#dcSourceThumb',layer); thumbEl.classList.remove('loading');
+    thumbEl.innerHTML=thumb?`<img src="${esc(thumb)}" alt="Source thumbnail">`:ICON.play;
+    $('#dcSourceTitle',layer).textContent=first.title||links[0]||'Source video';
+    const known=sourceInfo.known!==false && durations().some(Boolean);
+    $('#dcSourceSub',layer).textContent=known?`${links.length} source${links.length===1?'':'s'} · exact duration loaded`:`${links.length} source${links.length===1?'':'s'} · duration estimate used`;
+    $('#dcSourceDuration',layer).textContent=clockFromSeconds(maxSec);
   };
-  const updateVisual=({full,start,end,total})=>{
-    const left=(start/full)*100, width=Math.max(1,((end-start)/full)*100);
+  const readRange=()=>{
+    let start=Math.max(0,Math.min(maxSec-1,Number(startInput.value||0)));
+    let end=Math.max(start+1,Math.min(maxSec,Number(endInput.value||maxSec)));
+    if(start>=end) start=Math.max(0,end-1);
+    startInput.value=String(Math.round(start)); endInput.value=String(Math.round(end));
+    sourceStartSeconds=Math.round(start); sourceEndSeconds=Math.round(end); selectedSeconds=selectedTotalSeconds(sourceStartSeconds,sourceEndSeconds);
+    return {start:sourceStartSeconds,end:sourceEndSeconds,total:selectedSeconds};
+  };
+  const updateVisual=(range)=>{
+    const left=(range.start/maxSec)*100, width=Math.max(.5,((range.end-range.start)/maxSec)*100);
     fill.style.left=`${left}%`; fill.style.width=`${width}%`;
-    startRead.textContent=clockFromMinutes(start); endRead.textContent=clockFromMinutes(end);
-    selectedRead.textContent=clockFromMinutes(end-start);
-    totalRead.textContent=`${Math.ceil(total)} total source minute${Math.ceil(total)===1?'':'s'}`;
-    summary.textContent=`${clockFromMinutes(start)} → ${clockFromMinutes(end)}`;
+    startRead.textContent=clockFromSeconds(range.start); endRead.textContent=clockFromSeconds(range.end); selectedRead.textContent=clockFromSeconds(range.end-range.start);
+    const full=Math.abs(range.start)<1 && Math.abs(range.end-maxSec)<2;
+    creditSaver.textContent=full?'Full video selected':'Credit saver range'; creditSaver.classList.toggle('good',!full);
   };
   const update=async()=>{
     const range=readRange(); updateVisual(range);
-    latest=await fetchTokenEstimate(range.total);
-    const estimate=latest.unlimited?'∞':String(latest.estimatedTokens||Math.ceil(range.total*rate));
+    const minutes=Math.max(1/60,minutesFromSeconds(range.total));
+    latest=await fetchTokenEstimate(minutes);
+    const estimate=latest.unlimited?'∞':String(latest.estimatedTokens||Math.ceil(minutes*rate));
     tokensEl.textContent=estimate;
-    subEl.textContent=latest.unlimited?'admin account':`estimated tokens for ${Math.ceil(range.total)} source min`;
+    subEl.textContent=latest.unlimited?'admin account':`${clockFromSeconds(range.total)} selected source time`;
     const remaining=latest.unlimited?'Unlimited tokens':`${Math.max(0,Math.round(Number(latest.remaining||0)))} tokens left`;
     const enough=latest.enough||latest.unlimited;
     balanceEl.classList.toggle('warn',!enough);
-    balanceEl.textContent=enough?`${remaining}. Selected range can be processed.`:`${remaining}. Shorten the selected range or upgrade before rendering.`;
-    confirm.textContent=enough?'Create clips from selected range':'Upgrade to continue';
+    balanceEl.textContent=enough?`${remaining}. Ready to process selected range.`:`${remaining}. Shorten the range or upgrade before rendering.`;
+    confirm.disabled=false; confirm.textContent=enough?'Create clips from selected range':'Upgrade to continue';
   };
-  const scheduleUpdate=()=>{clearTimeout(fullInput._timer);fullInput._timer=setTimeout(update,160)};
-  [fullInput,startInput,endInput].forEach(el=>el.addEventListener('input',scheduleUpdate));
+  const scheduleUpdate=()=>{clearTimeout(layer._timer);layer._timer=setTimeout(update,80)};
+  [startInput,endInput].forEach(el=>el.addEventListener('input',scheduleUpdate));
   $('#dcOpenBillingFromCharge').onclick=()=>{close();openBillingModal();};
+  $('#dcChargeTemplate').onchange=e=>{const t=$('#dcCreateTemplate'); if(t)t.value=e.target.value};
+  $('#dcChargeCount').onchange=e=>{const t=$('#dcCreateCount'); if(t)t.value=e.target.value};
+  $('#dcChargeDuration').onchange=e=>{const t=$('#dcCreateDuration'); if(t)t.value=e.target.value};
   confirm.onclick=async()=>{
     if(!latest.enough&&!latest.unlimited){close();openBillingModal();return;}
     confirm.disabled=true; confirm.textContent='Queueing…';
     try{
-      await onConfirm({sourceStartSeconds:Math.max(0,Math.round(sourceStartMinutes*60)),sourceEndSeconds:Math.max(1,Math.round(sourceEndMinutes*60)),estimatedMinutes:selectedMinutes});
+      await onConfirm({sourceStartSeconds,sourceEndSeconds,estimatedMinutes:minutesFromSeconds(selectedSeconds),sourceMeta:sourceInfo.sources});
       close();
     } catch(e){notify(e.message,'bad');confirm.disabled=false;confirm.textContent='Try again';}
   };
-  update();
+  fetchSourceInfo(urls).then(info=>{
+    sourceInfo=info||sourceInfo;
+    const knownDurations=durations();
+    maxSec=Math.max(60,...knownDurations.map(v=>Math.round(v)));
+    startInput.max=String(maxSec); endInput.max=String(maxSec); endInput.value=String(maxSec);
+    setSourceVisual(); update();
+  }).catch(()=>{setSourceVisual();update()});
 }
 async function queueProjectImport(url,button,range={}){
   const [min,max]=$('#dcCreateDuration').value.split(',').map(Number);
@@ -1314,6 +1426,7 @@ async function queueProjectImport(url,button,range={}){
     await callApi('/api/clip-settings',{method:'POST',body:JSON.stringify({clipsPerVideo:Number($('#dcCreateCount').value),clipMinSeconds:min,clipMaxSeconds:max})});
     const payload={urls:url,sourceStartSeconds:Math.max(0,Math.round(Number(range.sourceStartSeconds||0)))};
     if(Number.isFinite(Number(range.sourceEndSeconds))&&Number(range.sourceEndSeconds)>payload.sourceStartSeconds) payload.sourceEndSeconds=Math.round(Number(range.sourceEndSeconds));
+    if(Array.isArray(range.sourceMeta)) payload.sourceMeta=range.sourceMeta;
     const result=await callApi('/api/videos',{method:'POST',body:JSON.stringify(payload)});
     const failed=(result.results||[]).filter(x=>!x.ok).length;
     notify(failed?`${result.results.length-failed} queued, ${failed} failed`:'Lecture queued — watch Working now',failed?'bad':'good');
@@ -1345,7 +1458,7 @@ function renderProjects(){
   requestAnimationFrame(()=>animatePanel(panel));
 }
 function projectCard(p,clips){
-  const own=clips.filter(c=>c.projectId===p.id),thumb=own.find(c=>c.thumbUrl)?.thumbUrl,waiting=own.filter(c=>c.status==='waiting').length,scheduled=own.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length;
+  const own=clips.filter(c=>c.projectId===p.id),thumb=projectThumbUrl(p,clips),waiting=own.filter(c=>c.status==='waiting').length,scheduled=own.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length;
   const title=projectDisplayTitle(p);
   const failed=p.status==='failed'||p.error, busy=['queued','processing'].includes(p.status);
   const badgeClass=failed?'bad':busy?'warn':'good';
@@ -1357,7 +1470,7 @@ function renderProjectDetail(panel,d){
   document.body.classList.add('dc-project-open');
   panel.classList.add('dc-project-detail-view');
   const clips=(d.clips||[]).filter(c=>c.projectId===p.id).sort((a,b)=>Number(b.score||0)-Number(a.score||0));
-  const title=projectDisplayTitle(p), thumb=clips.find(c=>c.thumbUrl)?.thumbUrl;
+  const title=projectDisplayTitle(p), thumb=projectThumbUrl(p,d.clips||clips);
   const waiting=clips.filter(c=>c.status==='waiting').length, scheduled=clips.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length, posted=clips.filter(c=>c.status==='posted').length, failed=p.status==='failed'||p.error;
   panel.innerHTML=`<div class="dc-project-detail-page"><div class="dc-project-detail-hero"><button class="dc-icon-btn dc-svg" id="dcBackProjects" title="Back to projects">${ICON.back}</button><div class="dc-project-detail-thumb">${thumb?`<img src="${authedUrl(thumb)}" alt="${esc(title)} thumbnail">`:`<div class="dc-project-placeholder">${ICON.projects}<span>Lecture</span></div>`}</div><div class="dc-project-detail-info"><span class="dc-pill ${failed?'bad':['queued','processing'].includes(p.status)?'warn':'good'}">${failed?'Needs retry':statusName(p.status)}</span><h1>${esc(title)}</h1><p>${clips.length} clips · ${posted} posted · ${scheduled} scheduled</p></div><div class="dc-project-detail-actions"><button class="dc-btn secondary" data-more-project="${esc(p.id)}" ${!p.sourceReusable?'disabled':''}>Generate more</button>${failed?`<button class="dc-btn secondary" data-retry-project="${esc(p.id)}">Retry</button>`:''}<button class="dc-btn danger" data-delete-project="${esc(p.id)}">Delete project</button></div></div><div class="dc-project-detail-stats">${metric(clips.length,'Clips')}${metric(waiting,'Review')}${metric(scheduled,'Scheduled')}${metric(posted,'Posted')}${metric(Math.round((clips[0]?.score||0)),'Top score')}</div>${failed?`<div class="dc-project-error-mini">${esc(shortError(p.error||p.stage))}</div>`:''}${p.moreJob&&['queued','processing'].includes(p.moreJob.status)?`<div class="dc-card dc-card-pad"><div class="dc-now-row"><span class="dc-spinner"></span><div class="dc-now-main"><strong>${esc(p.moreJob.stage||'Generating more clips')}</strong><span>Reusing saved lecture and transcript.</span><div class="dc-progress"><i style="width:${clamp(p.moreJob.progress,0,100)}%"></i></div></div><span class="dc-pill warn">${Math.round(p.moreJob.progress||0)}%</span></div></div>`:''}<div class="dc-project-detail-filter"><select><option>All clips</option><option>Waiting review</option><option>Scheduled</option><option>Posted</option></select><select><option>Highest score</option><option>Newest first</option><option>Longest</option></select><span class="dc-pill">${clips.length} clips</span><button class="dc-btn secondary" data-more-project="${esc(p.id)}" ${!p.sourceReusable?'disabled':''}>More clips</button></div><div class="dc-project-clip-grid">${clips.length?clips.map(c=>clipCard(c,{detail:true})).join(''):`<div class="dc-empty dc-empty-full"><strong>No clips yet</strong>${['queued','processing'].includes(p.status)?'Processing is still underway.':'Generate more clips from this lecture.'}</div>`}</div></div>`;
   $('#dcBackProjects').onclick=()=>{selectedProjectId='';document.body.classList.remove('dc-project-open');renderProjects()};
