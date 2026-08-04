@@ -55,11 +55,6 @@ function marketingLayout(req, { title, description, body, canonicalPath = '/' })
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${title}</title>
   <meta name="description" content="${description}">
-  <meta name="application-name" content="DeenClipped">
-  <meta property="og:site_name" content="DeenClipped">
-  <meta property="og:title" content="DeenClipped">
-  <meta property="og:description" content="DeenClipped helps users create, edit, and publish short-form clips from long videos.">
-  <meta name="robots" content="index,follow">
   <link rel="canonical" href="${canonical}">
   <style>
     :root{color-scheme:dark;--bg:#070707;--panel:#101012;--panel2:#171514;--line:rgba(255,255,255,.12);--text:#f7f2ea;--muted:#aaa4a0;--gold:#e3bd75;--gold2:#f4d99a;--green:#63d89a}
@@ -67,7 +62,7 @@ function marketingLayout(req, { title, description, body, canonicalPath = '/' })
   </style>
 </head>
 <body>
-  <header class="site nav"><a class="brand" href="/"><span class="mark"></span><span>DeenClipped</span></a><nav class="navlinks"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a class="btn primary" href="/login?returnTo=%2Fapp">Sign in</a></nav></header>
+  <header class="site nav"><a class="brand" href="/"><span class="mark"></span><span>DeenClipped</span></a><nav class="navlinks"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a class="btn primary" href="/login">Sign in</a></nav></header>
   ${body}
   <footer class="footer"><div class="site"><span>© ${new Date().getFullYear()} DeenClipped. Create, edit and publish short-form clips from long videos.</span><span><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><a href="mailto:support@deenclipped.online">Contact</a></span></div></footer>
 </body>
@@ -76,11 +71,12 @@ function marketingLayout(req, { title, description, body, canonicalPath = '/' })
 function marketingHome(req) {
   return marketingLayout(req, {
     title: 'DeenClipped',
-    description: 'DeenClipped helps users create, edit, and publish short-form clips from long videos.',
+    description: 'DeenClipped is a web application that helps users create, edit, and publish short-form clips from long videos.',
     canonicalPath: '/',
-    body: `<main class="site hero"><section><span class="kicker">DeenClipped app homepage</span><h1>DeenClipped</h1><p><strong>DeenClipped</strong> is a web application that helps users create, edit, and publish short-form clips from long videos. Users can upload or import long-form videos, choose the exact source range, generate short clips, edit captions and templates, and publish or schedule those clips to their own connected social accounts.</p><p><strong>Purpose of DeenClipped:</strong> DeenClipped turns long videos, lectures, podcasts, and recordings into short-form social media clips for platforms such as YouTube Shorts, TikTok, Instagram Reels, and Facebook Reels.</p><div class="actions"><a class="btn primary" href="/login?returnTo=%2Fapp">Open DeenClipped</a><a class="btn" href="/privacy">Privacy Policy</a><a class="btn" href="/terms">Terms of Service</a></div></section><aside class="mock" aria-label="DeenClipped product preview"><div class="mockbar"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div><div class="clipgrid"><div class="clipcard"><b>Import</b><span>Paste a video link or upload your own long video file.</span></div><div class="clipcard"><b>Clip</b><span>Select the source window, template, clip count, and clip length.</span></div><div class="clipcard"><b>Edit</b><span>Review clips, captions, thumbnails, and final style before publishing.</span></div><div class="clipcard"><b>Publish</b><span>Connect your own social accounts and publish or schedule clips.</span></div></div></aside></main><section class="site features"><article class="feature"><h2>What DeenClipped does</h2><p>DeenClipped creates short-form clips from long videos and helps users edit and publish those clips.</p></article><article class="feature"><h2>Create and edit clips</h2><p>Users can generate clips, review captions, adjust style, choose templates, and prepare clips for posting.</p></article><article class="feature"><h2>Publish to your accounts</h2><p>Users can connect their own social accounts so clips publish to the correct channel.</p></article></section>`
+    body: `<main class="site hero"><section><span class="kicker">DeenClipped app homepage</span><h1>DeenClipped</h1><p><strong>DeenClipped is a web application that helps users create, edit, and publish short-form clips from long videos.</strong></p><p>Purpose of DeenClipped: users can import or upload a long video, choose the part of the source video they want to use, generate short-form clips, review and edit captions, choose templates, connect their own social media accounts, and publish or schedule clips to their own channels.</p><div class="actions"><a class="btn primary" href="/login?returnTo=/app">Sign in to DeenClipped</a><a class="btn" href="/privacy">Privacy Policy</a><a class="btn" href="/terms">Terms of Service</a></div></section><aside class="mock" aria-label="DeenClipped product preview"><div class="mockbar"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div><div class="clipgrid"><div class="clipcard"><b>Import</b><span>Paste a video link or upload your own video file.</span></div><div class="clipcard"><b>Clip</b><span>Select the source range, template, clip count and style.</span></div><div class="clipcard"><b>Edit</b><span>Review generated clips, captions, layouts and titles.</span></div><div class="clipcard"><b>Publish</b><span>Connect your own YouTube and social accounts to publish clips.</span></div></div></aside></main><section class="site features"><article class="feature"><h2>What DeenClipped does</h2><p>DeenClipped turns long-form videos into short-form clips for platforms such as YouTube Shorts, TikTok, Instagram Reels and Facebook Reels.</p></article><article class="feature"><h2>Who DeenClipped is for</h2><p>DeenClipped is for creators, educators, podcasters and teams who want to repurpose long videos into clips.</p></article><article class="feature"><h2>How DeenClipped works</h2><p>Upload or import a video, generate clips, edit the results, then publish or schedule them through connected accounts.</p></article></section>`
   });
 }
+
 function privacyPage(req) {
   return marketingLayout(req, {
     title: 'Privacy Policy — DeenClipped',
@@ -96,6 +92,16 @@ function termsPage(req) {
     canonicalPath: '/terms',
     body: `<main class="site page"><article class="pagecard"><h1>Terms of Service</h1><p>Last updated: 4 August 2026</p><p>These Terms govern use of DeenClipped, an app for creating, editing and publishing short-form clips from long videos.</p><h2>Use of the service</h2><p>You must use DeenClipped lawfully and only with content you own or have permission to use. You are responsible for the videos, links, clips, captions and posts you create or publish through the service.</p><h2>Source content and copyright</h2><p>Uploading or importing videos you do not own or do not have permission to use may violate copyright or platform rules. By using DeenClipped, you confirm that you have the required rights and permissions for the content you process.</p><h2>Connected platforms</h2><p>When you connect YouTube or another platform, DeenClipped publishes only using the connected account permissions you grant. You remain responsible for complying with each platform's rules.</p><h2>Billing and tokens</h2><p>Some features may require tokens, subscriptions or paid plans. Token usage may be based on selected source video time and other plan rules shown in the app.</p><h2>Service availability</h2><p>DeenClipped may change, pause or remove features over time. We do not guarantee uninterrupted access.</p><h2>Contact</h2><p>Questions can be sent to <a href="mailto:support@deenclipped.online">support@deenclipped.online</a>.</p></article></main>`
   });
+}
+
+function serveAppShell(req, res, url, currentUser) {
+  if (auth.enabled() && !currentUser) return redirect(res, `/login?returnTo=${encodeURIComponent('/app' + (url.search || ''))}`);
+  if (auth.enabled() && currentUser && billing.needsPlanChoice(currentUser)) return redirect(res, `/plans?returnTo=${encodeURIComponent('/app' + (url.search || ''))}`);
+  let html = fs.readFileSync(page, 'utf8');
+  if (!html.includes('/activity-fix.js')) html = html.replace('</body>', '<script src="/activity-fix.js"></script>\n</body>');
+  const body = Buffer.from(html);
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
+  return res.end(body);
 }
 
 function formBody(req, limit = 1_000_000) {
@@ -272,7 +278,6 @@ function runDoctor() {
 async function route(req, res, url) {
   const { pathname } = url; const method = req.method || 'GET';
   if (pathname === '/healthz') return json(res, 200, { ok: true, engine: 'self-hosted' });
-  if (method === 'GET' && pathname === '/robots.txt') { const body = 'User-agent: *\nAllow: /\n'; res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'public, max-age=300' }); return res.end(body); }
   if (method === 'POST' && pathname === '/api/billing/webhook') {
     try {
       const raw = await readRawBody(req, 5_000_000);
@@ -344,16 +349,12 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/privacy') return html(res, 200, privacyPage(req));
   if (method === 'GET' && pathname === '/terms') return html(res, 200, termsPage(req));
   if (method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
+    // Google OAuth verification must always see a public homepage here.
+    // The logged-in product is served from /app so / is never hidden behind auth.
     return html(res, 200, marketingHome(req));
   }
-  if (method === 'GET' && (pathname === '/app' || pathname === '/app/')) {
-    if (auth.enabled() && !currentUser) return redirect(res, `/login?returnTo=${encodeURIComponent(pathname + url.search)}`);
-    if (auth.enabled() && currentUser && billing.needsPlanChoice(currentUser)) return redirect(res, `/plans?returnTo=${encodeURIComponent(pathname + url.search)}`);
-    let html = fs.readFileSync(page, 'utf8');
-    if (!html.includes('/activity-fix.js')) html = html.replace('</body>', '<script src="/activity-fix.js"></script>\n</body>');
-    const body = Buffer.from(html);
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
-    return res.end(body);
+  if (method === 'GET' && (pathname === '/app' || pathname === '/dashboard')) {
+    return serveAppShell(req, res, url, currentUser);
   }
   if (method === 'GET' && pathname === '/activity-fix.js') {
     if (!fs.existsSync(activityFixPage)) return json(res, 404, { error: 'Activity UI script not found.' });
@@ -368,10 +369,10 @@ async function route(req, res, url) {
       // The account comes from the signed OAuth state, not from whoever holds
       // a session cookie when the callback lands.
       await social.completeOAuth(provider, url);
-      return redirect(res, `/?social=connected&provider=${encodeURIComponent(provider)}`);
+      return redirect(res, `/app?social=connected&provider=${encodeURIComponent(provider)}`);
     } catch (error) {
       console.error(error);
-      return redirect(res, `/?social=error&provider=${encodeURIComponent(provider)}&message=${encodeURIComponent(error.message)}`);
+      return redirect(res, `/app?social=error&provider=${encodeURIComponent(provider)}&message=${encodeURIComponent(error.message)}`);
     }
   }
   const socialMedia = pathname.match(/^\/media\/social\/([^/]+)\.mp4$/);
