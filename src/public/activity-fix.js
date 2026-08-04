@@ -62,6 +62,7 @@ const ICON = {
   warning:'<svg viewBox="0 0 24 24"><path d="M12 3 2.5 20.5h19Z"/><path d="M12 9v5m0 3h.01"/></svg>',
   clock:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   sparkles:'<svg viewBox="0 0 24 24"><path d="M12 3 13.8 8.2 19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z"/><path d="M19 15l.9 2.6 2.6.9-2.6.9L19 23l-.9-2.6-2.6-.9 2.6-.9Z"/></svg>',
+  tokens:'<svg viewBox="0 0 24 24"><path d="M12 3 20 7.5v9L12 21l-8-4.5v-9Z"/><path d="M8.3 9.7 12 7.7l3.7 2-3.7 2.1Z"/><path d="M12 11.8v4.5"/></svg>',
   scissors:'<svg viewBox="0 0 24 24"><circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="M8.7 8.7 20 20M8.7 15.3 20 4"/></svg>',
   youtube:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31.5 31.5 0 0 0 0 12a31.5 31.5 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31.5 31.5 0 0 0 24 12a31.5 31.5 0 0 0-.5-5.8ZM9.6 15.6V8.4l6.3 3.6-6.3 3.6Z"/></svg>',
   tiktok:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.7 2c.4 3.2 2.2 5.1 5.3 5.3v3.6c-1.8.2-3.5-.4-5.2-1.5v6.8c0 8.6-9.4 11.3-13.2 5.1-2.5-4.1-1-11.3 7-11.6v3.8c-.6.1-1.2.2-1.7.4-1.6.5-2.5 2-2.2 3.7.6 3.2 6.3 4.1 5.8-2.1V2h4.2Z"/></svg>',
@@ -244,6 +245,13 @@ const css = String.raw`
 @media(max-width:1200px){.dc-home-dashboard{grid-template-columns:1fr}.dc-home-metrics.v3{grid-template-columns:repeat(3,minmax(120px,1fr))}.dc-review-item{grid-template-columns:78px minmax(0,1fr)}.dc-review-actions{grid-column:1/-1;min-width:0}}
 @media(max-width:720px){.dc-v3-hero{grid-template-columns:1fr;min-height:0;padding:18px!important}.dc-v3-source-row,.dc-social-grid.clean{grid-template-columns:1fr}.dc-home-metrics.v3{grid-template-columns:1fr 1fr}.dc-review-item{grid-template-columns:72px 1fr}.dc-review-actions{grid-template-columns:1fr 1fr}.dc-project-grid{grid-template-columns:1fr}}
 
+`;
+
+
+const billingCss = String.raw`
+.dc-token-pill{min-height:38px;display:inline-flex;align-items:center;gap:8px;padding:0 12px;border:1px solid rgba(217,180,120,.24);border-radius:999px;background:rgba(217,180,120,.075);color:var(--dc-accent2);font-size:10px;font-weight:750;white-space:nowrap;box-shadow:0 8px 30px rgba(217,180,120,.06)}
+.dc-token-pill svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8}.dc-token-pill em{font-style:normal;color:var(--dc-muted);font-weight:600}.dc-token-pill:hover{background:rgba(217,180,120,.12);border-color:rgba(217,180,120,.38)}
+.dc-billing-layer{position:fixed;inset:0;z-index:420;display:none;place-items:center;padding:18px;background:rgba(0,0,0,.62);backdrop-filter:blur(15px)}.dc-billing-layer.show{display:grid}.dc-billing-card{width:min(940px,100%);max-height:min(820px,92dvh);overflow:auto;border:1px solid var(--dc-line2);border-radius:20px;background:linear-gradient(180deg,#141417,#0c0c0e);box-shadow:0 28px 90px rgba(0,0,0,.55)}.dc-billing-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:22px;border-bottom:1px solid var(--dc-line)}.dc-billing-head h2{margin:0;font-size:24px;letter-spacing:-.04em}.dc-billing-head p{margin:6px 0 0;color:var(--dc-muted);font-size:11px;line-height:1.55}.dc-billing-close{width:38px;height:38px;border-radius:999px;border:1px solid var(--dc-line);background:#0a0a0c;color:var(--dc-text);font-size:22px}.dc-billing-usage{display:grid;grid-template-columns:1.2fr .8fr;gap:12px;padding:16px 22px;border-bottom:1px solid var(--dc-line)}.dc-usage-panel,.dc-rate-panel{border:1px solid var(--dc-line);border-radius:15px;background:rgba(255,255,255,.03);padding:15px}.dc-usage-panel strong,.dc-rate-panel strong{display:block;font-size:11px;color:var(--dc-muted);text-transform:uppercase;letter-spacing:.08em}.dc-usage-value{font-size:34px;font-weight:900;letter-spacing:-.04em;margin-top:6px}.dc-usage-value span{font-size:13px;color:var(--dc-muted);font-weight:700}.dc-usage-bar{height:8px;border-radius:999px;background:#24242a;margin-top:11px;overflow:hidden}.dc-usage-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--dc-accent),var(--dc-accent2));box-shadow:0 0 22px rgba(217,180,120,.32)}.dc-rate-panel b{display:block;font-size:22px;margin-top:8px}.dc-rate-panel em{display:block;color:var(--dc-muted);font-style:normal;font-size:10px;line-height:1.55;margin-top:5px}.dc-plan-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:18px 22px}.dc-plan-card{border:1px solid var(--dc-line);border-radius:16px;background:rgba(255,255,255,.03);padding:16px;display:flex;flex-direction:column;gap:11px}.dc-plan-card.current{border-color:rgba(217,180,120,.55);box-shadow:0 0 0 1px rgba(217,180,120,.14) inset}.dc-plan-card h3{margin:0;font-size:16px}.dc-plan-card p{margin:0;color:var(--dc-muted);font-size:10px;line-height:1.55}.dc-plan-card .tokens{font-size:28px;font-weight:900;letter-spacing:-.04em}.dc-plan-card .tokens span{font-size:10px;color:var(--dc-muted);font-weight:700}.dc-plan-card .badge{align-self:flex-start;padding:5px 8px;border-radius:999px;background:rgba(217,180,120,.10);color:var(--dc-accent2);font-size:9px;font-weight:800}.dc-plan-card .dc-btn{width:100%;margin-top:auto}.dc-billing-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 22px 22px;color:var(--dc-muted);font-size:10px}.dc-billing-foot .dc-btn{min-height:36px}@media(max-width:820px){.dc-billing-usage,.dc-plan-grid{grid-template-columns:1fr}.dc-billing-foot{flex-direction:column;align-items:stretch}.dc-token-pill em{display:none}}
 `;
 
 
@@ -659,7 +667,7 @@ function injectShell(){
   if (shellReady) return;
   shellReady = true;
   const style = document.createElement('style');
-  style.id = 'dcPhase4Styles'; style.textContent = css + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss; document.head.appendChild(style);
+  style.id = 'dcPhase4Styles'; style.textContent = css + billingCss + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss; document.head.appendChild(style);
   document.body.classList.add('dc-app');
 
   const side = document.createElement('aside'); side.id = 'dcSidebar';
@@ -668,7 +676,7 @@ function injectShell(){
   const top = document.createElement('header'); top.id = 'dcTopbar';
   const signedUser = data()?.user || null;
   const avatar = signedUser?.picture ? `<img src="${esc(signedUser.picture)}" alt="">` : `<span class="dc-user-avatar">${esc((signedUser?.name || signedUser?.email || 'D').slice(0,1).toUpperCase())}</span>`;
-  top.innerHTML = `<button class="dc-mobile-menu dc-svg" id="dcMobileMenu" type="button" aria-label="Open menu">${ICON.menu}</button><div class="dc-page-title"><strong id="dcPageName">Home</strong><span id="dcPageSub">Everything important in one place</span></div><div class="dc-global-search">${ICON.search}<input id="dcGlobalSearch" placeholder="Search projects and clips"><div class="dc-search-results" id="dcSearchResults"></div></div><div class="dc-top-actions"><div class="dc-health" id="dcHealth"><i></i><span>Checking</span></div><button class="dc-btn secondary dc-tour-launch" id="dcTourLaunch" type="button">Guided demo</button>${signedUser ? `<div class="dc-user-pill">${avatar}<span>${esc(signedUser.name || signedUser.email || 'Signed in')}</span></div><form class="dc-logout-form" method="post" action="/auth/logout"><button class="dc-logout-btn" type="submit">Log out</button></form>` : ''}<button class="dc-btn" id="dcNewProject"><span>＋ New project</span></button></div>`;
+  top.innerHTML = `<button class="dc-mobile-menu dc-svg" id="dcMobileMenu" type="button" aria-label="Open menu">${ICON.menu}</button><div class="dc-page-title"><strong id="dcPageName">Home</strong><span id="dcPageSub">Everything important in one place</span></div><div class="dc-global-search">${ICON.search}<input id="dcGlobalSearch" placeholder="Search projects and clips"><div class="dc-search-results" id="dcSearchResults"></div></div><div class="dc-top-actions"><div class="dc-health" id="dcHealth"><i></i><span>Checking</span></div><button class="dc-token-pill" id="dcTokenPill" type="button">${ICON.tokens}<span>Tokens</span></button><button class="dc-btn secondary dc-tour-launch" id="dcTourLaunch" type="button">Guided demo</button>${signedUser ? `<div class="dc-user-pill">${avatar}<span>${esc(signedUser.name || signedUser.email || 'Signed in')}</span></div><form class="dc-logout-form" method="post" action="/auth/logout"><button class="dc-logout-btn" type="submit">Log out</button></form>` : ''}<button class="dc-btn" id="dcNewProject"><span>＋ New project</span></button></div>`;
 
   const work = document.createElement('div'); work.id = 'dcWork'; work.setAttribute('role','status'); work.setAttribute('aria-live','polite');
   work.innerHTML = `<span class="dc-work-toast-orb">${ICON.play}</span><div class="dc-work-toast-copy"><strong>Working…</strong><span>Saving changes</span></div><button id="dcWorkClose" type="button" aria-label="Hide progress notification">×</button><div class="dc-work-toast-progress"><i></i></div>`;
@@ -704,6 +712,7 @@ function bindGlobal(){
   $('#dcShade').onclick = () => document.body.classList.remove('dc-menu-open');
   $('#dcNewProject').onclick = () => { go('home'); setTimeout(() => $('#dcCreateUrl')?.focus(), 30); };
   $('#dcTourLaunch').onclick = () => openGuidedTour(0);
+  $('#dcTokenPill').onclick = openBillingModal;
   $('#dcWorkClose').onclick = () => { const el=$('#dcWork'); if(el){ el.dataset.dismissed='1'; el.dataset.dismissedKey = el.dataset.workKey || ''; el.classList.remove('show'); } };
   $('#dcGlobalSearch').addEventListener('input', renderGlobalSearch);
   document.addEventListener('keydown', event => {
@@ -1981,6 +1990,39 @@ function renderSidebarLive(){
   box.classList.add('v3-now');
   box.innerHTML=`<div class="dc-now-topline"><span class="dc-now-chip ${busy?'busy':'good'}">${busy?'Live':'Ready'}</span><span class="dc-now-title">Happening now</span></div><div class="dc-now-focus"><span class="dc-now-focus-icon">${icon}</span><div><strong>${esc(title)}</strong><span>${esc(stage)}</span></div></div><div class="dc-now-progress"><i style="width:${pct}%"></i></div>${nextLine}<div class="dc-now-mini-stats"><span><b>${waiting}</b><em>review</em></span><span><b>${scheduled}</b><em>scheduled</em></span></div><div class="dc-sidebar-live-foot"><button class="dc-btn secondary" data-dc-nav="review">Review</button><button class="dc-btn secondary" data-dc-nav="schedule">Schedule</button></div>`;
 }
+
+function billingInfo(){return data()?.billing || {current:{plan:'free',remaining:0,used:0,allowance:0},plans:{},tokenRatePerMinute:1}}
+function updateTokenPill(){
+  const pill=$('#dcTokenPill'); if(!pill)return;
+  const bill=billingInfo(),cur=bill.current||{};
+  const label=cur.unlimited?'∞ tokens':`${Math.max(0,Math.round(Number(cur.remaining||0)))} tokens`;
+  const rate=`${Number(bill.tokenRatePerMinute||1)} token/min`;
+  pill.innerHTML=`${ICON.tokens}<span>${esc(label)}</span><em>${esc(rate)}</em>`;
+  pill.title=cur.unlimited?'Admin accounts have unlimited tokens':`${label} left · ${rate} charged for source video minutes`;
+}
+function openBillingModal(){
+  $('#dcBillingLayer')?.remove();
+  const bill=billingInfo(),cur=bill.current||{},plans=bill.plans||{};
+  const currentPlan=cur.plan||'free';
+  const unlimited=!!cur.unlimited;
+  const allowance=Number(cur.allowance||0),used=Number(cur.used||0),reserved=Number(cur.reserved||0),remaining=Number(cur.remaining||0);
+  const pct=unlimited?100:allowance?clamp(((used+reserved)/allowance)*100,0,100):0;
+  const planCards=['weekly','monthly','yearly'].map(id=>{
+    const plan=plans[id]||{};const isCurrent=currentPlan===id;const enabled=plan.enabled!==false&&plan.priceId;
+    return `<article class="dc-plan-card ${isCurrent?'current':''}"><span class="badge">${esc(plan.badge||'Plan')}</span><h3>${esc(plan.name||id)}</h3><div class="tokens">${esc(plan.tokens||0)} <span>tokens / ${esc(plan.interval||id)}</span></div><p>${esc(plan.description||'Token allowance for clipping lectures.')}</p><button class="dc-btn ${isCurrent?'secondary':''}" data-billing-checkout="${esc(id)}" ${enabled?'':'disabled'}>${isCurrent?'Current plan':enabled?`Start ${bill.trialDays||7}-day trial`:'Add Stripe price'}</button></article>`;
+  }).join('');
+  const layer=document.createElement('div');layer.id='dcBillingLayer';layer.className='dc-billing-layer show';
+  layer.innerHTML=`<section class="dc-billing-card" role="dialog" aria-modal="true" aria-labelledby="dcBillingTitle"><div class="dc-billing-head"><div><h2 id="dcBillingTitle">Tokens and plans</h2><p>DeenClipped charges tokens by source video minutes. Your current rate is <b>${esc(bill.tokenRatePerMinute||1)} token per minute</b>. Rerenders from template updates do not burn tokens.</p></div><button class="dc-billing-close" id="dcBillingClose" type="button" aria-label="Close">×</button></div><div class="dc-billing-usage"><div class="dc-usage-panel"><strong>${unlimited?'Admin allowance':'Current allowance'}</strong><div class="dc-usage-value">${unlimited?'∞':remaining}<span>${unlimited?' unlimited tokens':` left of ${allowance}`}</span></div><div class="dc-usage-bar"><i style="width:${pct}%"></i></div></div><div class="dc-rate-panel"><strong>Charge rate</strong><b>${esc(bill.tokenRatePerMinute||1)} token/min</b><em>Example: a 45 minute lecture costs about ${Math.ceil(45*Number(bill.tokenRatePerMinute||1))} tokens after it finishes processing.</em></div></div><div class="dc-plan-grid">${planCards}</div><div class="dc-billing-foot"><span>${bill.stripeConfigured?'Stripe Checkout is connected.':'Stripe is not configured yet. Add keys and price IDs in Render.'}</span><button class="dc-btn secondary" id="dcBillingPortal" type="button" ${cur.stripeCustomerId?'':'disabled'}>Manage billing</button></div></section>`;
+  document.body.append(layer);
+  $('#dcBillingClose').onclick=()=>layer.remove();
+  layer.addEventListener('click',event=>{if(event.target===layer)layer.remove()});
+  $$('[data-billing-checkout]',layer).forEach(btn=>btn.addEventListener('click',async()=>{
+    const plan=btn.dataset.billingCheckout; if(!plan||btn.disabled)return;
+    try{btn.disabled=true;btn.textContent='Opening Stripe…';const res=await callApi('/api/billing/checkout',{method:'POST',body:JSON.stringify({plan})}); if(res.url) location.href=res.url; else throw new Error('Stripe did not return a checkout URL.');}
+    catch(e){notify(e.message,'bad');btn.disabled=false;btn.textContent='Try again';}
+  }));
+  $('#dcBillingPortal')?.addEventListener('click',async()=>{try{const res=await callApi('/api/billing/portal',{method:'POST',body:'{}'}); if(res.url) location.href=res.url;}catch(e){notify(e.message,'bad')}});
+}
 function renderCurrent(){if(currentView==='home')renderHome();if(currentView==='projects')renderProjects();if(currentView==='review')renderReview();if(currentView==='editor')ensureEditor();if(currentView==='publishing')renderConnections();if(currentView==='templates')renderTemplatesPage();if(currentView==='music')renderAudioLibrary();if(currentView==='insights')renderInsightsPage();if(currentView==='automation')renderSettingsPage()}
 async function refreshData(){if(typeof refresh==='function')return refresh();try{DATA=await callApi('/api/state')}catch{}}
 function hexAlpha(hex,alpha){const value=String(hex||'#000000').replace('#','');if(!/^[0-9a-fA-F]{6}$/.test(value))return `rgba(0,0,0,${alpha})`;const n=parseInt(value,16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${alpha})`}
@@ -1995,7 +2037,7 @@ function sync(){
   const live=Boolean($('#app')&&!$('#app').classList.contains('hide'));
   $('#dcSidebar').style.display=live?'flex':'none';$('#dcTopbar').style.display=live?'flex':'none';
   if(!live||!data())return;
-  const jobs=activeJobs(),health=$('#dcHealth');health.className=`dc-health ${jobs.length?'busy':!data().readiness?.ready?'bad':''}`;$('span',health).textContent=jobs.length?`${jobs.length} active`:data().readiness?.ready?'Ready':'Setup needed';
+  const jobs=activeJobs(),health=$('#dcHealth');health.className=`dc-health ${jobs.length?'busy':!data().readiness?.ready?'bad':''}`;$('span',health).textContent=jobs.length?`${jobs.length} active`:data().readiness?.ready?'Ready':'Setup needed';updateTokenPill();
   const signature=JSON.stringify({p:(data().projects||[]).map(p=>[p.id,p.status,p.progress,p.moreJob?.status,p.moreJob?.progress]),c:(data().clips||[]).map(c=>[c.id,c.status,c.scheduledAt,c.postedAt,c.rerender?.status]),r:(data().rerenderJobs||[]).map(r=>[r.id,r.status,r.progress]),s:data().social?.providers});
   if(signature!==lastDataSignature){lastDataSignature=signature;if(currentView!=='editor'||!editor.dirty)renderCurrent();else{renderTimeline();}}
   paintWork();
