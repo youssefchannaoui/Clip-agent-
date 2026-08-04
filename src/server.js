@@ -347,6 +347,11 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/api/auth/me') return json(res, 200, { user: auth.userPublic(currentUser), auth: auth.publicConfig() });
   if (method === 'GET' && pathname === '/api/state') return json(res, 200, appState(currentUser));
   if (method === 'GET' && pathname === '/api/billing') return json(res, 200, billing.publicBilling(currentUser));
+  if (method === 'POST' && pathname === '/api/billing/estimate') {
+    const body = await readBody(req);
+    try { return json(res, 200, billing.estimateTokenCharge(currentUser, Number(body.minutes || body.sourceMinutes || 0))); }
+    catch (error) { return json(res, 400, { error: error.message }); }
+  }
   if (method === 'POST' && pathname === '/api/billing/checkout') {
     const body = await readBody(req);
     try { return json(res, 200, await billing.createCheckoutSession(currentUser, String(body.plan || ''))); }
