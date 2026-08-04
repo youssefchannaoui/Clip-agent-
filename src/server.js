@@ -340,9 +340,9 @@ async function route(req, res, url) {
   if (method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
     if (auth.enabled() && !currentUser) return html(res, 200, marketingHome(req));
     if (auth.enabled() && currentUser && billing.needsPlanChoice(currentUser)) return redirect(res, `/plans?returnTo=${encodeURIComponent(pathname + url.search)}`);
-    let html = fs.readFileSync(page, 'utf8');
-    if (!html.includes('/activity-fix.js')) html = html.replace('</body>', '<script src="/activity-fix.js"></script>\n</body>');
-    const body = Buffer.from(html);
+    let pageHtml = fs.readFileSync(page, 'utf8');
+    if (!pageHtml.includes('/activity-fix.js')) pageHtml = pageHtml.replace('</body>', '<script src="/activity-fix.js"></script>\n</body>');
+    const body = Buffer.from(pageHtml);
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
     return res.end(body);
   }
