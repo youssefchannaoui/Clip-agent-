@@ -167,6 +167,39 @@ async function sourceInfoViaYouTubeHtml(url) {
   const meta = metadataFromYouTubeHtml(html, url);
   return meta.durationSec ? meta : null;
 }
+
+async function sourceInfoViaYouTubeDataApi(url) {
+  const videoId = youtubeIdFromUrl(url);
+  const key = String(config.youtubeDataApiKey || '').trim();
+  if (!videoId || !key) return null;
+  const apiUrl = `${config.youtubeApiBase}/youtube/v3/videos?part=snippet,contentDetails&id=${encodeURIComponent(videoId)}&key=${encodeURIComponent(key)}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12_000);
+  try {
+    const response = await fetch(apiUrl, { signal: controller.signal });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = payload?.error?.message || `YouTube Data API HTTP ${response.status}`;
+      throw new Error(message);
+    }
+    const item = Array.isArray(payload?.items) ? payload.items[0] : null;
+    if (!item) return null;
+    const durationSec = Math.round(parseIsoDuration(item?.contentDetails?.duration || '') || 0) || null;
+    const thumbs = item?.snippet?.thumbnails || {};
+    const thumbnail = thumbs.maxres?.url || thumbs.standard?.url || thumbs.high?.url || thumbs.medium?.url || thumbs.default?.url || fallbackThumb(url);
+    return {
+      url,
+      title: String(item?.snippet?.title || url),
+      durationSec,
+      durationKnown: Boolean(durationSec),
+      thumbnail,
+      extractor: 'youtube-data-api',
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function sourceInfoViaYtDlp(url) {
   const baseArgs = ['-m', 'yt_dlp', '--dump-single-json', '--skip-download', '--no-playlist', '--no-warnings'];
   const attempts = [
@@ -194,11 +227,18 @@ export async function sourceInfo(url) {
   const value = String(url || '').trim();
   if (!value) throw new Error('No source URL supplied.');
   const warnings = [];
+
+  try {
+    const apiInfo = await sourceInfoViaYouTubeDataApi(value);
+    if (apiInfo?.durationSec) return { ...apiInfo, durationKnown: true };
+    if (youtubeIdFromUrl(value) && !config.youtubeDataApiKey) warnings.push('No YOUTUBE_DATA_API_KEY configured for reliable preflight duration.');
+  } catch (error) { warnings.push(`YouTube Data API failed: ${error.message}`); }
+
   try {
     const info = await sourceInfoViaYtDlp(value);
-    if (info.durationSec) return { ...info, durationKnown: true };
+    if (info.durationSec) return { ...info, durationKnown: true, warning: warnings.join(' | ') || undefined };
     warnings.push('yt-dlp did not return a duration.');
-  } catch (error) { warnings.push(error.message); }
+  } catch (error) { warnings.push(`yt-dlp failed: ${error.message}`); }
 
   try {
     const htmlInfo = await sourceInfoViaYouTubeHtml(value);
