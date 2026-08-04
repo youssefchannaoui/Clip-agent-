@@ -1318,7 +1318,12 @@ function clockFromMinutes(value){
 function openTokenEstimateModal({urls,onConfirm}){
   $('#dcChargeLayer')?.remove();
   const bill=billingInfo(),rate=Number(bill.tokenRatePerMinute||1),links=splitVideoLinks(urls);
-  const fallbackSec=20*60;
+  // No invented duration. Everything here — the range slider, the token
+  // estimate — is only meaningful against a real length, so this starts at
+  // zero and stays there until a lookup verifies it or the person enters it
+  // by hand. Seeding a guess is what previously let an unverified number be
+  // shown and charged against as though it were fact.
+  const fallbackSec=0;
   const currentTemplate=$('#dcCreateTemplate')?.value || data()?.selectedTemplate?.id || '';
   const currentCount=$('#dcCreateCount')?.value || '8';
   const currentDuration=$('#dcCreateDuration')?.value || '30,60';
