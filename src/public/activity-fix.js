@@ -261,6 +261,21 @@ const billingCss = String.raw`
 
 
 
+
+const rangeChargeCss = String.raw`
+.dc-charge-layer{position:fixed;inset:0;z-index:520;display:grid;place-items:center;padding:18px;background:rgba(0,0,0,.70);backdrop-filter:blur(24px) saturate(1.08)}
+.dc-charge-card{width:min(720px,calc(100vw - 32px));max-height:calc(100dvh - 38px);overflow:auto;scrollbar-width:none;border:1px solid rgba(255,255,255,.10);border-radius:24px;background:linear-gradient(150deg,rgba(24,24,27,.96),rgba(10,10,12,.97));box-shadow:0 30px 110px rgba(0,0,0,.62),0 0 44px rgba(217,180,120,.08)}
+.dc-charge-card::-webkit-scrollbar{display:none}.dc-charge-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:24px 26px 18px;border-bottom:1px solid rgba(255,255,255,.08)}
+.dc-charge-head span{display:inline-flex;align-items:center;gap:8px;min-height:26px;padding:0 10px;border-radius:999px;background:rgba(217,180,120,.09);border:1px solid rgba(217,180,120,.20);color:var(--dc-accent2);font-size:10px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.dc-charge-head svg{width:15px;height:15px}.dc-charge-head h2{font-size:25px;letter-spacing:-.04em;margin:14px 0 7px}.dc-charge-head p{max-width:560px;margin:0;color:var(--dc-muted);font-size:11px;line-height:1.55}.dc-charge-close{width:38px;height:38px;flex:0 0 38px;border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(255,255,255,.03);color:var(--dc-text);font-size:20px}.dc-charge-close:hover{background:rgba(255,255,255,.08)}
+.dc-charge-body{padding:18px 26px 24px}.dc-charge-range-shell{display:grid;gap:12px}.dc-charge-summary{display:grid;grid-template-columns:42px minmax(0,1fr) auto;align-items:center;gap:12px;padding:14px;border:1px solid rgba(217,180,120,.20);border-radius:18px;background:linear-gradient(135deg,rgba(217,180,120,.11),rgba(255,255,255,.025))}.dc-charge-summary i{width:42px;height:42px;border-radius:14px;background:rgba(217,180,120,.14);box-shadow:0 0 26px rgba(217,180,120,.10);display:grid;place-items:center}.dc-charge-summary i::before{content:'▶';font-size:13px;color:var(--dc-accent2)}.dc-charge-summary strong,.dc-charge-summary span{display:block}.dc-charge-summary strong{font-size:13px}.dc-charge-summary span{font-size:10px;color:var(--dc-muted);margin-top:3px}.dc-charge-summary b{font-size:11px;color:var(--dc-accent2);font-weight:850;white-space:nowrap}
+.dc-charge-range-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.dc-charge-tile{padding:14px;border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(255,255,255,.03)}.dc-charge-tile strong,.dc-charge-tile span{display:block}.dc-charge-tile strong{font-size:24px;letter-spacing:-.04em}.dc-charge-tile span{font-size:10px;color:var(--dc-muted);margin-top:4px}
+.dc-range-picker{padding:16px;border:1px solid rgba(255,255,255,.09);border-radius:20px;background:linear-gradient(180deg,rgba(255,255,255,.042),rgba(255,255,255,.018))}.dc-range-top{display:flex;align-items:end;justify-content:space-between;gap:14px;margin-bottom:14px}.dc-range-top strong,.dc-range-top span{display:block}.dc-range-top strong{font-size:13px}.dc-range-top span{color:var(--dc-muted);font-size:10px;margin-top:3px}.dc-range-top label{min-width:160px;color:var(--dc-muted);font-size:9px}.dc-range-top input{width:100%;height:38px;margin-top:5px;padding:0 10px;border:1px solid rgba(255,255,255,.10);border-radius:11px;background:#0b0b0d;color:var(--dc-text);font-weight:850}.dc-range-bars{display:grid;gap:12px}.dc-range-bars label{display:grid;grid-template-columns:54px minmax(0,1fr) 58px;gap:10px;align-items:center;color:var(--dc-muted);font-size:10px}.dc-range-bars input[type=range]{width:100%;accent-color:var(--dc-accent)}.dc-range-bars b{color:var(--dc-text);font-size:10px;text-align:right}.dc-range-visual{position:relative;height:14px;margin:8px 0 2px;border-radius:999px;background:#222228;overflow:hidden}.dc-range-fill{position:absolute;top:0;bottom:0;border-radius:999px;background:linear-gradient(90deg,var(--dc-accent),var(--dc-accent2));box-shadow:0 0 20px rgba(217,180,120,.28)}.dc-range-readout{display:flex;justify-content:space-between;gap:10px;color:var(--dc-muted);font-size:10px}.dc-range-readout b{color:var(--dc-accent2)}
+.dc-charge-cost-panel{display:grid;grid-template-columns:1fr 1fr;gap:10px}.dc-charge-cost{padding:15px;border:1px solid rgba(217,180,120,.20);border-radius:18px;background:rgba(217,180,120,.055)}.dc-charge-cost b{display:block;font-size:32px;letter-spacing:-.055em;color:var(--dc-accent2);line-height:1}.dc-charge-cost span{display:block;font-size:10px;color:var(--dc-muted);margin-top:5px}.dc-charge-muted{min-height:auto;padding:13px 14px;border-radius:16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);color:var(--dc-muted);font-size:10px;line-height:1.45}.dc-charge-muted.warn{background:rgba(229,169,87,.09);color:var(--dc-orange);border-color:rgba(229,169,87,.22)}
+.dc-charge-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:3px}.dc-charge-actions .dc-btn{min-height:44px;border-radius:999px}.dc-charge-actions .dc-btn:first-child{min-width:220px}.dc-charge-note{color:var(--dc-muted);font-size:9.5px;line-height:1.45}.dc-charge-note b{color:var(--dc-text)}
+@media(max-width:720px){.dc-charge-card{width:calc(100vw - 18px);max-height:calc(100dvh - 18px);border-radius:20px}.dc-charge-head,.dc-charge-body{padding-left:16px;padding-right:16px}.dc-charge-range-grid,.dc-charge-cost-panel{grid-template-columns:1fr}.dc-charge-summary{grid-template-columns:36px minmax(0,1fr)}.dc-charge-summary b{grid-column:1/-1}.dc-range-top{display:grid}.dc-range-bars label{grid-template-columns:48px minmax(0,1fr) 52px}.dc-charge-actions{display:grid}.dc-charge-actions .dc-btn:first-child{min-width:0;width:100%}}
+`;
+
+
 const v3Css = String.raw`
 /* DeenClipped V3 visual system */
 :root{--dc-v3-glow:rgba(217,180,120,.18);--dc-v3-blue:#55b7ff;--dc-v3-pink:#ff5c9a;--dc-v3-purple:#9c7cff;--dc-v3-youtube:#ff0033;--dc-v3-tiktok:#25f4ee;--dc-v3-instagram:#e95a9a;--dc-v3-facebook:#5b8cff}
@@ -776,7 +791,7 @@ function injectShell(){
   if (shellReady) return;
   shellReady = true;
   const style = document.createElement('style');
-  style.id = 'dcPhase4Styles'; style.textContent = css + billingCss + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss + topbarCleanCss + trialUxCss; document.head.appendChild(style);
+  style.id = 'dcPhase4Styles'; style.textContent = css + billingCss + rangeChargeCss + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss + topbarCleanCss + trialUxCss; document.head.appendChild(style);
   document.body.classList.add('dc-app');
 
   const side = document.createElement('aside'); side.id = 'dcSidebar';
@@ -1227,47 +1242,79 @@ async function fetchTokenEstimate(minutes){
     return {estimatedMinutes:Math.max(1,Math.ceil(Number(minutes||0))),estimatedTokens:Math.max(1,Math.ceil(Math.max(1,Number(minutes||0))*rate)),rate,unlimited:bill.current?.unlimited,remaining:bill.current?.remaining,enough:true,terms:bill.terms||[]};
   }
 }
+function clockFromMinutes(value){
+  const total=Math.max(0,Math.round(Number(value||0)*60));
+  const h=Math.floor(total/3600),m=Math.floor((total%3600)/60),sec=total%60;
+  if(h) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  return `${m}:${String(sec).padStart(2,'0')}`;
+}
 function openTokenEstimateModal({urls,onConfirm}){
   $('#dcChargeLayer')?.remove();
   const bill=billingInfo(),rate=Number(bill.tokenRatePerMinute||1),links=splitVideoLinks(urls);
-  const defaultMinutes=Math.max(10,links.length*45);
+  const defaultFullMinutes=Math.max(10,45);
   const layer=document.createElement('div'); layer.id='dcChargeLayer'; layer.className='dc-charge-layer';
-  const terms=(bill.terms&&bill.terms.length?bill.terms:[`${rate} token/min for source video duration`,'Charged after exact length is known','Template rerenders are free','You can cancel from billing settings']);
-  layer.innerHTML=`<section class="dc-charge-card" role="dialog" aria-modal="true" aria-labelledby="dcChargeTitle"><div class="dc-charge-head"><div><span>${ICON.tokens} Token check</span><h2 id="dcChargeTitle">Review before rendering</h2><p>No tokens are used until DeenClipped reads the source duration. You can edit the estimate below.</p></div><button class="dc-charge-close" id="dcChargeClose" type="button" aria-label="Close">×</button></div><div class="dc-charge-body"><div class="dc-charge-summary"><i></i><div><strong>Ready to import ${esc(links.length)} lecture${links.length===1?'':'s'}</strong><span>Template/style rerenders stay free. Only new source-video minutes use tokens.</span></div></div><div class="dc-charge-grid"><div class="dc-charge-tile"><strong>${esc(links.length)}</strong><span>lecture link${links.length===1?'':'s'} queued</span></div><div class="dc-charge-tile"><strong>${esc(rate)}</strong><span>token per source minute</span></div></div><div class="dc-charge-estimate"><label>Estimated source minutes<input id="dcEstimateMinutes" type="number" min="1" step="1" value="${esc(defaultMinutes)}"></label><div class="dc-charge-cost"><b id="dcEstimateTokens">${esc(Math.ceil(defaultMinutes*rate))}</b><small id="dcEstimateSub">estimated tokens</small></div></div><div class="dc-charge-steps"><div class="dc-charge-step"><b>1</b><div><strong>Estimate</strong><span>Confirm the rough source length.</span></div></div><div class="dc-charge-step"><b>2</b><div><strong>Read video</strong><span>DeenClipped finds the real duration.</span></div></div><div class="dc-charge-step"><b>3</b><div><strong>Charge exact</strong><span>You only pay for source minutes.</span></div></div></div><div class="dc-charge-actions"><button class="dc-btn" id="dcConfirmCharge" type="button">Create clips</button><button class="dc-btn secondary" id="dcOpenBillingFromCharge" type="button">View plans</button><div class="dc-charge-muted" id="dcChargeBalance">Checking token balance…</div></div></div></section>`;
+  layer.innerHTML=`<section class="dc-charge-card" role="dialog" aria-modal="true" aria-labelledby="dcChargeTitle"><div class="dc-charge-head"><div><span>${ICON.tokens} Token confirmation</span><h2 id="dcChargeTitle">Choose the part to process.</h2><p>Full video is selected by default. Move the start and end sliders if you only want DeenClipped to analyse one section, then tokens are based on that selected source time.</p></div><button class="dc-charge-close" id="dcChargeClose" type="button" aria-label="Close">×</button></div><div class="dc-charge-body"><div class="dc-charge-range-shell"><div class="dc-charge-summary"><i></i><div><strong>Full source selected first</strong><span>Same idea as big clipping tools: choose the source window before rendering.</span></div><b id="dcRangeSummary">0:00 → 45:00</b></div><div class="dc-charge-range-grid"><div class="dc-charge-tile"><strong>${esc(links.length)}</strong><span>source link${links.length===1?'':'s'} queued</span></div><div class="dc-charge-tile"><strong>${esc(rate)}</strong><span>token per selected source minute</span></div></div><div class="dc-range-picker"><div class="dc-range-top"><div><strong>Source range</strong><span>Set the estimated full video length, then select the beginning and end you want analysed.</span></div><label>Estimated full length / source<input id="dcFullMinutes" type="number" min="1" step="1" value="${esc(defaultFullMinutes)}"></label></div><div class="dc-range-bars"><label>Start<input id="dcRangeStart" type="range" min="0" max="${esc(defaultFullMinutes)}" step="0.5" value="0"><b id="dcStartReadout">0:00</b></label><label>End<input id="dcRangeEnd" type="range" min="0.5" max="${esc(defaultFullMinutes)}" step="0.5" value="${esc(defaultFullMinutes)}"><b id="dcEndReadout">45:00</b></label></div><div class="dc-range-visual" aria-hidden="true"><i class="dc-range-fill" id="dcRangeFill"></i></div><div class="dc-range-readout"><span>Selected: <b id="dcSelectedReadout">45:00</b> per source</span><span id="dcTotalReadout">45 total source minutes</span></div></div><div class="dc-charge-cost-panel"><div class="dc-charge-cost"><b id="dcEstimateTokens">${esc(Math.ceil(defaultFullMinutes*rate*links.length))}</b><span id="dcEstimateSub">estimated tokens for selected range</span></div><div class="dc-charge-muted" id="dcChargeBalance">Checking token balance…</div></div><div class="dc-charge-actions"><button class="dc-btn" id="dcConfirmCharge" type="button">Create clips from selected range</button><button class="dc-btn secondary" id="dcOpenBillingFromCharge" type="button">View plans</button><div class="dc-charge-note">Tokens are charged after the worker confirms the exact selected duration. <b>Template rerenders stay free.</b></div></div></div></div></section>`;
   document.body.append(layer);
   const close=()=>layer.remove();
   $('#dcChargeClose').onclick=close;
   layer.addEventListener('click',event=>{if(event.target===layer)close()});
-  const input=$('#dcEstimateMinutes',layer),tokensEl=$('#dcEstimateTokens',layer),subEl=$('#dcEstimateSub',layer),balanceEl=$('#dcChargeBalance',layer),confirm=$('#dcConfirmCharge',layer);
-  let latest={enough:true};
+  const fullInput=$('#dcFullMinutes',layer),startInput=$('#dcRangeStart',layer),endInput=$('#dcRangeEnd',layer);
+  const fill=$('#dcRangeFill',layer),summary=$('#dcRangeSummary',layer),startRead=$('#dcStartReadout',layer),endRead=$('#dcEndReadout',layer),selectedRead=$('#dcSelectedReadout',layer),totalRead=$('#dcTotalReadout',layer);
+  const tokensEl=$('#dcEstimateTokens',layer),subEl=$('#dcEstimateSub',layer),balanceEl=$('#dcChargeBalance',layer),confirm=$('#dcConfirmCharge',layer);
+  let latest={enough:true}, selectedMinutes=defaultFullMinutes*links.length, sourceStartMinutes=0, sourceEndMinutes=defaultFullMinutes;
+  const readRange=()=>{
+    let full=Math.max(1,Number(fullInput.value||defaultFullMinutes));
+    startInput.max=String(full); endInput.max=String(full); endInput.min='0.5';
+    let start=Math.max(0,Math.min(full-.5,Number(startInput.value||0)));
+    let end=Math.max(start+.5,Math.min(full,Number(endInput.value||full)));
+    if(end>full) end=full;
+    if(start>=end) start=Math.max(0,end-.5);
+    startInput.value=String(start); endInput.value=String(end);
+    sourceStartMinutes=start; sourceEndMinutes=end; selectedMinutes=Math.max(.5,(end-start)*Math.max(1,links.length));
+    return {full,start,end,total:selectedMinutes};
+  };
+  const updateVisual=({full,start,end,total})=>{
+    const left=(start/full)*100, width=Math.max(1,((end-start)/full)*100);
+    fill.style.left=`${left}%`; fill.style.width=`${width}%`;
+    startRead.textContent=clockFromMinutes(start); endRead.textContent=clockFromMinutes(end);
+    selectedRead.textContent=clockFromMinutes(end-start);
+    totalRead.textContent=`${Math.ceil(total)} total source minute${Math.ceil(total)===1?'':'s'}`;
+    summary.textContent=`${clockFromMinutes(start)} → ${clockFromMinutes(end)}`;
+  };
   const update=async()=>{
-    const minutes=Math.max(1,Math.ceil(Number(input.value||defaultMinutes)));
-    latest=await fetchTokenEstimate(minutes);
-    tokensEl.textContent=latest.unlimited?'∞':String(latest.estimatedTokens||Math.ceil(minutes*rate));
-    subEl.textContent=latest.unlimited?'admin account':`estimated tokens for ${minutes} min`;
+    const range=readRange(); updateVisual(range);
+    latest=await fetchTokenEstimate(range.total);
+    const estimate=latest.unlimited?'∞':String(latest.estimatedTokens||Math.ceil(range.total*rate));
+    tokensEl.textContent=estimate;
+    subEl.textContent=latest.unlimited?'admin account':`estimated tokens for ${Math.ceil(range.total)} source min`;
     const remaining=latest.unlimited?'Unlimited tokens':`${Math.max(0,Math.round(Number(latest.remaining||0)))} tokens left`;
     const enough=latest.enough||latest.unlimited;
     balanceEl.classList.toggle('warn',!enough);
-    balanceEl.textContent=enough?`${remaining} after this check is okay`:`${remaining}. Upgrade or reduce the source minutes before rendering.`;
-    confirm.textContent=enough?'Create clips':'Upgrade to continue';
+    balanceEl.textContent=enough?`${remaining}. Selected range can be processed.`:`${remaining}. Shorten the selected range or upgrade before rendering.`;
+    confirm.textContent=enough?'Create clips from selected range':'Upgrade to continue';
   };
-  input.addEventListener('input',()=>{clearTimeout(input._timer);input._timer=setTimeout(update,220)});
+  const scheduleUpdate=()=>{clearTimeout(fullInput._timer);fullInput._timer=setTimeout(update,160)};
+  [fullInput,startInput,endInput].forEach(el=>el.addEventListener('input',scheduleUpdate));
   $('#dcOpenBillingFromCharge').onclick=()=>{close();openBillingModal();};
   confirm.onclick=async()=>{
     if(!latest.enough&&!latest.unlimited){close();openBillingModal();return;}
     confirm.disabled=true; confirm.textContent='Queueing…';
-    try{await onConfirm(); close();}
-    catch(e){notify(e.message,'bad');confirm.disabled=false;confirm.textContent='Try again';}
+    try{
+      await onConfirm({sourceStartSeconds:Math.max(0,Math.round(sourceStartMinutes*60)),sourceEndSeconds:Math.max(1,Math.round(sourceEndMinutes*60)),estimatedMinutes:selectedMinutes});
+      close();
+    } catch(e){notify(e.message,'bad');confirm.disabled=false;confirm.textContent='Try again';}
   };
   update();
 }
-async function queueProjectImport(url,button){
+async function queueProjectImport(url,button,range={}){
   const [min,max]=$('#dcCreateDuration').value.split(',').map(Number);
   button.disabled=true; button.textContent='Queueing…';
   try{
     await callApi('/api/template',{method:'POST',body:JSON.stringify({id:$('#dcCreateTemplate').value})});
     await callApi('/api/clip-settings',{method:'POST',body:JSON.stringify({clipsPerVideo:Number($('#dcCreateCount').value),clipMinSeconds:min,clipMaxSeconds:max})});
-    const result=await callApi('/api/videos',{method:'POST',body:JSON.stringify({urls:url})});
+    const payload={urls:url,sourceStartSeconds:Math.max(0,Math.round(Number(range.sourceStartSeconds||0)))};
+    if(Number.isFinite(Number(range.sourceEndSeconds))&&Number(range.sourceEndSeconds)>payload.sourceStartSeconds) payload.sourceEndSeconds=Math.round(Number(range.sourceEndSeconds));
+    const result=await callApi('/api/videos',{method:'POST',body:JSON.stringify(payload)});
     const failed=(result.results||[]).filter(x=>!x.ok).length;
     notify(failed?`${result.results.length-failed} queued, ${failed} failed`:'Lecture queued — watch Working now',failed?'bad':'good');
     $('#dcCreateUrl').value=''; await refreshData(); renderHome();
@@ -1275,7 +1322,7 @@ async function queueProjectImport(url,button){
 }
 async function generateProject(){
   const url=$('#dcCreateUrl')?.value.trim(), button=$('#dcGenerate'); if(!url) return notify('Paste a video link first','bad');
-  openTokenEstimateModal({urls:url,onConfirm:()=>queueProjectImport(url,button)});
+  openTokenEstimateModal({urls:url,onConfirm:(range)=>queueProjectImport(url,button,range)});
 }
 
 function renderProjects(){
