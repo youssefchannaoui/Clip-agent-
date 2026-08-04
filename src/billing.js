@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { state, save, log } from './store.js';
 
 const now = () => Date.now();
+const DAY_MS = 24 * 60 * 60 * 1000;
 const secondsToMs = value => Math.max(0, Number(value || 0) * 1000);
 const cleanEmail = value => String(value || '').trim().toLowerCase();
 
@@ -57,6 +58,31 @@ export function tokenCostForSeconds(seconds = 0) {
   return Math.max(1, Math.ceil((Math.max(0, Number(seconds) || 0) / 60) * tokenRate()));
 }
 
+export function tokenCostForMinutes(minutes = 0) {
+  return Math.max(1, Math.ceil(Math.max(0, Number(minutes) || 0) * tokenRate()));
+}
+
+function daysRemaining(timestamp) {
+  const target = Number(timestamp || 0);
+  if (!target) return null;
+  return Math.max(0, Math.ceil((target - now()) / DAY_MS));
+}
+
+function trialState(billing = {}) {
+  const trialStart = Number(billing.trialStart || 0) || null;
+  const trialEnd = Number(billing.trialEnd || 0) || null;
+  const status = String(billing.status || '').toLowerCase();
+  const active = status === 'trialing' && trialEnd && trialEnd > now();
+  const ended = Boolean(trialEnd && trialEnd <= now() && status !== 'active');
+  return {
+    active: Boolean(active),
+    ended,
+    startsAt: trialStart,
+    endsAt: trialEnd,
+    daysLeft: active ? daysRemaining(trialEnd) : null,
+  };
+}
+
 export function ensureBillingState() {
   if (!Array.isArray(state.billingEvents)) state.billingEvents = [];
   if (!state.billingSettings || typeof state.billingSettings !== 'object') state.billingSettings = {};
@@ -98,6 +124,37 @@ export function publicBilling(user) {
   const allow = unlimited ? Infinity : allowance(currentPlan);
   const used = Number(billing.tokensUsed || 0);
   const reserved = Number(billing.tokensReserved || 0);
+  const trial = trialState(billing);
+  const remaining = unlimited ? null : Math.max(0, allow - used - reserved);
+  const periodEndsInDays = billing.periodEnd ? daysRemaining(billing.periodEnd) : null;
+  const notices = [];
+  if (trial.active && trial.daysLeft <= 2) {
+    notices.push({
+      id: `trial-ending-${billing.trialEnd}`,
+      kind: 'trial_ending',
+      title: `Trial ends in ${trial.daysLeft} day${trial.daysLeft === 1 ? '' : 's'}`,
+      message: 'Choose a plan or confirm your billing details before the trial ends to keep posting without interruption.',
+      action: 'Manage plan',
+    });
+  }
+  if (trial.ended) {
+    notices.push({
+      id: `trial-ended-${billing.trialEnd}`,
+      kind: 'trial_ended',
+      title: 'Your trial has ended',
+      message: 'Start a weekly, monthly or yearly plan to keep generating clips.',
+      action: 'Choose plan',
+    });
+  }
+  if (!unlimited && remaining !== null && allow > 0 && remaining <= Math.max(5, Math.ceil(allow * 0.1))) {
+    notices.push({
+      id: `low-tokens-${currentPlan}-${billing.periodStart}`,
+      kind: 'low_tokens',
+      title: `${Math.round(remaining)} tokens left`,
+      message: 'You are close to your token limit. Upgrade before importing another long lecture.',
+      action: 'Upgrade',
+    });
+  }
   return {
     enabled: config.stripeEnabled,
     stripeConfigured: Boolean(config.stripeSecretKey),
@@ -105,6 +162,13 @@ export function publicBilling(user) {
     portalConfigured: Boolean(config.stripeSecretKey),
     tokenRatePerMinute: tokenRate(),
     trialDays: config.stripeTrialDays,
+    terms: [
+      `${tokenRate()} token per source video minute`,
+      'Tokens are charged after the source duration is known',
+      'Template updates and rerenders are free',
+      `${config.stripeTrialDays || 7}-day trial on paid plans`,
+      'Unused trial access does not roll into another trial',
+    ],
     current: {
       plan: currentPlan,
       status: billing.status || 'free',
@@ -112,13 +176,16 @@ export function publicBilling(user) {
       allowance: unlimited ? null : allow,
       used,
       reserved,
-      remaining: unlimited ? null : Math.max(0, allow - used - reserved),
+      remaining,
       periodStart: billing.periodStart || null,
       periodEnd: billing.periodEnd || null,
+      periodEndsInDays,
+      trial,
       stripeCustomerId: billing.stripeCustomerId || '',
       stripeSubscriptionId: billing.stripeSubscriptionId || '',
     },
     plans: plans(),
+    notices,
     recentEvents: (state.billingEvents || []).filter(event => event.userId === user.id).slice(0, 10),
   };
 }
@@ -141,6 +208,25 @@ export function assertCanStartProject(user) {
   return assertCanSpend(user, config.minimumTokensToStart, 'start a new lecture');
 }
 
+export function estimateTokenCharge(user, minutes = 0) {
+  ensureBillingState();
+  if (!user) throw new Error('Sign in to continue.');
+  const estimatedMinutes = Math.max(1, Math.ceil(Number(minutes || 0)));
+  const estimatedTokens = tokenCostForMinutes(estimatedMinutes);
+  const info = publicBilling(user);
+  const remaining = info.current?.unlimited ? null : Number(info.current?.remaining || 0);
+  return {
+    estimatedMinutes,
+    estimatedTokens,
+    rate: tokenRate(),
+    unlimited: Boolean(info.current?.unlimited),
+    remaining,
+    enough: info.current?.unlimited || remaining >= estimatedTokens,
+    minimumToStart: config.minimumTokensToStart,
+    terms: info.terms || [],
+  };
+}
+
 export function chargeTokens(userId, tokens, reason = 'usage', meta = {}) {
   ensureBillingState();
   const user = (state.authUsers || []).find(item => item.id === userId);
@@ -149,9 +235,13 @@ export function chargeTokens(userId, tokens, reason = 'usage', meta = {}) {
   const amount = Math.max(1, Math.ceil(Number(tokens || 0)));
   billing.tokensUsed = Math.max(0, Number(billing.tokensUsed || 0)) + amount;
   user.updatedAt = now();
+  const beforeRemaining = Math.max(0, allowance(billing.plan || 'free') - Number(billing.tokensUsed || 0) - Number(billing.tokensReserved || 0));
   const event = {
     id: `bill_${now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`,
     userId: user.id, amount, reason, meta, createdAt: now(),
+    type: 'tokens_charged',
+    remaining: beforeRemaining,
+    message: `${amount} token${amount === 1 ? '' : 's'} used for ${reason}.`,
   };
   state.billingEvents.unshift(event);
   state.billingEvents = state.billingEvents.slice(0, 500);
@@ -293,6 +383,8 @@ function updateFromSubscription(subscription = {}) {
   billing.stripePriceId = subscription.items?.data?.[0]?.price?.id || billing.stripePriceId || '';
   billing.periodStart = nextPeriodStart;
   billing.periodEnd = secondsToMs(subscription.current_period_end) || (nextPeriodStart + periodMs(plan));
+  billing.trialStart = secondsToMs(subscription.trial_start) || billing.trialStart || null;
+  billing.trialEnd = secondsToMs(subscription.trial_end) || billing.trialEnd || null;
   if (nextPeriodStart && nextPeriodStart !== oldPeriodStart) {
     billing.tokensUsed = 0;
     billing.tokensReserved = 0;
