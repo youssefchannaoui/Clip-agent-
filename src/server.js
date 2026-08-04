@@ -23,7 +23,7 @@ const page = path.join(config.root, 'src', 'public', 'index.html');
 const activityFixPage = path.join(config.root, 'src', 'public', 'activity-fix.js');
 const marketingCssPage = path.join(config.root, 'src', 'public', 'marketing.css');
 const marketingJsPage = path.join(config.root, 'src', 'public', 'marketing.js');
-const marketingAssetDir = path.join(config.root, 'src', 'public', 'marketing-assets');
+const marketingAssetDir = path.resolve(config.root, 'src', 'public', 'marketing-assets');
 const youtubeCookiesFile = path.join(config.dataDir, 'youtube-cookies.txt');
 
 function json(res, status, value) {
@@ -319,8 +319,8 @@ async function route(req, res, url) {
   }
   if (method === 'GET' && pathname.startsWith('/marketing-assets/')) {
     const name = path.basename(decodeURIComponent(pathname));
-    const file = path.join(marketingAssetDir, name);
-    if (!file.startsWith(path.resolve(marketingAssetDir) + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+    const file = path.resolve(marketingAssetDir, name);
+    if (!file.startsWith(marketingAssetDir + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
       return json(res, 404, { error: 'Marketing asset not found.' });
     }
     const extension = path.extname(file).toLowerCase();
