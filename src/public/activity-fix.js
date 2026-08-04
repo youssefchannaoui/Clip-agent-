@@ -708,7 +708,7 @@ body.dc-app #dcNewProject{min-height:36px!important;border-radius:11px!important
 .dc-account-menu form{margin:3px 0 0}
 .dc-logout-btn{width:100%;min-height:36px;border-radius:9px;color:var(--dc-red);font-size:10px;text-align:left;padding:0 10px;background:transparent;border:0}
 .dc-logout-btn:hover{background:rgba(239,107,122,.08)}
-body.dc-app .dc-logout-form{display:none}
+body.dc-app .dc-logout-form:not(.dc-account-menu .dc-logout-form){display:none}
 @media(max-width:1160px){body.dc-app .dc-page-title{min-width:125px}.dc-user-copy small,.dc-token-pill .dc-token-rate{display:none}.dc-user-menu-button{max-width:132px}.dc-user-copy b{max-width:82px}}
 @media(max-width:920px){body.dc-app .dc-health span,body.dc-app .dc-tour-launch{display:none}body.dc-app .dc-token-pill{padding:0 9px}.dc-user-menu-button{padding-right:7px}.dc-user-copy{display:none}}
 @media(max-width:720px){body.dc-app .dc-token-pill .dc-token-main{display:none}.dc-account-menu{right:-62px}}
@@ -726,6 +726,49 @@ body.dc-app .dc-token-pill.warn{background:rgba(229,169,87,.09);border-color:rgb
 .dc-charge-head span,.dc-billing-notice-head span{display:inline-flex;align-items:center;gap:8px;color:var(--dc-accent2);font-size:10px;font-weight:900;letter-spacing:.11em;text-transform:uppercase}.dc-charge-head h2,.dc-billing-notice-head h2{margin:9px 0 0;font-size:26px;line-height:1.05;letter-spacing:-.04em}.dc-charge-head p,.dc-billing-notice-head p{margin:8px 0 0;color:var(--dc-muted);font-size:11px;line-height:1.55}.dc-charge-close,.dc-notice-close{width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,.09);background:#0b0b0d;color:var(--dc-muted);font-size:19px}.dc-charge-close:hover,.dc-notice-close:hover{color:var(--dc-text)}
 .dc-charge-body{padding:18px 24px 24px}.dc-charge-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}.dc-charge-tile{padding:15px;border:1px solid rgba(255,255,255,.08);border-radius:18px;background:rgba(255,255,255,.03)}.dc-charge-tile strong,.dc-charge-tile span{display:block}.dc-charge-tile strong{font-size:26px;letter-spacing:-.04em}.dc-charge-tile span{font-size:10px;color:var(--dc-muted);margin-top:4px}.dc-charge-estimate{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;padding:14px;border:1px solid rgba(217,180,120,.22);border-radius:18px;background:rgba(217,180,120,.06);margin-bottom:14px}.dc-charge-estimate label{display:block;font-size:10px;color:var(--dc-muted)}.dc-charge-estimate input{width:100%;height:42px;margin-top:6px;padding:0 12px;border:1px solid rgba(255,255,255,.10);border-radius:12px;background:#0b0b0d;color:var(--dc-text);font-size:18px;font-weight:850}.dc-charge-estimate b{display:block;font-size:28px;letter-spacing:-.04em;color:var(--dc-accent2)}.dc-charge-estimate small{display:block;color:var(--dc-muted);font-size:9px;margin-top:3px}.dc-charge-terms{display:grid;gap:8px;margin:14px 0}.dc-charge-terms span{display:flex;align-items:center;gap:9px;color:var(--dc-muted);font-size:10px;line-height:1.35}.dc-charge-terms span::before{content:'✓';width:18px;height:18px;flex:0 0 18px;display:grid;place-items:center;border-radius:50%;background:rgba(83,199,139,.10);color:var(--dc-green);font-weight:900}.dc-charge-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:18px}.dc-charge-actions .dc-btn{min-height:44px;border-radius:999px}.dc-charge-actions .dc-btn:first-child{flex:1}.dc-charge-muted{color:var(--dc-muted);font-size:9px;line-height:1.35}.dc-billing-notice-body{padding:20px 24px 24px}.dc-billing-notice-actions{display:flex;gap:10px;align-items:center;justify-content:flex-end;margin-top:18px}.dc-billing-notice-actions .dc-btn{border-radius:999px;min-height:42px}.dc-token-toast{position:fixed;right:22px;bottom:92px;z-index:515;max-width:360px;padding:14px 16px;border:1px solid rgba(217,180,120,.25);border-radius:18px;background:rgba(16,16,19,.88);box-shadow:0 18px 60px rgba(0,0,0,.42),0 0 28px rgba(217,180,120,.13);backdrop-filter:blur(18px);animation:dcViewReveal .22s ease both}.dc-token-toast strong,.dc-token-toast span{display:block}.dc-token-toast strong{font-size:12px}.dc-token-toast span{font-size:10px;color:var(--dc-muted);margin-top:4px;line-height:1.4}.dc-token-toast.good{border-color:rgba(83,199,139,.25)}.dc-token-toast.warn{border-color:rgba(229,169,87,.30)}.dc-trial-mini{display:inline-flex;align-items:center;gap:5px;margin-left:2px;padding-left:6px;border-left:1px solid rgba(255,255,255,.10);font-size:8px;color:inherit;font-weight:850;font-style:normal}
 @media(max-width:720px){.dc-charge-grid{grid-template-columns:1fr}.dc-charge-estimate{grid-template-columns:1fr}.dc-charge-actions,.dc-billing-notice-actions{flex-direction:column;align-items:stretch}.dc-token-toast{left:12px;right:12px;bottom:84px;max-width:none}}
+
+
+/* Phase billing modal fit + account logout repair */
+body.dc-app .dc-account-menu .dc-logout-form{display:block!important}
+body.dc-app .dc-account-menu .dc-logout-btn{display:flex!important;align-items:center;justify-content:space-between;width:100%;min-height:38px;border-radius:10px;color:var(--dc-red);font-size:10px;text-align:left;padding:0 10px;background:transparent;border:0}
+body.dc-app .dc-account-menu .dc-logout-btn::after{content:'→';color:currentColor;opacity:.72}
+body.dc-app .dc-account-menu .dc-logout-btn:hover{background:rgba(239,107,122,.09);color:#ff8f9a}
+body.dc-app .dc-billing-layer{padding:18px;overflow:hidden}
+body.dc-app .dc-billing-card{width:min(1040px,calc(100vw - 36px));max-height:calc(100dvh - 44px);overflow-y:auto;overflow-x:hidden;scrollbar-width:none;border-radius:24px}
+body.dc-app .dc-billing-card::-webkit-scrollbar{width:0;height:0}
+body.dc-app .dc-billing-head{padding:22px 24px 12px;grid-template-columns:minmax(0,1fr) 40px}
+body.dc-app .dc-billing-head h2{font-size:28px;line-height:1.02;margin-top:12px;max-width:760px}
+body.dc-app .dc-billing-head p{font-size:11px;line-height:1.55;margin-top:8px;max-width:760px}
+body.dc-app .dc-billing-close{width:38px;height:38px;font-size:22px}
+body.dc-app .dc-billing-status{padding:0 24px 12px;grid-template-columns:minmax(0,1.15fr) minmax(240px,.85fr);gap:12px}
+body.dc-app .dc-usage-panel,body.dc-app .dc-rate-panel{border-radius:18px;padding:15px}
+body.dc-app .dc-usage-row{margin-top:10px;gap:12px;align-items:center}
+body.dc-app .dc-usage-value{font-size:44px;letter-spacing:-.065em}
+body.dc-app .dc-usage-value span{font-size:11px}
+body.dc-app .dc-usage-meta{min-width:185px;gap:7px}
+body.dc-app .dc-usage-mini{padding:8px;border-radius:11px}
+body.dc-app .dc-usage-mini b{font-size:13px}
+body.dc-app .dc-usage-bar{height:7px;margin-top:12px}
+body.dc-app .dc-rate-big{font-size:24px;margin-top:10px}
+body.dc-app .dc-rate-panel p{font-size:10px;line-height:1.5;margin-top:7px}
+body.dc-app .dc-rate-steps{margin-top:9px;gap:6px}
+body.dc-app .dc-rate-steps span{font-size:8px;padding:5px 7px}
+body.dc-app .dc-charge-terms{grid-template-columns:repeat(5,minmax(0,1fr));gap:7px!important;margin:0 24px 12px!important}
+body.dc-app .dc-charge-terms span{font-size:8.5px;line-height:1.25;padding:7px 8px;border:1px solid rgba(255,255,255,.07);border-radius:999px;background:rgba(255,255,255,.025);white-space:normal}
+body.dc-app .dc-charge-terms span::before{width:15px;height:15px;flex-basis:15px;font-size:9px}
+body.dc-app .dc-plan-grid{padding:0 24px 14px;gap:12px}
+body.dc-app .dc-plan-card{min-height:208px;border-radius:19px;padding:15px}
+body.dc-app .dc-plan-card h3{font-size:16px}
+body.dc-app .dc-plan-card .tokens{font-size:32px;margin-top:12px}
+body.dc-app .dc-plan-card p{font-size:10px;line-height:1.45;margin:9px 0 11px}
+body.dc-app .dc-plan-features{gap:6px;margin-top:auto}
+body.dc-app .dc-plan-features span{font-size:8.7px}
+body.dc-app .dc-plan-card .dc-btn{min-height:36px;margin-top:12px;border-radius:10px}
+body.dc-app .dc-billing-foot{padding:0 24px 20px;margin-top:0}
+body.dc-app .dc-billing-note span{font-size:9px}
+@media(max-height:760px){body.dc-app .dc-billing-card{max-height:calc(100dvh - 28px)}body.dc-app .dc-billing-head{padding:16px 20px 8px}body.dc-app .dc-billing-head h2{font-size:24px;margin-top:8px}body.dc-app .dc-billing-head p{font-size:10px;line-height:1.45}body.dc-app .dc-billing-kicker{min-height:24px;font-size:8.5px}body.dc-app .dc-billing-status{padding:0 20px 10px}body.dc-app .dc-usage-value{font-size:36px}body.dc-app .dc-plan-grid{padding:0 20px 10px}body.dc-app .dc-plan-card{min-height:184px;padding:13px}body.dc-app .dc-plan-card .tokens{font-size:28px}body.dc-app .dc-plan-card p{margin:6px 0 8px}body.dc-app .dc-charge-terms{margin:0 20px 10px!important}body.dc-app .dc-billing-foot{padding:0 20px 14px}}
+@media(max-width:860px){body.dc-app .dc-billing-card{width:calc(100vw - 22px);overflow-y:auto}body.dc-app .dc-billing-status,body.dc-app .dc-plan-grid,body.dc-app .dc-charge-terms{grid-template-columns:1fr}body.dc-app .dc-charge-terms span{border-radius:12px}body.dc-app .dc-usage-row{align-items:flex-start;flex-direction:column}body.dc-app .dc-usage-meta{width:100%;min-width:0}}
+
 `;
 
 function injectShell(){
