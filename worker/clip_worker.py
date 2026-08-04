@@ -210,6 +210,20 @@ def copy_or_download(job: dict[str, Any], destination: Path) -> tuple[Path, str]
     return destination, title or detected_title or "Untitled lecture"
 
 
+def trim_source_window(ffmpeg: str, source: Path, destination: Path, start_sec: float, duration_sec: float) -> None:
+    if duration_sec <= 0:
+        raise RuntimeError("The selected source range is empty.")
+    run([
+        ffmpeg, "-y", "-ss", f"{max(0.0, start_sec):.3f}", "-i", str(source),
+        "-t", f"{duration_sec:.3f}", "-map", "0", "-c", "copy", "-avoid_negative_ts", "make_zero", str(destination),
+    ], timeout=60 * 60)
+    if not destination.exists() or destination.stat().st_size <= 0:
+        run([
+            ffmpeg, "-y", "-ss", f"{max(0.0, start_sec):.3f}", "-i", str(source),
+            "-t", f"{duration_sec:.3f}", "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", str(destination),
+        ], timeout=60 * 60)
+
+
 def extract_audio(ffmpeg: str, source: Path, audio_file: Path) -> None:
     run([
         ffmpeg, "-y", "-i", str(source), "-vn", "-ac", "1", "-ar", "16000",
@@ -1401,12 +1415,28 @@ def process(job_file: Path) -> None:
         raise RuntimeError("A valid app-owned template is mandatory.")
 
     progress("Downloading source video", 1, etaSec=None)
-    source_file, detected_title = copy_or_download(job, source_file)
+    requested_start = max(0.0, float(job.get("sourceStartSec") or 0.0))
+    requested_end_raw = job.get("sourceEndSec")
+    requested_end = float(requested_end_raw) if requested_end_raw is not None else None
+    wants_window = requested_start > 0.05 or (requested_end is not None and requested_end > requested_start)
+    raw_source_file = job_dir / "downloaded_source.mp4" if wants_window else source_file
+    raw_source_file, detected_title = copy_or_download(job, raw_source_file)
+    full_duration = media_duration(job["ffprobe"], raw_source_file)
+    if full_duration <= 0:
+        raise RuntimeError("The downloaded source could not be read as video.")
+    if full_duration > float(job["settings"].get("maxSourceMinutes", 180)) * 60:
+        raise RuntimeError("The source is longer than the configured processing limit.")
+    selected_start = min(requested_start, max(0.0, full_duration - 1.0))
+    selected_end = full_duration if requested_end is None else min(max(selected_start + 0.5, requested_end), full_duration)
+    if selected_end <= selected_start:
+        raise RuntimeError("The selected source range is empty.")
+    if wants_window:
+        progress("Preparing selected source range", 6, sourceDurationSec=round(full_duration, 2), etaSec=None)
+        trim_source_window(job["ffmpeg"], raw_source_file, source_file, selected_start, selected_end - selected_start)
+        raw_source_file.unlink(missing_ok=True)
     duration = media_duration(job["ffprobe"], source_file)
     if duration <= 0:
-        raise RuntimeError("The downloaded source could not be read as video.")
-    if duration > float(job["settings"].get("maxSourceMinutes", 180)) * 60:
-        raise RuntimeError("The source is longer than the configured processing limit.")
+        raise RuntimeError("The selected source range could not be read as video.")
 
     progress("Extracting speech audio", 9, sourceDurationSec=round(duration, 2), etaSec=None)
     extract_audio(job["ffmpeg"], source_file, audio_file)
@@ -1447,6 +1477,9 @@ def process(job_file: Path) -> None:
             "id": job["id"],
             "title": detected_title,
             "durationSec": duration,
+            "sourceFullDurationSec": full_duration,
+            "sourceStartSec": selected_start,
+            "sourceEndSec": selected_end,
             "templateId": job["template"]["id"],
             "templateName": job["template"]["name"],
             "musicRequired": True,
