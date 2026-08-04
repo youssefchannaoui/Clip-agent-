@@ -55,6 +55,11 @@ function marketingLayout(req, { title, description, body, canonicalPath = '/' })
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${title}</title>
   <meta name="description" content="${description}">
+  <meta name="application-name" content="DeenClipped">
+  <meta property="og:site_name" content="DeenClipped">
+  <meta property="og:title" content="DeenClipped">
+  <meta property="og:description" content="DeenClipped helps users create, edit, and publish short-form clips from long videos.">
+  <meta name="robots" content="index,follow">
   <link rel="canonical" href="${canonical}">
   <style>
     :root{color-scheme:dark;--bg:#070707;--panel:#101012;--panel2:#171514;--line:rgba(255,255,255,.12);--text:#f7f2ea;--muted:#aaa4a0;--gold:#e3bd75;--gold2:#f4d99a;--green:#63d89a}
@@ -62,7 +67,7 @@ function marketingLayout(req, { title, description, body, canonicalPath = '/' })
   </style>
 </head>
 <body>
-  <header class="site nav"><a class="brand" href="/"><span class="mark"></span><span>DeenClipped</span></a><nav class="navlinks"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a class="btn primary" href="/login">Sign in</a></nav></header>
+  <header class="site nav"><a class="brand" href="/"><span class="mark"></span><span>DeenClipped</span></a><nav class="navlinks"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a class="btn primary" href="/login?returnTo=%2Fapp">Sign in</a></nav></header>
   ${body}
   <footer class="footer"><div class="site"><span>© ${new Date().getFullYear()} DeenClipped. Create, edit and publish short-form clips from long videos.</span><span><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><a href="mailto:support@deenclipped.online">Contact</a></span></div></footer>
 </body>
@@ -73,7 +78,7 @@ function marketingHome(req) {
     title: 'DeenClipped',
     description: 'DeenClipped helps users create, edit, and publish short-form clips from long videos.',
     canonicalPath: '/',
-    body: `<main class="site hero"><section><span class="kicker">AI clipping studio</span><h1>DeenClipped</h1><p><strong>DeenClipped</strong> is an AI clipping app that helps users create, edit, and publish short-form clips from long videos. Users can import a long video or upload their own file, choose a source range, generate clips, review them in the editor, apply templates, and publish or schedule clips to their own connected social accounts.</p><div class="actions"><a class="btn primary" href="/login">Open DeenClipped</a><a class="btn" href="/privacy">Read privacy policy</a></div></section><aside class="mock" aria-label="DeenClipped product preview"><div class="mockbar"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div><div class="clipgrid"><div class="clipcard"><b>Import</b><span>Paste a video link or upload your own video file.</span></div><div class="clipcard"><b>Clip</b><span>Choose the exact source range, template, and clip settings.</span></div><div class="clipcard"><b>Edit</b><span>Review captions, layout, thumbnails, and final clip style.</span></div><div class="clipcard"><b>Publish</b><span>Connect your own YouTube or social account and publish clips.</span></div></div></aside></main><section class="site features"><article class="feature"><h2>What DeenClipped does</h2><p>DeenClipped turns long videos into short-form clips for social media.</p></article><article class="feature"><h2>Create and edit clips</h2><p>Generate clips, review captions, adjust style, and keep templates consistent.</p></article><article class="feature"><h2>Publish to your accounts</h2><p>Connect your own social accounts so clips publish to the right channel.</p></article></section>`
+    body: `<main class="site hero"><section><span class="kicker">DeenClipped app homepage</span><h1>DeenClipped</h1><p><strong>DeenClipped</strong> is a web application that helps users create, edit, and publish short-form clips from long videos. Users can upload or import long-form videos, choose the exact source range, generate short clips, edit captions and templates, and publish or schedule those clips to their own connected social accounts.</p><p><strong>Purpose of DeenClipped:</strong> DeenClipped turns long videos, lectures, podcasts, and recordings into short-form social media clips for platforms such as YouTube Shorts, TikTok, Instagram Reels, and Facebook Reels.</p><div class="actions"><a class="btn primary" href="/login?returnTo=%2Fapp">Open DeenClipped</a><a class="btn" href="/privacy">Privacy Policy</a><a class="btn" href="/terms">Terms of Service</a></div></section><aside class="mock" aria-label="DeenClipped product preview"><div class="mockbar"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div><div class="clipgrid"><div class="clipcard"><b>Import</b><span>Paste a video link or upload your own long video file.</span></div><div class="clipcard"><b>Clip</b><span>Select the source window, template, clip count, and clip length.</span></div><div class="clipcard"><b>Edit</b><span>Review clips, captions, thumbnails, and final style before publishing.</span></div><div class="clipcard"><b>Publish</b><span>Connect your own social accounts and publish or schedule clips.</span></div></div></aside></main><section class="site features"><article class="feature"><h2>What DeenClipped does</h2><p>DeenClipped creates short-form clips from long videos and helps users edit and publish those clips.</p></article><article class="feature"><h2>Create and edit clips</h2><p>Users can generate clips, review captions, adjust style, choose templates, and prepare clips for posting.</p></article><article class="feature"><h2>Publish to your accounts</h2><p>Users can connect their own social accounts so clips publish to the correct channel.</p></article></section>`
   });
 }
 function privacyPage(req) {
@@ -267,6 +272,7 @@ function runDoctor() {
 async function route(req, res, url) {
   const { pathname } = url; const method = req.method || 'GET';
   if (pathname === '/healthz') return json(res, 200, { ok: true, engine: 'self-hosted' });
+  if (method === 'GET' && pathname === '/robots.txt') { const body = 'User-agent: *\nAllow: /\n'; res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'public, max-age=300' }); return res.end(body); }
   if (method === 'POST' && pathname === '/api/billing/webhook') {
     try {
       const raw = await readRawBody(req, 5_000_000);
@@ -288,7 +294,7 @@ async function route(req, res, url) {
     return html(res, 200, billing.plansPage(currentUser, { error: url.searchParams.get('error') || '', info: url.searchParams.get('info') || '', returnTo: url.searchParams.get('returnTo') || '/app' }));
   }
   if (method === 'POST' && pathname === '/billing/continue-free') {
-    try { const body = await formBody(req); billing.markPlansSeen(currentUser); return redirect(res, body.returnTo || '/'); }
+    try { const body = await formBody(req); billing.markPlansSeen(currentUser); return redirect(res, body.returnTo || '/app'); }
     catch (error) { return redirect(res, `/plans?error=${encodeURIComponent(error.message)}`); }
   }
   if (method === 'POST' && pathname === '/billing/checkout') {
@@ -304,7 +310,7 @@ async function route(req, res, url) {
     try {
       const result = await auth.completeGoogle(req, url.searchParams.get('code') || '', url.searchParams.get('state') || '');
       const session = auth.createSession(result.user, { provider: 'google' });
-      return redirectWithCookies(res, billing.postLoginRedirect(result.user, result.returnTo || '/'), auth.cookieHeaders(session));
+      return redirectWithCookies(res, billing.postLoginRedirect(result.user, result.returnTo || '/app'), auth.cookieHeaders(session));
     } catch (error) { return redirect(res, `/login?error=${encodeURIComponent(error.message)}`); }
   }
   if (method === 'POST' && pathname === '/auth/apple/callback') {
@@ -312,7 +318,7 @@ async function route(req, res, url) {
       const body = await formBody(req);
       const result = await auth.completeApple(req, body);
       const session = auth.createSession(result.user, { provider: 'apple' });
-      return redirectWithCookies(res, billing.postLoginRedirect(result.user, result.returnTo || '/'), auth.cookieHeaders(session));
+      return redirectWithCookies(res, billing.postLoginRedirect(result.user, result.returnTo || '/app'), auth.cookieHeaders(session));
     } catch (error) { return redirect(res, `/login?error=${encodeURIComponent(error.message)}`); }
   }
   if (method === 'POST' && pathname === '/auth/email') {
@@ -320,7 +326,7 @@ async function route(req, res, url) {
       const body = await formBody(req);
       const user = auth.emailLogin(body.email || '', body.password || '', body.name || '');
       const session = auth.createSession(user, { provider: 'email' });
-      return redirectWithCookies(res, billing.postLoginRedirect(user, body.returnTo || '/'), auth.cookieHeaders(session));
+      return redirectWithCookies(res, billing.postLoginRedirect(user, body.returnTo || '/app'), auth.cookieHeaders(session));
     } catch (error) { return redirect(res, `/login?error=${encodeURIComponent(error.message)}`); }
   }
   if (method === 'POST' && pathname === '/auth/password') {
@@ -328,7 +334,7 @@ async function route(req, res, url) {
       const body = await formBody(req);
       const user = auth.passwordLogin(body.password || '');
       const session = auth.createSession(user, { provider: 'password' });
-      return redirectWithCookies(res, billing.postLoginRedirect(user, body.returnTo || '/'), auth.cookieHeaders(session));
+      return redirectWithCookies(res, billing.postLoginRedirect(user, body.returnTo || '/app'), auth.cookieHeaders(session));
     } catch (error) { return redirect(res, `/login?error=${encodeURIComponent(error.message)}`); }
   }
   if (method === 'POST' && pathname === '/auth/logout') {
@@ -338,7 +344,6 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/privacy') return html(res, 200, privacyPage(req));
   if (method === 'GET' && pathname === '/terms') return html(res, 200, termsPage(req));
   if (method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
-    if (currentUser && auth.enabled()) return redirect(res, `/app${url.search || ''}`);
     return html(res, 200, marketingHome(req));
   }
   if (method === 'GET' && (pathname === '/app' || pathname === '/app/')) {
@@ -363,10 +368,10 @@ async function route(req, res, url) {
       // The account comes from the signed OAuth state, not from whoever holds
       // a session cookie when the callback lands.
       await social.completeOAuth(provider, url);
-      return redirect(res, `/app?social=connected&provider=${encodeURIComponent(provider)}`);
+      return redirect(res, `/?social=connected&provider=${encodeURIComponent(provider)}`);
     } catch (error) {
       console.error(error);
-      return redirect(res, `/app?social=error&provider=${encodeURIComponent(provider)}&message=${encodeURIComponent(error.message)}`);
+      return redirect(res, `/?social=error&provider=${encodeURIComponent(provider)}&message=${encodeURIComponent(error.message)}`);
     }
   }
   const socialMedia = pathname.match(/^\/media\/social\/([^/]+)\.mp4$/);
