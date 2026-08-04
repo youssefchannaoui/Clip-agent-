@@ -23,7 +23,15 @@ const page = path.join(config.root, 'src', 'public', 'index.html');
 const activityFixPage = path.join(config.root, 'src', 'public', 'activity-fix.js');
 const marketingCssPage = path.join(config.root, 'src', 'public', 'marketing.css');
 const marketingJsPage = path.join(config.root, 'src', 'public', 'marketing.js');
-const marketingAssetDir = path.resolve(config.root, 'src', 'public', 'marketing-assets');
+// Marketing images are looked for in a dedicated subfolder first, then in
+// src/public itself. They are currently committed directly to src/public, so
+// serving only from the subfolder means every request 404s against a directory
+// that does not exist. Accepting both keeps existing files working and still
+// supports tidying them into the subfolder later.
+const marketingAssetDirs = [
+  path.resolve(config.root, 'src', 'public', 'marketing-assets'),
+  path.resolve(config.root, 'src', 'public'),
+];
 const youtubeCookiesFile = path.join(config.dataDir, 'youtube-cookies.txt');
 
 function json(res, status, value) {
@@ -319,12 +327,17 @@ async function route(req, res, url) {
   }
   if (method === 'GET' && pathname.startsWith('/marketing-assets/')) {
     const name = path.basename(decodeURIComponent(pathname));
-    const file = path.resolve(marketingAssetDir, name);
-    if (!file.startsWith(marketingAssetDir + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
-      return json(res, 404, { error: 'Marketing asset not found.' });
+    let file = null;
+    for (const dir of marketingAssetDirs) {
+      const candidate = path.resolve(dir, name);
+      // Keep the traversal guard: the resolved path must stay inside the
+      // directory being searched.
+      if (!candidate.startsWith(dir + path.sep)) continue;
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) { file = candidate; break; }
     }
+    if (!file) return json(res, 404, { error: 'Marketing asset not found.' });
     const extension = path.extname(file).toLowerCase();
-    const contentType = extension === '.webp' ? 'image/webp' : extension === '.png' ? 'image/png' : extension === '.svg' ? 'image/svg+xml' : 'application/octet-stream';
+    const contentType = extension === '.webp' ? 'image/webp' : extension === '.png' ? 'image/png' : extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg' : extension === '.svg' ? 'image/svg+xml' : 'application/octet-stream';
     return streamFile(req, res, file, { contentType, cacheControl: 'public, max-age=86400' });
   }
   if (method === 'GET' && pathname === '/features') return html(res, 200, featuresPage(req));
