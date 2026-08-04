@@ -76,36 +76,145 @@ function fallbackThumb(url) {
   const id = youtubeIdFromUrl(url);
   return id ? `https://i.ytimg.com/vi/${encodeURIComponent(id)}/hqdefault.jpg` : '';
 }
+function parseIsoDuration(value = '') {
+  const match = String(value || '').match(/^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/i);
+  if (!match) return null;
+  const days = Number(match[1] || 0), hours = Number(match[2] || 0), minutes = Number(match[3] || 0), seconds = Number(match[4] || 0);
+  const total = days * 86400 + hours * 3600 + minutes * 60 + seconds;
+  return Number.isFinite(total) && total > 0 ? total : null;
+}
+function durationFromMetadata(info) {
+  const direct = Number(info?.duration || info?.duration_sec || info?.duration_seconds || 0);
+  if (Number.isFinite(direct) && direct > 0) return Math.round(direct);
+  const ms = Number(info?.duration_ms || info?.approxDurationMs || 0);
+  if (Number.isFinite(ms) && ms > 0) return Math.round(ms / 1000);
+  const iso = parseIsoDuration(info?.duration || info?.durationText || info?.length_text || '');
+  return iso ? Math.round(iso) : null;
+}
 async function ffprobeDuration(url) {
   const info = await runJsonCommand(config.ffprobePath, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'json', url], 12_000);
   const duration = Number(info?.format?.duration);
-  return Number.isFinite(duration) && duration > 0 ? duration : null;
+  return Number.isFinite(duration) && duration > 0 ? Math.round(duration) : null;
+}
+function youtubeWatchUrl(url) {
+  const videoId = youtubeIdFromUrl(url);
+  return videoId ? `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}` : String(url || '');
+}
+function cookieHeaderFromNetscape() {
+  const cookiePath = path.join(config.dataDir, 'youtube-cookies.txt');
+  if (!fs.existsSync(cookiePath)) return '';
+  try {
+    const pairs = [];
+    for (const line of fs.readFileSync(cookiePath, 'utf8').split(/\r?\n/)) {
+      if (!line || line.startsWith('#')) continue;
+      const parts = line.split('\t');
+      if (parts.length < 7) continue;
+      const domain = parts[0] || '';
+      const name = parts[5] || '';
+      const value = parts.slice(6).join('\t') || '';
+      if (!name || !/(^|\.)youtube\.com$|(^|\.)google\.com$/i.test(domain.replace(/^\./, ''))) continue;
+      pairs.push(`${name}=${value}`);
+    }
+    return pairs.join('; ');
+  } catch { return ''; }
+}
+async function fetchText(url, timeoutMs = 18_000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const headers = {
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
+      'accept-language': 'en-US,en;q=0.9',
+    };
+    const cookie = cookieHeaderFromNetscape();
+    if (cookie) headers.cookie = cookie;
+    const response = await fetch(url, { headers, signal: controller.signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.text();
+  } finally { clearTimeout(timer); }
+}
+function metadataFromYouTubeHtml(html, url) {
+  const text = String(html || '');
+  const lengthMatch = text.match(/\"lengthSeconds\"\s*:\s*\"?(\d+)/)
+    || text.match(/\"approxDurationMs\"\s*:\s*\"?(\d+)/);
+  let durationSec = null;
+  if (lengthMatch) {
+    const raw = Number(lengthMatch[1]);
+    durationSec = lengthMatch[0].includes('approxDurationMs') ? Math.round(raw / 1000) : Math.round(raw);
+  }
+  if (!durationSec) {
+    const itemprop = text.match(/itemprop=[\"']duration[\"'][^>]*content=[\"']([^\"']+)/i)
+      || text.match(/content=[\"']([^\"']+)[\"'][^>]*itemprop=[\"']duration[\"']/i)
+      || text.match(/\"duration\"\s*:\s*\"(PT[^\"]+)/i);
+    if (itemprop) durationSec = Math.round(parseIsoDuration(itemprop[1]) || 0) || null;
+  }
+  const titleMatch = text.match(/<meta\s+property=[\"']og:title[\"']\s+content=[\"']([^\"']+)/i)
+    || text.match(/<title>([^<]+)/i);
+  const thumbMatch = text.match(/<meta\s+property=[\"']og:image[\"']\s+content=[\"']([^\"']+)/i);
+  const decode = input => String(input || '').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+  return {
+    url,
+    title: decode(titleMatch?.[1] || '').replace(/ - YouTube$/i, '').trim(),
+    durationSec: Number.isFinite(durationSec) && durationSec > 0 ? durationSec : null,
+    thumbnail: decode(thumbMatch?.[1] || '') || fallbackThumb(url),
+    extractor: 'youtube-html',
+  };
+}
+async function sourceInfoViaYouTubeHtml(url) {
+  const watch = youtubeWatchUrl(url);
+  if (!youtubeIdFromUrl(watch)) return null;
+  const html = await fetchText(watch);
+  const meta = metadataFromYouTubeHtml(html, url);
+  return meta.durationSec ? meta : null;
+}
+async function sourceInfoViaYtDlp(url) {
+  const baseArgs = ['-m', 'yt_dlp', '--dump-single-json', '--skip-download', '--no-playlist', '--no-warnings'];
+  const attempts = [
+    [...baseArgs, ...cookieArgs(), url],
+    [...baseArgs, '--extractor-args', 'youtube:player_client=web,ios,android', ...cookieArgs(), url],
+  ];
+  let lastError = null;
+  for (const args of attempts) {
+    try {
+      const info = await runJsonCommand(config.pythonBin, args, 35_000);
+      const durationSec = durationFromMetadata(info);
+      return {
+        url,
+        title: String(info.title || info.fulltitle || info.alt_title || url),
+        durationSec,
+        thumbnail: pickBestThumbnail(info) || fallbackThumb(url),
+        extractor: info.extractor_key || info.extractor || 'yt-dlp',
+      };
+    } catch (error) { lastError = error; }
+  }
+  throw lastError || new Error('Could not read source metadata.');
 }
 
 export async function sourceInfo(url) {
   const value = String(url || '').trim();
   if (!value) throw new Error('No source URL supplied.');
+  const warnings = [];
   try {
-    const info = await runJsonCommand(config.pythonBin, ['-m', 'yt_dlp', '--dump-single-json', '--skip-download', '--no-playlist', '--no-warnings', ...cookieArgs(), value], 30_000);
-    const duration = Number(info.duration || info.duration_sec || 0);
-    return {
-      url: value,
-      title: String(info.title || info.fulltitle || info.alt_title || value),
-      durationSec: Number.isFinite(duration) && duration > 0 ? Math.round(duration) : null,
-      thumbnail: pickBestThumbnail(info) || fallbackThumb(value),
-      extractor: info.extractor_key || info.extractor || null,
-    };
-  } catch (error) {
-    let durationSec = null;
-    try { durationSec = await ffprobeDuration(value); } catch {}
-    return {
-      url: value,
-      title: value,
-      durationSec: durationSec ? Math.round(durationSec) : null,
-      thumbnail: fallbackThumb(value),
-      warning: error.message,
-    };
-  }
+    const info = await sourceInfoViaYtDlp(value);
+    if (info.durationSec) return { ...info, durationKnown: true };
+    warnings.push('yt-dlp did not return a duration.');
+  } catch (error) { warnings.push(error.message); }
+
+  try {
+    const htmlInfo = await sourceInfoViaYouTubeHtml(value);
+    if (htmlInfo?.durationSec) return { ...htmlInfo, durationKnown: true, warning: warnings.join(' | ') || undefined };
+  } catch (error) { warnings.push(`YouTube HTML fallback failed: ${error.message}`); }
+
+  let durationSec = null;
+  try { durationSec = await ffprobeDuration(value); } catch (error) { warnings.push(`ffprobe failed: ${error.message}`); }
+  return {
+    url: value,
+    title: value,
+    durationSec: durationSec ? Math.round(durationSec) : null,
+    durationKnown: Boolean(durationSec),
+    thumbnail: fallbackThumb(value),
+    warning: warnings.filter(Boolean).join(' | '),
+  };
 }
 
 function cleanSourceRange(options = {}) {
