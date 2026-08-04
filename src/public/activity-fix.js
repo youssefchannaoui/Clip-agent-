@@ -761,6 +761,11 @@ body.dc-app .dc-source-preview-copy small,body.dc-app .dc-source-preview-copy st
 body.dc-app .dc-source-preview-copy small{color:var(--dc-accent2);font-size:8.5px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}
 body.dc-app .dc-source-preview-copy strong{font-size:15px;margin-top:3px}.dc-source-preview-copy span{font-size:10px;color:var(--dc-muted);margin-top:3px}
 body.dc-app .dc-source-duration{padding:8px 11px;border:1px solid rgba(255,255,255,.09);border-radius:999px;background:rgba(0,0,0,.22);font-size:12px;color:var(--dc-accent2)}
+
+body.dc-app .dc-source-manual{display:grid;grid-template-columns:minmax(0,1fr) 140px;gap:12px;align-items:center;padding:12px 14px;border:1px solid rgba(229,169,87,.22);border-radius:18px;background:rgba(229,169,87,.065)}
+body.dc-app .dc-source-manual[hidden]{display:none!important}
+body.dc-app .dc-source-manual strong,body.dc-app .dc-source-manual span{display:block}.dc-source-manual strong{font-size:12px}.dc-source-manual span{margin-top:3px;color:var(--dc-muted);font-size:9.5px;line-height:1.4}
+body.dc-app .dc-source-manual label{display:block;color:var(--dc-muted);font-size:8.5px}.dc-source-manual label span{margin:0 0 5px}.dc-source-manual input{width:100%;height:40px;padding:0 11px;border:1px solid rgba(255,255,255,.10);border-radius:12px;background:#0b0b0d;color:var(--dc-text);font-size:15px;font-weight:800}
 body.dc-app .dc-processing-card{padding:18px;border:1px solid rgba(255,255,255,.09);border-radius:22px;background:rgba(255,255,255,.033)}
 body.dc-app .dc-processing-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:18px}
 body.dc-app .dc-processing-head strong,body.dc-app .dc-processing-head span{display:block}.dc-processing-head strong{font-size:16px}.dc-processing-head span{color:var(--dc-muted);font-size:10.5px;margin-top:4px}.dc-processing-head em{font-style:normal;color:var(--dc-muted);font-size:9px;font-weight:900;padding:7px 10px;border:1px solid rgba(255,255,255,.08);border-radius:999px;background:rgba(0,0,0,.2);white-space:nowrap}.dc-processing-head em.good{color:var(--dc-green);border-color:rgba(83,199,139,.24);background:rgba(83,199,139,.08)}
@@ -1313,7 +1318,7 @@ function clockFromMinutes(value){
 function openTokenEstimateModal({urls,onConfirm}){
   $('#dcChargeLayer')?.remove();
   const bill=billingInfo(),rate=Number(bill.tokenRatePerMinute||1),links=splitVideoLinks(urls);
-  const fallbackSec=45*60;
+  const fallbackSec=20*60;
   const currentTemplate=$('#dcCreateTemplate')?.value || data()?.selectedTemplate?.id || '';
   const currentCount=$('#dcCreateCount')?.value || '8';
   const currentDuration=$('#dcCreateDuration')?.value || '30,60';
@@ -1327,13 +1332,17 @@ function openTokenEstimateModal({urls,onConfirm}){
     <div class="dc-source-range-body">
       <div class="dc-source-preview-card" id="dcSourcePreviewCard">
         <div class="dc-source-thumb loading" id="dcSourceThumb">${ICON.play}</div>
-        <div class="dc-source-preview-copy"><small>Reading source</small><strong id="dcSourceTitle">Checking video duration…</strong><span id="dcSourceSub">Full range will appear here once the source is checked.</span></div>
+        <div class="dc-source-preview-copy"><small id="dcSourceState">Reading source</small><strong id="dcSourceTitle">Checking video duration…</strong><span id="dcSourceSub">Full range will appear here once the source is checked.</span></div>
         <b class="dc-source-duration" id="dcSourceDuration">--:--</b>
+      </div>
+      <div class="dc-source-manual" id="dcSourceManual" hidden>
+        <div><strong>Duration could not be verified</strong><span>Enter the full video length so token estimates are not guessed.</span></div>
+        <label><span>Minutes</span><input id="dcManualDurationMin" type="number" min="1" step="0.1" value="20"></label>
       </div>
       <div class="dc-processing-card">
         <div class="dc-processing-head"><div><strong>Processing timeframe</strong><span>Move the handles to choose exactly what part DeenClipped should analyse.</span></div><em id="dcCreditSaver">Full video selected</em></div>
         <div class="dc-dual-range" id="dcDualRange"><div class="dc-dual-track"><i id="dcRangeFill"></i></div><input id="dcRangeStart" type="range" min="0" max="${fallbackSec}" step="1" value="0" aria-label="Start time"><input id="dcRangeEnd" type="range" min="1" max="${fallbackSec}" step="1" value="${fallbackSec}" aria-label="End time"></div>
-        <div class="dc-time-boxes"><label>Start<b id="dcStartReadout">0:00</b></label><label>End<b id="dcEndReadout">45:00</b></label><label>Selected<b id="dcSelectedReadout">45:00</b></label></div>
+        <div class="dc-time-boxes"><label>Start<b id="dcStartReadout">0:00</b></label><label>End<b id="dcEndReadout">20:00</b></label><label>Selected<b id="dcSelectedReadout">20:00</b></label></div>
       </div>
       <div class="dc-import-options-card">
         <label>Template<select id="dcChargeTemplate">${templateOptions}</select></label>
@@ -1354,19 +1363,29 @@ function openTokenEstimateModal({urls,onConfirm}){
   const startInput=$('#dcRangeStart',layer),endInput=$('#dcRangeEnd',layer),fill=$('#dcRangeFill',layer);
   const startRead=$('#dcStartReadout',layer),endRead=$('#dcEndReadout',layer),selectedRead=$('#dcSelectedReadout',layer),creditSaver=$('#dcCreditSaver',layer);
   const tokensEl=$('#dcEstimateTokens',layer),subEl=$('#dcEstimateSub',layer),balanceEl=$('#dcChargeBalance',layer),confirm=$('#dcConfirmCharge',layer);
-  let sourceInfo={sources:links.map(url=>({url,durationSec:null,title:url,thumbnail:youtubeThumbFromUrl(url)})),known:false};
-  let maxSec=fallbackSec, latest={enough:true}, selectedSeconds=fallbackSec*links.length, sourceStartSeconds=0, sourceEndSeconds=fallbackSec;
-  const durations=()=>sourceInfo.sources.map(src=>Number(src.durationSec)||maxSec).filter(v=>v>0);
+  const manualBox=$('#dcSourceManual',layer),manualInput=$('#dcManualDurationMin',layer);
+  let sourceInfo={sources:links.map(url=>({url,durationSec:null,durationKnown:false,title:url,thumbnail:youtubeThumbFromUrl(url)})),known:false};
+  let maxSec=fallbackSec, durationVerified=false, latest={enough:true}, selectedSeconds=fallbackSec*links.length, sourceStartSeconds=0, sourceEndSeconds=fallbackSec;
+  const knownDurations=()=>sourceInfo.sources.map(src=>Number(src.durationSec)).filter(v=>Number.isFinite(v)&&v>0);
+  const durations=()=>sourceInfo.sources.map(src=>Number(src.durationSec)>0?Number(src.durationSec):maxSec).filter(v=>v>0);
   const selectedTotalSeconds=(start,end)=>durations().reduce((sum,dur)=>sum+Math.max(0,Math.min(end,dur)-Math.min(start,dur)),0);
+  const applyMaxSeconds=(seconds,{keepRange=false}={})=>{
+    maxSec=Math.max(60,Math.round(Number(seconds)||fallbackSec));
+    startInput.max=String(Math.max(0,maxSec-1)); endInput.max=String(maxSec);
+    if(!keepRange){startInput.value='0'; endInput.value=String(maxSec)}
+    else {startInput.value=String(Math.min(Number(startInput.value||0),Math.max(0,maxSec-1))); endInput.value=String(Math.min(Math.max(Number(endInput.value||maxSec),1),maxSec));}
+  };
   const setSourceVisual=()=>{
     const first=sourceInfo.sources?.[0]||{};
     const thumb=sourceThumbnailFromInfo(first,links[0]);
     const thumbEl=$('#dcSourceThumb',layer); thumbEl.classList.remove('loading');
     thumbEl.innerHTML=thumb?`<img src="${esc(thumb)}" alt="Source thumbnail">`:ICON.play;
     $('#dcSourceTitle',layer).textContent=first.title||links[0]||'Source video';
-    const known=sourceInfo.known!==false && durations().some(Boolean);
-    $('#dcSourceSub',layer).textContent=known?`${links.length} source${links.length===1?'':'s'} · exact duration loaded`:`${links.length} source${links.length===1?'':'s'} · duration estimate used`;
-    $('#dcSourceDuration',layer).textContent=clockFromSeconds(maxSec);
+    const loaded=durationVerified&&knownDurations().length===links.length;
+    $('#dcSourceState',layer).textContent=loaded?'Duration loaded':'Duration needs check';
+    $('#dcSourceSub',layer).textContent=loaded?`${links.length} source${links.length===1?'':'s'} · real video length loaded`:`${links.length} source${links.length===1?'':'s'} · enter duration if the server could not read it`;
+    $('#dcSourceDuration',layer).textContent=loaded?clockFromSeconds(maxSec):'Manual';
+    if(manualBox) manualBox.hidden=loaded;
   };
   const readRange=()=>{
     let start=Math.max(0,Math.min(maxSec-1,Number(startInput.value||0)));
@@ -1398,6 +1417,11 @@ function openTokenEstimateModal({urls,onConfirm}){
   };
   const scheduleUpdate=()=>{clearTimeout(layer._timer);layer._timer=setTimeout(update,80)};
   [startInput,endInput].forEach(el=>el.addEventListener('input',scheduleUpdate));
+  manualInput?.addEventListener('input',()=>{
+    const minutes=Math.max(1,Number(manualInput.value||20));
+    applyMaxSeconds(minutes*60,{keepRange:false});
+    setSourceVisual(); update();
+  });
   $('#dcOpenBillingFromCharge').onclick=()=>{close();openBillingModal();};
   $('#dcChargeTemplate').onchange=e=>{const t=$('#dcCreateTemplate'); if(t)t.value=e.target.value};
   $('#dcChargeCount').onchange=e=>{const t=$('#dcCreateCount'); if(t)t.value=e.target.value};
@@ -1412,11 +1436,22 @@ function openTokenEstimateModal({urls,onConfirm}){
   };
   fetchSourceInfo(urls).then(info=>{
     sourceInfo=info||sourceInfo;
-    const knownDurations=durations();
-    maxSec=Math.max(60,...knownDurations.map(v=>Math.round(v)));
-    startInput.max=String(maxSec); endInput.max=String(maxSec); endInput.value=String(maxSec);
+    const realDurations=knownDurations();
+    durationVerified=Boolean(sourceInfo.known)&&realDurations.length===links.length;
+    if(durationVerified) applyMaxSeconds(Math.max(...realDurations.map(v=>Math.round(v))),{keepRange:false});
+    else {
+      const fallbackMinutes=Math.max(1,Number(manualInput?.value||20));
+      applyMaxSeconds(fallbackMinutes*60,{keepRange:false});
+      const warning=(sourceInfo.sources||[]).map(src=>src.warning||src.error).filter(Boolean)[0];
+      if(warning) console.warn('Source duration was not verified:', warning);
+    }
     setSourceVisual(); update();
-  }).catch(()=>{setSourceVisual();update()});
+  }).catch(error=>{
+    durationVerified=false;
+    applyMaxSeconds(Math.max(1,Number(manualInput?.value||20))*60,{keepRange:false});
+    console.warn('Source info failed:', error);
+    setSourceVisual();update();
+  });
 }
 async function queueProjectImport(url,button,range={}){
   const [min,max]=$('#dcCreateDuration').value.split(',').map(Number);
