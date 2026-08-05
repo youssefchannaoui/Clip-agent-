@@ -833,11 +833,16 @@ body.dc-app .dc-billing-note span{font-size:9px}
 
 `;
 
+/* V4 dashboard: a focused creator command centre, built from live workspace data. */
+const v4DashboardCss = String.raw`
+.dc-home-v4{display:grid;gap:16px}.dc-v4-hero{position:relative;overflow:hidden;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,.75fr);gap:18px;padding:26px;border:1px solid rgba(217,180,120,.28);border-radius:26px;background:radial-gradient(circle at 9% 6%,rgba(217,180,120,.17),transparent 30%),radial-gradient(circle at 93% 12%,rgba(74,193,255,.13),transparent 31%),linear-gradient(135deg,#16130f,#101116 55%,#0b1017)}.dc-v4-hero:after{content:'';position:absolute;width:360px;height:360px;right:-170px;bottom:-210px;border-radius:50%;border:1px solid rgba(217,180,120,.16);box-shadow:0 0 0 32px rgba(217,180,120,.025),0 0 0 64px rgba(217,180,120,.018);pointer-events:none}.dc-v4-eyebrow{display:inline-flex;align-items:center;gap:7px;min-height:28px;padding:0 10px;border:1px solid rgba(217,180,120,.26);border-radius:999px;background:rgba(217,180,120,.08);color:var(--dc-accent2);font-size:9px;font-weight:850;letter-spacing:.1em;text-transform:uppercase}.dc-v4-eyebrow i{width:7px;height:7px;border-radius:50%;background:var(--dc-green);box-shadow:0 0 0 4px rgba(83,199,139,.08)}.dc-v4-hero h1{max-width:740px;margin:13px 0 7px;font-size:clamp(32px,3.6vw,52px);line-height:.98;letter-spacing:-.06em}.dc-v4-hero p{max-width:630px;margin:0;color:var(--dc-muted);font-size:12px;line-height:1.55}.dc-v4-hero-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:18px}.dc-v4-hero-actions .dc-btn{min-height:43px;border-radius:13px}.dc-v4-scoreboard{position:relative;z-index:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;align-content:center}.dc-v4-stat{min-height:96px;padding:15px;border:1px solid rgba(255,255,255,.085);border-radius:18px;background:rgba(6,7,9,.36);backdrop-filter:blur(12px)}.dc-v4-stat b,.dc-v4-stat span{display:block}.dc-v4-stat b{font-size:30px;letter-spacing:-.07em}.dc-v4-stat span{margin-top:4px;color:var(--dc-muted);font-size:9px}.dc-v4-stat.good b{color:var(--dc-green)}.dc-v4-stat.gold b{color:var(--dc-accent2)}.dc-v4-start{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 14px;border:1px solid rgba(217,180,120,.22);border-radius:20px;background:linear-gradient(130deg,rgba(217,180,120,.09),rgba(255,255,255,.022) 46%,rgba(85,183,255,.06))}.dc-v4-start-icon{width:48px;height:48px;border-radius:16px;display:grid;place-items:center;background:rgba(217,180,120,.15);color:var(--dc-accent2)}.dc-v4-start-icon svg{width:23px;height:23px}.dc-v4-start-copy strong,.dc-v4-start-copy span{display:block}.dc-v4-start-copy strong{font-size:13px}.dc-v4-start-copy span{margin-top:3px;color:var(--dc-muted);font-size:9.5px}.dc-v4-import{display:grid;grid-template-columns:minmax(280px,1fr) 142px 105px 150px auto auto;gap:8px;align-items:center;margin-top:11px}.dc-v4-import input,.dc-v4-import select{height:45px;min-height:45px;padding:0 12px;border:1px solid var(--dc-line);border-radius:13px;background:#09090b;color:var(--dc-text)}.dc-v4-import .dc-btn{height:45px;border-radius:13px}.dc-v4-grid{display:grid;grid-template-columns:minmax(0,1.38fr) minmax(300px,.62fr);gap:16px}.dc-v4-panel{padding:18px;border:1px solid var(--dc-line);border-radius:22px;background:linear-gradient(155deg,#151518,#0e0e11)}.dc-v4-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:13px}.dc-v4-panel-head h2{margin:0;font-size:17px;letter-spacing:-.025em}.dc-v4-panel-head p{margin:4px 0 0;color:var(--dc-muted);font-size:10px}.dc-v4-next{display:grid;grid-template-columns:50px minmax(0,1fr) auto;gap:11px;align-items:center;padding:11px;border:1px solid rgba(217,180,120,.19);border-radius:16px;background:radial-gradient(circle at 100% 0,rgba(217,180,120,.10),transparent 40%),#0a0a0c}.dc-v4-next-icon{width:50px;height:50px;border-radius:15px;display:grid;place-items:center;background:rgba(217,180,120,.12);color:var(--dc-accent2)}.dc-v4-next-icon.good{background:rgba(83,199,139,.12);color:var(--dc-green)}.dc-v4-next-icon svg{width:23px;height:23px}.dc-v4-next strong,.dc-v4-next span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-v4-next strong{font-size:12px}.dc-v4-next span{margin-top:4px;color:var(--dc-muted);font-size:9px}.dc-v4-projects{display:grid;gap:8px;margin-top:12px}.dc-v4-project{display:grid;grid-template-columns:62px minmax(0,1fr) auto 17px;align-items:center;gap:10px;width:100%;padding:8px;border:1px solid rgba(255,255,255,.07);border-radius:14px;background:rgba(0,0,0,.18);text-align:left;color:var(--dc-text)}.dc-v4-project:hover{border-color:rgba(217,180,120,.34);background:#111115}.dc-v4-project img,.dc-v4-project-thumb{width:62px;height:42px;border-radius:9px;object-fit:cover;background:#09090a;display:grid;place-items:center;color:var(--dc-subtle)}.dc-v4-project strong,.dc-v4-project span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-v4-project strong{font-size:10.5px}.dc-v4-project span{margin-top:3px;color:var(--dc-muted);font-size:8.7px}.dc-v4-project svg{width:16px;color:var(--dc-subtle)}.dc-v4-rail{display:grid;gap:11px}.dc-v4-readiness{padding:16px;border:1px solid var(--dc-line);border-radius:20px;background:linear-gradient(155deg,#141418,#0d0d10)}.dc-v4-readiness h2{margin:0;font-size:15px}.dc-v4-readiness>p{margin:4px 0 12px;color:var(--dc-muted);font-size:9.5px}.dc-v4-check{display:grid;grid-template-columns:27px minmax(0,1fr) auto;gap:9px;align-items:center;padding:9px 0;border-top:1px solid rgba(255,255,255,.065)}.dc-v4-check:first-of-type{border-top:0}.dc-v4-check i{width:27px;height:27px;border-radius:9px;display:grid;place-items:center;background:rgba(239,107,122,.10);color:var(--dc-red);font-style:normal;font-size:12px;font-weight:900}.dc-v4-check.on i{background:rgba(83,199,139,.12);color:var(--dc-green)}.dc-v4-check strong,.dc-v4-check span{display:block}.dc-v4-check strong{font-size:10px}.dc-v4-check span{margin-top:2px;color:var(--dc-muted);font-size:8.2px}.dc-v4-check .dc-pill{font-size:8px}.dc-v4-queue{display:grid;gap:8px}.dc-v4-queue-row{display:grid;grid-template-columns:27px minmax(0,1fr) auto;align-items:center;gap:9px;padding:10px;border:1px solid rgba(255,255,255,.07);border-radius:13px;background:#0b0b0d}.dc-v4-queue-row>span:first-child{width:27px;height:27px;border-radius:9px;display:grid;place-items:center;background:rgba(217,180,120,.11);color:var(--dc-accent2)}.dc-v4-queue-row svg{width:14px;height:14px}.dc-v4-queue-row strong,.dc-v4-queue-row em{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-v4-queue-row strong{font-size:10px}.dc-v4-queue-row em{margin-top:2px;color:var(--dc-muted);font-size:8px;font-style:normal}.dc-v4-queue-row .dc-pill{font-size:8px}@media(max-width:1180px){.dc-v4-hero,.dc-v4-grid{grid-template-columns:1fr}.dc-v4-import{grid-template-columns:minmax(260px,1fr) 145px 105px}.dc-v4-import .dc-btn{grid-column:auto}}@media(max-width:720px){.dc-v4-hero{padding:19px}.dc-v4-scoreboard{grid-template-columns:repeat(4,minmax(0,1fr))}.dc-v4-stat{min-height:74px;padding:10px}.dc-v4-stat b{font-size:21px}.dc-v4-stat span{font-size:7.8px}.dc-v4-start{grid-template-columns:42px minmax(0,1fr)}.dc-v4-start-icon{width:42px;height:42px}.dc-v4-start>.dc-btn{grid-column:1/-1}.dc-v4-import{grid-template-columns:1fr 1fr}.dc-v4-import input{grid-column:1/-1}.dc-v4-import .dc-btn{grid-column:auto}.dc-v4-project{grid-template-columns:54px minmax(0,1fr) 17px}.dc-v4-project .dc-pill{display:none}.dc-v4-project img,.dc-v4-project-thumb{width:54px;height:38px}}
+`;
+
 function injectShell(){
   if (shellReady) return;
   shellReady = true;
   const style = document.createElement('style');
-  style.id = 'dcPhase4Styles'; style.textContent = css + billingCss + rangeChargeCss + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss + topbarCleanCss + trialUxCss; document.head.appendChild(style);
+  style.id = 'dcPhase4Styles'; style.textContent = css + billingCss + rangeChargeCss + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss + topbarCleanCss + trialUxCss + v4DashboardCss; document.head.appendChild(style);
   document.body.classList.add('dc-app');
 
   const side = document.createElement('aside'); side.id = 'dcSidebar';
@@ -1071,68 +1076,71 @@ function renderHome(){
   const scheduled = clips.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length;
   const posted = clips.filter(c=>c.status==='posted').length;
   const selectedTemplate = d.selectedTemplate?.name || d.templateDraft?.name || 'Choose template';
+  const connected = connectedPlatformCount(d);
   const next = nextScheduledClip(clips);
   panel.innerHTML = `
-    <div class="dc-home-v3g">
-      <section class="dc-home-hero-g" data-tour="home-hero">
-        <div class="dc-home-hero-copy">
-          <div class="dc-v3-kicker">${ICON.scissors} V3 workspace</div>
-          <h1>One clean workflow. Import, review, edit, publish.</h1>
-          <p>DeenClipped turns long lectures into captioned vertical clips, then keeps the next action clear.</p>
-          <div class="dc-stat-ribbon" aria-label="Workspace summary">
-            ${tinyStat(projects.length,'lectures')}${tinyStat(clips.length,'clips')}${tinyStat(waiting,'review')}${tinyStat(scheduled,'scheduled')}${tinyStat(posted,'posted')}
-          </div>
-          <div class="dc-v3-actions">
-            <button class="dc-btn" id="dcHeroCreate">Paste a lecture</button>
-            <button class="dc-btn secondary" data-dc-nav="review">Review clips</button>
-            <button class="dc-btn secondary" id="dcHeroTour">Guided demo</button>
-          </div>
+    <div class="dc-home-v4">
+      <section class="dc-v4-hero" data-tour="home-hero">
+        <div>
+          <div class="dc-v4-eyebrow"><i></i> Creator command centre</div>
+          <h1>Make the next great clip obvious.</h1>
+          <p>Import a source, review the strongest moments, then send polished clips to your own channels. Every number here comes from your live workspace.</p>
+          <div class="dc-v4-hero-actions"><button class="dc-btn" id="dcHeroCreate">Start a new source</button><button class="dc-btn secondary" data-dc-nav="review">${waiting ? `Review ${waiting} clips` : 'Open clip review'}</button><button class="dc-btn secondary" id="dcHeroTour">How it works</button></div>
         </div>
-        <div class="dc-hero-stage" aria-label="Recent clip previews">${heroThumbs(clips)}</div>
+        <div class="dc-v4-scoreboard" aria-label="Workspace summary">${v4Stat(projects.length,'sources')} ${v4Stat(clips.length,'clips','gold')} ${v4Stat(waiting,'to review',waiting?'gold':'')} ${v4Stat(posted,'published','good')}</div>
       </section>
 
-      <section class="dc-home-import-g" data-tour="create-form">
-        <span class="dc-import-icon">${socialSvg('youtube')}</span>
-        <input id="dcCreateUrl" placeholder="Paste YouTube or video URL">
+      <section class="dc-v4-start" data-tour="create-form"><span class="dc-v4-start-icon">${ICON.scissors}</span><div class="dc-v4-start-copy"><strong>Create clips from a source you own</strong><span>Paste a supported link or upload the original video. Choose the template and output before you spend tokens.</span></div><button class="dc-btn secondary" id="dcPickVideo" type="button">Upload original</button></section>
+      <section class="dc-v4-import">
+        <input id="dcCreateUrl" placeholder="Paste a YouTube or video URL">
         <select id="dcCreateTemplate" data-tour="template-picker">${(d.templates||[]).map(t=>`<option value="${esc(t.id)}" ${t.id===d.selectedTemplate?.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select>
-        <select id="dcCreateCount"><option>4</option><option selected>8</option><option>12</option><option>16</option></select>
-        <select id="dcCreateDuration"><option value="15,45">15–45 sec</option><option value="30,60" selected>30–60 sec</option><option value="45,90">45–90 sec</option></select>
-        <button class="dc-btn" id="dcGenerate" data-tour="generate-button">Generate</button>
+        <select id="dcCreateCount" aria-label="Number of clips"><option>4</option><option selected>8</option><option>12</option><option>16</option></select>
+        <select id="dcCreateDuration" aria-label="Clip duration"><option value="15,45">15–45 sec</option><option value="30,60" selected>30–60 sec</option><option value="45,90">45–90 sec</option></select>
+        <button class="dc-btn" id="dcGenerate" data-tour="generate-button">Find clips</button>
         <input id="dcVideoUpload" type="file" accept="video/mp4,video/quicktime,video/x-m4v,video/webm,video/x-matroska" hidden>
-        <button class="dc-btn secondary" id="dcPickVideo" type="button">Upload file</button>
+        <button class="dc-btn secondary" id="dcSourceYouTube" type="button">Paste link</button>
       </section>
 
-      <section class="dc-home-flow-g" aria-label="Main workflow">
-        ${flowCard('Import','Link or original file',socialSvg('youtube'),'dcSourceYouTube')}
-        ${flowCard('Review',waiting ? `${waiting} clips waiting` : 'Nothing waiting',ICON.review,'review')}
-        ${flowCard('Template',selectedTemplate,ICON.style,'editor')}
-        ${flowCard('Publish',scheduled ? `${scheduled} clips scheduled` : 'Connect platforms',ICON.publish,'schedule')}
-      </section>
-
-      <section class="dc-home-command-g" data-tour="happening-now">
-        <div class="dc-home-main-g">
-          ${liveFocusPanel(d,jobs,next,selectedTemplate)}
-          <div class="dc-project-gallery-g">
-            <div class="dc-simple-head"><div><h2>Recent projects</h2><p>Pick up from a lecture without reading a log.</p></div><button class="dc-btn secondary" data-dc-nav="projects">View all</button></div>
-            <div class="dc-project-strip-g">${recentProjectsCinema(projects,clips)}</div>
-          </div>
-        </div>
-        <aside class="dc-home-dock-g">
-          ${nextPostDock(next)}
-          ${platformDock(d)}
-          ${attentionDock(d)}
-        </aside>
+      <section class="dc-v4-grid" data-tour="happening-now">
+        <div class="dc-v4-panel"><div class="dc-v4-panel-head"><div><h2>Your next action</h2><p>One clear action prevents a pile of unfinished clips.</p></div><button class="dc-btn secondary" data-dc-nav="projects">All projects</button></div>${v4NextAction(d,jobs,next,waiting,selectedTemplate)}<div class="dc-v4-panel-head" style="margin-top:18px"><div><h2>Continue creating</h2><p>Your newest sources and their delivery status.</p></div></div><div class="dc-v4-projects">${v4ProjectRows(projects,clips)}</div></div>
+        <aside class="dc-v4-rail">${v4Readiness(d,connected,selectedTemplate)}<section class="dc-v4-panel"><div class="dc-v4-panel-head"><div><h2>Publish queue</h2><p>${scheduled ? `${scheduled} clips moving toward delivery.` : 'Approve a clip to start your queue.'}</p></div><button class="dc-btn secondary" data-dc-nav="schedule">Open</button></div><div class="dc-v4-queue">${v4QueueRows(clips)}</div></section></aside>
       </section>
     </div>`;
   $('#dcGenerate').onclick=generateProject;
   $('#dcPickVideo').onclick=()=>$('#dcVideoUpload').click();
   $('#dcVideoUpload').onchange=()=>prepareVideoUpload($('#dcVideoUpload').files?.[0]);
   $('#dcHeroCreate').onclick=()=>$('#dcCreateUrl').focus();
+  $('#dcV4Start') && ($('#dcV4Start').onclick=()=>$('#dcCreateUrl').focus());
   const source=$('#dcSourceYouTube'); if(source) source.onclick=()=>$('#dcCreateUrl').focus();
   $('#dcHeroTour').onclick=()=>openGuidedTour(0);
   requestAnimationFrame(()=>animatePanel(panel));
 }
 function tinyStat(value,label){return `<span class="dc-tiny-stat"><b>${esc(value)}</b>${esc(label)}</span>`}
+function v4Stat(value,label,tone=''){return `<div class="dc-v4-stat ${esc(tone)}"><b>${esc(value)}</b><span>${esc(label)}</span></div>`}
+function v4NextAction(d,jobs,next,waiting,templateName){
+  if(jobs.length){const j=jobs[0];return `<div class="dc-v4-next"><span class="dc-v4-next-icon">${j.kind==='publish'?ICON.publish:j.kind==='render'?ICON.editor:ICON.scissors}</span><div><strong>${esc(shortText(j.title,62))}</strong><span>${esc(shortText(j.stage||'Working now',80))}</span></div><span class="dc-pill warn">${Number.isFinite(j.progress)?`${Math.round(j.progress)}%`:'Live'}</span></div>`}
+  if(waiting)return `<div class="dc-v4-next"><span class="dc-v4-next-icon">${ICON.review}</span><div><strong>${waiting} ${waiting===1?'clip is':'clips are'} ready for your decision</strong><span>Approve the strong ones, then edit or schedule them.</span></div><button class="dc-btn" data-dc-nav="review">Review</button></div>`;
+  if(next)return `<div class="dc-v4-next"><span class="dc-v4-next-icon good">${ICON.publish}</span><div><strong>${esc(shortText(next.title||'Scheduled clip',62))}</strong><span>Next delivery: ${esc(formatDate(next.scheduledAt))}</span></div><button class="dc-btn secondary" data-dc-nav="schedule">View</button></div>`;
+  return `<div class="dc-v4-next"><span class="dc-v4-next-icon good">${ICON.scissors}</span><div><strong>Start with your next long-form video</strong><span>Current template: ${esc(templateName)}. You will see the token check before processing begins.</span></div><button class="dc-btn" id="dcV4Start">Create</button></div>`;
+}
+function v4ProjectRows(projects,clips){
+  const list=[...projects].sort((a,b)=>Number(b.submittedAt||0)-Number(a.submittedAt||0)).slice(0,4);
+  if(!list.length)return `<div class="dc-empty v3"><strong>Your workspace is ready</strong><span>Start a source above and your projects will live here.</span></div>`;
+  return list.map(p=>{const own=clips.filter(c=>c.projectId===p.id),thumb=projectThumbUrl(p,clips),failed=p.status==='failed'||p.error,busy=['queued','processing'].includes(p.status);return `<button class="dc-v4-project" data-open-project="${esc(p.id)}" type="button">${thumb?`<img src="${authedUrl(thumb)}" alt="">`:`<span class="dc-v4-project-thumb">${ICON.projects}</span>`}<span><strong>${esc(shortText(projectDisplayTitle(p),58))}</strong><span>${own.length} clips · ${busy?'Processing':failed?'Needs attention':'Ready to continue'}</span></span><b class="dc-pill ${failed?'bad':busy?'warn':'good'}">${failed?'Fix':busy?'Live':'Ready'}</b>${ICON.chevron}</button>`}).join('');
+}
+function v4Readiness(d,connected,templateName){
+  const readiness=[
+    [Boolean(d.selectedTemplate?.id||d.templateDraft?.id),'Template',templateName,'templates'],
+    [connected>0,'Channels',connected?`${connected} connected destination${connected===1?'':'s'}`:'Connect when you are ready to publish','publishing'],
+    [Boolean((d.tracks||[]).length),'Audio',(d.tracks||[]).length?'Background audio ready':'Optional: add a nasheed track','music']
+  ];
+  return `<section class="dc-v4-readiness"><h2>Publishing readiness</h2><p>Nothing posts automatically without your approval.</p>${readiness.map(([on,title,copy,target])=>`<button class="dc-v4-check ${on?'on':''}" data-dc-nav="${target}" type="button"><i>${on?'✓':'+'}</i><span><strong>${title}</strong><span>${esc(copy)}</span></span><b class="dc-pill ${on?'good':'warn'}">${on?'Ready':'Set up'}</b></button>`).join('')}</section>`;
+}
+function v4QueueRows(clips){
+  const list=clips.filter(c=>['approved','scheduled','publishing'].includes(c.status)).sort((a,b)=>Number(a.scheduledAt||Infinity)-Number(b.scheduledAt||Infinity)).slice(0,3);
+  if(!list.length)return `<div class="dc-empty"><strong>No clips in the queue</strong>Approve your best clip to plan the next post.</div>`;
+  return list.map(c=>`<button class="dc-v4-queue-row" data-edit-style-clip="${esc(c.id)}" type="button"><span>${ICON.publish}</span><span><strong>${esc(shortText(c.title||'Untitled clip',42))}</strong><em>${c.scheduledAt?esc(formatDate(c.scheduledAt)):'Ready to schedule'}</em></span><b class="dc-pill ${c.status==='publishing'?'warn':'good'}">${c.status==='publishing'?'Sending':'Ready'}</b></button>`).join('');
+}
 function flowCard(title,note,icon,target){
   const attr = target === 'dcSourceYouTube' ? 'id="dcSourceYouTube"' : `data-dc-nav="${esc(target)}"`;
   return `<button class="dc-flow-card-g" type="button" ${attr}><span>${icon}</span><strong>${esc(title)}</strong><em>${esc(note)}</em></button>`;
