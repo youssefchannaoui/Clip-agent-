@@ -121,6 +121,14 @@ GOOGLE_SIGNIN_REDIRECT_URI=https://deenclipped.online/auth/google/callback
 
 Google compares redirect URIs exactly, including scheme, hostname, path and trailing slash. Account sign-in credentials are intentionally separate from the YouTube publishing credentials.
 
+The production YouTube publishing OAuth client must also register this exact redirect URI:
+
+```text
+https://deenclipped.online/auth/youtube/callback
+```
+
+The complete Google OAuth and YouTube approval checklist, scope justifications, reviewer demo script and copy-ready audit answers are in [`docs/YOUTUBE_VERIFICATION.md`](docs/YOUTUBE_VERIFICATION.md).
+
 ## YouTube source imports
 
 Do not request or store customer browser cookies. YouTube may block server-hosted downloaders with a bot confirmation and its supported Data API does not provide a method for downloading the original audiovisual file. DeenClipped therefore keeps link import as best effort and presents **Upload original video** whenever YouTube blocks the server. MP4, MOV, M4V, WebM and MKV uploads are supported up to `MAX_VIDEO_UPLOAD_MB` (2 GB by default).

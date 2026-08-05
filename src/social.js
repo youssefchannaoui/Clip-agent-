@@ -254,12 +254,24 @@ export async function completeOAuth(provider, callbackUrl) {
   return { userId };
 }
 
-export function disconnect(provider, user) {
+export async function disconnect(provider, user) {
   const userId = user?.id || user;
   if (!userId) throw new SocialError('Sign in to disconnect an account.');
   const affected = provider === 'meta' ? ['instagram', 'facebook'] : [provider];
   if (!['youtube', 'meta', 'tiktok'].includes(provider)) throw new SocialError('Unknown provider.');
 
+  // Remove the local credential first so a slow or unavailable provider can
+  // never prevent the customer taking access away from DeenClipped. For
+  // YouTube we also revoke the Google grant remotely on a best-effort basis.
+  let googleCredential = '';
+  if (provider === 'youtube') {
+    try {
+      const token = decrypt(connection(userId, 'youtube')?.token);
+      googleCredential = token?.refresh_token || token?.access_token || '';
+    } catch (error) {
+      log(`The stored YouTube grant could not be read during disconnect; the local credential will still be removed. ${error.message}`, 'warn', userId);
+    }
+  }
   removeConnection(state.socialConnections, userId, provider);
 
   // Only this account's publishing settings are touched. Disconnecting used to
@@ -271,7 +283,23 @@ export function disconnect(provider, user) {
   if (!anyEnabled) next.enabled = false;
   setPublishingSettings(user, next);
 
-  save(); log(`Disconnected ${provider}. New uploads to it were disabled; existing platform posts were not deleted.`, 'info', userId);
+  save();
+
+  if (googleCredential) {
+    try {
+      const response = await fetch(config.googleRevokeUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ token: googleCredential }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!response.ok) log(`Google returned ${response.status} while revoking the disconnected YouTube grant. The local credential was removed.`, 'warn', userId);
+    } catch (error) {
+      log(`Google could not be reached while revoking the disconnected YouTube grant. The local credential was removed. ${error.message}`, 'warn', userId);
+    }
+  }
+
+  log(`Disconnected ${provider}. Stored credentials were removed and new uploads to it were disabled; existing platform posts were not deleted.`, 'info', userId);
 }
 
 /** One account's connection for a provider, or null. */

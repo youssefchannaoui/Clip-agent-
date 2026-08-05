@@ -52,6 +52,15 @@ test('public routes, pricing and dashboard assets remain available', async () =>
   assert.match(pricing, /Token shop/i);
   assert.match(pricing, /Stripe price not configured/i);
 
+  const privacy = await (await fetch(`${base}/privacy`)).text();
+  assert.match(privacy, /Google API Services User Data Policy/i);
+  assert.match(privacy, /Limited Use requirements/i);
+  assert.match(privacy, /completed within 30 days/i);
+
+  const terms = await (await fetch(`${base}/terms`)).text();
+  assert.match(terms, /YouTube Terms of Service/i);
+  assert.match(terms, /Google Privacy Policy/i);
+
   const app = await fetch(`${base}/app`, { headers: { Cookie: creatorCookie }, redirect: 'manual' });
   assert.equal(app.status, 200);
   assert.match(await app.text(), /premium-dashboard\.js/);

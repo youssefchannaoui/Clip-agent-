@@ -13,6 +13,7 @@ process.env.GOOGLE_CLIENT_ID = 'google-client';
 process.env.GOOGLE_CLIENT_SECRET = 'google-secret';
 process.env.GOOGLE_AUTH_BASE = 'https://accounts.test';
 process.env.GOOGLE_TOKEN_URL = 'https://google.test/token';
+process.env.GOOGLE_REVOKE_URL = 'https://google.test/revoke';
 process.env.YOUTUBE_API_BASE = 'https://google.test';
 process.env.META_APP_ID = 'meta-app';
 process.env.META_APP_SECRET = 'meta-secret';
@@ -72,6 +73,27 @@ test('YouTube OAuth, connection check and resumable upload complete', async () =
   assert.equal(result.postUrl, 'https://youtu.be/youtube-video-1');
   assert.equal(target.providerState.stage, 'completed');
   assert.ok(calls.some(call => call.url.includes('uploadType=resumable')));
+});
+
+test('YouTube OAuth requests only the documented channel and upload scopes', () => {
+  const start = new URL(social.oauthStartUrl('youtube', USER));
+  assert.equal(start.searchParams.get('redirect_uri'), 'https://app.test/auth/youtube/callback');
+  assert.deepEqual(start.searchParams.get('scope').split(' ').sort(), [
+    'https://www.googleapis.com/auth/youtube.readonly',
+    'https://www.googleapis.com/auth/youtube.upload',
+  ]);
+});
+
+test('disconnect removes the local YouTube credential and revokes the Google grant', async () => {
+  let revoked = '';
+  global.fetch = async (url, options = {}) => {
+    assert.equal(String(url), 'https://google.test/revoke');
+    revoked = String(options.body);
+    return new Response('', { status: 200 });
+  };
+  await social.disconnect('youtube', USER);
+  assert.match(revoked, /token=yt-refresh/);
+  assert.equal(social.connectionStatus(USER).providers.youtube.connected, false);
 });
 
 test('Meta OAuth supports Instagram and Facebook publishing paths', async () => {
