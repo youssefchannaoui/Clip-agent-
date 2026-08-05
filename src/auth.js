@@ -104,9 +104,8 @@ export function cookieHeaders(sessionToken = '', { clear = false } = {}) {
   return [`${SESSION_COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${age}${secure}`];
 }
 
-export function currentUser(req) {
+export function sessionUser(req) {
   ensureAuthState();
-  if (!enabled()) return ownerUser();
   const raw = parseCookies(req)[SESSION_COOKIE];
   if (!raw) return null;
   const sessionHash = sha256(raw);
@@ -116,6 +115,12 @@ export function currentUser(req) {
   if (!user) return null;
   session.lastSeenAt = now();
   return user;
+}
+
+export function currentUser(req) {
+  const signedInUser = sessionUser(req);
+  if (signedInUser) return signedInUser;
+  return enabled() ? null : ownerUser();
 }
 
 export function requireUser(req) {

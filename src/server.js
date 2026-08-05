@@ -442,7 +442,7 @@ async function route(req, res, url) {
 
   if (!pathname.startsWith('/api/')) return json(res, 404, { error: 'Not found.' });
   if (auth.enabled() && !currentUser) return json(res, 401, { error: 'Sign in to continue.', loginRequired: true });
-  if (!auth.enabled() && !authed(req, url)) return json(res, 401, { error: 'Wrong password.' });
+  if (!auth.enabled() && !auth.sessionUser(req) && !authed(req, url)) return json(res, 401, { error: 'Wrong password.' });
 
   if (method === 'GET' && pathname === '/api/auth/me') return json(res, 200, { user: auth.userPublic(currentUser), auth: auth.publicConfig() });
   if (method === 'GET' && pathname === '/api/state') return json(res, 200, appState(currentUser));
