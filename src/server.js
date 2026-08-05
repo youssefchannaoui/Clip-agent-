@@ -19,6 +19,7 @@ import * as auth from './auth.js';
 import * as billing from './billing.js';
 import * as marketing from './marketing.js';
 import * as admin from './admin.js';
+import { saveVideoUpload, removeUploadedFile } from './uploads.js';
 
 const page = path.join(config.root, 'src', 'public', 'index.html');
 const activityFixPage = path.join(config.root, 'src', 'public', 'activity-fix.js');
@@ -34,7 +35,6 @@ const marketingAssetDirs = [
   path.resolve(config.root, 'src', 'public', 'marketing-assets'),
   path.resolve(config.root, 'src', 'public'),
 ];
-const youtubeCookiesFile = path.join(config.dataDir, 'youtube-cookies.txt');
 
 function json(res, status, value) {
   const body = JSON.stringify(value);
@@ -217,7 +217,7 @@ function appState(user = null) {
     tracks: audio.listNasheeds(user),
     projects: projectsForUser.map(project => ({
       id: project.id, title: project.title, url: project.url, engine: project.engine, status: project.status,
-      stage: project.stage, progress: project.progress || 0, error: project.error || null,
+      stage: project.stage, progress: project.progress || 0, error: project.error || null, errorCode: project.errorCode || null,
       submittedAt: project.submittedAt, completedAt: project.completedAt || null, clipCount: project.clipCount || 0,
       durationSec: project.durationSec || project.sourceDurationSec || null, sourceDurationSec: project.sourceDurationSec || null, sourceThumbUrl: project.sourceThumbUrl || null, sourceTitle: project.sourceTitle || null, templateIdUsed: project.templateIdUsed,
       templateNameUsed: project.templateNameUsed, templateVersionUsed: project.templateVersionUsed || 1, musicRequired: true,
@@ -549,6 +549,28 @@ async function route(req, res, url) {
     return json(res, 200, { results, sourceRange });
   }
 
+  if (method === 'POST' && pathname === '/api/video-uploads') {
+    let upload = null;
+    try {
+      upload = await saveVideoUpload(req, currentUser.id);
+      const sourceStartSeconds = Math.max(0, Math.round(Number(req.headers['x-source-start-seconds'] || 0)));
+      const sourceEndRaw = Number(req.headers['x-source-end-seconds']);
+      const sourceEndSeconds = Number.isFinite(sourceEndRaw) && sourceEndRaw > sourceStartSeconds ? Math.round(sourceEndRaw) : null;
+      if (sourceEndSeconds !== null && sourceEndSeconds - sourceStartSeconds < 30) throw new Error('Choose at least 30 seconds of source video.');
+      const durationSec = Math.max(0, Math.round(Number(req.headers['x-source-duration-seconds'] || 0)));
+      const projectId = await agent.submitVideo(upload.filePath, upload.title, currentUser.id, {
+        sourceRange: { startSec: sourceStartSeconds, endSec: sourceEndSeconds },
+        sourceMeta: { title: upload.title, durationSec: durationSec || null, thumbnail: '' },
+        sourceKind: 'upload', originalFileName: upload.fileName, uploadedInputFile: upload.filePath,
+        displayUrl: `Uploaded file · ${upload.fileName}`,
+      });
+      return json(res, 201, { ok: true, projectId, fileName: upload.fileName, size: upload.size });
+    } catch (error) {
+      if (upload?.filePath) removeUploadedFile(upload.filePath);
+      return json(res, error.statusCode || 400, { error: error.message });
+    }
+  }
+
   const projectRetry = pathname.match(/^\/api\/projects\/([^/]+)\/retry$/);
   if (method === 'POST' && projectRetry) {
     try { const id = decodeURIComponent(projectRetry[1]); assertCanAccessProject(currentUser, id); return json(res, 200, { ok: true, project: agent.engine.retryProject(id) }); }
@@ -677,36 +699,10 @@ async function route(req, res, url) {
   const musicDelete = pathname.match(/^\/api\/music\/([^/]+)$/);
   if (method === 'DELETE' && musicDelete) return audio.deleteNasheed(currentUser, decodeURIComponent(musicDelete[1])) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'Track not found.' });
 
-  // The downloader cookies are a deployment-wide credential belonging to the
-  // operator, not a per-account setting. Any signed-in customer could read,
-  // replace or delete them before this check existed.
-  if (pathname === '/api/admin/youtube-cookies' || pathname === '/api/diagnostics') {
+  if (pathname === '/api/diagnostics') {
     try { requireOperator(currentUser); }
     catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
   }
-  if (method === 'GET' && pathname === '/api/admin/youtube-cookies') {
-    return json(res, 200, { connected: fs.existsSync(youtubeCookiesFile) });
-  }
-  if (method === 'POST' && pathname === '/api/admin/youtube-cookies') {
-    const body = await readBody(req, 5 * 1024 * 1024);
-    const contents = String(body.contents || '');
-    const headerValid = contents.includes('# Netscape HTTP Cookie File') || contents.includes('# HTTP Cookie File');
-    if (!headerValid) return json(res, 400, { error: 'Upload a valid Netscape-format cookies.txt file.' });
-    if (!/(^|\n)(?:#HttpOnly_)?\.?youtube\.com\t/im.test(contents) && !contents.includes('.youtube.com')) {
-      return json(res, 400, { error: 'The file does not contain YouTube cookies.' });
-    }
-    fs.mkdirSync(config.dataDir, { recursive: true });
-    fs.writeFileSync(youtubeCookiesFile, contents, { encoding: 'utf8', mode: 0o600 });
-    log('YouTube downloader cookies were updated through the admin panel.');
-    return json(res, 200, { ok: true, connected: true });
-  }
-  if (method === 'DELETE' && pathname === '/api/admin/youtube-cookies') {
-    try { fs.unlinkSync(youtubeCookiesFile); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
-    log('YouTube downloader cookies were removed.');
-    return json(res, 200, { ok: true, connected: false });
-  }
-
   if (method === 'GET' && pathname === '/api/diagnostics') {
     const [ffmpeg, worker] = await Promise.all([checkFfmpeg(), runDoctor()]);
     return json(res, 200, { ok: ffmpeg.ok && worker.ok, ffmpeg, worker, readiness: agent.engine.readiness(currentUser), python: config.pythonBin, model: config.aiModel, note: 'The first real transcription downloads the selected Whisper model once.' });

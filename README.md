@@ -23,8 +23,8 @@ Three matching tabs were added without replacing the classic screens:
 
 ## Automated workflow
 
-1. Paste an authorised lecture/video link.
-2. `yt-dlp` downloads the source.
+1. Upload an original video file, or paste an authorised video link for a best-effort import.
+2. Uploaded files are streamed into the signed-in customer's private workspace. Link imports use `yt-dlp` when the source platform permits server-side access.
 3. Faster-Whisper transcribes or translates it locally.
 4. Candidate moments are segmented and scored.
 5. The selected saved template is rendered into every clip.
@@ -100,6 +100,30 @@ TIKTOK_CLIENT_SECRET=
 ```
 
 Never change `SOCIAL_TOKEN_KEY` after connecting accounts, or stored tokens will become unreadable. See `AUTOMATIC-PUBLISHING-SETUP.md` for provider steps.
+
+## Public Google sign-in
+
+Create a Google OAuth 2.0 **Web application** client and register this exact authorised redirect URI:
+
+```text
+https://deenclipped.online/auth/google/callback
+```
+
+Set the OAuth app audience to **External**, publish it to **In production**, and configure these Render variables:
+
+```env
+AUTH_REQUIRED=true
+PUBLIC_BASE_URL=https://deenclipped.online
+GOOGLE_SIGNIN_CLIENT_ID=
+GOOGLE_SIGNIN_CLIENT_SECRET=
+GOOGLE_SIGNIN_REDIRECT_URI=https://deenclipped.online/auth/google/callback
+```
+
+Google compares redirect URIs exactly, including scheme, hostname, path and trailing slash. Account sign-in credentials are intentionally separate from the YouTube publishing credentials.
+
+## YouTube source imports
+
+Do not request or store customer browser cookies. YouTube may block server-hosted downloaders with a bot confirmation and its supported Data API does not provide a method for downloading the original audiovisual file. DeenClipped therefore keeps link import as best effort and presents **Upload original video** whenever YouTube blocks the server. MP4, MOV, M4V, WebM and MKV uploads are supported up to `MAX_VIDEO_UPLOAD_MB` (2 GB by default).
 
 ## Local installation
 

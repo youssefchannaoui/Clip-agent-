@@ -184,15 +184,6 @@ def copy_or_download(job: dict[str, Any], destination: Path) -> tuple[Path, str]
         "overwrites": True,
         "js_runtimes": {"node": {"path": None}},
     }
-    # Newer yt-dlp builds can use Node for YouTube's JS challenges. Unknown
-    # options are intentionally avoided so older builds still work.
-    cookie_path = os.environ.get("YOUTUBE_COOKIES_PATH", "").strip()
-    if not cookie_path:
-        cookie_path = str(Path(os.environ.get("DATA_DIR", "data")) / "youtube-cookies.txt")
-    cookie_file = Path(cookie_path)
-    if cookie_file.exists() and cookie_file.is_file():
-        options["cookiefile"] = str(cookie_file)
-
     with YoutubeDL(options) as ydl:
         info = ydl.extract_info(source, download=True)
         detected_title = str(info.get("title") or "").strip()

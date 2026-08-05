@@ -330,6 +330,9 @@ body.dc-project-open .main-col,body.dc-project-open #app>.wrap{overflow-x:hidden
 .dc-home-v3g{display:flex;flex-direction:column;gap:18px}.dc-home-hero-g{position:relative;min-height:330px;display:grid;grid-template-columns:minmax(420px,1.1fr) minmax(320px,.9fr);align-items:center;gap:22px;padding:34px 28px;border:1px solid rgba(217,180,120,.28);border-radius:26px;background:radial-gradient(circle at 12% 6%,rgba(217,180,120,.18),transparent 30%),radial-gradient(circle at 86% 20%,rgba(85,183,255,.12),transparent 32%),linear-gradient(135deg,#17130f,#101114 58%,#0b1118);overflow:hidden}.dc-home-hero-g::after{content:'';position:absolute;right:-150px;top:-180px;width:420px;height:420px;border-radius:50%;border:1px solid rgba(217,180,120,.18);background:rgba(217,180,120,.045);pointer-events:none}.dc-home-hero-copy{position:relative;z-index:1}.dc-home-hero-copy h1{font-size:clamp(36px,4vw,58px);line-height:.94;letter-spacing:-.055em;margin:18px 0 12px;max-width:760px}.dc-home-hero-copy p{max-width:620px;margin:0;color:var(--dc-muted);font-size:14px;line-height:1.55}.dc-stat-ribbon{display:flex;flex-wrap:wrap;gap:8px;margin:17px 0 2px}.dc-tiny-stat{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 10px;border:1px solid rgba(255,255,255,.09);border-radius:999px;background:rgba(0,0,0,.22);color:var(--dc-muted);font-size:10px}.dc-tiny-stat b{color:var(--dc-text);font-size:14px}.dc-hero-stage{position:relative;z-index:1;min-height:250px}.dc-hero-stage .dc-v3-phone-wall{height:100%;min-height:260px}.dc-home-import-g{display:grid;grid-template-columns:44px minmax(320px,1fr) 190px 92px 140px auto;gap:9px;align-items:center;padding:10px;border:1px solid var(--dc-line);border-radius:20px;background:linear-gradient(180deg,#141417,#0d0d10)}.dc-import-icon{width:44px;height:44px;border-radius:15px;display:grid;place-items:center;background:rgba(255,0,51,.12);color:#ff4168}.dc-import-icon svg{width:24px;height:24px}.dc-home-import-g input,.dc-home-import-g select{height:46px;min-height:46px;border:1px solid var(--dc-line);border-radius:14px;background:#09090b;color:var(--dc-text);padding:0 13px}.dc-home-import-g .dc-btn{height:46px;border-radius:14px}.dc-home-flow-g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.dc-flow-card-g{min-height:86px;display:grid;grid-template-columns:42px minmax(0,1fr);grid-template-rows:auto auto;align-content:center;column-gap:12px;padding:14px 15px;border:1px solid var(--dc-line);border-radius:20px;background:linear-gradient(145deg,rgba(255,255,255,.038),rgba(255,255,255,.012));text-align:left;color:var(--dc-text);transition:transform .18s ease,border-color .18s ease,background .18s ease}.dc-flow-card-g:hover{transform:translateY(-2px);border-color:var(--dc-line2);background:linear-gradient(145deg,rgba(217,180,120,.07),rgba(255,255,255,.018))}.dc-flow-card-g>span{grid-row:1/3;width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:rgba(217,180,120,.10);color:var(--dc-accent2)}.dc-flow-card-g svg{width:21px;height:21px}.dc-flow-card-g strong{font-size:14px}.dc-flow-card-g em{font-style:normal;color:var(--dc-muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-home-command-g{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);gap:16px;align-items:start}.dc-home-main-g{display:flex;flex-direction:column;gap:16px}.dc-live-focus-g{min-height:128px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px;border:1px solid rgba(217,180,120,.18);border-radius:24px;background:radial-gradient(circle at 100% 0,rgba(217,180,120,.11),transparent 32%),linear-gradient(145deg,#151519,#0f0f12)}.dc-live-focus-g.busy{border-color:rgba(217,180,120,.42)}.dc-live-left{display:flex;align-items:center;gap:15px;min-width:0}.dc-live-icon{width:56px;height:56px;flex:0 0 56px;border-radius:18px;display:grid;place-items:center;background:rgba(217,180,120,.12);color:var(--dc-accent2)}.dc-live-icon.good{background:rgba(83,199,139,.11);color:var(--dc-green)}.dc-live-icon svg{width:26px;height:26px}.dc-live-focus-g small{display:block;color:var(--dc-accent2);font-size:9px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}.dc-live-focus-g h2{margin:0;font-size:21px;letter-spacing:-.025em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-live-focus-g p{margin:5px 0 0;color:var(--dc-muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-project-gallery-g{padding:20px;border:1px solid var(--dc-line);border-radius:24px;background:linear-gradient(180deg,#131316,#0d0d10)}.dc-simple-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.dc-simple-head h2{margin:0;font-size:18px}.dc-simple-head p{margin:4px 0 0;color:var(--dc-muted);font-size:11px}.dc-project-strip-g{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}.dc-cinema-project{display:flex;flex-direction:column;gap:10px;min-width:0;padding:10px;border:1px solid var(--dc-line);border-radius:18px;background:#0b0b0d;text-align:left;color:var(--dc-text);transition:transform .18s ease,border-color .18s ease}.dc-cinema-project:hover{transform:translateY(-2px);border-color:var(--dc-line2)}.dc-cinema-thumb{height:132px;border-radius:14px;overflow:hidden;background:#050506;display:grid;place-items:center;color:var(--dc-muted)}.dc-cinema-thumb img{width:100%;height:100%;object-fit:cover}.dc-cinema-copy strong,.dc-cinema-copy em{display:block}.dc-cinema-copy strong{font-size:12px;line-height:1.3;min-height:32px}.dc-cinema-copy em{font-style:normal;color:var(--dc-muted);font-size:9px;margin-top:4px}.dc-cinema-project .dc-pill{align-self:flex-start}.dc-home-dock-g{display:flex;flex-direction:column;gap:12px}.dc-dock-card-g{padding:16px;border:1px solid var(--dc-line);border-radius:22px;background:linear-gradient(180deg,#141417,#0d0d10)}.dc-dock-card-g.next{border-color:rgba(217,180,120,.22)}.dc-dock-card-g.warn{border-color:rgba(239,107,122,.24)}.dc-dock-head{display:flex;align-items:center;gap:8px;margin-bottom:12px}.dc-dock-head span{width:34px;height:34px;border-radius:12px;display:grid;place-items:center;background:rgba(217,180,120,.10);color:var(--dc-accent2)}.dc-dock-head svg{width:18px;height:18px}.dc-dock-head b{font-size:14px}.dc-dock-card-g p{margin:0 0 12px;color:var(--dc-muted);font-size:11px;line-height:1.45}.dc-dock-post{display:grid;grid-template-columns:58px minmax(0,1fr);grid-template-rows:auto auto;gap:2px 10px;align-items:center;margin-bottom:12px}.dc-dock-post img{grid-row:1/3;width:58px;height:58px;border-radius:14px;object-fit:cover}.dc-dock-post strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}.dc-dock-post em{font-style:normal;color:var(--dc-muted);font-size:9px}.dc-platform-dots{display:flex;gap:8px;margin-bottom:10px}.dc-platform-dot{width:40px;height:40px;border-radius:14px;display:grid;place-items:center;background:#0b0b0d;color:var(--dc-subtle);border:1px solid var(--dc-line);opacity:.75}.dc-platform-dot svg{width:19px;height:19px}.dc-platform-dot.on{opacity:1;border-color:rgba(83,199,139,.24)}.dc-platform-dot.ready{opacity:1;border-color:rgba(217,180,120,.24)}.dc-platform-dot.youtube{color:#ff4168}.dc-platform-dot.tiktok{color:#3ef4ee}.dc-platform-dot.instagram{color:#ff7ebe}.dc-platform-dot.facebook{color:#7aa7ff}
 @media(max-width:1250px){.dc-home-hero-g,.dc-home-command-g{grid-template-columns:1fr}.dc-project-strip-g{grid-template-columns:repeat(2,minmax(0,1fr))}.dc-home-import-g{grid-template-columns:44px minmax(260px,1fr) 170px 90px}.dc-home-import-g #dcCreateDuration,.dc-home-import-g #dcGenerate{grid-column:auto}.dc-home-flow-g{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){.dc-home-hero-g{padding:22px 18px;min-height:0}.dc-home-hero-copy h1{font-size:32px}.dc-hero-stage{display:none}.dc-home-import-g{grid-template-columns:1fr}.dc-import-icon{display:none}.dc-home-flow-g,.dc-project-strip-g{grid-template-columns:1fr}.dc-live-focus-g{align-items:flex-start;flex-direction:column}.dc-live-focus-g .dc-btn{width:100%}}
+.dc-home-import-g{grid-template-columns:44px minmax(280px,1fr) 180px 82px 130px auto auto}
+@media(max-width:1250px){.dc-home-import-g{grid-template-columns:44px minmax(260px,1fr) 170px 90px}}
+@media(max-width:760px){.dc-home-import-g{grid-template-columns:1fr}}
 
 `;
 
@@ -923,6 +926,7 @@ function handleClick(event){
   const post = event.target.closest('[data-post-clip]'); if (post) { postClip(post.dataset.postClip); return; }
   const discard = event.target.closest('[data-delete-clip]'); if (discard) { deleteClip(discard.dataset.deleteClip); return; }
   const retry = event.target.closest('[data-retry-project]'); if (retry) { retryProject(retry.dataset.retryProject); return; }
+  const uploadFallback = event.target.closest('[data-upload-fallback]'); if (uploadFallback) { go('home'); requestAnimationFrame(()=>$('#dcVideoUpload')?.click()); return; }
   const more = event.target.closest('[data-more-project]'); if (more) { generateMore(more.dataset.moreProject); return; }
   const delProject = event.target.closest('[data-delete-project]'); if (delProject) { deleteProject(delProject.dataset.deleteProject); return; }
   const useTemplate = event.target.closest('[data-use-template]'); if (useTemplate) { selectStudioTemplate(useTemplate.dataset.useTemplate); return; }
@@ -966,7 +970,7 @@ function workToastCopy(item){
   }
   const url=String(item?.url||''), method=String(item?.method||'POST').toUpperCase();
   if(method==='DELETE')return{title:'Removing item',detail:'Cleaning this from your workspace.'};
-  if(/youtube-cookies/.test(url))return{title:'Updating YouTube cookies',detail:'Saving downloader access securely on the server.'};
+  if(/video-uploads/.test(url))return{title:'Uploading source video',detail:'Sending your original file securely to the clip worker.'};
   if(/music/.test(url))return{title:'Updating nasheed audio',detail:'Saving your background audio settings.'};
   if(/templates\/apply-all|\/api\/template|\/api\/templates/.test(url))return{title:'Updating template',detail:'Applying the latest look to your clip workflow.'};
   if(/schedule-selected|scheduled|schedule/.test(url))return{title:'Scheduling clips',detail:'Preparing selected clips for the posting calendar.'};
@@ -1087,10 +1091,12 @@ function renderHome(){
         <select id="dcCreateCount"><option>4</option><option selected>8</option><option>12</option><option>16</option></select>
         <select id="dcCreateDuration"><option value="15,45">15–45 sec</option><option value="30,60" selected>30–60 sec</option><option value="45,90">45–90 sec</option></select>
         <button class="dc-btn" id="dcGenerate" data-tour="generate-button">Generate</button>
+        <input id="dcVideoUpload" type="file" accept="video/mp4,video/quicktime,video/x-m4v,video/webm,video/x-matroska" hidden>
+        <button class="dc-btn secondary" id="dcPickVideo" type="button">Upload file</button>
       </section>
 
       <section class="dc-home-flow-g" aria-label="Main workflow">
-        ${flowCard('Import','Paste lecture links',socialSvg('youtube'),'dcSourceYouTube')}
+        ${flowCard('Import','Link or original file',socialSvg('youtube'),'dcSourceYouTube')}
         ${flowCard('Review',waiting ? `${waiting} clips waiting` : 'Nothing waiting',ICON.review,'review')}
         ${flowCard('Template',selectedTemplate,ICON.style,'editor')}
         ${flowCard('Publish',scheduled ? `${scheduled} clips scheduled` : 'Connect platforms',ICON.publish,'schedule')}
@@ -1112,6 +1118,8 @@ function renderHome(){
       </section>
     </div>`;
   $('#dcGenerate').onclick=generateProject;
+  $('#dcPickVideo').onclick=()=>$('#dcVideoUpload').click();
+  $('#dcVideoUpload').onchange=()=>prepareVideoUpload($('#dcVideoUpload').files?.[0]);
   $('#dcHeroCreate').onclick=()=>$('#dcCreateUrl').focus();
   const source=$('#dcSourceYouTube'); if(source) source.onclick=()=>$('#dcCreateUrl').focus();
   $('#dcHeroTour').onclick=()=>openGuidedTour(0);
@@ -1315,7 +1323,7 @@ function clockFromMinutes(value){
   if(h) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
   return `${m}:${String(sec).padStart(2,'0')}`;
 }
-function openTokenEstimateModal({urls,onConfirm}){
+function openTokenEstimateModal({urls,onConfirm,sourceInfoOverride=null}){
   $('#dcChargeLayer')?.remove();
   const bill=billingInfo(),rate=Number(bill.tokenRatePerMinute||1),links=splitVideoLinks(urls);
   // No invented duration. Everything here — the range slider, the token
@@ -1454,7 +1462,7 @@ function openTokenEstimateModal({urls,onConfirm}){
       close();
     } catch(e){notify(e.message,'bad');confirm.disabled=false;confirm.textContent='Try again';}
   };
-  fetchSourceInfo(urls).then(info=>{
+  (sourceInfoOverride?Promise.resolve(sourceInfoOverride):fetchSourceInfo(urls)).then(info=>{
     sourceInfo=info||sourceInfo;
     const realDurations=knownDurations();
     durationVerified=Boolean(sourceInfo.known)&&realDurations.length===links.length;
@@ -1493,6 +1501,44 @@ async function generateProject(){
   openTokenEstimateModal({urls:url,onConfirm:(range)=>queueProjectImport(url,button,range)});
 }
 
+function videoDuration(file){
+  return new Promise((resolve,reject)=>{
+    const video=document.createElement('video'),url=URL.createObjectURL(file);
+    video.preload='metadata';
+    video.onloadedmetadata=()=>{const duration=Number(video.duration);URL.revokeObjectURL(url);Number.isFinite(duration)&&duration>0?resolve(duration):reject(new Error('Could not read the video duration.'))};
+    video.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('Could not read this video file.'))};
+    video.src=url;
+  });
+}
+
+async function prepareVideoUpload(file){
+  if(!file)return;
+  if(file.size>2*1024*1024*1024){$('#dcVideoUpload').value='';return notify('Choose a video smaller than 2 GB.','bad')}
+  const button=$('#dcPickVideo');button.disabled=true;button.textContent='Reading…';
+  try{
+    const durationSec=Math.round(await videoDuration(file));
+    const sourceInfo={ok:true,known:true,totalDurationSec:durationSec,sources:[{url:file.name,title:file.name.replace(/\.[^.]+$/,''),durationSec,durationKnown:true,thumbnail:'',extractor:'browser-upload'}]};
+    openTokenEstimateModal({urls:file.name,sourceInfoOverride:sourceInfo,onConfirm:(range)=>queueVideoUpload(file,button,{...range,durationSec})});
+  }catch(error){notify(error.message,'bad')}
+  finally{button.disabled=false;button.textContent='Upload file';$('#dcVideoUpload').value=''}
+}
+
+async function queueVideoUpload(file,button,range={}){
+  const [min,max]=$('#dcCreateDuration').value.split(',').map(Number);
+  button.disabled=true;button.textContent='Uploading…';
+  try{
+    await callApi('/api/template',{method:'POST',body:JSON.stringify({id:$('#dcCreateTemplate').value})});
+    await callApi('/api/clip-settings',{method:'POST',body:JSON.stringify({clipsPerVideo:Number($('#dcCreateCount').value),clipMinSeconds:min,clipMaxSeconds:max})});
+    const headers={'Content-Type':file.type||'application/octet-stream','X-File-Name':encodeURIComponent(file.name),'X-Source-Start-Seconds':String(Math.max(0,Math.round(Number(range.sourceStartSeconds||0)))),'X-Source-Duration-Seconds':String(Math.max(0,Math.round(Number(range.durationSec||0))))};
+    if(Number.isFinite(Number(range.sourceEndSeconds))&&Number(range.sourceEndSeconds)>Number(range.sourceStartSeconds||0))headers['X-Source-End-Seconds']=String(Math.round(Number(range.sourceEndSeconds)));
+    try{if(typeof PW!=='undefined'&&PW)headers['x-app-password']=PW}catch{}
+    const response=await fetch(authedUrl('/api/video-uploads'),{method:'POST',headers,body:file});
+    const text=await response.text();let payload={};try{payload=text?JSON.parse(text):{}}catch{payload={error:text}}
+    if(!response.ok)throw new Error(payload.error||`${response.status} ${response.statusText}`);
+    notify('Video uploaded — clip generation is queued');await refreshData();renderHome();
+  }finally{button.disabled=false;button.textContent='Upload file'}
+}
+
 function renderProjects(){
   const panel=$('#view-projects'),d=data();if(!panel||!d)return;
   if(selectedProjectId){renderProjectDetail(panel,d);return}
@@ -1507,6 +1553,7 @@ function renderProjects(){
   else if(projectSort==='az')projects.sort((a,b)=>String(projectDisplayTitle(a)).localeCompare(String(projectDisplayTitle(b))));
   else projects.sort((a,b)=>Number(b.submittedAt||0)-Number(a.submittedAt||0));
   panel.innerHTML=`<div class="dc-page-head"><div><h1>Projects</h1><p>Lectures, generated clips and render status.</p></div><button class="dc-btn" data-dc-nav="home">＋ New project</button></div><div class="dc-filterbar"><input id="dcProjectSearch" placeholder="Search lectures" value="${esc(projectQuery)}"><select id="dcProjectFilter"><option value="all">All projects</option><option value="processing" ${projectFilter==='processing'?'selected':''}>Processing</option><option value="ready" ${projectFilter==='ready'?'selected':''}>Has clips to review</option><option value="issues" ${projectFilter==='issues'?'selected':''}>Issues</option></select><select id="dcProjectSort"><option value="newest">Newest first</option><option value="oldest" ${projectSort==='oldest'?'selected':''}>Oldest first</option><option value="az" ${projectSort==='az'?'selected':''}>A–Z</option></select></div><div class="dc-project-grid">${projects.length?projects.map(p=>projectCard(p,d.clips||[])).join(''):`<div class="dc-empty"><strong>No matching projects</strong>Change the search or filter.</div>`}</div>`;
+  upgradeYoutubeFallbackButtons(panel,projects);
   $('#dcProjectSearch').oninput=e=>{projectQuery=e.target.value.trim().toLowerCase();renderProjects()};
   $('#dcProjectFilter').onchange=e=>{projectFilter=e.target.value;renderProjects()};
   $('#dcProjectSort').onchange=e=>{projectSort=e.target.value;renderProjects()};
@@ -1528,8 +1575,17 @@ function renderProjectDetail(panel,d){
   const title=projectDisplayTitle(p), thumb=projectThumbUrl(p,d.clips||clips);
   const waiting=clips.filter(c=>c.status==='waiting').length, scheduled=clips.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length, posted=clips.filter(c=>c.status==='posted').length, failed=p.status==='failed'||p.error;
   panel.innerHTML=`<div class="dc-project-detail-page"><div class="dc-project-detail-hero"><button class="dc-icon-btn dc-svg" id="dcBackProjects" title="Back to projects">${ICON.back}</button><div class="dc-project-detail-thumb">${thumb?`<img src="${authedUrl(thumb)}" alt="${esc(title)} thumbnail">`:`<div class="dc-project-placeholder">${ICON.projects}<span>Lecture</span></div>`}</div><div class="dc-project-detail-info"><span class="dc-pill ${failed?'bad':['queued','processing'].includes(p.status)?'warn':'good'}">${failed?'Needs retry':statusName(p.status)}</span><h1>${esc(title)}</h1><p>${clips.length} clips · ${posted} posted · ${scheduled} scheduled</p></div><div class="dc-project-detail-actions"><button class="dc-btn secondary" data-more-project="${esc(p.id)}" ${!p.sourceReusable?'disabled':''}>Generate more</button>${failed?`<button class="dc-btn secondary" data-retry-project="${esc(p.id)}">Retry</button>`:''}<button class="dc-btn danger" data-delete-project="${esc(p.id)}">Delete project</button></div></div><div class="dc-project-detail-stats">${metric(clips.length,'Clips')}${metric(waiting,'Review')}${metric(scheduled,'Scheduled')}${metric(posted,'Posted')}${metric(Math.round((clips[0]?.score||0)),'Top score')}</div>${failed?`<div class="dc-project-error-mini">${esc(shortError(p.error||p.stage))}</div>`:''}${p.moreJob&&['queued','processing'].includes(p.moreJob.status)?`<div class="dc-card dc-card-pad"><div class="dc-now-row"><span class="dc-spinner"></span><div class="dc-now-main"><strong>${esc(p.moreJob.stage||'Generating more clips')}</strong><span>Reusing saved lecture and transcript.</span><div class="dc-progress"><i style="width:${clamp(p.moreJob.progress,0,100)}%"></i></div></div><span class="dc-pill warn">${Math.round(p.moreJob.progress||0)}%</span></div></div>`:''}<div class="dc-project-detail-filter"><select><option>All clips</option><option>Waiting review</option><option>Scheduled</option><option>Posted</option></select><select><option>Highest score</option><option>Newest first</option><option>Longest</option></select><span class="dc-pill">${clips.length} clips</span><button class="dc-btn secondary" data-more-project="${esc(p.id)}" ${!p.sourceReusable?'disabled':''}>More clips</button></div><div class="dc-project-clip-grid">${clips.length?clips.map(c=>clipCard(c,{detail:true})).join(''):`<div class="dc-empty dc-empty-full"><strong>No clips yet</strong>${['queued','processing'].includes(p.status)?'Processing is still underway.':'Generate more clips from this lecture.'}</div>`}</div></div>`;
+  upgradeYoutubeFallbackButtons(panel,[p]);
   $('#dcBackProjects').onclick=()=>{selectedProjectId='';document.body.classList.remove('dc-project-open');renderProjects()};
   requestAnimationFrame(()=>animatePanel(panel));
+}
+function upgradeYoutubeFallbackButtons(panel,projects){
+  for(const project of projects||[]){
+    if(project?.errorCode!=='youtube_import_blocked')continue;
+    const button=$(`[data-retry-project="${CSS.escape(String(project.id))}"]`,panel);
+    if(!button)continue;
+    button.removeAttribute('data-retry-project');button.setAttribute('data-upload-fallback','');button.textContent='Upload original video';button.classList.remove('secondary');
+  }
 }
 function clipCard(c,opts={}){
   const canPost=['approved','ready','publish_failed','scheduled'].includes(c.status);
@@ -2348,17 +2404,19 @@ async function deleteTrack(id){if(!confirm('Delete this audio track?'))return;tr
 function renderSettingsPage(){
   const panel=$('#view-automation'),d=data();if(!panel||!d)return;
   const auto=d.automationSettings||{}, clip=d.clipSettings||{};
-  panel.innerHTML=`<div class="dc-manage-page"><section class="dc-manage-hero"><div><span class="dc-manage-kicker">${ICON.settings} Studio settings</span><h1>Real controls for generation and posting.</h1><p>Tune clip generation, automatic approval behaviour and YouTube downloader cookies without digging through plain text panels.</p></div><div class="dc-manage-metrics"><span><b>${auto.enabled?'On':'Off'}</b><em>automation</em></span><span><b>${auto.minimumScore||80}+</b><em>score</em></span><span><b>${clip.clipMaxSeconds||60}s</b><em>max length</em></span></div></section><div class="dc-settings-grid"><section class="dc-settings-panel"><h2>Clip generation</h2><p>These defaults apply to new lecture imports.</p><div class="dc-settings-form"><label>Clips per lecture<input type="number" min="1" max="30" id="dcSetClipCount" value="${esc(clip.clipsPerVideo||8)}"></label><label>Minimum seconds<input type="number" min="3" max="180" id="dcSetMinSec" value="${esc(clip.clipMinSeconds||30)}"></label><label>Maximum seconds<input type="number" min="3" max="180" id="dcSetMaxSec" value="${esc(clip.clipMaxSeconds||60)}"></label><button class="dc-btn wide" id="dcSaveClipSettings">Save generation settings</button></div></section><section class="dc-settings-panel"><h2>Automation rules</h2><p>Controls which generated clips are allowed into the automatic workflow.</p><div class="dc-settings-form"><label class="dc-switch-row wide"><span><strong>Automation enabled</strong><span>Approve strong clips automatically</span></span><input type="checkbox" id="dcAutoEnabled" ${auto.enabled?'checked':''}></label><label>Minimum score<input type="number" min="1" max="100" id="dcAutoScore" value="${esc(auto.minimumScore||80)}"></label><label>Minimum quality<input type="number" min="1" max="100" id="dcAutoQuality" value="${esc(auto.minimumQuality||72)}"></label><label>Max per project<input type="number" min="1" max="20" id="dcAutoMax" value="${esc(auto.maxPerProject||4)}"></label><label class="dc-switch-row"><span><strong>Review required</strong><span>Keep manual check before posting</span></span><input type="checkbox" id="dcReviewRequired" ${auto.skipReviewRequired===false?'checked':''}></label><button class="dc-btn wide" id="dcSaveAutomation">Save automation</button></div></section></div><section class="dc-settings-panel"><h2>YouTube downloader cookies</h2><p>Only use this for your private app. Uploading valid signed-in cookies helps Render download videos when YouTube blocks server traffic.</p><div class="dc-upload-zone"><input type="file" id="dcCookieFile" accept=".txt,text/plain"><div class="dc-manage-actions"><button class="dc-btn" id="dcUploadCookies">Upload cookies.txt</button><button class="dc-btn danger" id="dcDeleteCookies">Remove cookies</button></div></div></section></div>`;
+  panel.innerHTML=`<div class="dc-manage-page">
+    <section class="dc-manage-hero"><div><span class="dc-manage-kicker">${ICON.settings} Studio settings</span><h1>Real controls for generation and posting.</h1><p>Tune clip generation and automatic approval behaviour. Source uploads stay inside each customer’s private workspace.</p></div><div class="dc-manage-metrics"><span><b>${auto.enabled?'On':'Off'}</b><em>automation</em></span><span><b>${auto.minimumScore||80}+</b><em>score</em></span><span><b>${clip.clipMaxSeconds||60}s</b><em>max length</em></span></div></section>
+    <div class="dc-settings-grid">
+      <section class="dc-settings-panel"><h2>Clip generation</h2><p>These defaults apply to new lecture imports.</p><div class="dc-settings-form"><label>Clips per lecture<input type="number" min="1" max="30" id="dcSetClipCount" value="${esc(clip.clipsPerVideo||8)}"></label><label>Minimum seconds<input type="number" min="3" max="180" id="dcSetMinSec" value="${esc(clip.clipMinSeconds||30)}"></label><label>Maximum seconds<input type="number" min="3" max="180" id="dcSetMaxSec" value="${esc(clip.clipMaxSeconds||60)}"></label><button class="dc-btn wide" id="dcSaveClipSettings">Save generation settings</button></div></section>
+      <section class="dc-settings-panel"><h2>Automation rules</h2><p>Controls which generated clips are allowed into the automatic workflow.</p><div class="dc-settings-form"><label class="dc-switch-row wide"><span><strong>Automation enabled</strong><span>Approve strong clips automatically</span></span><input type="checkbox" id="dcAutoEnabled" ${auto.enabled?'checked':''}></label><label>Minimum score<input type="number" min="1" max="100" id="dcAutoScore" value="${esc(auto.minimumScore||80)}"></label><label>Minimum quality<input type="number" min="1" max="100" id="dcAutoQuality" value="${esc(auto.minimumQuality||72)}"></label><label>Max per project<input type="number" min="1" max="20" id="dcAutoMax" value="${esc(auto.maxPerProject||4)}"></label><label class="dc-switch-row"><span><strong>Review required</strong><span>Keep manual check before posting</span></span><input type="checkbox" id="dcReviewRequired" ${auto.skipReviewRequired===false?'checked':''}></label><button class="dc-btn wide" id="dcSaveAutomation">Save automation</button></div></section>
+    </div>
+  </div>`;
   $('#dcSaveClipSettings').onclick=saveClipSettingsPanel;
   $('#dcSaveAutomation').onclick=saveAutomationPanel;
-  $('#dcUploadCookies').onclick=uploadCookiesPanel;
-  $('#dcDeleteCookies').onclick=deleteCookiesPanel;
   requestAnimationFrame(()=>animatePanel(panel));
 }
 async function saveClipSettingsPanel(){try{await callApi('/api/clip-settings',{method:'POST',body:JSON.stringify({clipsPerVideo:Number($('#dcSetClipCount')?.value||8),clipMinSeconds:Number($('#dcSetMinSec')?.value||30),clipMaxSeconds:Number($('#dcSetMaxSec')?.value||60)})});notify('Generation settings saved');await refreshData();renderSettingsPage()}catch(e){notify(e.message,'bad')}}
 async function saveAutomationPanel(){try{await callApi('/api/automation-settings',{method:'POST',body:JSON.stringify({enabled:$('#dcAutoEnabled')?.checked,minimumScore:Number($('#dcAutoScore')?.value||80),minimumQuality:Number($('#dcAutoQuality')?.value||72),maxPerProject:Number($('#dcAutoMax')?.value||4),skipReviewRequired:!$('#dcReviewRequired')?.checked})});notify('Automation saved');await refreshData();renderSettingsPage()}catch(e){notify(e.message,'bad')}}
-async function uploadCookiesPanel(){const file=$('#dcCookieFile')?.files?.[0];if(!file)return notify('Choose cookies.txt first','bad');try{const contents=await file.text();await callApi('/api/admin/youtube-cookies',{method:'POST',body:JSON.stringify({contents})});notify('YouTube cookies uploaded')}catch(e){notify(e.message,'bad')}}
-async function deleteCookiesPanel(){if(!confirm('Remove YouTube downloader cookies?'))return;try{await callApi('/api/admin/youtube-cookies',{method:'DELETE'});notify('YouTube cookies removed')}catch(e){notify(e.message,'bad')}}
 function renderSidebarLive(){
   const box=$('#dcSidebarLive'),d=data();if(!box||!d)return;
   const jobs=activeJobs();const clips=d.clips||[];

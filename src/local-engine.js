@@ -62,10 +62,6 @@ function runJsonCommand(command, args, timeoutMs = 25_000) {
     });
   });
 }
-function cookieArgs() {
-  const cookiePath = path.join(config.dataDir, 'youtube-cookies.txt');
-  return fs.existsSync(cookiePath) ? ['--cookies', cookiePath] : [];
-}
 function pickBestThumbnail(info) {
   const thumbs = Array.isArray(info?.thumbnails) ? info.thumbnails : [];
   const sorted = thumbs.filter(t => t?.url).sort((a, b) => Number(b.width || 0) - Number(a.width || 0));
@@ -108,24 +104,6 @@ function youtubeWatchUrl(url) {
   const videoId = youtubeIdFromUrl(url);
   return videoId ? `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}` : String(url || '');
 }
-function cookieHeaderFromNetscape() {
-  const cookiePath = path.join(config.dataDir, 'youtube-cookies.txt');
-  if (!fs.existsSync(cookiePath)) return '';
-  try {
-    const pairs = [];
-    for (const line of fs.readFileSync(cookiePath, 'utf8').split(/\r?\n/)) {
-      if (!line || line.startsWith('#')) continue;
-      const parts = line.split('\t');
-      if (parts.length < 7) continue;
-      const domain = parts[0] || '';
-      const name = parts[5] || '';
-      const value = parts.slice(6).join('\t') || '';
-      if (!name || !/(^|\.)youtube\.com$|(^|\.)google\.com$/i.test(domain.replace(/^\./, ''))) continue;
-      pairs.push(`${name}=${value}`);
-    }
-    return pairs.join('; ');
-  } catch { return ''; }
-}
 async function fetchText(url, timeoutMs = 18_000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -134,8 +112,6 @@ async function fetchText(url, timeoutMs = 18_000) {
       'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
       'accept-language': 'en-US,en;q=0.9',
     };
-    const cookie = cookieHeaderFromNetscape();
-    if (cookie) headers.cookie = cookie;
     const response = await fetch(url, { headers, signal: controller.signal });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return await response.text();
@@ -211,8 +187,8 @@ async function sourceInfoViaYouTubeDataApi(url) {
 async function sourceInfoViaYtDlp(url) {
   const baseArgs = ['-m', 'yt_dlp', '--dump-single-json', '--skip-download', '--no-playlist', '--no-warnings'];
   const attempts = [
-    [...baseArgs, ...cookieArgs(), url],
-    [...baseArgs, '--extractor-args', 'youtube:player_client=web,ios,android', ...cookieArgs(), url],
+    [...baseArgs, url],
+    [...baseArgs, '--extractor-args', 'youtube:player_client=web,ios,android', url],
   ];
   let lastError = null;
   for (const args of attempts) {
@@ -306,12 +282,14 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
   const sourceMeta = Array.isArray(options?.sourceMeta) ? options.sourceMeta.find(item => String(item?.url || '') === value) || options.sourceMeta[0] : (options?.sourceMeta || {});
   const projectId = id('project');
   const project = withOwner({
-    id: projectId, url: value, title: String(title || '').trim() || value,
+    id: projectId, url: String(options.displayUrl || value), title: String(title || '').trim() || value,
     engine: 'self-hosted', status: 'queued', stage: 'Waiting for the local AI worker', progress: 0,
     submittedAt: Date.now(), clipCount: 0, templateIdUsed: template.id, templateNameUsed: template.name,
     templateVersionUsed: template.version || 1, templateSnapshot: template, musicRequired: true, error: null,
     sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
     sourceTitle: sourceMeta?.title || null, sourceDurationSec: sourceMeta?.durationSec || null, sourceThumbUrl: sourceMeta?.thumbnail || null,
+    sourceKind: options.sourceKind || 'link', originalFileName: options.originalFileName || null,
+    uploadedInputFile: options.uploadedInputFile || null,
   }, user.id);
   state.projects.unshift(project);
   save();
@@ -344,8 +322,21 @@ function parseWorkerLine(record, line) {
   } else if (payload.type === 'warning') {
     log(String(payload.warning || 'The worker reported a warning.'), 'warn');
   } else if (payload.type === 'error') {
-    record.error = String(payload.error || 'The worker failed.');
+    const safe = customerSafeProjectError(payload.error || 'The worker failed.');
+    record.error = safe.message;
+    record.errorCode = safe.code;
   }
+}
+
+export function customerSafeProjectError(value = '') {
+  const raw = String(value || '').replace(/\s+/g, ' ').trim();
+  if (/sign in to confirm you(?:'|’)?re not a bot|cookies-from-browser|--cookies\b|youtube.*bot/i.test(raw)) {
+    return {
+      code: 'youtube_import_blocked',
+      message: 'YouTube blocked this server-side import. Upload the original MP4 or MOV instead; DeenClipped never asks customers for browser cookies.',
+    };
+  }
+  return { code: 'processing_failed', message: raw.slice(-1800) || 'The video could not be processed.' };
 }
 
 function importResult(project, file) {
@@ -382,7 +373,9 @@ function importResult(project, file) {
 
 function finishFailed(record, stderr, code, label) {
   record.status = 'failed'; record.stage = `${label} failed`;
-  record.error = record.error || stderr.trim().slice(-1800) || `Worker exited with code ${code}.`;
+  const safe = customerSafeProjectError(record.error || stderr || `Worker exited with code ${code}.`);
+  record.error = safe.message;
+  record.errorCode = safe.code;
   record.updatedAt = Date.now(); save();
 }
 
@@ -815,6 +808,7 @@ export function deleteProject(projectId) {
   if (project.moreJob?.id) fs.rmSync(path.join(jobsDir, project.moreJob.id), { recursive: true, force: true });
   fs.rmSync(path.join(clipsDir, projectId), { recursive: true, force: true });
   if (project.sourceFile) removeDataFile(project.sourceFile);
+  if (project.uploadedInputFile) removeDataFile(project.uploadedInputFile);
   save(); log(`Removed "${project.title}" and its local rendered files.`);
 }
 

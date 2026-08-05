@@ -43,6 +43,7 @@ export const config = {
   aiLanguage: process.env.CLIP_AI_LANGUAGE || '',
   maxConcurrentJobs: Math.max(1, Math.round(number(process.env.MAX_CONCURRENT_JOBS, 1))),
   maxSourceMinutes: Math.max(5, number(process.env.MAX_SOURCE_MINUTES, 180)),
+  maxVideoUploadBytes: Math.max(50, number(process.env.MAX_VIDEO_UPLOAD_MB, 2048)) * 1024 * 1024,
   keepSourceFiles: boolean(process.env.KEEP_SOURCE_FILES, true),
 
   defaultTemplateId: process.env.DEFAULT_TEMPLATE_ID || 'deenclipped-gold',

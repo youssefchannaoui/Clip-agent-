@@ -11,6 +11,18 @@ services:
     envVars:
       - key: APP_PASSWORD
         sync: false
+      - key: AUTH_REQUIRED
+        value: "true"
+      - key: EMAIL_SIGNIN_ENABLED
+        value: "true"
+      - key: PUBLIC_BASE_URL
+        value: https://deenclipped.online
+      - key: GOOGLE_SIGNIN_CLIENT_ID
+        sync: false
+      - key: GOOGLE_SIGNIN_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_SIGNIN_REDIRECT_URI
+        value: https://deenclipped.online/auth/google/callback
       - key: TIMEZONE
         value: Australia/Perth
       - key: POST_TIMES
@@ -33,6 +45,8 @@ services:
         value: "1"
       - key: KEEP_SOURCE_FILES
         value: "true"
+      - key: MAX_VIDEO_UPLOAD_MB
+        value: "2048"
       - key: SOCIAL_PUBLISH_ENABLED
         value: "true"
       - key: SOCIAL_TOKEN_KEY
