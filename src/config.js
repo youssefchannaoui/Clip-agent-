@@ -46,6 +46,27 @@ export const config = {
   maxVideoUploadBytes: Math.max(50, number(process.env.MAX_VIDEO_UPLOAD_MB, 2048)) * 1024 * 1024,
   keepSourceFiles: boolean(process.env.KEEP_SOURCE_FILES, true),
 
+  processingMode: String(process.env.PROCESSING_MODE || (process.env.WORKER_BASE_URL ? 'remote' : 'local')).toLowerCase(),
+  workerBaseUrl: (process.env.WORKER_BASE_URL || '').replace(/\/+$/, ''),
+  workerSharedSecret: process.env.WORKER_SHARED_SECRET || '',
+  workerRequestTimeoutMs: Math.max(5_000, Math.round(number(process.env.WORKER_REQUEST_TIMEOUT_MS, 30_000))),
+  workerPollIntervalMs: Math.max(1_000, Math.round(number(process.env.WORKER_POLL_INTERVAL_MS, 5_000))),
+  workerJobTimeoutMs: Math.max(10 * 60_000, Math.round(number(process.env.WORKER_JOB_TIMEOUT_MS, 6 * 60 * 60_000))),
+  workerCallbackSecret: process.env.WORKER_CALLBACK_SECRET || process.env.WORKER_SHARED_SECRET || '',
+
+  videoImportProvider: String(process.env.VIDEO_IMPORT_PROVIDER || 'ffmpegapi').toLowerCase(),
+  videoImportApiUrl: (process.env.VIDEO_IMPORT_API_URL || 'https://ffmpegapi.net').replace(/\/+$/, ''),
+  videoImportApiKey: process.env.VIDEO_IMPORT_API_KEY || '',
+  videoImportPollIntervalMs: Math.max(1_000, Math.round(number(process.env.VIDEO_IMPORT_POLL_INTERVAL_MS, 5_000))),
+  videoImportTimeoutMs: Math.max(60_000, Math.round(number(process.env.VIDEO_IMPORT_TIMEOUT_MS, 1_800_000))),
+
+  objectStorageEndpoint: (process.env.OBJECT_STORAGE_ENDPOINT || '').replace(/\/+$/, ''),
+  objectStorageRegion: process.env.OBJECT_STORAGE_REGION || 'auto',
+  objectStorageBucket: process.env.OBJECT_STORAGE_BUCKET || '',
+  objectStorageAccessKey: process.env.OBJECT_STORAGE_ACCESS_KEY || '',
+  objectStorageSecretKey: process.env.OBJECT_STORAGE_SECRET_KEY || '',
+  objectStoragePublicUrl: (process.env.OBJECT_STORAGE_PUBLIC_URL || '').replace(/\/+$/, ''),
+
   defaultTemplateId: process.env.DEFAULT_TEMPLATE_ID || 'deenclipped-gold',
   clipsPerVideo: Math.max(1, Math.round(number(process.env.CLIPS_PER_VIDEO, 8))),
   clipMinSeconds: Math.max(3, Math.round(number(process.env.CLIP_MIN_SECONDS, 20))),

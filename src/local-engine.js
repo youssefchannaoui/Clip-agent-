@@ -11,10 +11,13 @@ import { withOwner, ownerOf } from './tenancy.js';
 import { workerMusicTracks } from './audio.js';
 import * as billing from './billing.js';
 import * as vizard from './vizard.js';
+import * as workerClient from './worker-client.js';
+import { parseYouTubeUrl, assertStorageObjectKey } from './video-import.js';
 
 const jobsDir = path.join(config.dataDir, 'jobs');
 const sourcesDir = path.join(config.dataDir, 'sources');
 const clipsDir = path.join(config.dataDir, 'clips');
+const publishCacheDir = path.join(config.dataDir, 'publish-cache');
 const running = new Map();
 const socialRendering = new Map();
 let pumping = false;
@@ -32,6 +35,40 @@ function removeDataFile(file) {
   const allowedRoot = path.resolve(config.dataDir) + path.sep;
   if (resolved.startsWith(allowedRoot)) fs.rmSync(resolved, { force: true });
 }
+
+function trustedRemoteMediaUrl(value) {
+  const url = new URL(String(value || ''));
+  const configuredBase = config.objectStoragePublicUrl || config.objectStorageEndpoint;
+  if (!configuredBase || url.protocol !== 'https:' || url.origin !== new URL(configuredBase).origin) {
+    throw new Error('The rendered clip URL is outside the configured media storage host.');
+  }
+  return url.toString();
+}
+
+async function cacheRemotePublishClip(clip) {
+  const url = trustedRemoteMediaUrl(clip.clipUrl);
+  fs.mkdirSync(publishCacheDir, { recursive: true });
+  const file = path.join(publishCacheDir, `${String(clip.id).replace(/[^A-Za-z0-9_-]/g, '_')}.mp4`);
+  if (fs.existsSync(file) && fs.statSync(file).size > 0) return file;
+  const temporary = `${file}.part`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10 * 60_000);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok || !response.body) throw new Error(`Stored clip download returned HTTP ${response.status}.`);
+    trustedRemoteMediaUrl(response.url || url);
+    const length = Number(response.headers.get('content-length') || 0);
+    if (length > 256 * 1024 * 1024) throw new Error('This finished clip is too large for the publishing relay. Download it or shorten the clip.');
+    let received = 0;
+    const limiter = new TransformStream({ transform(chunk, stream) { received += chunk.byteLength; if (received > 256 * 1024 * 1024) throw new Error('This finished clip exceeds the publishing relay limit.'); stream.enqueue(chunk); } });
+    await pipeline(Readable.fromWeb(response.body.pipeThrough(limiter)), fs.createWriteStream(temporary));
+    fs.renameSync(temporary, file);
+    return file;
+  } finally {
+    clearTimeout(timer);
+    fs.rmSync(temporary, { force: true });
+  }
+}
 /**
  * Render settings for one account.
  *
@@ -46,6 +83,28 @@ function sharedSettings(user) {
     task: config.aiTask, language: config.aiLanguage, maxSourceMinutes: config.maxSourceMinutes,
     keepSourceFiles: config.keepSourceFiles, ollamaUrl: config.ollamaUrl, ollamaModel: config.ollamaModel,
   };
+}
+
+function remoteProcessing() { return config.processingMode === 'remote'; }
+
+function signedMusicUrl(track, userId) {
+  const expires = Date.now() + config.workerJobTimeoutMs;
+  const message = `${track.id}\n${userId}\n${expires}`;
+  const sig = crypto.createHmac('sha256', config.workerCallbackSecret).update(message).digest('hex');
+  return `${config.publicBaseUrl}/api/worker-assets/music/${encodeURIComponent(track.id)}?user=${encodeURIComponent(userId)}&exp=${expires}&sig=${sig}`;
+}
+
+export function verifyWorkerAssetSignature(trackId, userId, expires, supplied) {
+  const expiry = Number(expires);
+  if (!config.workerCallbackSecret || !Number.isFinite(expiry) || expiry < Date.now() || expiry > Date.now() + config.workerJobTimeoutMs + 60_000) return false;
+  const expected = crypto.createHmac('sha256', config.workerCallbackSecret).update(`${trackId}\n${userId}\n${expiry}`).digest('hex');
+  if (typeof supplied !== 'string' || supplied.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(supplied), Buffer.from(expected));
+}
+
+function remoteMusicTracks(tracks, userId) {
+  if (!config.publicBaseUrl) throw new Error('PUBLIC_BASE_URL must be configured before the external worker can fetch nasheed tracks.');
+  return tracks.map(track => ({ id: track.id, name: track.name, url: signedMusicUrl(track, userId) }));
 }
 
 
@@ -213,6 +272,10 @@ async function sourceInfoViaYtDlp(url) {
 export async function sourceInfo(url) {
   const value = String(url || '').trim();
   if (!value) throw new Error('No source URL supplied.');
+  if (remoteProcessing()) {
+    const parsed = parseYouTubeUrl(value);
+    return { url: parsed.canonicalUrl, title: parsed.canonicalUrl, durationSec: null, durationKnown: false, thumbnail: fallbackThumb(parsed.canonicalUrl), extractor: 'validated-only' };
+  }
   const warnings = [];
 
   try {
@@ -252,10 +315,12 @@ function cleanSourceRange(options = {}) {
   return { startSec, endSec };
 }
 
-function validateSubmission(url, user) {
+function validateSubmission(url, user, options = {}) {
   const value = String(url || '').trim();
-  if (!value) throw new Error('Paste a video link first.');
-  if (!/^https?:\/\//i.test(value) && !value.startsWith('file://') && !path.isAbsolute(value)) {
+  if (!value) throw new Error(options.sourceKind === 'object_storage' ? 'Upload a video first.' : 'Paste a video link first.');
+  if (remoteProcessing() && options.sourceKind === 'object_storage') assertStorageObjectKey(value);
+  else if (remoteProcessing()) parseYouTubeUrl(value);
+  else if (!/^https?:\/\//i.test(value) && !value.startsWith('file://') && !path.isAbsolute(value)) {
     throw new Error('Use a complete http(s) video link.');
   }
   const template = selectedTemplate(user);
@@ -270,8 +335,9 @@ export function readiness(user) {
   const tracks = workerMusicTracks(user);
   return {
     ready: Boolean(template?.id && tracks.length), templateReady: Boolean(template?.id), template,
-    musicReady: tracks.length > 0, musicTrackCount: tracks.length, engine: 'self-hosted', model: config.aiModel,
-    youtubeImport: { configured: vizard.configured(), provider: 'vizard' },
+    musicReady: tracks.length > 0, musicTrackCount: tracks.length, engine: remoteProcessing() ? 'remote-worker' : 'self-hosted', model: config.aiModel,
+    worker: { configured: workerClient.configured(), mode: config.processingMode },
+    youtubeImport: { configured: remoteProcessing() ? Boolean(config.videoImportApiKey && workerClient.configured()) : vizard.configured(), provider: remoteProcessing() ? config.videoImportProvider : 'vizard' },
   };
 }
 
@@ -280,12 +346,13 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
   // resulting clips are invisible to their creator and can surface elsewhere.
   if (!userId) throw new Error('Sign in before submitting a lecture.');
   const user = state.authUsers?.find(item => item.id === String(userId)) || { id: String(userId), role: 'creator' };
-  const { value, template, tracks } = validateSubmission(url, user);
+  const { value, template, tracks } = validateSubmission(url, user, options);
   billing.assertCanStartProject(user);
   const sourceRange = cleanSourceRange(options);
   const sourceMeta = Array.isArray(options?.sourceMeta) ? options.sourceMeta.find(item => String(item?.url || '') === value) || options.sourceMeta[0] : (options?.sourceMeta || {});
   const projectId = id('project');
-  const useVizard = vizard.isYouTubeUrl(value);
+  const useRemote = remoteProcessing();
+  const useVizard = !useRemote && vizard.isYouTubeUrl(value);
   if (useVizard && !vizard.configured()) {
     throw new Error('YouTube URL import is not configured yet. The site owner must add a Vizard API key. You can still upload an MP4 or MOV.');
   }
@@ -297,21 +364,30 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
   }
   const project = withOwner({
     id: projectId, url: String(options.displayUrl || value), title: String(title || '').trim() || value,
-    engine: useVizard ? 'vizard' : 'self-hosted', status: 'queued',
-    stage: useVizard ? 'Waiting for secure YouTube import' : 'Waiting for the local AI worker', progress: 0,
+    engine: useRemote ? 'remote' : useVizard ? 'vizard' : 'self-hosted', status: 'queued',
+    stage: useRemote ? 'queued' : useVizard ? 'Waiting for secure YouTube import' : 'Waiting for the local AI worker', progress: 0,
     submittedAt: Date.now(), clipCount: 0, templateIdUsed: template.id, templateNameUsed: template.name,
     templateVersionUsed: template.version || 1, templateSnapshot: template, musicRequired: true, error: null,
     sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
     sourceTitle: sourceMeta?.title || null, sourceDurationSec: sourceMeta?.durationSec || null, sourceThumbUrl: sourceMeta?.thumbnail || null,
     sourceKind: options.sourceKind || 'link', originalFileName: options.originalFileName || null,
-    uploadedInputFile: options.uploadedInputFile || null,
+    uploadedInputFile: options.uploadedInputFile || null, sourceObjectKey: options.sourceKind === 'object_storage' ? value : null,
   }, user.id);
   state.projects.unshift(project);
   save();
 
   const dir = path.join(jobsDir, projectId);
   fs.mkdirSync(dir, { recursive: true });
-  const job = {
+  const job = useRemote ? {
+    id: projectId, projectId, title: String(title || '').trim() || sourceMeta?.title || '',
+    source: options.sourceKind === 'object_storage'
+      ? { type: 'object_storage', objectKey: assertStorageObjectKey(value), title: options.originalFileName || sourceMeta?.title || '' }
+      : { type: 'youtube', url: parseYouTubeUrl(value).canonicalUrl },
+    template, musicTracks: remoteMusicTracks(tracks, user.id), settings: sharedSettings(user),
+    requestedClipCount: clipSettings(user).clipsPerVideo,
+    sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
+    callbackUrl: config.publicBaseUrl ? `${config.publicBaseUrl}/api/worker-callbacks/${encodeURIComponent(projectId)}` : '',
+  } : {
     id: projectId, url: value, title: String(title || '').trim(), sourceDir: sourcesDir,
     outputDir: path.join(clipsDir, projectId), resultPath: resultFile(projectId),
     ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath, template, musicTracks: tracks,
@@ -320,7 +396,7 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
   };
   fs.writeFileSync(jobFile(projectId), JSON.stringify(job, null, 2));
   const rangeCopy = sourceRange.endSec ? ` · source window ${Math.round(sourceRange.startSec / 60)}–${Math.round(sourceRange.endSec / 60)} min` : (sourceRange.startSec ? ` · source starts at ${Math.round(sourceRange.startSec / 60)} min` : '');
-  log(`Queued "${project.title}" for ${useVizard ? 'secure YouTube import and DeenClipped rendering' : 'the self-hosted clip AI'} using template "${template.name}"${rangeCopy}.`, 'info', user.id);
+  log(`Queued "${project.title}" for ${useRemote ? 'the external processing worker' : useVizard ? 'secure YouTube import and DeenClipped rendering' : 'the self-hosted clip AI'} using template "${template.name}"${rangeCopy}.`, 'info', user.id);
   pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
   return projectId;
 }
@@ -354,13 +430,12 @@ export function customerSafeProjectError(value = '') {
   return { code: 'processing_failed', message: raw.slice(-1800) || 'The video could not be processed.' };
 }
 
-function importResult(project, file) {
-  const result = JSON.parse(fs.readFileSync(file, 'utf8'));
+function importResultObject(project, result, engine = 'self-hosted') {
   const imported = [];
   for (const clip of result.clips || []) {
     const record = withOwner({
       ...clip, status: 'waiting', targets: [], addedAt: Date.now(), scheduledAt: null, postedAt: null,
-      projectTitle: result.project?.title || project.title, engine: 'self-hosted', renderVersion: 1,
+      projectTitle: result.project?.title || project.title, engine, renderVersion: 1,
     }, ownerOf(project));
     state.clips.push(record);
     imported.push(record);
@@ -372,6 +447,10 @@ function importResult(project, file) {
   project.sourceEndSec = result.project?.sourceEndSec ?? project.sourceEndSec ?? null;
   project.sourceFile = result.project?.sourceFile || null;
   project.transcriptFile = result.project?.transcriptFile || null;
+  project.sourceObjectKey = result.project?.sourceObjectKey || project.sourceObjectKey || null;
+  project.sourceUrl = result.project?.sourceUrl || project.sourceUrl || null;
+  project.transcriptObjectKey = result.project?.transcriptObjectKey || null;
+  project.transcriptUrl = result.project?.transcriptUrl || null;
   project.clipCount = imported.length;
   project.status = 'done'; project.stage = 'Clips are ready for review'; project.progress = 100;
   project.completedAt = Date.now(); project.error = null;
@@ -383,7 +462,102 @@ function importResult(project, file) {
     log(`Could not charge tokens for "${project.title}": ${error.message}`, 'warn', ownerOf(project));
   }
   save();
-  log(`${imported.length} self-hosted clips are ready from "${project.title}". Every clip passed music, template and resolution checks.`, 'info', ownerOf(project));
+  log(`${imported.length} clips are ready from "${project.title}". Every clip passed music, template and resolution checks.`, 'info', ownerOf(project));
+}
+
+function importResult(project, file) {
+  importResultObject(project, JSON.parse(fs.readFileSync(file, 'utf8')), 'self-hosted');
+}
+
+export function acceptRemoteUpdate(projectId, update) {
+  const project = projectById(projectId);
+  if (!project || project.engine !== 'remote') return null;
+  if (update.status === 'completed' && update.result && project.status !== 'done') {
+    importResultObject(project, update.result, 'remote-worker');
+  } else if (update.status === 'failed') {
+    project.status = 'failed'; project.stage = 'failed'; project.progress = Number(update.progress || project.progress || 0);
+    project.error = customerSafeProjectError(update.error || 'The external worker failed.').message;
+    project.errorCode = 'processing_failed'; project.updatedAt = Date.now(); save();
+  } else if (update.status === 'cancelled') {
+    project.status = 'cancelled'; project.stage = 'cancelled'; project.updatedAt = Date.now(); save();
+  } else if (project.status !== 'done') {
+    project.status = update.status === 'queued' ? 'queued' : 'processing';
+    project.stage = String(update.stage || update.status || 'processing');
+    project.progress = Math.max(0, Math.min(100, Number(update.progress) || 0));
+    project.updatedAt = Date.now(); save();
+  }
+  return project;
+}
+
+async function runRemoteProject(project) {
+  const file = jobFile(project.id);
+  if (!fs.existsSync(file)) {
+    project.status = 'failed'; project.stage = 'failed'; project.error = 'The remote job metadata is missing. Submit the video again.'; save(); return;
+  }
+  const payload = JSON.parse(fs.readFileSync(file, 'utf8'));
+  project.status = 'processing'; project.stage = 'Connecting to processing worker'; project.progress = Math.max(1, project.progress || 0); project.error = null; save();
+  running.set(project.id, { remote: true });
+  const started = Date.now();
+  try {
+    await workerClient.createJob(payload);
+    while (Date.now() - started < config.workerJobTimeoutMs) {
+      const update = await workerClient.getJob(project.id);
+      acceptRemoteUpdate(project.id, update);
+      if (['completed', 'failed', 'cancelled'].includes(update.status)) return;
+      await new Promise(resolve => setTimeout(resolve, config.workerPollIntervalMs));
+    }
+    throw new Error('The processing worker exceeded the job timeout. The job can be retried safely.');
+  } catch (error) {
+    if (project.status !== 'done') {
+      project.status = error.code === 'worker_unavailable' ? 'queued' : 'failed';
+      project.stage = error.code === 'worker_unavailable' ? 'Worker unavailable — retrying after recovery' : 'failed';
+      project.error = error.message; project.errorCode = error.code || 'processing_failed';
+      if (error.code === 'worker_unavailable') project.nextRetryAt = Date.now() + 30_000;
+      save();
+      if (error.code === 'worker_unavailable') setTimeout(() => pump().catch(() => {}), 30_000);
+    }
+  } finally {
+    running.delete(project.id);
+    pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
+  }
+}
+
+async function runRemoteAux(project, jobRecord, kind) {
+  if (!jobRecord.jobFile || !fs.existsSync(jobRecord.jobFile)) {
+    jobRecord.status = 'failed'; jobRecord.stage = 'Job metadata is missing'; jobRecord.error = 'Start this operation again.'; save(); return;
+  }
+  const payload = JSON.parse(fs.readFileSync(jobRecord.jobFile, 'utf8'));
+  jobRecord.status = 'processing'; jobRecord.stage = 'Connecting to processing worker'; jobRecord.progress = 1; jobRecord.error = null; save();
+  running.set(jobRecord.id, { remote: true });
+  try {
+    await workerClient.createJob(payload);
+    const started = Date.now();
+    while (Date.now() - started < config.workerJobTimeoutMs) {
+      const update = await workerClient.getJob(jobRecord.id);
+      jobRecord.stage = String(update.stage || update.status || 'processing');
+      jobRecord.progress = Math.max(0, Math.min(100, Number(update.progress) || 0));
+      jobRecord.status = update.status === 'queued' ? 'queued' : 'processing'; save();
+      if (update.status === 'completed') {
+        if (kind === 'more') importMoreResultObject(project, jobRecord, update.result || {}, 'remote-worker');
+        else importRerenderResultObject(jobRecord, update.result || {});
+        return;
+      }
+      if (update.status === 'failed') throw new Error(update.error || 'The external worker failed.');
+      if (update.status === 'cancelled') { jobRecord.status = 'cancelled'; jobRecord.stage = 'cancelled'; save(); return; }
+      await new Promise(resolve => setTimeout(resolve, config.workerPollIntervalMs));
+    }
+    throw new Error('The processing worker exceeded the job timeout.');
+  } catch (error) {
+    jobRecord.status = error.code === 'worker_unavailable' ? 'queued' : 'failed';
+    jobRecord.stage = error.code === 'worker_unavailable' ? 'Worker unavailable — retrying' : 'failed';
+    jobRecord.error = error.message;
+    if (error.code === 'worker_unavailable') jobRecord.nextRetryAt = Date.now() + 30_000;
+    save();
+    if (error.code === 'worker_unavailable') setTimeout(() => pump().catch(() => {}), 30_000);
+  } finally {
+    running.delete(jobRecord.id);
+    pump().catch(() => {});
+  }
 }
 
 function finishFailed(record, stderr, code, label) {
@@ -592,8 +766,7 @@ async function runVizardProject(project) {
   }
 }
 
-function importMoreResult(project, jobRecord, file) {
-  const result = JSON.parse(fs.readFileSync(file, 'utf8'));
+function importMoreResultObject(project, jobRecord, result, engine = 'self-hosted') {
   const existingIds = new Set(state.clips.map(clip => clip.id));
   const imported = [];
   for (const clip of result.clips || []) {
@@ -601,7 +774,7 @@ function importMoreResult(project, jobRecord, file) {
     const record = withOwner({
       ...clip, projectId: project.id, projectTitle: project.title,
       status: 'waiting', targets: [], addedAt: Date.now(), scheduledAt: null, readyAt: null, postedAt: null,
-      engine: 'self-hosted', renderVersion: 1, generatedFromSavedLecture: true,
+      engine, renderVersion: 1, generatedFromSavedLecture: true,
     }, ownerOf(project));
     state.clips.push(record);
     existingIds.add(record.id);
@@ -622,6 +795,10 @@ function importMoreResult(project, jobRecord, file) {
   }
   save();
   log(`${imported.length} more clips were generated inside "${project.title}" using its saved source and transcript.`, 'info', ownerOf(project));
+}
+
+function importMoreResult(project, jobRecord, file) {
+  importMoreResultObject(project, jobRecord, JSON.parse(fs.readFileSync(file, 'utf8')));
 }
 
 function runMoreClips(project, jobRecord) {
@@ -660,8 +837,7 @@ function runMoreClips(project, jobRecord) {
   });
 }
 
-function importRerenderResult(jobRecord, file) {
-  const result = JSON.parse(fs.readFileSync(file, 'utf8'));
+function importRerenderResultObject(jobRecord, result) {
   const rendered = result.clips?.[0];
   if (!rendered?.renderVerified || !rendered?.musicVerified) throw new Error('The re-render did not pass verification.');
   const original = clipById(jobRecord.clipId);
@@ -711,6 +887,10 @@ function importRerenderResult(jobRecord, file) {
   save();
 }
 
+function importRerenderResult(jobRecord, file) {
+  importRerenderResultObject(jobRecord, JSON.parse(fs.readFileSync(file, 'utf8')));
+}
+
 function runRerender(jobRecord) {
   return new Promise(resolve => {
     const file = jobRecord.jobFile;
@@ -750,10 +930,10 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   if (project.moreJob && ['queued', 'processing'].includes(project.moreJob.status)) {
     throw new Error('This lecture is already generating more clips.');
   }
-  if (!project.sourceFile || !fs.existsSync(project.sourceFile)) {
+  if ((!project.sourceFile || !fs.existsSync(project.sourceFile)) && !(project.engine === 'remote' && project.sourceObjectKey)) {
     throw new Error('The saved source video is unavailable. Generate more cannot safely re-download it because that would create a duplicate Library lecture.');
   }
-  if (!project.transcriptFile || !fs.existsSync(project.transcriptFile)) {
+  if ((!project.transcriptFile || !fs.existsSync(project.transcriptFile)) && !(project.engine === 'remote' && project.transcriptObjectKey)) {
     throw new Error('The saved transcript is unavailable. This lecture must be processed again before more clips can be generated.');
   }
   const count = Math.max(1, Math.min(20, Math.round(Number(requestedCount) || 8)));
@@ -763,8 +943,8 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   if (!template?.id) throw new Error('Choose a valid saved template.');
   const tracks = workerMusicTracks(owner);
   if (!tracks.length) throw new Error('Music is mandatory. Upload at least one nasheed first.');
-  const transcriptSegments = JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8'));
-  if (!Array.isArray(transcriptSegments) || !transcriptSegments.length) throw new Error('The saved transcript is empty.');
+  const transcriptSegments = project.transcriptFile && fs.existsSync(project.transcriptFile) ? JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8')) : [];
+  if (project.engine !== 'remote' && (!Array.isArray(transcriptSegments) || !transcriptSegments.length)) throw new Error('The saved transcript is empty.');
   const existingRanges = state.clips
     .filter(clip => clip.projectId === project.id)
     .map(clip => ({ id: clip.id, startSec: Number(clip.startSec || 0), endSec: Number(clip.endSec || 0) }));
@@ -774,7 +954,13 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   fs.mkdirSync(dir, { recursive: true });
   const resultPath = path.join(dir, 'result.json');
   const outputDir = path.join(clipsDir, project.id, 'more', moreId);
-  const payload = {
+  const payload = project.engine === 'remote' ? {
+    mode: 'more_clips', id: moreId, projectId: project.id, projectTitle: project.title, requestedCount: count,
+    source: { type: 'object_storage', objectKey: project.sourceObjectKey, title: project.title },
+    transcript: { objectKey: project.transcriptObjectKey }, existingRanges,
+    template, musicTracks: remoteMusicTracks(tracks, owner.id), settings: { ...sharedSettings(owner), clipsPerVideo: count },
+    callbackUrl: '',
+  } : {
     mode: 'more_clips', id: moreId, projectId: project.id, projectTitle: project.title, requestedCount: count,
     sourceFile: project.sourceFile, transcriptFile: project.transcriptFile, transcriptSegments, existingRanges,
     outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
@@ -785,7 +971,7 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   const record = {
     id: moreId, status: 'queued', stage: 'Waiting to generate more clips', progress: 0,
     requestedCount: count, createdAt: Date.now(), updatedAt: Date.now(), jobFile: file, resultPath,
-    reusedSource: true, reusedTranscript: true,
+    reusedSource: true, reusedTranscript: true, engine: project.engine === 'remote' ? 'remote' : 'self-hosted',
   };
   project.moreJob = record;
   project.updatedAt = Date.now();
@@ -801,7 +987,7 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
   if (clip.status === 'posted' && !asVariant) throw new Error('A posted video cannot be changed. Create a re-post variant instead.');
   const project = projectById(clip.projectId);
   const sourceFile = clip.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
-  if (!sourceFile || !fs.existsSync(sourceFile)) throw new Error('The original source file is unavailable. Keep source files enabled to re-render clips.');
+  if ((!sourceFile || !fs.existsSync(sourceFile)) && !(project?.engine === 'remote' && project.sourceObjectKey)) throw new Error('The original source file is unavailable. Keep source files enabled to re-render clips.');
   const owner = ownerOfRecord(clip);
   const template = templateById(templateId, owner) || selectedTemplate(owner);
   if (!template?.id) throw new Error('Choose a valid saved template.');
@@ -815,7 +1001,17 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
   const resultPath = path.join(dir, 'result.json');
   const outputDir = path.join(clipsDir, project.id, 'rerenders');
   const outputClipId = asVariant ? `${clip.id}-variant-${Date.now().toString(36)}` : `${clip.id}-render-${Date.now().toString(36)}`;
-  const payload = {
+  const payload = project.engine === 'remote' ? {
+    mode: 'rerender', id: rerenderId, projectId: project.id, clipIdOverride: outputClipId,
+    source: { type: 'object_storage', objectKey: project.sourceObjectKey, title: project.title },
+    transcript: { objectKey: project.transcriptObjectKey || '' }, template,
+    musicTracks: remoteMusicTracks(tracks, owner.id), settings: sharedSettings(owner),
+    clip: {
+      id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
+      startSec: clip.startSec, endSec: clip.endSec, score: clip.score, scoreReasons: clip.scoreReasons,
+      reviewRequired: clip.reviewRequired,
+    }, callbackUrl: '',
+  } : {
     mode: 'rerender', id: rerenderId, projectId: project.id, clipIdOverride: outputClipId,
     sourceFile, outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
     template, musicTracks: tracks, settings: sharedSettings(owner), transcriptSegments,
@@ -829,7 +1025,7 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
   fs.writeFileSync(file, JSON.stringify(payload, null, 2));
   const record = withOwner({
     id: rerenderId, clipId: clip.id, templateId: template.id, templateName: template.name,
-    asVariant: Boolean(asVariant), status: 'queued', stage: 'Waiting to re-render', progress: 0,
+    asVariant: Boolean(asVariant), status: 'queued', stage: 'Waiting to re-render', progress: 0, engine: project.engine === 'remote' ? 'remote' : 'self-hosted',
     createdAt: Date.now(), jobFile: file, resultPath,
   }, ownerOf(clip));
   state.rerenderJobs.unshift(record);
@@ -846,14 +1042,20 @@ export async function pump() {
   try {
     while (running.size < config.maxConcurrentJobs) {
       const candidates = [
+        ...state.projects.filter(item => item.engine === 'remote' && item.status === 'queued' && Number(item.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote', item, at: item.submittedAt })),
         ...state.projects.filter(item => item.engine === 'self-hosted' && item.status === 'queued').map(item => ({ type: 'project', item, at: item.submittedAt })),
         ...state.projects.filter(item => item.engine === 'vizard' && item.status === 'queued').map(item => ({ type: 'vizard', item, at: item.submittedAt })),
-        ...state.projects.filter(item => item.moreJob?.status === 'queued').map(item => ({ type: 'more', item: item.moreJob, project: item, at: item.moreJob.createdAt })),
-        ...state.rerenderJobs.filter(item => item.status === 'queued').map(item => ({ type: 'rerender', item, at: item.createdAt })),
+        ...state.projects.filter(item => item.moreJob?.engine === 'remote' && item.moreJob.status === 'queued' && Number(item.moreJob.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote-more', item: item.moreJob, project: item, at: item.moreJob.createdAt })),
+        ...state.projects.filter(item => item.moreJob?.engine !== 'remote' && item.moreJob?.status === 'queued').map(item => ({ type: 'more', item: item.moreJob, project: item, at: item.moreJob.createdAt })),
+        ...state.rerenderJobs.filter(item => item.engine === 'remote' && item.status === 'queued' && Number(item.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote-rerender', item, project: projectById(clipById(item.clipId)?.projectId), at: item.createdAt })),
+        ...state.rerenderJobs.filter(item => item.engine !== 'remote' && item.status === 'queued').map(item => ({ type: 'rerender', item, at: item.createdAt })),
       ].sort((a, b) => a.at - b.at);
       const next = candidates[0];
       if (!next) break;
-      if (next.type === 'project') runProject(next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
+      if (next.type === 'remote') runRemoteProject(next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
+      else if (next.type === 'remote-more') runRemoteAux(next.project, next.item, 'more').catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
+      else if (next.type === 'remote-rerender') runRemoteAux(next.project, next.item, 'rerender').catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
+      else if (next.type === 'project') runProject(next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
       else if (next.type === 'vizard') runVizardProject(next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
       else if (next.type === 'more') runMoreClips(next.project, next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
       else runRerender(next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
@@ -890,6 +1092,16 @@ function runWorkerJob(jobPath, resultPath, label = 'Render') {
 export async function socialPublishFile(clipId, provider) {
   const clip = clipById(clipId);
   if (!clip) throw new Error('That clip does not exist.');
+  if (clip.clipUrl) {
+    if (provider === 'instagram') return null;
+    if (provider === 'tiktok') {
+      const template = clip.templateSnapshot || templateById(clip.templateId, ownerOfRecord(clip));
+      if (String(template?.watermark || '').trim() || template?.brandLineEnabled) {
+        throw new Error('TikTok requires a clean copy without an app watermark. Choose a TikTok-safe template and re-render this clip first.');
+      }
+    }
+    return cacheRemotePublishClip(clip);
+  }
   const regular = clipFilePath(clipId, 'video');
   if (!regular) throw new Error('The rendered clip file is missing.');
   if (provider !== 'tiktok') return regular;
@@ -951,10 +1163,22 @@ export async function socialPublishFile(clipId, provider) {
   return promise;
 }
 
+export function releaseSocialPublishFile(file) {
+  if (!file) return;
+  const resolved = path.resolve(file);
+  const allowed = path.resolve(publishCacheDir) + path.sep;
+  if (resolved.startsWith(allowed)) fs.rmSync(resolved, { force: true });
+}
+
 export function retryProject(projectId) {
   const project = projectById(projectId);
   if (!project) throw new Error('That project does not exist.');
   if (running.has(projectId)) throw new Error('That project is already processing.');
+  if (project.engine === 'remote') {
+    Object.assign(project, { status: 'queued', stage: 'queued', progress: Math.min(5, project.progress || 0), error: null, errorCode: null });
+    save(); pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
+    return project;
+  }
   if (project.engine === 'vizard') {
     if (!vizard.configured()) throw new Error('YouTube URL import is not configured. Add VIZARD_API_KEY before retrying.');
     Object.assign(project, { status: 'queued', stage: 'Waiting to retry YouTube import', progress: Math.min(65, project.progress || 0), error: null, errorCode: null });
@@ -981,6 +1205,8 @@ export function retryProject(projectId) {
 
 export function cancelProject(projectId) {
   const current = running.get(projectId);
+  const remoteProject = projectById(projectId);
+  if (remoteProject?.engine === 'remote') workerClient.cancelJob(projectId).catch(() => {});
   if (typeof current?.kill === 'function') current.kill('SIGTERM');
   else if (current) current.cancelled = true;
   const project = projectById(projectId);
@@ -1014,7 +1240,12 @@ export function clipFilePath(clipId, kind = 'video') {
 }
 
 export function recoverInterruptedJobs() {
+  fs.rmSync(publishCacheDir, { recursive: true, force: true });
+  fs.mkdirSync(publishCacheDir, { recursive: true });
   for (const project of state.projects) {
+    if (project.engine === 'remote' && project.status === 'processing') {
+      project.status = 'queued'; project.stage = 'Recovered after web server restart'; project.progress = Math.min(project.progress || 0, 5);
+    }
     if (project.engine === 'self-hosted' && project.status === 'processing') {
       project.status = 'queued'; project.stage = 'Recovered after server restart'; project.progress = Math.min(project.progress || 0, 95);
     }

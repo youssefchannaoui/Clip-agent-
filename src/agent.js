@@ -266,9 +266,13 @@ async function processTarget(clip, target) {
       target.status = 'publishing'; target.stage = `Preparing ${target.provider} upload`; target.error = null; target.updatedAt = Date.now(); save();
       log(`Preparing "${clip.title}" for ${target.provider}.`, 'info', ownerOf(clip));
       const file = await engine.socialPublishFile(clip.id, target.provider);
-      target.stage = `Uploading video to ${target.provider}`; target.updatedAt = Date.now(); save();
-      log(`Uploading "${clip.title}" to ${target.provider}.`, 'info', ownerOf(clip));
-      result = await social.publishTarget(clip, target, file);
+      try {
+        target.stage = `Uploading video to ${target.provider}`; target.updatedAt = Date.now(); save();
+        log(`Uploading "${clip.title}" to ${target.provider}.`, 'info', ownerOf(clip));
+        result = await social.publishTarget(clip, target, file);
+      } finally {
+        engine.releaseSocialPublishFile(file);
+      }
     }
     if (result?.pending) {
       target.status = 'processing'; target.externalId = result.externalId || target.externalId;

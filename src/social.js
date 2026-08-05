@@ -937,10 +937,10 @@ function publishingAccountFor(clip, target) {
 
 export async function publishTarget(clip, target, file) {
   const userId = publishingAccountFor(clip, target);
+  if (target.provider === 'instagram') return startInstagram(clip, target, userId);
   if (!file || !fs.existsSync(file)) throw new SocialError('The rendered clip file is missing.', { provider: target.provider });
   if (target.provider === 'youtube') return uploadYouTube(clip, target, file, userId);
   if (target.provider === 'facebook') return uploadFacebook(clip, target, file, userId);
-  if (target.provider === 'instagram') return startInstagram(clip, target, userId);
   if (target.provider === 'tiktok') return startTikTok(clip, target, file, userId);
   throw new SocialError('Unknown publishing provider.');
 }

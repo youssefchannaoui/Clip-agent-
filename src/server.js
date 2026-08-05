@@ -2,6 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import crypto from 'node:crypto';
 import { config } from './config.js';
 import {
   state, save, log, logFor, clipSettings, setClipSettings, musicSettings, setMusicSettings,
@@ -20,6 +21,9 @@ import * as billing from './billing.js';
 import * as marketing from './marketing.js';
 import * as admin from './admin.js';
 import { saveVideoUpload, removeUploadedFile } from './uploads.js';
+import * as objectStorage from './object-storage.js';
+import { assertStorageObjectKey } from './video-import.js';
+import * as workerClient from './worker-client.js';
 
 const page = path.join(config.root, 'src', 'public', 'index.html');
 const activityFixPage = path.join(config.root, 'src', 'public', 'activity-fix.js');
@@ -42,6 +46,7 @@ function json(res, status, value) {
   res.end(body);
 }
 function redirect(res, location) { res.writeHead(302, { Location: location, 'Cache-Control': 'no-store' }); res.end(); }
+function temporaryRedirect(res, location) { res.writeHead(307, { Location: location, 'Cache-Control': 'private, no-store' }); res.end(); }
 
 function redirectWithCookies(res, location, cookies = []) {
   const headers = { Location: location, 'Cache-Control': 'no-store' };
@@ -137,6 +142,13 @@ function sameSecret(a, b) {
   let difference = 0; for (let index = 0; index < a.length; index++) difference |= a.charCodeAt(index) ^ b.charCodeAt(index);
   return difference === 0;
 }
+function verifyWorkerRequest(req, pathname, rawBody) {
+  const timestamp = String(req.headers['x-deenclipped-timestamp'] || '');
+  const supplied = String(req.headers['x-deenclipped-signature'] || '');
+  if (!config.workerSharedSecret || !timestamp || !supplied || Math.abs(Date.now() - Number(timestamp)) > 5 * 60_000) return false;
+  const expected = crypto.createHmac('sha256', config.workerSharedSecret).update(`${timestamp}\n${req.method || 'GET'}\n${pathname}\n${rawBody}`).digest('hex');
+  return sameSecret(expected, supplied);
+}
 function authed(req, url) { return !config.password || sameSecret(req.headers['x-app-password'] || url.searchParams.get('pw') || '', config.password); }
 function readBody(req, limit = 1_000_000) {
   return new Promise((resolve, reject) => {
@@ -199,20 +211,20 @@ function publicClip(clip) {
     variantOf: clip.variantOf || null, addedAt: clip.addedAt,
     targets: (clip.targets || []).map(social.targetPublic),
     rerender: rerender ? { id: rerender.id, status: rerender.status, stage: rerender.stage, progress: rerender.progress, error: rerender.error || null, asVariant: rerender.asVariant } : null,
-    videoUrl: `/api/clips/${encodeURIComponent(clip.id)}/video`, thumbUrl: `/api/clips/${encodeURIComponent(clip.id)}/thumb`,
+    videoUrl: clip.clipUrl || `/api/clips/${encodeURIComponent(clip.id)}/video`, thumbUrl: clip.thumbUrl || `/api/clips/${encodeURIComponent(clip.id)}/thumb`,
   };
 }
 
 function appState(user = null) {
   // Everything below is scoped to one account: its records, its settings, its
   // templates, its music, its connected platforms and its activity feed.
-  if (!user?.id) return { engine: 'self-hosted', user: null, auth: auth.publicConfig(), projects: [], clips: [], log: [] };
+  if (!user?.id) return { engine: config.processingMode === 'remote' ? 'remote-worker' : 'self-hosted', user: null, auth: auth.publicConfig(), projects: [], clips: [], log: [] };
   const readiness = agent.engine.readiness(user);
   const projectsForUser = ownedBy(state.projects, user.id);
   const projectIdsForUser = new Set(projectsForUser.map(project => project.id));
   const clipsForUser = ownedBy(state.clips, user.id).filter(clip => projectIdsForUser.has(clip.projectId));
   return {
-    engine: 'self-hosted', user: auth.userPublic(user), auth: auth.publicConfig(), readiness, clipSettings: clipSettings(user), musicSettings: musicSettings(user), automationSettings: automationSettings(user),
+    engine: config.processingMode === 'remote' ? 'remote-worker' : 'self-hosted', user: auth.userPublic(user), auth: auth.publicConfig(), readiness, clipSettings: clipSettings(user), musicSettings: musicSettings(user), automationSettings: automationSettings(user),
     selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(),
     tracks: audio.listNasheeds(user),
     projects: projectsForUser.map(project => ({
@@ -221,7 +233,7 @@ function appState(user = null) {
       submittedAt: project.submittedAt, completedAt: project.completedAt || null, clipCount: project.clipCount || 0,
       durationSec: project.durationSec || project.sourceDurationSec || null, sourceDurationSec: project.sourceDurationSec || null, sourceThumbUrl: project.sourceThumbUrl || null, sourceTitle: project.sourceTitle || null, templateIdUsed: project.templateIdUsed,
       templateNameUsed: project.templateNameUsed, templateVersionUsed: project.templateVersionUsed || 1, musicRequired: true,
-      sourceReusable: Boolean(project.sourceFile && fs.existsSync(project.sourceFile) && project.transcriptFile && fs.existsSync(project.transcriptFile)),
+      sourceReusable: Boolean((project.sourceFile && fs.existsSync(project.sourceFile) && project.transcriptFile && fs.existsSync(project.transcriptFile)) || (project.sourceObjectKey && project.transcriptObjectKey)),
       moreJob: project.moreJob ? {
         id: project.moreJob.id, status: project.moreJob.status, stage: project.moreJob.stage,
         progress: project.moreJob.progress || 0, error: project.moreJob.error || null,
@@ -253,7 +265,26 @@ function runDoctor() {
 
 async function route(req, res, url) {
   const { pathname } = url; const method = req.method || 'GET';
-  if (pathname === '/healthz') return json(res, 200, { ok: true, engine: 'self-hosted' });
+  if (pathname === '/healthz') return json(res, 200, { ok: true, engine: config.processingMode === 'remote' ? 'remote-worker' : 'self-hosted' });
+  const workerCallback = pathname.match(/^\/api\/worker-callbacks\/([^/]+)$/);
+  if (method === 'POST' && workerCallback) {
+    const raw = await readRawBody(req, 5_000_000);
+    if (!verifyWorkerRequest(req, pathname, raw)) return json(res, 401, { error: 'Invalid worker signature.' });
+    let update; try { update = JSON.parse(raw); } catch { return json(res, 400, { error: 'Invalid callback JSON.' }); }
+    const project = agent.engine.acceptRemoteUpdate(decodeURIComponent(workerCallback[1]), update);
+    return project ? json(res, 200, { ok: true }) : json(res, 404, { error: 'Job not found.' });
+  }
+  const workerMusic = pathname.match(/^\/api\/worker-assets\/music\/([^/]+)$/);
+  if (method === 'GET' && workerMusic) {
+    const trackId = decodeURIComponent(workerMusic[1]);
+    const userId = String(url.searchParams.get('user') || '');
+    if (!agent.engine.verifyWorkerAssetSignature(trackId, userId, url.searchParams.get('exp'), url.searchParams.get('sig'))) {
+      return json(res, 401, { error: 'Invalid or expired worker asset link.' });
+    }
+    const found = audio.nasheedFilePath(userId, trackId);
+    if (!found) return json(res, 404, { error: 'Track not found.' });
+    return streamFile(req, res, found.file, { contentType: 'audio/mpeg' });
+  }
   if (method === 'POST' && pathname === '/api/billing/webhook') {
     try {
       const raw = await readRawBody(req, 5_000_000);
@@ -396,6 +427,8 @@ async function route(req, res, url) {
     let allowed = false;
     try { allowed = social.verifyMediaSignature(clipId, url.searchParams.get('exp'), url.searchParams.get('sig')); } catch {}
     if (!allowed) return json(res, 403, { error: 'This media link is invalid or expired.' });
+    const remoteClip = state.clips.find(item => item.id === clipId);
+    if (remoteClip?.clipUrl) return temporaryRedirect(res, remoteClip.clipUrl);
     const file = agent.engine.clipFilePath(clipId, 'video');
     return streamFile(req, res, file, { cacheControl: 'public, max-age=3600, immutable' });
   }
@@ -532,8 +565,28 @@ async function route(req, res, url) {
     });
   }
 
+  if (method === 'POST' && pathname === '/api/uploads/presign') {
+    const body = await readBody(req);
+    try {
+      const upload = objectStorage.createUpload(currentUser.id, String(body.fileName || ''), String(body.contentType || 'video/mp4'));
+      return json(res, 200, { ok: true, ...upload });
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+
   if (method === 'POST' && pathname === '/api/videos') {
-    const body = await readBody(req); const urls = String(body.urls || '').split(/[\n,]+/).map(value => value.trim()).filter(Boolean);
+    const body = await readBody(req);
+    if (body.objectKey) {
+      try {
+        const objectKey = assertStorageObjectKey(body.objectKey);
+        const projectId = await agent.submitVideo(objectKey, body.title || body.fileName || '', currentUser.id, {
+          sourceKind: 'object_storage', originalFileName: body.fileName || '', displayUrl: `Uploaded file · ${body.fileName || 'video'}`,
+          sourceMeta: { title: body.title || body.fileName || '', durationSec: Number(body.durationSec || 0) || null, thumbnail: '' },
+          sourceRange: { startSec: Number(body.sourceStartSeconds || 0), endSec: Number(body.sourceEndSeconds) || null },
+        });
+        return json(res, 201, { ok: true, projectId });
+      } catch (error) { return json(res, 400, { error: error.message }); }
+    }
+    const urls = String(body.urls || '').split(/[\n,]+/).map(value => value.trim()).filter(Boolean);
     if (!urls.length) return json(res, 400, { error: 'Paste at least one video link.' });
     const sourceStartSeconds = Math.max(0, Math.round(Number(body.sourceStartSeconds || 0)));
     const sourceEndRaw = Number(body.sourceEndSeconds);
@@ -550,6 +603,9 @@ async function route(req, res, url) {
   }
 
   if (method === 'POST' && pathname === '/api/video-uploads') {
+    if (config.processingMode === 'remote') {
+      return json(res, 409, { error: 'Large videos upload directly to secure object storage. Refresh the app and try Upload MP4 again.', directUploadRequired: true });
+    }
     let upload = null;
     try {
       upload = await saveVideoUpload(req, currentUser.id);
@@ -704,6 +760,14 @@ async function route(req, res, url) {
     catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
   }
   if (method === 'GET' && pathname === '/api/diagnostics') {
+    if (config.processingMode === 'remote') {
+      try {
+        const worker = await workerClient.readiness();
+        return json(res, 200, { ok: Boolean(worker.ready), worker, readiness: agent.engine.readiness(currentUser), model: config.aiModel, note: 'Heavy processing runs on the external worker.' });
+      } catch (error) {
+        return json(res, 503, { ok: false, error: error.message, readiness: agent.engine.readiness(currentUser) });
+      }
+    }
     const [ffmpeg, worker] = await Promise.all([checkFfmpeg(), runDoctor()]);
     return json(res, 200, { ok: ffmpeg.ok && worker.ok, ffmpeg, worker, readiness: agent.engine.readiness(currentUser), python: config.pythonBin, model: config.aiModel, note: 'The first real transcription downloads the selected Whisper model once.' });
   }
@@ -722,6 +786,7 @@ async function route(req, res, url) {
     let clip; try { clip = assertCanAccessClip(currentUser, decodeURIComponent(sourcePreview[1])); } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
     const project = clip ? state.projects.find(item => item.id === clip.projectId) : null;
     const sourceFile = clip?.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
+    if (project?.sourceUrl) return temporaryRedirect(res, project.sourceUrl);
     if (!clip || !sourceFile || !fs.existsSync(sourceFile)) return json(res, 404, { error: 'Original source video is unavailable.' });
     return streamFile(req, res, sourceFile, { contentType: 'video/mp4' });
   }
@@ -730,6 +795,8 @@ async function route(req, res, url) {
   if (method === 'GET' && clipVideo) {
     const id = decodeURIComponent(clipVideo[1]); const kind = clipVideo[2];
     let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+    const remoteUrl = kind === 'thumb' ? clip?.thumbUrl : clip?.clipUrl;
+    if (remoteUrl) return temporaryRedirect(res, remoteUrl);
     const file = agent.engine.clipFilePath(id, kind === 'thumb' ? 'thumb' : 'video'); if (!file) return json(res, 404, { error: 'Rendered file not found.' });
     if (kind === 'thumb') return streamFile(req, res, file, { contentType: 'image/jpeg' });
     const filename = `${(clip?.title || 'deenclipped').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 70) || 'deenclipped'}.mp4`;

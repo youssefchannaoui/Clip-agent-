@@ -1,16 +1,19 @@
 services:
   - type: web
     name: deenclipped-ai
-    runtime: docker
+    runtime: node
     plan: starter
+    startCommand: node src/server.js
     healthCheckPath: /healthz
     disk:
-      name: deenclipped-data
-      mountPath: /app/data
-      sizeGB: 10
+      name: deenclipped-metadata
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: APP_PASSWORD
         sync: false
+      - key: DATA_DIR
+        value: /var/data
       - key: AUTH_REQUIRED
         value: "true"
       - key: EMAIL_SIGNIN_ENABLED
@@ -25,6 +28,42 @@ services:
         value: https://deenclipped.online/auth/google/callback
       - key: TIMEZONE
         value: Australia/Perth
+      - key: PROCESSING_MODE
+        value: remote
+      - key: WORKER_BASE_URL
+        sync: false
+      - key: WORKER_SHARED_SECRET
+        sync: false
+      - key: WORKER_CALLBACK_SECRET
+        sync: false
+      - key: WORKER_REQUEST_TIMEOUT_MS
+        value: "30000"
+      - key: WORKER_POLL_INTERVAL_MS
+        value: "5000"
+      - key: WORKER_JOB_TIMEOUT_MS
+        value: "21600000"
+      - key: VIDEO_IMPORT_PROVIDER
+        value: ffmpegapi
+      - key: VIDEO_IMPORT_API_URL
+        value: https://ffmpegapi.net
+      - key: VIDEO_IMPORT_API_KEY
+        sync: false
+      - key: VIDEO_IMPORT_POLL_INTERVAL_MS
+        value: "5000"
+      - key: VIDEO_IMPORT_TIMEOUT_MS
+        value: "1800000"
+      - key: OBJECT_STORAGE_ENDPOINT
+        sync: false
+      - key: OBJECT_STORAGE_REGION
+        sync: false
+      - key: OBJECT_STORAGE_BUCKET
+        sync: false
+      - key: OBJECT_STORAGE_ACCESS_KEY
+        sync: false
+      - key: OBJECT_STORAGE_SECRET_KEY
+        sync: false
+      - key: OBJECT_STORAGE_PUBLIC_URL
+        sync: false
       - key: POST_TIMES
         value: 07:00,12:00,17:00,20:30
       - key: CLIP_AI_MODEL
@@ -41,10 +80,6 @@ services:
         value: "60"
       - key: MUSIC_VOLUME_PERCENT
         value: "13"
-      - key: MAX_CONCURRENT_JOBS
-        value: "1"
-      - key: KEEP_SOURCE_FILES
-        value: "true"
       - key: MAX_VIDEO_UPLOAD_MB
         value: "2048"
       - key: SOCIAL_PUBLISH_ENABLED

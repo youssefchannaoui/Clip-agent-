@@ -222,7 +222,19 @@ def extract_audio(ffmpeg: str, source: Path, audio_file: Path) -> None:
     ], timeout=60 * 60)
 
 
-def transcribe(job: dict[str, Any], audio_file: Path, duration_sec: float) -> list[dict[str, Any]]:
+class TranscriptionBackend:
+    """Backend boundary for CPU Faster-Whisper today and optional CUDA later."""
+
+    def transcribe(self, job: dict[str, Any], audio_file: Path, duration_sec: float) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+
+class FasterWhisperBackend(TranscriptionBackend):
+    def transcribe(self, job: dict[str, Any], audio_file: Path, duration_sec: float) -> list[dict[str, Any]]:
+        return _transcribe_with_faster_whisper(job, audio_file, duration_sec)
+
+
+def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, duration_sec: float) -> list[dict[str, Any]]:
     supplied = job.get("transcriptSegments")
     if isinstance(supplied, list) and supplied:
         return [
@@ -310,6 +322,10 @@ def transcribe(job: dict[str, Any], audio_file: Path, duration_sec: float) -> li
     if not output:
         raise RuntimeError("The transcription model did not find any speech in the source.")
     return output
+
+
+def transcribe(job: dict[str, Any], audio_file: Path, duration_sec: float) -> list[dict[str, Any]]:
+    return FasterWhisperBackend().transcribe(job, audio_file, duration_sec)
 
 
 FILLER = {
@@ -1147,6 +1163,7 @@ def render_clip(
     ffprobe = job["ffprobe"]
     template = job["template"]
     settings = job["settings"]
+    ffmpeg_threads = str(max(1, int(settings.get("ffmpegThreads") or os.getenv("FFMPEG_THREADS", "4"))))
     clip_id = str(job.get("clipIdOverride") or f"{job['id']}-{index:02d}")
     output_dir.mkdir(parents=True, exist_ok=True)
     clip_file = output_dir / f"{clip_id}.mp4"
@@ -1187,7 +1204,7 @@ def render_clip(
         "-i", str(source), "-stream_loop", "-1", "-i", str(track["path"]),
         "-filter_complex", filter_complex,
         "-map", "[vout]", "-map", "[aout]",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "19",
+        "-c:v", "libx264", "-threads", ffmpeg_threads, "-preset", "veryfast", "-crf", "19",
         "-pix_fmt", "yuv420p", "-r", "30", "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart", "-shortest", str(clip_file),
     ], timeout=60 * 60)

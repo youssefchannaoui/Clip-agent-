@@ -1,6 +1,6 @@
-# DeenClipped AI 2.4 — Exact Classic Interface
+# DeenClipped AI 3.0 — Web app + external processing worker
 
-DeenClipped AI 2.4 keeps the original Clip Agent interface as the visual foundation while replacing Opus processing with a self-hosted AI clipping, rendering and publishing pipeline.
+DeenClipped AI keeps the polished editor and publishing workspace while moving video import, Whisper, FFmpeg, rendering, and media storage off the lightweight Render web service.
 
 ## Exact classic interface
 
@@ -23,9 +23,9 @@ Three matching tabs were added without replacing the classic screens:
 
 ## Automated workflow
 
-1. Upload an original video file, or paste an authorised video link for a best-effort import.
-2. Uploaded files are streamed into the signed-in customer's private workspace. Link imports use `yt-dlp` when the source platform permits server-side access.
-3. Faster-Whisper transcribes or translates it locally.
+1. Upload an original video directly to object storage, or paste an authorised YouTube URL.
+2. Render validates the request, creates persistent metadata, and signs a job for the external worker. It never downloads the full source video.
+3. The worker obtains YouTube MP4s from the configured managed provider and runs Faster-Whisper in CPU INT8 mode.
 4. Candidate moments are segmented and scored.
 5. The selected saved template is rendered into every clip.
 6. A shuffled nasheed is physically mixed into every final MP4.
@@ -48,19 +48,9 @@ The backend blocks submission or posting when any required part is missing:
 
 Possible Quran or hadith quotations are held for review by default.
 
-## Render deployment
+## Production deployment
 
-Use the included **Docker** Blueprint. Do not deploy this as Render's native Node runtime. The Docker image installs Python, FFmpeg, `yt-dlp`, `yt-dlp-ejs` and Faster-Whisper, and the build fails if the Python imports do not work.
-
-1. Put all repository files at the GitHub repository root.
-2. Merge them into the branch Render will deploy, normally `main`.
-3. In Render choose **New → Blueprint** and select the repository.
-4. Use the root `render.yaml`.
-5. Set `APP_PASSWORD`.
-6. Wait for the Docker build log to print `Python AI dependencies verified`.
-7. Open the app and run **Automation → Run system check**.
-
-The Blueprint attaches a persistent disk at `/app/data`. Keep it attached because templates, nasheeds, source files, rendered clips, state and encrypted OAuth tokens are stored there.
+Use the root `render.yaml` for the lightweight Node web/API service and `worker/docker-compose.yml` for the CPU worker on an Ubuntu VPS. Render retains a small metadata disk; source videos, clips, thumbnails, and transcripts live in S3-compatible object storage. Full setup, firewall, update, and log commands are in [`docs/EXTERNAL_WORKER.md`](docs/EXTERNAL_WORKER.md).
 
 ## First app setup
 
@@ -131,7 +121,7 @@ The complete Google OAuth and YouTube approval checklist, scope justifications, 
 
 ## YouTube source imports
 
-Do not request or store customer browser cookies. YouTube may block server-hosted downloaders with a bot confirmation and its supported Data API does not provide a method for downloading the original audiovisual file. DeenClipped therefore keeps link import as best effort and presents **Upload original video** whenever YouTube blocks the server. MP4, MOV, M4V, WebM and MKV uploads are supported up to `MAX_VIDEO_UPLOAD_MB` (2 GB by default).
+Do not request or store customer browser cookies. YouTube URLs are validated on Render and sent as metadata to the worker. The worker calls the configurable managed provider; the default FFMPEGAPI adapter follows its documented `youtube_to_mp4` response. Playlists, unsupported URLs, provider failures, and oversized videos direct the user to **Upload MP4**. MP4, MOV, M4V, WebM and MKV uploads go directly from the browser to object storage.
 
 ## Local installation
 
