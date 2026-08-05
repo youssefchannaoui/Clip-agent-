@@ -1,3 +1,5 @@
+import { config } from './config.js';
+
 function escapeHtml(value = '') {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -64,6 +66,7 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
         <a href="/#how-it-works">How it works</a>
         <a href="/features">Features</a>
         <a href="/pricing">Pricing</a>
+        <a href="/pricing#token-shop">Token shop</a>
         <a href="/#faq">FAQ</a>
         <a href="/contact">Contact</a>
       </nav>
@@ -114,13 +117,25 @@ function reelCard([src, alt], className = '') {
   return `<figure class="reel-card ${className}"><img src="/marketing-assets/${src}" alt="${alt}" loading="lazy"><span class="reel-badge">9:16</span></figure>`;
 }
 
-function pricingCards() {
-  return `<div class="pricing-grid">
-    <article class="price-card"><span class="plan-kicker">Start</span><h3>Free</h3><div class="price">40 <small>tokens</small></div><p>Explore the complete workflow before choosing a paid plan.</p><ul><li>Generate from selected source time</li><li>Review clips before posting</li><li>Access templates and editor</li></ul><a class="button secondary full" href="/login?returnTo=/app">Start free</a></article>
-    <article class="price-card"><span class="plan-kicker">Flexible</span><h3>Weekly</h3><div class="price">120 <small>tokens/week</small></div><p>For occasional lectures, events and short campaigns.</p><ul><li>Weekly token refresh</li><li>Full review and editor</li><li>Publishing workflow</li></ul><a class="button secondary full" href="/login?returnTo=/app">Choose weekly</a></article>
-    <article class="price-card popular"><span class="popular-label">Most popular</span><span class="plan-kicker">Consistent</span><h3>Monthly</h3><div class="price">650 <small>tokens/month</small></div><p>For creators building a dependable short-form schedule.</p><ul><li>More source-video minutes</li><li>Scheduling and connections</li><li>Complete clip workflow</li></ul><a class="button primary full" href="/login?returnTo=/app">Choose monthly</a></article>
-    <article class="price-card"><span class="plan-kicker">Best value</span><h3>Yearly</h3><div class="price">9,000 <small>tokens/year</small></div><p>For higher-volume clipping across the full year.</p><ul><li>Annual token allocation</li><li>Complete workspace</li><li>Best long-term value</li></ul><a class="button secondary full" href="/login?returnTo=/app">Choose yearly</a></article>
-  </div>`;
+function pricingCards(currentUser = null) {
+  const accountUrl = currentUser ? '/plans' : '/login?returnTo=/plans';
+  const plans = [
+    { id: 'free', kicker: 'Start', name: 'Free', price: 'A$0', tokens: config.tokensFree, interval: 'starter tokens', copy: 'Explore the complete workflow before choosing a paid plan.', enabled: true },
+    { id: 'weekly', kicker: 'Flexible', name: 'Weekly', price: config.planPriceWeeklyLabel, tokens: config.tokensWeekly, interval: 'tokens/week', copy: 'For occasional lectures, events and short campaigns.', enabled: Boolean(config.stripePriceWeekly) },
+    { id: 'monthly', kicker: 'Consistent', name: 'Monthly', price: config.planPriceMonthlyLabel, tokens: config.tokensMonthly, interval: 'tokens/month', copy: 'For creators building a dependable short-form schedule.', enabled: Boolean(config.stripePriceMonthly), popular: true },
+    { id: 'yearly', kicker: 'Best value', name: 'Yearly', price: config.planPriceYearlyLabel, tokens: config.tokensYearly, interval: 'tokens/year', copy: 'For higher-volume clipping across the full year.', enabled: Boolean(config.stripePriceYearly) },
+  ];
+  return `<div class="pricing-grid">${plans.map(plan => `<article class="price-card ${plan.popular ? 'popular' : ''}">${plan.popular ? '<span class="popular-label">Most popular</span>' : ''}<span class="plan-kicker">${escapeHtml(plan.kicker)}</span><h3>${escapeHtml(plan.name)}</h3><div class="plan-price-label">${escapeHtml(plan.price)}</div><div class="price">${escapeHtml(plan.tokens)} <small>${escapeHtml(plan.interval)}</small></div><p>${escapeHtml(plan.copy)}</p><ul><li>Selected source-time processing</li><li>Review, editor and templates included</li><li>Ordinary template rerenders are free</li></ul>${plan.enabled ? `<a class="button ${plan.popular ? 'primary' : 'secondary'} full" href="${accountUrl}">${plan.id === 'free' ? 'Start free' : `Choose ${escapeHtml(plan.name.toLowerCase())}`}</a>` : '<span class="button secondary full disabled" aria-disabled="true">Stripe price not configured</span>'}</article>`).join('')}</div>`;
+}
+
+function tokenShop(currentUser = null) {
+  const accountUrl = currentUser ? '/plans#token-shop' : '/login?returnTo=/plans';
+  const packs = [
+    { name: 'Quick boost', tokens: 100, price: config.topupPrice100Label, enabled: Boolean(config.stripePriceTopup100) },
+    { name: 'Creator boost', tokens: 300, price: config.topupPrice300Label, enabled: Boolean(config.stripePriceTopup300), popular: true },
+    { name: 'Studio boost', tokens: 750, price: config.topupPrice750Label, enabled: Boolean(config.stripePriceTopup750) },
+  ];
+  return `<section class="token-shop reveal" id="token-shop"><div class="pricing-section-head"><span class="section-label">Token shop</span><h2>Add tokens without changing your plan.</h2><p>One-time top-ups work with free, weekly, monthly and yearly accounts. Purchased tokens stay available through subscription renewals until you use them.</p></div><div class="topup-grid">${packs.map(pack => `<article class="topup-card ${pack.popular ? 'popular' : ''}">${pack.popular ? '<span class="popular-label">Most popular</span>' : ''}<span class="plan-kicker">One-time purchase</span><h3>${escapeHtml(pack.name)}</h3><strong>+${escapeHtml(pack.tokens)}</strong><small>tokens</small><div class="topup-price">${escapeHtml(pack.price)}</div>${pack.enabled ? `<a class="button ${pack.popular ? 'primary' : 'secondary'} full" href="${accountUrl}">Open token shop</a>` : '<span class="button secondary full disabled" aria-disabled="true">Stripe price not configured</span>'}</article>`).join('')}</div><p class="token-shop-note">Stripe Checkout handles payment securely. DeenClipped never stores raw card details, and tokens are credited only after a verified successful Stripe webhook.</p></section>`;
 }
 
 function faqBlock() {
@@ -271,8 +286,8 @@ export function features({ base, currentUser }) {
 }
 
 export function pricing({ base, currentUser }) {
-  const body = `<main><section class="page-hero wrap"><span class="eyebrow"><i></i>Pricing</span><h1>Pay for the source time you choose to process.</h1><p>One token represents one selected source-video minute. Full-video processing is selected by default, and trimming the source range reduces usage.</p></section><section class="page-content"><div class="wrap">${pricingCards()}<div class="pricing-explainer"><div><span class="section-label">How tokens work</span><h2>Clear before you render.</h2><p>DeenClipped reads the source duration, lets you select a start and end time, then estimates usage from that selected range. Final usage is based on confirmed source time.</p>${checkItem('1 token per source minute','Usage follows the selected source window.')}${checkItem('Review before publishing','Approve every result before it reaches a connected platform.')}</div><div class="product-frame"><img src="/marketing-assets/workflow-premium.webp" alt="DeenClipped token and workflow overview"></div></div></div></section></main>`;
-  return layout({ base, currentUser, title: 'Pricing — DeenClipped', description: 'Compare DeenClipped free, weekly, monthly and yearly token plans.', canonicalPath: '/pricing', body });
+  const body = `<main><section class="page-hero pricing-hero wrap"><span class="eyebrow"><i></i>Affordable creator pricing</span><h1>Choose a plan. Add tokens only when you need them.</h1><p>Pay for the selected source time you process. Subscription allowances refresh normally, while one-time top-up tokens remain in your wallet until used.</p><div class="pricing-trust"><span>Free starter access</span><span>Secure Stripe Checkout</span><span>No raw card storage</span></div></section><section class="page-content"><div class="wrap"><div class="pricing-section-head"><span class="section-label">Subscriptions</span><h2>Built for different publishing rhythms.</h2><p>Prices remain configuration-driven until the final Stripe products are confirmed.</p></div>${pricingCards(currentUser)}${tokenShop(currentUser)}<div class="pricing-explainer"><div><span class="section-label">How tokens work</span><h2>Clear before you render.</h2><p>DeenClipped reads the source duration, lets you select a start and end time, then estimates usage from that selected range. Subscription allowance is used before purchased top-ups.</p>${checkItem(`${config.tokensPerMinute} token per source minute`,'Usage follows the selected source window.')}${checkItem('Editing stays fair','Reviewing, template changes and ordinary template rerenders do not unnecessarily consume tokens.')}${checkItem('Top-ups persist','Purchased tokens do not disappear when a subscription renews or is cancelled.')}</div><div class="product-frame"><img src="/marketing-assets/workflow-premium.webp" alt="DeenClipped token and workflow overview"></div></div></div></section></main>`;
+  return layout({ base, currentUser, title: 'Pricing & Token Shop — DeenClipped', description: 'Compare DeenClipped free, weekly, monthly and yearly plans and optional one-time token packs.', canonicalPath: '/pricing', body });
 }
 
 export function contact({ base, currentUser }) {

@@ -8,6 +8,7 @@ const secondsToMs = value => Math.max(0, Number(value || 0) * 1000);
 const cleanEmail = value => String(value || '').trim().toLowerCase();
 
 export const PLAN_ORDER = ['weekly', 'monthly', 'yearly'];
+export const TOPUP_ORDER = ['boost100', 'boost300', 'boost750'];
 
 function periodMs(interval) {
   if (interval === 'weekly') return 7 * 24 * 60 * 60 * 1000;
@@ -24,20 +25,50 @@ export function plans() {
     },
     weekly: {
       id: 'weekly', name: 'Weekly', interval: 'week', badge: 'Start small',
-      tokens: config.tokensWeekly, priceId: config.stripePriceWeekly, enabled: Boolean(config.stripePriceWeekly),
-      description: 'Lower token pack for testing weekly content.',
+      tokens: config.tokensWeekly, priceId: config.stripePriceWeekly, priceLabel: config.planPriceWeeklyLabel,
+      enabled: Boolean(config.stripePriceWeekly),
+      description: 'Affordable access for occasional lecture clipping.',
     },
     monthly: {
-      id: 'monthly', name: 'Monthly', interval: 'month', badge: 'Best for creators',
-      tokens: config.tokensMonthly, priceId: config.stripePriceMonthly, enabled: Boolean(config.stripePriceMonthly),
-      description: 'More tokens for regular lecture clipping.',
+      id: 'monthly', name: 'Monthly', interval: 'month', badge: 'Most popular',
+      tokens: config.tokensMonthly, priceId: config.stripePriceMonthly, priceLabel: config.planPriceMonthlyLabel,
+      enabled: Boolean(config.stripePriceMonthly),
+      description: 'The best balance for creators posting consistently.',
     },
     yearly: {
-      id: 'yearly', name: 'Yearly', interval: 'year', badge: 'Biggest allowance',
-      tokens: config.tokensYearly, priceId: config.stripePriceYearly, enabled: Boolean(config.stripePriceYearly),
-      description: 'The largest token pool for serious posting.',
+      id: 'yearly', name: 'Yearly', interval: 'year', badge: 'Best value',
+      tokens: config.tokensYearly, priceId: config.stripePriceYearly, priceLabel: config.planPriceYearlyLabel,
+      enabled: Boolean(config.stripePriceYearly),
+      description: 'The lowest long-term cost for regular publishing.',
     },
   };
+}
+
+export function topups() {
+  return {
+    boost100: {
+      id: 'boost100', name: 'Quick boost', tokens: 100,
+      priceId: config.stripePriceTopup100, priceLabel: config.topupPrice100Label,
+      badge: 'Light use', description: 'A small top-up for one more lecture or a few extra clips.',
+      enabled: Boolean(config.stripePriceTopup100),
+    },
+    boost300: {
+      id: 'boost300', name: 'Creator boost', tokens: 300,
+      priceId: config.stripePriceTopup300, priceLabel: config.topupPrice300Label,
+      badge: 'Most popular', description: 'Extra room for a busy week without changing your plan.',
+      enabled: Boolean(config.stripePriceTopup300),
+    },
+    boost750: {
+      id: 'boost750', name: 'Studio boost', tokens: 750,
+      priceId: config.stripePriceTopup750, priceLabel: config.topupPrice750Label,
+      badge: 'Best value', description: 'A larger one-time token pack for long lectures and campaigns.',
+      enabled: Boolean(config.stripePriceTopup750),
+    },
+  };
+}
+
+function topupForPrice(priceId = '') {
+  return Object.values(topups()).find(pack => pack.priceId && pack.priceId === priceId) || null;
 }
 
 function planForPrice(priceId = '') {
@@ -85,6 +116,7 @@ function trialState(billing = {}) {
 
 export function ensureBillingState() {
   if (!Array.isArray(state.billingEvents)) state.billingEvents = [];
+  if (!Array.isArray(state.processedStripeEvents)) state.processedStripeEvents = [];
   if (!state.billingSettings || typeof state.billingSettings !== 'object') state.billingSettings = {};
   for (const user of state.authUsers || []) ensureUserBilling(user);
 }
@@ -97,6 +129,8 @@ export function ensureUserBilling(user) {
   billing.status ||= billing.plan === 'admin' ? 'active' : 'free';
   billing.tokensUsed = Math.max(0, Number(billing.tokensUsed || 0));
   billing.tokensReserved = Math.max(0, Number(billing.tokensReserved || 0));
+  billing.bonusTokens = Math.max(0, Number(billing.bonusTokens || 0));
+  if (!Array.isArray(billing.processedTopupSessions)) billing.processedTopupSessions = [];
   billing.periodStart ||= user.createdAt || now();
   billing.periodEnd ||= billing.plan === 'free' || billing.plan === 'admin'
     ? null
@@ -124,8 +158,10 @@ export function publicBilling(user) {
   const allow = unlimited ? Infinity : allowance(currentPlan);
   const used = Number(billing.tokensUsed || 0);
   const reserved = Number(billing.tokensReserved || 0);
+  const bonusTokens = Math.max(0, Number(billing.bonusTokens || 0));
   const trial = trialState(billing);
-  const remaining = unlimited ? null : Math.max(0, allow - used - reserved);
+  const baseRemaining = unlimited ? null : Math.max(0, allow - used - reserved);
+  const remaining = unlimited ? null : baseRemaining + bonusTokens;
   const periodEndsInDays = billing.periodEnd ? daysRemaining(billing.periodEnd) : null;
   const notices = [];
   if (trial.active && trial.daysLeft <= 2) {
@@ -159,6 +195,7 @@ export function publicBilling(user) {
     enabled: config.stripeEnabled,
     stripeConfigured: Boolean(config.stripeSecretKey),
     checkoutConfigured: Boolean(config.stripePriceWeekly || config.stripePriceMonthly || config.stripePriceYearly),
+    topupCheckoutConfigured: Boolean(config.stripePriceTopup100 || config.stripePriceTopup300 || config.stripePriceTopup750),
     portalConfigured: Boolean(config.stripeSecretKey),
     tokenRatePerMinute: tokenRate(),
     trialDays: config.stripeTrialDays,
@@ -168,12 +205,16 @@ export function publicBilling(user) {
       'Template updates and rerenders are free',
       `${config.stripeTrialDays || 7}-day trial on paid plans`,
       'Unused trial access does not roll into another trial',
+      'Purchased top-up tokens do not expire when a subscription renews',
     ],
     current: {
       plan: currentPlan,
       status: billing.status || 'free',
       unlimited,
       allowance: unlimited ? null : allow,
+      baseRemaining,
+      bonusTokens: unlimited ? null : bonusTokens,
+      totalAvailable: unlimited ? null : remaining,
       used,
       reserved,
       remaining,
@@ -185,6 +226,7 @@ export function publicBilling(user) {
       stripeSubscriptionId: billing.stripeSubscriptionId || '',
     },
     plans: plans(),
+    topups: topups(),
     notices,
     recentEvents: (state.billingEvents || []).filter(event => event.userId === user.id).slice(0, 10),
   };
@@ -233,12 +275,23 @@ export function chargeTokens(userId, tokens, reason = 'usage', meta = {}) {
   if (!user || isUnlimited(user)) return { charged: 0, unlimited: true };
   const billing = ensureUserBilling(user);
   const amount = Math.max(1, Math.ceil(Number(tokens || 0)));
-  billing.tokensUsed = Math.max(0, Number(billing.tokensUsed || 0)) + amount;
+  const planAllowance = allowance(billing.plan || 'free');
+  const usedBefore = Math.max(0, Number(billing.tokensUsed || 0));
+  const reserved = Math.max(0, Number(billing.tokensReserved || 0));
+  const baseAvailable = Math.max(0, planAllowance - usedBefore - reserved);
+  const bonusAvailable = Math.max(0, Number(billing.bonusTokens || 0));
+  if (baseAvailable + bonusAvailable < amount) {
+    throw new Error(`Not enough tokens. This charge needs ${amount}, but only ${baseAvailable + bonusAvailable} are available.`);
+  }
+  const subscriptionUsed = Math.min(baseAvailable, amount);
+  const bonusUsed = amount - subscriptionUsed;
+  billing.bonusTokens = Math.max(0, Number(billing.bonusTokens || 0) - bonusUsed);
+  billing.tokensUsed = usedBefore + subscriptionUsed;
   user.updatedAt = now();
-  const beforeRemaining = Math.max(0, allowance(billing.plan || 'free') - Number(billing.tokensUsed || 0) - Number(billing.tokensReserved || 0));
+  const beforeRemaining = Math.max(0, planAllowance - Number(billing.tokensUsed || 0) - reserved) + Number(billing.bonusTokens || 0);
   const event = {
     id: `bill_${now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`,
-    userId: user.id, amount, reason, meta, createdAt: now(),
+    userId: user.id, amount, reason, meta: { ...meta, subscriptionUsed, bonusUsed }, createdAt: now(),
     type: 'tokens_charged',
     remaining: beforeRemaining,
     message: `${amount} token${amount === 1 ? '' : 's'} used for ${reason}.`,
@@ -306,8 +359,8 @@ export async function createCheckoutSession(user, planId) {
   const params = {
     mode: 'subscription',
     customer,
-    success_url: `${appBase()}/?billing=success`,
-    cancel_url: `${appBase()}/?billing=cancelled`,
+    success_url: `${appBase()}/app?billing=success`,
+    cancel_url: `${appBase()}/plans?billing=cancelled`,
     'line_items[0][price]': plan.priceId,
     'line_items[0][quantity]': '1',
     'metadata[userId]': user.id,
@@ -321,18 +374,81 @@ export async function createCheckoutSession(user, planId) {
   return { id: session.id, url: session.url };
 }
 
+export async function createTopupCheckoutSession(user, packageId) {
+  ensureBillingState();
+  if (!user) throw new Error('Sign in to continue.');
+  if (isUnlimited(user)) throw new Error('Owner and admin accounts already have unlimited tokens.');
+  const pack = topups()[packageId];
+  if (!pack || !TOPUP_ORDER.includes(pack.id)) throw new Error('Choose a valid token pack.');
+  if (!pack.priceId) throw new Error(`${pack.name} does not have a Stripe price ID configured yet.`);
+  const customer = await ensureStripeCustomer(user);
+  const session = await stripeRequest('/checkout/sessions', {
+    mode: 'payment',
+    customer,
+    success_url: `${appBase()}/app?billing=topup-success&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${appBase()}/plans?billing=topup-cancelled`,
+    'line_items[0][price]': pack.priceId,
+    'line_items[0][quantity]': '1',
+    'metadata[userId]': user.id,
+    'metadata[kind]': 'token_topup',
+    'metadata[package]': pack.id,
+    'metadata[tokens]': String(pack.tokens),
+    allow_promotion_codes: 'true',
+  });
+  return { id: session.id, url: session.url };
+}
+
+export function grantTopup(user, packageId, references = {}) {
+  ensureBillingState();
+  if (!user || isUnlimited(user)) return { granted: 0, unlimited: Boolean(user && isUnlimited(user)) };
+  const pack = topups()[packageId];
+  if (!pack) throw new Error('Unknown token top-up package.');
+  const billing = ensureUserBilling(user);
+  const refs = typeof references === 'string' ? { sessionId: references } : references;
+  const cleanSessionId = String(refs.sessionId || '');
+  if (!cleanSessionId) throw new Error('A verified Stripe Checkout session is required to grant a token top-up.');
+  if (billing.processedTopupSessions.includes(cleanSessionId)) {
+    return { granted: 0, duplicate: true, balance: billing.bonusTokens };
+  }
+  billing.bonusTokens = Math.max(0, Number(billing.bonusTokens || 0)) + Number(pack.tokens || 0);
+  billing.processedTopupSessions.unshift(cleanSessionId);
+  billing.processedTopupSessions = billing.processedTopupSessions.slice(0, 100);
+  const event = {
+    id: `bill_${now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`,
+    userId: user.id,
+    amount: Number(pack.tokens || 0),
+    reason: 'token top-up',
+    meta: {
+      packageId: pack.id,
+      sessionId: cleanSessionId,
+      stripeEventId: String(refs.eventId || ''),
+      paymentIntentId: String(refs.paymentIntentId || ''),
+      customerId: String(refs.customerId || ''),
+    },
+    createdAt: now(),
+    type: 'tokens_added',
+    remaining: Math.max(0, allowance(billing.plan || 'free') - Number(billing.tokensUsed || 0) - Number(billing.tokensReserved || 0)) + billing.bonusTokens,
+    message: `${pack.tokens} top-up tokens added to your wallet.`,
+  };
+  state.billingEvents.unshift(event);
+  state.billingEvents = state.billingEvents.slice(0, 500);
+  user.updatedAt = now();
+  save();
+  log(`Added ${pack.tokens} top-up tokens to ${user.email || user.id}.`);
+  return { granted: pack.tokens, balance: billing.bonusTokens, event };
+}
+
 export async function createPortalSession(user) {
   ensureBillingState();
   if (!user) throw new Error('Sign in to continue.');
   const customer = await ensureStripeCustomer(user);
-  const session = await stripeRequest('/billing_portal/sessions', { customer, return_url: `${appBase()}/?billing=portal` });
+  const session = await stripeRequest('/billing_portal/sessions', { customer, return_url: `${appBase()}/app?billing=portal` });
   return { id: session.id, url: session.url };
 }
 
 export function verifyStripeSignature(rawBody, signatureHeader) {
   if (!config.stripeWebhookSecret) {
-    if (!config.stripeSecretKey) throw new Error('Stripe is not configured.');
-    return JSON.parse(rawBody || '{}');
+    throw new Error('Stripe webhooks are not configured. Add STRIPE_WEBHOOK_SECRET in Render.');
   }
   const parts = String(signatureHeader || '').split(',').reduce((acc, part) => {
     const [key, value] = part.split('=');
@@ -343,6 +459,7 @@ export function verifyStripeSignature(rawBody, signatureHeader) {
   const timestamp = parts.t?.[0];
   const signatures = parts.v1 || [];
   if (!timestamp || !signatures.length) throw new Error('Missing Stripe signature.');
+  if (Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp)) > 300) throw new Error('Expired Stripe signature.');
   const signedPayload = `${timestamp}.${rawBody}`;
   const expected = crypto.createHmac('sha256', config.stripeWebhookSecret).update(signedPayload).digest('hex');
   const ok = signatures.some(sig => {
@@ -414,17 +531,33 @@ function clearSubscription(subscription = {}) {
 
 export function handleWebhookEvent(event) {
   ensureBillingState();
+  const eventId = String(event?.id || '');
+  if (!eventId) throw new Error('Invalid Stripe event.');
+  if (state.processedStripeEvents.some(item => item?.id === eventId)) return { ok: true, duplicate: true };
   const object = event?.data?.object || {};
   switch (event?.type) {
-    case 'checkout.session.completed': {
-      const user = (state.authUsers || []).find(item => item.id === object.metadata?.userId);
+    case 'checkout.session.completed':
+    case 'checkout.session.async_payment_succeeded': {
+      const customerId = typeof object.customer === 'string' ? object.customer : object.customer?.id;
+      const user = (state.authUsers || []).find(item => item.id === object.metadata?.userId) || userByCustomer(customerId);
       if (user) {
-        const billing = ensureUserBilling(user);
-        billing.stripeCustomerId = typeof object.customer === 'string' ? object.customer : object.customer?.id || billing.stripeCustomerId || '';
-        billing.stripeSubscriptionId = typeof object.subscription === 'string' ? object.subscription : object.subscription?.id || billing.stripeSubscriptionId || '';
-        billing.plan = object.metadata?.plan || billing.plan || 'free';
-        billing.status = 'checkout_complete';
-        save();
+        const userBilling = ensureUserBilling(user);
+        userBilling.stripeCustomerId = customerId || userBilling.stripeCustomerId || '';
+        if (object.metadata?.kind === 'token_topup' || object.mode === 'payment') {
+          if (object.payment_status !== 'paid') break;
+          const packageId = object.metadata?.package || topupForPrice(object.line_items?.data?.[0]?.price?.id)?.id;
+          if (packageId) grantTopup(user, packageId, {
+            sessionId: object.id,
+            eventId,
+            paymentIntentId: typeof object.payment_intent === 'string' ? object.payment_intent : object.payment_intent?.id,
+            customerId,
+          });
+        } else {
+          userBilling.stripeSubscriptionId = typeof object.subscription === 'string' ? object.subscription : object.subscription?.id || userBilling.stripeSubscriptionId || '';
+          userBilling.plan = object.metadata?.plan || userBilling.plan || 'free';
+          userBilling.status = 'checkout_complete';
+          save();
+        }
       }
       break;
     }
@@ -450,6 +583,9 @@ export function handleWebhookEvent(event) {
     default:
       break;
   }
+  state.processedStripeEvents.unshift({ id: eventId, type: String(event.type || ''), objectId: String(object.id || ''), processedAt: now() });
+  state.processedStripeEvents = state.processedStripeEvents.slice(0, 1000);
+  save();
   return { ok: true };
 }
 
@@ -491,23 +627,35 @@ export function plansPage(user, { error = '', info = '', returnTo = '/' } = {}) 
   const bill = publicBilling(user);
   const cur = bill.current || {};
   const trialDays = Math.max(0, Number(bill.trialDays || 0));
-  const planList = ['weekly', 'monthly', 'yearly'].map(id => bill.plans?.[id]).filter(Boolean);
   const returnValue = esc(safeReturn(returnTo));
-  const planCards = planList.map(plan => {
+  const planCards = PLAN_ORDER.map(id => bill.plans?.[id]).filter(Boolean).map(plan => {
     const configured = Boolean(plan.priceId);
     const current = cur.plan === plan.id && cur.status !== 'free';
+    const cta = current ? 'Current plan' : configured ? `Start ${trialDays || 7}-day trial` : 'Stripe price required';
     return `<article class="dc-plan ${plan.id === 'monthly' ? 'featured' : ''}">
-      <span class="badge">${esc(plan.badge || '')}</span>
+      <div class="plan-top"><span class="badge">${esc(plan.badge || '')}</span>${plan.id === 'monthly' ? '<span class="popular">Recommended</span>' : ''}</div>
       <h2>${esc(plan.name)}</h2>
+      <div class="money">${esc(plan.priceLabel || 'Set price')}<small> / ${esc(plan.interval)}</small></div>
       <p>${esc(plan.description)}</p>
-      <div class="tokens"><b>${esc(plan.tokens)}</b><span>tokens / ${esc(plan.interval)}</span></div>
-      <ul><li>${esc(tokenRate())} token per source minute</li><li>Template rerenders do not cost tokens</li><li>${trialDays ? `${trialDays}-day free trial` : 'Starts immediately'}</li></ul>
-      <form method="post" action="/billing/checkout"><input type="hidden" name="plan" value="${esc(plan.id)}"><input type="hidden" name="returnTo" value="${returnValue}"><button type="submit" ${configured && !current ? '' : 'disabled'}>${current ? 'Current plan' : configured ? `Start ${trialDays || 7}-day trial` : 'Add Stripe price'}</button></form>
+      <div class="tokens"><b>${esc(plan.tokens)}</b><span>tokens included every ${esc(plan.interval)}</span></div>
+      <ul><li>${esc(tokenRate())} token per selected source minute</li><li>Review, editor, templates and publishing</li><li>Template-only rerenders stay free</li><li>${trialDays ? `${trialDays}-day trial when shown at checkout` : 'Starts immediately'}</li></ul>
+      <form method="post" action="/billing/checkout"><input type="hidden" name="plan" value="${esc(plan.id)}"><input type="hidden" name="returnTo" value="${returnValue}"><button type="submit" ${configured && !current ? '' : 'disabled'}>${esc(cta)}</button></form>
     </article>`;
   }).join('');
-  const remaining = cur.unlimited ? '∞' : Number(cur.remaining || 0);
-  const allowance = cur.unlimited ? 'unlimited' : `${remaining} left of ${Number(cur.allowance || 0)}`;
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Choose plan · DeenClipped</title><style>
-  :root{color-scheme:dark;--bg:#08080a;--panel:#111114;--panel2:#19191d;--line:#2c2c33;--text:#f8f7f4;--muted:#a7a4ad;--gold:#d9b478;--gold2:#f0d29e;--green:#53c78b;--red:#ef6b7a}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 18% 0,rgba(217,180,120,.17),transparent 33%),radial-gradient(circle at 80% 10%,rgba(85,183,255,.10),transparent 34%),var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--text);padding:30px}.wrap{width:min(1160px,100%);margin:0 auto}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}.brand{display:flex;align-items:center;gap:12px}.logo{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;border:1px solid rgba(217,180,120,.3);background:rgba(217,180,120,.10);color:var(--gold);font-weight:900}.brand strong,.brand span{display:block}.brand strong{font-size:16px}.brand span{font-size:12px;color:var(--muted);margin-top:2px}.account{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px}.ghost{min-height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:#0b0b0d;color:var(--text);cursor:pointer}.hero{display:grid;grid-template-columns:1.08fr .92fr;gap:18px;margin-bottom:18px}.hero-card,.usage{border:1px solid rgba(255,255,255,.09);border-radius:28px;background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025));box-shadow:0 24px 80px rgba(0,0,0,.28);padding:28px;overflow:hidden;position:relative}.hero-card:after{content:'';position:absolute;right:-70px;bottom:-90px;width:310px;height:310px;border-radius:50%;background:radial-gradient(circle,rgba(217,180,120,.16),transparent 68%)}.eyebrow{display:inline-flex;min-height:28px;align-items:center;padding:0 11px;border-radius:999px;border:1px solid rgba(217,180,120,.23);background:rgba(217,180,120,.08);color:var(--gold2);font-size:11px;font-weight:900;letter-spacing:.09em;text-transform:uppercase}.hero h1{font-size:48px;line-height:.98;letter-spacing:-.06em;margin:20px 0 12px}.hero p{color:var(--muted);line-height:1.65;margin:0;max-width:620px}.usage h2{font-size:18px;margin:0 0 10px}.usage .big{font-size:42px;font-weight:950;letter-spacing:-.05em}.usage .big span{font-size:14px;color:var(--muted);font-weight:700}.bar{height:10px;background:#25252b;border-radius:999px;overflow:hidden;margin:14px 0}.bar i{display:block;height:100%;width:34%;border-radius:999px;background:linear-gradient(90deg,var(--gold),var(--gold2));box-shadow:0 0 24px rgba(217,180,120,.35)}.rate{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}.rate div{padding:12px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.03)}.rate b,.rate span{display:block}.rate span{font-size:12px;color:var(--muted);margin-top:4px}.alerts{margin-bottom:14px}.alert{padding:12px 14px;border-radius:16px;font-size:13px;margin-bottom:10px}.alert.bad{background:rgba(239,107,122,.1);border:1px solid rgba(239,107,122,.25);color:#ffb7bf}.alert.good{background:rgba(83,199,139,.1);border:1px solid rgba(83,199,139,.25);color:#b7ffd3}.plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.dc-plan{border:1px solid rgba(255,255,255,.09);border-radius:24px;background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));padding:20px;display:flex;flex-direction:column;gap:12px}.dc-plan.featured{border-color:rgba(217,180,120,.46);box-shadow:0 0 0 1px rgba(217,180,120,.14) inset,0 24px 70px rgba(217,180,120,.06)}.badge{align-self:flex-start;min-height:24px;padding:0 9px;display:inline-flex;align-items:center;border-radius:999px;background:rgba(217,180,120,.10);color:var(--gold2);font-size:11px;font-weight:850}.dc-plan h2{font-size:22px;margin:0}.dc-plan p{color:var(--muted);font-size:13px;line-height:1.55;margin:0}.tokens b{font-size:40px;letter-spacing:-.05em}.tokens span{display:block;color:var(--muted);font-size:12px}.dc-plan ul{margin:0;padding-left:18px;color:var(--muted);font-size:12px;line-height:1.75}.dc-plan button,.free button{width:100%;height:48px;border:0;border-radius:999px;background:linear-gradient(135deg,var(--gold),var(--gold2));color:#1a1207;font-weight:850;cursor:pointer;margin-top:auto}.dc-plan button:disabled{opacity:.45;cursor:not-allowed}.free{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:16px;padding:16px 18px;border:1px solid var(--line);border-radius:22px;background:rgba(255,255,255,.03)}.free strong,.free span{display:block}.free span{color:var(--muted);font-size:13px;margin-top:3px}.free button{width:auto;min-width:190px;background:#0c0c0f;color:var(--text);border:1px solid var(--line)}.foot{color:var(--muted);font-size:12px;line-height:1.6;margin-top:18px}@media(max-width:900px){body{padding:16px}.hero,.plans{grid-template-columns:1fr}.hero h1{font-size:36px}.top{align-items:flex-start;flex-direction:column}.free{align-items:stretch;flex-direction:column}.free button{width:100%}}
-  </style></head><body><main class="wrap"><div class="top"><div class="brand"><div class="logo">DC</div><div><strong>DeenClipped Studio</strong><span>Choose your creator plan</span></div></div><div class="account"><span>${esc(user?.email || user?.name || 'Signed in')}</span><form method="post" action="/auth/logout"><button class="ghost" type="submit">Log out</button></form></div></div><div class="alerts">${error ? `<div class="alert bad">${esc(error)}</div>` : ''}${info ? `<div class="alert good">${esc(info)}</div>` : ''}</div><section class="hero"><div class="hero-card"><span class="eyebrow">Free trial and tokens</span><h1>Pick how many clips you want to create.</h1><p>DeenClipped uses tokens so creators only pay for processing time. Weekly gives a smaller allowance, monthly gives more, and yearly is built for serious posting. Admin accounts stay unlimited.</p></div><aside class="usage"><h2>Your token wallet</h2><div class="big">${esc(remaining)} <span>${esc(allowance)}</span></div><div class="bar"><i style="width:${cur.unlimited ? 100 : Math.max(6, Math.min(100, ((Number(cur.used || 0) / Math.max(1, Number(cur.allowance || 1))) * 100)))}%"></i></div><div class="rate"><div><b>${esc(bill.tokenRatePerMinute || 1)} token/min</b><span>Source video charge rate</span></div><div><b>${trialDays || 7} days</b><span>Free trial on paid plans</span></div></div></aside></section><section class="plans">${planCards}</section><section class="free"><div><strong>Not ready to subscribe?</strong><span>Continue with free starter tokens and upgrade from the top-bar token button later.</span></div><form method="post" action="/billing/continue-free"><input type="hidden" name="returnTo" value="${returnValue}"><button type="submit">Continue with free tokens</button></form></section><div class="foot">Stripe Checkout handles cards, Apple Pay and Google Pay when configured. DeenClipped does not store card details.</div></main></body></html>`;
+  const topupCards = TOPUP_ORDER.map(id => bill.topups?.[id]).filter(Boolean).map(pack => {
+    const configured = Boolean(pack.priceId);
+    return `<article class="dc-topup ${pack.id === 'boost300' ? 'featured' : ''}">
+      <span class="badge">${esc(pack.badge || 'Top-up')}</span>
+      <div><h3>${esc(pack.name)}</h3><p>${esc(pack.description)}</p></div>
+      <div class="topup-value"><b>+${esc(pack.tokens)}</b><span>tokens</span></div>
+      <div class="topup-price">${esc(pack.priceLabel || 'Set price')}<small> one-time</small></div>
+      <form method="post" action="/billing/topup"><input type="hidden" name="package" value="${esc(pack.id)}"><input type="hidden" name="returnTo" value="${returnValue}"><button type="submit" ${configured && !cur.unlimited ? '' : 'disabled'}>${cur.unlimited ? 'Unlimited owner account' : configured ? 'Add tokens' : 'Stripe price required'}</button></form>
+    </article>`;
+  }).join('');
+  const remaining = cur.unlimited ? '∞' : Math.round(Number(cur.remaining || 0));
+  const bonus = cur.unlimited ? 'Unlimited' : `${Math.round(Number(cur.bonusTokens || 0))} top-up`;
+  const pct = cur.unlimited ? 100 : Math.max(4, Math.min(100, (Number(cur.used || 0) / Math.max(1, Number(cur.allowance || 1))) * 100));
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Plans & token shop · DeenClipped</title><style>
+  :root{color-scheme:dark;--bg:#070708;--panel:#111113;--panel2:#18181c;--line:rgba(255,255,255,.10);--text:#faf8f3;--muted:#aaa6a0;--gold:#e4bc71;--gold2:#f2d696;--green:#59d493;--red:#ef6b7a}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% -8%,rgba(228,188,113,.18),transparent 32%),radial-gradient(circle at 8% 38%,rgba(70,112,120,.08),transparent 24%),var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--text);padding:26px}.wrap{width:min(1240px,100%);margin:0 auto}.top{height:58px;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:42px}.brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}.logo{width:43px;height:43px;border-radius:14px;display:grid;place-items:center;border:1px solid rgba(228,188,113,.34);background:linear-gradient(145deg,#2a251d,#0c0c0e);color:var(--gold);font-weight:950}.brand strong,.brand span{display:block}.brand strong{font-size:16px}.brand span{font-size:11px;color:var(--muted);margin-top:2px}.account{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px}.ghost{min-height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--text);cursor:pointer}.hero{text-align:center;max-width:850px;margin:0 auto 34px}.eyebrow{display:inline-flex;min-height:30px;align-items:center;padding:0 12px;border-radius:999px;border:1px solid rgba(228,188,113,.28);background:rgba(228,188,113,.08);color:var(--gold2);font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.hero h1{font-size:clamp(42px,6vw,70px);line-height:.96;letter-spacing:-.065em;margin:20px 0 14px}.hero p{color:var(--muted);font-size:16px;line-height:1.65;margin:0}.wallet{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;margin:0 0 22px}.wallet-main,.wallet-rule{padding:22px;border:1px solid var(--line);border-radius:24px;background:linear-gradient(160deg,rgba(255,255,255,.055),rgba(255,255,255,.018));box-shadow:0 24px 70px rgba(0,0,0,.26)}.wallet-head{display:flex;justify-content:space-between;gap:12px;color:var(--muted);font-size:11px}.wallet-number{font-size:46px;font-weight:950;letter-spacing:-.06em;margin:10px 0 3px}.wallet-number span{font-size:13px;color:var(--muted);font-weight:650;letter-spacing:0}.bar{height:8px;background:#26262b;border-radius:999px;overflow:hidden;margin-top:14px}.bar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--gold),var(--gold2));width:${pct}%}.wallet-rule b,.wallet-rule span{display:block}.wallet-rule b{font-size:26px}.wallet-rule span{font-size:12px;color:var(--muted);margin-top:5px}.section-title{text-align:center;max-width:720px;margin:52px auto 24px}.section-title span{font-size:10px;text-transform:uppercase;letter-spacing:.12em;font-weight:900;color:var(--gold2)}.section-title h2{font-size:36px;letter-spacing:-.045em;margin:9px 0}.section-title p{color:var(--muted);font-size:14px;margin:0}.plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.dc-plan,.dc-topup{border:1px solid var(--line);border-radius:24px;background:linear-gradient(180deg,rgba(255,255,255,.048),rgba(255,255,255,.018));padding:21px;display:flex;flex-direction:column;gap:12px;position:relative}.dc-plan.featured,.dc-topup.featured{border-color:rgba(228,188,113,.47);box-shadow:0 0 0 1px rgba(228,188,113,.10) inset,0 26px 75px rgba(228,188,113,.06)}.plan-top{display:flex;justify-content:space-between;align-items:center}.badge,.popular{min-height:24px;padding:0 9px;display:inline-flex;align-items:center;border-radius:999px;background:rgba(228,188,113,.10);color:var(--gold2);font-size:9px;font-weight:850}.popular{background:var(--gold);color:#171108}.dc-plan h2,.dc-topup h3{font-size:22px;margin:0}.money{font-size:35px;font-weight:950;letter-spacing:-.055em}.money small,.topup-price small{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:0}.dc-plan p,.dc-topup p{color:var(--muted);font-size:12.5px;line-height:1.55;margin:0}.tokens{padding:12px;border-radius:15px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06)}.tokens b,.tokens span{display:block}.tokens b{font-size:24px}.tokens span{font-size:10px;color:var(--muted);margin-top:2px}.dc-plan ul{margin:0;padding:0;list-style:none;display:grid;gap:8px;color:#d5d0c8;font-size:11.5px}.dc-plan li:before{content:'✓';color:var(--green);margin-right:8px}.dc-plan button,.dc-topup button,.free button{width:100%;height:46px;border:0;border-radius:13px;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#171108;font-weight:850;cursor:pointer;margin-top:auto}.dc-plan button:disabled,.dc-topup button:disabled{opacity:.42;cursor:not-allowed}.topups{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.topup-value b,.topup-value span{display:block}.topup-value b{font-size:38px;letter-spacing:-.055em}.topup-value span{font-size:11px;color:var(--muted)}.topup-price{font-size:20px;font-weight:850}.shop-note{text-align:center;color:var(--muted);font-size:12px;margin:16px auto 0;max-width:760px}.free{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:18px;padding:17px 20px;border:1px solid var(--line);border-radius:20px;background:rgba(255,255,255,.025)}.free strong,.free span{display:block}.free span{color:var(--muted);font-size:12px;margin-top:3px}.free button{width:auto;min-width:210px;background:#0e0e10;color:var(--text);border:1px solid var(--line)}.alerts{margin-bottom:14px}.alert{padding:12px 14px;border-radius:14px;font-size:12px;margin-bottom:8px}.alert.bad{background:rgba(239,107,122,.1);border:1px solid rgba(239,107,122,.25);color:#ffb7bf}.alert.good{background:rgba(89,212,147,.1);border:1px solid rgba(89,212,147,.25);color:#baffd5}.foot{text-align:center;color:var(--muted);font-size:11px;line-height:1.65;margin:28px auto 8px;max-width:850px}@media(max-width:900px){body{padding:16px}.plans,.topups,.wallet{grid-template-columns:1fr}.hero h1{font-size:42px}.top{height:auto;align-items:flex-start;flex-direction:column;margin-bottom:30px}.free{align-items:stretch;flex-direction:column}.free button{width:100%}}@media(max-width:560px){.account span{display:none}.hero h1{font-size:38px}.wallet-main,.wallet-rule,.dc-plan,.dc-topup{border-radius:19px}}
+  </style></head><body><main class="wrap"><div class="top"><a class="brand" href="/"><div class="logo">DC</div><div><strong>DeenClipped</strong><span>Plans & token shop</span></div></a><div class="account"><span>${esc(user?.email || user?.name || 'Signed in')}</span><a class="ghost" href="/app">Dashboard</a><form method="post" action="/auth/logout"><button class="ghost" type="submit">Log out</button></form></div></div><div class="alerts">${error ? `<div class="alert bad">${esc(error)}</div>` : ''}${info ? `<div class="alert good">${esc(info)}</div>` : ''}</div><section class="hero"><span class="eyebrow">Simple, affordable creator pricing</span><h1>Choose a plan. Add tokens only when you need them.</h1><p>DeenClipped keeps pricing tied to selected source minutes. Your subscription refreshes normally, while one-time top-up tokens stay in your wallet until you use them.</p></section><section class="wallet"><div class="wallet-main"><div class="wallet-head"><span>Your wallet</span><span>${esc(cur.plan || 'free')} plan</span></div><div class="wallet-number">${esc(remaining)} <span>tokens available</span></div><div class="wallet-head"><span>${esc(bonus)} tokens</span><span>${cur.unlimited ? 'No usage limits' : `${Math.round(Number(cur.used || 0))} used this period`}</span></div><div class="bar"><i></i></div></div><div class="wallet-rule"><b>${esc(bill.tokenRatePerMinute || 1)} token/min</b><span>Only the selected source range is charged. Editing, reviewing and template-only rerenders do not consume extra tokens.</span></div></section><div class="section-title"><span>Subscriptions</span><h2>Built for different posting rhythms.</h2><p>Start small, publish consistently, or lock in the best annual value.</p></div><section class="plans">${planCards}</section><div class="section-title"><span>Token shop</span><h2>Need more without changing your plan?</h2><p>Buy a one-time token pack. Top-up tokens are added to your current wallet and do not disappear at your next renewal.</p></div><section class="topups" id="token-shop">${topupCards}</section><p class="shop-note">Token packs are optional and available alongside free, weekly, monthly and yearly plans. Stripe shows the final total before payment.</p><section class="free"><div><strong>Not ready to subscribe?</strong><span>Continue with free starter tokens and return to Plans & tokens from the dashboard whenever you need more.</span></div><form method="post" action="/billing/continue-free"><input type="hidden" name="returnTo" value="${returnValue}"><button type="submit">Continue with free tokens</button></form></section><div class="foot">Payments are handled by Stripe. DeenClipped does not store complete card details. Prices shown are configuration-driven labels and Stripe shows the final amount before payment.</div></main></body></html>`;
 }

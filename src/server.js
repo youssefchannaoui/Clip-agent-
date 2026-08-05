@@ -18,9 +18,11 @@ import { checkFfmpeg } from './ffmpeg.js';
 import * as auth from './auth.js';
 import * as billing from './billing.js';
 import * as marketing from './marketing.js';
+import * as admin from './admin.js';
 
 const page = path.join(config.root, 'src', 'public', 'index.html');
 const activityFixPage = path.join(config.root, 'src', 'public', 'activity-fix.js');
+const premiumDashboardPage = path.join(config.root, 'src', 'public', 'premium-dashboard.js');
 const marketingCssPage = path.join(config.root, 'src', 'public', 'marketing.css');
 const marketingJsPage = path.join(config.root, 'src', 'public', 'marketing.js');
 // Marketing images are looked for in a dedicated subfolder first, then in
@@ -72,6 +74,7 @@ function serveAppShell(req, res, url, currentUser) {
   if (auth.enabled() && currentUser && billing.needsPlanChoice(currentUser)) return redirect(res, `/plans?returnTo=${encodeURIComponent('/app' + (url.search || ''))}`);
   let html = fs.readFileSync(page, 'utf8');
   if (!html.includes('/activity-fix.js')) html = html.replace('</body>', '<script src="/activity-fix.js"></script>\n</body>');
+  if (!html.includes('/premium-dashboard.js')) html = html.replace('</body>', '<script src="/premium-dashboard.js"></script>\n</body>');
   const body = Buffer.from(html);
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
   return res.end(body);
@@ -105,7 +108,7 @@ function assertCanAccessProject(user, projectId) {
   return project;
 }
 function requireOperator(user) {
-  if (user?.role !== 'owner') throw Object.assign(new Error('Not found.'), { statusCode: 404 });
+  if (!['owner', 'admin'].includes(String(user?.role || '').toLowerCase())) throw Object.assign(new Error('Not found.'), { statusCode: 404 });
   return user;
 }
 
@@ -279,6 +282,15 @@ async function route(req, res, url) {
     try { const body = await formBody(req); const session = await billing.createCheckoutSession(currentUser, String(body.plan || '')); return redirect(res, session.url); }
     catch (error) { return redirect(res, `/plans?error=${encodeURIComponent(error.message)}`); }
   }
+  if (method === 'POST' && pathname === '/billing/topup') {
+    try {
+      const body = await formBody(req);
+      const session = await billing.createTopupCheckoutSession(currentUser, String(body.package || ''));
+      return redirect(res, session.url);
+    } catch (error) {
+      return redirect(res, `/plans?error=${encodeURIComponent(error.message)}`);
+    }
+  }
   const authStart = pathname.match(/^\/auth\/(google|apple)\/start$/);
   if (method === 'GET' && authStart) {
     try { return redirect(res, auth.oauthStart(authStart[1], req, url.searchParams.get('returnTo') || '/app')); }
@@ -356,6 +368,12 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/activity-fix.js') {
     if (!fs.existsSync(activityFixPage)) return json(res, 404, { error: 'Activity UI script not found.' });
     const body = fs.readFileSync(activityFixPage);
+    res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
+    return res.end(body);
+  }
+  if (method === 'GET' && pathname === '/premium-dashboard.js') {
+    if (!fs.existsSync(premiumDashboardPage)) return json(res, 404, { error: 'Premium dashboard script not found.' });
+    const body = fs.readFileSync(premiumDashboardPage);
     res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
     return res.end(body);
   }
@@ -439,9 +457,19 @@ async function route(req, res, url) {
     try { return json(res, 200, await billing.createCheckoutSession(currentUser, String(body.plan || ''))); }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
+  if (method === 'POST' && pathname === '/api/billing/topup-checkout') {
+    const body = await readBody(req);
+    try { return json(res, 200, await billing.createTopupCheckoutSession(currentUser, String(body.package || ''))); }
+    catch (error) { return json(res, 400, { error: error.message }); }
+  }
   if (method === 'POST' && pathname === '/api/billing/portal') {
     try { return json(res, 200, await billing.createPortalSession(currentUser)); }
     catch (error) { return json(res, 400, { error: error.message }); }
+  }
+
+  if (method === 'GET' && pathname === '/api/admin/analytics') {
+    try { requireOperator(currentUser); return json(res, 200, admin.analytics(currentUser)); }
+    catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
   }
 
   const socialConnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok)\/connect$/);
