@@ -7,11 +7,32 @@ function escapeHtml(value = '') {
     .replaceAll("'", '&#039;');
 }
 
+function logoMark() {
+  return `<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 26" fill="none"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg></span>`;
+}
+
+function icon(name) {
+  const icons = {
+    check: '<svg viewBox="0 0 24 24" fill="none"><path d="m5 12.5 4.2 4.2L19 7"/></svg>',
+    link: '<svg viewBox="0 0 24 24" fill="none"><path d="M10 13.5 14 9.5"/><path d="M7.2 16.3 5.8 17.7a4 4 0 0 1-5.6-5.6l3.5-3.5a4 4 0 0 1 5.6 0"/><path d="m16.8 7.7 1.4-1.4a4 4 0 0 1 5.6 5.6l-3.5 3.5a4 4 0 0 1-5.6 0"/></svg>',
+    upload: '<svg viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 15v5h16v-5"/></svg>',
+    clips: '<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="m10 9 6 3-6 3Z"/></svg>',
+    edit: '<svg viewBox="0 0 24 24" fill="none"><path d="m4 16.5 9-9 3.5 3.5-9 9H4Z"/><path d="m15 6 1.5-1.5a2 2 0 0 1 2.8 0l.2.2a2 2 0 0 1 0 2.8L18 9"/></svg>',
+    publish: '<svg viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 20h16"/></svg>',
+    captions: '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 10a3 3 0 1 0 0 4m7-4a3 3 0 1 0 0 4"/></svg>',
+    template: '<svg viewBox="0 0 24 24" fill="none"><path d="M12 3 4 8v8l8 5 8-5V8Z"/><path d="m4 8 8 5 8-5M12 13v8"/></svg>',
+    calendar: '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4m8-4v4M3 10h18"/></svg>',
+    account: '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4.3 3.5-6.5 8-6.5s7.2 2.2 8 6.5"/></svg>',
+    arrow: '<svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>',
+    left: '<svg viewBox="0 0 24 24" fill="none"><path d="m14 6-6 6 6 6"/></svg>',
+    right: '<svg viewBox="0 0 24 24" fill="none"><path d="m10 6 6 6-6 6"/></svg>',
+  };
+  return icons[name] || icons.check;
+}
+
 function navActions(currentUser) {
-  if (currentUser) {
-    return `<div class="nav-actions"><a class="button primary" href="/app">My dashboard</a></div>`;
-  }
-  return `<div class="nav-actions"><a class="button ghost" href="/login?returnTo=/app">Sign in</a><a class="button primary" href="/login?returnTo=/app">Get started</a></div>`;
+  if (currentUser) return `<div class="nav-actions"><a class="button primary compact" href="/app">My dashboard ${icon('arrow')}</a></div>`;
+  return `<div class="nav-actions"><a class="button text-button" href="/login?returnTo=/app">Sign in</a><a class="button primary compact" href="/login?returnTo=/app">Get started ${icon('arrow')}</a></div>`;
 }
 
 function layout({ base, currentUser, title, description, canonicalPath = '/', body }) {
@@ -25,7 +46,7 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${safeTitle}</title>
   <meta name="description" content="${safeDescription}">
-  <meta name="theme-color" content="#060607">
+  <meta name="theme-color" content="#070708">
   <meta property="og:title" content="${safeTitle}">
   <meta property="og:description" content="${safeDescription}">
   <meta property="og:type" content="website">
@@ -36,8 +57,8 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
 <body>
   <header class="site-header">
     <div class="wrap nav">
-      <a class="brand" href="/" aria-label="DeenClipped home"><span class="brand-mark" aria-hidden="true"></span><span>DeenClipped</span></a>
-      <button class="menu-button" type="button" data-menu aria-label="Open navigation">☰</button>
+      <a class="brand" href="/" aria-label="DeenClipped home">${logoMark()}<span class="brand-copy"><strong>DeenClipped</strong><small>AI clip workspace</small></span></a>
+      <button class="menu-button" type="button" data-menu aria-label="Open navigation"><span></span><span></span><span></span></button>
       <nav class="nav-links" aria-label="Main navigation">
         <a href="/#how-it-works">How it works</a>
         <a href="/features">Features</a>
@@ -52,12 +73,12 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
   <footer class="site-footer">
     <div class="wrap">
       <div class="footer-grid">
-        <div class="footer-brand"><a class="brand" href="/"><span class="brand-mark"></span><span>DeenClipped</span></a><p>Turn long lectures and videos into clean short-form clips, review them, and publish to your own connected channels.</p></div>
+        <div class="footer-brand"><a class="brand" href="/">${logoMark()}<span class="brand-copy"><strong>DeenClipped</strong><small>AI clip workspace</small></span></a><p>Turn long lectures and videos into review-ready short clips, refine every detail, then publish to your own connected channels.</p></div>
         <div class="footer-col"><h4>Product</h4><a href="/features">Features</a><a href="/pricing">Pricing</a><a href="/app">Dashboard</a></div>
         <div class="footer-col"><h4>Company</h4><a href="/contact">Contact</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a></div>
         <div class="footer-col"><h4>Start</h4><a href="/login?returnTo=/app">Sign in</a><a href="/login?returnTo=/app">Create free clips</a><a href="mailto:support@deenclipped.online">Support</a></div>
       </div>
-      <div class="footer-bottom"><span>© ${new Date().getFullYear()} DeenClipped</span><span>Built for clean, controlled short-form publishing.</span></div>
+      <div class="footer-bottom"><span>© ${new Date().getFullYear()} DeenClipped</span><span>Import · Review · Edit · Publish</span></div>
     </div>
   </footer>
   <script src="/marketing.js" defer></script>
@@ -66,134 +87,149 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
 }
 
 function sourceForm() {
-  return `<form class="source-bar" data-source-form><span class="source-icon">↗</span><label class="sr-only" for="source-url">Video URL</label><input id="source-url" name="source" placeholder="Paste a YouTube or video link" autocomplete="off"><button type="submit">Create free clips</button></form>`;
+  return `<form class="source-bar" data-source-form><span class="source-icon">${icon('link')}</span><label class="sr-only" for="source-url">Video URL</label><input id="source-url" name="source" placeholder="Paste a YouTube or video link" autocomplete="off"><button type="submit">Get clips ${icon('arrow')}</button></form>`;
+}
+
+function checkItem(title, text) {
+  return `<div class="detail-item"><span class="detail-check">${icon('check')}</span><span><b>${title}</b><small>${text}</small></span></div>`;
+}
+
+function pricingCards() {
+  return `<div class="pricing-grid">
+    <article class="price-card"><span class="plan-kicker">Start</span><h3>Free</h3><div class="price">40 <small>tokens</small></div><p>Explore the complete workflow before choosing a paid plan.</p><ul><li>Generate from selected source time</li><li>Review clips before posting</li><li>Access templates and editor</li></ul><a class="button secondary full" href="/login?returnTo=/app">Start free</a></article>
+    <article class="price-card"><span class="plan-kicker">Flexible</span><h3>Weekly</h3><div class="price">120 <small>tokens/week</small></div><p>For occasional lectures, events and short campaigns.</p><ul><li>Weekly token refresh</li><li>Full review and editor</li><li>Publishing workflow</li></ul><a class="button secondary full" href="/login?returnTo=/app">Choose weekly</a></article>
+    <article class="price-card popular"><span class="popular-label">Most popular</span><span class="plan-kicker">Consistent</span><h3>Monthly</h3><div class="price">650 <small>tokens/month</small></div><p>For creators building a dependable short-form schedule.</p><ul><li>More source-video minutes</li><li>Scheduling and connections</li><li>Complete clip workflow</li></ul><a class="button primary full" href="/login?returnTo=/app">Choose monthly</a></article>
+    <article class="price-card"><span class="plan-kicker">Best value</span><h3>Yearly</h3><div class="price">9,000 <small>tokens/year</small></div><p>For higher-volume clipping across the full year.</p><ul><li>Annual token allocation</li><li>Complete workspace</li><li>Best long-term value</li></ul><a class="button secondary full" href="/login?returnTo=/app">Choose yearly</a></article>
+  </div>`;
+}
+
+function faqBlock() {
+  return `<div class="faq reveal">
+    <details><summary>What does DeenClipped do?</summary><p>DeenClipped turns long lectures and videos into short-form clips, lets you review and edit every result, then helps publish or schedule approved clips.</p></details>
+    <details><summary>Can I paste a YouTube link?</summary><p>Yes. You can begin with a supported video link or upload a video directly. DeenClipped then reads the source and lets you choose the processing range.</p></details>
+    <details><summary>Do customers need to upload browser cookies?</summary><p>No. Customer-facing workflows should not ask users to upload browser cookies. Import handling remains behind the product experience.</p></details>
+    <details><summary>Does publishing go to my own channel?</summary><p>Yes. Each DeenClipped user connects their own supported social accounts, and publishing uses that user's saved connection.</p></details>
+    <details><summary>Can I review clips before posting?</summary><p>Yes. The workflow is review-first. You can approve, edit, regenerate, shorten, lengthen or remove clips before they are posted.</p></details>
+  </div>`;
 }
 
 export function home({ base, currentUser }) {
   const body = `
   <main>
     <section class="hero wrap">
-      <span class="eyebrow"><i></i>DeenClipped AI clip workspace</span>
-      <h1><span>One lecture. Ten clean clips.</span><br>Ready to publish.</h1>
-      <p class="hero-copy">Turn long Islamic lectures and videos into short-form clips with AI. DeenClipped finds strong moments, adds captions, gives you full review control, and helps you publish faster.</p>
+      <span class="eyebrow"><i></i>Built for lecture-to-short workflows</span>
+      <h1>Turn long lectures into <span>powerful short clips.</span></h1>
+      <p class="hero-copy">DeenClipped finds strong moments, creates vertical clips, adds captions, gives you a real editor, and helps publish to your connected platforms.</p>
       <p class="purpose-line"><strong>DeenClipped</strong> is a web application that helps users create, edit, and publish short-form clips from long videos.</p>
       ${sourceForm()}
-      <div class="hero-actions"><a class="button ghost" href="/features">Explore features</a><a class="button ghost" href="/pricing">View pricing</a></div>
-      <p class="hero-note">No editing experience required. Review every clip before it goes live.</p>
-      <div class="hero-stage reveal">
-        <div class="browser-bar"><i></i><i></i><i></i><span></span></div>
-        <img class="product-image" src="/marketing-assets/dashboard.webp" alt="DeenClipped dashboard showing video import, clip review, templates and publishing">
-        <div class="floating-chip chip-one"><i></i>4 clips ready to review</div>
-        <div class="floating-chip chip-two"><i></i>Your workflow, in one place</div>
+      <div class="hero-actions"><a class="button secondary" href="/features">Explore the workflow</a><a class="button text-link" href="/pricing">View pricing ${icon('arrow')}</a></div>
+      <div class="hero-product reveal" data-parallax>
+        <div class="hero-glow"></div>
+        <div class="app-frame hero-app-frame"><div class="window-bar"><span></span><span></span><span></span><i>deenclipped.online/app</i></div><img src="/marketing-assets/hero-dashboard.webp" alt="DeenClipped dashboard showing the complete clipping workflow" fetchpriority="high"></div>
+        <figure class="floating-clip floating-a"><img src="/marketing-assets/floating-clip-a.webp" alt="A finished DeenClipped vertical clip"><figcaption><b>Captioned</b><span>Ready to review</span></figcaption></figure>
+        <figure class="floating-clip floating-b"><img src="/marketing-assets/floating-clip-b.webp" alt="A vertical lecture clip created in DeenClipped"><figcaption><b>Reframed</b><span>9:16 output</span></figcaption></figure>
+        <figure class="floating-clip floating-c"><img src="/marketing-assets/floating-clip-c.webp" alt="A completed short-form clip"><figcaption><b>Publish-ready</b><span>Your final approval</span></figcaption></figure>
+        <div class="status-float status-left"><span>${icon('clips')}</span><div><b>Strong moments found</b><small>Review the best clips first</small></div></div>
+        <div class="status-float status-right"><span>${icon('calendar')}</span><div><b>Schedule ready</b><small>Post to your channels</small></div></div>
       </div>
-      <div class="platform-strip">
-        <span class="platform-pill"><i class="platform-dot yt"></i><b>YouTube</b> import & publish</span>
-        <span class="platform-pill"><i class="platform-dot tt"></i><b>TikTok</b> publishing</span>
-        <span class="platform-pill"><i class="platform-dot ig"></i><b>Instagram</b> Reels</span>
-        <span class="platform-pill"><i class="platform-dot fb"></i><b>Facebook</b> Reels</span>
-      </div>
+      <div class="capability-rail reveal"><span>${icon('link')} Import a source</span><i>${icon('arrow')}</i><span>${icon('clips')} Find strong moments</span><i>${icon('arrow')}</i><span>${icon('edit')} Refine every clip</span><i>${icon('arrow')}</i><span>${icon('publish')} Publish or schedule</span></div>
     </section>
 
-    <section class="section" id="how-it-works">
+    <section class="section workflow-section" id="how-it-works">
       <div class="wrap">
-        <div class="section-head reveal"><span class="section-label">How it works</span><h2>From one long video to a complete clip pipeline.</h2><p>Import once. Choose the source window. Review the strongest moments. Publish on your schedule.</p></div>
-        <div class="workflow-grid reveal">
-          <article class="workflow-card"><span class="number">01 — IMPORT</span><h3>Paste a link or upload</h3><p>Bring in a lecture or video, then select the exact source range you want DeenClipped to process.</p></article>
-          <article class="workflow-card"><span class="number">02 — REVIEW</span><h3>Choose the best clips</h3><p>See real thumbnails, hook scores, titles and captions before approving anything.</p></article>
-          <article class="workflow-card"><span class="number">03 — PUBLISH</span><h3>Post to your channels</h3><p>Connect your own accounts, publish immediately, or place clips into a clean schedule.</p></article>
+        <div class="section-head align-left reveal"><span class="section-label">One connected workflow</span><h2>Everything between the long video and the final post.</h2><p>DeenClipped is more than a clip generator. It keeps the source, generated clips, editor, templates, schedule and platform connections together.</p></div>
+        <div class="workflow-story reveal">
+          <div class="story-copy"><span class="story-number">01</span><h3>Start with the exact source you need.</h3><p>Paste a supported video link or upload a file. DeenClipped reads the source, lets you choose the start and end time, and estimates tokens from only the selected source window.</p>${checkItem('Full video by default','Process everything, or shorten the range to save tokens.')}${checkItem('Clear generation settings','Choose clip count, target length and template before rendering.')}</div>
+          <div class="story-visual source-visual"><div class="app-frame"><img src="/marketing-assets/dashboard-overview.webp" alt="DeenClipped source import and dashboard"></div><div class="mini-control"><span>${icon('link')}</span><div><b>Source understood</b><small>Choose the section to process</small></div></div></div>
         </div>
       </div>
     </section>
 
-    <section class="section">
-      <div class="wrap split reverse">
-        <div class="real-panel clip-phone-wrap reveal"><img src="/marketing-assets/clip-review.webp" alt="DeenClipped clip review page with real generated clip thumbnails"><div class="phone-card"><img src="/marketing-assets/vertical-clip.webp" alt="A finished vertical short-form clip"></div></div>
-        <div class="split-copy reveal"><span class="section-label">AI clip review</span><h2>See the clips, not a wall of settings.</h2><p>DeenClipped presents generated clips as real visual results. Review the thumbnail, hook strength, title and posting status before you move forward.</p><div class="feature-list"><div><span class="check">✓</span><span><b>Real clip thumbnails</b><span>Know exactly what was generated at a glance.</span></span></div><div><span class="check">✓</span><span><b>Approve before posting</b><span>Nothing is published without your review.</span></span></div><div><span class="check">✓</span><span><b>Regenerate and refine</b><span>Shorten, lengthen, retitle or edit the clip style.</span></span></div></div><a class="button primary" href="/login?returnTo=/app">Generate your first clips</a></div>
+    <section class="section clips-section">
+      <div class="wrap split-layout">
+        <div class="media-stack reveal">
+          <div class="app-frame media-main"><img src="/marketing-assets/clip-library.webp" alt="DeenClipped project with generated clip thumbnails"></div>
+          <div class="stack-card stack-one"><img src="/marketing-assets/floating-clip-a.webp" alt="Generated vertical clip one"></div>
+          <div class="stack-card stack-two"><img src="/marketing-assets/floating-clip-b.webp" alt="Generated vertical clip two"></div>
+          <div class="stack-card stack-three"><img src="/marketing-assets/floating-clip-c.webp" alt="Generated vertical clip three"></div>
+        </div>
+        <div class="feature-copy reveal"><span class="section-label">AI clip discovery</span><h2>See the actual clips, not a wall of settings.</h2><p>Generated moments appear as real visual results with thumbnails, captions, titles, scores and posting status. You can quickly understand what the AI created before spending time editing.</p><div class="detail-list">${checkItem('Visual clip review','Compare several generated moments at a glance.')}${checkItem('Hook and title guidance','Start with the strongest openings and clearer titles.')}${checkItem('Refine without starting over','Shorten, lengthen, retitle, regenerate or open the editor.')}</div><a class="button primary" href="/login?returnTo=/app">Create your first clips ${icon('arrow')}</a></div>
       </div>
     </section>
 
-    <section class="section">
-      <div class="wrap split">
-        <div class="split-copy reveal"><span class="section-label">Real editor control</span><h2>AI starts the edit. You stay in control.</h2><p>Open any clip in the editor, adjust the framing, move captions, change the template and refine the timeline before rendering.</p><div class="feature-list"><div><span class="check">✓</span><span><b>Caption positioning</b><span>Drag, select and snap captions where they belong.</span></span></div><div><span class="check">✓</span><span><b>Vertical framing</b><span>Fit the lecture into a clean short-form layout.</span></span></div><div><span class="check">✓</span><span><b>Template-based rendering</b><span>Keep every clip visually consistent.</span></span></div></div><a class="button ghost" href="/features">See every feature</a></div>
-        <div class="real-panel reveal"><img src="/marketing-assets/editor.webp" alt="DeenClipped video editor with vertical preview, captions and timeline"></div>
-      </div>
-    </section>
-
-    <section class="section">
+    <section class="section editor-section">
       <div class="wrap">
-        <div class="section-head reveal"><span class="section-label">Publishing workflow</span><h2>Create once. Publish consistently.</h2><p>Schedule approved clips and keep each customer or creator connected to their own social accounts.</p></div>
-        <div class="publish-grid reveal"><div class="real-panel"><img src="/marketing-assets/schedule.webp" alt="DeenClipped publishing schedule with upcoming short-form clips"></div><div class="real-panel portrait"><img src="/marketing-assets/connections.webp" alt="DeenClipped connected platforms and scheduled posts"></div></div>
+        <div class="section-head reveal"><span class="section-label">Real editing control</span><h2>AI starts the edit. You decide how it finishes.</h2><p>Move beyond one-click output with practical controls for captions, framing, templates, audio and timing.</p></div>
+        <div class="editor-showcase reveal">
+          <div class="app-frame editor-main"><img src="/marketing-assets/editor-timeline.webp" alt="DeenClipped editor with vertical preview and timeline"></div>
+          <div class="editor-detail speaker-card"><img src="/marketing-assets/speaker-focus.webp" alt="DeenClipped automatic speaker focus control"><span><b>Speaker focus</b><small>Keep attention on the person speaking.</small></span></div>
+          <div class="editor-detail preview-card"><img src="/marketing-assets/caption-preview.webp" alt="DeenClipped caption preview"><span><b>Caption control</b><small>Position readable captions exactly where they belong.</small></span></div>
+          <div class="editor-label label-one">Drag captions</div><div class="editor-label label-two">Adjust framing</div><div class="editor-label label-three">Refine the timeline</div>
+        </div>
+        <div class="feature-row reveal"><div><span>${icon('captions')}</span><b>Caption positioning</b><p>Select, drag and place captions around the speaker and important visual content.</p></div><div><span>${icon('edit')}</span><b>Framing and canvas</b><p>Resize and reposition the video for a cleaner vertical composition.</p></div><div><span>${icon('template')}</span><b>Reusable templates</b><p>Keep typography, branding and layout consistent across every clip.</p></div></div>
       </div>
     </section>
 
-    <section class="section-tight">
-      <div class="wrap metrics reveal"><div class="metric"><strong>1 link</strong><span>Start from one lecture or source video.</span></div><div class="metric"><strong>AI clips</strong><span>Find strong moments automatically.</span></div><div class="metric"><strong>Full review</strong><span>Approve and refine before publishing.</span></div><div class="metric"><strong>Your accounts</strong><span>Publish to each user's own channels.</span></div></div>
+    <section class="section organise-section">
+      <div class="wrap split-layout reverse">
+        <div class="feature-copy reveal"><span class="section-label">Projects and operations</span><h2>Keep every lecture, clip and next action organised.</h2><p>The project library keeps the original source at the top level and the generated clips inside it. Your workflow queue shows what is processing, what needs review, and what is ready to publish.</p><div class="detail-list">${checkItem('Source-first project library','Find the original lecture quickly, then open its clips.')}${checkItem('Clear workflow status','See processing, review and publishing progress in one place.')}${checkItem('Built for multiple accounts','Each user keeps their own projects and connected platforms.')}</div></div>
+        <div class="double-media reveal"><div class="app-frame back-media"><img src="/marketing-assets/projects-library.webp" alt="DeenClipped project library"></div><div class="app-frame front-media"><img src="/marketing-assets/workflow-queue.webp" alt="DeenClipped workflow queue and platform connections"></div></div>
+      </div>
     </section>
 
-    <section class="section">
+    <section class="section publishing-section">
       <div class="wrap">
-        <div class="section-head reveal"><span class="section-label">Everything in one workspace</span><h2>Built for the full clipping workflow.</h2><p>Not just generation. DeenClipped connects the import, review, edit and publishing stages.</p></div>
-        <div class="features-grid reveal">
-          <article class="feature-card"><span class="feature-icon">✦</span><h3>AI moment detection</h3><p>Find useful, complete moments instead of random cut points.</p></article>
-          <article class="feature-card"><span class="feature-icon">CC</span><h3>Automatic captions</h3><p>Generate readable captions and support bilingual clip styles.</p></article>
-          <article class="feature-card"><span class="feature-icon">⌗</span><h3>Smart reframing</h3><p>Convert landscape source videos into vertical clips built for Shorts and Reels.</p></article>
-          <article class="feature-card"><span class="feature-icon">◇</span><h3>Reusable templates</h3><p>Save a consistent visual style across every render.</p></article>
-          <article class="feature-card"><span class="feature-icon">✓</span><h3>Clip review</h3><p>Approve, delete, retitle and refine clips before they leave the workspace.</p></article>
-          <article class="feature-card"><span class="feature-icon">↗</span><h3>Publish and schedule</h3><p>Send approved clips to connected platforms immediately or later.</p></article>
+        <div class="section-head reveal"><span class="section-label">Publish with control</span><h2>Create once. Review carefully. Publish consistently.</h2><p>Approved clips can be downloaded, posted immediately, or placed into a publishing schedule for your own connected accounts.</p></div>
+        <div class="publishing-canvas reveal"><div class="app-frame schedule-frame"><img src="/marketing-assets/publishing-schedule.webp" alt="DeenClipped publishing schedule"></div><div class="connection-panel"><img src="/marketing-assets/vertical-clip.webp" alt="DeenClipped social platform connections"><div class="connection-caption"><span>${icon('account')}</span><div><b>Your accounts stay yours</b><small>Connections are stored per DeenClipped user.</small></div></div></div></div>
+      </div>
+    </section>
+
+    <section class="section gallery-section">
+      <div class="wrap">
+        <div class="section-head reveal"><span class="section-label">Inside the workspace</span><h2>Explore more of the real product.</h2><p>Use the arrows to move through the dashboard, clip review, projects, editor and publishing workflow.</p></div>
+        <div class="product-gallery reveal" data-gallery>
+          <div class="gallery-track">
+            <figure class="gallery-slide active"><img src="/marketing-assets/hero-dashboard.webp" alt="DeenClipped dashboard"><figcaption><b>Dashboard</b><span>Import, monitor and continue the next task.</span></figcaption></figure>
+            <figure class="gallery-slide"><img src="/marketing-assets/clip-results.webp" alt="DeenClipped generated clip results"><figcaption><b>Clip results</b><span>Review real thumbnails, scores and posting actions.</span></figcaption></figure>
+            <figure class="gallery-slide"><img src="/marketing-assets/projects-library.webp" alt="DeenClipped projects"><figcaption><b>Projects</b><span>Keep sources and generated clips organised.</span></figcaption></figure>
+            <figure class="gallery-slide"><img src="/marketing-assets/editor-timeline.webp" alt="DeenClipped editor"><figcaption><b>Editor</b><span>Refine framing, captions and timing.</span></figcaption></figure>
+            <figure class="gallery-slide"><img src="/marketing-assets/publishing-schedule.webp" alt="DeenClipped schedule"><figcaption><b>Publishing</b><span>Post now, download, or schedule the next clip.</span></figcaption></figure>
+          </div>
+          <button class="gallery-button previous" type="button" data-gallery-prev aria-label="Previous screenshot">${icon('left')}</button><button class="gallery-button next" type="button" data-gallery-next aria-label="Next screenshot">${icon('right')}</button><div class="gallery-dots" data-gallery-dots></div>
         </div>
       </div>
     </section>
 
-    <section class="section" id="pricing-preview">
-      <div class="wrap">
-        <div class="section-head reveal"><span class="section-label">Simple plans</span><h2>Choose the amount of source time you need.</h2><p>Tokens are based on selected source-video minutes, so trimming the source window saves tokens.</p></div>
-        ${pricingCards()}
-        <div style="text-align:center;margin-top:24px"><a class="button ghost" href="/pricing">Compare all plans</a></div>
-      </div>
+    <section class="section pricing-section">
+      <div class="wrap"><div class="section-head reveal"><span class="section-label">Simple source-time pricing</span><h2>Use tokens on the video time you choose to process.</h2><p>One token represents one selected source-video minute. Template-only rerenders remain free under the current plan rules.</p></div>${pricingCards()}</div>
     </section>
 
-    <section class="section" id="faq">
-      <div class="wrap"><div class="section-head reveal"><span class="section-label">Questions</span><h2>Everything you need to know.</h2></div>${faqBlock()}</div>
-    </section>
+    <section class="section faq-section" id="faq"><div class="wrap"><div class="section-head reveal"><span class="section-label">Questions</span><h2>Know how the workflow works before you start.</h2></div>${faqBlock()}</div></section>
 
-    <section class="section-tight"><div class="wrap final-cta reveal"><span class="section-label">Start creating</span><h2>Turn the next lecture into clips people will actually watch.</h2><p>Bring in a source video, choose the range and let DeenClipped build a review-ready set of clips.</p><a class="button primary" href="/login?returnTo=/app">Create free clips</a></div></section>
+    <section class="section final-section"><div class="wrap final-cta reveal"><div><span class="section-label">Start creating</span><h2>Turn the next lecture into clips worth watching.</h2><p>Bring in a source, choose the range and build a review-ready set of short clips in one connected workspace.</p></div><a class="button primary" href="/login?returnTo=/app">Open DeenClipped ${icon('arrow')}</a></div></section>
   </main>`;
   return layout({ base, currentUser, title: 'DeenClipped', description: 'DeenClipped is a web application that helps users create, edit, and publish short-form clips from long videos.', canonicalPath: '/', body });
 }
 
-function pricingCards() {
-  return `<div class="pricing-grid reveal">
-    <article class="price-card"><h3>Free</h3><div class="price">$0</div><p>Test the full workflow and create your first clips.</p><ul><li>40 starter tokens</li><li>Clip review and editor</li><li>Template rerenders stay free</li></ul><a class="button ghost" href="/login?returnTo=/app">Start free</a></article>
-    <article class="price-card"><h3>Weekly</h3><div class="price">120 <small>tokens/week</small></div><p>Flexible access for occasional weekly clipping.</p><ul><li>Renews weekly</li><li>All creation tools</li><li>Publishing workflow</li></ul><a class="button ghost" href="/login?returnTo=/app">Choose weekly</a></article>
-    <article class="price-card popular"><span class="price-badge">Popular</span><h3>Monthly</h3><div class="price">650 <small>tokens/month</small></div><p>Best for creators publishing clips consistently.</p><ul><li>More source minutes</li><li>Full review and editor</li><li>Scheduling and connections</li></ul><a class="button primary" href="/login?returnTo=/app">Choose monthly</a></article>
-    <article class="price-card"><h3>Yearly</h3><div class="price">9,000 <small>tokens/year</small></div><p>Maximum value for high-volume long-form content.</p><ul><li>Annual token allocation</li><li>Complete workspace</li><li>Best long-term value</li></ul><a class="button ghost" href="/login?returnTo=/app">Choose yearly</a></article>
-  </div>`;
-}
-
-function faqBlock() {
-  return `<div class="faq reveal">
-    <details><summary>What does DeenClipped do?</summary><p>DeenClipped turns long videos into short-form clips, lets you review and edit them, and helps publish or schedule approved clips.</p></details>
-    <details><summary>Can I paste a YouTube link?</summary><p>Yes. DeenClipped supports URL import when the source can be accessed, with direct video upload available as the reliable alternative.</p></details>
-    <details><summary>Do customers need to upload cookies?</summary><p>No. Customer-facing workflows should not ask users to upload browser cookies. Import handling stays behind the app experience.</p></details>
-    <details><summary>Does publishing go to my own channel?</summary><p>Yes. Each user connects their own social accounts, and publishing uses that user's saved connection.</p></details>
-    <details><summary>Can I review clips before posting?</summary><p>Yes. DeenClipped is built around review-first publishing. You can approve, edit, regenerate or delete clips before posting.</p></details>
-  </div>`;
-}
-
 export function features({ base, currentUser }) {
-  const body = `<main><section class="page-hero wrap"><span class="eyebrow"><i></i>Product features</span><h1>Everything between the long video and the final post.</h1><p>DeenClipped combines AI clipping with the practical controls needed to review, edit, organise and publish short-form content.</p></section><section class="page-content"><div class="wrap"><div class="features-grid">${[
-    ['✦','AI clip detection','Find strong, complete moments from lectures and long-form videos.'],['CC','Captions','Generate readable captions and keep them consistent with saved templates.'],['⌗','Source range control','Choose the exact beginning and end of the source video before processing.'],['◇','Templates','Reuse layouts, fonts, caption styles and framing choices.'],['✓','Clip review','Approve, retitle, shorten, lengthen, edit or remove generated clips.'],['↗','Publishing','Connect each user’s own YouTube and social accounts.'],['◫','Project library','Keep the original source thumbnail at project level and clip thumbnails inside the project.'],['⌁','Scheduling','Place approved clips into publishing windows and post when ready.'],['▣','Editor','Fine-tune framing, captions, video placement and timeline elements.']
-  ].map(([icon,title,text])=>`<article class="feature-card reveal"><span class="feature-icon">${icon}</span><h3>${title}</h3><p>${text}</p></article>`).join('')}</div><div class="section"><div class="real-panel reveal"><img src="/marketing-assets/dashboard.webp" alt="DeenClipped full dashboard"></div></div><div class="final-cta reveal"><h2>See the complete workflow in your own dashboard.</h2><p>Start with a source video and move through generation, review, editing and publishing without leaving DeenClipped.</p><a class="button primary" href="/login?returnTo=/app">Open DeenClipped</a></div></div></section></main>`;
+  const body = `<main>
+    <section class="page-hero wrap"><span class="eyebrow"><i></i>Product features</span><h1>A complete workflow for turning long videos into short-form content.</h1><p>Import, clip, review, edit, organise, schedule and publish without moving between disconnected tools.</p></section>
+    <section class="page-content"><div class="wrap">
+      <div class="feature-row feature-page-row"><div><span>${icon('clips')}</span><b>AI clip discovery</b><p>Find complete, strong moments from lectures and long-form videos.</p></div><div><span>${icon('captions')}</span><b>Captions</b><p>Create readable captions and position them around the speaker.</p></div><div><span>${icon('edit')}</span><b>Editor</b><p>Adjust framing, video position, captions, audio and timing.</p></div><div><span>${icon('template')}</span><b>Templates</b><p>Reuse consistent caption, branding and layout choices.</p></div><div><span>${icon('calendar')}</span><b>Scheduling</b><p>Place approved clips into clear publishing windows.</p></div><div><span>${icon('account')}</span><b>Own account connections</b><p>Each user connects and publishes to their own supported channels.</p></div></div>
+      <div class="feature-page-showcase"><div class="app-frame"><img src="/marketing-assets/clip-results.webp" alt="DeenClipped clip review"></div><div class="app-frame"><img src="/marketing-assets/editor-timeline.webp" alt="DeenClipped editor"></div><div class="app-frame"><img src="/marketing-assets/publishing-schedule.webp" alt="DeenClipped publishing schedule"></div></div>
+      <div class="final-cta reveal"><div><span class="section-label">See it together</span><h2>Open one workspace instead of five separate tools.</h2><p>Start from the source video and continue through generation, review, editing and publishing.</p></div><a class="button primary" href="/login?returnTo=/app">Open DeenClipped ${icon('arrow')}</a></div>
+    </div></section>
+  </main>`;
   return layout({ base, currentUser, title: 'Features — DeenClipped', description: 'Explore DeenClipped AI clipping, captions, templates, review, editing, scheduling and social publishing features.', canonicalPath: '/features', body });
 }
 
 export function pricing({ base, currentUser }) {
-  const body = `<main><section class="page-hero wrap"><span class="eyebrow"><i></i>Pricing</span><h1>Pay for the source time you process.</h1><p>One token represents one selected source-video minute. Full-video processing is selected by default, and trimming the source range reduces usage.</p></section><section class="page-content"><div class="wrap">${pricingCards()}<div class="section-tight"><div class="legal"><h2>How tokens work</h2><p>DeenClipped reads the source duration, lets you select a start and end time, then estimates usage from the selected range. The final charge is based on confirmed source time. Template-only rerenders remain free under the current plan rules.</p><h2>Trials and billing</h2><p>Paid subscriptions may include a seven-day trial when shown during checkout. Current prices and final billing terms are displayed before purchase through Stripe.</p></div></div></div></section></main>`;
+  const body = `<main><section class="page-hero wrap"><span class="eyebrow"><i></i>Pricing</span><h1>Pay for the source time you choose to process.</h1><p>One token represents one selected source-video minute. Full-video processing is selected by default, and trimming the source range reduces usage.</p></section><section class="page-content"><div class="wrap">${pricingCards()}<div class="pricing-explainer"><div><span class="section-label">How tokens work</span><h2>Clear before you render.</h2><p>DeenClipped reads the source duration, lets you select a start and end time, then estimates usage from that selected range. Final usage is based on confirmed source time.</p>${checkItem('1 token per source minute','Usage follows the selected source window.')}${checkItem('Template rerenders stay free','Changing the visual template does not re-charge source time under current rules.')}</div><div class="app-frame"><img src="/marketing-assets/pricing-plans.webp" alt="DeenClipped token plans"></div></div></div></section></main>`;
   return layout({ base, currentUser, title: 'Pricing — DeenClipped', description: 'Compare DeenClipped free, weekly, monthly and yearly token plans.', canonicalPath: '/pricing', body });
 }
 
 export function contact({ base, currentUser }) {
-  const body = `<main><section class="page-hero wrap"><span class="eyebrow"><i></i>Contact</span><h1>Talk to DeenClipped.</h1><p>Questions about your account, publishing connections, billing or the clipping workflow can be sent directly to support.</p></section><section class="page-content"><div class="wrap"><div class="contact-card"><h2>Support</h2><p>Email <a href="mailto:support@deenclipped.online">support@deenclipped.online</a></p><p>Include the email attached to your account and a short description of what happened.</p><a class="button primary" href="mailto:support@deenclipped.online">Email support</a></div></div></section></main>`;
+  const body = `<main><section class="page-hero wrap"><span class="eyebrow"><i></i>Contact</span><h1>Talk to DeenClipped.</h1><p>Questions about your account, publishing connections, billing or the clipping workflow can be sent directly to support.</p></section><section class="page-content"><div class="wrap"><div class="contact-card"><span class="contact-icon">${logoMark()}</span><h2>Support</h2><p>Email <a href="mailto:support@deenclipped.online">support@deenclipped.online</a></p><p>Include the email attached to your account and a short description of what happened.</p><a class="button primary" href="mailto:support@deenclipped.online">Email support ${icon('arrow')}</a></div></div></section></main>`;
   return layout({ base, currentUser, title: 'Contact — DeenClipped', description: 'Contact DeenClipped support.', canonicalPath: '/contact', body });
 }
 
