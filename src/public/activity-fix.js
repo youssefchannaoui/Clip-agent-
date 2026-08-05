@@ -865,11 +865,26 @@ const v4DeclutterCss = String.raw`
 @media(max-width:900px){.dc-empty-visual,.dc-review-empty-pro.visual,.dc-editor-empty{grid-template-columns:1fr}.dc-empty-visual-media,.dc-review-empty-pro.visual img,.dc-editor-empty img{height:230px}}@media(max-width:720px){#dcTopbar .dc-token-label{display:none}.dc-empty-visual,.dc-review-empty-pro.visual,.dc-editor-empty{padding:18px;min-height:0}.dc-empty-visual-copy h2,.dc-editor-empty h1{font-size:23px}}
 `;
 
+const v5ExperienceCss = String.raw`
+/* V5 creator workspace: fewer surfaces, stronger imagery and reliable icons. */
+.dc-home-v5{display:flex;flex-direction:column;gap:18px}.dc-v5-hero{position:relative;min-height:500px;display:grid;grid-template-columns:minmax(480px,1.02fr) minmax(430px,.98fr);gap:32px;align-items:center;padding:48px;border:1px solid rgba(221,183,118,.3);border-radius:30px;overflow:hidden;background:radial-gradient(circle at 4% 0,rgba(221,183,118,.2),transparent 31%),radial-gradient(circle at 91% 18%,rgba(53,118,157,.16),transparent 29%),linear-gradient(135deg,#1a1510 0,#101115 48%,#081018 100%);box-shadow:0 32px 100px rgba(0,0,0,.42)}.dc-v5-hero::before{content:'';position:absolute;inset:0;background:linear-gradient(110deg,transparent 42%,rgba(255,255,255,.025) 43%,transparent 44%);pointer-events:none}.dc-v5-hero::after{content:'';position:absolute;width:460px;height:460px;right:-220px;top:-250px;border:1px solid rgba(221,183,118,.22);border-radius:50%;box-shadow:0 0 0 70px rgba(221,183,118,.025),0 0 0 140px rgba(221,183,118,.015);pointer-events:none}.dc-v5-hero-copy{position:relative;z-index:2}.dc-v5-eyebrow{display:inline-flex;align-items:center;gap:8px;color:#e5c68e;font-size:9px;font-weight:850;letter-spacing:.16em;text-transform:uppercase}.dc-v5-eyebrow i{width:7px;height:7px;border-radius:50%;background:#71d6a0;box-shadow:0 0 0 5px rgba(113,214,160,.09)}.dc-v5-hero h1{max-width:790px;margin:17px 0 15px;font-size:clamp(46px,5vw,76px);line-height:.91;letter-spacing:-.065em}.dc-v5-hero-copy>p{max-width:650px;margin:0;color:#a9a8b0;font-size:14px;line-height:1.65}.dc-v5-hero-actions{display:flex;align-items:center;gap:10px;margin-top:24px}.dc-v5-hero-actions .dc-btn{min-height:48px;padding:0 20px;border-radius:14px}.dc-v5-inline-stats{display:flex;gap:20px;flex-wrap:wrap;margin-top:25px;padding-top:20px;border-top:1px solid rgba(255,255,255,.08)}.dc-v5-inline-stat{min-width:72px}.dc-v5-inline-stat b,.dc-v5-inline-stat span{display:block}.dc-v5-inline-stat b{font-size:19px;letter-spacing:-.03em}.dc-v5-inline-stat span{margin-top:3px;color:#777780;font-size:8px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}.dc-v5-brands{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:22px}.dc-v5-brands>small{margin-right:3px;color:#6f6f77;font-size:8px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.dc-v5-brand{position:relative;width:36px;height:36px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(0,0,0,.24);color:#666771}.dc-v5-brand svg{width:17px;height:17px}.dc-v5-brand.youtube{color:#ff4168}.dc-v5-brand.tiktok{color:#3df4ee}.dc-v5-brand.instagram{color:#ff7fba}.dc-v5-brand.facebook{color:#76a8ff}.dc-v5-brand.on{border-color:rgba(109,211,154,.35);box-shadow:0 0 0 1px rgba(109,211,154,.06) inset}.dc-v5-brand.on::after{content:'';position:absolute;right:-2px;top:-2px;width:7px;height:7px;border:2px solid #101115;border-radius:50%;background:#6dd39a}
+.dc-v5-stage{position:relative;z-index:2;min-height:390px}.dc-v5-stage-glow{position:absolute;inset:14% 8% 8%;border-radius:50%;background:radial-gradient(circle,rgba(221,183,118,.15),transparent 66%);filter:blur(16px)}.dc-v5-phone{position:absolute;width:178px;aspect-ratio:9/16;border:1px solid rgba(255,255,255,.18);border-radius:25px;overflow:hidden;background:#08090b;box-shadow:0 34px 80px rgba(0,0,0,.6);transform:rotate(var(--rot));transition:transform .3s ease}.dc-v5-phone:hover{transform:rotate(0) translateY(-7px);z-index:5}.dc-v5-phone:nth-of-type(2){left:2%;top:17%;--rot:-7deg}.dc-v5-phone:nth-of-type(3){left:34%;top:2%;--rot:3deg;z-index:3}.dc-v5-phone:nth-of-type(4){right:0;top:19%;--rot:7deg}.dc-v5-phone img{width:100%;height:100%;display:block;object-fit:cover}.dc-v5-phone::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,rgba(0,0,0,.84));pointer-events:none}.dc-v5-phone-copy{position:absolute;z-index:2;left:13px;right:13px;bottom:15px}.dc-v5-phone-copy small,.dc-v5-phone-copy strong{display:block}.dc-v5-phone-copy small{color:#e3c388;font-size:7px;font-weight:850;letter-spacing:.1em;text-transform:uppercase}.dc-v5-phone-copy strong{margin-top:5px;color:#fff;font-size:11px;line-height:1.25;text-shadow:0 2px 12px #000}.dc-v5-score{position:absolute;z-index:2;right:10px;top:10px;min-width:34px;height:25px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(5,6,8,.75);color:#c7ff87;font-size:9px;font-weight:850;backdrop-filter:blur(10px)}
+.dc-v5-create{padding:20px;border:1px solid rgba(255,255,255,.09);border-radius:24px;background:linear-gradient(145deg,#151518,#0c0d10);box-shadow:0 20px 55px rgba(0,0,0,.2)}.dc-v5-create-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:14px}.dc-v5-create-head h2{margin:0;font-size:21px;letter-spacing:-.035em}.dc-v5-create-head p{margin:4px 0 0;color:#7e7e87;font-size:10px}.dc-v5-token-note{display:inline-flex;align-items:center;gap:6px;color:#96969e;font-size:9px}.dc-v5-token-note svg{width:15px;height:15px}.dc-v5-url-row{display:grid;grid-template-columns:48px minmax(320px,1fr) auto;gap:9px}.dc-v5-url-brand{height:50px;display:grid;place-items:center;border-radius:15px;background:rgba(255,0,51,.13);color:#ff456b}.dc-v5-url-brand svg{width:23px;height:23px}.dc-v5-url-row input{height:50px!important;padding:0 16px!important;border:1px solid rgba(255,255,255,.09)!important;border-radius:15px!important;background:#08090b!important;color:#fff!important;font-size:12px!important}.dc-v5-url-row .dc-btn{height:50px;padding:0 24px;border-radius:15px}.dc-v5-options{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}.dc-v5-option{display:flex;align-items:center;gap:7px;min-height:38px;padding:0 11px;border:1px solid rgba(255,255,255,.075);border-radius:12px;background:#0a0b0d}.dc-v5-option span{color:#73737b;font-size:8px;text-transform:uppercase;letter-spacing:.08em}.dc-v5-option select{height:34px!important;min-height:34px!important;padding:0 24px 0 0!important;border:0!important;background:transparent!important;color:#d7d7db!important;font-size:9px!important}.dc-v5-upload{margin-left:auto;min-height:38px!important;border-radius:12px!important}.dc-v5-upload svg{width:16px;height:16px;margin-right:6px}
+.dc-v5-lower{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(320px,.55fr);gap:16px}.dc-v5-library,.dc-v5-side-card{border:1px solid rgba(255,255,255,.085);border-radius:25px;background:linear-gradient(160deg,#121316,#0b0c0e)}.dc-v5-library{padding:22px}.dc-v5-section-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:16px}.dc-v5-section-head h2{margin:0;font-size:20px;letter-spacing:-.035em}.dc-v5-section-head p{margin:4px 0 0;color:#797981;font-size:10px}.dc-v5-text-link{display:inline-flex;align-items:center;gap:6px;color:#cfb276;font-size:9px;font-weight:800}.dc-v5-text-link svg{width:15px;height:15px}.dc-v5-project-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}.dc-v5-project{min-width:0;padding:9px;border:1px solid rgba(255,255,255,.075);border-radius:18px;background:#090a0c;text-align:left;color:#fff}.dc-v5-project:hover{border-color:rgba(221,183,118,.32);transform:translateY(-2px)}.dc-v5-project-media{position:relative;height:155px;display:block;overflow:hidden;border-radius:13px;background:#050506}.dc-v5-project-media img{width:100%;height:100%;object-fit:cover}.dc-v5-project-media .dc-ui-icon{position:absolute;inset:0;display:grid;place-items:center;color:#a88e5b}.dc-v5-project-media .dc-ui-icon svg{width:28px;height:28px}.dc-v5-project-status{position:absolute;left:8px;top:8px;z-index:2}.dc-v5-project-copy{display:block;padding:11px 3px 3px}.dc-v5-project-copy strong,.dc-v5-project-copy small{display:block}.dc-v5-project-copy strong{min-height:32px;font-size:11px;line-height:1.4}.dc-v5-project-copy small{margin-top:5px;color:#777780;font-size:8px}.dc-v5-library-empty{position:relative;min-height:270px;display:flex;align-items:center;overflow:hidden;padding:32px;border-radius:19px;background:#090a0c}.dc-v5-library-empty img{position:absolute;inset:0 0 0 auto;width:65%;height:100%;object-fit:cover;opacity:.58;mask-image:linear-gradient(90deg,transparent,#000 45%)}.dc-v5-library-empty::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,#090a0c 25%,transparent 78%)}.dc-v5-library-empty-copy{position:relative;z-index:2;max-width:360px}.dc-v5-library-empty-copy span{color:#d8bb80;font-size:8px;font-weight:850;letter-spacing:.12em;text-transform:uppercase}.dc-v5-library-empty-copy h3{margin:8px 0 7px;font-size:25px;letter-spacing:-.045em}.dc-v5-library-empty-copy p{margin:0;color:#8b8b94;font-size:10px;line-height:1.55}.dc-v5-side{display:flex;flex-direction:column;gap:14px}.dc-v5-side-card{padding:19px}.dc-v5-side-head{display:flex;align-items:center;gap:9px;margin-bottom:13px}.dc-v5-side-head>.dc-ui-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:rgba(221,183,118,.09);color:#d8b875}.dc-v5-side-head>.dc-ui-icon svg{width:17px;height:17px}.dc-v5-side-head strong{font-size:13px}.dc-v5-side-card p{margin:0;color:#82828b;font-size:10px;line-height:1.5}.dc-v5-next-main{display:flex;align-items:center;gap:10px;margin-bottom:13px}.dc-v5-next-main img{width:62px;height:78px;object-fit:cover;border-radius:12px}.dc-v5-next-main strong,.dc-v5-next-main small{display:block}.dc-v5-next-main strong{font-size:11px;line-height:1.4}.dc-v5-next-main small{margin-top:4px;color:#7b7b84;font-size:8px}.dc-v5-channel-row{display:flex;gap:8px;margin:5px 0 12px}.dc-v5-channel-row .dc-v5-brand{width:40px;height:40px}.dc-v5-side-card .dc-btn{width:100%;margin-top:14px;border-radius:12px}.dc-v5-status-line{display:flex;align-items:center;gap:8px;padding:10px;border:1px solid rgba(255,255,255,.07);border-radius:12px;background:#090a0c}.dc-v5-status-line>.dc-ui-icon{width:28px;height:28px;display:grid;place-items:center;border-radius:9px;background:rgba(109,211,154,.09);color:#6dd39a}.dc-v5-status-line span{font-size:9px;color:#9b9ba4}
+/* Line icons must stay visible even when older dashboard rules set SVG fills. */
+.dc-ui-icon svg,.dc-empty-icon svg,.dc-empty-visual-copy>span svg,.dc-live-icon svg,.dc-v4-next-icon svg,.dc-dock-head>span svg,.dc-manage-kicker svg,.dc-manage-logo:not(.dc-social-logo) svg,.dc-flow-card-g>span svg,.dc-road-step>span svg{fill:none!important;stroke:currentColor!important;stroke-width:1.8!important;stroke-linecap:round!important;stroke-linejoin:round!important}.dc-empty-visual-copy>span svg{width:16px;height:16px}.dc-v5-brand.youtube svg,.dc-v5-brand.tiktok svg,.dc-v5-brand.facebook svg,.dc-v5-url-brand svg,.dc-social-logo.youtube svg,.dc-social-logo.tiktok svg,.dc-social-logo.facebook svg{fill:currentColor!important;stroke:none!important}.dc-v5-brand.instagram svg,.dc-social-logo.instagram svg{fill:none!important;stroke:currentColor!important;stroke-width:2!important}.dc-v5-brand.instagram svg circle:last-child,.dc-social-logo.instagram svg circle:last-child{fill:currentColor!important;stroke:none!important}
+/* Carry the new visual language through the rest of the workspace. */
+.dc-page-head,.dc-review-hero-pro,.dc-manage-hero,.dc-studio-hero{border-radius:25px!important;border-color:rgba(255,255,255,.09)!important;background:radial-gradient(circle at 100% 0,rgba(55,113,151,.1),transparent 35%),linear-gradient(145deg,#151518,#0d0e11)!important}.dc-project-card,.dc-review-item,.dc-manage-card,.dc-template-card,.dc-settings-panel,.dc-insight-panel{border-color:rgba(255,255,255,.08)!important;box-shadow:0 20px 55px rgba(0,0,0,.18)!important}.dc-manage-metrics{gap:22px}.dc-manage-metrics span{min-width:0!important;padding:0 0 0 18px!important;border:0!important;border-left:1px solid rgba(255,255,255,.1)!important;border-radius:0!important;background:transparent!important}.dc-studio-strip{display:flex!important;align-items:center;gap:0!important;padding:2px 4px;overflow:auto}.dc-studio-stat{min-width:160px;padding:0 24px!important;border:0!important;border-right:1px solid rgba(255,255,255,.09)!important;border-radius:0!important;background:transparent!important}.dc-studio-stat:last-child{border-right:0!important}.dc-nav-button.is-active{background:linear-gradient(90deg,rgba(221,183,118,.15),rgba(221,183,118,.06))!important}.dc-btn{font-weight:760!important}.dc-btn.secondary{background:#0c0d0f!important}
+@media(max-width:1250px){.dc-v5-hero{grid-template-columns:1fr;padding:38px}.dc-v5-stage{min-height:360px}.dc-v5-phone:nth-of-type(2){left:13%}.dc-v5-phone:nth-of-type(3){left:40%}.dc-v5-phone:nth-of-type(4){right:13%}.dc-v5-lower{grid-template-columns:1fr}.dc-v5-side{display:grid;grid-template-columns:1fr 1fr}}
+@media(max-width:860px){.dc-v5-hero{min-height:0;padding:26px 20px}.dc-v5-hero h1{font-size:43px}.dc-v5-stage{min-height:290px}.dc-v5-phone{width:130px}.dc-v5-phone:nth-of-type(2){left:5%}.dc-v5-phone:nth-of-type(3){left:35%}.dc-v5-phone:nth-of-type(4){right:4%}.dc-v5-url-row{grid-template-columns:44px 1fr}.dc-v5-url-row .dc-btn{grid-column:1/-1}.dc-v5-options{display:grid;grid-template-columns:1fr 1fr}.dc-v5-option{min-width:0}.dc-v5-upload{width:auto!important;margin:0}.dc-v5-project-grid{grid-template-columns:1fr}.dc-v5-side{grid-template-columns:1fr}}
+@media(max-width:560px){.dc-v5-hero h1{font-size:36px}.dc-v5-stage{min-height:245px}.dc-v5-phone{width:105px;border-radius:18px}.dc-v5-inline-stats{gap:13px}.dc-v5-create{padding:14px}.dc-v5-create-head{display:block}.dc-v5-token-note{margin-top:8px}.dc-v5-options{grid-template-columns:1fr}.dc-v5-library{padding:15px}.dc-v5-library-empty{padding:22px}.dc-v5-library-empty img{width:100%;opacity:.35}}
+`;
+
 function injectShell(){
   if (shellReady) return;
   shellReady = true;
   const style = document.createElement('style');
-  style.id = 'dcPhase4Styles'; style.textContent = css + billingCss + rangeChargeCss + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss + topbarCleanCss + trialUxCss + v4DashboardCss + v4WorkspaceCss + v4CinematicCss + v4DeclutterCss; document.head.appendChild(style);
+  style.id = 'dcPhase4Styles'; style.textContent = css + billingCss + rangeChargeCss + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss + topbarCleanCss + trialUxCss + v4DashboardCss + v4WorkspaceCss + v4CinematicCss + v4DeclutterCss + v5ExperienceCss; document.head.appendChild(style);
   document.body.classList.add('dc-app');
 
   const side = document.createElement('aside'); side.id = 'dcSidebar';
@@ -1042,6 +1057,7 @@ function paintWork(){
 }
 
 function go(view){
+  const changedView=currentView!==view;
   if(view!=='projects')document.body.classList.remove('dc-project-open');
   currentView = view;
   $$('[data-dc-nav]').forEach(b => b.classList.toggle('is-active', b.dataset.dcNav === view));
@@ -1054,6 +1070,7 @@ function go(view){
   };
   $('#dcPageName').textContent = labels[view]?.[0] || view;
   $('#dcPageSub').textContent = labels[view]?.[1] || '';
+  if(changedView)requestAnimationFrame(()=>window.scrollTo(0,0));
 
   if (CUSTOM.has(view)) {
     $$('.main-col > .panel').forEach(p => p.classList.add('hide'));
@@ -1106,52 +1123,73 @@ function renderHome(){
   const connected = connectedPlatformCount(d);
   const next = nextScheduledClip(clips);
   panel.innerHTML = `
-    <div class="dc-home-v4-cinema">
-      <section class="dc-home-hero-g" data-tour="home-hero">
-        <div class="dc-home-hero-copy">
-          <div class="dc-v4-eyebrow"><i></i> DeenClipped V4 studio</div>
-          <h1>Turn one long video into your next month of content.</h1>
-          <p>Find the strongest moments, build beautiful vertical clips, and publish to your own channels from one premium creator workspace.</p>
-          <div class="dc-stat-ribbon" aria-label="Workspace summary">${tinyStat(projects.length,'sources')}${tinyStat(clips.length,'clips')}${tinyStat(waiting,'to review')}${tinyStat(scheduled,'scheduled')}${tinyStat(posted,'published')}</div>
-          <div class="dc-v3-actions"><button class="dc-btn" id="dcHeroCreate">Create new clips</button>${waiting?`<button class="dc-btn secondary" data-dc-nav="review">Review ${waiting} clips</button>`:''}</div>
-          ${heroPlatformRail(d)}
+    <div class="dc-home-v5">
+      <section class="dc-v5-hero" data-tour="home-hero">
+        <div class="dc-v5-hero-copy">
+          <div class="dc-v5-eyebrow"><i></i> AI clip studio</div>
+          <h1>One talk.<br>Your next month of content.</h1>
+          <p>DeenClipped finds the strongest moments, builds clean vertical clips and prepares them for every channel—while you stay in control of what gets published.</p>
+          <div class="dc-v5-hero-actions"><button class="dc-btn" id="dcHeroCreate">Start clipping</button>${waiting?`<button class="dc-btn secondary" data-dc-nav="review">Review ${waiting} ready</button>`:''}</div>
+          <div class="dc-v5-inline-stats" aria-label="Workspace summary">${v5InlineStat(projects.length,'Sources')}${v5InlineStat(clips.length,'Clips')}${v5InlineStat(waiting,'To review')}${v5InlineStat(posted,'Published')}</div>
+          ${v5BrandRail(d)}
         </div>
-        <div class="dc-hero-stage" aria-label="Floating previews of your latest vertical clips"><div class="dc-v3-phone-wall">${heroThumbs(clips)}</div></div>
+        <div class="dc-v5-stage" aria-label="Preview of vertical clips"><div class="dc-v5-stage-glow"></div>${v5HeroCards(clips)}</div>
       </section>
 
-      <section class="dc-home-import-g" data-tour="create-form">
-        <span class="dc-import-icon">${socialSvg('youtube')}</span>
-        <input id="dcCreateUrl" placeholder="Paste a YouTube or video URL">
-        <select id="dcCreateTemplate" data-tour="template-picker">${(d.templates||[]).map(t=>`<option value="${esc(t.id)}" ${t.id===d.selectedTemplate?.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select>
-        <select id="dcCreateCount" aria-label="Number of clips"><option>4</option><option selected>8</option><option>12</option><option>16</option></select>
-        <select id="dcCreateDuration" aria-label="Clip duration"><option value="15,45">15–45 sec</option><option value="30,60" selected>30–60 sec</option><option value="45,90">45–90 sec</option></select>
-        <button class="dc-btn" id="dcGenerate" data-tour="generate-button">Generate clips</button>
+      <section class="dc-v5-create" data-tour="create-form">
+        <div class="dc-v5-create-head"><div><h2>Create your clips</h2><p>Paste a supported video link or upload your original file.</p></div><span class="dc-v5-token-note">${uiIcon('tokens')} Token cost is confirmed before processing</span></div>
+        <div class="dc-v5-url-row"><span class="dc-v5-url-brand">${socialSvg('youtube')}</span><input id="dcCreateUrl" placeholder="Paste a YouTube or video URL"><button class="dc-btn" id="dcGenerate" data-tour="generate-button">Generate clips</button></div>
+        <div class="dc-v5-options">
+          <label class="dc-v5-option"><span>Look</span><select id="dcCreateTemplate" data-tour="template-picker">${(d.templates||[]).map(t=>`<option value="${esc(t.id)}" ${t.id===d.selectedTemplate?.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select></label>
+          <label class="dc-v5-option"><span>Clips</span><select id="dcCreateCount" aria-label="Number of clips"><option>4</option><option selected>8</option><option>12</option><option>16</option></select></label>
+          <label class="dc-v5-option"><span>Length</span><select id="dcCreateDuration" aria-label="Clip duration"><option value="15,45">15–45 sec</option><option value="30,60" selected>30–60 sec</option><option value="45,90">45–90 sec</option></select></label>
+          <button class="dc-btn secondary dc-v5-upload" id="dcPickVideo" type="button">${uiIcon('publish')} Upload original</button>
+        </div>
         <input id="dcVideoUpload" type="file" accept="video/mp4,video/quicktime,video/x-m4v,video/webm,video/x-matroska" hidden>
-        <button class="dc-btn secondary" id="dcPickVideo" type="button">Upload original</button>
       </section>
 
-      <section class="dc-v4-feature-band" aria-label="Main workflow">
-        ${flowCard('Import','YouTube link or original file',socialSvg('youtube'),'dcSourceYouTube')}
-        ${flowCard('Review',waiting?`${waiting} clips waiting`:'Choose the strongest moments',ICON.review,'review')}
-        ${flowCard('Style',selectedTemplate,ICON.style,'templates')}
-        ${flowCard('Publish',connected?`${connected} channels connected`:'Connect your channels',ICON.publish,'publishing')}
-      </section>
-
-      <section class="dc-v4-action-shell">${v4NextAction(d,jobs,next,waiting,selectedTemplate)}</section>
-
-      <section class="dc-home-command-g" data-tour="happening-now">
-        <div class="dc-home-main-g">${liveFocusPanel(d,jobs,next,selectedTemplate)}<div class="dc-project-gallery-g"><div class="dc-simple-head"><div><h2>Continue creating</h2><p>Jump back into your latest sources and clips.</p></div><button class="dc-btn secondary" data-dc-nav="projects">View all projects</button></div><div class="dc-project-strip-g">${recentProjectsCinema(projects,clips)}</div></div></div>
-        <aside class="dc-home-dock-g">${nextPostDock(next)}${platformDock(d)}${attentionDock(d)}</aside>
+      <section class="dc-v5-lower" data-tour="happening-now">
+        <div class="dc-v5-library"><div class="dc-v5-section-head"><div><h2>Your library</h2><p>Recent source videos and generated clips.</p></div><button class="dc-v5-text-link" data-dc-nav="projects">View all ${uiIcon('chevron')}</button></div>${v5ProjectLibrary(projects,clips)}</div>
+        <aside class="dc-v5-side">${v5UpNext(d,jobs,next,waiting,selectedTemplate)}${v5Channels(d,connected)}</aside>
       </section>
     </div>`;
   $('#dcGenerate').onclick=generateProject;
   $('#dcPickVideo').onclick=()=>$('#dcVideoUpload').click();
   $('#dcVideoUpload').onchange=()=>prepareVideoUpload($('#dcVideoUpload').files?.[0]);
   $('#dcHeroCreate').onclick=()=>$('#dcCreateUrl').focus();
-  $('#dcV4Start') && ($('#dcV4Start').onclick=()=>$('#dcCreateUrl').focus());
-  const source=$('#dcSourceYouTube'); if(source) source.onclick=()=>$('#dcCreateUrl').focus();
-  $('#dcHeroTour').onclick=()=>openGuidedTour(0);
   requestAnimationFrame(()=>animatePanel(panel));
+}
+function uiIcon(name){return `<span class="dc-ui-icon">${ICON[name]||ICON.sparkles}</span>`}
+function v5InlineStat(value,label){return `<span class="dc-v5-inline-stat"><b>${esc(value)}</b><span>${esc(label)}</span></span>`}
+function v5BrandRail(d){
+  const providers=d.social?.providers||{};
+  return `<div class="dc-v5-brands"><small>Ready for</small>${['youtube','tiktok','instagram','facebook'].map(key=>`<span class="dc-v5-brand ${key} ${providers[key]?.connected?'on':''}" title="${key}">${socialSvg(key)}</span>`).join('')}</div>`;
+}
+function v5HeroCards(clips){
+  const recent=[...clips].filter(c=>c.thumbUrl).sort((a,b)=>Number(b.createdAt||b.renderedAt||0)-Number(a.createdAt||a.renderedAt||0)).slice(0,3);
+  const fallback=[
+    ['/marketing-assets/reel-dua.webp','Powerful reminder'],
+    ['/marketing-assets/reel-deeds.webp','Strongest moment'],
+    ['/marketing-assets/reel-quran.webp','Ready to publish']
+  ];
+  return fallback.map(([image,title],index)=>{const clip=recent[index],src=clip?.thumbUrl?authedUrl(clip.thumbUrl):image;return `<article class="dc-v5-phone"><img src="${src}" alt="${esc(clip?.title||title)} preview"><span class="dc-v5-score">${clip?Math.round(clip.score||0):[94,89,92][index]}</span><span class="dc-v5-phone-copy"><small>${clip?'AI selected':['Hook','Caption','Publish'][index]}</small><strong>${esc(shortText(clip?.title||title,38))}</strong></span></article>`}).join('');
+}
+function v5ProjectLibrary(projects,clips){
+  const list=[...projects].sort((a,b)=>Number(b.submittedAt||0)-Number(a.submittedAt||0)).slice(0,3);
+  if(!list.length)return `<div class="dc-v5-library-empty"><img src="/marketing-assets/library-premium.webp" alt="DeenClipped project library"><div class="dc-v5-library-empty-copy"><span>Your content library</span><h3>Every source and clip, organised.</h3><p>Your first project will appear here with its strongest clips, review state and publishing progress.</p></div></div>`;
+  return `<div class="dc-v5-project-grid">${list.map(p=>{const own=clips.filter(c=>c.projectId===p.id),thumb=projectThumbUrl(p,clips),failed=p.status==='failed'||p.error,busy=['queued','processing'].includes(p.status);return `<button class="dc-v5-project" type="button" data-open-project="${esc(p.id)}"><span class="dc-v5-project-media">${thumb?`<img src="${authedUrl(thumb)}" alt="${esc(projectDisplayTitle(p))} thumbnail">`:uiIcon('projects')}<b class="dc-v5-project-status dc-pill ${failed?'bad':busy?'warn':'good'}">${failed?'Fix':busy?'Processing':'Ready'}</b></span><span class="dc-v5-project-copy"><strong>${esc(shortText(projectDisplayTitle(p),48))}</strong><small>${own.length} clips · ${own.filter(c=>['approved','scheduled','publishing','posted'].includes(c.status)).length} approved</small></span></button>`}).join('')}</div>`;
+}
+function v5UpNext(d,jobs,next,waiting,templateName){
+  let body='';
+  if(jobs.length){const j=jobs[0];body=`<div class="dc-v5-status-line">${uiIcon(j.kind==='publish'?'publish':'scissors')}<span>${esc(shortText(j.title,58))} · ${esc(shortText(j.stage||'Working now',50))}</span></div>`}
+  else if(waiting)body=`<p>${waiting} ${waiting===1?'clip is':'clips are'} ready for your decision.</p><button class="dc-btn" data-dc-nav="review">Open review</button>`;
+  else if(next)body=`<div class="dc-v5-next-main">${next.thumbUrl?`<img src="${authedUrl(next.thumbUrl)}" alt="${esc(next.title||'Scheduled clip')}">`:uiIcon('publish')}<div><strong>${esc(shortText(next.title||'Scheduled clip',46))}</strong><small>${esc(formatDate(next.scheduledAt))}</small></div></div><button class="dc-btn secondary" data-dc-nav="schedule">View schedule</button>`;
+  else body=`<div class="dc-v5-status-line">${uiIcon('check')}<span>Workspace ready · ${esc(templateName)} selected</span></div>`;
+  return `<section class="dc-v5-side-card"><div class="dc-v5-side-head">${uiIcon(jobs.length?'sparkles':next?'clock':waiting?'review':'check')}<strong>Up next</strong></div>${body}</section>`;
+}
+function v5Channels(d,connected){
+  const providers=d.social?.providers||{};
+  return `<section class="dc-v5-side-card"><div class="dc-v5-side-head">${uiIcon('social')}<strong>Publishing channels</strong></div><div class="dc-v5-channel-row">${['youtube','tiktok','instagram','facebook'].map(key=>`<span class="dc-v5-brand ${key} ${providers[key]?.connected?'on':''}">${socialSvg(key)}</span>`).join('')}</div><p>${connected?`${connected} connected. Approved clips can be prepared for publishing.`:'Connect a channel when you are ready to publish.'}</p><button class="dc-btn secondary" data-dc-nav="publishing">Manage channels</button></section>`;
 }
 function tinyStat(value,label){return `<span class="dc-tiny-stat"><b>${esc(value)}</b>${esc(label)}</span>`}
 function v4Stat(value,label,tone=''){return `<div class="dc-v4-stat ${esc(tone)}"><b>${esc(value)}</b><span>${esc(label)}</span></div>`}
