@@ -2,12 +2,15 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { config } from './config.js';
 import { state, save, log, clipSettings, musicSettings, ownerOfRecord } from './store.js';
 import { selectedTemplate, templateById } from './templates.js';
 import { withOwner, ownerOf } from './tenancy.js';
 import { workerMusicTracks } from './audio.js';
 import * as billing from './billing.js';
+import * as vizard from './vizard.js';
 
 const jobsDir = path.join(config.dataDir, 'jobs');
 const sourcesDir = path.join(config.dataDir, 'sources');
@@ -268,6 +271,7 @@ export function readiness(user) {
   return {
     ready: Boolean(template?.id && tracks.length), templateReady: Boolean(template?.id), template,
     musicReady: tracks.length > 0, musicTrackCount: tracks.length, engine: 'self-hosted', model: config.aiModel,
+    youtubeImport: { configured: vizard.configured(), provider: 'vizard' },
   };
 }
 
@@ -281,9 +285,20 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
   const sourceRange = cleanSourceRange(options);
   const sourceMeta = Array.isArray(options?.sourceMeta) ? options.sourceMeta.find(item => String(item?.url || '') === value) || options.sourceMeta[0] : (options?.sourceMeta || {});
   const projectId = id('project');
+  const useVizard = vizard.isYouTubeUrl(value);
+  if (useVizard && !vizard.configured()) {
+    throw new Error('YouTube URL import is not configured yet. The site owner must add a Vizard API key. You can still upload an MP4 or MOV.');
+  }
+  const knownDuration = Number(sourceMeta?.durationSec || 0);
+  const trimsYouTube = sourceRange.startSec > 0
+    || (sourceRange.endSec && knownDuration > 0 && sourceRange.endSec < knownDuration - 2);
+  if (useVizard && trimsYouTube) {
+    throw new Error('YouTube URL import currently processes the full video. Reset the source window to Full video, or upload the original file to clip only a selected range.');
+  }
   const project = withOwner({
     id: projectId, url: String(options.displayUrl || value), title: String(title || '').trim() || value,
-    engine: 'self-hosted', status: 'queued', stage: 'Waiting for the local AI worker', progress: 0,
+    engine: useVizard ? 'vizard' : 'self-hosted', status: 'queued',
+    stage: useVizard ? 'Waiting for secure YouTube import' : 'Waiting for the local AI worker', progress: 0,
     submittedAt: Date.now(), clipCount: 0, templateIdUsed: template.id, templateNameUsed: template.name,
     templateVersionUsed: template.version || 1, templateSnapshot: template, musicRequired: true, error: null,
     sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
@@ -305,7 +320,7 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
   };
   fs.writeFileSync(jobFile(projectId), JSON.stringify(job, null, 2));
   const rangeCopy = sourceRange.endSec ? ` · source window ${Math.round(sourceRange.startSec / 60)}–${Math.round(sourceRange.endSec / 60)} min` : (sourceRange.startSec ? ` · source starts at ${Math.round(sourceRange.startSec / 60)} min` : '');
-  log(`Queued "${project.title}" for the self-hosted clip AI using template "${template.name}"${rangeCopy}.`, 'info', user.id);
+  log(`Queued "${project.title}" for ${useVizard ? 'secure YouTube import and DeenClipped rendering' : 'the self-hosted clip AI'} using template "${template.name}"${rangeCopy}.`, 'info', user.id);
   pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
   return projectId;
 }
@@ -412,6 +427,169 @@ function runProject(project) {
       resolve(); pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
     });
   });
+}
+
+async function downloadVizardClip(url, destination) {
+  const trusted = vizard.assertTrustedClipUrl(url);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10 * 60_000);
+  const temporary = `${destination}.part`;
+  try {
+    const response = await fetch(trusted, { signal: controller.signal });
+    if (!response.ok || !response.body) throw new Error(`Clip download returned HTTP ${response.status}.`);
+    vizard.assertTrustedClipUrl(response.url || trusted);
+    const length = Number(response.headers.get('content-length') || 0);
+    if (length > 750 * 1024 * 1024) throw new Error('A generated clip exceeded the 750 MB safety limit.');
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(temporary));
+    fs.renameSync(temporary, destination);
+    return destination;
+  } finally {
+    clearTimeout(timer);
+    try { fs.rmSync(temporary, { force: true }); } catch {}
+  }
+}
+
+async function renderVizardVideo(project, video, index, owner, template, tracks) {
+  const providerId = String(video.videoId || index).replace(/[^a-z0-9_-]+/gi, '').slice(0, 80) || String(index);
+  const rawDir = path.join(sourcesDir, project.id);
+  const rawFile = path.join(rawDir, `vizard-${providerId}.mp4`);
+  await downloadVizardClip(video.videoUrl, rawFile);
+  const durationSec = Math.max(3, Number(video.videoMsDuration || 0) / 1000);
+  const renderId = `${project.id}-vizard-${String(index).padStart(2, '0')}`;
+  const dir = path.join(jobsDir, project.id, 'vizard-renders', String(index));
+  const outputDir = path.join(clipsDir, project.id);
+  const outputClipId = `${project.id}-${String(index).padStart(2, '0')}`;
+  const resultPath = path.join(dir, 'result.json');
+  fs.mkdirSync(dir, { recursive: true });
+  const transcript = String(video.transcript || '').trim();
+  const score = Math.max(0, Math.min(100, Math.round(Number(video.viralScore || 0) * 10)));
+  const payload = {
+    mode: 'rerender', id: renderId, projectId: project.id, clipIdOverride: outputClipId,
+    sourceFile: rawFile, outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
+    template, musicTracks: tracks, settings: sharedSettings(owner),
+    transcriptSegments: [{ start: 0, end: durationSec, text: transcript || String(video.title || 'Reminder'), words: [] }],
+    clip: {
+      id: outputClipId, title: String(video.title || `Clip ${index}`), transcript,
+      description: transcript, startSec: 0, endSec: durationSec, score: score || 70,
+      scoreReasons: video.viralReason ? [String(video.viralReason)] : ['Selected by Vizard AI from the source video.'],
+      reviewRequired: false,
+    },
+  };
+  const jobPath = path.join(dir, 'job.json');
+  fs.writeFileSync(jobPath, JSON.stringify(payload, null, 2));
+  const result = await runWorkerJob(jobPath, resultPath, `DeenClipped render ${index}`);
+  const rendered = result.clips?.[0];
+  if (!rendered?.renderVerified || !rendered?.musicVerified || !rendered?.clipFile || !fs.existsSync(rendered.clipFile)) {
+    throw new Error(`Generated clip ${index} did not pass DeenClipped's render checks.`);
+  }
+  return withOwner({
+    ...rendered,
+    projectId: project.id,
+    projectTitle: project.title,
+    sourceFile: rawFile,
+    provider: 'vizard',
+    providerVideoId: video.videoId || null,
+    providerEditorUrl: video.clipEditorUrl || null,
+    status: 'waiting', targets: [], addedAt: Date.now(), scheduledAt: null, postedAt: null,
+    engine: 'vizard+deenclipped', renderVersion: 1,
+  }, ownerOf(project));
+}
+
+async function runVizardProject(project) {
+  const control = { cancelled: false };
+  running.set(project.id, control);
+  const owner = ownerOfRecord(project);
+  try {
+    project.status = 'processing';
+    project.stage = project.vizardProjectId ? 'Reconnecting to YouTube import' : 'Sending the YouTube video to the secure importer';
+    project.progress = Math.max(2, Number(project.progress || 0));
+    project.startedAt = project.startedAt || Date.now();
+    project.error = null;
+    save();
+
+    if (!project.vizardProjectId) {
+      const settings = clipSettings(owner);
+      const preferredLength = settings.clipMaxSeconds <= 30 ? [1]
+        : settings.clipMaxSeconds <= 60 ? [2]
+          : settings.clipMaxSeconds <= 90 ? [3] : [4];
+      const created = await vizard.createProject({
+        videoUrl: project.url,
+        projectName: project.sourceTitle || project.title,
+        maxClips: Math.min(config.vizardMaxClips, Math.max(1, Number(settings.clipsPerVideo) || config.vizardMaxClips)),
+        preferLength: preferredLength,
+      });
+      project.vizardProjectId = created.projectId;
+      project.vizardShareLink = created.shareLink;
+      project.vizardSubmittedAt = Date.now();
+      project.stage = 'YouTube video accepted — finding the strongest moments';
+      project.progress = 12;
+      save();
+    }
+
+    let result = null;
+    while (!control.cancelled && projectById(project.id)) {
+      result = await vizard.queryProject(project.vizardProjectId);
+      if (result.status === 'complete') break;
+      const elapsed = Date.now() - Number(project.vizardSubmittedAt || project.startedAt || Date.now());
+      if (elapsed > config.vizardProcessingTimeoutMs) throw new Error('YouTube clipping took too long. Retry the project to reconnect to the existing import.');
+      project.stage = 'Finding and ranking the strongest moments';
+      project.progress = Math.min(68, Math.max(15, 15 + Math.round(elapsed / config.vizardProcessingTimeoutMs * 53)));
+      project.updatedAt = Date.now();
+      save();
+      await new Promise(resolve => setTimeout(resolve, config.vizardPollIntervalMs));
+    }
+    if (control.cancelled || !projectById(project.id)) return;
+    const videos = (result?.videos || []).slice(0, config.vizardMaxClips);
+    if (!videos.length) throw new Error('Vizard finished without returning any clips.');
+    project.title = result.projectName || project.sourceTitle || project.title;
+    project.stage = `Applying DeenClipped captions, template and music to ${videos.length} clips`;
+    project.progress = 72;
+    project.vizardShareLink = result.shareLink || project.vizardShareLink || null;
+    save();
+
+    const template = selectedTemplate(owner);
+    const tracks = workerMusicTracks(owner);
+    if (!template?.id || !tracks.length) throw new Error('A saved template and at least one nasheed are required to finish these clips.');
+    const imported = [];
+    for (let index = 0; index < videos.length; index++) {
+      if (control.cancelled || !projectById(project.id)) return;
+      project.stage = `Rendering DeenClipped clip ${index + 1} of ${videos.length}`;
+      project.progress = 72 + Math.round(index / videos.length * 25);
+      save();
+      imported.push(await renderVizardVideo(project, videos[index], index + 1, owner, template, tracks));
+    }
+    state.clips.push(...imported);
+    project.clipCount = imported.length;
+    project.durationSec = Number(project.sourceDurationSec || 0) || null;
+    project.status = 'done';
+    project.stage = 'Clips are ready for review';
+    project.progress = 100;
+    project.completedAt = Date.now();
+    project.error = null;
+    project.errorCode = null;
+    try {
+      const charge = billing.chargeSourceMinutes(ownerOf(project), Number(project.sourceDurationSec || 0), { projectId: project.id, title: project.title });
+      if (charge.charged) project.tokensCharged = charge.charged;
+    } catch (error) {
+      project.billingWarning = error.message;
+      log(`Could not charge tokens for "${project.title}": ${error.message}`, 'warn', ownerOf(project));
+    }
+    save();
+    log(`${imported.length} YouTube clips are ready from "${project.title}". Vizard selected the moments; DeenClipped applied and verified the final template, captions and music.`, 'info', ownerOf(project));
+  } catch (error) {
+    if (!projectById(project.id) || control.cancelled) return;
+    project.status = 'failed';
+    project.stage = 'YouTube import failed';
+    project.error = String(error?.message || 'The YouTube video could not be processed.').slice(0, 1800);
+    project.errorCode = error?.code ? `vizard_${error.code}` : 'vizard_import_failed';
+    project.updatedAt = Date.now();
+    save();
+    log(`Could not import "${project.title}" from YouTube: ${project.error}`, 'error', ownerOf(project));
+  } finally {
+    running.delete(project.id);
+    pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
+  }
 }
 
 function importMoreResult(project, jobRecord, file) {
@@ -622,7 +800,8 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
   if (!clip) throw new Error('That clip does not exist.');
   if (clip.status === 'posted' && !asVariant) throw new Error('A posted video cannot be changed. Create a re-post variant instead.');
   const project = projectById(clip.projectId);
-  if (!project?.sourceFile || !fs.existsSync(project.sourceFile)) throw new Error('The original source file is unavailable. Keep source files enabled to re-render clips.');
+  const sourceFile = clip.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
+  if (!sourceFile || !fs.existsSync(sourceFile)) throw new Error('The original source file is unavailable. Keep source files enabled to re-render clips.');
   const owner = ownerOfRecord(clip);
   const template = templateById(templateId, owner) || selectedTemplate(owner);
   if (!template?.id) throw new Error('Choose a valid saved template.');
@@ -638,7 +817,7 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
   const outputClipId = asVariant ? `${clip.id}-variant-${Date.now().toString(36)}` : `${clip.id}-render-${Date.now().toString(36)}`;
   const payload = {
     mode: 'rerender', id: rerenderId, projectId: project.id, clipIdOverride: outputClipId,
-    sourceFile: project.sourceFile, outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
+    sourceFile, outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
     template, musicTracks: tracks, settings: sharedSettings(owner), transcriptSegments,
     clip: {
       id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
@@ -668,12 +847,14 @@ export async function pump() {
     while (running.size < config.maxConcurrentJobs) {
       const candidates = [
         ...state.projects.filter(item => item.engine === 'self-hosted' && item.status === 'queued').map(item => ({ type: 'project', item, at: item.submittedAt })),
+        ...state.projects.filter(item => item.engine === 'vizard' && item.status === 'queued').map(item => ({ type: 'vizard', item, at: item.submittedAt })),
         ...state.projects.filter(item => item.moreJob?.status === 'queued').map(item => ({ type: 'more', item: item.moreJob, project: item, at: item.moreJob.createdAt })),
         ...state.rerenderJobs.filter(item => item.status === 'queued').map(item => ({ type: 'rerender', item, at: item.createdAt })),
       ].sort((a, b) => a.at - b.at);
       const next = candidates[0];
       if (!next) break;
       if (next.type === 'project') runProject(next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
+      else if (next.type === 'vizard') runVizardProject(next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
       else if (next.type === 'more') runMoreClips(next.project, next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
       else runRerender(next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
       await new Promise(resolve => setTimeout(resolve, 30));
@@ -723,7 +904,8 @@ export async function socialPublishFile(clipId, provider) {
 
   const promise = (async () => {
     const project = projectById(clip.projectId);
-    if (!project?.sourceFile || !fs.existsSync(project.sourceFile)) throw new Error('The original source is unavailable for the automatic TikTok-safe render.');
+    const sourceFile = clip.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
+    if (!sourceFile || !fs.existsSync(sourceFile)) throw new Error('The original source is unavailable for the automatic TikTok-safe render.');
     const transcriptSegments = project.transcriptFile && fs.existsSync(project.transcriptFile)
       ? JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8')) : [];
     const tracks = workerMusicTracks(clipOwner);
@@ -745,7 +927,7 @@ export async function socialPublishFile(clipId, provider) {
     const outputClipId = `${clip.id}-tiktok-safe`;
     const payload = {
       mode: 'rerender', id: renderId, projectId: project.id, clipIdOverride: outputClipId,
-      sourceFile: project.sourceFile, outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
+      sourceFile, outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
       template: cleanTemplate, musicTracks: selectedTracks, settings: sharedSettings(clipOwner), transcriptSegments,
       clip: {
         id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
@@ -773,6 +955,12 @@ export function retryProject(projectId) {
   const project = projectById(projectId);
   if (!project) throw new Error('That project does not exist.');
   if (running.has(projectId)) throw new Error('That project is already processing.');
+  if (project.engine === 'vizard') {
+    if (!vizard.configured()) throw new Error('YouTube URL import is not configured. Add VIZARD_API_KEY before retrying.');
+    Object.assign(project, { status: 'queued', stage: 'Waiting to retry YouTube import', progress: Math.min(65, project.progress || 0), error: null, errorCode: null });
+    save(); pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
+    return project;
+  }
   if (!fs.existsSync(jobFile(projectId))) throw new Error('The project job file is missing. Submit the video again.');
   const job = JSON.parse(fs.readFileSync(jobFile(projectId), 'utf8'));
   const projectOwner = ownerOfRecord(project);
@@ -792,7 +980,9 @@ export function retryProject(projectId) {
 }
 
 export function cancelProject(projectId) {
-  running.get(projectId)?.kill('SIGTERM');
+  const current = running.get(projectId);
+  if (typeof current?.kill === 'function') current.kill('SIGTERM');
+  else if (current) current.cancelled = true;
   const project = projectById(projectId);
   if (project?.moreJob?.id) running.get(project.moreJob.id)?.kill('SIGTERM');
 }
@@ -800,7 +990,8 @@ export function deleteProject(projectId) {
   const project = projectById(projectId);
   if (!project) throw new Error('That project does not exist.');
   cancelProject(projectId);
-  const clipIds = new Set(state.clips.filter(clip => clip.projectId === projectId).map(clip => clip.id));
+  const projectClips = state.clips.filter(clip => clip.projectId === projectId);
+  const clipIds = new Set(projectClips.map(clip => clip.id));
   state.clips = state.clips.filter(clip => !clipIds.has(clip.id));
   state.projects = state.projects.filter(item => item.id !== projectId);
   state.rerenderJobs = state.rerenderJobs.filter(item => !clipIds.has(item.clipId));
@@ -809,6 +1000,7 @@ export function deleteProject(projectId) {
   fs.rmSync(path.join(clipsDir, projectId), { recursive: true, force: true });
   if (project.sourceFile) removeDataFile(project.sourceFile);
   if (project.uploadedInputFile) removeDataFile(project.uploadedInputFile);
+  for (const clip of projectClips) if (clip.sourceFile) removeDataFile(clip.sourceFile);
   save(); log(`Removed "${project.title}" and its local rendered files.`);
 }
 
@@ -825,6 +1017,9 @@ export function recoverInterruptedJobs() {
   for (const project of state.projects) {
     if (project.engine === 'self-hosted' && project.status === 'processing') {
       project.status = 'queued'; project.stage = 'Recovered after server restart'; project.progress = Math.min(project.progress || 0, 95);
+    }
+    if (project.engine === 'vizard' && project.status === 'processing') {
+      project.status = 'queued'; project.stage = 'Reconnecting to YouTube import after server restart'; project.progress = Math.min(project.progress || 0, 68);
     }
     if (project.moreJob?.status === 'processing') {
       project.moreJob.status = 'queued'; project.moreJob.stage = 'Recovered after server restart'; project.moreJob.progress = Math.min(project.moreJob.progress || 0, 95);

@@ -182,7 +182,7 @@ export function deleteClip(id) {
   if (!clip) throw new Error('That clip no longer exists.');
   if ((clip.targets || []).some(target => ['publishing', 'processing'].includes(target.status))) throw new Error('Wait for the active platform transfer to finish before deleting this clip.');
   state.clips = state.clips.filter(item => item.id !== id); save();
-  for (const file of [clip.clipFile, clip.thumbFile]) { try { removeDataFile(file); } catch {} }
+  for (const file of [clip.clipFile, clip.thumbFile, clip.sourceFile]) { try { removeDataFile(file); } catch {} }
 }
 
 function applyAutomation() {

@@ -65,6 +65,16 @@ services:
         sync: false
       - key: GOOGLE_REDIRECT_URI
         value: https://deenclipped.online/auth/youtube/callback
+      - key: VIZARD_API_KEY
+        sync: false
+      - key: VIZARD_MAX_CLIPS
+        value: "8"
+      - key: VIZARD_CLIP_MODEL
+        value: clip_v1
+      - key: VIZARD_POLL_INTERVAL_MS
+        value: "30000"
+      - key: VIZARD_PROCESSING_TIMEOUT_MS
+        value: "5400000"
       - key: META_APP_ID
         sync: false
       - key: META_APP_SECRET

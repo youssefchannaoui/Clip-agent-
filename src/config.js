@@ -88,6 +88,13 @@ export const config = {
   youtubeApiBase: (process.env.YOUTUBE_API_BASE || 'https://www.googleapis.com').replace(/\/+$/, ''),
   youtubeDataApiKey: process.env.YOUTUBE_DATA_API_KEY || process.env.GOOGLE_YOUTUBE_API_KEY || '',
 
+  vizardApiKey: process.env.VIZARD_API_KEY || '',
+  vizardApiBase: (process.env.VIZARD_API_BASE_URL || 'https://elb-api.vizard.ai/hvizard-server-front/open-api/v1').replace(/\/+$/, ''),
+  vizardPollIntervalMs: Math.max(5_000, Math.round(number(process.env.VIZARD_POLL_INTERVAL_MS, 30_000))),
+  vizardProcessingTimeoutMs: Math.max(10 * 60_000, Math.round(number(process.env.VIZARD_PROCESSING_TIMEOUT_MS, 90 * 60_000))),
+  vizardMaxClips: Math.max(1, Math.min(100, Math.round(number(process.env.VIZARD_MAX_CLIPS, 8)))),
+  vizardClipModel: ['clip_v1', 'clip_v2'].includes(process.env.VIZARD_CLIP_MODEL) ? process.env.VIZARD_CLIP_MODEL : 'clip_v1',
+
   metaAppId: process.env.META_APP_ID || '',
   metaAppSecret: process.env.META_APP_SECRET || '',
   metaRedirectUri: process.env.META_REDIRECT_URI || '',

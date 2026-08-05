@@ -721,8 +721,9 @@ async function route(req, res, url) {
   if (method === 'GET' && sourcePreview) {
     let clip; try { clip = assertCanAccessClip(currentUser, decodeURIComponent(sourcePreview[1])); } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
     const project = clip ? state.projects.find(item => item.id === clip.projectId) : null;
-    if (!clip || !project?.sourceFile || !fs.existsSync(project.sourceFile)) return json(res, 404, { error: 'Original source video is unavailable.' });
-    return streamFile(req, res, project.sourceFile, { contentType: 'video/mp4' });
+    const sourceFile = clip?.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
+    if (!clip || !sourceFile || !fs.existsSync(sourceFile)) return json(res, 404, { error: 'Original source video is unavailable.' });
+    return streamFile(req, res, sourceFile, { contentType: 'video/mp4' });
   }
 
   const clipVideo = pathname.match(/^\/api\/clips\/([^/]+)\/(video|download|thumb)$/);
@@ -840,7 +841,8 @@ async function route(req, res, url) {
     const id = decodeURIComponent(clipFraming[1]);
     let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 403, { error: error.message }); }
     const project = state.projects.find(item => item.id === clip.projectId);
-    if (!project?.sourceFile || !fs.existsSync(project.sourceFile)) {
+    const sourceFile = clip?.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
+    if (!sourceFile || !fs.existsSync(sourceFile)) {
       return json(res, 200, { plan: { available: false, reason: 'The original video is no longer stored, so framing cannot be analysed.' } });
     }
 
@@ -862,7 +864,7 @@ async function route(req, res, url) {
 
     const requestFile = path.join(config.dataDir, `framing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`);
     fs.writeFileSync(requestFile, JSON.stringify({
-      source: project.sourceFile, ffprobe: config.ffprobePath || 'ffprobe',
+      source: sourceFile, ffprobe: config.ffprobePath || 'ffprobe',
       start: clipStart, duration,
       width: Number(body.width) || 1080, height: Number(body.height) || 1920,
       bias: String(body.bias || 'auto'), padding: Number(body.padding ?? 0.18),
