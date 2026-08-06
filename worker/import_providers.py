@@ -145,6 +145,68 @@ class FfmpegApiImportProvider(ManagedImportProvider):
         return ImportedSource(destination, str(payload.get("title") or ""))
 
 
+class YtDlpImportProvider(ManagedImportProvider):
+    """Self-hosted YouTube download using yt-dlp. Runs on this worker box directly,
+    with no third-party download API or subscription required."""
+
+    name = "ytdlp"
+
+    def __init__(self) -> None:
+        self.max_bytes = max(50, int(os.getenv("WORKER_MAX_DOWNLOAD_MB", "4096"))) * 1024 * 1024
+        self.timeout = max(60, int(os.getenv("VIDEO_IMPORT_TIMEOUT_MS", "1800000")) // 1000)
+
+    def import_video(self, source: dict, destination: Path, cancelled: Callable[[], bool]) -> ImportedSource:
+        import yt_dlp
+
+        youtube_url = validate_youtube_url(source.get("url", ""))
+        if cancelled():
+            raise ImportProviderError("Job cancelled.")
+
+        outtmpl = str(destination.with_suffix(""))
+        info_holder: dict = {}
+
+        def progress_hook(status: dict) -> None:
+            if cancelled():
+                raise yt_dlp.utils.DownloadError("Job cancelled.")
+            downloaded = status.get("downloaded_bytes") or 0
+            if downloaded and downloaded > self.max_bytes:
+                raise yt_dlp.utils.DownloadError("The imported video exceeds the configured download limit.")
+
+        ydl_opts = {
+            "format": "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b",
+            "merge_output_format": "mp4",
+            "outtmpl": outtmpl + ".%(ext)s",
+            "quiet": True,
+            "no_warnings": True,
+            "noplaylist": True,
+            "socket_timeout": self.timeout,
+            "progress_hooks": [progress_hook],
+            "retries": 3,
+        }
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(youtube_url, download=True)
+                info_holder["title"] = info.get("title", "") if isinstance(info, dict) else ""
+                produced = Path(ydl.prepare_filename(info))
+                if produced.suffix != ".mp4":
+                    produced = produced.with_suffix(".mp4")
+        except yt_dlp.utils.DownloadError as exc:
+            message = str(exc)
+            if "cancelled" in message.lower():
+                raise ImportProviderError("Job cancelled.") from exc
+            raise ImportProviderError(f"yt-dlp download failed: {message[:500]}") from exc
+
+        if not produced.is_file():
+            raise ImportProviderError("yt-dlp did not produce an output file.")
+        if produced.stat().st_size > self.max_bytes:
+            produced.unlink(missing_ok=True)
+            raise ImportProviderError("The imported video exceeds the configured download limit.")
+        if produced != destination:
+            produced.replace(destination)
+        return ImportedSource(destination, info_holder.get("title", ""))
+
+
 class DirectUploadProvider(ManagedImportProvider):
     name = "direct_upload"
 
@@ -167,4 +229,6 @@ def provider_for(source: dict, storage) -> ManagedImportProvider:
     selected = os.getenv("VIDEO_IMPORT_PROVIDER", "ffmpegapi").lower()
     if selected == "ffmpegapi":
         return FfmpegApiImportProvider()
+    if selected == "ytdlp":
+        return YtDlpImportProvider()
     raise ImportProviderError(f"Unsupported VIDEO_IMPORT_PROVIDER: {selected}")
