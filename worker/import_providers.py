@@ -207,6 +207,86 @@ class YtDlpImportProvider(ManagedImportProvider):
         return ImportedSource(destination, info_holder.get("title", ""))
 
 
+class SocialKitImportProvider(ManagedImportProvider):
+    """Hosted YouTube import via SocialKit's async (v2) download job API.
+
+    SocialKit performs the actual download on its own infrastructure, so this
+    works from datacenter IP ranges that YouTube blocks outright. Flow is
+    submit job -> poll until ``ready`` -> fetch the temporary download URL.
+    """
+
+    name = "socialkit"
+
+    def __init__(self) -> None:
+        self.base = os.getenv("VIDEO_IMPORT_API_URL", "https://api.socialkit.dev").rstrip("/")
+        self.api_key = os.getenv("VIDEO_IMPORT_API_KEY", "")
+        self.quality = os.getenv("SOCIALKIT_QUALITY", "720p")
+        self.timeout = max(60, int(os.getenv("VIDEO_IMPORT_TIMEOUT_MS", "1800000")) // 1000)
+        self.max_bytes = max(50, int(os.getenv("WORKER_MAX_DOWNLOAD_MB", "4096"))) * 1024 * 1024
+        self.poll_seconds = max(2, int(os.getenv("SOCIALKIT_POLL_SECONDS", "5")))
+        configured = {h.strip().lower() for h in os.getenv("VIDEO_IMPORT_ALLOWED_DOWNLOAD_HOSTS", "").split(",") if h.strip()}
+        self.allowed_hosts = configured or {"amazonaws.com", "socialkit.dev"}
+
+    def _call(self, url: str, method: str = "GET") -> dict:
+        request = urllib.request.Request(
+            url, method=method,
+            headers={"User-Agent": "DeenClipped-Worker/1.0", "Accept": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "replace")[:300]
+            raise ImportProviderError(f"SocialKit request failed with HTTP {exc.code}: {detail}") from exc
+        except (TimeoutError, socket.timeout) as exc:
+            raise ImportProviderError("SocialKit request timed out.") from exc
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise ImportProviderError("SocialKit returned invalid JSON.") from exc
+
+    def import_video(self, source: dict, destination: Path, cancelled: Callable[[], bool]) -> ImportedSource:
+        if not self.api_key:
+            raise ImportProviderError("The managed YouTube import provider is not configured.")
+        youtube_url = validate_youtube_url(source.get("url", ""))
+        if cancelled():
+            raise ImportProviderError("Job cancelled.")
+
+        submit_query = urllib.parse.urlencode({
+            "access_key": self.api_key, "url": youtube_url, "quality": self.quality,
+        })
+        submitted = self._call(f"{self.base}/v2/youtube/download?{submit_query}", method="POST")
+        job = submitted.get("data") if isinstance(submitted, dict) else None
+        if not isinstance(job, dict) or not job.get("jobId"):
+            message = (submitted or {}).get("error") if isinstance(submitted, dict) else None
+            raise ImportProviderError(str(message or "SocialKit did not return a download job id.")[:300])
+        job_id = urllib.parse.quote(str(job["jobId"]), safe="")
+
+        status_query = urllib.parse.urlencode({"access_key": self.api_key})
+        deadline = time.monotonic() + self.timeout
+        info: dict = {}
+        while True:
+            if cancelled():
+                raise ImportProviderError("Job cancelled.")
+            if time.monotonic() > deadline:
+                raise ImportProviderError("SocialKit download timed out. Upload the original MP4 or retry later.")
+            time.sleep(self.poll_seconds)
+            polled = self._call(f"{self.base}/v2/downloads/{job_id}?{status_query}")
+            info = polled.get("data") if isinstance(polled, dict) else None
+            if not isinstance(info, dict):
+                raise ImportProviderError("SocialKit returned an unexpected job status.")
+            state = str(info.get("status") or "").lower()
+            if state == "ready":
+                break
+            if state in {"failed", "error", "cancelled", "canceled", "expired"}:
+                raise ImportProviderError(str(info.get("error") or f"SocialKit download {state}.")[:300])
+
+        download_url = info.get("downloadUrl")
+        if not isinstance(download_url, str) or not download_url:
+            raise ImportProviderError("SocialKit did not return a download URL.")
+        safe_url = assert_public_https_url(download_url, self.allowed_hosts)
+        download_https(safe_url, destination, self.max_bytes, self.timeout, cancelled)
+        return ImportedSource(destination, str(info.get("title") or ""))
+
+
 class DirectUploadProvider(ManagedImportProvider):
     name = "direct_upload"
 
@@ -231,4 +311,6 @@ def provider_for(source: dict, storage) -> ManagedImportProvider:
         return FfmpegApiImportProvider()
     if selected == "ytdlp":
         return YtDlpImportProvider()
+    if selected == "socialkit":
+        return SocialKitImportProvider()
     raise ImportProviderError(f"Unsupported VIDEO_IMPORT_PROVIDER: {selected}")
