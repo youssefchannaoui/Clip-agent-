@@ -37,7 +37,11 @@ export function presign({ method = 'GET', key, expiresSec = 900, contentType = '
   const day = stamp.slice(0, 8);
   const region = config.objectStorageRegion || 'auto';
   const scope = `${day}/${region}/s3/aws4_request`;
-  const signedHeaders = contentType ? 'content-type;host' : 'host';
+  const headerPairs = contentType
+    ? [['content-type', contentType], ['host', base.host]]
+    : [['host', base.host]];
+  headerPairs.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  const signedHeaders = headerPairs.map(([name]) => name).join(';');
   const params = new URLSearchParams({
     'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
     'X-Amz-Credential': `${config.objectStorageAccessKey}/${scope}`,
@@ -45,8 +49,8 @@ export function presign({ method = 'GET', key, expiresSec = 900, contentType = '
     'X-Amz-Expires': String(Math.max(60, Math.min(3600, Number(expiresSec) || 900))),
     'X-Amz-SignedHeaders': signedHeaders,
   });
-  const canonicalQuery = [...params.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${encode(k)}=${encode(v)}`).join('&');
-  const headers = `host:${base.host}\n${contentType ? `content-type:${contentType}\n` : ''}`;
+  const canonicalQuery = [...params.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, v]) => `${encode(k)}=${encode(v)}`).join('&');
+  const headers = `${headerPairs.map(([name, value]) => `${name}:${value}`).join('\n')}\n`;
   const canonical = [method.toUpperCase(), base.pathname, canonicalQuery, headers, signedHeaders, 'UNSIGNED-PAYLOAD'].join('\n');
   const stringToSign = ['AWS4-HMAC-SHA256', stamp, scope, sha256(canonical)].join('\n');
   const dateKey = hmac(`AWS4${config.objectStorageSecretKey}`, day);
