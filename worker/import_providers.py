@@ -224,6 +224,7 @@ class SocialKitImportProvider(ManagedImportProvider):
         self.timeout = max(60, int(os.getenv("VIDEO_IMPORT_TIMEOUT_MS", "1800000")) // 1000)
         self.max_bytes = max(50, int(os.getenv("WORKER_MAX_DOWNLOAD_MB", "4096"))) * 1024 * 1024
         self.poll_seconds = max(2, int(os.getenv("SOCIALKIT_POLL_SECONDS", "5")))
+        self.max_duration = max(0, int(os.getenv("SOCIALKIT_MAX_DURATION_SEC", "0")))
         configured = {h.strip().lower() for h in os.getenv("VIDEO_IMPORT_ALLOWED_DOWNLOAD_HOSTS", "").split(",") if h.strip()}
         self.allowed_hosts = configured or {"amazonaws.com", "socialkit.dev"}
 
@@ -250,9 +251,10 @@ class SocialKitImportProvider(ManagedImportProvider):
         if cancelled():
             raise ImportProviderError("Job cancelled.")
 
-        submit_query = urllib.parse.urlencode({
-            "access_key": self.api_key, "url": youtube_url, "quality": self.quality,
-        })
+        submit_params = {"access_key": self.api_key, "url": youtube_url, "quality": self.quality}
+        if self.max_duration:
+            submit_params["max_duration"] = str(self.max_duration)
+        submit_query = urllib.parse.urlencode(submit_params)
         submitted = self._call(f"{self.base}/v2/youtube/download?{submit_query}", method="POST")
         job = submitted.get("data") if isinstance(submitted, dict) else None
         if not isinstance(job, dict) or not job.get("jobId"):
