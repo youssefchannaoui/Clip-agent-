@@ -274,7 +274,25 @@ export async function sourceInfo(url) {
   if (!value) throw new Error('No source URL supplied.');
   if (remoteProcessing()) {
     const parsed = parseYouTubeUrl(value);
-    return { url: parsed.canonicalUrl, title: parsed.canonicalUrl, durationSec: null, durationKnown: false, thumbnail: fallbackThumb(parsed.canonicalUrl), extractor: 'validated-only' };
+    // yt-dlp and ffprobe do not exist on the web service, but the YouTube Data
+    // API and the public watch page are ordinary HTTPS calls that work here.
+    // Trying them means the token estimate is based on the real length instead
+    // of forcing the person to type it in by hand every single time.
+    try {
+      const apiInfo = await sourceInfoViaYouTubeDataApi(value);
+      if (apiInfo?.durationSec) return { ...apiInfo, durationKnown: true, extractor: 'youtube-data-api' };
+    } catch { /* fall through to the HTML page */ }
+    try {
+      const htmlInfo = await sourceInfoViaYouTubeHtml(value);
+      if (htmlInfo?.durationSec) return { ...htmlInfo, durationKnown: true, extractor: 'youtube-html' };
+    } catch { /* fall through to manual entry */ }
+    return {
+      url: parsed.canonicalUrl, title: parsed.canonicalUrl, durationSec: null, durationKnown: false,
+      thumbnail: fallbackThumb(parsed.canonicalUrl), extractor: 'validated-only',
+      warning: config.youtubeDataApiKey
+        ? 'Could not read the duration from YouTube; enter it manually.'
+        : 'Set YOUTUBE_DATA_API_KEY for reliable duration lookup.',
+    };
   }
   const warnings = [];
 
