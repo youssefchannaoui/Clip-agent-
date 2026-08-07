@@ -191,7 +191,34 @@ test('the monthly card carries one badge, not two', () => {
   const user = makeUser('viewer4');
   state.authUsers = [user];
   const html = billing.plansPage(user, {});
-  assert.equal((html.match(/Most popular/g) || []).length, 1, 'only the top-up pack keeps "Most popular"');
+  // "Most popular" belongs to the Monthly plan and nothing else — two things
+  // claiming it on one page dilutes both.
+  assert.equal((html.match(/Most popular/g) || []).length, 1);
+  assert.ok(html.includes('Best seller'), 'the 300 pack should have its own label');
+});
+
+test('yearly is anchored against monthly, not left as the biggest number', () => {
+  const user = makeUser('viewer7');
+  state.authUsers = [user];
+  const html = billing.plansPage(user, {});
+  // A$249/yr vs A$29.99/mo => A$20.75/mo, 31% saved.
+  assert.ok(html.includes('A$20.75 a month'), 'expected the per-month equivalent');
+  assert.ok(html.includes('Save 31%'), 'expected the savings badge');
+});
+
+test('only the monthly CTA gets the primary treatment', () => {
+  const user = makeUser('viewer8');
+  state.authUsers = [user];
+  const html = billing.plansPage(user, {});
+  assert.equal((html.match(/class="cta-primary"/g) || []).length, 1);
+  assert.equal((html.match(/class="cta-secondary"/g) || []).length, 2);
+});
+
+test('motion is disabled for users who ask the OS for less of it', () => {
+  const user = makeUser('viewer9');
+  state.authUsers = [user];
+  const html = billing.plansPage(user, {});
+  assert.ok(html.includes('prefers-reduced-motion'), 'animations must degrade gracefully');
 });
 
 test('cards show a per-minute rate', () => {
