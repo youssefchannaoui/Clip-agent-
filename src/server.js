@@ -20,6 +20,7 @@ import * as auth from './auth.js';
 import * as billing from './billing.js';
 import * as marketing from './marketing.js';
 import * as admin from './admin.js';
+import * as adminOps from './admin-ops.js';
 import { saveVideoUpload, removeUploadedFile } from './uploads.js';
 import * as objectStorage from './object-storage.js';
 import { assertStorageObjectKey } from './video-import.js';
@@ -248,6 +249,7 @@ function appState(user = null) {
     postTimes: config.postTimes, timezone: config.timezone, activeJobs: agent.engine.activeJobCount(),
     log: logFor(user, 60), directPublishingEnabled: config.socialPublishEnabled,
     publishingSettings: publishingSettings(user), social: social.connectionStatus(user), billing: billing.publicBilling(user),
+    role: String(user?.role || 'creator').toLowerCase(),
   };
 }
 
@@ -503,6 +505,32 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/api/admin/analytics') {
     try { requireOperator(currentUser); return json(res, 200, admin.analytics(currentUser)); }
     catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+  }
+
+  if (method === 'GET' && pathname === '/api/admin/operations') {
+    try { requireOperator(currentUser); return json(res, 200, await adminOps.operations(currentUser)); }
+    catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+  }
+
+  if (method === 'GET' && pathname === '/api/admin/vendors') {
+    try { requireOperator(currentUser); return json(res, 200, adminOps.listVendors(currentUser)); }
+    catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+  }
+
+  if (method === 'POST' && pathname === '/api/admin/vendors') {
+    try {
+      requireOperator(currentUser);
+      const body = await readBody(req);
+      return json(res, 200, adminOps.saveVendor(currentUser, body));
+    } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+  }
+
+  if (method === 'DELETE' && pathname.startsWith('/api/admin/vendors/')) {
+    try {
+      requireOperator(currentUser);
+      const id = decodeURIComponent(pathname.slice('/api/admin/vendors/'.length));
+      return json(res, 200, adminOps.deleteVendor(currentUser, id));
+    } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
   }
 
   const socialConnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok)\/connect$/);

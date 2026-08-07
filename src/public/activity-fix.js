@@ -81,7 +81,7 @@ const STUDIO_NAV = [
 ];
 const NAV = [...CREATE_NAV, ...PUBLISH_NAV, ...STUDIO_NAV];
 const MANAGE = [];
-const CUSTOM = new Set(['home','projects','review','editor','publishing','templates','music','automation','insights']);
+const CUSTOM = new Set(['home','projects','review','editor','publishing','templates','music','automation','insights','admin']);
 
 let currentView = 'home';
 let selectedProjectId = '';
@@ -896,7 +896,7 @@ function injectShell(){
   document.body.classList.add('dc-app');
 
   const side = document.createElement('aside'); side.id = 'dcSidebar';
-  side.innerHTML = `<div id="dcBrand"><div class="dc-logo"><svg viewBox="0 0 24 26" fill="none"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg></div><div class="dc-brand-copy"><strong>DeenClipped</strong><span>AI clip workspace</span></div></div><div class="dc-nav-scroll"><div class="dc-nav-group"><div class="dc-nav-label"><span>Create</span><i></i></div>${CREATE_NAV.map(([v,l,i])=>navButton(v,l,i)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Publish</span><i></i></div>${PUBLISH_NAV.map(([v,l,i])=>navButton(v,l,i)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Studio</span><i></i></div>${STUDIO_NAV.map(([v,l,i])=>navButton(v,l,i)).join('')}</div></div><div class="dc-sidebar-bottom"><button class="dc-collapse" id="dcCollapse"><span class="dc-nav-icon">${ICON.collapse}</span><span>Collapse sidebar</span></button></div>`;
+  side.innerHTML = `<div id="dcBrand"><div class="dc-logo"><svg viewBox="0 0 24 26" fill="none"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg></div><div class="dc-brand-copy"><strong>DeenClipped</strong><span>AI clip workspace</span></div></div><div class="dc-nav-scroll"><div class="dc-nav-group"><div class="dc-nav-label"><span>Create</span><i></i></div>${CREATE_NAV.map(([v,l,i])=>navButton(v,l,i)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Publish</span><i></i></div>${PUBLISH_NAV.map(([v,l,i])=>navButton(v,l,i)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Studio</span><i></i></div>${STUDIO_NAV.map(([v,l,i])=>navButton(v,l,i)).join('')}</div><div class="dc-nav-group" id="dcAdminNav" style="display:none"><div class="dc-nav-label"><span>Admin</span><i></i></div>${navButton('admin','Admin console','analytics')}</div></div><div class="dc-sidebar-bottom"><button class="dc-collapse" id="dcCollapse"><span class="dc-nav-icon">${ICON.collapse}</span><span>Collapse sidebar</span></button></div>`;
 
   const top = document.createElement('header'); top.id = 'dcTopbar';
   const appData = data() || {};
@@ -913,7 +913,7 @@ function injectShell(){
 
   const main = $('.main-col');
   if (main) {
-    for (const name of ['home','projects','review','editor','publishing','templates','music','automation','insights']) {
+    for (const name of ['home','projects','review','editor','publishing','templates','music','automation','insights','admin']) {
       if (!$(`#view-${name}`)) {
         const panel = document.createElement('section'); panel.id = `view-${name}`; panel.className = 'panel hide';
         main.prepend(panel);
@@ -1075,7 +1075,8 @@ function go(view){
     review:['Clip Review','Approve AI clips before posting'], editor:['Editor','Edit the selected clip'],
     schedule:['Schedule','Queued posts and delivery timing'], insights:['Insights','Clip quality and studio signals'],
     publishing:['Channels','Connected publishing destinations'], templates:['Templates','Caption styles and reusable looks'], music:['Audio','Background tracks and audio level'],
-    automation:['Settings','Generation rules and studio controls']
+    automation:['Settings','Generation rules and studio controls'],
+    admin:['Admin','Subscriptions, storage, integrations and sign-ups']
   };
   $('#dcPageName').textContent = labels[view]?.[0] || view;
   $('#dcPageSub').textContent = labels[view]?.[1] || '';
@@ -1084,6 +1085,7 @@ function go(view){
   if (CUSTOM.has(view)) {
     $$('.main-col > .panel').forEach(p => p.classList.add('hide'));
     $(`#view-${view}`)?.classList.remove('hide');
+    if (view === 'admin') renderAdminPage();
     if (view === 'home') renderHome();
     if (view === 'projects') renderProjects();
     if (view === 'review') renderReview();
@@ -2768,7 +2770,7 @@ function maybeShowBillingNotices(){
   const notices=billingInfo().notices||[];
   if(notices.length)showBillingNotice(notices[0]);
 }
-function renderCurrent(){if(currentView==='home')renderHome();if(currentView==='projects')renderProjects();if(currentView==='review')renderReview();if(currentView==='editor')ensureEditor();if(currentView==='publishing')renderConnections();if(currentView==='templates')renderTemplatesPage();if(currentView==='music')renderAudioLibrary();if(currentView==='insights')renderInsightsPage();if(currentView==='automation')renderSettingsPage()}
+function renderCurrent(){if(currentView==='admin')renderAdminPage();if(currentView==='home')renderHome();if(currentView==='projects')renderProjects();if(currentView==='review')renderReview();if(currentView==='editor')ensureEditor();if(currentView==='publishing')renderConnections();if(currentView==='templates')renderTemplatesPage();if(currentView==='music')renderAudioLibrary();if(currentView==='insights')renderInsightsPage();if(currentView==='automation')renderSettingsPage()}
 async function refreshData(){if(typeof refresh==='function')return refresh();try{DATA=await callApi('/api/state')}catch{}}
 function hexAlpha(hex,alpha){const value=String(hex||'#000000').replace('#','');if(!/^[0-9a-fA-F]{6}$/.test(value))return `rgba(0,0,0,${alpha})`;const n=parseInt(value,16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${alpha})`}
 function formatDuration(ms){const s=Math.max(0,Math.round(Number(ms||0)/1000));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}
@@ -2782,11 +2784,276 @@ function sync(){
   const live=Boolean($('#app')&&!$('#app').classList.contains('hide'));
   $('#dcSidebar').style.display=live?'flex':'none';$('#dcTopbar').style.display=live?'flex':'none';
   if(!live||!data())return;
+  const adminNav=$('#dcAdminNav');if(adminNav)adminNav.style.display=isOperator()?'':'none';
   const jobs=activeJobs(),issues=workspaceFailures(data()),health=$('#dcHealth');health.className=`dc-health ${issues.length?'bad':jobs.length?'busy':!data().readiness?.ready?'bad':''}`;$('span',health).textContent=issues.length?`${issues.length} ${issues.length===1?'issue':'issues'}`:jobs.length?`${jobs.length} active`:data().readiness?.ready?'Ready':'Setup needed';health.style.cursor='pointer';health.onclick=()=>openIssuesPanel();updateTokenPill();maybeShowBillingNotices();maybeShowTokenEvents();
   const signature=JSON.stringify({p:(data().projects||[]).map(p=>[p.id,p.status,p.progress,p.moreJob?.status,p.moreJob?.progress]),c:(data().clips||[]).map(c=>[c.id,c.status,c.scheduledAt,c.postedAt,c.rerender?.status]),r:(data().rerenderJobs||[]).map(r=>[r.id,r.status,r.progress]),s:data().social?.providers});
   if(signature!==lastDataSignature){lastDataSignature=signature;if(currentView!=='editor'||!editor.dirty)renderCurrent();else{renderTimeline();}}
   paintWork();
 }
-function boot(){injectShell();setTimeout(()=>{go('home');try{if(localStorage.getItem('dc-guided-demo-complete')!=='1')setTimeout(()=>openGuidedTour(0),700)}catch{}},80);setInterval(sync,900)}
+/* ==========================================================================
+ * ADMIN CONSOLE  (owner / admin accounts only)
+ * ========================================================================== */
+
+let adminOps = null;
+let adminOpsLoading = false;
+let adminOpsError = '';
+let adminTab = 'overview';
+let adminAnalytics = null;
+
+function isOperator(){
+  const role=String(data()?.role||'').toLowerCase();
+  return role==='owner'||role==='admin';
+}
+
+function formatBytes(bytes){
+  const n=Number(bytes||0);
+  if(!Number.isFinite(n)||n<=0)return '0 B';
+  const units=['B','KB','MB','GB','TB'];
+  const i=Math.min(units.length-1,Math.floor(Math.log(n)/Math.log(1024)));
+  return `${(n/Math.pow(1024,i)).toFixed(i===0?0:i===1?0:2)} ${units[i]}`;
+}
+function formatMoney(amount,currency='USD'){
+  const n=Number(amount||0);
+  try{return new Intl.NumberFormat('en-AU',{style:'currency',currency,maximumFractionDigits:2}).format(n)}
+  catch{return `${currency} ${n.toFixed(2)}`}
+}
+function formatDay(value){
+  if(!value)return '—';
+  return new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',year:'numeric'}).format(new Date(Number(value)));
+}
+
+async function loadAdminOps(force=false){
+  if(adminOpsLoading)return;
+  if(adminOps&&!force)return;
+  adminOpsLoading=true;adminOpsError='';
+  try{
+    const [ops,stats]=await Promise.all([
+      callApi('/api/admin/operations'),
+      callApi('/api/admin/analytics').catch(()=>null)
+    ]);
+    adminOps=ops;
+    if(stats)adminAnalytics=stats;
+  }catch(error){
+    adminOpsError=error.message||'Could not load admin data.';
+  }finally{
+    adminOpsLoading=false;
+    if(currentView==='admin')renderAdminPage();
+  }
+}
+
+function adminStatusPill(status){
+  if(status==='ok')return `<span class="dc-status-pill good">Connected</span>`;
+  if(status==='missing')return `<span class="dc-status-pill bad">Missing</span>`;
+  return `<span class="dc-status-pill">Optional</span>`;
+}
+
+function adminTabs(){
+  const tabs=[['overview','Overview'],['subscriptions','Subscriptions'],['storage','Storage'],['integrations','Integrations'],['vendors','Costs & renewals'],['users','Users']];
+  return `<div class="dc-admin-tabs">${tabs.map(([id,label])=>`<button class="dc-admin-tab${adminTab===id?' is-active':''}" type="button" data-admin-tab="${id}">${esc(label)}</button>`).join('')}</div>`;
+}
+
+function adminOverview(){
+  const ops=adminOps,stats=adminAnalytics;
+  if(!ops)return '';
+  const o=stats?.overview||{};
+  const sub=ops.subscriptions||{};
+  const storage=ops.storage||{};
+  const summary=ops.integrationSummary||{};
+  const vendors=ops.vendors||{};
+  const cards=[
+    ['Signed-up users',o.users??sub.totalUsers??0,`${o.newUsers30d??0} new in 30 days`],
+    ['Active (7 days)',o.activeUsers7d??0,`${sub.trialUsers??0} on trial`],
+    ['Paying subscribers',sub.payingUsers??0,sub.stripeReady?'Stripe live':'Stripe not configured'],
+    ['Storage used',formatBytes(storage.totalBytes),`${(storage.totalObjects||0).toLocaleString()} objects`],
+    ['Videos processed',o.projects??0,`${o.processingProjects??0} running now`],
+    ['Clips posted',o.postedClips??0,`${o.clips??0} generated total`],
+    ['Integrations',`${summary.ok??0}/${summary.total??0}`,summary.missing?`${summary.missing} required missing`:'All required connected'],
+    ['Monthly running cost',formatMoney(vendors.totalMonthly||0),vendors.nextRenewal?`Next: ${esc(vendors.nextRenewal.name)}`:'No renewals tracked'],
+  ];
+  const alerts=[];
+  if(summary.missing)alerts.push(`${summary.missing} required integration${summary.missing===1?'':'s'} not configured.`);
+  if(!sub.stripeReady)alerts.push('Stripe is not fully configured, so no payments can be taken yet.');
+  (vendors.vendors||[]).filter(v=>v.overdue).forEach(v=>alerts.push(`${v.name} renewal date has passed.`));
+  (vendors.vendors||[]).filter(v=>v.dueSoon).forEach(v=>alerts.push(`${v.name} renews in ${v.daysUntilRenewal} day${v.daysUntilRenewal===1?'':'s'}.`));
+  if(storage.truncated)alerts.push('Storage scan stopped early — the bucket is very large, totals are a lower bound.');
+
+  return `${alerts.length?`<section class="dc-admin-alerts">${alerts.map(a=>`<div class="dc-admin-alert">${ICON.alert||''}<span>${esc(a)}</span></div>`).join('')}</section>`:''}
+  <div class="dc-admin-grid">${cards.map(([label,value,sub2])=>`<article class="dc-admin-card"><span class="dc-admin-card-label">${esc(label)}</span><strong>${esc(String(value))}</strong><em>${esc(sub2)}</em></article>`).join('')}</div>`;
+}
+
+function adminSubscriptions(){
+  const sub=adminOps?.subscriptions;if(!sub)return '';
+  const prices=sub.planPrices||{};
+  const planRows=(sub.plans||[]).map(p=>`<tr><td><strong>${esc(p.plan)}</strong>${prices[p.plan]?`<span class="dc-admin-dim"> · ${esc(prices[p.plan])}</span>`:''}</td><td>${p.users}</td><td>${p.active}</td><td>${p.trialing}</td><td>${p.canceled}</td></tr>`).join('');
+  const renewalRows=(sub.upcomingRenewals||[]).map(r=>`<tr><td><strong>${esc(r.name)}</strong><span class="dc-admin-dim">${esc(r.email)}</span></td><td>${esc(r.plan)}</td><td>${esc(r.status)}</td><td>${formatDay(r.renewsAt)}</td><td>${r.daysUntil<0?'<span class="dc-status-pill bad">Overdue</span>':`${r.daysUntil}d`}</td></tr>`).join('');
+  return `<section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>Plans</h2>${sub.stripeReady?`<span class="dc-status-pill good">Stripe live</span>`:`<span class="dc-status-pill bad">Stripe not configured</span>`}</div>
+    <p class="dc-admin-note">${sub.payingUsers||0} paying · ${sub.trialUsers||0} trialing · ${sub.totalUsers||0} total accounts. Trial length ${sub.trialDays||0} days.</p>
+    <table class="dc-admin-table"><thead><tr><th>Plan</th><th>Users</th><th>Active</th><th>Trialing</th><th>Cancelled</th></tr></thead><tbody>${planRows||'<tr><td colspan="5">No plan data yet.</td></tr>'}</tbody></table></section>
+  <section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>Upcoming renewals</h2></div>
+    <table class="dc-admin-table"><thead><tr><th>Account</th><th>Plan</th><th>Status</th><th>Renews</th><th>In</th></tr></thead><tbody>${renewalRows||'<tr><td colspan="5">No subscription renewals scheduled.</td></tr>'}</tbody></table></section>`;
+}
+
+function adminStorage(){
+  const s=adminOps?.storage;if(!s)return '';
+  if(!s.configured)return `<section class="dc-admin-panel"><h2>Storage</h2><p class="dc-admin-note">Object storage is not configured.</p></section>`;
+  if(s.error)return `<section class="dc-admin-panel"><h2>Storage</h2><p class="dc-admin-note">Could not read the bucket: ${esc(s.error)}</p></section>`;
+  const max=Math.max(1,...(s.folders||[]).map(f=>f.bytes));
+  const rows=(s.folders||[]).map(f=>`<div class="dc-quality-row"><span>${esc(f.prefix)}/</span><div class="dc-quality-bar"><i style="width:${Math.round(f.bytes/max*100)}%"></i></div><b>${formatBytes(f.bytes)}</b></div><div class="dc-admin-dim" style="margin:-4px 0 10px">${f.objects.toLocaleString()} objects</div>`).join('');
+  return `<section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>${esc(s.bucket)}</h2><span class="dc-status-pill">${esc(s.region)}</span></div>
+    <div class="dc-admin-grid">
+      <article class="dc-admin-card"><span class="dc-admin-card-label">Total stored</span><strong>${formatBytes(s.totalBytes)}</strong><em>${(s.totalObjects||0).toLocaleString()} objects</em></article>
+      <article class="dc-admin-card"><span class="dc-admin-card-label">Oldest file</span><strong>${formatDay(s.oldestAt)}</strong><em>first upload</em></article>
+      <article class="dc-admin-card"><span class="dc-admin-card-label">Newest file</span><strong>${formatDay(s.newestAt)}</strong><em>most recent write</em></article>
+    </div>
+    ${s.truncated?`<p class="dc-admin-note">Scan stopped after ${s.scannedPages} pages — totals are a lower bound.</p>`:''}
+    <h3 class="dc-admin-subhead">Breakdown by folder</h3>${rows||'<p class="dc-admin-note">Bucket is empty.</p>'}</section>`;
+}
+
+function adminIntegrations(){
+  const rows=adminOps?.integrations||[];
+  const grouped=new Map();
+  rows.forEach(r=>{const list=grouped.get(r.category)||[];list.push(r);grouped.set(r.category,list)});
+  return [...grouped.entries()].map(([category,items])=>`<section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>${esc(category)}</h2></div>
+    <div class="dc-admin-list">${items.map(item=>`<div class="dc-admin-row"><div class="dc-admin-row-copy"><strong>${esc(item.name)}${item.required?'<em class="dc-admin-req">required</em>':''}</strong><span>${esc(item.detail)}</span><span class="dc-admin-dim">${item.envKeys.map(esc).join(' · ')}</span></div><div class="dc-admin-row-actions">${adminStatusPill(item.status)}${item.dashboard?`<a class="dc-btn secondary" href="${esc(item.dashboard)}" target="_blank" rel="noopener noreferrer">Open</a>`:''}</div></div>`).join('')}</div></section>`).join('');
+}
+
+function adminVendors(){
+  const v=adminOps?.vendors;if(!v)return '';
+  const rows=(v.vendors||[]).map(row=>`<div class="dc-admin-row"><div class="dc-admin-row-copy"><strong>${esc(row.name)}</strong><span>${esc(row.plan||'—')} · ${formatMoney(row.cost,row.currency)} ${esc(row.cycle)}</span>${row.notes?`<span class="dc-admin-dim">${esc(row.notes)}</span>`:''}</div><div class="dc-admin-row-actions">${row.renewsAt?`<span class="dc-status-pill${row.overdue?' bad':row.dueSoon?' warn':''}">${row.overdue?'Overdue':`${formatDay(row.renewsAt)}`}</span>`:'<span class="dc-status-pill">No date</span>'}${row.url?`<a class="dc-btn secondary" href="${esc(row.url)}" target="_blank" rel="noopener noreferrer">Open</a>`:''}<button class="dc-btn secondary" type="button" data-vendor-delete="${esc(row.id)}">Remove</button></div></div>`).join('');
+  return `<section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>What you pay for</h2><span class="dc-status-pill">${formatMoney(v.totalMonthly||0)} / month</span></div>
+    <p class="dc-admin-note">These services have no API to query, so record them here to keep every renewal date in one place.</p>
+    <div class="dc-admin-list">${rows||'<p class="dc-admin-note">Nothing recorded yet.</p>'}</div>
+    <h3 class="dc-admin-subhead">Add or update</h3>
+    <form class="dc-admin-form" id="dcVendorForm">
+      <label>Service<input name="name" placeholder="SocialKit" required></label>
+      <label>Plan<input name="plan" placeholder="Pro"></label>
+      <label>Cost<input name="cost" type="number" min="0" step="0.01" placeholder="29"></label>
+      <label>Currency<input name="currency" value="USD" maxlength="6"></label>
+      <label>Billing cycle<select name="cycle"><option value="monthly">Monthly</option><option value="yearly">Yearly</option><option value="weekly">Weekly</option><option value="one-off">One-off</option></select></label>
+      <label>Next payment<input name="renewsAt" type="date"></label>
+      <label class="wide">Dashboard URL<input name="url" type="url" placeholder="https://..."></label>
+      <label class="wide">Notes<input name="notes" placeholder="Card ending 1234"></label>
+      <div class="wide"><button class="dc-btn" type="submit">Save service</button></div>
+    </form></section>`;
+}
+
+function adminUsers(){
+  const users=adminAnalytics?.users||[];
+  const rows=users.slice(0,100).map(u=>`<tr><td><strong>${esc(u.name)}</strong><span class="dc-admin-dim">${esc(u.email)}</span></td><td>${esc(u.plan)}</td><td>${esc(u.billingStatus)}</td><td>${u.projects}</td><td>${u.clips}</td><td>${u.posted}</td><td>${formatDay(u.createdAt)}</td><td>${u.lastLoginAt?formatRelative(u.lastLoginAt):'—'}</td></tr>`).join('');
+  return `<section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>Accounts</h2><span class="dc-status-pill">${users.length} shown</span></div>
+    <table class="dc-admin-table"><thead><tr><th>Account</th><th>Plan</th><th>Status</th><th>Videos</th><th>Clips</th><th>Posted</th><th>Joined</th><th>Last seen</th></tr></thead><tbody>${rows||'<tr><td colspan="8">No accounts yet.</td></tr>'}</tbody></table></section>`;
+}
+
+function renderAdminPage(){
+  const panel=$('#view-admin');if(!panel)return;
+  if(!isOperator()){panel.innerHTML=`<div class="dc-empty v3"><div><div class="dc-empty-icon">${ICON.settings}</div><strong>Not available</strong></div></div>`;return}
+  if(!adminOps&&!adminOpsError){
+    panel.innerHTML=`<div class="dc-manage-page"><section class="dc-studio-hero"><div><span class="dc-manage-kicker">${ICON.analytics} Admin console</span><h1>Loading operations data…</h1><p>Reading storage totals, integration status and subscription records.</p></div></section></div>`;
+    loadAdminOps();return;
+  }
+  const body=adminOpsError
+    ? `<section class="dc-admin-panel"><h2>Could not load</h2><p class="dc-admin-note">${esc(adminOpsError)}</p><button class="dc-btn" type="button" id="dcAdminRetry">Try again</button></section>`
+    : adminTab==='overview'?adminOverview()
+      :adminTab==='subscriptions'?adminSubscriptions()
+        :adminTab==='storage'?adminStorage()
+          :adminTab==='integrations'?adminIntegrations()
+            :adminTab==='vendors'?adminVendors()
+              :adminUsers();
+  panel.innerHTML=`<div class="dc-manage-page">
+    <section class="dc-studio-hero"><div><span class="dc-manage-kicker">${ICON.analytics} Admin console</span><h1>Everything about the business in one place.</h1><p>Only owner and admin accounts can see this page. Creators never see this tab.</p></div><div class="dc-studio-actions"><button class="dc-btn secondary" type="button" id="dcAdminRefresh">Refresh</button></div></section>
+    ${adminTabs()}${body}</div>`;
+  $('#dcAdminRefresh')?.addEventListener('click',()=>{adminOps=null;adminAnalytics=null;renderAdminPage();});
+  $('#dcAdminRetry')?.addEventListener('click',()=>{adminOpsError='';adminOps=null;renderAdminPage();});
+  $('#dcVendorForm')?.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const form=event.target,fd=new FormData(form);
+    const renews=String(fd.get('renewsAt')||'');
+    const payload={
+      name:String(fd.get('name')||''),plan:String(fd.get('plan')||''),
+      cost:Number(fd.get('cost')||0),currency:String(fd.get('currency')||'USD'),
+      cycle:String(fd.get('cycle')||'monthly'),url:String(fd.get('url')||''),
+      notes:String(fd.get('notes')||''),renewsAt:renews?Date.parse(`${renews}T12:00:00`):0,
+    };
+    try{
+      await callApi('/api/admin/vendors',{method:'POST',body:JSON.stringify(payload)});
+      notify('Saved.','good');adminOps=null;renderAdminPage();
+    }catch(error){notify(error.message,'bad')}
+  });
+  requestAnimationFrame(()=>animatePanel(panel));
+}
+
+const DC_ADMIN_CSS = `
+/* --- Admin console ------------------------------------------------------- */
+.dc-admin-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 4px}
+.dc-admin-tab{min-height:34px;padding:0 14px;border:1px solid var(--dc-line);border-radius:999px;background:#0b0b0d;color:var(--dc-muted);font-size:11px;font-weight:700}
+.dc-admin-tab:hover{color:var(--dc-text);border-color:rgba(221,183,118,.3)}
+.dc-admin-tab.is-active{background:rgba(217,180,120,.13);border-color:rgba(217,180,120,.35);color:var(--dc-text)}
+.dc-admin-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.dc-admin-card{padding:15px;border:1px solid var(--dc-line);border-radius:18px;background:linear-gradient(145deg,#151519,#0d0d10)}
+.dc-admin-card-label{display:block;color:var(--dc-subtle);font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+.dc-admin-card strong{display:block;font-size:24px;margin:7px 0 3px;letter-spacing:-.02em}
+.dc-admin-card em{display:block;font-style:normal;color:var(--dc-muted);font-size:9.5px}
+.dc-admin-panel{padding:16px;border:1px solid var(--dc-line);border-radius:22px;background:linear-gradient(145deg,#151519,#0d0d10)}
+.dc-admin-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.dc-admin-panel h2{font-size:16px;margin:0}
+.dc-admin-subhead{font-size:12px;margin:16px 0 8px;color:var(--dc-muted)}
+.dc-admin-note{margin:0 0 12px;color:var(--dc-muted);font-size:10.5px;line-height:1.55}
+.dc-admin-dim{display:block;color:var(--dc-subtle);font-size:9px;margin-top:2px}
+.dc-admin-list{display:grid;gap:8px}
+.dc-admin-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px;border:1px solid rgba(255,255,255,.065);border-radius:13px;background:rgba(0,0,0,.22)}
+.dc-admin-row-copy{min-width:0}
+.dc-admin-row-copy strong{display:block;font-size:11.5px}
+.dc-admin-row-copy span{display:block;font-size:9.5px;color:var(--dc-muted);margin-top:3px}
+.dc-admin-row-actions{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.dc-admin-row-actions .dc-btn{min-height:30px;font-size:9.5px;padding:0 10px}
+.dc-admin-req{font-style:normal;margin-left:7px;padding:2px 6px;border-radius:999px;background:rgba(217,180,120,.14);color:var(--dc-accent2);font-size:8px;letter-spacing:.06em;text-transform:uppercase}
+.dc-admin-table{width:100%;border-collapse:collapse;font-size:10.5px}
+.dc-admin-table th{text-align:left;padding:8px 10px;color:var(--dc-subtle);font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--dc-line)}
+.dc-admin-table td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
+.dc-admin-table tr:last-child td{border-bottom:0}
+.dc-admin-table strong{font-size:11px}
+.dc-admin-alerts{display:grid;gap:7px}
+.dc-admin-alert{display:flex;align-items:center;gap:9px;padding:10px 12px;border:1px solid rgba(255,138,138,.24);border-radius:12px;background:rgba(255,90,90,.07);color:#ffb3b3;font-size:10.5px}
+.dc-admin-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.dc-admin-form label{display:grid;gap:6px;color:var(--dc-muted);font-size:9px}
+.dc-admin-form input,.dc-admin-form select{width:100%;height:38px;padding:0 10px;border:1px solid var(--dc-line);border-radius:10px;background:#0b0b0d;color:var(--dc-text)}
+.dc-admin-form .wide{grid-column:1/-1}
+@media(max-width:820px){.dc-admin-form{grid-template-columns:1fr}.dc-admin-row{flex-direction:column;align-items:flex-start}}
+
+/* --- Sidebar / main content must never overlap --------------------------- */
+/* The sidebar is position:fixed, so any horizontal overflow in a panel used
+   to slide underneath it and make the page look broken. Clipping overflow on
+   the scroll container and pinning the panel's own stacking context keeps the
+   two permanently separated. */
+body.dc-app #app>.wrap{max-width:100vw;overflow-x:clip}
+body.dc-app .main-col,body.dc-app .main-col>.panel{min-width:0;max-width:100%}
+body.dc-app .main-col>.panel{position:relative;z-index:1}
+#dcSidebar{z-index:190}
+#dcTopbar{z-index:180}
+body.dc-project-open #view-projects{width:100%!important;max-width:100%!important;overflow:visible!important;position:relative;z-index:1}
+body.dc-project-open .main-col,body.dc-project-open #app>.wrap{overflow-x:clip!important}
+
+/* --- Floating hero clips: wider, more staggered, less clumped ------------- */
+.dc-v5-stage{min-height:350px}
+.dc-v5-phone:nth-of-type(2){left:0%;top:26%;--rot:-12deg;z-index:2}
+.dc-v5-phone:nth-of-type(3){left:33%;top:0%;--rot:2deg;z-index:4}
+.dc-v5-phone:nth-of-type(4){right:0%;top:23%;--rot:12deg;z-index:2}
+.dc-v5-phone:nth-of-type(3){width:166px}
+.dc-v5-phone:nth-of-type(2),.dc-v5-phone:nth-of-type(4){width:142px}
+.dc-v5-phone:nth-of-type(2){animation-duration:8.5s;animation-delay:-1.1s}
+.dc-v5-phone:nth-of-type(3){animation-duration:7s;animation-delay:-3.4s}
+.dc-v5-phone:nth-of-type(4){animation-duration:9.5s;animation-delay:-5.8s}
+.dc-v5-phone:hover{transform:rotate(0) translateY(-12px) scale(1.04);z-index:6}
+@media(max-width:860px){
+  .dc-v5-stage{min-height:300px}
+  .dc-v5-phone:nth-of-type(3){width:138px}
+  .dc-v5-phone:nth-of-type(2),.dc-v5-phone:nth-of-type(4){width:120px}
+  .dc-v5-phone:nth-of-type(2){left:1%;top:24%}
+  .dc-v5-phone:nth-of-type(4){right:1%;top:22%}
+}
+`;
+try{const s=document.createElement('style');s.textContent=DC_ADMIN_CSS;document.head.append(s);}catch{}
+
+function boot(){injectShell();setTimeout(()=>{go('home');try{if(localStorage.getItem('dc-guided-demo-complete')!=='1'){const start=()=>{if($('#app')&&!$('#app').classList.contains('hide')&&$('#view-home'))openGuidedTour(0);else setTimeout(start,400)};setTimeout(start,700)}}catch{}},80);setInterval(sync,900)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
