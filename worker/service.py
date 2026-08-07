@@ -214,6 +214,7 @@ class Processor:
                 del stderr_lines[:-80]
 
         threading.Thread(target=collect_stderr, daemon=True).start()
+        reported_error = ""
         for line in child.stdout:
             if self.cancelled(job_id):
                 child.terminate()
@@ -222,6 +223,8 @@ class Processor:
                 event = json.loads(line)
             except ValueError:
                 continue
+            if event.get("type") == "error":
+                reported_error = str(event.get("error") or "").strip()
             if event.get("type") == "progress":
                 raw = str(event.get("stage") or "processing").lower()
                 stage = "extracting audio" if "audio" in raw else "transcribing" if "transcri" in raw else "analysing" if "analys" in raw or "candidate" in raw else "rendering" if "render" in raw or "verif" in raw else "creating clips"
@@ -232,7 +235,10 @@ class Processor:
         if self.cancelled(job_id):
             raise ImportProviderError("Job cancelled.")
         if code != 0 or not result_path.exists():
-            raise RuntimeError("Processing engine failed: " + " ".join(stderr_lines[-10:])[-1000:])
+            detail = reported_error or " ".join(stderr_lines[-10:]).strip()
+            if not detail:
+                detail = f"the processing engine exited with code {code} and produced no output."
+            raise RuntimeError("Processing engine failed: " + detail[-1000:])
         return json.loads(result_path.read_text(encoding="utf-8"))
 
     def upload_result(self, job_id: str, result: dict[str, Any]) -> dict[str, Any]:
