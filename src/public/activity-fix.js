@@ -2962,6 +2962,11 @@ function renderAdminPage(){
   panel.innerHTML=`<div class="dc-manage-page">
     <section class="dc-studio-hero"><div><span class="dc-manage-kicker">${ICON.analytics} Admin console</span><h1>Everything about the business in one place.</h1><p>Only owner and admin accounts can see this page. Creators never see this tab.</p></div><div class="dc-studio-actions"><button class="dc-btn secondary" type="button" id="dcAdminRefresh">Refresh</button></div></section>
     ${adminTabs()}${body}</div>`;
+  $$('[data-admin-tab]',panel).forEach(btn=>btn.addEventListener('click',()=>{adminTab=btn.dataset.adminTab;renderAdminPage();}));
+  $$('[data-vendor-delete]',panel).forEach(btn=>btn.addEventListener('click',async()=>{
+    try{await callApi(`/api/admin/vendors/${encodeURIComponent(btn.dataset.vendorDelete)}`,{method:'DELETE'});notify('Removed.','good');adminOps=null;renderAdminPage();}
+    catch(error){notify(error.message,'bad')}
+  }));
   $('#dcAdminRefresh')?.addEventListener('click',()=>{adminOps=null;adminAnalytics=null;renderAdminPage();});
   $('#dcAdminRetry')?.addEventListener('click',()=>{adminOpsError='';adminOps=null;renderAdminPage();});
   $('#dcVendorForm')?.addEventListener('submit',async event=>{
@@ -2985,6 +2990,10 @@ function renderAdminPage(){
 const DC_ADMIN_CSS = `
 /* --- Admin console ------------------------------------------------------- */
 .dc-admin-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 4px}
+.dc-manage-page>*{min-width:0;max-width:100%}
+.dc-admin-grid,.dc-admin-panel,.dc-admin-list,.dc-admin-row{min-width:0;max-width:100%}
+.dc-admin-table{display:block;overflow-x:auto;white-space:nowrap}
+.dc-admin-row-copy strong,.dc-admin-row-copy span{overflow-wrap:anywhere}
 .dc-admin-tab{min-height:34px;padding:0 14px;border:1px solid var(--dc-line);border-radius:999px;background:#0b0b0d;color:var(--dc-muted);font-size:11px;font-weight:700}
 .dc-admin-tab:hover{color:var(--dc-text);border-color:rgba(221,183,118,.3)}
 .dc-admin-tab.is-active{background:rgba(217,180,120,.13);border-color:rgba(217,180,120,.35);color:var(--dc-text)}
