@@ -986,6 +986,7 @@ function handleClick(event){
   const schedule = event.target.closest('[data-schedule-clip]'); if (schedule) { scheduleClip(schedule.dataset.scheduleClip); return; }
   const approve = event.target.closest('[data-approve-clip]'); if (approve) { approveClip(approve.dataset.approveClip); return; }
   const post = event.target.closest('[data-post-clip]'); if (post) { postClip(post.dataset.postClip); return; }
+  const openIssues = event.target.closest('[data-open-issues]'); if (openIssues) { openIssuesPanel(); return; }
   const discard = event.target.closest('[data-delete-clip]'); if (discard) { deleteClip(discard.dataset.deleteClip); return; }
   const retry = event.target.closest('[data-retry-project]'); if (retry) { retryProject(retry.dataset.retryProject); return; }
   const uploadFallback = event.target.closest('[data-upload-fallback]'); if (uploadFallback) { go('home'); requestAnimationFrame(()=>$('#dcVideoUpload')?.click()); return; }
@@ -1184,6 +1185,74 @@ function v5HeroCards(clips){
   ];
   return fallback.map(([image,title],index)=>{const clip=recent[index],src=clip?.thumbUrl?authedUrl(clip.thumbUrl):image;return `<article class="dc-v5-phone"><img src="${src}" alt="${esc(clip?.title||title)} preview"><span class="dc-v5-score">${clip?Math.round(clip.score||0):[94,89,92][index]}</span><span class="dc-v5-phone-copy"><small>${clip?'AI selected':['Hook','Caption','Publish'][index]}</small><strong>${esc(shortText(clip?.title||title,38))}</strong></span></article>`}).join('');
 }
+/* Dismissed issues -------------------------------------------------------- */
+const DISMISS_KEY='dc-dismissed-issues';
+function dismissedIssues(){
+  try{const raw=localStorage.getItem(DISMISS_KEY);const list=raw?JSON.parse(raw):[];return Array.isArray(list)?list:[]}catch{return []}
+}
+function issueKey(issue){return `${issue.kind}:${issue.id}:${issue.at||0}`}
+function dismissIssue(key){
+  try{const list=dismissedIssues();if(!list.includes(key)){list.push(key);localStorage.setItem(DISMISS_KEY,JSON.stringify(list.slice(-200)))}}catch{}
+}
+function clearDismissedIssues(){try{localStorage.removeItem(DISMISS_KEY)}catch{}}
+/* Recent activity --------------------------------------------------------- */
+function recentActivity(d,limit=14){
+  const items=[];
+  (d.projects||[]).forEach(p=>{
+    const title=projectDisplayTitle(p);
+    if(p.status==='done')items.push({tone:'good',text:`${title} finished · ${p.clipCount||0} clips`,at:p.completedAt||p.updatedAt});
+    else if(p.status==='failed'||p.error)items.push({tone:'bad',text:`${title} failed`,at:p.updatedAt||p.completedAt});
+    else if(['queued','processing'].includes(p.status))items.push({tone:'live',text:`${title} · ${p.stage||'processing'}`,at:p.updatedAt||p.startedAt||p.submittedAt});
+  });
+  (d.clips||[]).forEach(c=>{
+    const title=shortText(c.title||'Clip',40);
+    if(c.status==='posted')items.push({tone:'good',text:`Posted · ${title}`,at:c.postedAt||c.updatedAt});
+    else if(c.status==='publish_failed')items.push({tone:'bad',text:`Publish failed · ${title}`,at:c.updatedAt});
+    else if(c.status==='scheduled'&&c.scheduledAt)items.push({tone:'live',text:`Scheduled · ${title}`,at:c.scheduledAt});
+  });
+  return items.filter(i=>Number(i.at)).sort((a,b)=>Number(b.at||0)-Number(a.at||0)).slice(0,limit);
+}
+/* Issues + activity drawer ------------------------------------------------ */
+function closeIssuesPanel(){const el=document.getElementById('dcIssuesPanel');if(el)el.remove()}
+function openIssuesPanel(){
+  const d=data();if(!d)return;
+  closeIssuesPanel();
+  const issues=workspaceFailures(d),activity=recentActivity(d);
+  const wrap=document.createElement('div');
+  wrap.id='dcIssuesPanel';
+  wrap.setAttribute('style','position:fixed;inset:0;z-index:9000;display:flex;justify-content:flex-end;background:rgba(6,6,10,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);');
+  const issueRows=issues.length?issues.map(issue=>`<div style="display:flex;gap:12px;align-items:flex-start;padding:14px;border:1px solid rgba(255,255,255,.09);border-radius:14px;background:rgba(255,255,255,.035);margin-bottom:10px">
+      <span style="width:8px;height:8px;border-radius:99px;background:#ff6b6b;margin-top:7px;flex:none"></span>
+      <div style="flex:1;min-width:0">
+        <strong style="display:block;font-size:13.5px;line-height:1.35">${esc(shortText(issue.title,70))}</strong>
+        <span style="display:block;color:rgba(255,255,255,.62);font-size:12px;margin-top:3px">${esc(shortText(issue.detail,150))}</span>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">${v5FailureAction(issue)}<button class="dc-btn secondary" data-dismiss-issue="${esc(issueKey(issue))}">Dismiss</button></div>
+      </div></div>`).join(''):`<div style="padding:20px;text-align:center;color:rgba(255,255,255,.55);font-size:13px">Nothing needs attention.</div>`;
+  const activityRows=activity.length?activity.map(a=>`<div style="display:flex;gap:10px;align-items:center;padding:9px 2px;border-bottom:1px solid rgba(255,255,255,.05)">
+      <span style="width:6px;height:6px;border-radius:99px;flex:none;background:${a.tone==='bad'?'#ff6b6b':a.tone==='live'?'#f5c451':'#4ade80'}"></span>
+      <span style="flex:1;min-width:0;font-size:12.5px;color:rgba(255,255,255,.85);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.text)}</span>
+      <span style="font-size:11px;color:rgba(255,255,255,.4);flex:none">${esc(formatDate(a.at))}</span>
+    </div>`).join(''):`<div style="padding:14px 2px;color:rgba(255,255,255,.45);font-size:12.5px">No recent activity yet.</div>`;
+  wrap.innerHTML=`<aside style="width:min(430px,100%);height:100%;overflow:auto;background:rgba(18,18,24,.92);border-left:1px solid rgba(255,255,255,.10);padding:22px;box-shadow:-30px 0 60px rgba(0,0,0,.45)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <strong style="font-size:16px;letter-spacing:-.01em">Issues & activity</strong>
+      <button id="dcIssuesClose" class="dc-btn secondary" type="button" aria-label="Close">Close</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 10px">
+      <span style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.5)">Needs attention${issues.length?` · ${issues.length}`:''}</span>
+      ${issues.length?`<button class="dc-btn secondary" id="dcDismissAll" type="button">Dismiss all</button>`:`<button class="dc-btn secondary" id="dcRestoreDismissed" type="button">Restore dismissed</button>`}
+    </div>
+    ${issueRows}
+    <div style="margin:22px 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.5)">Recently</div>
+    ${activityRows}
+  </aside>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click',e=>{if(e.target===wrap)closeIssuesPanel()});
+  const closeBtn=wrap.querySelector('#dcIssuesClose');if(closeBtn)closeBtn.onclick=closeIssuesPanel;
+  const dismissAll=wrap.querySelector('#dcDismissAll');if(dismissAll)dismissAll.onclick=()=>{issues.forEach(i=>dismissIssue(issueKey(i)));openIssuesPanel();try{sync()}catch{}};
+  const restore=wrap.querySelector('#dcRestoreDismissed');if(restore)restore.onclick=()=>{clearDismissedIssues();openIssuesPanel();try{sync()}catch{}};
+  wrap.querySelectorAll('[data-dismiss-issue]').forEach(btn=>{btn.onclick=()=>{dismissIssue(btn.dataset.dismissIssue);openIssuesPanel();try{sync()}catch{}}});
+}
 function workspaceFailures(d){
   const issues=[];
   (d.projects||[]).forEach(p=>{
@@ -1192,7 +1261,8 @@ function workspaceFailures(d){
   });
   (d.rerenderJobs||[]).forEach(j=>{if(j.status==='failed'){const clip=(d.clips||[]).find(c=>c.id===j.clipId);issues.push({kind:'render',id:j.clipId,title:`Edit failed · ${clip?.title||'Clip'}`,detail:shortError(j.error||j.stage||'The edited clip could not be rendered.'),at:j.updatedAt||j.completedAt||j.startedAt||j.createdAt})}});
   (d.clips||[]).forEach(c=>{const failed=(c.targets||[]).filter(t=>t.status==='failed');if(c.status==='publish_failed'||failed.length){const target=failed[0];issues.push({kind:'publish',id:c.id,title:`Publish failed · ${c.title||'Clip'}`,detail:shortError(target?.error||target?.stage||c.error||'A connected channel rejected this upload.'),at:target?.updatedAt||c.updatedAt||c.postedAt||c.createdAt})}});
-  return issues.sort((a,b)=>Number(b.at||0)-Number(a.at||0));
+  const dismissed=dismissedIssues();
+  return issues.filter(issue=>!dismissed.includes(issueKey(issue))).sort((a,b)=>Number(b.at||0)-Number(a.at||0));
 }
 function v5FailureAction(issue){
   if(issue.kind==='project')return `<button class="dc-btn danger" data-retry-project="${esc(issue.id)}">Retry</button>`;
@@ -1202,8 +1272,11 @@ function v5FailureAction(issue){
 }
 function v5HappeningNow(d,jobs,next,waiting,templateName){
   const issues=workspaceFailures(d);
-  if(issues.length){const issue=issues[0];return `<section class="dc-v5-now fail" data-tour="happening-now"><span class="dc-v5-now-icon fail">${uiIcon('warning')}</span><div class="dc-v5-now-copy"><small>Needs attention${issues.length>1?` · ${issues.length} issues`:''}</small><strong>${esc(shortText(issue.title,72))}</strong><span>${esc(shortText(issue.detail,110))}</span></div>${v5FailureAction(issue)}</section>`}
-  if(jobs.length){const job=jobs[0],progress=Number.isFinite(job.progress)?Math.round(job.progress):null;return `<section class="dc-v5-now" data-tour="happening-now"><span class="dc-v5-now-icon live">${uiIcon(job.kind==='publish'?'publish':job.kind==='render'?'editor':'sparkles')}</span><div class="dc-v5-now-copy"><small>Happening now</small><strong>${esc(shortText(job.title,72))}</strong><span>${esc(shortText(job.stage||'Working now',90))}</span>${progress!==null?`<div class="dc-v5-now-progress"><i style="width:${clamp(progress,0,100)}%"></i></div>`:''}</div><span class="dc-pill warn">${progress!==null?`${progress}%`:'Live'}</span></section>`}
+  // Live work always wins this slot. A failure from days ago must never hide
+  // the job that is running right now; unresolved issues are surfaced as a
+  // badge here and in full via the issues panel in the top bar.
+  if(jobs.length){const job=jobs[0],progress=Number.isFinite(job.progress)?Math.round(job.progress):null;return `<section class="dc-v5-now" data-tour="happening-now"><span class="dc-v5-now-icon live">${uiIcon(job.kind==='publish'?'publish':job.kind==='render'?'editor':'sparkles')}</span><div class="dc-v5-now-copy"><small>Happening now</small><strong>${esc(shortText(job.title,72))}</strong><span>${esc(shortText(job.stage||'Working now',90))}</span>${progress!==null?`<div class="dc-v5-now-progress"><i style="width:${clamp(progress,0,100)}%"></i></div>`:''}</div>${issues.length?`<button class="dc-pill bad" data-open-issues="1" title="Open issues">${issues.length} ${issues.length===1?'issue':'issues'}</button>`:''}<span class="dc-pill warn">${progress!==null?`${progress}%`:'Live'}</span></section>`}
+  if(issues.length){const issue=issues[0];return `<section class="dc-v5-now fail" data-tour="happening-now"><span class="dc-v5-now-icon fail">${uiIcon('warning')}</span><div class="dc-v5-now-copy"><small>Needs attention${issues.length>1?` · ${issues.length} issues`:''}</small><strong>${esc(shortText(issue.title,72))}</strong><span>${esc(shortText(issue.detail,110))}</span></div>${issues.length>1?`<button class="dc-btn secondary" data-open-issues="1">View all</button>`:''}${v5FailureAction(issue)}</section>`}
   if(waiting)return `<section class="dc-v5-now" data-tour="happening-now"><span class="dc-v5-now-icon">${uiIcon('review')}</span><div class="dc-v5-now-copy"><small>Happening now</small><strong>${waiting} ${waiting===1?'clip is':'clips are'} ready to review</strong><span>Choose the strongest moments before they enter the publishing queue.</span></div><button class="dc-btn secondary" data-dc-nav="review">Review clips</button></section>`;
   if(next)return `<section class="dc-v5-now" data-tour="happening-now"><span class="dc-v5-now-icon live">${uiIcon('clock')}</span><div class="dc-v5-now-copy"><small>Happening now</small><strong>${esc(shortText(next.title||'Your next clip',72))}</strong><span>Scheduled for ${esc(formatDate(next.scheduledAt))}</span></div><button class="dc-btn secondary" data-dc-nav="schedule">View schedule</button></section>`;
   return `<section class="dc-v5-now" data-tour="happening-now"><span class="dc-v5-now-icon live">${uiIcon('check')}</span><div class="dc-v5-now-copy"><small>Happening now</small><strong>Your studio is ready for the next source</strong><span>${esc(templateName)} is selected. Nothing is processing right now.</span></div><span class="dc-pill good">Ready</span></section>`;
@@ -1720,11 +1793,14 @@ function upgradeYoutubeFallbackButtons(panel,projects){
   }
 }
 function clipCard(c,opts={}){
-  const canPost=['approved','ready','publish_failed','scheduled'].includes(c.status);
+  // A clip that is still "waiting" can be posted immediately — publishNow()
+  // approves it on the way through — so offer both actions instead of hiding
+  // "Post now" until the clip has been approved separately.
+  const canPost=['waiting','approved','ready','publish_failed','scheduled'].includes(c.status);
   const canSchedule=c.status==='waiting';
   const title=shortText(c.title||'Untitled clip', opts.detail?54:44);
   const sub=c.scheduledAt?`Scheduled · ${formatDate(c.scheduledAt)}`:statusName(c.status);
-  return `<article class="dc-clip-card v3-full"><div class="dc-clip-media"><button class="dc-clip-media-button" data-edit-style-clip="${esc(c.id)}" type="button">${clipThumb(c)}</button><span class="dc-score">${Math.round(c.score||0)}</span><span class="dc-duration">${formatDuration(c.durationMs)}</span><span class="dc-clip-state dc-pill ${c.status==='posted'?'good':c.status==='waiting'?'warn':c.status==='publish_failed'?'bad':''}">${statusName(c.status)}</span></div><div class="dc-clip-body"><h3>${esc(title)}</h3><p>${esc(sub)}</p><div class="dc-clip-actions"><button class="dc-btn" data-edit-style-clip="${esc(c.id)}">Edit style</button><button class="dc-btn secondary" data-edit-video-clip="${esc(c.id)}">Edit video</button>${canPost?`<button class="dc-btn secondary" data-post-clip="${esc(c.id)}">Post now</button>`:canSchedule?`<button class="dc-btn secondary" data-schedule-clip="${esc(c.id)}">Schedule</button>`:`<button class="dc-btn secondary" data-download-clip="${esc(c.id)}">Download</button>`}<button class="dc-btn secondary" data-download-clip="${esc(c.id)}">Download</button><button class="dc-btn danger" data-delete-clip="${esc(c.id)}">Delete</button></div></div></article>`;
+  return `<article class="dc-clip-card v3-full"><div class="dc-clip-media"><button class="dc-clip-media-button" data-edit-style-clip="${esc(c.id)}" type="button">${clipThumb(c)}</button><span class="dc-score">${Math.round(c.score||0)}</span><span class="dc-duration">${formatDuration(c.durationMs)}</span><span class="dc-clip-state dc-pill ${c.status==='posted'?'good':c.status==='waiting'?'warn':c.status==='publish_failed'?'bad':''}">${statusName(c.status)}</span></div><div class="dc-clip-body"><h3>${esc(title)}</h3><p>${esc(sub)}</p><div class="dc-clip-actions"><button class="dc-btn" data-edit-style-clip="${esc(c.id)}">Edit style</button><button class="dc-btn secondary" data-edit-video-clip="${esc(c.id)}">Edit video</button>${canPost?`<button class="dc-btn secondary" data-post-clip="${esc(c.id)}">Post now</button>`:''}${canSchedule?`<button class="dc-btn secondary" data-schedule-clip="${esc(c.id)}">Schedule</button>`:''}${(!canPost&&!canSchedule)?`<button class="dc-btn secondary" data-download-clip="${esc(c.id)}">Download</button>`:''}<button class="dc-btn secondary" data-download-clip="${esc(c.id)}">Download</button><button class="dc-btn danger" data-delete-clip="${esc(c.id)}">Delete</button></div></div></article>`;
 }
 
 function renderReview(){
@@ -2706,7 +2782,7 @@ function sync(){
   const live=Boolean($('#app')&&!$('#app').classList.contains('hide'));
   $('#dcSidebar').style.display=live?'flex':'none';$('#dcTopbar').style.display=live?'flex':'none';
   if(!live||!data())return;
-  const jobs=activeJobs(),issues=workspaceFailures(data()),health=$('#dcHealth');health.className=`dc-health ${issues.length?'bad':jobs.length?'busy':!data().readiness?.ready?'bad':''}`;$('span',health).textContent=issues.length?`${issues.length} ${issues.length===1?'issue':'issues'}`:jobs.length?`${jobs.length} active`:data().readiness?.ready?'Ready':'Setup needed';updateTokenPill();maybeShowBillingNotices();maybeShowTokenEvents();
+  const jobs=activeJobs(),issues=workspaceFailures(data()),health=$('#dcHealth');health.className=`dc-health ${issues.length?'bad':jobs.length?'busy':!data().readiness?.ready?'bad':''}`;$('span',health).textContent=issues.length?`${issues.length} ${issues.length===1?'issue':'issues'}`:jobs.length?`${jobs.length} active`:data().readiness?.ready?'Ready':'Setup needed';health.style.cursor='pointer';health.onclick=()=>openIssuesPanel();updateTokenPill();maybeShowBillingNotices();maybeShowTokenEvents();
   const signature=JSON.stringify({p:(data().projects||[]).map(p=>[p.id,p.status,p.progress,p.moreJob?.status,p.moreJob?.progress]),c:(data().clips||[]).map(c=>[c.id,c.status,c.scheduledAt,c.postedAt,c.rerender?.status]),r:(data().rerenderJobs||[]).map(r=>[r.id,r.status,r.progress]),s:data().social?.providers});
   if(signature!==lastDataSignature){lastDataSignature=signature;if(currentView!=='editor'||!editor.dirty)renderCurrent();else{renderTimeline();}}
   paintWork();
