@@ -297,7 +297,11 @@ class DirectUploadProvider(ManagedImportProvider):
 
     def import_video(self, source: dict, destination: Path, cancelled: Callable[[], bool]) -> ImportedSource:
         key = str(source.get("objectKey") or "")
-        if not key.startswith("uploads/") or ".." in key.split("/"):
+        # "uploads/" holds creator-supplied source files; "projects/" holds the
+        # source copy the worker itself stores so clips can be re-rendered and
+        # published later. Both are legitimate inputs here.
+        allowed_prefixes = ("uploads/", "projects/")
+        if not key.startswith(allowed_prefixes) or ".." in key.split("/"):
             raise ImportProviderError("The uploaded video reference is invalid.")
         if cancelled():
             raise ImportProviderError("Job cancelled.")
