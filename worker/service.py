@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+import worker_metrics
 from import_providers import ImportProviderError, download_https, provider_for
 from object_storage import ObjectStorage
 
@@ -409,6 +410,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(401, {"error": "Authentication required.", "code": "unauthorized"})
         if self.command == "GET" and path == "/health":
             return self.send_json(200, {"ok": True, "service": "deenclipped-worker"})
+        if self.command == "GET" and path == "/metrics":
+            return self.send_json(200, worker_metrics.snapshot(
+                str(TEMP_DIR),
+                queue_depth=PROCESSOR.queue.qsize(),
+                running=len(PROCESSOR.running),
+                max_concurrent=MAX_CONCURRENT,
+            ))
         if self.command == "GET" and path == "/readiness":
             free = shutil.disk_usage(TEMP_DIR).free
             ready = bool(ObjectStorage().configured and free >= MIN_FREE_BYTES)

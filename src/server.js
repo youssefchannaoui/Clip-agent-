@@ -512,6 +512,14 @@ async function route(req, res, url) {
     catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
   }
 
+  if (method === 'POST' && pathname === '/api/admin/service-meta') {
+    try {
+      requireOperator(currentUser);
+      const body = await readBody(req);
+      return json(res, 200, adminOps.saveServiceMeta(currentUser, body));
+    } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+  }
+
   if (method === 'GET' && pathname === '/api/admin/vendors') {
     try { requireOperator(currentUser); return json(res, 200, adminOps.listVendors(currentUser)); }
     catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }

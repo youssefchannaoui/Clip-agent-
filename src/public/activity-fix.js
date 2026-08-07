@@ -2848,7 +2848,7 @@ function adminStatusPill(status){
 }
 
 function adminTabs(){
-  const tabs=[['overview','Overview'],['subscriptions','Subscriptions'],['storage','Storage'],['integrations','Integrations'],['vendors','Costs & renewals'],['users','Users']];
+  const tabs=[['overview','Overview'],['services','Services'],['subscriptions','Subscriptions'],['storage','Storage'],['integrations','Integrations'],['vendors','Costs & renewals'],['users','Users']];
   return `<div class="dc-admin-tabs">${tabs.map(([id,label])=>`<button class="dc-admin-tab${adminTab===id?' is-active':''}" type="button" data-admin-tab="${id}">${esc(label)}</button>`).join('')}</div>`;
 }
 
@@ -2944,6 +2944,101 @@ function adminUsers(){
     <table class="dc-admin-table"><thead><tr><th>Account</th><th>Plan</th><th>Status</th><th>Videos</th><th>Clips</th><th>Posted</th><th>Joined</th><th>Last seen</th></tr></thead><tbody>${rows||'<tr><td colspan="8">No accounts yet.</td></tr>'}</tbody></table></section>`;
 }
 
+
+function adminMeter(label,percent,detail,tone=''){
+  const pct=percent===null||percent===undefined?null:Math.max(0,Math.min(100,Number(percent)));
+  return `<div class="dc-quality-row"><span>${esc(label)}</span><div class="dc-quality-bar${tone?' '+tone:''}"><i style="width:${pct===null?0:pct}%"></i></div><b>${pct===null?'—':pct+'%'}</b></div>${detail?`<div class="dc-admin-dim" style="margin:-4px 0 10px">${esc(detail)}</div>`:''}`;
+}
+
+function adminServices(){
+  const live=adminOps?.live;
+  if(!live)return `<section class="dc-admin-panel"><h2>Services</h2><p class="dc-admin-note">No live metric data in this response.</p></section>`;
+  if(live.error)return `<section class="dc-admin-panel"><h2>Services</h2><p class="dc-admin-note">Could not read live metrics: ${esc(live.error)}</p></section>`;
+
+  /* ---- Worker box ---- */
+  const w=live.worker||{};
+  let workerPanel;
+  if(!w.configured){
+    workerPanel=`<p class="dc-admin-note">The processing worker is not configured.</p>`;
+  }else if(w.error){
+    workerPanel=`<p class="dc-admin-note">Worker unreachable: ${esc(w.error)}</p>`;
+  }else{
+    const cpu=w.cpu||{},mem=w.memory||{},disk=w.disk||{},q=w.queue||{};
+    const la=cpu.loadAverage;
+    const upt=w.uptimeSeconds?`${Math.floor(w.uptimeSeconds/86400)}d ${Math.floor((w.uptimeSeconds%86400)/3600)}h`:'—';
+    workerPanel=`${w.legacy?`<p class="dc-admin-note">${esc(w.note||'Worker needs rebuilding for full metrics.')}</p>`:''}
+      <div class="dc-admin-grid">
+        <article class="dc-admin-card"><span class="dc-admin-card-label">CPU</span><strong>${cpu.percent===null||cpu.percent===undefined?'—':cpu.percent+'%'}</strong><em>${cpu.cores?cpu.cores+' cores':'—'}${la?` · load ${la['1m']}`:''}</em></article>
+        <article class="dc-admin-card"><span class="dc-admin-card-label">Memory</span><strong>${mem.percent===null||mem.percent===undefined?'—':mem.percent+'%'}</strong><em>${mem.usedBytes?formatBytes(mem.usedBytes):'—'} of ${mem.totalBytes?formatBytes(mem.totalBytes):'—'}</em></article>
+        <article class="dc-admin-card"><span class="dc-admin-card-label">Disk</span><strong>${disk.percent===null||disk.percent===undefined?'—':disk.percent+'%'}</strong><em>${disk.freeBytes?formatBytes(disk.freeBytes)+' free':'—'}</em></article>
+        <article class="dc-admin-card"><span class="dc-admin-card-label">Queue</span><strong>${q.running??0} / ${q.maxConcurrent??'—'}</strong><em>${q.depth??0} waiting · up ${upt}</em></article>
+      </div>
+      ${adminMeter('CPU',cpu.percent,cpu.cores?`${cpu.cores} cores available`:'')}
+      ${adminMeter('Memory',mem.percent,mem.totalBytes?`${formatBytes(mem.usedBytes||0)} of ${formatBytes(mem.totalBytes)}`:'')}
+      ${adminMeter('Disk',disk.percent,disk.totalBytes?`${formatBytes(disk.freeBytes||0)} free of ${formatBytes(disk.totalBytes)}`:'')}`;
+  }
+
+  /* ---- Hetzner billing ---- */
+  const h=live.hetzner||{};
+  let hetznerPanel;
+  if(!h.configured){
+    hetznerPanel=`<p class="dc-admin-note">Add <b>${esc((h.envKeys||['HETZNER_API_TOKEN']).join(', '))}</b> in Render to show server type, cost and bandwidth.</p>`;
+  }else if(h.error){
+    hetznerPanel=`<p class="dc-admin-note">Hetzner API error: ${esc(h.error)}</p>`;
+  }else{
+    hetznerPanel=(h.servers||[]).map(s=>`<div class="dc-admin-row"><div class="dc-admin-row-copy"><strong>${esc(s.name)} <span class="dc-admin-req">${esc(s.serverType)}</span></strong><span>${s.cores} vCPU · ${s.memoryGb} GB RAM · ${s.diskGb} GB disk · ${esc(s.location)}</span><span class="dc-admin-dim">Traffic ${s.outgoingTrafficBytes?formatBytes(s.outgoingTrafficBytes):'0 B'} of ${s.includedTrafficBytes?formatBytes(s.includedTrafficBytes):'—'}${s.trafficPercent!==null?` (${s.trafficPercent}%)`:''}</span></div><div class="dc-admin-row-actions"><span class="dc-status-pill${s.status==='running'?' good':' bad'}">${esc(s.status)}</span><span class="dc-status-pill">${s.monthlyCost?`€${s.monthlyCost.toFixed(2)}/mo`:'—'}</span></div></div>`).join('')
+      ||`<p class="dc-admin-note">No servers returned by the Hetzner API.</p>`;
+  }
+
+  /* ---- Cloudflare R2 ---- */
+  const c=live.cloudflare||{};
+  let cfPanel;
+  if(!c.configured){
+    cfPanel=`<p class="dc-admin-note">Add <b>${esc((c.envKeys||['CLOUDFLARE_API_TOKEN','CLOUDFLARE_ACCOUNT_ID']).join(', '))}</b> in Render to show R2 operation counts and free-tier headroom.</p>`;
+  }else if(c.error){
+    cfPanel=`<p class="dc-admin-note">Cloudflare API error: ${esc(c.error)}</p>`;
+  }else{
+    const ft=c.freeTier||{};
+    const aPct=ft.classA?Math.min(100,Math.round(c.classAOperations/ft.classA*100)):null;
+    const bPct=ft.classB?Math.min(100,Math.round(c.classBOperations/ft.classB*100)):null;
+    cfPanel=`<div class="dc-admin-grid">
+        <article class="dc-admin-card"><span class="dc-admin-card-label">Class A ops</span><strong>${(c.classAOperations||0).toLocaleString()}</strong><em>writes · last ${c.windowDays} days</em></article>
+        <article class="dc-admin-card"><span class="dc-admin-card-label">Class B ops</span><strong>${(c.classBOperations||0).toLocaleString()}</strong><em>reads · last ${c.windowDays} days</em></article>
+        <article class="dc-admin-card"><span class="dc-admin-card-label">Stored</span><strong>${c.storedBytes?formatBytes(c.storedBytes):'—'}</strong><em>${c.objectCount?c.objectCount.toLocaleString()+' objects':'per Cloudflare'}</em></article>
+      </div>
+      ${adminMeter('Class A free tier',aPct,`${(c.classAOperations||0).toLocaleString()} of ${(ft.classA||0).toLocaleString()} free writes/month`)}
+      ${adminMeter('Class B free tier',bPct,`${(c.classBOperations||0).toLocaleString()} of ${(ft.classB||0).toLocaleString()} free reads/month`)}
+      ${(c.byAction||[]).length?`<h3 class="dc-admin-subhead">By operation</h3><table class="dc-admin-table"><thead><tr><th>Operation</th><th>Requests</th></tr></thead><tbody>${c.byAction.map(r=>`<tr><td>${esc(r.action)}</td><td>${r.requests.toLocaleString()}</td></tr>`).join('')}</tbody></table>`:''}`;
+  }
+
+  /* ---- SocialKit (estimated) ---- */
+  const s=live.socialkit||{};
+  let skPanel;
+  if(!s.applicable){
+    skPanel=`<p class="dc-admin-note">Import provider is <b>${esc(s.provider||'none')}</b>, so no SocialKit credits are consumed.</p>`;
+  }else{
+    skPanel=`<p class="dc-admin-note"><b>Estimated.</b> SocialKit has no usage API, so this is calculated from your own imports at 1 credit per source minute. Treat the SocialKit dashboard as the source of truth.</p>
+      <div class="dc-admin-grid">
+        <article class="dc-admin-card"><span class="dc-admin-card-label">Credits used (est.)</span><strong>${(s.creditsUsedEstimate||0).toLocaleString()}</strong><em>${s.importsThisWindow||0} link imports this period</em></article>
+        <article class="dc-admin-card"><span class="dc-admin-card-label">Remaining (est.)</span><strong>${s.creditsRemainingEstimate===null||s.creditsRemainingEstimate===undefined?'—':s.creditsRemainingEstimate.toLocaleString()}</strong><em>${s.planCredits?`of ${s.planCredits.toLocaleString()} plan credits`:'set plan size below'}</em></article>
+        <article class="dc-admin-card"><span class="dc-admin-card-label">Period started</span><strong>${formatDay(s.windowStart)}</strong><em>day ${s.daysIntoWindow??0}${s.resetDay?` · resets day ${s.resetDay}`:' · rolling 30 days'}</em></article>
+        <article class="dc-admin-card"><span class="dc-admin-card-label">Previous period</span><strong>${(s.previousPeriod?.creditsUsed||0).toLocaleString()}</strong><em>${s.previousPeriod?.imports||0} imports last cycle</em></article>
+      </div>
+      ${s.percentUsed!==null&&s.percentUsed!==undefined?adminMeter('Plan credits used',s.percentUsed,`${(s.creditsUsedEstimate||0).toLocaleString()} of ${(s.planCredits||0).toLocaleString()}`):''}
+      <h3 class="dc-admin-subhead">Plan details</h3>
+      <form class="dc-admin-form" id="dcSocialkitForm">
+        <label>Monthly plan credits<input name="planCredits" type="number" min="0" step="1" value="${s.planCredits||''}" placeholder="12000"></label>
+        <label>Resets on day of month<input name="resetDay" type="number" min="1" max="31" step="1" value="${s.resetDay||''}" placeholder="7"></label>
+        <div class="wide"><button class="dc-btn" type="submit">Save plan details</button></div>
+      </form>`;
+  }
+
+  return `<section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>Processing worker</h2><span class="dc-status-pill">${live.at?formatRelative(live.at):''}</span></div>${workerPanel}</section>
+    <section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>Hetzner Cloud</h2>${h.configured&&!h.error?`<span class="dc-status-pill">€${(h.totalMonthlyCost||0).toFixed(2)}/mo</span>`:''}</div>${hetznerPanel}</section>
+    <section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>Cloudflare R2</h2></div>${cfPanel}</section>
+    <section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>SocialKit credits</h2><span class="dc-status-pill warn">Estimate</span></div>${skPanel}</section>`;
+}
+
 function renderAdminPage(){
   const panel=$('#view-admin');if(!panel)return;
   if(!isOperator()){panel.innerHTML=`<div class="dc-empty v3"><div><div class="dc-empty-icon">${ICON.settings}</div><strong>Not available</strong></div></div>`;return}
@@ -2954,6 +3049,7 @@ function renderAdminPage(){
   const body=adminOpsError
     ? `<section class="dc-admin-panel"><h2>Could not load</h2><p class="dc-admin-note">${esc(adminOpsError)}</p><button class="dc-btn" type="button" id="dcAdminRetry">Try again</button></section>`
     : adminTab==='overview'?adminOverview()
+      :adminTab==='services'?adminServices()
       :adminTab==='subscriptions'?adminSubscriptions()
         :adminTab==='storage'?adminStorage()
           :adminTab==='integrations'?adminIntegrations()
@@ -2969,6 +3065,14 @@ function renderAdminPage(){
   }));
   $('#dcAdminRefresh')?.addEventListener('click',()=>{adminOps=null;adminAnalytics=null;renderAdminPage();});
   $('#dcAdminRetry')?.addEventListener('click',()=>{adminOpsError='';adminOps=null;renderAdminPage();});
+  $('#dcSocialkitForm')?.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const fd=new FormData(event.target);
+    try{
+      await callApi('/api/admin/service-meta',{method:'POST',body:JSON.stringify({service:'socialkit',planCredits:Number(fd.get('planCredits')||0),resetDay:Number(fd.get('resetDay')||0)})});
+      notify('Saved.','good');adminOps=null;renderAdminPage();
+    }catch(error){notify(error.message,'bad')}
+  });
   $('#dcVendorForm')?.addEventListener('submit',async event=>{
     event.preventDefault();
     const form=event.target,fd=new FormData(form);

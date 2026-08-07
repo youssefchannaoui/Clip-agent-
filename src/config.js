@@ -87,6 +87,9 @@ export const config = {
   authRequired: boolean(process.env.AUTH_REQUIRED, Boolean(process.env.GOOGLE_SIGNIN_CLIENT_ID || process.env.APPLE_SIGNIN_CLIENT_ID || process.env.APP_PASSWORD)),
   emailSigninEnabled: boolean(process.env.EMAIL_SIGNIN_ENABLED, true),
   sessionSecret: process.env.APP_SESSION_SECRET || process.env.SOCIAL_TOKEN_KEY || process.env.APP_PASSWORD || 'dev-session-secret-change-me',
+  cloudflareApiToken: process.env.CLOUDFLARE_API_TOKEN || '',
+  cloudflareAccountId: process.env.CLOUDFLARE_ACCOUNT_ID || '',
+  hetznerApiToken: process.env.HETZNER_API_TOKEN || '',
   adminEmail: process.env.ADMIN_EMAIL || 'admin@deenclipped.local',
   adminName: process.env.ADMIN_NAME || 'DeenClipped Admin',
 

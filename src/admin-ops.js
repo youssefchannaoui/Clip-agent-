@@ -10,6 +10,7 @@ import { config } from './config.js';
 import { state, save } from './store.js';
 import * as objectStorage from './object-storage.js';
 import { publicBilling } from './billing.js';
+import * as serviceMetrics from './service-metrics.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -249,8 +250,12 @@ export async function operations(user) {
     storage = { configured: objectStorage.configured(), error: error.message, totalBytes: 0, totalObjects: 0, folders: [] };
   }
   const rows = integrations();
+  let live;
+  try { live = await serviceMetrics.allMetrics(); }
+  catch (error) { live = { error: error.message }; }
   return {
     generatedAt: Date.now(),
+    live,
     storage,
     integrations: rows,
     integrationSummary: {
@@ -268,4 +273,19 @@ export async function operations(user) {
       tokensPerMinute: Number(config.tokensPerMinute || 1),
     },
   };
+}
+
+/* --- Editable per-service metadata (plan sizes, reset days) --------------- */
+
+export function saveServiceMeta(user, input = {}) {
+  requireOperator(user);
+  const service = String(input.service || '').trim().toLowerCase();
+  if (!service) throw Object.assign(new Error('A service name is required.'), { statusCode: 400 });
+  if (!state.adminServiceMeta || typeof state.adminServiceMeta !== 'object') state.adminServiceMeta = {};
+  const planCredits = Math.max(0, Number(input.planCredits || 0));
+  const resetDayRaw = Number(input.resetDay || 0);
+  const resetDay = resetDayRaw >= 1 && resetDayRaw <= 31 ? Math.floor(resetDayRaw) : 0;
+  state.adminServiceMeta[service] = { planCredits, resetDay, updatedAt: Date.now() };
+  save();
+  return state.adminServiceMeta[service];
 }

@@ -45,6 +45,7 @@ async function request(pathname, { method = 'GET', body = null, timeoutMs = conf
 
 export const health = () => request('/health');
 export const readiness = () => request('/readiness');
+export const metrics = () => request('/metrics');
 export const createJob = job => request('/jobs', { method: 'POST', body: job });
 export const getJob = id => request(`/jobs/${encodeURIComponent(id)}`);
 export const cancelJob = id => request(`/jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} });
