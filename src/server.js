@@ -41,6 +41,19 @@ const marketingAssetDirs = [
   path.resolve(config.root, 'src', 'public'),
 ];
 
+// BillingError and friends carry a machine-readable `code` plus the token
+// numbers. Without this the client only sees a sentence and cannot tell an
+// out-of-tokens refusal apart from any other 400.
+function errorBody(error) {
+  const body = { error: error?.message || 'Something went wrong.' };
+  if (!error?.code) return body;
+  body.code = error.code;
+  for (const key of ['needed', 'remaining', 'shortfall', 'plan', 'expiredAt']) {
+    if (error[key] !== undefined) body[key] = error[key];
+  }
+  return body;
+}
+
 function json(res, status, value) {
   const body = JSON.stringify(value);
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
@@ -294,7 +307,7 @@ async function route(req, res, url) {
       billing.handleWebhookEvent(event);
       return json(res, 200, { received: true });
     } catch (error) {
-      return json(res, 400, { error: error.message });
+      return json(res, 400, errorBody(error));
     }
   }
 
@@ -485,31 +498,31 @@ async function route(req, res, url) {
   if (method === 'POST' && pathname === '/api/billing/estimate') {
     const body = await readBody(req);
     try { return json(res, 200, billing.estimateTokenCharge(currentUser, Number(body.minutes || body.sourceMinutes || 0))); }
-    catch (error) { return json(res, 400, { error: error.message }); }
+    catch (error) { return json(res, 400, errorBody(error)); }
   }
   if (method === 'POST' && pathname === '/api/billing/checkout') {
     const body = await readBody(req);
     try { return json(res, 200, await billing.createCheckoutSession(currentUser, String(body.plan || ''))); }
-    catch (error) { return json(res, 400, { error: error.message }); }
+    catch (error) { return json(res, 400, errorBody(error)); }
   }
   if (method === 'POST' && pathname === '/api/billing/topup-checkout') {
     const body = await readBody(req);
     try { return json(res, 200, await billing.createTopupCheckoutSession(currentUser, String(body.package || ''))); }
-    catch (error) { return json(res, 400, { error: error.message }); }
+    catch (error) { return json(res, 400, errorBody(error)); }
   }
   if (method === 'POST' && pathname === '/api/billing/portal') {
     try { return json(res, 200, await billing.createPortalSession(currentUser)); }
-    catch (error) { return json(res, 400, { error: error.message }); }
+    catch (error) { return json(res, 400, errorBody(error)); }
   }
 
   if (method === 'GET' && pathname === '/api/admin/analytics') {
     try { requireOperator(currentUser); return json(res, 200, admin.analytics(currentUser)); }
-    catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+    catch (error) { return json(res, error.statusCode || 404, errorBody(error)); }
   }
 
   if (method === 'GET' && pathname === '/api/admin/operations') {
     try { requireOperator(currentUser); return json(res, 200, await adminOps.operations(currentUser)); }
-    catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+    catch (error) { return json(res, error.statusCode || 404, errorBody(error)); }
   }
 
   if (method === 'POST' && pathname === '/api/admin/service-meta') {
@@ -517,12 +530,12 @@ async function route(req, res, url) {
       requireOperator(currentUser);
       const body = await readBody(req);
       return json(res, 200, adminOps.saveServiceMeta(currentUser, body));
-    } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+    } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
   }
 
   if (method === 'GET' && pathname === '/api/admin/vendors') {
     try { requireOperator(currentUser); return json(res, 200, adminOps.listVendors(currentUser)); }
-    catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+    catch (error) { return json(res, error.statusCode || 404, errorBody(error)); }
   }
 
   if (method === 'POST' && pathname === '/api/admin/vendors') {
@@ -530,7 +543,7 @@ async function route(req, res, url) {
       requireOperator(currentUser);
       const body = await readBody(req);
       return json(res, 200, adminOps.saveVendor(currentUser, body));
-    } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+    } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
   }
 
   if (method === 'DELETE' && pathname.startsWith('/api/admin/vendors/')) {
@@ -538,18 +551,18 @@ async function route(req, res, url) {
       requireOperator(currentUser);
       const id = decodeURIComponent(pathname.slice('/api/admin/vendors/'.length));
       return json(res, 200, adminOps.deleteVendor(currentUser, id));
-    } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+    } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
   }
 
   const socialConnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok)\/connect$/);
   if (method === 'POST' && socialConnect) {
     try { return json(res, 200, { url: social.oauthStartUrl(socialConnect[1], currentUser?.id) }); }
-    catch (error) { return json(res, 400, { error: error.message }); }
+    catch (error) { return json(res, 400, errorBody(error)); }
   }
   const socialDisconnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok)\/disconnect$/);
   if (method === 'POST' && socialDisconnect) {
     try { await social.disconnect(socialDisconnect[1], currentUser); return json(res, 200, { ok: true }); }
-    catch (error) { return json(res, 400, { error: error.message }); }
+    catch (error) { return json(res, 400, errorBody(error)); }
   }
   const socialTest = pathname.match(/^\/api\/social\/(youtube|meta|tiktok)\/test$/);
   if (method === 'POST' && socialTest) {
@@ -580,7 +593,7 @@ async function route(req, res, url) {
       log(`Automatic publishing ${next.enabled ? 'enabled' : 'paused'} for ${['youtube','instagram','facebook','tiktok'].filter(provider => next[provider].enabled).join(', ') || 'no destinations'}.`, 'info', currentUser.id);
       agent.tick().catch(() => {});
       return json(res, 200, { ok: true, settings: publishingSettings(currentUser), social: social.connectionStatus(currentUser) });
-    } catch (error) { return json(res, 400, { error: error.message }); }
+    } catch (error) { return json(res, 400, errorBody(error)); }
   }
 
   if (method === 'POST' && pathname === '/api/source-info') {
@@ -606,7 +619,7 @@ async function route(req, res, url) {
     try {
       const upload = objectStorage.createUpload(currentUser.id, String(body.fileName || ''), String(body.contentType || 'video/mp4'));
       return json(res, 200, { ok: true, ...upload });
-    } catch (error) { return json(res, 400, { error: error.message }); }
+    } catch (error) { return json(res, 400, errorBody(error)); }
   }
 
   if (method === 'POST' && pathname === '/api/videos') {
@@ -620,7 +633,7 @@ async function route(req, res, url) {
           sourceRange: { startSec: Number(body.sourceStartSeconds || 0), endSec: Number(body.sourceEndSeconds) || null },
         });
         return json(res, 201, { ok: true, projectId });
-      } catch (error) { return json(res, 400, { error: error.message }); }
+      } catch (error) { return json(res, 400, errorBody(error)); }
     }
     const urls = String(body.urls || '').split(/[\n,]+/).map(value => value.trim()).filter(Boolean);
     if (!urls.length) return json(res, 400, { error: 'Paste at least one video link.' });
@@ -659,14 +672,14 @@ async function route(req, res, url) {
       return json(res, 201, { ok: true, projectId, fileName: upload.fileName, size: upload.size });
     } catch (error) {
       if (upload?.filePath) removeUploadedFile(upload.filePath);
-      return json(res, error.statusCode || 400, { error: error.message });
+      return json(res, error.statusCode || 400, errorBody(error));
     }
   }
 
   const projectRetry = pathname.match(/^\/api\/projects\/([^/]+)\/retry$/);
   if (method === 'POST' && projectRetry) {
     try { const id = decodeURIComponent(projectRetry[1]); assertCanAccessProject(currentUser, id); return json(res, 200, { ok: true, project: agent.engine.retryProject(id) }); }
-    catch (error) { return json(res, 400, { error: error.message }); }
+    catch (error) { return json(res, 400, errorBody(error)); }
   }
   const projectMore = pathname.match(/^\/api\/projects\/([^/]+)\/more-clips$/);
   if (method === 'POST' && projectMore) {
@@ -675,12 +688,12 @@ async function route(req, res, url) {
       const id = decodeURIComponent(projectMore[1]); assertCanAccessProject(currentUser, id);
       const job = agent.engine.queueMoreClips(id, Number(body.count || 8));
       return json(res, 202, { ok: true, job });
-    } catch (error) { return json(res, 400, { error: error.message }); }
+    } catch (error) { return json(res, 400, errorBody(error)); }
   }
   const projectMatch = pathname.match(/^\/api\/projects\/([^/]+)$/);
   if (method === 'DELETE' && projectMatch) {
     try { const id = decodeURIComponent(projectMatch[1]); assertCanAccessProject(currentUser, id); agent.engine.deleteProject(id); return json(res, 200, { ok: true }); }
-    catch (error) { return json(res, 400, { error: error.message }); }
+    catch (error) { return json(res, 400, errorBody(error)); }
   }
 
   if (method === 'GET' && pathname === '/api/templates') return json(res, 200, { templates: templates.listTemplates(currentUser), selectedTemplate: templates.selectedTemplate(currentUser), draft: templates.defaultTemplateDraft() });
@@ -693,7 +706,7 @@ async function route(req, res, url) {
       const propagation = selected ? queueTemplateForEveryUnpostedClip(template, currentUser, 'creating and selecting it') : { queued: 0, skipped: 0, errors: [] };
       log(`Created template "${template.name}". It is ready for automated renders.`, 'info', currentUser.id);
       return json(res, 200, { ok: true, template, propagation });
-    } catch (error) { return json(res, 400, { error: error.message }); }
+    } catch (error) { return json(res, 400, errorBody(error)); }
   }
   const duplicateTemplate = pathname.match(/^\/api\/templates\/([^/]+)\/duplicate$/);
   if (method === 'POST' && duplicateTemplate) {
@@ -702,7 +715,7 @@ async function route(req, res, url) {
       const template = templates.duplicateTemplate(currentUser, decodeURIComponent(duplicateTemplate[1]), body.name);
       templates.setSelectedTemplate(currentUser, template.id);
       return json(res, 200, { ok: true, template });
-    } catch (error) { return json(res, 400, { error: error.message }); }
+    } catch (error) { return json(res, 400, errorBody(error)); }
   }
   const templateMatch = pathname.match(/^\/api\/templates\/([^/]+)$/);
   if (method === 'PUT' && templateMatch) {
@@ -715,11 +728,11 @@ async function route(req, res, url) {
         : { queued: 0, skipped: 0, errors: [] };
       log(`Saved template "${template.name}" version ${template.version}. New renders use it automatically.`, 'info', currentUser.id);
       return json(res, 200, { ok: true, template, propagation });
-    } catch (error) { return json(res, 400, { error: error.message }); }
+    } catch (error) { return json(res, 400, errorBody(error)); }
   }
   if (method === 'DELETE' && templateMatch) {
     try { templates.deleteTemplate(currentUser, decodeURIComponent(templateMatch[1])); return json(res, 200, { ok: true }); }
-    catch (error) { return json(res, 400, { error: error.message }); }
+    catch (error) { return json(res, 400, errorBody(error)); }
   }
   if (method === 'POST' && pathname === '/api/templates/apply-all') {
     const body = await readBody(req);
@@ -746,7 +759,7 @@ async function route(req, res, url) {
       const propagation = queueTemplateForEveryUnpostedClip(template, currentUser, 'selecting it as the default');
       log(`Automation template set to "${template.name}". Every new and unposted clip is locked to this saved version.`, 'info', currentUser.id);
       return json(res, 200, { ok: true, template, propagation });
-    } catch (error) { return json(res, 400, { error: error.message }); }
+    } catch (error) { return json(res, 400, errorBody(error)); }
   }
 
   if (method === 'POST' && pathname === '/api/clip-settings') {
@@ -775,7 +788,7 @@ async function route(req, res, url) {
   if (method === 'POST' && pathname === '/api/music') {
     const body = await readBody(req, 60 * 1024 * 1024);
     try { const track = await audio.saveNasheed(currentUser, body.name, body.data, body.mimeType); log(`Added "${track.name}". The renderer can rotate it across clips.`, 'info', currentUser.id); return json(res, 200, { ok: true, track }); }
-    catch (error) { return json(res, 400, { error: error.message }); }
+    catch (error) { return json(res, 400, errorBody(error)); }
   }
   if (method === 'POST' && pathname === '/api/music-settings') {
     const body = await readBody(req); const volumePercent = Math.round(Number(body.volumePercent));
@@ -793,7 +806,7 @@ async function route(req, res, url) {
 
   if (pathname === '/api/diagnostics') {
     try { requireOperator(currentUser); }
-    catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+    catch (error) { return json(res, error.statusCode || 404, errorBody(error)); }
   }
   if (method === 'GET' && pathname === '/api/diagnostics') {
     if (config.processingMode === 'remote') {
@@ -814,12 +827,12 @@ async function route(req, res, url) {
       for (const id of (Array.isArray(body.ids) ? body.ids : [])) assertCanAccessClip(currentUser, String(id));
       const summary = agent.scheduleSelected(body.ids);
       return json(res, 200, { ok: summary.failed === 0, ...summary });
-    } catch (error) { return json(res, 400, { error: error.message }); }
+    } catch (error) { return json(res, 400, errorBody(error)); }
   }
 
   const sourcePreview = pathname.match(/^\/api\/clips\/([^/]+)\/source-preview$/);
   if (method === 'GET' && sourcePreview) {
-    let clip; try { clip = assertCanAccessClip(currentUser, decodeURIComponent(sourcePreview[1])); } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+    let clip; try { clip = assertCanAccessClip(currentUser, decodeURIComponent(sourcePreview[1])); } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
     const project = clip ? state.projects.find(item => item.id === clip.projectId) : null;
     const sourceFile = clip?.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
     if (project?.sourceUrl) return temporaryRedirect(res, project.sourceUrl);
@@ -830,7 +843,7 @@ async function route(req, res, url) {
   const clipVideo = pathname.match(/^\/api\/clips\/([^/]+)\/(video|download|thumb)$/);
   if (method === 'GET' && clipVideo) {
     const id = decodeURIComponent(clipVideo[1]); const kind = clipVideo[2];
-    let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+    let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
     const remoteUrl = kind === 'thumb' ? clip?.thumbUrl : clip?.clipUrl;
     if (remoteUrl) return temporaryRedirect(res, remoteUrl);
     const file = agent.engine.clipFilePath(id, kind === 'thumb' ? 'thumb' : 'video'); if (!file) return json(res, 404, { error: 'Rendered file not found.' });
@@ -843,28 +856,28 @@ async function route(req, res, url) {
   if (method === 'POST' && rerenderClip) {
     const body = await readBody(req);
     try { const id = decodeURIComponent(rerenderClip[1]); assertCanAccessClip(currentUser, id); return json(res, 202, { ok: true, job: agent.engine.queueClipRerender(id, String(body.templateId || ''), { asVariant: Boolean(body.asVariant) }) }); }
-    catch (error) { return json(res, 400, { error: error.message }); }
+    catch (error) { return json(res, 400, errorBody(error)); }
   }
   const clipPublish = pathname.match(/^\/api\/clips\/([^/]+)\/publish$/);
   if (method === 'POST' && clipPublish) {
     try { const id = decodeURIComponent(clipPublish[1]); assertCanAccessClip(currentUser, id); return json(res, 200, { ok: true, clip: publicClip(await agent.publishNow(id)) }); }
-    catch (error) { return json(res, 400, { error: error.message }); }
+    catch (error) { return json(res, 400, errorBody(error)); }
   }
   const clipRetryPublish = pathname.match(/^\/api\/clips\/([^/]+)\/retry-publish$/);
   if (method === 'POST' && clipRetryPublish) {
     const body = await readBody(req);
     try { const id = decodeURIComponent(clipRetryPublish[1]); assertCanAccessClip(currentUser, id); return json(res, 200, { ok: true, clip: publicClip(agent.retryPublishing(id, String(body.provider || ''))) }); }
-    catch (error) { return json(res, 400, { error: error.message }); }
+    catch (error) { return json(res, 400, errorBody(error)); }
   }
   const clipReady = pathname.match(/^\/api\/clips\/([^/]+)\/ready$/);
   if (method === 'POST' && clipReady) {
     try { const id = decodeURIComponent(clipReady[1]); assertCanAccessClip(currentUser, id); return json(res, 200, { ok: true, clip: publicClip(agent.readyNow(id)) }); }
-    catch (error) { return json(res, 400, { error: error.message }); }
+    catch (error) { return json(res, 400, errorBody(error)); }
   }
   const clipPosted = pathname.match(/^\/api\/clips\/([^/]+)\/posted$/);
   if (method === 'POST' && clipPosted) {
     try { const id = decodeURIComponent(clipPosted[1]); assertCanAccessClip(currentUser, id); return json(res, 200, { ok: true, clip: publicClip(agent.markPosted(id)) }); }
-    catch (error) { return json(res, 400, { error: error.message }); }
+    catch (error) { return json(res, 400, errorBody(error)); }
   }
   // Real speech timing for one clip.
   //
@@ -878,7 +891,7 @@ async function route(req, res, url) {
   const clipCaptions = pathname.match(/^\/api\/clips\/([^/]+)\/captions$/);
   if (method === 'GET' && clipCaptions) {
     const id = decodeURIComponent(clipCaptions[1]);
-    let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 403, { error: error.message }); }
+    let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 403, errorBody(error)); }
 
     const project = state.projects.find(item => item.id === clip.projectId);
     const clipStart = Number(clip.startSec) || 0;
@@ -914,7 +927,7 @@ async function route(req, res, url) {
   const clipResync = pathname.match(/^\/api\/clips\/([^/]+)\/captions\/resync$/);
   if (method === 'POST' && clipResync) {
     const id = decodeURIComponent(clipResync[1]);
-    let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 403, { error: error.message }); }
+    let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 403, errorBody(error)); }
     const project = state.projects.find(item => item.id === clip.projectId);
     if (!project?.transcriptFile || !fs.existsSync(project.transcriptFile)) {
       return json(res, 400, { error: 'No transcript is stored for this lecture, so speech timing cannot be recovered.' });
@@ -942,7 +955,7 @@ async function route(req, res, url) {
   const clipFraming = pathname.match(/^\/api\/clips\/([^/]+)\/framing-preview$/);
   if (method === 'POST' && clipFraming) {
     const id = decodeURIComponent(clipFraming[1]);
-    let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 403, { error: error.message }); }
+    let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 403, errorBody(error)); }
     const project = state.projects.find(item => item.id === clip.projectId);
     const sourceFile = clip?.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
     if (!sourceFile || !fs.existsSync(sourceFile)) {
@@ -1003,17 +1016,17 @@ async function route(req, res, url) {
       agent.updateClip(id, body); let clip;
       if (body.status === 'approved') clip = agent.approveClip(id); else if (body.status === 'waiting') clip = agent.pullBack(id); else clip = state.clips.find(item => item.id === id);
       return json(res, 200, { ok: true, clip: publicClip(clip) });
-    } catch (error) { return json(res, 400, { error: error.message }); }
+    } catch (error) { return json(res, 400, errorBody(error)); }
   }
   if (clipMatch && method === 'DELETE') {
     try { const id = decodeURIComponent(clipMatch[1]); assertCanAccessClip(currentUser, id); agent.deleteClip(id); return json(res, 200, { ok: true }); }
-    catch (error) { return json(res, 400, { error: error.message }); }
+    catch (error) { return json(res, 400, errorBody(error)); }
   }
   return json(res, 404, { error: 'Not found.' });
 }
 
 export const server = http.createServer((req, res) => {
   let url; try { url = new URL(req.url, `http://${req.headers.host || 'localhost'}`); } catch { return json(res, 400, { error: 'Bad request.' }); }
-  route(req, res, url).catch(error => { console.error(error); if (!res.headersSent) json(res, 500, { error: error.message || 'Unexpected server error.' }); });
+  route(req, res, url).catch(error => { console.error(error); if (!res.headersSent) json(res, 500, errorBody(error)); });
 });
 server.listen(config.port, () => { console.log(`DeenClipped self-hosted engine listening on http://localhost:${config.port}`); agent.start(); });

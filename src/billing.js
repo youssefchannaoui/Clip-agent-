@@ -7,6 +7,17 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const secondsToMs = value => Math.max(0, Number(value || 0) * 1000);
 const cleanEmail = value => String(value || '').trim().toLowerCase();
 
+// Carries a machine-readable reason so the dashboard can show the right
+// upsell instead of dumping a sentence into a toast.
+export class BillingError extends Error {
+  constructor(message, code = 'billing_error', details = {}) {
+    super(message);
+    this.name = 'BillingError';
+    this.code = code;
+    Object.assign(this, details);
+  }
+}
+
 export const PLAN_ORDER = ['weekly', 'monthly', 'yearly'];
 export const TOPUP_ORDER = ['boost100', 'boost300', 'boost750'];
 
@@ -16,29 +27,38 @@ function periodMs(interval) {
   return 30 * 24 * 60 * 60 * 1000;
 }
 
+export function trialAllowed(planId) {
+  if (!(config.stripeTrialDays > 0)) return false;
+  return config.trialPlans.includes(String(planId || '').toLowerCase());
+}
+
 export function plans() {
   return {
     free: {
       id: 'free', name: 'Free', interval: 'one-time', badge: 'Test drive',
       tokens: config.tokensFree, priceId: '', enabled: true,
-      description: 'Try the studio before upgrading.',
+      days: config.freeTierDays,
+      description: config.freeTierDays > 0
+        ? `Try the studio free for ${config.freeTierDays} days.`
+        : 'Try the studio before upgrading.',
     },
     weekly: {
       id: 'weekly', name: 'Weekly', interval: 'week', badge: 'Start small',
       tokens: config.tokensWeekly, priceId: config.stripePriceWeekly, priceLabel: config.planPriceWeeklyLabel,
-      enabled: Boolean(config.stripePriceWeekly),
+      enabled: Boolean(config.stripePriceWeekly), trialEligible: trialAllowed('weekly'),
       description: 'Affordable access for occasional lecture clipping.',
     },
     monthly: {
-      id: 'monthly', name: 'Monthly', interval: 'month', badge: 'Most popular',
+      id: 'monthly', name: 'Monthly', interval: 'month', badge: '',
       tokens: config.tokensMonthly, priceId: config.stripePriceMonthly, priceLabel: config.planPriceMonthlyLabel,
-      enabled: Boolean(config.stripePriceMonthly),
+      listPriceLabel: config.planPriceMonthlyListLabel,
+      enabled: Boolean(config.stripePriceMonthly), trialEligible: trialAllowed('monthly'),
       description: 'The best balance for creators posting consistently.',
     },
     yearly: {
       id: 'yearly', name: 'Yearly', interval: 'year', badge: 'Best value',
       tokens: config.tokensYearly, priceId: config.stripePriceYearly, priceLabel: config.planPriceYearlyLabel,
-      enabled: Boolean(config.stripePriceYearly),
+      enabled: Boolean(config.stripePriceYearly), trialEligible: trialAllowed('yearly'),
       description: 'The lowest long-term cost for regular publishing.',
     },
   };
@@ -132,6 +152,11 @@ export function ensureUserBilling(user) {
   billing.bonusTokens = Math.max(0, Number(billing.bonusTokens || 0));
   if (!Array.isArray(billing.processedTopupSessions)) billing.processedTopupSessions = [];
   billing.periodStart ||= user.createdAt || now();
+  // The free grant is a trial of the product, not a standing entitlement.
+  // Stamped once, at first sight of the account, and never extended.
+  if (billing.plan === 'free' && !billing.freeExpiresAt && config.freeTierDays > 0) {
+    billing.freeExpiresAt = Number(billing.periodStart) + config.freeTierDays * DAY_MS;
+  }
   billing.periodEnd ||= billing.plan === 'free' || billing.plan === 'admin'
     ? null
     : billing.periodStart + periodMs(billing.plan);
@@ -143,6 +168,20 @@ export function ensureUserBilling(user) {
     billing.tokensReserved = 0;
   }
   return billing;
+}
+
+export function freeTierState(billing = {}) {
+  const onFree = String(billing.plan || 'free') === 'free';
+  const expiresAt = Number(billing.freeExpiresAt || 0) || null;
+  if (!onFree || !expiresAt) {
+    return { onFree, expiresAt: null, expired: false, daysLeft: null };
+  }
+  return {
+    onFree: true,
+    expiresAt,
+    expired: expiresAt <= now(),
+    daysLeft: daysRemaining(expiresAt),
+  };
 }
 
 export function isUnlimited(user) {
@@ -160,6 +199,7 @@ export function publicBilling(user) {
   const reserved = Number(billing.tokensReserved || 0);
   const bonusTokens = Math.max(0, Number(billing.bonusTokens || 0));
   const trial = trialState(billing);
+  const freeTier = unlimited ? { onFree: false, expiresAt: null, expired: false, daysLeft: null } : freeTierState(billing);
   const baseRemaining = unlimited ? null : Math.max(0, allow - used - reserved);
   const remaining = unlimited ? null : baseRemaining + bonusTokens;
   const periodEndsInDays = billing.periodEnd ? daysRemaining(billing.periodEnd) : null;
@@ -179,6 +219,23 @@ export function publicBilling(user) {
       kind: 'trial_ended',
       title: 'Your trial has ended',
       message: 'Start a weekly, monthly or yearly plan to keep generating clips.',
+      action: 'Choose plan',
+    });
+  }
+  if (freeTier.onFree && freeTier.expired) {
+    notices.push({
+      id: `free-expired-${freeTier.expiresAt}`,
+      kind: 'free_expired',
+      title: 'Your free trial has ended',
+      message: `The free tier runs for ${config.freeTierDays} days. Choose a plan to keep generating clips — your existing clips stay where they are.`,
+      action: 'Choose plan',
+    });
+  } else if (freeTier.onFree && freeTier.daysLeft !== null && freeTier.daysLeft <= 1) {
+    notices.push({
+      id: `free-ending-${freeTier.expiresAt}`,
+      kind: 'free_ending',
+      title: freeTier.daysLeft === 0 ? 'Free access ends today' : 'Free access ends tomorrow',
+      message: 'Pick a plan to keep your studio open.',
       action: 'Choose plan',
     });
   }
@@ -203,7 +260,7 @@ export function publicBilling(user) {
       `${tokenRate()} token per source video minute`,
       'Tokens are charged after the source duration is known',
       'Template updates and rerenders are free',
-      `${config.stripeTrialDays || 7}-day trial on paid plans`,
+      `${config.stripeTrialDays || 7}-day trial on ${config.trialPlans.join(' and ')} plans`,
       'Unused trial access does not roll into another trial',
       'Purchased top-up tokens do not expire when a subscription renews',
     ],
@@ -222,6 +279,7 @@ export function publicBilling(user) {
       periodEnd: billing.periodEnd || null,
       periodEndsInDays,
       trial,
+      freeTier,
       stripeCustomerId: billing.stripeCustomerId || '',
       stripeSubscriptionId: billing.stripeSubscriptionId || '',
     },
@@ -239,8 +297,22 @@ export function assertCanSpend(user, tokens, action = 'start this job') {
   const info = publicBilling(user);
   const needed = Math.max(1, Math.ceil(Number(tokens || 0)));
   const remaining = Number(info.current.remaining || 0);
+  const freeTier = info.current.freeTier || {};
+  // Checked before the balance: an expired free account is blocked even if
+  // it still shows unspent tokens.
+  if (freeTier.onFree && freeTier.expired) {
+    throw new BillingError(
+      `Your ${config.freeTierDays}-day free trial has ended. Choose a plan to ${action}.`,
+      'free_expired',
+      { needed, remaining, plan: info.current.plan, expiredAt: freeTier.expiresAt },
+    );
+  }
   if (remaining < needed) {
-    throw new Error(`Not enough tokens to ${action}. You have ${remaining} tokens left and this needs about ${needed}. Upgrade or wait for your plan to renew.`);
+    throw new BillingError(
+      `Not enough tokens to ${action}. You have ${remaining} tokens left and this needs about ${needed}.`,
+      'insufficient_tokens',
+      { needed, remaining, shortfall: needed - remaining, plan: info.current.plan },
+    );
   }
   return true;
 }
@@ -367,9 +439,15 @@ export async function createCheckoutSession(user, planId) {
     'metadata[plan]': plan.id,
     'subscription_data[metadata][userId]': user.id,
     'subscription_data[metadata][plan]': plan.id,
-    allow_promotion_codes: 'true',
   };
-  if (config.stripeTrialDays > 0) params['subscription_data[trial_period_days]'] = String(config.stripeTrialDays);
+  // A coupon and customer-entered promo codes are mutually exclusive in
+  // Stripe. The Monthly coupon turns the A$34.99 list price into the
+  // A$29.99 the page advertises, so it has to be applied server-side --
+  // leaving it to the customer to type would bill them the list price.
+  const coupon = plan.id === 'monthly' ? config.stripeCouponMonthly : '';
+  if (coupon) params['discounts[0][coupon]'] = coupon;
+  else params.allow_promotion_codes = 'true';
+  if (trialAllowed(plan.id)) params['subscription_data[trial_period_days]'] = String(config.stripeTrialDays);
   const session = await stripeRequest('/checkout/sessions', params);
   return { id: session.id, url: session.url };
 }
@@ -628,17 +706,39 @@ export function plansPage(user, { error = '', info = '', returnTo = '/' } = {}) 
   const cur = bill.current || {};
   const trialDays = Math.max(0, Number(bill.trialDays || 0));
   const returnValue = esc(safeReturn(returnTo));
+  // The configured label often already carries its own period ('A$9.99 / week'),
+  // and the card template appends one too, which rendered 'A$9.99 / week / week'.
+  // Strip any trailing period off the label and let the template own it.
+  const priceAmount = plan => {
+    const raw = String(plan.priceLabel || '').trim();
+    if (!raw) return 'Set price';
+    const interval = String(plan.interval || '').trim();
+    if (!interval) return raw;
+    const stripped = raw.replace(new RegExp(`\\s*/\\s*${interval}\\s*$`, 'i'), '').trim();
+    return stripped || raw;
+  };
+  const perMinute = plan => {
+    const match = String(plan.priceLabel || '').match(/([\d]+(?:\.[\d]+)?)/);
+    const tokens = Number(plan.tokens || 0);
+    if (!match || !tokens) return '';
+    const cents = (Number(match[1]) / tokens) * 100;
+    if (!Number.isFinite(cents) || cents <= 0) return '';
+    return `${cents.toFixed(1)}c per source minute`;
+  };
   const planCards = PLAN_ORDER.map(id => bill.plans?.[id]).filter(Boolean).map(plan => {
     const configured = Boolean(plan.priceId);
     const current = cur.plan === plan.id && cur.status !== 'free';
-    const cta = current ? 'Current plan' : configured ? (trialDays > 0 ? `Start ${trialDays}-day trial` : 'Subscribe') : 'Stripe price required';
+    const canTrial = Boolean(plan.trialEligible) && trialDays > 0;
+    const cta = current ? 'Current plan' : configured ? (canTrial ? `Start ${trialDays}-day trial` : 'Subscribe') : 'Stripe price required';
+    const rate = perMinute(plan);
     return `<article class="dc-plan ${plan.id === 'monthly' ? 'featured' : ''}">
-      <div class="plan-top"><span class="badge">${esc(plan.badge || '')}</span>${plan.id === 'monthly' ? '<span class="popular">Recommended</span>' : ''}</div>
+      <div class="plan-top">${plan.badge ? `<span class="badge">${esc(plan.badge)}</span>` : '<span></span>'}${plan.id === 'monthly' ? '<span class="popular">Recommended</span>' : ''}</div>
       <h2>${esc(plan.name)}</h2>
-      <div class="money">${esc(plan.priceLabel || 'Set price')}<small> / ${esc(plan.interval)}</small></div>
+      <div class="money">${plan.listPriceLabel ? `<s>${esc(plan.listPriceLabel)}</s> ` : ''}${esc(priceAmount(plan))}<small> / ${esc(plan.interval)}</small></div>
+      ${rate ? `<div class="per-min">${esc(rate)}</div>` : ''}
       <p>${esc(plan.description)}</p>
       <div class="tokens"><b>${esc(plan.tokens)}</b><span>tokens included every ${esc(plan.interval)}</span></div>
-      <ul><li>${esc(tokenRate())} token per selected source minute</li><li>Review, editor, templates and publishing</li><li>Template-only rerenders stay free</li><li>${trialDays ? `${trialDays}-day trial when shown at checkout` : 'Starts immediately'}</li></ul>
+      <ul><li>${esc(tokenRate())} token per selected source minute</li><li>Review, editor, templates and publishing</li><li>Template-only rerenders stay free</li><li>${canTrial ? `${trialDays}-day trial when shown at checkout` : 'Billed immediately, cancel any time'}</li></ul>
       <form method="post" action="/billing/checkout"><input type="hidden" name="plan" value="${esc(plan.id)}"><input type="hidden" name="returnTo" value="${returnValue}"><button type="submit" ${configured && !current ? '' : 'disabled'}>${esc(cta)}</button></form>
     </article>`;
   }).join('');
@@ -652,7 +752,7 @@ export function plansPage(user, { error = '', info = '', returnTo = '/' } = {}) 
       <div class="money">A$0<small> / to start</small></div>
       <p>${esc(freePlan.description)}</p>
       <div class="tokens"><b>${esc(freePlan.tokens)}</b><span>tokens to try it out</span></div>
-      <ul><li>${esc(tokenRate())} token per selected source minute</li><li>Review, editor, templates and publishing</li><li>Template-only rerenders stay free</li><li>Upgrade any time, keep your clips</li></ul>
+      <ul><li>${esc(tokenRate())} token per selected source minute</li><li>Review, editor, templates and publishing</li><li>Template-only rerenders stay free</li><li>${freePlan.days ? `Expires ${freePlan.days} days after signup` : 'Upgrade any time, keep your clips'}</li></ul>
       ${onFree
         ? `<form method="post" action="/billing/continue-free"><input type="hidden" name="returnTo" value="${returnValue}"><button type="submit">Start with ${esc(freePlan.tokens)} free tokens</button></form>`
         : `<form><button type="button" disabled>Included with every account</button></form>`}
@@ -672,6 +772,6 @@ export function plansPage(user, { error = '', info = '', returnTo = '/' } = {}) 
   const bonus = cur.unlimited ? 'Unlimited' : `${Math.round(Number(cur.bonusTokens || 0))} top-up`;
   const pct = cur.unlimited ? 100 : Math.max(4, Math.min(100, (Number(cur.used || 0) / Math.max(1, Number(cur.allowance || 1))) * 100));
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Plans & token shop · DeenClipped</title><style>
-  :root{color-scheme:dark;--bg:#070708;--panel:#111113;--panel2:#18181c;--line:rgba(255,255,255,.10);--text:#faf8f3;--muted:#aaa6a0;--gold:#e4bc71;--gold2:#f2d696;--green:#59d493;--red:#ef6b7a}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% -8%,rgba(228,188,113,.18),transparent 32%),radial-gradient(circle at 8% 38%,rgba(70,112,120,.08),transparent 24%),var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--text);padding:26px}.wrap{width:min(1240px,100%);margin:0 auto}.top{height:58px;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:42px}.brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}.logo{width:43px;height:43px;border-radius:14px;display:grid;place-items:center;border:1px solid rgba(228,188,113,.34);background:linear-gradient(145deg,#2a251d,#0c0c0e);color:var(--gold);font-weight:950}.brand strong,.brand span{display:block}.brand strong{font-size:16px}.brand span{font-size:11px;color:var(--muted);margin-top:2px}.account{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px}.ghost{min-height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--text);cursor:pointer}.hero{text-align:center;max-width:850px;margin:0 auto 34px}.eyebrow{display:inline-flex;min-height:30px;align-items:center;padding:0 12px;border-radius:999px;border:1px solid rgba(228,188,113,.28);background:rgba(228,188,113,.08);color:var(--gold2);font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.hero h1{font-size:clamp(42px,6vw,70px);line-height:.96;letter-spacing:-.065em;margin:20px 0 14px}.hero p{color:var(--muted);font-size:16px;line-height:1.65;margin:0}.wallet{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;margin:0 0 22px}.wallet-main,.wallet-rule{padding:22px;border:1px solid var(--line);border-radius:24px;background:linear-gradient(160deg,rgba(255,255,255,.055),rgba(255,255,255,.018));box-shadow:0 24px 70px rgba(0,0,0,.26)}.wallet-head{display:flex;justify-content:space-between;gap:12px;color:var(--muted);font-size:11px}.wallet-number{font-size:46px;font-weight:950;letter-spacing:-.06em;margin:10px 0 3px}.wallet-number span{font-size:13px;color:var(--muted);font-weight:650;letter-spacing:0}.bar{height:8px;background:#26262b;border-radius:999px;overflow:hidden;margin-top:14px}.bar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--gold),var(--gold2));width:${pct}%}.wallet-rule b,.wallet-rule span{display:block}.wallet-rule b{font-size:26px}.wallet-rule span{font-size:12px;color:var(--muted);margin-top:5px}.section-title{text-align:center;max-width:720px;margin:52px auto 24px}.section-title span{font-size:10px;text-transform:uppercase;letter-spacing:.12em;font-weight:900;color:var(--gold2)}.section-title h2{font-size:36px;letter-spacing:-.045em;margin:9px 0}.section-title p{color:var(--muted);font-size:14px;margin:0}.plans{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.dc-plan.free-plan{border-color:rgba(89,212,147,.30);background:linear-gradient(180deg,rgba(89,212,147,.07),rgba(255,255,255,.02))}.dc-plan.free-plan .badge{color:var(--green);border-color:rgba(89,212,147,.34);background:rgba(89,212,147,.10)}.dc-plan.free-plan .popular.free-tag{color:#062;background:var(--green)}.dc-plan.free-plan .tokens b{color:var(--green)}.dc-plan.free-plan button{background:linear-gradient(180deg,#6fe0a4,#3fbe80);color:#042314}@media(max-width:1180px){.plans{grid-template-columns:repeat(2,minmax(0,1fr))}}.dc-plan,.dc-topup{border:1px solid var(--line);border-radius:24px;background:linear-gradient(180deg,rgba(255,255,255,.048),rgba(255,255,255,.018));padding:21px;display:flex;flex-direction:column;gap:12px;position:relative}.dc-plan.featured,.dc-topup.featured{border-color:rgba(228,188,113,.47);box-shadow:0 0 0 1px rgba(228,188,113,.10) inset,0 26px 75px rgba(228,188,113,.06)}.plan-top{display:flex;justify-content:space-between;align-items:center}.badge,.popular{min-height:24px;padding:0 9px;display:inline-flex;align-items:center;border-radius:999px;background:rgba(228,188,113,.10);color:var(--gold2);font-size:9px;font-weight:850}.popular{background:var(--gold);color:#171108}.dc-plan h2,.dc-topup h3{font-size:22px;margin:0}.money{font-size:35px;font-weight:950;letter-spacing:-.055em}.money small,.topup-price small{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:0}.dc-plan p,.dc-topup p{color:var(--muted);font-size:12.5px;line-height:1.55;margin:0}.tokens{padding:12px;border-radius:15px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06)}.tokens b,.tokens span{display:block}.tokens b{font-size:24px}.tokens span{font-size:10px;color:var(--muted);margin-top:2px}.dc-plan ul{margin:0;padding:0;list-style:none;display:grid;gap:8px;color:#d5d0c8;font-size:11.5px}.dc-plan li:before{content:'✓';color:var(--green);margin-right:8px}.dc-plan button,.dc-topup button,.free button{width:100%;height:46px;border:0;border-radius:13px;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#171108;font-weight:850;cursor:pointer;margin-top:auto}.dc-plan button:disabled,.dc-topup button:disabled{opacity:.42;cursor:not-allowed}.topups{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.topup-value b,.topup-value span{display:block}.topup-value b{font-size:38px;letter-spacing:-.055em}.topup-value span{font-size:11px;color:var(--muted)}.topup-price{font-size:20px;font-weight:850}.shop-note{text-align:center;color:var(--muted);font-size:12px;margin:16px auto 0;max-width:760px}.free{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:18px;padding:17px 20px;border:1px solid var(--line);border-radius:20px;background:rgba(255,255,255,.025)}.free strong,.free span{display:block}.free span{color:var(--muted);font-size:12px;margin-top:3px}.free button{width:auto;min-width:210px;background:#0e0e10;color:var(--text);border:1px solid var(--line)}.alerts{margin-bottom:14px}.alert{padding:12px 14px;border-radius:14px;font-size:12px;margin-bottom:8px}.alert.bad{background:rgba(239,107,122,.1);border:1px solid rgba(239,107,122,.25);color:#ffb7bf}.alert.good{background:rgba(89,212,147,.1);border:1px solid rgba(89,212,147,.25);color:#baffd5}.foot{text-align:center;color:var(--muted);font-size:11px;line-height:1.65;margin:28px auto 8px;max-width:850px}@media(max-width:900px){body{padding:16px}.plans,.topups,.wallet{grid-template-columns:1fr}.hero h1{font-size:42px}.top{height:auto;align-items:flex-start;flex-direction:column;margin-bottom:30px}.free{align-items:stretch;flex-direction:column}.free button{width:100%}}@media(max-width:560px){.account span{display:none}.hero h1{font-size:38px}.wallet-main,.wallet-rule,.dc-plan,.dc-topup{border-radius:19px}}
+  :root{color-scheme:dark;--bg:#070708;--panel:#111113;--panel2:#18181c;--line:rgba(255,255,255,.10);--text:#faf8f3;--muted:#aaa6a0;--gold:#e4bc71;--gold2:#f2d696;--green:#59d493;--red:#ef6b7a}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% -8%,rgba(228,188,113,.18),transparent 32%),radial-gradient(circle at 8% 38%,rgba(70,112,120,.08),transparent 24%),var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--text);padding:26px}.wrap{width:min(1240px,100%);margin:0 auto}.top{height:58px;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:42px}.brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}.logo{width:43px;height:43px;border-radius:14px;display:grid;place-items:center;border:1px solid rgba(228,188,113,.34);background:linear-gradient(145deg,#2a251d,#0c0c0e);color:var(--gold);font-weight:950}.brand strong,.brand span{display:block}.brand strong{font-size:16px}.brand span{font-size:11px;color:var(--muted);margin-top:2px}.account{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px}.ghost{min-height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--text);cursor:pointer}.hero{text-align:center;max-width:850px;margin:0 auto 34px}.eyebrow{display:inline-flex;min-height:30px;align-items:center;padding:0 12px;border-radius:999px;border:1px solid rgba(228,188,113,.28);background:rgba(228,188,113,.08);color:var(--gold2);font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.hero h1{font-size:clamp(42px,6vw,70px);line-height:.96;letter-spacing:-.065em;margin:20px 0 14px}.hero p{color:var(--muted);font-size:16px;line-height:1.65;margin:0}.wallet{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;margin:0 0 22px}.wallet-main,.wallet-rule{padding:22px;border:1px solid var(--line);border-radius:24px;background:linear-gradient(160deg,rgba(255,255,255,.055),rgba(255,255,255,.018));box-shadow:0 24px 70px rgba(0,0,0,.26)}.wallet-head{display:flex;justify-content:space-between;gap:12px;color:var(--muted);font-size:11px}.wallet-number{font-size:46px;font-weight:950;letter-spacing:-.06em;margin:10px 0 3px}.wallet-number span{font-size:13px;color:var(--muted);font-weight:650;letter-spacing:0}.bar{height:8px;background:#26262b;border-radius:999px;overflow:hidden;margin-top:14px}.bar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--gold),var(--gold2));width:${pct}%}.wallet-rule b,.wallet-rule span{display:block}.wallet-rule b{font-size:26px}.wallet-rule span{font-size:12px;color:var(--muted);margin-top:5px}.section-title{text-align:center;max-width:720px;margin:52px auto 24px}.section-title span{font-size:10px;text-transform:uppercase;letter-spacing:.12em;font-weight:900;color:var(--gold2)}.section-title h2{font-size:36px;letter-spacing:-.045em;margin:9px 0}.section-title p{color:var(--muted);font-size:14px;margin:0}.plans{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.dc-plan.free-plan{border-color:rgba(89,212,147,.30);background:linear-gradient(180deg,rgba(89,212,147,.07),rgba(255,255,255,.02))}.dc-plan.free-plan .badge{color:var(--green);border-color:rgba(89,212,147,.34);background:rgba(89,212,147,.10)}.dc-plan.free-plan .popular.free-tag{color:#062;background:var(--green)}.dc-plan.free-plan .tokens b{color:var(--green)}.dc-plan.free-plan button{background:linear-gradient(180deg,#6fe0a4,#3fbe80);color:#042314}@media(max-width:1180px){.plans{grid-template-columns:repeat(2,minmax(0,1fr))}}.dc-plan,.dc-topup{border:1px solid var(--line);border-radius:24px;background:linear-gradient(180deg,rgba(255,255,255,.048),rgba(255,255,255,.018));padding:21px;display:flex;flex-direction:column;gap:12px;position:relative}.dc-plan.featured,.dc-topup.featured{border-color:rgba(228,188,113,.47);box-shadow:0 0 0 1px rgba(228,188,113,.10) inset,0 26px 75px rgba(228,188,113,.06)}.plan-top{display:flex;justify-content:space-between;align-items:center}.badge,.popular{min-height:24px;padding:0 9px;display:inline-flex;align-items:center;border-radius:999px;background:rgba(228,188,113,.10);color:var(--gold2);font-size:9px;font-weight:850}.popular{background:var(--gold);color:#171108}.dc-plan h2,.dc-topup h3{font-size:22px;margin:0}.money{font-size:35px;font-weight:950;letter-spacing:-.055em}.money small,.topup-price small{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:0}.money s{font-size:20px;color:var(--muted);font-weight:700;text-decoration-thickness:2px;margin-right:4px}.per-min{font-size:11px;color:var(--gold2);font-weight:700;letter-spacing:.02em;margin:-6px 0 0}.dc-plan p,.dc-topup p{color:var(--muted);font-size:12.5px;line-height:1.55;margin:0}.tokens{padding:12px;border-radius:15px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06)}.tokens b,.tokens span{display:block}.tokens b{font-size:24px}.tokens span{font-size:10px;color:var(--muted);margin-top:2px}.dc-plan ul{margin:0;padding:0;list-style:none;display:grid;gap:8px;color:#d5d0c8;font-size:11.5px}.dc-plan li:before{content:'✓';color:var(--green);margin-right:8px}.dc-plan button,.dc-topup button,.free button{width:100%;height:46px;border:0;border-radius:13px;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#171108;font-weight:850;cursor:pointer;margin-top:auto}.dc-plan button:disabled,.dc-topup button:disabled{opacity:.42;cursor:not-allowed}.topups{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.topup-value b,.topup-value span{display:block}.topup-value b{font-size:38px;letter-spacing:-.055em}.topup-value span{font-size:11px;color:var(--muted)}.topup-price{font-size:20px;font-weight:850}.shop-note{text-align:center;color:var(--muted);font-size:12px;margin:16px auto 0;max-width:760px}.free{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:18px;padding:17px 20px;border:1px solid var(--line);border-radius:20px;background:rgba(255,255,255,.025)}.free strong,.free span{display:block}.free span{color:var(--muted);font-size:12px;margin-top:3px}.free button{width:auto;min-width:210px;background:#0e0e10;color:var(--text);border:1px solid var(--line)}.alerts{margin-bottom:14px}.alert{padding:12px 14px;border-radius:14px;font-size:12px;margin-bottom:8px}.alert.bad{background:rgba(239,107,122,.1);border:1px solid rgba(239,107,122,.25);color:#ffb7bf}.alert.good{background:rgba(89,212,147,.1);border:1px solid rgba(89,212,147,.25);color:#baffd5}.foot{text-align:center;color:var(--muted);font-size:11px;line-height:1.65;margin:28px auto 8px;max-width:850px}@media(max-width:900px){body{padding:16px}.plans,.topups,.wallet{grid-template-columns:1fr}.hero h1{font-size:42px}.top{height:auto;align-items:flex-start;flex-direction:column;margin-bottom:30px}.free{align-items:stretch;flex-direction:column}.free button{width:100%}}@media(max-width:560px){.account span{display:none}.hero h1{font-size:38px}.wallet-main,.wallet-rule,.dc-plan,.dc-topup{border-radius:19px}}
   </style></head><body><main class="wrap"><div class="top"><a class="brand" href="/"><div class="logo">DC</div><div><strong>DeenClipped</strong><span>Plans & token shop</span></div></a><div class="account"><span>${esc(user?.email || user?.name || 'Signed in')}</span><a class="ghost" href="/app">Dashboard</a><form method="post" action="/auth/logout"><button class="ghost" type="submit">Log out</button></form></div></div><div class="alerts">${error ? `<div class="alert bad">${esc(error)}</div>` : ''}${info ? `<div class="alert good">${esc(info)}</div>` : ''}</div><section class="hero"><span class="eyebrow">Simple, affordable creator pricing</span><h1>Choose a plan. Add tokens only when you need them.</h1><p>DeenClipped keeps pricing tied to selected source minutes. Your subscription refreshes normally, while one-time top-up tokens stay in your wallet until you use them.</p></section><section class="wallet"><div class="wallet-main"><div class="wallet-head"><span>Your wallet</span><span>${esc(cur.plan || 'free')} plan</span></div><div class="wallet-number">${esc(remaining)} <span>tokens available</span></div><div class="wallet-head"><span>${esc(bonus)} tokens</span><span>${cur.unlimited ? 'No usage limits' : `${Math.round(Number(cur.used || 0))} used this period`}</span></div><div class="bar"><i></i></div></div><div class="wallet-rule"><b>${esc(bill.tokenRatePerMinute || 1)} token/min</b><span>Only the selected source range is charged. Editing, reviewing and template-only rerenders do not consume extra tokens.</span></div></section><div class="section-title"><span>Subscriptions</span><h2>Built for different posting rhythms.</h2><p>Start small, publish consistently, or lock in the best annual value.</p></div><section class="plans">${freeCard}${planCards}</section><div class="section-title"><span>Token shop</span><h2>Need more without changing your plan?</h2><p>Buy a one-time token pack. Top-up tokens are added to your current wallet and do not disappear at your next renewal.</p></div><section class="topups" id="token-shop">${topupCards}</section><p class="shop-note">Token packs are optional and available alongside free, weekly, monthly and yearly plans. Stripe shows the final total before payment.</p><section class="free"><div><strong>Already have free tokens?</strong><span>Head back to the dashboard. You can return to Plans &amp; tokens any time from the token pill in the top bar.</span></div><form method="post" action="/billing/continue-free"><input type="hidden" name="returnTo" value="${returnValue}"><button type="submit">Continue with free tokens</button></form></section><div class="foot">Payments are handled by Stripe. DeenClipped does not store complete card details. Prices shown are configuration-driven labels and Stripe shows the final amount before payment.</div></main></body></html>`;
 }

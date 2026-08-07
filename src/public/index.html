@@ -1548,6 +1548,18 @@ select:focus{outline:none;border-color:var(--blue)}
 </div>
 
 <div class="toasts" id="toasts"></div>
+<style>
+.billing-block{position:fixed;inset:0;z-index:9000;display:grid;place-items:center;padding:20px;background:rgba(4,4,6,.72);backdrop-filter:blur(6px)}
+.billing-block-card{position:relative;width:min(430px,100%);padding:26px;border-radius:22px;border:1px solid rgba(228,188,113,.34);background:linear-gradient(170deg,#17171b,#0b0b0d);box-shadow:0 30px 90px rgba(0,0,0,.55);color:#faf8f3}
+.billing-block-card h3{margin:0 0 10px;font-size:21px;letter-spacing:-.03em}
+.billing-block-card p{margin:0 0 20px;font-size:13.5px;line-height:1.6;color:#aaa6a0}
+.billing-block-row{display:flex;flex-wrap:wrap;gap:9px}
+.billing-block-row a{flex:1 1 150px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;border-radius:12px;font-size:13px;font-weight:850;text-decoration:none}
+.billing-block-primary{background:linear-gradient(135deg,#f2d696,#e4bc71);color:#171108}
+.billing-block-secondary{border:1px solid rgba(255,255,255,.14);color:#faf8f3}
+.billing-block-close{position:absolute;top:12px;right:12px;width:30px;height:30px;border:0;border-radius:9px;background:transparent;color:#aaa6a0;font-size:19px;line-height:1;cursor:pointer}
+.billing-block-close:hover{background:rgba(255,255,255,.07);color:#faf8f3}
+</style>
 
 <script>
 'use strict';
@@ -1595,13 +1607,78 @@ function visualEmpty(title,note,iconName='sparkles',action='') {return `<div cla
 const when=ms=>ms?new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}).format(new Date(ms)):'—';
 const age=ms=>{if(!ms)return'';const d=Date.now()-ms;if(d<60000)return'now';if(d<3600000)return`${Math.floor(d/60000)}m ago`;if(d<86400000)return`${Math.floor(d/3600000)}h ago`;return`${Math.floor(d/86400000)}d ago`};
 function toast(message,type=''){const box=$('#toasts');if(!box)return;const n=document.createElement('div');n.className=`toast ${type}`;n.textContent=message;box.append(n);setTimeout(()=>n.remove(),3600)}
+// A toast is the wrong shape for "you cannot continue until you pay": it
+// disappears in 3.6s and offers nowhere to go. These two refusals get a
+// modal with the actual next step instead.
+const BILLING_BLOCKS={
+  free_expired:{
+    title:'Your free trial has ended',
+    body:()=>'The free tier runs for a few days so you can try the studio. Choose a plan to keep generating clips — everything you have already made stays where it is.',
+    primary:{label:'See plans',href:'/plans'},
+    secondary:null,
+  },
+  insufficient_tokens:{
+    title:'Not enough tokens',
+    body:e=>{
+      const short=Number(e.shortfall||0),need=Number(e.needed||0),have=Number(e.remaining||0);
+      if(short>0)return `This needs about ${need} tokens and you have ${have}. You are ${short} short.`;
+      return 'You do not have enough tokens left for this job.';
+    },
+    primary:{label:'Upgrade plan',href:'/plans'},
+    secondary:{label:'Buy a token pack',href:'/plans#token-shop'},
+  },
+};
+let BILLING_MODAL=null;
+function showBillingBlock(error){
+  const spec=BILLING_BLOCKS[error&&error.code];
+  if(!spec)return false;
+  if(BILLING_MODAL)BILLING_MODAL.remove();
+  const wrap=document.createElement('div');
+  wrap.className='billing-block';
+  wrap.setAttribute('role','dialog');
+  wrap.setAttribute('aria-modal','true');
+  const card=document.createElement('div');
+  card.className='billing-block-card';
+  const h=document.createElement('h3');h.textContent=spec.title;
+  const p=document.createElement('p');p.textContent=spec.body(error||{});
+  const row=document.createElement('div');row.className='billing-block-row';
+  const primary=document.createElement('a');
+  primary.className='billing-block-primary';
+  primary.href=spec.primary.href;primary.textContent=spec.primary.label;
+  row.append(primary);
+  if(spec.secondary){
+    const secondary=document.createElement('a');
+    secondary.className='billing-block-secondary';
+    secondary.href=spec.secondary.href;secondary.textContent=spec.secondary.label;
+    row.append(secondary);
+  }
+  const close=document.createElement('button');
+  close.type='button';close.className='billing-block-close';
+  close.setAttribute('aria-label','Close');close.textContent='\u00d7';
+  const dismiss=()=>{wrap.remove();if(BILLING_MODAL===wrap)BILLING_MODAL=null;};
+  close.addEventListener('click',dismiss);
+  wrap.addEventListener('click',event=>{if(event.target===wrap)dismiss();});
+  document.addEventListener('keydown',function onKey(event){
+    if(event.key!=='Escape')return;
+    dismiss();document.removeEventListener('keydown',onKey);
+  });
+  card.append(close,h,p,row);
+  wrap.append(card);
+  document.body.append(wrap);
+  BILLING_MODAL=wrap;
+  primary.focus();
+  return true;
+}
 let API_SEQUENCE=0;
 async function api(url,options={}){
   const method=String(options.method||'GET').toUpperCase(),requestId=`api-${++API_SEQUENCE}`;
   if(method!=='GET')window.dispatchEvent(new CustomEvent('deen:api-start',{detail:{id:requestId,url,method}}));
   try{
     const r=await fetch(url,{...options,headers:{'Content-Type':'application/json','x-app-password':PW,...(options.headers||{})}});let b={};try{b=await r.json()}catch{}
-    if(!r.ok)throw new Error(b.error||`Request failed (${r.status})`);
+    if(!r.ok){const err=new Error(b.error||`Request failed (${r.status})`);
+      if(b.code){err.code=b.code;for(const k of ['needed','remaining','shortfall','plan','expiredAt'])if(b[k]!==undefined)err[k]=b[k];
+        showBillingBlock(err);}
+      throw err;}
     if(method!=='GET')window.dispatchEvent(new CustomEvent('deen:api-end',{detail:{id:requestId,url,method,ok:true,result:b}}));
     return b;
   }catch(error){
