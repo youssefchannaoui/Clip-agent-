@@ -2784,6 +2784,17 @@ function sync(){
   const live=Boolean($('#app')&&!$('#app').classList.contains('hide'));
   $('#dcSidebar').style.display=live?'flex':'none';$('#dcTopbar').style.display=live?'flex':'none';
   if(!live||!data())return;
+  // Only one view panel may ever be visible. The original app still controls
+  // the legacy library/queue panels, so if both scripts touch visibility at
+  // once a stale panel can be left on screen and appear to overlap the
+  // sidebar. Re-asserting it here means any such race self-corrects.
+  if(currentView){
+    const active=`view-${currentView}`;
+    $$('.main-col > .panel').forEach(p=>{
+      const shouldHide=p.id!==active;
+      if(p.classList.contains('hide')!==shouldHide)p.classList.toggle('hide',shouldHide);
+    });
+  }
   const adminNav=$('#dcAdminNav');if(adminNav)adminNav.style.display=isOperator()?'':'none';
   const jobs=activeJobs(),issues=workspaceFailures(data()),health=$('#dcHealth');health.className=`dc-health ${issues.length?'bad':jobs.length?'busy':!data().readiness?.ready?'bad':''}`;$('span',health).textContent=issues.length?`${issues.length} ${issues.length===1?'issue':'issues'}`:jobs.length?`${jobs.length} active`:data().readiness?.ready?'Ready':'Setup needed';health.style.cursor='pointer';health.onclick=()=>openIssuesPanel();updateTokenPill();maybeShowBillingNotices();maybeShowTokenEvents();
   const signature=JSON.stringify({p:(data().projects||[]).map(p=>[p.id,p.status,p.progress,p.moreJob?.status,p.moreJob?.progress]),c:(data().clips||[]).map(c=>[c.id,c.status,c.scheduledAt,c.postedAt,c.rerender?.status]),r:(data().rerenderJobs||[]).map(r=>[r.id,r.status,r.progress]),s:data().social?.providers});
@@ -3094,6 +3105,11 @@ function renderAdminPage(){
 const DC_ADMIN_CSS = `
 /* --- Admin console ------------------------------------------------------- */
 .dc-admin-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 4px}
+#dcSidebar{background:#0c0c0e!important;z-index:400!important}
+#dcTopbar{z-index:390!important}
+body.dc-app .main-col>.panel{position:relative;z-index:1}
+body.dc-app #app>.wrap{box-sizing:border-box}
+body.dc-project-open .dc-project-detail-page,body.dc-project-open .dc-project-clip-grid{min-width:0!important;max-width:100%!important}
 .dc-manage-page>*{min-width:0;max-width:100%}
 .dc-admin-grid,.dc-admin-panel,.dc-admin-list,.dc-admin-row{min-width:0;max-width:100%}
 .dc-admin-table{display:block;overflow-x:auto;white-space:nowrap}
