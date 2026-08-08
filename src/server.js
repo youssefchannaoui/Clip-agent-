@@ -398,6 +398,57 @@ async function route(req, res, url) {
     const contentType = extension === '.webp' ? 'image/webp' : extension === '.png' ? 'image/png' : extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg' : extension === '.svg' ? 'image/svg+xml' : 'application/octet-stream';
     return streamFile(req, res, file, { contentType, cacheControl: 'public, max-age=86400' });
   }
+  if (method === 'GET' && pathname === '/robots.txt') {
+    const origin = marketingContext(req).base;
+    const body = [
+      'User-agent: *',
+      'Allow: /',
+      // Everything below is behind login. Indexing it wastes crawl budget
+      // and surfaces endpoints that should not be in search results.
+      'Disallow: /app',
+      'Disallow: /plans',
+      'Disallow: /admin',
+      'Disallow: /auth/',
+      'Disallow: /api/',
+      'Disallow: /billing/',
+      '',
+      `Sitemap: ${origin}/sitemap.xml`,
+      '',
+    ].join('\n');
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
+    return res.end(body);
+  }
+  if (method === 'GET' && pathname === '/sitemap.xml') {
+    const origin = marketingContext(req).base;
+    const pages = [
+      { path: '/', priority: '1.0', freq: 'weekly' },
+      { path: '/features', priority: '0.8', freq: 'monthly' },
+      { path: '/pricing', priority: '0.9', freq: 'weekly' },
+      { path: '/contact', priority: '0.4', freq: 'yearly' },
+      { path: '/privacy', priority: '0.3', freq: 'yearly' },
+      { path: '/terms', priority: '0.3', freq: 'yearly' },
+    ];
+    const today = new Date().toISOString().slice(0, 10);
+    const body = `<?xml version="1.0" encoding="UTF-8"?>\n`
+      + `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`
+      + pages.map(page => `  <url><loc>${origin}${page.path === '/' ? '' : page.path}</loc>`
+        + `<lastmod>${today}</lastmod><changefreq>${page.freq}</changefreq>`
+        + `<priority>${page.priority}</priority></url>`).join('\n')
+      + `\n</urlset>\n`;
+    res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
+    return res.end(body);
+  }
+  // Browsers request these at the root regardless of what the HTML declares.
+  if (method === 'GET' && (pathname === '/favicon.ico' || pathname === '/favicon.png')) {
+    const file = path.resolve(config.root, 'src', 'public', 'marketing-assets', 'favicon-32.png');
+    if (!fs.existsSync(file)) return json(res, 404, { error: 'Favicon not found.' });
+    return streamFile(req, res, file, { contentType: 'image/png', cacheControl: 'public, max-age=604800' });
+  }
+  if (method === 'GET' && pathname === '/apple-touch-icon.png') {
+    const file = path.resolve(config.root, 'src', 'public', 'marketing-assets', 'apple-touch-icon.png');
+    if (!fs.existsSync(file)) return json(res, 404, { error: 'Icon not found.' });
+    return streamFile(req, res, file, { contentType: 'image/png', cacheControl: 'public, max-age=604800' });
+  }
   if (method === 'GET' && pathname === '/features') return html(res, 200, featuresPage(req));
   if (method === 'GET' && pathname === '/pricing') return html(res, 200, pricingPage(req));
   if (method === 'GET' && pathname === '/contact') return html(res, 200, contactPage(req));

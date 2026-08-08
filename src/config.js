@@ -152,6 +152,14 @@ export const config = {
   stripeCouponMonthly: process.env.STRIPE_COUPON_MONTHLY || '',
   planPriceMonthlyListLabel: process.env.PLAN_PRICE_MONTHLY_LIST_LABEL || '',
   freeTierDays: Math.max(0, Math.round(number(process.env.FREE_TIER_DAYS, 3))),
+  // Privacy-friendly analytics (Plausible, Umami, Fathom). Both must be set
+  // or nothing is injected — no silent half-configured tracking.
+  analyticsScriptUrl: process.env.ANALYTICS_SCRIPT_URL || '',
+  analyticsSiteId: process.env.ANALYTICS_SITE_ID || '',
+  // A real sample clip. The section does not render until this is set.
+  demoVideoUrl: process.env.DEMO_VIDEO_URL || '',
+  demoVideoPoster: process.env.DEMO_VIDEO_POSTER || '/marketing-assets/reel-winter.webp',
+  socialImagePath: process.env.SOCIAL_IMAGE_PATH || '/marketing-assets/og-cover.png',
   tokensFree: Math.max(0, Math.round(number(process.env.TOKENS_FREE, 40))),
   tokensWeekly: Math.max(1, Math.round(number(process.env.TOKENS_WEEKLY, 75))),
   tokensMonthly: Math.max(1, Math.round(number(process.env.TOKENS_MONTHLY, 400))),
