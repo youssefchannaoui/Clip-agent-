@@ -79,3 +79,13 @@ test('the product UI includes Brand Kit and Creator Lab as first-class screens',
   assert.match(ui, /function renderCreatorLab\(\)/);
   assert.match(ui, /Free exports are branded/);
 });
+
+test('publishing keeps a complete command-centre layout', () => {
+  const ui = fs.readFileSync(new URL('../src/public/activity-fix.js', import.meta.url), 'utf8');
+  assert.match(ui, /Publishing command centre/);
+  assert.match(ui, /Live publishing queue/);
+  assert.match(ui, /Platform connections/);
+  assert.match(ui, /Quick preview/);
+  assert.match(ui, /Your publishing queue is clear/);
+  assert.doesNotMatch(ui, /ICON\.calendar/);
+});
