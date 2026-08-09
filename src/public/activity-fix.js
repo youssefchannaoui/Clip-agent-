@@ -1396,6 +1396,7 @@ function go(view){
   } else {
     $$('.main-col > .panel').forEach(p => p.classList.toggle('hide', p.id !== `view-${view}`));
   }
+  lastDataSignature=structuralDataSignature(data());
   requestAnimationFrame(()=>animatePanel($(`#view-${view}`)));
   window.scrollTo({top:0, behavior:'auto'});
 }
@@ -1466,6 +1467,7 @@ function renderHome(){
   $('#dcPickVideo').onclick=()=>$('#dcVideoUpload').click();
   $('#dcVideoUpload').onchange=()=>prepareVideoUpload($('#dcVideoUpload').files?.[0]);
   $('#dcHeroCreate').onclick=()=>$('#dcCreateUrl').focus();
+  lastDataSignature=structuralDataSignature(d);
   requestAnimationFrame(()=>animatePanel(panel));
 }
 function uiIcon(name){return `<span class="dc-ui-icon">${ICON[name]||ICON.sparkles}</span>`}
@@ -1573,7 +1575,7 @@ function v5HappeningNow(d,jobs,next,waiting,templateName){
   // Live work always wins this slot. A failure from days ago must never hide
   // the job that is running right now; unresolved issues are surfaced as a
   // badge here and in full via the issues panel in the top bar.
-  if(jobs.length){const job=jobs[0],progress=Number.isFinite(job.progress)?Math.round(job.progress):null;return `<section class="dc-v5-now" data-tour="happening-now"><span class="dc-v5-now-icon live">${uiIcon(job.kind==='publish'?'publish':job.kind==='render'?'editor':'sparkles')}</span><div class="dc-v5-now-copy"><small>Happening now</small><strong>${esc(shortText(job.title,72))}</strong><span>${esc(shortText(job.stage||'Working now',90))}</span>${progress!==null?`<div class="dc-v5-now-progress"><i style="width:${clamp(progress,0,100)}%"></i></div>`:''}</div>${issues.length?`<button class="dc-pill bad" data-open-issues="1" title="Open issues">${issues.length} ${issues.length===1?'issue':'issues'}</button>`:''}<span class="dc-pill warn">${progress!==null?`${progress}%`:'Live'}</span></section>`}
+  if(jobs.length){const job=jobs[0],progress=Number.isFinite(job.progress)?Math.round(job.progress):null;return `<section class="dc-v5-now" data-tour="happening-now" data-live-job="current"><span class="dc-v5-now-icon live">${uiIcon(job.kind==='publish'?'publish':job.kind==='render'?'editor':'sparkles')}</span><div class="dc-v5-now-copy"><small>Happening now</small><strong data-live-title>${esc(shortText(job.title,72))}</strong><span data-live-stage>${esc(shortText(job.stage||'Working now',90))}</span><div class="dc-v5-now-progress" data-live-progress-wrap ${progress===null?'hidden':''}><i data-live-progress style="width:${clamp(progress||0,0,100)}%"></i></div></div>${issues.length?`<button class="dc-pill bad" data-open-issues="1" title="Open issues">${issues.length} ${issues.length===1?'issue':'issues'}</button>`:''}<span class="dc-pill warn" data-live-percent>${progress!==null?`${progress}%`:'Live'}</span></section>`}
   if(issues.length){const issue=issues[0];return `<section class="dc-v5-now fail" data-tour="happening-now"><span class="dc-v5-now-icon fail">${uiIcon('warning')}</span><div class="dc-v5-now-copy"><small>Needs attention${issues.length>1?` · ${issues.length} issues`:''}</small><strong>${esc(shortText(issue.title,72))}</strong><span>${esc(shortText(issue.detail,110))}</span></div>${issues.length>1?`<button class="dc-btn secondary" data-open-issues="1">View all</button>`:''}${v5FailureAction(issue)}</section>`}
   if(waiting)return `<section class="dc-v5-now" data-tour="happening-now"><span class="dc-v5-now-icon">${uiIcon('review')}</span><div class="dc-v5-now-copy"><small>Happening now</small><strong>${waiting} ${waiting===1?'clip is':'clips are'} ready to review</strong><span>Choose the strongest moments before they enter the publishing queue.</span></div><button class="dc-btn secondary" data-dc-nav="review">Review clips</button></section>`;
   if(next)return `<section class="dc-v5-now" data-tour="happening-now"><span class="dc-v5-now-icon live">${uiIcon('clock')}</span><div class="dc-v5-now-copy"><small>Happening now</small><strong>${esc(shortText(next.title||'Your next clip',72))}</strong><span>Scheduled for ${esc(formatDate(next.scheduledAt))}</span></div><button class="dc-btn secondary" data-dc-nav="schedule">View schedule</button></section>`;
@@ -1586,7 +1588,7 @@ function v5ProjectLibrary(projects,clips){
 }
 function v5UpNext(d,jobs,next,waiting,templateName){
   let body='';
-  if(jobs.length){const j=jobs[0];body=`<div class="dc-v5-status-line">${uiIcon(j.kind==='publish'?'publish':'scissors')}<span>${esc(shortText(j.title,58))} · ${esc(shortText(j.stage||'Working now',50))}</span></div>`}
+  if(jobs.length){const j=jobs[0];body=`<div class="dc-v5-status-line" data-live-job="current">${uiIcon(j.kind==='publish'?'publish':'scissors')}<span data-live-summary>${esc(shortText(j.title,58))} · ${esc(shortText(j.stage||'Working now',50))}</span></div>`}
   else if(waiting)body=`<p>${waiting} ${waiting===1?'clip is':'clips are'} ready for your decision.</p><button class="dc-btn" data-dc-nav="review">Open review</button>`;
   else if(next)body=`<div class="dc-v5-next-main">${next.thumbUrl?`<img src="${authedUrl(next.thumbUrl)}" alt="${esc(next.title||'Scheduled clip')}">`:uiIcon('publish')}<div><strong>${esc(shortText(next.title||'Scheduled clip',46))}</strong><small>${esc(formatDate(next.scheduledAt))}</small></div></div><button class="dc-btn secondary" data-dc-nav="schedule">View schedule</button>`;
   else body=`<div class="dc-v5-status-line">${uiIcon('check')}<span>Workspace ready · ${esc(templateName)} selected</span></div>`;
@@ -2066,6 +2068,7 @@ function renderProjects(){
   if($('#dcProjectSearch'))$('#dcProjectSearch').oninput=e=>{projectQuery=e.target.value.trim().toLowerCase();renderProjects()};
   if($('#dcProjectFilter'))$('#dcProjectFilter').onchange=e=>{projectFilter=e.target.value;renderProjects()};
   if($('#dcProjectSort'))$('#dcProjectSort').onchange=e=>{projectSort=e.target.value;renderProjects()};
+  lastDataSignature=structuralDataSignature(d);
   requestAnimationFrame(()=>animatePanel(panel));
 }
 function libraryProjectRow(p,clips){
@@ -2073,7 +2076,7 @@ function libraryProjectRow(p,clips){
   const failed=p.status==='failed'||p.error,busy=['queued','processing'].includes(p.status),tone=failed?'bad':busy?'blue':waiting?'orange':'good';
   const label=failed?'Needs attention':busy?(p.stage||'Processing'):waiting?`${waiting} to review`:scheduled?`${scheduled} ready`:'Ready';
   const progress=busy?clamp(Number(p.progress||0),0,100):own.length?Math.round(((own.length-waiting)/Math.max(1,own.length))*100):100;
-  return `<article class="dc-library-row"><button class="dc-library-row-main" type="button" data-open-project="${esc(p.id)}"><span class="dc-library-row-thumb ${thumb?'':'empty'}">${thumb?`<img src="${authedUrl(thumb)}" alt="${esc(projectDisplayTitle(p))} thumbnail">`:ICON.projects}</span><span class="dc-library-row-copy"><strong>${esc(shortText(projectDisplayTitle(p),72))}</strong><em>${own.length} clip${own.length===1?'':'s'} · updated ${esc(formatRelative(p.updatedAt||p.submittedAt||Date.now()))}</em><span class="dc-library-progress"><i style="width:${progress}%"></i></span></span><span class="dc-library-row-state ${tone}"><i></i>${esc(shortText(label,30))}</span>${ICON.chevron}</button><details class="dc-library-row-menu"><summary aria-label="Project actions">•••</summary><div><button data-more-project="${esc(p.id)}" ${!p.sourceReusable?'disabled':''}>Generate more clips</button>${failed?`<button data-retry-project="${esc(p.id)}">Retry processing</button>`:''}<button class="danger" data-delete-project="${esc(p.id)}">Delete project</button></div></details></article>`;
+  return `<article class="dc-library-row" data-live-project="${esc(p.id)}"><button class="dc-library-row-main" type="button" data-open-project="${esc(p.id)}"><span class="dc-library-row-thumb ${thumb?'':'empty'}">${thumb?`<img src="${authedUrl(thumb)}" alt="${esc(projectDisplayTitle(p))} thumbnail">`:ICON.projects}</span><span class="dc-library-row-copy"><strong>${esc(shortText(projectDisplayTitle(p),72))}</strong><em>${own.length} clip${own.length===1?'':'s'} · updated ${esc(formatRelative(p.updatedAt||p.submittedAt||Date.now()))}</em><span class="dc-library-progress"><i data-live-progress style="width:${progress}%"></i></span></span><span class="dc-library-row-state ${tone}" data-live-stage><i></i>${esc(shortText(label,30))}</span>${ICON.chevron}</button><details class="dc-library-row-menu"><summary aria-label="Project actions">•••</summary><div><button data-more-project="${esc(p.id)}" ${!p.sourceReusable?'disabled':''}>Generate more clips</button>${failed?`<button data-retry-project="${esc(p.id)}">Retry processing</button>`:''}<button class="danger" data-delete-project="${esc(p.id)}">Delete project</button></div></details></article>`;
 }
 function libraryWorkflowCard(processing,waiting,ready){
   return `<section class="dc-library-side-card"><div class="dc-library-side-head"><span class="blue">${ICON.analytics}</span><div><strong>Workflow overview</strong><small>Keep your content moving.</small></div></div><div class="dc-library-flow"><button data-dc-nav="projects"><i class="blue"></i><span>Processing</span><b>${processing}</b></button><button data-dc-nav="review"><i class="orange"></i><span>In review</span><b>${waiting}</b></button><button data-dc-nav="schedule"><i class="green"></i><span>Ready to publish</span><b>${ready}</b></button></div><button class="dc-btn secondary wide" data-dc-nav="review">Open workflow</button></section>`;
@@ -2101,9 +2104,10 @@ function renderProjectDetail(panel,d){
   const clips=(d.clips||[]).filter(c=>c.projectId===p.id).sort((a,b)=>Number(b.score||0)-Number(a.score||0));
   const title=projectDisplayTitle(p), thumb=projectThumbUrl(p,d.clips||clips);
   const waiting=clips.filter(c=>c.status==='waiting').length, scheduled=clips.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length, posted=clips.filter(c=>c.status==='posted').length, failed=p.status==='failed'||p.error;
-  panel.innerHTML=`<div class="dc-project-detail-page"><div class="dc-project-detail-hero"><button class="dc-icon-btn dc-svg" id="dcBackProjects" title="Back to projects">${ICON.back}</button><div class="dc-project-detail-thumb">${thumb?`<img src="${authedUrl(thumb)}" alt="${esc(title)} thumbnail">`:`<div class="dc-project-placeholder">${ICON.projects}<span>Lecture</span></div>`}</div><div class="dc-project-detail-info"><span class="dc-pill ${failed?'bad':['queued','processing'].includes(p.status)?'warn':'good'}">${failed?'Needs retry':statusName(p.status)}</span><h1>${esc(title)}</h1><p>${clips.length} clips · ${posted} posted · ${scheduled} scheduled</p></div><div class="dc-project-detail-actions"><button class="dc-btn secondary" data-more-project="${esc(p.id)}" ${!p.sourceReusable?'disabled':''}>Generate more</button>${failed?`<button class="dc-btn secondary" data-retry-project="${esc(p.id)}">Retry</button>`:''}<button class="dc-btn danger" data-delete-project="${esc(p.id)}">Delete project</button></div></div><div class="dc-project-detail-stats">${metric(clips.length,'Clips')}${metric(waiting,'Review')}${metric(scheduled,'Scheduled')}${metric(posted,'Posted')}${metric(Math.round((clips[0]?.score||0)),'Top score')}</div>${failed?`<div class="dc-project-error-mini">${esc(shortError(p.error||p.stage))}</div>`:''}${p.moreJob&&['queued','processing'].includes(p.moreJob.status)?`<div class="dc-card dc-card-pad"><div class="dc-now-row"><span class="dc-spinner"></span><div class="dc-now-main"><strong>${esc(p.moreJob.stage||'Generating more clips')}</strong><span>Reusing saved lecture and transcript.</span><div class="dc-progress"><i style="width:${clamp(p.moreJob.progress,0,100)}%"></i></div></div><span class="dc-pill warn">${Math.round(p.moreJob.progress||0)}%</span></div></div>`:''}<div class="dc-project-detail-filter"><select><option>All clips</option><option>Waiting review</option><option>Scheduled</option><option>Posted</option></select><select><option>Highest score</option><option>Newest first</option><option>Longest</option></select><span class="dc-pill">${clips.length} clips</span><button class="dc-btn secondary" data-more-project="${esc(p.id)}" ${!p.sourceReusable?'disabled':''}>More clips</button></div><div class="dc-project-clip-grid">${clips.length?clips.map(c=>clipCard(c,{detail:true})).join(''):`<div class="dc-empty dc-empty-full"><strong>No clips yet</strong>${['queued','processing'].includes(p.status)?'Processing is still underway.':'Generate more clips from this lecture.'}</div>`}</div></div>`;
+  panel.innerHTML=`<div class="dc-project-detail-page"><div class="dc-project-detail-hero"><button class="dc-icon-btn dc-svg" id="dcBackProjects" title="Back to projects">${ICON.back}</button><div class="dc-project-detail-thumb">${thumb?`<img src="${authedUrl(thumb)}" alt="${esc(title)} thumbnail">`:`<div class="dc-project-placeholder">${ICON.projects}<span>Lecture</span></div>`}</div><div class="dc-project-detail-info"><span class="dc-pill ${failed?'bad':['queued','processing'].includes(p.status)?'warn':'good'}">${failed?'Needs retry':statusName(p.status)}</span><h1>${esc(title)}</h1><p>${clips.length} clips · ${posted} posted · ${scheduled} scheduled</p></div><div class="dc-project-detail-actions"><button class="dc-btn secondary" data-more-project="${esc(p.id)}" ${!p.sourceReusable?'disabled':''}>Generate more</button>${failed?`<button class="dc-btn secondary" data-retry-project="${esc(p.id)}">Retry</button>`:''}<button class="dc-btn danger" data-delete-project="${esc(p.id)}">Delete project</button></div></div><div class="dc-project-detail-stats">${metric(clips.length,'Clips')}${metric(waiting,'Review')}${metric(scheduled,'Scheduled')}${metric(posted,'Posted')}${metric(Math.round((clips[0]?.score||0)),'Top score')}</div>${failed?`<div class="dc-project-error-mini">${esc(shortError(p.error||p.stage))}</div>`:''}${p.moreJob&&['queued','processing'].includes(p.moreJob.status)?`<div class="dc-card dc-card-pad" data-live-more-job="${esc(p.id)}"><div class="dc-now-row"><span class="dc-spinner"></span><div class="dc-now-main"><strong data-live-stage>${esc(p.moreJob.stage||'Generating more clips')}</strong><span>Reusing saved lecture and transcript.</span><div class="dc-progress"><i data-live-progress style="width:${clamp(p.moreJob.progress,0,100)}%"></i></div></div><span class="dc-pill warn" data-live-percent>${Math.round(p.moreJob.progress||0)}%</span></div></div>`:''}<div class="dc-project-detail-filter"><select><option>All clips</option><option>Waiting review</option><option>Scheduled</option><option>Posted</option></select><select><option>Highest score</option><option>Newest first</option><option>Longest</option></select><span class="dc-pill">${clips.length} clips</span><button class="dc-btn secondary" data-more-project="${esc(p.id)}" ${!p.sourceReusable?'disabled':''}>More clips</button></div><div class="dc-project-clip-grid">${clips.length?clips.map(c=>clipCard(c,{detail:true})).join(''):`<div class="dc-empty dc-empty-full"><strong>No clips yet</strong>${['queued','processing'].includes(p.status)?'Processing is still underway.':'Generate more clips from this lecture.'}</div>`}</div></div>`;
   upgradeYoutubeFallbackButtons(panel,[p]);
   $('#dcBackProjects').onclick=()=>{selectedProjectId='';document.body.classList.remove('dc-project-open');renderProjects()};
+  lastDataSignature=structuralDataSignature(d);
   requestAnimationFrame(()=>animatePanel(panel));
 }
 function upgradeYoutubeFallbackButtons(panel,projects){
@@ -3385,7 +3389,7 @@ function maybeShowBillingNotices(){
   const unseen=notices.find(notice=>notice?.id&&!seenGet('billing_notice',notice.id));
   if(unseen)showBillingNotice(unseen);
 }
-function renderCurrent(){if(currentView==='admin')renderAdminPage();if(currentView==='home')renderHome();if(currentView==='projects')renderProjects();if(currentView==='review')renderReview();if(currentView==='editor')ensureEditor();if(currentView==='schedule')renderPublishingWorkspace();if(currentView==='publishing')renderConnections();if(currentView==='templates')renderTemplatesPage();if(currentView==='brand')renderBrandKit();if(currentView==='lab')renderCreatorLab();if(currentView==='music')renderAudioLibrary();if(currentView==='insights')renderInsightsPage();if(currentView==='automation')renderSettingsPage();if(currentView==='subscription')renderSubscriptionPage()}
+function renderCurrent(){if(currentView==='admin')renderAdminPage();if(currentView==='home')renderHome();if(currentView==='projects')renderProjects();if(currentView==='review')renderReview();if(currentView==='editor')ensureEditor();if(currentView==='schedule')renderPublishingWorkspace();if(currentView==='publishing')renderConnections();if(currentView==='templates')renderTemplatesPage();if(currentView==='brand')renderBrandKit();if(currentView==='lab')renderCreatorLab();if(currentView==='music')renderAudioLibrary();if(currentView==='insights')renderInsightsPage();if(currentView==='automation')renderSettingsPage();if(currentView==='subscription')renderSubscriptionPage();lastDataSignature=structuralDataSignature(data())}
 async function refreshData(){if(typeof refresh==='function')return refresh();try{DATA=await callApi('/api/state')}catch{}}
 function hexAlpha(hex,alpha){const value=String(hex||'#000000').replace('#','');if(!/^[0-9a-fA-F]{6}$/.test(value))return `rgba(0,0,0,${alpha})`;const n=parseInt(value,16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${alpha})`}
 function formatDuration(ms){const s=Math.max(0,Math.round(Number(ms||0)/1000));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}
@@ -3393,6 +3397,49 @@ function formatClock(sec,decimal=false){const n=Math.max(0,Number(sec||0)),m=Mat
 function formatDate(value){if(!value)return'—';return new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(new Date(Number(value)))}
 function formatRelative(value){const diff=Date.now()-Number(value||0);if(diff<60000)return'Just now';if(diff<3600000)return`${Math.round(diff/60000)}m ago`;if(diff<86400000)return`${Math.round(diff/3600000)}h ago`;return`${Math.round(diff/86400000)}d ago`}
 function statusName(value){const map={queued:'Queued',processing:'Processing',done:'Ready',completed:'Ready',waiting:'Ready to review',approved:'Approved',scheduled:'Scheduled',publishing:'Publishing',posted:'Posted',publish_failed:'Publish failed',failed:'Failed',ready:'Ready'};return map[value]||String(value||'Draft').replace(/_/g,' ').replace(/\b\w/g,m=>m.toUpperCase())}
+
+function structuralDataSignature(d=data()){
+  if(!d)return'';
+  const providers=Object.entries(d.social?.providers||{}).map(([key,value])=>[key,Boolean(value?.configured),Boolean(value?.connected),(value?.accounts||[]).map(account=>account.id)]);
+  const current=d.billing?.current||{};
+  return JSON.stringify({
+    p:(d.projects||[]).map(p=>[p.id,p.status,Boolean(p.error),p.moreJob?.status,Boolean(p.moreJob?.error),Boolean(p.sourceReusable)]),
+    c:(d.clips||[]).map(c=>[c.id,c.status,c.scheduledAt,c.postedAt,(c.targets||[]).map(t=>[t.provider,t.status])]),
+    r:(d.rerenderJobs||[]).map(r=>[r.id,r.status,Boolean(r.error)]),
+    s:providers,t:d.selectedTemplate?.id||'',a:(d.tracks||[]).map(track=>track.id),
+    b:[current.plan,current.remaining,current.used,current.periodEnd,current.cancelAtPeriodEnd,current.trial?.active,current.freeTier?.expired]
+  });
+}
+
+function patchLiveProgress(){
+  const d=data();if(!d)return;
+  const current=activeJobs()[0];
+  if(current){
+    const progress=Number.isFinite(Number(current.progress))?clamp(Number(current.progress),0,100):null;
+    $$('[data-live-job="current"]').forEach(root=>{
+      const title=$('[data-live-title]',root),stage=$('[data-live-stage]',root),summary=$('[data-live-summary]',root),bar=$('[data-live-progress]',root),wrap=$('[data-live-progress-wrap]',root),percent=$('[data-live-percent]',root);
+      if(title)title.textContent=shortText(current.title||'Working now',72);
+      if(stage)stage.textContent=shortText(current.stage||'Working now',90);
+      if(summary)summary.textContent=`${shortText(current.title||'Working now',58)} · ${shortText(current.stage||'Working now',50)}`;
+      if(bar&&progress!==null)bar.style.width=`${progress}%`;
+      if(wrap)wrap.hidden=progress===null;
+      if(percent)percent.textContent=progress===null?'Live':`${Math.round(progress)}%`;
+    });
+  }
+  const projects=new Map((d.projects||[]).map(project=>[String(project.id),project]));
+  $$('[data-live-project]').forEach(root=>{
+    const project=projects.get(root.dataset.liveProject);if(!project)return;
+    const busy=['queued','processing'].includes(project.status);if(!busy)return;
+    const progress=clamp(Number(project.progress||0),0,100),bar=$('[data-live-progress]',root),stage=$('[data-live-stage]',root);
+    if(bar)bar.style.width=`${progress}%`;
+    if(stage){stage.lastChild.textContent=shortText(project.stage||'Processing',30);stage.className='dc-library-row-state blue'}
+  });
+  $$('[data-live-more-job]').forEach(root=>{
+    const project=projects.get(root.dataset.liveMoreJob),job=project?.moreJob;if(!job)return;
+    const progress=clamp(Number(job.progress||0),0,100),bar=$('[data-live-progress]',root),stage=$('[data-live-stage]',root),percent=$('[data-live-percent]',root);
+    if(bar)bar.style.width=`${progress}%`;if(stage)stage.textContent=job.stage||'Generating more clips';if(percent)percent.textContent=`${Math.round(progress)}%`;
+  });
+}
 
 function sync(){
   injectShell();
@@ -3414,8 +3461,9 @@ function sync(){
   const adminNav=$('#dcAdminNav');if(adminNav)adminNav.style.display=isOperator()?'':'none';
   detectWorkflowSignals(data());
   const jobs=activeJobs(),issues=workspaceFailures(data()),health=$('#dcHealth');health.className=`dc-health ${issues.length?'bad':jobs.length?'busy':!data().readiness?.ready?'bad':''}`;$('span',health).textContent=issues.length?`${issues.length} ${issues.length===1?'issue':'issues'}`:jobs.length?`${jobs.length} active`:data().readiness?.ready?'Ready':'Setup needed';health.style.cursor='pointer';health.onclick=()=>openIssuesPanel();updateTokenPill();maybeShowBillingNotices();maybeShowTokenEvents();
-  const signature=JSON.stringify({p:(data().projects||[]).map(p=>[p.id,p.status,p.progress,p.moreJob?.status,p.moreJob?.progress]),c:(data().clips||[]).map(c=>[c.id,c.status,c.scheduledAt,c.postedAt,c.rerender?.status]),r:(data().rerenderJobs||[]).map(r=>[r.id,r.status,r.progress]),s:data().social?.providers});
+  const signature=structuralDataSignature(data());
   if(signature!==lastDataSignature){lastDataSignature=signature;if(currentView!=='editor'||!editor.dirty)renderCurrent();else{renderTimeline();}}
+  patchLiveProgress();
   paintWork();
 }
 /* ==========================================================================
