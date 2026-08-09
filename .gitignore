@@ -1,4 +1,4 @@
-patch/
+patch*/
 
 # Runtime state written by the app — not source
 data/
