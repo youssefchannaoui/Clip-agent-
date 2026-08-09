@@ -8,6 +8,7 @@ import {
 } from './tenancy.js';
 
 const stateFile = path.join(config.dataDir, 'state.json');
+const backupStateFile = `${stateFile}.bak`;
 
 /**
  * Settings that used to be one global value shared by everybody. They are now
@@ -95,25 +96,34 @@ function migrate(parsed) {
   return fresh;
 }
 
+function readStateFile(file) {
+  const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('State root must be an object.');
+  return migrate(parsed);
+}
+
 function load() {
-  try { return migrate(JSON.parse(fs.readFileSync(stateFile, 'utf8'))); }
-  catch { return blankState(); }
+  if (!fs.existsSync(stateFile)) return blankState();
+  try { return readStateFile(stateFile); }
+  catch (primaryError) {
+    try {
+      const recovered = readStateFile(backupStateFile);
+      console.error(`[error] Recovered application state from backup after the primary state file failed: ${primaryError.message}`);
+      return recovered;
+    } catch (backupError) {
+      throw new Error(`Application state is unreadable; refusing to boot empty. Primary: ${primaryError.message}. Backup: ${backupError.message}`);
+    }
+  }
 }
 
 export const state = load();
-let writing = false;
-let dirty = false;
 
 export function save() {
-  if (writing) { dirty = true; return; }
-  writing = true;
   fs.mkdirSync(path.dirname(stateFile), { recursive: true });
   const tmp = `${stateFile}.tmp`;
-  fs.writeFile(tmp, JSON.stringify(state, null, 2), error => {
-    if (!error) { try { fs.renameSync(tmp, stateFile); } catch {} }
-    writing = false;
-    if (dirty) { dirty = false; save(); }
-  });
+  fs.writeFileSync(tmp, JSON.stringify(state, null, 2), { encoding: 'utf8', mode: 0o600 });
+  if (fs.existsSync(stateFile)) fs.copyFileSync(stateFile, backupStateFile);
+  fs.renameSync(tmp, stateFile);
 }
 
 /**

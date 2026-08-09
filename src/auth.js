@@ -67,6 +67,7 @@ export function publicConfig() {
     apple: configured('apple'),
     password: Boolean(config.password),
     email: Boolean(config.emailSigninEnabled),
+    registration: Boolean(config.emailRegistrationEnabled),
   };
 }
 
@@ -182,6 +183,7 @@ export function emailLogin(email, password, name = '') {
   if (pass.length < 8) throw new Error('Use at least 8 characters for email sign-in.');
   let user = state.authUsers.find(item => cleanEmail(item.email) === clean);
   if (!user) {
+    if (!config.emailRegistrationEnabled) throw new Error('No account exists for that email. Use Google sign-in or contact support.');
     user = {
       id: `user_${now().toString(36)}_${token(5)}`,
       email: clean,

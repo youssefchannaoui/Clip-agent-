@@ -5,10 +5,10 @@ Production uses two services. Render serves the website, authentication, metadat
 ## Required infrastructure
 
 - Render Starter web service with the 1 GB metadata disk from `render.yaml`.
-- Ubuntu 24.04 VPS with 4–6 vCPU, 8–12 GB RAM, and at least 100 GB disk.
+- A third-party Linux compute server sized for the chosen Whisper model and concurrent workload.
 - S3-compatible bucket with CORS allowing `PUT` from `https://deenclipped.online` and `GET`/`HEAD` for the configured public media hostname.
 - A FFMPEGAPI key. The adapter uses the official `POST /api/youtube_to_mp4` contract with `X-API-Key`, `youtube_url`, and the returned `success`, `download_url`, `filename`, and `title` fields.
-- A random shared secret of at least 32 characters. Use the same value on Render and the worker.
+- Two random secrets of at least 32 characters: one for web-to-worker requests and one for worker callbacks/assets.
 
 Generate secrets:
 
@@ -29,8 +29,8 @@ Set every `sync: false` value in the Render dashboard. The processing-specific v
 ```env
 PROCESSING_MODE=remote
 WORKER_BASE_URL=https://worker.deenclipped.online
-WORKER_SHARED_SECRET=<same-long-random-secret-as-worker>
-WORKER_CALLBACK_SECRET=<same-long-random-secret-as-worker>
+WORKER_SHARED_SECRET=<web-to-worker-secret>
+WORKER_CALLBACK_SECRET=<worker-to-web-secret>
 VIDEO_IMPORT_PROVIDER=ffmpegapi
 VIDEO_IMPORT_API_URL=https://ffmpegapi.net
 VIDEO_IMPORT_API_KEY=<provider-key>
@@ -51,7 +51,8 @@ Publishing remains compatible with the existing platform integrations. Instagram
 Install Docker and its Compose plugin using the official Docker repository, clone the repository, and create `worker/.env`:
 
 ```env
-WORKER_SHARED_SECRET=<same-long-random-secret-as-render>
+WORKER_SHARED_SECRET=<web-to-worker-secret>
+WORKER_CALLBACK_SECRET=<worker-to-web-secret>
 WORKER_PORT=8080
 WORKER_MAX_CONCURRENT_JOBS=1
 WORKER_MAX_DOWNLOAD_MB=4096
@@ -62,7 +63,7 @@ VIDEO_IMPORT_PROVIDER=ffmpegapi
 VIDEO_IMPORT_API_URL=https://ffmpegapi.net
 VIDEO_IMPORT_API_KEY=<provider-key>
 VIDEO_IMPORT_TIMEOUT_MS=1800000
-VIDEO_IMPORT_ALLOWED_DOWNLOAD_HOSTS=ffmpegapi.net
+VIDEO_IMPORT_ALLOWED_DOWNLOAD_HOSTS=<provider-host,comma-separated-provider-cdn-hosts>
 
 OBJECT_STORAGE_ENDPOINT=https://<s3-endpoint>
 OBJECT_STORAGE_REGION=<region-or-auto>

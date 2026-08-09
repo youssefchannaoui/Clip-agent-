@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
-import { config } from './config.js';
+import { config, productionConfigurationErrors } from './config.js';
 import {
   state, save, log, logFor, clipSettings, setClipSettings, musicSettings, setMusicSettings,
   automationSettings, setAutomationSettings, publishingSettings, setPublishingSettings,
@@ -71,6 +71,36 @@ function html(res, status, value) {
   const body = Buffer.from(String(value));
   res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
   res.end(body);
+}
+
+function applySecurityHeaders(res) {
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(self)');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: https:; media-src 'self' blob: https:; connect-src 'self' https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com");
+}
+
+const authAttempts = new Map();
+function requestIp(req) {
+  return String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').split(',')[0].trim();
+}
+function authRateLimited(req) {
+  const key = requestIp(req);
+  const now = Date.now();
+  const recent = (authAttempts.get(key) || []).filter(at => now - at < 15 * 60_000);
+  recent.push(now);
+  authAttempts.set(key, recent);
+  return recent.length > 12;
+}
+function unsafeCrossSiteRequest(req, url) {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method || 'GET')) return false;
+  if (url.pathname === '/api/billing/webhook' || url.pathname === '/auth/apple/callback' || url.pathname.startsWith('/api/worker-callbacks/')) return false;
+  if (String(req.headers['sec-fetch-site'] || '').toLowerCase() === 'cross-site') return true;
+  const origin = String(req.headers.origin || '');
+  if (!origin) return false;
+  try { return new URL(origin).origin !== new URL(publicBase(req)).origin; } catch { return true; }
 }
 
 function publicBase(req) {
@@ -159,8 +189,8 @@ function sameSecret(a, b) {
 function verifyWorkerRequest(req, pathname, rawBody) {
   const timestamp = String(req.headers['x-deenclipped-timestamp'] || '');
   const supplied = String(req.headers['x-deenclipped-signature'] || '');
-  if (!config.workerSharedSecret || !timestamp || !supplied || Math.abs(Date.now() - Number(timestamp)) > 5 * 60_000) return false;
-  const expected = crypto.createHmac('sha256', config.workerSharedSecret).update(`${timestamp}\n${req.method || 'GET'}\n${pathname}\n${rawBody}`).digest('hex');
+  if (!config.workerCallbackSecret || !timestamp || !supplied || Math.abs(Date.now() - Number(timestamp)) > 5 * 60_000) return false;
+  const expected = crypto.createHmac('sha256', config.workerCallbackSecret).update(`${timestamp}\n${req.method || 'GET'}\n${pathname}\n${rawBody}`).digest('hex');
   return sameSecret(expected, supplied);
 }
 function authed(req, url) { return !config.password || sameSecret(req.headers['x-app-password'] || url.searchParams.get('pw') || '', config.password); }
@@ -281,6 +311,14 @@ function runDoctor() {
 async function route(req, res, url) {
   const { pathname } = url; const method = req.method || 'GET';
   if (pathname === '/healthz') return json(res, 200, { ok: true, engine: config.processingMode === 'remote' ? 'remote-worker' : 'self-hosted' });
+  if (pathname === '/readyz') {
+    const errors = productionConfigurationErrors();
+    try { fs.accessSync(config.dataDir, fs.constants.R_OK | fs.constants.W_OK); } catch { errors.push('Persistent data storage is not readable and writable.'); }
+    if (config.processingMode === 'remote' && !errors.some(item => item.startsWith('WORKER_'))) {
+      try { await workerClient.readiness(); } catch (error) { errors.push(`External worker is not ready: ${error.message}`); }
+    }
+    return json(res, errors.length ? 503 : 200, { ok: errors.length === 0, engine: config.processingMode, checks: errors.length ? errors : ['configuration', 'storage', 'worker'] });
+  }
   const workerCallback = pathname.match(/^\/api\/worker-callbacks\/([^/]+)$/);
   if (method === 'POST' && workerCallback) {
     const raw = await readRawBody(req, 5_000_000);
@@ -1077,7 +1115,13 @@ async function route(req, res, url) {
 }
 
 export const server = http.createServer((req, res) => {
+  applySecurityHeaders(res);
   let url; try { url = new URL(req.url, `http://${req.headers.host || 'localhost'}`); } catch { return json(res, 400, { error: 'Bad request.' }); }
+  if (unsafeCrossSiteRequest(req, url)) return json(res, 403, { error: 'Cross-site request blocked.' });
+  if (req.method === 'POST' && ['/auth/email', '/auth/password'].includes(url.pathname) && authRateLimited(req)) {
+    res.setHeader('Retry-After', '900');
+    return json(res, 429, { error: 'Too many sign-in attempts. Try again in 15 minutes.' });
+  }
   route(req, res, url).catch(error => { console.error(error); if (!res.headersSent) json(res, 500, errorBody(error)); });
 });
 server.listen(config.port, () => { console.log(`DeenClipped self-hosted engine listening on http://localhost:${config.port}`); agent.start(); });

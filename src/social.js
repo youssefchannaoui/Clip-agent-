@@ -536,7 +536,6 @@ async function youtubeUploadStatus(uploadUrl, accessToken, totalSize) {
 async function uploadYouTube(clip, target, file, userId) {
   const accessToken = await youtubeToken(userId);
   const stat = fs.statSync(file);
-  const bytes = fs.readFileSync(file);
   target.providerState ||= {};
   let uploadUrl = target.providerState.uploadUrl || '';
   let offset = Math.max(0, Number(target.providerState.offset || 0));
@@ -601,7 +600,7 @@ async function uploadYouTube(clip, target, file, userId) {
   let failures = 0;
   while (offset < stat.size) {
     const endExclusive = Math.min(stat.size, offset + chunkSize);
-    const body = bytes.subarray(offset, endExclusive);
+    const body = fs.createReadStream(file, { start: offset, end: endExclusive - 1 });
     target.providerState = { ...target.providerState, stage: 'uploading', totalSize: stat.size, offset };
     save();
     try {
@@ -614,6 +613,7 @@ async function uploadYouTube(clip, target, file, userId) {
           'Content-Range': `bytes ${offset}-${endExclusive - 1}/${stat.size}`,
         },
         body,
+        duplex: 'half',
         signal: AbortSignal.timeout(10 * 60_000),
       });
       if (res.ok) {
@@ -688,11 +688,13 @@ async function uploadFacebook(clip, target, file, userId) {
   }
 
   if (!['uploaded', 'published'].includes(target.providerState.stage)) {
-    const bytes = fs.readFileSync(file);
+    const size = fs.statSync(file).size;
+    const bytes = fs.createReadStream(file);
     const upload = await fetch(uploadUrl, {
       method: 'POST',
-      headers: { Authorization: `OAuth ${accessToken}`, offset: '0', file_size: String(bytes.length), 'Content-Type': 'application/octet-stream' },
+      headers: { Authorization: `OAuth ${accessToken}`, offset: '0', file_size: String(size), 'Content-Type': 'application/octet-stream' },
       body: bytes,
+      duplex: 'half',
       signal: AbortSignal.timeout(10 * 60_000),
     });
     if (!upload.ok) {

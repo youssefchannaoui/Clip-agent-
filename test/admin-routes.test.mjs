@@ -67,6 +67,20 @@ test('public routes, pricing and dashboard assets remain available', async () =>
   assert.equal((await fetch(`${base}/premium-dashboard.js`)).status, 200);
 });
 
+test('responses carry browser security headers and cross-site mutations are blocked', async () => {
+  const page = await fetch(`${base}/`);
+  assert.equal(page.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(page.headers.get('x-frame-options'), 'DENY');
+  assert.match(page.headers.get('content-security-policy') || '', /frame-ancestors 'none'/);
+
+  const blocked = await fetch(`${base}/api/billing/estimate`, {
+    method: 'POST',
+    headers: { Cookie: creatorCookie, Origin: 'https://attacker.invalid', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ minutes: 1 }),
+  });
+  assert.equal(blocked.status, 403);
+});
+
 test('admin analytics accepts owner and admin but rejects creators', async () => {
   for (const cookie of [ownerCookie, adminCookie]) {
     const response = await fetch(`${base}/api/admin/analytics`, { headers: { Cookie: cookie } });

@@ -31,6 +31,7 @@ MAX_DOWNLOAD_BYTES = max(50, int(os.getenv("WORKER_MAX_DOWNLOAD_MB", "4096"))) *
 MIN_FREE_BYTES = max(1, int(os.getenv("WORKER_MIN_FREE_GB", "10"))) * 1024**3
 JOB_TTL_SECONDS = max(3600, int(os.getenv("WORKER_TEMP_TTL_HOURS", "24")) * 3600)
 SHARED_SECRET = os.getenv("WORKER_SHARED_SECRET", "")
+CALLBACK_SECRET = os.getenv("WORKER_CALLBACK_SECRET", SHARED_SECRET)
 
 
 def now_ms() -> int:
@@ -169,7 +170,7 @@ class Processor:
         body = json.dumps(status, separators=(",", ":")).encode()
         timestamp = str(now_ms())
         path = __import__("urllib.parse", fromlist=["urlparse"]).urlparse(url).path
-        signature = hmac.new(SHARED_SECRET.encode(), f"{timestamp}\nPOST\n{path}\n{body.decode()}".encode(), hashlib.sha256).hexdigest()
+        signature = hmac.new(CALLBACK_SECRET.encode(), f"{timestamp}\nPOST\n{path}\n{body.decode()}".encode(), hashlib.sha256).hexdigest()
         request = urllib.request.Request(url, data=body, method="POST", headers={
             "Content-Type": "application/json", "X-DeenClipped-Timestamp": timestamp,
             "X-DeenClipped-Signature": signature, "User-Agent": "DeenClipped-Worker/1.0",
@@ -448,6 +449,8 @@ class Handler(BaseHTTPRequestHandler):
 def main() -> int:
     if not SHARED_SECRET or len(SHARED_SECRET) < 32:
         raise SystemExit("WORKER_SHARED_SECRET must contain at least 32 characters.")
+    if not CALLBACK_SECRET or len(CALLBACK_SECRET) < 32:
+        raise SystemExit("WORKER_CALLBACK_SECRET must contain at least 32 characters.")
     PROCESSOR.start()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     stop = lambda *_: threading.Thread(target=server.shutdown, daemon=True).start()

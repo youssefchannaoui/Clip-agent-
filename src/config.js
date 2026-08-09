@@ -86,6 +86,7 @@ export const config = {
 
   authRequired: boolean(process.env.AUTH_REQUIRED, Boolean(process.env.GOOGLE_SIGNIN_CLIENT_ID || process.env.APPLE_SIGNIN_CLIENT_ID || process.env.APP_PASSWORD)),
   emailSigninEnabled: boolean(process.env.EMAIL_SIGNIN_ENABLED, true),
+  emailRegistrationEnabled: boolean(process.env.EMAIL_REGISTRATION_ENABLED, false),
   sessionSecret: process.env.APP_SESSION_SECRET || process.env.SOCIAL_TOKEN_KEY || process.env.APP_PASSWORD || 'dev-session-secret-change-me',
   cloudflareApiToken: process.env.CLOUDFLARE_API_TOKEN || '',
   cloudflareAccountId: process.env.CLOUDFLARE_ACCOUNT_ID || '',
@@ -186,4 +187,22 @@ if (!config.password) {
 }
 if (config.authRequired && config.sessionSecret === 'dev-session-secret-change-me') {
   console.warn('[warn] APP_SESSION_SECRET is not set. Set a long random secret before public launch.');
+}
+
+export function productionConfigurationErrors() {
+  const errors = [];
+  if (!config.authRequired) errors.push('AUTH_REQUIRED must be enabled.');
+  if (!config.sessionSecret || config.sessionSecret === 'dev-session-secret-change-me') errors.push('APP_SESSION_SECRET must be a production secret.');
+  if (config.processingMode === 'remote') {
+    if (!config.workerBaseUrl) errors.push('WORKER_BASE_URL is required for remote processing.');
+    if (!config.workerSharedSecret || config.workerSharedSecret.length < 32) errors.push('WORKER_SHARED_SECRET must contain at least 32 characters.');
+    if (!config.workerCallbackSecret || config.workerCallbackSecret.length < 32) errors.push('WORKER_CALLBACK_SECRET must contain at least 32 characters.');
+    if (!config.objectStorageEndpoint || !config.objectStorageBucket || !config.objectStorageAccessKey || !config.objectStorageSecretKey) errors.push('Object storage credentials are required for remote processing.');
+  }
+  if (config.stripeEnabled) {
+    if (!config.stripeSecretKey) errors.push('STRIPE_SECRET_KEY is required when Stripe is enabled.');
+    if (!config.stripeWebhookSecret) errors.push('STRIPE_WEBHOOK_SECRET is required when Stripe is enabled.');
+    if (!config.stripePriceWeekly || !config.stripePriceMonthly || !config.stripePriceYearly) errors.push('All subscription Stripe price IDs are required when Stripe is enabled.');
+  }
+  return errors;
 }

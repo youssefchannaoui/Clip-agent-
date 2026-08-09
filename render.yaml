@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: starter
     startCommand: node src/server.js
-    healthCheckPath: /healthz
+    healthCheckPath: /readyz
     disk:
       name: deenclipped-metadata
       mountPath: /var/data
@@ -18,6 +18,10 @@ services:
         value: "true"
       - key: EMAIL_SIGNIN_ENABLED
         value: "true"
+      - key: EMAIL_REGISTRATION_ENABLED
+        value: "false"
+      - key: APP_SESSION_SECRET
+        generateValue: true
       - key: PUBLIC_BASE_URL
         value: https://deenclipped.online
       - key: GOOGLE_SIGNIN_CLIENT_ID
@@ -47,6 +51,8 @@ services:
       - key: VIDEO_IMPORT_API_URL
         value: https://ffmpegapi.net
       - key: VIDEO_IMPORT_API_KEY
+        sync: false
+      - key: VIDEO_IMPORT_ALLOWED_DOWNLOAD_HOSTS
         sync: false
       - key: VIDEO_IMPORT_POLL_INTERVAL_MS
         value: "5000"
@@ -117,6 +123,18 @@ services:
       - key: TIKTOK_CLIENT_KEY
         sync: false
       - key: TIKTOK_CLIENT_SECRET
+        sync: false
+      - key: STRIPE_ENABLED
+        value: "true"
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_WEEKLY
+        sync: false
+      - key: STRIPE_PRICE_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_YEARLY
         sync: false
       - key: STRIPE_PRICE_TOPUP_100
         sync: false

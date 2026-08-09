@@ -18,6 +18,7 @@ process.env.DATA_DIR = dataDir;
 process.env.PORT = String(port);
 process.env.AUTH_REQUIRED = 'true';
 process.env.EMAIL_SIGNIN_ENABLED = 'true';
+process.env.EMAIL_REGISTRATION_ENABLED = 'true';
 process.env.ADMIN_EMAIL = 'operator@deenclipped.test';
 process.env.SOCIAL_TOKEN_KEY = 'isolation-test-social-key-over-32-characters';
 
