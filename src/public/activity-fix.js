@@ -2891,6 +2891,8 @@ let adminOpsLoading = false;
 let adminOpsError = '';
 let adminTab = 'overview';
 let adminAnalytics = null;
+let adminUserQuery = '';
+let adminUserPlan = 'all';
 
 function isOperator(){
   const role=String(data()?.role||'').toLowerCase();
@@ -2940,7 +2942,7 @@ function adminStatusPill(status){
 }
 
 function adminTabs(){
-  const tabs=[['overview','Overview'],['services','Services'],['subscriptions','Subscriptions'],['storage','Storage'],['integrations','Integrations'],['vendors','Costs & renewals'],['users','Users']];
+  const tabs=[['overview','Command centre'],['services','Infrastructure'],['subscriptions','Revenue'],['users','Users'],['activity','Activity'],['storage','Storage'],['integrations','Integrations'],['vendors','Costs']];
   return `<div class="dc-admin-tabs">${tabs.map(([id,label])=>`<button class="dc-admin-tab${adminTab===id?' is-active':''}" type="button" data-admin-tab="${id}">${esc(label)}</button>`).join('')}</div>`;
 }
 
@@ -2968,9 +2970,14 @@ function adminOverview(){
   (vendors.vendors||[]).filter(v=>v.overdue).forEach(v=>alerts.push(`${v.name} renewal date has passed.`));
   (vendors.vendors||[]).filter(v=>v.dueSoon).forEach(v=>alerts.push(`${v.name} renews in ${v.daysUntilRenewal} day${v.daysUntilRenewal===1?'':'s'}.`));
   if(storage.truncated)alerts.push('Storage scan stopped early — the bucket is very large, totals are a lower bound.');
-
-  return `${alerts.length?`<section class="dc-admin-alerts">${alerts.map(a=>`<div class="dc-admin-alert">${ICON.alert||''}<span>${esc(a)}</span></div>`).join('')}</section>`:''}
-  <div class="dc-admin-grid">${cards.map(([label,value,sub2])=>`<article class="dc-admin-card"><span class="dc-admin-card-label">${esc(label)}</span><strong>${esc(String(value))}</strong><em>${esc(sub2)}</em></article>`).join('')}</div>`;
+  const required=Math.max(1,Number(summary.total||0)),healthy=Math.max(0,required-Number(summary.missing||0));
+  const health=Math.max(0,Math.min(100,Math.round((healthy/required)*70+(sub.stripeReady?15:0)+(!storage.error&&storage.configured?15:0))));
+  const users=Math.max(0,Number(o.users??sub.totalUsers??0)),active=Number(o.activeUsers7d||0),paid=Number(sub.payingUsers||0),posted=Number(o.postedClips||0);
+  const recent=(stats?.recentActivity||[]).slice(0,5);
+  return `<section class="dc-admin-command-row"><article class="dc-admin-health"><div class="dc-admin-health-ring" style="--score:${health}"><strong>${health}</strong><span>/100</span></div><div><span class="dc-admin-card-label">Business health</span><h2>${health>=85?'Launch systems healthy':health>=60?'A few items need attention':'Action required before launch'}</h2><p>${alerts.length?`${alerts.length} open item${alerts.length===1?'':'s'} need review.`:'Core services, billing and storage are ready.'}</p></div></article><div class="dc-admin-quick-actions"><button type="button" data-admin-jump="services">Check infrastructure</button><button type="button" data-admin-jump="subscriptions">Review revenue</button><button type="button" data-admin-jump="users">Find a user</button><button type="button" data-admin-jump="integrations">Open integrations</button></div></section>
+  ${alerts.length?`<section class="dc-admin-alerts"><div class="dc-admin-section-title"><div><span>Needs attention</span><h2>Fix these before they become incidents.</h2></div><span class="dc-status-pill bad">${alerts.length} open</span></div>${alerts.map(a=>`<div class="dc-admin-alert">${ICON.alert||''}<span>${esc(a)}</span></div>`).join('')}</section>`:''}
+  <div class="dc-admin-grid dc-admin-kpi-grid">${cards.map(([label,value,sub2],index)=>`<article class="dc-admin-card ${index<3?'priority':''}"><span class="dc-admin-card-label">${esc(label)}</span><strong>${esc(String(value))}</strong><em>${esc(sub2)}</em></article>`).join('')}</div>
+  <section class="dc-admin-overview-split"><article class="dc-admin-panel"><div class="dc-admin-panel-head"><div><span class="dc-admin-card-label">Creator funnel</span><h2>From signup to published clip</h2></div></div><div class="dc-admin-funnel"><div><span>Signed up</span><strong>${users}</strong><i style="width:100%"></i></div><div><span>Active this week</span><strong>${active}</strong><i style="width:${users?Math.max(5,active/users*100):0}%"></i></div><div><span>Paying</span><strong>${paid}</strong><i style="width:${users?Math.max(5,paid/users*100):0}%"></i></div><div><span>Clips posted</span><strong>${posted}</strong><i style="width:${Math.max(5,Math.min(100,posted/Math.max(1,users)*12))}%"></i></div></div></article><article class="dc-admin-panel"><div class="dc-admin-panel-head"><div><span class="dc-admin-card-label">Latest token activity</span><h2>What just happened</h2></div><button class="dc-admin-text-btn" type="button" data-admin-jump="activity">View all</button></div><div class="dc-admin-timeline">${recent.length?recent.map(e=>`<div><i class="${e.type==='tokens_charged'?'used':'added'}"></i><span><strong>${esc(e.message||e.type||'Billing event')}</strong><small>${formatRelative(e.createdAt)}</small></span><b>${e.amount?`${e.type==='tokens_charged'?'−':'+'}${Number(e.amount).toLocaleString()}`:'—'}</b></div>`).join(''):'<p class="dc-admin-note">No recent token activity.</p>'}</div></article></section>`;
 }
 
 function adminSubscriptions(){
@@ -3031,9 +3038,25 @@ function adminVendors(){
 
 function adminUsers(){
   const users=adminAnalytics?.users||[];
-  const rows=users.slice(0,100).map(u=>`<tr><td><strong>${esc(u.name)}</strong><span class="dc-admin-dim">${esc(u.email)}</span></td><td>${esc(u.plan)}</td><td>${esc(u.billingStatus)}</td><td>${u.projects}</td><td>${u.clips}</td><td>${u.posted}</td><td>${formatDay(u.createdAt)}</td><td>${u.lastLoginAt?formatRelative(u.lastLoginAt):'—'}</td></tr>`).join('');
-  return `<section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>Accounts</h2><span class="dc-status-pill">${users.length} shown</span></div>
-    <table class="dc-admin-table"><thead><tr><th>Account</th><th>Plan</th><th>Status</th><th>Videos</th><th>Clips</th><th>Posted</th><th>Joined</th><th>Last seen</th></tr></thead><tbody>${rows||'<tr><td colspan="8">No accounts yet.</td></tr>'}</tbody></table></section>`;
+  const query=adminUserQuery.trim().toLowerCase();
+  const filtered=users.filter(u=>(adminUserPlan==='all'||u.plan===adminUserPlan)&&(!query||`${u.name} ${u.email} ${u.plan} ${u.billingStatus} ${u.role}`.toLowerCase().includes(query)));
+  const rows=filtered.slice(0,250).map(u=>`<tr><td><strong>${esc(u.name)}</strong><span class="dc-admin-dim">${esc(u.email)}</span></td><td><span class="dc-status-pill ${u.plan==='monthly'||u.plan==='yearly'?'good':''}">${esc(u.plan)}</span></td><td>${esc(u.billingStatus)}</td><td><strong>${u.remainingTokens===null?'∞':Number(u.remainingTokens||0).toLocaleString()}</strong><span class="dc-admin-dim">${Number(u.tokensUsed||0).toLocaleString()} used</span></td><td>${u.projects}</td><td>${u.clips}</td><td>${u.posted}</td><td>${u.failed?`<span class="dc-status-pill bad">${u.failed}</span>`:'0'}</td><td>${u.lastLoginAt?formatRelative(u.lastLoginAt):'Never'}</td></tr>`).join('');
+  return `<section class="dc-admin-panel dc-admin-users-panel"><div class="dc-admin-panel-head"><div><span class="dc-admin-card-label">Account directory</span><h2>Users and customer health</h2><p class="dc-admin-note">Search accounts, inspect product usage and export the current operational view.</p></div><span class="dc-status-pill">${filtered.length} of ${users.length}</span></div><div class="dc-admin-user-tools"><label class="dc-admin-search-box"><span>⌕</span><input id="dcAdminUserSearch" type="search" value="${esc(adminUserQuery)}" placeholder="Search name, email, role or status"></label><select id="dcAdminPlanFilter" aria-label="Filter users by plan"><option value="all">All plans</option>${['free','weekly','monthly','yearly','admin'].map(p=>`<option value="${p}" ${adminUserPlan===p?'selected':''}>${p[0].toUpperCase()+p.slice(1)}</option>`).join('')}</select><button class="dc-btn secondary" type="button" id="dcAdminExportUsers">Export CSV</button></div><table class="dc-admin-table"><thead><tr><th>Account</th><th>Plan</th><th>Status</th><th>Tokens</th><th>Videos</th><th>Clips</th><th>Posted</th><th>Failures</th><th>Last seen</th></tr></thead><tbody>${rows||'<tr><td colspan="9">No accounts match these filters.</td></tr>'}</tbody></table></section>`;
+}
+
+function adminActivity(){
+  const billing=adminAnalytics?.recentActivity||[],app=adminAnalytics?.recentApplicationActivity||[];
+  const events=[...billing.map(e=>({...e,kind:'billing',label:e.message||e.type||'Billing activity'})),...app.map((e,index)=>({...e,id:`app_${index}`,kind:'system',label:`${String(e.level||'info').toUpperCase()} application event`}))].sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0)).slice(0,80);
+  return `<section class="dc-admin-panel"><div class="dc-admin-panel-head"><div><span class="dc-admin-card-label">Audit stream</span><h2>Recent account and system activity</h2><p class="dc-admin-note">A read-only operational trail. Sensitive payloads and credentials are never included.</p></div><span class="dc-status-pill">${events.length} events</span></div><div class="dc-admin-activity-list">${events.length?events.map(e=>`<div class="dc-admin-activity-item"><span class="dc-admin-activity-icon ${esc(e.kind)}">${e.kind==='billing'?'$':'•'}</span><div><strong>${esc(e.label)}</strong><span>${e.userId?`User ${esc(String(e.userId).slice(0,12))} · `:''}${esc(formatDay(e.createdAt))} · ${esc(formatRelative(e.createdAt))}</span></div><b>${e.amount?`${e.type==='tokens_charged'?'−':'+'}${Number(e.amount).toLocaleString()} tokens`:esc(e.level||e.kind)}</b></div>`).join(''):'<p class="dc-admin-note">No recent activity has been recorded.</p>'}</div></section>`;
+}
+
+function exportAdminUsers(){
+  const users=adminAnalytics?.users||[];
+  const headings=['Name','Email','Role','Plan','Billing status','Tokens remaining','Tokens used','Projects','Clips','Posted','Failures','Joined','Last login'];
+  const cell=value=>`"${String(value??'').replace(/"/g,'""')}"`;
+  const rows=users.map(u=>[u.name,u.email,u.role,u.plan,u.billingStatus,u.remainingTokens===null?'unlimited':u.remainingTokens,u.tokensUsed,u.projects,u.clips,u.posted,u.failed,new Date(u.createdAt||0).toISOString(),u.lastLoginAt?new Date(u.lastLoginAt).toISOString():'']);
+  const blob=new Blob([[headings,...rows].map(row=>row.map(cell).join(',')).join('\n')],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`deenclipped-users-${new Date().toISOString().slice(0,10)}.csv`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
 
@@ -3143,20 +3166,29 @@ function renderAdminPage(){
     : adminTab==='overview'?adminOverview()
       :adminTab==='services'?adminServices()
       :adminTab==='subscriptions'?adminSubscriptions()
-        :adminTab==='storage'?adminStorage()
+        :adminTab==='users'?adminUsers()
+          :adminTab==='activity'?adminActivity()
+            :adminTab==='storage'?adminStorage()
           :adminTab==='integrations'?adminIntegrations()
             :adminTab==='vendors'?adminVendors()
-              :adminUsers();
+              :adminOverview();
+  const generated=adminOps?.generatedAt||adminAnalytics?.generatedAt;
+  const missing=Number(adminOps?.integrationSummary?.missing||0);
   panel.innerHTML=`<div class="dc-manage-page">
-    <section class="dc-studio-hero"><div><span class="dc-manage-kicker">${ICON.analytics} Admin console</span><h1>Everything about the business in one place.</h1><p>Only owner and admin accounts can see this page. Creators never see this tab.</p></div><div class="dc-studio-actions"><button class="dc-btn secondary" type="button" id="dcAdminRefresh">Refresh</button></div></section>
+    <section class="dc-studio-hero dc-admin-hero"><div><span class="dc-manage-kicker">${ICON.analytics} Owner command centre</span><h1>Run DeenClipped with confidence.</h1><p>Customers, revenue, infrastructure, integrations and operating costs—one secure view with no secrets exposed.</p><div class="dc-admin-live-line"><span><i class="${missing?'warn':''}"></i>${missing?`${missing} required setup item${missing===1?'':'s'}`:'Core systems ready'}</span><span>Updated ${generated?formatRelative(generated):'just now'}</span></div></div><div class="dc-studio-actions"><button class="dc-btn secondary dc-svg" type="button" id="dcAdminRefresh">${ICON.refresh||''} Refresh data</button></div></section>
     ${adminTabs()}${body}</div>`;
   $$('[data-admin-tab]',panel).forEach(btn=>btn.addEventListener('click',()=>{adminTab=btn.dataset.adminTab;renderAdminPage();}));
+  $$('[data-admin-jump]',panel).forEach(btn=>btn.addEventListener('click',()=>{adminTab=btn.dataset.adminJump;renderAdminPage();}));
   $$('[data-vendor-delete]',panel).forEach(btn=>btn.addEventListener('click',async()=>{
     try{await callApi(`/api/admin/vendors/${encodeURIComponent(btn.dataset.vendorDelete)}`,{method:'DELETE'});notify('Removed.','good');adminOps=null;renderAdminPage();}
     catch(error){notify(error.message,'bad')}
   }));
   $('#dcAdminRefresh')?.addEventListener('click',()=>{adminOps=null;adminAnalytics=null;renderAdminPage();});
   $('#dcAdminRetry')?.addEventListener('click',()=>{adminOpsError='';adminOps=null;renderAdminPage();});
+  let userSearchTimer;
+  $('#dcAdminUserSearch')?.addEventListener('input',event=>{clearTimeout(userSearchTimer);const value=event.target.value;userSearchTimer=setTimeout(()=>{adminUserQuery=value;renderAdminPage();const input=$('#dcAdminUserSearch');if(input){input.focus();input.setSelectionRange(input.value.length,input.value.length)}},180)});
+  $('#dcAdminPlanFilter')?.addEventListener('change',event=>{adminUserPlan=event.target.value;renderAdminPage()});
+  $('#dcAdminExportUsers')?.addEventListener('click',exportAdminUsers);
   $('#dcSocialkitForm')?.addEventListener('submit',async event=>{
     event.preventDefault();
     const fd=new FormData(event.target);
@@ -3185,7 +3217,8 @@ function renderAdminPage(){
 
 const DC_ADMIN_CSS = `
 /* --- Admin console ------------------------------------------------------- */
-.dc-admin-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 4px}
+.dc-admin-tabs{position:sticky;top:68px;z-index:12;display:flex;gap:4px;overflow-x:auto;margin:0;padding:5px;border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(11,11,13,.88);backdrop-filter:blur(18px);scrollbar-width:none}
+.dc-admin-tabs::-webkit-scrollbar{display:none}
 #dcSidebar{background:#0c0c0e!important;z-index:400!important}
 #dcTopbar{z-index:390!important}
 body.dc-app .main-col>.panel{position:relative;z-index:1}
@@ -3195,17 +3228,23 @@ body.dc-project-open .dc-project-detail-page,body.dc-project-open .dc-project-cl
 .dc-admin-grid,.dc-admin-panel,.dc-admin-list,.dc-admin-row{min-width:0;max-width:100%}
 .dc-admin-table{display:block;overflow-x:auto;white-space:nowrap}
 .dc-admin-row-copy strong,.dc-admin-row-copy span{overflow-wrap:anywhere}
-.dc-admin-tab{min-height:34px;padding:0 14px;border:1px solid var(--dc-line);border-radius:999px;background:#0b0b0d;color:var(--dc-muted);font-size:11px;font-weight:700}
+.dc-admin-tab{min-height:38px;flex:0 0 auto;padding:0 14px;border:0;border-radius:11px;background:transparent;color:var(--dc-muted);font-size:10px;font-weight:800}
 .dc-admin-tab:hover{color:var(--dc-text);border-color:rgba(221,183,118,.3)}
-.dc-admin-tab.is-active{background:rgba(217,180,120,.13);border-color:rgba(217,180,120,.35);color:var(--dc-text)}
+.dc-admin-tab.is-active{background:linear-gradient(145deg,rgba(217,180,120,.19),rgba(217,180,120,.08));box-shadow:0 0 0 1px rgba(217,180,120,.28) inset;color:var(--dc-accent2)}
+.dc-admin-hero{border-color:rgba(217,180,120,.25)!important;background:radial-gradient(circle at 86% 5%,rgba(217,180,120,.18),transparent 35%),radial-gradient(circle at 15% 120%,rgba(66,168,255,.09),transparent 30%),linear-gradient(145deg,#18140f,#101014 62%)!important}
+.dc-admin-live-line{display:flex;gap:14px;flex-wrap:wrap;margin-top:13px;color:var(--dc-muted);font-size:9px}.dc-admin-live-line span{display:inline-flex;align-items:center;gap:6px}.dc-admin-live-line i{width:7px;height:7px;border-radius:50%;background:var(--dc-green);box-shadow:0 0 0 4px rgba(83,199,139,.09)}.dc-admin-live-line i.warn{background:var(--dc-orange);box-shadow:0 0 0 4px rgba(229,169,87,.09)}
+.dc-admin-command-row{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);gap:12px}.dc-admin-health{display:flex;align-items:center;gap:18px;padding:20px;border:1px solid rgba(217,180,120,.18);border-radius:22px;background:linear-gradient(145deg,rgba(217,180,120,.08),rgba(255,255,255,.022))}.dc-admin-health-ring{--score:0;position:relative;width:94px;height:94px;flex:0 0 94px;display:grid;place-content:center;text-align:center;border-radius:50%;background:radial-gradient(circle at center,#111114 58%,transparent 60%),conic-gradient(var(--dc-accent2) calc(var(--score)*1%),rgba(255,255,255,.07) 0)}.dc-admin-health-ring strong{font-size:28px;line-height:1;letter-spacing:-.05em}.dc-admin-health-ring span{margin-top:2px;color:var(--dc-muted);font-size:8px}.dc-admin-health h2{margin:5px 0 4px;font-size:19px}.dc-admin-health p{margin:0;color:var(--dc-muted);font-size:10px}.dc-admin-quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.dc-admin-quick-actions button{min-height:55px;padding:0 13px;border:1px solid rgba(255,255,255,.075);border-radius:15px;background:linear-gradient(145deg,#151519,#0d0d10);color:var(--dc-muted);font-size:10px;font-weight:750;text-align:left}.dc-admin-quick-actions button:hover{border-color:rgba(217,180,120,.26);color:var(--dc-text);transform:translateY(-1px)}
+.dc-admin-section-title{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:3px}.dc-admin-section-title span:first-child{color:#ffb3b3;font-size:8px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.dc-admin-section-title h2{margin:4px 0 0;font-size:15px;color:var(--dc-text)}
 .dc-admin-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
 .dc-admin-card{padding:15px;border:1px solid var(--dc-line);border-radius:18px;background:linear-gradient(145deg,#151519,#0d0d10)}
+.dc-admin-kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.dc-admin-card.priority{border-color:rgba(217,180,120,.16);background:radial-gradient(circle at 100% 0,rgba(217,180,120,.09),transparent 45%),linear-gradient(145deg,#171619,#0d0d10)}
 .dc-admin-card-label{display:block;color:var(--dc-subtle);font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
 .dc-admin-card strong{display:block;font-size:24px;margin:7px 0 3px;letter-spacing:-.02em}
 .dc-admin-card em{display:block;font-style:normal;color:var(--dc-muted);font-size:9.5px}
 .dc-admin-panel{padding:16px;border:1px solid var(--dc-line);border-radius:22px;background:linear-gradient(145deg,#151519,#0d0d10)}
 .dc-admin-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
 .dc-admin-panel h2{font-size:16px;margin:0}
+.dc-admin-panel-head>div>.dc-admin-note{margin:5px 0 0}.dc-admin-overview-split{display:grid;grid-template-columns:1fr 1fr;gap:10px}.dc-admin-funnel{display:grid;gap:12px}.dc-admin-funnel>div{position:relative;display:grid;grid-template-columns:1fr auto;gap:8px;padding-bottom:8px}.dc-admin-funnel span{color:var(--dc-muted);font-size:10px}.dc-admin-funnel strong{font-size:11px}.dc-admin-funnel i{position:absolute;left:0;bottom:0;height:4px;max-width:100%;border-radius:999px;background:linear-gradient(90deg,var(--dc-accent),var(--dc-accent2))}.dc-admin-text-btn{border:0;background:transparent;color:var(--dc-accent2);font-size:9px;font-weight:800}.dc-admin-timeline{display:grid}.dc-admin-timeline>div{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:9px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.055)}.dc-admin-timeline>div:last-child{border-bottom:0}.dc-admin-timeline i{width:8px;height:8px;border-radius:50%;background:var(--dc-green)}.dc-admin-timeline i.used{background:var(--dc-accent)}.dc-admin-timeline span strong,.dc-admin-timeline span small{display:block}.dc-admin-timeline span strong{font-size:9.5px}.dc-admin-timeline span small{margin-top:2px;color:var(--dc-subtle);font-size:8px}.dc-admin-timeline>div>b{color:var(--dc-accent2);font-size:10px}
 .dc-admin-subhead{font-size:12px;margin:16px 0 8px;color:var(--dc-muted)}
 .dc-admin-note{margin:0 0 12px;color:var(--dc-muted);font-size:10.5px;line-height:1.55}
 .dc-admin-dim{display:block;color:var(--dc-subtle);font-size:9px;margin-top:2px}
@@ -3222,13 +3261,17 @@ body.dc-project-open .dc-project-detail-page,body.dc-project-open .dc-project-cl
 .dc-admin-table td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
 .dc-admin-table tr:last-child td{border-bottom:0}
 .dc-admin-table strong{font-size:11px}
+.dc-admin-users-panel{overflow:hidden}.dc-admin-users-panel>.dc-admin-table{margin:0 -16px -16px;width:calc(100% + 32px)}.dc-admin-user-tools{display:grid;grid-template-columns:minmax(220px,1fr) 150px auto;gap:8px;margin:12px 0}.dc-admin-search-box{position:relative}.dc-admin-search-box span{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--dc-subtle)}.dc-admin-search-box input,.dc-admin-user-tools select{width:100%;height:40px;border:1px solid var(--dc-line);border-radius:11px;background:#0b0b0d;color:var(--dc-text)}.dc-admin-search-box input{padding:0 12px 0 34px}.dc-admin-user-tools select{padding:0 10px}.dc-admin-user-tools .dc-btn{height:40px}
+.dc-admin-activity-list{display:grid}.dc-admin-activity-item{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:11px;align-items:center;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.055)}.dc-admin-activity-item:last-child{border-bottom:0}.dc-admin-activity-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:rgba(255,255,255,.055);color:var(--dc-muted);font-weight:900}.dc-admin-activity-icon.billing{background:rgba(217,180,120,.11);color:var(--dc-accent2)}.dc-admin-activity-item>div strong,.dc-admin-activity-item>div span{display:block}.dc-admin-activity-item>div strong{font-size:10px}.dc-admin-activity-item>div span{margin-top:3px;color:var(--dc-subtle);font-size:8.5px}.dc-admin-activity-item>b{color:var(--dc-muted);font-size:9px;text-transform:capitalize}
 .dc-admin-alerts{display:grid;gap:7px}
 .dc-admin-alert{display:flex;align-items:center;gap:9px;padding:10px 12px;border:1px solid rgba(255,138,138,.24);border-radius:12px;background:rgba(255,90,90,.07);color:#ffb3b3;font-size:10.5px}
 .dc-admin-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .dc-admin-form label{display:grid;gap:6px;color:var(--dc-muted);font-size:9px}
 .dc-admin-form input,.dc-admin-form select{width:100%;height:38px;padding:0 10px;border:1px solid var(--dc-line);border-radius:10px;background:#0b0b0d;color:var(--dc-text)}
 .dc-admin-form .wide{grid-column:1/-1}
-@media(max-width:820px){.dc-admin-form{grid-template-columns:1fr}.dc-admin-row{flex-direction:column;align-items:flex-start}}
+@media(max-width:1050px){.dc-admin-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dc-admin-command-row,.dc-admin-overview-split{grid-template-columns:1fr}}
+@media(max-width:820px){.dc-admin-form{grid-template-columns:1fr}.dc-admin-row{flex-direction:column;align-items:flex-start}.dc-admin-user-tools{grid-template-columns:1fr}.dc-admin-tabs{top:60px}.dc-admin-command-row{grid-template-columns:1fr}.dc-admin-health{align-items:flex-start}.dc-admin-activity-item{grid-template-columns:30px minmax(0,1fr)}.dc-admin-activity-item>b{grid-column:2}.dc-admin-kpi-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.dc-admin-health{flex-direction:column}.dc-admin-quick-actions,.dc-admin-kpi-grid{grid-template-columns:1fr}.dc-admin-tabs{margin-left:-2px;margin-right:-2px}}
 
 /* --- Sidebar / main content must never overlap --------------------------- */
 /* The sidebar is position:fixed, so any horizontal overflow in a panel used
