@@ -13,6 +13,21 @@ import { publicBilling } from './billing.js';
 import * as serviceMetrics from './service-metrics.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const VENDOR_DEFAULTS_VERSION = 1;
+const DEFAULT_VENDOR_COSTS = [
+  {
+    id: 'vendor_socialkit', name: 'SocialKit', plan: 'Video import API', cost: 29,
+    currency: 'USD', cycle: 'monthly', renewsAt: null,
+    url: 'https://socialkit.dev/dashboard',
+    notes: 'Confirmed monthly import-provider cost.',
+  },
+  {
+    id: 'vendor_hetzner', name: 'Hetzner', plan: 'Processing worker VPS', cost: 25,
+    currency: 'USD', cycle: 'monthly', renewsAt: null,
+    url: 'https://console.hetzner.cloud/',
+    notes: 'Confirmed monthly CPU and RAM worker cost.',
+  },
+];
 
 function requireOperator(user) {
   if (!user || !['owner', 'admin'].includes(String(user.role || '').toLowerCase())) {
@@ -109,6 +124,17 @@ function integrations() {
 
 function vendorStore() {
   if (!Array.isArray(state.adminVendors)) state.adminVendors = [];
+  if (Number(state.adminVendorDefaultsVersion || 0) < VENDOR_DEFAULTS_VERSION) {
+    const normalName = value => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const existing = new Set(state.adminVendors.map(row => normalName(row?.name)));
+    for (const vendor of DEFAULT_VENDOR_COSTS) {
+      if (!existing.has(normalName(vendor.name))) {
+        state.adminVendors.push({ ...vendor, updatedAt: Date.now() });
+      }
+    }
+    state.adminVendorDefaultsVersion = VENDOR_DEFAULTS_VERSION;
+    save();
+  }
   return state.adminVendors;
 }
 

@@ -95,6 +95,23 @@ test('admin analytics accepts owner and admin but rejects creators', async () =>
   assert.equal(anonymousResponse.status, 401);
 });
 
+test('owner costs start with the confirmed SocialKit and Hetzner monthly spend', async () => {
+  const response = await fetch(`${base}/api/admin/vendors`, { headers: { Cookie: ownerCookie } });
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.totalMonthly, 54);
+  assert.deepEqual(
+    payload.vendors.map(vendor => [vendor.name, vendor.cost, vendor.currency, vendor.cycle]).sort(),
+    [
+      ['Hetzner', 25, 'USD', 'monthly'],
+      ['SocialKit', 29, 'USD', 'monthly'],
+    ],
+  );
+
+  const creatorResponse = await fetch(`${base}/api/admin/vendors`, { headers: { Cookie: creatorCookie } });
+  assert.equal(creatorResponse.status, 404);
+});
+
 test('billing API reports separated balances and rejects unknown top-up packs', async () => {
   creator.billing.tokensUsed = 10;
   creator.billing.bonusTokens = 25;
