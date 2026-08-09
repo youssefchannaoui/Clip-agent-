@@ -32,7 +32,22 @@ export function approveClip(id) {
   clip.status = 'approved'; clip.approvedAt = Date.now(); clip.approvedBy = 'manual';
   const publishing = publishingSettings(ownerOfRecord(clip));
   if (publishing.enabled && publishing.tiktok?.enabled) clip.tiktokConsentAt = Date.now();
-  save(); tick().catch(() => {}); return clip;
+  save();
+  try {
+    // Approval is the scheduling decision: reserve the next free posting slot
+    // before replying so the interface never briefly leaves a clip in limbo.
+    return scheduleApprovedClip(clip);
+  } catch (error) {
+    // Keep review recoverable when a destination was disconnected or another
+    // scheduling prerequisite changed while the reviewer had the page open.
+    clip.status = 'waiting';
+    clip.scheduledAt = null;
+    clip.approvedAt = null;
+    clip.approvedBy = null;
+    clip.targets = [];
+    save();
+    throw error;
+  }
 }
 
 export function scheduleSelected(ids = []) {

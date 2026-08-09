@@ -41,3 +41,16 @@ test('automation thresholds for one account do not approve another account\'s cl
   // user_auto_1's settings.
   assert.equal(store.state.clips.find(item => item.id === 'other-strong').status, 'scheduled');
 });
+
+test('manual approval immediately reserves the next distinct posting slot', () => {
+  store.state.clips.push(
+    { id: 'manual-slot-1', projectId: 'p1', userId: USER, title: 'Manual one', status: 'waiting', score: 90, musicVerified: true, renderVerified: true, templateId: 'deenclipped-gold' },
+    { id: 'manual-slot-2', projectId: 'p1', userId: USER, title: 'Manual two', status: 'waiting', score: 89, musicVerified: true, renderVerified: true, templateId: 'deenclipped-gold' },
+  );
+  const first = agent.approveClip('manual-slot-1');
+  const second = agent.approveClip('manual-slot-2');
+  assert.equal(first.status, 'scheduled');
+  assert.equal(second.status, 'scheduled');
+  assert.ok(Number(first.scheduledAt) > Date.now());
+  assert.ok(Number(second.scheduledAt) > Number(first.scheduledAt));
+});
