@@ -38,6 +38,7 @@ export function plans() {
       id: 'free', name: 'Free', interval: 'one-time', badge: 'Test drive',
       tokens: config.tokensFree, priceId: '', enabled: true,
       days: config.freeTierDays,
+      features: ['Exact word-sync captions', 'Editor and clip review', 'DeenClipped watermark'],
       description: config.freeTierDays > 0
         ? `Try the studio free for ${config.freeTierDays} days.`
         : 'Try the studio before upgrading.',
@@ -46,6 +47,7 @@ export function plans() {
       id: 'weekly', name: 'Weekly', interval: 'week', badge: 'Start small',
       tokens: config.tokensWeekly, priceId: config.stripePriceWeekly, priceLabel: config.planPriceWeeklyLabel,
       enabled: Boolean(config.stripePriceWeekly), trialEligible: trialAllowed('weekly'),
+      features: ['Remove or customise watermark', 'Brand Kit', 'Unlimited free rerenders'],
       description: 'Affordable access for occasional lecture clipping.',
     },
     monthly: {
@@ -53,12 +55,14 @@ export function plans() {
       tokens: config.tokensMonthly, priceId: config.stripePriceMonthly, priceLabel: config.planPriceMonthlyLabel,
       listPriceLabel: config.planPriceMonthlyListLabel,
       enabled: Boolean(config.stripePriceMonthly), trialEligible: trialAllowed('monthly'),
+      features: ['Everything in Weekly', 'Creator Lab intelligence', 'Batch scheduling and publishing'],
       description: 'The best balance for creators posting consistently.',
     },
     yearly: {
       id: 'yearly', name: 'Yearly', interval: 'year', badge: 'Best value',
       tokens: config.tokensYearly, priceId: config.stripePriceYearly, priceLabel: config.planPriceYearlyLabel,
       enabled: Boolean(config.stripePriceYearly), trialEligible: trialAllowed('yearly'),
+      features: ['Everything in Monthly', 'Largest annual token bank', 'Full multi-channel workflow'],
       description: 'The lowest long-term cost for regular publishing.',
     },
   };
@@ -188,11 +192,32 @@ export function isUnlimited(user) {
   return Boolean(user && ['owner', 'admin'].includes(String(user.role || '').toLowerCase()));
 }
 
+export function featureAccess(user) {
+  if (!user) return {
+    premium: false, watermarkRequired: true, canRemoveWatermark: false,
+    customBranding: false, creatorLab: false, batchPublishing: false,
+  };
+  const billing = ensureUserBilling(user);
+  const plan = String(billing.plan || 'free').toLowerCase();
+  const unlimited = isUnlimited(user);
+  const premium = unlimited || ['weekly', 'monthly', 'yearly'].includes(plan);
+  const studioPremium = unlimited || ['monthly', 'yearly'].includes(plan);
+  return {
+    premium,
+    watermarkRequired: !premium,
+    canRemoveWatermark: premium,
+    customBranding: premium,
+    creatorLab: studioPremium,
+    batchPublishing: studioPremium,
+  };
+}
+
 export function publicBilling(user) {
   ensureBillingState();
   if (!user) return { enabled: config.stripeEnabled, plans: plans(), tokenRatePerMinute: tokenRate() };
   const billing = ensureUserBilling(user);
   const unlimited = isUnlimited(user);
+  const features = featureAccess(user);
   const currentPlan = billing.plan || 'free';
   const allow = unlimited ? Infinity : allowance(currentPlan);
   const used = Number(billing.tokensUsed || 0);
@@ -256,6 +281,7 @@ export function publicBilling(user) {
     portalConfigured: Boolean(config.stripeSecretKey),
     tokenRatePerMinute: tokenRate(),
     trialDays: config.stripeTrialDays,
+    features,
     terms: [
       `${tokenRate()} token per source video minute`,
       'Tokens are charged after the source duration is known',
@@ -752,7 +778,7 @@ export function plansPage(user, { error = '', info = '', returnTo = '/' } = {}) 
       ${rate ? `<div class="per-min">${esc(rate)}</div>` : ''}
       <p>${esc(plan.description)}</p>
       <div class="tokens"><b>${esc(plan.tokens)}</b><span>tokens included every ${esc(plan.interval)}</span></div>
-      <ul><li>${esc(tokenRate())} token per selected source minute</li><li>Review, editor, templates and publishing</li><li>Template-only rerenders stay free</li><li>${canTrial ? `${trialDays}-day trial when shown at checkout` : 'Billed immediately, cancel any time'}</li></ul>
+      <ul>${(plan.features || []).map(feature => `<li>${esc(feature)}</li>`).join('')}<li>${esc(tokenRate())} token per selected source minute</li><li>${canTrial ? `${trialDays}-day trial when shown at checkout` : 'Billed immediately, cancel any time'}</li></ul>
       <form method="post" action="/billing/checkout"><input type="hidden" name="plan" value="${esc(plan.id)}"><input type="hidden" name="returnTo" value="${returnValue}"><button class="${plan.id === 'monthly' ? 'cta-primary' : 'cta-secondary'}" type="submit" ${configured && !current ? '' : 'disabled'}>${esc(cta)}</button></form>
     </article>`;
   }).join('');
@@ -766,7 +792,7 @@ export function plansPage(user, { error = '', info = '', returnTo = '/' } = {}) 
       <div class="money">A$0<small> / to start</small></div>
       <p>${esc(freePlan.description)}</p>
       <div class="tokens"><b>${esc(freePlan.tokens)}</b><span>tokens to try it out</span></div>
-      <ul><li>${esc(tokenRate())} token per selected source minute</li><li>Review, editor, templates and publishing</li><li>Template-only rerenders stay free</li><li>${freePlan.days ? `Expires ${freePlan.days} days after signup` : 'Upgrade any time, keep your clips'}</li></ul>
+      <ul>${(freePlan.features || []).map(feature => `<li>${esc(feature)}</li>`).join('')}<li>${esc(tokenRate())} token per selected source minute</li><li>${freePlan.days ? `Expires ${freePlan.days} days after signup` : 'Upgrade any time, keep your clips'}</li></ul>
       ${onFree
         ? `<form method="post" action="/billing/continue-free"><input type="hidden" name="returnTo" value="${returnValue}"><button type="submit">Start with ${esc(freePlan.tokens)} free tokens</button></form>`
         : `<form><button type="button" disabled>Included with every account</button></form>`}

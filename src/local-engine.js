@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { config } from './config.js';
-import { state, save, log, clipSettings, musicSettings, ownerOfRecord } from './store.js';
+import { state, save, log, clipSettings, musicSettings, brandSettings, ownerOfRecord } from './store.js';
 import { selectedTemplate, templateById } from './templates.js';
 import { withOwner, ownerOf } from './tenancy.js';
 import { workerMusicTracks } from './audio.js';
@@ -83,6 +83,36 @@ function sharedSettings(user) {
     task: config.aiTask, language: config.aiLanguage, maxSourceMinutes: config.maxSourceMinutes,
     keepSourceFiles: config.keepSourceFiles, ollamaUrl: config.ollamaUrl, ollamaModel: config.ollamaModel,
   };
+}
+
+/**
+ * Resolve the template that is actually sent to FFmpeg. Watermark entitlement
+ * lives here instead of in the browser so free accounts cannot remove the
+ * DeenClipped mark by editing a request or a saved template file.
+ */
+export function effectiveTemplateForUser(user, sourceTemplate = null) {
+  const source = sourceTemplate || selectedTemplate(user) || {};
+  const template = structuredClone(source);
+  const access = billing.featureAccess(user);
+  const brand = brandSettings(user);
+  if (access.watermarkRequired) {
+    template.watermark = 'DEENCLIPPED';
+    template.watermarkOpacity = Math.max(72, Number(brand.watermarkOpacity || 88));
+    template.watermarkPosition = 'top-center';
+    template.watermarkColor = '#D9B478';
+    template.brandLineEnabled = false;
+  } else {
+    template.watermark = brand.watermarkEnabled === false ? '' : String(brand.watermarkText || 'DEENCLIPPED').trim().slice(0, 60);
+    template.watermarkOpacity = Number(brand.watermarkOpacity ?? template.watermarkOpacity ?? 88);
+    template.watermarkPosition = brand.watermarkPosition || template.watermarkPosition || 'top-center';
+    template.watermarkColor = brand.watermarkColor || template.watermarkColor || '#D9B478';
+  }
+  if (access.customBranding) {
+    template.brandLineEnabled = Boolean(brand.brandLineEnabled);
+    template.brandLineColor = brand.brandLineColor || template.brandLineColor || '#D9B478';
+  }
+  template.watermarkRequired = access.watermarkRequired;
+  return template;
 }
 
 function remoteProcessing() { return config.processingMode === 'remote'; }
@@ -341,7 +371,7 @@ function validateSubmission(url, user, options = {}) {
   else if (!/^https?:\/\//i.test(value) && !value.startsWith('file://') && !path.isAbsolute(value)) {
     throw new Error('Use a complete http(s) video link.');
   }
-  const template = selectedTemplate(user);
+  const template = effectiveTemplateForUser(user, selectedTemplate(user));
   if (!template?.id) throw new Error('Select a valid template before submitting.');
   const tracks = workerMusicTracks(user);
   if (!tracks.length) throw new Error('Music is required on every clip. Upload at least one nasheed first.');
@@ -740,7 +770,7 @@ async function runVizardProject(project) {
     project.vizardShareLink = result.shareLink || project.vizardShareLink || null;
     save();
 
-    const template = selectedTemplate(owner);
+    const template = effectiveTemplateForUser(owner, selectedTemplate(owner));
     const tracks = workerMusicTracks(owner);
     if (!template?.id || !tracks.length) throw new Error('A saved template and at least one nasheed are required to finish these clips.');
     const imported = [];
@@ -957,7 +987,7 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   const count = Math.max(1, Math.min(20, Math.round(Number(requestedCount) || 8)));
   const owner = ownerOfRecord(project);
   billing.assertCanSpend(owner, billing.tokenCostForSeconds(count * (clipSettings(owner).clipMaxSeconds || 60)), 'generate more clips');
-  const template = selectedTemplate(owner);
+  const template = effectiveTemplateForUser(owner, selectedTemplate(owner));
   if (!template?.id) throw new Error('Choose a valid saved template.');
   const tracks = workerMusicTracks(owner);
   if (!tracks.length) throw new Error('Music is mandatory. Upload at least one nasheed first.');
@@ -1007,7 +1037,7 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
   const sourceFile = clip.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
   if ((!sourceFile || !fs.existsSync(sourceFile)) && !(project?.engine === 'remote' && project.sourceObjectKey)) throw new Error('The original source file is unavailable. Keep source files enabled to re-render clips.');
   const owner = ownerOfRecord(clip);
-  const template = templateById(templateId, owner) || selectedTemplate(owner);
+  const template = effectiveTemplateForUser(owner, templateById(templateId, owner) || selectedTemplate(owner));
   if (!template?.id) throw new Error('Choose a valid saved template.');
   const tracks = workerMusicTracks(owner);
   if (!tracks.length) throw new Error('Music is mandatory. Upload at least one nasheed first.');
@@ -1206,7 +1236,7 @@ export function retryProject(projectId) {
   if (!fs.existsSync(jobFile(projectId))) throw new Error('The project job file is missing. Submit the video again.');
   const job = JSON.parse(fs.readFileSync(jobFile(projectId), 'utf8'));
   const projectOwner = ownerOfRecord(project);
-  const template = selectedTemplate(projectOwner); const tracks = workerMusicTracks(projectOwner);
+  const template = effectiveTemplateForUser(projectOwner, selectedTemplate(projectOwner)); const tracks = workerMusicTracks(projectOwner);
   if (!template?.id) throw new Error('Select a template before retrying.');
   if (!tracks.length) throw new Error('Upload at least one nasheed before retrying.');
   job.template = template; job.musicTracks = tracks; job.settings = sharedSettings(projectOwner);

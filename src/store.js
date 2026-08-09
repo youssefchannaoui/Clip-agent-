@@ -41,6 +41,15 @@ export function settingDefaults() {
       facebook: { enabled: false, accountId: '' },
       tiktok: { enabled: false, accountId: '', privacy: 'SELF_ONLY', allowComments: true, allowDuet: false, allowStitch: false },
     },
+    brandSettings: {
+      watermarkEnabled: true,
+      watermarkText: 'DEENCLIPPED',
+      watermarkPosition: 'top-center',
+      watermarkColor: '#D9B478',
+      watermarkOpacity: 88,
+      brandLineEnabled: false,
+      brandLineColor: '#D9B478',
+    },
     selectedTemplateId: config.defaultTemplateId,
   };
 }
@@ -253,6 +262,17 @@ export function setPublishingSettings(user, next) {
   });
   save();
   return publishingSettings(user);
+}
+
+export function brandSettings(user) {
+  return { ...settingDefaults().brandSettings, ...(readSetting(user, 'brandSettings') || {}) };
+}
+export function setBrandSettings(user, next) {
+  const id = userIdOf(user);
+  if (!id) throw new Error('Brand settings need an account.');
+  writeUserSetting(state, id, 'brandSettings', { ...brandSettings(user), ...next });
+  save();
+  return brandSettings(user);
 }
 
 export function selectedTemplateId(user) {

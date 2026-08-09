@@ -130,3 +130,32 @@ test('billing API reports separated balances and rejects unknown top-up packs', 
   assert.equal(invalid.status, 400);
   assert.match((await invalid.json()).error, /valid token pack/i);
 });
+
+test('Brand Kit enforces free watermarking and unlocks paid controls', async () => {
+  creator.billing.plan = 'free';
+  creator.billing.status = 'free';
+  let response = await fetch(`${base}/api/brand-settings`, {
+    method: 'POST',
+    headers: { Cookie: creatorCookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ watermarkEnabled: false, watermarkText: 'REMOVE ME', watermarkOpacity: 10 }),
+  });
+  assert.equal(response.status, 200);
+  let payload = await response.json();
+  assert.equal(payload.features.watermarkRequired, true);
+  assert.equal(payload.settings.watermarkEnabled, true);
+  assert.equal(payload.settings.watermarkText, 'DEENCLIPPED');
+  assert.ok(payload.settings.watermarkOpacity >= 72);
+
+  creator.billing.plan = 'monthly';
+  creator.billing.status = 'active';
+  response = await fetch(`${base}/api/brand-settings`, {
+    method: 'POST',
+    headers: { Cookie: creatorCookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ watermarkEnabled: false, watermarkText: 'Creator Studio', watermarkOpacity: 55 }),
+  });
+  assert.equal(response.status, 200);
+  payload = await response.json();
+  assert.equal(payload.features.canRemoveWatermark, true);
+  assert.equal(payload.settings.watermarkEnabled, false);
+  assert.equal(payload.settings.watermarkText, 'Creator Studio');
+});

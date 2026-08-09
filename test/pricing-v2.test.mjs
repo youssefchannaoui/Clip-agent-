@@ -236,6 +236,16 @@ test('the free card states the expiry window', () => {
   assert.ok(html.includes('Expires 3 days after signup'));
 });
 
+test('signed-in pricing makes premium entitlements explicit', () => {
+  const user = makeUser('viewer-premium');
+  state.authUsers = [user];
+  const html = billing.plansPage(user, {});
+  assert.ok(html.includes('DeenClipped watermark'));
+  assert.ok(html.includes('Remove or customise watermark'));
+  assert.ok(html.includes('Creator Lab intelligence'));
+  assert.ok(html.includes('Batch scheduling and publishing'));
+});
+
 // The highest-risk change in this patch. If the coupon is not attached
 // server-side, Stripe bills the A$34.99 list price and the customer pays A$5
 // more than the page advertised — with no error anywhere to notice it by.

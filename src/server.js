@@ -7,6 +7,7 @@ import { config, productionConfigurationErrors } from './config.js';
 import {
   state, save, log, logFor, clipSettings, setClipSettings, musicSettings, setMusicSettings,
   automationSettings, setAutomationSettings, publishingSettings, setPublishingSettings,
+  brandSettings, setBrandSettings,
 } from './store.js';
 import { ownedBy, findOwned } from './tenancy.js';
 import * as audio from './audio.js';
@@ -52,6 +53,25 @@ function errorBody(error) {
     if (error[key] !== undefined) body[key] = error[key];
   }
   return body;
+}
+
+function cleanBrandSettings(input = {}, user = null) {
+  const current = brandSettings(user);
+  const features = billing.featureAccess(user);
+  const positions = new Set(['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right']);
+  const cleanColor = (value, fallback) => /^#[0-9A-F]{6}$/i.test(String(value || '')) ? String(value).toUpperCase() : fallback;
+  const opacity = features.watermarkRequired ? 88 : Math.max(20, Math.min(100, Math.round(Number(input.watermarkOpacity ?? current.watermarkOpacity ?? 88))));
+  return {
+    watermarkEnabled: features.canRemoveWatermark ? input.watermarkEnabled !== false : true,
+    watermarkText: features.customBranding
+      ? (String(input.watermarkText ?? current.watermarkText ?? 'DEENCLIPPED').trim().slice(0, 60) || 'DEENCLIPPED')
+      : 'DEENCLIPPED',
+    watermarkPosition: features.customBranding && positions.has(String(input.watermarkPosition)) ? String(input.watermarkPosition) : 'top-center',
+    watermarkColor: features.customBranding ? cleanColor(input.watermarkColor, current.watermarkColor || '#D9B478') : '#D9B478',
+    watermarkOpacity: opacity,
+    brandLineEnabled: features.customBranding ? Boolean(input.brandLineEnabled) : false,
+    brandLineColor: cleanColor(input.brandLineColor, current.brandLineColor || '#D9B478'),
+  };
 }
 
 function json(res, status, value) {
@@ -315,6 +335,7 @@ function appState(user = null) {
     postTimes: config.postTimes, timezone: config.timezone, activeJobs: agent.engine.activeJobCount(),
     log: logFor(user, 60), directPublishingEnabled: config.socialPublishEnabled,
     publishingSettings: publishingSettings(user), social: social.connectionStatus(user), billing: billing.publicBilling(user),
+    brandSettings: cleanBrandSettings(brandSettings(user), user),
     role: String(user?.role || 'creator').toLowerCase(),
   };
 }
@@ -607,6 +628,17 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/api/auth/me') return json(res, 200, { user: auth.userPublic(currentUser), auth: auth.publicConfig() });
   if (method === 'GET' && pathname === '/api/state') return json(res, 200, appState(currentUser));
   if (method === 'GET' && pathname === '/api/billing') return json(res, 200, billing.publicBilling(currentUser));
+  if (method === 'GET' && pathname === '/api/brand-settings') {
+    return json(res, 200, { settings: cleanBrandSettings(brandSettings(currentUser), currentUser), features: billing.featureAccess(currentUser) });
+  }
+  if (method === 'POST' && pathname === '/api/brand-settings') {
+    const body = await readBody(req);
+    try {
+      const settings = setBrandSettings(currentUser, cleanBrandSettings(body, currentUser));
+      log(`Brand Kit updated${billing.featureAccess(currentUser).watermarkRequired ? ' with the required free-plan watermark' : ''}.`, 'info', currentUser.id);
+      return json(res, 200, { ok: true, settings: cleanBrandSettings(settings, currentUser), features: billing.featureAccess(currentUser) });
+    } catch (error) { return json(res, 400, errorBody(error)); }
+  }
   if (method === 'POST' && pathname === '/api/billing/estimate') {
     const body = await readBody(req);
     try { return json(res, 200, billing.estimateTokenCharge(currentUser, Number(body.minutes || body.sourceMinutes || 0))); }
