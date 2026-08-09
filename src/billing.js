@@ -196,6 +196,7 @@ export function featureAccess(user) {
   if (!user) return {
     premium: false, watermarkRequired: true, canRemoveWatermark: false,
     customBranding: false, creatorLab: false, batchPublishing: false,
+    socialPublishing: false,
   };
   const billing = ensureUserBilling(user);
   const plan = String(billing.plan || 'free').toLowerCase();
@@ -209,6 +210,7 @@ export function featureAccess(user) {
     customBranding: premium,
     creatorLab: studioPremium,
     batchPublishing: studioPremium,
+    socialPublishing: premium,
   };
 }
 
@@ -217,7 +219,7 @@ export function publicBilling(user) {
   if (!user) return { enabled: config.stripeEnabled, plans: plans(), tokenRatePerMinute: tokenRate() };
   const billing = ensureUserBilling(user);
   const unlimited = isUnlimited(user);
-  const features = featureAccess(user);
+  const planFeatures = featureAccess(user);
   const currentPlan = billing.plan || 'free';
   const allow = unlimited ? Infinity : allowance(currentPlan);
   const used = Number(billing.tokensUsed || 0);
@@ -227,8 +229,24 @@ export function publicBilling(user) {
   const freeTier = unlimited ? { onFree: false, expiresAt: null, expired: false, daysLeft: null } : freeTierState(billing);
   const baseRemaining = unlimited ? null : Math.max(0, allow - used - reserved);
   const remaining = unlimited ? null : baseRemaining + bonusTokens;
+  const canPublish = unlimited || (planFeatures.socialPublishing && remaining > 0);
+  const publishingBlockCode = canPublish
+    ? ''
+    : !planFeatures.socialPublishing
+      ? 'publishing_requires_premium'
+      : 'publishing_tokens_empty';
+  const features = { ...planFeatures, canPublish, publishingBlockCode };
   const periodEndsInDays = billing.periodEnd ? daysRemaining(billing.periodEnd) : null;
   const notices = [];
+  if (freeTier.onFree && !freeTier.expired) {
+    notices.push({
+      id: `free-welcome-${billing.periodStart}`,
+      kind: 'free_welcome',
+      title: `Your ${config.freeTierDays}-day trial is ready`,
+      message: `Explore with ${allowance('free')} tokens: generate, edit and download watermarked clips. Social posting unlocks when you choose Premium.`,
+      action: 'View Premium',
+    });
+  }
   if (trial.active && trial.daysLeft <= 2) {
     notices.push({
       id: `trial-ending-${billing.trialEnd}`,
@@ -264,7 +282,15 @@ export function publicBilling(user) {
       action: 'Choose plan',
     });
   }
-  if (!unlimited && remaining !== null && allow > 0 && remaining <= Math.max(5, Math.ceil(allow * 0.1))) {
+  if (!unlimited && remaining === 0) {
+    notices.push({
+      id: `tokens-empty-${currentPlan}-${billing.periodStart}`,
+      kind: 'tokens_empty',
+      title: 'You are out of tokens',
+      message: 'Generating and social posting are paused. Choose a plan or add tokens to continue; your existing clips stay available.',
+      action: currentPlan === 'free' ? 'Choose Premium' : 'Add tokens',
+    });
+  } else if (!unlimited && remaining !== null && allow > 0 && remaining <= Math.max(5, Math.ceil(allow * 0.1))) {
     notices.push({
       id: `low-tokens-${currentPlan}-${billing.periodStart}`,
       kind: 'low_tokens',
@@ -341,6 +367,30 @@ export function assertCanSpend(user, tokens, action = 'start this job') {
       `Not enough tokens to ${action}. You have ${remaining} tokens left and this needs about ${needed}.`,
       'insufficient_tokens',
       { needed, remaining, shortfall: needed - remaining, plan: info.current.plan },
+    );
+  }
+  return true;
+}
+
+export function assertCanPublish(user, action = 'post clips') {
+  ensureBillingState();
+  if (!user) throw new Error('Sign in to continue.');
+  if (isUnlimited(user)) return true;
+  const info = publicBilling(user);
+  const remaining = Number(info.current?.remaining || 0);
+  const plan = String(info.current?.plan || 'free');
+  if (!info.features?.socialPublishing) {
+    throw new BillingError(
+      'Social publishing is a Premium feature. You can keep browsing, editing and downloading watermarked clips, or choose Weekly, Monthly or Yearly to post.',
+      'publishing_requires_premium',
+      { remaining, plan, action },
+    );
+  }
+  if (remaining <= 0) {
+    throw new BillingError(
+      'You have 0 tokens left. Add tokens or choose a plan before posting.',
+      'publishing_tokens_empty',
+      { remaining, plan, action },
     );
   }
   return true;

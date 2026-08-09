@@ -125,6 +125,45 @@ test('a free account inside the window can still spend', () => {
   assert.equal(billing.assertCanSpend(user, 5, 'start a job'), true);
 });
 
+test('free accounts can explore but cannot publish to social platforms', () => {
+  const user = makeUser('free-publishing', {
+    periodStart: Date.now(),
+    freeExpiresAt: Date.now() + 3 * DAY,
+  });
+  state.authUsers = [user];
+  const info = billing.publicBilling(user);
+  assert.equal(info.current.remaining, 40);
+  assert.equal(info.features.socialPublishing, false);
+  assert.equal(info.features.canPublish, false);
+  assert.equal(info.features.publishingBlockCode, 'publishing_requires_premium');
+  assert.ok(info.notices.some(notice => notice.kind === 'free_welcome'));
+  assert.throws(
+    () => billing.assertCanPublish(user, 'post this clip'),
+    error => error.code === 'publishing_requires_premium' && error.remaining === 40,
+  );
+});
+
+test('paid accounts cannot publish at zero tokens and resume after a top-up', () => {
+  const user = makeUser('paid-empty', {
+    plan: 'monthly', status: 'active', tokensUsed: 400,
+    periodStart: Date.now(), periodEnd: Date.now() + 30 * DAY,
+  });
+  state.authUsers = [user];
+  let info = billing.publicBilling(user);
+  assert.equal(info.features.socialPublishing, true);
+  assert.equal(info.features.canPublish, false);
+  assert.equal(info.features.publishingBlockCode, 'publishing_tokens_empty');
+  assert.ok(info.notices.some(notice => notice.kind === 'tokens_empty'));
+  assert.throws(
+    () => billing.assertCanPublish(user, 'post this clip'),
+    error => error.code === 'publishing_tokens_empty' && error.remaining === 0,
+  );
+  user.billing.bonusTokens = 10;
+  info = billing.publicBilling(user);
+  assert.equal(info.features.canPublish, true);
+  assert.equal(billing.assertCanPublish(user, 'post this clip'), true);
+});
+
 test('running out of tokens raises a structured refusal, not a bare Error', () => {
   const user = makeUser('broke', {
     plan: 'monthly', status: 'active',

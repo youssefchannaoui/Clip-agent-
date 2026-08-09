@@ -90,6 +90,27 @@ test('subscription is a first-class account screen with real billing actions', (
   assert.match(ui, /\/api\/billing\/topup/);
 });
 
+test('the token chooser shows every real plan together without period tabs', () => {
+  const ui = fs.readFileSync(new URL('../src/public/activity-fix.js', import.meta.url), 'utf8');
+  assert.match(ui, /const sortPlans=\['free','weekly','monthly','yearly'\]/);
+  assert.match(ui, /Every option, side by side\./);
+  assert.match(ui, /grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.doesNotMatch(ui, /data-billing-tab=/);
+  assert.doesNotMatch(ui, /role="tabpanel"/);
+  assert.doesNotMatch(ui, /\$\{id==='monthly'\?'':'hidden'\}/);
+});
+
+test('first-run onboarding is account-scoped and explains free publishing limits', () => {
+  const ui = fs.readFileSync(new URL('../src/public/activity-fix.js', import.meta.url), 'utf8');
+  const legacy = fs.readFileSync(new URL('../src/public/index.html', import.meta.url), 'utf8');
+  assert.match(ui, /seenGet\('guided_demo','complete'\)/);
+  assert.match(ui, /seenSet\('guided_demo','complete'\)/);
+  assert.doesNotMatch(ui, /dc-guided-demo-complete/);
+  assert.match(ui, /Your 3-day trial wallet/);
+  assert.match(ui, /social posting unlocks with Premium/i);
+  assert.match(legacy, /function maybeOpenTour\(\)\{\}/);
+});
+
 test('publishing keeps a complete command-centre layout', () => {
   const ui = fs.readFileSync(new URL('../src/public/activity-fix.js', import.meta.url), 'utf8');
   assert.match(ui, /Publishing command centre/);
@@ -102,5 +123,7 @@ test('publishing keeps a complete command-centre layout', () => {
   assert.match(ui, /Platform connections/);
   assert.match(ui, /Quick preview/);
   assert.match(ui, /Your publishing queue is clear/);
+  assert.match(ui, /Publishing unlocks with Premium/);
+  assert.match(ui, /data-open-billing/);
   assert.doesNotMatch(ui, /ICON\.calendar/);
 });

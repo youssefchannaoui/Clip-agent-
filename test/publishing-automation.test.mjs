@@ -21,6 +21,14 @@ const agent = await import('../src/agent.js');
 
 const USER = 'user_publish_auto_1';
 
+store.state.authUsers.push({
+  id: USER, email: 'publisher@deenclipped.test', role: 'creator', createdAt: Date.now(),
+  billing: {
+    plan: 'monthly', status: 'active', tokensUsed: 0, tokensReserved: 0,
+    periodStart: Date.now(), periodEnd: Date.now() + 30 * 24 * 60 * 60 * 1000,
+  },
+});
+
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json', ...headers } });
 }
@@ -65,4 +73,24 @@ test('a strong clip is automatically scheduled and then posted to YouTube', asyn
   assert.equal(clip.status, 'posted');
   assert.equal(clip.targets[0].postId, 'posted-video-id');
   assert.equal(clip.targets[0].postUrl, 'https://youtu.be/posted-video-id');
+});
+
+test('the publishing engine refuses a free-trial social post before mutation', async () => {
+  const freeUser = {
+    id: 'user_publish_free', email: 'free@deenclipped.test', role: 'creator', createdAt: Date.now(),
+    billing: { plan: 'free', status: 'free', tokensUsed: 0, tokensReserved: 0, periodStart: Date.now() },
+  };
+  store.state.authUsers.push(freeUser);
+  const clip = {
+    id: 'clip-free-post', projectId: 'project-free-post', userId: freeUser.id, title: 'Free trial clip',
+    status: 'waiting', musicVerified: true, renderVerified: true, templateId: 'deenclipped-gold', targets: [],
+  };
+  store.state.projects.push({ id: clip.projectId, title: 'Free lecture', userId: freeUser.id });
+  store.state.clips.push(clip);
+  await assert.rejects(
+    () => agent.publishNow(clip.id),
+    error => error.code === 'publishing_requires_premium',
+  );
+  assert.equal(clip.status, 'waiting');
+  assert.deepEqual(clip.targets, []);
 });

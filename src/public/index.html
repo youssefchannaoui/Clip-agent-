@@ -1601,7 +1601,10 @@ let TOUR_INDEX=0;
 function renderTour(){const step=TOUR_STEPS[TOUR_INDEX]||TOUR_STEPS[0];$('#tourIcon').innerHTML=ICONS[step[0]]||ICONS.sparkles;$('#tourTitle').textContent=step[1];$('#tourCopy').textContent=step[2];$('#tourCount').textContent=`Step ${TOUR_INDEX+1} of ${TOUR_STEPS.length}`;$('#tourProgress').style.width=`${((TOUR_INDEX+1)/TOUR_STEPS.length)*100}%`;$('#tourBack').disabled=TOUR_INDEX===0;$('#tourNext').textContent=TOUR_INDEX===TOUR_STEPS.length-1?'Finish':'Next'}
 function openTour(force=false){TOUR_INDEX=0;renderTour();$('#tourModal')?.classList.remove('hide');if(force)localStorage.setItem('deenTourSeen','1')}
 function closeTour(){localStorage.setItem('deenTourSeen','1');$('#tourModal')?.classList.add('hide')}
-function maybeOpenTour(){if(localStorage.getItem('deenTourSeen'))return;setTimeout(()=>openTour(false),600)}
+// The account-scoped workspace guide in activity-fix.js owns first-run
+// onboarding. Keeping this legacy modal manual prevents two tours opening on
+// top of each other for a brand-new account.
+function maybeOpenTour(){}
 function visualEmpty(title,note,iconName='sparkles',action='') {return `<div class="empty-visual"><div class="empty-visual-icon">${ICONS[iconName]||ICONS.sparkles}</div><div class="empty-visual-title">${esc(title)}</div><div class="empty-visual-note">${esc(note)}</div>${action?`<div style="margin-top:16px">${action}</div>`:''}</div>`}
 
 const when=ms=>ms?new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}).format(new Date(ms)):'—';
@@ -1626,6 +1629,18 @@ const BILLING_BLOCKS={
     },
     primary:{label:'Upgrade plan',href:'/plans'},
     secondary:{label:'Buy a token pack',href:'/plans#token-shop'},
+  },
+  publishing_requires_premium:{
+    title:'Publishing unlocks with Premium',
+    body:()=>'Your free 3-day, 40-token trial lets you browse, generate, edit and download watermarked clips. Choose Weekly, Monthly or Yearly when you are ready to post.',
+    primary:{label:'See Premium plans',href:'/plans'},
+    secondary:null,
+  },
+  publishing_tokens_empty:{
+    title:'Add tokens before posting',
+    body:()=>'Your wallet is at zero. Your existing clips stay available, but social posting is paused until you add tokens or change plan.',
+    primary:{label:'Add tokens',href:'/plans#token-shop'},
+    secondary:{label:'Compare plans',href:'/plans'},
   },
 };
 let BILLING_MODAL=null;

@@ -6,6 +6,7 @@ import { ownedBy, ownerOf } from './tenancy.js';
 import { nextSlot } from './slots.js';
 import * as engine from './local-engine.js';
 import * as social from './social.js';
+import * as billing from './billing.js';
 
 let timer = null;
 let ticking = false;
@@ -155,6 +156,7 @@ function setTargets(clip) {
   // up uploaded to somebody else's channel.
   const settings = publishingSettings(ownerOfRecord(clip));
   if (!settings.enabled) { clip.targets = []; return; }
+  billing.assertCanPublish(ownerOfRecord(clip), 'schedule social posts');
   const targets = social.enabledTargetsForClip(clip);
   if (!targets.length) {
     if (clip.approvedBy === 'automation' && settings.tiktok?.enabled) {
@@ -219,6 +221,10 @@ function applyAutomationForOwner(ownerId, ownerClips) {
   const settings = automationSettings(owner);
   if (!settings.enabled) return;
   const publish = publishingSettings(owner);
+  if (publish.enabled) {
+    try { billing.assertCanPublish(owner, 'use automatic publishing'); }
+    catch { return; }
+  }
   const enabledAutomaticProviders = ['youtube', 'instagram', 'facebook'].filter(provider => publish[provider]?.enabled);
   if (publish.enabled && !enabledAutomaticProviders.length) return; // TikTok cannot be silently auto-consented.
   const projects = new Map();
@@ -317,6 +323,24 @@ async function processTarget(clip, target) {
 
 async function publishClip(clip) {
   if (publishing.has(clip.id)) return;
+  try {
+    billing.assertCanPublish(ownerOfRecord(clip), 'publish clips');
+  } catch (error) {
+    for (const target of clip.targets || []) {
+      if (!activeTarget(target)) continue;
+      target.status = 'blocked';
+      target.stage = 'Upgrade required';
+      target.error = error.message;
+      target.nextTryAt = null;
+      target.updatedAt = Date.now();
+    }
+    clip.status = 'ready';
+    clip.readyAt = clip.readyAt || Date.now();
+    clip.scheduledAt = null;
+    save();
+    log(`Publishing paused for "${clip.title}": ${error.message}`, 'warn', ownerOf(clip));
+    return;
+  }
   publishing.add(clip.id);
   try {
     for (const target of clip.targets || []) {
@@ -329,6 +353,7 @@ async function publishClip(clip) {
 export async function publishNow(id) {
   const clip = clipById(id);
   if (!clip) throw new Error('That clip no longer exists.');
+  billing.assertCanPublish(ownerOfRecord(clip), 'post this clip');
   if (!clip.musicVerified || !clip.renderVerified) throw new Error('The clip has not passed render verification.');
   if (['posted', 'publishing'].includes(clip.status)) throw new Error(`This clip is already ${clip.status}.`);
   if (clip.status === 'waiting') {
@@ -368,6 +393,7 @@ export async function publishNow(id) {
 export function retryPublishing(id, provider = '') {
   const clip = clipById(id);
   if (!clip) throw new Error('That clip no longer exists.');
+  billing.assertCanPublish(ownerOfRecord(clip), 'retry this post');
   const targets = (clip.targets || []).filter(target => !provider || target.provider === provider);
   if (!targets.length) throw new Error('No matching publishing destination exists for this clip.');
   for (const target of targets) {
