@@ -1,1 +1,24 @@
 patch/
+
+# Runtime state written by the app — not source
+data/
+
+# Python bytecode from the worker and its tests
+__pycache__/
+*.py[cod]
+
+# Local environment files. Production secrets live in Render and on the VPS;
+# a stray .env in the repo is how they end up in a commit.
+.env
+.env.*
+!.env.example
+render.env
+
+# Editor and OS noise
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Scratch space used when rendering page previews
+.tmp-*/
