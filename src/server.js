@@ -295,6 +295,7 @@ function publicClip(clip) {
     templateOutdated: Boolean(currentTemplate && Number(currentTemplate.version || 1) > Number(clip.templateVersion || 1)),
     renderVersion: clip.renderVersion || 1, renderVerified: Boolean(clip.renderVerified),
     renderedWidth: clip.renderedWidth || null, renderedHeight: clip.renderedHeight || null,
+    smartFraming: clip.smartFraming || null,
     variantOf: clip.variantOf || null, addedAt: clip.addedAt,
     targets: (clip.targets || []).map(social.targetPublic),
     rerender: rerender ? { id: rerender.id, status: rerender.status, stage: rerender.stage, progress: rerender.progress, error: rerender.error || null, asVariant: rerender.asVariant } : null,
@@ -1099,42 +1100,56 @@ async function route(req, res, url) {
     const id = decodeURIComponent(clipFraming[1]);
     let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 403, errorBody(error)); }
     const project = state.projects.find(item => item.id === clip.projectId);
-    const sourceFile = clip?.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
-    if (!sourceFile || !fs.existsSync(sourceFile)) {
-      return json(res, 200, { plan: { available: false, reason: 'The original video is no longer stored, so framing cannot be analysed.' } });
-    }
-
     const body = await readBody(req);
     const clipStart = Number(clip.startSec) || 0;
     const clipEnd = Number(clip.endSec) || (clipStart + (Number(clip.durationMs) || 0) / 1000);
     const duration = Math.max(0, clipEnd - clipStart);
+    if (duration < 0.25 || duration > 180) {
+      return json(res, 400, { error: 'This clip duration cannot be analysed for framing.' });
+    }
 
     // Give the tracker the real speech spans so it holds position during
     // silence instead of chasing detector noise when nobody is talking.
     let speechSpans = [];
-    if (project.transcriptFile && fs.existsSync(project.transcriptFile)) {
+    try {
+      const segments = await projectTranscriptSegments(project);
+      speechSpans = wordsForClip(segments, clipStart, clipEnd).map(w => [w.start, w.end]);
+    } catch { speechSpans = []; }
+
+    const requestPayload = {
+      start: clipStart, duration,
+      width: Number(body.width) || 1080, height: Number(body.height) || 1920,
+      bias: String(body.bias || 'auto'), padding: Number(body.padding ?? 0.18),
+      zoom: Number(body.zoom ?? 1), smoothing: Number(body.smoothing ?? 0.68),
+      sampleHz: Math.max(1, Math.min(5, Number(body.sampleHz) || 3)), speechSpans,
+    };
+    const sourceFile = clip?.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
+
+    // Production clips live in object storage and are rendered by the
+    // third-party worker. Analyse them there instead of incorrectly claiming
+    // the source has disappeared just because Render has no local copy.
+    if ((!sourceFile || !fs.existsSync(sourceFile)) && project?.sourceObjectKey && workerClient.configured()) {
       try {
-        const parsed = JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8'));
-        const segments = Array.isArray(parsed) ? parsed : (parsed.segments || []);
-        speechSpans = wordsForClip(segments, clipStart, clipEnd).map(w => [w.start, w.end]);
-      } catch { speechSpans = []; }
+        const result = await workerClient.analyseFraming({ ...requestPayload, sourceKey: project.sourceObjectKey });
+        return json(res, 200, { plan: result.plan || result });
+      } catch (error) {
+        return json(res, 200, { plan: { available: false, reason: `Speaker analysis is temporarily unavailable: ${error.message}` } });
+      }
+    }
+    if (!sourceFile || !fs.existsSync(sourceFile)) {
+      return json(res, 200, { plan: { available: false, reason: 'The original video is no longer stored, so framing cannot be analysed.' } });
     }
 
     const requestFile = path.join(config.dataDir, `framing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`);
     fs.writeFileSync(requestFile, JSON.stringify({
-      source: sourceFile, ffprobe: config.ffprobePath || 'ffprobe',
-      start: clipStart, duration,
-      width: Number(body.width) || 1080, height: Number(body.height) || 1920,
-      bias: String(body.bias || 'auto'), padding: Number(body.padding ?? 0.18),
-      zoom: Number(body.zoom ?? 1), smoothing: Number(body.smoothing ?? 0.82),
-      speechSpans,
+      ...requestPayload, source: sourceFile, ffprobe: config.ffprobePath || 'ffprobe',
     }));
 
     try {
       const plan = await new Promise((resolve) => {
         const child = spawn(config.pythonBin, [config.workerScript, '--framing', requestFile], { stdio: ['ignore', 'pipe', 'pipe'] });
         let out = '', err = '';
-        const timer = setTimeout(() => { child.kill('SIGKILL'); resolve({ available: false, reason: 'Framing analysis took too long and was stopped.' }); }, 120000);
+        const timer = setTimeout(() => { child.kill('SIGKILL'); resolve({ available: false, reason: 'Framing analysis took too long and was stopped.' }); }, 180000);
         child.stdout.on('data', d => { out += d; });
         child.stderr.on('data', d => { err += d; });
         child.on('error', e => { clearTimeout(timer); resolve({ available: false, reason: `The analyser could not start: ${e.message}` }); });

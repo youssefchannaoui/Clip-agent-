@@ -6,6 +6,7 @@ import hmac
 import json
 import os
 import queue
+import re
 import shutil
 import signal
 import subprocess
@@ -32,6 +33,7 @@ MIN_FREE_BYTES = max(1, int(os.getenv("WORKER_MIN_FREE_GB", "10"))) * 1024**3
 JOB_TTL_SECONDS = max(3600, int(os.getenv("WORKER_TEMP_TTL_HOURS", "24")) * 3600)
 SHARED_SECRET = os.getenv("WORKER_SHARED_SECRET", "")
 CALLBACK_SECRET = os.getenv("WORKER_CALLBACK_SECRET", SHARED_SECRET)
+FRAMING_CACHE_LOCK = threading.RLock()
 
 
 def now_ms() -> int:
@@ -383,6 +385,84 @@ def authenticated(timestamp: str, method: str, pathname: str, body: bytes, suppl
     return hmac.compare_digest(expected, supplied)
 
 
+def analyse_framing(payload: dict[str, Any]) -> dict[str, Any]:
+    """Download a stored source and return an active-speaker crop plan."""
+    source_key = str(payload.get("sourceKey") or "")
+    if (
+        not source_key
+        or len(source_key) > 512
+        or ".." in source_key
+        or not re.fullmatch(r"(?:projects|uploads)/[A-Za-z0-9._/-]+", source_key)
+    ):
+        raise ValueError("A valid stored source key is required.")
+    duration = float(payload.get("duration") or 0)
+    if duration < 0.25 or duration > 180:
+        raise ValueError("Framing analysis supports clips between 0.25 and 180 seconds.")
+    width = max(240, min(4096, int(payload.get("width") or 1080)))
+    height = max(240, min(4096, int(payload.get("height") or 1920)))
+    bias = str(payload.get("bias") or "auto")
+    if bias not in {"auto", "left", "center", "right"}:
+        raise ValueError("The framing bias is invalid.")
+
+    spans: list[list[float]] = []
+    for item in list(payload.get("speechSpans") or [])[:5000]:
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            continue
+        start, end = max(0.0, float(item[0])), min(duration, float(item[1]))
+        if end > start:
+            spans.append([round(start, 3), round(end, 3)])
+
+    storage = ObjectStorage()
+    if not storage.configured:
+        raise RuntimeError("Object storage is not configured on the worker.")
+    if shutil.disk_usage(TEMP_DIR).free < MIN_FREE_BYTES:
+        raise RuntimeError("The worker does not have enough temporary disk space for framing analysis.")
+
+    work_dir = TEMP_DIR / f"framing-{now_ms()}-{threading.get_ident()}"
+    cache_dir = TEMP_DIR / "framing-cache"
+    source_file = cache_dir / f"{hashlib.sha256(source_key.encode()).hexdigest()}.mp4"
+    request_file = work_dir / "request.json"
+    work_dir.mkdir(parents=True, exist_ok=False)
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        with FRAMING_CACHE_LOCK:
+            if not source_file.exists() or source_file.stat().st_size == 0:
+                partial = source_file.with_suffix(f".{threading.get_ident()}.part")
+                try:
+                    storage.download(source_key, partial)
+                    partial.replace(source_file)
+                finally:
+                    partial.unlink(missing_ok=True)
+            source_file.touch()
+            cache_dir.touch()
+        request = {
+            "source": str(source_file), "ffprobe": os.getenv("FFPROBE_PATH", "ffprobe"),
+            "start": max(0.0, float(payload.get("start") or 0)), "duration": duration,
+            "width": width, "height": height, "bias": bias,
+            "padding": max(0.05, min(0.45, float(payload.get("padding", 0.18)))),
+            "zoom": max(0.75, min(1.35, float(payload.get("zoom", 1.0)))),
+            "smoothing": max(0.0, min(0.95, float(payload.get("smoothing", 0.68)))),
+            "sampleHz": max(1.0, min(5.0, float(payload.get("sampleHz", 3.0)))),
+            "speechSpans": spans,
+        }
+        request_file.write_text(json.dumps(request), encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "worker" / "clip_worker.py"), "--framing", str(request_file)],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=210, check=False,
+        )
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout).strip().splitlines()
+            raise RuntimeError(detail[-1] if detail else "Speaker analysis returned no result.")
+        response = json.loads(result.stdout or "{}")
+        plan = response.get("plan")
+        if not isinstance(plan, dict):
+            raise RuntimeError("Speaker analysis returned an invalid result.")
+        return plan
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "DeenClippedWorker/1.0"
 
@@ -424,6 +504,16 @@ class Handler(BaseHTTPRequestHandler):
             free = shutil.disk_usage(TEMP_DIR).free
             ready = bool(ObjectStorage().configured and free >= MIN_FREE_BYTES)
             return self.send_json(200 if ready else 503, {"ready": ready, "freeBytes": free, "queueDepth": PROCESSOR.queue.qsize(), "running": len(PROCESSOR.running)})
+        if self.command == "POST" and path == "/framing":
+            try:
+                payload = json.loads(body or b"{}")
+                return self.send_json(200, {"plan": analyse_framing(payload)})
+            except ValueError as exc:
+                return self.send_json(400, {"error": clean_error(exc), "code": "invalid_framing_request"})
+            except subprocess.TimeoutExpired:
+                return self.send_json(503, {"error": "Speaker analysis took too long. Try again.", "code": "framing_timeout"})
+            except Exception as exc:
+                return self.send_json(503, {"error": clean_error(exc), "code": "framing_unavailable"})
         if self.command == "POST" and path == "/jobs":
             try:
                 payload = json.loads(body or b"{}")

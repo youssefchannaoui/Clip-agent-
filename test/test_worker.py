@@ -121,6 +121,33 @@ class CaptionTimingTests(unittest.TestCase):
         self.assertLessEqual(frames[0]["end"], 0.74)
         self.assertEqual(frames[1]["start"], 1.8)
 
+
+class DynamicSpeakerCropTests(unittest.TestCase):
+    def test_crop_filter_moves_continuously_between_speaker_keyframes(self):
+        plan = {
+            "available": True, "w": 608, "h": 1080,
+            "keyframes": [
+                {"t": 0.0, "x": 80, "y": 0},
+                {"t": 2.0, "x": 720, "y": 0},
+                {"t": 4.0, "x": 100, "y": 0},
+            ],
+        }
+        graph = worker.build_video_filter(
+            {"width": 1080, "height": 1920, "fitMode": "crop"},
+            pathlib.Path("/tmp/captions.ass"), plan,
+        )
+        self.assertIn("crop=608:1080:x='if(lt(t,", graph)
+        self.assertIn("clip((t-", graph)
+
+    def test_speech_spans_are_clip_relative_and_merge_nearby_words(self):
+        candidate = worker.Candidate(10, 16, "two words", [{
+            "start": 10, "end": 13, "text": "two words", "words": [
+                {"start": 10.2, "end": 10.5, "word": "two"},
+                {"start": 10.58, "end": 10.9, "word": "words"},
+            ],
+        }], 80, [], False)
+        self.assertEqual(worker.candidate_speech_spans(candidate), [(0.2, 0.9)])
+
     def test_dynamic_frames_do_not_hold_through_silence(self):
         segments = [{"start": 0.0, "end": 2.1, "text": "First second", "words": [
             {"start": 0.0, "end": 0.3, "word": "First"},

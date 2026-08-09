@@ -1381,6 +1381,45 @@ def filter_values(template: dict[str, Any]) -> tuple[float, float, float, float]
     )
 
 
+def compact_crop_keyframes(plan: dict[str, Any], max_points: int = 72) -> list[dict[str, Any]]:
+    """Keep meaningful camera moves without building an enormous FFmpeg expression."""
+    frames = sorted((plan.get("keyframes") or []), key=lambda item: float(item.get("t") or 0))
+    if len(frames) <= 2:
+        return frames
+    threshold_x = max(3.0, float(plan.get("w") or 0) * 0.008)
+    threshold_y = max(3.0, float(plan.get("h") or 0) * 0.008)
+    kept = [frames[0]]
+    for frame in frames[1:-1]:
+        previous = kept[-1]
+        moved = abs(float(frame.get("x") or 0) - float(previous.get("x") or 0)) >= threshold_x \
+            or abs(float(frame.get("y") or 0) - float(previous.get("y") or 0)) >= threshold_y
+        elapsed = float(frame.get("t") or 0) - float(previous.get("t") or 0)
+        if moved or elapsed >= 1.25:
+            kept.append(frame)
+    kept.append(frames[-1])
+    if len(kept) <= max_points:
+        return kept
+    stride = max(1, math.ceil((len(kept) - 2) / max(1, max_points - 2)))
+    return [kept[0], *kept[1:-1:stride], kept[-1]][:max_points]
+
+
+def crop_axis_expression(plan: dict[str, Any], axis: str) -> str:
+    """Create a continuous FFmpeg crop expression from speaker keyframes."""
+    frames = compact_crop_keyframes(plan)
+    if not frames:
+        return str(int(plan.get(axis) or 0))
+    expression = str(int(round(float(frames[-1].get(axis) or 0))))
+    for index in range(len(frames) - 2, -1, -1):
+        current, following = frames[index], frames[index + 1]
+        start = float(current.get("t") or 0)
+        end = max(start + 0.001, float(following.get("t") or start + 0.001))
+        value = float(current.get(axis) or 0)
+        delta = float(following.get(axis) or 0) - value
+        interpolation = f"{value:.3f}+({delta:.3f})*clip((t-{start:.3f})/{end-start:.3f},0,1)"
+        expression = f"if(lt(t,{end:.3f}),{interpolation},{expression})"
+    return expression
+
+
 def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict[str, Any] | None = None) -> str:
     width = int(template.get("width", 1080))
     height = int(template.get("height", 1920))
@@ -1390,12 +1429,20 @@ def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict
         if crop_plan:
             crop_w = int(crop_plan.get("w") or width)
             crop_h = int(crop_plan.get("h") or height)
-            crop_x = int(crop_plan.get("x") or 0)
-            crop_y = int(crop_plan.get("y") or 0)
-            graph = (
-                f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:{crop_y},"
-                f"scale={width}:{height},setsar=1[base]"
-            )
+            if crop_plan.get("keyframes"):
+                crop_x = crop_axis_expression(crop_plan, "x")
+                crop_y = crop_axis_expression(crop_plan, "y")
+                graph = (
+                    f"[0:v]crop={crop_w}:{crop_h}:x='{crop_x}':y='{crop_y}',"
+                    f"scale={width}:{height},setsar=1[base]"
+                )
+            else:
+                crop_x = int(crop_plan.get("x") or 0)
+                crop_y = int(crop_plan.get("y") or 0)
+                graph = (
+                    f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:{crop_y},"
+                    f"scale={width}:{height},setsar=1[base]"
+                )
         else:
             graph = (
                 f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
@@ -1470,6 +1517,29 @@ def render_quality_settings(settings: dict[str, Any]) -> tuple[str, int]:
     return preset, max(16, min(23, crf))
 
 
+def candidate_speech_spans(candidate: Candidate) -> list[tuple[float, float]]:
+    """Return merged, clip-relative speech windows from exact word timings."""
+    spans: list[tuple[float, float]] = []
+    for segment in candidate.segments or []:
+        words = segment.get("words") or []
+        items = words if words else [segment]
+        for item in items:
+            absolute_start = float(item.get("start", candidate.start) or candidate.start)
+            absolute_end = float(item.get("end", absolute_start) or absolute_start)
+            start = round(max(0.0, min(candidate.duration, absolute_start - candidate.start)), 3)
+            end = round(max(start, min(candidate.duration, absolute_end - candidate.start)), 3)
+            if end > start:
+                spans.append((start, end))
+    spans.sort()
+    merged: list[tuple[float, float]] = []
+    for start, end in spans:
+        if merged and start <= merged[-1][1] + 0.14:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
 def render_clip(
     job: dict[str, Any], candidate: Candidate, index: int, source: Path,
     track: dict[str, Any], output_dir: Path,
@@ -1492,16 +1562,29 @@ def render_clip(
     crop_plan = None
     if bool(template.get("smartFramingEnabled")) and str(template.get("fitMode") or "contain") == "crop":
         try:
-            crop_plan = detect_main_face_crop(
+            tracked = track_speaker_keyframes(
                 source,
                 ffprobe,
-                candidate,
+                candidate.start,
+                candidate.duration,
                 int(template.get("width", 1080)),
                 int(template.get("height", 1920)),
                 str(template.get("smartFramingBias") or "auto"),
                 float(template.get("smartFramingPadding", 0.18)),
                 float(template.get("smartFramingZoom", 1.0)),
+                float(template.get("smartFramingSmoothing", 0.68)),
+                sample_hz=3.0,
+                speech_spans=candidate_speech_spans(candidate) or None,
             )
+            if tracked.get("available"):
+                crop_plan = tracked
+            else:
+                crop_plan = detect_main_face_crop(
+                    source, ffprobe, candidate,
+                    int(template.get("width", 1080)), int(template.get("height", 1920)),
+                    str(template.get("smartFramingBias") or "auto"),
+                    float(template.get("smartFramingPadding", 0.18)), float(template.get("smartFramingZoom", 1.0)),
+                )
         except Exception:
             crop_plan = None
     filter_complex = (
@@ -1586,6 +1669,7 @@ def render_clip(
             "videoCodec": "h264", "audioCodec": "aac", "preset": video_preset,
             "crf": video_crf, "fps": 30, "audioBitrateKbps": 192,
         },
+        "smartFraming": crop_plan if crop_plan and crop_plan.get("available") else None,
         "createdAt": int(time.time() * 1000),
     }
 
@@ -1854,8 +1938,8 @@ def track_speaker_keyframes(
     bias: str = "auto",
     padding: float = 0.18,
     zoom: float = 1.0,
-    smoothing: float = 0.82,
-    sample_hz: float = 2.0,
+    smoothing: float = 0.68,
+    sample_hz: float = 3.0,
     speech_spans: list[tuple[float, float]] | None = None,
 ) -> dict[str, Any]:
     """Follow the active speaker across a clip and return smoothed keyframes.
@@ -1934,9 +2018,43 @@ def track_speaker_keyframes(
             return True  # no timing info, so assume speech throughout
         return any(s <= t <= e for s, e in speech_spans)
 
-    raw: list[tuple[float, float, float]] = []  # (t, cx, cy)
+    def overlap_ratio(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
+        ax, ay, aw, ah = a; bx, by, bw, bh = b
+        left, top = max(ax, bx), max(ay, by)
+        right, bottom = min(ax + aw, bx + bw), min(ay + ah, by + bh)
+        intersection = max(0, right - left) * max(0, bottom - top)
+        union = aw * ah + bw * bh - intersection
+        return intersection / max(1, union)
+
+    def dedupe_faces(items: list[tuple[int, int, int, int]]) -> list[tuple[int, int, int, int]]:
+        kept: list[tuple[int, int, int, int]] = []
+        for face in sorted(items, key=lambda item: item[2] * item[3], reverse=True):
+            if not any(overlap_ratio(face, existing) >= 0.34 for existing in kept):
+                kept.append(face)
+        return kept
+
+    def region_motion(current: Any, previous: Any, x0: int, y0: int, x1: int, y1: int) -> float:
+        if previous is None or x1 <= x0 or y1 <= y0:
+            return 0.0
+        now_region = current[y0:y1, x0:x1]
+        old_region = previous[y0:y1, x0:x1]
+        if not now_region.size or now_region.shape != old_region.shape:
+            return 0.0
+        now_region = cv2.resize(now_region, (64, 32), interpolation=cv2.INTER_AREA)
+        old_region = cv2.resize(old_region, (64, 32), interpolation=cv2.INTER_AREA)
+        now_region = cv2.GaussianBlur(cv2.equalizeHist(now_region), (3, 3), 0)
+        old_region = cv2.GaussianBlur(cv2.equalizeHist(old_region), (3, 3), 0)
+        return float(cv2.absdiff(now_region, old_region).mean()) / 255.0
+
+    raw: list[tuple[float, float, float, bool]] = []  # (t, cx, cy, switched)
     previous_gray = None
     previous_center: tuple[float, float] | None = None
+    pending_center: tuple[float, float] | None = None
+    pending_hits = 0
+    speaker_switches = 0
+    confidence_samples: list[float] = []
+    max_faces = 0
+    detected_samples = 0
     for index in range(samples + 1):
         offset = min(duration, index * step)
         cap.set(cv2.CAP_PROP_POS_MSEC, (start + offset) * 1000.0)
@@ -1944,52 +2062,96 @@ def track_speaker_keyframes(
         if not ok or frame is None:
             continue
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        detection_scale = min(1.0, 960.0 / max(1, src_w))
+        detection_gray = gray if detection_scale >= 0.999 else cv2.resize(
+            gray, (max(2, int(round(src_w * detection_scale))), max(2, int(round(src_h * detection_scale)))),
+            interpolation=cv2.INTER_AREA,
+        )
 
         faces: list[tuple[int, int, int, int]] = []
         for i, detector in enumerate(detectors):
             if detector.empty():
                 continue
             found = detector.detectMultiScale(
-                gray, scaleFactor=1.08 if i == 0 else 1.10,
-                minNeighbors=3 if i == 0 else 4, minSize=(min_face, min_face),
+                detection_gray, scaleFactor=1.08 if i == 0 else 1.10,
+                minNeighbors=3 if i == 0 else 4,
+                minSize=(max(20, int(min_face * detection_scale)), max(20, int(min_face * detection_scale))),
             )
-            faces.extend(tuple(map(int, f)) for f in found)
+            for found_face in found:
+                fx, fy, fw, fh = map(int, found_face)
+                faces.append(tuple(int(round(value / detection_scale)) for value in (fx, fy, fw, fh)))
+
+        # Profile detection is directional; mirror the image so a person
+        # looking the other way is not silently ignored.
+        profile = detectors[-1]
+        if not profile.empty():
+            flipped = cv2.flip(detection_gray, 1)
+            mirrored = profile.detectMultiScale(
+                flipped, scaleFactor=1.10, minNeighbors=4,
+                minSize=(max(20, int(min_face * detection_scale)), max(20, int(min_face * detection_scale))),
+            )
+            for fx, fy, fw, fh in mirrored:
+                dx = detection_gray.shape[1] - int(fx) - int(fw)
+                faces.append(tuple(int(round(value / detection_scale)) for value in (dx, int(fy), int(fw), int(fh))))
+        faces = dedupe_faces(faces)
+        max_faces = max(max_faces, len(faces))
 
         if faces:
-            best = None
-            best_score = -1.0
+            detected_samples += 1
+            if not speaking_at(offset) and previous_center is not None:
+                # Nobody is speaking: hold the composition completely. This
+                # avoids camera movement caused by smiles, gestures or cuts.
+                raw.append((offset, previous_center[0], previous_center[1], False))
+                previous_gray = gray
+                continue
+            scored: list[tuple[float, tuple[int, int, int, int], tuple[float, float]]] = []
             for (fx, fy, fw, fh) in faces:
-                # Bigger faces are more likely to be the subject.
-                score = float(fw * fh) / float(src_w * src_h)
-                # Mouth movement: compare the lower half of the face with the
-                # same region last sample. A speaking mouth changes more.
+                center = (fx + fw / 2.0, fy + fh / 2.0)
+                # Face size is useful, but it must not overpower actual speech.
+                score = float(fw * fh) / float(src_w * src_h) * 3.0
+                # Isolate lower-face activity and subtract general head/camera
+                # movement measured above the mouth. This is much more robust
+                # than comparing the entire lower half of a moving face.
                 if previous_gray is not None and speaking_at(offset):
-                    my0, my1 = fy + fh // 2, min(src_h, fy + fh)
-                    mx0, mx1 = max(0, fx), min(src_w, fx + fw)
-                    if my1 > my0 and mx1 > mx0:
-                        now_mouth = gray[my0:my1, mx0:mx1].astype("float32")
-                        was_mouth = previous_gray[my0:my1, mx0:mx1].astype("float32")
-                        if now_mouth.shape == was_mouth.shape and now_mouth.size:
-                            movement = float(abs(now_mouth - was_mouth).mean()) / 255.0
-                            score += movement * 2.5  # weight movement heavily
-                # Prefer continuity. A one-frame false face at the other side
-                # of a two-person interview must not make the crop jump away from
-                # the current speaker.
+                    x0, x1 = max(0, fx + int(fw * 0.16)), min(src_w, fx + int(fw * 0.84))
+                    mouth = region_motion(gray, previous_gray, x0, max(0, fy + int(fh * 0.50)), x1, min(src_h, fy + int(fh * 0.88)))
+                    forehead = region_motion(gray, previous_gray, x0, max(0, fy + int(fh * 0.12)), x1, min(src_h, fy + int(fh * 0.43)))
+                    speech_motion = max(0.0, mouth - forehead * 0.55)
+                    score += speech_motion * 5.5
+                # Continuity breaks ties, but no longer outweighs a genuinely
+                # talking face on the other side of an interview frame.
                 if previous_center is not None:
-                    candidate_x, candidate_y = fx + fw / 2.0, fy + fh / 2.0
-                    distance = ((candidate_x - previous_center[0]) ** 2 + (candidate_y - previous_center[1]) ** 2) ** 0.5
-                    score += max(0.0, 1.0 - distance / max(src_w, src_h)) * 0.42
-                if score > best_score:
-                    best_score = score
-                    best = (fx, fy, fw, fh)
-            if best:
-                fx, fy, fw, fh = best
-                previous_center = (fx + fw / 2.0, fy + fh / 2.0)
-                raw.append((offset, previous_center[0], previous_center[1]))
+                    distance = ((center[0] - previous_center[0]) ** 2 + (center[1] - previous_center[1]) ** 2) ** 0.5
+                    score += max(0.0, 1.0 - distance / max(src_w, src_h)) * 0.12
+                scored.append((score, (fx, fy, fw, fh), center))
+            scored.sort(key=lambda item: item[0], reverse=True)
+            best_score, best_face, best_center = scored[0]
+            if len(scored) > 1:
+                margin = max(0.0, best_score - scored[1][0])
+                confidence_samples.append(min(1.0, margin / max(0.04, abs(best_score))))
+
+            switched = False
+            if previous_center is not None and len(scored) > 1:
+                current = min(scored, key=lambda item: (item[2][0] - previous_center[0]) ** 2 + (item[2][1] - previous_center[1]) ** 2)
+                current_score, _, current_center = current
+                separation = ((best_center[0] - current_center[0]) ** 2 + (best_center[1] - current_center[1]) ** 2) ** 0.5
+                if separation > max(40.0, crop_w * 0.22) and best_score > current_score + 0.025:
+                    if pending_center and ((best_center[0] - pending_center[0]) ** 2 + (best_center[1] - pending_center[1]) ** 2) ** 0.5 < max(50.0, crop_w * 0.18):
+                        pending_hits += 1
+                    else:
+                        pending_center, pending_hits = best_center, 1
+                    if pending_hits < 2:
+                        best_center = current_center
+                    else:
+                        switched = True; speaker_switches += 1; pending_center = None; pending_hits = 0
+                else:
+                    best_center = current_center; pending_center = None; pending_hits = 0
+            previous_center = best_center
+            raw.append((offset, previous_center[0], previous_center[1], switched))
         elif previous_center is not None:
             # Hold the speaker through short detector misses instead of falling
             # back to a centre crop that cuts them out.
-            raw.append((offset, previous_center[0], previous_center[1]))
+            raw.append((offset, previous_center[0], previous_center[1], False))
         previous_gray = gray
     cap.release()
 
@@ -1997,18 +2159,27 @@ def track_speaker_keyframes(
         return {"available": False, "reason": "No face or speaker could be detected in this clip."}
 
     # Exponential smoothing so the crop glides instead of snapping.
-    alpha = 1.0 - max(0.0, min(0.98, smoothing))
+    alpha = 1.0 - max(0.0, min(0.95, smoothing))
     keyframes: list[dict[str, Any]] = []
     smooth_x, smooth_y = raw[0][1], raw[0][2]
-    for (t, cx, cy) in raw:
-        smooth_x += (cx - smooth_x) * alpha
-        smooth_y += (cy - smooth_y) * alpha
+    for (t, cx, cy, switched) in raw:
+        # Respond quickly to a confirmed speaker handoff, then return to the
+        # user's normal smoothing level for natural camera motion.
+        frame_alpha = max(alpha, 0.52) if switched else alpha
+        smooth_x += (cx - smooth_x) * frame_alpha
+        smooth_y += (cy - smooth_y) * max(frame_alpha, 0.34)
         x, y = crop_origin_from_center(smooth_x, smooth_y, src_w, src_h, crop_w, crop_h, padding)
         keyframes.append({"t": round(t, 3), "x": x, "y": y, "w": crop_w, "h": crop_h})
 
+    confidence = sum(confidence_samples) / len(confidence_samples) if confidence_samples else (0.72 if detected_samples else 0.0)
     return {
         "available": True, "method": "active-speaker", "srcW": src_w, "srcH": src_h,
         "w": crop_w, "h": crop_h, "keyframes": keyframes,
+        "confidence": round(max(0.0, min(1.0, confidence)), 3),
+        "speakerSwitches": speaker_switches,
+        "maxFaces": max_faces,
+        "detectedSamples": detected_samples,
+        "sampleCount": samples + 1,
     }
 
 
@@ -2033,7 +2204,8 @@ def main() -> int:
             str(request.get("bias") or "auto"),
             float(request.get("padding") or 0.18),
             float(request.get("zoom") or 1.0),
-            float(request.get("smoothing") or 0.82),
+            float(request.get("smoothing") or 0.68),
+            float(request.get("sampleHz") or 3.0),
             speech_spans=spans or None,
         )
         print(json.dumps({"plan": plan}))

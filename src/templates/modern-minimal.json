@@ -59,5 +59,6 @@
   "smartFramingEnabled": true,
   "smartFramingBias": "auto",
   "smartFramingPadding": 0.16,
-  "smartFramingZoom": 1.02
+  "smartFramingZoom": 1.02,
+  "smartFramingSmoothing": 0.68
 }

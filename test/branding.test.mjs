@@ -94,7 +94,8 @@ test('publishing keeps a complete command-centre layout', () => {
   const ui = fs.readFileSync(new URL('../src/public/activity-fix.js', import.meta.url), 'utf8');
   assert.match(ui, /Publishing command centre/);
   assert.match(ui, /Live publishing queue/);
-  assert.match(ui, /Schedule slots/);
+  assert.match(ui, /data-publish-tab="slots">Slots/);
+  assert.doesNotMatch(ui, /data-publish-tab="scheduled"/);
   assert.match(ui, /Open posting slot/);
   assert.match(ui, /data-publish-slot-days/);
   assert.match(ui, /Approve a clip and it moves straight into the next open slot/);

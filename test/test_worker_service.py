@@ -113,6 +113,35 @@ class WorkerPersistenceTests(unittest.TestCase):
         self.service.Processor(self.service.JobStore()).cleanup_abandoned()
         self.assertFalse(abandoned.exists())
 
+    def test_framing_analysis_downloads_the_stored_source_and_cleans_up(self):
+        class FakeStorage:
+            configured = True
+
+            def download(self, key, destination):
+                self.key = key
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(b"video")
+
+        completed = mock.Mock(
+            returncode=0,
+            stdout=json.dumps({"plan": {"available": True, "method": "active-speaker", "keyframes": []}}),
+            stderr="",
+        )
+        with mock.patch.object(self.service, "ObjectStorage", return_value=FakeStorage()), \
+             mock.patch.object(self.service.shutil, "disk_usage", return_value=mock.Mock(free=self.service.MIN_FREE_BYTES + 1)), \
+             mock.patch.object(self.service.subprocess, "run", return_value=completed) as subprocess_run:
+            plan = self.service.analyse_framing({
+                "sourceKey": "projects/project_1/source.mp4", "duration": 30,
+                "speechSpans": [[0.2, 1.0]],
+            })
+        self.assertEqual(plan["method"], "active-speaker")
+        self.assertTrue(subprocess_run.called)
+        self.assertFalse(any(item.name != "framing-cache" for item in self.service.TEMP_DIR.glob("framing-*")))
+
+    def test_framing_analysis_rejects_unsafe_storage_keys(self):
+        with self.assertRaisesRegex(ValueError, "valid stored source key"):
+            self.service.analyse_framing({"sourceKey": "projects/../secret", "duration": 30})
+
 
 if __name__ == "__main__":
     unittest.main()

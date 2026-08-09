@@ -16,6 +16,9 @@ const DEFAULTS = Object.freeze({
   fitMode: 'contain',
   smartFramingEnabled: true,
   smartFramingBias: 'auto',
+  smartFramingPadding: 0.18,
+  smartFramingZoom: 1,
+  smartFramingSmoothing: 0.68,
   frameBackground: '#000000',
   blurStrength: 28,
   filterPreset: 'natural',
@@ -86,6 +89,7 @@ const ENUMS = {
 
 const NUMBER_RANGES = {
   width: [360, 2160], height: [360, 3840], blurStrength: [0, 60],
+  smartFramingPadding: [0.05, 0.45], smartFramingZoom: [0.75, 1.35], smartFramingSmoothing: [0, 0.95],
   brightness: [-1, 1], contrast: [0.5, 2], saturation: [0, 3], gamma: [0.5, 2], sharpen: [0, 2], vignette: [0, 1],
   captionFontSize: [24, 180], captionFontWeight: [400, 900], captionLetterSpacing: [-4, 12],
   captionOutlineWidth: [0, 14], captionShadow: [0, 8], captionBackgroundOpacity: [0, 100], captionHighlightGlow: [0, 30],
