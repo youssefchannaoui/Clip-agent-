@@ -36,6 +36,122 @@ const notify = (message, kind='good') => {
   console[kind === 'bad' ? 'error' : 'log'](message);
 };
 
+const NOTIFICATION_DEFAULTS = Object.freeze({
+  desktop:false, sounds:false, respectMedia:true, started:false, completed:true, publishing:true, failures:true, volume:55,
+});
+let notificationAudio = null;
+let workflowBaseline = null;
+let workflowBaselineUser = '';
+
+function notificationUserKey(){
+  const d=data();
+  return String(d?.user?.id||d?.user?.email||d?.account?.id||'anon').replace(/[^a-zA-Z0-9_.@-]/g,'_');
+}
+function notificationStorageKey(){return `dc_notification_settings_${notificationUserKey()}`}
+function notificationPrefs(){
+  try{return {...NOTIFICATION_DEFAULTS,...JSON.parse(localStorage.getItem(notificationStorageKey())||'{}')}}catch{return {...NOTIFICATION_DEFAULTS}}
+}
+function saveNotificationPrefs(patch={}){
+  const next={...notificationPrefs(),...patch};
+  next.volume=clamp(next.volume,0,100);
+  try{localStorage.setItem(notificationStorageKey(),JSON.stringify(next))}catch{}
+  return next;
+}
+function notificationPermission(){
+  if(!('Notification' in window))return'unsupported';
+  return Notification.permission||'default';
+}
+function notificationPermissionCopy(){
+  const permission=notificationPermission(),enabled=notificationPrefs().desktop&&permission==='granted';
+  if(permission==='unsupported')return{tone:'bad',label:'Unavailable',copy:'This browser does not expose desktop notifications.'};
+  if(permission==='denied')return{tone:'bad',label:'Blocked',copy:'Open this site’s browser settings and change Notifications to Allow.'};
+  if(enabled)return{tone:'good',label:'Allowed',copy:'Chrome or Safari can alert you while DeenClipped is open.'};
+  if(permission==='granted')return{tone:'warn',label:'Paused',copy:'Browser permission is allowed, but DeenClipped alerts are paused.'};
+  return{tone:'warn',label:'Not enabled',copy:'Choose Enable notifications, then press Allow in your browser.'};
+}
+async function requestDesktopNotifications(){
+  if(!('Notification' in window)){notify('Desktop notifications are not supported in this browser.','bad');return false}
+  if(Notification.permission==='denied'){notify('Notifications are blocked. Open the site settings in Chrome or Safari and choose Allow.','bad');return false}
+  const permission=await Notification.requestPermission();
+  const allowed=permission==='granted';
+  saveNotificationPrefs({desktop:allowed});
+  if(allowed){
+    pushDesktopNotification('DeenClipped notifications are on','We’ll tell you when clips finish, posts go live, or something needs attention.','notifications-ready','automation',true);
+    playNotificationSound('complete',true);
+    notify('Browser notifications enabled','good');
+  }else notify('Notifications were not enabled. You can try again from Settings.','bad');
+  return allowed;
+}
+function createNotificationAudio(){
+  if(notificationAudio)return notificationAudio;
+  const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+  if(!AudioContextClass)return null;
+  try{notificationAudio=new AudioContextClass();return notificationAudio}catch{return null}
+}
+function playNotificationSound(kind='complete',force=false){
+  const prefs=notificationPrefs();if(!force&&!prefs.sounds)return;
+  if(!force&&prefs.respectMedia&&$$('video,audio').some(media=>!media.paused&&!media.ended))return;
+  const context=createNotificationAudio();if(!context)return;
+  const patterns={start:[[392,0,.08],[523,.10,.10]],complete:[[523,0,.09],[659,.11,.09],[784,.22,.16]],published:[[587,0,.08],[784,.1,.10],[988,.22,.18]],failure:[[330,0,.12],[247,.15,.18]],test:[[523,0,.08],[659,.1,.08],[880,.2,.16]]};
+  const notes=patterns[kind]||patterns.complete,volume=clamp(prefs.volume,0,100)/100;
+  try{
+    if(context.state==='suspended')context.resume().catch(()=>{});
+    const base=context.currentTime+.015;
+    notes.forEach(([frequency,offset,duration])=>{
+      const oscillator=context.createOscillator(),gain=context.createGain();
+      oscillator.type=kind==='failure'?'triangle':'sine';oscillator.frequency.value=frequency;
+      gain.gain.setValueAtTime(.0001,base+offset);gain.gain.exponentialRampToValueAtTime(Math.max(.0001,.12*volume),base+offset+.015);gain.gain.exponentialRampToValueAtTime(.0001,base+offset+duration);
+      oscillator.connect(gain);gain.connect(context.destination);oscillator.start(base+offset);oscillator.stop(base+offset+duration+.025);
+    });
+  }catch{}
+}
+function pushDesktopNotification(title,body,tag,view='home',force=false){
+  const prefs=notificationPrefs();
+  if(notificationPermission()!=='granted'||(!force&&!prefs.desktop))return null;
+  try{
+    const notice=new Notification(title,{body,tag:`deenclipped-${tag}`,icon:'/marketing-assets/apple-touch-icon.png',badge:'/marketing-assets/favicon-32.png',silent:true});
+    notice.onclick=()=>{window.focus();notice.close();if(view)go(view)};
+    return notice;
+  }catch{return null}
+}
+function workflowSnapshot(d){
+  const snapshot={};
+  (d?.projects||[]).forEach(project=>{
+    snapshot[`project:${project.id}`]={status:project.status,title:project.title||'Lecture',kind:'project'};
+    if(project.moreJob)snapshot[`more:${project.id}`]={status:project.moreJob.status,title:project.title||'Lecture',kind:'more'};
+  });
+  (d?.rerenderJobs||[]).forEach(job=>{
+    const clip=(d.clips||[]).find(item=>item.id===job.clipId);
+    snapshot[`render:${job.id||job.clipId}`]={status:job.status,title:clip?.title||'Clip',kind:'render'};
+  });
+  (d?.clips||[]).forEach(clip=>(clip.targets||[]).forEach(target=>{
+    snapshot[`publish:${clip.id}:${target.provider}`]={status:target.status,title:clip.title||'Clip',provider:target.provider,kind:'publish'};
+  }));
+  return snapshot;
+}
+function workflowSignal(kind,title,body,tag,view){
+  const prefs=notificationPrefs();
+  if(kind==='start'&&!prefs.started)return;
+  if(kind==='complete'&&!prefs.completed)return;
+  if(kind==='published'&&!prefs.publishing)return;
+  if(kind==='failure'&&!prefs.failures)return;
+  playNotificationSound(kind);
+  pushDesktopNotification(title,body,tag,view);
+}
+function detectWorkflowSignals(d){
+  const user=notificationUserKey(),current=workflowSnapshot(d);
+  if(!workflowBaseline||workflowBaselineUser!==user){workflowBaseline=current;workflowBaselineUser=user;return}
+  const active=new Set(['queued','processing','retrying','publishing','uploading','rendering','transcribing','analysing','creating clips']);
+  Object.entries(current).forEach(([key,item])=>{
+    const previous=workflowBaseline[key];if(!previous||previous.status===item.status)return;
+    if(!active.has(previous.status)&&active.has(item.status))workflowSignal('start','DeenClipped is working',`${item.title} has started ${item.kind==='publish'?'publishing':'processing'}.`,`${key}:start`,item.kind==='publish'?'schedule':'home');
+    if(active.has(previous.status)&&['completed','done','waiting','ready'].includes(item.status))workflowSignal('complete','Your clips are ready',`${item.title} finished processing and is ready to review.`,`${key}:complete`,'review');
+    if(item.kind==='publish'&&item.status==='posted')workflowSignal('published','Your clip is live',`${item.title} finished publishing to ${item.provider||'your channel'}.`,`${key}:posted`,'schedule');
+    if(item.status==='failed'||item.status==='publish_failed')workflowSignal('failure','DeenClipped needs your attention',`${item.title} did not finish. Open the workspace to review the error.`,`${key}:failed`,item.kind==='publish'?'schedule':'projects');
+  });
+  workflowBaseline=current;
+}
+
 const ICON = {
   home:'<svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/><path d="m9 21 6 0"/></svg>',
   projects:'<svg viewBox="0 0 24 24"><path d="M3 7.5h6l2-2h10v14H3Z"/><path d="M3 10h18"/></svg>',
@@ -3006,19 +3122,38 @@ async function deleteTrack(id){if(!confirm('Delete this audio track?'))return;tr
 function renderSettingsPage(){
   const panel=$('#view-automation'),d=data();if(!panel||!d)return;
   const auto=d.automationSettings||{}, clip=d.clipSettings||{};
+  const alerts=notificationPrefs(),permission=notificationPermissionCopy();
+  const alertToggle=(id,title,copy,checked)=>`<label class="dc-switch-row"><span><strong>${esc(title)}</strong><span>${esc(copy)}</span></span><input type="checkbox" id="${id}" ${checked?'checked':''}></label>`;
   panel.innerHTML=`<div class="dc-manage-page">
-    <section class="dc-manage-hero"><div><span class="dc-manage-kicker">${ICON.settings} Studio settings</span><h1>Real controls for generation and posting.</h1><p>Tune clip generation and automatic approval behaviour. Source uploads stay inside each customer’s private workspace.</p></div><div class="dc-manage-metrics"><span><b>${auto.enabled?'On':'Off'}</b><em>automation</em></span><span><b>${auto.minimumScore||80}+</b><em>score</em></span><span><b>${clip.clipMaxSeconds||60}s</b><em>max length</em></span></div></section>
+    <section class="dc-manage-hero"><div><span class="dc-manage-kicker">${ICON.settings} Studio settings</span><h1>Real controls for generation, alerts and posting.</h1><p>Tune clip generation, automatic approval and the moments DeenClipped should announce. Source uploads stay inside each customer’s private workspace.</p></div><div class="dc-manage-metrics"><span><b>${auto.enabled?'On':'Off'}</b><em>automation</em></span><span><b>${permission.label}</b><em>alerts</em></span><span><b>${clip.clipMaxSeconds||60}s</b><em>max length</em></span></div></section>
     <div class="dc-settings-grid">
       <section class="dc-settings-panel"><h2>Clip generation</h2><p>These defaults apply to new lecture imports.</p><div class="dc-settings-form"><label>Clips per lecture<input type="number" min="1" max="30" id="dcSetClipCount" value="${esc(clip.clipsPerVideo||8)}"></label><label>Minimum seconds<input type="number" min="3" max="180" id="dcSetMinSec" value="${esc(clip.clipMinSeconds||30)}"></label><label>Maximum seconds<input type="number" min="3" max="180" id="dcSetMaxSec" value="${esc(clip.clipMaxSeconds||60)}"></label><button class="dc-btn wide" id="dcSaveClipSettings">Save generation settings</button></div></section>
       <section class="dc-settings-panel"><h2>Automation rules</h2><p>Controls which generated clips are allowed into the automatic workflow.</p><div class="dc-settings-form"><label class="dc-switch-row wide"><span><strong>Automation enabled</strong><span>Approve strong clips automatically</span></span><input type="checkbox" id="dcAutoEnabled" ${auto.enabled?'checked':''}></label><label>Minimum score<input type="number" min="1" max="100" id="dcAutoScore" value="${esc(auto.minimumScore||80)}"></label><label>Minimum quality<input type="number" min="1" max="100" id="dcAutoQuality" value="${esc(auto.minimumQuality||72)}"></label><label>Max per project<input type="number" min="1" max="20" id="dcAutoMax" value="${esc(auto.maxPerProject||4)}"></label><label class="dc-switch-row"><span><strong>Review required</strong><span>Keep manual check before posting</span></span><input type="checkbox" id="dcReviewRequired" ${auto.skipReviewRequired===false?'checked':''}></label><button class="dc-btn wide" id="dcSaveAutomation">Save automation</button></div></section>
+      <section class="dc-settings-panel dc-alert-settings">
+        <div class="dc-alert-head"><div><h2>Notifications & sounds</h2><p>Get a clean alert when processing finishes, a post goes live, or the workflow needs attention.</p></div><span class="dc-alert-status ${permission.tone}"><i></i>${esc(permission.label)}</span></div>
+        <div class="dc-alert-grid">
+          <article class="dc-alert-card"><div class="dc-alert-card-head"><span>${ICON.publish}</span><div><strong>Chrome & Safari notifications</strong><small>${esc(permission.copy)}</small></div></div><div class="dc-alert-options">${alertToggle('dcAlertComplete','Clips ready','When processing or a re-render finishes',alerts.completed)}${alertToggle('dcAlertPublishing','Post published','When a platform confirms the upload',alerts.publishing)}${alertToggle('dcAlertFailures','Needs attention','Failed processing or publishing',alerts.failures)}${alertToggle('dcAlertStarted','Processing started','Optional early progress alert',alerts.started)}</div><div class="dc-alert-actions"><button class="dc-btn" id="dcEnableNotifications" ${notificationPermission()==='unsupported'||notificationPermission()==='denied'?'disabled':''}>${notificationPermission()==='granted'?(alerts.desktop?'Notifications enabled':'Resume notifications'):'Enable notifications'}</button><button class="dc-btn secondary" id="dcPauseNotifications" ${!alerts.desktop?'disabled':''}>Pause</button><button class="dc-btn secondary" id="dcTestNotification" ${notificationPermission()!=='granted'?'disabled':''}>Send test</button></div><div class="dc-browser-note">Chrome: click the lock icon → Site settings → Notifications. Safari: Safari Settings → Websites → Notifications. Alerts currently run while DeenClipped is open.</div></article>
+          <article class="dc-alert-card"><div class="dc-alert-card-head"><span>${ICON.audio}</span><div><strong>Workflow sounds</strong><small>Short, subtle chimes—never speech or music over your editor.</small></div></div><div class="dc-alert-options">${alertToggle('dcAlertSounds','Sounds enabled','Play chimes for selected events',alerts.sounds)}${alertToggle('dcAlertRespectMedia','Respect playback','Stay silent while a video or track is playing',alerts.respectMedia)}</div><div class="dc-volume-row"><input type="range" min="0" max="100" step="5" id="dcAlertVolume" value="${esc(alerts.volume)}"><output id="dcAlertVolumeOut">${esc(alerts.volume)}%</output></div><div class="dc-alert-actions"><button class="dc-btn secondary" id="dcTestSound">Play test sound</button></div><div class="dc-browser-note">Your preferences are saved to this browser and kept separate for each DeenClipped account.</div></article>
+        </div>
+      </section>
     </div>
   </div>`;
   $('#dcSaveClipSettings').onclick=saveClipSettingsPanel;
   $('#dcSaveAutomation').onclick=saveAutomationPanel;
+  bindNotificationSettings();
   requestAnimationFrame(()=>animatePanel(panel));
 }
 async function saveClipSettingsPanel(){try{await callApi('/api/clip-settings',{method:'POST',body:JSON.stringify({clipsPerVideo:Number($('#dcSetClipCount')?.value||8),clipMinSeconds:Number($('#dcSetMinSec')?.value||30),clipMaxSeconds:Number($('#dcSetMaxSec')?.value||60)})});notify('Generation settings saved');await refreshData();renderSettingsPage()}catch(e){notify(e.message,'bad')}}
 async function saveAutomationPanel(){try{await callApi('/api/automation-settings',{method:'POST',body:JSON.stringify({enabled:$('#dcAutoEnabled')?.checked,minimumScore:Number($('#dcAutoScore')?.value||80),minimumQuality:Number($('#dcAutoQuality')?.value||72),maxPerProject:Number($('#dcAutoMax')?.value||4),skipReviewRequired:!$('#dcReviewRequired')?.checked})});notify('Automation saved');await refreshData();renderSettingsPage()}catch(e){notify(e.message,'bad')}}
+function bindNotificationSettings(){
+  const fields={dcAlertComplete:'completed',dcAlertPublishing:'publishing',dcAlertFailures:'failures',dcAlertStarted:'started',dcAlertSounds:'sounds',dcAlertRespectMedia:'respectMedia'};
+  Object.entries(fields).forEach(([id,key])=>$('#'+id)?.addEventListener('change',event=>{const checked=event.currentTarget.checked;saveNotificationPrefs({[key]:checked});if(key==='sounds'&&checked)playNotificationSound('test',true)}));
+  $('#dcAlertVolume')?.addEventListener('input',event=>{const volume=Number(event.currentTarget.value||0);saveNotificationPrefs({volume});if($('#dcAlertVolumeOut'))$('#dcAlertVolumeOut').textContent=`${volume}%`});
+  $('#dcEnableNotifications')?.addEventListener('click',async()=>{await requestDesktopNotifications();renderSettingsPage()});
+  $('#dcPauseNotifications')?.addEventListener('click',()=>{saveNotificationPrefs({desktop:false});notify('Desktop notifications paused');renderSettingsPage()});
+  $('#dcTestSound')?.addEventListener('click',()=>{saveNotificationPrefs({sounds:true});playNotificationSound('test',true);if($('#dcAlertSounds'))$('#dcAlertSounds').checked=true;notify('Sound is working','good')});
+  $('#dcTestNotification')?.addEventListener('click',()=>{saveNotificationPrefs({desktop:true});pushDesktopNotification('DeenClipped test','Notifications are working. We’ll use this for finished clips and publishing updates.','test','home',true);notify('Test notification sent','good')});
+}
 function renderSidebarLive(){
   const box=$('#dcSidebarLive'),d=data();if(!box||!d)return;
   const jobs=activeJobs();const clips=d.clips||[];
@@ -3251,6 +3386,7 @@ function sync(){
     });
   }
   const adminNav=$('#dcAdminNav');if(adminNav)adminNav.style.display=isOperator()?'':'none';
+  detectWorkflowSignals(data());
   const jobs=activeJobs(),issues=workspaceFailures(data()),health=$('#dcHealth');health.className=`dc-health ${issues.length?'bad':jobs.length?'busy':!data().readiness?.ready?'bad':''}`;$('span',health).textContent=issues.length?`${issues.length} ${issues.length===1?'issue':'issues'}`:jobs.length?`${jobs.length} active`:data().readiness?.ready?'Ready':'Setup needed';health.style.cursor='pointer';health.onclick=()=>openIssuesPanel();updateTokenPill();maybeShowBillingNotices();maybeShowTokenEvents();
   const signature=JSON.stringify({p:(data().projects||[]).map(p=>[p.id,p.status,p.progress,p.moreJob?.status,p.moreJob?.progress]),c:(data().clips||[]).map(c=>[c.id,c.status,c.scheduledAt,c.postedAt,c.rerender?.status]),r:(data().rerenderJobs||[]).map(r=>[r.id,r.status,r.progress]),s:data().social?.providers});
   if(signature!==lastDataSignature){lastDataSignature=signature;if(currentView!=='editor'||!editor.dirty)renderCurrent();else{renderTimeline();}}
@@ -3713,6 +3849,10 @@ body.dc-app .dc-page-head::before,body.dc-app .dc-manage-hero::before,body.dc-ap
 @media(max-width:1200px){.dc-sub-main-grid{grid-template-columns:1fr 1fr}.dc-sub-payment{grid-column:1/-1}.dc-sub-payment-rows{grid-template-columns:1fr 1fr;column-gap:22px}}
 @media(max-width:840px){.dc-sub-hero{grid-template-columns:1fr}.dc-sub-hero-balance{width:100%}.dc-sub-main-grid,.dc-sub-topup-grid{grid-template-columns:1fr}.dc-sub-payment{grid-column:auto}.dc-sub-payment-rows{grid-template-columns:1fr}.dc-sub-section-head{align-items:flex-start;flex-direction:column}}
 @media(max-width:520px){.dc-sub-hero{padding:22px;border-radius:22px}.dc-sub-hero h1{font-size:34px}.dc-sub-token-grid{grid-template-columns:1fr 1fr}.dc-sub-actions{flex-direction:column}.dc-sub-card,.dc-sub-section{padding:15px;border-radius:19px}.dc-sub-card-head{align-items:flex-start;flex-direction:column}.dc-sub-topup{grid-template-columns:1fr}.dc-sub-topup-value{text-align:left}}
+
+/* Browser notifications and workflow sounds */
+.dc-alert-settings{grid-column:1/-1;position:relative;overflow:hidden;background:radial-gradient(circle at 100% 0,rgba(142,185,255,.11),transparent 36%),linear-gradient(145deg,#151519,#0d0d10)}.dc-alert-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:14px}.dc-alert-head p{margin-bottom:0}.dc-alert-status{display:inline-flex;align-items:center;gap:7px;min-height:29px;padding:0 10px;border:1px solid rgba(255,255,255,.08);border-radius:999px;color:var(--dc-muted);background:rgba(0,0,0,.2);font-size:8px;font-weight:850;white-space:nowrap}.dc-alert-status i{width:7px;height:7px;border-radius:50%;background:var(--dc-orange);box-shadow:0 0 10px currentColor}.dc-alert-status.good{color:var(--dc-green)}.dc-alert-status.bad{color:var(--dc-red)}.dc-alert-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.dc-alert-card{padding:14px;border:1px solid rgba(255,255,255,.065);border-radius:17px;background:rgba(0,0,0,.22)}.dc-alert-card-head{display:flex;align-items:center;gap:10px;margin-bottom:11px}.dc-alert-card-head>span{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:rgba(142,185,255,.1);color:#9bc4ff}.dc-alert-card-head svg{width:19px;height:19px}.dc-alert-card-head strong,.dc-alert-card-head small{display:block}.dc-alert-card-head strong{font-size:11px}.dc-alert-card-head small{margin-top:3px;color:var(--dc-muted);font-size:8.5px;line-height:1.4}.dc-alert-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:11px}.dc-alert-actions .dc-btn{min-height:34px;padding:0 11px;font-size:8.5px}.dc-alert-options{display:grid;grid-template-columns:1fr 1fr;gap:7px}.dc-alert-options .dc-switch-row{min-height:58px;padding:9px}.dc-alert-options .dc-switch-row strong{font-size:9.5px}.dc-alert-options .dc-switch-row span span{font-size:7.7px}.dc-volume-row{display:grid;grid-template-columns:minmax(0,1fr) 42px;gap:10px;align-items:center;margin-top:10px}.dc-volume-row input{width:100%;accent-color:var(--dc-accent)}.dc-volume-row output{height:30px;display:grid;place-items:center;border:1px solid var(--dc-line);border-radius:9px;background:#0b0b0d;color:var(--dc-accent2);font-size:8.5px}.dc-browser-note{margin-top:10px;padding:9px 10px;border:1px solid rgba(255,255,255,.055);border-radius:11px;background:rgba(255,255,255,.025);color:var(--dc-subtle);font-size:7.8px;line-height:1.5}
+@media(max-width:820px){.dc-alert-grid,.dc-alert-options{grid-template-columns:1fr}.dc-alert-head{align-items:flex-start;flex-direction:column}}
 
 /* Publishing v4 control-room layer */
 .dc-publish-board-top{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.065);background:linear-gradient(90deg,rgba(112,215,162,.055),transparent 44%)}.dc-publish-live{display:flex;align-items:center;gap:10px}.dc-publish-live>span{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:rgba(112,215,162,.09);color:#70d7a2}.dc-publish-live svg{width:18px;height:18px}.dc-publish-live strong,.dc-publish-live small{display:block}.dc-publish-live strong{font-size:10px}.dc-publish-live small{margin-top:2px;color:var(--dc-subtle);font-size:8px}.dc-publish-board-tools{display:flex;align-items:center;gap:7px}.dc-publish-board-tools .dc-btn{min-height:34px;padding:0 11px;font-size:8.5px}.dc-publish-health{display:inline-flex;align-items:center;gap:7px;min-height:29px;padding:0 10px;border:1px solid rgba(255,255,255,.07);border-radius:999px;background:rgba(0,0,0,.2);color:var(--dc-muted);font-size:8px}.dc-publish-health i{width:6px;height:6px;border-radius:50%;background:var(--dc-orange);box-shadow:0 0 9px currentColor}.dc-publish-health.ready i{background:#70d7a2}.dc-publish-meta{display:flex!important;align-items:center;gap:6px!important;margin-top:7px!important}.dc-publish-meta i{display:inline-flex;align-items:center;min-height:20px;padding:0 7px;border-radius:999px;background:rgba(255,255,255,.045);color:var(--dc-muted);font-size:7px;font-style:normal}.dc-publish-meta i.score{background:rgba(112,215,162,.08);color:#8ce8b9}.dc-publish-meta i.attention{background:rgba(237,183,99,.09);color:#edb763}.dc-publish-row{position:relative}.dc-publish-row:before{content:'';position:absolute;left:0;top:18px;bottom:18px;width:2px;border-radius:99px;background:transparent}.dc-publish-row:hover:before{background:var(--dc-accent)}.dc-publish-hero>div:first-child{min-width:0}.dc-publish-summary{flex:0 0 246px;display:grid;grid-template-columns:repeat(3,1fr);flex-wrap:nowrap}.dc-publish-summary span{min-width:0}.dc-publish-empty .dc-empty-icon{width:58px;height:58px;display:grid;place-items:center;margin:0 auto 14px;border:1px solid rgba(112,215,162,.14);border-radius:18px;background:rgba(112,215,162,.06);color:#70d7a2}.dc-publish-empty .dc-empty-icon svg{width:27px;height:27px}
