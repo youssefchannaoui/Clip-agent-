@@ -831,6 +831,18 @@ body.dc-app .dc-billing-foot{padding:0 24px 20px;margin-top:0}
 body.dc-app .dc-billing-note span{font-size:9px}
 @media(max-height:760px){body.dc-app .dc-billing-card{max-height:calc(100dvh - 28px)}body.dc-app .dc-billing-head{padding:16px 20px 8px}body.dc-app .dc-billing-head h2{font-size:24px;margin-top:8px}body.dc-app .dc-billing-head p{font-size:10px;line-height:1.45}body.dc-app .dc-billing-kicker{min-height:24px;font-size:8.5px}body.dc-app .dc-billing-status{padding:0 20px 10px}body.dc-app .dc-usage-value{font-size:36px}body.dc-app .dc-plan-grid{padding:0 20px 10px}body.dc-app .dc-plan-card{min-height:184px;padding:13px}body.dc-app .dc-plan-card .tokens{font-size:28px}body.dc-app .dc-plan-card p{margin:6px 0 8px}body.dc-app .dc-charge-terms{margin:0 20px 10px!important}body.dc-app .dc-billing-foot{padding:0 20px 14px}}
 @media(max-width:860px){body.dc-app .dc-billing-card{width:calc(100vw - 22px);overflow-y:auto}body.dc-app .dc-billing-status,body.dc-app .dc-plan-grid,body.dc-app .dc-charge-terms{grid-template-columns:1fr}body.dc-app .dc-charge-terms span{border-radius:12px}body.dc-app .dc-usage-row{align-items:flex-start;flex-direction:column}body.dc-app .dc-usage-meta{width:100%;min-width:0}}
+/* Precision pass: consistent optical centring, readable compact text and a calmer token modal. */
+body.dc-app .dc-btn,body.dc-app .dc-pill,body.dc-app .dc-status-pill,body.dc-app .dc-billing-kicker,body.dc-app .dc-token-pill{display:inline-flex;align-items:center;justify-content:center;text-align:center;line-height:1.2}
+body.dc-app .dc-btn{min-height:40px;padding-top:9px;padding-bottom:9px}
+body.dc-app .dc-pill,body.dc-app .dc-status-pill{min-height:26px;padding:5px 10px}
+body.dc-app .dc-billing-card{background:radial-gradient(circle at 14% 0%,rgba(217,180,120,.13),transparent 32%),linear-gradient(180deg,#141416,#0b0b0d 72%)}
+body.dc-app .dc-billing-head p,body.dc-app .dc-rate-panel p,body.dc-app .dc-plan-card p{font-size:11.5px}
+body.dc-app .dc-usage-mini span,body.dc-app .dc-plan-features span,body.dc-app .dc-billing-note span{font-size:10px;line-height:1.45}
+body.dc-app .dc-plan-card{min-height:224px}body.dc-app .dc-plan-card .dc-btn{min-height:40px;font-size:11px}
+.dc-tiktok-controls{grid-column:1/-1;display:grid;grid-template-columns:minmax(170px,.7fr) repeat(3,minmax(0,1fr));gap:10px;padding:14px;border:1px solid rgba(37,244,238,.16);border-radius:16px;background:rgba(37,244,238,.035)}
+.dc-tiktok-controls>label:first-child{display:grid;gap:7px;color:var(--dc-muted);font-size:10px;font-weight:700}.dc-tiktok-controls select{width:100%;min-height:42px;border:1px solid rgba(255,255,255,.10);border-radius:11px;background:#0b0b0d;color:var(--dc-text);padding:0 11px}
+.dc-tiktok-controls .dc-switch-row{min-height:66px;margin:0}.dc-tiktok-review-note{grid-column:1/-1;margin:0;color:var(--dc-muted);font-size:10px;line-height:1.5}.dc-tiktok-review-note b{color:var(--dc-text)}
+@media(max-width:980px){.dc-tiktok-controls{grid-template-columns:1fr 1fr}}@media(max-width:620px){.dc-tiktok-controls{grid-template-columns:1fr}}
 @media(max-width:620px){body.dc-app .dc-youtube-consent-card .dc-charge-terms{grid-template-columns:1fr!important}}
 
 `;
@@ -2549,7 +2561,7 @@ function providerSummary(info){
   if(!info.configured)return 'Needs API keys in Render environment variables.';
   if(!info.connected)return 'Ready to connect this publishing destination.';
   if(!info.enabled)return `${info.account?.name||'Connected account'} is connected. Turn it on when you are ready.`;
-  if(info.provider==='tiktok')return `${info.account?.name||'TikTok account'} receives user-approved clips as drafts.`;
+  if(info.provider==='tiktok')return `${info.account?.name||'TikTok account'} receives only clips you explicitly approve, using TikTok's current creator settings.`;
   return `${info.account?.name||'Account'} is ready for approved and scheduled clips.`;
 }
 function providerBadge(info){return !info.configured?'bad':info.enabled?'good':info.connected?'warn':''}
@@ -2590,10 +2602,19 @@ function renderConnections(){
   const panel=$('#view-publishing'),d=data();if(!panel||!d)return;
   const providers=['youtube','tiktok','instagram','facebook'].map(providerInfo);
   const connected=providers.filter(p=>p.connected).length, enabled=providers.filter(p=>p.enabled).length;
-  const destinationSettings=connected?`<section class="dc-settings-panel"><h2>Active destinations</h2><p>Only connected channels appear here. TikTok uploads remain drafts for the creator to review in TikTok.</p><div class="dc-settings-form">${providers.filter(p=>p.connected).map(p=>`<label class="dc-switch-row"><span><strong>${esc(providerTitle(p.provider))}</strong><span>${esc(p.account?.name||'Connected account')}</span></span><input type="checkbox" id="dcPub_${esc(p.provider)}" ${p.enabled?'checked':''}></label>`).join('')}<button class="dc-btn wide" id="dcSavePublishing">Save active destinations</button></div></section>`:'';
-  panel.innerHTML=`<div class="dc-manage-page"><section class="dc-manage-hero"><div><span class="dc-manage-kicker">${ICON.social} Publishing hub</span><h1>Your channels, one approval flow.</h1><p>Connect each destination once. You still choose which clips are approved, scheduled or sent as drafts.</p></div><div class="dc-manage-metrics"><span><b>${connected}</b><em>connected</em></span><span><b>${enabled}</b><em>active</em></span><span><b>${d.directPublishingEnabled?'Ready':'Review'}</b><em>posting mode</em></span></div></section><div class="dc-manage-grid">${providers.map(connectionCard).join('')}</div>${destinationSettings}</div>`;
+  const destinationSettings=connected?`<section class="dc-settings-panel"><h2>Active destinations</h2><p>Only connected channels appear here. TikTok always uses the latest options returned for the connected creator and requires explicit approval for every post.</p><div class="dc-settings-form">${providers.filter(p=>p.connected).map(p=>destinationControl(p)).join('')}<button class="dc-btn wide" id="dcSavePublishing">Save active destinations</button></div></section>`:'';
+  panel.innerHTML=`<div class="dc-manage-page"><section class="dc-manage-hero"><div><span class="dc-manage-kicker">${ICON.social} Publishing hub</span><h1>Your channels, one approval flow.</h1><p>Connect each destination once. You still choose which clips are approved, scheduled or published.</p></div><div class="dc-manage-metrics"><span><b>${connected}</b><em>connected</em></span><span><b>${enabled}</b><em>active</em></span><span><b>${d.directPublishingEnabled?'Ready':'Review'}</b><em>posting mode</em></span></div></section><div class="dc-manage-grid">${providers.map(connectionCard).join('')}</div>${destinationSettings}</div>`;
   if($('#dcSavePublishing'))$('#dcSavePublishing').onclick=savePublishingRules;
   requestAnimationFrame(()=>animatePanel(panel));
+}
+function destinationControl(info){
+  const base=`<label class="dc-switch-row wide"><span><strong>${esc(providerTitle(info.provider))}</strong><span>${esc(info.account?.name||'Connected account')}</span></span><input type="checkbox" id="dcPub_${esc(info.provider)}" ${info.enabled?'checked':''}></label>`;
+  if(info.provider!=='tiktok')return base;
+  const creator=info.account?.creatorInfo||{}, options=Array.isArray(creator.privacy_level_options)?creator.privacy_level_options:[];
+  const privacy=info.setting?.privacy||'SELF_ONLY';
+  const labels={SELF_ONLY:'Only me',MUTUAL_FOLLOW_FRIENDS:'Friends',FOLLOWER_OF_CREATOR:'Followers',PUBLIC_TO_EVERYONE:'Everyone'};
+  const choices=(options.length?options:['SELF_ONLY']).map(value=>`<option value="${esc(value)}" ${value===privacy?'selected':''}>${esc(labels[value]||value)}</option>`).join('');
+  return `${base}<div class="dc-tiktok-controls"><label>Privacy<select id="dcTikTokPrivacy">${choices}</select></label><label class="dc-switch-row"><span><strong>Allow comments</strong><span>${creator.comment_disabled?'Unavailable for this account':'Viewer comments on this post'}</span></span><input type="checkbox" id="dcTikTokComments" ${info.setting?.allowComments!==false&&!creator.comment_disabled?'checked':''} ${creator.comment_disabled?'disabled':''}></label><label class="dc-switch-row"><span><strong>Allow Duet</strong><span>${creator.duet_disabled?'Unavailable for this account':'Let viewers create Duets'}</span></span><input type="checkbox" id="dcTikTokDuet" ${info.setting?.allowDuet&&!creator.duet_disabled?'checked':''} ${creator.duet_disabled?'disabled':''}></label><label class="dc-switch-row"><span><strong>Allow Stitch</strong><span>${creator.stitch_disabled?'Unavailable for this account':'Let viewers create Stitches'}</span></span><input type="checkbox" id="dcTikTokStitch" ${info.setting?.allowStitch&&!creator.stitch_disabled?'checked':''} ${creator.stitch_disabled?'disabled':''}></label><p class="dc-tiktok-review-note">Posting as <b>${esc(info.account?.name||'TikTok creator')}</b>${creator.max_video_post_duration_sec?` · maximum ${esc(creator.max_video_post_duration_sec)} seconds`:''}. Test the connection again whenever TikTok options change.</p></div>`;
 }
 function connectionCard(info){
   const connectLabel=info.connected?'Reconnect':'Connect';
@@ -2617,7 +2638,7 @@ async function testSocial(provider){try{await callApi(`/api/social/${encodeURICo
 async function disconnectSocial(provider){if(!confirm(`Disconnect ${provider}?`))return;try{await callApi(`/api/social/${encodeURIComponent(provider)}/disconnect`,{method:'POST'});notify('Disconnected');await refreshData();renderConnections()}catch(e){notify(e.message,'bad')}}
 async function savePublishingRules(){
   const d=data()||{}, current=d.publishingSettings||{};
-  const next={enabled:false,youtube:{...(current.youtube||{}),enabled:$('#dcPub_youtube')?.checked||false},instagram:{...(current.instagram||{}),enabled:$('#dcPub_instagram')?.checked||false,shareToFeed:true},facebook:{...(current.facebook||{}),enabled:$('#dcPub_facebook')?.checked||false},tiktok:{...(current.tiktok||{}),enabled:$('#dcPub_tiktok')?.checked||false,allowComments:current.tiktok?.allowComments!==false,allowDuet:Boolean(current.tiktok?.allowDuet),allowStitch:Boolean(current.tiktok?.allowStitch)}};
+  const next={enabled:false,youtube:{...(current.youtube||{}),enabled:$('#dcPub_youtube')?.checked||false},instagram:{...(current.instagram||{}),enabled:$('#dcPub_instagram')?.checked||false,shareToFeed:true},facebook:{...(current.facebook||{}),enabled:$('#dcPub_facebook')?.checked||false},tiktok:{...(current.tiktok||{}),enabled:$('#dcPub_tiktok')?.checked||false,privacy:$('#dcTikTokPrivacy')?.value||current.tiktok?.privacy||'SELF_ONLY',allowComments:$('#dcTikTokComments')?.checked??current.tiktok?.allowComments!==false,allowDuet:$('#dcTikTokDuet')?.checked??Boolean(current.tiktok?.allowDuet),allowStitch:$('#dcTikTokStitch')?.checked??Boolean(current.tiktok?.allowStitch)}};
   next.enabled=['youtube','instagram','facebook','tiktok'].some(p=>next[p].enabled);
   ['youtube','instagram','facebook','tiktok'].forEach(p=>{const info=providerInfo(p);if(info.account&&!next[p].accountId)next[p].accountId=info.account.id});
   try{await callApi('/api/publishing-settings',{method:'POST',body:JSON.stringify(next)});notify('Publishing rules saved');await refreshData();renderConnections()}catch(e){notify(e.message,'bad')}
