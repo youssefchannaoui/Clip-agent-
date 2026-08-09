@@ -82,6 +82,7 @@ function sharedSettings(user) {
     model: config.aiModel, device: config.aiDevice, computeType: config.aiComputeType,
     task: config.aiTask, language: config.aiLanguage, maxSourceMinutes: config.maxSourceMinutes,
     keepSourceFiles: config.keepSourceFiles, ollamaUrl: config.ollamaUrl, ollamaModel: config.ollamaModel,
+    videoPreset: config.videoPreset, videoCrf: config.videoCrf,
   };
 }
 

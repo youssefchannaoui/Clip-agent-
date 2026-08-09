@@ -36,7 +36,7 @@ export const config = {
   workerScript: path.join(root, 'worker', 'clip_worker.py'),
   ffmpegPath: process.env.FFMPEG_PATH || 'ffmpeg',
   ffprobePath: process.env.FFPROBE_PATH || 'ffprobe',
-  aiModel: process.env.CLIP_AI_MODEL || 'small',
+  aiModel: process.env.CLIP_AI_MODEL || 'large-v3-turbo',
   aiDevice: process.env.CLIP_AI_DEVICE || 'auto',
   aiComputeType: process.env.CLIP_AI_COMPUTE_TYPE || 'int8',
   aiTask: process.env.CLIP_AI_TASK || 'transcribe',
@@ -45,6 +45,9 @@ export const config = {
   maxSourceMinutes: Math.max(5, number(process.env.MAX_SOURCE_MINUTES, 180)),
   maxVideoUploadBytes: Math.max(50, number(process.env.MAX_VIDEO_UPLOAD_MB, 2048)) * 1024 * 1024,
   keepSourceFiles: boolean(process.env.KEEP_SOURCE_FILES, true),
+  videoPreset: ['slow', 'medium', 'fast'].includes(String(process.env.VIDEO_PRESET || '').toLowerCase())
+    ? String(process.env.VIDEO_PRESET).toLowerCase() : 'medium',
+  videoCrf: Math.max(16, Math.min(23, Math.round(number(process.env.VIDEO_CRF, 18)))),
 
   processingMode: String(process.env.PROCESSING_MODE || (process.env.WORKER_BASE_URL ? 'remote' : 'local')).toLowerCase(),
   workerBaseUrl: (process.env.WORKER_BASE_URL || '').replace(/\/+$/, ''),

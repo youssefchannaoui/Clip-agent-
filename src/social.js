@@ -508,8 +508,17 @@ export async function testConnection(provider, accountId = '', user) {
   }
 }
 
-function captionText(clip, max = 2200) {
-  return [clip.description, clip.hashtags].filter(Boolean).join('\n\n').trim().slice(0, max);
+function platformCopy(clip, provider = '') {
+  const specific = clip?.platformMetadata?.[provider];
+  const metadata = specific && typeof specific === 'object' ? specific : {};
+  const title = String(metadata.title || clip?.title || '').trim();
+  const suppliedCaption = String(metadata.caption || metadata.description || '').trim();
+  const fallbackCaption = [clip?.description, clip?.hashtags].filter(Boolean).join('\n\n').trim();
+  return { title, caption: suppliedCaption || fallbackCaption };
+}
+
+function captionText(clip, max = 2200, provider = '') {
+  return platformCopy(clip, provider).caption.slice(0, max);
 }
 
 async function youtubeUploadStatus(uploadUrl, accessToken, totalSize) {
@@ -564,8 +573,8 @@ async function uploadYouTube(clip, target, file, userId) {
     const hashtags = String(clip.hashtags || '').match(/#[\p{L}\p{N}_]+/gu)?.map(tag => tag.slice(1)).slice(0, 20) || [];
     const metadata = {
       snippet: {
-        title: String(clip.title || 'DeenClipped reminder').slice(0, 100),
-        description: captionText(clip, 5000),
+        title: String(platformCopy(clip, 'youtube').title || 'DeenClipped reminder').slice(0, 100),
+        description: captionText(clip, 5000, 'youtube'),
         categoryId: target.settings.categoryId || '22',
         ...(hashtags.length ? { tags: hashtags } : {}),
       },
@@ -713,7 +722,7 @@ async function uploadFacebook(clip, target, file, userId) {
   if (target.providerState.stage !== 'published') {
     const finishParams = new URLSearchParams({
       upload_phase: 'finish', access_token: accessToken, video_id: videoId, video_state: 'PUBLISHED',
-      description: captionText(clip, 5000), title: String(clip.title || '').slice(0, 255),
+      description: captionText(clip, 5000, 'facebook'), title: platformCopy(clip, 'facebook').title.slice(0, 255),
     });
     const finish = await jsonRequest(`${config.metaGraphBase}/${config.metaGraphVersion}/${encodeURIComponent(account.pageId)}/video_reels?${finishParams}`, { method: 'POST' }, 'Facebook');
     if (!finish?.success) throw new SocialError('Facebook did not confirm that the Reel was published.', { retryable: true, provider: 'facebook' });
@@ -732,7 +741,7 @@ async function uploadFacebook(clip, target, file, userId) {
 async function startInstagram(clip, target, userId) {
   const { account, accessToken } = metaPage(target.accountId, 'instagram', userId);
   const body = new URLSearchParams({
-    media_type: 'REELS', video_url: publicMediaUrl(clip.id), caption: captionText(clip, 2200),
+    media_type: 'REELS', video_url: publicMediaUrl(clip.id), caption: captionText(clip, 2200, 'instagram'),
     share_to_feed: target.settings.shareToFeed === false ? 'false' : 'true', access_token: accessToken,
   });
   const container = await jsonRequest(`${config.metaGraphBase}/${config.metaGraphVersion}/${encodeURIComponent(account.instagramId)}/media`, {
@@ -831,7 +840,7 @@ async function startTikTok(clip, target, file, userId) {
   if (!publishId || !uploadUrl) {
     const body = {
       post_info: {
-        title: [clip.title, captionText(clip, 2100)].filter(Boolean).join('\n\n').slice(0, 2200),
+        title: (platformCopy(clip, 'tiktok').caption || [clip.title, captionText(clip, 2100)].filter(Boolean).join('\n\n')).slice(0, 2200),
         privacy_level: privacy,
         disable_comment: Boolean(creator.comment_disabled) || target.settings.allowComments === false,
         disable_duet: Boolean(creator.duet_disabled) || target.settings.allowDuet !== true,
@@ -973,5 +982,5 @@ export function targetPublic(target) {
   };
 }
 
-export const __test = { tiktokChunks, captionText, selectedAccount };
+export const __test = { tiktokChunks, captionText, platformCopy, selectedAccount };
 export { SocialError };

@@ -41,6 +41,63 @@ class WorkerScoringTests(unittest.TestCase):
         self.assertIn("hook", report)
         self.assertIn("readability", report)
 
+    def test_growth_scoring_prefers_a_clear_hook_and_payoff(self):
+        strong = "Remember this when hardship reaches you. The lesson is that patience changes how you respond."
+        vague = "And this is what he said about it, you know, and then he carried on talking about that."
+        strong_score, _, _ = worker.score_candidate(0, 38, strong, self.segments)
+        vague_score, _, _ = worker.score_candidate(0, 38, vague, self.segments)
+        self.assertGreater(strong_score, vague_score)
+
+    def test_selection_avoids_near_duplicate_moments(self):
+        first = worker.Candidate(0, 35, "Remember Allah during hardship and return to prayer with patience.", self.segments, 94, [], False)
+        duplicate = worker.Candidate(40, 75, "Remember Allah in hardship and return to prayer with real patience.", self.segments, 93, [], False)
+        distinct = worker.Candidate(90, 125, "The best response to anger is to pause before your words cause harm.", self.segments, 88, [], False)
+        selected = worker.select_candidates([first, duplicate, distinct], 2)
+        self.assertIn(first, selected)
+        self.assertIn(distinct, selected)
+
+
+class TranscriptQualityTests(unittest.TestCase):
+    def test_normalisation_removes_repeats_and_splits_real_silence(self):
+        raw = [
+            {"start": 0, "end": 3, "text": "Remember Allah today", "words": [
+                {"start": 0.0, "end": 0.4, "word": "Remember"},
+                {"start": 0.45, "end": 0.8, "word": "Allah"},
+                {"start": 2.1, "end": 2.5, "word": "today"},
+            ]},
+            {"start": 3.1, "end": 4.0, "text": "Remember Allah today", "words": []},
+        ]
+        cleaned = worker.normalise_transcript_segments(raw, 5)
+        self.assertEqual(len(cleaned), 2)
+        self.assertEqual(cleaned[0]["text"], "Remember Allah")
+        self.assertEqual(cleaned[1]["text"], "today")
+        self.assertLess(cleaned[0]["end"], cleaned[1]["start"])
+
+
+class GrowthMetadataTests(unittest.TestCase):
+    def test_metadata_is_platform_ready_and_not_a_raw_transcript_dump(self):
+        transcript = "Remember that hardship can bring you closer to Allah. The lesson is to return sincerely and keep moving forward."
+        title = worker.title_from_text(transcript, 1)
+        description = worker.description_from_text(transcript)
+        hashtags = worker.hashtags_from_text(transcript)
+        metadata = worker.platform_metadata(title, description, hashtags)
+        self.assertLessEqual(len(title), 100)
+        self.assertNotEqual(description, transcript)
+        self.assertIn("#DeenClipped", hashtags)
+        self.assertLessEqual(len(metadata["youtube"]["title"]), 100)
+        self.assertIn(hashtags, metadata["instagram"]["caption"])
+
+    def test_ai_copy_sanitizers_limit_noisy_output(self):
+        title = worker.clean_title('Title: "A Reminder That Changes Your Entire Week Forever!!!"')
+        hashtags = worker.clean_hashtags(["#Faith", "faith", "#Sabr", "#Sabr", "#DeenClipped", "#Reminder", "#Extra"])
+        self.assertLessEqual(len(title.split()), 10)
+        self.assertEqual(len(hashtags.split()), 5)
+        self.assertEqual(hashtags.split().count("#Sabr"), 1)
+
+    def test_render_quality_defaults_are_high_but_bounded(self):
+        self.assertEqual(worker.render_quality_settings({}), ("medium", 18))
+        self.assertEqual(worker.render_quality_settings({"videoPreset": "invalid", "videoCrf": 50}), ("medium", 23))
+
 
 class CaptionTimingTests(unittest.TestCase):
     def test_edited_words_keep_original_speech_gaps(self):

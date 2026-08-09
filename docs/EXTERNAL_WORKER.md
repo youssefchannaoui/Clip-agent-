@@ -74,8 +74,10 @@ OBJECT_STORAGE_PUBLIC_URL=https://<public-media-host>
 
 WHISPER_DEVICE=cpu
 WHISPER_COMPUTE_TYPE=int8
-WHISPER_MODEL=small
+WHISPER_MODEL=large-v3-turbo
 FFMPEG_THREADS=4
+VIDEO_PRESET=medium
+VIDEO_CRF=18
 ```
 
 Start the worker from the repository root:

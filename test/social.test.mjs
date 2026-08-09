@@ -50,6 +50,20 @@ test('TikTok chunk plan obeys whole-file and multi-chunk rules', () => {
   assert.ok(medium.lengths.at(-1) <= 128 * MB);
 });
 
+test('platform-specific growth copy is used without duplicating legacy captions', () => {
+  const clip = {
+    title: 'Fallback title', description: 'Fallback description', hashtags: '#Fallback',
+    platformMetadata: {
+      youtube: { title: 'YouTube growth title', description: 'YouTube description\n\n#YouTube' },
+      instagram: { caption: 'Instagram-native caption\n\n#Reels' },
+    },
+  };
+  assert.equal(social.__test.platformCopy(clip, 'youtube').title, 'YouTube growth title');
+  assert.equal(social.__test.captionText(clip, 5000, 'youtube'), 'YouTube description\n\n#YouTube');
+  assert.equal(social.__test.captionText(clip, 2200, 'instagram'), 'Instagram-native caption\n\n#Reels');
+  assert.equal(social.__test.captionText(clip, 2200, 'facebook'), 'Fallback description\n\n#Fallback');
+});
+
 test('YouTube OAuth, connection check and resumable upload complete', async () => {
   const calls = [];
   global.fetch = async (url, options = {}) => {

@@ -198,7 +198,7 @@ class Processor:
             **os.environ,
             "WHISPER_DEVICE": os.getenv("WHISPER_DEVICE", "cpu"),
             "WHISPER_COMPUTE_TYPE": os.getenv("WHISPER_COMPUTE_TYPE", "int8"),
-            "WHISPER_MODEL": os.getenv("WHISPER_MODEL", "small"),
+            "WHISPER_MODEL": os.getenv("WHISPER_MODEL", "large-v3-turbo"),
             "FFMPEG_THREADS": os.getenv("FFMPEG_THREADS", "4"),
         }
         child = subprocess.Popen(
@@ -309,8 +309,10 @@ class Processor:
                     **(payload.get("settings") or {}),
                     "device": os.getenv("WHISPER_DEVICE", "cpu"),
                     "computeType": os.getenv("WHISPER_COMPUTE_TYPE", "int8"),
-                    "model": os.getenv("WHISPER_MODEL", "small"),
+                    "model": os.getenv("WHISPER_MODEL", "large-v3-turbo"),
                     "ffmpegThreads": max(1, int(os.getenv("FFMPEG_THREADS", "4"))),
+                    "videoPreset": os.getenv("VIDEO_PRESET", str((payload.get("settings") or {}).get("videoPreset") or "medium")),
+                    "videoCrf": int(os.getenv("VIDEO_CRF", str((payload.get("settings") or {}).get("videoCrf") or "18"))),
                 },
                 "sourceStartSec": payload.get("sourceStartSec") or 0,
                 "sourceEndSec": payload.get("sourceEndSec"),

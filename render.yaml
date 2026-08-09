@@ -73,7 +73,7 @@ services:
       - key: POST_TIMES
         value: 07:00,12:00,17:00,20:30
       - key: CLIP_AI_MODEL
-        value: small
+        value: large-v3-turbo
       - key: CLIP_AI_DEVICE
         value: cpu
       - key: CLIP_AI_COMPUTE_TYPE
@@ -86,6 +86,10 @@ services:
         value: "60"
       - key: MUSIC_VOLUME_PERCENT
         value: "13"
+      - key: VIDEO_PRESET
+        value: medium
+      - key: VIDEO_CRF
+        value: "18"
       - key: MAX_VIDEO_UPLOAD_MB
         value: "2048"
       - key: SOCIAL_PUBLISH_ENABLED

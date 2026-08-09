@@ -234,10 +234,79 @@ class FasterWhisperBackend(TranscriptionBackend):
         return _transcribe_with_faster_whisper(job, audio_file, duration_sec)
 
 
+def normalise_transcript_segments(raw_segments: list[dict[str, Any]], duration_sec: float) -> list[dict[str, Any]]:
+    """Return ordered, non-overlapping speech timings suitable for captions and selection.
+
+    Provider transcripts and Whisper occasionally contain repeated segments,
+    overlapping words, or one very long segment spanning a real pause. Cleaning
+    those once, at the pipeline boundary, keeps captions off during silence and
+    gives the selector natural sentence boundaries instead of arbitrary chunks.
+    """
+    duration = max(0.01, float(duration_sec or 0.01))
+    cleaned: list[dict[str, Any]] = []
+    previous_text = ""
+    previous_end = 0.0
+
+    for item in sorted(raw_segments or [], key=lambda row: float(row.get("start", 0) or 0)):
+        text = re.sub(r"\s+", " ", str(item.get("text") or "")).strip()
+        start = max(0.0, min(duration, float(item.get("start", 0) or 0)))
+        end = max(start, min(duration, float(item.get("end", start) or start)))
+        if not text or end <= start:
+            continue
+        fingerprint = re.sub(r"[^\w]+", " ", text.casefold()).strip()
+        if fingerprint and fingerprint == previous_text and start <= previous_end + 1.0:
+            continue
+
+        words: list[dict[str, Any]] = []
+        word_cursor = start
+        for raw_word in sorted(item.get("words") or [], key=lambda row: float(row.get("start", start) or start)):
+            value = re.sub(r"\s+", " ", str(raw_word.get("word") or "")).strip()
+            if not value:
+                continue
+            word_start = max(start, min(end, float(raw_word.get("start", word_cursor) or word_cursor)))
+            word_start = max(word_start, word_cursor)
+            word_end = max(word_start + 0.04, min(end, float(raw_word.get("end", word_start + 0.12) or word_start + 0.12)))
+            if word_end > end + 0.001:
+                word_end = end
+            if word_end <= word_start:
+                continue
+            if words and value.casefold() == words[-1]["word"].casefold() and word_start <= words[-1]["end"] + 0.05:
+                words[-1]["end"] = max(words[-1]["end"], word_end)
+                word_cursor = words[-1]["end"]
+                continue
+            words.append({"start": word_start, "end": word_end, "word": value})
+            word_cursor = word_end
+
+        # Split at a real pause. This preserves exact word timings and gives
+        # candidate generation a clean boundary without displaying text while
+        # nobody is speaking.
+        groups: list[list[dict[str, Any]]] = []
+        if words:
+            current: list[dict[str, Any]] = []
+            for word in words:
+                if current and word["start"] - current[-1]["end"] >= 0.85:
+                    groups.append(current)
+                    current = []
+                current.append(word)
+            if current:
+                groups.append(current)
+
+        if len(groups) > 1:
+            for group in groups:
+                group_text = " ".join(str(word["word"]) for word in group).strip()
+                cleaned.append({"start": group[0]["start"], "end": group[-1]["end"], "text": group_text, "words": group})
+        else:
+            cleaned.append({"start": start, "end": end, "text": text, "words": words})
+        previous_text = fingerprint
+        previous_end = end
+
+    return cleaned
+
+
 def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, duration_sec: float) -> list[dict[str, Any]]:
     supplied = job.get("transcriptSegments")
     if isinstance(supplied, list) and supplied:
-        return [
+        supplied_segments = [
             {
                 "start": float(item["start"]),
                 "end": float(item["end"]),
@@ -255,6 +324,7 @@ def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, durat
             for item in supplied
             if float(item.get("end", 0)) > float(item.get("start", 0))
         ]
+        return normalise_transcript_segments(supplied_segments, duration_sec)
 
     try:
         from faster_whisper import WhisperModel
@@ -264,7 +334,7 @@ def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, durat
     settings = job["settings"]
     device = settings.get("device") or "auto"
     compute_type = settings.get("computeType") or "int8"
-    model_name = settings.get("model") or "small"
+    model_name = settings.get("model") or "large-v3-turbo"
     progress(
         "Loading transcription model", 13,
         model=model_name, device=device, computeType=compute_type,
@@ -272,12 +342,24 @@ def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, durat
     )
     model = WhisperModel(model_name, device=device, compute_type=compute_type)
     kwargs: dict[str, Any] = {
-        "beam_size": 5,
+        "beam_size": 8,
+        "patience": 1.2,
         "vad_filter": True,
-        "vad_parameters": {"min_silence_duration_ms": 450},
+        "vad_parameters": {
+            "threshold": 0.45,
+            "min_speech_duration_ms": 180,
+            "min_silence_duration_ms": 280,
+            "speech_pad_ms": 180,
+        },
         "word_timestamps": True,
         "condition_on_previous_text": True,
-        "task": settings.get("task") or "translate",
+        "repetition_penalty": 1.08,
+        "no_repeat_ngram_size": 3,
+        "compression_ratio_threshold": 2.2,
+        "log_prob_threshold": -1.0,
+        "no_speech_threshold": 0.55,
+        "hallucination_silence_threshold": 1.0,
+        "task": settings.get("task") or "transcribe",
     }
     language = str(settings.get("language") or "").strip()
     if language:
@@ -321,7 +403,7 @@ def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, durat
         })
     if not output:
         raise RuntimeError("The transcription model did not find any speech in the source.")
-    return output
+    return normalise_transcript_segments(output, duration_sec)
 
 
 def transcribe(job: dict[str, Any], audio_file: Path, duration_sec: float) -> list[dict[str, Any]]:
@@ -337,7 +419,12 @@ HOOKS = {
     "what if", "the truth", "important", "biggest", "most", "brothers", "sisters",
     "heart", "death", "jannah", "paradise", "dua", "prayer", "salah", "repent",
 }
+PAYOFFS = {
+    "therefore", "the lesson", "what matters", "the answer", "this means", "instead",
+    "so that", "the reason", "you can", "we should", "do this", "remember this",
+}
 WEAK_START = ("and ", "but ", "so ", "because ", "then ", "he ", "she ", "they ", "this ", "that ", "it ")
+VAGUE_START = ("he said", "she said", "they said", "this is", "that is", "it was", "as i said")
 INTRO_WORDS = {"welcome", "subscribe", "channel", "podcast", "episode", "sponsor", "like and subscribe"}
 QUOTE_RISK = re.compile(r"\b(quran says|allah says|prophet said|hadith|verse|surah)\b", re.I)
 
@@ -353,6 +440,10 @@ class Candidate:
     quote_risk: bool
     ai_title: str = ""
     ai_reason: str = ""
+    ai_description: str = ""
+    ai_hashtags: str = ""
+    ai_hook: str = ""
+    ai_topic: str = ""
 
     @property
     def duration(self) -> float:
@@ -369,6 +460,7 @@ def score_candidate(start: float, end: float, text: str, segments: list[dict[str
     words = re.findall(r"[a-zA-Z']+", lower)
     reasons: list[str] = []
     score = 34.0
+    opening = " ".join(words[:24])
 
     if 35 <= duration <= 70:
         score += 18
@@ -390,6 +482,15 @@ def score_candidate(start: float, end: float, text: str, segments: list[dict[str
     else:
         score -= 10
 
+    if lower.startswith(VAGUE_START):
+        score -= 12
+        reasons.append("opening needs missing context")
+
+    opening_hooks = [hook for hook in HOOKS if hook in opening]
+    if opening_hooks:
+        score += min(12, 5 + len(opening_hooks) * 2)
+        reasons.append("strong opening hook")
+
     hook_hits = [hook for hook in HOOKS if hook in lower]
     if hook_hits:
         score += min(15, 6 + len(hook_hits) * 2)
@@ -398,6 +499,11 @@ def score_candidate(start: float, end: float, text: str, segments: list[dict[str
     if "?" in text:
         score += 5
         reasons.append("question hook")
+
+    payoff_hits = [payoff for payoff in PAYOFFS if payoff in lower]
+    if payoff_hits:
+        score += min(10, 4 + len(payoff_hits) * 2)
+        reasons.append("clear takeaway")
 
     word_rate = len(words) / max(duration, 1) * 60
     if 95 <= word_rate <= 195:
@@ -408,6 +514,8 @@ def score_candidate(start: float, end: float, text: str, segments: list[dict[str
 
     filler_count = sum(lower.count(item) for item in FILLER)
     score -= min(14, filler_count * 2.5)
+    if words and filler_count / len(words) > 0.07:
+        score -= 8
 
     intro_hits = sum(1 for item in INTRO_WORDS if item in lower)
     score -= intro_hits * 10
@@ -425,6 +533,8 @@ def score_candidate(start: float, end: float, text: str, segments: list[dict[str
     ]
     long_silence = sum(gap for gap in gaps if gap > 1.5)
     score -= min(12, long_silence * 3)
+    if duration and long_silence / duration > 0.12:
+        score -= 8
 
     quote_risk = bool(QUOTE_RISK.search(text))
     if quote_risk:
@@ -492,14 +602,35 @@ def remove_existing_moments(candidates: list[Candidate], existing: list[dict[str
 
 
 def select_candidates(candidates: list[Candidate], limit: int) -> list[Candidate]:
+    """Choose high-scoring moments without returning several versions of one idea."""
     selected: list[Candidate] = []
-    for candidate in sorted(candidates, key=lambda item: (-item.score, item.start)):
-        if any(overlap_ratio(candidate, previous) > 0.48 for previous in selected):
-            continue
-        selected.append(candidate)
-        if len(selected) >= limit:
+    remaining = list(candidates)
+    lecture_end = max((item.end for item in candidates), default=1.0)
+    while remaining and len(selected) < limit:
+        ranked: list[tuple[float, Candidate]] = []
+        for candidate in remaining:
+            if any(overlap_ratio(candidate, previous) > 0.48 for previous in selected):
+                continue
+            similarity = max((lexical_similarity(candidate.text, previous.text) for previous in selected), default=0.0)
+            if similarity > 0.78:
+                continue
+            coverage = min((abs(candidate.start - previous.start) / lecture_end for previous in selected), default=0.5)
+            adjusted = candidate.score - similarity * 26 + min(8.0, coverage * 18)
+            ranked.append((adjusted, candidate))
+        if not ranked:
             break
+        chosen = max(ranked, key=lambda row: (row[0], row[1].score, -row[1].start))[1]
+        selected.append(chosen)
+        remaining.remove(chosen)
     return sorted(selected, key=lambda item: (-item.score, item.start))
+
+
+def lexical_similarity(left: str, right: str) -> float:
+    left_words = {word for word in re.findall(r"\w+", left.casefold()) if len(word) > 2}
+    right_words = {word for word in re.findall(r"\w+", right.casefold()) if len(word) > 2}
+    if not left_words or not right_words:
+        return 0.0
+    return len(left_words & right_words) / len(left_words | right_words)
 
 
 def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any]) -> list[Candidate]:
@@ -519,18 +650,24 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any]) ->
         for index, candidate in enumerate(shortlist)
     ]
     prompt = (
-        "You rank candidate short clips from Islamic lectures. Return JSON only with a key named clips. "
-        "For every candidate, return index, score from 0 to 100, a respectful English title under 12 words, "
-        "and one short reason. Reward a strong standalone reminder, a clear opening, a complete ending, useful "
-        "meaning and low filler. Penalize intros, promotions, missing context and sentences cut in half. Never "
-        "invent or rewrite Quran or hadith quotations. Scoring candidates:\n" + json.dumps(items, ensure_ascii=False)
+        "You are DeenClipped's senior short-form editor. Rank candidate moments from Islamic lectures for honest "
+        "retention and shareability. Return strict JSON only: {\"clips\":[...]}. For EVERY candidate return: "
+        "index, score (0-100), title, description, hashtags, hook, topic, reason, and dimensions containing "
+        "hook, clarity, completeness, payoff and shareability (each 0-100). The title must be 4-10 words, "
+        "specific, respectful, natural, and at most 70 characters. The description must be 1-2 concise sentences "
+        "that explain the real value in the supplied text. Return 3-5 relevant hashtags. Reward a compelling first "
+        "three seconds, standalone context, emotional or practical value, a complete payoff, clean pacing, and a "
+        "memorable final line. Penalize filler, intros, promotions, vague pronouns, duplicated ideas, missing context, "
+        "and cut-off sentences. Never fabricate facts, quotations, Quran references, hadith, promises, controversy, "
+        "or claims not present in the transcript. Do not use sensational clickbait or rewrite sacred quotations. "
+        "Candidates:\n" + json.dumps(items, ensure_ascii=False)
     )
     request_body = json.dumps({
         "model": model,
         "prompt": prompt,
         "stream": False,
         "format": "json",
-        "options": {"temperature": 0.1},
+        "options": {"temperature": 0.15},
     }).encode("utf-8")
     request = urllib.request.Request(
         base_url + "/api/generate",
@@ -550,10 +687,23 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any]) ->
             if index < 0 or index >= len(shortlist):
                 continue
             candidate = shortlist[index]
+            dimensions = row.get("dimensions") if isinstance(row.get("dimensions"), dict) else {}
+            dimension_scores = []
+            for key in ("hook", "clarity", "completeness", "payoff", "shareability"):
+                try:
+                    dimension_scores.append(max(0.0, min(100.0, float(dimensions.get(key)))))
+                except (TypeError, ValueError):
+                    pass
             ai_score = max(0, min(100, int(round(float(row.get("score", candidate.score))))))
-            candidate.score = int(round(candidate.score * 0.45 + ai_score * 0.55))
-            candidate.ai_title = str(row.get("title") or "").strip()[:90]
-            candidate.ai_reason = str(row.get("reason") or "").strip()[:180]
+            if dimension_scores:
+                ai_score = int(round(ai_score * 0.55 + (sum(dimension_scores) / len(dimension_scores)) * 0.45))
+            candidate.score = int(round(candidate.score * 0.40 + ai_score * 0.60))
+            candidate.ai_title = clean_title(str(row.get("title") or ""))
+            candidate.ai_description = clean_description(str(row.get("description") or ""))
+            candidate.ai_hashtags = clean_hashtags(row.get("hashtags"))
+            candidate.ai_hook = clean_short_text(str(row.get("hook") or ""), 120)
+            candidate.ai_topic = clean_short_text(str(row.get("topic") or ""), 80)
+            candidate.ai_reason = clean_short_text(str(row.get("reason") or ""), 180)
             if candidate.ai_reason:
                 candidate.reasons = ([candidate.ai_reason] + candidate.reasons)[:4]
         return candidates
@@ -901,22 +1051,97 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     ass_file.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
 
 
+def clean_short_text(value: str, maximum: int) -> str:
+    cleaned = re.sub(r"\s+", " ", html.unescape(str(value or ""))).strip(" \t\r\n\"'`•-")
+    if len(cleaned) > maximum:
+        cleaned = cleaned[:maximum].rsplit(" ", 1)[0].rstrip(" ,;:-")
+    return cleaned
+
+
+def clean_title(value: str) -> str:
+    cleaned = clean_short_text(value, 90)
+    cleaned = re.sub(r"^(title|caption)\s*:\s*", "", cleaned, flags=re.I)
+    cleaned = re.sub(r"[.!?…]+$", "", cleaned).strip(" \t\r\n\"'`•-")
+    if len(cleaned.split()) > 10:
+        cleaned = " ".join(cleaned.split()[:10]).rstrip(" ,;:-")
+    return cleaned if 4 <= len(cleaned) <= 90 else ""
+
+
+def clean_description(value: str) -> str:
+    return clean_short_text(re.sub(r"^(description|caption)\s*:\s*", "", str(value or ""), flags=re.I), 600)
+
+
+def clean_hashtags(value: Any) -> str:
+    if isinstance(value, list):
+        source = " ".join(str(item) for item in value)
+    else:
+        source = str(value or "")
+    raw = re.findall(r"#?[\w]+", source, flags=re.UNICODE)
+    tags: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        word = item.lstrip("#_")
+        if len(word) < 2 or len(word) > 40:
+            continue
+        key = word.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        tags.append("#" + word)
+        if len(tags) >= 5:
+            break
+    return " ".join(tags)
+
+
+TOPIC_HASHTAGS = (
+    ("quran", "#Quran"), ("allah", "#Allah"), ("prayer", "#Prayer"), ("salah", "#Salah"),
+    ("dua", "#Dua"), ("patience", "#Sabr"), ("sabr", "#Sabr"), ("repent", "#Tawbah"),
+    ("ramadan", "#Ramadan"), ("jannah", "#Jannah"), ("paradise", "#Jannah"),
+    ("heart", "#HeartReminder"), ("faith", "#Faith"), ("tawakkul", "#Tawakkul"),
+)
+
+
 def title_from_text(text: str, number: int) -> str:
     cleaned = re.sub(r"\s+", " ", text).strip()
-    first = re.split(r"(?<=[.!?])\s+", cleaned)[0]
-    words = first.split()
-    if len(words) > 11:
-        first = " ".join(words[:11]).rstrip(",;:") + "…"
-    if len(first) < 8:
-        first = f"Important reminder {number}"
-    return first[:90]
+    sentences = [part.strip(" ,;:-") for part in re.split(r"(?<=[.!?])\s+", cleaned) if part.strip()]
+    strongest = max(
+        sentences or [cleaned],
+        key=lambda part: sum(3 for hook in HOOKS if hook in part.casefold()) + sum(2 for payoff in PAYOFFS if payoff in part.casefold()) - abs(len(part.split()) - 8) * 0.15,
+    )
+    strongest = re.sub(r"^(and|but|so|because|then)\s+", "", strongest, flags=re.I)
+    title = clean_title(strongest)
+    if not title:
+        words = strongest.split()[:9]
+        title = clean_title(" ".join(words))
+    return title or f"A Reminder Worth Hearing {number}"
 
 
 def description_from_text(text: str) -> str:
     cleaned = re.sub(r"\s+", " ", text).strip()
-    if len(cleaned) > 300:
-        cleaned = cleaned[:297].rsplit(" ", 1)[0] + "…"
-    return cleaned
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", cleaned) if part.strip()]
+    excerpt = " ".join(sentences[:2]) if sentences else cleaned
+    excerpt = clean_short_text(excerpt, 420)
+    if not excerpt:
+        return "A concise reminder to reflect on and share with someone who may benefit."
+    return clean_description(excerpt + " Save this reminder and share it with someone who may benefit.")
+
+
+def hashtags_from_text(text: str) -> str:
+    lower = text.casefold()
+    tags = [tag for keyword, tag in TOPIC_HASHTAGS if keyword in lower]
+    tags.extend(["#IslamicReminder", "#DeenClipped"])
+    return clean_hashtags(tags[:5])
+
+
+def platform_metadata(title: str, description: str, hashtags: str) -> dict[str, Any]:
+    full_caption = "\n\n".join(part for part in (description, hashtags) if part).strip()
+    short_caption = "\n\n".join(part for part in (title, description, hashtags) if part).strip()
+    return {
+        "youtube": {"title": title[:100], "description": full_caption[:5000]},
+        "tiktok": {"title": short_caption[:2200], "caption": short_caption[:2200]},
+        "instagram": {"caption": full_caption[:2200]},
+        "facebook": {"title": title[:255], "description": full_caption[:5000]},
+    }
 
 
 def fitted_crop_size(
@@ -1234,6 +1459,17 @@ def quality_report(candidate: Candidate, template: dict[str, Any]) -> dict[str, 
     }
 
 
+def render_quality_settings(settings: dict[str, Any]) -> tuple[str, int]:
+    preset = str(settings.get("videoPreset") or os.getenv("VIDEO_PRESET", "medium")).lower()
+    if preset not in {"slow", "medium", "fast"}:
+        preset = "medium"
+    try:
+        crf = int(settings.get("videoCrf") or os.getenv("VIDEO_CRF", "18"))
+    except (TypeError, ValueError):
+        crf = 18
+    return preset, max(16, min(23, crf))
+
+
 def render_clip(
     job: dict[str, Any], candidate: Candidate, index: int, source: Path,
     track: dict[str, Any], output_dir: Path,
@@ -1243,6 +1479,7 @@ def render_clip(
     template = job["template"]
     settings = job["settings"]
     ffmpeg_threads = str(max(1, int(settings.get("ffmpegThreads") or os.getenv("FFMPEG_THREADS", "4"))))
+    video_preset, video_crf = render_quality_settings(settings)
     clip_id = str(job.get("clipIdOverride") or f"{job['id']}-{index:02d}")
     output_dir.mkdir(parents=True, exist_ok=True)
     clip_file = output_dir / f"{clip_id}.mp4"
@@ -1275,7 +1512,7 @@ def render_clip(
         + "[music][voice_sidechain]sidechaincompress="
           "threshold=0.025:ratio=10:attack=15:release=650[ducked];"
         + "[voice_mix][ducked]amix=inputs=2:duration=first:dropout_transition=2,"
-        + "loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
+        + "loudnorm=I=-16:TP=-1.5:LRA=11,alimiter=limit=0.95[aout]"
     )
 
     run([
@@ -1283,8 +1520,9 @@ def render_clip(
         "-i", str(source), "-stream_loop", "-1", "-i", str(track["path"]),
         "-filter_complex", filter_complex,
         "-map", "[vout]", "-map", "[aout]",
-        "-c:v", "libx264", "-threads", ffmpeg_threads, "-preset", "veryfast", "-crf", "19",
-        "-pix_fmt", "yuv420p", "-r", "30", "-c:a", "aac", "-b:a", "192k",
+        "-c:v", "libx264", "-threads", ffmpeg_threads, "-preset", video_preset, "-crf", str(video_crf),
+        "-profile:v", "high", "-level:v", "4.1", "-pix_fmt", "yuv420p", "-r", "30",
+        "-c:a", "aac", "-b:a", "192k", "-max_muxing_queue_size", "2048",
         "-movflags", "+faststart", "-shortest", str(clip_file),
     ], timeout=60 * 60)
 
@@ -1292,12 +1530,15 @@ def render_clip(
     streams = info.get("streams", [])
     stream_types = {stream.get("codec_type") for stream in streams}
     video_stream = next((stream for stream in streams if stream.get("codec_type") == "video"), {})
+    audio_stream = next((stream for stream in streams if stream.get("codec_type") == "audio"), {})
     rendered_duration = media_duration(ffprobe, clip_file)
     expected_width = int(template.get("width", 1080))
     expected_height = int(template.get("height", 1920))
     if (
         "video" not in stream_types or "audio" not in stream_types
-        or rendered_duration < max(2, candidate.duration - 2.5)
+        or abs(rendered_duration - candidate.duration) > max(1.0, candidate.duration * 0.025)
+        or str(video_stream.get("codec_name") or "") != "h264"
+        or str(audio_stream.get("codec_name") or "") != "aac"
         or int(video_stream.get("width") or 0) != expected_width
         or int(video_stream.get("height") or 0) != expected_height
     ):
@@ -1310,14 +1551,20 @@ def render_clip(
 
     ass_file.unlink(missing_ok=True)
     report = quality_report(candidate, template)
+    title = candidate.ai_title or title_from_text(candidate.text, index)
+    description = candidate.ai_description or description_from_text(candidate.text)
+    hashtags = candidate.ai_hashtags or hashtags_from_text(candidate.text)
     return {
         "id": clip_id,
         "projectId": job.get("projectId") or job["id"],
         "clipFile": str(clip_file),
         "thumbFile": str(thumb_file),
-        "title": candidate.ai_title or title_from_text(candidate.text, index),
-        "description": description_from_text(candidate.text),
-        "hashtags": "#IslamicReminder #DeenClipped",
+        "title": title,
+        "description": description,
+        "hashtags": hashtags,
+        "hook": candidate.ai_hook,
+        "topic": candidate.ai_topic,
+        "platformMetadata": platform_metadata(title, description, hashtags),
         "transcript": candidate.text,
         "startSec": round(candidate.start, 3),
         "endSec": round(candidate.end, 3),
@@ -1335,6 +1582,10 @@ def render_clip(
         "renderVerified": True,
         "renderedWidth": expected_width,
         "renderedHeight": expected_height,
+        "renderQuality": {
+            "videoCodec": "h264", "audioCodec": "aac", "preset": video_preset,
+            "crf": video_crf, "fps": 30, "audioBitrateKbps": 192,
+        },
         "createdAt": int(time.time() * 1000),
     }
 
@@ -1404,6 +1655,10 @@ def process_rerender(job: dict[str, Any], job_file: Path) -> None:
         reasons=list(clip.get("scoreReasons") or []),
         quote_risk=bool(clip.get("reviewRequired")),
         ai_title=str(clip.get("title") or ""),
+        ai_description=str(clip.get("description") or ""),
+        ai_hashtags=str(clip.get("hashtags") or ""),
+        ai_hook=str(clip.get("hook") or ""),
+        ai_topic=str(clip.get("topic") or ""),
     )
     seed = int(hashlib.sha256(str(job.get("clipIdOverride") or job["id"]).encode()).hexdigest()[:12], 16)
     track = tracks[seed % len(tracks)]

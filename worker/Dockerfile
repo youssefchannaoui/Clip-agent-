@@ -9,8 +9,10 @@ ENV PYTHONUNBUFFERED=1 \
     FFPROBE_PATH=ffprobe \
     WHISPER_DEVICE=cpu \
     WHISPER_COMPUTE_TYPE=int8 \
-    WHISPER_MODEL=small \
+    WHISPER_MODEL=large-v3-turbo \
     FFMPEG_THREADS=4 \
+    VIDEO_PRESET=medium \
+    VIDEO_CRF=18 \
     WORKER_MAX_CONCURRENT_JOBS=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
