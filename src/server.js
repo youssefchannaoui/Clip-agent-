@@ -32,6 +32,12 @@ const activityFixPage = path.join(config.root, 'src', 'public', 'activity-fix.js
 const premiumDashboardPage = path.join(config.root, 'src', 'public', 'premium-dashboard.js');
 const marketingCssPage = path.join(config.root, 'src', 'public', 'marketing.css');
 const marketingJsPage = path.join(config.root, 'src', 'public', 'marketing.js');
+function assetVersion(file) {
+  try { return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex').slice(0, 12); }
+  catch { return 'missing'; }
+}
+const activityFixVersion = assetVersion(activityFixPage);
+const premiumDashboardVersion = assetVersion(premiumDashboardPage);
 // Marketing images are looked for in a dedicated subfolder first, then in
 // src/public itself. They are currently committed directly to src/public, so
 // serving only from the subfolder means every request 404s against a directory
@@ -165,8 +171,8 @@ function serveAppShell(req, res, url, currentUser) {
   if (auth.enabled() && !currentUser) return redirect(res, `/login?returnTo=${encodeURIComponent('/app' + (url.search || ''))}`);
   if (auth.enabled() && currentUser && billing.needsPlanChoice(currentUser)) return redirect(res, `/plans?returnTo=${encodeURIComponent('/app' + (url.search || ''))}`);
   let html = fs.readFileSync(page, 'utf8');
-  if (!html.includes('/activity-fix.js')) html = html.replace('</body>', '<script src="/activity-fix.js"></script>\n</body>');
-  if (!html.includes('/premium-dashboard.js')) html = html.replace('</body>', '<script src="/premium-dashboard.js"></script>\n</body>');
+  if (!html.includes('/activity-fix.js')) html = html.replace('</body>', `<script src="/activity-fix.js?v=${activityFixVersion}"></script>\n</body>`);
+  if (!html.includes('/premium-dashboard.js')) html = html.replace('</body>', `<script src="/premium-dashboard.js?v=${premiumDashboardVersion}"></script>\n</body>`);
   const body = Buffer.from(html);
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
   return res.end(body);

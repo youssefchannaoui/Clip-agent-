@@ -63,7 +63,9 @@ test('public routes, pricing and dashboard assets remain available', async () =>
 
   const app = await fetch(`${base}/app`, { headers: { Cookie: creatorCookie }, redirect: 'manual' });
   assert.equal(app.status, 200);
-  assert.match(await app.text(), /premium-dashboard\.js/);
+  const appHtml = await app.text();
+  assert.match(appHtml, /activity-fix\.js\?v=[a-f0-9]{12}/);
+  assert.match(appHtml, /premium-dashboard\.js\?v=[a-f0-9]{12}/);
   assert.equal((await fetch(`${base}/premium-dashboard.js`)).status, 200);
 });
 
