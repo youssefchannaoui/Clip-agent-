@@ -439,6 +439,7 @@ body.dc-side-collapsed .dc-sidebar-live{display:none}
 const v3ProjectCss = String.raw`
 /* V3E: project detail fit, cleaner home, complete clip actions */
 body.dc-app{overflow-x:hidden!important}
+body.dc-app #libraryBrowser{display:none!important}
 body.dc-project-open .library-browser-foot,body.dc-project-open .library-actions,body.dc-project-open .bulk-actions{display:none!important}
 body.dc-project-open #view-projects{width:100%!important;max-width:none!important;overflow:visible!important}
 body.dc-project-open .main-col,body.dc-project-open #app>.wrap{overflow-x:hidden!important}
@@ -1183,6 +1184,7 @@ function navButton(view, label, icon){
 }
 
 function bindGlobal(){
+  document.addEventListener('click', handleProjectOpenCapture, true);
   document.addEventListener('click', handleClick);
   document.addEventListener('pointerdown', createRipple);
   $('#dcCollapse').onclick = () => {
@@ -1223,6 +1225,28 @@ function bindGlobal(){
   window.addEventListener('deen:api-end', onApiEnd);
 }
 
+function hideLegacyProjectBrowser(){
+  const legacy=$('#libraryBrowser');
+  const wasOpen=Boolean(legacy&&!legacy.classList.contains('hide'));
+  if(legacy){legacy.classList.add('hide');legacy.setAttribute('aria-hidden','true')}
+  try{
+    if(typeof LIBRARY_PROJECT_ID!=='undefined')LIBRARY_PROJECT_ID='';
+    if(typeof LIBRARY_SELECTED!=='undefined')LIBRARY_SELECTED.clear();
+  }catch{}
+  if(wasOpen&&!$('#dcBillingLayer')&&!$('#dcGuideLayer')&&!$('#videoModal:not(.hide)')&&!$('#rerenderModal:not(.hide)'))document.body.style.overflow='';
+}
+
+function handleProjectOpenCapture(event){
+  if(!document.body.classList.contains('dc-app'))return;
+  const target=event.target instanceof Element?event.target.closest('[data-open-project]'):null;
+  if(!target)return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  hideLegacyProjectBrowser();
+  selectedProjectId=target.dataset.openProject||'';
+  if(selectedProjectId)go('projects');
+}
+
 function handleClick(event){
   const openBilling = event.target.closest('[data-open-billing]');
   if (openBilling) { openBillingModal(); return; }
@@ -1241,7 +1265,7 @@ function handleClick(event){
     return;
   }
   const project = event.target.closest('[data-open-project]');
-  if (project) { selectedProjectId = project.dataset.openProject; go('projects'); return; }
+  if (project) { hideLegacyProjectBrowser(); selectedProjectId = project.dataset.openProject; go('projects'); return; }
   const editStyle = event.target.closest('[data-edit-style-clip]'); if (editStyle) { openEditor(editStyle.dataset.editStyleClip, 'style'); return; }
   const editVideo = event.target.closest('[data-edit-video-clip]'); if (editVideo) { openEditor(editVideo.dataset.editVideoClip, 'canvas'); return; }
   const edit = event.target.closest('[data-edit-clip]'); if (edit) { openEditor(edit.dataset.editClip, 'captions'); return; }
@@ -2019,6 +2043,7 @@ async function queueVideoUpload(file,button,range={}){
 
 function renderProjects(){
   const panel=$('#view-projects'),d=data();if(!panel||!d)return;
+  hideLegacyProjectBrowser();
   if(selectedProjectId){renderProjectDetail(panel,d);return}
   document.body.classList.remove('dc-project-open');
   panel.classList.remove('dc-project-detail-view');
@@ -3371,6 +3396,7 @@ function statusName(value){const map={queued:'Queued',processing:'Processing',do
 
 function sync(){
   injectShell();
+  hideLegacyProjectBrowser();
   const live=Boolean($('#app')&&!$('#app').classList.contains('hide'));
   $('#dcSidebar').style.display=live?'flex':'none';$('#dcTopbar').style.display=live?'flex':'none';
   if(!live||!data())return;
