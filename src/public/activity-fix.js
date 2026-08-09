@@ -208,6 +208,7 @@ const CUSTOM = new Set(['home','projects','review','editor','schedule','publishi
 
 let currentView = 'home';
 let selectedProjectId = '';
+let reviewFocusClipId = '';
 let selectedClipId = '';
 let projectQuery = '';
 let projectFilter = 'all';
@@ -1149,6 +1150,7 @@ function injectShell(){
   const style = document.createElement('style');
   style.id = 'dcPhase4Styles'; style.textContent = css + billingCss + rangeChargeCss + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss + topbarCleanCss + trialUxCss + v4DashboardCss + v4WorkspaceCss + v4CinematicCss + v4DeclutterCss + v5ExperienceCss + publishingWorkspaceCss + premiumStudioCss; document.head.appendChild(style);
   document.body.classList.add('dc-app');
+  hideLegacyProjectBrowser();
 
   const side = document.createElement('aside'); side.id = 'dcSidebar';
   side.innerHTML = `<div id="dcBrand"><div class="dc-logo"><svg viewBox="0 0 24 26" fill="none"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg></div><div class="dc-brand-copy"><strong>DeenClipped</strong><span>AI clip workspace</span></div></div><div class="dc-nav-scroll"><div class="dc-nav-group"><div class="dc-nav-label"><span>Create</span><i></i></div>${CREATE_NAV.map(([v,l,i])=>navButton(v,l,i)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Publish</span><i></i></div>${PUBLISH_NAV.map(([v,l,i])=>navButton(v,l,i)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Studio</span><i></i></div>${STUDIO_NAV.map(([v,l,i])=>navButton(v,l,i)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Account</span><i></i></div>${ACCOUNT_NAV.map(([v,l,i])=>navButton(v,l,i)).join('')}</div><div class="dc-nav-group" id="dcAdminNav" style="display:none"><div class="dc-nav-label"><span>Admin</span><i></i></div>${navButton('admin','Admin console','analytics')}</div></div><div class="dc-sidebar-bottom"><button class="dc-collapse" id="dcCollapse"><span class="dc-nav-icon">${ICON.collapse}</span><span>Collapse sidebar</span></button></div>`;
@@ -1223,12 +1225,19 @@ function bindGlobal(){
   });
   window.addEventListener('deen:api-start', onApiStart);
   window.addEventListener('deen:api-end', onApiEnd);
+  window.addEventListener('deen:open-project', event => {
+    const projectId=String(event.detail?.projectId||'');
+    if(!projectId)return;
+    hideLegacyProjectBrowser();
+    selectedProjectId=projectId;
+    go('projects');
+  });
 }
 
 function hideLegacyProjectBrowser(){
   const legacy=$('#libraryBrowser');
   const wasOpen=Boolean(legacy&&!legacy.classList.contains('hide'));
-  if(legacy){legacy.classList.add('hide');legacy.setAttribute('aria-hidden','true')}
+  if(legacy)legacy.remove();
   try{
     if(typeof LIBRARY_PROJECT_ID!=='undefined')LIBRARY_PROJECT_ID='';
     if(typeof LIBRARY_SELECTED!=='undefined')LIBRARY_SELECTED.clear();
@@ -1266,6 +1275,8 @@ function handleClick(event){
   }
   const project = event.target.closest('[data-open-project]');
   if (project) { hideLegacyProjectBrowser(); selectedProjectId = project.dataset.openProject; go('projects'); return; }
+  const reviewClip = event.target.closest('[data-review-clip]');
+  if (reviewClip) { reviewFocusClipId=reviewClip.dataset.reviewClip||''; reviewFilter='all'; go('review'); return; }
   const editStyle = event.target.closest('[data-edit-style-clip]'); if (editStyle) { openEditor(editStyle.dataset.editStyleClip, 'style'); return; }
   const editVideo = event.target.closest('[data-edit-video-clip]'); if (editVideo) { openEditor(editVideo.dataset.editVideoClip, 'canvas'); return; }
   const edit = event.target.closest('[data-edit-clip]'); if (edit) { openEditor(edit.dataset.editClip, 'captions'); return; }
@@ -2119,14 +2130,11 @@ function upgradeYoutubeFallbackButtons(panel,projects){
   }
 }
 function clipCard(c,opts={}){
-  // A clip that is still "waiting" can be posted immediately — publishNow()
-  // approves it on the way through — so offer both actions instead of hiding
-  // "Post now" until the clip has been approved separately.
-  const canPost=['waiting','approved','ready','publish_failed','scheduled'].includes(c.status);
-  const canSchedule=c.status==='waiting';
+  const reviewAction=c.status==='waiting'?`<button class="dc-btn" data-review-clip="${esc(c.id)}">Approve</button>`:'';
+  const scheduleAction=['approved','scheduled','publishing'].includes(c.status)?`<button class="dc-btn secondary" data-dc-nav="publishing">View schedule</button>`:'';
   const title=shortText(c.title||'Untitled clip', opts.detail?54:44);
   const sub=c.scheduledAt?`Scheduled · ${formatDate(c.scheduledAt)}`:statusName(c.status);
-  return `<article class="dc-clip-card v3-full"><div class="dc-clip-media"><button class="dc-clip-media-button" data-edit-style-clip="${esc(c.id)}" type="button">${clipThumb(c)}</button><span class="dc-score">${Math.round(c.score||0)}</span><span class="dc-duration">${formatDuration(c.durationMs)}</span><span class="dc-clip-state dc-pill ${c.status==='posted'?'good':c.status==='waiting'?'warn':c.status==='publish_failed'?'bad':''}">${statusName(c.status)}</span></div><div class="dc-clip-body"><h3>${esc(title)}</h3><p>${esc(sub)}</p><div class="dc-clip-actions"><button class="dc-btn" data-edit-style-clip="${esc(c.id)}">Edit style</button><button class="dc-btn secondary" data-edit-video-clip="${esc(c.id)}">Edit video</button>${canPost?`<button class="dc-btn secondary" data-post-clip="${esc(c.id)}">Post now</button>`:''}${canSchedule?`<button class="dc-btn secondary" data-schedule-clip="${esc(c.id)}">Schedule</button>`:''}${(!canPost&&!canSchedule)?`<button class="dc-btn secondary" data-download-clip="${esc(c.id)}">Download</button>`:''}<button class="dc-btn secondary" data-download-clip="${esc(c.id)}">Download</button><button class="dc-btn danger" data-delete-clip="${esc(c.id)}">Delete</button></div></div></article>`;
+  return `<article class="dc-clip-card v3-full"><div class="dc-clip-media"><button class="dc-clip-media-button" data-edit-style-clip="${esc(c.id)}" type="button">${clipThumb(c)}</button><span class="dc-score">${Math.round(c.score||0)}</span><span class="dc-duration">${formatDuration(c.durationMs)}</span><span class="dc-clip-state dc-pill ${c.status==='posted'?'good':c.status==='waiting'?'warn':c.status==='publish_failed'?'bad':''}">${statusName(c.status)}</span></div><div class="dc-clip-body"><h3>${esc(title)}</h3><p>${esc(sub)}</p><div class="dc-clip-actions"><button class="dc-btn secondary" data-edit-style-clip="${esc(c.id)}">Edit style</button><button class="dc-btn secondary" data-edit-video-clip="${esc(c.id)}">Edit video</button>${reviewAction}${scheduleAction}<button class="dc-btn secondary" data-download-clip="${esc(c.id)}">Download</button><button class="dc-btn danger" data-delete-clip="${esc(c.id)}">Delete</button></div></div></article>`;
 }
 
 function renderReview(){
@@ -2136,19 +2144,20 @@ function renderReview(){
   const avg=allWaiting.length?Math.round(allWaiting.reduce((sum,c)=>sum+Number(c.score||0),0)/allWaiting.length):0;
   let waiting=allWaiting.filter(c=>reviewFilter==='strong'?hookInfo(c).strong:reviewFilter==='short'?Number(c.durationMs||0)<=60000:reviewFilter==='verified'?Boolean(c.musicVerified&&c.renderVerified):true);
   waiting.sort(reviewSort==='duration'?(a,b)=>Number(a.durationMs||0)-Number(b.durationMs||0):(a,b)=>Number(b.score||0)-Number(a.score||0));
-  const toolbar=allWaiting.length?`<div class="dc-review-toolbar pro"><select id="dcReviewFilter" aria-label="Filter clips"><option value="all">All clips (${allWaiting.length})</option><option value="strong" ${reviewFilter==='strong'?'selected':''}>Strong hooks (${strong})</option><option value="short" ${reviewFilter==='short'?'selected':''}>Under 60 seconds</option><option value="verified" ${reviewFilter==='verified'?'selected':''}>Render verified</option></select><select id="dcReviewSort" aria-label="Sort clips"><option value="score">Highest score</option><option value="duration" ${reviewSort==='duration'?'selected':''}>Shortest first</option></select><span class="spacer"></span><button class="dc-btn secondary" id="dcApproveVerified">Approve verified</button><button class="dc-btn" id="dcScheduleAll" ${!waiting.length?'disabled':''}>Schedule visible</button></div>`:'';
+  if(reviewFocusClipId)waiting.sort((a,b)=>(a.id===reviewFocusClipId?-1:0)-(b.id===reviewFocusClipId?-1:0));
+  const toolbar=allWaiting.length?`<div class="dc-review-toolbar pro"><select id="dcReviewFilter" aria-label="Filter clips"><option value="all">All clips (${allWaiting.length})</option><option value="strong" ${reviewFilter==='strong'?'selected':''}>Strong hooks (${strong})</option><option value="short" ${reviewFilter==='short'?'selected':''}>Under 60 seconds</option><option value="verified" ${reviewFilter==='verified'?'selected':''}>Render verified</option></select><select id="dcReviewSort" aria-label="Sort clips"><option value="score">Highest score</option><option value="duration" ${reviewSort==='duration'?'selected':''}>Shortest first</option></select><span class="spacer"></span><button class="dc-btn secondary" id="dcApproveVerified">Schedule verified</button><button class="dc-btn" id="dcScheduleAll" ${!waiting.length?'disabled':''}>Schedule visible</button></div>`:'';
   const empty=allWaiting.length?`<div class="dc-review-empty-pro"><div><div class="dc-empty-icon">${ICON.review}</div><strong>No clips match</strong><p>Choose another filter to keep reviewing.</p><button class="dc-btn" data-review-filter="all">Show every clip</button></div></div>`:`<div class="dc-review-empty-pro visual"><div><div class="dc-empty-icon">${ICON.review}</div><strong>Your review queue is clear.</strong><p>New clips will appear here with their score, hook strength and suggested posting copy.</p><button class="dc-btn" data-dc-nav="home">Create new clips</button></div><img src="/marketing-assets/clip-review.webp" alt="DeenClipped clip review preview"></div>`;
-  panel.innerHTML=`<div class="dc-review-page-pro ${allWaiting.length?'':'is-empty'}"><section class="dc-review-hero-pro"><div><span class="dc-review-kicker">Clip approval</span><h1>Choose the clips worth publishing.</h1><p>See the hook, duration and posting copy at a glance. Open the editor only when a clip needs your touch.</p></div><div class="dc-review-metrics-pro"><span><b>${allWaiting.length}</b><em>waiting</em></span><span><b>${strong}</b><em>strong hooks</em></span><span><b>${avg}</b><em>avg score</em></span></div></section>${toolbar}<div class="dc-review-list pro">${waiting.length?waiting.map(reviewRow).join(''):empty}</div></div>`;
+  panel.innerHTML=`<div class="dc-review-page-pro ${allWaiting.length?'':'is-empty'}"><section class="dc-review-hero-pro"><div><span class="dc-review-kicker">Final review</span><h1>Choose when each clip goes live.</h1><p>Check the hook, captions and posting copy, then post now or reserve the next publishing slot.</p></div><div class="dc-review-metrics-pro"><span><b>${allWaiting.length}</b><em>waiting</em></span><span><b>${strong}</b><em>strong hooks</em></span><span><b>${avg}</b><em>avg score</em></span></div></section>${toolbar}<div class="dc-review-list pro">${waiting.length?waiting.map(reviewRow).join(''):empty}</div></div>`;
   if($('#dcApproveVerified'))$('#dcApproveVerified').onclick=approveVerified;
   if($('#dcScheduleAll'))$('#dcScheduleAll').onclick=()=>scheduleMany(waiting.map(c=>c.id));
   if($('#dcReviewFilter'))$('#dcReviewFilter').onchange=e=>{reviewFilter=e.target.value;renderReview()};
   if($('#dcReviewSort'))$('#dcReviewSort').onchange=e=>{reviewSort=e.target.value;renderReview()};
   $$('[data-review-filter]',panel).forEach(button=>button.onclick=()=>{reviewFilter=button.dataset.reviewFilter;renderReview()});
-  requestAnimationFrame(()=>animatePanel(panel));
+  requestAnimationFrame(()=>{animatePanel(panel);if(reviewFocusClipId)panel.querySelector(`[data-review-row="${CSS.escape(reviewFocusClipId)}"]`)?.scrollIntoView({block:'center',behavior:'smooth'})});
 }
 function reviewRow(c){
   const hook=hookInfo(c), copy=socialCopyForClip(c);
-  return `<article class="dc-review-item pro"><button class="dc-review-media" type="button" data-edit-clip="${esc(c.id)}" aria-label="Open ${esc(c.title||'clip')}">${c.thumbUrl?`<img src="${authedUrl(c.thumbUrl)}" alt="${esc(c.title||'Clip')} thumbnail">`:''}<span class="dc-review-score">${Math.round(c.score||0)}</span></button><div class="dc-review-main"><div class="dc-review-title-row"><h3>${esc(c.title||copy.title)}</h3><small>${formatDuration(c.durationMs)} · quality ${Math.round(c.quality||c.score||0)}/100</small></div><div class="dc-hook-strip"><div class="dc-hook-card"><strong><span class="dc-hook-badge ${hook.strong?'good':'warn'}">${hook.strong?'Strong':'Needs work'} hook</span></strong><p>${esc(hook.suggestion)}</p></div><div class="dc-copy-card"><strong>Suggested post</strong><div class="dc-copy-grid"><div class="dc-copy-mini"><b>Caption</b><span>${esc(copy.tiktok)}</span></div><div class="dc-copy-mini"><b>Shorts title</b><span>${esc(copy.youtube)}</span></div></div></div></div><div class="dc-review-actions pro clear"><button class="dc-btn" data-approve-clip="${esc(c.id)}">Approve</button><button class="dc-btn secondary" data-edit-style-clip="${esc(c.id)}">Open editor</button><details class="dc-clip-more"><summary>More</summary><div><button data-regenerate-title="${esc(c.id)}">Regenerate title</button><button data-make-shorter="${esc(c.id)}">Make shorter</button><button data-make-longer="${esc(c.id)}">Make longer</button><button class="danger" data-delete-clip="${esc(c.id)}">Delete clip</button></div></details></div></div></article>`;
+  return `<article class="dc-review-item pro ${c.id===reviewFocusClipId?'is-focused':''}" data-review-row="${esc(c.id)}"><button class="dc-review-media" type="button" data-edit-clip="${esc(c.id)}" aria-label="Open ${esc(c.title||'clip')}">${c.thumbUrl?`<img src="${authedUrl(c.thumbUrl)}" alt="${esc(c.title||'Clip')} thumbnail">`:''}<span class="dc-review-score">${Math.round(c.score||0)}</span></button><div class="dc-review-main"><div class="dc-review-title-row"><h3>${esc(c.title||copy.title)}</h3><small>${formatDuration(c.durationMs)} · quality ${Math.round(c.quality||c.score||0)}/100</small></div><div class="dc-hook-strip"><div class="dc-hook-card"><strong><span class="dc-hook-badge ${hook.strong?'good':'warn'}">${hook.strong?'Strong':'Needs work'} hook</span></strong><p>${esc(hook.suggestion)}</p></div><div class="dc-copy-card"><strong>Suggested post</strong><div class="dc-copy-grid"><div class="dc-copy-mini"><b>Caption</b><span>${esc(copy.tiktok)}</span></div><div class="dc-copy-mini"><b>Shorts title</b><span>${esc(copy.youtube)}</span></div></div></div></div><div class="dc-review-actions pro clear"><button class="dc-btn" data-post-clip="${esc(c.id)}">Post now</button><button class="dc-btn secondary" data-schedule-clip="${esc(c.id)}">Schedule</button><button class="dc-btn secondary" data-edit-style-clip="${esc(c.id)}">Open editor</button><details class="dc-clip-more"><summary>More</summary><div><button data-regenerate-title="${esc(c.id)}">Regenerate title</button><button data-make-shorter="${esc(c.id)}">Make shorter</button><button data-make-longer="${esc(c.id)}">Make longer</button><button class="danger" data-delete-clip="${esc(c.id)}">Delete clip</button></div></details></div></div></article>`;
 }
 function clipReviewText(c){
   return String(c.transcript||c.description||c.title||'').replace(/\s+/g,' ').trim();

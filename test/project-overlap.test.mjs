@@ -7,7 +7,9 @@ const activityFix = fs.readFileSync(new URL('../src/public/activity-fix.js', imp
 test('the V4 workspace permanently suppresses the retired project browser', () => {
   assert.match(activityFix, /body\.dc-app #libraryBrowser\{display:none!important\}/);
   assert.match(activityFix, /function hideLegacyProjectBrowser\(\)/);
-  assert.match(activityFix, /legacy\.classList\.add\('hide'\)/);
+  assert.match(activityFix, /if\(legacy\)legacy\.remove\(\)/);
+  const injectShell = activityFix.slice(activityFix.indexOf('function injectShell(){'), activityFix.indexOf('function navButton'));
+  assert.match(injectShell, /document\.body\.classList\.add\('dc-app'\);\s*hideLegacyProjectBrowser\(\)/);
 });
 
 test('project navigation wins before legacy target click handlers can run', () => {
