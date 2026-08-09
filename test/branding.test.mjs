@@ -80,6 +80,16 @@ test('the product UI includes Brand Kit and Creator Lab as first-class screens',
   assert.match(ui, /Free exports are branded/);
 });
 
+test('subscription is a first-class account screen with real billing actions', () => {
+  const ui = fs.readFileSync(new URL('../src/public/activity-fix.js', import.meta.url), 'utf8');
+  assert.match(ui, /\['subscription','Subscription','billing'\]/);
+  assert.match(ui, /function renderSubscriptionPage\(\)/);
+  assert.match(ui, /Billing & payment/);
+  assert.match(ui, /Add tokens without changing your plan/);
+  assert.match(ui, /\/api\/billing\/portal/);
+  assert.match(ui, /\/api\/billing\/topup/);
+});
+
 test('publishing keeps a complete command-centre layout', () => {
   const ui = fs.readFileSync(new URL('../src/public/activity-fix.js', import.meta.url), 'utf8');
   assert.match(ui, /Publishing command centre/);

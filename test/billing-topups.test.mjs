@@ -101,11 +101,15 @@ test('subscription renewal and cancellation preserve top-up tokens', () => {
       metadata: { userId: creator.id, plan: 'weekly' },
       current_period_start: 1_800_000_000,
       current_period_end: 1_800_604_800,
+      cancel_at_period_end: true,
+      cancel_at: 1_800_604_800,
       items: { data: [{ price: { id: 'price_weekly' } }] },
     } },
   });
   assert.equal(creator.billing.tokensUsed, 0);
   assert.equal(creator.billing.bonusTokens, 77);
+  assert.equal(billing.publicBilling(creator).current.cancelAtPeriodEnd, true);
+  assert.equal(billing.publicBilling(creator).current.cancelAt, 1_800_604_800_000);
 
   billing.handleWebhookEvent({
     id: 'evt_cancel', type: 'customer.subscription.deleted', data: { object: {
@@ -114,6 +118,8 @@ test('subscription renewal and cancellation preserve top-up tokens', () => {
   });
   assert.equal(creator.billing.plan, 'free');
   assert.equal(creator.billing.bonusTokens, 77);
+  assert.equal(billing.publicBilling(creator).current.cancelAtPeriodEnd, false);
+  assert.ok(billing.publicBilling(creator).current.canceledAt);
 });
 
 test('unknown top-up pack is rejected before checkout and unsigned webhooks fail', async () => {

@@ -304,6 +304,9 @@ export function publicBilling(user) {
       periodStart: billing.periodStart || null,
       periodEnd: billing.periodEnd || null,
       periodEndsInDays,
+      cancelAtPeriodEnd: Boolean(billing.cancelAtPeriodEnd),
+      cancelAt: billing.cancelAt || null,
+      canceledAt: billing.canceledAt || null,
       trial,
       freeTier,
       stripeCustomerId: billing.stripeCustomerId || '',
@@ -604,6 +607,9 @@ function updateFromSubscription(subscription = {}) {
   billing.stripePriceId = subscription.items?.data?.[0]?.price?.id || billing.stripePriceId || '';
   billing.periodStart = nextPeriodStart;
   billing.periodEnd = secondsToMs(subscription.current_period_end) || (nextPeriodStart + periodMs(plan));
+  billing.cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
+  billing.cancelAt = secondsToMs(subscription.cancel_at) || null;
+  billing.canceledAt = secondsToMs(subscription.canceled_at) || null;
   billing.trialStart = secondsToMs(subscription.trial_start) || billing.trialStart || null;
   billing.trialEnd = secondsToMs(subscription.trial_end) || billing.trialEnd || null;
   if (nextPeriodStart && nextPeriodStart !== oldPeriodStart) {
@@ -624,6 +630,9 @@ function clearSubscription(subscription = {}) {
   billing.status = 'cancelled';
   billing.stripeSubscriptionId = '';
   billing.stripePriceId = '';
+  billing.cancelAtPeriodEnd = false;
+  billing.cancelAt = null;
+  billing.canceledAt = secondsToMs(subscription.canceled_at) || now();
   billing.periodStart = now();
   billing.periodEnd = null;
   billing.tokensUsed = 0;
