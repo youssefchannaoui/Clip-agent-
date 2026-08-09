@@ -27,7 +27,13 @@ const DEFAULTS = Object.freeze({
   vignette: 0,
   captionMode: 'dynamic-stack',
   captionFont: 'DejaVu Sans',
+  captionHighlightFont: 'DejaVu Serif',
+  captionArabicFont: 'Amiri',
+  captionHighlightItalic: true,
+  captionHighlightGlow: 0,
   captionFontSize: 96,
+  captionFontWeight: 800,
+  captionLetterSpacing: 0,
   captionPrimary: '#FFFFFF',
   captionHighlight: '#D9B478',
   captionOutline: '#09090A',
@@ -37,12 +43,16 @@ const DEFAULTS = Object.freeze({
   captionBackgroundOpacity: 0,
   captionPosition: 'middle',
   captionHorizontal: 'right',
+  captionPositionX: 78,
+  captionPositionY: 58,
   captionMarginV: 180,
   captionMarginH: 90,
   captionMaxWords: 4,
   captionStackMaxWords: 4,
   captionStackProbability: 0.42,
   captionClearPause: 0.42,
+  captionHoldSeconds: 0.04,
+  captionTimingOffsetMs: 0,
   captionLineHeight: 0.88,
   captionUppercase: false,
   hookEnabled: false,
@@ -77,8 +87,10 @@ const ENUMS = {
 const NUMBER_RANGES = {
   width: [360, 2160], height: [360, 3840], blurStrength: [0, 60],
   brightness: [-1, 1], contrast: [0.5, 2], saturation: [0, 3], gamma: [0.5, 2], sharpen: [0, 2], vignette: [0, 1],
-  captionFontSize: [24, 140], captionOutlineWidth: [0, 14], captionShadow: [0, 8], captionBackgroundOpacity: [0, 100],
+  captionFontSize: [24, 180], captionFontWeight: [400, 900], captionLetterSpacing: [-4, 12],
+  captionOutlineWidth: [0, 14], captionShadow: [0, 8], captionBackgroundOpacity: [0, 100], captionHighlightGlow: [0, 30],
   captionMarginV: [20, 800], captionMarginH: [20, 700], captionMaxWords: [1, 12],
+  captionPositionX: [0, 100], captionPositionY: [0, 100], captionTimingOffsetMs: [-1500, 1500], captionHoldSeconds: [0, 0.2],
   captionStackMaxWords: [1, 6], captionStackProbability: [0, 1], captionClearPause: [0.15, 2], captionLineHeight: [0.65, 1.4],
   hookDuration: [0.5, 8], hookFontSize: [24, 120], hookBackgroundOpacity: [0, 100],
   watermarkFontSize: [12, 90], watermarkOpacity: [0, 100], watermarkMarginV: [10, 500], watermarkMarginH: [10, 500],
@@ -119,10 +131,12 @@ export function sanitiseTemplate(input = {}, { id = '', builtIn = false, userId 
   for (const [key, [minimum, maximum]] of Object.entries(NUMBER_RANGES)) {
     output[key] = clamp(source[key], minimum, maximum, DEFAULTS[key]);
   }
+  if (input?.captionPositionX == null) output.captionPositionX = ({ left: 22, center: 50, right: 78 })[output.captionHorizontal] ?? 50;
+  if (input?.captionPositionY == null) output.captionPositionY = ({ top: 24, middle: 58, bottom: 76 })[output.captionPosition] ?? 58;
   for (const key of ['frameBackground', 'captionPrimary', 'captionHighlight', 'captionOutline', 'captionBackground', 'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor']) {
     output[key] = cleanColor(source[key], DEFAULTS[key]);
   }
-  for (const key of ['captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled']) {
+  for (const key of ['captionUppercase', 'captionHighlightItalic', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled']) {
     output[key] = Boolean(source[key]);
   }
   // Opening title cards are intentionally disabled. Clips begin immediately with spoken captions.
@@ -132,6 +146,8 @@ export function sanitiseTemplate(input = {}, { id = '', builtIn = false, userId 
     output.captionMode = 'dynamic-stack';
   }
   output.captionFont = cleanText(source.captionFont, DEFAULTS.captionFont, 80);
+  output.captionHighlightFont = cleanText(source.captionHighlightFont, DEFAULTS.captionHighlightFont, 80);
+  output.captionArabicFont = cleanText(source.captionArabicFont, DEFAULTS.captionArabicFont, 80);
   output.watermark = cleanText(source.watermark, DEFAULTS.watermark, 60);
   output.version = Math.max(1, Math.round(Number(source.version) || 1));
   output.updatedAt = Number(source.updatedAt) || Date.now();

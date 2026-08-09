@@ -62,6 +62,29 @@ function json(res, status, value) {
 function redirect(res, location) { res.writeHead(302, { Location: location, 'Cache-Control': 'no-store' }); res.end(); }
 function temporaryRedirect(res, location) { res.writeHead(307, { Location: location, 'Cache-Control': 'private, no-store' }); res.end(); }
 
+async function projectTranscriptSegments(project) {
+  if (!project) return [];
+  let parsed = null;
+  if (project.transcriptFile && fs.existsSync(project.transcriptFile)) {
+    parsed = JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8'));
+  } else if (project.transcriptObjectKey && objectStorage.configured()) {
+    const key = String(project.transcriptObjectKey || '');
+    if (!/^projects\/[A-Za-z0-9._/-]+\/transcript\.json$/.test(key) || key.includes('..')) {
+      throw new Error('The stored transcript reference is invalid.');
+    }
+    const response = await fetch(objectStorage.presign({ method: 'GET', key, expiresSec: 120 }), {
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!response.ok) throw new Error(`Stored transcript download failed with status ${response.status}.`);
+    const declaredSize = Number(response.headers.get('content-length') || 0);
+    if (declaredSize > 20 * 1024 * 1024) throw new Error('The stored transcript is unexpectedly large.');
+    const body = await response.text();
+    if (Buffer.byteLength(body) > 20 * 1024 * 1024) throw new Error('The stored transcript is unexpectedly large.');
+    parsed = JSON.parse(body);
+  }
+  return Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.segments) ? parsed.segments : []);
+}
+
 function redirectWithCookies(res, location, cookies = []) {
   const headers = { Location: location, 'Cache-Control': 'no-store' };
   if (cookies.length) headers['Set-Cookie'] = cookies;
@@ -79,7 +102,7 @@ function applySecurityHeaders(res) {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(self)');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: https:; media-src 'self' blob: https:; connect-src 'self' https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: https:; media-src 'self' blob: https:; connect-src 'self' https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com");
 }
 
 const authAttempts = new Map();
@@ -989,10 +1012,9 @@ async function route(req, res, url) {
 
     let words = [];
     let exact = false;
-    if (project?.transcriptFile && fs.existsSync(project.transcriptFile)) {
+    if ((project?.transcriptFile && fs.existsSync(project.transcriptFile)) || project?.transcriptObjectKey) {
       try {
-        const parsed = JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8'));
-        const segments = Array.isArray(parsed) ? parsed : (parsed.segments || []);
+        const segments = await projectTranscriptSegments(project);
         words = wordsForClip(segments, clipStart, clipEnd);
         exact = words.length > 0;
       } catch {
@@ -1018,14 +1040,13 @@ async function route(req, res, url) {
     const id = decodeURIComponent(clipResync[1]);
     let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 403, errorBody(error)); }
     const project = state.projects.find(item => item.id === clip.projectId);
-    if (!project?.transcriptFile || !fs.existsSync(project.transcriptFile)) {
+    if ((!project?.transcriptFile || !fs.existsSync(project.transcriptFile)) && !project?.transcriptObjectKey) {
       return json(res, 400, { error: 'No transcript is stored for this lecture, so speech timing cannot be recovered.' });
     }
     const clipStart = Number(clip.startSec) || 0;
     const clipEnd = Number(clip.endSec) || (clipStart + (Number(clip.durationMs) || 0) / 1000);
     try {
-      const parsed = JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8'));
-      const segments = Array.isArray(parsed) ? parsed : (parsed.segments || []);
+      const segments = await projectTranscriptSegments(project);
       const words = wordsForClip(segments, clipStart, clipEnd);
       if (!words.length) return json(res, 400, { error: 'No speech was found inside this clip.' });
       return json(res, 200, {

@@ -666,6 +666,34 @@ def candidate_words(candidate: Candidate) -> list[dict[str, Any]]:
     return words
 
 
+def remap_edited_words(text: str, source_words: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep edited wording on the original Whisper speech rhythm and pauses."""
+    tokens = [token for token in str(text or "").strip().split() if token]
+    source = [
+        word for word in source_words
+        if math.isfinite(float(word.get("start", 0))) and float(word.get("end", 0)) > float(word.get("start", 0))
+    ]
+    if not tokens or not source:
+        return []
+    if len(tokens) == len(source):
+        return [{**source[index], "word": token} for index, token in enumerate(tokens)]
+
+    mapped: list[dict[str, Any]] = []
+    for index, token in enumerate(tokens):
+        position = 0.0 if len(tokens) == 1 else index / (len(tokens) - 1) * (len(source) - 1)
+        left = math.floor(position)
+        right = min(len(source) - 1, math.ceil(position))
+        mix = position - left
+        start = float(source[left]["start"]) + (float(source[right]["start"]) - float(source[left]["start"])) * mix
+        next_position = min(len(source) - 1, position + max(0.65, len(source) / len(tokens)))
+        next_left = math.floor(next_position)
+        next_right = min(len(source) - 1, math.ceil(next_position))
+        next_mix = next_position - next_left
+        estimated_end = float(source[next_left]["end"]) + (float(source[next_right]["end"]) - float(source[next_left]["end"])) * next_mix
+        mapped.append({"word": token, "start": start, "end": max(start + 0.08, estimated_end)})
+    return mapped
+
+
 def chunked(items: list[Any], size: int) -> Iterable[list[Any]]:
     for index in range(0, len(items), max(1, size)):
         yield items[index:index + max(1, size)]
@@ -683,6 +711,7 @@ def dynamic_caption_frames(candidate: Candidate, template: dict[str, Any]) -> li
     max_stack = max(1, min(6, int(template.get("captionStackMaxWords", 4))))
     probability = max(0.0, min(1.0, float(template.get("captionStackProbability", 0.42))))
     clear_pause = max(0.15, min(2.0, float(template.get("captionClearPause", 0.42))))
+    hold = max(0.0, min(0.2, float(template.get("captionHoldSeconds", 0.04))))
     frames: list[dict[str, Any]] = []
     stack: list[dict[str, Any]] = []
     target = 1
@@ -714,7 +743,7 @@ def dynamic_caption_frames(candidate: Candidate, template: dict[str, Any]) -> li
         if index + 1 < len(words):
             next_start = float(words[index + 1]["start"])
             gap = max(0.0, next_start - float(word["end"]))
-            end = next_start if gap < clear_pause else float(word["end"]) + min(0.14, gap * 0.35)
+            end = next_start if gap < clear_pause else float(word["end"]) + min(hold, gap * 0.35)
         else:
             end = float(word["end"])
         frames.append({
@@ -722,6 +751,27 @@ def dynamic_caption_frames(candidate: Candidate, template: dict[str, Any]) -> li
             "end": max(float(word["start"]) + 0.08, min(candidate.duration, end)),
             "words": list(stack),
         })
+    return frames
+
+
+def phrase_caption_frames(words: list[dict[str, Any]], max_words: int, clear_pause: float, hold: float) -> list[dict[str, Any]]:
+    """Group exact words without ever carrying a caption across real silence."""
+    frames: list[dict[str, Any]] = []
+    start = 0
+    for index, word in enumerate(words):
+        next_word = words[index + 1] if index + 1 < len(words) else None
+        gap = max(0.0, float(next_word["start"]) - float(word["end"])) if next_word else float("inf")
+        punctuation = bool(re.search(r"[.!?…][\"']?$", str(word.get("word") or "").strip()))
+        if index - start + 1 < max_words and not punctuation and gap < clear_pause and next_word:
+            continue
+        group = words[start:index + 1]
+        end = float(word["end"])
+        if next_word and gap < clear_pause:
+            end = float(next_word["start"])
+        elif next_word:
+            end += min(hold, gap * 0.35)
+        frames.append({"start": float(group[0]["start"]), "end": end, "words": group})
+        start = index + 1
     return frames
 
 
@@ -734,6 +784,8 @@ def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) ->
     highlight_italic = bool(template.get("captionHighlightItalic", True))
     highlight_glow = max(0.0, min(30.0, float(template.get("captionHighlightGlow", 0))))
     font_size = int(template.get("captionFontSize", 62))
+    font_weight = max(400, min(900, int(template.get("captionFontWeight", 800))))
+    letter_spacing = max(-4.0, min(12.0, float(template.get("captionLetterSpacing", 0))))
     margin_v = int(template.get("captionMarginV", 220))
     outline_width = float(template.get("captionOutlineWidth", 5))
     shadow = float(template.get("captionShadow", 1))
@@ -752,6 +804,15 @@ def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) ->
     border_style = 3 if background_opacity > 0 else 1
     uppercase = bool(template.get("captionUppercase", False))
     max_words = int(template.get("captionMaxWords", 6))
+    clear_pause = max(0.15, min(2.0, float(template.get("captionClearPause", 0.42))))
+    hold = max(0.0, min(0.2, float(template.get("captionHoldSeconds", 0.04))))
+    timing_offset = max(-1.5, min(1.5, float(template.get("captionTimingOffsetMs", 0)) / 1000.0))
+    caption_x = int(round(width * max(0.0, min(100.0, float(template.get("captionPositionX", 50)))) / 100.0))
+    caption_y = int(round(height * max(0.0, min(100.0, float(template.get("captionPositionY", 58)))) / 100.0))
+    position_tag = f"{{\\pos({caption_x},{caption_y})}}"
+
+    def shifted(value: float) -> float:
+        return max(0.0, min(candidate.duration, float(value) + timing_offset))
 
     watermark_opacity = float(template.get("watermarkOpacity", 100))
     watermark_color = ass_color(template.get("watermarkColor", "#FFFFFF"), opacity_alpha(watermark_opacity))
@@ -770,7 +831,7 @@ WrapStyle: 2
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,{font},{font_size},{primary},{highlight},{outline},{back},-1,0,0,0,100,{scale_y},0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
+Style: Caption,{font},{font_size},{primary},{highlight},{outline},{back},{-1 if font_weight >= 600 else 0},0,0,0,100,{scale_y},{letter_spacing:g},0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
 Style: Watermark,{font},{watermark_size},{watermark_color},{watermark_color},{outline},&H00000000,1,0,0,0,100,100,2,0,1,1,0,{watermark_align},{watermark_margin_h},{watermark_margin_h},{watermark_margin_v},1
 
 [Events]
@@ -794,8 +855,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     highlight_italic=highlight_italic, highlight_glow=highlight_glow, scale_y=scale_y,
                 ))
             text = "\\N".join(lines)
-            events.append(f"Dialogue: 2,{ass_time(frame['start'])},{ass_time(frame['end'])},Caption,,0,0,0,,{text}")
+            start = shifted(frame["start"])
+            end = shifted(frame["end"])
+            if end > start:
+                events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{position_tag}{text}")
     elif mode == "word" and words:
+        word_index = 0
         for group in chunked(words, max_words):
             for active_index, active in enumerate(group):
                 text_parts: list[str] = []
@@ -806,19 +871,33 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                         highlight_font=highlight_font, arabic_font=arabic_font,
                         highlight_italic=highlight_italic, highlight_glow=highlight_glow, scale_y=scale_y,
                     ))
-                start = float(active["start"])
-                end = max(start + 0.08, float(active["end"]))
-                events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{' '.join(text_parts)}")
+                raw_start = float(active["start"])
+                raw_end = max(raw_start + 0.08, float(active["end"]))
+                next_word = words[word_index + 1] if word_index + 1 < len(words) else None
+                gap = max(0.0, float(next_word["start"]) - raw_end) if next_word else float("inf")
+                raw_end = float(next_word["start"]) if next_word and gap < clear_pause else raw_end + (min(hold, gap * 0.35) if next_word else hold)
+                start, end = shifted(raw_start), shifted(raw_end)
+                if end > start:
+                    events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{position_tag}{' '.join(text_parts)}")
+                word_index += 1
+    elif words:
+        for frame in phrase_caption_frames(words, max_words, clear_pause, hold):
+            raw = " ".join(str(word["word"]) for word in frame["words"])
+            raw = raw.upper() if uppercase else raw
+            text = wrap_caption(ass_escape(raw), 28)
+            start, end = shifted(frame["start"]), shifted(frame["end"])
+            if end > start:
+                events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{position_tag}{text}")
     else:
         for segment in candidate.segments:
-            start = max(0.0, float(segment["start"]) - candidate.start)
-            end = min(candidate.duration, float(segment["end"]) - candidate.start)
+            start = shifted(max(0.0, float(segment["start"]) - candidate.start))
+            end = shifted(min(candidate.duration, float(segment["end"]) - candidate.start))
             if end <= start:
                 continue
             raw = str(segment["text"])
             raw = raw.upper() if uppercase else raw
             text = wrap_caption(ass_escape(raw), 28)
-            events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{text}")
+            events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{position_tag}{text}")
     ass_file.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
 
 
@@ -1308,6 +1387,13 @@ def process_rerender(job: dict[str, Any], job_file: Path) -> None:
     if not segments:
         segments = [{"start": start, "end": end, "text": str(clip.get("transcript") or clip.get("description") or "Reminder"), "words": []}]
     text = " ".join(str(segment.get("text") or "").strip() for segment in segments).strip()
+    edited_text = str(clip.get("transcript") or "").strip()
+    if edited_text and edited_text != text:
+        source_words = [word for segment in segments for word in (segment.get("words") or [])]
+        edited_words = remap_edited_words(edited_text, source_words)
+        if edited_words:
+            segments = [{"start": start, "end": end, "text": edited_text, "words": edited_words}]
+            text = edited_text
     score = int(clip.get("score") or 70)
     candidate = Candidate(
         start=start,

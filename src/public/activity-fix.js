@@ -35,15 +35,15 @@ const notify = (message, kind='good') => {
 };
 
 const ICON = {
-  home:'<svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3Z"/></svg>',
-  projects:'<svg viewBox="0 0 24 24"><path d="M3.5 6.5h6l1.8 2h9.2v11H3.5Z"/></svg>',
-  review:'<svg viewBox="0 0 24 24"><path d="M5 4h14v16H5Z"/><path d="m8 12 2.2 2.2L16 8.5"/></svg>',
-  editor:'<svg viewBox="0 0 24 24"><path d="m4 16.5 9-9 3.5 3.5-9 9H4Z"/><path d="m15 6 1.5-1.5a2 2 0 0 1 2.8 0l.2.2a2 2 0 0 1 0 2.8L18 9"/></svg>',
-  publish:'<svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 20h16"/></svg>',
-  analytics:'<svg viewBox="0 0 24 24"><path d="M4 20V11m5 9V4m6 16v-7m5 7H2"/></svg>',
-  social:'<svg viewBox="0 0 24 24"><circle cx="7" cy="12" r="3"/><circle cx="17" cy="6" r="3"/><circle cx="17" cy="18" r="3"/><path d="m9.5 10.5 5-3m-5 6 5 3"/></svg>',
-  music:'<svg viewBox="0 0 24 24"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>',
-  settings:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>',
+  home:'<svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/><path d="m9 21 6 0"/></svg>',
+  projects:'<svg viewBox="0 0 24 24"><path d="M3 7.5h6l2-2h10v14H3Z"/><path d="M3 10h18"/></svg>',
+  review:'<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 3v3h6V3M8 13l2.3 2.3L16.5 9"/></svg>',
+  editor:'<svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16Z"/><path d="m13.5 6.5 4 4M4 12H2m20 0h-2M12 4V2m0 20v-2"/></svg>',
+  publish:'<svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/></svg>',
+  analytics:'<svg viewBox="0 0 24 24"><path d="M4 20V10m5 10V4m6 16v-7m5 7H2"/><path d="m4 7 5-4 6 6 5-4"/></svg>',
+  social:'<svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="m8.7 10.7 6.6-3.4m-6.6 6 6.6 3.4"/></svg>',
+  music:'<svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/><path d="M9 9l11-2"/></svg>',
+  settings:'<svg viewBox="0 0 24 24"><path d="M4 7h10m4 0h2M4 17h2m4 0h10M4 12h3m4 0h9"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/><circle cx="9" cy="12" r="2"/></svg>',
   captions:'<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 10a3 3 0 1 0 0 4m7-4a3 3 0 1 0 0 4"/></svg>',
   canvas:'<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8v8H8Z"/></svg>',
   style:'<svg viewBox="0 0 24 24"><path d="M12 3 4 8v8l8 5 8-5V8Z"/><path d="m4 8 8 5 8-5M12 13v8"/></svg>',
@@ -74,14 +74,14 @@ const CREATE_NAV = [
   ['home','Home','home'], ['projects','Projects','projects'], ['review','Review','review']
 ];
 const PUBLISH_NAV = [
-  ['schedule','Schedule','publish'], ['publishing','Channels','social']
+  ['schedule','Publishing','publish'], ['publishing','Channels','social']
 ];
 const STUDIO_NAV = [
   ['templates','Templates','style'], ['music','Audio','music'], ['insights','Insights','analytics'], ['automation','Settings','settings']
 ];
 const NAV = [...CREATE_NAV, ...PUBLISH_NAV, ...STUDIO_NAV];
 const MANAGE = [];
-const CUSTOM = new Set(['home','projects','review','editor','publishing','templates','music','automation','insights','admin']);
+const CUSTOM = new Set(['home','projects','review','editor','schedule','publishing','templates','music','automation','insights','admin']);
 
 let currentView = 'home';
 let selectedProjectId = '';
@@ -91,6 +91,7 @@ let projectFilter = 'all';
 let projectSort = 'newest';
 let reviewFilter = 'all';
 let reviewSort = 'score';
+let publishingQueueTab = 'queue';
 let shellReady = false;
 let lastDataSignature = '';
 let lastWriteAt = 0;
@@ -689,6 +690,73 @@ body.dc-app #view-schedule .slot-card.open .slot-media{
 
 `;
 
+const publishingWorkspaceCss = String.raw`
+/* Publishing workspace: the real product now matches the polished launch preview. */
+body.dc-app #view-schedule{max-width:1540px;margin:0 auto}
+.dc-publish-page{display:grid;gap:14px}
+.dc-publish-hero{position:relative;overflow:hidden;display:flex;align-items:flex-end;justify-content:space-between;gap:22px;padding:26px 28px;border:1px solid rgba(217,180,120,.2);border-radius:26px;background:radial-gradient(circle at 4% 0,rgba(217,180,120,.16),transparent 36%),radial-gradient(circle at 92% 15%,rgba(90,174,255,.09),transparent 32%),linear-gradient(145deg,#151519,#0c0c0f);box-shadow:0 26px 70px rgba(0,0,0,.22)}
+.dc-publish-hero:after{content:'';position:absolute;right:-80px;top:-110px;width:310px;height:310px;border:1px solid rgba(217,180,120,.09);border-radius:50%;box-shadow:0 0 90px rgba(217,180,120,.05);pointer-events:none}
+.dc-publish-kicker{display:inline-flex;align-items:center;gap:7px;color:var(--dc-accent2);font-size:9px;font-weight:850;letter-spacing:.12em;text-transform:uppercase}.dc-publish-kicker svg{width:15px;height:15px}
+.dc-publish-hero h1{margin:8px 0 7px;font-size:clamp(30px,3vw,42px);line-height:.98;letter-spacing:-.05em}.dc-publish-hero p{max-width:640px;margin:0;color:var(--dc-muted);font-size:11px;line-height:1.55}
+.dc-publish-summary{position:relative;z-index:1;display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.dc-publish-summary span{min-width:78px;padding:11px 13px;border:1px solid rgba(255,255,255,.075);border-radius:15px;background:rgba(0,0,0,.28)}.dc-publish-summary b,.dc-publish-summary em{display:block}.dc-publish-summary b{font-size:18px}.dc-publish-summary em{margin-top:2px;color:var(--dc-subtle);font-size:8px;font-style:normal}
+.dc-publish-layout{display:grid;grid-template-columns:minmax(0,1fr) 318px;gap:14px;align-items:start}
+.dc-publish-board,.dc-publish-side-card{overflow:hidden;border:1px solid rgba(255,255,255,.08);border-radius:24px;background:linear-gradient(180deg,#141417,#0d0d10);box-shadow:0 22px 60px rgba(0,0,0,.2)}
+.dc-publish-tabs{display:flex;min-height:60px;padding:0 16px;border-bottom:1px solid rgba(255,255,255,.075);background:rgba(255,255,255,.012)}
+.dc-publish-tab{position:relative;display:inline-flex;align-items:center;gap:8px;padding:0 17px;color:var(--dc-muted);font-size:10px;font-weight:720}.dc-publish-tab b{display:grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:rgba(255,255,255,.055);font-size:8px}.dc-publish-tab:hover{color:var(--dc-text)}.dc-publish-tab.on{color:var(--dc-text)}.dc-publish-tab.on:after{content:'';position:absolute;left:15px;right:15px;bottom:0;height:2px;background:linear-gradient(90deg,var(--dc-accent),var(--dc-accent2));box-shadow:0 0 16px rgba(217,180,120,.25)}.dc-publish-tab.on b{background:rgba(217,180,120,.13);color:var(--dc-accent2)}
+.dc-publish-columns{display:grid;grid-template-columns:minmax(260px,1.35fr) minmax(130px,.62fr) minmax(130px,.55fr) minmax(250px,.95fr);gap:14px;padding:11px 18px;border-bottom:1px solid rgba(255,255,255,.055);color:var(--dc-subtle);font-size:8px;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
+.dc-publish-list{display:grid}.dc-publish-row{display:grid;grid-template-columns:minmax(260px,1.35fr) minmax(130px,.62fr) minmax(130px,.55fr) minmax(250px,.95fr);gap:14px;align-items:center;min-height:112px;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.06);transition:background .2s ease}.dc-publish-row:hover{background:rgba(255,255,255,.025)}.dc-publish-row:last-child{border-bottom:0}
+.dc-publish-clip{display:grid;grid-template-columns:78px minmax(0,1fr);gap:12px;align-items:center}.dc-publish-thumb{position:relative;width:78px;height:78px;overflow:hidden;border-radius:13px;background:#08080a;border:1px solid rgba(255,255,255,.08)}.dc-publish-thumb img{width:100%;height:100%;object-fit:cover}.dc-publish-thumb>span{position:absolute;right:5px;bottom:5px;min-height:18px;padding:0 5px;display:grid;place-items:center;border-radius:6px;background:rgba(0,0,0,.76);font-size:7px;color:#fff}.dc-publish-thumb.empty{display:grid;place-items:center;color:var(--dc-accent)}.dc-publish-thumb.empty svg{width:24px;height:24px}
+.dc-publish-copy strong,.dc-publish-copy span{display:block}.dc-publish-copy strong{font-size:11px;line-height:1.35}.dc-publish-copy span{margin-top:5px;color:var(--dc-subtle);font-size:8.5px}.dc-publish-when{display:flex;gap:8px;align-items:flex-start}.dc-publish-when>span{width:27px;height:27px;display:grid;place-items:center;flex:0 0 27px;border-radius:9px;background:rgba(217,180,120,.08);color:var(--dc-accent2)}.dc-publish-when svg{width:14px;height:14px}.dc-publish-when b,.dc-publish-when em{display:block}.dc-publish-when b{font-size:9.5px}.dc-publish-when em{margin-top:3px;color:var(--dc-subtle);font-size:8px;font-style:normal}
+.dc-publish-brands{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.dc-publish-brand{width:29px;height:29px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.08);border-radius:9px;background:#19191d;color:#84848e}.dc-publish-brand svg{width:15px;height:15px}.dc-publish-brand.youtube.on{color:#ff4c55;background:rgba(255,76,85,.08)}.dc-publish-brand.tiktok.on{color:#fff}.dc-publish-brand.instagram.on{color:#f578c5;background:rgba(245,120,197,.08)}.dc-publish-brand.facebook.on{color:#6c9cff;background:rgba(108,156,255,.08)}.dc-publish-brand-more{font-size:8px;color:var(--dc-muted)}
+.dc-publish-actions{display:flex;justify-content:flex-end;align-items:center;gap:7px}.dc-publish-actions .dc-btn{min-height:35px;padding:0 11px;font-size:9px}.dc-publish-actions .dc-btn.primary{min-width:86px}.dc-publish-more{width:34px;height:34px;display:grid;place-items:center;color:var(--dc-muted);border-radius:9px}.dc-publish-more:hover{background:rgba(255,255,255,.05);color:var(--dc-text)}
+.dc-publish-empty{min-height:330px;display:grid;place-items:center;padding:34px;text-align:center}.dc-publish-empty>div{max-width:350px}.dc-publish-empty .dc-empty-icon{margin:0 auto 14px}.dc-publish-empty strong{display:block;font-size:15px}.dc-publish-empty p{margin:7px 0 16px;color:var(--dc-muted);font-size:10px;line-height:1.5}
+.dc-publish-board-foot{display:flex;align-items:center;justify-content:center;gap:10px;padding:13px;border-top:1px solid rgba(255,255,255,.065);color:var(--dc-muted);font-size:9px}.dc-publish-board-foot button{color:var(--dc-accent2);font-weight:750}.dc-publish-board-foot svg{width:14px;height:14px}
+.dc-publish-side{display:grid;gap:14px}.dc-publish-side-card{padding:15px}.dc-publish-side-head{display:flex;align-items:center;gap:9px;margin-bottom:13px}.dc-publish-side-head>span{width:31px;height:31px;display:grid;place-items:center;border-radius:10px;background:rgba(217,180,120,.09);color:var(--dc-accent2)}.dc-publish-side-head svg{width:16px;height:16px}.dc-publish-side-head strong,.dc-publish-side-head small{display:block}.dc-publish-side-head strong{font-size:11px}.dc-publish-side-head small{margin-top:2px;color:var(--dc-subtle);font-size:8px}
+.dc-publish-connection-list{display:grid;gap:6px}.dc-publish-connection{display:grid;grid-template-columns:31px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px;border:1px solid rgba(255,255,255,.06);border-radius:12px;background:rgba(0,0,0,.18)}.dc-publish-connection .dc-publish-brand{width:31px;height:31px}.dc-publish-connection strong,.dc-publish-connection small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-publish-connection strong{font-size:9px}.dc-publish-connection small{margin-top:2px;color:var(--dc-subtle);font-size:7.5px}.dc-publish-connection .dc-pill{min-height:20px;padding:0 7px;font-size:7px}
+.dc-publish-connect{width:100%;margin-top:9px}.dc-publish-previews{display:grid;grid-template-columns:1fr 1fr;gap:8px}.dc-publish-preview{position:relative;aspect-ratio:9/14;overflow:hidden;border-radius:13px;background:#08080a;border:1px solid rgba(255,255,255,.08)}.dc-publish-preview img{width:100%;height:100%;object-fit:cover;transition:transform .35s ease}.dc-publish-preview:hover img{transform:scale(1.04)}.dc-publish-preview span{position:absolute;left:7px;right:7px;bottom:7px;padding:6px;border-radius:8px;background:rgba(0,0,0,.72);color:#fff;font-size:7px;line-height:1.3}.dc-publish-preview.empty{display:grid;place-items:center;color:var(--dc-subtle)}
+@media(max-width:1220px){.dc-publish-layout{grid-template-columns:1fr}.dc-publish-side{grid-template-columns:1fr 1fr}.dc-publish-columns,.dc-publish-row{grid-template-columns:minmax(240px,1.25fr) minmax(120px,.62fr) minmax(120px,.5fr) minmax(230px,.9fr)}}
+@media(max-width:900px){.dc-publish-hero{align-items:flex-start;flex-direction:column}.dc-publish-summary{justify-content:flex-start}.dc-publish-columns{display:none}.dc-publish-row{grid-template-columns:minmax(0,1fr) auto}.dc-publish-when,.dc-publish-brands{grid-column:1}.dc-publish-actions{grid-column:2;grid-row:1/4;flex-direction:column;align-items:stretch}.dc-publish-side{grid-template-columns:1fr 1fr}}
+@media(max-width:620px){.dc-publish-hero{padding:21px}.dc-publish-tabs{padding:0;overflow:auto}.dc-publish-tab{padding:0 12px}.dc-publish-row{grid-template-columns:1fr;padding:14px}.dc-publish-actions{grid-column:1;grid-row:auto;flex-direction:row;justify-content:flex-start;flex-wrap:wrap}.dc-publish-side{grid-template-columns:1fr}.dc-publish-summary span{min-width:72px}.dc-publish-board-foot{flex-wrap:wrap;text-align:center}}
+`;
+
+const premiumStudioCss = String.raw`
+/* DeenClipped visual system: restrained colour, clearer hierarchy, real icon language. */
+:root{--dc-blue:#65a9ff;--dc-purple:#ad8cff;--dc-pink:#f17ab8;--dc-teal:#5ed6c5;--dc-green:#63d89a;--dc-orange:#efb45f;--dc-gold:#dfb86f}
+body.dc-app{background:radial-gradient(circle at 76% -10%,rgba(76,101,170,.08),transparent 35%),radial-gradient(circle at 12% 110%,rgba(217,180,120,.07),transparent 34%),#070709!important}
+#dcSidebar{background:linear-gradient(180deg,rgba(14,14,17,.98),rgba(8,8,11,.99));box-shadow:20px 0 70px rgba(0,0,0,.18)}
+.dc-logo{background:radial-gradient(circle at 35% 20%,rgba(255,229,174,.18),transparent 45%),rgba(217,180,120,.08);box-shadow:0 0 26px rgba(217,180,120,.08),inset 0 0 0 1px rgba(255,255,255,.025)}
+.dc-nav-button{position:relative;border:1px solid transparent}.dc-nav-button .dc-nav-icon{border-radius:8px;transition:color .2s ease,background .2s ease,box-shadow .2s ease}.dc-nav-button .dc-nav-icon svg{width:18px;height:18px}
+.dc-nav-button[data-dc-nav="home"] .dc-nav-icon,.dc-nav-button[data-dc-nav="projects"] .dc-nav-icon{color:var(--dc-gold)}
+.dc-nav-button[data-dc-nav="review"] .dc-nav-icon{color:var(--dc-orange)}.dc-nav-button[data-dc-nav="schedule"] .dc-nav-icon{color:var(--dc-green)}.dc-nav-button[data-dc-nav="publishing"] .dc-nav-icon{color:var(--dc-purple)}
+.dc-nav-button[data-dc-nav="templates"] .dc-nav-icon{color:var(--dc-pink)}.dc-nav-button[data-dc-nav="music"] .dc-nav-icon{color:var(--dc-teal)}.dc-nav-button[data-dc-nav="insights"] .dc-nav-icon{color:var(--dc-blue)}.dc-nav-button[data-dc-nav="automation"] .dc-nav-icon{color:#9ca8bd}
+.dc-nav-button.is-active{border-color:rgba(255,255,255,.055);background:linear-gradient(90deg,rgba(217,180,120,.13),rgba(255,255,255,.025))}.dc-nav-button.is-active .dc-nav-icon{background:rgba(255,255,255,.05);box-shadow:0 0 22px currentColor}
+.dc-btn:not(.secondary):not(.danger){background:linear-gradient(135deg,#f0cb83,#d9ab5e);box-shadow:0 10px 28px rgba(217,180,120,.13),inset 0 1px rgba(255,255,255,.35)}.dc-btn:not(.secondary):not(.danger):hover:not(:disabled){background:linear-gradient(135deg,#f8dda8,#e2b96f);transform:translateY(-1px)}
+.dc-pill.good{background:rgba(99,216,154,.1);color:var(--dc-green);border:1px solid rgba(99,216,154,.12)}.dc-pill.warn{background:rgba(239,180,95,.1);color:var(--dc-orange);border:1px solid rgba(239,180,95,.12)}.dc-pill.bad{border:1px solid rgba(239,107,122,.13)}
+.dc-social-logo.youtube,.dc-manage-logo.youtube{color:#ff4c55!important;background:rgba(255,76,85,.09)!important}.dc-social-logo.tiktok,.dc-manage-logo.tiktok{color:#fff!important;background:linear-gradient(135deg,rgba(37,244,238,.12),rgba(254,44,85,.12))!important}.dc-social-logo.instagram,.dc-manage-logo.instagram{color:#f17ab8!important;background:linear-gradient(145deg,rgba(157,78,221,.14),rgba(255,112,67,.11))!important}.dc-social-logo.facebook,.dc-manage-logo.facebook{color:#6c9cff!important;background:rgba(108,156,255,.1)!important}
+.dc-manage-card,.dc-template-card,.dc-settings-panel,.dc-insight-panel,.dc-project-card{background:radial-gradient(circle at 100% 0,rgba(255,255,255,.028),transparent 33%),linear-gradient(150deg,#16161a,#0d0d10)!important}
+
+/* Source-first Projects library. */
+.dc-library-page{display:grid;gap:14px}.dc-library-hero{position:relative;overflow:hidden;display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:27px 29px;border:1px solid rgba(217,180,120,.19);border-radius:27px;background:radial-gradient(circle at 7% 0,rgba(217,180,120,.17),transparent 36%),radial-gradient(circle at 91% 12%,rgba(101,169,255,.1),transparent 31%),linear-gradient(145deg,#16161a,#0c0c0f);box-shadow:0 28px 75px rgba(0,0,0,.23)}
+.dc-library-hero:after{content:'';position:absolute;right:7%;top:-155px;width:330px;height:330px;border-radius:50%;border:1px solid rgba(101,169,255,.09);box-shadow:0 0 100px rgba(101,169,255,.06);pointer-events:none}.dc-library-hero-copy{position:relative;z-index:1}.dc-library-kicker{display:inline-flex;align-items:center;gap:8px;color:var(--dc-accent2);font-size:9px;font-weight:850;letter-spacing:.12em;text-transform:uppercase}.dc-library-kicker svg{width:16px;height:16px}.dc-library-hero h1{max-width:760px;margin:9px 0 7px;font-size:clamp(30px,3.4vw,45px);line-height:1;letter-spacing:-.052em}.dc-library-hero p{max-width:660px;margin:0;color:var(--dc-muted);font-size:11px;line-height:1.55}.dc-library-hero>.dc-btn{position:relative;z-index:1}
+.dc-library-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}.dc-library-metrics>div{display:grid;grid-template-columns:37px auto;grid-template-rows:auto auto;column-gap:10px;align-items:center;padding:12px 14px;border:1px solid rgba(255,255,255,.07);border-radius:16px;background:linear-gradient(145deg,#151519,#0d0d10)}.dc-library-metrics>div>span{grid-row:1/3;width:37px;height:37px;display:grid;place-items:center;border-radius:12px}.dc-library-metrics svg{width:18px;height:18px}.dc-library-metrics strong{font-size:17px}.dc-library-metrics small{color:var(--dc-subtle);font-size:8px}.dc-library-metrics .gold,.dc-library-side-head .gold{color:var(--dc-gold);background:rgba(223,184,111,.1)}.dc-library-metrics .purple,.dc-library-side-head .purple{color:var(--dc-purple);background:rgba(173,140,255,.1)}.dc-library-metrics .blue,.dc-library-side-head .blue{color:var(--dc-blue);background:rgba(101,169,255,.1)}.dc-library-metrics .orange,.dc-library-side-head .orange{color:var(--dc-orange);background:rgba(239,180,95,.1)}.dc-library-metrics .green,.dc-library-side-head .green{color:var(--dc-green);background:rgba(99,216,154,.1)}
+.dc-library-toolbar{display:grid;grid-template-columns:minmax(260px,1fr) 180px 160px;gap:8px}.dc-library-toolbar input,.dc-library-toolbar select{width:100%;height:42px;min-height:42px;border:1px solid rgba(255,255,255,.075);border-radius:12px;background:#101014;color:var(--dc-text)}.dc-library-search{position:relative}.dc-library-search>svg{position:absolute;left:13px;top:13px;width:16px;height:16px;fill:none;stroke:var(--dc-subtle);stroke-width:1.8;z-index:1}.dc-library-search input{padding-left:39px}
+.dc-library-layout{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:14px;align-items:start}.dc-library-projects,.dc-library-side-card{overflow:hidden;border:1px solid rgba(255,255,255,.075);border-radius:22px;background:linear-gradient(180deg,#141417,#0d0d10);box-shadow:0 22px 56px rgba(0,0,0,.17)}.dc-library-section-head{min-height:60px;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 17px;border-bottom:1px solid rgba(255,255,255,.065)}.dc-library-section-head h2,.dc-library-section-head p{margin:0}.dc-library-section-head h2{font-size:13px}.dc-library-section-head p{margin-top:3px;color:var(--dc-subtle);font-size:8px}
+.dc-library-row{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 44px;border-bottom:1px solid rgba(255,255,255,.055);transition:background .2s ease}.dc-library-row:last-child{border-bottom:0}.dc-library-row:hover{background:rgba(255,255,255,.025)}.dc-library-row-main{display:grid;grid-template-columns:82px minmax(0,1fr) minmax(105px,auto) 18px;gap:13px;align-items:center;min-height:94px;padding:13px 5px 13px 17px;text-align:left;color:var(--dc-text)}.dc-library-row-main>svg{width:16px;height:16px;color:var(--dc-subtle)}.dc-library-row-thumb{width:82px;height:64px;overflow:hidden;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:#09090b}.dc-library-row-thumb img{width:100%;height:100%;object-fit:cover}.dc-library-row-thumb.empty{display:grid;place-items:center;color:var(--dc-gold);background:radial-gradient(circle at 50% 20%,rgba(217,180,120,.16),transparent 50%),#0c0c0f}.dc-library-row-thumb.empty svg{width:24px;height:24px}.dc-library-row-copy strong,.dc-library-row-copy em{display:block}.dc-library-row-copy strong{font-size:11px;line-height:1.35}.dc-library-row-copy em{margin-top:4px;color:var(--dc-subtle);font-size:8px;font-style:normal}.dc-library-progress{display:block;height:3px;margin-top:9px;border-radius:99px;background:rgba(255,255,255,.06);overflow:hidden}.dc-library-progress i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--dc-gold),var(--dc-blue))}.dc-library-row-state{display:flex;align-items:center;justify-content:flex-start;gap:7px;color:var(--dc-muted);font-size:8px;white-space:nowrap}.dc-library-row-state i{width:7px;height:7px;border-radius:50%;background:var(--dc-green);box-shadow:0 0 12px currentColor}.dc-library-row-state.blue{color:var(--dc-blue)}.dc-library-row-state.blue i{background:var(--dc-blue)}.dc-library-row-state.orange{color:var(--dc-orange)}.dc-library-row-state.orange i{background:var(--dc-orange)}.dc-library-row-state.bad{color:var(--dc-red)}.dc-library-row-state.bad i{background:var(--dc-red)}
+.dc-library-row-menu{position:relative;display:grid;place-items:center}.dc-library-row-menu summary{width:34px;height:34px;display:grid;place-items:center;border-radius:9px;color:var(--dc-muted);cursor:pointer;list-style:none}.dc-library-row-menu summary::-webkit-details-marker{display:none}.dc-library-row-menu summary:hover{background:rgba(255,255,255,.05);color:var(--dc-text)}.dc-library-row-menu>div{position:absolute;z-index:30;right:8px;top:64px;width:170px;padding:6px;border:1px solid var(--dc-line2);border-radius:11px;background:#18181c;box-shadow:0 20px 50px #000}.dc-library-row-menu>div button{width:100%;padding:9px;border-radius:7px;color:var(--dc-text);font-size:9px;text-align:left}.dc-library-row-menu>div button:hover{background:rgba(255,255,255,.05)}.dc-library-row-menu>div button.danger{color:var(--dc-red)}
+.dc-library-side{display:grid;gap:12px}.dc-library-side-card{padding:14px}.dc-library-side-head{display:flex;align-items:center;gap:9px;margin-bottom:11px}.dc-library-side-head>span{width:34px;height:34px;display:grid;place-items:center;border-radius:11px}.dc-library-side-head svg{width:17px;height:17px}.dc-library-side-head strong,.dc-library-side-head small{display:block}.dc-library-side-head strong{font-size:10px}.dc-library-side-head small{margin-top:2px;color:var(--dc-subtle);font-size:7.5px}.dc-library-side-card>.wide{width:100%;margin-top:9px}
+.dc-library-flow{display:grid;gap:5px}.dc-library-flow button{display:grid;grid-template-columns:7px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px;border-radius:9px;color:var(--dc-muted);font-size:8.5px;text-align:left}.dc-library-flow button:hover{background:rgba(255,255,255,.035)}.dc-library-flow i{width:7px;height:7px;border-radius:50%}.dc-library-flow i.blue{background:var(--dc-blue)}.dc-library-flow i.orange{background:var(--dc-orange)}.dc-library-flow i.green{background:var(--dc-green)}.dc-library-flow b{color:var(--dc-text)}
+.dc-library-platforms{display:grid;gap:5px}.dc-library-platforms>div{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px}.dc-library-platforms .dc-publish-brand{width:26px;height:26px}.dc-library-platforms b{font-size:8.5px}.dc-library-platforms em{color:var(--dc-subtle);font-size:7px;font-style:normal}.dc-library-platforms em.on{color:var(--dc-green)}.dc-library-recent{display:grid;gap:5px}.dc-library-recent>button{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px;border-radius:9px;text-align:left;color:var(--dc-text)}.dc-library-recent>button:hover{background:rgba(255,255,255,.035)}.dc-library-recent img,.dc-library-recent>button>span{width:40px;height:31px;object-fit:cover;border-radius:7px;background:#09090b;display:grid;place-items:center}.dc-library-recent svg{width:14px;height:14px}.dc-library-recent strong{font-size:8.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-library-recent em{color:var(--dc-subtle);font-size:7px;font-style:normal}
+
+/* Editor now reads as a creative suite rather than a flat form. */
+body.dc-app .dc-editor-page{filter:drop-shadow(0 24px 70px rgba(0,0,0,.22))}.dc-editor-header{position:relative!important;border-color:rgba(217,180,120,.19)!important;background:radial-gradient(circle at 70% -180%,rgba(217,180,120,.16),transparent 48%),linear-gradient(180deg,#19191d,#111114)!important}.dc-editor-header:after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent,var(--dc-gold),var(--dc-purple),transparent);opacity:.45}.dc-editor-workspace{border-color:rgba(255,255,255,.09)!important;background:#08080b!important;box-shadow:inset 0 1px rgba(255,255,255,.025)}
+.dc-tool-rail{background:linear-gradient(180deg,#111116,#0a0a0d)!important}.dc-tool-button{min-height:58px!important;border:1px solid transparent!important}.dc-tool-button .dc-tool-icon{width:30px;height:30px;display:grid;place-items:center;border-radius:10px;background:rgba(255,255,255,.035)}.dc-tool-button .dc-tool-icon svg{width:17px;height:17px}.dc-tool-button[data-editor-tool="captions"]{color:var(--dc-purple)}.dc-tool-button[data-editor-tool="canvas"]{color:var(--dc-blue)}.dc-tool-button[data-editor-tool="style"]{color:var(--dc-pink)}.dc-tool-button[data-editor-tool="audio"]{color:var(--dc-teal)}.dc-tool-button[data-editor-tool="details"]{color:var(--dc-orange)}.dc-tool-button.on{border-color:rgba(255,255,255,.07)!important;background:linear-gradient(145deg,rgba(255,255,255,.075),rgba(255,255,255,.025))!important;box-shadow:inset 3px 0 currentColor}.dc-tool-button.on .dc-tool-icon{background:color-mix(in srgb,currentColor 15%,transparent);box-shadow:0 0 24px color-mix(in srgb,currentColor 15%,transparent)}
+.dc-tool-panel{background:radial-gradient(circle at 0 0,rgba(173,140,255,.045),transparent 30%),linear-gradient(180deg,#151519,#0e0e11)!important}.dc-tool-head{background:rgba(255,255,255,.012)}.dc-tool-content::-webkit-scrollbar{width:7px}.dc-tool-content::-webkit-scrollbar-thumb{background:#34343c;border-radius:99px}.dc-subtabs{border-radius:11px!important}.dc-subtabs button.on{background:linear-gradient(145deg,#2a2a31,#1d1d22)!important;box-shadow:0 5px 16px rgba(0,0,0,.2)}.dc-style-card{border-radius:11px!important;background:linear-gradient(145deg,#121216,#0b0b0e)!important}.dc-style-card:hover,.dc-style-card.on{box-shadow:0 12px 28px rgba(0,0,0,.24)}
+.dc-canvas-area{background:#08080b!important}.dc-canvas-toolbar{background:linear-gradient(180deg,#111115,#0d0d10)!important}.dc-canvas-wrap{background-image:radial-gradient(circle at 50% 45%,rgba(101,169,255,.07),transparent 38%),linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px)!important;background-size:auto,24px 24px,24px 24px!important;background-position:center,center,center!important}.dc-video-canvas{border:1px solid rgba(255,255,255,.11);box-shadow:0 30px 90px #000,0 0 0 1px rgba(217,180,120,.07),0 0 55px rgba(101,169,255,.05)!important}.dc-layer-switch,.dc-safe-toggle{border-radius:9px!important}.dc-layer-switch button.on,.dc-safe-toggle.on{background:rgba(101,169,255,.11)!important;color:#b9d8ff!important;border-color:rgba(101,169,255,.2)!important}.dc-caption-status{background:rgba(8,8,11,.82)!important;border:1px solid rgba(173,140,255,.18);color:#d8caff!important;backdrop-filter:blur(8px)}
+.dc-timeline{background:linear-gradient(180deg,#141418,#0e0e11)!important}.dc-timeline-scroll{border-radius:10px!important}.dc-video-block{background:linear-gradient(90deg,#285c87,#3f82b5)!important}.dc-caption-block{background:linear-gradient(90deg,#5d4380,#8560a8)!important}.dc-caption-block.active{background:linear-gradient(90deg,#8462ab,#b084dc)!important}.dc-audio-block{background:linear-gradient(90deg,#365d4a,#52866a)!important}.dc-playhead{box-shadow:0 0 14px rgba(217,180,120,.45)}
+@media(max-width:1180px){.dc-library-layout{grid-template-columns:1fr}.dc-library-side{grid-template-columns:repeat(3,minmax(0,1fr))}.dc-library-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:760px){.dc-library-hero{align-items:flex-start;flex-direction:column;padding:21px}.dc-library-metrics{grid-template-columns:1fr 1fr}.dc-library-toolbar{grid-template-columns:1fr}.dc-library-side{grid-template-columns:1fr}.dc-library-row-main{grid-template-columns:66px minmax(0,1fr) 16px}.dc-library-row-thumb{width:66px;height:54px}.dc-library-row-state{grid-column:2}.dc-library-row-main>svg{grid-column:3;grid-row:1}.dc-library-section-head>.dc-pill{display:none}}
+`;
+
 
 const topbarCleanCss = String.raw`
 /* Phase billing topbar cleanup */
@@ -953,7 +1021,7 @@ function injectShell(){
   if (shellReady) return;
   shellReady = true;
   const style = document.createElement('style');
-  style.id = 'dcPhase4Styles'; style.textContent = css + billingCss + rangeChargeCss + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss + topbarCleanCss + trialUxCss + v4DashboardCss + v4WorkspaceCss + v4CinematicCss + v4DeclutterCss + v5ExperienceCss; document.head.appendChild(style);
+  style.id = 'dcPhase4Styles'; style.textContent = css + billingCss + rangeChargeCss + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss + topbarCleanCss + trialUxCss + v4DashboardCss + v4WorkspaceCss + v4CinematicCss + v4DeclutterCss + v5ExperienceCss + publishingWorkspaceCss + premiumStudioCss; document.head.appendChild(style);
   document.body.classList.add('dc-app');
 
   const side = document.createElement('aside'); side.id = 'dcSidebar';
@@ -1031,6 +1099,8 @@ function bindGlobal(){
 }
 
 function handleClick(event){
+  const publishTab = event.target.closest('[data-publish-tab]');
+  if (publishTab) { publishingQueueTab = publishTab.dataset.publishTab || 'queue'; renderPublishingWorkspace(); return; }
   const nav = event.target.closest('[data-dc-nav]');
   if (nav) { go(nav.dataset.dcNav); document.body.classList.remove('dc-menu-open'); return; }
   const result = event.target.closest('[data-search-type]');
@@ -1141,7 +1211,7 @@ function go(view){
   const labels = {
     home:['Home','Everything important in one place'], projects:['Projects','Lectures and all generated clips'],
     review:['Clip Review','Approve AI clips before posting'], editor:['Editor','Edit the selected clip'],
-    schedule:['Schedule','Queued posts and delivery timing'], insights:['Insights','Clip quality and studio signals'],
+    schedule:['Publishing','Post now, download, or schedule your clips'], insights:['Insights','Clip quality and studio signals'],
     publishing:['Channels','Connected publishing destinations'], templates:['Templates','Caption styles and reusable looks'], music:['Audio','Background tracks and audio level'],
     automation:['Settings','Generation rules and studio controls'],
     admin:['Admin','Subscriptions, storage, integrations and sign-ups']
@@ -1158,6 +1228,7 @@ function go(view){
     if (view === 'projects') renderProjects();
     if (view === 'review') renderReview();
     if (view === 'editor') ensureEditor();
+    if (view === 'schedule') renderPublishingWorkspace();
     if (view === 'publishing') renderConnections();
     if (view === 'templates') renderTemplatesPage();
     if (view === 'music') renderAudioLibrary();
@@ -1827,12 +1898,35 @@ function renderProjects(){
   else if(projectSort==='az')projects.sort((a,b)=>String(projectDisplayTitle(a)).localeCompare(String(projectDisplayTitle(b))));
   else projects.sort((a,b)=>Number(b.submittedAt||0)-Number(a.submittedAt||0));
   const hasAny=(d.projects||[]).length>0;
-  panel.innerHTML=`<div class="dc-page-head"><div><h1>Projects</h1><p>Your source videos and every clip created from them.</p></div>${hasAny?'<button class="dc-btn" data-dc-nav="home">＋ New project</button>':''}</div>${hasAny?`<div class="dc-filterbar"><input id="dcProjectSearch" placeholder="Search projects" value="${esc(projectQuery)}"><select id="dcProjectFilter"><option value="all">All projects</option><option value="processing" ${projectFilter==='processing'?'selected':''}>Processing</option><option value="ready" ${projectFilter==='ready'?'selected':''}>Ready to review</option><option value="issues" ${projectFilter==='issues'?'selected':''}>Needs attention</option></select><select id="dcProjectSort"><option value="newest">Newest first</option><option value="oldest" ${projectSort==='oldest'?'selected':''}>Oldest first</option><option value="az" ${projectSort==='az'?'selected':''}>A–Z</option></select></div>`:''}<div class="dc-project-grid">${projects.length?projects.map(p=>projectCard(p,d.clips||[])).join(''):hasAny?`<div class="dc-empty"><strong>No projects match</strong>Clear the search or choose another filter.</div>`:`<section class="dc-empty-visual"><div class="dc-empty-visual-copy"><span>${ICON.projects} Your project library</span><h2>Start with one source video.</h2><p>Paste a supported link or upload your original video. DeenClipped keeps the source, generated clips and publishing status together.</p><button class="dc-btn" data-dc-nav="home">Create your first project</button></div><div class="dc-empty-visual-media"><img src="/marketing-assets/library-premium.webp" alt="DeenClipped project library preview"></div></section>`}</div>`;
+  const allClips=d.clips||[], waiting=allClips.filter(c=>c.status==='waiting').length, processing=(d.projects||[]).filter(p=>['queued','processing'].includes(p.status)).length, ready=allClips.filter(c=>['approved','ready','scheduled'].includes(c.status)).length;
+  panel.innerHTML=`<div class="dc-library-page"><section class="dc-library-hero"><div class="dc-library-hero-copy"><span class="dc-library-kicker">${ICON.projects} Source-first library</span><h1>Every lecture, clip and next action—organised.</h1><p>Keep the original source at the top level, then move cleanly from processing to review and publishing.</p></div><button class="dc-btn" data-dc-nav="home">＋ New project</button></section>
+    <div class="dc-library-metrics"><div><span class="gold">${ICON.projects}</span><strong>${(d.projects||[]).length}</strong><small>Projects</small></div><div><span class="purple">${ICON.editor}</span><strong>${allClips.length}</strong><small>Generated clips</small></div><div><span class="blue">${ICON.sparkles}</span><strong>${processing}</strong><small>Processing</small></div><div><span class="orange">${ICON.review}</span><strong>${waiting}</strong><small>In review</small></div><div><span class="green">${ICON.publish}</span><strong>${ready}</strong><small>Ready to publish</small></div></div>
+    ${hasAny?`<div class="dc-library-toolbar"><div class="dc-library-search">${ICON.search}<input id="dcProjectSearch" placeholder="Search projects, lectures and sources" value="${esc(projectQuery)}"></div><select id="dcProjectFilter"><option value="all">All projects</option><option value="processing" ${projectFilter==='processing'?'selected':''}>Processing</option><option value="ready" ${projectFilter==='ready'?'selected':''}>Ready to review</option><option value="issues" ${projectFilter==='issues'?'selected':''}>Needs attention</option></select><select id="dcProjectSort"><option value="newest">Newest first</option><option value="oldest" ${projectSort==='oldest'?'selected':''}>Oldest first</option><option value="az" ${projectSort==='az'?'selected':''}>A–Z</option></select></div>`:''}
+    ${hasAny?`<div class="dc-library-layout"><section class="dc-library-projects"><div class="dc-library-section-head"><div><h2>Your projects</h2><p>${projects.length} source${projects.length===1?'':'s'} in this view</p></div><span class="dc-pill">Source → clips → publish</span></div><div class="dc-library-rows">${projects.length?projects.map(p=>libraryProjectRow(p,allClips)).join(''):`<div class="dc-empty"><strong>No projects match</strong>Clear the search or choose another filter.</div>`}</div></section><aside class="dc-library-side">${libraryWorkflowCard(processing,waiting,ready)}${libraryPlatformsCard(d)}${libraryRecentClips(allClips)}</aside></div>`:`<section class="dc-empty-visual"><div class="dc-empty-visual-copy"><span>${ICON.projects} Your project library</span><h2>Start with one source video.</h2><p>Paste a supported link or upload your original video. DeenClipped keeps the source, generated clips and publishing status together.</p><button class="dc-btn" data-dc-nav="home">Create your first project</button></div><div class="dc-empty-visual-media"><img src="/marketing-assets/library-premium.webp" alt="DeenClipped project library preview"></div></section>`}
+  </div>`;
   upgradeYoutubeFallbackButtons(panel,projects);
   if($('#dcProjectSearch'))$('#dcProjectSearch').oninput=e=>{projectQuery=e.target.value.trim().toLowerCase();renderProjects()};
   if($('#dcProjectFilter'))$('#dcProjectFilter').onchange=e=>{projectFilter=e.target.value;renderProjects()};
   if($('#dcProjectSort'))$('#dcProjectSort').onchange=e=>{projectSort=e.target.value;renderProjects()};
   requestAnimationFrame(()=>animatePanel(panel));
+}
+function libraryProjectRow(p,clips){
+  const own=clips.filter(c=>c.projectId===p.id),thumb=projectThumbUrl(p,clips),waiting=own.filter(c=>c.status==='waiting').length,scheduled=own.filter(c=>['approved','ready','scheduled','publishing'].includes(c.status)).length;
+  const failed=p.status==='failed'||p.error,busy=['queued','processing'].includes(p.status),tone=failed?'bad':busy?'blue':waiting?'orange':'good';
+  const label=failed?'Needs attention':busy?(p.stage||'Processing'):waiting?`${waiting} to review`:scheduled?`${scheduled} ready`:'Ready';
+  const progress=busy?clamp(Number(p.progress||0),0,100):own.length?Math.round(((own.length-waiting)/Math.max(1,own.length))*100):100;
+  return `<article class="dc-library-row"><button class="dc-library-row-main" type="button" data-open-project="${esc(p.id)}"><span class="dc-library-row-thumb ${thumb?'':'empty'}">${thumb?`<img src="${authedUrl(thumb)}" alt="${esc(projectDisplayTitle(p))} thumbnail">`:ICON.projects}</span><span class="dc-library-row-copy"><strong>${esc(shortText(projectDisplayTitle(p),72))}</strong><em>${own.length} clip${own.length===1?'':'s'} · updated ${esc(formatRelative(p.updatedAt||p.submittedAt||Date.now()))}</em><span class="dc-library-progress"><i style="width:${progress}%"></i></span></span><span class="dc-library-row-state ${tone}"><i></i>${esc(shortText(label,30))}</span>${ICON.chevron}</button><details class="dc-library-row-menu"><summary aria-label="Project actions">•••</summary><div><button data-more-project="${esc(p.id)}" ${!p.sourceReusable?'disabled':''}>Generate more clips</button>${failed?`<button data-retry-project="${esc(p.id)}">Retry processing</button>`:''}<button class="danger" data-delete-project="${esc(p.id)}">Delete project</button></div></details></article>`;
+}
+function libraryWorkflowCard(processing,waiting,ready){
+  return `<section class="dc-library-side-card"><div class="dc-library-side-head"><span class="blue">${ICON.analytics}</span><div><strong>Workflow overview</strong><small>Keep your content moving.</small></div></div><div class="dc-library-flow"><button data-dc-nav="projects"><i class="blue"></i><span>Processing</span><b>${processing}</b></button><button data-dc-nav="review"><i class="orange"></i><span>In review</span><b>${waiting}</b></button><button data-dc-nav="schedule"><i class="green"></i><span>Ready to publish</span><b>${ready}</b></button></div><button class="dc-btn secondary wide" data-dc-nav="review">Open workflow</button></section>`;
+}
+function libraryPlatformsCard(d){
+  const infos=['youtube','tiktok','instagram','facebook'].map(providerInfo);
+  return `<section class="dc-library-side-card"><div class="dc-library-side-head"><span class="purple">${ICON.social}</span><div><strong>Platform connections</strong><small>Where your clips can publish.</small></div></div><div class="dc-library-platforms">${infos.map(info=>`<div><span class="dc-publish-brand ${info.provider} ${info.connected?'on':''}">${socialSvg(info.provider)}</span><b>${esc(providerTitle(info.provider).replace(' Shorts','').replace(' Reels',''))}</b><em class="${info.connected?'on':''}">${info.connected?'Connected':'Connect'}</em></div>`).join('')}</div><button class="dc-btn secondary wide" data-dc-nav="publishing">Manage channels</button></section>`;
+}
+function libraryRecentClips(clips){
+  const recent=[...clips].sort((a,b)=>Number(b.createdAt||b.renderedAt||0)-Number(a.createdAt||a.renderedAt||0)).slice(0,3);
+  return `<section class="dc-library-side-card"><div class="dc-library-side-head"><span class="gold">${ICON.play}</span><div><strong>Recent clips</strong><small>Your latest generated moments.</small></div></div><div class="dc-library-recent">${recent.length?recent.map(c=>`<button type="button" data-edit-style-clip="${esc(c.id)}">${c.thumbUrl?`<img src="${authedUrl(c.thumbUrl)}" alt="">`:`<span>${ICON.play}</span>`}<strong>${esc(shortText(c.title||'Untitled clip',38))}</strong><em>${formatDuration(c.durationMs)}</em></button>`).join(''):`<div class="dc-empty"><strong>No clips yet</strong>Create a project to fill this list.</div>`}</div></section>`;
 }
 function projectCard(p,clips){
   const own=clips.filter(c=>c.projectId===p.id),thumb=projectThumbUrl(p,clips),waiting=own.filter(c=>c.status==='waiting').length,scheduled=own.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length;
@@ -2064,7 +2158,7 @@ async function ensureEditor(){
     editor.loading=true; editor.clipId=clip.id; editor.tool=pendingTool;editor.captionTab=pendingTool==='captions'?pendingTab:'styles';editor.search='';
     const template=(d.templates||[]).find(t=>t.id===clip.templateId)||d.selectedTemplate||(d.templates||[])[0]||d.templateDraft||{};
     const saved=loadEditorDraft(clip.id);
-    editor.draft={...clone(template),...(saved?.draft||{}),__clipId:clip.id};editor.draft.cropPositionX??=50;editor.draft.cropPositionY??=50;editor.draft.captionTimingOffsetMs??=-120;
+    editor.draft={...clone(template),...(saved?.draft||{}),__clipId:clip.id};editor.draft.cropPositionX??=50;editor.draft.cropPositionY??=50;editor.draft.captionTimingOffsetMs??=0;
     editor.captionText=saved?.captionText??clip.transcript??'';
     editor.trimIn=0;editor.trimOut=Math.max(.1,Number(clip.durationMs||0)/1000);
     editor.dirty=Boolean(saved);editor.localSavedAt=Number(saved?.savedAt||0);editor.selectedLayer='captions';editor.history=[];editor.historyIndex=-1;editor.sourceBase=Number(clip.startSec||0);editor.sourceEnd=Number(clip.endSec||editor.sourceBase+editor.trimOut);editor.sourceFallback=false;editor.framingPlan=clip.smartFraming||null;editor.framingStatus=editor.framingPlan?'ready':'idle';editor.framingMessage=editor.framingPlan?'Using the framing saved with this render':'Smart framing has not been analysed';
@@ -2144,10 +2238,10 @@ function renderEditorTool(){
 }
 function captionTool(){
   const exact=editor.captionSource==='whisper',busy=editor.captionSyncStatus==='syncing';
-  const offset=Number(editor.draft.captionTimingOffsetMs??-120);
-  const syncTitle=busy?'Synchronising speech…':exact?'Speech timing synced':editor.captionSource==='edited'?'Edited timing':'Timing needs synchronising';
-  const syncText=busy?'Re-transcribing this exact clip and rebuilding word timestamps.':exact?'Whisper word timestamps are loaded for this clip.':'Use Auto-sync before the final export so captions follow the voice.';
-  return `<div class="dc-sync-card"><div class="dc-sync-top"><i class="dc-sync-dot ${busy?'busy':exact?'good':''}"></i><div class="dc-sync-copy"><strong>${syncTitle}</strong><span>${syncText}</span></div></div><div class="dc-sync-actions"><button type="button" class="dc-btn ${exact?'secondary':''}" id="dcSyncCaptions" ${busy?'disabled':''}>${busy?'Syncing…':'Auto-sync captions'}</button><button type="button" class="dc-btn secondary" data-caption-nudge="-100">Earlier</button><button type="button" class="dc-btn secondary" data-caption-nudge="100">Later</button></div><div class="dc-field" style="margin-top:11px"><div class="dc-timing-readout"><span>Fine timing</span><b id="dcTimingLabel">${formatCaptionOffset(offset)}</b></div><input type="range" data-template-key="captionTimingOffsetMs" value="${offset}" min="-1000" max="1000" step="20"></div></div><div class="dc-subtabs">${['styles','text','format','position'].map(x=>`<button type="button" class="${editor.captionTab===x?'on':''}" data-caption-tab="${x}">${x[0].toUpperCase()+x.slice(1)}</button>`).join('')}</div>${editor.captionTab==='styles'?captionStyles():editor.captionTab==='text'?captionTextPanel():editor.captionTab==='format'?captionFormat():captionPosition()}`;
+  const offset=Number(editor.draft.captionTimingOffsetMs??0);
+  const syncTitle=busy?'Synchronising speech…':exact?'Automatically synced to speech':editor.captionSource==='edited'?'Edits kept on speech timing':'Timing needs synchronising';
+  const syncText=busy?'Reloading the exact Whisper word timestamps for this clip.':exact?'Every word follows its Whisper timestamp and captions disappear during silence.':'Press Sync captions to recover the original word-by-word speech timing.';
+  return `<div class="dc-sync-card"><div class="dc-sync-top"><i class="dc-sync-dot ${busy?'busy':exact?'good':''}"></i><div class="dc-sync-copy"><strong>${syncTitle}</strong><span>${syncText}</span></div></div><div class="dc-sync-actions"><button type="button" class="dc-btn ${exact?'secondary':''}" id="dcSyncCaptions" ${busy?'disabled':''}>${busy?'Syncing…':'Sync captions'}</button><button type="button" class="dc-btn secondary" data-caption-nudge="-100">Earlier</button><button type="button" class="dc-btn secondary" data-caption-nudge="100">Later</button></div><div class="dc-field" style="margin-top:11px"><div class="dc-timing-readout"><span>Fine timing</span><b id="dcTimingLabel">${formatCaptionOffset(offset)}</b></div><input type="range" data-template-key="captionTimingOffsetMs" value="${offset}" min="-1500" max="1500" step="20"></div></div><div class="dc-subtabs">${['styles','text','format','position'].map(x=>`<button type="button" class="${editor.captionTab===x?'on':''}" data-caption-tab="${x}">${x[0].toUpperCase()+x.slice(1)}</button>`).join('')}</div>${editor.captionTab==='styles'?captionStyles():editor.captionTab==='text'?captionTextPanel():editor.captionTab==='format'?captionFormat():captionPosition()}`;
 }
 
 function captionStyles(){
@@ -2156,15 +2250,16 @@ function captionStyles(){
 }
 
 function captionStylePreview(id){
-  if(id==='gold')return'color:#d9b478;-webkit-text-stroke:1px #000';if(id==='clean')return'font-weight:600;background:#0008';if(id==='arabic')return"font-family:Amiri,serif;font-size:15px";if(id==='bold')return'font-size:13px;font-weight:900';if(id==='cinema')return"font-family:'Playfair Display',serif;font-size:11px";return'font-weight:900';
+  if(id==='gold')return'color:#d9b478;-webkit-text-stroke:1px #000';if(id==='clean')return'font-weight:600;background:#0008';if(id==='arabic')return"font-family:Amiri,serif;font-size:15px";if(id==='bold')return'font-size:13px;font-weight:900';if(id==='cinema')return"font-family:'Noto Serif',serif;font-size:11px";return'font-family:Manrope,sans-serif;font-weight:900';
 }
 function captionTextPanel(){
   const groups=captionSegments().slice(0,30);
   return `<div class="dc-section"><h3>Edit caption transcript</h3><textarea class="dc-caption-editor" id="dcCaptionText">${esc(editor.captionText)}</textarea><div class="dc-caption-note" style="margin-top:7px">Whisper word timings are preserved. When words are changed, DeenClipped maps them onto the original speech spans instead of stretching captions across silence.</div></div><div class="dc-section"><h3>Speech-timed segments</h3><div class="dc-caption-list">${groups.map(g=>`<button class="dc-caption-line" data-caption-start="${g.start}"><span>${formatClock(g.start)}</span><b>${esc(g.text)}</b></button>`).join('')}</div></div>`; 
 }
 function captionFormat(){
-  const d=editor.draft;
-  return `<div class="dc-section"><h3>Behaviour</h3>${selectField('Caption mode','captionMode',[['dynamic-stack','Dynamic pop'],['word','Word highlight'],['phrase','Phrase captions']])}${selectField('Main font','captionFont',[['Poppins','Poppins'],['Montserrat','Montserrat'],['Playfair Display','Playfair Display'],['DejaVu Sans','DejaVu Sans'],['Amiri','Amiri'],['Scheherazade New','Scheherazade Arabic']])}${selectField('Important-word font','captionHighlightFont',[['DejaVu Serif','DejaVu Serif'],['DejaVu Sans','DejaVu Sans'],['Poppins','Poppins'],['Montserrat','Montserrat'],['Amiri','Amiri']])}${selectField('Arabic font','captionArabicFont',[['Amiri','Amiri'],['Scheherazade New','Scheherazade Arabic'],['DejaVu Sans','DejaVu Sans']])}${rangeField('Font size','captionFontSize',24,160,1)}${rangeField('Words per caption','captionMaxWords',1,12,1)}${checkField('Italic important words','captionHighlightItalic')}${checkField('Uppercase captions','captionUppercase')}</div><div class="dc-section"><h3>Clean emphasis</h3>${rangeField('Important-word glow','captionHighlightGlow',0,30,1)}<div class="dc-color-grid">${colorField('Text','captionPrimary')}${colorField('Important word','captionHighlight')}${colorField('Outline','captionOutline')}${colorField('Background','captionBackground')}</div>${rangeField('Outline','captionOutlineWidth',0,14,1)}${rangeField('Background opacity','captionBackgroundOpacity',0,100,1)}${rangeField('Line spacing','captionLineHeight',.65,1.4,.05)}</div>`;
+  const fonts=[['Manrope','Manrope'],['Roboto','Roboto'],['Lato','Lato'],['Noto Sans','Noto Sans'],['Noto Serif','Noto Serif'],['Cantarell','Cantarell'],['Play','Play'],['Andika','Andika'],['Liberation Sans','Liberation Sans'],['Liberation Serif','Liberation Serif'],['DejaVu Sans','DejaVu Sans'],['DejaVu Serif','DejaVu Serif'],['Amiri','Amiri'],['Scheherazade New','Scheherazade Arabic'],['Noto Naskh Arabic','Noto Naskh Arabic'],['Noto Kufi Arabic','Noto Kufi Arabic']];
+  const emphasis=[['Noto Serif','Noto Serif'],['DejaVu Serif','DejaVu Serif'],['Liberation Serif','Liberation Serif'],['Manrope','Manrope'],['Roboto','Roboto'],['Lato','Lato'],['Amiri','Amiri']];
+  return `<div class="dc-section"><h3>Type and layout</h3>${selectField('Caption mode','captionMode',[['dynamic-stack','Dynamic pop'],['word','Word highlight'],['phrase','Phrase captions']])}${selectField('Main font','captionFont',fonts)}${selectField('Important-word font','captionHighlightFont',emphasis)}${selectField('Arabic font','captionArabicFont',[['Amiri','Amiri'],['Scheherazade New','Scheherazade Arabic'],['Noto Naskh Arabic','Noto Naskh Arabic'],['Noto Kufi Arabic','Noto Kufi Arabic'],['Noto Sans Arabic','Noto Sans Arabic']])}${rangeField('Font size','captionFontSize',24,180,1)}${rangeField('Font weight','captionFontWeight',400,900,100)}${rangeField('Letter spacing','captionLetterSpacing',-4,12,.5)}${rangeField('Words per caption','captionMaxWords',1,12,1)}${checkField('Italic important words','captionHighlightItalic')}${checkField('Uppercase captions','captionUppercase')}</div><div class="dc-section"><h3>Speech flow</h3>${rangeField('Clear on silent gap','captionClearPause',.15,2,.05)}${rangeField('Hold after each word','captionHoldSeconds',0,.2,.01)}${rangeField('Maximum stacked words','captionStackMaxWords',1,6,1)}${rangeField('Stack frequency','captionStackProbability',0,1,.05)}<div class="dc-caption-note">Silence always clears the caption. These controls only decide how quickly it clears and how spoken words build on screen.</div></div><div class="dc-section"><h3>Clean emphasis</h3>${rangeField('Important-word glow','captionHighlightGlow',0,30,1)}<div class="dc-color-grid">${colorField('Text','captionPrimary')}${colorField('Important word','captionHighlight')}${colorField('Outline','captionOutline')}${colorField('Background','captionBackground')}</div>${rangeField('Outline','captionOutlineWidth',0,14,1)}${rangeField('Shadow','captionShadow',0,8,.5)}${rangeField('Background opacity','captionBackgroundOpacity',0,100,1)}${rangeField('Line spacing','captionLineHeight',.65,1.4,.05)}</div>`;
 }
 function captionPosition(){
   const key=`${editor.draft.captionPosition||'middle'}-${editor.draft.captionHorizontal||'center'}`;
@@ -2246,12 +2341,12 @@ function markEditorDirty(){editor.dirty=true;saveEditorLocal()}
 
 function applyCaptionStyle(id){
   const presets={
-    viral:{captionMode:'dynamic-stack',captionFont:'Poppins',captionFontSize:100,captionPrimary:'#FFFFFF',captionHighlight:'#D9B478',captionOutline:'#09090A',captionOutlineWidth:5,captionBackgroundOpacity:0,captionPosition:'middle',captionHorizontal:'center',captionMaxWords:4,captionUppercase:false},
-    gold:{captionMode:'word',captionFont:'Montserrat',captionFontSize:92,captionPrimary:'#FFFFFF',captionHighlight:'#D9B478',captionOutline:'#000000',captionOutlineWidth:5,captionPosition:'middle',captionHorizontal:'center',captionMaxWords:5},
-    clean:{captionMode:'phrase',captionFont:'Poppins',captionFontSize:72,captionPrimary:'#FFFFFF',captionHighlight:'#FFFFFF',captionOutline:'#000000',captionOutlineWidth:2,captionBackground:'#000000',captionBackgroundOpacity:55,captionPosition:'bottom',captionHorizontal:'center',captionMaxWords:7},
+    viral:{captionMode:'dynamic-stack',captionFont:'Manrope',captionFontWeight:900,captionFontSize:100,captionPrimary:'#FFFFFF',captionHighlight:'#D9B478',captionOutline:'#09090A',captionOutlineWidth:5,captionBackgroundOpacity:0,captionPosition:'middle',captionHorizontal:'center',captionMaxWords:4,captionUppercase:false},
+    gold:{captionMode:'word',captionFont:'Lato',captionFontWeight:900,captionFontSize:92,captionPrimary:'#FFFFFF',captionHighlight:'#D9B478',captionOutline:'#000000',captionOutlineWidth:5,captionPosition:'middle',captionHorizontal:'center',captionMaxWords:5},
+    clean:{captionMode:'phrase',captionFont:'Roboto',captionFontWeight:700,captionFontSize:72,captionPrimary:'#FFFFFF',captionHighlight:'#FFFFFF',captionOutline:'#000000',captionOutlineWidth:2,captionBackground:'#000000',captionBackgroundOpacity:55,captionPosition:'bottom',captionHorizontal:'center',captionMaxWords:7},
     arabic:{captionMode:'phrase',captionFont:'Amiri',captionFontSize:94,captionPrimary:'#FFFFFF',captionHighlight:'#D9B478',captionOutline:'#000000',captionOutlineWidth:4,captionBackgroundOpacity:30,captionPosition:'bottom',captionHorizontal:'right',captionMaxWords:8},
-    bold:{captionMode:'dynamic-stack',captionFont:'Poppins',captionFontSize:122,captionPrimary:'#FFFFFF',captionHighlight:'#D9B478',captionOutline:'#000000',captionOutlineWidth:7,captionPosition:'middle',captionHorizontal:'center',captionMaxWords:3,captionUppercase:true},
-    cinema:{captionMode:'phrase',captionFont:'Playfair Display',captionFontSize:70,captionPrimary:'#FFFFFF',captionHighlight:'#D9B478',captionOutline:'#000000',captionOutlineWidth:3,captionBackgroundOpacity:0,captionPosition:'bottom',captionHorizontal:'center',captionMaxWords:8}
+    bold:{captionMode:'dynamic-stack',captionFont:'Manrope',captionFontWeight:900,captionFontSize:122,captionPrimary:'#FFFFFF',captionHighlight:'#D9B478',captionOutline:'#000000',captionOutlineWidth:7,captionPosition:'middle',captionHorizontal:'center',captionMaxWords:3,captionUppercase:true},
+    cinema:{captionMode:'phrase',captionFont:'Noto Serif',captionFontWeight:700,captionFontSize:70,captionPrimary:'#FFFFFF',captionHighlight:'#D9B478',captionOutline:'#000000',captionOutlineWidth:3,captionBackgroundOpacity:0,captionPosition:'bottom',captionHorizontal:'center',captionMaxWords:8}
   };
   Object.assign(editor.draft,presets[id]||{});markEditorDirty();pushHistory();renderEditorTool();updateEditorPreview();updateCaptionAtTime(editor.currentTime);renderTimeline();
 }
@@ -2397,7 +2492,7 @@ function updateEditorPreview(){
   video.style.filter=`${filters[d.filterPreset]||''} brightness(${1+Number(d.brightness||0)}) contrast(${Number(d.contrast||1)}) saturate(${Number(d.saturation||1)})`;
   const keepOverlayState = ['is-selected','is-dragging','is-resizing'].filter(cls=>overlay.classList.contains(cls));
   overlay.className=`dc-caption-overlay align-${d.captionHorizontal||'center'} ${keepOverlayState.join(' ')}`.trim();overlay.style.left=`${clamp(Number(d.captionPositionX??50),7,93)}%`;overlay.style.top=`${clamp(Number(d.captionPositionY??58),8,88)}%`;
-  overlay.style.fontFamily=d.captionFont||'Poppins';overlay.style.fontSize=`${clamp(Number(d.captionFontSize||96)/3.45,15,52)}px`;overlay.style.color=d.captionPrimary||'#fff';overlay.style.webkitTextStroke=`${Number(d.captionOutlineWidth||0)/3}px ${d.captionOutline||'#000'}`;overlay.style.textShadow=`0 ${clamp(Number(d.captionShadow||0)/2,0,4)}px ${clamp(Number(d.captionShadow||0)*1.8,0,12)}px rgba(0,0,0,.58)`;overlay.style.textTransform=d.captionUppercase?'uppercase':'none';overlay.style.setProperty('--dc-cap-highlight',d.captionHighlight||'#fff');overlay.style.setProperty('--dc-cap-highlight-font',d.captionHighlightFont||'DejaVu Serif');overlay.style.setProperty('--dc-cap-arabic-font',d.captionArabicFont||'Amiri');overlay.style.setProperty('--dc-cap-highlight-style',d.captionHighlightItalic===false?'normal':'italic');overlay.style.setProperty('--dc-cap-highlight-glow',`${clamp(Number(d.captionHighlightGlow||0)/2.5,0,14)}px`);overlay.style.setProperty('--dc-cap-bg-color',hexAlpha(d.captionBackground||'#000000',clamp(Number(d.captionBackgroundOpacity||0)/100,0,1)));overlay.style.lineHeight=String(d.captionLineHeight||.9);
+  overlay.style.fontFamily=d.captionFont||'Manrope';overlay.style.fontSize=`${clamp(Number(d.captionFontSize||96)/3.45,15,52)}px`;overlay.style.fontWeight=String(clamp(Number(d.captionFontWeight||800),400,900));overlay.style.letterSpacing=`${clamp(Number(d.captionLetterSpacing||0)/3.45,-1.2,3.5)}px`;overlay.style.color=d.captionPrimary||'#fff';overlay.style.webkitTextStroke=`${Number(d.captionOutlineWidth||0)/3}px ${d.captionOutline||'#000'}`;overlay.style.textShadow=`0 ${clamp(Number(d.captionShadow||0)/2,0,4)}px ${clamp(Number(d.captionShadow||0)*1.8,0,12)}px rgba(0,0,0,.58)`;overlay.style.textTransform=d.captionUppercase?'uppercase':'none';overlay.style.setProperty('--dc-cap-highlight',d.captionHighlight||'#fff');overlay.style.setProperty('--dc-cap-highlight-font',d.captionHighlightFont||'Noto Serif');overlay.style.setProperty('--dc-cap-arabic-font',d.captionArabicFont||'Amiri');overlay.style.setProperty('--dc-cap-highlight-style',d.captionHighlightItalic===false?'normal':'italic');overlay.style.setProperty('--dc-cap-highlight-glow',`${clamp(Number(d.captionHighlightGlow||0)/2.5,0,14)}px`);overlay.style.setProperty('--dc-cap-bg-color',hexAlpha(d.captionBackground||'#000000',clamp(Number(d.captionBackgroundOpacity||0)/100,0,1)));overlay.style.lineHeight=String(d.captionLineHeight||.9);
   water.textContent=d.watermark||'';water.className=`dc-watermark ${d.watermarkPosition||'top-center'}`;water.style.color=d.watermarkColor||'#d9b478';water.style.opacity=clamp(Number(d.watermarkOpacity||100)/100,0,1);water.style.fontSize=`${clamp(Number(d.watermarkFontSize||28)/2.3,7,28)}px`;
   line.style.display=d.brandLineEnabled?'block':'none';line.style.background=d.brandLineColor||'#d9b478';applyFrameAtTime(editor.currentTime);
 }
@@ -2418,11 +2513,11 @@ function updateCaptionAtTime(time){
 function isArabicWord(value){return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(String(value||''))}
 function captionHtmlAtTime(time){
   const words=editor.captionWords;if(!words.length)return'';
-  const offset=Number(editor.draft.captionTimingOffsetMs??-120)/1000;
+  const offset=Number(editor.draft.captionTimingOffsetMs??0)/1000;
   const speechTime=time-offset;
-  const hold=Math.min(.09,Math.max(0,Number(editor.draft.captionHoldSeconds??.06)));
+  const hold=Math.min(.2,Math.max(0,Number(editor.draft.captionHoldSeconds??.04)));
   const index=words.findIndex(w=>speechTime>=Number(w.start)&&speechTime<Number(w.end)+hold);if(index<0)return'';
-  const mode=editor.draft.captionMode||'dynamic-stack',max=Math.max(1,Number(editor.draft.captionMaxWords||4)),groups=speechGroups(words,max),group=groups.find(g=>index>=g.startIndex&&index<=g.endIndex);
+  const mode=editor.draft.captionMode||'dynamic-stack',max=Math.max(1,Number(editor.draft.captionMaxWords||4)),groups=speechGroups(words,max,Number(editor.draft.captionClearPause||.42)),group=groups.find(g=>index>=g.startIndex&&index<=g.endIndex);
   if(!group)return'';
   const visible=mode==='dynamic-stack'?words.slice(group.startIndex,index+1):words.slice(group.startIndex,group.endIndex+1);
   const html=mode==='dynamic-stack'
@@ -2434,11 +2529,11 @@ function captionHtmlAtTime(time){
 function approximateWords(text,duration){
   const tokens=String(text||'').trim().split(/\s+/).filter(Boolean);if(!tokens.length)return[];const step=Math.max(.12,duration/tokens.length);return tokens.map((word,i)=>({word,start:i*step,end:Math.min(duration,(i+1)*step)}));
 }
-function speechGroups(words,maxWords){
+function speechGroups(words,maxWords,clearPause=.42){
   const groups=[];let start=0;
   for(let i=0;i<words.length;i++){
     const current=words[i],next=words[i+1],count=i-start+1,punctuation=/[.!?…][”"'’)]?$/.test(String(current.word||'')),gap=next?Number(next.start)-Number(current.end):Infinity;
-    if(count>=maxWords||punctuation||gap>=.34||!next){groups.push({startIndex:start,endIndex:i,start:Number(words[start].start),end:Number(current.end),text:words.slice(start,i+1).map(w=>w.word).join(' ')});start=i+1}
+    if(count>=maxWords||punctuation||gap>=clamp(Number(clearPause)||.42,.15,2)||!next){groups.push({startIndex:start,endIndex:i,start:Number(words[start].start),end:Number(current.end),text:words.slice(start,i+1).map(w=>w.word).join(' ')});start=i+1}
   }
   return groups;
 }
@@ -2455,7 +2550,7 @@ function mapEditedWordsToSpeech(text,reference,duration){
     return{word,start,end:Math.max(start+.08,Math.min(duration,estimatedEnd))};
   });
 }
-function captionSegments(){const offset=Number(editor.draft.captionTimingOffsetMs??-120)/1000;return speechGroups(editor.captionWords,Math.max(1,Number(editor.draft.captionMaxWords||4))).map(g=>({start:clamp(g.start+offset,0,editor.trimOut),end:clamp(g.end+offset,0,editor.trimOut),text:g.text})).filter(g=>g.end>g.start)}
+function captionSegments(){const offset=Number(editor.draft.captionTimingOffsetMs??0)/1000;return speechGroups(editor.captionWords,Math.max(1,Number(editor.draft.captionMaxWords||4)),Number(editor.draft.captionClearPause||.42)).map(g=>({start:clamp(g.start+offset,0,editor.trimOut),end:clamp(g.end+offset,0,editor.trimOut),text:g.text})).filter(g=>g.end>g.start)}
 function renderTimeline(){
   const duration=editor.trimOut||Math.max(.1,Number(currentClip()?.durationMs||0)/1000)||1,ruler=$('#dcRuler'),track=$('#dcCaptionTrack'),scroll=$('#dcTimelineScroll');if(!ruler||!track)return;
   editor.timelineWidth=Math.max(scroll?.clientWidth||0,72+Math.ceil(duration*46));
@@ -2472,7 +2567,7 @@ function formatCaptionOffset(value){
   return `${Math.abs(ms)} ms ${ms<0?'earlier':'later'}`;
 }
 function nudgeCaptionTiming(amount){
-  editor.draft.captionTimingOffsetMs=clamp(Number(editor.draft.captionTimingOffsetMs??-120)+Number(amount||0),-1000,1000);
+  editor.draft.captionTimingOffsetMs=clamp(Number(editor.draft.captionTimingOffsetMs??0)+Number(amount||0),-1500,1500);
   markEditorDirty();pushHistory();renderEditorTool();updateCaptionAtTime(editor.currentTime);renderTimeline();
 }
 async function resyncCaptions(){
@@ -2483,7 +2578,7 @@ async function resyncCaptions(){
     if(!Array.isArray(payload.words)||!payload.words.length)throw new Error('No speech timestamps were returned.');
     editor.captionWords=payload.words.map(w=>({start:Number(w.start),end:Number(w.end),word:String(w.word||'').trim()})).filter(w=>w.word&&w.end>w.start).sort((a,b)=>a.start-b.start);editor.captionTimingReference=clone(editor.captionWords);
     editor.captionText=payload.transcript||editor.captionWords.map(w=>w.word).join(' ');
-    editor.captionSource='whisper';editor.captionSyncStatus='idle';editor.draft.captionTimingOffsetMs=-120;markEditorDirty();pushHistory();renderEditorTool();updateCaptionAtTime(editor.currentTime);renderTimeline();notify('Captions synchronised to this clip');
+    editor.captionSource='whisper';editor.captionSyncStatus='idle';editor.draft.captionTimingOffsetMs=0;markEditorDirty();pushHistory();renderEditorTool();updateCaptionAtTime(editor.currentTime);renderTimeline();notify('Captions synchronised to this clip');
   }catch(error){editor.captionSyncStatus='error';editor.captionSyncMessage=error.message;notify(error.message,'bad');renderEditorTool()}
 }
 
@@ -2679,6 +2774,69 @@ function renderInsightsPage(){
 }
 function qualityRow(label,value,total){const pct=Math.max(0,Math.min(100,Math.round(Number(value||0)/Math.max(1,Number(total||1))*100)));return `<div class="dc-quality-row"><span>${esc(label)}</span><div class="dc-quality-bar"><i style="width:${pct}%"></i></div><b>${pct}%</b></div>`}
 function connectedPlatformCount(d){const providers=d.social?.providers||{};return ['youtube','tiktok','instagram','facebook'].filter(p=>providerInfo(p).connected||providers[p]?.connected).length}
+function publishingClipGroups(d){
+  const clips=d.clips||[];
+  return {
+    queue:clips.filter(c=>['approved','ready','publish_failed'].includes(c.status)),
+    scheduled:clips.filter(c=>['scheduled','publishing'].includes(c.status)).sort((a,b)=>Number(a.scheduledAt||Infinity)-Number(b.scheduledAt||Infinity)),
+    posted:clips.filter(c=>c.status==='posted').sort((a,b)=>Number(b.postedAt||b.updatedAt||0)-Number(a.postedAt||a.updatedAt||0))
+  };
+}
+function publishingProvidersForClip(clip,providerInfos){
+  const explicit=(clip.targets||[]).map(target=>typeof target==='string'?target:target?.provider).filter(Boolean);
+  const enabled=providerInfos.filter(info=>info.connected&&info.enabled).map(info=>info.provider);
+  const connected=providerInfos.filter(info=>info.connected).map(info=>info.provider);
+  const keys=[...new Set(explicit.length?explicit:enabled.length?enabled:connected)];
+  return keys.length?keys:['youtube','tiktok','instagram','facebook'];
+}
+function publishingWhen(clip,tab){
+  const value=tab==='posted'?(clip.postedAt||clip.updatedAt):clip.scheduledAt;
+  if(!value)return {primary:tab==='queue'?'Ready now':tab==='posted'?'Published':'Not scheduled',secondary:tab==='queue'?'Choose when to publish':'—'};
+  const date=new Date(Number(value));
+  if(Number.isNaN(date.getTime()))return {primary:statusName(clip.status),secondary:'—'};
+  return {
+    primary:new Intl.DateTimeFormat('en-AU',{weekday:'short',day:'numeric',month:'short'}).format(date),
+    secondary:new Intl.DateTimeFormat('en-AU',{hour:'2-digit',minute:'2-digit'}).format(date)
+  };
+}
+function publishingRow(clip,tab,providerInfos,projects){
+  const providers=publishingProvidersForClip(clip,providerInfos),when=publishingWhen(clip,tab);
+  const project=projects.find(item=>item.id===clip.projectId);
+  const source=projectDisplayTitle(project||{})||'DeenClipped project';
+  const thumb=clip.thumbUrl?`<img src="${authedUrl(clip.thumbUrl)}" alt="${esc(clip.title||'Clip')} thumbnail">`:ICON.play;
+  const brands=providers.slice(0,3).map(key=>`<span class="dc-publish-brand ${esc(key)} ${providerInfos.find(info=>info.provider===key)?.connected?'on':''}" title="${esc(providerTitle(key))}">${socialSvg(key)}</span>`).join('');
+  const more=providers.length>3?`<span class="dc-publish-brand-more">+${providers.length-3}</span>`:'';
+  let primary='';
+  if(tab==='queue')primary=`<button class="dc-btn primary" data-post-clip="${esc(clip.id)}">${clip.status==='publish_failed'?'Retry post':'Post now'}</button><button class="dc-btn secondary" data-schedule-clip="${esc(clip.id)}">Schedule</button>`;
+  else if(tab==='scheduled')primary=clip.status==='publishing'?`<button class="dc-btn secondary" disabled>Sending…</button>`:`<button class="dc-btn primary" data-post-clip="${esc(clip.id)}">Post now</button>`;
+  return `<article class="dc-publish-row">
+    <div class="dc-publish-clip"><button class="dc-publish-thumb ${clip.thumbUrl?'':'empty'}" type="button" data-edit-style-clip="${esc(clip.id)}">${thumb}<span>${formatDuration(clip.durationMs)}</span></button><div class="dc-publish-copy"><strong>${esc(shortText(clip.title||'Untitled clip',64))}</strong><span>${esc(shortText(source,48))} · ${esc(statusName(clip.status))}</span></div></div>
+    <div class="dc-publish-when"><span>${ICON.clock}</span><div><b>${esc(when.primary)}</b><em>${esc(when.secondary)}</em></div></div>
+    <div class="dc-publish-brands">${brands}${more}</div>
+    <div class="dc-publish-actions">${primary}<button class="dc-btn secondary" data-download-clip="${esc(clip.id)}">Download</button><button class="dc-publish-more" type="button" data-edit-style-clip="${esc(clip.id)}" title="Open editor" aria-label="Open clip editor">•••</button></div>
+  </article>`;
+}
+function publishingConnection(info){
+  const state=!info.configured?'Setup needed':info.connected?'Connected':'Not connected';
+  const name=info.account?.name||providerTitle(info.provider);
+  return `<div class="dc-publish-connection"><span class="dc-publish-brand ${esc(info.provider)} ${info.connected?'on':''}">${socialSvg(info.provider)}</span><div><strong>${esc(providerTitle(info.provider))}</strong><small>${esc(info.connected?name:state)}</small></div><span class="dc-pill ${info.connected?'good':info.configured?'warn':'bad'}">${esc(state)}</span></div>`;
+}
+function renderPublishingWorkspace(){
+  const panel=$('#view-schedule'),d=data();if(!panel||!d)return;
+  const groups=publishingClipGroups(d),providers=['youtube','tiktok','instagram','facebook'].map(providerInfo),projects=d.projects||[];
+  if(!groups[publishingQueueTab])publishingQueueTab='queue';
+  const active=groups[publishingQueueTab], connected=providers.filter(info=>info.connected).length;
+  const previewPool=[...groups.queue,...groups.scheduled,...groups.posted].filter(clip=>clip.thumbUrl).slice(0,2);
+  const rows=active.length?active.map(clip=>publishingRow(clip,publishingQueueTab,providers,projects)).join(''):`<div class="dc-publish-empty"><div><div class="dc-empty-icon">${publishingQueueTab==='posted'?ICON.check:ICON.publish}</div><strong>${publishingQueueTab==='queue'?'Nothing waiting to publish':publishingQueueTab==='scheduled'?'No scheduled posts':'No published clips yet'}</strong><p>${publishingQueueTab==='queue'?'Approve a clip in Review and it will appear here, ready for posting or scheduling.':publishingQueueTab==='scheduled'?'Schedule an approved clip and its delivery time will show here.':'Published clips and their download links will stay easy to find here.'}</p><button class="dc-btn" data-dc-nav="${publishingQueueTab==='posted'?'review':'review'}">Open Review</button></div></div>`;
+  const previews=previewPool.length?previewPool.map(clip=>`<button class="dc-publish-preview" type="button" data-edit-style-clip="${esc(clip.id)}">${clip.thumbUrl?`<img src="${authedUrl(clip.thumbUrl)}" alt="${esc(clip.title||'Clip')} preview">`:''}<span>${esc(shortText(clip.title||'Clip',42))}</span></button>`).join(''):`<div class="dc-publish-preview empty">${ICON.play}</div><div class="dc-publish-preview empty">${ICON.play}</div>`;
+  panel.innerHTML=`<div class="dc-publish-page">
+    <section class="dc-publish-hero"><div><span class="dc-publish-kicker">${ICON.publish} Publishing</span><h1>Ready when your clips are.</h1><p>Review the final look, choose the right channels, then post now or schedule for later. Nothing leaves your workspace without your approval.</p></div><div class="dc-publish-summary"><span><b>${groups.queue.length}</b><em>ready</em></span><span><b>${groups.scheduled.length}</b><em>scheduled</em></span><span><b>${groups.posted.length}</b><em>posted</em></span></div></section>
+    <div class="dc-publish-layout"><section class="dc-publish-board"><nav class="dc-publish-tabs" aria-label="Publishing status"><button class="dc-publish-tab ${publishingQueueTab==='queue'?'on':''}" data-publish-tab="queue">Publishing queue <b>${groups.queue.length}</b></button><button class="dc-publish-tab ${publishingQueueTab==='scheduled'?'on':''}" data-publish-tab="scheduled">Scheduled <b>${groups.scheduled.length}</b></button><button class="dc-publish-tab ${publishingQueueTab==='posted'?'on':''}" data-publish-tab="posted">Posted <b>${groups.posted.length}</b></button></nav><div class="dc-publish-columns"><span>Clip</span><span>Publish time</span><span>Channels</span><span>Actions</span></div><div class="dc-publish-list">${rows}</div><div class="dc-publish-board-foot"><span>Want to post to more platforms?</span><button data-dc-nav="publishing">Connect more accounts →</button></div></section>
+      <aside class="dc-publish-side"><section class="dc-publish-side-card"><div class="dc-publish-side-head"><span>${ICON.social}</span><div><strong>Connections</strong><small>Manage your connected platforms.</small></div></div><div class="dc-publish-connection-list">${providers.map(publishingConnection).join('')}</div><button class="dc-btn secondary dc-publish-connect" data-dc-nav="publishing">＋ Connect more platforms</button></section><section class="dc-publish-side-card"><div class="dc-publish-side-head"><span>${ICON.play}</span><div><strong>Quick preview</strong><small>Open a clip before posting.</small></div></div><div class="dc-publish-previews">${previews}</div></section></aside>
+    </div>
+  </div>`;
+  requestAnimationFrame(()=>animatePanel(panel));
+}
 function renderConnections(){
   const panel=$('#view-publishing'),d=data();if(!panel||!d)return;
   const providers=['youtube','tiktok','instagram','facebook'].map(providerInfo);
@@ -2884,7 +3042,7 @@ function maybeShowBillingNotices(){
   const notices=billingInfo().notices||[];
   if(notices.length)showBillingNotice(notices[0]);
 }
-function renderCurrent(){if(currentView==='admin')renderAdminPage();if(currentView==='home')renderHome();if(currentView==='projects')renderProjects();if(currentView==='review')renderReview();if(currentView==='editor')ensureEditor();if(currentView==='publishing')renderConnections();if(currentView==='templates')renderTemplatesPage();if(currentView==='music')renderAudioLibrary();if(currentView==='insights')renderInsightsPage();if(currentView==='automation')renderSettingsPage()}
+function renderCurrent(){if(currentView==='admin')renderAdminPage();if(currentView==='home')renderHome();if(currentView==='projects')renderProjects();if(currentView==='review')renderReview();if(currentView==='editor')ensureEditor();if(currentView==='schedule')renderPublishingWorkspace();if(currentView==='publishing')renderConnections();if(currentView==='templates')renderTemplatesPage();if(currentView==='music')renderAudioLibrary();if(currentView==='insights')renderInsightsPage();if(currentView==='automation')renderSettingsPage()}
 async function refreshData(){if(typeof refresh==='function')return refresh();try{DATA=await callApi('/api/state')}catch{}}
 function hexAlpha(hex,alpha){const value=String(hex||'#000000').replace('#','');if(!/^[0-9a-fA-F]{6}$/.test(value))return `rgba(0,0,0,${alpha})`;const n=parseInt(value,16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${alpha})`}
 function formatDuration(ms){const s=Math.max(0,Math.round(Number(ms||0)/1000));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}

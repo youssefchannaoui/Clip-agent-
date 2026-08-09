@@ -15,6 +15,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg ca-certificates curl fontconfig fonts-dejavu-core \
+    fonts-lato fonts-liberation2 fonts-roboto fonts-noto-core fonts-noto-extra \
+    fonts-cantarell fonts-manrope fonts-play fonts-sil-andika fonts-sil-charis \
     fonts-hosny-amiri fonts-sil-scheherazade \
     && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*

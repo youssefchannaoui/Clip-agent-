@@ -40,9 +40,14 @@ test('save and export cannot run over each other', () => {
   assert.match(ui, /finally\{editor\.exporting=false/);
 });
 
-test('caption controls match direct manipulation limits and preset fonts', () => {
-  assert.match(ui, /rangeField\('Font size','captionFontSize',24,160,1\)/);
-  assert.match(ui, /\['Poppins','Poppins'\]/);
-  assert.match(ui, /\['Montserrat','Montserrat'\]/);
-  assert.match(ui, /\['Playfair Display','Playfair Display'\]/);
+test('caption controls match exports and expose a broad font and timing set', () => {
+  assert.match(ui, /rangeField\('Font size','captionFontSize',24,180,1\)/);
+  assert.match(ui, /\['Manrope','Manrope'\]/);
+  assert.match(ui, /\['Roboto','Roboto'\]/);
+  assert.match(ui, /\['Noto Sans','Noto Sans'\]/);
+  assert.match(ui, /\['Noto Naskh Arabic','Noto Naskh Arabic'\]/);
+  assert.match(ui, /rangeField\('Clear on silent gap','captionClearPause'/);
+  assert.match(ui, /rangeField\('Font weight','captionFontWeight'/);
+  assert.match(ui, /id="dcSyncCaptions"/);
+  assert.match(ui, />\$\{busy\?'Syncing…':'Sync captions'\}</);
 });

@@ -41,6 +41,39 @@ class WorkerScoringTests(unittest.TestCase):
         self.assertIn("hook", report)
         self.assertIn("readability", report)
 
+
+class CaptionTimingTests(unittest.TestCase):
+    def test_edited_words_keep_original_speech_gaps(self):
+        source = [
+            {"start": 0.1, "end": 0.4, "word": "old"},
+            {"start": 0.5, "end": 0.8, "word": "caption"},
+            {"start": 2.0, "end": 2.3, "word": "word"},
+        ]
+        mapped = worker.remap_edited_words("new corrected caption", source)
+        self.assertEqual([word["word"] for word in mapped], ["new", "corrected", "caption"])
+        self.assertEqual([word["start"] for word in mapped], [0.1, 0.5, 2.0])
+
+    def test_phrase_frames_end_before_a_real_silent_gap(self):
+        words = [
+            {"start": 0.0, "end": 0.3, "word": "First"},
+            {"start": 0.34, "end": 0.7, "word": "phrase."},
+            {"start": 1.8, "end": 2.1, "word": "Second"},
+        ]
+        frames = worker.phrase_caption_frames(words, 8, 0.42, 0.04)
+        self.assertEqual(len(frames), 2)
+        self.assertLessEqual(frames[0]["end"], 0.74)
+        self.assertEqual(frames[1]["start"], 1.8)
+
+    def test_dynamic_frames_do_not_hold_through_silence(self):
+        segments = [{"start": 0.0, "end": 2.1, "text": "First second", "words": [
+            {"start": 0.0, "end": 0.3, "word": "First"},
+            {"start": 1.8, "end": 2.1, "word": "second"},
+        ]}]
+        candidate = worker.Candidate(0, 2.5, "First second", segments, 80, [], False)
+        frames = worker.dynamic_caption_frames(candidate, {"captionClearPause": 0.42, "captionHoldSeconds": 0.04})
+        self.assertLessEqual(frames[0]["end"], 0.34)
+        self.assertEqual(frames[1]["start"], 1.8)
+
 class FillModeAspectTests(unittest.TestCase):
     """Covers the reported Fill-mode bug: video coming out stretched.
 
