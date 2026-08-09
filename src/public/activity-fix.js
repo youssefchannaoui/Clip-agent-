@@ -2696,23 +2696,17 @@ function renderGlobalSearch(){
 const GUIDE_STEPS = [
   {view:'home',target:'[data-tour="home-hero"]',title:'Welcome to DeenClipped',copy:'This is the main workspace. The goal is simple: import a lecture, approve the best clips, polish the template, then publish or download.'},
   {view:'home',target:'#dcTokenPill',title:'Your 3-day trial wallet',copy:'New accounts start with 40 tokens for generating and editing clips. Free downloads include a DeenClipped watermark; social posting unlocks with Premium.'},
-  {view:'home',target:'[data-tour="create-form"]',title:'1. Paste your lecture link',copy:'Paste a supported lecture or video link here. Your projects, clips and connected accounts stay inside your private workspace.'},
-  {view:'home',target:'[data-tour="template-picker"]',title:'2. Choose the default template',copy:'Pick the caption look before generating. Template changes should flow through new clips and queued unposted clips.'},
-  {view:'home',target:'[data-tour="generate-button"]',title:'3. Generate clips',copy:'This starts the worker: download, transcribe, find strong moments, render thumbnails and create clip options.'},
+  {view:'home',target:'[data-tour="create-form"]',title:'Create your first clips',copy:'Paste a supported lecture link or upload a video, choose the look and clip length, then generate. The token estimate is always shown before processing.'},
   {view:'home',target:'[data-tour="happening-now"]',title:'Working now and next action',copy:'Home shows the current job, latest result, next post and any attention items so users do not need to hunt through menus.'},
   {view:'projects',target:'#view-projects',title:'Projects hold each lecture',copy:'Every lecture stays together with its clips, status, errors, thumbnails and history. Failed old projects can be retried or deleted.'},
   {view:'review',target:'#view-review',title:'Clip Review is the approval queue',copy:'This is where users approve, reject, schedule, regenerate titles, make clips shorter or longer and open style/video edits.'},
   {view:'editor',target:'#view-editor',title:'Editor for one clip',copy:'The editor is for precise changes only: captions, framing, template look, audio and export. The normal review page should handle quick clip actions.'},
-  {view:'schedule',target:'[data-dc-nav="schedule"]',title:'Schedule shows posting windows',copy:'Approved clips live here before posting. Premium accounts can post now or fill automatic slots; everyone can keep previewing and downloading their clips.'},
-  {view:'publishing',target:'#view-publishing',title:'Platforms connect accounts',copy:'TikTok, YouTube, Instagram and Facebook connections belong here. Every creator connects only their own account and can disconnect it at any time.'},
-  {view:'templates',target:'#view-templates',title:'Templates control the look',copy:'Saved looks, defaults and reusable caption styles belong here so clips stay consistent across new and queued videos.'},
-  {view:'music',target:'#view-music',title:'Nasheeds control background audio',copy:'Users can upload, preview and delete nasheed tracks, then keep the mix low under the speaker.'},
-  {view:'insights',target:'#view-insights',title:'Insights are clip-quality signals',copy:'This should focus on hook scores, approvals, failed clips, template performance and workflow issues. Real social analytics can come later.'},
-  {view:'automation',target:'#view-automation',title:'Studio Settings',copy:'Generation defaults, automation rules and posting controls live here.'},
-  {view:'home',target:'#dcTopbar',title:'Search and guided demo',copy:'The top bar stays consistent. Users can search projects and clips or rerun this guided demo any time from the button.'},
-  {view:'home',target:'#dcNewProject',title:'Private creator workspace',copy:'Sign-in, billing, projects and platform connections stay separated for every creator account.'}
+  {view:'schedule',target:'#view-schedule',title:'Publishing slots stay organised',copy:'Approved clips fill the next open slot. Premium accounts can post to connected channels; everyone can still preview and download their work.'},
+  {view:'publishing',target:'#view-publishing',title:'Connect your own channels',copy:'TikTok, YouTube, Instagram and Facebook connections stay private to your account, and nothing posts without the publishing rules you choose.'},
+  {view:'home',target:'#dcTopbar',title:'You are ready',copy:'Search stays at the top, billing is always one click away, and you can replay this guide from Demo whenever you need it.'}
 ];
 let guideIndex = 0;
+let guideRenderToken = 0;
 function openGuidedTour(index=0){
   guideIndex = clamp(index,0,GUIDE_STEPS.length-1);
   let layer = $('#dcGuideLayer');
@@ -2725,23 +2719,34 @@ function openGuidedTour(index=0){
   layer.classList.add('show');renderGuidedTour();
 }
 function closeGuidedTour(){seenSet('guided_demo','complete');$('#dcGuideLayer')?.remove()}
+function visibleGuideTarget(selector){
+  return $$(selector).find(element=>{
+    if(!element?.isConnected)return false;
+    const rect=element.getBoundingClientRect(),style=getComputedStyle(element);
+    return rect.width>8&&rect.height>8&&style.display!=='none'&&style.visibility!=='hidden'&&Number(style.opacity||1)>.02;
+  })||null;
+}
 function renderGuidedTour(){
+  const token=++guideRenderToken;
   const step=GUIDE_STEPS[guideIndex]||GUIDE_STEPS[0];
   if(step.view && currentView!==step.view) go(step.view);
   setTimeout(()=>{
-    const target=$(step.target),spot=$('#dcGuideSpot'),card=$('#dcGuideCard');if(!spot||!card)return;
+    if(token!==guideRenderToken)return;
+    const target=visibleGuideTarget(step.target),spot=$('#dcGuideSpot'),card=$('#dcGuideCard');if(!spot||!card)return;
     $('#dcGuideTitle').textContent=step.title;$('#dcGuideCopy').textContent=step.copy;$('#dcGuideCount').textContent=`${guideIndex+1}/${GUIDE_STEPS.length}`;$('#dcGuideBar')?.style.setProperty('width',`${((guideIndex+1)/GUIDE_STEPS.length)*100}%`);$('#dcGuideBack').disabled=guideIndex===0;$('#dcGuideNext').textContent=guideIndex>=GUIDE_STEPS.length-1?'Finish':'Next';
-    if(!target){spot.style.cssText='left:50%;top:50%;width:1px;height:1px';card.classList.add('dc-guide-missing');return}
-    card.classList.remove('dc-guide-missing');target.scrollIntoView({block:'center',inline:'center',behavior:'smooth'});
+    if(!target){spot.style.cssText='display:none';card.classList.add('dc-guide-missing');card.style.left=`${Math.max(14,(innerWidth-Math.min(360,innerWidth-28))/2)}px`;card.style.top=`${Math.max(14,(innerHeight-220)/2)}px`;return}
+    card.classList.remove('dc-guide-missing');spot.style.display='block';target.scrollIntoView({block:'center',inline:'nearest',behavior:'auto'});
     setTimeout(()=>{
-      const r=target.getBoundingClientRect(),pad=8;
-      const left=Math.max(8,r.left-pad),top=Math.max(8,r.top-pad),width=Math.min(window.innerWidth-16,r.width+pad*2),height=Math.min(window.innerHeight-16,r.height+pad*2);
+      if(token!==guideRenderToken)return;
+      const liveTarget=visibleGuideTarget(step.target);if(!liveTarget){renderGuidedTour();return}
+      const r=liveTarget.getBoundingClientRect(),pad=8;
+      const left=Math.max(8,r.left-pad),top=Math.max(8,r.top-pad),right=Math.min(window.innerWidth-8,r.right+pad),bottom=Math.min(window.innerHeight-8,r.bottom+pad),width=Math.max(18,right-left),height=Math.max(18,bottom-top);
       spot.style.left=`${left}px`;spot.style.top=`${top}px`;spot.style.width=`${width}px`;spot.style.height=`${height}px`;
       const cardW=Math.min(360,window.innerWidth-28);let cx=Math.min(window.innerWidth-cardW-14,Math.max(14,left));let cy=top+height+14;
       if(cy+190>window.innerHeight)cy=Math.max(14,top-204);
       card.style.left=`${cx}px`;card.style.top=`${cy}px`;card.style.width=`${cardW}px`;
-    },170);
-  },80);
+    },70);
+  },70);
 }
 
 function providerInfo(provider){
