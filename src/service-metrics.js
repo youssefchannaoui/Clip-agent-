@@ -48,7 +48,13 @@ export async function workerMetrics() {
         legacy: true,
         note: 'Worker has not been rebuilt with the metrics endpoint yet.',
         disk: { freeBytes: readiness.freeBytes ?? null, totalBytes: null, usedBytes: null, percent: null },
-        queue: { depth: readiness.queueDepth ?? 0, running: readiness.running ?? 0, maxConcurrent: null },
+        queue: {
+          depth: readiness.queueDepth ?? 0,
+          running: readiness.running ?? 0,
+          maxConcurrent: readiness.maxConcurrent ?? null,
+          heavyRunning: readiness.heavyRunning ?? 0,
+          maxHeavy: readiness.maxHeavy ?? null,
+        },
         cpu: { percent: null, cores: null, loadAverage: null },
         memory: { usedBytes: null, totalBytes: null, percent: null },
       };
