@@ -9,6 +9,33 @@ const PROVIDERS = ['youtube', 'instagram', 'facebook', 'tiktok'];
 const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+/**
+ * Open an upload stream that cannot take the process down.
+ *
+ * A ReadStream that emits 'error' with no listener attached is rethrown by
+ * Node as an uncaught exception, which terminates the server. That is
+ * exactly how one missing publish-cache file turned a failed YouTube upload
+ * into a repeating production outage: the upload fails, the caller deletes
+ * the cached file in its `finally`, and the still-open stream then errors
+ * with ENOENT against a process that is not listening.
+ *
+ * Publishing is best-effort and retried, so a missing file is a normal
+ * retryable condition, never a fatal one.
+ */
+function publishReadStream(file, options = {}, provider = '') {
+  if (!file || !fs.existsSync(file)) {
+    throw new SocialError(
+      'The prepared upload file is no longer available. It will be rebuilt on the next attempt.',
+      { retryable: true, provider },
+    );
+  }
+  const stream = fs.createReadStream(file, options);
+  // The listener alone is what prevents the crash. fetch() still rejects on
+  // a broken stream, so the failure surfaces normally through the caller.
+  stream.on('error', () => {});
+  return stream;
+}
+
 class SocialError extends Error {
   constructor(message, { retryable = false, status = 0, provider = '' } = {}) {
     super(message);
@@ -609,7 +636,7 @@ async function uploadYouTube(clip, target, file, userId) {
   let failures = 0;
   while (offset < stat.size) {
     const endExclusive = Math.min(stat.size, offset + chunkSize);
-    const body = fs.createReadStream(file, { start: offset, end: endExclusive - 1 });
+    const body = publishReadStream(file, { start: offset, end: endExclusive - 1 }, 'youtube');
     target.providerState = { ...target.providerState, stage: 'uploading', totalSize: stat.size, offset };
     save();
     try {
@@ -618,7 +645,10 @@ async function uploadYouTube(clip, target, file, userId) {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'video/mp4',
-          'Content-Length': String(body.length),
+          // A ReadStream has no .length, so this used to send the literal
+          // string "undefined" and undici rejected the request as
+          // "fetch failed" before it ever reached YouTube.
+          'Content-Length': String(endExclusive - offset),
           'Content-Range': `bytes ${offset}-${endExclusive - 1}/${stat.size}`,
         },
         body,
@@ -698,7 +728,7 @@ async function uploadFacebook(clip, target, file, userId) {
 
   if (!['uploaded', 'published'].includes(target.providerState.stage)) {
     const size = fs.statSync(file).size;
-    const bytes = fs.createReadStream(file);
+    const bytes = publishReadStream(file, {}, target.provider || '');
     const upload = await fetch(uploadUrl, {
       method: 'POST',
       headers: { Authorization: `OAuth ${accessToken}`, offset: '0', file_size: String(size), 'Content-Type': 'application/octet-stream' },
