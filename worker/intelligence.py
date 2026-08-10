@@ -120,7 +120,24 @@ def evaluate_clip(
     normal = " ".join((text or "").split())
     lower = normal.casefold()
     word_list = tokens(normal)
-    opening = " ".join(word_list[:24])
+    # Retention is decided disproportionately early. Prefer actual word timing
+    # for the first three seconds and fall back to a short lexical window for
+    # imported transcripts that predate word timestamps.
+    opening_timed: list[str] = []
+    closing_timed: list[str] = []
+    for segment in segments or []:
+        for word in segment.get("words") or []:
+            value = str(word.get("word") or "").strip()
+            if not value:
+                continue
+            word_start = float(word.get("start", start) or start)
+            word_end = float(word.get("end", word_start) or word_start)
+            if word_start <= float(start) + 3.2:
+                opening_timed.append(value)
+            if word_end >= float(end) - 6.0:
+                closing_timed.append(value)
+    opening = " ".join(tokens(" ".join(opening_timed))) if opening_timed else " ".join(word_list[:18])
+    closing = " ".join(tokens(" ".join(closing_timed))) if closing_timed else " ".join(word_list[-32:])
     ending_complete = bool(re.search(r"[.!?؟…]['\"]?$", normal.strip()))
     hook_hits = contains_any(opening, HOOK_TERMS)
     payoff_hits = contains_any(lower, PAYOFF_TERMS)
@@ -130,6 +147,8 @@ def evaluate_clip(
     weak_opening = lower.startswith(WEAK_OPENINGS)
     vague_opening = lower.startswith(VAGUE_OPENINGS)
     question_opening = "?" in normal[:180] or "؟" in normal[:180]
+    opening_specificity = len(set(tokens(opening))) / max(1, len(tokens(opening)))
+    closing_payoff_hits = contains_any(closing, PAYOFF_TERMS) + contains_any(closing, ACTION_TERMS)
 
     gaps = [
         max(0.0, float(right.get("start", 0)) - float(left.get("end", 0)))
@@ -144,6 +163,12 @@ def evaluate_clip(
     hook -= 18 if weak_opening else 0
     hook -= 14 if vague_opening else 0
     hook -= min(22, filler_count * 4)
+
+    opening_strength = 48 + min(28, len(hook_hits) * 10) + (14 if question_opening else 0)
+    opening_strength += min(10, opening_specificity * 12)
+    opening_strength -= 20 if weak_opening else 0
+    opening_strength -= 14 if vague_opening else 0
+    opening_strength -= min(24, filler_count * 5)
 
     flow = 64 + (15 if ending_complete else -18) + (9 if not weak_opening else -12)
     flow -= min(35, silence_ratio * 150)
@@ -160,6 +185,8 @@ def evaluate_clip(
 
     completeness = 54 + (27 if ending_complete else -18) + (10 if payoff_hits else 0)
     completeness -= 18 if vague_opening else 0
+    payoff_strength = 44 + min(34, len(closing_payoff_hits) * 11) + (16 if ending_complete else -18)
+    payoff_strength += 8 if len(tokens(closing)) >= 8 else 0
 
     unique_ratio = len(set(word_list)) / max(1, len(word_list))
     specificity = 46 + min(32, unique_ratio * 44)
@@ -180,11 +207,18 @@ def evaluate_clip(
         "confidence": confidence,
         "safety": int(round(clamp(safety))),
         "durationFit": duration_fit,
+        "openingStrength": int(round(clamp(opening_strength))),
+        "payoffStrength": int(round(clamp(payoff_strength))),
     }
+    dimensions["shareability"] = int(round(clamp((
+        dimensions["openingStrength"] + dimensions["value"]
+        + dimensions["specificity"] + dimensions["payoffStrength"]
+    ) / 4)))
     weights = {
-        "hook": 0.17, "flow": 0.12, "value": 0.17, "clarity": 0.11,
-        "completeness": 0.13, "specificity": 0.08, "pacing": 0.08,
-        "confidence": 0.07, "safety": 0.04, "durationFit": 0.03,
+        "hook": 0.11, "openingStrength": 0.12, "flow": 0.10, "value": 0.14,
+        "clarity": 0.09, "completeness": 0.10, "payoffStrength": 0.10,
+        "specificity": 0.06, "pacing": 0.06, "confidence": 0.06,
+        "safety": 0.03, "durationFit": 0.03,
     }
     overall = int(round(sum(dimensions[key] * weight for key, weight in weights.items())))
 
@@ -197,6 +231,8 @@ def evaluate_clip(
         "clarity": "easy to understand", "completeness": "complete thought and payoff",
         "specificity": "specific and searchable", "pacing": "strong short-form pace",
         "confidence": "high-confidence transcript",
+        "openingStrength": "strong first three seconds", "payoffStrength": "clear ending payoff",
+        "shareability": "strong save-and-share potential",
     }
     reasons = [labels[key] for value, key in ranked if value >= 72][:3]
     if quote_risk:
@@ -215,6 +251,17 @@ def evaluate_clip(
             "hookTerms": hook_hits[:4], "payoffTerms": payoff_hits[:4],
             "actionTerms": action_hits[:4], "promotionTerms": promotion_hits[:3],
             "longSilenceSec": round(long_silence, 2),
+            "firstThreeSeconds": " ".join(opening_timed).strip()[:220] or " ".join(word_list[:18])[:220],
+            "endingPayoff": " ".join(closing_timed).strip()[:320] or " ".join(word_list[-32:])[:320],
+            "dropOffRisks": [
+                label for condition, label in (
+                    (weak_opening, "weak opening connector"),
+                    (vague_opening, "missing opening context"),
+                    (filler_count >= 2, "opening filler"),
+                    (silence_ratio > 0.12, "long silence"),
+                    (not ending_complete, "cut-off ending"),
+                ) if condition
+            ],
         },
     }
 
@@ -257,6 +304,9 @@ def build_growth_pack(
     goal: str = "education",
     tone: str = "respectful",
     avoid_phrases: list[str] | None = None,
+    score: int = 0,
+    score_breakdown: dict[str, Any] | None = None,
+    confidence: int = 82,
 ) -> dict[str, Any]:
     """Build copy variants from transcript-grounded language only.
 
@@ -280,7 +330,6 @@ def build_growth_pack(
     primary = alternatives[0] if alternatives else "A Reminder Worth Hearing"
     tags = " ".join((hashtags or "").split()[:5])
     safe_description = "" if any(phrase in str(description or "").casefold() for phrase in avoided) else description
-    caption = "\n\n".join(part for part in (safe_description, tags) if part).strip()
     search = _search_terms(" ".join(part for part in (topic, text) if part))
     calls_to_action = {
         "growth": "Save this reminder and share it with someone who may benefit.",
@@ -295,17 +344,48 @@ def build_growth_pack(
         "creators": "What part of this message should more people hear?",
         "general": "What part of this reminder stood out to you?",
     }
+    breakdown = score_breakdown or {}
+    platform_fit = {
+        "youtube": (int(breakdown.get("specificity", score or 70)) + int(breakdown.get("completeness", score or 70))) / 2,
+        "tiktok": (int(breakdown.get("openingStrength", breakdown.get("hook", score or 70))) + int(breakdown.get("pacing", score or 70))) / 2,
+        "instagram": (int(breakdown.get("value", score or 70)) + int(breakdown.get("clarity", score or 70))) / 2,
+        "facebook": (int(breakdown.get("value", score or 70)) + int(breakdown.get("payoffStrength", breakdown.get("completeness", score or 70)))) / 2,
+    }
+    best_platforms = [name for name, _value in sorted(platform_fit.items(), key=lambda row: (-row[1], row[0]))[:2]]
+    hook_preview = _clean_title(hook or (sentences[0] if sentences else primary), 120)
+    payoff_preview = _clean_title(sentences[-1] if sentences else primary, 160)
+    forecast = "strong" if score >= 86 and confidence >= 76 else "promising" if score >= 72 and confidence >= 66 else "review"
+    cta = calls_to_action.get(goal, calls_to_action["education"])
+    youtube_description = "\n\n".join(part for part in (safe_description, cta, tags) if part).strip()
+    short_caption = "\n\n".join(part for part in (primary, safe_description, cta, tags) if part).strip()
+    social_caption = "\n\n".join(part for part in (safe_description, cta, tags) if part).strip()
     return {
         "primaryTitle": primary,
         "alternateTitles": alternatives[1:],
         "searchTerms": search,
         "pinnedComment": pinned_comments.get(audience, pinned_comments["general"]),
-        "callToAction": calls_to_action.get(goal, calls_to_action["education"]),
+        "callToAction": cta,
         "strategy": {"audience": audience, "goal": goal, "tone": tone},
+        "directorBrief": {
+            "forecast": forecast,
+            "hookPreview": hook_preview,
+            "payoffPreview": payoff_preview,
+            "bestPlatforms": best_platforms,
+            "platformFit": {key: int(round(value)) for key, value in platform_fit.items()},
+            "transcriptConfidence": int(max(0, min(100, confidence))),
+            "why": [
+                label for value, label in sorted((
+                    (int(breakdown.get("openingStrength", breakdown.get("hook", 0))), "Strong opening"),
+                    (int(breakdown.get("value", 0)), "Clear viewer value"),
+                    (int(breakdown.get("payoffStrength", breakdown.get("completeness", 0))), "Complete payoff"),
+                    (int(breakdown.get("specificity", 0)), "Searchable topic"),
+                ), reverse=True) if value >= 72
+            ][:3],
+        },
         "platforms": {
-            "youtube": {"title": primary[:100], "description": caption[:5000], "searchTerms": search},
-            "tiktok": {"caption": "\n\n".join(part for part in (primary, safe_description, tags) if part)[:2200]},
-            "instagram": {"caption": caption[:2200], "altText": _clean_title(sentences[0] if sentences else primary, 180)},
-            "facebook": {"title": primary[:255], "description": caption[:5000]},
+            "youtube": {"title": primary[:100], "description": youtube_description[:5000], "searchTerms": search},
+            "tiktok": {"caption": short_caption[:2200]},
+            "instagram": {"caption": social_caption[:2200], "altText": _clean_title(sentences[0] if sentences else primary, 180)},
+            "facebook": {"title": primary[:255], "description": social_caption[:5000]},
         },
     }

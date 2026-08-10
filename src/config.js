@@ -195,7 +195,9 @@ if (config.authRequired && config.sessionSecret === 'dev-session-secret-change-m
 export function productionConfigurationErrors() {
   const errors = [];
   if (!config.authRequired) errors.push('AUTH_REQUIRED must be enabled.');
-  if (!config.sessionSecret || config.sessionSecret === 'dev-session-secret-change-me') errors.push('APP_SESSION_SECRET must be a production secret.');
+  if (!config.sessionSecret || config.sessionSecret === 'dev-session-secret-change-me' || config.sessionSecret.length < 32) errors.push('APP_SESSION_SECRET must contain at least 32 characters.');
+  if (config.password && config.password.length < 12) errors.push('APP_PASSWORD must contain at least 12 characters when the admin password fallback is enabled.');
+  if (config.socialPublishEnabled && (!config.socialTokenKey || config.socialTokenKey.length < 32)) errors.push('SOCIAL_TOKEN_KEY must contain at least 32 characters when social publishing is enabled.');
   if (config.processingMode === 'remote') {
     if (!config.workerBaseUrl) errors.push('WORKER_BASE_URL is required for remote processing.');
     if (!config.workerSharedSecret || config.workerSharedSecret.length < 32) errors.push('WORKER_SHARED_SECRET must contain at least 32 characters.');
@@ -206,6 +208,8 @@ export function productionConfigurationErrors() {
     if (!config.stripeSecretKey) errors.push('STRIPE_SECRET_KEY is required when Stripe is enabled.');
     if (!config.stripeWebhookSecret) errors.push('STRIPE_WEBHOOK_SECRET is required when Stripe is enabled.');
     if (!config.stripePriceWeekly || !config.stripePriceMonthly || !config.stripePriceYearly) errors.push('All subscription Stripe price IDs are required when Stripe is enabled.');
+    if (!config.stripePriceTopup100 || !config.stripePriceTopup300 || !config.stripePriceTopup750) errors.push('All token top-up Stripe price IDs are required when Stripe is enabled.');
+    if (config.planPriceMonthlyListLabel && !config.stripeCouponMonthly) errors.push('STRIPE_COUPON_MONTHLY is required when a discounted Monthly list price is advertised.');
   }
   return errors;
 }

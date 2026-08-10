@@ -47,7 +47,7 @@ export function plans() {
       id: 'weekly', name: 'Weekly', interval: 'week', badge: 'Start small',
       tokens: config.tokensWeekly, priceId: config.stripePriceWeekly, priceLabel: config.planPriceWeeklyLabel,
       enabled: Boolean(config.stripePriceWeekly), trialEligible: trialAllowed('weekly'),
-      features: ['Remove or customise watermark', 'Brand Kit', 'Unlimited free rerenders'],
+      features: ['Remove or customise watermark', 'Brand Kit', 'Unlimited free rerenders', 'Quality Center preflight'],
       description: 'Affordable access for occasional lecture clipping.',
     },
     monthly: {
@@ -55,7 +55,7 @@ export function plans() {
       tokens: config.tokensMonthly, priceId: config.stripePriceMonthly, priceLabel: config.planPriceMonthlyLabel,
       listPriceLabel: config.planPriceMonthlyListLabel,
       enabled: Boolean(config.stripePriceMonthly), trialEligible: trialAllowed('monthly'),
-      features: ['Everything in Weekly', 'Creator Lab intelligence', 'Batch scheduling and publishing'],
+      features: ['Everything in Weekly', 'AI Director intelligence', 'Active-speaker framing', 'Batch scheduling and publishing'],
       description: 'The best balance for creators posting consistently.',
     },
     yearly: {
@@ -138,6 +138,53 @@ function trialState(billing = {}) {
   };
 }
 
+// A single account mode keeps the product experience consistent across the
+// home screen, navigation, billing, generation and publishing.  The old UI
+// inferred these states independently and could tell the same person they
+// were on "Free", "Trial" and "Premium" on three different screens.
+export function accountExperience({ billing = {}, unlimited = false, remaining = 0, freeTier = {}, trial = {} } = {}) {
+  const plan = String(billing.plan || 'free').toLowerCase();
+  const status = String(billing.status || 'free').toLowerCase();
+  const paid = ['weekly', 'monthly', 'yearly'].includes(plan);
+  const empty = !unlimited && Number(remaining || 0) <= 0;
+  let id = 'free_trial';
+  if (unlimited) id = 'owner';
+  else if (paid && status === 'past_due') id = 'premium_past_due';
+  else if (paid && billing.cancelAtPeriodEnd) id = 'premium_canceling';
+  else if (paid && trial.active) id = 'premium_trial';
+  else if (paid && empty) id = 'premium_empty';
+  else if (paid) id = 'premium_active';
+  else if (freeTier.expired || trial.ended) id = 'free_expired';
+  else if (empty) id = 'free_empty';
+
+  const browseOnly = ['free_expired', 'free_empty', 'premium_past_due'].includes(id);
+  const premium = id === 'owner' || id.startsWith('premium_');
+  const labels = {
+    owner: ['Owner studio', 'Unlimited account access'],
+    free_trial: ['Free studio trial', 'Explore, edit and download with a watermark'],
+    free_empty: ['Free tokens used', 'Your existing work stays available'],
+    free_expired: ['Free trial ended', 'Browse your work or choose Premium'],
+    premium_trial: ['Premium trial', 'Every creator tool is unlocked'],
+    premium_active: ['Premium studio', 'Full creator workflow unlocked'],
+    premium_empty: ['Premium · add tokens', 'Your studio is active; processing is paused'],
+    premium_canceling: ['Premium ending soon', 'Access continues until the period ends'],
+    premium_past_due: ['Payment needs attention', 'Update billing to resume processing'],
+  };
+  return {
+    id,
+    label: labels[id]?.[0] || labels.free_trial[0],
+    detail: labels[id]?.[1] || labels.free_trial[1],
+    premium,
+    browseOnly,
+    canGenerate: unlimited || (!browseOnly && !empty),
+    canEdit: true,
+    canDownload: true,
+    canPublish: unlimited || (premium && !empty && id !== 'premium_past_due'),
+    watermarkRequired: !premium,
+    showUpgrade: !unlimited && !['premium_active', 'premium_trial', 'premium_canceling'].includes(id),
+  };
+}
+
 export function ensureBillingState() {
   if (!Array.isArray(state.billingEvents)) state.billingEvents = [];
   if (!Array.isArray(state.processedStripeEvents)) state.processedStripeEvents = [];
@@ -195,7 +242,8 @@ export function isUnlimited(user) {
 export function featureAccess(user) {
   if (!user) return {
     premium: false, watermarkRequired: true, canRemoveWatermark: false,
-    customBranding: false, creatorLab: false, batchPublishing: false,
+    customBranding: false, creatorLab: false, aiDirector: false, advancedFraming: false,
+    qualityCenter: true, batchPublishing: false,
     socialPublishing: false,
   };
   const billing = ensureUserBilling(user);
@@ -209,6 +257,9 @@ export function featureAccess(user) {
     canRemoveWatermark: premium,
     customBranding: premium,
     creatorLab: studioPremium,
+    aiDirector: studioPremium,
+    advancedFraming: studioPremium,
+    qualityCenter: true,
     batchPublishing: studioPremium,
     socialPublishing: premium,
   };
@@ -236,6 +287,7 @@ export function publicBilling(user) {
       ? 'publishing_requires_premium'
       : 'publishing_tokens_empty';
   const features = { ...planFeatures, canPublish, publishingBlockCode };
+  const experience = accountExperience({ billing, unlimited, remaining, freeTier, trial });
   const periodEndsInDays = billing.periodEnd ? daysRemaining(billing.periodEnd) : null;
   const notices = [];
   if (freeTier.onFree && !freeTier.expired) {
@@ -335,12 +387,14 @@ export function publicBilling(user) {
       canceledAt: billing.canceledAt || null,
       trial,
       freeTier,
+      experience,
       stripeCustomerId: billing.stripeCustomerId || '',
       stripeSubscriptionId: billing.stripeSubscriptionId || '',
     },
     plans: plans(),
     topups: topups(),
     notices,
+    experience,
     recentEvents: (state.billingEvents || []).filter(event => event.userId === user.id).slice(0, 10),
   };
 }

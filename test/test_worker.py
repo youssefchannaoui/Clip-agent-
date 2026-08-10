@@ -83,7 +83,8 @@ class GrowthMetadataTests(unittest.TestCase):
         metadata = worker.platform_metadata(title, description, hashtags)
         self.assertLessEqual(len(title), 100)
         self.assertNotEqual(description, transcript)
-        self.assertIn("#DeenClipped", hashtags)
+        self.assertIn("#IslamicReminder", hashtags)
+        self.assertNotIn("#DeenClipped", hashtags)
         self.assertLessEqual(len(metadata["youtube"]["title"]), 100)
         self.assertIn(hashtags, metadata["instagram"]["caption"])
 
@@ -114,11 +115,17 @@ class GrowthMetadataTests(unittest.TestCase):
             worker.title_from_text(transcript, 1),
             worker.description_from_text(transcript),
             worker.hashtags_from_text(transcript),
+            score=88,
+            score_breakdown={"openingStrength": 91, "pacing": 86, "value": 84, "clarity": 83, "completeness": 79, "payoffStrength": 82, "specificity": 75},
+            confidence=93,
         )
         self.assertTrue(pack["primaryTitle"])
         self.assertLessEqual(len(pack["alternateTitles"]), 2)
         self.assertIn("youtube", pack["platforms"])
         self.assertIn("instagram", pack["platforms"])
+        self.assertEqual(pack["directorBrief"]["forecast"], "strong")
+        self.assertIn("tiktok", pack["directorBrief"]["bestPlatforms"])
+        self.assertIn("Save this lesson", pack["platforms"]["instagram"]["caption"])
         self.assertNotIn("Quran 2:", str(pack))
 
     def test_growth_pack_applies_audience_goal_and_avoidance_without_inventing_claims(self):
@@ -152,6 +159,11 @@ class ExplainableIntelligenceTests(unittest.TestCase):
         )
         for key in ("hook", "flow", "value", "clarity", "completeness", "specificity", "pacing", "confidence", "safety"):
             self.assertIn(key, evaluation["dimensions"])
+        self.assertIn("openingStrength", evaluation["dimensions"])
+        self.assertIn("payoffStrength", evaluation["dimensions"])
+        self.assertIn("shareability", evaluation["dimensions"])
+        self.assertIn("firstThreeSeconds", evaluation["signals"])
+        self.assertIn("dropOffRisks", evaluation["signals"])
         self.assertGreaterEqual(evaluation["confidence"], 90)
 
     def test_arabic_hook_and_payoff_are_understood(self):
@@ -173,6 +185,19 @@ class ExplainableIntelligenceTests(unittest.TestCase):
         evaluation = worker.evaluate_clip(candidate.start, candidate.end, candidate.text, candidate.segments)
         self.assertLess(evaluation["confidence"], 68)
         self.assertIn("transcript confidence needs review", evaluation["reasons"])
+
+    def test_review_reasons_explain_every_automatic_publish_blocker(self):
+        candidate = worker.Candidate(
+            0, 34, "A moment that still needs a careful human check.", [],
+            66, [], False,
+            dimensions={"completeness": 42, "payoffStrength": 39},
+            confidence=61,
+        )
+        reasons = worker.candidate_review_reasons(candidate)
+        self.assertEqual(len(reasons), 3)
+        self.assertTrue(any("confidence" in reason.lower() for reason in reasons))
+        self.assertTrue(any("context" in reason.lower() for reason in reasons))
+        self.assertTrue(any("payoff" in reason.lower() for reason in reasons))
 
 
 class CaptionTimingTests(unittest.TestCase):

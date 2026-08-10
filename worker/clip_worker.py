@@ -616,7 +616,10 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any]) ->
     if not base_url or not candidates:
         return candidates
 
-    shortlist = sorted(candidates, key=lambda item: -item.score)[:24]
+    # The deterministic scorer has already filtered the full lecture. Keeping
+    # the refinement prompt bounded makes a small CPU model faster and far more
+    # likely to return valid JSON instead of losing the last candidates.
+    shortlist = sorted(candidates, key=lambda item: -item.score)[:16]
     items = [
         {
             "index": index,
@@ -624,7 +627,7 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any]) ->
             "heuristicScore": candidate.score,
             "builtInDimensions": candidate.dimensions,
             "transcriptConfidence": candidate.confidence,
-            "text": candidate.text[:1400],
+            "text": candidate.text[:1000],
         }
         for index, candidate in enumerate(shortlist)
     ]
@@ -639,7 +642,8 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any]) ->
         "You are DeenClipped's senior short-form editor. Rank candidate moments from Islamic lectures for honest "
         "retention and shareability. Return strict JSON only: {\"clips\":[...]}. For EVERY candidate return: "
         "index, score (0-100), title, description, hashtags, hook, topic, reason, and dimensions containing "
-        "hook, flow, value, clarity, completeness, specificity and shareability (each 0-100). The title must be 4-10 words, "
+        "hook, openingStrength, flow, value, clarity, completeness, payoffStrength, specificity, shareability and platformFit "
+        "(each 0-100). The title must be 4-10 words, "
         "specific, respectful, natural, and at most 70 characters. The description must be 1-2 concise sentences "
         "that explain the real value in the supplied text. Return 3-5 relevant hashtags. Reward a compelling first "
         "three seconds, standalone context, emotional or practical value, a complete payoff, clean pacing, and a "
@@ -678,7 +682,7 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any]) ->
             candidate = shortlist[index]
             dimensions = row.get("dimensions") if isinstance(row.get("dimensions"), dict) else {}
             dimension_scores = []
-            for key in ("hook", "flow", "value", "clarity", "completeness", "specificity", "shareability"):
+            for key in ("hook", "openingStrength", "flow", "value", "clarity", "completeness", "payoffStrength", "specificity", "shareability", "platformFit"):
                 try:
                     dimension_scores.append(max(0.0, min(100.0, float(dimensions.get(key)))))
                 except (TypeError, ValueError):
@@ -687,7 +691,7 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any]) ->
             if dimension_scores:
                 ai_score = int(round(ai_score * 0.55 + (sum(dimension_scores) / len(dimension_scores)) * 0.45))
             candidate.score = int(round(candidate.score * 0.45 + ai_score * 0.55))
-            for key in ("hook", "flow", "value", "clarity", "completeness", "specificity"):
+            for key in ("hook", "openingStrength", "flow", "value", "clarity", "completeness", "payoffStrength", "specificity", "shareability", "platformFit"):
                 try:
                     model_value = max(0, min(100, int(round(float(dimensions.get(key))))))
                 except (TypeError, ValueError):
@@ -1147,18 +1151,40 @@ def title_from_text(text: str, number: int) -> str:
 def description_from_text(text: str) -> str:
     cleaned = re.sub(r"\s+", " ", text).strip()
     sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", cleaned) if part.strip()]
-    excerpt = " ".join(sentences[:2]) if sentences else cleaned
+    # A social description should summarise the moment, not silently copy the
+    # complete clip transcript into every platform caption.
+    excerpt = sentences[0] if sentences else cleaned
     excerpt = clean_short_text(excerpt, 420)
     if not excerpt:
-        return "A concise reminder to reflect on and share with someone who may benefit."
-    return clean_description(excerpt + " Save this reminder and share it with someone who may benefit.")
+        return "A concise reminder with one clear point to revisit."
+    # build_growth_pack adds one goal-specific call to action for each social
+    # platform. Keep this base summary clean so fallback captions never repeat
+    # “save” or “share” twice.
+    return clean_description(f"A concise reminder: {excerpt}")
 
 
 def hashtags_from_text(text: str) -> str:
     lower = text.casefold()
     tags = [tag for keyword, tag in TOPIC_HASHTAGS if keyword in lower]
-    tags.extend(["#IslamicReminder", "#DeenClipped"])
+    # Premium exports must not carry hidden product promotion after the user
+    # removes the watermark. Free-plan branding is enforced in the video layer.
+    tags.append("#IslamicReminder")
     return clean_hashtags(tags[:5])
+
+
+def candidate_review_reasons(candidate: Candidate) -> list[str]:
+    """Explain every signal that should stop automatic publishing."""
+    dimensions = candidate.dimensions or {}
+    reasons: list[str] = []
+    if candidate.quote_risk:
+        reasons.append("Religious quotation needs a human wording check.")
+    if int(candidate.confidence or 0) < 68:
+        reasons.append("Transcript confidence is below the safe publishing threshold.")
+    if int(dimensions.get("completeness", 100)) < 55:
+        reasons.append("The selected moment may start or end without enough context.")
+    if int(dimensions.get("payoffStrength", 100)) < 48:
+        reasons.append("The ending payoff is too weak for automatic publishing.")
+    return reasons
 
 
 def platform_metadata(title: str, description: str, hashtags: str) -> dict[str, Any]:
@@ -1680,8 +1706,11 @@ def render_clip(
         goal=str(settings.get("contentGoal") or "education"),
         tone=str(settings.get("brandTone") or "respectful"),
         avoid_phrases=[str(item) for item in (settings.get("avoidPhrases") or [])],
+        score=candidate.score, score_breakdown=candidate.dimensions,
+        confidence=candidate.confidence,
     )
     title = str(growth_pack.get("primaryTitle") or title)
+    review_reasons = candidate_review_reasons(candidate)
     return {
         "id": clip_id,
         "projectId": job.get("projectId") or job["id"],
@@ -1704,7 +1733,8 @@ def render_clip(
         "confidence": candidate.confidence,
         "intelligenceSignals": candidate.signals,
         "quality": report,
-        "reviewRequired": candidate.quote_risk or candidate.confidence < 68,
+        "reviewRequired": bool(review_reasons),
+        "reviewReasons": review_reasons,
         "musicName": track.get("name") or "Nasheed",
         "musicVerified": True,
         "templateId": template["id"],

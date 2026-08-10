@@ -281,7 +281,7 @@ test('signed-in pricing makes premium entitlements explicit', () => {
   const html = billing.plansPage(user, {});
   assert.ok(html.includes('DeenClipped watermark'));
   assert.ok(html.includes('Remove or customise watermark'));
-  assert.ok(html.includes('Creator Lab intelligence'));
+  assert.ok(html.includes('AI Director intelligence'));
   assert.ok(html.includes('Batch scheduling and publishing'));
 });
 

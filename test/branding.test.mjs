@@ -35,7 +35,7 @@ test('free accounts always render with the DeenClipped watermark', () => {
   assert.equal(rendered.watermarkRequired, true);
 });
 
-test('weekly unlocks branding while Creator Lab begins on monthly', () => {
+test('weekly unlocks branding while AI Director begins on monthly', () => {
   const weekly = user('weekly-features', 'weekly');
   const monthly = user('monthly-features', 'monthly');
   assert.equal(billing.featureAccess(weekly).customBranding, true);
@@ -71,10 +71,10 @@ test('paid Brand Kit values are applied to every render template', () => {
   assert.equal(rendered.brandLineColor, '#654321');
 });
 
-test('the product UI includes Brand Kit and Creator Lab as first-class screens', () => {
+test('the product UI includes Brand Kit and AI Director as first-class screens', () => {
   const ui = fs.readFileSync(new URL('../src/public/activity-fix.js', import.meta.url), 'utf8');
-  assert.match(ui, /\['brand','Brand Kit','brand'\]/);
-  assert.match(ui, /\['lab','Creator Lab','lab'\]/);
+  assert.match(ui, /\['brand','Brand Kit','brand','PRO'\]/);
+  assert.match(ui, /\['lab','AI Director','lab','PRO'\]/);
   assert.match(ui, /function renderBrandKit\(\)/);
   assert.match(ui, /function renderCreatorLab\(\)/);
   assert.match(ui, /Free exports are branded/);

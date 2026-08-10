@@ -30,6 +30,7 @@ import * as workerClient from './worker-client.js';
 const page = path.join(config.root, 'src', 'public', 'index.html');
 const activityFixPage = path.join(config.root, 'src', 'public', 'activity-fix.js');
 const premiumDashboardPage = path.join(config.root, 'src', 'public', 'premium-dashboard.js');
+const studioV6CssPage = path.join(config.root, 'src', 'public', 'studio-v6.css');
 const marketingCssPage = path.join(config.root, 'src', 'public', 'marketing.css');
 const marketingJsPage = path.join(config.root, 'src', 'public', 'marketing.js');
 function assetVersion(file) {
@@ -38,6 +39,7 @@ function assetVersion(file) {
 }
 const activityFixVersion = assetVersion(activityFixPage);
 const premiumDashboardVersion = assetVersion(premiumDashboardPage);
+const studioV6CssVersion = assetVersion(studioV6CssPage);
 // Marketing images are looked for in a dedicated subfolder first, then in
 // src/public itself. They are currently committed directly to src/public, so
 // serving only from the subfolder means every request 404s against a directory
@@ -188,6 +190,7 @@ function serveAppShell(req, res, url, currentUser) {
   if (auth.enabled() && !currentUser) return redirect(res, `/login?returnTo=${encodeURIComponent('/app' + (url.search || ''))}`);
   if (auth.enabled() && currentUser && billing.needsPlanChoice(currentUser)) return redirect(res, `/plans?returnTo=${encodeURIComponent('/app' + (url.search || ''))}`);
   let html = fs.readFileSync(page, 'utf8');
+  if (!html.includes('/studio-v6.css')) html = html.replace('</head>', `<link rel="stylesheet" href="/studio-v6.css?v=${studioV6CssVersion}">\n</head>`);
   if (!html.includes('/activity-fix.js')) html = html.replace('</body>', `<script src="/activity-fix.js?v=${activityFixVersion}"></script>\n</body>`);
   if (!html.includes('/premium-dashboard.js')) html = html.replace('</body>', `<script src="/premium-dashboard.js?v=${premiumDashboardVersion}"></script>\n</body>`);
   const body = Buffer.from(html);
@@ -584,6 +587,12 @@ async function route(req, res, url) {
     if (!fs.existsSync(premiumDashboardPage)) return json(res, 404, { error: 'Premium dashboard script not found.' });
     const body = fs.readFileSync(premiumDashboardPage);
     res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
+    return res.end(body);
+  }
+  if (method === 'GET' && pathname === '/studio-v6.css') {
+    if (!fs.existsSync(studioV6CssPage)) return json(res, 404, { error: 'Studio V6 stylesheet not found.' });
+    const body = fs.readFileSync(studioV6CssPage);
+    res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
     return res.end(body);
   }
   const oauthCallback = pathname.match(/^\/auth\/(youtube|meta|tiktok)\/callback$/);
@@ -1152,6 +1161,13 @@ async function route(req, res, url) {
   if (method === 'POST' && clipFraming) {
     const id = decodeURIComponent(clipFraming[1]);
     let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 403, errorBody(error)); }
+    if (!billing.featureAccess(currentUser).advancedFraming) {
+      return json(res, 403, {
+        error: 'AI active-speaker framing is included with Monthly and Yearly Premium.',
+        code: 'premium_feature',
+        feature: 'advancedFraming',
+      });
+    }
     const project = state.projects.find(item => item.id === clip.projectId);
     const body = await readBody(req);
     const clipStart = Number(clip.startSec) || 0;

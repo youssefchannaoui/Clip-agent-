@@ -62,14 +62,14 @@ test('pricing explains the watermark and premium creator tools', () => {
   const html = page();
   assert.ok(html.includes('DeenClipped watermark on exports'));
   assert.ok(html.includes('Remove or customise the watermark'));
-  assert.ok(html.includes('Creator Lab content intelligence'));
+  assert.ok(html.includes('AI Director intelligence'));
   assert.ok(html.includes('Batch scheduling and publishing'));
 });
 
-test('the features page includes Brand Kit and Creator Lab', () => {
+test('the features page includes Brand Kit and AI Director', () => {
   const html = marketing.features({ base: 'https://deenclipped.online', currentUser: null });
   assert.ok(html.includes('<h3>Brand Kit</h3>'));
-  assert.ok(html.includes('<h3>Creator Lab</h3>'));
+  assert.ok(html.includes('<h3>AI Director</h3>'));
 });
 
 test('savings maths follows configuration rather than hardcoded numbers', async () => {

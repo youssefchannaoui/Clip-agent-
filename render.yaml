@@ -148,3 +148,27 @@ services:
         sync: false
       - key: STRIPE_PRICE_TOPUP_750
         sync: false
+      - key: STRIPE_COUPON_MONTHLY
+        sync: false
+      - key: PLAN_PRICE_WEEKLY_LABEL
+        value: A$9.99 / week
+      - key: PLAN_PRICE_MONTHLY_LABEL
+        value: A$29.99
+      - key: PLAN_PRICE_MONTHLY_LIST_LABEL
+        value: A$34.99
+      - key: PLAN_PRICE_YEARLY_LABEL
+        value: A$249
+      - key: STRIPE_TRIAL_DAYS
+        value: "7"
+      - key: TRIAL_PLANS
+        value: monthly,yearly
+      - key: FREE_TIER_DAYS
+        value: "3"
+      - key: TOKENS_FREE
+        value: "40"
+      - key: TOKENS_WEEKLY
+        value: "75"
+      - key: TOKENS_MONTHLY
+        value: "400"
+      - key: TOKENS_YEARLY
+        value: "4800"
