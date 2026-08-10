@@ -1,4 +1,4 @@
-"""Authenticated, persistent, single-concurrency DeenClipped processing service."""
+"""Authenticated, persistent and resource-aware DeenClipped processing service."""
 from __future__ import annotations
 
 import hashlib
@@ -28,12 +28,40 @@ JOBS_DIR = DATA_DIR / "jobs"
 TEMP_DIR = Path(os.getenv("WORKER_TEMP_DIR", str(DATA_DIR / "tmp"))).resolve()
 PORT = int(os.getenv("WORKER_PORT", "8080"))
 MAX_CONCURRENT = max(1, int(os.getenv("WORKER_MAX_CONCURRENT_JOBS", "1")))
+MAX_HEAVY = max(1, min(MAX_CONCURRENT, int(os.getenv("WORKER_MAX_HEAVY_JOBS", "1"))))
+JOB_PROCESS_TIMEOUT_SECONDS = max(15 * 60, int(os.getenv("WORKER_JOB_TIMEOUT_MINUTES", "180")) * 60)
+CALLBACK_ATTEMPTS = max(1, min(6, int(os.getenv("WORKER_CALLBACK_ATTEMPTS", "4"))))
 MAX_DOWNLOAD_BYTES = max(50, int(os.getenv("WORKER_MAX_DOWNLOAD_MB", "4096"))) * 1024 * 1024
 MIN_FREE_BYTES = max(1, int(os.getenv("WORKER_MIN_FREE_GB", "10"))) * 1024**3
 JOB_TTL_SECONDS = max(3600, int(os.getenv("WORKER_TEMP_TTL_HOURS", "24")) * 3600)
 SHARED_SECRET = os.getenv("WORKER_SHARED_SECRET", "")
 CALLBACK_SECRET = os.getenv("WORKER_CALLBACK_SECRET", SHARED_SECRET)
 FRAMING_CACHE_LOCK = threading.RLock()
+
+
+def terminate_process_tree(child: subprocess.Popen, grace_seconds: float = 6.0) -> None:
+    """Stop a worker and every FFmpeg/Whisper descendant it launched."""
+    if child.poll() is not None:
+        return
+    try:
+        os.killpg(child.pid, signal.SIGTERM)
+    except (OSError, ProcessLookupError):
+        try:
+            child.terminate()
+        except OSError:
+            return
+    try:
+        child.wait(timeout=max(0.1, grace_seconds))
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        os.killpg(child.pid, signal.SIGKILL)
+    except (OSError, ProcessLookupError):
+        try:
+            child.kill()
+        except OSError:
+            pass
 
 
 def now_ms() -> int:
@@ -116,7 +144,7 @@ class JobStore:
                 status = json.loads(status_path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 continue
-            if status.get("status") in {"queued", "importing", "downloading", "extracting audio", "transcribing", "analysing", "creating clips", "rendering", "uploading", "processing"}:
+            if status.get("status") in {"queued", "importing", "downloading", "waiting for processing capacity", "extracting audio", "transcribing", "analysing", "creating clips", "rendering", "uploading", "processing"}:
                 status.update(status="queued", stage="queued", progress=min(5, int(status.get("progress") or 0)), error=None)
                 self.write(str(status["id"]), status)
                 recovered.append(str(status["id"]))
@@ -129,19 +157,34 @@ class Processor:
         self.storage = ObjectStorage()
         self.queue: queue.Queue[str] = queue.Queue()
         self.running: dict[str, subprocess.Popen] = {}
+        self.active_jobs: set[str] = set()
         self.lock = threading.RLock()
         self.stop = threading.Event()
+        self.heavy_slots = threading.BoundedSemaphore(MAX_HEAVY)
+        self.heavy_running = 0
         self.threads = [threading.Thread(target=self.loop, name=f"job-{index}", daemon=True) for index in range(MAX_CONCURRENT)]
 
     def start(self) -> None:
         for job_id in self.store.recover():
             self.queue.put(job_id)
+        self.refresh_queue_positions()
         self.cleanup_abandoned()
         for thread in self.threads:
             thread.start()
 
     def submit(self, job_id: str) -> None:
         self.queue.put(job_id)
+        self.refresh_queue_positions()
+
+    def refresh_queue_positions(self) -> None:
+        """Keep every queued job's displayed position accurate as work moves."""
+        with self.queue.mutex:
+            pending = list(self.queue.queue)
+        for position, queued_id in enumerate(pending, start=1):
+            try:
+                self.store.update(queued_id, queuePosition=position)
+            except KeyError:
+                continue
 
     def cancelled(self, job_id: str) -> bool:
         return bool(self.store.read(job_id).get("cancelRequested"))
@@ -157,7 +200,7 @@ class Processor:
         with self.lock:
             child = self.running.get(job_id)
         if child and child.poll() is None:
-            child.terminate()
+            terminate_process_tree(child)
         return status
 
     def progress(self, job_id: str, stage: str, progress: int) -> None:
@@ -177,10 +220,45 @@ class Processor:
             "Content-Type": "application/json", "X-DeenClipped-Timestamp": timestamp,
             "X-DeenClipped-Signature": signature, "User-Agent": "DeenClipped-Worker/1.0",
         })
-        try:
-            urllib.request.urlopen(request, timeout=15).close()
-        except Exception:
-            pass
+        last_error = ""
+        delays = (0.0, 1.0, 3.0, 7.0, 12.0, 20.0)
+        for attempt in range(CALLBACK_ATTEMPTS):
+            if delays[attempt]:
+                time.sleep(delays[attempt])
+            try:
+                urllib.request.urlopen(request, timeout=15).close()
+                return
+            except Exception as exc:
+                last_error = clean_error(exc)
+        print(json.dumps({
+            "type": "callback_failed", "jobId": status.get("id"),
+            "attempts": CALLBACK_ATTEMPTS, "error": last_error,
+        }), flush=True)
+
+    def acquire_heavy_slot(self, job_id: str) -> None:
+        announced = False
+        while not self.stop.is_set():
+            if self.cancelled(job_id):
+                raise ImportProviderError("Job cancelled.")
+            if self.heavy_slots.acquire(timeout=0.5):
+                with self.lock:
+                    self.heavy_running += 1
+                return
+            if not announced:
+                status = self.store.read(job_id) or {}
+                self.store.update(
+                    job_id,
+                    status="waiting for processing capacity",
+                    stage="waiting for processing capacity",
+                    progress=max(9, int(status.get("progress") or 0)),
+                )
+                announced = True
+        raise RuntimeError("The worker is shutting down.")
+
+    def release_heavy_slot(self) -> None:
+        with self.lock:
+            self.heavy_running = max(0, self.heavy_running - 1)
+        self.heavy_slots.release()
 
     def fetch_music(self, payload: dict[str, Any], work: Path) -> list[dict[str, str]]:
         tracks = []
@@ -206,6 +284,7 @@ class Processor:
         child = subprocess.Popen(
             [sys.executable, str(ROOT / "worker" / "clip_worker.py"), str(job_file)],
             cwd=ROOT, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            start_new_session=True,
         )
         with self.lock:
             self.running[job_id] = child
@@ -218,11 +297,34 @@ class Processor:
                 del stderr_lines[:-80]
 
         threading.Thread(target=collect_stderr, daemon=True).start()
+        stdout_lines: queue.Queue[str | None] = queue.Queue()
+
+        def collect_stdout() -> None:
+            assert child.stdout
+            for stdout_line in child.stdout:
+                stdout_lines.put(stdout_line)
+            stdout_lines.put(None)
+
+        threading.Thread(target=collect_stdout, daemon=True).start()
         reported_error = ""
-        for line in child.stdout:
+        started = time.monotonic()
+        timed_out = False
+        stdout_closed = False
+        while child.poll() is None or not stdout_closed or not stdout_lines.empty():
             if self.cancelled(job_id):
-                child.terminate()
+                terminate_process_tree(child)
                 break
+            if time.monotonic() - started > JOB_PROCESS_TIMEOUT_SECONDS:
+                timed_out = True
+                terminate_process_tree(child)
+                break
+            try:
+                line = stdout_lines.get(timeout=1.0)
+            except queue.Empty:
+                continue
+            if line is None:
+                stdout_closed = True
+                continue
             try:
                 event = json.loads(line)
             except ValueError:
@@ -233,11 +335,17 @@ class Processor:
                 raw = str(event.get("stage") or "processing").lower()
                 stage = "extracting audio" if "audio" in raw else "transcribing" if "transcri" in raw else "analysing" if "analys" in raw or "candidate" in raw else "rendering" if "render" in raw or "verif" in raw else "creating clips"
                 self.store.update(job_id, status=stage, stage=stage, progress=int(event.get("progress") or 0))
-        code = child.wait()
+        try:
+            code = child.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            terminate_process_tree(child, grace_seconds=1)
+            code = child.wait()
         with self.lock:
             self.running.pop(job_id, None)
         if self.cancelled(job_id):
             raise ImportProviderError("Job cancelled.")
+        if timed_out:
+            raise RuntimeError(f"Processing exceeded the {JOB_PROCESS_TIMEOUT_SECONDS // 60}-minute safety limit.")
         if code != 0 or not result_path.exists():
             detail = reported_error or " ".join(stderr_lines[-10:]).strip()
             if not detail:
@@ -282,6 +390,7 @@ class Processor:
         if work.exists():
             shutil.rmtree(work)
         work.mkdir(parents=True)
+        heavy_acquired = False
         try:
             if shutil.disk_usage(TEMP_DIR).free < MIN_FREE_BYTES:
                 raise RuntimeError("The worker does not have enough free temporary disk space.")
@@ -334,7 +443,11 @@ class Processor:
                 )
             job_path = work / "job.json"
             job_path.write_text(json.dumps(worker_job, indent=2), encoding="utf-8")
+            self.acquire_heavy_slot(job_id)
+            heavy_acquired = True
             result = self.run_clip_worker(job_id, job_path, result_path)
+            self.release_heavy_slot()
+            heavy_acquired = False
             public_result = self.upload_result(job_id, result)
             status = self.store.update(job_id, status="completed", stage="completed", progress=100, result=public_result, error=None, completedAt=now_ms())
             self.callback(payload, status)
@@ -345,6 +458,8 @@ class Processor:
                 status = self.store.update(job_id, status="failed", stage="failed", error=clean_error(exc), completedAt=now_ms())
             self.callback(payload, status)
         finally:
+            if heavy_acquired:
+                self.release_heavy_slot()
             shutil.rmtree(work, ignore_errors=True)
 
     def loop(self) -> None:
@@ -353,9 +468,17 @@ class Processor:
                 job_id = self.queue.get(timeout=1)
             except queue.Empty:
                 continue
+            self.refresh_queue_positions()
             status = self.store.read(job_id)
             if status and status.get("status") == "queued" and not status.get("cancelRequested"):
-                self.process(job_id)
+                with self.lock:
+                    self.active_jobs.add(job_id)
+                try:
+                    self.store.update(job_id, queuePosition=0)
+                    self.process(job_id)
+                finally:
+                    with self.lock:
+                        self.active_jobs.discard(job_id)
             self.queue.task_done()
 
     def cleanup_abandoned(self) -> None:
@@ -497,13 +620,19 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, worker_metrics.snapshot(
                 str(TEMP_DIR),
                 queue_depth=PROCESSOR.queue.qsize(),
-                running=len(PROCESSOR.running),
+                running=len(PROCESSOR.active_jobs),
                 max_concurrent=MAX_CONCURRENT,
+                heavy_running=PROCESSOR.heavy_running,
+                max_heavy=MAX_HEAVY,
             ))
         if self.command == "GET" and path == "/readiness":
             free = shutil.disk_usage(TEMP_DIR).free
             ready = bool(ObjectStorage().configured and free >= MIN_FREE_BYTES)
-            return self.send_json(200 if ready else 503, {"ready": ready, "freeBytes": free, "queueDepth": PROCESSOR.queue.qsize(), "running": len(PROCESSOR.running)})
+            return self.send_json(200 if ready else 503, {
+                "ready": ready, "freeBytes": free, "queueDepth": PROCESSOR.queue.qsize(),
+                "running": len(PROCESSOR.active_jobs), "maxConcurrent": MAX_CONCURRENT,
+                "heavyRunning": PROCESSOR.heavy_running, "maxHeavy": MAX_HEAVY,
+            })
         if self.command == "POST" and path == "/framing":
             try:
                 payload = json.loads(body or b"{}")
@@ -548,7 +677,10 @@ def main() -> int:
     stop = lambda *_: threading.Thread(target=server.shutdown, daemon=True).start()
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
-    print(json.dumps({"type": "startup", "port": PORT, "concurrency": MAX_CONCURRENT}), flush=True)
+    print(json.dumps({
+        "type": "startup", "port": PORT, "concurrency": MAX_CONCURRENT,
+        "heavyConcurrency": MAX_HEAVY, "jobTimeoutMinutes": JOB_PROCESS_TIMEOUT_SECONDS // 60,
+    }), flush=True)
     server.serve_forever()
     return 0
 

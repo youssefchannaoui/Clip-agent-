@@ -66,6 +66,18 @@ function cleanBrandSettings(input = {}, user = null) {
   const features = billing.featureAccess(user);
   const positions = new Set(['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right']);
   const cleanColor = (value, fallback) => /^#[0-9A-F]{6}$/i.test(String(value || '')) ? String(value).toUpperCase() : fallback;
+  const cleanList = (value, fallback = []) => {
+    if (value === undefined || value === null) return fallback;
+    const source = Array.isArray(value) ? value : String(value ?? '').split(/[,\n]/);
+    const cleaned = source.map(item => String(item || '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60)).filter(Boolean);
+    return [...new Set(cleaned)].slice(0, 80);
+  };
+  const audiences = new Set(['general', 'new-muslims', 'students', 'families', 'creators']);
+  const goals = new Set(['education', 'growth', 'community', 'reflection']);
+  const tones = new Set(['respectful', 'warm', 'direct', 'reflective']);
+  const audience = String(input.audience ?? current.audience ?? 'general');
+  const contentGoal = String(input.contentGoal ?? current.contentGoal ?? 'education');
+  const brandTone = String(input.brandTone ?? current.brandTone ?? 'respectful');
   const opacity = features.watermarkRequired ? 88 : Math.max(20, Math.min(100, Math.round(Number(input.watermarkOpacity ?? current.watermarkOpacity ?? 88))));
   return {
     watermarkEnabled: features.canRemoveWatermark ? input.watermarkEnabled !== false : true,
@@ -77,6 +89,11 @@ function cleanBrandSettings(input = {}, user = null) {
     watermarkOpacity: opacity,
     brandLineEnabled: features.customBranding ? Boolean(input.brandLineEnabled) : false,
     brandLineColor: cleanColor(input.brandLineColor, current.brandLineColor || '#D9B478'),
+    brandVocabulary: features.customBranding ? cleanList(input.brandVocabulary, current.brandVocabulary || []) : [],
+    audience: features.customBranding && audiences.has(audience) ? audience : 'general',
+    contentGoal: features.customBranding && goals.has(contentGoal) ? contentGoal : 'education',
+    brandTone: features.customBranding && tones.has(brandTone) ? brandTone : 'respectful',
+    avoidPhrases: features.customBranding ? cleanList(input.avoidPhrases, current.avoidPhrases || []).slice(0, 30) : [],
   };
 }
 
@@ -292,6 +309,10 @@ function publicClip(clip) {
     id: clip.id, projectId: clip.projectId, projectTitle: clip.projectTitle,
     title: clip.title, description: clip.description, hashtags: clip.hashtags, transcript: clip.transcript,
     score: clip.score, scoreReasons: clip.scoreReasons || [], quality: clip.quality || null,
+    scoreBreakdown: clip.scoreBreakdown || clip.quality?.scoreBreakdown || null,
+    confidence: Number.isFinite(Number(clip.confidence)) ? Number(clip.confidence) : null,
+    intelligenceSignals: clip.intelligenceSignals || null,
+    growthPack: clip.growthPack || null, platformMetadata: clip.platformMetadata || null,
     reviewRequired: Boolean(clip.reviewRequired), startSec: clip.startSec, endSec: clip.endSec, durationMs: clip.durationMs,
     status: clip.status, approvedBy: clip.approvedBy || null,
     scheduledAt: clip.scheduledAt, scheduledLabel: clip.scheduledAt ? formatLocal(clip.scheduledAt) : null,
@@ -324,6 +345,7 @@ function appState(user = null) {
     projects: projectsForUser.map(project => ({
       id: project.id, title: project.title, url: project.url, engine: project.engine, status: project.status,
       stage: project.stage, progress: project.progress || 0, error: project.error || null, errorCode: project.errorCode || null,
+      queuePosition: Math.max(0, Number(project.queuePosition || 0)),
       submittedAt: project.submittedAt, completedAt: project.completedAt || null, clipCount: project.clipCount || 0,
       durationSec: project.durationSec || project.sourceDurationSec || null, sourceDurationSec: project.sourceDurationSec || null, sourceThumbUrl: project.sourceThumbUrl || null, sourceTitle: project.sourceTitle || null, templateIdUsed: project.templateIdUsed,
       templateNameUsed: project.templateNameUsed, templateVersionUsed: project.templateVersionUsed || 1, musicRequired: true,
@@ -331,6 +353,7 @@ function appState(user = null) {
       moreJob: project.moreJob ? {
         id: project.moreJob.id, status: project.moreJob.status, stage: project.moreJob.stage,
         progress: project.moreJob.progress || 0, error: project.moreJob.error || null,
+        queuePosition: Math.max(0, Number(project.moreJob.queuePosition || 0)),
         requestedCount: project.moreJob.requestedCount || 0, importedCount: project.moreJob.importedCount || 0,
         createdAt: project.moreJob.createdAt || null, startedAt: project.moreJob.startedAt || null,
         completedAt: project.moreJob.completedAt || null, updatedAt: project.moreJob.updatedAt || null,

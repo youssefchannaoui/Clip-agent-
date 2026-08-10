@@ -54,7 +54,10 @@ Install Docker and its Compose plugin using the official Docker repository, clon
 WORKER_SHARED_SECRET=<web-to-worker-secret>
 WORKER_CALLBACK_SECRET=<worker-to-web-secret>
 WORKER_PORT=8080
-WORKER_MAX_CONCURRENT_JOBS=1
+WORKER_MAX_CONCURRENT_JOBS=2
+WORKER_MAX_HEAVY_JOBS=1
+WORKER_JOB_TIMEOUT_MINUTES=180
+WORKER_CALLBACK_ATTEMPTS=4
 WORKER_MAX_DOWNLOAD_MB=4096
 WORKER_MIN_FREE_GB=10
 WORKER_TEMP_TTL_HOURS=24
@@ -75,7 +78,9 @@ OBJECT_STORAGE_PUBLIC_URL=https://<public-media-host>
 WHISPER_DEVICE=cpu
 WHISPER_COMPUTE_TYPE=int8
 WHISPER_MODEL=large-v3-turbo
-FFMPEG_THREADS=4
+WHISPER_BEAM_SIZE=5
+WHISPER_CPU_THREADS=2
+FFMPEG_THREADS=2
 VIDEO_PRESET=medium
 VIDEO_CRF=18
 ```
@@ -96,7 +101,7 @@ docker compose -f worker/docker-compose.yml up -d --build
 
 The Compose service binds to `127.0.0.1:8080`. Put Caddy, Nginx, or Cloudflare Tunnel in front of it for HTTPS. Allow inbound TCP 22 only from the administrator IP and inbound 443 from Render or the tunnel. Do not expose port 8080 publicly. Every worker endpoint, including health and readiness, requires a timestamped HMAC signature.
 
-The worker persists job status and model cache in its Docker volume. It requeues interrupted jobs after restart, processes one job at a time, checks disk space, enforces download limits, supports cancellation, removes each job's temporary directory in `finally`, and removes abandoned temporary directories at startup.
+The worker persists job status and model cache in its Docker volume. On the current 2-vCPU/4-GB host, two jobs may import, prepare or upload concurrently while a heavy-work semaphore permits only one Whisper/FFmpeg pipeline at a time. It requeues interrupted jobs after restart, checks disk space, enforces download and runtime limits, supports process-tree cancellation, verifies object uploads, retries callbacks, removes each job's temporary directory in `finally`, and removes abandoned temporary directories at startup.
 
 ## Operational checks
 

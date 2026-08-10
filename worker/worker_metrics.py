@@ -178,13 +178,26 @@ def uptime_seconds() -> float | None:
         return None
 
 
-def snapshot(temp_dir: str, queue_depth: int = 0, running: int = 0, max_concurrent: int = 1) -> dict[str, Any]:
+def snapshot(
+    temp_dir: str,
+    queue_depth: int = 0,
+    running: int = 0,
+    max_concurrent: int = 1,
+    heavy_running: int = 0,
+    max_heavy: int = 1,
+) -> dict[str, Any]:
     """Everything the admin console needs about this box, in one payload."""
     return {
         "at": int(time.time() * 1000),
         "cpu": {"percent": cpu_percent(), "cores": cpu_count(), "loadAverage": load_average()},
         "memory": memory(),
         "disk": disk(temp_dir),
-        "queue": {"depth": queue_depth, "running": running, "maxConcurrent": max_concurrent},
+        "queue": {
+            "depth": queue_depth,
+            "running": running,
+            "maxConcurrent": max_concurrent,
+            "heavyRunning": heavy_running,
+            "maxHeavy": max_heavy,
+        },
         "uptimeSeconds": uptime_seconds(),
     }

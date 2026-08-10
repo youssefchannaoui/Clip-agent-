@@ -1,0 +1,311 @@
+"""Deterministic intelligence primitives for DeenClipped's clip pipeline.
+
+The worker can optionally ask a local language model to refine a shortlist, but
+the core ranking and metadata must remain useful, explainable, multilingual and
+safe when that model is unavailable.  This module deliberately has no network
+or heavyweight dependencies so it is fast to evaluate and straightforward to
+test.
+"""
+
+from __future__ import annotations
+
+import math
+import re
+from collections import Counter
+from typing import Any, Iterable
+
+
+TOKEN_RE = re.compile(r"[^\W_]+(?:['’][^\W_]+)?", re.UNICODE)
+SENTENCE_RE = re.compile(r"(?<=[.!?؟…])\s+", re.UNICODE)
+
+HOOK_TERMS = (
+    "remember", "imagine", "why", "what if", "the truth", "never", "always",
+    "most important", "biggest", "the mistake", "the secret", "did you know",
+    "تذكر", "تذكّر", "تخيل", "تخيّل", "لماذا", "الحقيقة", "أهم", "أكبر",
+    "هل تعلم", "ماذا لو", "لا تنس", "انتبه",
+)
+PAYOFF_TERMS = (
+    "the lesson", "the answer", "this means", "the reason", "what matters",
+    "therefore", "instead", "remember this", "you can", "we should", "do this",
+    "الدرس", "الإجابة", "هذا يعني", "السبب", "المهم", "لذلك", "بدلاً", "تذكر هذا",
+)
+ACTION_TERMS = (
+    "start", "stop", "avoid", "choose", "ask", "return", "repair", "practice",
+    "reflect", "save", "share", "remember", "ابدأ", "توقف", "تجنب", "اختر",
+    "اسأل", "ارجع", "تأمل", "تذكّر",
+)
+WEAK_OPENINGS = (
+    "and ", "but ", "so ", "because ", "then ", "he ", "she ", "they ",
+    "this ", "that ", "it ", "كما ", "ثم ", "وهو ", "وهي ", "قال ", "هذا ",
+)
+VAGUE_OPENINGS = (
+    "he said", "she said", "they said", "this is", "that is", "it was", "as i said",
+    "قال هو", "قالت هي", "كما قلت", "هذا هو", "كانت هذه",
+)
+FILLERS = (
+    "um", "uh", "erm", "you know", "i mean", "basically", "literally", "sort of",
+    "kind of", "يعني", "اممم", "آه", "بصراحة",
+)
+PROMOTION_TERMS = (
+    "subscribe", "like and subscribe", "sponsor", "our channel", "this podcast",
+    "اشترك", "القناة", "الراعي",
+)
+
+
+def clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
+    return max(low, min(high, value))
+
+
+def tokens(text: str) -> list[str]:
+    """Return Unicode-aware word tokens for English, Arabic and mixed speech."""
+    return [match.group(0).casefold().replace("’", "'") for match in TOKEN_RE.finditer(text or "")]
+
+
+def contains_any(text: str, terms: Iterable[str]) -> list[str]:
+    normal = " ".join((text or "").casefold().split())
+    return [term for term in terms if term.casefold() in normal]
+
+
+def _timing_confidence(segments: list[dict[str, Any]]) -> int:
+    probabilities: list[float] = []
+    for segment in segments or []:
+        for word in segment.get("words") or []:
+            try:
+                value = float(word.get("probability"))
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(value):
+                probabilities.append(clamp(value, 0.0, 1.0))
+        try:
+            average_log_probability = float(segment.get("avgLogProb"))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(average_log_probability):
+            probabilities.append(clamp(math.exp(average_log_probability), 0.0, 1.0))
+    if not probabilities:
+        # Existing/imported transcripts do not always include probabilities.
+        # Unknown confidence should be visible but must not condemn good clips.
+        return 82
+    probabilities.sort()
+    # Weight the weakest quartile so one hallucinated phrase cannot hide behind
+    # a high overall mean.
+    weak = probabilities[: max(1, len(probabilities) // 4)]
+    weighted = (sum(probabilities) / len(probabilities)) * 0.65 + (sum(weak) / len(weak)) * 0.35
+    return int(round(clamp(weighted * 100)))
+
+
+def _pacing_score(word_count: int, duration: float) -> tuple[int, float]:
+    wpm = word_count / max(duration, 1.0) * 60.0
+    if 105 <= wpm <= 185:
+        score = 96 - abs(wpm - 145) * 0.22
+    elif 80 <= wpm < 105:
+        score = 76 - (105 - wpm) * 0.8
+    elif 185 < wpm <= 220:
+        score = 83 - (wpm - 185) * 1.0
+    else:
+        score = 42 - min(30.0, abs(wpm - 145) * 0.18)
+    return int(round(clamp(score, 10, 100))), round(wpm, 1)
+
+
+def evaluate_clip(
+    start: float,
+    end: float,
+    text: str,
+    segments: list[dict[str, Any]],
+    *,
+    quote_risk: bool = False,
+) -> dict[str, Any]:
+    """Score one candidate on transparent retention and trust dimensions."""
+    duration = max(0.01, float(end) - float(start))
+    normal = " ".join((text or "").split())
+    lower = normal.casefold()
+    word_list = tokens(normal)
+    opening = " ".join(word_list[:24])
+    ending_complete = bool(re.search(r"[.!?؟…]['\"]?$", normal.strip()))
+    hook_hits = contains_any(opening, HOOK_TERMS)
+    payoff_hits = contains_any(lower, PAYOFF_TERMS)
+    action_hits = contains_any(lower, ACTION_TERMS)
+    promotion_hits = contains_any(lower, PROMOTION_TERMS)
+    filler_count = sum(lower.count(term) for term in FILLERS)
+    weak_opening = lower.startswith(WEAK_OPENINGS)
+    vague_opening = lower.startswith(VAGUE_OPENINGS)
+    question_opening = "?" in normal[:180] or "؟" in normal[:180]
+
+    gaps = [
+        max(0.0, float(right.get("start", 0)) - float(left.get("end", 0)))
+        for left, right in zip(segments or [], (segments or [])[1:])
+    ]
+    long_silence = sum(gap for gap in gaps if gap > 1.35)
+    silence_ratio = long_silence / duration
+    pacing, wpm = _pacing_score(len(word_list), duration)
+    confidence = _timing_confidence(segments)
+
+    hook = 46 + min(30, len(hook_hits) * 9) + (14 if question_opening else 0)
+    hook -= 18 if weak_opening else 0
+    hook -= 14 if vague_opening else 0
+    hook -= min(22, filler_count * 4)
+
+    flow = 64 + (15 if ending_complete else -18) + (9 if not weak_opening else -12)
+    flow -= min(35, silence_ratio * 150)
+    flow -= min(20, filler_count * 3)
+
+    value = 48 + min(30, len(payoff_hits) * 10) + min(18, len(action_hits) * 5)
+    value += 8 if any(char.isdigit() for char in normal) else 0
+    value -= len(promotion_hits) * 20
+
+    clarity = 76 + (8 if ending_complete else -8) - min(28, filler_count * 4)
+    clarity -= 15 if vague_opening else 0
+    clarity -= 14 if len(word_list) < 28 else 0
+    clarity -= 8 if len(word_list) > 175 else 0
+
+    completeness = 54 + (27 if ending_complete else -18) + (10 if payoff_hits else 0)
+    completeness -= 18 if vague_opening else 0
+
+    unique_ratio = len(set(word_list)) / max(1, len(word_list))
+    specificity = 46 + min(32, unique_ratio * 44)
+    specificity += 8 if any(char.isdigit() for char in normal) else 0
+    specificity -= 14 if vague_opening else 0
+
+    safety = 96 - (27 if quote_risk else 0) - max(0, 72 - confidence) * 0.65
+    duration_fit = 96 if 32 <= duration <= 68 else 82 if 24 <= duration <= 85 else 48
+
+    dimensions = {
+        "hook": int(round(clamp(hook))),
+        "flow": int(round(clamp(flow))),
+        "value": int(round(clamp(value))),
+        "clarity": int(round(clamp(clarity))),
+        "completeness": int(round(clamp(completeness))),
+        "specificity": int(round(clamp(specificity))),
+        "pacing": pacing,
+        "confidence": confidence,
+        "safety": int(round(clamp(safety))),
+        "durationFit": duration_fit,
+    }
+    weights = {
+        "hook": 0.17, "flow": 0.12, "value": 0.17, "clarity": 0.11,
+        "completeness": 0.13, "specificity": 0.08, "pacing": 0.08,
+        "confidence": 0.07, "safety": 0.04, "durationFit": 0.03,
+    }
+    overall = int(round(sum(dimensions[key] * weight for key, weight in weights.items())))
+
+    ranked = sorted(
+        ((value, label) for label, value in dimensions.items() if label not in {"safety", "durationFit"}),
+        reverse=True,
+    )
+    labels = {
+        "hook": "strong opening hook", "flow": "smooth standalone flow", "value": "clear viewer value",
+        "clarity": "easy to understand", "completeness": "complete thought and payoff",
+        "specificity": "specific and searchable", "pacing": "strong short-form pace",
+        "confidence": "high-confidence transcript",
+    }
+    reasons = [labels[key] for value, key in ranked if value >= 72][:3]
+    if quote_risk:
+        reasons.append("religious quotation needs human review")
+    if confidence < 68:
+        reasons.append("transcript confidence needs review")
+    if not reasons:
+        reasons.append("usable standalone moment")
+    return {
+        "score": max(1, min(100, overall)),
+        "dimensions": dimensions,
+        "confidence": confidence,
+        "wordsPerMinute": wpm,
+        "reasons": reasons[:4],
+        "signals": {
+            "hookTerms": hook_hits[:4], "payoffTerms": payoff_hits[:4],
+            "actionTerms": action_hits[:4], "promotionTerms": promotion_hits[:3],
+            "longSilenceSec": round(long_silence, 2),
+        },
+    }
+
+
+def _clean_title(text: str, limit: int = 70) -> str:
+    value = re.sub(r"\s+", " ", text or "").strip(" \t\r\n.,;:!?؟…-–—\"'")
+    value = re.sub(r"^(and|but|so|because|then)\s+", "", value, flags=re.I)
+    words = value.split()[:10]
+    value = " ".join(words)
+    if len(value) > limit:
+        value = value[: limit + 1].rsplit(" ", 1)[0]
+    return value.strip(" ,.;:-")
+
+
+def _sentences(text: str) -> list[str]:
+    cleaned = re.sub(r"\s+", " ", text or "").strip()
+    return [part.strip() for part in SENTENCE_RE.split(cleaned) if len(tokens(part)) >= 3]
+
+
+def _search_terms(text: str, limit: int = 6) -> list[str]:
+    stop = {
+        "this", "that", "with", "from", "they", "them", "then", "have", "your", "what", "when",
+        "will", "into", "about", "because", "there", "where", "which", "would", "could", "should",
+        "and", "the", "for", "are", "was", "were", "you", "our", "but", "not", "all", "can",
+        "هذا", "هذه", "ذلك", "التي", "الذي", "على", "إلى", "في", "من", "عن", "مع", "كان", "ثم",
+    }
+    counts = Counter(word for word in tokens(text) if len(word) >= 3 and word not in stop)
+    return [word for word, _count in counts.most_common(limit)]
+
+
+def build_growth_pack(
+    text: str,
+    title: str,
+    description: str,
+    hashtags: str,
+    *,
+    hook: str = "",
+    topic: str = "",
+    audience: str = "general",
+    goal: str = "education",
+    tone: str = "respectful",
+    avoid_phrases: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build copy variants from transcript-grounded language only.
+
+    These are suggestions, not invented claims: every title is selected from
+    supplied transcript sentences or an already-reviewed local-model title.
+    """
+    sentences = _sentences(text)
+    avoided = [str(item or "").strip().casefold() for item in (avoid_phrases or []) if str(item or "").strip()]
+    candidates = [title, hook, *(sentences[:3])]
+    alternatives: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        cleaned = _clean_title(candidate)
+        fingerprint = cleaned.casefold()
+        if not cleaned or fingerprint in seen or any(phrase in fingerprint for phrase in avoided):
+            continue
+        seen.add(fingerprint)
+        alternatives.append(cleaned)
+        if len(alternatives) >= 3:
+            break
+    primary = alternatives[0] if alternatives else "A Reminder Worth Hearing"
+    tags = " ".join((hashtags or "").split()[:5])
+    safe_description = "" if any(phrase in str(description or "").casefold() for phrase in avoided) else description
+    caption = "\n\n".join(part for part in (safe_description, tags) if part).strip()
+    search = _search_terms(" ".join(part for part in (topic, text) if part))
+    calls_to_action = {
+        "growth": "Save this reminder and share it with someone who may benefit.",
+        "community": "Share your reflection respectfully and pass this reminder on.",
+        "reflection": "Pause, reflect on this reminder, and return to it when you need it.",
+        "education": "Save this lesson so you can revisit the key point.",
+    }
+    pinned_comments = {
+        "students": "What is the main lesson you are taking from this clip?",
+        "new-muslims": "What part of this reminder would you like explained further?",
+        "families": "How could a family put this reminder into practice?",
+        "creators": "What part of this message should more people hear?",
+        "general": "What part of this reminder stood out to you?",
+    }
+    return {
+        "primaryTitle": primary,
+        "alternateTitles": alternatives[1:],
+        "searchTerms": search,
+        "pinnedComment": pinned_comments.get(audience, pinned_comments["general"]),
+        "callToAction": calls_to_action.get(goal, calls_to_action["education"]),
+        "strategy": {"audience": audience, "goal": goal, "tone": tone},
+        "platforms": {
+            "youtube": {"title": primary[:100], "description": caption[:5000], "searchTerms": search},
+            "tiktok": {"caption": "\n\n".join(part for part in (primary, safe_description, tags) if part)[:2200]},
+            "instagram": {"caption": caption[:2200], "altText": _clean_title(sentences[0] if sentences else primary, 180)},
+            "facebook": {"title": primary[:255], "description": caption[:5000]},
+        },
+    }

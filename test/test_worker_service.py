@@ -80,6 +80,10 @@ class WorkerPersistenceTests(unittest.TestCase):
         os.environ["WORKER_DATA_DIR"] = str(self.temp / "data")
         os.environ["WORKER_TEMP_DIR"] = str(self.temp / "tmp")
         os.environ["WORKER_SHARED_SECRET"] = "worker-test-secret-at-least-thirty-two-characters"
+        os.environ["WORKER_CALLBACK_SECRET"] = "callback-test-secret-at-least-thirty-two-characters"
+        os.environ["WORKER_MAX_CONCURRENT_JOBS"] = "2"
+        os.environ["WORKER_MAX_HEAVY_JOBS"] = "1"
+        os.environ["WORKER_CALLBACK_ATTEMPTS"] = "2"
         sys.modules.pop("service", None)
         self.service = importlib.import_module("service")
 
@@ -105,6 +109,19 @@ class WorkerPersistenceTests(unittest.TestCase):
         self.assertEqual(recovered["status"], "queued")
         self.assertLessEqual(recovered["progress"], 5)
 
+    def test_queue_positions_follow_the_actual_pending_order(self):
+        store = self.service.JobStore()
+        store.create({"id": "job_1", "source": {"type": "youtube"}})
+        store.create({"id": "job_2", "source": {"type": "youtube"}})
+        processor = self.service.Processor(store)
+        processor.submit("job_1")
+        processor.submit("job_2")
+        self.assertEqual(store.read("job_1")["queuePosition"], 1)
+        self.assertEqual(store.read("job_2")["queuePosition"], 2)
+        self.assertEqual(processor.queue.get_nowait(), "job_1")
+        processor.refresh_queue_positions()
+        self.assertEqual(store.read("job_2")["queuePosition"], 1)
+
     def test_abandoned_temporary_directories_are_removed(self):
         abandoned = self.service.TEMP_DIR / "abandoned"
         abandoned.mkdir(parents=True)
@@ -112,6 +129,32 @@ class WorkerPersistenceTests(unittest.TestCase):
         os.utime(abandoned, (old, old))
         self.service.Processor(self.service.JobStore()).cleanup_abandoned()
         self.assertFalse(abandoned.exists())
+
+    def test_two_jobs_can_prepare_but_only_one_can_use_heavy_compute(self):
+        processor = self.service.Processor(self.service.JobStore())
+        self.assertEqual(len(processor.threads), 2)
+        self.assertTrue(processor.heavy_slots.acquire(blocking=False))
+        self.assertFalse(processor.heavy_slots.acquire(blocking=False))
+        processor.heavy_slots.release()
+
+    def test_callback_retries_a_temporary_failure(self):
+        processor = self.service.Processor(self.service.JobStore())
+        response = FakeResponse(b"ok")
+        with mock.patch.object(self.service.urllib.request, "urlopen", side_effect=[OSError("temporary"), response]) as urlopen, \
+             mock.patch.object(self.service.time, "sleep"):
+            processor.callback(
+                {"callbackUrl": "https://deenclipped.online/api/worker-callbacks/project_1"},
+                {"id": "project_1", "status": "completed"},
+            )
+        self.assertEqual(urlopen.call_count, 2)
+
+    def test_terminating_a_worker_stops_the_process_group(self):
+        child = mock.Mock(pid=1234)
+        child.poll.return_value = None
+        child.wait.return_value = 0
+        with mock.patch.object(self.service.os, "killpg") as killpg:
+            self.service.terminate_process_tree(child)
+        killpg.assert_called_once_with(1234, self.service.signal.SIGTERM)
 
     def test_framing_analysis_downloads_the_stored_source_and_cleans_up(self):
         class FakeStorage:

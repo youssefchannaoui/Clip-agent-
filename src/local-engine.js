@@ -77,12 +77,16 @@ async function cacheRemotePublishClip(clip) {
  * signed-in user, so the owner is resolved from the record instead.
  */
 function sharedSettings(user) {
+  const brand = brandSettings(user);
   return {
     ...clipSettings(user), ...musicSettings(user),
     model: config.aiModel, device: config.aiDevice, computeType: config.aiComputeType,
     task: config.aiTask, language: config.aiLanguage, maxSourceMinutes: config.maxSourceMinutes,
     keepSourceFiles: config.keepSourceFiles, ollamaUrl: config.ollamaUrl, ollamaModel: config.ollamaModel,
     videoPreset: config.videoPreset, videoCrf: config.videoCrf,
+    brandVocabulary: brand.brandVocabulary || [], audience: brand.audience || 'general',
+    contentGoal: brand.contentGoal || 'education', brandTone: brand.brandTone || 'respectful',
+    avoidPhrases: brand.avoidPhrases || [],
   };
 }
 
@@ -523,16 +527,19 @@ export function acceptRemoteUpdate(projectId, update) {
   if (!project || project.engine !== 'remote') return null;
   if (update.status === 'completed' && update.result && project.status !== 'done') {
     importResultObject(project, update.result, 'remote-worker');
+    project.queuePosition = 0;
   } else if (update.status === 'failed') {
     project.status = 'failed'; project.stage = 'failed'; project.progress = Number(update.progress || project.progress || 0);
+    project.queuePosition = 0;
     project.error = customerSafeProjectError(update.error || 'The external worker failed.').message;
     project.errorCode = 'processing_failed'; project.updatedAt = Date.now(); save();
   } else if (update.status === 'cancelled') {
-    project.status = 'cancelled'; project.stage = 'cancelled'; project.updatedAt = Date.now(); save();
+    project.status = 'cancelled'; project.stage = 'cancelled'; project.queuePosition = 0; project.updatedAt = Date.now(); save();
   } else if (project.status !== 'done') {
     project.status = update.status === 'queued' ? 'queued' : 'processing';
     project.stage = String(update.stage || update.status || 'processing');
     project.progress = Math.max(0, Math.min(100, Number(update.progress) || 0));
+    project.queuePosition = Math.max(0, Number(update.queuePosition || 0));
     project.updatedAt = Date.now(); save();
   }
   return project;
@@ -585,18 +592,21 @@ async function runRemoteAux(project, jobRecord, kind) {
       const update = await workerClient.getJob(jobRecord.id);
       jobRecord.stage = String(update.stage || update.status || 'processing');
       jobRecord.progress = Math.max(0, Math.min(100, Number(update.progress) || 0));
+      jobRecord.queuePosition = Math.max(0, Number(update.queuePosition || 0));
       jobRecord.status = update.status === 'queued' ? 'queued' : 'processing'; save();
       if (update.status === 'completed') {
+        jobRecord.queuePosition = 0;
         if (kind === 'more') importMoreResultObject(project, jobRecord, update.result || {}, 'remote-worker');
         else importRerenderResultObject(jobRecord, update.result || {});
         return;
       }
       if (update.status === 'failed') throw new Error(update.error || 'The external worker failed.');
-      if (update.status === 'cancelled') { jobRecord.status = 'cancelled'; jobRecord.stage = 'cancelled'; save(); return; }
+      if (update.status === 'cancelled') { jobRecord.status = 'cancelled'; jobRecord.stage = 'cancelled'; jobRecord.queuePosition = 0; save(); return; }
       await new Promise(resolve => setTimeout(resolve, config.workerPollIntervalMs));
     }
     throw new Error('The processing worker exceeded the job timeout.');
   } catch (error) {
+    jobRecord.queuePosition = 0;
     jobRecord.status = error.code === 'worker_unavailable' ? 'queued' : 'failed';
     jobRecord.stage = error.code === 'worker_unavailable' ? 'Worker unavailable — retrying' : 'failed';
     jobRecord.error = error.message;

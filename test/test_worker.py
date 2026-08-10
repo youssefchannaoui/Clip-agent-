@@ -94,9 +94,85 @@ class GrowthMetadataTests(unittest.TestCase):
         self.assertEqual(len(hashtags.split()), 5)
         self.assertEqual(hashtags.split().count("#Sabr"), 1)
 
+    def test_ai_metadata_cannot_invent_references_numbers_links_or_blocked_phrases(self):
+        transcript = "Patience helps a believer respond carefully during hardship."
+        self.assertTrue(worker.metadata_copy_safe("Patience During Hardship", transcript))
+        self.assertFalse(worker.metadata_copy_safe("Quran 2:153 Explains Patience", transcript))
+        self.assertFalse(worker.metadata_copy_safe("Read more at example.com", transcript))
+        self.assertFalse(worker.metadata_copy_safe("Guaranteed viral patience", transcript, ["guaranteed viral"]))
+        cited = "The speaker discusses Quran 2:153 and patience."
+        self.assertTrue(worker.metadata_copy_safe("Quran 2:153 and Patience", cited))
+
     def test_render_quality_defaults_are_high_but_bounded(self):
         self.assertEqual(worker.render_quality_settings({}), ("medium", 18))
         self.assertEqual(worker.render_quality_settings({"videoPreset": "invalid", "videoCrf": 50}), ("medium", 23))
+
+    def test_growth_pack_provides_grounded_platform_variants(self):
+        transcript = "Why does patience matter during hardship? The lesson is to respond carefully and keep moving forward."
+        pack = worker.build_growth_pack(
+            transcript,
+            worker.title_from_text(transcript, 1),
+            worker.description_from_text(transcript),
+            worker.hashtags_from_text(transcript),
+        )
+        self.assertTrue(pack["primaryTitle"])
+        self.assertLessEqual(len(pack["alternateTitles"]), 2)
+        self.assertIn("youtube", pack["platforms"])
+        self.assertIn("instagram", pack["platforms"])
+        self.assertNotIn("Quran 2:", str(pack))
+
+    def test_growth_pack_applies_audience_goal_and_avoidance_without_inventing_claims(self):
+        pack = worker.build_growth_pack(
+            "This guaranteed viral claim should not become the title. Patience is a careful response to hardship.",
+            "Guaranteed Viral Claim", "A calm lesson about patience.", "#Patience",
+            audience="students", goal="education", tone="respectful",
+            avoid_phrases=["guaranteed viral"],
+        )
+        self.assertNotIn("guaranteed viral", pack["primaryTitle"].lower())
+        self.assertIn("main lesson", pack["pinnedComment"].lower())
+        self.assertIn("revisit", pack["callToAction"].lower())
+        self.assertEqual(pack["strategy"]["audience"], "students")
+
+
+class ExplainableIntelligenceTests(unittest.TestCase):
+    def test_score_contains_all_retention_and_trust_dimensions(self):
+        segments = [{
+            "start": 0, "end": 36,
+            "text": "Remember this lesson.",
+            "words": [
+                {"start": 0.0, "end": 0.4, "word": "Remember", "probability": 0.97},
+                {"start": 0.5, "end": 0.9, "word": "this", "probability": 0.96},
+                {"start": 1.0, "end": 1.4, "word": "lesson", "probability": 0.94},
+            ],
+        }]
+        evaluation = worker.evaluate_clip(
+            0, 36,
+            "Remember this when hardship reaches you. The lesson is to respond with patience.",
+            segments,
+        )
+        for key in ("hook", "flow", "value", "clarity", "completeness", "specificity", "pacing", "confidence", "safety"):
+            self.assertIn(key, evaluation["dimensions"])
+        self.assertGreaterEqual(evaluation["confidence"], 90)
+
+    def test_arabic_hook_and_payoff_are_understood(self):
+        strong = "تذكر هذا عندما تأتيك الشدة. الدرس هو أن تختار الصبر وتفكر قبل أن تتكلم."
+        vague = "ثم قال هذا وهو يعني يعني شيئاً وبعد ذلك استمر في الكلام."
+        strong_score, _, _ = worker.score_candidate(0, 38, strong, [])
+        vague_score, _, _ = worker.score_candidate(0, 38, vague, [])
+        self.assertGreater(strong_score, vague_score)
+
+    def test_low_word_confidence_requires_review(self):
+        candidate = worker.Candidate(
+            0, 34, "A complete thought worth reviewing.",
+            [{"start": 0, "end": 34, "text": "A complete thought worth reviewing.", "words": [
+                {"start": 0, "end": 0.5, "word": "unclear", "probability": 0.31},
+                {"start": 0.6, "end": 1.0, "word": "speech", "probability": 0.38},
+            ]}],
+            70, [], False,
+        )
+        evaluation = worker.evaluate_clip(candidate.start, candidate.end, candidate.text, candidate.segments)
+        self.assertLess(evaluation["confidence"], 68)
+        self.assertIn("transcript confidence needs review", evaluation["reasons"])
 
 
 class CaptionTimingTests(unittest.TestCase):

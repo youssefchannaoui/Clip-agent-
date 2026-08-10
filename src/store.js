@@ -49,6 +49,11 @@ export function settingDefaults() {
       watermarkOpacity: 88,
       brandLineEnabled: false,
       brandLineColor: '#D9B478',
+      brandVocabulary: [],
+      audience: 'general',
+      contentGoal: 'education',
+      brandTone: 'respectful',
+      avoidPhrases: [],
     },
     selectedTemplateId: config.defaultTemplateId,
   };

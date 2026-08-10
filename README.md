@@ -1,4 +1,4 @@
-# DeenClipped AI 3.0 — Web app + external processing worker
+# DeenClipped AI 4.0 — Web app + resource-aware processing worker
 
 DeenClipped AI keeps the polished editor and publishing workspace while moving video import, Whisper, FFmpeg, rendering, and media storage off the lightweight Render web service.
 

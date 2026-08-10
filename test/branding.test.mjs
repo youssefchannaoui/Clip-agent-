@@ -78,6 +78,19 @@ test('the product UI includes Brand Kit and Creator Lab as first-class screens',
   assert.match(ui, /function renderBrandKit\(\)/);
   assert.match(ui, /function renderCreatorLab\(\)/);
   assert.match(ui, /Free exports are branded/);
+  assert.match(ui, /AI language & growth profile/);
+  assert.match(ui, /Names and specialist vocabulary/);
+  assert.match(ui, /Explainable intelligence/);
+  assert.match(ui, /Copy post pack/);
+});
+
+test('production releases two remote jobs while the worker serialises heavy AI work', () => {
+  const render = fs.readFileSync(new URL('../render.yaml', import.meta.url), 'utf8');
+  const compose = fs.readFileSync(new URL('../worker/docker-compose.yml', import.meta.url), 'utf8');
+  assert.match(render, /key: MAX_CONCURRENT_JOBS\s+value: "2"/);
+  assert.match(compose, /WORKER_MAX_CONCURRENT_JOBS: "2"/);
+  assert.match(compose, /WORKER_MAX_HEAVY_JOBS: "1"/);
+  assert.match(compose, /mem_limit: 3500m/);
 });
 
 test('subscription is a first-class account screen with real billing actions', () => {

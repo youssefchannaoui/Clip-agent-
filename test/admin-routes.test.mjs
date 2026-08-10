@@ -160,4 +160,61 @@ test('Brand Kit enforces free watermarking and unlocks paid controls', async () 
   assert.equal(payload.features.canRemoveWatermark, true);
   assert.equal(payload.settings.watermarkEnabled, false);
   assert.equal(payload.settings.watermarkText, 'Creator Studio');
+
+  response = await fetch(`${base}/api/brand-settings`, {
+    method: 'POST',
+    headers: { Cookie: creatorCookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      brandVocabulary: ['Alhamdulillah', 'Sulaiman'], audience: 'students',
+      contentGoal: 'growth', brandTone: 'warm', avoidPhrases: ['guaranteed viral'],
+    }),
+  });
+  payload = await response.json();
+  assert.deepEqual(payload.settings.brandVocabulary, ['Alhamdulillah', 'Sulaiman']);
+  assert.equal(payload.settings.audience, 'students');
+  assert.equal(payload.settings.contentGoal, 'growth');
+  assert.equal(payload.settings.brandTone, 'warm');
+  assert.deepEqual(payload.settings.avoidPhrases, ['guaranteed viral']);
+
+  response = await fetch(`${base}/api/brand-settings`, {
+    method: 'POST',
+    headers: { Cookie: creatorCookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ brandVocabulary: [], avoidPhrases: [] }),
+  });
+  payload = await response.json();
+  assert.deepEqual(payload.settings.brandVocabulary, []);
+  assert.deepEqual(payload.settings.avoidPhrases, []);
+  assert.equal(payload.settings.audience, 'students');
+  assert.equal(payload.settings.contentGoal, 'growth');
+  assert.equal(payload.settings.brandTone, 'warm');
+});
+
+test('clip intelligence and remote queue positions reach the dashboard API', async () => {
+  const project = {
+    id: 'intelligence-project', userId: creator.id, title: 'Queue test', engine: 'remote',
+    status: 'queued', stage: 'Waiting for processing capacity', progress: 4, queuePosition: 2,
+    submittedAt: Date.now(), clipCount: 1,
+  };
+  const growthPack = { primaryTitle: 'A grounded title', alternateTitles: ['Another title'], searchTerms: ['faith'] };
+  const clip = {
+    id: 'intelligence-clip', userId: creator.id, projectId: project.id, projectTitle: project.title,
+    title: 'A grounded title', description: 'Grounded description', transcript: 'Grounded transcript',
+    score: 91, scoreBreakdown: { hook: 94, flow: 88, value: 92 }, confidence: 87,
+    intelligenceSignals: { opening: 'question' }, growthPack,
+    platformMetadata: { youtube: { title: 'A grounded title' } }, status: 'waiting',
+  };
+  state.projects.push(project); state.clips.push(clip);
+  try {
+    const payload = await (await fetch(`${base}/api/state`, { headers: { Cookie: creatorCookie } })).json();
+    const visibleProject = payload.projects.find(item => item.id === project.id);
+    const visibleClip = payload.clips.find(item => item.id === clip.id);
+    assert.equal(visibleProject.queuePosition, 2);
+    assert.deepEqual(visibleClip.scoreBreakdown, clip.scoreBreakdown);
+    assert.equal(visibleClip.confidence, 87);
+    assert.deepEqual(visibleClip.growthPack, growthPack);
+    assert.equal(visibleClip.platformMetadata.youtube.title, 'A grounded title');
+  } finally {
+    state.projects = state.projects.filter(item => item.id !== project.id);
+    state.clips = state.clips.filter(item => item.id !== clip.id);
+  }
 });

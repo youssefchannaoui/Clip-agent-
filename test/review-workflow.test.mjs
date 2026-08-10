@@ -30,6 +30,32 @@ test('Review owns the final post-now and scheduling actions', () => {
   assert.doesNotMatch(reviewRow, /data-approve-clip/);
 });
 
+test('Review shows real quality and transcript confidence without object coercion', () => {
+  const review = activityFix.slice(activityFix.indexOf('function reviewRow(c)'), activityFix.indexOf('function clipReviewText'));
+  assert.match(review, /typeof c\?\.quality==='object'/);
+  assert.match(review, /c\.quality\?\.overall/);
+  assert.match(review, /clipTranscriptConfidence/);
+  assert.match(review, /Human check required/);
+  assert.doesNotMatch(review, /Math\.round\(c\.quality\|\|c\.score/);
+});
+
+test('bulk Review actions exclude clips requiring a human check', () => {
+  const renderReview = activityFix.slice(activityFix.indexOf('function renderReview()'), activityFix.indexOf('function reviewRow(c)'));
+  const approveVerified = activityFix.slice(activityFix.indexOf('async function approveVerified()'), activityFix.indexOf('async function approveClip'));
+  assert.match(renderReview, /safeWaiting=waiting\.filter\(c=>!c\.reviewRequired\)/);
+  assert.match(renderReview, /scheduleMany\(safeWaiting\.map/);
+  assert.match(approveVerified, /&&\s*!c\.reviewRequired/);
+});
+
+test('post suggestions prefer transcript-grounded growth metadata', () => {
+  const copy = activityFix.slice(activityFix.indexOf('function socialCopyForClip'), activityFix.indexOf('async function regenerateClipCopy'));
+  assert.match(copy, /growthPack/);
+  assert.match(copy, /platformMetadata/);
+  assert.match(copy, /platforms\.youtube\?\.title/);
+  assert.doesNotMatch(copy, /#Quran/);
+  assert.doesNotMatch(copy, /Islamic reminder/);
+});
+
 test('approving from a project focuses that clip in Review', () => {
   assert.match(activityFix, /reviewFocusClipId=reviewClip\.dataset\.reviewClip/);
   assert.match(activityFix, /reviewFilter='all'; go\('review'\)/);

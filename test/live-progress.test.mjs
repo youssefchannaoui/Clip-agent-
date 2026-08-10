@@ -21,5 +21,6 @@ test('live percentages and stages are patched in place', () => {
   assert.match(activity, /data-live-job="current"/);
   assert.match(activity, /data-live-project=/);
   assert.match(activity, /data-live-more-job=/);
+  assert.match(activity, /position \$\{Math\.round\(item\.queuePosition\)\}/);
   assert.match(activity, /patchLiveProgress\(\);\n  paintWork\(\)/);
 });
