@@ -122,6 +122,9 @@ test('publishing keeps a complete command-centre layout', () => {
   assert.match(ui, /Approve a clip and it moves straight into the next open slot/);
   assert.match(ui, /Platform connections/);
   assert.match(ui, /Quick preview/);
+  assert.match(ui, /dc-publish-next-media/);
+  assert.match(ui, /nextClip\.thumbUrl/);
+  assert.match(ui, /formatDuration\(nextClip\.durationMs\)/);
   assert.match(ui, /Your publishing queue is clear/);
   assert.match(ui, /Publishing unlocks with Premium/);
   assert.match(ui, /data-open-billing/);
