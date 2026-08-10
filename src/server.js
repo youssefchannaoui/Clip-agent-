@@ -986,9 +986,33 @@ async function route(req, res, url) {
     let clip; try { clip = assertCanAccessClip(currentUser, decodeURIComponent(sourcePreview[1])); } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
     const project = clip ? state.projects.find(item => item.id === clip.projectId) : null;
     const sourceFile = clip?.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
+    if (!clip) return json(res, 404, { error: 'Clip not found.' });
+    if (sourceFile && fs.existsSync(sourceFile)) return streamFile(req, res, sourceFile, { contentType: 'video/mp4' });
+
+    // Remote workers keep the clean project source in private object storage.
+    // The persisted sourceUrl is the bucket address, not necessarily a public
+    // URL, so redirecting to it directly makes the editor report a missing file
+    // even though the object exists. Sign a short-lived owner-scoped preview URL
+    // instead. Access to this route has already been checked through the clip.
+    const sourceObjectKey = String(clip.sourceObjectKey || project?.sourceObjectKey || '').trim();
+    if (sourceObjectKey) {
+      if (!/^projects\/[A-Za-z0-9._/-]+\/source\.mp4$/.test(sourceObjectKey) || sourceObjectKey.split('/').includes('..')) {
+        return json(res, 400, { error: 'The stored source video reference is invalid.' });
+      }
+      if (!objectStorage.configured()) {
+        return json(res, 503, { error: 'The clean source preview is temporarily unavailable because object storage is not configured.' });
+      }
+      try {
+        return temporaryRedirect(res, objectStorage.presign({ method: 'GET', key: sourceObjectKey, expiresSec: 900 }));
+      } catch (error) {
+        return json(res, 503, { error: `The clean source preview could not be prepared: ${error.message}` });
+      }
+    }
+
+    // Keep support for deliberately public/external source URLs created by
+    // older imports, but only after trying the private object key above.
     if (project?.sourceUrl) return temporaryRedirect(res, project.sourceUrl);
-    if (!clip || !sourceFile || !fs.existsSync(sourceFile)) return json(res, 404, { error: 'Original source video is unavailable.' });
-    return streamFile(req, res, sourceFile, { contentType: 'video/mp4' });
+    return json(res, 404, { error: 'The clean source video is unavailable.' });
   }
 
   const clipVideo = pathname.match(/^\/api\/clips\/([^/]+)\/(video|download|thumb)$/);

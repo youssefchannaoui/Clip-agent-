@@ -2641,8 +2641,8 @@ function bindVideo(clip){
   video.onerror=()=>{
     if(editor.sourceFallback)return;
     editor.sourceFallback=true;video.pause();if(bg)bg.pause();
-    const status=$('#dcCaptionStatus');if(status)status.textContent='Original source unavailable — preview fallback disabled to prevent doubled captions';
-    notify('The original lecture file is unavailable. The editor will not load the rendered clip because that would duplicate burned-in captions.','bad');
+    const status=$('#dcCaptionStatus');if(status)status.textContent='Clean source preview unavailable — rendered export preserved';
+    notify('The clean source preview could not be loaded. Your rendered clip is still safe, but it is not used in the editor because it already contains captions.','bad');
   };
   video.ontimeupdate=()=>{
     const local=clamp(video.currentTime-editor.sourceBase,0,editor.trimOut);editor.currentTime=local;syncBackgroundVideo();updatePlayhead(local);updateCaptionAtTime(local);applyFrameAtTime(local);
