@@ -3758,7 +3758,7 @@ function adminServices(){
         <article class="dc-admin-card"><span class="dc-admin-card-label">CPU</span><strong>${cpu.percent===null||cpu.percent===undefined?'—':cpu.percent+'%'}</strong><em>${cpu.cores?cpu.cores+' cores':'—'}${la?` · load ${la['1m']}`:''}</em></article>
         <article class="dc-admin-card"><span class="dc-admin-card-label">Memory</span><strong>${mem.percent===null||mem.percent===undefined?'—':mem.percent+'%'}</strong><em>${mem.usedBytes?formatBytes(mem.usedBytes):'—'} of ${mem.totalBytes?formatBytes(mem.totalBytes):'—'}</em></article>
         <article class="dc-admin-card"><span class="dc-admin-card-label">Disk</span><strong>${disk.percent===null||disk.percent===undefined?'—':disk.percent+'%'}</strong><em>${disk.freeBytes?formatBytes(disk.freeBytes)+' free':'—'}</em></article>
-        <article class="dc-admin-card"><span class="dc-admin-card-label">Queue</span><strong>${q.running??0} / ${q.maxConcurrent??'—'}</strong><em>${q.depth??0} waiting · up ${upt}</em></article>
+        <article class="dc-admin-card"><span class="dc-admin-card-label">Worker lanes</span><strong>${q.running??0} / ${q.maxConcurrent??'—'}</strong><em>${q.depth??0} waiting · AI/render ${q.heavyRunning??0} / ${q.maxHeavy??'—'} · up ${upt}</em></article>
       </div>
       ${adminMeter('CPU',cpu.percent,cpu.cores?`${cpu.cores} cores available`:'')}
       ${adminMeter('Memory',mem.percent,mem.totalBytes?`${formatBytes(mem.usedBytes||0)} of ${formatBytes(mem.totalBytes)}`:'')}
