@@ -86,6 +86,61 @@ test('the timeline supports dragging, not only a single click', () => {
   assert.match(body, /wasPlaying/);
 });
 
+// The editor works in clip-local time but drives a <video> in media time, and
+// which file is loaded decides whether those differ. Getting it wrong does not
+// look like an off-by-one, it looks like the editor is dead: every seek lands
+// past the end of the file and every reported position clamps to zero.
+function makeTimebase() {
+  const body = ui.slice(ui.indexOf('function applyMediaTimebase(clip,baked){'));
+  const src = body.slice(0, body.indexOf('\nfunction bindVideo'));
+  const editor = {};
+  const fn = new Function('editor', `${src}\nreturn applyMediaTimebase;`)(editor);
+  return (clip, baked) => { fn(clip, baked); return { ...editor }; };
+}
+
+test('a clean plate keeps the clip offset inside the full lecture', () => {
+  const apply = makeTimebase();
+  const state = apply({ startSec: 300, endSec: 337 }, false);
+  assert.equal(state.sourceBase, 300, 'clip-local 0 sits at startSec in the lecture');
+  assert.equal(state.sourceEnd, 337);
+  assert.equal(state.trimOut, 37);
+});
+
+test('an export preview is its own timeline and takes no offset', () => {
+  // The regression: a 37s export with startSec 300 was seeked to 337s, which
+  // clamped to the end, while ontimeupdate reported 0 - 300 and clamped to 0.
+  // Nothing moved, so dragging and clicking a caption both looked broken.
+  const apply = makeTimebase();
+  const state = apply({ startSec: 300, endSec: 337 }, true);
+  assert.equal(state.sourceBase, 0, 'the export begins at media zero');
+  assert.equal(state.sourceEnd, 37, 'and ends at its own duration');
+  assert.equal(state.trimOut, 37, 'the clip duration is the same either way');
+});
+
+test('duration falls back to durationMs when endSec is absent', () => {
+  const apply = makeTimebase();
+  assert.equal(apply({ startSec: 10, durationMs: 20000 }, false).trimOut, 20);
+  assert.equal(apply({ startSec: 10, durationMs: 20000 }, true).sourceEnd, 20);
+});
+
+test('a zero-length clip cannot produce a zero duration', () => {
+  // trimOut divides in timelineGeometry; zero would make every position NaN.
+  const apply = makeTimebase();
+  assert.ok(apply({ startSec: 5, endSec: 5 }, false).trimOut > 0);
+});
+
+test('both preview paths set the timebase through one function', () => {
+  // The fallback swaps to the export after the timebase was already set for a
+  // clean plate, so it has to rebase or it produces a visible but completely
+  // unresponsive editor.
+  assert.equal((ui.match(/applyMediaTimebase\(/g) || []).length, 4,
+    'one definition, plus the clip-open, bind and fallback call sites');
+  const bind = ui.slice(ui.indexOf('function bindVideo(clip){'));
+  const handler = bind.slice(bind.indexOf('video.onerror=()=>{'));
+  assert.match(handler.slice(0, handler.indexOf('\n  };')), /applyMediaTimebase\(clip,true\)/,
+    'the export fallback must rebase to media zero');
+});
+
 test('the ruler shares the caption track gutter', () => {
   const css = ui.slice(ui.indexOf('.dc-ruler{'));
   const rule = css.slice(0, css.indexOf('}'));

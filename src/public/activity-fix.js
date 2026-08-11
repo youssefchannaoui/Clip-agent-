@@ -2512,10 +2512,12 @@ async function ensureEditor(){
     editor.draft={...clone(template),...(saved?.draft||{}),__clipId:clip.id};editor.draft.cropPositionX??=50;editor.draft.cropPositionY??=50;editor.draft.captionTimingOffsetMs??=0;
     editor.captionText=saved?.captionText??clip.transcript??'';
     editor.trimIn=0;editor.trimOut=Math.max(.1,Number(clip.durationMs||0)/1000);
-    editor.dirty=Boolean(saved);editor.localSavedAt=Number(saved?.savedAt||0);editor.selectedLayer='captions';editor.history=[];editor.historyIndex=-1;editor.sourceBase=Number(clip.startSec||0);editor.sourceEnd=Number(clip.endSec||editor.sourceBase+editor.trimOut);editor.sourceFallback=false;editor.framingPlan=clip.smartFraming||null;editor.framingStatus=editor.framingPlan?'ready':'idle';editor.framingMessage=editor.framingPlan?'Using the framing saved with this render':'Smart framing has not been analysed';
+    editor.dirty=Boolean(saved);editor.localSavedAt=Number(saved?.savedAt||0);editor.selectedLayer='captions';editor.history=[];editor.historyIndex=-1;editor.sourceFallback=false;editor.framingPlan=clip.smartFraming||null;editor.framingStatus=editor.framingPlan?'ready':'idle';editor.framingMessage=editor.framingPlan?'Using the framing saved with this render':'Smart framing has not been analysed';
     // Seeded from the server's claim once per clip. bindVideo() may later flip
     // it to true if that claim does not survive contact with a real load.
+    // Set before the timebase, which depends on it.
     editor.bakedPreview=clip.cleanSource===false;
+    applyMediaTimebase(clip,editor.bakedPreview);
     editor.captionWords=approximateWords(editor.captionText,editor.trimOut);editor.captionTimingReference=clone(editor.captionWords);editor.captionSource='fallback';editor.backendCaptionReady=false;
     await loadCaptionWords(clip);
     pushHistory(true);
@@ -2834,6 +2836,27 @@ function bindCaptionDrag(){
   canvas.addEventListener('pointerdown',event=>{if(!event.target.closest('#dcCaptionOverlay')&&!event.target.closest('#dcResizeHandle'))selectEditorLayer(event.target.closest('.dc-video-layer')?'video':'none')});
 }
 
+// The editor works in clip-local time (0 .. duration) but drives a <video>
+// element in media time, and the two differ depending on which file is loaded.
+//
+//   clean plate  the whole lecture. Clip-local 0 is at clip.startSec, so every
+//                seek must be offset by it.
+//   export       the clip itself, already trimmed. Clip-local 0 is media 0, and
+//                applying the offset seeks past the end of the file.
+//
+// Getting this wrong does not look like an off-by-one; it looks like the editor
+// is dead. On a 37-second export with startSec 300, every seek resolves to 337s,
+// which clamps to the end, and ontimeupdate computes a negative local time that
+// clamps to 0 — so the playhead never moves, captions never advance, and both
+// dragging and clicking a caption appear to do nothing at all.
+function applyMediaTimebase(clip,baked){
+  const start=Number(clip.startSec||0);
+  const end=Number(clip.endSec||start+Number(clip.durationMs||0)/1000);
+  const duration=Math.max(.1,end-start);
+  editor.trimOut=duration;
+  editor.sourceBase=baked?0:start;
+  editor.sourceEnd=baked?duration:end;
+}
 function bindVideo(clip){
   const video=$('#dcEditorVideo'),bg=$('#dcEditorVideoBg');if(!video)return;
   // Set per clip from what the server already told us, so the editor never
@@ -2842,9 +2865,9 @@ function bindVideo(clip){
   // Reset per bind so a fresh onerror can fire; bakedPreview is deliberately
   // not reset here, because it is set once per clip and must outlive re-renders.
   editor.sourceFallback=false;
-  document.body.classList.toggle('dc-editor-baked-preview',!editorHasCleanSource(clip));
-  const start=Number(clip.startSec||0),end=Number(clip.endSec||start+Number(clip.durationMs||0)/1000);
-  editor.sourceBase=start;editor.sourceEnd=end;editor.trimOut=Math.max(.1,end-start);
+  const baked=!editorHasCleanSource(clip);
+  document.body.classList.toggle('dc-editor-baked-preview',baked);
+  applyMediaTimebase(clip,baked);
   const initialise=()=>{
     if(!editor.sourceFallback){try{video.currentTime=start;if(bg)bg.currentTime=start}catch{}}
     renderTimeline();updateCaptionAtTime(0);applyFrameAtTime(0);
@@ -2867,6 +2890,10 @@ function bindVideo(clip){
     if(editorHasCleanSource(clip)){
       const exportUrl=authedUrl(`/api/clips/${encodeURIComponent(clip.id)}/video`);
       editor.bakedPreview=true;
+      // The file about to load is the trimmed clip, not the lecture, so the
+      // timebase set for a clean plate no longer applies. Without this the
+      // fallback produces a visible but completely unresponsive editor.
+      applyMediaTimebase(clip,true);
       document.body.classList.add('dc-editor-baked-preview');
       video.onerror=()=>{
         const status=$('#dcCaptionStatus');if(status)status.textContent='This clip’s video could not be loaded';

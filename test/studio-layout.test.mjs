@@ -147,8 +147,12 @@ test('a baked export shows one set of captions, not two', () => {
   // A control that cannot perform its function should say so, not perform an
   // animation of itself.
   const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
-  assert.match(source, /classList\.toggle\('dc-editor-baked-preview',!editorHasCleanSource\(clip\)\)/,
-    'the state must be set from the server flag, and reset, in one call');
+  // toggle(), not add(): the state must also clear when moving to a clip that
+  // does have a clean plate, or the previous clip's verdict follows it.
+  assert.match(source, /const baked=!editorHasCleanSource\(clip\);/,
+    'the verdict must come from the clean-source check');
+  assert.match(source, /classList\.toggle\('dc-editor-baked-preview',baked\)/,
+    'the state must be set and reset in one call');
 
   const overlayRules = (css.match(/body\.dc-editor-baked-preview #dcCaptionOverlay[^{]*\{[^}]*\}/g) || [])
     .filter(rule => !rule.slice(0, rule.indexOf('{')).includes('::'));
