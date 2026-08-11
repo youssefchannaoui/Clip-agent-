@@ -80,8 +80,28 @@ test('the product UI includes Brand Kit and AI Director as first-class screens',
   assert.match(ui, /Free exports are branded/);
   assert.match(ui, /AI language & growth profile/);
   assert.match(ui, /Names and specialist vocabulary/);
-  assert.match(ui, /Explainable intelligence/);
-  assert.match(ui, /Copy post pack/);
+  // AI Director was rebuilt as a chat assistant on 11 Aug. It answers from
+  // the growth pack the worker already derived from the transcript, so the
+  // guarantee worth testing is that it stays grounded and offers copy-out.
+  assert.match(ui, /function directorAnswer\(question\)/);
+  assert.match(ui, /data-director-copy/);
+  assert.match(ui, /growthPack/);
+});
+
+test('AI Director never invents copy when a clip has no grounded growth pack', () => {
+  const ui = fs.readFileSync(new URL('../src/public/activity-fix.js', import.meta.url), 'utf8');
+  // Inventing a title or a quotation for an Islamic lecture is the worst
+  // failure this product can have, so the no-data path must say so plainly
+  // rather than improvising.
+  assert.match(ui, /function directorMissingPack\(clip\)/);
+  assert.match(ui, /was processed before DeenClipped started generating post copy/);
+  const answer = ui.slice(ui.indexOf('function directorAnswer(question){'));
+  const body = answer.slice(0, answer.indexOf('\nfunction directorAsk'));
+  for (const intent of ['caption', 'title', 'hashtag', 'hook', 'platform']) {
+    assert.ok(body.includes(intent), `${intent} intent should be handled`);
+  }
+  // The catch-all must decline rather than guess.
+  assert.match(body, /I can only answer from the clips you've generated/);
 });
 
 test('production releases two remote jobs while the worker serialises heavy AI work', () => {

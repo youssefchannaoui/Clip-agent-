@@ -3022,17 +3022,158 @@ const LAB_TOPICS=[
 ];
 function labTopic(clip){const text=`${clip.title||''} ${clip.description||''} ${clip.transcript||''}`.toLowerCase();return LAB_TOPICS.find(([,words])=>words.some(word=>text.includes(word)))?.[0]||'General reminders'}
 function labDimensionRows(clip){const d=clip.scoreBreakdown||clip.quality?.scoreBreakdown||{};return[['First 3s','openingStrength'],['Hook','hook'],['Flow','flow'],['Value','value'],['Payoff','payoffStrength'],['Complete','completeness'],['Specific','specificity'],['Timing','confidence']].map(([label,key])=>{const fallback=key==='openingStrength'?d.hook:key==='payoffStrength'?d.completeness:undefined,value=clamp(Number(d[key]??fallback??clip[key]??clip.quality?.[key]??0),0,100);return `<span><b>${esc(label)}</b><i><em style="width:${value}%"></em></i><strong>${Math.round(value)}</strong></span>`}).join('')}
+const DIRECTOR_CHIPS=[
+  ['What should I post next?','next'],
+  ['Write captions for this clip','caption'],
+  ['Give me another title','title'],
+  ['Which platform fits best?','platform'],
+  ['What topics am I missing?','ideas'],
+];
+const directorChat={messages:[],draft:'',focusId:''};
+function directorRanked(){return [...(data()?.clips||[])].sort((a,b)=>Number(b.score||0)-Number(a.score||0))}
+function directorFocus(){const clips=directorRanked();return clips.find(c=>c.id===directorChat.focusId)||clips[0]||null}
+function directorSay(role,parts){directorChat.messages.push({role,parts:Array.isArray(parts)?parts:[{type:'text',value:String(parts)}]})}
+function directorMissingPack(clip){
+  return [{type:'text',value:`"${shortText(clip.title||'This clip',60)}" was processed before DeenClipped started generating post copy, so I have no grounded titles or captions for it. Re-process that lecture and I'll have them.`}];
+}
+function directorAnswer(question){
+  const text=String(question||'').toLowerCase().trim();
+  const clips=directorRanked(),clip=directorFocus();
+  const has=(...words)=>words.some(word=>text.includes(word));
+  if(!clips.length)return [{type:'text',value:'You have no clips yet. Generate some from a lecture and I can suggest what to post, write captions and pick platforms.'}];
+
+  if(has('next','lineup','week','schedule','order','first'))
+    {const queue=clips.filter(c=>c.status!=='posted').slice(0,7);
+     return queue.length?[{type:'text',value:`Post these in this order — ranked by how well each one holds attention.`},{type:'clips',ids:queue.map(c=>c.id)}]:[{type:'text',value:'Every clip you have is already posted. Generate more from a new lecture.'}];}
+
+  if(!clip)return [{type:'text',value:'Pick a clip first and I can work on it.'}];
+  const pack=clip.growthPack||{},brief=pack.directorBrief||{},platforms=pack.platforms||{};
+
+  if(has('caption','description','write','copy','post text')){
+    if(!platforms.tiktok&&!platforms.youtube)return directorMissingPack(clip);
+    const parts=[{type:'text',value:`Grounded captions for "${shortText(clip.title||'this clip',52)}" — every line comes from the transcript.`}];
+    if(platforms.youtube?.title)parts.push({type:'copy',label:'YouTube title',value:platforms.youtube.title});
+    if(platforms.youtube?.description)parts.push({type:'copy',label:'YouTube description',value:platforms.youtube.description});
+    if(platforms.tiktok?.caption)parts.push({type:'copy',label:'TikTok caption',value:platforms.tiktok.caption});
+    if(platforms.instagram?.caption)parts.push({type:'copy',label:'Instagram caption',value:platforms.instagram.caption});
+    return parts;
+  }
+
+  if(has('title','headline','name it','rename')){
+    const titles=[pack.primaryTitle,...(pack.alternateTitles||[])].filter(Boolean);
+    if(!titles.length)return directorMissingPack(clip);
+    return [{type:'text',value:'Every one of these is drawn from what the speaker actually said:'},...titles.map((value,index)=>({type:'copy',label:index?`Alternative ${index}`:'Suggested title',value}))];
+  }
+
+  if(has('hashtag','tag','search','seo','discover')){
+    const terms=pack.searchTerms||[];const tags=String(clip.hashtags||'').trim();
+    if(!terms.length&&!tags)return directorMissingPack(clip);
+    const parts=[{type:'text',value:'Tags and search terms taken from the topic of this clip:'}];
+    if(tags)parts.push({type:'copy',label:'Hashtags',value:tags});
+    if(terms.length)parts.push({type:'copy',label:'Search terms',value:terms.join(', ')});
+    return parts;
+  }
+
+  if(has('hook','opening','first three','first 3','start','payoff','ending')){
+    if(!brief.hookPreview&&!brief.payoffPreview)return directorMissingPack(clip);
+    const parts=[];
+    if(brief.hookPreview)parts.push({type:'text',value:`Opening line: "${brief.hookPreview}"`});
+    if(brief.payoffPreview)parts.push({type:'text',value:`Closing payoff: "${brief.payoffPreview}"`});
+    parts.push({type:'text',value:'If the opening does not stand alone without context, trim the clip so it starts later.'});
+    return parts;
+  }
+
+  if(has('platform','where','youtube','tiktok','instagram','facebook','best fit')){
+    const fit=brief.platformFit||{};const best=brief.bestPlatforms||[];
+    if(!best.length)return directorMissingPack(clip);
+    const names={youtube:'YouTube Shorts',tiktok:'TikTok',instagram:'Instagram Reels',facebook:'Facebook Reels'};
+    const ordered=Object.entries(fit).sort((a,b)=>b[1]-a[1]).map(([key,value])=>`${names[key]||key} ${Math.round(value)}`).join(' · ');
+    return [{type:'text',value:`Best fit: ${best.map(name=>names[name]||name).join(' and ')}.`},{type:'text',value:`Scored across all four: ${ordered}.`}];
+  }
+
+  if(has('why','score','strong','good','work','retention')){
+    const reasons=[...(brief.why||[]),...(clip.scoreReasons||[])].filter(Boolean).slice(0,4);
+    const parts=[{type:'text',value:`"${shortText(clip.title||'This clip',52)}" scores ${Math.round(clip.score||0)} out of 100.${brief.forecast?` Retention forecast: ${brief.forecast}.`:''}`}];
+    if(reasons.length)parts.push({type:'text',value:reasons.join(' · ')});
+    if(clip.scoreBreakdown||clip.quality?.scoreBreakdown)parts.push({type:'dimensions',id:clip.id});
+    return parts;
+  }
+
+  if(has('idea','topic','gap','cover','missing','content')){
+    const counts=new Map();clips.forEach(c=>{const topic=labTopic(c);counts.set(topic,(counts.get(topic)||0)+1)});
+    const gaps=LAB_TOPICS.map(([name])=>name).filter(name=>!counts.has(name));
+    const covered=[...counts.entries()].sort((a,b)=>b[1]-a[1]).slice(0,3).map(([name,count])=>`${name} (${count})`).join(', ');
+    const parts=[{type:'text',value:covered?`You post most about ${covered}.`:'Your clips do not group into a clear topic yet.'}];
+    parts.push({type:'text',value:gaps.length?`Nothing in your library covers ${gaps.slice(0,4).join(', ')} — lectures on those would widen your reach.`:'Your main topics are all represented, so keep going deeper rather than wider.'});
+    return parts;
+  }
+
+  return [
+    {type:'text',value:"I can only answer from the clips you've generated, and that one is outside what I can see."},
+    {type:'text',value:'Ask me what to post next, for captions, titles, hashtags, the hook, which platform fits, why a clip scores well, or which topics you are missing.'},
+  ];
+}
+function directorAsk(question){
+  const clean=String(question||'').trim();if(!clean)return;
+  directorSay('user',[{type:'text',value:clean}]);
+  directorSay('director',directorAnswer(clean));
+  directorChat.draft='';
+  renderCreatorLab();
+  const thread=$('#dcDirectorThread');if(thread)thread.scrollTop=thread.scrollHeight;
+  $('#dcDirectorInput')?.focus();
+}
+function directorPartHtml(part,messageIndex,partIndex){
+  if(part.type==='copy')return `<div class="dc-director-copy"><div><small>${esc(part.label)}</small><p>${esc(part.value)}</p></div><button class="dc-btn secondary" data-director-copy="${messageIndex}:${partIndex}">Copy</button></div>`;
+  if(part.type==='clips'){
+    const clips=data()?.clips||[];
+    return `<div class="dc-director-clips">${part.ids.map((id,order)=>{const clip=clips.find(c=>c.id===id);if(!clip)return '';return `<button data-edit-video-clip="${esc(clip.id)}"><i>${order+1}</i><span class="dc-director-thumb">${clip.thumbUrl?`<img src="${authedUrl(clip.thumbUrl)}" alt="">`:ICON.play}</span><b>${esc(shortText(clip.title||'Untitled clip',54))}</b><em>${Math.round(clip.score||0)}</em></button>`}).join('')}</div>`;
+  }
+  if(part.type==='dimensions'){
+    const clip=(data()?.clips||[]).find(c=>c.id===part.id);
+    return clip?`<div class="dc-lab-dimensions">${labDimensionRows(clip)}</div>`:'';
+  }
+  return `<p>${esc(part.value)}</p>`;
+}
 function renderCreatorLab(){
-  const panel=$('#view-lab'),d=data();if(!panel||!d)return;const clips=d.clips||[],premium=Boolean(d.billing?.features?.creatorLab||d.billing?.current?.unlimited);
-  const scored=[...clips].sort((a,b)=>Number(b.score||0)-Number(a.score||0)),avg=Math.round(scored.reduce((sum,c)=>sum+Number(c.score||0),0)/Math.max(1,scored.length));
-  const topicCounts=new Map();clips.forEach(c=>{const topic=labTopic(c);topicCounts.set(topic,(topicCounts.get(topic)||0)+1)});const topics=[...topicCounts.entries()].sort((a,b)=>b[1]-a[1]);
-  const gaps=LAB_TOPICS.map(([name])=>name).filter(name=>!topicCounts.has(name)).slice(0,4);const strong=scored.filter(c=>Number(c.score||0)>=85),ready=clips.filter(c=>c.musicVerified&&c.renderVerified),waiting=clips.filter(c=>c.status==='waiting');
-  const intelligenceClip=scored.find(c=>c.scoreBreakdown||c.quality?.scoreBreakdown)||scored[0];const growth=intelligenceClip?.growthPack||{},brief=growth.directorBrief||{},fit=brief.platformFit||{},platforms=brief.bestPlatforms||[];const intelligencePanel=intelligenceClip?`<section class="dc-lab-panel dc-lab-intelligence standalone"><div class="dc-lab-head"><div><span>Explainable intelligence</span><h2>Why this clip can work</h2></div><button class="dc-btn secondary" data-edit-video-clip="${esc(intelligenceClip.id)}">Open in Editor</button></div><div class="dc-lab-intelligence-grid"><div><strong>${esc(shortText(intelligenceClip.title||'Top clip',76))}</strong><p>${esc((intelligenceClip.scoreReasons||[]).join(' · ')||'Generate a new clip to see its detailed retention signals.')}</p><div class="dc-lab-dimensions">${labDimensionRows(intelligenceClip)}</div></div><aside><div class="dc-director-forecast ${esc(brief.forecast||'review')}"><span>${ICON.sparkles}</span><div><small>Retention forecast</small><strong>${esc(brief.forecast||'Generate again for V6 forecast')}</strong></div></div><small>Growth pack</small><h3>${esc(growth.primaryTitle||intelligenceClip.title||'Suggested title')}</h3><p>${esc((growth.alternateTitles||[]).join(' · ')||'Alternate titles appear on newly generated clips.')}</p><div>${(growth.searchTerms||[]).slice(0,6).map(term=>`<span>${esc(term)}</span>`).join('')}</div><button class="dc-btn" id="dcCopyGrowthPack">Copy post pack</button></aside></div>${brief.hookPreview||platforms.length?`<div class="dc-director-playbook"><article><small>First three seconds</small><strong>${esc(brief.hookPreview||intelligenceClip.intelligenceSignals?.firstThreeSeconds||'Opening analysis will appear on newly processed clips.')}</strong></article><article><small>Ending payoff</small><strong>${esc(brief.payoffPreview||intelligenceClip.intelligenceSignals?.endingPayoff||'Payoff analysis will appear on newly processed clips.')}</strong></article><article class="platforms"><small>Best platform fit</small><div>${(['youtube','tiktok','instagram','facebook']).map(name=>`<span class="${platforms.includes(name)?'best':''}">${socialSvg(name)}<b>${providerTitle(name).replace(' Shorts','').replace(' Reels','')}</b><em>${Math.round(Number(fit[name]||0))||'—'}</em></span>`).join('')}</div></article></div>`:''}</section>`:'';
-  const weeklyPlan=scored.slice(0,7);const body=premium?`<div class="dc-lab-grid"><section class="dc-lab-panel wide"><div class="dc-lab-head"><div><span>Next seven posts</span><h2>AI-ranked weekly lineup</h2></div><button class="dc-btn secondary" id="dcCopyLabPlan">Copy plan</button></div><div class="dc-lab-lineup">${weeklyPlan.length?weeklyPlan.map((clip,index)=>`<button data-edit-video-clip="${esc(clip.id)}"><span>${String(index+1).padStart(2,'0')}</span><div><strong>${esc(shortText(clip.title||'Untitled clip',58))}</strong><small>${esc(labTopic(clip))} · ${Number(clip.score||0)}/100 · ${esc(statusName(clip.status))}</small></div><i>${ICON.chevron}</i></button>`).join(''):`<div class="dc-lab-empty">Generate clips to build your first weekly lineup.</div>`}</div></section><section class="dc-lab-panel"><div class="dc-lab-head"><div><span>Content mix</span><h2>Topic coverage</h2></div></div><div class="dc-topic-cloud">${topics.length?topics.map(([name,count])=>`<span style="--weight:${Math.min(5,count)}"><b>${esc(name)}</b><em>${count}</em></span>`).join(''):'<p>No clip topics yet.</p>'}</div></section><section class="dc-lab-panel"><div class="dc-lab-head"><div><span>Opportunity</span><h2>Content gaps</h2></div></div><div class="dc-gap-list">${gaps.length?gaps.map(name=>`<div><span>${ICON.sparkles}</span><p><strong>${esc(name)}</strong><small>No recent clips cover this lane.</small></p></div>`).join(''):'<div><span>${ICON.check}</span><p><strong>Balanced library</strong><small>Your main content lanes are represented.</small></p></div>'}</div></section><section class="dc-lab-panel wide"><div class="dc-lab-head"><div><span>Hook intelligence</span><h2>Your strongest opening moments</h2></div><span class="dc-pill good">${strong.length} strong</span></div><div class="dc-lab-hooks">${strong.slice(0,6).map(c=>`<article><span>${Number(c.score||0)}</span><div><strong>${esc(shortText(c.title||'Strong clip',72))}</strong><small>${esc((c.scoreReasons||[])[0]||'Strong AI-selected opening and clear standalone context.')}</small></div><button class="dc-btn secondary" data-edit-video-clip="${esc(c.id)}">Refine</button></article>`).join('')||'<div class="dc-lab-empty">Clips scoring 85+ will appear here with their strongest hook reason.</div>'}</div></section></div>`:`<section class="dc-lab-locked"><div class="dc-lab-lock-icon">${ICON.lab}</div><span>Premium intelligence</span><h2>Turn your clip library into a content strategy.</h2><p>AI Director ranks a seven-post lineup, maps topic coverage, finds content gaps and surfaces the strongest hooks—using clips DeenClipped already understands.</p><div class="dc-lab-teasers"><span>Weekly lineup</span><span>Topic coverage</span><span>Content gaps</span><span>Hook intelligence</span></div><button class="dc-btn" id="dcLabUpgrade">Unlock AI Director</button></section>`;
-  panel.innerHTML=`<div class="dc-lab-page dc-ai-director"><section class="dc-product-hero dc-lab-hero"><div><span class="dc-product-kicker">${ICON.lab} AI Director <b class="dc-inline-pro">PRO</b></span><h1>Turn every lecture into a growth plan.</h1><p>Explainable scores, a seven-post lineup, topic gaps and platform-ready copy—grounded in what the speaker actually said.</p></div><div class="dc-product-stats"><span><b>${clips.length}</b><em>clips analysed</em></span><span><b>${avg}</b><em>average score</em></span><span><b>${ready.length}</b><em>export ready</em></span><span><b>${waiting.length}</b><em>to review</em></span></div></section>${body}${premium?intelligencePanel:''}</div>`;
-  if($('#dcLabUpgrade'))$('#dcLabUpgrade').onclick=openBillingModal;
-  if($('#dcCopyLabPlan'))$('#dcCopyLabPlan').onclick=async()=>{const text=weeklyPlan.map((c,i)=>`${i+1}. ${c.title||'Untitled clip'} — ${labTopic(c)} — ${Number(c.score||0)}/100`).join('\n');try{await navigator.clipboard.writeText(text);notify('Weekly plan copied')}catch{notify('Copy was blocked by the browser','bad')}};
-  if($('#dcCopyGrowthPack'))$('#dcCopyGrowthPack').onclick=async()=>{const platforms=growth.platforms||{},text=[growth.primaryTitle||intelligenceClip?.title,...(growth.alternateTitles||[]),'',platforms.instagram?.caption||intelligenceClip?.description||'',growth.pinnedComment?`Pinned comment: ${growth.pinnedComment}`:''].filter(Boolean).join('\n');try{await navigator.clipboard.writeText(text);notify('Growth pack copied')}catch{notify('Copy was blocked by the browser','bad')}};
+  const panel=$('#view-lab'),d=data();if(!panel||!d)return;
+  const clips=d.clips||[],premium=Boolean(d.billing?.features?.creatorLab||d.billing?.current?.unlimited);
+  const ranked=directorRanked(),avg=Math.round(ranked.reduce((sum,c)=>sum+Number(c.score||0),0)/Math.max(1,ranked.length));
+  const ready=clips.filter(c=>c.musicVerified&&c.renderVerified).length,waiting=clips.filter(c=>c.status==='waiting').length;
+  const focus=directorFocus();
+  const hero=`<section class="dc-settings-command"><div><span class="dc-settings-kicker">${ICON.lab} AI Director <b class="dc-inline-pro">PRO</b></span><h1>Ask what to post next.</h1><p>Answers come from what the speaker actually said in your lectures — never invented.</p></div><div class="dc-settings-command-status"><span class="${clips.length?'on':''}"><i>${ICON.lab}</i><b>${clips.length} analysed</b><em>clips</em></span><span class="${avg>=72?'on':''}"><i>${ICON.sparkles}</i><b>${avg} average</b><em>quality score</em></span><span class="${ready?'on':''}"><i>${ICON.check}</i><b>${ready} ready</b><em>export verified</em></span></div></section>`;
+
+  if(!premium){
+    panel.innerHTML=`<div class="dc-settings-hub dc-director-page">${hero}<section class="dc-lab-locked"><div class="dc-lab-lock-icon">${ICON.lab}</div><span>Premium intelligence</span><h2>Ask your library what to post next.</h2><p>AI Director answers in plain language using the titles, hooks and captions DeenClipped already generated from your transcripts.</p><div class="dc-lab-teasers">${DIRECTOR_CHIPS.map(([label])=>`<span>${esc(label)}</span>`).join('')}</div><button class="dc-btn" id="dcLabUpgrade">Unlock AI Director</button></section></div>`;
+    if($('#dcLabUpgrade'))$('#dcLabUpgrade').onclick=openBillingModal;
+    requestAnimationFrame(()=>animatePanel(panel));
+    return;
+  }
+
+  const thread=directorChat.messages.length
+    ?directorChat.messages.map((message,messageIndex)=>`<div class="dc-director-msg ${message.role}">${message.parts.map((part,partIndex)=>directorPartHtml(part,messageIndex,partIndex)).join('')}</div>`).join('')
+    :`<div class="dc-director-welcome"><span>${ICON.sparkles}</span><strong>Ask me anything about your clips.</strong><p>I read the transcripts DeenClipped already analysed, so nothing I suggest is made up.</p></div>`;
+  const focusCard=focus?`<div class="dc-director-focus"><span class="dc-director-thumb">${focus.thumbUrl?`<img src="${authedUrl(focus.thumbUrl)}" alt="">`:ICON.play}</span><div><small>Working on</small><select id="dcDirectorFocus">${ranked.map(c=>`<option value="${esc(c.id)}" ${c.id===focus.id?'selected':''}>${esc(shortText(c.title||'Untitled clip',48))}</option>`).join('')}</select></div></div>`:'';
+
+  panel.innerHTML=`<div class="dc-settings-hub dc-director-page">${hero}
+    <section class="dc-settings-section violet"><header><span>${ICON.sparkles}</span><div><small>Assistant</small><h2>Ask about your clips</h2></div><b>Grounded in your transcripts</b></header>
+      <div class="dc-director-body">${focusCard}<div class="dc-director-thread" id="dcDirectorThread">${thread}</div>
+        <div class="dc-director-chips">${DIRECTOR_CHIPS.map(([label])=>`<button data-director-chip="${esc(label)}">${esc(label)}</button>`).join('')}</div>
+        <form class="dc-director-composer" id="dcDirectorForm"><input id="dcDirectorInput" placeholder="Ask about a clip, a caption, or what to post next" autocomplete="off" value="${esc(directorChat.draft)}"><button class="dc-btn" type="submit">Ask</button></form>
+      </div></section>
+    <section class="dc-settings-section"><header><span>${ICON.publish}</span><div><small>Queue</small><h2>Post these next</h2></div><b>${Math.min(7,ranked.filter(c=>c.status!=='posted').length)} clips</b></header>
+      <div class="dc-director-lineup">${ranked.filter(c=>c.status!=='posted').slice(0,7).map((clip,index)=>`<button data-edit-video-clip="${esc(clip.id)}"><i>${index+1}</i><span class="dc-director-thumb">${clip.thumbUrl?`<img src="${authedUrl(clip.thumbUrl)}" alt="">`:ICON.play}</span><div><strong>${esc(shortText(clip.title||'Untitled clip',56))}</strong><small>${esc(labTopic(clip))} · ${esc(statusName(clip.status))}</small></div><em>${Math.round(clip.score||0)}</em></button>`).join('')||'<div class="dc-qc-empty">Everything is posted. Generate clips from a new lecture.</div>'}</div></section>
+  </div>`;
+
+  $('#dcDirectorForm')?.addEventListener('submit',event=>{event.preventDefault();directorAsk($('#dcDirectorInput')?.value)});
+  $('#dcDirectorInput')?.addEventListener('input',event=>{directorChat.draft=event.target.value});
+  $('#dcDirectorFocus')?.addEventListener('change',event=>{directorChat.focusId=event.target.value;renderCreatorLab()});
+  $$('[data-director-chip]',panel).forEach(button=>button.addEventListener('click',()=>directorAsk(button.dataset.directorChip)));
+  $$('[data-director-copy]',panel).forEach(button=>button.addEventListener('click',async()=>{
+    const [messageIndex,partIndex]=button.dataset.directorCopy.split(':').map(Number);
+    const value=directorChat.messages[messageIndex]?.parts[partIndex]?.value||'';
+    try{await navigator.clipboard.writeText(value);notify('Copied')}catch{notify('Copy was blocked by the browser','bad')}
+  }));
+  const threadEl=$('#dcDirectorThread');if(threadEl)threadEl.scrollTop=threadEl.scrollHeight;
   requestAnimationFrame(()=>animatePanel(panel));
 }
 

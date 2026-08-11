@@ -234,6 +234,58 @@ body.dc-app .dc-qc-empty { margin:18px 20px;padding:26px;text-align:center;color
 body.dc-app .dc-qc-empty svg { width:17px;height:17px;fill:none;stroke:currentColor;vertical-align:-3px;margin-right:6px;color:var(--v6-green); }
 body.dc-app .dc-qc-empty-page { min-height:240px;display:grid;place-items:center;align-content:center;text-align:center;padding:34px;border:1px dashed var(--v6-line);border-radius:22px;color:var(--v6-muted); }.dc-qc-empty-page>svg{width:38px;height:38px;margin-bottom:12px;color:var(--v6-green)}.dc-qc-empty-page strong{color:#fff;font-size:14px;display:block;margin-bottom:5px}.dc-qc-empty-page p{margin:0 0 15px;font-size:9.5px}
 
+/* AI Director — chat surface. Reuses the Settings section shell; only the
+ * thread, chips and composer are new. */
+body.dc-app .dc-director-page { display:grid;gap:16px; }
+body.dc-app .dc-director-body { display:grid;gap:12px;padding:18px 20px; }
+body.dc-app .dc-director-focus { display:grid;grid-template-columns:64px minmax(0,1fr);gap:12px;align-items:center;padding:10px;border:1px solid rgba(255,255,255,.065);border-radius:14px;background:rgba(2,2,4,.23); }
+body.dc-app .dc-director-focus small { display:block;color:var(--v6-muted);font-size:8px;font-weight:900;letter-spacing:.1em;text-transform:uppercase; }
+body.dc-app .dc-director-focus select { width:100%;margin-top:5px;height:34px;padding:0 9px;border:1px solid rgba(255,255,255,.09);border-radius:10px;background:#09090b;color:var(--v6-text);font-size:10px; }
+body.dc-app .dc-director-thumb { display:grid;place-items:center;overflow:hidden;border-radius:10px;border:1px solid rgba(255,255,255,.06);background:#060607;color:var(--v6-muted); }
+body.dc-app .dc-director-thumb img { width:100%;height:100%;object-fit:cover; }
+body.dc-app .dc-director-thumb svg { width:16px;height:16px;fill:none;stroke:currentColor;opacity:.55; }
+body.dc-app .dc-director-focus>.dc-director-thumb { width:64px;height:44px; }
+body.dc-app .dc-director-thread { display:grid;gap:10px;max-height:440px;overflow-y:auto;padding:4px; }
+body.dc-app .dc-director-msg { display:grid;gap:8px;max-width:86%;padding:12px 14px;border-radius:15px;font-size:11px;line-height:1.6; }
+body.dc-app .dc-director-msg p { margin:0; }
+body.dc-app .dc-director-msg.user { justify-self:end;background:rgba(181,144,255,.13);border:1px solid rgba(181,144,255,.20); }
+body.dc-app .dc-director-msg.director { justify-self:start;background:rgba(2,2,4,.30);border:1px solid rgba(255,255,255,.07); }
+body.dc-app .dc-director-welcome { display:grid;place-items:center;text-align:center;padding:30px 20px;border:1px dashed rgba(255,255,255,.08);border-radius:16px; }
+body.dc-app .dc-director-welcome>span { width:42px;height:42px;display:grid;place-items:center;margin-bottom:11px;border-radius:13px;background:rgba(181,144,255,.10);color:#c8acff; }
+body.dc-app .dc-director-welcome svg { width:20px;height:20px;fill:none;stroke:currentColor; }
+body.dc-app .dc-director-welcome strong { font-size:13px; }
+body.dc-app .dc-director-welcome p { margin:5px 0 0;color:var(--v6-muted);font-size:10px;max-width:380px;line-height:1.55; }
+body.dc-app .dc-director-copy { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border:1px solid rgba(255,255,255,.07);border-radius:12px;background:rgba(0,0,0,.26); }
+body.dc-app .dc-director-copy small { color:#c8acff;font-size:8px;font-weight:900;letter-spacing:.1em;text-transform:uppercase; }
+body.dc-app .dc-director-copy p { margin:5px 0 0;font-size:10px;line-height:1.55;white-space:pre-wrap; }
+body.dc-app .dc-director-copy .dc-btn { min-height:30px;padding:0 11px;font-size:8px; }
+body.dc-app .dc-director-clips,body.dc-app .dc-director-lineup { display:grid;gap:8px; }
+body.dc-app .dc-director-lineup { padding:18px 20px; }
+body.dc-app .dc-director-clips>button,body.dc-app .dc-director-lineup>button {
+  display:grid;grid-template-columns:26px 74px minmax(0,1fr) auto;gap:11px;align-items:center;width:100%;
+  padding:9px;border:1px solid rgba(255,255,255,.065);border-radius:13px;background:rgba(2,2,4,.23);
+  color:var(--v6-text);text-align:left;transition:transform .18s ease,border-color .18s ease;
+}
+body.dc-app .dc-director-clips>button:hover,body.dc-app .dc-director-lineup>button:hover { transform:translateY(-2px);border-color:rgba(181,144,255,.32); }
+body.dc-app .dc-director-clips>button>i,body.dc-app .dc-director-lineup>button>i { width:26px;height:26px;display:grid;place-items:center;border-radius:9px;background:rgba(181,144,255,.10);color:#c8acff;font-size:9px;font-style:normal;font-weight:900; }
+body.dc-app .dc-director-clips .dc-director-thumb,body.dc-app .dc-director-lineup .dc-director-thumb { width:74px;height:46px; }
+body.dc-app .dc-director-clips>button>b { font-size:10.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+body.dc-app .dc-director-lineup strong { display:block;font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+body.dc-app .dc-director-lineup small { display:block;margin-top:3px;color:var(--v6-muted);font-size:8px; }
+body.dc-app .dc-director-clips>button>em,body.dc-app .dc-director-lineup>button>em { font-style:normal;font-size:11px;font-weight:900;color:#c8acff; }
+body.dc-app .dc-director-chips { display:flex;gap:7px;flex-wrap:wrap; }
+body.dc-app .dc-director-chips>button { padding:8px 11px;border:1px solid rgba(181,144,255,.16);border-radius:999px;background:rgba(181,144,255,.06);color:#c9b0f8;font-size:9px;transition:.16s; }
+body.dc-app .dc-director-chips>button:hover { border-color:rgba(181,144,255,.38);background:rgba(181,144,255,.12); }
+body.dc-app .dc-director-composer { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px; }
+body.dc-app .dc-director-composer input { height:44px;padding:0 14px;border:1px solid rgba(255,255,255,.09);border-radius:13px;background:#09090b;color:var(--v6-text);font-size:11px;outline:0; }
+body.dc-app .dc-director-composer input:focus { border-color:rgba(181,144,255,.45);box-shadow:0 0 0 3px rgba(181,144,255,.10); }
+body.dc-app .dc-director-composer .dc-btn { min-height:44px;padding:0 20px; }
+@media (max-width:760px) {
+  body.dc-app .dc-director-msg { max-width:100%; }
+  body.dc-app .dc-director-clips>button,body.dc-app .dc-director-lineup>button { grid-template-columns:24px 60px minmax(0,1fr) auto;gap:9px; }
+  body.dc-app .dc-director-clips .dc-director-thumb,body.dc-app .dc-director-lineup .dc-director-thumb { width:60px;height:38px; }
+}
+
 /* Consistent screen language across the existing, already-functional views. */
 body.dc-app .dc-product-hero,body.dc-app .dc-style-hero,body.dc-app .dc-manage-hero,body.dc-app .dc-settings-command,body.dc-app .dc-subscription-hero,body.dc-app .dc-review-hero-pro,body.dc-app .dc-project-detail-hero {
   border-radius:28px !important;
