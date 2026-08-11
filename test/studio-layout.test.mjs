@@ -109,3 +109,20 @@ test('liveJobTitle turns a watch URL into something readable', async () => {
   assert.equal(module.liveJobTitle({ title: 'Sabab Ep.2 with Deya Elayyan' }), 'Sabab Ep.2 with Deya Elayyan');
   assert.equal(module.liveJobTitle({}), 'Working now');
 });
+
+test('every slider uses the studio accent, not the browser default', () => {
+  // The editor's Look panel rendered brightness/contrast/saturation in system
+  // blue because accent-color was only set inside two unrelated containers.
+  assert.match(css, /body\.dc-app input\[type=range\]\s*\{[^}]*accent-color/,
+    'sliders outside .dc-range-bars fall back to the browser default');
+});
+
+test('rules for removed markup cannot reshape live controls', () => {
+  // `.dc-style-tile` no longer exists, but `.dc-style-enlarge` survived the
+  // rename, so an unscoped tile-era rule was still restyling the live pill.
+  const app = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
+  assert.equal(app.includes('dc-style-tile'), false, 'tile markup is gone; update this test if it returns');
+  assert.doesNotMatch(css, /body\.dc-app \.dc-style-enlarge\s*\{/,
+    'the enlarge rule must be scoped to the tile preview it was written for');
+  assert.match(css, /body\.dc-app \.dc-style-tile-preview \.dc-style-enlarge\s*\{/);
+});
