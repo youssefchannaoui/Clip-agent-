@@ -634,8 +634,16 @@ body.dc-app .dc-empty { border-radius: var(--v6-radius-md); }
  * is not a thing the control can honestly do, so it is hidden and the reason
  * is stated instead. Every other edit still works and still exports.
  * ------------------------------------------------------------------ */
+/* Never `display:none` here. This state is the common case — a YouTube import
+ * discards its raw download after processing, so most clips have no clean
+ * source — and hiding the overlay removes caption dragging and resizing from
+ * almost the whole library. It has been broken this way twice: once when the
+ * rule was written, and once when a revert brought it back along with the test
+ * that was supposed to prevent exactly this. The box stays interactive; the
+ * outline just marks which of the two captions on screen is the live one. */
 body.dc-editor-baked-preview #dcCaptionOverlay {
-  display: none;
+  outline: 2px solid var(--v6-gold);
+  outline-offset: 2px;
 }
 body.dc-editor-baked-preview #dcCaptionStatus { color: var(--v6-gold); }
 

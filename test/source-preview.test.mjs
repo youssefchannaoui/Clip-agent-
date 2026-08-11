@@ -155,10 +155,3 @@ test('a failed clean-source verdict survives later re-renders', () => {
   assert.doesNotMatch(head, /editor\.bakedPreview=false/);
 });
 
-test('the baked-preview state hides the caption overlay rather than outlining it', () => {
-  const css = fs.readFileSync(new URL('../src/public/studio-v6.css', import.meta.url), 'utf8');
-  const start = css.indexOf('body.dc-editor-baked-preview #dcCaptionOverlay');
-  assert.ok(start >= 0, 'the baked-preview overlay rule must exist');
-  const rule = css.slice(start, css.indexOf('}', start));
-  assert.match(rule, /display:\s*none/);
-});
