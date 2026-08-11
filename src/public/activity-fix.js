@@ -2786,6 +2786,9 @@ function bindCaptionDrag(){
 
 function bindVideo(clip){
   const video=$('#dcEditorVideo'),bg=$('#dcEditorVideoBg');if(!video)return;
+  // Cleared per clip: the previous clip may have fallen back to its baked
+  // export, and that state must not follow a clip that has a clean source.
+  document.body.classList.remove('dc-editor-baked-preview');
   const start=Number(clip.startSec||0),end=Number(clip.endSec||start+Number(clip.durationMs||0)/1000);
   editor.sourceBase=start;editor.sourceEnd=end;editor.trimOut=Math.max(.1,end-start);
   const initialise=()=>{
@@ -2804,8 +2807,14 @@ function bindVideo(clip){
     const fallbackUrl=authedUrl(`/api/clips/${encodeURIComponent(clip.id)}/video`);
     video.onerror=null;video.src=fallbackUrl;video.load();
     if(bg){bg.onerror=null;bg.src=fallbackUrl;bg.load();}
-    const status=$('#dcCaptionStatus');if(status)status.textContent='Showing the rendered export — clean source unavailable';
-    notify('A clean, caption-free source is not available for this clip, so the editor is showing your rendered export instead. Captions will appear baked into the preview, but your edits still apply correctly when you export.','bad');
+    // The export already has captions burned into its pixels. Drawing the
+    // draggable caption box on top of it put two sets of captions on screen —
+    // one that moves and one that never can — and asked the user to position
+    // text against a frame that already contains text. Hide the live overlay
+    // and say so, rather than showing a control that cannot mean anything here.
+    document.body.classList.add('dc-editor-baked-preview');
+    const status=$('#dcCaptionStatus');if(status)status.textContent='Showing the rendered export — caption position cannot be previewed';
+    notify('This clip no longer has a clean source, so the editor is showing your rendered export, which already has captions burned in. Caption position is hidden here because it cannot be previewed against a baked frame — every other edit still applies normally on export.','bad');
   };
   video.ontimeupdate=()=>{
     const local=clamp(video.currentTime-editor.sourceBase,0,editor.trimOut);editor.currentTime=local;syncBackgroundVideo();updatePlayhead(local);updateCaptionAtTime(local);applyFrameAtTime(local);

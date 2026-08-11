@@ -126,3 +126,27 @@ test('rules for removed markup cannot reshape live controls', () => {
     'the enlarge rule must be scoped to the tile preview it was written for');
   assert.match(css, /body\.dc-app \.dc-style-tile-preview \.dc-style-enlarge\s*\{/);
 });
+
+test('a baked-export preview never shows a second, draggable caption layer', () => {
+  // The editor falls back to the rendered export when a clip's clean source
+  // is gone. That file has captions burned in, so the live overlay put two
+  // sets of captions on screen — one movable, one not.
+  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
+
+  // The fallback marks the state...
+  assert.match(source, /classList\.add\('dc-editor-baked-preview'\)/,
+    'the fallback must mark the baked-preview state');
+  // ...and it is cleared per clip, or it follows the next clip that has a
+  // clean source and hides a control that should work.
+  assert.match(source, /classList\.remove\('dc-editor-baked-preview'\)/,
+    'the state must be reset when another clip is bound');
+
+  // ...and the CSS actually hides both the box and its resize handle.
+  assert.match(css, /body\.dc-editor-baked-preview #dcCaptionOverlay[^{]*\{[^}]*display:\s*none/);
+  assert.match(css, /#dcResizeHandle/);
+
+  // The old copy claimed edits "apply correctly" while showing an unusable
+  // control; the new copy has to say position is unavailable.
+  assert.doesNotMatch(source, /Captions will appear baked into the preview/);
+  assert.match(source, /caption position cannot be previewed/i);
+});

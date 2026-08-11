@@ -40,5 +40,13 @@ test('a missing clean source falls back to the rendered export instead of a dead
   assert.match(body, /video\.src=fallbackUrl/);
   assert.match(body, /video\.load\(\)/);
   assert.match(body, /bg\.src=fallbackUrl/);
-  assert.match(body, /A clean, caption-free source is not available/);
+  // The user has to be told why the preview changed. Asserting the behaviour
+  // rather than the exact sentence: the previous wording pinned here promised
+  // that caption edits "apply correctly" while the editor showed a caption box
+  // that could not work against a baked frame, so the copy had to change.
+  assert.match(body, /notify\(/, 'the fallback must tell the user what happened');
+  assert.match(body, /rendered export/, 'the message must say what is being shown instead');
+  // And the live caption layer is suppressed, or the baked captions and the
+  // draggable ones appear together and neither makes sense.
+  assert.match(body, /dc-editor-baked-preview/, 'the baked-preview state must be marked');
 });

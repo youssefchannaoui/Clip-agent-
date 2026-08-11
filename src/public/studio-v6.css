@@ -693,6 +693,22 @@ body.dc-app .dc-metric,
 body.dc-app .dc-empty { border-radius: var(--v6-radius-md); }
 
 /* ------------------------------------------------------------------ *
+ * Editor previewing a baked export
+ *
+ * When a clip's clean source is gone — normal after a YouTube import, where
+ * the raw download is discarded once processing finishes — the editor falls
+ * back to playing the clip's rendered export. That file already has captions
+ * burned into its pixels, so drawing the draggable caption box over it put
+ * two sets of captions on screen: one the user could move, and one they
+ * never could. Positioning text against a frame that already contains text
+ * is not a thing the control can honestly do, so it is hidden and the reason
+ * is stated instead. Every other edit still works and still exports.
+ * ------------------------------------------------------------------ */
+body.dc-editor-baked-preview #dcCaptionOverlay,
+body.dc-editor-baked-preview #dcResizeHandle { display: none !important; }
+body.dc-editor-baked-preview #dcCaptionStatus { color: var(--v6-gold); }
+
+/* ------------------------------------------------------------------ *
  * Sliders
  *
  * `accent-color` was set on range inputs inside `.dc-range-bars` and
