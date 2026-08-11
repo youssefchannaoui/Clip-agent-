@@ -355,3 +355,18 @@ test('a missing clean source does not black-screen while the browser times out',
   assert.match(init.slice(0, 200), /clearTimeout\(sourceWatchdog\)/,
     'a source that does load must cancel the watchdog');
 });
+
+test('the editor loads the template the clip was actually rendered with', () => {
+  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
+  const start = source.indexOf('const template = clone(clip.templateSnapshot');
+  assert.notEqual(start, -1, 'the draft must start from the clip\'s own snapshot');
+
+  // A lookup by id returns whatever that template has become since the render,
+  // or — if it was deleted — something unrelated. The editable caption box
+  // then floats somewhere the burned-in captions are not, which is what makes
+  // a baked preview show two captions in two different places.
+  const expression = source.slice(start, source.indexOf(';', start));
+  const snapshot = expression.indexOf('clip.templateSnapshot');
+  const byId = expression.indexOf('t.id===clip.templateId');
+  assert.ok(snapshot > -1 && snapshot < byId, 'the snapshot must be preferred over a lookup by id');
+});

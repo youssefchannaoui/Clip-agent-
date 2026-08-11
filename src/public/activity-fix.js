@@ -2507,9 +2507,14 @@ async function ensureEditor(){
   if(editor.clipId!==clip.id){
     const pendingTool=editor.pendingTool||'captions', pendingTab=editor.pendingCaptionTab||'styles'; editor.pendingTool=''; editor.pendingCaptionTab='';
     editor.loading=true; editor.clipId=clip.id; editor.tool=pendingTool;editor.captionTab=pendingTool==='captions'?pendingTab:'styles';editor.search='';
-    const template=(d.templates||[]).find(t=>t.id===clip.templateId)||d.selectedTemplate||(d.templates||[])[0]||d.templateDraft||{};
+    // The snapshot is the template this clip was actually rendered with, so it
+    // is the only thing that matches the captions baked into the video. A
+    // lookup by id returns whatever that template has become since — or, if it
+    // was deleted, something unrelated — and the editable caption box then
+    // floats somewhere the burned-in text is not.
+    const template = clone(clip.templateSnapshot || (d.templates||[]).find(t=>t.id===clip.templateId) || d.selectedTemplate || (d.templates||[])[0] || d.templateDraft || {});
     const saved=loadEditorDraft(clip.id);
-    editor.draft={...clone(template),...(saved?.draft||{}),__clipId:clip.id};editor.draft.cropPositionX??=50;editor.draft.cropPositionY??=50;editor.draft.captionTimingOffsetMs??=0;
+    editor.draft={...template,...(saved?.draft||{}),__clipId:clip.id};editor.draft.cropPositionX??=50;editor.draft.cropPositionY??=50;editor.draft.captionTimingOffsetMs??=0;
     editor.captionText=saved?.captionText??clip.transcript??'';
     editor.trimIn=0;editor.trimOut=Math.max(.1,Number(clip.durationMs||0)/1000);
     editor.dirty=Boolean(saved);editor.localSavedAt=Number(saved?.savedAt||0);editor.selectedLayer='captions';editor.history=[];editor.historyIndex=-1;editor.sourceFallback=false;editor.framingPlan=clip.smartFraming||null;editor.framingStatus=editor.framingPlan?'ready':'idle';editor.framingMessage=editor.framingPlan?'Using the framing saved with this render':'Smart framing has not been analysed';
