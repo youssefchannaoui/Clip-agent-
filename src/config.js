@@ -22,6 +22,8 @@ const boolean = (value, fallback) => {
   return /^(1|true|yes|on)$/i.test(String(value));
 };
 
+const maxConcurrentJobs = Math.max(1, Math.round(number(process.env.MAX_CONCURRENT_JOBS, 1)));
+
 export const config = {
   root,
   dataDir: process.env.DATA_DIR || path.join(root, 'data'),
@@ -41,13 +43,26 @@ export const config = {
   aiComputeType: process.env.CLIP_AI_COMPUTE_TYPE || 'int8',
   aiTask: process.env.CLIP_AI_TASK || 'transcribe',
   aiLanguage: process.env.CLIP_AI_LANGUAGE || '',
-  maxConcurrentJobs: Math.max(1, Math.round(number(process.env.MAX_CONCURRENT_JOBS, 1))),
+  maxConcurrentJobs,
+  // No single account may hold every processing slot. Half the slots by
+  // default, so one customer applying a template to forty clips still leaves
+  // room for another customer's first import. Never below one, or nothing runs.
+  maxConcurrentJobsPerUser: Math.max(1, Math.min(
+    maxConcurrentJobs,
+    Math.round(number(process.env.MAX_CONCURRENT_JOBS_PER_USER, Math.ceil(maxConcurrentJobs / 2))),
+  )),
   maxSourceMinutes: Math.max(5, number(process.env.MAX_SOURCE_MINUTES, 180)),
   maxVideoUploadBytes: Math.max(50, number(process.env.MAX_VIDEO_UPLOAD_MB, 2048)) * 1024 * 1024,
   keepSourceFiles: boolean(process.env.KEEP_SOURCE_FILES, true),
   videoPreset: ['slow', 'medium', 'fast'].includes(String(process.env.VIDEO_PRESET || '').toLowerCase())
     ? String(process.env.VIDEO_PRESET).toLowerCase() : 'medium',
   videoCrf: Math.max(16, Math.min(23, Math.round(number(process.env.VIDEO_CRF, 18)))),
+  // Render bulk template re-renders with a fast encoder preset so a batch
+  // comes back quickly, and upgrade a clip to export quality on demand before
+  // it can be downloaded or published. Off by default: it makes the batch feel
+  // fast but costs a second encode for every clip actually used, which is the
+  // wrong trade on a small box.
+  previewBatchRenders: boolean(process.env.PREVIEW_BATCH_RENDERS, false),
 
   processingMode: String(process.env.PROCESSING_MODE || (process.env.WORKER_BASE_URL ? 'remote' : 'local')).toLowerCase(),
   workerBaseUrl: (process.env.WORKER_BASE_URL || '').replace(/\/+$/, ''),

@@ -107,6 +107,41 @@ def _pacing_score(word_count: int, duration: float) -> tuple[int, float]:
     return int(round(clamp(score, 10, 100))), round(wpm, 1)
 
 
+def _delivery_scores(audio: dict[str, Any]) -> tuple[int, int]:
+    """Turn acoustic measurements into two scored dimensions.
+
+    `delivery` is how forcefully the moment is spoken; `cleanEdges` is whether
+    it begins and ends on a natural break. Both are deliberately shallow
+    formulas over `audio_features` output — the point is that a human can read
+    them and predict what they will do to a clip's rank.
+    """
+    energy = float(audio.get("energy", 1.0))
+    emphasis = float(audio.get("emphasis", 1.0))
+    dynamics = float(audio.get("dynamics", 0.0))
+    silence_ratio = float(audio.get("silenceRatio", 0.0))
+    opening_energy = float(audio.get("openingEnergy", 1.0))
+    leading = float(audio.get("leadingPauseSec", 0.0))
+    trailing = float(audio.get("trailingPauseSec", 0.0))
+
+    delivery = 50.0
+    # Louder than this speaker's own median, not louder in absolute terms.
+    delivery += max(-18.0, min(20.0, (energy - 1.0) * 40.0))
+    # The raised voice before a point lands. Below 1.4x median this pays nothing.
+    delivery += min(22.0, max(0.0, emphasis - 1.4) * 22.0)
+    # Flat, monotone reading scores near zero here; an expressive passage gains.
+    delivery += min(14.0, dynamics * 20.0)
+    delivery -= min(30.0, silence_ratio * 60.0)
+
+    clean_edges = 50.0
+    # Half a second of quiet on an edge is enough to sound intentional.
+    clean_edges += min(25.0, leading * 50.0)
+    clean_edges += min(25.0, trailing * 50.0)
+    # Opening much quieter than the body usually means the cut lands mid-word.
+    clean_edges -= min(15.0, max(0.0, 0.8 - opening_energy) * 40.0)
+
+    return int(round(clamp(delivery))), int(round(clamp(clean_edges)))
+
+
 def evaluate_clip(
     start: float,
     end: float,
@@ -114,8 +149,16 @@ def evaluate_clip(
     segments: list[dict[str, Any]],
     *,
     quote_risk: bool = False,
+    audio: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Score one candidate on transparent retention and trust dimensions."""
+    """Score one candidate on transparent retention and trust dimensions.
+
+    `audio` is the optional acoustic summary of this window from
+    `audio_features.AudioEnvelope.features()`. When it is absent — a re-render,
+    a generate-more run on a lecture whose audio is gone, or any failure to
+    read `speech.wav` — scoring falls back to exactly the transcript-only
+    behaviour that came before it, weights included.
+    """
     duration = max(0.01, float(end) - float(start))
     normal = " ".join((text or "").split())
     lower = normal.casefold()
@@ -220,6 +263,16 @@ def evaluate_clip(
         "specificity": 0.06, "pacing": 0.06, "confidence": 0.06,
         "safety": 0.03, "durationFit": 0.03,
     }
+    if audio:
+        dimensions["delivery"], dimensions["cleanEdges"] = _delivery_scores(audio)
+        # How the moment sounds is real evidence, but it is evidence about
+        # delivery, not about whether the point is worth hearing. The
+        # transcript keeps 86% of the decision; the microphone gets 14%.
+        # Same reasoning as the 45/55 blend with the local model — a signal
+        # that informs the heuristic rather than overruling it.
+        weights = {key: weight * 0.86 for key, weight in weights.items()}
+        weights["delivery"] = 0.09
+        weights["cleanEdges"] = 0.05
     overall = int(round(sum(dimensions[key] * weight for key, weight in weights.items())))
 
     ranked = sorted(
@@ -233,6 +286,7 @@ def evaluate_clip(
         "confidence": "high-confidence transcript",
         "openingStrength": "strong first three seconds", "payoffStrength": "clear ending payoff",
         "shareability": "strong save-and-share potential",
+        "delivery": "forceful spoken delivery", "cleanEdges": "clean pause boundaries",
     }
     reasons = [labels[key] for value, key in ranked if value >= 72][:3]
     if quote_risk:
@@ -251,6 +305,9 @@ def evaluate_clip(
             "hookTerms": hook_hits[:4], "payoffTerms": payoff_hits[:4],
             "actionTerms": action_hits[:4], "promotionTerms": promotion_hits[:3],
             "longSilenceSec": round(long_silence, 2),
+            # Empty when the clip was scored on transcript alone, which is how
+            # a reader tells the two paths apart after the fact.
+            "audio": dict(audio) if audio else {},
             "firstThreeSeconds": " ".join(opening_timed).strip()[:220] or " ".join(word_list[:18])[:220],
             "endingPayoff": " ".join(closing_timed).strip()[:320] or " ".join(word_list[-32:])[:320],
             "dropOffRisks": [
@@ -260,6 +317,11 @@ def evaluate_clip(
                     (filler_count >= 2, "opening filler"),
                     (silence_ratio > 0.12, "long silence"),
                     (not ending_complete, "cut-off ending"),
+                    # Heard rather than inferred from segment gaps: dead air the
+                    # transcript timings do not show, and a cut that lands
+                    # mid-sentence with no breath before it.
+                    (bool(audio) and float((audio or {}).get("silenceRatio", 0)) > 0.35, "dead air on the recording"),
+                    (bool(audio) and float((audio or {}).get("leadingPauseSec", 1)) < 0.12, "starts mid-breath"),
                 ) if condition
             ],
         },

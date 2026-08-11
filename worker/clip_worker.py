@@ -26,6 +26,7 @@ import subprocess
 import sys
 import time
 import threading
+import unicodedata
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,8 +34,10 @@ from typing import Any, Iterable
 
 try:
     from worker.intelligence import build_growth_pack, evaluate_clip
+    from worker.audio_features import load_envelope
 except ImportError:  # Direct execution from the worker directory.
     from intelligence import build_growth_pack, evaluate_clip
+    from audio_features import load_envelope
 
 try:
     import cv2  # type: ignore
@@ -508,13 +511,31 @@ def punctuation_boundary(text: str) -> bool:
     return bool(re.search(r"[.!?…]['\"]?$", text.strip()))
 
 
-def score_candidate(start: float, end: float, text: str, segments: list[dict[str, Any]]) -> tuple[int, list[str], bool]:
+def score_candidate(
+    start: float,
+    end: float,
+    text: str,
+    segments: list[dict[str, Any]],
+    envelope: Any = None,
+) -> tuple[int, list[str], bool]:
     quote_risk = bool(QUOTE_RISK.search(text))
-    evaluation = evaluate_clip(start, end, text, segments, quote_risk=quote_risk)
+    audio = envelope.features(start, end) if envelope is not None else None
+    evaluation = evaluate_clip(start, end, text, segments, quote_risk=quote_risk, audio=audio)
     return int(evaluation["score"]), list(evaluation["reasons"]), quote_risk
 
 
-def build_candidates(segments: list[dict[str, Any]], minimum: float, maximum: float) -> list[Candidate]:
+def build_candidates(
+    segments: list[dict[str, Any]],
+    minimum: float,
+    maximum: float,
+    envelope: Any = None,
+) -> list[Candidate]:
+    """Build and score every viable window.
+
+    `envelope` is an optional `AudioEnvelope`. When supplied, each window is
+    also scored on how it sounds; when None, scoring is transcript-only and
+    identical to the behaviour before acoustic scoring existed.
+    """
     candidates: list[Candidate] = []
     count = len(segments)
     for start_index in range(count):
@@ -538,7 +559,8 @@ def build_candidates(segments: list[dict[str, Any]], minimum: float, maximum: fl
 
             text = " ".join(str(item["text"]).strip() for item in group).strip()
             quote_risk = bool(QUOTE_RISK.search(text))
-            evaluation = evaluate_clip(start, end, text, group.copy(), quote_risk=quote_risk)
+            audio = envelope.features(start, end) if envelope is not None else None
+            evaluation = evaluate_clip(start, end, text, group.copy(), quote_risk=quote_risk, audio=audio)
             score, reasons = int(evaluation["score"]), list(evaluation["reasons"])
             candidates.append(Candidate(
                 start, end, text, group.copy(), score, reasons, quote_risk,
@@ -610,10 +632,60 @@ def lexical_similarity(left: str, right: str) -> float:
     return len(left_words & right_words) / len(left_words | right_words)
 
 
+OLLAMA_PROBE_TIMEOUT = 6
+
+
+def ollama_health(settings: dict[str, Any]) -> dict[str, Any]:
+    """Whether the local model endpoint is configured, reachable and loaded.
+
+    Refinement used to discover an unreachable endpoint only by waiting out a
+    180-second timeout, then falling back to heuristic scoring with a single
+    warning line. That is expensive and easy to miss: the product advertises
+    AI clip quality it may not be delivering, on every job, silently.
+
+    A short probe answers the same question in a few seconds and gives the
+    caller something specific enough to act on.
+    """
+    base_url = str(settings.get("ollamaUrl") or "").rstrip("/")
+    model = str(settings.get("ollamaModel") or "qwen3:4b")
+    if not base_url:
+        return {"configured": False, "reachable": False, "model": model, "reason": "No local model endpoint is configured."}
+    try:
+        request = urllib.request.Request(base_url + "/api/tags", headers={"Accept": "application/json"})
+        with urllib.request.urlopen(request, timeout=OLLAMA_PROBE_TIMEOUT) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        names = [str(item.get("name") or "") for item in (payload.get("models") or []) if isinstance(item, dict)]
+        family = model.split(":")[0]
+        return {
+            "configured": True, "reachable": True, "model": model,
+            "modelPresent": any(name == model or name.split(":")[0] == family for name in names),
+            "models": names[:20],
+        }
+    except Exception as exc:
+        return {"configured": True, "reachable": False, "model": model, "reason": str(exc)[:300]}
+
+
 def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any]) -> list[Candidate]:
     base_url = str(settings.get("ollamaUrl") or "").rstrip("/")
     model = str(settings.get("ollamaModel") or "qwen3:4b")
     if not base_url or not candidates:
+        return candidates
+
+    # Fail fast and loudly rather than slowly and quietly.
+    health = ollama_health(settings)
+    if not health.get("reachable"):
+        emit(
+            "ai_scoring", status="unreachable", configured=True, model=model,
+            endpoint=base_url, reason=health.get("reason") or "",
+            warning="Local AI scoring is configured but unreachable; clips were ranked by the built-in scorer only.",
+        )
+        return candidates
+    if not health.get("modelPresent"):
+        emit(
+            "ai_scoring", status="model_missing", configured=True, model=model,
+            endpoint=base_url, available=health.get("models") or [],
+            warning=f"Local AI model '{model}' is not installed on the Ollama host; clips were ranked by the built-in scorer only.",
+        )
         return candidates
 
     # The deterministic scorer has already filtered the full lecture. Keeping
@@ -711,9 +783,17 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any]) ->
             candidate.ai_reason = clean_short_text(str(row.get("reason") or ""), 180)
             if candidate.ai_reason:
                 candidate.reasons = ([candidate.ai_reason] + candidate.reasons)[:4]
+        emit("ai_scoring", status="applied", configured=True, model=model, endpoint=base_url, refined=len(rows))
         return candidates
     except Exception as exc:
-        emit("warning", warning=f"Local Ollama scoring was unavailable; using built-in scoring instead: {exc}")
+        # Reachable but the call itself failed: a timeout, or output that was
+        # not usable JSON. Distinct from unreachable, and worth separating —
+        # the fix for each is different.
+        emit(
+            "ai_scoring", status="failed", configured=True, model=model, endpoint=base_url,
+            reason=str(exc)[:300],
+            warning=f"Local Ollama scoring was unavailable; using built-in scoring instead: {exc}",
+        )
         return candidates
 
 
@@ -741,6 +821,61 @@ def ass_escape(text: str) -> str:
 
 def contains_arabic(text: str) -> bool:
     return bool(re.search(r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]", str(text)))
+
+
+# Unicode directional formatting. Wrapping a line in RLE\u2026PDF states its base
+# direction explicitly instead of leaving libass to infer it, which is what
+# decides whether "\u0642\u0627\u0644 \u0627\u0644\u0644\u0647" renders in the right order or backwards.
+RLE = "\u202B"  # right-to-left embedding
+LRE = "\u202A"  # left-to-right embedding
+PDF = "\u202C"  # pop directional formatting
+
+
+def first_strong_is_rtl(text: str) -> bool:
+    """Whether the first strongly-directional character is right-to-left.
+
+    This is the Unicode bidirectional algorithm's own rule for deciding a
+    paragraph's base direction (rules P2/P3). Leading punctuation, digits and
+    quotation marks are neutral and are skipped, so \u00AB"\u0627\u0644\u062D\u0645\u062F \u0644\u0644\u0647"\u00BB is still
+    recognised as Arabic.
+    """
+    for char in str(text):
+        direction = unicodedata.bidirectional(char)
+        if direction == "L":
+            return False
+        if direction in ("R", "AL"):
+            return True
+    return False
+
+
+def caption_direction(text: str, template: dict[str, Any] | None = None) -> str:
+    """Base writing direction for one caption line: 'rtl' or 'ltr'.
+
+    'auto' resolves per line rather than per clip, which is what mixed
+    lectures actually need \u2014 an Arabic ayah and its English explanation can be
+    seconds apart in the same clip and must each read correctly.
+    """
+    setting = str((template or {}).get("captionDirection", "auto")).lower()
+    if setting in ("rtl", "ltr"):
+        return setting
+    return "rtl" if first_strong_is_rtl(text) else "ltr"
+
+
+def with_direction(text: str, direction: str) -> str:
+    """State a line's base direction explicitly with bidi controls.
+
+    Applied per display line rather than per event: libass runs the bidi
+    algorithm on each line separately, so an embedding that spans a `\\N`
+    break would not do what it looks like it does.
+
+    Left-to-right lines are also marked when they are being placed inside
+    otherwise right-to-left content, so a Latin phrase in an Arabic lecture
+    does not inherit a direction it should not have.
+    """
+    if not text:
+        return text
+    mark = RLE if direction == "rtl" else LRE
+    return "\\N".join(f"{mark}{line}{PDF}" for line in text.split("\\N"))
 
 
 def caption_word_override(
@@ -1009,7 +1144,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     highlight_font=highlight_font, arabic_font=arabic_font,
                     highlight_italic=highlight_italic, highlight_glow=highlight_glow, scale_y=scale_y,
                 ))
-            text = "\\N".join(lines)
+            # Each stacked word is its own display line, so direction is
+            # resolved per word. A stack mixing an Arabic term with English
+            # ones then gets each line right rather than all of them wrong.
+            directed = [
+                with_direction(line, caption_direction(word["word"], template))
+                for line, word in zip(lines, frame["words"])
+            ]
+            text = "\\N".join(directed)
             start = shifted(frame["start"])
             end = shifted(frame["end"])
             if end > start:
@@ -1032,14 +1174,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 gap = max(0.0, float(next_word["start"]) - raw_end) if next_word else float("inf")
                 raw_end = float(next_word["start"]) if next_word and gap < clear_pause else raw_end + (min(hold, gap * 0.35) if next_word else hold)
                 start, end = shifted(raw_start), shifted(raw_end)
+                # This is the mode most at risk: several words sit on one line
+                # with styling tags between them. Stating the line's direction
+                # explicitly is what keeps Arabic reading right-to-left rather
+                # than the words appearing in source order.
+                line_text = with_direction(
+                    " ".join(text_parts),
+                    caption_direction(" ".join(str(word["word"]) for word in group), template),
+                )
                 if end > start:
-                    events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{position_tag}{' '.join(text_parts)}")
+                    events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{position_tag}{line_text}")
                 word_index += 1
     elif words:
         for frame in phrase_caption_frames(words, max_words, clear_pause, hold):
             raw = " ".join(str(word["word"]) for word in frame["words"])
             raw = raw.upper() if uppercase else raw
-            text = wrap_caption(ass_escape(raw), 28)
+            text = with_direction(wrap_caption(ass_escape(raw), 28), caption_direction(raw, template))
             start, end = shifted(frame["start"]), shifted(frame["end"])
             if end > start:
                 events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{position_tag}{text}")
@@ -1051,7 +1201,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 continue
             raw = str(segment["text"])
             raw = raw.upper() if uppercase else raw
-            text = wrap_caption(ass_escape(raw), 28)
+            text = with_direction(wrap_caption(ass_escape(raw), 28), caption_direction(raw, template))
             events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{position_tag}{text}")
     ass_file.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
 
@@ -1243,6 +1393,41 @@ def fitted_crop_size(
     return crop_w, crop_h
 
 
+def caption_zone(template: dict[str, Any] | None) -> dict[str, float] | None:
+    """Where the caption block will sit, as fractions of the output frame.
+
+    Framing and captions were computed independently, which is how the default
+    template ended up placing text at 78% across while the subject was pinned
+    dead centre — a collision by construction, not by accident. The renderer
+    already knows exactly where text goes before a single frame is cropped, so
+    that knowledge belongs in the framing decision too.
+
+    Returns None when captions are off or the template is missing, in which
+    case framing falls back to composing on the subject alone.
+    """
+    if not template:
+        return None
+    try:
+        cx = max(0.0, min(100.0, float(template.get("captionPositionX", 50)))) / 100.0
+        cy = max(0.0, min(100.0, float(template.get("captionPositionY", 58)))) / 100.0
+    except (TypeError, ValueError):
+        return None
+    return {"cx": cx, "cy": cy}
+
+
+# How far off the centre line a subject is placed when nothing else decides it.
+# Roughly the rule of thirds: dead centre reads as amateur in short form.
+OFF_AXIS = 0.14
+# Eyes sit about this far down a detected face box, so the eyeline is a little
+# above the box centre. Composition places the eyeline, not the face centre.
+EYELINE_IN_FACE = 0.10
+# The eyeline's target height in the crop, measured from the top.
+EYELINE_TARGET = 0.33
+# A little more headroom when captions sit low, so the subject rides higher
+# above the text rather than being crowded into it.
+EYELINE_TARGET_LOW_CAPTIONS = 0.30
+
+
 def crop_origin_from_center(
     center_x: float,
     center_y: float | None,
@@ -1252,16 +1437,23 @@ def crop_origin_from_center(
     crop_h: int,
     padding: float = 0.18,
     vertical_face_ratio: float = 0.38,
+    face_h: float | None = None,
+    captions: dict[str, float] | None = None,
 ) -> tuple[int, int]:
     """Given where the subject actually is, compute the crop's top-left corner.
 
-    This is the fix for a real bug: the previous code positioned the crop
-    vertically at a fixed 36% of the source frame no matter where the
-    detected face actually was, so a subject framed differently than that
-    one assumption got their head cut off. Horizontal placement already
-    used the detected position — vertical placement now does too, using
-    the same kind of "keep the subject inboard of the crop edge, not
-    pinned exactly in the middle" logic as horizontal already had.
+    Composition, not just containment. Three inputs decide it:
+
+    * `center_x` / `center_y` — where the subject was detected.
+    * `face_h` — the detected face height, when known. This is what makes
+      headroom adapt to shot size instead of applying one ratio to a wide
+      shot and a close-up alike. Without it, the old fixed ratio is used.
+    * `captions` — where the caption block will land, from `caption_zone()`.
+      Framing biases the subject away from it. Without it, composition falls
+      back to the subject alone.
+
+    Every added input is optional and degrades to the previous behaviour, so
+    callers that cannot supply a face height or a template still work.
 
     When no vertical detection is available at all (e.g. the edge-detection
     fallback, which only finds a horizontal position), center_y is None and
@@ -1271,20 +1463,64 @@ def crop_origin_from_center(
     """
     padding = max(0.05, min(0.45, float(padding)))
 
-    desired_ratio = 0.5
-    # Put a speaker near the outside edge closer to that same edge of the
-    # portrait crop. This leaves substantially more room toward the centre of
-    # the original landscape frame, where their shoulders, torso and gestures
-    # normally extend. The old 38/62 placement centred the face too aggressively
-    # and visibly sliced half of side-seated speakers out of the portrait.
-    if center_x < src_w * 0.42:
-        desired_ratio = 0.22 + padding * 0.10
-    elif center_x > src_w * 0.58:
-        desired_ratio = 0.78 - padding * 0.10
+    # ------------------------------------------------------------------
+    # Horizontal: never dead centre, and never under the captions.
+    #
+    # The previous rule was a step function — anywhere in the middle third of
+    # the source pinned the subject at exactly 0.5 of the crop. That is the
+    # "not putting them in the spot correctly" complaint: centred framing
+    # reads as amateur, and with the default right-hand caption block it also
+    # put text straight across the speaker's face.
+    #
+    # Placement is now continuous. A subject near a source edge stays inboard
+    # of the crop edge as before; a subject near the middle is pushed off the
+    # centre line, away from the captions when their position is known.
+    # ------------------------------------------------------------------
+    position = max(0.0, min(1.0, float(center_x) / max(1.0, float(src_w))))
+    desired_ratio = 0.22 + (0.78 - 0.22) * position
+
+    caption_cx = captions.get("cx") if captions else None
+    caption_cy = captions.get("cy") if captions else None
+    centrality = 1.0 - min(1.0, abs(position - 0.5) * 2.0)
+    if caption_cx is not None:
+        # Captions right of centre push the subject left, and the other way
+        # round. Text and face end up on opposite sides of the frame. The
+        # direction is fixed by the layout, so the nudge can be strongest
+        # exactly where it is needed most — on a centred subject.
+        push, strength = (-1.0 if caption_cx > 0.5 else 1.0), OFF_AXIS * centrality
+    else:
+        # Nothing to avoid, so keep the subject inboard: a speaker on the left
+        # of the source gets look-room to their right, and vice versa.
+        #
+        # This direction necessarily flips at the centre line, so the nudge
+        # has to fade to nothing there. Otherwise a subject drifting slowly
+        # across the middle of the frame would make the crop jump sides — the
+        # tracker calls this per keyframe, so a discontinuity here is visible
+        # motion, not a rounding detail.
+        push, strength = (1.0 if position >= 0.5 else -1.0), OFF_AXIS * (1.0 - centrality)
+    desired_ratio = max(0.18, min(0.82, desired_ratio + push * strength))
     x = int(max(0, min(src_w - crop_w, round(center_x - crop_w * desired_ratio))))
 
+    # ------------------------------------------------------------------
+    # Vertical: place the eyeline, not the face centre.
+    #
+    # A fixed 38% was applied to every shot regardless of type, so a wide
+    # shot and a close-up got identical headroom. The detected face height
+    # was available and unused. With it, the eyeline can be put roughly a
+    # third from the top — the actual composition rule — which adapts to
+    # shot size on its own.
+    # ------------------------------------------------------------------
     if center_y is None:
         y = int(round((src_h - crop_h) * 0.36))
+    elif face_h and face_h > 0:
+        eyeline = float(center_y) - float(face_h) * EYELINE_IN_FACE
+        target = EYELINE_TARGET_LOW_CAPTIONS if (caption_cy is not None and caption_cy > 0.62) else EYELINE_TARGET
+        raw_y = eyeline - crop_h * target
+        # Guard rails: keep real headroom above the face, and never let the
+        # composition rule push the chin out of the bottom of the crop.
+        raw_y = min(raw_y, (float(center_y) - float(face_h) * 0.5) - crop_h * 0.06)
+        raw_y = max(raw_y, (float(center_y) + float(face_h) * 0.5) - crop_h * 0.94)
+        y = int(round(raw_y))
     else:
         y = int(round(center_y - crop_h * vertical_face_ratio))
     y = max(0, min(src_h - crop_h, y))
@@ -1292,7 +1528,7 @@ def crop_origin_from_center(
     return x, y
 
 
-def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_width: int, out_height: int, bias: str = "auto", padding: float = 0.18, zoom: float = 1.0) -> dict[str, Any] | None:
+def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_width: int, out_height: int, bias: str = "auto", padding: float = 0.18, zoom: float = 1.0, template: dict[str, Any] | None = None) -> dict[str, Any] | None:
     """Choose one stable crop that keeps the main speaker visible.
 
     This intentionally avoids frame-by-frame camera movement. It samples a few
@@ -1335,6 +1571,7 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
     sample_points = [0.10, 0.25, 0.40, 0.55, 0.70, 0.85]
     face_centers: list[float] = []
     face_centers_y: list[float] = []
+    face_heights: list[float] = []
     body_centers: list[float] = []
     body_centers_y: list[float] = []
     min_face = max(28, min(src_w, src_h) // 24)
@@ -1368,6 +1605,7 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
             x, y, w, h = max(found, key=lambda item: item[2] * item[3])
             face_centers.append(float(x + w / 2))
             face_centers_y.append(float(y + h / 2))
+            face_heights.append(float(h))
             continue
         if not upper_body.empty():
             bodies = upper_body.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=3, minSize=(min_body, min_body))
@@ -1412,7 +1650,14 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
     # vertical position instead of a fixed guess. The fixed guess used to
     # apply no matter where the subject really was, which is what cut
     # heads off when a video's framing didn't match that one assumption.
-    x, y = crop_origin_from_center(center, center_y, src_w, src_h, crop_w, crop_h, padding)
+    median_face_h = None
+    if face_heights:
+        ordered_heights = sorted(face_heights)
+        median_face_h = ordered_heights[len(ordered_heights) // 2]
+    x, y = crop_origin_from_center(
+        center, center_y, src_w, src_h, crop_w, crop_h, padding,
+        face_h=median_face_h, captions=caption_zone(template),
+    )
     method = "face" if face_centers else ("upper-body" if body_centers else "foreground")
     return {"x": x, "y": y, "w": crop_w, "h": crop_h, "method": method}
 
@@ -1569,6 +1814,14 @@ def quality_report(candidate: Candidate, template: dict[str, Any]) -> dict[str, 
 
 
 def render_quality_settings(settings: dict[str, Any]) -> tuple[str, int]:
+    """Encoder preset and CRF for this render.
+
+    A `preview` render trades file size and a little detail for speed. That
+    matters because applying a template queues a re-render of every unposted
+    clip, and the user sits watching the whole batch — the wait they actually
+    feel is the batch, not any single export. Export quality is unchanged;
+    only previews are made cheaper, and only when the caller asks.
+    """
     preset = str(settings.get("videoPreset") or os.getenv("VIDEO_PRESET", "medium")).lower()
     if preset not in {"slow", "medium", "fast"}:
         preset = "medium"
@@ -1576,7 +1829,55 @@ def render_quality_settings(settings: dict[str, Any]) -> tuple[str, int]:
         crf = int(settings.get("videoCrf") or os.getenv("VIDEO_CRF", "18"))
     except (TypeError, ValueError):
         crf = 18
-    return preset, max(16, min(23, crf))
+    crf = max(16, min(23, crf))
+    if settings.get("previewQuality"):
+        # `veryfast` is roughly 3-4x quicker than `medium` on the same clip.
+        # CRF 23 is the top of the range this pipeline already allows, so a
+        # preview is never worse than a legitimate full-quality setting.
+        return "veryfast", max(crf, 23)
+    return preset, crf
+
+
+def framing_signature(template: dict[str, Any], candidate: Candidate) -> str:
+    """Fingerprint of everything that decides where the crop lands.
+
+    Speaker tracking samples the video several times a second through OpenCV
+    and is the slowest part of a re-render that is not encoding. When a user
+    changes a caption colour, none of its inputs have changed and the whole
+    analysis is repeated for nothing.
+
+    Caption position is deliberately part of this. Framing now biases the
+    subject away from the caption block, so moving the captions genuinely does
+    invalidate a cached plan — leaving it out would be a subtle wrong-cache
+    bug rather than a missing optimisation.
+    """
+    parts = [
+        template.get("width", 1080), template.get("height", 1920),
+        template.get("fitMode", "contain"),
+        bool(template.get("smartFramingEnabled")),
+        template.get("smartFramingBias", "auto"),
+        template.get("smartFramingPadding", 0.18),
+        template.get("smartFramingZoom", 1.0),
+        template.get("smartFramingSmoothing", 0.68),
+        template.get("smartFramingDwellSeconds", 1.2),
+        template.get("captionPositionX", 50),
+        template.get("captionPositionY", 58),
+        round(float(candidate.start), 3), round(float(candidate.end), 3),
+    ]
+    return hashlib.sha256("|".join(str(part) for part in parts).encode("utf-8")).hexdigest()[:32]
+
+
+def reusable_crop_plan(job: dict[str, Any], template: dict[str, Any], candidate: Candidate) -> dict[str, Any] | None:
+    """A previously computed crop plan, if it is still valid for this render."""
+    cached = job.get("cropPlan")
+    if not isinstance(cached, dict) or not cached.get("signature"):
+        return None
+    if cached["signature"] != framing_signature(template, candidate):
+        return None
+    plan = cached.get("plan")
+    if not isinstance(plan, dict) or not plan.get("w") or not plan.get("h"):
+        return None
+    return plan
 
 
 def candidate_speech_spans(candidate: Candidate) -> list[tuple[float, float]]:
@@ -1622,7 +1923,14 @@ def render_clip(
     volume = max(0.01, min(0.5, float(settings.get("musicVolumePercent", 13)) / 100.0))
     voice_chain = "highpass=f=75,lowpass=f=15000,acompressor=threshold=-18dB:ratio=2.5:attack=12:release=160," if bool(template.get("voiceEnhance", True)) else ""
     crop_plan = None
-    if bool(template.get("smartFramingEnabled")) and str(template.get("fitMode") or "contain") == "crop":
+    reused_framing = False
+    smart_framing = bool(template.get("smartFramingEnabled")) and str(template.get("fitMode") or "contain") == "crop"
+    if smart_framing:
+        # A re-render that only changed caption styling has identical framing
+        # inputs, so the speaker analysis it already paid for still holds.
+        crop_plan = reusable_crop_plan(job, template, candidate)
+        reused_framing = crop_plan is not None
+    if smart_framing and crop_plan is None:
         try:
             tracked = track_speaker_keyframes(
                 source,
@@ -1637,6 +1945,8 @@ def render_clip(
                 float(template.get("smartFramingSmoothing", 0.68)),
                 sample_hz=3.0,
                 speech_spans=candidate_speech_spans(candidate) or None,
+                template=template,
+                min_dwell_seconds=float(template.get("smartFramingDwellSeconds", 1.2)),
             )
             if tracked.get("available"):
                 crop_plan = tracked
@@ -1646,6 +1956,7 @@ def render_clip(
                     int(template.get("width", 1080)), int(template.get("height", 1920)),
                     str(template.get("smartFramingBias") or "auto"),
                     float(template.get("smartFramingPadding", 0.18)), float(template.get("smartFramingZoom", 1.0)),
+                    template=template,
                 )
         except Exception:
             crop_plan = None
@@ -1742,6 +2053,11 @@ def render_clip(
         "templateVersion": int(template.get("version", 1)),
         "templateSnapshot": template,
         "renderVerified": True,
+        # Stored on the clip so a later re-render that does not touch framing
+        # can skip the speaker analysis entirely. `signature` is what makes
+        # that safe: a plan is only reused when every framing input matches.
+        "cropPlan": {"signature": framing_signature(template, candidate), "plan": crop_plan} if crop_plan else None,
+        "reusedFraming": reused_framing,
         "renderedWidth": expected_width,
         "renderedHeight": expected_height,
         "renderQuality": {
@@ -1771,6 +2087,12 @@ def doctor() -> int:
     # rather than only when someone clicks the button in the editor.
     problem = cv2_problem()
     checks["opencv"] = problem if problem else f"{getattr(cv2, '__version__', 'unknown')} (framing available)"
+    # Whether the local model the product advertises is actually there. This
+    # is the question the handover asks and nothing could answer.
+    checks["ollama"] = ollama_health({
+        "ollamaUrl": os.getenv("OLLAMA_URL", ""),
+        "ollamaModel": os.getenv("OLLAMA_MODEL", "qwen3:4b"),
+    })
     print(json.dumps(checks, ensure_ascii=False))
     return 0 if checks.get("yt_dlp") is True and checks.get("faster_whisper") is True else 1
 
@@ -1857,10 +2179,26 @@ def process_more_clips(job: dict[str, Any], job_file: Path) -> None:
     requested = max(1, min(20, int(job.get("requestedCount") or settings.get("clipsPerVideo", 8))))
     progress("Loading saved lecture and transcript", 5, requestedClips=requested, reusedSource=True, reusedTranscript=True)
 
+    # Generate-more reuses the saved transcript but has never had speech audio
+    # of its own, so its ranking would silently differ from the first pass on
+    # the same lecture. One extra ffmpeg pass keeps the two consistent; if it
+    # fails, scoring degrades to transcript-only rather than failing the job.
+    envelope = None
+    more_audio_file = job_file.parent / "speech.wav"
+    try:
+        if not more_audio_file.exists():
+            extract_audio(job["ffmpeg"], source_file, more_audio_file)
+        envelope = load_envelope(more_audio_file)
+    except Exception as exc:
+        emit("warning", warning=f"Speech audio could not be prepared for acoustic scoring: {exc}")
+    if envelope is None:
+        emit("warning", warning="Generating more clips from the transcript only; acoustic scoring was unavailable.")
+
     candidates = build_candidates(
         segments,
         float(settings.get("clipMinSeconds", 20)),
         float(settings.get("clipMaxSeconds", 90)),
+        envelope,
     )
     progress("Removing moments already used", 25, candidateCount=len(candidates), requestedClips=requested)
     candidates = remove_existing_moments(candidates, list(job.get("existingRanges") or []))
@@ -1959,10 +2297,17 @@ def process(job_file: Path) -> None:
 
     progress("Analysing transcript", 61, sourceDurationSec=round(duration, 2), processedSec=round(duration, 2), etaSec=None)
     settings = job["settings"]
+    # The speech audio is still on disk from transcription. Reading its
+    # loudness envelope costs one streaming pass and lets clip selection hear
+    # emphasis and pauses that the transcript cannot show.
+    envelope = load_envelope(audio_file)
+    if envelope is None:
+        emit("warning", warning="Speech audio was unavailable for acoustic scoring; ranking on the transcript only.")
     candidates = build_candidates(
         segments,
         float(settings.get("clipMinSeconds", 20)),
         float(settings.get("clipMaxSeconds", 90)),
+        envelope,
     )
     progress("Finding and scoring clips", 69, candidateCount=len(candidates), etaSec=None)
     candidates = refine_with_ollama(candidates, settings)
@@ -2020,6 +2365,8 @@ def track_speaker_keyframes(
     smoothing: float = 0.68,
     sample_hz: float = 3.0,
     speech_spans: list[tuple[float, float]] | None = None,
+    template: dict[str, Any] | None = None,
+    min_dwell_seconds: float = 1.2,
 ) -> dict[str, Any]:
     """Follow the active speaker across a clip and return smoothed keyframes.
 
@@ -2040,6 +2387,16 @@ def track_speaker_keyframes(
 
     The raw per-sample choice is then run through an exponential smoother so
     the crop glides rather than snapping between faces on a single bad frame.
+
+    Two further guards on movement: a switch must be confirmed over two
+    samples, and once committed the crop holds that speaker for at least
+    `min_dwell_seconds` before it will move again. Without the hold, a
+    back-and-forth exchange could satisfy the two-sample rule repeatedly and
+    leave the frame oscillating between two people.
+
+    `template` supplies the caption geometry so composition can keep the
+    subject clear of the text; without it, framing composes on the subject
+    alone.
     """
     problem = cv2_problem()
     if problem:
@@ -2063,9 +2420,13 @@ def track_speaker_keyframes(
     if crop_w >= src_w:
         return {"available": False, "reason": "The whole width is already used."}
 
+    zone = caption_zone(template)
+
     # A fixed bias needs no detection at all.
     if bias in {"left", "center", "right"}:
         centre = {"left": crop_w * 0.5, "center": src_w * 0.5, "right": src_w - crop_w * 0.5}[bias]
+        # An explicit bias is the user overruling the automatic choice, so the
+        # caption-avoidance nudge must not quietly move it back.
         x, y = crop_origin_from_center(centre, None, src_w, src_h, crop_w, crop_h, padding)
         return {
             "available": True, "method": f"bias-{bias}", "srcW": src_w, "srcH": src_h,
@@ -2125,13 +2486,21 @@ def track_speaker_keyframes(
         old_region = cv2.GaussianBlur(cv2.equalizeHist(old_region), (3, 3), 0)
         return float(cv2.absdiff(now_region, old_region).mean()) / 255.0
 
-    raw: list[tuple[float, float, float, bool]] = []  # (t, cx, cy, switched)
+    raw: list[tuple[float, float, float, bool, float]] = []  # (t, cx, cy, switched, face_h)
     previous_gray = None
     previous_scene = None
     previous_center: tuple[float, float] | None = None
+    # Face height travels with the centre so composition can place the eyeline
+    # rather than applying one headroom ratio to every shot size.
+    previous_face_h: float = 0.0
     pending_center: tuple[float, float] | None = None
     pending_hits = 0
     speaker_switches = 0
+    # When the crop last committed to a different speaker. Confirming a switch
+    # over two samples stops single-frame noise, but nothing stopped the crop
+    # bouncing straight back on the next pair — which is how two people in
+    # conversation made the frame oscillate.
+    last_switch_at: float | None = None
     confidence_samples: list[float] = []
     max_faces = 0
     detected_samples = 0
@@ -2198,7 +2567,7 @@ def track_speaker_keyframes(
             if not speaking_at(offset) and previous_center is not None:
                 # Nobody is speaking: hold the composition completely. This
                 # avoids camera movement caused by smiles, gestures or cuts.
-                raw.append((offset, previous_center[0], previous_center[1], False))
+                raw.append((offset, previous_center[0], previous_center[1], False, previous_face_h))
                 previous_gray = gray
                 continue
             scored: list[tuple[float, tuple[int, int, int, int], tuple[float, float]]] = []
@@ -2228,27 +2597,45 @@ def track_speaker_keyframes(
                 confidence_samples.append(min(1.0, margin / max(0.04, abs(best_score))))
 
             switched = bool(shot_change and previous_composition is not None)
+            best_face_h = float(best_face[3]) if best_face else 0.0
             if previous_center is not None and len(scored) > 1:
                 current = min(scored, key=lambda item: (item[2][0] - previous_center[0]) ** 2 + (item[2][1] - previous_center[1]) ** 2)
-                current_score, _, current_center = current
+                current_score, current_face, current_center = current
                 separation = ((best_center[0] - current_center[0]) ** 2 + (best_center[1] - current_center[1]) ** 2) ** 0.5
-                if separation > max(40.0, crop_w * 0.22) and best_score > current_score + 0.025:
+                # A camera cut resets continuity, so the dwell timer should not
+                # hold the crop on a speaker who is no longer in this shot.
+                held = (
+                    last_switch_at is not None
+                    and not shot_change
+                    and (offset - last_switch_at) < min_dwell_seconds
+                )
+                if separation > max(40.0, crop_w * 0.22) and best_score > current_score + 0.025 and not held:
                     if pending_center and ((best_center[0] - pending_center[0]) ** 2 + (best_center[1] - pending_center[1]) ** 2) ** 0.5 < max(50.0, crop_w * 0.18):
                         pending_hits += 1
                     else:
                         pending_center, pending_hits = best_center, 1
                     if pending_hits < 2:
-                        best_center = current_center
+                        best_center, best_face_h = current_center, float(current_face[3])
                     else:
-                        switched = True; speaker_switches += 1; pending_center = None; pending_hits = 0
+                        switched = True
+                        speaker_switches += 1
+                        pending_center = None
+                        pending_hits = 0
+                        last_switch_at = offset
                 else:
-                    best_center = current_center; pending_center = None; pending_hits = 0
+                    # Either no real challenger, or one arrived inside the
+                    # dwell window. Either way keep the current speaker and
+                    # forget the challenger, so a brief interjection cannot
+                    # accumulate hits across the hold.
+                    best_center, best_face_h = current_center, float(current_face[3])
+                    pending_center, pending_hits = None, 0
             previous_center = best_center
-            raw.append((offset, previous_center[0], previous_center[1], switched))
+            previous_face_h = best_face_h or previous_face_h
+            raw.append((offset, previous_center[0], previous_center[1], switched, previous_face_h))
         elif previous_center is not None:
             # Hold the speaker through short detector misses instead of falling
             # back to a centre crop that cuts them out.
-            raw.append((offset, previous_center[0], previous_center[1], False))
+            raw.append((offset, previous_center[0], previous_center[1], False, previous_face_h))
         previous_gray = gray
     cap.release()
 
@@ -2259,13 +2646,21 @@ def track_speaker_keyframes(
     alpha = 1.0 - max(0.0, min(0.95, smoothing))
     keyframes: list[dict[str, Any]] = []
     smooth_x, smooth_y = raw[0][1], raw[0][2]
-    for (t, cx, cy, switched) in raw:
+    smooth_face_h = raw[0][4]
+    for (t, cx, cy, switched, face_h) in raw:
         # Respond quickly to a confirmed speaker handoff, then return to the
         # user's normal smoothing level for natural camera motion.
         frame_alpha = max(alpha, 0.52) if switched else alpha
         smooth_x += (cx - smooth_x) * frame_alpha
         smooth_y += (cy - smooth_y) * max(frame_alpha, 0.34)
-        x, y = crop_origin_from_center(smooth_x, smooth_y, src_w, src_h, crop_w, crop_h, padding)
+        # Smooth the face height too, or headroom would jitter every time the
+        # detector returned a slightly different box for the same face.
+        if face_h > 0:
+            smooth_face_h += (face_h - smooth_face_h) * max(frame_alpha, 0.34)
+        x, y = crop_origin_from_center(
+            smooth_x, smooth_y, src_w, src_h, crop_w, crop_h, padding,
+            face_h=smooth_face_h or None, captions=zone,
+        )
         keyframes.append({"t": round(t, 3), "x": x, "y": y, "w": crop_w, "h": crop_h})
 
     confidence = sum(confidence_samples) / len(confidence_samples) if confidence_samples else (0.72 if detected_samples else 0.0)
@@ -2305,6 +2700,11 @@ def main() -> int:
             float(request.get("smoothing") or 0.68),
             float(request.get("sampleHz") or 3.0),
             speech_spans=spans or None,
+            # Without the template the preview would compose on the subject
+            # alone while the real render also steers around the captions, so
+            # the preview would be quietly lying about the result.
+            template=request.get("template") if isinstance(request.get("template"), dict) else None,
+            min_dwell_seconds=float(request.get("dwellSeconds") or 1.2),
         )
         print(json.dumps({"plan": plan}))
         return 0

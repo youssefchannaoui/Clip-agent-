@@ -122,6 +122,57 @@ class WorkerPersistenceTests(unittest.TestCase):
         processor.refresh_queue_positions()
         self.assertEqual(store.read("job_2")["queuePosition"], 1)
 
+    def test_one_account_batch_does_not_block_another_account(self):
+        """Twenty jobs from one customer must not put another customer twenty-first."""
+        fair = self.service.FairQueue()
+        for index in range(20):
+            fair.put(f"a_{index}", "user_a")
+        fair.put("b_0", "user_b")
+        self.assertEqual(fair.get_nowait(), "a_0")
+        self.assertEqual(fair.get_nowait(), "b_0")
+        self.assertEqual(fair.get_nowait(), "a_1")
+        self.assertEqual(fair.qsize(), 18)
+
+    def test_accounts_are_served_in_turn_and_keep_their_own_order(self):
+        fair = self.service.FairQueue()
+        for index in range(3):
+            fair.put(f"a_{index}", "user_a")
+            fair.put(f"b_{index}", "user_b")
+        drained = [fair.get_nowait() for _ in range(6)]
+        self.assertEqual(drained, ["a_0", "b_0", "a_1", "b_1", "a_2", "b_2"])
+        with self.assertRaises(self.service.queue.Empty):
+            fair.get_nowait()
+
+    def test_untagged_jobs_keep_plain_arrival_order(self):
+        """A web service that has not been redeployed yet sends no tenant."""
+        fair = self.service.FairQueue()
+        for index in range(4):
+            fair.put(f"job_{index}")
+        self.assertEqual([fair.get_nowait() for _ in range(4)], ["job_0", "job_1", "job_2", "job_3"])
+
+    def test_queue_positions_reflect_the_fair_order_not_arrival_order(self):
+        store = self.service.JobStore()
+        for job_id, tenant in (("a_1", "user_a"), ("a_2", "user_a"), ("b_1", "user_b")):
+            store.create({"id": job_id, "tenant": tenant, "source": {"type": "youtube"}})
+        processor = self.service.Processor(store)
+        for job_id, tenant in (("a_1", "user_a"), ("a_2", "user_a"), ("b_1", "user_b")):
+            processor.submit(job_id, tenant)
+        # b_1 arrived last but runs second, and the position the customer sees
+        # has to say so or the wait estimate lies.
+        self.assertEqual(store.read("a_1")["queuePosition"], 1)
+        self.assertEqual(store.read("b_1")["queuePosition"], 2)
+        self.assertEqual(store.read("a_2")["queuePosition"], 3)
+
+    def test_restart_recovery_rebuilds_the_rotation_from_stored_tenants(self):
+        store = self.service.JobStore()
+        for job_id, tenant in (("a_1", "user_a"), ("a_2", "user_a"), ("b_1", "user_b")):
+            store.create({"id": job_id, "tenant": tenant, "source": {"type": "youtube"}})
+        self.assertEqual(store.read("a_1")["tenant"], "user_a")
+        processor = self.service.Processor(store)
+        for job_id in sorted(store.recover()):
+            processor.queue.put(job_id, self.service.tenant_of(store.read(job_id)))
+        self.assertEqual(processor.queue.snapshot(), ["a_1", "b_1", "a_2"])
+
     def test_abandoned_temporary_directories_are_removed(self):
         abandoned = self.service.TEMP_DIR / "abandoned"
         abandoned.mkdir(parents=True)

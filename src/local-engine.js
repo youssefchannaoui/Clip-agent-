@@ -438,6 +438,10 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
       : { type: 'youtube', url: parseYouTubeUrl(value).canonicalUrl },
     template, musicTracks: remoteMusicTracks(tracks, user.id), settings: sharedSettings(user),
     requestedClipCount: clipSettings(user).clipsPerVideo,
+    // The worker rotates between accounts rather than running strict FIFO, so
+    // it needs to know whose job this is. Fairness only — the worker never
+    // uses this to decide who may see what.
+    tenant: user.id,
     sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
     callbackUrl: config.publicBaseUrl ? `${config.publicBaseUrl}/api/worker-callbacks/${encodeURIComponent(projectId)}` : '',
   } : {
@@ -952,6 +956,9 @@ function importRerenderResultObject(jobRecord, result) {
     Object.assign(original, rendered, preserved, {
       renderVersion: (original.renderVersion || 1) + 1,
       rerenderedAt: Date.now(),
+      // Which quality this file actually is. A preview-tier clip is fine to
+      // watch in the app but must be upgraded before it leaves the platform.
+      renderTier: jobRecord.renderTier === 'preview' ? 'preview' : 'export',
     });
     for (const oldFile of oldFiles) {
       if (oldFile && ![original.clipFile, original.thumbFile].includes(oldFile)) removeDataFile(oldFile);
@@ -1036,7 +1043,7 @@ export function queueMoreClips(projectId, requestedCount = 8) {
     source: { type: 'object_storage', objectKey: project.sourceObjectKey, title: project.title },
     transcript: { objectKey: project.transcriptObjectKey }, existingRanges,
     template, musicTracks: remoteMusicTracks(tracks, owner.id), settings: { ...sharedSettings(owner), clipsPerVideo: count },
-    callbackUrl: '',
+    tenant: owner.id, callbackUrl: '',
   } : {
     mode: 'more_clips', id: moreId, projectId: project.id, projectTitle: project.title, requestedCount: count,
     sourceFile: project.sourceFile, transcriptFile: project.transcriptFile, transcriptSegments, existingRanges,
@@ -1058,7 +1065,10 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   return record;
 }
 
-export function queueClipRerender(clipId, templateId, { asVariant = false, batchId = '', batchLabel = '', batchTotal = 0 } = {}) {
+/** Framing choices a single clip may override without editing the template. */
+const FRAMING_BIASES = ['auto', 'left', 'center', 'right'];
+
+export function queueClipRerender(clipId, templateId, { asVariant = false, batchId = '', batchLabel = '', batchTotal = 0, framingBias = undefined } = {}) {
   const clip = clipById(clipId);
   if (!clip) throw new Error('That clip does not exist.');
   if (clip.status === 'posted' && !asVariant) throw new Error('A posted video cannot be changed. Create a re-post variant instead.');
@@ -1066,8 +1076,24 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, batch
   const sourceFile = clip.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
   if ((!sourceFile || !fs.existsSync(sourceFile)) && !(project?.engine === 'remote' && project.sourceObjectKey)) throw new Error('The original source file is unavailable. Keep source files enabled to re-render clips.');
   const owner = ownerOfRecord(clip);
-  const template = effectiveTemplateForUser(owner, templateById(templateId, owner) || selectedTemplate(owner));
-  if (!template?.id) throw new Error('Choose a valid saved template.');
+  const baseTemplate = effectiveTemplateForUser(owner, templateById(templateId, owner) || selectedTemplate(owner));
+  if (!baseTemplate?.id) throw new Error('Choose a valid saved template.');
+
+  // A per-clip framing nudge, for the one clip where the automatic choice is
+  // wrong. Editing the template instead would re-render every unposted clip
+  // the account owns, which is a lot of collateral for fixing one shot.
+  if (framingBias !== undefined) {
+    if (!FRAMING_BIASES.includes(String(framingBias))) throw new Error('Choose a valid framing option.');
+    clip.framingBias = String(framingBias) === 'auto' ? null : String(framingBias);
+  }
+  const template = clip.framingBias
+    ? { ...baseTemplate, smartFramingBias: clip.framingBias }
+    : baseTemplate;
+
+  // Only a bulk template application renders at preview quality, and only
+  // when the operator has opted in. A single deliberate re-render, and every
+  // upgrade requested by a download or a publish, is always export quality.
+  const previewQuality = Boolean(config.previewBatchRenders && batchId);
   const tracks = workerMusicTracks(owner);
   if (!tracks.length) throw new Error('Music is mandatory. Upload at least one nasheed first.');
   const transcriptSegments = project.transcriptFile && fs.existsSync(project.transcriptFile)
@@ -1082,21 +1108,28 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, batch
     mode: 'rerender', id: rerenderId, projectId: project.id, clipIdOverride: outputClipId,
     source: { type: 'object_storage', objectKey: project.sourceObjectKey, title: project.title },
     transcript: { objectKey: project.transcriptObjectKey || '' }, template,
-    musicTracks: remoteMusicTracks(tracks, owner.id), settings: sharedSettings(owner),
-    clip: {
-      id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
-      startSec: clip.startSec, endSec: clip.endSec, score: clip.score, scoreReasons: clip.scoreReasons,
-      reviewRequired: clip.reviewRequired,
-    }, callbackUrl: '',
-  } : {
-    mode: 'rerender', id: rerenderId, projectId: project.id, clipIdOverride: outputClipId,
-    sourceFile, outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
-    template, musicTracks: tracks, settings: sharedSettings(owner), transcriptSegments,
+    musicTracks: remoteMusicTracks(tracks, owner.id), settings: { ...sharedSettings(owner), previewQuality },
     clip: {
       id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
       startSec: clip.startSec, endSec: clip.endSec, score: clip.score, scoreReasons: clip.scoreReasons,
       reviewRequired: clip.reviewRequired,
     },
+    // Lets the worker skip speaker analysis when nothing that decides framing
+    // has changed. It re-checks the signature itself, so a stale plan is
+    // ignored rather than trusted.
+    cropPlan: clip.cropPlan || null,
+    tenant: owner.id, callbackUrl: '',
+  } : {
+    mode: 'rerender', id: rerenderId, projectId: project.id, clipIdOverride: outputClipId,
+    sourceFile, outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
+    template, musicTracks: tracks, settings: { ...sharedSettings(owner), previewQuality },
+    transcriptSegments,
+    clip: {
+      id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
+      startSec: clip.startSec, endSec: clip.endSec, score: clip.score, scoreReasons: clip.scoreReasons,
+      reviewRequired: clip.reviewRequired,
+    },
+    cropPlan: clip.cropPlan || null,
   };
   const file = path.join(dir, 'job.json');
   fs.writeFileSync(file, JSON.stringify(payload, null, 2));
@@ -1106,6 +1139,7 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, batch
     createdAt: Date.now(), jobFile: file, resultPath,
     clipTitle: clip.title || '', projectId: project.id, projectTitle: project.title || '',
     batchId: String(batchId || ''), batchLabel: String(batchLabel || ''), batchTotal: Number(batchTotal || 0),
+    renderTier: previewQuality ? 'preview' : 'export',
     stages: [], etaSec: null, currentClip: null, totalClips: null, startedAt: null,
   }, ownerOf(clip));
   state.rerenderJobs.unshift(record);
@@ -1116,21 +1150,100 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, batch
   return record;
 }
 
+/**
+ * Fair queuing across accounts.
+ *
+ * This queue used to be a single global FIFO ordered by arrival time. That is
+ * invisible with one customer and indefensible with ten: saving a template
+ * queues a re-render of every unposted clip its owner has
+ * (`queueTemplateForEveryUnpostedClip` in server.js), so forty of one
+ * customer's jobs sat in front of another customer's brand-new import.
+ *
+ * Work is now taken round-robin by owner. Each account's queued jobs are
+ * ranked within their own group by arrival, that rank is offset by however
+ * many jobs the account already has running, and the global order is by rank
+ * first and arrival second. Twenty jobs from A followed by one from B run
+ * A, B, A, A, … instead of leaving B twenty-first.
+ *
+ * The rank is recomputed from state on every pass rather than carried in a
+ * cursor, so a restart cannot lose its place in the rotation or strand an
+ * account. Render order is a scheduling decision, not persisted data.
+ */
+const ownerKey = value => value || '';
+const queuedAt = candidate => Number(candidate.at) || 0;
+/** Background bulk work sorts behind an account's own foreground jobs. */
+const batchRank = candidate => (candidate.item?.batchId ? 1 : 0);
+
+/** How many jobs each account currently has in flight, by owner id. */
+function runningOwnerCounts() {
+  const counts = new Map();
+  const bump = owner => counts.set(ownerKey(owner), (counts.get(ownerKey(owner)) || 0) + 1);
+  for (const project of state.projects) {
+    if (running.has(project.id)) bump(ownerOf(project));
+    // `moreJob` is nested inside its project and carries no owner of its own.
+    if (project.moreJob?.id && running.has(project.moreJob.id)) bump(ownerOf(project));
+  }
+  for (const job of state.rerenderJobs) {
+    if (running.has(job.id)) bump(ownerOf(job));
+  }
+  return counts;
+}
+
+/** Everything waiting for a slot, tagged with the account that owns it. */
+function queuedCandidates() {
+  return [
+    ...state.projects.filter(item => item.engine === 'remote' && item.status === 'queued' && Number(item.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote', item, at: item.submittedAt, owner: ownerOf(item) })),
+    ...state.projects.filter(item => item.engine === 'self-hosted' && item.status === 'queued').map(item => ({ type: 'project', item, at: item.submittedAt, owner: ownerOf(item) })),
+    ...state.projects.filter(item => item.engine === 'vizard' && item.status === 'queued').map(item => ({ type: 'vizard', item, at: item.submittedAt, owner: ownerOf(item) })),
+    ...state.projects.filter(item => item.moreJob?.engine === 'remote' && item.moreJob.status === 'queued' && Number(item.moreJob.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote-more', item: item.moreJob, project: item, at: item.moreJob.createdAt, owner: ownerOf(item) })),
+    ...state.projects.filter(item => item.moreJob?.engine !== 'remote' && item.moreJob?.status === 'queued').map(item => ({ type: 'more', item: item.moreJob, project: item, at: item.moreJob.createdAt, owner: ownerOf(item) })),
+    ...state.rerenderJobs.filter(item => item.engine === 'remote' && item.status === 'queued' && Number(item.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote-rerender', item, project: projectById(clipById(item.clipId)?.projectId), at: item.createdAt, owner: ownerOf(item) })),
+    ...state.rerenderJobs.filter(item => item.engine !== 'remote' && item.status === 'queued').map(item => ({ type: 'rerender', item, at: item.createdAt, owner: ownerOf(item) })),
+  ];
+}
+
+/**
+ * Order candidates round-robin by owner, skipping accounts that already hold
+ * their share of the slots. Exported so the ordering can be tested without
+ * spawning a renderer.
+ */
+export function fairQueueOrder(candidates, runningCounts = new Map(), maxPerOwner = Infinity) {
+  const groups = new Map();
+  for (const candidate of candidates) {
+    const key = ownerKey(candidate.owner);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(candidate);
+  }
+  const ranked = [];
+  for (const [key, group] of groups) {
+    const active = runningCounts.get(key) || 0;
+    // This account is already using its allowance. Its remaining work waits
+    // for one of its own jobs to finish, rather than taking someone else's turn.
+    if (active >= maxPerOwner) continue;
+    // Within one account, a bulk template batch yields to that account's own
+    // foreground work. Otherwise saving a template monopolises the owner's
+    // turn: they queue forty re-renders, import a lecture, and wait for all
+    // forty first. Ordering inside each class is still arrival order.
+    group.sort((a, b) => batchRank(a) - batchRank(b) || queuedAt(a) - queuedAt(b));
+    group.forEach((candidate, index) => ranked.push({ ...candidate, rank: active + index }));
+  }
+  return ranked.sort((a, b) => a.rank - b.rank || queuedAt(a) - queuedAt(b));
+}
+
+/** The order queued work will actually be dispatched in, right now. */
+export function plannedQueueOrder() {
+  return fairQueueOrder(queuedCandidates(), runningOwnerCounts(), config.maxConcurrentJobsPerUser);
+}
+
 export async function pump() {
   if (pumping) return;
   pumping = true;
   try {
     while (running.size < config.maxConcurrentJobs) {
-      const candidates = [
-        ...state.projects.filter(item => item.engine === 'remote' && item.status === 'queued' && Number(item.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote', item, at: item.submittedAt })),
-        ...state.projects.filter(item => item.engine === 'self-hosted' && item.status === 'queued').map(item => ({ type: 'project', item, at: item.submittedAt })),
-        ...state.projects.filter(item => item.engine === 'vizard' && item.status === 'queued').map(item => ({ type: 'vizard', item, at: item.submittedAt })),
-        ...state.projects.filter(item => item.moreJob?.engine === 'remote' && item.moreJob.status === 'queued' && Number(item.moreJob.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote-more', item: item.moreJob, project: item, at: item.moreJob.createdAt })),
-        ...state.projects.filter(item => item.moreJob?.engine !== 'remote' && item.moreJob?.status === 'queued').map(item => ({ type: 'more', item: item.moreJob, project: item, at: item.moreJob.createdAt })),
-        ...state.rerenderJobs.filter(item => item.engine === 'remote' && item.status === 'queued' && Number(item.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote-rerender', item, project: projectById(clipById(item.clipId)?.projectId), at: item.createdAt })),
-        ...state.rerenderJobs.filter(item => item.engine !== 'remote' && item.status === 'queued').map(item => ({ type: 'rerender', item, at: item.createdAt })),
-      ].sort((a, b) => a.at - b.at);
-      const next = candidates[0];
+      const next = plannedQueueOrder()[0];
+      // Nothing queued, or everything queued belongs to accounts already at
+      // their slot allowance. Each running job calls pump() again when it
+      // finishes, so the held-back work is picked up then.
       if (!next) break;
       if (next.type === 'remote') runRemoteProject(next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
       else if (next.type === 'remote-more') runRemoteAux(next.project, next.item, 'more').catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
@@ -1169,9 +1282,41 @@ function runWorkerJob(jobPath, resultPath, label = 'Render') {
  * derivative is rendered automatically while the user's normal branded clip
  * remains unchanged for every other destination.
  */
+/**
+ * Make sure a clip is export quality before it leaves the platform.
+ *
+ * A bulk template application may have rendered it with a fast encoder preset
+ * so the batch came back quickly. That file is fine to review in the app and
+ * is not fine to publish or hand to a customer, so the first request that
+ * would send it outside queues the full-quality render instead.
+ *
+ * Deliberately not a blocking re-encode: a render takes minutes and an HTTP
+ * request cannot wait for one. The caller gets a clear, retryable error and
+ * the work is already moving.
+ */
+export function assertExportQuality(clip) {
+  if (!clip || clip.renderTier !== 'preview') return clip;
+  const pending = state.rerenderJobs.some(job =>
+    job.clipId === clip.id && job.renderTier !== 'preview' && ['queued', 'processing'].includes(job.status));
+  if (!pending) {
+    try {
+      queueClipRerender(clip.id, clip.templateId || '', { asVariant: false });
+    } catch (error) {
+      const failure = new Error(`This clip needs a full-quality render first, which could not be started: ${error.message}`);
+      failure.statusCode = 409;
+      throw failure;
+    }
+  }
+  const error = new Error('This clip is still a fast preview. The full-quality version is rendering now — try again shortly.');
+  error.statusCode = 409;
+  error.code = 'export_render_pending';
+  throw error;
+}
+
 export async function socialPublishFile(clipId, provider) {
   const clip = clipById(clipId);
   if (!clip) throw new Error('That clip does not exist.');
+  assertExportQuality(clip);
   if (clip.clipUrl) {
     if (provider === 'instagram') return null;
     if (provider === 'tiktok') {

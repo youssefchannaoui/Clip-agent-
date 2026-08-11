@@ -34,7 +34,7 @@ RUN python -m pip install --upgrade pip setuptools wheel \
 
 COPY worker /app/worker
 RUN mkdir -p /var/lib/deenclipped/jobs /var/lib/deenclipped/tmp /var/lib/deenclipped/models \
-    && python -m py_compile /app/worker/service.py /app/worker/import_providers.py /app/worker/object_storage.py /app/worker/intelligence.py /app/worker/clip_worker.py
+    && python -m py_compile /app/worker/service.py /app/worker/import_providers.py /app/worker/object_storage.py /app/worker/intelligence.py /app/worker/audio_features.py /app/worker/clip_worker.py
 
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=8s --start-period=30s --retries=3 \

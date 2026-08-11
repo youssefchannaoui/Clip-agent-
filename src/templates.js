@@ -19,6 +19,10 @@ const DEFAULTS = Object.freeze({
   smartFramingPadding: 0.18,
   smartFramingZoom: 1,
   smartFramingSmoothing: 0.68,
+  // Shortest time the crop stays on one speaker after moving to them. Without
+  // a hold, two people in conversation can satisfy the switch test repeatedly
+  // and leave the frame oscillating between them.
+  smartFramingDwellSeconds: 1.2,
   frameBackground: '#000000',
   blurStrength: 28,
   filterPreset: 'natural',
@@ -29,6 +33,10 @@ const DEFAULTS = Object.freeze({
   sharpen: 0.45,
   vignette: 0,
   captionMode: 'dynamic-stack',
+  // Writing direction for captions. 'auto' decides per line from the script,
+  // which is what mixed Arabic/English lectures need — the same clip can have
+  // an Arabic ayah and an English explanation seconds apart.
+  captionDirection: 'auto',
   captionFont: 'DejaVu Sans',
   captionHighlightFont: 'DejaVu Serif',
   captionArabicFont: 'Amiri',
@@ -82,6 +90,7 @@ const ENUMS = {
   smartFramingBias: ['auto', 'left', 'center', 'right'],
   filterPreset: ['natural', 'crisp', 'warm', 'cinematic', 'monochrome', 'custom'],
   captionMode: ['phrase', 'word', 'dynamic-stack'],
+  captionDirection: ['auto', 'ltr', 'rtl'],
   captionPosition: ['top', 'middle', 'bottom'],
   captionHorizontal: ['left', 'center', 'right'],
   watermarkPosition: ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'],
@@ -90,6 +99,7 @@ const ENUMS = {
 const NUMBER_RANGES = {
   width: [360, 2160], height: [360, 3840], blurStrength: [0, 60],
   smartFramingPadding: [0.05, 0.45], smartFramingZoom: [0.75, 1.35], smartFramingSmoothing: [0, 0.95],
+  smartFramingDwellSeconds: [0, 5],
   brightness: [-1, 1], contrast: [0.5, 2], saturation: [0, 3], gamma: [0.5, 2], sharpen: [0, 2], vignette: [0, 1],
   captionFontSize: [24, 180], captionFontWeight: [400, 900], captionLetterSpacing: [-4, 12],
   captionOutlineWidth: [0, 14], captionShadow: [0, 8], captionBackgroundOpacity: [0, 100], captionHighlightGlow: [0, 30],

@@ -77,6 +77,96 @@ def clean_error(exc: BaseException) -> str:
     return text[-1500:] or "Processing failed."
 
 
+def tenant_of(record: dict[str, Any]) -> str:
+    """The account a job belongs to, read from either its payload or its status.
+
+    Used only to keep the queue fair — never for access control, which the
+    web service already enforces before a job reaches this worker.
+
+    Older callers do not send `tenant`. Those jobs share the empty tenant,
+    which behaves exactly like the previous single global FIFO — so a version
+    skew between the web service and this worker degrades to the old
+    behaviour rather than misattributing anyone's work.
+    """
+    value = str(record.get("tenant") or "")
+    return value[:120]
+
+
+class FairQueue:
+    """A job queue that rotates between accounts instead of running in arrival order.
+
+    The worker previously used a plain `queue.Queue`, so one customer applying
+    a template to forty clips pushed forty jobs ahead of every other
+    customer's. One heavy slot meant the second customer waited for all forty.
+
+    Jobs are held in one FIFO per tenant, and `get` takes the next job from
+    each tenant in turn. Within an account, order is still arrival order; only
+    the choice of *which* account goes next changed.
+    """
+
+    def __init__(self) -> None:
+        self.condition = threading.Condition(threading.Lock())
+        self.pending: dict[str, list[str]] = {}
+        self.rotation: list[str] = []
+        self.count = 0
+
+    def put(self, job_id: str, tenant: str = "") -> None:
+        with self.condition:
+            if tenant not in self.pending:
+                self.pending[tenant] = []
+                self.rotation.append(tenant)
+            self.pending[tenant].append(job_id)
+            self.count += 1
+            self.condition.notify()
+
+    def get(self, timeout: float | None = None) -> str:
+        """Next job in fair order. Raises `queue.Empty` on timeout, like `queue.Queue`."""
+        with self.condition:
+            if self.count == 0 and not self.condition.wait_for(lambda: self.count > 0, timeout):
+                raise queue.Empty
+            if self.count == 0:
+                raise queue.Empty
+            tenant = self.rotation.pop(0)
+            jobs = self.pending[tenant]
+            job_id = jobs.pop(0)
+            self.count -= 1
+            if jobs:
+                # Back of the rotation: this account waits for everyone else
+                # holding work before its next job is considered.
+                self.rotation.append(tenant)
+            else:
+                del self.pending[tenant]
+            return job_id
+
+    def snapshot(self) -> list[str]:
+        """The order jobs will actually come out in, for accurate queue positions.
+
+        Simulated rather than read off insertion order, because after fair
+        rotation those two are no longer the same and the position drives the
+        wait estimate the customer sees.
+        """
+        with self.condition:
+            pending = {tenant: list(jobs) for tenant, jobs in self.pending.items()}
+            rotation = list(self.rotation)
+        order: list[str] = []
+        while rotation:
+            tenant = rotation.pop(0)
+            jobs = pending.get(tenant) or []
+            if not jobs:
+                continue
+            order.append(jobs.pop(0))
+            if jobs:
+                rotation.append(tenant)
+        return order
+
+    def get_nowait(self) -> str:
+        return self.get(timeout=0)
+
+    def qsize(self) -> int:
+        with self.condition:
+            return self.count
+
+
 class JobStore:
     def __init__(self) -> None:
         JOBS_DIR.mkdir(parents=True, exist_ok=True)
@@ -116,6 +206,10 @@ class JobStore:
                 "id": job_id, "status": "queued", "stage": "queued", "progress": 0,
                 "createdAt": now_ms(), "updatedAt": now_ms(), "cancelRequested": False,
                 "result": None, "error": None,
+                # Which account queued this. Held on the status rather than only
+                # in the payload so a restart can rebuild the fair rotation
+                # without re-reading every payload from disk.
+                "tenant": tenant_of(payload),
             }
             self.write(job_id, status)
             return status, True
@@ -155,7 +249,7 @@ class Processor:
     def __init__(self, store: JobStore) -> None:
         self.store = store
         self.storage = ObjectStorage()
-        self.queue: queue.Queue[str] = queue.Queue()
+        self.queue = FairQueue()
         self.running: dict[str, subprocess.Popen] = {}
         self.active_jobs: set[str] = set()
         self.lock = threading.RLock()
@@ -166,20 +260,19 @@ class Processor:
 
     def start(self) -> None:
         for job_id in self.store.recover():
-            self.queue.put(job_id)
+            self.queue.put(job_id, tenant_of(self.store.read(job_id) or {}))
         self.refresh_queue_positions()
         self.cleanup_abandoned()
         for thread in self.threads:
             thread.start()
 
-    def submit(self, job_id: str) -> None:
-        self.queue.put(job_id)
+    def submit(self, job_id: str, tenant: str = "") -> None:
+        self.queue.put(job_id, tenant)
         self.refresh_queue_positions()
 
     def refresh_queue_positions(self) -> None:
         """Keep every queued job's displayed position accurate as work moves."""
-        with self.queue.mutex:
-            pending = list(self.queue.queue)
+        pending = self.queue.snapshot()
         for position, queued_id in enumerate(pending, start=1):
             try:
                 self.store.update(queued_id, queuePosition=position)
@@ -479,7 +572,6 @@ class Processor:
                 finally:
                     with self.lock:
                         self.active_jobs.discard(job_id)
-            self.queue.task_done()
 
     def cleanup_abandoned(self) -> None:
         cutoff = time.time() - JOB_TTL_SECONDS
@@ -567,6 +659,14 @@ def analyse_framing(payload: dict[str, Any]) -> dict[str, Any]:
             "smoothing": max(0.0, min(0.95, float(payload.get("smoothing", 0.68)))),
             "sampleHz": max(1.0, min(5.0, float(payload.get("sampleHz", 3.0)))),
             "speechSpans": spans,
+            # Only the caption geometry travels, not the whole template: it is
+            # all the framing decision reads, and a preview that ignored it
+            # would show a different composition from the finished render.
+            "template": {
+                "captionPositionX": max(0.0, min(100.0, float(payload.get("captionPositionX", 50)))),
+                "captionPositionY": max(0.0, min(100.0, float(payload.get("captionPositionY", 58)))),
+            },
+            "dwellSeconds": max(0.0, min(5.0, float(payload.get("dwellSeconds", 1.2)))),
         }
         request_file.write_text(json.dumps(request), encoding="utf-8")
         result = subprocess.run(
@@ -648,7 +748,7 @@ class Handler(BaseHTTPRequestHandler):
                 payload = json.loads(body or b"{}")
                 status, created = STORE.create(payload)
                 if created:
-                    PROCESSOR.submit(str(status["id"]))
+                    PROCESSOR.submit(str(status["id"]), tenant_of(payload))
                 return self.send_json(202 if created else 200, status)
             except (ValueError, OSError) as exc:
                 return self.send_json(400, {"error": clean_error(exc), "code": "invalid_job"})

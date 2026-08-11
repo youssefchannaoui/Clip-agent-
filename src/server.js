@@ -634,6 +634,10 @@ async function route(req, res, url) {
     if (!allowed) return json(res, 403, { error: 'This media link is invalid or expired.' });
     const remoteClip = state.clips.find(item => item.id === clipId);
     if (remoteClip?.clipUrl) return temporaryRedirect(res, remoteClip.clipUrl);
+    // This signed link is what a social platform fetches the video from, so
+    // a preview-quality file reaching it would be published at that quality.
+    try { agent.engine.assertExportQuality(remoteClip); }
+    catch (error) { return json(res, error.statusCode || 409, errorBody(error)); }
     const file = agent.engine.clipFilePath(clipId, 'video');
     return streamFile(req, res, file, { cacheControl: 'public, max-age=3600, immutable' });
   }
@@ -1073,6 +1077,12 @@ async function route(req, res, url) {
     if (remoteUrl) return temporaryRedirect(res, remoteUrl);
     const file = agent.engine.clipFilePath(id, kind === 'thumb' ? 'thumb' : 'video'); if (!file) return json(res, 404, { error: 'Rendered file not found.' });
     if (kind === 'thumb') return streamFile(req, res, file, { contentType: 'image/jpeg' });
+    // A fast preview render may be streamed for review inside the app, but
+    // never handed over as a file the customer keeps.
+    if (kind === 'download') {
+      try { agent.engine.assertExportQuality(clip); }
+      catch (error) { return json(res, error.statusCode || 409, errorBody(error)); }
+    }
     const filename = `${(clip?.title || 'deenclipped').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 70) || 'deenclipped'}.mp4`;
     return streamFile(req, res, file, kind === 'download' ? { downloadName: filename } : {});
   }
@@ -1080,7 +1090,15 @@ async function route(req, res, url) {
   const rerenderClip = pathname.match(/^\/api\/clips\/([^/]+)\/rerender$/);
   if (method === 'POST' && rerenderClip) {
     const body = await readBody(req);
-    try { const id = decodeURIComponent(rerenderClip[1]); assertCanAccessClip(currentUser, id); return json(res, 202, { ok: true, job: agent.engine.queueClipRerender(id, String(body.templateId || ''), { asVariant: Boolean(body.asVariant) }) }); }
+    try {
+      const id = decodeURIComponent(rerenderClip[1]);
+      assertCanAccessClip(currentUser, id);
+      const options = { asVariant: Boolean(body.asVariant) };
+      // Only forward a framing choice the caller actually made, so a plain
+      // re-render does not silently clear an override set earlier.
+      if (body.framingBias !== undefined) options.framingBias = String(body.framingBias);
+      return json(res, 202, { ok: true, job: agent.engine.queueClipRerender(id, String(body.templateId || ''), options) });
+    }
     catch (error) { return json(res, 400, errorBody(error)); }
   }
   const clipPublish = pathname.match(/^\/api\/clips\/([^/]+)\/publish$/);
