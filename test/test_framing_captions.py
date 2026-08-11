@@ -172,16 +172,16 @@ class CaptionDirectionTests(unittest.TestCase):
         self.assertEqual(worker.caption_direction(self.ARABIC, {"captionDirection": "ltr"}), "ltr")
         self.assertEqual(worker.caption_direction(self.ARABIC, {"captionDirection": "auto"}), "rtl")
 
-    def test_direction_marks_wrap_each_display_line_separately(self):
-        # libass runs bidi per line, so an embedding spanning a \N break would
-        # not do what it looks like it does.
-        marked = worker.with_direction("first\\Nsecond", "rtl")
-        self.assertEqual(marked, f"{worker.RLE}first{worker.PDF}\\N{worker.RLE}second{worker.PDF}")
-        self.assertEqual(marked.count(worker.RLE), 2)
-        self.assertEqual(marked.count(worker.PDF), 2)
+    def test_caption_text_carries_no_bidi_control_characters(self):
+        """Injecting RLE/PDF broke Arabic captions outright in the real render.
 
-    def test_empty_text_is_left_alone(self):
-        self.assertEqual(worker.with_direction("", "rtl"), "")
+        Debian's libass links FriBidi and HarfBuzz and was already shaping and
+        ordering whole-line Arabic correctly. Adding explicit controls to a
+        working path — without any way to see the output — stopped Arabic
+        captions appearing at all. This pins the text as clean.
+        """
+        self.assertFalse(hasattr(worker, "with_direction"),
+                         "the bidi injection helper must not come back without a verified render")
 
 
 class ArabicSubtitleRenderTests(unittest.TestCase):
@@ -215,26 +215,21 @@ class ArabicSubtitleRenderTests(unittest.TestCase):
         import shutil
         shutil.rmtree(self.temp, ignore_errors=True)
 
-    def test_every_caption_mode_marks_arabic_as_right_to_left(self):
+    def test_every_caption_mode_emits_arabic_without_control_characters(self):
         for mode in ("phrase", "word", "dynamic-stack"):
             content = self.build(mode, self.ARABIC_WORDS, self.temp)
-            # Only caption events; the watermark is a separate style and is
-            # English regardless of what language the speaker is using.
             dialogue = [line for line in content.splitlines() if ",Caption," in line]
             self.assertTrue(dialogue, f"{mode} produced no dialogue lines")
-            self.assertTrue(
-                all(worker.RLE in line for line in dialogue),
-                f"{mode} emitted Arabic without a right-to-left mark",
-            )
+            for control in ("\u202a", "\u202b", "\u202c"):
+                self.assertNotIn(control, content, f"{mode} injected a bidi control character")
+            self.assertIn(self.ARABIC_WORDS[0], content, f"{mode} dropped the Arabic text")
 
-    def test_english_captions_are_not_marked_right_to_left(self):
+    def test_english_captions_are_emitted_unchanged(self):
         for mode in ("phrase", "word", "dynamic-stack"):
             content = self.build(mode, ["Peace", "be", "upon", "you"], self.temp)
-            # Only caption events; the watermark is a separate style and is
-            # English regardless of what language the speaker is using.
             dialogue = [line for line in content.splitlines() if ",Caption," in line]
             self.assertTrue(dialogue)
-            self.assertFalse(any(worker.RLE in line for line in dialogue), f"{mode} wrongly marked English as RTL")
+            self.assertIn("Peace", content)
 
     def test_the_arabic_font_is_still_selected_per_line(self):
         # Existing behaviour that must not regress: Amiri for Arabic text.
@@ -249,11 +244,12 @@ class ArabicSubtitleRenderTests(unittest.TestCase):
         self.assertTrue(all(position >= 0 for position in positions))
         self.assertEqual(positions, sorted(positions), "words were written out of spoken order")
 
-    def test_a_forced_direction_applies_to_english_too(self):
+    def test_a_forced_direction_does_not_inject_controls(self):
+        # `captionDirection` is kept as a field for a future alignment-based
+        # implementation. It must not reintroduce control characters.
         content = self.build("phrase", ["Peace", "be", "upon", "you"], self.temp, {"captionDirection": "rtl"})
-        dialogue = [line for line in content.splitlines() if ",Caption," in line]
-        self.assertTrue(dialogue)
-        self.assertTrue(all(worker.RLE in line for line in dialogue))
+        for control in ("\u202a", "\u202b", "\u202c"):
+            self.assertNotIn(control, content)
 
 
 class FramingCacheTests(unittest.TestCase):

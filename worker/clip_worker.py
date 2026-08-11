@@ -861,23 +861,19 @@ def caption_direction(text: str, template: dict[str, Any] | None = None) -> str:
     return "rtl" if first_strong_is_rtl(text) else "ltr"
 
 
-def with_direction(text: str, direction: str) -> str:
-    """State a line's base direction explicitly with bidi controls.
-
-    Applied per display line rather than per event: libass runs the bidi
-    algorithm on each line separately, so an embedding that spans a `\\N`
-    break would not do what it looks like it does.
-
-    Left-to-right lines are also marked when they are being placed inside
-    otherwise right-to-left content, so a Latin phrase in an Arabic lecture
-    does not inherit a direction it should not have.
-    """
-    if not text:
-        return text
-    mark = RLE if direction == "rtl" else LRE
-    return "\\N".join(f"{mark}{line}{PDF}" for line in text.split("\\N"))
-
-
+# Bidi control characters are deliberately NOT injected into caption text.
+#
+# An earlier version wrapped every line in RLE…PDF to state its base direction
+# explicitly. That broke Arabic captions outright in the rendered output —
+# they stopped appearing — on a path that was already working: Debian's libass
+# links FriBidi and HarfBuzz and had been shaping and ordering whole-line
+# Arabic correctly on its own.
+#
+# The lesson is narrower than "bidi controls are bad": the change was made to
+# a working path without any way to see the rendered result, and shipped. If
+# right-to-left handling needs help in future, `caption_direction` below gives
+# the base direction per line — drive alignment with it and verify against a
+# real render before trusting it.
 def caption_word_override(
     text: str,
     *,
@@ -1147,11 +1143,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             # Each stacked word is its own display line, so direction is
             # resolved per word. A stack mixing an Arabic term with English
             # ones then gets each line right rather than all of them wrong.
-            directed = [
-                with_direction(line, caption_direction(word["word"], template))
-                for line, word in zip(lines, frame["words"])
-            ]
-            text = "\\N".join(directed)
+            text = "\\N".join(lines)
             start = shifted(frame["start"])
             end = shifted(frame["end"])
             if end > start:
@@ -1178,10 +1170,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 # with styling tags between them. Stating the line's direction
                 # explicitly is what keeps Arabic reading right-to-left rather
                 # than the words appearing in source order.
-                line_text = with_direction(
-                    " ".join(text_parts),
-                    caption_direction(" ".join(str(word["word"]) for word in group), template),
-                )
+                line_text = " ".join(text_parts)
                 if end > start:
                     events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{position_tag}{line_text}")
                 word_index += 1
@@ -1189,7 +1178,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         for frame in phrase_caption_frames(words, max_words, clear_pause, hold):
             raw = " ".join(str(word["word"]) for word in frame["words"])
             raw = raw.upper() if uppercase else raw
-            text = with_direction(wrap_caption(ass_escape(raw), 28), caption_direction(raw, template))
+            text = wrap_caption(ass_escape(raw), 28)
             start, end = shifted(frame["start"]), shifted(frame["end"])
             if end > start:
                 events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{position_tag}{text}")
@@ -1201,7 +1190,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 continue
             raw = str(segment["text"])
             raw = raw.upper() if uppercase else raw
-            text = with_direction(wrap_caption(ass_escape(raw), 28), caption_direction(raw, template))
+            text = wrap_caption(ass_escape(raw), 28)
             events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{position_tag}{text}")
     ass_file.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
 
