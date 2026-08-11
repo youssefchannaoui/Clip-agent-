@@ -78,7 +78,9 @@ test('the product UI includes Brand Kit and AI Director as first-class screens',
   assert.match(ui, /function renderBrandKit\(\)/);
   assert.match(ui, /function renderCreatorLab\(\)/);
   assert.match(ui, /Free exports are branded/);
-  assert.match(ui, /AI language & growth profile/);
+  // Renamed 11 Aug when Brand Kit was split into two sections. The guarantee
+  // is that the AI-language controls still have their own labelled home.
+  assert.match(ui, /How AI writes for you/);
   assert.match(ui, /Names and specialist vocabulary/);
   // AI Director was rebuilt as a chat assistant on 11 Aug. It answers from
   // the growth pack the worker already derived from the transcript, so the
