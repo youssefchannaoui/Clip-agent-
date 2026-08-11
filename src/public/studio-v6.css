@@ -769,3 +769,50 @@ body.dc-app .dc-transcript-empty { color: var(--v6-muted);font-size: 10px;margin
      canvas wins, since framing is what you cannot do anywhere else. */
   body.dc-app .dc-transcript { display: none; }
 }
+
+/* Removing a word. The control only appears on the word under the pointer,
+   so a dense transcript is not a field of crosses. */
+body.dc-app .dc-transcript-item { position: relative;display: inline-block; }
+body.dc-app .dc-transcript-cut {
+  position: absolute;
+  right: -5px;
+  top: -9px;
+  width: 15px;
+  height: 15px;
+  display: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--v6-red);
+  color: #180a0c;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+body.dc-app .dc-transcript-item:hover .dc-transcript-cut,
+body.dc-app .dc-transcript-cut:focus-visible { display: grid; }
+
+/* ------------------------------------------------------------------ *
+ * A quieter canvas
+ *
+ * The framing guide and the layer badge were painted permanently, so chrome
+ * competed with the video on every frame. They are guidance for a drag, not
+ * a permanent readout: shown while the pointer is over the stage or while a
+ * layer is being moved, and out of the way otherwise.
+ *
+ * Safe zones are deliberately untouched — they have their own toggle
+ * (`.dc-safe-toggle`), and overriding a control the user explicitly set is
+ * how the caption overlay got hidden out from under them earlier.
+ * ------------------------------------------------------------------ */
+body.dc-app .dc-framing-guide,
+body.dc-app .dc-layer-badge {
+  opacity: 0;
+  transition: opacity .16s ease;
+  pointer-events: none;
+}
+body.dc-app .dc-canvas-area:hover .dc-framing-guide,
+body.dc-app .dc-canvas-area:hover .dc-layer-badge,
+body.dc-app .dc-video-canvas.is-dragging .dc-framing-guide,
+body.dc-app .dc-video-canvas.is-dragging .dc-layer-badge { opacity: 1; }

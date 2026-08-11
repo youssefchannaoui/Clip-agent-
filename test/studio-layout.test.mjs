@@ -222,3 +222,32 @@ test('a clip with no transcript says so instead of rendering nothing', () => {
   const body = source.slice(start, source.indexOf('\n}', start));
   assert.match(body, /No transcript is available/);
 });
+
+test('deleting a word from the transcript uses the caption edit pipeline', () => {
+  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
+  assert.match(source, /closest\('\[data-cut-word\]'\)/, 'no handler for removing a word');
+  const start = source.indexOf('function removeTranscriptWord');
+  assert.notEqual(start, -1);
+  const body = source.slice(start, source.indexOf('\n}', start));
+
+  // Editing from the transcript and from the caption textarea must not drift:
+  // both re-map onto the original speech timing and mark the source edited.
+  assert.match(body, /mapEditedWordsToSpeech\(/);
+  assert.match(body, /editor\.captionSource\s*=\s*'edited'/);
+  assert.match(body, /captionTimingReference/, 'edits must map against the original timing');
+  assert.match(body, /markEditorDirty\(\)/);
+  assert.match(body, /debouncedHistory\(\)/, 'a deletion must be undoable');
+  // The textarea has to show the same text, or the two views disagree.
+  assert.match(body, /#dcCaptionText/);
+  // Out-of-range indices must not corrupt the transcript.
+  assert.match(body, /Number\.isInteger\(index\)/);
+});
+
+test('canvas guidance is not painted permanently, but user toggles are respected', () => {
+  assert.match(css, /body\.dc-app \.dc-framing-guide,\s*\nbody\.dc-app \.dc-layer-badge \{[^}]*opacity: 0/);
+  assert.match(css, /\.dc-canvas-area:hover \.dc-framing-guide/, 'guidance must return on hover');
+  assert.match(css, /\.dc-video-canvas\.is-dragging \.dc-framing-guide/, 'and while dragging');
+  // Safe zones have their own control; overriding it repeats a past mistake.
+  assert.doesNotMatch(css, /body\.dc-app \.dc-safe-zone \{[^}]*opacity: 0/,
+    'safe zones are user-toggled and must not be force-hidden');
+});

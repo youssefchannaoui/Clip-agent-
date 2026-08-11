@@ -1263,6 +1263,8 @@ function handleProjectOpenCapture(event){
 function handleClick(event){
   // Click a word, land on the syllable. This is the whole point of leading
   // with the transcript: the timings are Whisper's, not an estimate.
+  const cutWord = event.target.closest('[data-cut-word]');
+  if (cutWord) { removeTranscriptWord(Number(cutWord.dataset.cutWord)); return; }
   const transcriptWord = event.target.closest('[data-transcript-word]');
   if (transcriptWord) {
     const at = Number(transcriptWord.dataset.at);
@@ -2817,7 +2819,7 @@ function renderTranscript(){
     const previous = words[index - 1];
     const gap = previous ? Number(word.start) - Number(previous.end) : 0;
     const chip = gap >= TRANSCRIPT_GAP ? `<b class="dc-transcript-gap">${gap.toFixed(2)}s</b>` : '';
-    return `${chip}<button type="button" class="dc-transcript-word" data-transcript-word="${index}" data-at="${Number(word.start) || 0}">${esc(String(word.word || ''))}</button>`;
+    return `${chip}<span class="dc-transcript-item"><button type="button" class="dc-transcript-word" data-transcript-word="${index}" data-at="${Number(word.start) || 0}">${esc(String(word.word || ''))}</button><button type="button" class="dc-transcript-cut" data-cut-word="${index}" aria-label="Remove ${esc(String(word.word || 'word'))}" title="Remove this word">&times;</button></span>`;
   }).join(' ');
   highlightTranscriptWord(editor.currentTime || 0);
 }
@@ -2848,6 +2850,33 @@ function highlightTranscriptWord(time){
   // Keep the spoken word in view, but never yank the panel while the user is
   // reading somewhere else in it.
   if(!host.matches(':hover')) active.scrollIntoView({block:'nearest', behavior:'smooth'});
+}
+
+
+/**
+ * Delete a word from the clip.
+ *
+ * Routed through exactly the pipeline the caption textarea uses, so editing
+ * from the transcript and editing from the text box cannot drift apart:
+ * rebuild the text, re-map it onto the original speech timing, mark the
+ * source as edited, then refresh the caption overlay and the timeline.
+ * `debouncedHistory` makes it undoable with the editor's existing undo.
+ */
+function removeTranscriptWord(index){
+  const words = editor.captionWords || [];
+  if(!Number.isInteger(index) || index < 0 || index >= words.length) return;
+  const reference = editor.captionTimingReference?.length ? editor.captionTimingReference : words;
+  editor.captionText = words.filter((_, i) => i !== index).map(word => word.word).join(' ');
+  editor.captionWords = mapEditedWordsToSpeech(editor.captionText, reference, Math.max(.1, editor.trimOut - editor.trimIn));
+  editor.captionSource = 'edited';
+  markEditorDirty();
+  const box = $('#dcCaptionText');
+  if(box) box.value = editor.captionText;
+  transcriptActiveIndex = -1;
+  updateCaptionAtTime(editor.currentTime);
+  renderTimeline();
+  renderTranscript();
+  debouncedHistory();
 }
 
 function bindVideo(clip){
