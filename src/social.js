@@ -22,7 +22,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
  * Publishing is best-effort and retried, so a missing file is a normal
  * retryable condition, never a fatal one.
  */
-function publishReadStream(file, options = {}, provider = '') {
+function publishReadStream(file, options = {}, provider = '', onProgress) {
   if (!file || !fs.existsSync(file)) {
     throw new SocialError(
       'The prepared upload file is no longer available. It will be rebuilt on the next attempt.',
@@ -33,6 +33,22 @@ function publishReadStream(file, options = {}, provider = '') {
   // The listener alone is what prevents the crash. fetch() still rejects on
   // a broken stream, so the failure surfaces normally through the caller.
   stream.on('error', () => {});
+  if (onProgress) {
+    // Without this, the UI only learns about progress at chunk boundaries.
+    // Most clips are one or two chunks, so the bar sat at 0% for the whole
+    // upload and then jumped to done. Throttled so we're not calling save()
+    // on every TCP packet.
+    let sent = 0;
+    let lastReport = 0;
+    stream.on('data', chunk => {
+      sent += chunk.length;
+      const now = Date.now();
+      if (now - lastReport >= 400) {
+        lastReport = now;
+        onProgress(sent);
+      }
+    });
+  }
   return stream;
 }
 
@@ -636,7 +652,15 @@ async function uploadYouTube(clip, target, file, userId) {
   let failures = 0;
   while (offset < stat.size) {
     const endExclusive = Math.min(stat.size, offset + chunkSize);
-    const body = publishReadStream(file, { start: offset, end: endExclusive - 1 }, 'youtube');
+    const chunkStart = offset;
+    const body = publishReadStream(file, { start: offset, end: endExclusive - 1 }, 'youtube', sentInChunk => {
+      // Optimistic: reports bytes actually written to the socket for this
+      // chunk. If the chunk fails, the catch block below re-queries YouTube
+      // for the real confirmed offset before continuing, so this can never
+      // leave a wrong number behind.
+      target.providerState = { ...target.providerState, stage: 'uploading', totalSize: stat.size, offset: chunkStart + sentInChunk };
+      save();
+    });
     target.providerState = { ...target.providerState, stage: 'uploading', totalSize: stat.size, offset };
     save();
     try {
@@ -1012,5 +1036,5 @@ export function targetPublic(target) {
   };
 }
 
-export const __test = { tiktokChunks, captionText, platformCopy, selectedAccount };
+export const __test = { tiktokChunks, captionText, platformCopy, selectedAccount, publishReadStream };
 export { SocialError };

@@ -119,3 +119,46 @@ test('both upload paths go through the crash-safe stream helper', () => {
   );
   assert.ok(helper.includes("stream.on('error'"), 'the helper must attach an error listener');
 });
+
+test('progress bar stuck at 0%: publishReadStream reports real bytes in flight', async () => {
+  // Before this fix, the UI only learned about progress at chunk boundaries.
+  // Most clips are one or two 8 MB chunks, so a multi-second upload showed
+  // 0% the entire time and then jumped straight to "posted". This proves
+  // the stream itself reports partial progress as bytes are read, not just
+  // when the whole chunk finishes.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deenclipped-progress-'));
+  const file = path.join(dir, 'clip.mp4');
+  fs.writeFileSync(file, Buffer.alloc(2 * 1024 * 1024, 7)); // 2 MB, well over one throttle tick
+
+  const reports = [];
+  const stream = social.__test.publishReadStream(file, {}, 'youtube', sent => reports.push(sent));
+
+  await new Promise((resolve, reject) => {
+    stream.on('data', () => {});
+    stream.on('end', resolve);
+    stream.on('error', reject);
+  });
+
+  assert.ok(reports.length > 0, 'onProgress should fire at least once for a 2 MB read');
+  assert.ok(reports.every(n => n > 0), 'every reported value should be a positive byte count');
+  assert.ok(
+    reports.every((n, i) => i === 0 || n >= reports[i - 1]),
+    'reported bytes should never go backwards within a single stream',
+  );
+});
+
+test('a stream opened without onProgress behaves exactly as before', async () => {
+  // Regression guard: the new optional 4th argument must not change behaviour
+  // for the TikTok/Facebook call site, which does not pass a callback.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deenclipped-progress-'));
+  const file = path.join(dir, 'clip.mp4');
+  fs.writeFileSync(file, Buffer.alloc(1024, 1));
+  const stream = social.__test.publishReadStream(file, {}, 'tiktok');
+  const chunks = [];
+  await new Promise((resolve, reject) => {
+    stream.on('data', chunk => chunks.push(chunk));
+    stream.on('end', resolve);
+    stream.on('error', reject);
+  });
+  assert.equal(Buffer.concat(chunks).length, 1024);
+});
