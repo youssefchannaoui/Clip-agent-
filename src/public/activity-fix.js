@@ -2699,8 +2699,16 @@ function bindVideo(clip){
   video.onerror=()=>{
     if(editor.sourceFallback)return;
     editor.sourceFallback=true;video.pause();if(bg)bg.pause();
-    const status=$('#dcCaptionStatus');if(status)status.textContent='Clean source preview unavailable — rendered export preserved';
-    notify('The clean source preview could not be loaded. Your rendered clip is still safe, but it is not used in the editor because it already contains captions.','bad');
+    // No clean plate survived for this clip (common after a YouTube import,
+    // where the raw download is discarded once processing finishes). Fall
+    // back to the clip's own rendered export so the editor still has a
+    // playable frame to preview and re-frame against, instead of a dead
+    // <video> src that silently breaks the whole canvas.
+    const fallbackUrl=authedUrl(`/api/clips/${encodeURIComponent(clip.id)}/video`);
+    video.onerror=null;video.src=fallbackUrl;video.load();
+    if(bg){bg.onerror=null;bg.src=fallbackUrl;bg.load();}
+    const status=$('#dcCaptionStatus');if(status)status.textContent='Showing the rendered export — clean source unavailable';
+    notify('A clean, caption-free source is not available for this clip, so the editor is showing your rendered export instead. Captions will appear baked into the preview, but your edits still apply correctly when you export.','bad');
   };
   video.ontimeupdate=()=>{
     const local=clamp(video.currentTime-editor.sourceBase,0,editor.trimOut);editor.currentTime=local;syncBackgroundVideo();updatePlayhead(local);updateCaptionAtTime(local);applyFrameAtTime(local);

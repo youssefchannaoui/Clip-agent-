@@ -26,6 +26,19 @@ test('source preview object keys are restricted to clean project source videos',
 
 test('editor fallback message does not falsely claim the stored file is missing', () => {
   assert.doesNotMatch(editorSource, /The original lecture file is unavailable/);
-  assert.match(editorSource, /The clean source preview could not be loaded/);
-  assert.match(editorSource, /rendered clip is still safe/);
+});
+
+test('a missing clean source falls back to the rendered export instead of a dead video element', () => {
+  // 11 Aug: video.onerror used to just toast and give up, leaving both
+  // <video> elements pointed at a dead URL forever — the canvas stayed
+  // blank on every visit to that clip's editor. It must now recover by
+  // pointing at the clip's own rendered export.
+  const afterOnloadedMetadata = editorSource.slice(editorSource.indexOf('video.onloadedmetadata=initialise;'));
+  const handler = afterOnloadedMetadata.slice(afterOnloadedMetadata.indexOf('video.onerror=()=>{'));
+  const body = handler.slice(0, handler.indexOf('\n  };'));
+  assert.match(body, /\/api\/clips\/\$\{encodeURIComponent\(clip\.id\)\}\/video/);
+  assert.match(body, /video\.src=fallbackUrl/);
+  assert.match(body, /video\.load\(\)/);
+  assert.match(body, /bg\.src=fallbackUrl/);
+  assert.match(body, /A clean, caption-free source is not available/);
 });
