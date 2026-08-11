@@ -309,6 +309,37 @@ function streamFile(req, res, file, { downloadName = '', contentType = '', cache
 }
 
 function latestRerender(clipId) { return state.rerenderJobs.find(job => job.clipId === clipId) || null; }
+// Where a clip's *caption-free* video comes from, or null when none survives.
+//
+// This matters more than it looks. A clip whose clean plate is gone can only be
+// previewed using its own rendered export, and that export already has captions
+// painted into its pixels — so the editor would show baked captions with a
+// draggable caption box floating on top of them. Two sets of words, one of
+// which silently ignores every control in the panel.
+//
+// Three engines, and only one of them keeps a clean plate:
+//   remote      the worker uploads source.mp4 to object storage. Editable.
+//   self-hosted the source sits on Render's disk, which is wiped on restart.
+//   vizard      a third party returns finished, already-captioned clips. There
+//               is no clean plate and there never will be one.
+//
+// Both the preview route and publicClip() read this, so what the editor is told
+// and what the route actually serves cannot drift apart.
+function resolveCleanSource(clip) {
+  if (!clip) return null;
+  const project = state.projects.find(item => item.id === clip.projectId) || null;
+  const localFile = clip.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
+  if (localFile && fs.existsSync(localFile)) return { kind: 'file', file: localFile };
+  const key = String(clip.sourceObjectKey || project?.sourceObjectKey || '').trim();
+  if (key) {
+    if (!/^projects\/[A-Za-z0-9._/-]+\/source\.mp4$/.test(key) || key.split('/').includes('..')) return null;
+    if (!objectStorage.configured()) return null;
+    return { kind: 'object', key };
+  }
+  if (project?.sourceUrl) return { kind: 'url', url: project.sourceUrl };
+  return null;
+}
+
 function publicClip(clip) {
   const currentTemplate = templates.templateById(clip.templateId);
   const rerender = latestRerender(clip.id);
@@ -334,6 +365,9 @@ function publicClip(clip) {
     targets: (clip.targets || []).map(social.targetPublic),
     rerender: rerender ? { id: rerender.id, status: rerender.status, stage: rerender.stage, progress: rerender.progress, error: rerender.error || null, asVariant: rerender.asVariant } : null,
     videoUrl: clip.clipUrl || `/api/clips/${encodeURIComponent(clip.id)}/video`, thumbUrl: clip.thumbUrl || `/api/clips/${encodeURIComponent(clip.id)}/thumb`,
+    // Told to the editor up front so it can disable caption placement instead
+    // of discovering the problem when the <video> element fails to load.
+    cleanSource: Boolean(resolveCleanSource(clip)),
   };
 }
 
@@ -1038,35 +1072,26 @@ async function route(req, res, url) {
   const sourcePreview = pathname.match(/^\/api\/clips\/([^/]+)\/source-preview$/);
   if (method === 'GET' && sourcePreview) {
     let clip; try { clip = assertCanAccessClip(currentUser, decodeURIComponent(sourcePreview[1])); } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
-    const project = clip ? state.projects.find(item => item.id === clip.projectId) : null;
-    const sourceFile = clip?.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
     if (!clip) return json(res, 404, { error: 'Clip not found.' });
-    if (sourceFile && fs.existsSync(sourceFile)) return streamFile(req, res, sourceFile, { contentType: 'video/mp4' });
-
+    // Same resolver publicClip() reports from, so `cleanSource: true` and a 404
+    // here can never disagree.
+    const resolved = resolveCleanSource(clip);
+    if (!resolved) return json(res, 404, { error: 'The clean source video is unavailable.' });
+    if (resolved.kind === 'file') return streamFile(req, res, resolved.file, { contentType: 'video/mp4' });
     // Remote workers keep the clean project source in private object storage.
     // The persisted sourceUrl is the bucket address, not necessarily a public
     // URL, so redirecting to it directly makes the editor report a missing file
     // even though the object exists. Sign a short-lived owner-scoped preview URL
     // instead. Access to this route has already been checked through the clip.
-    const sourceObjectKey = String(clip.sourceObjectKey || project?.sourceObjectKey || '').trim();
-    if (sourceObjectKey) {
-      if (!/^projects\/[A-Za-z0-9._/-]+\/source\.mp4$/.test(sourceObjectKey) || sourceObjectKey.split('/').includes('..')) {
-        return json(res, 400, { error: 'The stored source video reference is invalid.' });
-      }
-      if (!objectStorage.configured()) {
-        return json(res, 503, { error: 'The clean source preview is temporarily unavailable because object storage is not configured.' });
-      }
+    if (resolved.kind === 'object') {
       try {
-        return temporaryRedirect(res, objectStorage.presign({ method: 'GET', key: sourceObjectKey, expiresSec: 900 }));
+        return temporaryRedirect(res, objectStorage.presign({ method: 'GET', key: resolved.key, expiresSec: 900 }));
       } catch (error) {
         return json(res, 503, { error: `The clean source preview could not be prepared: ${error.message}` });
       }
     }
-
-    // Keep support for deliberately public/external source URLs created by
-    // older imports, but only after trying the private object key above.
-    if (project?.sourceUrl) return temporaryRedirect(res, project.sourceUrl);
-    return json(res, 404, { error: 'The clean source video is unavailable.' });
+    // Deliberately public/external source URLs created by older imports.
+    return temporaryRedirect(res, resolved.url);
   }
 
   const clipVideo = pathname.match(/^\/api\/clips\/([^/]+)\/(video|download|thumb)$/);

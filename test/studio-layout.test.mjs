@@ -130,31 +130,37 @@ test('rules for removed markup cannot reshape live controls', () => {
     'rules for removed screens must not linger in the override layer');
 });
 
-test('caption editing stays usable when the preview is a baked export', () => {
-  // Regression: hiding the overlay removed caption positioning on nearly every
-  // clip, because a YouTube import discards its raw download after processing,
-  // so most clips reach this fallback. The control must stay interactive; only
-  // its labelling changes.
+test('a baked export shows one set of captions, not two', () => {
+  // This assertion is the reverse of what it was until 12 Aug, so the reversal
+  // is worth recording rather than silently flipping.
+  //
+  // The old rule was "the caption box must stay draggable", on the reasoning
+  // that hiding it removed caption positioning from nearly every clip. The
+  // premise was right — most clips do reach this path — but the conclusion was
+  // wrong. When there is no clean plate the video already has captions painted
+  // into its pixels, and there is no footage left to re-render from, so the
+  // draggable box could never affect an export. It moved, it snapped, it
+  // showed guides, and then it was discarded. Keeping it did not preserve
+  // caption positioning; it only hid the fact that positioning was already
+  // gone, behind two sets of words on screen at once.
+  //
+  // A control that cannot perform its function should say so, not perform an
+  // animation of itself.
   const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
-  assert.match(source, /classList\.add\('dc-editor-baked-preview'\)/);
-  assert.match(source, /classList\.remove\('dc-editor-baked-preview'\)/,
-    'the state must reset when another clip is bound');
+  assert.match(source, /classList\.toggle\('dc-editor-baked-preview',!editorHasCleanSource\(clip\)\)/,
+    'the state must be set from the server flag, and reset, in one call');
 
   const overlayRules = (css.match(/body\.dc-editor-baked-preview #dcCaptionOverlay[^{]*\{[^}]*\}/g) || [])
-    // The ::after label is decoration and is meant to ignore pointer events;
-    // only rules targeting the box itself constrain interactivity.
     .filter(rule => !rule.slice(0, rule.indexOf('{')).includes('::'));
-  assert.ok(overlayRules.length, 'the baked-preview state should still mark the caption box');
-  for (const rule of overlayRules) {
-    assert.doesNotMatch(rule, /display:\s*none/, 'the caption box must stay draggable');
-    assert.doesNotMatch(rule, /pointer-events:\s*none/, 'the caption box must stay clickable');
-  }
-  assert.doesNotMatch(css, /#dcResizeHandle[^{]*\{[^}]*display:\s*none/,
-    'the resize handle must stay usable');
+  assert.ok(overlayRules.length, 'the baked-preview state must still govern the caption box');
+  assert.ok(
+    overlayRules.some(rule => /display:\s*none/.test(rule)),
+    'the live overlay must be hidden so it cannot duplicate the baked captions',
+  );
 
-  // The gold outline marks it; a text badge over the video was too heavy.
+  // And the panel has to explain it, or the missing controls read as a bug.
+  assert.match(source, /Captions are part of this video/);
   assert.doesNotMatch(css, /DRAG THIS ONE/, 'no label painted over the frame');
-  assert.match(source, /outlined box is the live caption/);
 });
 
 test('the override layer has no rule that can never match', () => {

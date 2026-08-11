@@ -635,9 +635,7 @@ body.dc-app .dc-empty { border-radius: var(--v6-radius-md); }
  * is stated instead. Every other edit still works and still exports.
  * ------------------------------------------------------------------ */
 body.dc-editor-baked-preview #dcCaptionOverlay {
-  outline: 2px solid var(--v6-gold);
-  outline-offset: 2px;
-  background: rgba(224,186,117,.07);
+  display: none;
 }
 body.dc-editor-baked-preview #dcCaptionStatus { color: var(--v6-gold); }
 

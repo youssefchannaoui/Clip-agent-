@@ -48,6 +48,31 @@ test('caption controls match exports and expose a broad font and timing set', ()
   assert.match(ui, /\['Noto Naskh Arabic','Noto Naskh Arabic'\]/);
   assert.match(ui, /rangeField\('Clear on silent gap','captionClearPause'/);
   assert.match(ui, /rangeField\('Font weight','captionFontWeight'/);
-  assert.match(ui, /id="dcSyncCaptions"/);
-  assert.match(ui, />\$\{busy\?'Syncing…':'Sync captions'\}</);
+});
+
+test('captions synchronise themselves instead of offering a Sync button', () => {
+  // 12 Aug: the caption panel used to lead with "Sync captions", asking the
+  // user to run a repair the app already knew how to perform — there was no
+  // case where "leave it unsynced" was the right answer. The button is gone
+  // and autoSyncCaptions() runs on open.
+  assert.doesNotMatch(ui, /id="dcSyncCaptions"/, 'the manual sync button must not come back');
+  assert.doesNotMatch(ui, /'Sync captions'/, 'nothing should still offer syncing as a user chore');
+  assert.match(ui, /async function autoSyncCaptions\(clip\)\{/);
+  assert.match(ui, /autoSyncCaptions\(clip\);/, 'it must actually be called when a clip opens');
+});
+
+test('auto-sync never discards the user own caption edits', () => {
+  // Re-pulling Whisper over hand-edited words would silently throw away the
+  // user's rewrite, which is worse than slightly-off timing.
+  const fn = ui.slice(ui.indexOf('async function autoSyncCaptions(clip){'));
+  // Comments stripped: this file explains its reasoning inline, and prose that
+  // names a call is not a call. Asserting against raw text made the comment
+  // "Not markEditorDirty(): ..." read as evidence of the very bug it prevents.
+  const body = fn.slice(0, fn.indexOf('\n}')).replace(/^\s*\/\/.*$/gm, '');
+  assert.match(body, /captionSource==='whisper'\|\|editor\.captionSource==='edited'\)return/);
+  // A repair the user did not ask for must not mark their draft dirty, or
+  // every clip opens claiming unsaved changes.
+  assert.doesNotMatch(body, /markEditorDirty\(\)/);
+  // And a clip switch mid-flight must not write stale words over the new clip.
+  assert.match(body, /if\(editor\.clipId!==clipId\)return;/);
 });
