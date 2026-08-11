@@ -1261,16 +1261,6 @@ function handleProjectOpenCapture(event){
 }
 
 function handleClick(event){
-  // Click a word, land on the syllable. This is the whole point of leading
-  // with the transcript: the timings are Whisper's, not an estimate.
-  const cutWord = event.target.closest('[data-cut-word]');
-  if (cutWord) { removeTranscriptWord(Number(cutWord.dataset.cutWord)); return; }
-  const transcriptWord = event.target.closest('[data-transcript-word]');
-  if (transcriptWord) {
-    const at = Number(transcriptWord.dataset.at);
-    if (Number.isFinite(at)) { seekEditor(at); highlightTranscriptWord(at); }
-    return;
-  }
   const openBilling = event.target.closest('[data-open-billing]');
   if (openBilling) { openBillingModal(); return; }
   const publishTab = event.target.closest('[data-publish-tab]');
@@ -2523,7 +2513,7 @@ function renderEditor(clip){
   const panel=$('#view-editor'),d=data();if(!panel||!clip)return;
   panel.classList.add('dc-editor-page');
   const source=editorSourceUrl(clip);
-  panel.innerHTML=`<div class="dc-editor-header"><button class="dc-icon-btn dc-svg" id="dcEditorBack" title="Back to project">${ICON.back}</button><div class="dc-editor-title"><strong>${esc(clip.title||'Untitled clip')}</strong><span>${esc(clip.projectTitle||'Lecture')} · ${Math.round(clip.score||0)}/100 · <b id="dcEditorSaveState">${editor.dirty?'Draft backed up locally':'All changes saved'}</b></span></div><button class="dc-icon-btn dc-svg" id="dcUndo" title="Undo (⌘Z)" ${editor.historyIndex<=0?'disabled':''}>${ICON.undo}</button><button class="dc-icon-btn dc-svg" id="dcRedo" title="Redo (⇧⌘Z)" ${editor.historyIndex>=editor.history.length-1?'disabled':''}>${ICON.redo}</button><button class="dc-btn secondary" id="dcSaveDraft" title="Save and apply this template (⌘S)">Save</button><button class="dc-btn" id="dcRenderClip">Export video</button></div><div class="dc-editor-workspace"><nav class="dc-tool-rail">${toolButton('captions','Captions','captions')}${toolButton('canvas','Canvas','canvas')}${toolButton('style','Look','style')}${toolButton('audio','Audio','audio')}${toolButton('details','Post','details')}</nav><aside class="dc-tool-panel"><div class="dc-tool-head"><strong id="dcToolTitle">Captions</strong><span class="dc-pill ${editor.captionSource==='whisper'?'good':'warn'}" id="dcCaptionSource">${editor.captionSource==='whisper'?'Exact speech timing':editor.captionSource==='edited'?'Edited speech timing':'Estimated timing'}</span></div><div class="dc-tool-content" id="dcToolContent"></div></aside><section class="dc-transcript" aria-label="Clip transcript"><div class="dc-transcript-head"><strong>Transcript</strong><span id="dcTranscriptHint">Click a word to jump there</span></div><div class="dc-transcript-body" id="dcTranscript"></div></section><main class="dc-canvas-area"><div class="dc-canvas-toolbar"><button class="dc-icon-btn dc-svg" id="dcPlayButton" title="Play / pause (Space)">${ICON.play}</button><span class="dc-timeline-time" id="dcCanvasTime">0:00 / ${formatClock(editor.trimOut)}</span><div class="dc-layer-switch" role="group" aria-label="Select editor layer"><button type="button" data-select-layer="video" class="${editor.selectedLayer==='video'?'on':''}">Video</button><button type="button" data-select-layer="captions" class="${editor.selectedLayer==='captions'?'on':''}">Captions</button></div><button type="button" class="dc-safe-toggle ${editor.safeZones?'on':''}" id="dcSafeZones" aria-pressed="${editor.safeZones}">Safe zones</button><span class="spacer"></span><button type="button" class="dc-btn secondary dc-caption-edit-shortcut" id="dcOpenCaptionText">Edit captions</button><span class="dc-zoom">Shift + arrows nudge · arrows seek</span></div><div class="dc-canvas-wrap"><div class="dc-video-canvas ${editor.selectedLayer==='video'?'is-video-selected':''}" id="dcVideoCanvas"><video id="dcEditorVideoBg" class="dc-video-layer dc-video-bg" src="${source}" preload="metadata" muted playsinline></video><video id="dcEditorVideo" class="dc-video-layer dc-video-fg" src="${source}" preload="metadata" playsinline></video><div class="dc-safe-zone ${editor.safeZones?'show':''}" id="dcSafeZone"><span>Keep text inside</span></div><div class="dc-framing-guide"></div><button type="button" class="dc-resize-handle" id="dcResizeHandle" aria-label="Resize video"></button><span class="dc-layer-badge" id="dcLayerBadge">Video layer</span><div class="dc-snap-guide vertical" id="dcSnapGuideV"></div><div class="dc-snap-guide horizontal" id="dcSnapGuideH"></div><div class="dc-caption-overlay ${editor.selectedLayer==='captions'?'is-selected':''}" id="dcCaptionOverlay" role="group" aria-label="Caption layer"></div><div class="dc-watermark" id="dcWatermark"></div><div class="dc-brand-line" id="dcBrandLine"></div><span class="dc-caption-status" id="dcCaptionStatus">Captions follow the spoken words</span></div></div></main><section class="dc-timeline"><div class="dc-timeline-top"><span class="dc-timeline-time" id="dcTimelineTime">0:00.0</span><span class="dc-timeline-help">Click a caption to jump · Space to preview</span><span class="spacer"></span></div><div class="dc-timeline-scroll" id="dcTimelineScroll"><div class="dc-ruler" id="dcRuler"></div><div class="dc-track-row"><div class="dc-track-label">Video</div><div class="dc-track-content"><div class="dc-video-block">${esc(clip.title||'Video')}</div></div></div><div class="dc-track-row"><div class="dc-track-label">Captions</div><div class="dc-track-content" id="dcCaptionTrack"></div></div><div class="dc-track-row"><div class="dc-track-label">Audio</div><div class="dc-track-content"><div class="dc-audio-block">${esc(clip.musicName||'Nasheed')}</div></div></div><div class="dc-playhead" id="dcPlayhead"></div></div></section></div>`;
+  panel.innerHTML=`<div class="dc-editor-header"><button class="dc-icon-btn dc-svg" id="dcEditorBack" title="Back to project">${ICON.back}</button><div class="dc-editor-title"><strong>${esc(clip.title||'Untitled clip')}</strong><span>${esc(clip.projectTitle||'Lecture')} · ${Math.round(clip.score||0)}/100 · <b id="dcEditorSaveState">${editor.dirty?'Draft backed up locally':'All changes saved'}</b></span></div><button class="dc-icon-btn dc-svg" id="dcUndo" title="Undo (⌘Z)" ${editor.historyIndex<=0?'disabled':''}>${ICON.undo}</button><button class="dc-icon-btn dc-svg" id="dcRedo" title="Redo (⇧⌘Z)" ${editor.historyIndex>=editor.history.length-1?'disabled':''}>${ICON.redo}</button><button class="dc-btn secondary" id="dcSaveDraft" title="Save and apply this template (⌘S)">Save</button><button class="dc-btn" id="dcRenderClip">Export video</button></div><div class="dc-editor-workspace"><nav class="dc-tool-rail">${toolButton('captions','Captions','captions')}${toolButton('canvas','Canvas','canvas')}${toolButton('style','Look','style')}${toolButton('audio','Audio','audio')}${toolButton('details','Post','details')}</nav><aside class="dc-tool-panel"><div class="dc-tool-head"><strong id="dcToolTitle">Captions</strong><span class="dc-pill ${editor.captionSource==='whisper'?'good':'warn'}" id="dcCaptionSource">${editor.captionSource==='whisper'?'Exact speech timing':editor.captionSource==='edited'?'Edited speech timing':'Estimated timing'}</span></div><div class="dc-tool-content" id="dcToolContent"></div></aside><main class="dc-canvas-area"><div class="dc-canvas-toolbar"><button class="dc-icon-btn dc-svg" id="dcPlayButton" title="Play / pause (Space)">${ICON.play}</button><span class="dc-timeline-time" id="dcCanvasTime">0:00 / ${formatClock(editor.trimOut)}</span><div class="dc-layer-switch" role="group" aria-label="Select editor layer"><button type="button" data-select-layer="video" class="${editor.selectedLayer==='video'?'on':''}">Video</button><button type="button" data-select-layer="captions" class="${editor.selectedLayer==='captions'?'on':''}">Captions</button></div><button type="button" class="dc-safe-toggle ${editor.safeZones?'on':''}" id="dcSafeZones" aria-pressed="${editor.safeZones}">Safe zones</button><span class="spacer"></span><button type="button" class="dc-btn secondary dc-caption-edit-shortcut" id="dcOpenCaptionText">Edit captions</button><span class="dc-zoom">Shift + arrows nudge · arrows seek</span></div><div class="dc-canvas-wrap"><div class="dc-video-canvas ${editor.selectedLayer==='video'?'is-video-selected':''}" id="dcVideoCanvas"><video id="dcEditorVideoBg" class="dc-video-layer dc-video-bg" src="${source}" preload="metadata" muted playsinline></video><video id="dcEditorVideo" class="dc-video-layer dc-video-fg" src="${source}" preload="metadata" playsinline></video><div class="dc-safe-zone ${editor.safeZones?'show':''}" id="dcSafeZone"><span>Keep text inside</span></div><div class="dc-framing-guide"></div><button type="button" class="dc-resize-handle" id="dcResizeHandle" aria-label="Resize video"></button><span class="dc-layer-badge" id="dcLayerBadge">Video layer</span><div class="dc-snap-guide vertical" id="dcSnapGuideV"></div><div class="dc-snap-guide horizontal" id="dcSnapGuideH"></div><div class="dc-caption-overlay ${editor.selectedLayer==='captions'?'is-selected':''}" id="dcCaptionOverlay" role="group" aria-label="Caption layer"></div><div class="dc-watermark" id="dcWatermark"></div><div class="dc-brand-line" id="dcBrandLine"></div><span class="dc-caption-status" id="dcCaptionStatus">Captions follow the spoken words</span></div></div></main><section class="dc-timeline"><div class="dc-timeline-top"><span class="dc-timeline-time" id="dcTimelineTime">0:00.0</span><span class="dc-timeline-help">Click a caption to jump · Space to preview</span><span class="spacer"></span></div><div class="dc-timeline-scroll" id="dcTimelineScroll"><div class="dc-ruler" id="dcRuler"></div><div class="dc-track-row"><div class="dc-track-label">Video</div><div class="dc-track-content"><div class="dc-video-block">${esc(clip.title||'Video')}</div></div></div><div class="dc-track-row"><div class="dc-track-label">Captions</div><div class="dc-track-content" id="dcCaptionTrack"></div></div><div class="dc-track-row"><div class="dc-track-label">Audio</div><div class="dc-track-content"><div class="dc-audio-block">${esc(clip.musicName||'Nasheed')}</div></div></div><div class="dc-playhead" id="dcPlayhead"></div></div></section></div>`;
   $('#dcEditorBack').onclick=()=>{selectedProjectId=clip.projectId;go('projects')};
   $('#dcUndo').onclick=undoEditor;$('#dcRedo').onclick=redoEditor;$('#dcSaveDraft').onclick=saveEditorDraft;$('#dcRenderClip').onclick=renderEditedClip;$('#dcPlayButton').onclick=togglePlayback;$('#dcOpenCaptionText')?.addEventListener('click',()=>{editor.tool='captions';editor.captionTab='text';renderEditorTool();setTimeout(()=>$('#dcCaptionText')?.focus(),0);});
   $('#dcSafeZones')?.addEventListener('click',()=>{editor.safeZones=!editor.safeZones;$('#dcSafeZone')?.classList.toggle('show',editor.safeZones);$('#dcSafeZones')?.classList.toggle('on',editor.safeZones);$('#dcSafeZones')?.setAttribute('aria-pressed',String(editor.safeZones))});
@@ -2543,26 +2533,8 @@ function updateEditorSaveState(){
   state.textContent=editor.dirty?`Draft backed up locally${editor.localSavedAt?' · just now':''}`:'All changes saved';
   state.className=editor.dirty?'is-draft':'is-saved';
 }
-/**
- * Properties follow the selection.
- *
- * The tool rail used to be the only way to change the panel, so clicking the
- * caption on the canvas and then reaching for a category to style it were two
- * unrelated actions — nothing felt connected to what you had just clicked.
- * Selecting a layer now opens that layer's panel.
- *
- * Only on an actual change of layer: re-selecting the same thing must not
- * yank the panel back if the user has since opened Audio or Post on purpose.
- */
-const LAYER_TOOL = { captions: 'captions', video: 'canvas' };
 function selectEditorLayer(layer){
-  const previous = editor.selectedLayer;
   editor.selectedLayer=['video','captions'].includes(layer)?layer:'none';
-  const tool = LAYER_TOOL[editor.selectedLayer];
-  if(tool && editor.selectedLayer !== previous && editor.tool !== tool){
-    editor.tool = tool;
-    renderEditorTool();
-  }
   const canvas=$('#dcVideoCanvas'),caption=$('#dcCaptionOverlay');
   canvas?.classList.toggle('is-video-selected',editor.selectedLayer==='video');caption?.classList.toggle('is-selected',editor.selectedLayer==='captions');
   $$('[data-select-layer]').forEach(button=>button.classList.toggle('on',button.dataset.selectLayer===editor.selectedLayer));
@@ -2812,91 +2784,6 @@ function bindCaptionDrag(){
   canvas.addEventListener('pointerdown',event=>{if(!event.target.closest('#dcCaptionOverlay')&&!event.target.closest('#dcResizeHandle'))selectEditorLayer(event.target.closest('.dc-video-layer')?'video':'none')});
 }
 
-
-/**
- * The transcript, as the editor's primary surface.
- *
- * Word timings are real: `editor.captionWords` carries Whisper's per-word
- * start and end whenever a timed transcript exists, which is what makes
- * click-to-seek land on the actual syllable rather than an estimate.
- *
- * A gap chip is drawn wherever speech pauses for longer than TRANSCRIPT_GAP.
- * That is where filler and dead air live, so showing it turns a wall of text
- * into something you can edit against.
- */
-const TRANSCRIPT_GAP = 0.3;
-function renderTranscript(){
-  const host = $('#dcTranscript');
-  if(!host) return;
-  const words = editor.captionWords || [];
-  if(!words.length){
-    host.innerHTML = '<p class="dc-transcript-empty">No transcript is available for this clip.</p>';
-    return;
-  }
-  host.innerHTML = words.map((word, index) => {
-    const previous = words[index - 1];
-    const gap = previous ? Number(word.start) - Number(previous.end) : 0;
-    const chip = gap >= TRANSCRIPT_GAP ? `<b class="dc-transcript-gap">${gap.toFixed(2)}s</b>` : '';
-    return `${chip}<span class="dc-transcript-item"><button type="button" class="dc-transcript-word" data-transcript-word="${index}" data-at="${Number(word.start) || 0}">${esc(String(word.word || ''))}</button><button type="button" class="dc-transcript-cut" data-cut-word="${index}" aria-label="Remove ${esc(String(word.word || 'word'))}" title="Remove this word">&times;</button></span>`;
-  }).join(' ');
-  highlightTranscriptWord(editor.currentTime || 0);
-}
-
-/**
- * Move the active marker without rebuilding the list.
- *
- * Rewriting innerHTML on every frame re-lays-out every word and reads as a
- * visible shimmer during playback — the same trap `updateCaptionAtTime`
- * documents. Only the two spans that changed are touched.
- */
-let transcriptActiveIndex = -1;
-function highlightTranscriptWord(time){
-  const host = $('#dcTranscript');
-  if(!host) return;
-  const words = editor.captionWords || [];
-  let index = -1;
-  for(let i = 0; i < words.length; i++){
-    if(time >= Number(words[i].start) && time < Number(words[i].end)){ index = i; break; }
-  }
-  if(index === transcriptActiveIndex) return;
-  host.querySelector('.dc-transcript-word.is-active')?.classList.remove('is-active');
-  transcriptActiveIndex = index;
-  if(index < 0) return;
-  const active = host.querySelector(`[data-transcript-word="${index}"]`);
-  if(!active) return;
-  active.classList.add('is-active');
-  // Keep the spoken word in view, but never yank the panel while the user is
-  // reading somewhere else in it.
-  if(!host.matches(':hover')) active.scrollIntoView({block:'nearest', behavior:'smooth'});
-}
-
-
-/**
- * Delete a word from the clip.
- *
- * Routed through exactly the pipeline the caption textarea uses, so editing
- * from the transcript and editing from the text box cannot drift apart:
- * rebuild the text, re-map it onto the original speech timing, mark the
- * source as edited, then refresh the caption overlay and the timeline.
- * `debouncedHistory` makes it undoable with the editor's existing undo.
- */
-function removeTranscriptWord(index){
-  const words = editor.captionWords || [];
-  if(!Number.isInteger(index) || index < 0 || index >= words.length) return;
-  const reference = editor.captionTimingReference?.length ? editor.captionTimingReference : words;
-  editor.captionText = words.filter((_, i) => i !== index).map(word => word.word).join(' ');
-  editor.captionWords = mapEditedWordsToSpeech(editor.captionText, reference, Math.max(.1, editor.trimOut - editor.trimIn));
-  editor.captionSource = 'edited';
-  markEditorDirty();
-  const box = $('#dcCaptionText');
-  if(box) box.value = editor.captionText;
-  transcriptActiveIndex = -1;
-  updateCaptionAtTime(editor.currentTime);
-  renderTimeline();
-  renderTranscript();
-  debouncedHistory();
-}
-
 function bindVideo(clip){
   const video=$('#dcEditorVideo'),bg=$('#dcEditorVideoBg');if(!video)return;
   // Cleared per clip: the previous clip may have fallen back to its baked
@@ -2906,7 +2793,7 @@ function bindVideo(clip){
   editor.sourceBase=start;editor.sourceEnd=end;editor.trimOut=Math.max(.1,end-start);
   const initialise=()=>{
     if(!editor.sourceFallback){try{video.currentTime=start;if(bg)bg.currentTime=start}catch{}}
-    renderTimeline();renderTranscript();updateCaptionAtTime(0);applyFrameAtTime(0);
+    renderTimeline();updateCaptionAtTime(0);applyFrameAtTime(0);
   };
   video.onloadedmetadata=initialise;
   video.onerror=()=>{
@@ -2932,7 +2819,7 @@ function bindVideo(clip){
     notify('This clip no longer has a clean source, so the editor is showing your rendered export, which already has captions burned into it. Drag the outlined box — that is your live caption, and it is what the export will use. The captions painted into the video behind it are from the previous render.','bad');
   };
   video.ontimeupdate=()=>{
-    const local=clamp(video.currentTime-editor.sourceBase,0,editor.trimOut);editor.currentTime=local;syncBackgroundVideo();updatePlayhead(local);highlightTranscriptWord(local);updateCaptionAtTime(local);applyFrameAtTime(local);
+    const local=clamp(video.currentTime-editor.sourceBase,0,editor.trimOut);editor.currentTime=local;syncBackgroundVideo();updatePlayhead(local);updateCaptionAtTime(local);applyFrameAtTime(local);
     $('#dcCanvasTime').textContent=`${formatClock(local)} / ${formatClock(editor.trimOut)}`;$('#dcTimelineTime').textContent=formatClock(local,true);
     if(video.currentTime>=editor.sourceEnd-.02){video.pause();video.currentTime=editor.sourceBase;if(bg)bg.currentTime=editor.sourceBase}
   };

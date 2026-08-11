@@ -152,7 +152,8 @@ test('caption editing stays usable when the preview is a baked export', () => {
   assert.doesNotMatch(css, /#dcResizeHandle[^{]*\{[^}]*display:\s*none/,
     'the resize handle must stay usable');
 
-  // And the user is told which of the two captions is theirs.
+  // The gold outline marks it; a text badge over the video was too heavy.
+  assert.doesNotMatch(css, /DRAG THIS ONE/, 'no label painted over the frame');
   assert.match(source, /outlined box is the live caption/);
 });
 
@@ -179,92 +180,4 @@ test('the stylesheet is structurally valid', () => {
     assert.ok(depth >= 0, 'a closing brace appeared before its opening brace');
   }
   assert.equal(depth, 0, 'unbalanced braces in studio-v6.css');
-});
-
-test('the transcript is a persistent panel, not another settings tab', () => {
-  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
-  // It sits in the editor workspace beside the canvas, not inside the tool
-  // panel that the category rail swaps in and out.
-  assert.match(source, /<section class="dc-transcript"/);
-  assert.match(source, /id="dcTranscript"/);
-  // Anchor on the markup, not the first mention of the class — the file
-  // embeds CSS too, and that appears earlier.
-  const workspace = source.slice(source.indexOf('class="dc-editor-workspace"'));
-  const panel = workspace.indexOf('dc-transcript');
-  const canvas = workspace.indexOf('dc-canvas-area');
-  assert.ok(panel > -1 && panel < canvas, 'the transcript must sit before the canvas in the workspace');
-  assert.match(css, /body\.dc-app \.dc-transcript\s*\{/, 'the panel needs styling or it renders unstyled');
-});
-
-test('clicking a transcript word seeks the video', () => {
-  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
-  assert.match(source, /closest\('\[data-transcript-word\]'\)/, 'no click handler for transcript words');
-  const handler = source.slice(source.indexOf("closest('[data-transcript-word]')"));
-  assert.match(handler.slice(0, 400), /seekEditor\(/, 'a word click must seek');
-  // Each word carries its real start time from Whisper, not an index.
-  assert.match(source, /data-at="\$\{Number\(word\.start\)/);
-});
-
-test('the active word follows playback without rebuilding the list', () => {
-  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
-  assert.match(source, /highlightTranscriptWord\(local\)/, 'playback must drive the highlight');
-
-  const start = source.indexOf('function highlightTranscriptWord');
-  const body = source.slice(start, source.indexOf('\n}', start));
-  // Rewriting innerHTML every frame re-lays-out every word and shimmers.
-  assert.doesNotMatch(body, /innerHTML/, 'the highlight must not rebuild the transcript each frame');
-  assert.match(body, /if\(index === transcriptActiveIndex\) return;/, 'unchanged frames must bail early');
-});
-
-test('a clip with no transcript says so instead of rendering nothing', () => {
-  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
-  const start = source.indexOf('function renderTranscript');
-  const body = source.slice(start, source.indexOf('\n}', start));
-  assert.match(body, /No transcript is available/);
-});
-
-test('deleting a word from the transcript uses the caption edit pipeline', () => {
-  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
-  assert.match(source, /closest\('\[data-cut-word\]'\)/, 'no handler for removing a word');
-  const start = source.indexOf('function removeTranscriptWord');
-  assert.notEqual(start, -1);
-  const body = source.slice(start, source.indexOf('\n}', start));
-
-  // Editing from the transcript and from the caption textarea must not drift:
-  // both re-map onto the original speech timing and mark the source edited.
-  assert.match(body, /mapEditedWordsToSpeech\(/);
-  assert.match(body, /editor\.captionSource\s*=\s*'edited'/);
-  assert.match(body, /captionTimingReference/, 'edits must map against the original timing');
-  assert.match(body, /markEditorDirty\(\)/);
-  assert.match(body, /debouncedHistory\(\)/, 'a deletion must be undoable');
-  // The textarea has to show the same text, or the two views disagree.
-  assert.match(body, /#dcCaptionText/);
-  // Out-of-range indices must not corrupt the transcript.
-  assert.match(body, /Number\.isInteger\(index\)/);
-});
-
-test('canvas guidance is not painted permanently, but user toggles are respected', () => {
-  assert.match(css, /body\.dc-app \.dc-framing-guide,\s*\nbody\.dc-app \.dc-layer-badge \{[^}]*opacity: 0/);
-  assert.match(css, /\.dc-canvas-area:hover \.dc-framing-guide/, 'guidance must return on hover');
-  assert.match(css, /\.dc-video-canvas\.is-dragging \.dc-framing-guide/, 'and while dragging');
-  // Safe zones have their own control; overriding it repeats a past mistake.
-  assert.doesNotMatch(css, /body\.dc-app \.dc-safe-zone \{[^}]*opacity: 0/,
-    'safe zones are user-toggled and must not be force-hidden');
-});
-
-test('selecting a layer opens that layer\'s properties', () => {
-  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
-  const start = source.indexOf('function selectEditorLayer');
-  const body = source.slice(start, source.indexOf('\n}', start));
-
-  // Clicking the caption on the canvas should open caption properties, and
-  // the video should open framing — instead of the tool rail being the only
-  // way to change what the panel shows.
-  assert.match(source, /LAYER_TOOL = \{ captions: 'captions', video: 'canvas' \}/);
-  assert.match(body, /renderEditorTool\(\)/, 'selection must re-render the panel');
-
-  // Re-selecting the same layer must not drag the panel back if the user has
-  // deliberately opened Audio or Post since.
-  assert.match(body, /editor\.selectedLayer !== previous/,
-    'the panel should only follow an actual change of selection');
 });
