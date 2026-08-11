@@ -634,8 +634,29 @@ body.dc-app .dc-empty { border-radius: var(--v6-radius-md); }
  * is not a thing the control can honestly do, so it is hidden and the reason
  * is stated instead. Every other edit still works and still exports.
  * ------------------------------------------------------------------ */
-body.dc-editor-baked-preview #dcCaptionOverlay,
-body.dc-editor-baked-preview #dcResizeHandle { display: none !important; }
+body.dc-editor-baked-preview #dcCaptionOverlay {
+  outline: 2px solid var(--v6-gold);
+  outline-offset: 2px;
+  background: rgba(224,186,117,.07);
+}
+/* Names the box, so the one you can drag is obvious against the pair of
+   captions on screen. */
+body.dc-editor-baked-preview #dcCaptionOverlay::after {
+  content: 'DRAG THIS ONE';
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  margin-bottom: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--v6-gold);
+  color: #17130a;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  white-space: nowrap;
+  pointer-events: none;
+}
 body.dc-editor-baked-preview #dcCaptionStatus { color: var(--v6-gold); }
 
 /* ------------------------------------------------------------------ *

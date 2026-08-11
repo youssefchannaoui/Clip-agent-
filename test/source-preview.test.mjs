@@ -46,7 +46,9 @@ test('a missing clean source falls back to the rendered export instead of a dead
   // that could not work against a baked frame, so the copy had to change.
   assert.match(body, /notify\(/, 'the fallback must tell the user what happened');
   assert.match(body, /rendered export/, 'the message must say what is being shown instead');
-  // And the live caption layer is suppressed, or the baked captions and the
-  // draggable ones appear together and neither makes sense.
+  // The state is marked so the live caption box can be labelled against the
+  // baked ones behind it. It must stay draggable: this path is the common
+  // case, not the exception, so disabling it would remove caption positioning
+  // from nearly every clip.
   assert.match(body, /dc-editor-baked-preview/, 'the baked-preview state must be marked');
 });

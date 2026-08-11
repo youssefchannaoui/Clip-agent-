@@ -2807,14 +2807,16 @@ function bindVideo(clip){
     const fallbackUrl=authedUrl(`/api/clips/${encodeURIComponent(clip.id)}/video`);
     video.onerror=null;video.src=fallbackUrl;video.load();
     if(bg){bg.onerror=null;bg.src=fallbackUrl;bg.load();}
-    // The export already has captions burned into its pixels. Drawing the
-    // draggable caption box on top of it put two sets of captions on screen —
-    // one that moves and one that never can — and asked the user to position
-    // text against a frame that already contains text. Hide the live overlay
-    // and say so, rather than showing a control that cannot mean anything here.
+    // The export already has captions burned into its pixels, so two sets of
+    // captions appear: the baked ones, and the box the user can actually drag.
+    // Hiding the box was worse than the confusion — most clips reach this path,
+    // because a YouTube import discards its raw download once processing
+    // finishes, so that removed caption positioning almost everywhere. The box
+    // stays interactive and is marked instead, so it is obvious which of the
+    // two is the live one.
     document.body.classList.add('dc-editor-baked-preview');
-    const status=$('#dcCaptionStatus');if(status)status.textContent='Showing the rendered export — caption position cannot be previewed';
-    notify('This clip no longer has a clean source, so the editor is showing your rendered export, which already has captions burned in. Caption position is hidden here because it cannot be previewed against a baked frame — every other edit still applies normally on export.','bad');
+    const status=$('#dcCaptionStatus');if(status)status.textContent='Showing the rendered export — the outlined box is the live caption';
+    notify('This clip no longer has a clean source, so the editor is showing your rendered export, which already has captions burned into it. Drag the outlined box — that is your live caption, and it is what the export will use. The captions painted into the video behind it are from the previous render.','bad');
   };
   video.ontimeupdate=()=>{
     const local=clamp(video.currentTime-editor.sourceBase,0,editor.trimOut);editor.currentTime=local;syncBackgroundVideo();updatePlayhead(local);updateCaptionAtTime(local);applyFrameAtTime(local);

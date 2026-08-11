@@ -130,28 +130,30 @@ test('rules for removed markup cannot reshape live controls', () => {
     'rules for removed screens must not linger in the override layer');
 });
 
-test('a baked-export preview never shows a second, draggable caption layer', () => {
-  // The editor falls back to the rendered export when a clip's clean source
-  // is gone. That file has captions burned in, so the live overlay put two
-  // sets of captions on screen — one movable, one not.
+test('caption editing stays usable when the preview is a baked export', () => {
+  // Regression: hiding the overlay removed caption positioning on nearly every
+  // clip, because a YouTube import discards its raw download after processing,
+  // so most clips reach this fallback. The control must stay interactive; only
+  // its labelling changes.
   const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
-
-  // The fallback marks the state...
-  assert.match(source, /classList\.add\('dc-editor-baked-preview'\)/,
-    'the fallback must mark the baked-preview state');
-  // ...and it is cleared per clip, or it follows the next clip that has a
-  // clean source and hides a control that should work.
+  assert.match(source, /classList\.add\('dc-editor-baked-preview'\)/);
   assert.match(source, /classList\.remove\('dc-editor-baked-preview'\)/,
-    'the state must be reset when another clip is bound');
+    'the state must reset when another clip is bound');
 
-  // ...and the CSS actually hides both the box and its resize handle.
-  assert.match(css, /body\.dc-editor-baked-preview #dcCaptionOverlay[^{]*\{[^}]*display:\s*none/);
-  assert.match(css, /#dcResizeHandle/);
+  const overlayRules = (css.match(/body\.dc-editor-baked-preview #dcCaptionOverlay[^{]*\{[^}]*\}/g) || [])
+    // The ::after label is decoration and is meant to ignore pointer events;
+    // only rules targeting the box itself constrain interactivity.
+    .filter(rule => !rule.slice(0, rule.indexOf('{')).includes('::'));
+  assert.ok(overlayRules.length, 'the baked-preview state should still mark the caption box');
+  for (const rule of overlayRules) {
+    assert.doesNotMatch(rule, /display:\s*none/, 'the caption box must stay draggable');
+    assert.doesNotMatch(rule, /pointer-events:\s*none/, 'the caption box must stay clickable');
+  }
+  assert.doesNotMatch(css, /#dcResizeHandle[^{]*\{[^}]*display:\s*none/,
+    'the resize handle must stay usable');
 
-  // The old copy claimed edits "apply correctly" while showing an unusable
-  // control; the new copy has to say position is unavailable.
-  assert.doesNotMatch(source, /Captions will appear baked into the preview/);
-  assert.match(source, /caption position cannot be previewed/i);
+  // And the user is told which of the two captions is theirs.
+  assert.match(source, /outlined box is the live caption/);
 });
 
 test('the override layer has no rule that can never match', () => {
