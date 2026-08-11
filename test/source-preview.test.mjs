@@ -120,6 +120,41 @@ test('a clip with baked captions gets no draggable caption box', () => {
   assert.match(guard, /if\(!editorHasCleanSource\(currentClip\(\)\)\)return;/);
 });
 
+test('a clean-source claim that fails still leaves a playable canvas', () => {
+  // Shipped and immediately regressed on 12 Aug. Moving the decision up front
+  // was right, but the error path was deleted along with the old fallback, so a
+  // cleanSource:true clip whose plate could not actually be fetched left a dead
+  // <video> and an editor with nothing in it.
+  //
+  // cleanSource is a claim, not a guarantee: the server can verify that a
+  // storage key is well-formed and that storage is configured, but not that the
+  // object is still there or that presigning will succeed. The failure path has
+  // to degrade to the rendered export — and must enter baked mode as it does,
+  // or it recreates the two-sets-of-captions bug it was written to fix.
+  const fn = editorSource.slice(editorSource.indexOf('function bindVideo(clip){'));
+  const handler = fn.slice(fn.indexOf('video.onerror=()=>{'));
+  const body = handler.slice(0, handler.indexOf('\n  };'));
+  assert.match(body, /\/api\/clips\/\$\{encodeURIComponent\(clip\.id\)\}\/video/, 'it must fall back to the export');
+  assert.match(body, /video\.src=exportUrl/);
+  assert.match(body, /bg\.src=exportUrl/);
+  assert.match(body, /editor\.bakedPreview=true/, 'falling back must record that captions are now baked');
+  assert.match(body, /dc-editor-baked-preview/);
+  assert.match(body, /renderEditorTool\(\)/, 'the caption panel must be rebuilt for the new answer');
+});
+
+test('a failed clean-source verdict survives later re-renders', () => {
+  // Without this the editor retries the missing plate on every re-render,
+  // flickering between states forever.
+  const fn = editorSource.slice(editorSource.indexOf('function editorHasCleanSource(clip){'));
+  const body = fn.slice(0, fn.indexOf('\n}'));
+  assert.match(body, /editor\.bakedPreview/);
+  assert.match(body, /editor\.clipId===clip\.id/, 'the verdict must be scoped to the clip it was proven on');
+  // And bindVideo must not clear it, or the verdict never survives anything.
+  const bind = editorSource.slice(editorSource.indexOf('function bindVideo(clip){'));
+  const head = bind.slice(0, bind.indexOf('const start='));
+  assert.doesNotMatch(head, /editor\.bakedPreview=false/);
+});
+
 test('the baked-preview state hides the caption overlay rather than outlining it', () => {
   const css = fs.readFileSync(new URL('../src/public/studio-v6.css', import.meta.url), 'utf8');
   const start = css.indexOf('body.dc-editor-baked-preview #dcCaptionOverlay');

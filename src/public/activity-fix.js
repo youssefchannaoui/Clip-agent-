@@ -227,7 +227,7 @@ const editor = {
   tool:'captions', captionTab:'styles', clipId:'', draft:null, captionText:'', captionWords:[],
   captionSource:'fallback', dirty:false, loading:false, history:[], historyIndex:-1,
   currentTime:0, trimIn:0, trimOut:0, playing:false, search:'', presetId:'',
-  sourceBase:0, sourceEnd:0, sourceFallback:false, framingPlan:null, framingStatus:'idle',
+  sourceBase:0, sourceEnd:0, sourceFallback:false, bakedPreview:false, framingPlan:null, framingStatus:'idle',
   framingMessage:'Active-speaker framing has not been analysed', framingRequest:0, framingTimer:null,
   canvasDragging:false, canvasDragStart:null, backendCaptionReady:false,
   selectedLayer:'captions', safeZones:true, localSavedAt:0, saving:false, exporting:false, captionTimingReference:[],
@@ -2401,7 +2401,15 @@ async function deleteProject(id){if(!confirm('Delete this project and its genera
 // preview anyway and waiting for the <video> to error was how this used to work,
 // which meant the editor spent its first seconds in a state it already knew was
 // wrong, then reconfigured itself in front of the user.
-function editorHasCleanSource(clip){return clip?.cleanSource!==false}
+function editorHasCleanSource(clip){
+  // editor.bakedPreview is the runtime answer and outranks the server's claim,
+  // because the server can only verify that a storage key is well-formed — not
+  // that the object behind it still exists. Once a load has actually failed we
+  // know better than the flag does, and that verdict has to survive the
+  // re-renders that follow, or the editor would retry and flicker on every one.
+  if(clip&&editor.clipId===clip.id&&editor.bakedPreview)return false;
+  return clip?.cleanSource!==false;
+}
 function editorSourceUrl(clip){
   return editorHasCleanSource(clip)
     ? authedUrl(`/api/clips/${encodeURIComponent(clip.id)}/source-preview`)
@@ -2505,6 +2513,9 @@ async function ensureEditor(){
     editor.captionText=saved?.captionText??clip.transcript??'';
     editor.trimIn=0;editor.trimOut=Math.max(.1,Number(clip.durationMs||0)/1000);
     editor.dirty=Boolean(saved);editor.localSavedAt=Number(saved?.savedAt||0);editor.selectedLayer='captions';editor.history=[];editor.historyIndex=-1;editor.sourceBase=Number(clip.startSec||0);editor.sourceEnd=Number(clip.endSec||editor.sourceBase+editor.trimOut);editor.sourceFallback=false;editor.framingPlan=clip.smartFraming||null;editor.framingStatus=editor.framingPlan?'ready':'idle';editor.framingMessage=editor.framingPlan?'Using the framing saved with this render':'Smart framing has not been analysed';
+    // Seeded from the server's claim once per clip. bindVideo() may later flip
+    // it to true if that claim does not survive contact with a real load.
+    editor.bakedPreview=clip.cleanSource===false;
     editor.captionWords=approximateWords(editor.captionText,editor.trimOut);editor.captionTimingReference=clone(editor.captionWords);editor.captionSource='fallback';editor.backendCaptionReady=false;
     await loadCaptionWords(clip);
     pushHistory(true);
@@ -2828,6 +2839,8 @@ function bindVideo(clip){
   // Set per clip from what the server already told us, so the editor never
   // renders one state and then corrects itself. Must be assigned both ways:
   // the previous clip's state must not follow a clip that has a clean plate.
+  // Reset per bind so a fresh onerror can fire; bakedPreview is deliberately
+  // not reset here, because it is set once per clip and must outlive re-renders.
   editor.sourceFallback=false;
   document.body.classList.toggle('dc-editor-baked-preview',!editorHasCleanSource(clip));
   const start=Number(clip.startSec||0),end=Number(clip.endSec||start+Number(clip.durationMs||0)/1000);
@@ -2838,13 +2851,37 @@ function bindVideo(clip){
   };
   video.onloadedmetadata=initialise;
   video.onerror=()=>{
-    // With no clean plate we are already showing the export, so an error here
-    // means the export itself is unreachable. Say that plainly rather than
-    // swapping in another source that will fail the same way.
     if(editor.sourceFallback)return;
     editor.sourceFallback=true;video.pause();if(bg)bg.pause();
+    // cleanSource is a claim, not a guarantee. The server can only check that a
+    // storage key is well-formed and that storage is configured — it cannot
+    // know the object is still there, or that presigning will succeed. When
+    // that claim turns out to be wrong we must still show something, or the
+    // canvas is simply dead.
+    //
+    // So: fall back to the rendered export, but enter baked mode at the same
+    // time. That is the part the old code got wrong — it fell back and left the
+    // draggable caption box on screen, over an export that already had captions
+    // painted into it. Degrading the preview is fine; degrading it into two
+    // sets of captions is not.
+    if(editorHasCleanSource(clip)){
+      const exportUrl=authedUrl(`/api/clips/${encodeURIComponent(clip.id)}/video`);
+      editor.bakedPreview=true;
+      document.body.classList.add('dc-editor-baked-preview');
+      video.onerror=()=>{
+        const status=$('#dcCaptionStatus');if(status)status.textContent='This clip’s video could not be loaded';
+        notify('This clip’s video could not be loaded. Try reloading the page; if it persists the clip may need to be rendered again.','bad');
+      };
+      video.src=exportUrl;video.load();
+      if(bg){bg.onerror=null;bg.src=exportUrl;bg.load();}
+      // The caption panel and the drag binding both read this, so they have to
+      // be rebuilt now that the answer has changed.
+      renderEditorTool();
+      const status=$('#dcCaptionStatus');if(status)status.textContent='Showing the rendered export — its captions are part of the picture';
+      return;
+    }
     const status=$('#dcCaptionStatus');if(status)status.textContent='This clip’s video could not be loaded';
-    notify('This clip’s video could not be loaded. Try reloading the page; if it persists the render may need to be run again.','bad');
+    notify('This clip’s video could not be loaded. Try reloading the page; if it persists the clip may need to be rendered again.','bad');
   };
   video.ontimeupdate=()=>{
     const local=clamp(video.currentTime-editor.sourceBase,0,editor.trimOut);editor.currentTime=local;syncBackgroundVideo();updatePlayhead(local);updateCaptionAtTime(local);applyFrameAtTime(local);
