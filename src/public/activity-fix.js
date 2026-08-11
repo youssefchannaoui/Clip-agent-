@@ -2868,11 +2868,28 @@ function bindVideo(clip){
   const baked=!editorHasCleanSource(clip);
   document.body.classList.toggle('dc-editor-baked-preview',baked);
   applyMediaTimebase(clip,baked);
+  // A missing source does not fail fast. The browser retries and only gives
+  // up after many seconds, and the editor shows a black canvas for that whole
+  // time before `onerror` fires and the export is swapped in. Waiting on the
+  // network stack's own patience is the black screen users complain about.
+  //
+  // So put a bound on it: if metadata has not arrived by SOURCE_TIMEOUT_MS,
+  // take the same path `onerror` would have taken. Cleared as soon as the
+  // video reports it loaded, so a slow-but-working source is never cut off
+  // mid-flight.
+  const SOURCE_TIMEOUT_MS=2500;
+  let sourceWatchdog=null;
   const initialise=()=>{
+    clearTimeout(sourceWatchdog);
     if(!editor.sourceFallback){try{video.currentTime=start;if(bg)bg.currentTime=start}catch{}}
     renderTimeline();updateCaptionAtTime(0);applyFrameAtTime(0);
   };
   video.onloadedmetadata=initialise;
+  sourceWatchdog=setTimeout(()=>{
+    // readyState 0 means not even metadata arrived, so there is nothing to
+    // wait for that has not already had its chance.
+    if(video.readyState===0)video.onerror?.();
+  },SOURCE_TIMEOUT_MS);
   video.onerror=()=>{
     if(editor.sourceFallback)return;
     editor.sourceFallback=true;video.pause();if(bg)bg.pause();

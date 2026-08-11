@@ -334,3 +334,24 @@ test('playback does not repeat work on every frame', () => {
   assert.match(body, /activeCaptionBlock/, 'the active block should be remembered between frames');
   assert.match(body, /isConnected/, 'a re-rendered timeline must invalidate the cached block');
 });
+
+test('a missing clean source does not black-screen while the browser times out', () => {
+  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
+  const start = source.indexOf('function bindVideo(clip)');
+  const body = source.slice(start, source.indexOf('video.ontimeupdate', start));
+
+  // A missing file does not fail fast; the browser retries for many seconds
+  // and the canvas stays black until onerror finally fires.
+  assert.match(body, /SOURCE_TIMEOUT_MS\s*=\s*(\d+)/, 'the wait must be bounded');
+  const ms = Number(/SOURCE_TIMEOUT_MS\s*=\s*(\d+)/.exec(body)[1]);
+  assert.ok(ms > 0 && ms <= 5000, `${ms}ms is too long to stare at a black canvas`);
+
+  assert.match(body, /setTimeout\(/, 'the bound needs a timer');
+  assert.match(body, /video\.readyState===0/, 'only give up when nothing arrived at all');
+  assert.match(body, /video\.onerror\?\.\(\)/, 'timing out must take the same path as an error');
+
+  // And a slow-but-working source must never be cut off mid-load.
+  const init = source.slice(source.indexOf('const initialise=()=>{', start));
+  assert.match(init.slice(0, 200), /clearTimeout\(sourceWatchdog\)/,
+    'a source that does load must cancel the watchdog');
+});
