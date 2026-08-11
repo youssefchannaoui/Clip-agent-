@@ -1702,12 +1702,25 @@ function v5FailureAction(issue){
   if(issue.kind==='render')return `<button class="dc-btn secondary" data-edit-video-clip="${esc(issue.id)}">Open editor</button>`;
   return `<button class="dc-btn secondary" data-dc-nav="schedule">Open status</button>`;
 }
+/**
+ * A readable name for whatever is running right now.
+ *
+ * The Happening Now bar printed `job.title` straight out, so a fresh import
+ * showed the raw watch URL — the least useful string available, and the first
+ * thing a user sees on the home screen. The project list already solved this
+ * with `cleanUrlTitle`; this reuses it rather than inventing a second answer.
+ */
+function liveJobTitle(job){
+  const raw=String(job?.title||'').trim();
+  if(!raw)return 'Working now';
+  return /^https?:\/\//i.test(raw)?(cleanUrlTitle(raw)||raw):raw;
+}
 function v5HappeningNow(d,jobs,next,waiting,templateName){
   const issues=workspaceFailures(d);
   // Live work always wins this slot. A failure from days ago must never hide
   // the job that is running right now; unresolved issues are surfaced as a
   // badge here and in full via the issues panel in the top bar.
-  if(jobs.length){const job=jobs[0],progress=Number.isFinite(job.progress)?Math.round(job.progress):null;return `<section class="dc-v5-now" data-tour="happening-now" data-live-job="current"><span class="dc-v5-now-icon live">${uiIcon(job.kind==='publish'?'publish':job.kind==='render'?'editor':'sparkles')}</span><div class="dc-v5-now-copy"><small>Happening now</small><strong data-live-title>${esc(shortText(job.title,72))}</strong><span data-live-stage>${esc(shortText(job.stage||'Working now',90))}</span><div class="dc-v5-now-progress" data-live-progress-wrap ${progress===null?'hidden':''}><i data-live-progress style="width:${clamp(progress||0,0,100)}%"></i></div></div>${issues.length?`<button class="dc-pill bad" data-open-issues="1" title="Open issues">${issues.length} ${issues.length===1?'issue':'issues'}</button>`:''}<span class="dc-pill warn" data-live-percent>${progress!==null?`${progress}%`:'Live'}</span></section>`}
+  if(jobs.length){const job=jobs[0],progress=Number.isFinite(job.progress)?Math.round(job.progress):null;return `<section class="dc-v5-now" data-tour="happening-now" data-live-job="current"><span class="dc-v5-now-icon live">${uiIcon(job.kind==='publish'?'publish':job.kind==='render'?'editor':'sparkles')}</span><div class="dc-v5-now-copy"><small>Happening now</small><strong data-live-title>${esc(shortText(liveJobTitle(job),72))}</strong><span data-live-stage>${esc(shortText(job.stage||'Working now',90))}</span><div class="dc-v5-now-progress" data-live-progress-wrap ${progress===null?'hidden':''}><i data-live-progress style="width:${clamp(progress||0,0,100)}%"></i></div></div>${issues.length?`<button class="dc-pill bad" data-open-issues="1" title="Open issues">${issues.length} ${issues.length===1?'issue':'issues'}</button>`:''}<span class="dc-pill warn" data-live-percent>${progress!==null?`${progress}%`:'Live'}</span></section>`}
   if(issues.length){const issue=issues[0];return `<section class="dc-v5-now fail" data-tour="happening-now"><span class="dc-v5-now-icon fail">${uiIcon('warning')}</span><div class="dc-v5-now-copy"><small>Needs attention${issues.length>1?` · ${issues.length} issues`:''}</small><strong>${esc(shortText(issue.title,72))}</strong><span>${esc(shortText(issue.detail,110))}</span></div>${issues.length>1?`<button class="dc-btn secondary" data-open-issues="1">View all</button>`:''}${v5FailureAction(issue)}</section>`}
   if(waiting)return `<section class="dc-v5-now" data-tour="happening-now"><span class="dc-v5-now-icon">${uiIcon('review')}</span><div class="dc-v5-now-copy"><small>Happening now</small><strong>${waiting} ${waiting===1?'clip is':'clips are'} ready to review</strong><span>Choose the strongest moments before they enter the publishing queue.</span></div><button class="dc-btn secondary" data-dc-nav="review">Review clips</button></section>`;
   if(next)return `<section class="dc-v5-now" data-tour="happening-now"><span class="dc-v5-now-icon live">${uiIcon('clock')}</span><div class="dc-v5-now-copy"><small>Happening now</small><strong>${esc(shortText(next.title||'Your next clip',72))}</strong><span>Scheduled for ${esc(formatDate(next.scheduledAt))}</span></div><button class="dc-btn secondary" data-dc-nav="schedule">View schedule</button></section>`;
