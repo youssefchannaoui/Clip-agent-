@@ -251,3 +251,20 @@ test('canvas guidance is not painted permanently, but user toggles are respected
   assert.doesNotMatch(css, /body\.dc-app \.dc-safe-zone \{[^}]*opacity: 0/,
     'safe zones are user-toggled and must not be force-hidden');
 });
+
+test('selecting a layer opens that layer\'s properties', () => {
+  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
+  const start = source.indexOf('function selectEditorLayer');
+  const body = source.slice(start, source.indexOf('\n}', start));
+
+  // Clicking the caption on the canvas should open caption properties, and
+  // the video should open framing — instead of the tool rail being the only
+  // way to change what the panel shows.
+  assert.match(source, /LAYER_TOOL = \{ captions: 'captions', video: 'canvas' \}/);
+  assert.match(body, /renderEditorTool\(\)/, 'selection must re-render the panel');
+
+  // Re-selecting the same layer must not drag the panel back if the user has
+  // deliberately opened Audio or Post since.
+  assert.match(body, /editor\.selectedLayer !== previous/,
+    'the panel should only follow an actual change of selection');
+});

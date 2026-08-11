@@ -2543,8 +2543,26 @@ function updateEditorSaveState(){
   state.textContent=editor.dirty?`Draft backed up locally${editor.localSavedAt?' · just now':''}`:'All changes saved';
   state.className=editor.dirty?'is-draft':'is-saved';
 }
+/**
+ * Properties follow the selection.
+ *
+ * The tool rail used to be the only way to change the panel, so clicking the
+ * caption on the canvas and then reaching for a category to style it were two
+ * unrelated actions — nothing felt connected to what you had just clicked.
+ * Selecting a layer now opens that layer's panel.
+ *
+ * Only on an actual change of layer: re-selecting the same thing must not
+ * yank the panel back if the user has since opened Audio or Post on purpose.
+ */
+const LAYER_TOOL = { captions: 'captions', video: 'canvas' };
 function selectEditorLayer(layer){
+  const previous = editor.selectedLayer;
   editor.selectedLayer=['video','captions'].includes(layer)?layer:'none';
+  const tool = LAYER_TOOL[editor.selectedLayer];
+  if(tool && editor.selectedLayer !== previous && editor.tool !== tool){
+    editor.tool = tool;
+    renderEditorTool();
+  }
   const canvas=$('#dcVideoCanvas'),caption=$('#dcCaptionOverlay');
   canvas?.classList.toggle('is-video-selected',editor.selectedLayer==='video');caption?.classList.toggle('is-selected',editor.selectedLayer==='captions');
   $$('[data-select-layer]').forEach(button=>button.classList.toggle('on',button.dataset.selectLayer===editor.selectedLayer));
