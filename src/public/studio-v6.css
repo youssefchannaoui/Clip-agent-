@@ -694,3 +694,78 @@ body.dc-app [tabindex]:focus-visible {
 @media (prefers-reduced-motion:reduce) {
   body.dc-app *,body.dc-app *::before,body.dc-app *::after { animation-duration:.01ms !important;animation-iteration-count:1 !important;scroll-behavior:auto !important;transition-duration:.01ms !important; }
 }
+
+/* ------------------------------------------------------------------ *
+ * Transcript panel
+ *
+ * The editor led with a settings form — sliders grouped under Captions,
+ * Canvas, Look, Audio, Post — which answers "what value do you want for
+ * contrast" when the question a user actually has is "which words stay".
+ * The transcript is now a persistent column beside the canvas: click a word
+ * to jump to it, and watch the active word follow playback.
+ *
+ * Timings are Whisper's own, so a click lands on the syllable rather than an
+ * estimate. Gaps longer than 0.3s are drawn as chips because that is where
+ * filler and dead air sit.
+ * ------------------------------------------------------------------ */
+body.dc-app .dc-editor-workspace { grid-template-columns: auto auto minmax(240px,1fr) minmax(0,1.35fr); }
+body.dc-app .dc-transcript {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--v6-line);
+  background: var(--v6-panel-soft);
+}
+body.dc-app .dc-transcript-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--v6-s2);
+  padding: var(--v6-s3) var(--v6-s4);
+  border-bottom: 1px solid var(--v6-line);
+}
+body.dc-app .dc-transcript-head strong { font-size: 12px;letter-spacing: -.01em; }
+body.dc-app .dc-transcript-head span { color: var(--v6-muted);font-size: 9px; }
+body.dc-app .dc-transcript-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: var(--v6-s4);
+  line-height: 2.1;
+  font-size: 12.5px;
+}
+body.dc-app .dc-transcript-word {
+  padding: 2px 3px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--v6-text);
+  font: inherit;
+  cursor: pointer;
+  transition: background .12s ease,color .12s ease;
+}
+body.dc-app .dc-transcript-word:hover { background: rgba(255,255,255,.08); }
+body.dc-app .dc-transcript-word.is-active {
+  background: var(--v6-gold);
+  color: #17130a;
+  font-weight: 700;
+}
+/* A pause long enough to be worth cutting. */
+body.dc-app .dc-transcript-gap {
+  display: inline-block;
+  margin: 0 3px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.06);
+  color: var(--v6-muted);
+  font-size: 8.5px;
+  font-weight: 700;
+  vertical-align: 2px;
+}
+body.dc-app .dc-transcript-empty { color: var(--v6-muted);font-size: 10px;margin: 0; }
+
+@media (max-width:1180px) {
+  body.dc-app .dc-editor-workspace { grid-template-columns: auto auto minmax(0,1fr); }
+  /* Below this the canvas and the transcript cannot both be useful; the
+     canvas wins, since framing is what you cannot do anywhere else. */
+  body.dc-app .dc-transcript { display: none; }
+}

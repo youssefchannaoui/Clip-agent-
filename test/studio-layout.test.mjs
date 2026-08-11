@@ -180,3 +180,45 @@ test('the stylesheet is structurally valid', () => {
   }
   assert.equal(depth, 0, 'unbalanced braces in studio-v6.css');
 });
+
+test('the transcript is a persistent panel, not another settings tab', () => {
+  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
+  // It sits in the editor workspace beside the canvas, not inside the tool
+  // panel that the category rail swaps in and out.
+  assert.match(source, /<section class="dc-transcript"/);
+  assert.match(source, /id="dcTranscript"/);
+  // Anchor on the markup, not the first mention of the class — the file
+  // embeds CSS too, and that appears earlier.
+  const workspace = source.slice(source.indexOf('class="dc-editor-workspace"'));
+  const panel = workspace.indexOf('dc-transcript');
+  const canvas = workspace.indexOf('dc-canvas-area');
+  assert.ok(panel > -1 && panel < canvas, 'the transcript must sit before the canvas in the workspace');
+  assert.match(css, /body\.dc-app \.dc-transcript\s*\{/, 'the panel needs styling or it renders unstyled');
+});
+
+test('clicking a transcript word seeks the video', () => {
+  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
+  assert.match(source, /closest\('\[data-transcript-word\]'\)/, 'no click handler for transcript words');
+  const handler = source.slice(source.indexOf("closest('[data-transcript-word]')"));
+  assert.match(handler.slice(0, 400), /seekEditor\(/, 'a word click must seek');
+  // Each word carries its real start time from Whisper, not an index.
+  assert.match(source, /data-at="\$\{Number\(word\.start\)/);
+});
+
+test('the active word follows playback without rebuilding the list', () => {
+  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
+  assert.match(source, /highlightTranscriptWord\(local\)/, 'playback must drive the highlight');
+
+  const start = source.indexOf('function highlightTranscriptWord');
+  const body = source.slice(start, source.indexOf('\n}', start));
+  // Rewriting innerHTML every frame re-lays-out every word and shimmers.
+  assert.doesNotMatch(body, /innerHTML/, 'the highlight must not rebuild the transcript each frame');
+  assert.match(body, /if\(index === transcriptActiveIndex\) return;/, 'unchanged frames must bail early');
+});
+
+test('a clip with no transcript says so instead of rendering nothing', () => {
+  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
+  const start = source.indexOf('function renderTranscript');
+  const body = source.slice(start, source.indexOf('\n}', start));
+  assert.match(body, /No transcript is available/);
+});
