@@ -143,3 +143,34 @@ test('template names are escaped, not injected', () => {
   assert.doesNotMatch(card, /<img src=x onerror/);
   assert.match(card, /&lt;img src=x onerror/);
 });
+
+test('the template picker is a dropdown that starts closed', () => {
+  // It used to be an always-open strip of full-size cards that pushed the
+  // settings below the fold and made the editor look like a gallery.
+  mod.styleStudioLoad(TEMPLATE);
+  assert.equal(mod.styleStudio.menuOpen, false, 'the menu must start closed');
+  assert.match(ui, /class="dc-style-picker/);
+  assert.match(ui, /styleStudio\.menuOpen\?`<div class="dc-style-menu"/, 'the list renders only when open');
+  assert.doesNotMatch(ui, /class="dc-style-strip"/, 'the always-open strip is gone');
+});
+
+test('a template row is compact, not a full-size card', () => {
+  mod.setData({ templates: [TEMPLATE], selectedTemplate: { id: 'deenclipped-gold' } });
+  mod.styleStudioLoad(TEMPLATE);
+  const row = mod.styleTemplateCard(TEMPLATE, '');
+  assert.match(row, /class="dc-style-row /);
+  assert.match(row, /dc-style-row-art/);
+  assert.doesNotMatch(row, /dc-style-card-art/, 'the big card layout is gone');
+});
+
+test('the stage draws exactly one preview badge', () => {
+  // templatePreviewMarkup already renders its own "Sample preview" pill;
+  // a second one was being stacked on top of it and the two overlapped.
+  assert.doesNotMatch(ui, /dc-style-demo/, 'the duplicate badge must be gone');
+  // Count rendered markup only — the file also carries CSS selectors for it.
+  assert.equal(
+    (ui.match(/class="dc-style-sample-badge"/g) || []).length,
+    1,
+    'exactly one badge element is rendered',
+  );
+});

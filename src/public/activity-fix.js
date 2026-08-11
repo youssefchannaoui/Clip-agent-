@@ -3209,11 +3209,11 @@ const STYLE_GROUPS=[
   ['audio','Audio','audio','Brand'],
 ];
 const STYLE_FONTS=['DejaVu Sans','DejaVu Serif','Manrope','Roboto','Lato','Noto Sans','Noto Serif','Play','Liberation Sans','Liberation Serif','Amiri','Scheherazade New','Noto Naskh Arabic','Noto Kufi Arabic'];
-const styleStudio={draft:null,baseId:'',group:'',history:[],index:-1,dirty:false};
+const styleStudio={draft:null,baseId:'',group:'',history:[],index:-1,dirty:false,menuOpen:false};
 
 function styleStudioLoad(template){
   styleStudio.draft=clone(template);styleStudio.baseId=template.id||'';
-  styleStudio.history=[clone(template)];styleStudio.index=0;styleStudio.dirty=false;styleStudio.group='';
+  styleStudio.history=[clone(template)];styleStudio.index=0;styleStudio.dirty=false;styleStudio.group='';styleStudio.menuOpen=false;
 }
 function styleStudioPush(){
   styleStudio.history=styleStudio.history.slice(0,styleStudio.index+1);
@@ -3276,7 +3276,7 @@ function styleTemplateCard(t,sourcePreview){
   const editing=t.id===styleStudio.baseId, isDefault=data()?.selectedTemplate?.id===t.id;
   const swatches=[t.captionPrimary,t.captionHighlight,t.watermarkColor,t.brandLineColor].filter(Boolean).slice(0,4);
   const more=`<details class="dc-clip-more"><summary>More</summary><div><button data-duplicate-template="${esc(t.id)}">Duplicate</button>${isDefault?'':`<button data-use-template="${esc(t.id)}">Use for new clips</button>`}${t.builtIn?'':`<button class="danger" data-delete-template="${esc(t.id)}">Delete</button>`}</div></details>`;
-  return `<article class="dc-style-card ${editing?'is-editing':''}"><button type="button" class="dc-style-card-art" data-style-open="${esc(t.id)}" aria-label="Edit ${esc(t.name||'template')}">${templatePreviewMarkup(t,sourcePreview)}</button><div class="dc-style-card-foot"><div><strong>${esc(shortText(t.name||'Untitled',22))}</strong><small>${t.builtIn?'Built-in':'Custom'}${isDefault?' · default':''}</small></div><span class="dc-style-swatches">${swatches.map(c=>`<i style="background:${esc(templateSafeColor(c))}"></i>`).join('')}</span></div><div class="dc-style-card-row">${isDefault?'<b class="dc-style-flag">Default</b>':''}${more}</div></article>`;
+  return `<div class="dc-style-row ${editing?'is-editing':''}"><button type="button" class="dc-style-row-main" data-style-open="${esc(t.id)}" aria-label="Edit ${esc(t.name||'template')}"><span class="dc-style-row-art">${templatePreviewMarkup(t,sourcePreview)}</span><span class="dc-style-row-copy"><strong>${esc(shortText(t.name||'Untitled',26))}</strong><small>${t.builtIn?'Built-in':'Custom'}</small></span><span class="dc-style-swatches">${swatches.map(c=>`<i style="background:${esc(templateSafeColor(c))}"></i>`).join('')}</span>${isDefault?'<b class="dc-style-flag">Default</b>':''}</button>${more}</div>`;
 }
 
 async function styleStudioSave(){
@@ -3330,14 +3330,19 @@ function renderTemplatesPage(){
 
   panel.innerHTML=`<div class="dc-style-studio">
     <header class="dc-style-bar"><div class="dc-style-bar-title"><strong>Clip styles</strong><span>Build the look every new clip uses</span></div>
-      <select id="dcStyleSwitch" aria-label="Choose template">${templates.map(t=>`<option value="${esc(t.id)}" ${t.id===base.id?'selected':''}>${esc(t.name||'Untitled')}${d.selectedTemplate?.id===t.id?' · default':''}</option>`).join('')}</select>
+      <div class="dc-style-picker ${styleStudio.menuOpen?'is-open':''}"><button type="button" id="dcStyleSwitch" class="dc-style-switch" aria-haspopup="true" aria-expanded="${styleStudio.menuOpen?'true':'false'}"><span>${esc(shortText(base.name||'Untitled',26))}${d.selectedTemplate?.id===base.id?' · default':''}</span>${ICON.chevron}</button>${styleStudio.menuOpen?`<div class="dc-style-menu" id="dcStyleMenu"><button type="button" class="dc-style-new" id="dcStyleNew"><span>+</span>New template</button><div class="dc-style-menu-list">${templates.map(t=>styleTemplateCard(t,sourcePreview)).join('')}</div></div>`:''}</div>
       <div class="dc-style-bar-actions"><button type="button" class="dc-icon-btn dc-svg" id="dcStyleUndo" title="Undo" ${canUndo?'':'disabled'}>${ICON.undo}</button><button type="button" class="dc-icon-btn dc-svg" id="dcStyleRedo" title="Redo" ${canRedo?'':'disabled'}>${ICON.redo}</button><button type="button" class="dc-icon-btn dc-svg" id="dcStyleRevert" title="Discard changes" ${styleStudio.dirty?'':'disabled'}>${ICON.clock}</button><button class="dc-btn" id="dcStyleSave" ${styleStudio.dirty?'':'disabled'}>${styleStudio.dirty?'Save template':'Saved'}</button></div></header>
-    <div class="dc-style-strip"><button type="button" class="dc-style-new" id="dcStyleNew"><span>+</span><small>New template</small></button>${templates.map(t=>styleTemplateCard(t,sourcePreview)).join('')}</div>
     <div class="dc-style-workspace"><aside class="dc-style-side">${rail}</aside>
-      <main class="dc-style-stage"><div class="dc-style-stage-frame">${templatePreviewMarkup(draft,sourcePreview,true)}<span class="dc-style-demo">Preview</span></div><p class="dc-style-stage-note">Sample caption over your own footage. New clips use this look once saved.</p></main></div>
+      <main class="dc-style-stage"><div class="dc-style-stage-frame">${templatePreviewMarkup(draft,sourcePreview,true)}</div><p class="dc-style-stage-note">Sample caption over your own footage. New clips use this look once saved.</p></main></div>
   </div>`;
 
-  $('#dcStyleSwitch')?.addEventListener('change',event=>{const next=templates.find(t=>t.id===event.target.value);if(next){styleStudioLoad(next);renderTemplatesPage()}});
+  $('#dcStyleSwitch')?.addEventListener('click',event=>{event.stopPropagation();styleStudio.menuOpen=!styleStudio.menuOpen;renderTemplatesPage()});
+  if(styleStudio.menuOpen){
+    // Close on an outside click or Escape, the way every other menu here does.
+    const dismiss=event=>{if(event.target.closest?.('.dc-style-picker'))return;styleStudio.menuOpen=false;document.removeEventListener('click',dismiss);renderTemplatesPage()};
+    const escape=event=>{if(event.key!=='Escape')return;styleStudio.menuOpen=false;document.removeEventListener('keydown',escape);renderTemplatesPage()};
+    setTimeout(()=>{document.addEventListener('click',dismiss);document.addEventListener('keydown',escape)},0);
+  }
   $('#dcStyleUndo')?.addEventListener('click',styleStudioUndo);
   $('#dcStyleRedo')?.addEventListener('click',styleStudioRedo);
   $('#dcStyleRevert')?.addEventListener('click',styleStudioRevert);
@@ -3345,7 +3350,7 @@ function renderTemplatesPage(){
   $('#dcStyleNew')?.addEventListener('click',styleStudioCreate);
   $('#dcStyleBack')?.addEventListener('click',()=>{styleStudio.group='';renderTemplatesPage()});
   $$('[data-style-group]',panel).forEach(button=>button.addEventListener('click',()=>{styleStudio.group=button.dataset.styleGroup;renderTemplatesPage()}));
-  $$('[data-style-open]',panel).forEach(button=>button.addEventListener('click',()=>{const next=templates.find(t=>t.id===button.dataset.styleOpen);if(next){styleStudioLoad(next);renderTemplatesPage()}}));
+  $$('[data-style-open]',panel).forEach(button=>button.addEventListener('click',()=>{const next=templates.find(t=>t.id===button.dataset.styleOpen);if(next){styleStudioLoad(next);styleStudio.menuOpen=false;renderTemplatesPage()}}));
   $$('[data-style-seg]',panel).forEach(button=>button.addEventListener('click',()=>{styleStudioSet(button.dataset.styleSeg,button.dataset.styleValue);renderTemplatesPage()}));
   const controls=$('#dcStyleControls');
   if(controls){
@@ -3366,7 +3371,7 @@ function renderTemplatesPage(){
 }
 function styleStudioPaint(sourcePreview){
   const frame=$('.dc-style-stage-frame');if(!frame||!styleStudio.draft)return;
-  frame.innerHTML=`${templatePreviewMarkup(styleStudio.draft,sourcePreview,true)}<span class="dc-style-demo">Preview</span>`;
+  frame.innerHTML=templatePreviewMarkup(styleStudio.draft,sourcePreview,true);
   const save=$('#dcStyleSave');if(save){save.disabled=false;save.textContent='Save template'}
   const revert=$('#dcStyleRevert');if(revert)revert.disabled=false;
 }
