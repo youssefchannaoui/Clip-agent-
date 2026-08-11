@@ -46,17 +46,15 @@ test('V6 exposes distinct account-aware journeys instead of cosmetic plan badges
   assert.match(css, /data-dc-experience="owner"/);
 });
 
-test('Quality Center is a first-class functional route with real preflight signals', () => {
-  // Rebuilt 11 Aug: one question answered ("what can post right now"), not a
-  // dashboard of every signal. No numeric score, no separate preflight
-  // sidebar — just ready vs blocked, one plain-language reason each.
-  assert.match(ui, /\['quality','Quality Center','quality'\]/);
-  assert.match(ui, /function renderQualityCenter\(\)/);
-  assert.match(ui, /function qualityAssessment\(clip\)/);
-  assert.match(ui, /function qualityPrimaryIssue\(item\)/);
-  assert.match(ui, /Ready to post/);
-  assert.match(ui, /Needs a fix/);
-  assert.match(css, /\.dc-qc-page/);
+test('Quality Center is fully removed, with nothing left behind', () => {
+  // Deleted 11 Aug at the owner's request. Views are generated from the NAV
+  // arrays, so a stale render function or nav entry would resurrect a
+  // half-working screen rather than fail loudly.
+  assert.doesNotMatch(ui, /Quality Center/);
+  assert.doesNotMatch(ui, /renderQualityCenter/);
+  assert.doesNotMatch(ui, /qualityAssessment/);
+  assert.doesNotMatch(ui, /qualityClipRow/);
+  assert.doesNotMatch(css, /#view-quality/);
 });
 
 test('the modular V6 stylesheet is cache-versioned and served by the app', () => {

@@ -199,7 +199,7 @@ const PUBLISH_NAV = [
   ['schedule','Publishing','publish'], ['publishing','Channels','social']
 ];
 const STUDIO_NAV = [
-  ['templates','Clip Styles','style'], ['brand','Brand Kit','brand','PRO'], ['lab','AI Director','lab','PRO'], ['quality','Quality Center','quality'],
+  ['templates','Clip Styles','style'], ['brand','Brand Kit','brand','PRO'], ['lab','AI Director','lab','PRO'],
   ['music','Audio','music'], ['insights','Insights','analytics'], ['automation','Settings','settings']
 ];
 const ACCOUNT_NAV = [['subscription','Subscription','billing']];
@@ -1216,7 +1216,7 @@ function bindGlobal(){
   $('#dcWorkClose').onclick = () => { const el=$('#dcWork'); if(el){ el.dataset.dismissed='1'; el.dataset.dismissedKey = el.dataset.workKey || ''; el.classList.remove('show'); } };
   $('#dcGlobalSearch').addEventListener('input', renderGlobalSearch);
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape') { document.body.classList.remove('dc-menu-open'); $('#dcSearchResults')?.classList.remove('show');$('#dcTemplatePreviewLayer')?.remove();if(currentView==='editor')selectEditorLayer('none'); }
+    if (event.key === 'Escape') { document.body.classList.remove('dc-menu-open'); $('#dcSearchResults')?.classList.remove('show');if(currentView==='editor')selectEditorLayer('none'); }
     const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '');
     if (!typing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redoEditor() : undoEditor(); }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && currentView === 'editor') { event.preventDefault(); saveEditorDraft(); }
@@ -1297,7 +1297,6 @@ function handleClick(event){
   const uploadFallback = event.target.closest('[data-upload-fallback]'); if (uploadFallback) { go('home'); requestAnimationFrame(()=>$('#dcVideoUpload')?.click()); return; }
   const more = event.target.closest('[data-more-project]'); if (more) { generateMore(more.dataset.moreProject); return; }
   const delProject = event.target.closest('[data-delete-project]'); if (delProject) { deleteProject(delProject.dataset.deleteProject); return; }
-  const previewTemplate = event.target.closest('[data-preview-template]'); if (previewTemplate) { openTemplatePreview(previewTemplate.dataset.previewTemplate); return; }
   const openStyleEditor = event.target.closest('[data-open-style-editor]'); if (openStyleEditor) { openStyleEditorForClip(); return; }
   const useTemplate = event.target.closest('[data-use-template]'); if (useTemplate) { selectStudioTemplate(useTemplate.dataset.useTemplate); return; }
   const applyTemplate = event.target.closest('[data-apply-template]'); if (applyTemplate) { applyStudioTemplate(applyTemplate.dataset.applyTemplate); return; }
@@ -1383,7 +1382,7 @@ function go(view){
     review:['Clip Review','Approve AI clips before posting'], editor:['Editor','Edit the selected clip'],
     schedule:['Publishing','Post now, download, or schedule your clips'], insights:['Insights','Clip quality and studio signals'],
     publishing:['Channels','Connected publishing destinations'], templates:['Clip Styles','Choose how new clips look'], music:['Audio','Background tracks and audio level'],
-    brand:['Brand Kit','Watermark, colours and visual identity'], lab:['AI Director','Growth strategy and explainable clip intelligence'], quality:['Quality Center','Caption, framing, render and publishing preflight'],
+    brand:['Brand Kit','Watermark, colours and visual identity'], lab:['AI Director','Growth strategy and explainable clip intelligence'],
     automation:['Settings','Generation rules and studio controls'], subscription:['Subscription','Plan, tokens and payment details'],
     admin:['Admin','Subscriptions, storage, integrations and sign-ups']
   };
@@ -1404,7 +1403,6 @@ function go(view){
     if (view === 'templates') renderTemplatesPage();
     if (view === 'brand') renderBrandKit();
     if (view === 'lab') renderCreatorLab();
-    if (view === 'quality') renderQualityCenter();
     if (view === 'music') renderAudioLibrary();
     if (view === 'insights') renderInsightsPage();
     if (view === 'automation') renderSettingsPage();
@@ -1453,13 +1451,13 @@ function homeExperienceContent(exp,waiting=0){
     free_trial:{eyebrow:'Free 3-day creator trial',headline:'Create your first clips.\nLearn the whole workflow.',copy:'Use 40 tokens to generate, edit and download watermarked clips. Premium publishing stays locked until you choose a plan.',primary:'Start free'},
   };
   const profile=map[exp.id]||map.free_trial;
-  return{...profile,secondary:waiting?`Review ${waiting} ready`:aiDirector?'Open AI Director':exp.premium?'Open Quality Center':'See what Premium unlocks'};
+  return{...profile,secondary:waiting?`Review ${waiting} ready`:aiDirector?'Open AI Director':exp.premium?'Open Clip Styles':'See what Premium unlocks'};
 }
 function homeExperienceStrip(exp,d){
   const projects=d.projects||[],clips=d.clips||[],connected=connectedPlatformCount(d),ready=clips.filter(c=>c.musicVerified&&c.renderVerified).length,features=billingInfo().features||{},aiDirector=Boolean(features.aiDirector||billingInfo().current?.unlimited);
   if(exp.id==='owner')return `<section class="dc-v6-mode-card owner"><div><span>${ICON.analytics}</span><small>Owner view</small><strong>Creator workflow + live operations</strong><p>The customer experience stays clean while Admin Console carries worker lanes, subscriptions, storage and provider health.</p></div><button class="dc-btn secondary" data-dc-nav="admin">Open operations</button></section>`;
   if(exp.browseOnly||exp.id==='premium_empty')return `<section class="dc-v6-mode-card attention"><div><span>${ICON.tokens}</span><small>${esc(exp.label)}</small><strong>Your existing workspace remains available.</strong><p>${esc(exp.detail)}. Projects, edits and downloads are not deleted.</p></div><button class="dc-btn" data-dc-nav="subscription">${exp.id==='premium_empty'?'Add tokens':'Compare plans'}</button></section>`;
-  if(exp.premium)return `<section class="dc-v6-mode-card premium"><div><span>${ICON.sparkles}</span><small>${exp.id==='premium_trial'?'Premium trial path':'Premium workflow'}</small><strong>${ready} quality-ready clips · ${connected} connected channels</strong><p>${aiDirector?'AI Director, active-speaker framing, Brand Kit and publishing preflight are unlocked.':'Brand Kit, clean exports, Quality Center and social publishing are unlocked. Upgrade when you need AI Director and active-speaker framing.'}</p></div><div class="dc-v6-mode-actions"><button class="dc-btn secondary" data-dc-nav="quality">Open Quality Center</button><button class="dc-btn" ${aiDirector?'data-dc-nav="lab"':'data-dc-nav="subscription"'}>${aiDirector?'Open AI Director':'Explore studio plans'}</button></div></section>`;
+  if(exp.premium)return `<section class="dc-v6-mode-card premium"><div><span>${ICON.sparkles}</span><small>${exp.id==='premium_trial'?'Premium trial path':'Premium workflow'}</small><strong>${ready} quality-ready clips · ${connected} connected channels</strong><p>${aiDirector?'AI Director, active-speaker framing, Brand Kit and publishing preflight are unlocked.':'Brand Kit, clean exports and social publishing are unlocked. Upgrade when you need AI Director and active-speaker framing.'}</p></div><div class="dc-v6-mode-actions"><button class="dc-btn secondary" data-dc-nav="templates">Open Clip Styles</button><button class="dc-btn" ${aiDirector?'data-dc-nav="lab"':'data-dc-nav="subscription"'}>${aiDirector?'Open AI Director':'Explore studio plans'}</button></div></section>`;
   const steps=[['Import',projects.length>0],['Review',clips.length>0],['Style',Boolean(d.selectedTemplate)],['Publish',false]];
   return `<section class="dc-v6-trial-path"><div><small>Your free path</small><strong>See the product before you subscribe.</strong><p>Downloads include the DeenClipped watermark; social posting unlocks on Premium.</p></div><div class="dc-v6-trial-steps">${steps.map(([label,done],index)=>`<span class="${done?'done':index===3?'locked':''}"><i>${done?ICON.check:index===3?ICON.brand:index+1}</i><b>${esc(label)}</b><em>${index===3?'Premium':done?'Complete':'Next'}</em></span>`).join('')}</div><button class="dc-btn secondary" data-dc-nav="subscription">Compare Premium</button></section>`;
 }
@@ -1481,7 +1479,7 @@ function renderHome(){
           <div class="dc-v5-eyebrow"><i></i> ${esc(experience.eyebrow)}</div>
           <h1>${esc(experience.headline).replace(/\n/g,'<br>')}</h1>
           <p>${esc(experience.copy)}</p>
-          <div class="dc-v5-hero-actions"><button class="dc-btn" id="dcHeroCreate">${esc(experience.primary)}</button><button class="dc-btn secondary" ${waiting?'data-dc-nav="review"':billingInfo().features?.aiDirector?'data-dc-nav="lab"':exp.premium?'data-dc-nav="quality"':'data-dc-nav="subscription"'}>${esc(experience.secondary)}</button></div>
+          <div class="dc-v5-hero-actions"><button class="dc-btn" id="dcHeroCreate">${esc(experience.primary)}</button><button class="dc-btn secondary" ${waiting?'data-dc-nav="review"':billingInfo().features?.aiDirector?'data-dc-nav="lab"':exp.premium?'data-dc-nav="templates"':'data-dc-nav="subscription"'}>${esc(experience.secondary)}</button></div>
           <div class="dc-v5-inline-stats" aria-label="Workspace summary">${v5InlineStat(projects.length,'Sources')}${v5InlineStat(clips.length,'Clips')}${v5InlineStat(waiting,'To review')}${v5InlineStat(posted,'Published')}</div>
           ${v5BrandRail(d)}
         </div>
@@ -3202,59 +3200,175 @@ function renderCreatorLab(){
   requestAnimationFrame(()=>animatePanel(panel));
 }
 
-function qualityAssessment(clip){
-  const confidence=clipTranscriptConfidence(clip),captionReady=confidence===null?Boolean(clip.transcript):confidence>=72;
-  const renderReady=Boolean(clip.renderVerified),audioReady=Boolean(clip.musicVerified),framingReady=Boolean(clip.smartFraming?.available||clip.smartFraming?.keyframes?.length);
-  const growthReady=Boolean(clip.growthPack?.primaryTitle||clip.platformMetadata?.youtube?.title),safe=!clip.reviewRequired;
-  const checks=[captionReady,renderReady,audioReady,safe,growthReady],score=Math.round(checks.filter(Boolean).length/checks.length*82+(framingReady?18:10));
-  const issues=[];if(!captionReady)issues.push('Caption timing');if(!renderReady)issues.push('Render verification');if(!audioReady)issues.push('Audio verification');if(!safe)issues.push('Human review');if(!growthReady)issues.push('Post metadata');
-  return{confidence,captionReady,renderReady,audioReady,framingReady,growthReady,safe,score:clamp(score,0,100),issues};
+const STYLE_GROUPS=[
+  ['layout','Clip layout','style','Style'],
+  ['captions','Captions','captions','Style'],
+  ['headline','Auto headline','details','Style'],
+  ['framing','Speaker framing','canvas','Style'],
+  ['overlay','Overlay','brand','Brand'],
+  ['audio','Audio','audio','Brand'],
+];
+const STYLE_FONTS=['DejaVu Sans','DejaVu Serif','Manrope','Roboto','Lato','Noto Sans','Noto Serif','Play','Liberation Sans','Liberation Serif','Amiri','Scheherazade New','Noto Naskh Arabic','Noto Kufi Arabic'];
+const styleStudio={draft:null,baseId:'',group:'',history:[],index:-1,dirty:false};
+
+function styleStudioLoad(template){
+  styleStudio.draft=clone(template);styleStudio.baseId=template.id||'';
+  styleStudio.history=[clone(template)];styleStudio.index=0;styleStudio.dirty=false;styleStudio.group='';
 }
-function qualityPrimaryIssue(item){
-  const id=esc(item.clip.id);
-  if(!item.captionReady)return{reason:"Captions haven't been synced to the speech yet.",button:`<button class="dc-btn" data-edit-clip="${id}">Fix captions</button>`};
-  if(!item.renderReady)return{reason:"This clip hasn't been rendered and verified yet.",button:`<button class="dc-btn" data-edit-video-clip="${id}">Open editor</button>`};
-  if(!item.audioReady)return{reason:"Background audio hasn't been verified yet.",button:`<button class="dc-btn" data-edit-video-clip="${id}">Open editor</button>`};
-  if(!item.safe)return{reason:'This clip needs a quick human check before it can go out.',button:`<button class="dc-btn" data-review-clip="${id}">Review</button>`};
-  if(!item.growthReady)return{reason:"Title, description or hashtags haven't been generated yet.",button:`<button class="dc-btn" data-edit-video-clip="${id}">Open editor</button>`};
-  return{reason:'All checks passed.',button:''};
+function styleStudioPush(){
+  styleStudio.history=styleStudio.history.slice(0,styleStudio.index+1);
+  styleStudio.history.push(clone(styleStudio.draft));
+  if(styleStudio.history.length>60)styleStudio.history.shift();
+  styleStudio.index=styleStudio.history.length-1;styleStudio.dirty=true;
 }
-function qualityClipRow(item,isReady){
-  const id=esc(item.clip.id),primary=isReady?null:qualityPrimaryIssue(item);
-  return `<article class="dc-qc-row"><button class="dc-qc-thumb" data-edit-video-clip="${id}">${item.clip.thumbUrl?`<img src="${authedUrl(item.clip.thumbUrl)}" alt="${esc(item.clip.title||'Clip')} thumbnail">`:ICON.play}</button><div class="dc-qc-copy"><div class="dc-qc-title-row"><strong>${esc(shortText(item.clip.title||'Untitled clip',64))}</strong><span class="dc-pill ${isReady?'good':'warn'}">${isReady?'Good':'Needs review'}</span></div>${isReady?'':`<p>${esc(primary.reason)}</p>`}</div><div class="dc-qc-actions">${isReady?`<button class="dc-btn secondary" data-edit-video-clip="${id}">Open editor</button>`:primary.button}</div></article>`;
+function styleStudioSet(key,value){if(!styleStudio.draft)return;styleStudio.draft[key]=value;styleStudioPush()}
+function styleStudioUndo(){if(styleStudio.index<=0)return;styleStudio.index--;styleStudio.draft=clone(styleStudio.history[styleStudio.index]);styleStudio.dirty=true;renderTemplatesPage()}
+function styleStudioRedo(){if(styleStudio.index>=styleStudio.history.length-1)return;styleStudio.index++;styleStudio.draft=clone(styleStudio.history[styleStudio.index]);styleStudio.dirty=true;renderTemplatesPage()}
+function styleStudioRevert(){const base=(data()?.templates||[]).find(t=>t.id===styleStudio.baseId);if(!base)return;styleStudioLoad(base);renderTemplatesPage();notify('Reverted to the saved template')}
+
+function styleField(key,fallback){const value=styleStudio.draft?.[key];return value===undefined||value===null?fallback:value}
+function styleSeg(key,list){return `<div class="dc-style-seg" role="group">${list.map(([value,label])=>`<button type="button" data-style-seg="${esc(key)}" data-style-value="${esc(value)}" class="${String(styleField(key,''))===value?'on':''}">${esc(label)}</button>`).join('')}</div>`}
+function styleToggle(key,label,hint){return `<label class="dc-switch-row"><span><strong>${esc(label)}</strong><span>${esc(hint||'')}</span></span><input type="checkbox" data-style-key="${esc(key)}" data-style-type="bool" ${styleField(key,false)?'checked':''}></label>`}
+function styleColor(key,label){return `<label class="dc-style-ctl">${esc(label)}<input type="color" data-style-key="${esc(key)}" data-style-type="text" value="${esc(templateSafeColor(styleField(key,'#FFFFFF')))}"></label>`}
+function styleRange(key,label,min,max,step,suffix){const value=Number(styleField(key,min));return `<label class="dc-style-ctl wide">${esc(label)} <b data-style-out="${esc(key)}">${value}${esc(suffix||'')}</b><input type="range" min="${min}" max="${max}" step="${step}" data-style-key="${esc(key)}" data-style-type="number" data-style-suffix="${esc(suffix||'')}" value="${value}"></label>`}
+function styleSelect(key,label,list){return `<label class="dc-style-ctl">${esc(label)}<select data-style-key="${esc(key)}" data-style-type="text">${list.map(v=>{const [value,text]=Array.isArray(v)?v:[v,v];return `<option value="${esc(value)}" ${String(styleField(key,''))===String(value)?'selected':''}>${esc(text)}</option>`}).join('')}</select></label>`}
+function styleText(key,label,max){return `<label class="dc-style-ctl wide">${esc(label)}<input type="text" maxlength="${Number(max)||60}" data-style-key="${esc(key)}" data-style-type="text" value="${esc(styleField(key,''))}"></label>`}
+
+function styleGroupSummary(id){
+  const d=styleStudio.draft||{};
+  if(id==='layout')return `${templateFitLabel(d.fitMode)} · ${esc(String(d.filterPreset||'natural'))}`;
+  if(id==='captions')return `${templateModeLabel(d.captionMode)} · ${esc(String(d.captionFont||'Default'))}`;
+  if(id==='headline')return d.hookEnabled?`On · ${Number(d.hookDuration||0)}s`:'Off';
+  if(id==='framing')return d.smartFramingEnabled?`Tracking · ${esc(String(d.smartFramingBias||'auto'))}`:'Off';
+  if(id==='overlay')return `${d.watermark?esc(shortText(d.watermark,14)):'No mark'}${d.brandLineEnabled?' · accent':''}`;
+  if(id==='audio')return d.voiceEnhance?'Voice enhanced':'Raw audio';
+  return '';
 }
-function renderQualityCenter(){
-  const panel=$('#view-quality'),d=data();if(!panel||!d)return;const clips=d.clips||[];
-  const assessed=clips.map(clip=>({clip,...qualityAssessment(clip)}));
-  const blocked=assessed.filter(item=>item.issues.length).sort((a,b)=>b.issues.length-a.issues.length);
-  const ready=assessed.filter(item=>!item.issues.length);
-  const lists=`<section class="dc-settings-section green"><header><span>${ICON.check}</span><div><small>Cleared</small><h2>Ready to post</h2></div><b>${ready.length} ${ready.length===1?'clip':'clips'}</b></header><div class="dc-qc-list">${ready.length?ready.map(item=>qualityClipRow(item,true)).join(''):'<div class="dc-qc-empty">Nothing is fully clear yet — fix the items below first.</div>'}</div></section>
-    <section class="dc-settings-section"><header><span>${ICON.warning}</span><div><small>Blocked</small><h2>Needs a fix</h2></div><b>${blocked.length} ${blocked.length===1?'clip':'clips'}</b></header><div class="dc-qc-list">${blocked.length?blocked.map(item=>qualityClipRow(item,false)).join(''):`<div class="dc-qc-empty">${ICON.check} Nothing is blocked.</div>`}</div></section>`;
-  const empty=`<div class="dc-qc-empty dc-qc-empty-page">${ICON.quality}<strong>No clips to inspect yet.</strong><p>Create a project and Quality Center will build a preflight automatically.</p><button class="dc-btn" data-dc-nav="home">Create clips</button></div>`;
-  const connected=connectedPlatformCount(d);
-  panel.innerHTML=`<div class="dc-settings-hub dc-qc-page"><section class="dc-settings-command"><div><span class="dc-settings-kicker">${ICON.quality} Quality Center</span><h1>What can post right now.</h1><p>Everything cleared to go out, and everything blocked — with the one thing that fixes it.</p><div class="dc-qc-hero-actions"><button class="dc-btn" id="dcQualityRefresh">Run fresh checks</button></div></div><div class="dc-settings-command-status"><span class="${ready.length?'on':''}"><i>${ICON.check}</i><b>${ready.length} ready</b><em>cleared to post</em></span><span class="${blocked.length?'':'on'}"><i>${ICON.warning}</i><b>${blocked.length} blocked</b><em>need a fix</em></span><span class="${connected?'on':''}"><i>${ICON.social}</i><b>${connected} connected</b><em>channels</em></span></div></section>
-    ${clips.length?lists:empty}
-  </div>`;
-  $('#dcQualityRefresh')?.addEventListener('click',async event=>{const button=event.currentTarget;button.disabled=true;button.textContent='Checking…';await refreshData();renderQualityCenter();notify('Quality checks refreshed','good')});
-  requestAnimationFrame(()=>animatePanel(panel));
+function styleGroupControls(id){
+  if(id==='layout')return `${styleSeg('fitMode',[['contain','Fit whole frame'],['blur','Blurred sides'],['crop','Fill 9:16']])}
+    ${styleColor('frameBackground','Background')}${styleSelect('filterPreset','Colour look',[['natural','Natural'],['crisp','Crisp'],['warm','Warm'],['cinematic','Cinematic'],['monochrome','Monochrome']])}
+    ${styleRange('blurStrength','Side blur',0,60,1,'')}${styleRange('brightness','Brightness',-0.3,0.3,0.01,'')}${styleRange('contrast','Contrast',0.6,1.6,0.01,'')}${styleRange('saturation','Saturation',0,2,0.01,'')}${styleRange('sharpen','Sharpen',0,1.5,0.05,'')}${styleRange('vignette','Vignette',0,1,0.05,'')}`;
+  if(id==='captions')return `${styleSeg('captionMode',[['dynamic-stack','Word stack'],['word','Word highlight'],['phrase','Phrase']])}
+    ${styleSelect('captionFont','Main font',STYLE_FONTS)}${styleSelect('captionHighlightFont','Highlight font',STYLE_FONTS)}${styleSelect('captionArabicFont','Arabic font',STYLE_FONTS)}
+    ${styleColor('captionPrimary','Text')}${styleColor('captionHighlight','Highlight')}${styleColor('captionOutline','Outline')}${styleColor('captionBackground','Card')}
+    ${styleToggle('captionUppercase','Uppercase','Force capitals on every caption')}${styleToggle('captionHighlightItalic','Italic highlight','Slant the highlighted word')}
+    ${styleRange('captionFontSize','Size',40,160,1,'')}${styleRange('captionFontWeight','Weight',400,900,50,'')}${styleRange('captionOutlineWidth','Outline width',0,12,0.5,'')}${styleRange('captionShadow','Shadow',0,8,0.5,'')}
+    ${styleRange('captionBackgroundOpacity','Card opacity',0,100,1,'%')}${styleRange('captionLetterSpacing','Letter spacing',-4,12,0.5,'')}${styleRange('captionLineHeight','Line height',0.65,1.4,0.01,'')}
+    ${styleRange('captionPositionX','Horizontal',8,92,1,'%')}${styleRange('captionPositionY','Vertical',12,88,1,'%')}
+    ${styleRange('captionMaxWords','Words per card',1,8,1,'')}${styleRange('captionClearPause','Clear after pause',0,2,0.05,'s')}${styleRange('captionHoldSeconds','Hold',0,1,0.02,'s')}${styleRange('captionTimingOffsetMs','Timing offset',-400,400,10,'ms')}`;
+  if(id==='headline')return `${styleToggle('hookEnabled','Show auto headline','A short title card over the opening seconds')}
+    ${styleColor('hookColor','Text')}${styleColor('hookBackground','Background')}
+    ${styleRange('hookDuration','Duration',0.8,6,0.1,'s')}${styleRange('hookFontSize','Size',28,96,1,'')}${styleRange('hookBackgroundOpacity','Background opacity',0,100,1,'%')}`;
+  if(id==='framing')return `${styleToggle('smartFramingEnabled','Track the speaker','Keeps the face centred when filling 9:16')}
+    ${styleSelect('smartFramingBias','Bias',[['auto','Automatic'],['left','Left'],['center','Centre'],['right','Right']])}
+    ${styleRange('smartFramingPadding','Padding',0.05,0.45,0.01,'')}${styleRange('smartFramingZoom','Zoom',0.75,1.35,0.01,'')}${styleRange('smartFramingSmoothing','Smoothing',0,0.95,0.01,'')}
+    <p class="dc-style-hint">Only applies when the layout is set to fill 9:16.</p>`;
+  if(id==='overlay')return `${styleText('watermark','Watermark text',60)}
+    ${styleSelect('watermarkPosition','Position',[['top-left','Top left'],['top-center','Top centre'],['top-right','Top right'],['bottom-left','Bottom left'],['bottom-center','Bottom centre'],['bottom-right','Bottom right']])}
+    ${styleColor('watermarkColor','Colour')}${styleRange('watermarkOpacity','Opacity',0,100,1,'%')}${styleRange('watermarkFontSize','Size',14,64,1,'')}
+    ${styleToggle('brandLineEnabled','Accent line','A colour edge along the clip')}${styleColor('brandLineColor','Accent colour')}${styleRange('brandLineHeight','Accent thickness',2,24,1,'')}`;
+  if(id==='audio')return `${styleToggle('voiceEnhance','Enhance voice','Level and clean the speaker before mixing music under it')}
+    <p class="dc-style-hint">Background tracks and volume live in Audio.</p>`;
+  return '';
+}
+
+function styleTemplateCard(t,sourcePreview){
+  const editing=t.id===styleStudio.baseId, isDefault=data()?.selectedTemplate?.id===t.id;
+  const swatches=[t.captionPrimary,t.captionHighlight,t.watermarkColor,t.brandLineColor].filter(Boolean).slice(0,4);
+  const more=`<details class="dc-clip-more"><summary>More</summary><div><button data-duplicate-template="${esc(t.id)}">Duplicate</button>${isDefault?'':`<button data-use-template="${esc(t.id)}">Use for new clips</button>`}${t.builtIn?'':`<button class="danger" data-delete-template="${esc(t.id)}">Delete</button>`}</div></details>`;
+  return `<article class="dc-style-card ${editing?'is-editing':''}"><button type="button" class="dc-style-card-art" data-style-open="${esc(t.id)}" aria-label="Edit ${esc(t.name||'template')}">${templatePreviewMarkup(t,sourcePreview)}</button><div class="dc-style-card-foot"><div><strong>${esc(shortText(t.name||'Untitled',22))}</strong><small>${t.builtIn?'Built-in':'Custom'}${isDefault?' · default':''}</small></div><span class="dc-style-swatches">${swatches.map(c=>`<i style="background:${esc(templateSafeColor(c))}"></i>`).join('')}</span></div><div class="dc-style-card-row">${isDefault?'<b class="dc-style-flag">Default</b>':''}${more}</div></article>`;
+}
+
+async function styleStudioSave(){
+  const draft=styleStudio.draft;if(!draft)return;
+  const base=(data()?.templates||[]).find(t=>t.id===styleStudio.baseId);
+  const button=$('#dcStyleSave');if(button){button.disabled=true;button.textContent='Saving…'}
+  try{
+    let saved;
+    if(!base||base.builtIn){
+      // Built-in templates are editable:false on the server, so edits become
+      // a new custom template rather than a failed write.
+      const name=base&&draft.name===base.name?`${base.name} (custom)`:String(draft.name||'Custom template');
+      const result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...draft,name},select:true})});
+      saved=result.template;
+    }else{
+      const result=await callApi(`/api/templates/${encodeURIComponent(base.id)}`,{method:'PUT',body:JSON.stringify({template:draft})});
+      saved=result.template;
+    }
+    await refreshData();
+    if(saved)styleStudioLoad(saved);
+    notify('Template saved');
+  }catch(error){notify(error.message,'bad')}
+  renderTemplatesPage();
+}
+async function styleStudioCreate(){
+  const base=styleStudio.baseId||data()?.selectedTemplate?.id;
+  if(!base)return notify('No template to start from','bad');
+  try{
+    const result=await callApi(`/api/templates/${encodeURIComponent(base)}/duplicate`,{method:'POST',body:JSON.stringify({name:'New template'})});
+    await refreshData();
+    if(result.template)styleStudioLoad(result.template);
+    notify('New template created');
+  }catch(error){notify(error.message,'bad')}
+  renderTemplatesPage();
 }
 
 function renderTemplatesPage(){
   const panel=$('#view-templates'),d=data();if(!panel||!d)return;
-  const templates=d.templates||[], selected=d.selectedTemplate||templates[0]||{};
-  const recommended=templates.filter(t=>t.builtIn),custom=templates.filter(t=>!t.builtIn);
+  const templates=d.templates||[];
+  if(!templates.length){panel.innerHTML='<div class="dc-qc-empty">Default styles could not be loaded.</div>';return}
+  const base=templates.find(t=>t.id===styleStudio.baseId)||d.selectedTemplate||templates[0];
+  if(!styleStudio.draft||!templates.some(t=>t.id===styleStudio.baseId))styleStudioLoad(base);
+  const draft=styleStudio.draft;
   const sourcePreview=(d.projects||[]).map(project=>projectThumbUrl(project,[])).find(Boolean)||'';
-  const hasClips=(d.clips||[]).length>0;
-  const currentAction=hasClips?`<button class="dc-btn secondary" data-apply-template="${esc(selected.id||'')}">Apply to existing clips</button>`:'';
-  const recommendedCards=recommended.map(t=>templateCard(t,sourcePreview)).join('');
-  const customCards=custom.map(t=>templateCard(t,sourcePreview)).join('');
-  panel.innerHTML=`<div class="dc-settings-hub dc-styles-page">
-    <section class="dc-settings-command"><div><span class="dc-settings-kicker">${ICON.style} Clip styles</span><h1>Choose how new clips look.</h1><p>Captions, framing, colour and watermark placement. Existing clips stay as they are.</p></div><div class="dc-settings-command-status"><span class="on"><i>${ICON.check}</i><b>${esc(shortText(selected.name||'None',18))}</b><em>current default</em></span><span class="${recommended.length?'on':''}"><i>${ICON.style}</i><b>${recommended.length} ready-made</b><em>styles</em></span><span class="${custom.length?'on':''}"><i>${ICON.brand}</i><b>${custom.length} custom</b><em>yours</em></span></div></section>
-    <section class="dc-settings-section"><header><span>${ICON.style}</span><div><small>Ready-made</small><h2>Recommended styles</h2></div>${hasClips?`<b><button type="button" data-apply-template="${esc(selected.id||'')}">Apply default to existing clips</button></b>`:''}</header><div class="dc-style-grid">${recommendedCards||`<div class="dc-qc-empty">Default styles could not be loaded.</div>`}</div></section>
-    ${custom.length?`<section class="dc-settings-section violet"><header><span>${ICON.brand}</span><div><small>Your studio</small><h2>Your styles</h2></div><b>${custom.length} saved</b></header><div class="dc-style-grid">${customCards}</div></section>`:`<div class="dc-style-make"><span>${ICON.style}</span><div><strong>Create your own style</strong><p>Open a clip, adjust captions and colour, then save the look.</p></div><button class="dc-btn" data-open-style-editor>${hasClips?'Open editor':'Create a clip first'}</button></div>`}
+  const canUndo=styleStudio.index>0,canRedo=styleStudio.index<styleStudio.history.length-1;
+  const group=STYLE_GROUPS.find(g=>g[0]===styleStudio.group);
+
+  const rail=group
+    ?`<div class="dc-style-panel-head"><button type="button" id="dcStyleBack" class="dc-icon-btn dc-svg" aria-label="Back to all settings">${ICON.back}</button><div><small>${esc(group[3])}</small><strong>${esc(group[1])}</strong></div></div><div class="dc-style-panel" id="dcStyleControls">${styleGroupControls(group[0])}</div>`
+    :`<div class="dc-style-rail">${['Style','Brand'].map(section=>`<small>${esc(section)}</small>${STYLE_GROUPS.filter(g=>g[3]===section).map(([id,label,icon])=>`<button type="button" data-style-group="${esc(id)}"><span>${ICON[icon]||ICON.style}</span><div><strong>${esc(label)}</strong><em>${esc(styleGroupSummary(id))}</em></div>${ICON.chevron}</button>`).join('')}`).join('')}</div>`;
+
+  panel.innerHTML=`<div class="dc-style-studio">
+    <header class="dc-style-bar"><div class="dc-style-bar-title"><strong>Clip styles</strong><span>Build the look every new clip uses</span></div>
+      <select id="dcStyleSwitch" aria-label="Choose template">${templates.map(t=>`<option value="${esc(t.id)}" ${t.id===base.id?'selected':''}>${esc(t.name||'Untitled')}${d.selectedTemplate?.id===t.id?' · default':''}</option>`).join('')}</select>
+      <div class="dc-style-bar-actions"><button type="button" class="dc-icon-btn dc-svg" id="dcStyleUndo" title="Undo" ${canUndo?'':'disabled'}>${ICON.undo}</button><button type="button" class="dc-icon-btn dc-svg" id="dcStyleRedo" title="Redo" ${canRedo?'':'disabled'}>${ICON.redo}</button><button type="button" class="dc-icon-btn dc-svg" id="dcStyleRevert" title="Discard changes" ${styleStudio.dirty?'':'disabled'}>${ICON.clock}</button><button class="dc-btn" id="dcStyleSave" ${styleStudio.dirty?'':'disabled'}>${styleStudio.dirty?'Save template':'Saved'}</button></div></header>
+    <div class="dc-style-strip"><button type="button" class="dc-style-new" id="dcStyleNew"><span>+</span><small>New template</small></button>${templates.map(t=>styleTemplateCard(t,sourcePreview)).join('')}</div>
+    <div class="dc-style-workspace"><aside class="dc-style-side">${rail}</aside>
+      <main class="dc-style-stage"><div class="dc-style-stage-frame">${templatePreviewMarkup(draft,sourcePreview,true)}<span class="dc-style-demo">Preview</span></div><p class="dc-style-stage-note">Sample caption over your own footage. New clips use this look once saved.</p></main></div>
   </div>`;
-  $$('.dc-style-phone img',panel).forEach(img=>img.addEventListener('error',()=>img.remove(),{once:true}));
+
+  $('#dcStyleSwitch')?.addEventListener('change',event=>{const next=templates.find(t=>t.id===event.target.value);if(next){styleStudioLoad(next);renderTemplatesPage()}});
+  $('#dcStyleUndo')?.addEventListener('click',styleStudioUndo);
+  $('#dcStyleRedo')?.addEventListener('click',styleStudioRedo);
+  $('#dcStyleRevert')?.addEventListener('click',styleStudioRevert);
+  $('#dcStyleSave')?.addEventListener('click',styleStudioSave);
+  $('#dcStyleNew')?.addEventListener('click',styleStudioCreate);
+  $('#dcStyleBack')?.addEventListener('click',()=>{styleStudio.group='';renderTemplatesPage()});
+  $$('[data-style-group]',panel).forEach(button=>button.addEventListener('click',()=>{styleStudio.group=button.dataset.styleGroup;renderTemplatesPage()}));
+  $$('[data-style-open]',panel).forEach(button=>button.addEventListener('click',()=>{const next=templates.find(t=>t.id===button.dataset.styleOpen);if(next){styleStudioLoad(next);renderTemplatesPage()}}));
+  $$('[data-style-seg]',panel).forEach(button=>button.addEventListener('click',()=>{styleStudioSet(button.dataset.styleSeg,button.dataset.styleValue);renderTemplatesPage()}));
+  const controls=$('#dcStyleControls');
+  if(controls){
+    // Ranges repaint the preview live without re-rendering the panel, so the
+    // slider keeps focus while dragging.
+    controls.addEventListener('input',event=>{
+      const key=event.target.dataset.styleKey;if(!key)return;
+      const type=event.target.dataset.styleType;
+      const value=type==='number'?Number(event.target.value):type==='bool'?event.target.checked:event.target.value;
+      styleStudio.draft[key]=value;styleStudio.dirty=true;
+      const out=controls.querySelector(`[data-style-out="${CSS.escape(key)}"]`);
+      if(out)out.textContent=`${value}${event.target.dataset.styleSuffix||''}`;
+      styleStudioPaint(sourcePreview);
+    });
+    controls.addEventListener('change',event=>{if(event.target.dataset.styleKey)styleStudioPush()});
+  }
   requestAnimationFrame(()=>animatePanel(panel));
+}
+function styleStudioPaint(sourcePreview){
+  const frame=$('.dc-style-stage-frame');if(!frame||!styleStudio.draft)return;
+  frame.innerHTML=`${templatePreviewMarkup(styleStudio.draft,sourcePreview,true)}<span class="dc-style-demo">Preview</span>`;
+  const save=$('#dcStyleSave');if(save){save.disabled=false;save.textContent='Save template'}
+  const revert=$('#dcStyleRevert');if(revert)revert.disabled=false;
 }
 function templateSafeColor(value,fallback='#FFFFFF'){return /^#[0-9A-F]{6}$/i.test(String(value||''))?String(value).toUpperCase():fallback}
 function templateRgba(value,opacity){const color=templateSafeColor(value,'#000000'),alpha=clamp(Number(opacity||0),0,100)/100;return `rgba(${parseInt(color.slice(1,3),16)},${parseInt(color.slice(3,5),16)},${parseInt(color.slice(5,7),16)},${alpha})`}
@@ -3276,23 +3390,10 @@ function templatePreviewMarkup(t,sourcePreview='',large=false){
   const media=sourcePreview?`<img class="dc-style-phone-back" src="${authedUrl(sourcePreview)}" alt=""><img class="dc-style-phone-front" src="${authedUrl(sourcePreview)}" alt="Sample source preview">`:`<div class="dc-style-sample-scene"><i></i><b></b><em></em></div>`;
   return `<div class="dc-style-phone ${large?'large':''}" data-fit="${esc(fit)}" style="--style-bg:${templateSafeColor(t.frameBackground,'#000000')};--style-filter:${esc(filter)}">${media}<span class="dc-style-sample-badge">Sample preview</span><span class="dc-style-watermark" data-position="${esc(watermarkPosition)}" style="color:${templateSafeColor(t.watermarkColor,'#FFFFFF')};opacity:${clamp(Number(t.watermarkOpacity||72),0,100)/100}">${esc(t.watermark||'DEENCLIPPED')}</span><div class="dc-style-caption ${esc(mode)}" style="--style-highlight:${highlight};left:${x}%;top:${y}%;font-family:${templateFontFamily(t.captionFont)};font-size:${fontSize}px;font-weight:${weight};letter-spacing:${letter}px;line-height:${lineHeight};color:${primary};-webkit-text-stroke:${outline}px ${outlineColor};text-shadow:0 ${shadow}px ${Math.max(2,shadow*3)}px #000;background:${background}">${caption}</div></div>`;
 }
-function templateCard(t,sourcePreview=''){
-  const selected=DATA?.selectedTemplate?.id===t.id;
-  const more=`<details class="dc-clip-more"><summary>More</summary><div><button data-duplicate-template="${esc(t.id)}">Duplicate template</button>${!t.builtIn?`<button class="danger" data-delete-template="${esc(t.id)}">Delete template</button>`:''}</div></details>`;
-  return `<article class="dc-style-tile ${selected?'is-current':''}"><button class="dc-style-tile-preview" type="button" data-preview-template="${esc(t.id)}" aria-label="Preview ${esc(t.name||'style')}">${templatePreviewMarkup(t,sourcePreview)}<span class="dc-style-scrim"><strong>${esc(t.name||'Untitled style')}</strong>${selected?'<b class="dc-style-flag">Default</b>':''}</span><span class="dc-style-enlarge">${ICON.search}</span></button><div class="dc-style-tile-actions"><button class="dc-btn" data-use-template="${esc(t.id)}" ${selected?'disabled':''}>${selected?'In use':'Use this'}</button>${more}</div></article>`;
-}
-function openTemplatePreview(id){
-  const t=(data()?.templates||[]).find(item=>item.id===id);if(!t)return notify('That style is unavailable','bad');
-  $('#dcTemplatePreviewLayer')?.remove();const sourcePreview=(data()?.projects||[]).map(project=>projectThumbUrl(project,[])).find(Boolean)||'';
-  const layer=document.createElement('div');layer.id='dcTemplatePreviewLayer';layer.className='dc-style-modal-layer';
-  layer.innerHTML=`<section class="dc-style-modal" role="dialog" aria-modal="true" aria-labelledby="dcStylePreviewTitle"><div class="dc-style-modal-visual">${templatePreviewMarkup(t,sourcePreview,true)}</div><div class="dc-style-modal-copy"><button class="dc-style-modal-close" type="button" data-close-style-preview aria-label="Close">×</button><span>${t.builtIn?'Built-in style':'Your custom style'}</span><h2 id="dcStylePreviewTitle">${esc(t.name||'Clip style')}</h2><p>${esc(t.description||'A reusable look for captions, framing and colour.')}</p><div class="dc-style-modal-note"><b>What this changes</b><span>Caption layout, type, colour, framing and watermark placement.</span></div><div class="dc-style-modal-specs"><div><small>Captions</small><strong>${templateModeLabel(t.captionMode)}</strong></div><div><small>Video framing</small><strong>${templateFitLabel(t.fitMode)}</strong></div><div><small>Main font</small><strong>${esc(t.captionFont||'Default')}</strong></div><div><small>Highlight</small><strong><i style="background:${templateSafeColor(t.captionHighlight,'#FFFFFF')}"></i>${templateSafeColor(t.captionHighlight,'#FFFFFF')}</strong></div></div><p class="dc-style-modal-warning">This is a sample preview. Nothing changes until you choose “Use for new clips”. Existing clips remain untouched.</p><div class="dc-style-modal-actions"><button class="dc-btn secondary" data-close-style-preview>Keep browsing</button><button class="dc-btn" data-use-template="${esc(t.id)}" ${DATA?.selectedTemplate?.id===t.id?'disabled':''}>${DATA?.selectedTemplate?.id===t.id?'Current default':'Use for new clips'}</button></div></div></section>`;
-  layer.addEventListener('click',event=>{if(event.target===layer||event.target.closest('[data-close-style-preview]'))layer.remove()});document.body.append(layer);
-  $$('.dc-style-phone img',layer).forEach(img=>img.addEventListener('error',()=>img.remove(),{once:true}));
-}
 function openStyleEditorForClip(){const clip=[...(data()?.clips||[])].sort((a,b)=>Number(b.createdAt||b.renderedAt||0)-Number(a.createdAt||a.renderedAt||0))[0];if(!clip){go('home');return notify('Create a clip first, then turn its look into a reusable style')}openEditor(clip.id,'style')}
-async function selectStudioTemplate(id){if(!id)return notify('Choose a style first','bad');try{await callApi('/api/template',{method:'POST',body:JSON.stringify({id})});$('#dcTemplatePreviewLayer')?.remove();notify('Style set for new clips');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
+async function selectStudioTemplate(id){if(!id)return notify('Choose a style first','bad');try{await callApi('/api/template',{method:'POST',body:JSON.stringify({id})});notify('Style set for new clips');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
 async function applyStudioTemplate(id){if(!id)return notify('Choose a style first','bad');if(!confirm('Apply the current style to every existing clip that can be re-rendered? This queues new renders; already-posted files are not changed.'))return;try{const r=await callApi('/api/templates/apply-all',{method:'POST',body:JSON.stringify({templateId:id})});notify(`Queued ${r.queued||0} clips for style update`);await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
-async function duplicateStudioTemplate(id){const base=(DATA?.templates||[]).find(t=>t.id===id);try{const r=await callApi(`/api/templates/${encodeURIComponent(id)}/duplicate`,{method:'POST',body:JSON.stringify({name:`${base?.name||'Style'} Copy`})});$('#dcTemplatePreviewLayer')?.remove();notify('Custom style created');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
+async function duplicateStudioTemplate(id){const base=(DATA?.templates||[]).find(t=>t.id===id);try{const r=await callApi(`/api/templates/${encodeURIComponent(id)}/duplicate`,{method:'POST',body:JSON.stringify({name:`${base?.name||'Style'} Copy`})});notify('Custom style created');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
 async function deleteStudioTemplate(id){if(!id)return;if(!confirm('Delete this custom style? Existing rendered videos remain unchanged.'))return;try{await callApi(`/api/templates/${encodeURIComponent(id)}`,{method:'DELETE'});notify('Custom style deleted');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
 function renderInsightsPage(){
   const panel=$('#view-insights'),d=data();if(!panel||!d)return;
@@ -3750,7 +3851,7 @@ function maybeShowBillingNotices(){
   const unseen=notices.find(notice=>notice?.id&&!seenGet('billing_notice',notice.id));
   if(unseen)showBillingNotice(unseen);
 }
-function renderCurrent(){if(currentView==='admin')renderAdminPage();if(currentView==='home')renderHome();if(currentView==='projects')renderProjects();if(currentView==='review')renderReview();if(currentView==='editor')ensureEditor();if(currentView==='schedule')renderPublishingWorkspace();if(currentView==='publishing')renderConnections();if(currentView==='templates')renderTemplatesPage();if(currentView==='brand')renderBrandKit();if(currentView==='lab')renderCreatorLab();if(currentView==='quality')renderQualityCenter();if(currentView==='music')renderAudioLibrary();if(currentView==='insights')renderInsightsPage();if(currentView==='automation')renderSettingsPage();if(currentView==='subscription')renderSubscriptionPage();lastDataSignature=structuralDataSignature(data())}
+function renderCurrent(){if(currentView==='admin')renderAdminPage();if(currentView==='home')renderHome();if(currentView==='projects')renderProjects();if(currentView==='review')renderReview();if(currentView==='editor')ensureEditor();if(currentView==='schedule')renderPublishingWorkspace();if(currentView==='publishing')renderConnections();if(currentView==='templates')renderTemplatesPage();if(currentView==='brand')renderBrandKit();if(currentView==='lab')renderCreatorLab();if(currentView==='music')renderAudioLibrary();if(currentView==='insights')renderInsightsPage();if(currentView==='automation')renderSettingsPage();if(currentView==='subscription')renderSubscriptionPage();lastDataSignature=structuralDataSignature(data())}
 async function refreshData(){if(typeof refresh==='function')return refresh();try{DATA=await callApi('/api/state')}catch{}}
 function hexAlpha(hex,alpha){const value=String(hex||'#000000').replace('#','');if(!/^[0-9a-fA-F]{6}$/.test(value))return `rgba(0,0,0,${alpha})`;const n=parseInt(value,16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${alpha})`}
 function formatDuration(ms){const s=Math.max(0,Math.round(Number(ms||0)/1000));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}

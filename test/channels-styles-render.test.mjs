@@ -23,16 +23,13 @@ const formatRelative = () => '2 hours ago';
 const socialSvg = k => '<svg data-logo="' + k + '"></svg>';
 const providerTitle = p => ({youtube:'YouTube Shorts',tiktok:'TikTok',instagram:'Instagram Reels',facebook:'Facebook Reels'}[p] || p);
 const providerBadge = i => !i.configured ? 'bad' : i.enabled ? 'good' : i.connected ? 'warn' : '';
-const templatePreviewMarkup = () => '<div class="dc-style-phone"></div>';
 const ICON = { search: '<svg data-icon="search"></svg>' };
-let DATA = { selectedTemplate: { id: 'sel' } };
 `;
 
 const mod = new Function(
   stubs +
   between('function connectionCard(info){', 'async function beginSocialConnection') +
-  between("function templateCard(t,sourcePreview=''){", 'function openTemplatePreview') +
-  '; return { connectionCard, templateCard };',
+  '; return { connectionCard };',
 )();
 
 const channel = (over = {}) => ({
@@ -85,37 +82,4 @@ test('each platform keeps its own logo and brand class', () => {
     assert.match(html, new RegExp(`dc-social-logo ${provider}`), `${provider} logo class`);
     assert.match(html, new RegExp(`data-logo="${provider}"`), `${provider} mark`);
   }
-});
-
-test('a style tile leads with the preview and offers Use this', () => {
-  const html = mod.templateCard({ id: 't1', name: 'Viral Stacked', builtIn: true });
-  assert.doesNotMatch(html, /\[object Object\]/);
-  assert.match(html, /class="dc-style-tile /);
-  assert.match(html, /dc-style-tile-preview/);
-  assert.match(html, /data-preview-template="t1"/);
-  assert.match(html, /data-use-template="t1"/);
-  assert.match(html, /Viral Stacked/);
-  assert.match(html, />Use this</);
-});
-
-test('the current default is flagged and its Use button is disabled', () => {
-  const html = mod.templateCard({ id: 'sel', name: 'Current look', builtIn: true });
-  assert.match(html, /is-current/);
-  assert.match(html, /dc-style-flag/);
-  assert.match(html, /data-use-template="sel" disabled/);
-  assert.match(html, />In use</);
-});
-
-test('only custom styles can be deleted', () => {
-  const builtIn = mod.templateCard({ id: 'b1', name: 'Built in', builtIn: true });
-  const custom = mod.templateCard({ id: 'c1', name: 'Mine', builtIn: false });
-  assert.doesNotMatch(builtIn, /data-delete-template/, 'built-in styles must not be deletable');
-  assert.match(custom, /data-delete-template="c1"/);
-  assert.match(builtIn, /data-duplicate-template="b1"/, 'duplicating is always allowed');
-});
-
-test('style names are escaped, not injected', () => {
-  const html = mod.templateCard({ id: 'x', name: '<img src=x onerror=alert(1)>', builtIn: true });
-  assert.doesNotMatch(html, /<img src=x onerror/);
-  assert.match(html, /&lt;img src=x onerror/);
 });

@@ -4,25 +4,57 @@ import fs from 'node:fs';
 
 const ui = fs.readFileSync(new URL('../src/public/activity-fix.js', import.meta.url), 'utf8');
 
-test('templates are presented as an understandable clip-style workflow', () => {
-  // Copy was rewritten on 11 Aug when the page moved to preview-led tiles.
-  // What must survive is the meaning, not the wording: the page says what a
-  // style controls, promises existing clips are untouched, marks the current
-  // default, and separates ready-made from custom.
+test('Clip Styles is a template studio with the full editing chrome', () => {
   assert.match(ui, /\['templates','Clip Styles','style'\]/);
-  assert.match(ui, /Choose how new clips look/);
-  assert.match(ui, /current default/);
-  assert.match(ui, /Existing clips stay as they are/);
-  assert.match(ui, /Recommended styles/);
-  assert.match(ui, /Your styles/);
+  assert.match(ui, /function renderTemplatesPage\(\)/);
+  // Top bar: switch template, undo, redo, discard, save.
+  for (const id of ['dcStyleSwitch', 'dcStyleUndo', 'dcStyleRedo', 'dcStyleRevert', 'dcStyleSave', 'dcStyleNew']) {
+    assert.match(ui, new RegExp(id), `${id} should exist`);
+  }
 });
 
-test('a style is never applied to existing clips without an explicit action', () => {
-  // Silently restyling clips the user already approved would be destructive,
-  // so applying to existing clips must stay a separate, named control.
-  assert.match(ui, /data-apply-template/);
-  assert.match(ui, /Apply default to existing clips/);
-  assert.match(ui, /Nothing changes until you choose/);
+test('every settings group is backed by real template fields', () => {
+  // A control that writes a field the renderer does not read is a lie about
+  // what the export will look like, so each group is pinned to its fields.
+  const fields = {
+    layout: ['fitMode', 'frameBackground', 'filterPreset', 'blurStrength'],
+    captions: ['captionMode', 'captionFont', 'captionPrimary', 'captionHighlight', 'captionPositionX', 'captionMaxWords'],
+    headline: ['hookEnabled', 'hookDuration', 'hookFontSize', 'hookBackgroundOpacity'],
+    framing: ['smartFramingEnabled', 'smartFramingBias', 'smartFramingZoom'],
+    overlay: ['watermark', 'watermarkPosition', 'watermarkOpacity', 'brandLineEnabled'],
+    audio: ['voiceEnhance'],
+  };
+  for (const [group, keys] of Object.entries(fields)) {
+    for (const key of keys) {
+      assert.match(ui, new RegExp(`'${key}'`), `${group}: ${key} should be editable`);
+    }
+  }
+});
+
+test('no control is offered for a feature the worker cannot do', () => {
+  // OpusClip ships these; our pipeline does not. A dead toggle would quietly
+  // promise a render change that never happens.
+  const worker = fs.readFileSync(new URL('../worker/clip_worker.py', import.meta.url), 'utf8');
+  for (const absent of ['Remove filler words', 'Remove pauses', 'AI emojis', 'Stock Video B-Roll', 'AI keywords highlighter']) {
+    assert.doesNotMatch(ui, new RegExp(absent), `${absent} is not implemented in the worker`);
+  }
+  // Guard the inverse: if the worker ever grows filler-word removal, this
+  // test should be revisited rather than silently passing forever.
+  assert.doesNotMatch(worker, /remove_filler_words/);
+});
+
+test('saving a built-in template creates a custom copy instead of failing', () => {
+  // src/templates.js marks built-ins editable:false, so PUT would be rejected.
+  assert.match(ui, /if\(!base\|\|base\.builtIn\)\{/);
+  assert.match(ui, /\(custom\)/);
+  assert.match(ui, /method:'PUT'/);
+});
+
+test('templates can still be duplicated, deleted and made the default', () => {
+  assert.match(ui, /data-duplicate-template/);
+  assert.match(ui, /data-delete-template/);
+  assert.match(ui, /data-use-template/);
+  assert.match(ui, /\/duplicate/);
 });
 
 test('clip-style previews read the real top-level template settings', () => {
@@ -35,12 +67,4 @@ test('clip-style previews read the real top-level template settings', () => {
   assert.match(ui, /projectThumbUrl\(project,\[\]\)/);
   assert.doesNotMatch(ui, /t\.caption\?\.highlightStyle/);
   assert.doesNotMatch(ui, /t\.caption\?\.highlightColor/);
-});
-
-test('preview, future-default, editor and bulk actions have distinct labels', () => {
-  assert.match(ui, /data-preview-template/);
-  assert.match(ui, /Use for new clips/);
-  assert.match(ui, /Apply to existing clips/);
-  assert.match(ui, /data-open-style-editor/);
-  assert.match(ui, /Nothing changes until you choose/);
 });
