@@ -355,6 +355,8 @@ body.dc-app .dc-style-make p { margin:4px 0 0;color:var(--v6-muted);font-size:9p
   body.dc-app .dc-style-make .dc-btn { grid-column:1/-1;width:100%; }
 }
 
+body.dc-app .dc-style-preview-shade { position:absolute;z-index:2;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.22),transparent 28%,transparent 61%,rgba(0,0,0,.42)); }
+
 /* Clip Styles studio — top bar, template strip, drill-in rail, live stage. */
 body.dc-app .dc-style-studio { display:grid;gap:13px; }
 body.dc-app .dc-style-bar { display:grid;grid-template-columns:minmax(0,1fr) minmax(160px,240px) auto;gap:14px;align-items:center;padding:14px 18px;border:1px solid var(--v6-line);border-radius:20px;background:linear-gradient(155deg,var(--v6-panel-raised),var(--v6-panel-soft));box-shadow:var(--v6-shadow); }

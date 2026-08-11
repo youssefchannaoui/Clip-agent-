@@ -12,9 +12,14 @@ openssl rand -hex 32
 
 ---
 
-## Two problems found in config.js while planning this
+## Two latent traps in config.js — both CHECKED, neither is currently active
 
-**1. Your session secret is probably four characters.**
+Verified against Render on 9 Aug 2026: `APP_SESSION_SECRET` and
+`WORKER_CALLBACK_SECRET` are both set explicitly, so neither fallback below is
+in play today. They are recorded because unsetting either one silently
+reintroduces the problem, and nothing in the app would tell you.
+
+**1. If `APP_SESSION_SECRET` is ever removed, the session secret becomes four characters.**
 
 `src/config.js:89`
 
@@ -34,26 +39,29 @@ The startup warning at line 187 does **not** catch this. It only fires when the
 secret equals the literal dev default, so a four-character real value passes
 silently.
 
-**Check this first.** If `APP_SESSION_SECRET` is absent from Render, it is the
-most urgent item on the page, ahead of everything else.
+Status: **set on Render, not a live problem.** Never remove it. Worth adding a
+startup check that fails loudly when the session secret is shorter than 32
+characters, since the existing warning at line 187 only catches the literal dev
+default and would let a four-character real value through in silence.
 
-**2. `WORKER_CALLBACK_SECRET` shadows `WORKER_SHARED_SECRET`.**
+**2. `WORKER_CALLBACK_SECRET` falls back to `WORKER_SHARED_SECRET`.**
 
-`src/config.js:55` falls back to `WORKER_SHARED_SECRET` when the callback secret
-is unset. So rotating only the shared secret silently rotates the callback
-secret too. Set both explicitly so they stop moving together.
+`src/config.js:55` uses the shared secret when the callback secret is unset, so
+rotating one would silently rotate both.
+
+Status: **both set explicitly on Render, not a live problem.** Keep it that way.
 
 ---
 
 ## Order
 
-### 1. `APP_SESSION_SECRET` — do this first, on its own
+### 1. `APP_SESSION_SECRET` — already set, but rotate it anyway
 
-Setting it explicitly decouples sessions from the other two secrets, so nothing
-later cascades into a surprise logout.
+It exists on Render, so it is not urgent, but it was in the leaked set.
 
-- Generate 64 hex characters, set on Render.
+- Generate 64 hex characters, replace on Render.
 - Effect: everyone signed out once. With your current user count, nobody notices.
+- Because it is set explicitly, rotating it does not disturb anything else.
 
 ### 2. `APP_PASSWORD`
 
