@@ -191,3 +191,21 @@ test('the stylesheet is structurally valid', () => {
   }
   assert.equal(depth, 0, 'unbalanced braces in studio-v6.css');
 });
+
+test('playback does not repeat work on every frame', () => {
+  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
+  const start = source.indexOf('function updatePlayhead');
+  const body = source.slice(start, source.indexOf('\n}', start));
+
+  // applyFrameAtTime was called here as well as by ontimeupdate, so the frame
+  // transform was recomputed twice per tick.
+  assert.doesNotMatch(body, /applyFrameAtTime\(/,
+    'the caller already runs this once per tick');
+
+  // Every caption block used to have its class toggled each frame; on a
+  // word-level track that is hundreds of no-op writes a second.
+  assert.doesNotMatch(body, /\$\$\('\.dc-caption-block'\)\.forEach/,
+    'only the block that changed should be touched');
+  assert.match(body, /activeCaptionBlock/, 'the active block should be remembered between frames');
+  assert.match(body, /isConnected/, 'a re-rendered timeline must invalidate the cached block');
+});

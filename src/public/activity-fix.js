@@ -2921,6 +2921,9 @@ function bindVideo(clip){
 }
 function togglePlayback(){const video=$('#dcEditorVideo');if(!video)return;if(video.currentTime<editor.sourceBase||video.currentTime>=editor.sourceEnd)video.currentTime=editor.sourceBase;video.paused?video.play():video.pause()}
 function seekEditor(seconds){const video=$('#dcEditorVideo'),bg=$('#dcEditorVideoBg');if(!video)return;const local=clamp(seconds,0,editor.trimOut);video.currentTime=editor.sourceBase+local;if(bg)bg.currentTime=video.currentTime;editor.currentTime=local;updateCaptionAtTime(local);applyFrameAtTime(local)}
+// The block highlighted on the timeline, so playback does not walk every
+// caption element on every frame just to discover nothing changed.
+let activeCaptionBlock=null;
 function updatePlayhead(time){
   const geo=timelineGeometry();
   if(geo){
@@ -2928,8 +2931,26 @@ function updatePlayhead(time){
     const head=$('#dcPlayhead');if(head)head.style.left=`${left}px`;
     const grip=$('#dcPlayheadGrip');if(grip)grip.style.left=`${left}px`;
   }
-  applyFrameAtTime(time);
-  $$('.dc-caption-block').forEach(b=>b.classList.toggle('active',time>=Number(b.dataset.captionStart)&&time<Number(b.dataset.captionEnd)));
+  // `applyFrameAtTime` used to be called here as well as by the caller on
+  // every `ontimeupdate`, so the whole frame transform was recomputed twice
+  // per tick for nothing.
+  //
+  // The caption blocks were also re-queried and every one of them had its
+  // class toggled each frame. On a word-level track that is hundreds of
+  // elements a second, and all but one toggle is a no-op. Only the block
+  // that actually changed is touched now.
+  if(activeCaptionBlock&&!activeCaptionBlock.isConnected)activeCaptionBlock=null;
+  if(activeCaptionBlock){
+    const start=Number(activeCaptionBlock.dataset.captionStart),end=Number(activeCaptionBlock.dataset.captionEnd);
+    if(time>=start&&time<end)return;
+    activeCaptionBlock.classList.remove('active');
+    activeCaptionBlock=null;
+  }
+  for(const block of $$('.dc-caption-block')){
+    if(time>=Number(block.dataset.captionStart)&&time<Number(block.dataset.captionEnd)){
+      block.classList.add('active');activeCaptionBlock=block;break;
+    }
+  }
 }
 
 function updateEditorPreview(){
