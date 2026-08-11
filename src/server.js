@@ -234,13 +234,17 @@ function queueTemplateForEveryUnpostedClip(template, user, reason = 'template up
   let queued = 0;
   let skipped = 0;
   const errors = [];
+  // One id per action, so the browser can group these jobs and count them
+  // instead of showing four unrelated bars.
+  const batchId = `batch_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const eligible = ownedBy(state.clips, user?.id).filter(clip => clip.status !== 'posted' && !clip.variantOf).length;
   // Only the acting account's clips. This used to sweep `state.clips`, so one
   // customer saving a template queued a re-render of every other customer's
   // work onto their own template.
   for (const clip of ownedBy(state.clips, user?.id)) {
     if (clip.status === 'posted' || clip.variantOf) { skipped += 1; continue; }
     try {
-      agent.engine.queueClipRerender(clip.id, template.id, { asVariant: false });
+      agent.engine.queueClipRerender(clip.id, template.id, { asVariant: false, batchId, batchLabel: `Applying "${template.name}"`, batchTotal: eligible });
       queued += 1;
     } catch (error) {
       skipped += 1;
@@ -364,7 +368,21 @@ function appState(user = null) {
       } : null,
     })),
     clips: clipsForUser.map(publicClip),
-    rerenderJobs: ownedBy(state.rerenderJobs, user.id).filter(job => clipsForUser.some(clip => clip.id === job.clipId)).slice(0, 30),
+    rerenderJobs: ownedBy(state.rerenderJobs, user.id)
+      .filter(job => clipsForUser.some(clip => clip.id === job.clipId))
+      .slice(0, 30)
+      .map(job => ({
+        id: job.id, clipId: job.clipId, status: job.status, stage: job.stage, progress: job.progress,
+        error: job.error || null, asVariant: Boolean(job.asVariant), engine: job.engine || '',
+        createdAt: job.createdAt || null, startedAt: job.startedAt || null, updatedAt: job.updatedAt || null,
+        finishedAt: job.finishedAt || null,
+        clipTitle: job.clipTitle || '', projectTitle: job.projectTitle || '',
+        templateName: job.templateName || '',
+        batchId: job.batchId || '', batchLabel: job.batchLabel || '', batchTotal: Number(job.batchTotal || 0),
+        etaSec: Number.isFinite(Number(job.etaSec)) ? Number(job.etaSec) : null,
+        currentClip: job.currentClip ?? null, totalClips: job.totalClips ?? null,
+        stages: Array.isArray(job.stages) ? job.stages.slice(-12) : [],
+      })),
     postTimes: config.postTimes, timezone: config.timezone, activeJobs: agent.engine.activeJobCount(),
     log: logFor(user, 60), directPublishingEnabled: config.socialPublishEnabled,
     publishingSettings: publishingSettings(user), social: social.connectionStatus(user), billing: billing.publicBilling(user),

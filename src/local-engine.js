@@ -458,9 +458,26 @@ function parseWorkerLine(record, line) {
   let payload;
   try { payload = JSON.parse(line); } catch { return; }
   if (payload.type === 'progress') {
-    record.stage = String(payload.stage || 'Processing');
+    const stage = String(payload.stage || 'Processing');
+    // The worker already reports all of this on every step. Keeping only
+    // stage+progress is why the UI had no ETA and no clip counter.
+    const num = value => (Number.isFinite(Number(value)) ? Number(value) : null);
+    record.stage = stage;
     record.progress = Math.max(0, Math.min(100, Number(payload.progress) || 0));
+    record.etaSec = num(payload.etaSec);
+    record.currentClip = num(payload.currentClip);
+    record.totalClips = num(payload.totalClips);
+    record.sourceDurationSec = num(payload.sourceDurationSec);
+    record.processedSec = num(payload.processedSec);
     record.status = 'processing';
+    if (!record.startedAt) record.startedAt = Date.now();
+    // One entry per distinct stage, so the log reads as steps rather than
+    // one line per percentage tick. Bounded so state.json cannot grow.
+    record.stages = Array.isArray(record.stages) ? record.stages : [];
+    if (record.stages[record.stages.length - 1]?.stage !== stage) {
+      record.stages.push({ stage, at: Date.now(), progress: record.progress });
+      if (record.stages.length > 40) record.stages = record.stages.slice(-40);
+    }
     record.updatedAt = Date.now();
     save();
   } else if (payload.type === 'warning') {
@@ -901,6 +918,7 @@ function importRerenderResultObject(jobRecord, result) {
   if (!rendered?.renderVerified || !rendered?.musicVerified) throw new Error('The re-render did not pass verification.');
   const original = clipById(jobRecord.clipId);
   if (!original) throw new Error('The original clip was removed before the re-render completed.');
+  jobRecord.finishedAt = Date.now();
   const newer = state.rerenderJobs.find(item => item.clipId === jobRecord.clipId && !item.asVariant && item.createdAt > jobRecord.createdAt && ['queued', 'processing', 'done'].includes(item.status));
   if (!jobRecord.asVariant && newer) {
     jobRecord.status = 'superseded';
@@ -1040,7 +1058,7 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   return record;
 }
 
-export function queueClipRerender(clipId, templateId, { asVariant = false } = {}) {
+export function queueClipRerender(clipId, templateId, { asVariant = false, batchId = '', batchLabel = '', batchTotal = 0 } = {}) {
   const clip = clipById(clipId);
   if (!clip) throw new Error('That clip does not exist.');
   if (clip.status === 'posted' && !asVariant) throw new Error('A posted video cannot be changed. Create a re-post variant instead.');
@@ -1086,6 +1104,9 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
     id: rerenderId, clipId: clip.id, templateId: template.id, templateName: template.name,
     asVariant: Boolean(asVariant), status: 'queued', stage: 'Waiting to re-render', progress: 0, engine: project.engine === 'remote' ? 'remote' : 'self-hosted',
     createdAt: Date.now(), jobFile: file, resultPath,
+    clipTitle: clip.title || '', projectId: project.id, projectTitle: project.title || '',
+    batchId: String(batchId || ''), batchLabel: String(batchLabel || ''), batchTotal: Number(batchTotal || 0),
+    stages: [], etaSec: null, currentClip: null, totalClips: null, startedAt: null,
   }, ownerOf(clip));
   state.rerenderJobs.unshift(record);
   state.rerenderJobs = state.rerenderJobs.slice(0, 60);

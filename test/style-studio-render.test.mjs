@@ -174,3 +174,40 @@ test('the stage draws exactly one preview badge', () => {
     'exactly one badge element is rendered',
   );
 });
+
+// The drag itself needs a DOM, so these assert the two things that would
+// silently rot without one: that the studio and the clip editor share the
+// same feel, and that a drag costs one undo step rather than sixty.
+
+const styleDrag = between('function bindStyleCaptionDrag(sourcePreview){', 'function styleStudioPaint');
+const editorDrag = between('function bindCaptionDrag(){', 'function bindVideo');
+
+test('the studio caption drag matches the editor gesture for gesture', () => {
+  for (const source of [styleDrag, editorDrag]) {
+    assert.match(source, /snapPoints=\[25,50,75\],snapDistance=2\.5/, 'shared snap behaviour');
+    assert.match(source, /clamp\(drag\.startSize\+delta\/Math\.max\(1,drag\.rect\.height\)\*260,24,160\)/, 'shared resize curve');
+    assert.match(source, /setPointerCapture/, 'pointer capture so the drag survives leaving the element');
+  }
+});
+
+test('dragging writes the same template fields the sliders do', () => {
+  assert.match(styleDrag, /captionPositionX/);
+  assert.match(styleDrag, /captionPositionY/);
+  assert.match(styleDrag, /captionFontSize/);
+  // Position stays inside the frame.
+  assert.match(styleDrag, /clamp\(x,8,92\)/);
+  assert.match(styleDrag, /clamp\(y,12,88\)/);
+});
+
+test('a drag costs exactly one undo step', () => {
+  const move = styleDrag.slice(styleDrag.indexOf('caption.onpointermove'), styleDrag.indexOf('const finish'));
+  const finish = styleDrag.slice(styleDrag.indexOf('const finish'));
+  assert.doesNotMatch(move, /styleStudioPush\(\)/, 'pointermove must not push history');
+  assert.match(finish, /styleStudioPush\(\)/, 'pointerup commits one entry');
+});
+
+test('the stage renders snap guides for the drag to show', () => {
+  assert.match(ui, /data-style-guide="v"/);
+  assert.match(ui, /data-style-guide="h"/);
+  assert.match(ui, /function styleStageInner\(sourcePreview\)/);
+});

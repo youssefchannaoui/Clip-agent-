@@ -1166,7 +1166,7 @@ function injectShell(){
   top.innerHTML = `<button class="dc-mobile-menu dc-svg" id="dcMobileMenu" type="button" aria-label="Open menu">${ICON.menu}</button><div class="dc-page-title"><strong id="dcPageName">Home</strong><span id="dcPageSub">Everything important in one place</span></div><div class="dc-global-search">${ICON.search}<input id="dcGlobalSearch" placeholder="Search projects, clips and posts"><div class="dc-search-results" id="dcSearchResults"></div></div><div class="dc-top-actions"><button class="dc-experience-badge" id="dcExperienceBadge" type="button"><i></i><span>Loading account</span></button><div class="dc-health" id="dcHealth"><i></i><span>Checking</span></div><button class="dc-token-pill" id="dcTokenPill" type="button" aria-label="Open tokens and plans">${ICON.tokens}<span class="dc-token-label">Tokens</span></button><button class="dc-btn secondary dc-tour-launch" id="dcTourLaunch" type="button">Demo</button><div class="dc-user-menu-wrap"><button class="dc-user-menu-button" id="dcUserMenuButton" type="button" aria-haspopup="menu" aria-expanded="false">${avatar}<span class="dc-user-copy"><b>${esc(signedUser.name || signedUser.email || 'Signed in')}</b><small>${esc(signedUser.email || 'Admin account')}</small></span><svg class="dc-user-chevron" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="dc-account-menu" id="dcAccountMenu" role="menu"><div class="dc-account-head"><strong>${esc(signedUser.name || 'DeenClipped account')}</strong><span>${esc(signedUser.email || 'Signed in')}</span></div><button class="dc-account-action" id="dcAccountBilling" type="button">Tokens & billing <b>Open</b></button><form class="dc-logout-form" method="post" action="/auth/logout"><button class="dc-logout-btn" type="submit">Log out</button></form></div></div><button class="dc-btn" id="dcNewProject"><span>＋ New</span></button></div>`;
 
   const work = document.createElement('div'); work.id = 'dcWork'; work.setAttribute('role','status'); work.setAttribute('aria-live','polite');
-  work.innerHTML = `<span class="dc-work-toast-orb">${ICON.play}</span><div class="dc-work-toast-copy"><strong>Working…</strong><span>Saving changes</span></div><button id="dcWorkClose" type="button" aria-label="Hide progress notification">×</button><div class="dc-work-toast-progress"><i></i></div>`;
+  work.innerHTML = `<div class="dc-work-head"><span class="dc-work-toast-orb">${ICON.play}</span><div class="dc-work-toast-copy"><strong>Working…</strong><span>Saving changes</span></div><b class="dc-work-percent" id="dcWorkPercent"></b><button class="dc-work-expand" id="dcWorkExpand" type="button" aria-expanded="false" aria-label="Show activity detail">${ICON.chevron}</button><button id="dcWorkClose" type="button" aria-label="Hide progress notification">×</button><div class="dc-work-toast-progress"><i id="dcWorkBar"></i></div></div><div class="dc-work-panel" id="dcWorkPanel"></div>`;
   const shade = document.createElement('button'); shade.id = 'dcShade'; shade.type='button'; shade.setAttribute('aria-label','Close menu');
   document.body.append(side, top, shade, work);
 
@@ -1351,25 +1351,107 @@ function workToastCopy(item){
   if(/\/api\/clips/.test(url))return{title:'Saving clip changes',detail:'Updating this clip and refreshing the workspace.'};
   return{title:'Saving changes',detail:'DeenClipped is updating your workspace.'};
 }
+function formatEta(seconds){
+  const value=Number(seconds);
+  if(!Number.isFinite(value)||value<=0)return '';
+  if(value<45)return 'less than a minute left';
+  const minutes=Math.round(value/60);
+  if(minutes<60)return `about ${minutes} min left`;
+  const hours=Math.floor(minutes/60);
+  return `about ${hours}h ${minutes%60}m left`;
+}
+function activityModel(){
+  const d=data();if(!d)return null;
+  const jobs=activeJobs();
+  const rerenders=(d.rerenderJobs||[]);
+  const running=jobs.filter(job=>job.batchId);
+  const batchId=running[0]?.batchId||'';
+  if(batchId){
+    const all=rerenders.filter(j=>j.batchId===batchId);
+    const done=all.filter(j=>['done','failed','cancelled'].includes(j.status));
+    const total=Math.max(Number(all[0]?.batchTotal||0),all.length);
+    const active=all.filter(j=>j.status==='processing');
+    // Measured, not guessed: how long finished jobs in THIS batch took.
+    const samples=done.map(j=>Number(j.finishedAt||0)-Number(j.startedAt||0)).filter(ms=>ms>1000);
+    const perJob=samples.length?samples.reduce((sum,ms)=>sum+ms,0)/samples.length/1000:null;
+    const remaining=Math.max(0,total-done.length);
+    const partial=active.length?Number(active[0].progress||0)/100:0;
+    const eta=perJob!==null?Math.round(perJob*Math.max(0,remaining-partial)):null;
+    const percent=total?Math.round(((done.length+partial)/total)*100):0;
+    return {
+      kind:'batch', title:all[0]?.batchLabel||'Applying template',
+      subtitle:`${done.length} of ${total} done`, percent:clamp(percent,0,100), eta,
+      jobs:all.map(j=>({id:j.id,title:j.clipTitle||'Clip',stage:j.stage||j.status,progress:Number(j.progress||0),status:j.status,stages:j.stages||[]})),
+      log:(active[0]?.stages||done[done.length-1]?.stages||[]).slice(-6),
+    };
+  }
+  if(!jobs.length)return null;
+  const job=jobs[0];
+  return {
+    kind:job.kind, title:job.title||'Working', subtitle:job.stage||'Working now',
+    percent:Number.isFinite(Number(job.progress))?clamp(Math.round(Number(job.progress)),0,100):null,
+    eta:job.etaSec??null,
+    jobs:jobs.map(j=>({id:j.title,title:j.title,stage:j.stage,progress:Number(j.progress||0),status:j.status||'processing',stages:j.stages||[]})),
+    log:(job.stages||[]).slice(-6),
+  };
+}
 function currentWorkItem(){
   const pending = [...requestMap.values()].at(-1);
   if (pending) return {...pending, source:'request', key:`request:${pending.id || pending.url || Date.now()}`};
-  if (currentView === 'home') return null;
   const job = activeJobs()[0];
   if (!job) return null;
   return {...job, source:'job', key:`job:${job.kind}:${job.title}:${job.stage}:${job.at || ''}`};
 }
+function bindWorkDock(){
+  const el=$('#dcWork');if(!el||el.dataset.bound==='1')return;
+  el.dataset.bound='1';
+  $('#dcWorkExpand',el)?.addEventListener('click',event=>{
+    event.stopPropagation();
+    const open=!el.classList.contains('is-expanded');
+    el.classList.toggle('is-expanded',open);
+    $('#dcWorkExpand',el)?.setAttribute('aria-expanded',String(open));
+    paintWork();
+  });
+}
 function paintWork(){
+  bindWorkDock();
+  bindWorkDock();
   const el = $('#dcWork'); if (!el) return;
   const item = currentWorkItem();
   if (!item){ el.classList.remove('show'); delete el.dataset.dismissed; delete el.dataset.dismissedKey; return; }
   const key = item.key || `${item.source || 'work'}:${item.id || item.url || item.title || ''}`;
   if (el.dataset.workKey !== key){ el.dataset.workKey = key; delete el.dataset.dismissed; delete el.dataset.dismissedKey; }
   if (el.dataset.dismissed === '1' && el.dataset.dismissedKey === key){ el.classList.remove('show'); return; }
-  const copy=workToastCopy(item);
+  const model=item.source==='job'?activityModel():null;
+  const copy=model?{title:model.title,detail:[model.subtitle,model.percent===null?'':`${model.percent}%`,formatEta(model.eta)].filter(Boolean).join(' · ')}:workToastCopy(item);
   $('strong', el).textContent=copy.title;
   $('.dc-work-toast-copy span', el).textContent=copy.detail;
+  // A real bar. This used to be a fixed 42% sliver on an infinite loop, which
+  // is why it always looked stuck.
+  const bar=$('#dcWorkBar',el),percentEl=$('#dcWorkPercent',el);
+  const percent=model?model.percent:null;
+  if(bar){
+    const known=Number.isFinite(Number(percent));
+    bar.classList.toggle('is-indeterminate',!known);
+    bar.style.width=known?`${clamp(Number(percent),0,100)}%`:'';
+  }
+  if(percentEl)percentEl.textContent=Number.isFinite(Number(percent))?`${percent}%`:'';
+  const expand=$('#dcWorkExpand',el),panel=$('#dcWorkPanel',el);
+  if(expand)expand.hidden=!model;
+  if(panel&&model&&el.classList.contains('is-expanded')){
+    const rows=model.jobs.map(job=>{
+      const pct=clamp(Math.round(Number(job.progress||0)),0,100);
+      const state=job.status==='done'?'done':job.status==='failed'?'fail':job.status==='processing'?'live':'wait';
+      return `<div class="dc-work-job ${state}"><span class="dc-work-dot"></span><div><strong>${esc(shortText(job.title,42))}</strong><small>${esc(shortText(job.stage||job.status||'Waiting',54))}</small></div><i>${state==='done'?'Done':state==='fail'?'Failed':state==='wait'?'Queued':`${pct}%`}</i><div class="dc-work-job-bar"><b style="width:${state==='done'?100:pct}%"></b></div></div>`;
+    }).join('');
+    const log=(model.log||[]).map(entry=>`<li><time>${esc(formatClockTime(entry.at))}</time>${esc(shortText(entry.stage||'',60))}</li>`).join('');
+    panel.innerHTML=`<div class="dc-work-jobs">${rows||'<div class="dc-work-empty">Nothing queued.</div>'}</div>${log?`<ul class="dc-work-log">${log}</ul>`:''}`;
+  }else if(panel&&!el.classList.contains('is-expanded')){panel.innerHTML=''}
   el.classList.add('show');
+}
+function formatClockTime(at){
+  const value=Number(at);if(!Number.isFinite(value)||value<=0)return '';
+  try{return new Date(value).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'})}catch{return ''}
 }
 
 function go(view){
@@ -1422,13 +1504,17 @@ function activeJobs(){
   const jobs = [];
   const stageWithQueue=item=>Number(item?.queuePosition||0)>0?`${item.stage||'Queued'} · position ${Math.round(item.queuePosition)}`:(item?.stage||item?.status);
   (d.projects || []).forEach(p => {
-    if (['queued','processing'].includes(p.status)) jobs.push({kind:'project', title:p.title || 'Lecture', stage:stageWithQueue(p), progress:Number(p.progress || 0), at:p.startedAt || p.submittedAt});
+    if (['queued','processing'].includes(p.status)) jobs.push({kind:'project', title:p.title || 'Lecture', stage:stageWithQueue(p), progress:Number(p.progress || 0), at:p.startedAt || p.submittedAt, etaSec:Number.isFinite(Number(p.etaSec))?Number(p.etaSec):null, stages:Array.isArray(p.stages)?p.stages:[], status:p.status});
     if (p.moreJob && ['queued','processing'].includes(p.moreJob.status)) jobs.push({kind:'project', title:`More clips · ${p.title || 'Lecture'}`, stage:stageWithQueue(p.moreJob), progress:Number(p.moreJob.progress || 0), at:p.moreJob.startedAt || p.moreJob.createdAt});
   });
   (d.rerenderJobs || []).forEach(j => {
     if (['queued','processing'].includes(j.status)) {
       const clip = (d.clips || []).find(c => c.id === j.clipId);
-      jobs.push({kind:'render', title:`Editing ${clip?.title || 'clip'}`, stage:stageWithQueue(j), progress:Number(j.progress || 0), at:j.startedAt || j.createdAt});
+      jobs.push({kind:'render', title:`${j.clipTitle || clip?.title || 'Clip'}`, stage:stageWithQueue(j),
+        progress:Number(j.progress || 0), at:j.startedAt || j.createdAt,
+        etaSec:Number.isFinite(Number(j.etaSec)) ? Number(j.etaSec) : null,
+        batchId:j.batchId || '', batchLabel:j.batchLabel || '', batchTotal:Number(j.batchTotal || 0),
+        stages:Array.isArray(j.stages) ? j.stages : [], status:j.status});
     }
   });
   (d.clips || []).forEach(c => (c.targets || []).forEach(t => {
@@ -3333,7 +3419,7 @@ function renderTemplatesPage(){
       <div class="dc-style-picker ${styleStudio.menuOpen?'is-open':''}"><button type="button" id="dcStyleSwitch" class="dc-style-switch" aria-haspopup="true" aria-expanded="${styleStudio.menuOpen?'true':'false'}"><span>${esc(shortText(base.name||'Untitled',26))}${d.selectedTemplate?.id===base.id?' · default':''}</span>${ICON.chevron}</button>${styleStudio.menuOpen?`<div class="dc-style-menu" id="dcStyleMenu"><button type="button" class="dc-style-new" id="dcStyleNew"><span>+</span>New template</button><div class="dc-style-menu-list">${templates.map(t=>styleTemplateCard(t,sourcePreview)).join('')}</div></div>`:''}</div>
       <div class="dc-style-bar-actions"><button type="button" class="dc-icon-btn dc-svg" id="dcStyleUndo" title="Undo" ${canUndo?'':'disabled'}>${ICON.undo}</button><button type="button" class="dc-icon-btn dc-svg" id="dcStyleRedo" title="Redo" ${canRedo?'':'disabled'}>${ICON.redo}</button><button type="button" class="dc-icon-btn dc-svg" id="dcStyleRevert" title="Discard changes" ${styleStudio.dirty?'':'disabled'}>${ICON.clock}</button><button class="dc-btn" id="dcStyleSave" ${styleStudio.dirty?'':'disabled'}>${styleStudio.dirty?'Save template':'Saved'}</button></div></header>
     <div class="dc-style-workspace"><aside class="dc-style-side">${rail}</aside>
-      <main class="dc-style-stage"><div class="dc-style-stage-frame">${templatePreviewMarkup(draft,sourcePreview,true)}</div><p class="dc-style-stage-note">Sample caption over your own footage. New clips use this look once saved.</p></main></div>
+      <main class="dc-style-stage"><div class="dc-style-stage-frame">${styleStageInner(sourcePreview)}</div><p class="dc-style-stage-note">Drag the caption to move it · drag its bottom-right corner to resize</p></main></div>
   </div>`;
 
   $('#dcStyleSwitch')?.addEventListener('click',event=>{event.stopPropagation();styleStudio.menuOpen=!styleStudio.menuOpen;renderTemplatesPage()});
@@ -3352,6 +3438,8 @@ function renderTemplatesPage(){
   $$('[data-style-group]',panel).forEach(button=>button.addEventListener('click',()=>{styleStudio.group=button.dataset.styleGroup;renderTemplatesPage()}));
   $$('[data-style-open]',panel).forEach(button=>button.addEventListener('click',()=>{const next=templates.find(t=>t.id===button.dataset.styleOpen);if(next){styleStudioLoad(next);styleStudio.menuOpen=false;renderTemplatesPage()}}));
   $$('[data-style-seg]',panel).forEach(button=>button.addEventListener('click',()=>{styleStudioSet(button.dataset.styleSeg,button.dataset.styleValue);renderTemplatesPage()}));
+  bindStyleCaptionDrag(sourcePreview);
+  bindStyleCaptionDrag(sourcePreview);
   const controls=$('#dcStyleControls');
   if(controls){
     // Ranges repaint the preview live without re-rendering the panel, so the
@@ -3369,9 +3457,62 @@ function renderTemplatesPage(){
   }
   requestAnimationFrame(()=>animatePanel(panel));
 }
+function styleStageInner(sourcePreview){
+  return `${templatePreviewMarkup(styleStudio.draft,sourcePreview,true)}<i class="dc-style-guide v" data-style-guide="v"></i><i class="dc-style-guide h" data-style-guide="h"></i>`;
+}
+function bindStyleCaptionDrag(sourcePreview){
+  const frame=$('.dc-style-stage-frame');if(!frame||!styleStudio.draft)return;
+  const caption=frame.querySelector('.dc-style-caption');if(!caption)return;
+  const guideV=frame.querySelector('[data-style-guide="v"]'),guideH=frame.querySelector('[data-style-guide="h"]');
+  // Same snap behaviour as the clip editor so the two surfaces feel identical.
+  const snapPoints=[25,50,75],snapDistance=2.5;
+  const showGuide=(guide,value,vertical)=>{if(!guide)return;guide.classList.add('show');guide.style[vertical?'left':'top']=`${value}%`};
+  const hideGuides=()=>{guideV?.classList.remove('show');guideH?.classList.remove('show')};
+  const previewSize=value=>clamp(Number(value||82)/3.1,20,38);
+  let drag=null;
+  caption.onpointerdown=event=>{
+    if(event.button!==undefined&&event.button!==0)return;
+    const box=caption.getBoundingClientRect(),rect=frame.getBoundingClientRect();
+    const mode=(event.clientX>=box.right-20&&event.clientY>=box.bottom-20)?'resize':'move';
+    drag={mode,pointerId:event.pointerId,startClientX:event.clientX,startClientY:event.clientY,
+      startX:Number(styleStudio.draft.captionPositionX??50),startY:Number(styleStudio.draft.captionPositionY??58),
+      startSize:Number(styleStudio.draft.captionFontSize||96),rect,x:Number(styleStudio.draft.captionPositionX??50),
+      y:Number(styleStudio.draft.captionPositionY??58),size:Number(styleStudio.draft.captionFontSize||96)};
+    caption.classList.add(mode==='resize'?'is-resizing':'is-dragging');
+    caption.setPointerCapture?.(event.pointerId);event.preventDefault();event.stopPropagation();
+  };
+  caption.onpointermove=event=>{
+    if(!drag||event.pointerId!==drag.pointerId)return;
+    if(drag.mode==='resize'){
+      const delta=(event.clientX-drag.startClientX+event.clientY-drag.startClientY)/2;
+      drag.size=clamp(drag.startSize+delta/Math.max(1,drag.rect.height)*260,24,160);
+      caption.style.fontSize=`${previewSize(drag.size)}px`;
+      return;
+    }
+    let x=drag.startX+(event.clientX-drag.startClientX)/Math.max(1,drag.rect.width)*100;
+    let y=drag.startY+(event.clientY-drag.startClientY)/Math.max(1,drag.rect.height)*100;
+    hideGuides();
+    for(const point of snapPoints){if(Math.abs(x-point)<=snapDistance){x=point;showGuide(guideV,point,true);break}}
+    for(const point of snapPoints){if(Math.abs(y-point)<=snapDistance){y=point;showGuide(guideH,point,false);break}}
+    drag.x=clamp(x,8,92);drag.y=clamp(y,12,88);
+    caption.style.left=`${drag.x}%`;caption.style.top=`${drag.y}%`;
+  };
+  const finish=event=>{
+    if(!drag||(event&&event.pointerId!==undefined&&event.pointerId!==drag.pointerId))return;
+    const {mode,x,y,size}=drag;drag=null;hideGuides();
+    caption.classList.remove('is-dragging','is-resizing');
+    // One history entry per gesture, not one per pointermove.
+    if(mode==='resize')styleStudio.draft.captionFontSize=Math.round(size);
+    else{styleStudio.draft.captionPositionX=Math.round(x);styleStudio.draft.captionPositionY=Math.round(y)}
+    styleStudioPush();
+    renderTemplatesPage();
+  };
+  caption.onpointerup=finish;caption.onpointercancel=finish;
+}
 function styleStudioPaint(sourcePreview){
   const frame=$('.dc-style-stage-frame');if(!frame||!styleStudio.draft)return;
-  frame.innerHTML=templatePreviewMarkup(styleStudio.draft,sourcePreview,true);
+  frame.innerHTML=styleStageInner(sourcePreview);
+  bindStyleCaptionDrag(sourcePreview);
   const save=$('#dcStyleSave');if(save){save.disabled=false;save.textContent='Save template'}
   const revert=$('#dcStyleRevert');if(revert)revert.disabled=false;
 }
