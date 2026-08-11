@@ -122,9 +122,12 @@ test('rules for removed markup cannot reshape live controls', () => {
   // rename, so an unscoped tile-era rule was still restyling the live pill.
   const app = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
   assert.equal(app.includes('dc-style-tile'), false, 'tile markup is gone; update this test if it returns');
-  assert.doesNotMatch(css, /body\.dc-app \.dc-style-enlarge\s*\{/,
-    'the enlarge rule must be scoped to the tile preview it was written for');
-  assert.match(css, /body\.dc-app \.dc-style-tile-preview \.dc-style-enlarge\s*\{/);
+  assert.doesNotMatch(css, /\.dc-style-enlarge/,
+    'the override layer must not restyle a control whose markup it no longer owns');
+  // Screens that were deleted, whose rules outlived them. `dc-qc-empty` is
+  // deliberately absent from this list: it is still rendered.
+  assert.doesNotMatch(css, /dc-style-tile|dc-style-scrim|dc-style-make|dc-qc-(?:list|row|thumb|actions)|dc-director-playbook|dc-director-forecast|dc-sub-rail|dc-sub-panel|dc-subscription-(?:hero|layout)/,
+    'rules for removed screens must not linger in the override layer');
 });
 
 test('a baked-export preview never shows a second, draggable caption layer', () => {
@@ -149,4 +152,29 @@ test('a baked-export preview never shows a second, draggable caption layer', () 
   // control; the new copy has to say position is unavailable.
   assert.doesNotMatch(source, /Captions will appear baked into the preview/);
   assert.match(source, /caption position cannot be previewed/i);
+});
+
+test('the override layer has no rule that can never match', () => {
+  // A rule whose selector names a class that appears nowhere in the markup is
+  // dead weight at best. At worst it shares a name with something live and
+  // silently restyles it, which is exactly how the enlarge control broke.
+  // This is the invariant, so it catches the next removed screen too.
+  const markup = ['activity-fix.js', 'index.html', 'premium-dashboard.js']
+    .map(name => fs.readFileSync(path.join(root, 'src', 'public', name), 'utf8')).join('');
+  const present = new Set(markup.match(/dc-[a-z0-9-]+/g) || []);
+  const referenced = new Set((css.match(/\.(dc-[a-z0-9-]+)/g) || []).map(value => value.slice(1)));
+  const dead = [...referenced].filter(name => name !== 'dc-app' && !present.has(name)).sort();
+  assert.deepEqual(dead, [], `override layer targets classes that no longer exist: ${dead.join(', ')}`);
+});
+
+test('the stylesheet is structurally valid', () => {
+  // A brace-unbalanced stylesheet still passes `npm run check`, which only
+  // syntax-checks JS and Python. This caught a bad automated edit already.
+  let depth = 0;
+  for (const char of css) {
+    if (char === '{') depth += 1;
+    else if (char === '}') depth -= 1;
+    assert.ok(depth >= 0, 'a closing brace appeared before its opening brace');
+  }
+  assert.equal(depth, 0, 'unbalanced braces in studio-v6.css');
 });
