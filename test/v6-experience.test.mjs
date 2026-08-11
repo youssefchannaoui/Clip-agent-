@@ -47,13 +47,16 @@ test('V6 exposes distinct account-aware journeys instead of cosmetic plan badges
 });
 
 test('Quality Center is a first-class functional route with real preflight signals', () => {
+  // Rebuilt 11 Aug: one question answered ("what can post right now"), not a
+  // dashboard of every signal. No numeric score, no separate preflight
+  // sidebar — just ready vs blocked, one plain-language reason each.
   assert.match(ui, /\['quality','Quality Center','quality'\]/);
   assert.match(ui, /function renderQualityCenter\(\)/);
-  assert.match(ui, /Caption timing/);
-  assert.match(ui, /Render verification/);
-  assert.match(ui, /Active-speaker framing/);
-  assert.match(ui, /Publishing preflight/);
-  assert.match(css, /\.dc-v6-quality-page/);
+  assert.match(ui, /function qualityAssessment\(clip\)/);
+  assert.match(ui, /function qualityPrimaryIssue\(item\)/);
+  assert.match(ui, /Ready to post/);
+  assert.match(ui, /Needs a fix/);
+  assert.match(css, /\.dc-qc-page/);
 });
 
 test('the modular V6 stylesheet is cache-versioned and served by the app', () => {
