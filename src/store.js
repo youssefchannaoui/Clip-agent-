@@ -32,6 +32,10 @@ export function settingDefaults() {
       minimumScore: 80,
       minimumQuality: 72,
       maxPerProject: 4,
+      // When true, automatic scoring may rank clips but must leave every clip
+      // in Review until a person approves or posts it. `skipReviewRequired` is
+      // retained below only for data/API compatibility with older builds.
+      reviewBeforePosting: false,
       skipReviewRequired: true,
     },
     publishingSettings: {
@@ -73,6 +77,9 @@ function blankState() {
     authOAuthStates: {},
     authSettings: { onboardingComplete: false },
     userSettings: {},
+    // Server-owned Template Shop grants. Every record is scoped to one user;
+    // the browser never decides whether a paid product is unlocked.
+    templateEntitlements: [],
     log: [],
     legacyState: null,
   };
@@ -94,6 +101,7 @@ function migrate(parsed) {
       authOAuthStates: parsed.authOAuthStates && typeof parsed.authOAuthStates === 'object' ? parsed.authOAuthStates : {},
       authSettings: { ...fresh.authSettings, ...(parsed.authSettings || {}) },
       userSettings: parsed.userSettings && typeof parsed.userSettings === 'object' ? parsed.userSettings : {},
+      templateEntitlements: Array.isArray(parsed.templateEntitlements) ? parsed.templateEntitlements : [],
       // The old global settings are deliberately carried through untouched so
       // that migrateToMultiTenant can move them to the owner's account below.
     };
@@ -233,12 +241,41 @@ export function setMusicSettings(user, next) {
 }
 
 export function automationSettings(user) {
-  return { ...settingDefaults().automationSettings, ...(readSetting(user, 'automationSettings') || {}) };
+  const defaults = settingDefaults().automationSettings;
+  const stored = readSetting(user, 'automationSettings') || {};
+  // V7 briefly represented its "Review before posting" checkbox by writing
+  // skipReviewRequired=false. Preserve that user's choice when the canonical
+  // field is absent. Older builds used the same false value to allow flagged
+  // quotations through automation; interpreting it as full human review is
+  // the only safe migration. Review-required clips are now always excluded.
+  const reviewBeforePosting = typeof stored.reviewBeforePosting === 'boolean'
+    ? stored.reviewBeforePosting
+    : Object.prototype.hasOwnProperty.call(stored, 'skipReviewRequired') && stored.skipReviewRequired === false;
+  return {
+    ...defaults,
+    ...stored,
+    reviewBeforePosting,
+    // This compatibility field now expresses the invariant rather than a
+    // user-overridable safety bypass: flagged clips always stay in Review.
+    skipReviewRequired: true,
+  };
 }
 export function setAutomationSettings(user, next) {
   const id = userIdOf(user);
   if (!id) throw new Error('Settings need an account.');
-  writeUserSetting(state, id, 'automationSettings', { ...automationSettings(user), ...next });
+  const current = automationSettings(user);
+  const incoming = next && typeof next === 'object' ? next : {};
+  const reviewBeforePosting = typeof incoming.reviewBeforePosting === 'boolean'
+    ? incoming.reviewBeforePosting
+    : Object.prototype.hasOwnProperty.call(incoming, 'skipReviewRequired')
+      ? incoming.skipReviewRequired === false
+      : current.reviewBeforePosting;
+  writeUserSetting(state, id, 'automationSettings', {
+    ...current,
+    ...incoming,
+    reviewBeforePosting,
+    skipReviewRequired: true,
+  });
   save();
   return automationSettings(user);
 }

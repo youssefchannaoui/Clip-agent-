@@ -196,6 +196,80 @@ test('owners and admins bypass every gate', () => {
   assert.equal(billing.assertCanSpend(owner, 100000, 'render clips'), true);
 });
 
+test('past-due accounts expose no usable Premium access and every server gate agrees', () => {
+  const user = makeUser('past-due', {
+    plan: 'monthly', status: 'past_due', tokensUsed: 0, bonusTokens: 50,
+    periodStart: Date.now(), periodEnd: Date.now() + 30 * DAY,
+  });
+  state.authUsers = [user];
+
+  const access = billing.featureAccess(user);
+  assert.equal(access.billingPastDue, true);
+  assert.equal(access.premium, false);
+  assert.equal(access.watermarkRequired, true);
+  for (const feature of ['canRemoveWatermark', 'customBranding', 'creatorLab', 'aiDirector', 'advancedFraming', 'batchPublishing', 'socialPublishing']) {
+    assert.equal(access[feature], false, `${feature} must be suspended while billing is past due`);
+  }
+
+  const info = billing.publicBilling(user);
+  assert.equal(info.features.canSpend, false);
+  assert.equal(info.features.spendingBlockCode, 'billing_past_due');
+  assert.equal(info.features.canPublish, false);
+  assert.equal(info.features.publishingBlockCode, 'billing_past_due');
+  assert.equal(info.canBuyTopups, false);
+  assert.equal(info.topupBlockCode, 'billing_past_due');
+  assert.equal(info.experience.id, 'premium_past_due');
+  assert.equal(info.experience.premiumPlan, true);
+  assert.equal(info.experience.premium, false);
+  assert.equal(info.experience.browseOnly, true);
+  assert.ok(info.notices.some(notice => notice.kind === 'billing_past_due'));
+  assert.ok(!info.notices.some(notice => notice.kind === 'tokens_empty'));
+
+  assert.throws(
+    () => billing.assertCanSpend(user, 1, 'render clips'),
+    error => error.code === 'billing_past_due' && error.remaining === 450,
+  );
+  assert.throws(
+    () => billing.assertCanPublish(user, 'publish this clip'),
+    error => error.code === 'billing_past_due' && error.remaining === 450,
+  );
+});
+
+test('owner unlimited authority is preserved even if stale billing says past due', () => {
+  const owner = {
+    ...makeUser('past-due-owner', {
+      plan: 'monthly', status: 'past_due', tokensUsed: 400,
+      periodStart: Date.now(), periodEnd: Date.now() + 30 * DAY,
+    }),
+    role: 'owner',
+  };
+  state.authUsers = [owner];
+  const access = billing.featureAccess(owner);
+  const info = billing.publicBilling(owner);
+  assert.equal(access.billingPastDue, false);
+  assert.equal(access.premium, true);
+  assert.equal(access.socialPublishing, true);
+  assert.equal(info.current.unlimited, true);
+  assert.equal(info.features.canSpend, true);
+  assert.equal(info.features.canPublish, true);
+  assert.equal(info.topupBlockCode, 'topups_unavailable_unlimited');
+  assert.equal(billing.assertCanSpend(owner, 100000, 'render clips'), true);
+  assert.equal(billing.assertCanPublish(owner, 'publish clips'), true);
+});
+
+test('top-up eligibility distinguishes an active free trial from an expired one', () => {
+  const active = makeUser('topup-active-free', { freeExpiresAt: Date.now() + DAY });
+  const expired = makeUser('topup-expired-free', { freeExpiresAt: Date.now() - DAY });
+  state.authUsers = [active, expired];
+  assert.equal(billing.topupAccess(active).allowed, true);
+  assert.deepEqual(
+    { allowed: billing.topupAccess(expired).allowed, code: billing.topupAccess(expired).code },
+    { allowed: false, code: 'topups_require_active_plan' },
+  );
+  const html = billing.plansPage(expired, {});
+  assert.ok(html.includes('Choose a plan first'));
+});
+
 test('the plans page renders each period suffix exactly once', () => {
   const user = makeUser('viewer');
   state.authUsers = [user];

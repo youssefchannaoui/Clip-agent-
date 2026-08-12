@@ -340,6 +340,77 @@ function resolveCleanSource(clip) {
   return null;
 }
 
+function previewSourceForClip(clip) {
+  const resolved = resolveCleanSource(clip);
+  if (resolved?.kind === 'object') {
+    // Keep the browser on an owner-checked same-origin URL. That route signs
+    // and redirects to private storage only after access is verified; it also
+    // avoids a client password query invalidating the storage signature.
+    return { kind: 'video', url: `/api/clips/${encodeURIComponent(clip.id)}/source-preview`, timeBase: 'source' };
+  }
+  if (resolved?.kind === 'url' && /^https:\/\//i.test(String(resolved.url || ''))) {
+    return { kind: 'video', url: resolved.url, timeBase: 'source' };
+  }
+  if (resolved?.kind === 'file') {
+    // Never expose a server path. The existing owner-checked source endpoint
+    // streams the same file and is suitable for a browser-side composition.
+    return { kind: 'video', url: `/api/clips/${encodeURIComponent(clip.id)}/source-preview`, timeBase: 'source' };
+  }
+  if (clip.thumbUrl) return { kind: 'image', url: clip.thumbUrl, timeBase: 'clip' };
+  if (clip.clipUrl) return { kind: 'video', url: clip.clipUrl, timeBase: 'clip' };
+  return { kind: 'image', url: `/api/clips/${encodeURIComponent(clip.id)}/thumb`, timeBase: 'clip' };
+}
+
+async function templateShopPreviewPayload(user, productId, clip) {
+  const product = templates.templateShopProduct(productId, user);
+  const sourceStyle = templates.templateShopPreviewStyle(productId);
+  if (!product || !sourceStyle) throw Object.assign(new Error('That Template Shop item does not exist.'), { statusCode: 404 });
+
+  // The same server-owned style contract and watermark authority as export.
+  // No renderer job is queued: this is a browser composition over the user's
+  // own source, so it spends no tokens and cannot mutate the clip or template.
+  const style = agent.engine.effectiveTemplateForUser(user, sourceStyle);
+  const startSec = Math.max(0, Number(clip.startSec) || 0);
+  const endSec = Math.max(startSec, Number(clip.endSec) || startSec + (Number(clip.durationMs) || 0) / 1000);
+  let words = [];
+  try {
+    words = wordsForClip(await projectTranscriptSegments(state.projects.find(item => item.id === clip.projectId)), startSec, endSec);
+  } catch { words = []; }
+  if (!words.length) {
+    const text = String(clip.transcript || clip.description || product.preview.captionSample || 'Preview').trim();
+    const parts = text.split(/\s+/).filter(Boolean).slice(0, 80);
+    const duration = Math.max(1, endSec - startSec);
+    words = parts.map((word, index) => ({
+      word,
+      start: (index / Math.max(1, parts.length)) * duration,
+      end: ((index + 0.8) / Math.max(1, parts.length)) * duration,
+    }));
+  }
+  return {
+    ok: true,
+    mode: 'style_composition',
+    exportIdentical: false,
+    tokenCost: 0,
+    mutatesClip: false,
+    product,
+    clip: {
+      id: clip.id,
+      title: String(clip.title || ''),
+      startSec,
+      endSec,
+      durationSec: Math.max(0, endSec - startSec),
+      source: previewSourceForClip(clip),
+      words: words.slice(0, 500),
+    },
+    style: templates.clipStyleSettings(style),
+    message: 'Preview ready. This is a live style composition, not a rendered export; framing, font availability and final encoding can differ slightly.',
+    limitations: [
+      'No video file was rendered or saved.',
+      'Automatic speaker tracking, final font rendering and encoding are only exact in the exported render.',
+    ],
+  };
+}
+
 function publicClip(clip) {
   const currentTemplate = templates.templateById(clip.templateId, ownerOfRecord(clip));
   const rerender = latestRerender(clip.id);
@@ -388,6 +459,7 @@ function appState(user = null) {
   return {
     engine: config.processingMode === 'remote' ? 'remote-worker' : 'self-hosted', user: auth.userPublic(user), auth: auth.publicConfig(), readiness, clipSettings: clipSettings(user), musicSettings: musicSettings(user), automationSettings: automationSettings(user),
     selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(), clipStyleFields: templates.CLIP_STYLE_FIELDS,
+    templateShop: templates.listTemplateShop(user),
     tracks: audio.listNasheeds(user),
     projects: projectsForUser.map(project => ({
       id: project.id, title: project.title, url: project.url, engine: project.engine, status: project.status,
@@ -750,7 +822,9 @@ async function route(req, res, url) {
     try { return json(res, 200, await billing.createCheckoutSession(currentUser, String(body.plan || ''))); }
     catch (error) { return json(res, 400, errorBody(error)); }
   }
-  if (method === 'POST' && pathname === '/api/billing/topup-checkout') {
+  // `/topup-checkout` is canonical. Keep `/topup` as a compatibility alias
+  // for the V7 dashboard so a cached client cannot silently lose checkout.
+  if (method === 'POST' && ['/api/billing/topup-checkout', '/api/billing/topup'].includes(pathname)) {
     const body = await readBody(req);
     try { return json(res, 200, await billing.createTopupCheckoutSession(currentUser, String(body.package || ''))); }
     catch (error) { return json(res, 400, errorBody(error)); }
@@ -942,6 +1016,42 @@ async function route(req, res, url) {
   }
 
   if (method === 'GET' && pathname === '/api/templates') return json(res, 200, { templates: templates.listTemplates(currentUser), selectedTemplate: templates.selectedTemplate(currentUser), draft: templates.defaultTemplateDraft(), clipStyleFields: templates.CLIP_STYLE_FIELDS });
+  if (method === 'GET' && pathname === '/api/template-shop') {
+    return json(res, 200, { products: templates.listTemplateShop(currentUser) });
+  }
+  const acquireShopTemplate = pathname.match(/^\/api\/template-shop\/([^/]+)\/acquire$/);
+  if (method === 'POST' && acquireShopTemplate) {
+    try {
+      const result = templates.acquireTemplateShopProduct(currentUser, decodeURIComponent(acquireShopTemplate[1]));
+      log(`Added Template Shop item "${result.product.name}" to the library.`, 'info', currentUser.id);
+      return json(res, 200, { ok: true, ...result, templates: templates.listTemplates(currentUser) });
+    } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
+  }
+  const previewShopTemplate = pathname.match(/^\/api\/template-shop\/([^/]+)\/preview$/);
+  if (method === 'POST' && previewShopTemplate) {
+    const body = await readBody(req);
+    try {
+      const clip = assertCanAccessClip(currentUser, String(body.clipId || ''));
+      return json(res, 200, await templateShopPreviewPayload(currentUser, decodeURIComponent(previewShopTemplate[1]), clip));
+    } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
+  }
+  const customizeShopTemplate = pathname.match(/^\/api\/template-shop\/([^/]+)\/customize$/);
+  if (method === 'POST' && customizeShopTemplate) {
+    const body = await readBody(req);
+    try {
+      const result = templates.customizeTemplateShopProduct(currentUser, decodeURIComponent(customizeShopTemplate[1]), body.name);
+      // A customised copy is never silently made the automation default.
+      log(`Created an editable copy of "${result.product.name}".`, 'info', currentUser.id);
+      return json(res, 201, { ok: true, ...result, selected: false });
+    } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
+  }
+  const checkoutShopTemplate = pathname.match(/^\/api\/template-shop\/([^/]+)\/checkout$/);
+  if (method === 'POST' && checkoutShopTemplate) {
+    try {
+      const session = await billing.createTemplateCheckoutSession(currentUser, decodeURIComponent(checkoutShopTemplate[1]));
+      return json(res, 200, { ok: true, ...session });
+    } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
+  }
   if (method === 'POST' && pathname === '/api/templates') {
     const body = await readBody(req);
     try {
@@ -1019,14 +1129,20 @@ async function route(req, res, url) {
   }
   if (method === 'POST' && pathname === '/api/automation-settings') {
     const body = await readBody(req);
+    const current = automationSettings(currentUser);
+    const reviewBeforePosting = typeof body.reviewBeforePosting === 'boolean'
+      ? body.reviewBeforePosting
+      : Object.prototype.hasOwnProperty.call(body, 'skipReviewRequired')
+        ? body.skipReviewRequired === false
+        : current.reviewBeforePosting;
     const clean = {
       enabled: Boolean(body.enabled), minimumScore: Math.round(Number(body.minimumScore)), minimumQuality: Math.round(Number(body.minimumQuality)),
-      maxPerProject: Math.round(Number(body.maxPerProject)), skipReviewRequired: body.skipReviewRequired !== false,
+      maxPerProject: Math.round(Number(body.maxPerProject)), reviewBeforePosting, skipReviewRequired: true,
     };
     if (!Number.isFinite(clean.minimumScore) || clean.minimumScore < 1 || clean.minimumScore > 100) return json(res, 400, { error: 'Minimum score must be 1–100.' });
     if (!Number.isFinite(clean.minimumQuality) || clean.minimumQuality < 1 || clean.minimumQuality > 100) return json(res, 400, { error: 'Minimum quality must be 1–100.' });
     if (!Number.isFinite(clean.maxPerProject) || clean.maxPerProject < 1 || clean.maxPerProject > 20) return json(res, 400, { error: 'Automatic clips per source must be 1–20.' });
-    setAutomationSettings(currentUser, clean); log(`Automation ${clean.enabled ? 'enabled' : 'paused'}: score ${clean.minimumScore}+, quality ${clean.minimumQuality}+, up to ${clean.maxPerProject} per source.`, 'info', currentUser.id);
+    setAutomationSettings(currentUser, clean); log(`Automation ${clean.enabled ? 'enabled' : 'paused'}: score ${clean.minimumScore}+, quality ${clean.minimumQuality}+, up to ${clean.maxPerProject} per source${clean.reviewBeforePosting ? ', human review before posting' : ''}.`, 'info', currentUser.id);
     agent.tick().catch(() => {});
     return json(res, 200, { ok: true, settings: automationSettings(currentUser) });
   }

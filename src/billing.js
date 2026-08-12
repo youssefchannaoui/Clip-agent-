@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { config } from './config.js';
 import { state, save, log } from './store.js';
+import { templateShopCheckoutDefinition, templateShopProduct, grantPurchasedTemplate } from './templates.js';
 
 const now = () => Date.now();
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -158,7 +159,11 @@ export function accountExperience({ billing = {}, unlimited = false, remaining =
   else if (empty) id = 'free_empty';
 
   const browseOnly = ['free_expired', 'free_empty', 'premium_past_due'].includes(id);
-  const premium = id === 'owner' || id.startsWith('premium_');
+  const premiumPlan = id === 'owner' || id.startsWith('premium_');
+  // A past-due subscription still explains which plan needs attention, but it
+  // is not usable Premium access. Keeping those ideas separate stops the UI
+  // from showing unlocked badges while server-side processing is suspended.
+  const premium = premiumPlan && id !== 'premium_past_due';
   const labels = {
     owner: ['Owner studio', 'Unlimited account access'],
     free_trial: ['Free studio trial', 'Explore, edit and download with a watermark'],
@@ -174,6 +179,7 @@ export function accountExperience({ billing = {}, unlimited = false, remaining =
     id,
     label: labels[id]?.[0] || labels.free_trial[0],
     detail: labels[id]?.[1] || labels.free_trial[1],
+    premiumPlan,
     premium,
     browseOnly,
     canGenerate: unlimited || (!browseOnly && !empty),
@@ -244,13 +250,14 @@ export function featureAccess(user) {
     premium: false, watermarkRequired: true, canRemoveWatermark: false,
     customBranding: false, creatorLab: false, aiDirector: false, advancedFraming: false,
     qualityCenter: true, batchPublishing: false,
-    socialPublishing: false,
+    socialPublishing: false, billingPastDue: false,
   };
   const billing = ensureUserBilling(user);
   const plan = String(billing.plan || 'free').toLowerCase();
   const unlimited = isUnlimited(user);
-  const premium = unlimited || ['weekly', 'monthly', 'yearly'].includes(plan);
-  const studioPremium = unlimited || ['monthly', 'yearly'].includes(plan);
+  const billingPastDue = !unlimited && String(billing.status || '').toLowerCase() === 'past_due';
+  const premium = unlimited || (!billingPastDue && ['weekly', 'monthly', 'yearly'].includes(plan));
+  const studioPremium = unlimited || (!billingPastDue && ['monthly', 'yearly'].includes(plan));
   return {
     premium,
     watermarkRequired: !premium,
@@ -262,7 +269,44 @@ export function featureAccess(user) {
     qualityCenter: true,
     batchPublishing: studioPremium,
     socialPublishing: premium,
+    billingPastDue,
   };
+}
+
+/**
+ * Account-level eligibility for one-time token packs. Configuration and the
+ * selected pack are checked separately, but an expired trial or past-due
+ * subscription must never be sent to Stripe for tokens it cannot use.
+ */
+export function topupAccess(user) {
+  if (!user) return {
+    allowed: false,
+    code: 'sign_in_required',
+    message: 'Sign in before buying a token pack.',
+  };
+  const billing = ensureUserBilling(user);
+  const plan = String(billing.plan || 'free').toLowerCase();
+  if (isUnlimited(user)) return {
+    allowed: false,
+    code: 'topups_unavailable_unlimited',
+    message: 'Owner and admin accounts already have unlimited tokens.',
+    plan,
+  };
+  if (String(billing.status || '').toLowerCase() === 'past_due') return {
+    allowed: false,
+    code: 'billing_past_due',
+    message: 'Update your payment method before buying a token pack.',
+    plan,
+  };
+  const freeTier = freeTierState(billing);
+  if (freeTier.onFree && freeTier.expired) return {
+    allowed: false,
+    code: 'topups_require_active_plan',
+    message: 'Your free trial has ended. Choose a plan before buying a token pack.',
+    plan,
+    expiredAt: freeTier.expiresAt,
+  };
+  return { allowed: true, code: '', message: '', plan };
 }
 
 export function publicBilling(user) {
@@ -280,15 +324,46 @@ export function publicBilling(user) {
   const freeTier = unlimited ? { onFree: false, expiresAt: null, expired: false, daysLeft: null } : freeTierState(billing);
   const baseRemaining = unlimited ? null : Math.max(0, allow - used - reserved);
   const remaining = unlimited ? null : baseRemaining + bonusTokens;
+  const billingPastDue = Boolean(planFeatures.billingPastDue);
+  const canSpend = unlimited || (!billingPastDue && !(freeTier.onFree && freeTier.expired) && remaining > 0);
+  const spendingBlockCode = canSpend
+    ? ''
+    : billingPastDue
+      ? 'billing_past_due'
+      : freeTier.onFree && freeTier.expired
+        ? 'free_expired'
+        : 'insufficient_tokens';
   const canPublish = unlimited || (planFeatures.socialPublishing && remaining > 0);
   const publishingBlockCode = canPublish
     ? ''
+    : billingPastDue
+      ? 'billing_past_due'
     : !planFeatures.socialPublishing
       ? 'publishing_requires_premium'
       : 'publishing_tokens_empty';
-  const features = { ...planFeatures, canPublish, publishingBlockCode };
+  const features = { ...planFeatures, canSpend, spendingBlockCode, canPublish, publishingBlockCode };
   const experience = accountExperience({ billing, unlimited, remaining, freeTier, trial });
   const periodEndsInDays = billing.periodEnd ? daysRemaining(billing.periodEnd) : null;
+  const topupEligibility = topupAccess(user);
+  const topupCheckoutConfigured = Boolean(
+    config.stripeSecretKey
+      && (config.stripePriceTopup100 || config.stripePriceTopup300 || config.stripePriceTopup750),
+  );
+  const canBuyTopups = Boolean(topupEligibility.allowed && topupCheckoutConfigured);
+  const topupBlockCode = canBuyTopups
+    ? ''
+    : topupEligibility.allowed
+      ? 'topup_checkout_not_configured'
+      : topupEligibility.code;
+  const topupBlockMessage = canBuyTopups
+    ? ''
+    : topupEligibility.allowed
+      ? 'Token-pack checkout is not configured yet.'
+      : topupEligibility.message;
+  const publicTopups = Object.fromEntries(Object.entries(topups()).map(([id, pack]) => [id, {
+    ...pack,
+    canPurchase: Boolean(topupEligibility.allowed && config.stripeSecretKey && pack.enabled),
+  }]));
   const notices = [];
   if (freeTier.onFree && !freeTier.expired) {
     notices.push({
@@ -299,7 +374,7 @@ export function publicBilling(user) {
       action: 'View Premium',
     });
   }
-  if (trial.active && trial.daysLeft <= 2) {
+  if (!billingPastDue && trial.active && trial.daysLeft <= 2) {
     notices.push({
       id: `trial-ending-${billing.trialEnd}`,
       kind: 'trial_ending',
@@ -308,7 +383,7 @@ export function publicBilling(user) {
       action: 'Manage plan',
     });
   }
-  if (trial.ended) {
+  if (!billingPastDue && trial.ended) {
     notices.push({
       id: `trial-ended-${billing.trialEnd}`,
       kind: 'trial_ended',
@@ -334,7 +409,15 @@ export function publicBilling(user) {
       action: 'Choose plan',
     });
   }
-  if (!unlimited && remaining === 0) {
+  if (billingPastDue) {
+    notices.push({
+      id: `billing-past-due-${currentPlan}-${billing.periodStart}`,
+      kind: 'billing_past_due',
+      title: 'Your payment needs attention',
+      message: 'Update your payment method to restore Premium tools, processing and publishing. Your existing work stays available.',
+      action: 'Update billing',
+    });
+  } else if (!unlimited && remaining === 0) {
     notices.push({
       id: `tokens-empty-${currentPlan}-${billing.periodStart}`,
       kind: 'tokens_empty',
@@ -355,7 +438,10 @@ export function publicBilling(user) {
     enabled: config.stripeEnabled,
     stripeConfigured: Boolean(config.stripeSecretKey),
     checkoutConfigured: Boolean(config.stripePriceWeekly || config.stripePriceMonthly || config.stripePriceYearly),
-    topupCheckoutConfigured: Boolean(config.stripePriceTopup100 || config.stripePriceTopup300 || config.stripePriceTopup750),
+    topupCheckoutConfigured,
+    canBuyTopups,
+    topupBlockCode,
+    topupBlockMessage,
     portalConfigured: Boolean(config.stripeSecretKey),
     tokenRatePerMinute: tokenRate(),
     trialDays: config.stripeTrialDays,
@@ -392,7 +478,7 @@ export function publicBilling(user) {
       stripeSubscriptionId: billing.stripeSubscriptionId || '',
     },
     plans: plans(),
-    topups: topups(),
+    topups: publicTopups,
     notices,
     experience,
     recentEvents: (state.billingEvents || []).filter(event => event.userId === user.id).slice(0, 10),
@@ -407,6 +493,13 @@ export function assertCanSpend(user, tokens, action = 'start this job') {
   const needed = Math.max(1, Math.ceil(Number(tokens || 0)));
   const remaining = Number(info.current.remaining || 0);
   const freeTier = info.current.freeTier || {};
+  if (info.features?.billingPastDue) {
+    throw new BillingError(
+      `Your payment needs attention. Update billing to ${action}.`,
+      'billing_past_due',
+      { needed, remaining, plan: info.current.plan },
+    );
+  }
   // Checked before the balance: an expired free account is blocked even if
   // it still shows unspent tokens.
   if (freeTier.onFree && freeTier.expired) {
@@ -433,6 +526,13 @@ export function assertCanPublish(user, action = 'post clips') {
   const info = publicBilling(user);
   const remaining = Number(info.current?.remaining || 0);
   const plan = String(info.current?.plan || 'free');
+  if (info.features?.billingPastDue) {
+    throw new BillingError(
+      `Your payment needs attention. Update billing to ${action}.`,
+      'billing_past_due',
+      { remaining, plan, action },
+    );
+  }
   if (!info.features?.socialPublishing) {
     throw new BillingError(
       'Social publishing is a Premium feature. You can keep browsing, editing and downloading watermarked clips, or choose Weekly, Monthly or Yearly to post.',
@@ -588,7 +688,13 @@ export async function createCheckoutSession(user, planId) {
 export async function createTopupCheckoutSession(user, packageId) {
   ensureBillingState();
   if (!user) throw new Error('Sign in to continue.');
-  if (isUnlimited(user)) throw new Error('Owner and admin accounts already have unlimited tokens.');
+  const access = topupAccess(user);
+  if (!access.allowed) {
+    throw new BillingError(access.message, access.code, {
+      plan: access.plan,
+      expiredAt: access.expiredAt,
+    });
+  }
   const pack = topups()[packageId];
   if (!pack || !TOPUP_ORDER.includes(pack.id)) throw new Error('Choose a valid token pack.');
   if (!pack.priceId) throw new Error(`${pack.name} does not have a Stripe price ID configured yet.`);
@@ -604,6 +710,40 @@ export async function createTopupCheckoutSession(user, packageId) {
     'metadata[kind]': 'token_topup',
     'metadata[package]': pack.id,
     'metadata[tokens]': String(pack.tokens),
+    allow_promotion_codes: 'true',
+  });
+  return { id: session.id, url: session.url };
+}
+
+/**
+ * One-time Template Shop checkout. Unlocking is deliberately absent here:
+ * only a signed, paid Stripe webhook may create the entitlement.
+ */
+export async function createTemplateCheckoutSession(user, productId) {
+  ensureBillingState();
+  if (!user) throw new Error('Sign in to continue.');
+  const product = templateShopCheckoutDefinition(productId);
+  if (!product) throw Object.assign(new Error('Choose a valid purchasable template.'), { statusCode: 404, code: 'template_not_purchasable' });
+  if (templateShopProduct(productId, user)?.acquired) {
+    throw Object.assign(new Error('This template is already in your account.'), { statusCode: 409, code: 'template_already_owned' });
+  }
+  if (!product.priceId) {
+    throw Object.assign(new Error(`${product.name} checkout is not configured yet.`), {
+      statusCode: 503,
+      code: 'template_checkout_not_configured',
+    });
+  }
+  const customer = await ensureStripeCustomer(user);
+  const session = await stripeRequest('/checkout/sessions', {
+    mode: 'payment',
+    customer,
+    success_url: `${appBase()}/app?route=templates&templatePurchase=success&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${appBase()}/app?route=templates&templatePurchase=cancelled`,
+    'line_items[0][price]': product.priceId,
+    'line_items[0][quantity]': '1',
+    'metadata[userId]': user.id,
+    'metadata[kind]': 'template_purchase',
+    'metadata[productId]': product.id,
     allow_promotion_codes: 'true',
   });
   return { id: session.id, url: session.url };
@@ -760,7 +900,14 @@ export function handleWebhookEvent(event) {
       if (user) {
         const userBilling = ensureUserBilling(user);
         userBilling.stripeCustomerId = customerId || userBilling.stripeCustomerId || '';
-        if (object.metadata?.kind === 'token_topup' || object.mode === 'payment') {
+        if (object.metadata?.kind === 'template_purchase') {
+          if (object.payment_status !== 'paid') break;
+          grantPurchasedTemplate(user, object.metadata?.productId, {
+            checkoutSessionId: object.id,
+            stripeEventId: eventId,
+            paymentIntentId: typeof object.payment_intent === 'string' ? object.payment_intent : object.payment_intent?.id,
+          });
+        } else if (object.metadata?.kind === 'token_topup') {
           if (object.payment_status !== 'paid') break;
           const packageId = object.metadata?.package || topupForPrice(object.line_items?.data?.[0]?.price?.id)?.id;
           if (packageId) grantTopup(user, packageId, {
@@ -769,7 +916,7 @@ export function handleWebhookEvent(event) {
             paymentIntentId: typeof object.payment_intent === 'string' ? object.payment_intent : object.payment_intent?.id,
             customerId,
           });
-        } else {
+        } else if (object.mode === 'subscription' || object.metadata?.plan) {
           userBilling.stripeSubscriptionId = typeof object.subscription === 'string' ? object.subscription : object.subscription?.id || userBilling.stripeSubscriptionId || '';
           userBilling.plan = object.metadata?.plan || userBilling.plan || 'free';
           userBilling.status = 'checkout_complete';
@@ -913,12 +1060,22 @@ export function plansPage(user, { error = '', info = '', returnTo = '/' } = {}) 
 
   const topupCards = TOPUP_ORDER.map(id => bill.topups?.[id]).filter(Boolean).map((pack, index) => {
     const configured = Boolean(pack.priceId);
+    const available = Boolean(pack.canPurchase && bill.canBuyTopups);
+    const cta = cur.unlimited
+      ? 'Unlimited owner account'
+      : bill.topupBlockCode === 'billing_past_due'
+        ? 'Update billing first'
+        : bill.topupBlockCode === 'topups_require_active_plan'
+          ? 'Choose a plan first'
+          : available
+            ? 'Add tokens'
+            : 'Stripe price required';
     return `<article class="dc-topup ${pack.id === 'boost300' ? 'featured' : ''}" style="--i:${index + 1}">
       <span class="badge">${esc(pack.badge || 'Top-up')}</span>
       <div><h3>${esc(pack.name)}</h3><p>${esc(pack.description)}</p></div>
       <div class="topup-value"><b>+${esc(pack.tokens)}</b><span>tokens</span></div>
       <div class="topup-price">${esc(pack.priceLabel || 'Set price')}<small> one-time</small></div>
-      <form method="post" action="/billing/topup"><input type="hidden" name="package" value="${esc(pack.id)}"><input type="hidden" name="returnTo" value="${returnValue}"><button type="submit" ${configured && !cur.unlimited ? '' : 'disabled'}>${cur.unlimited ? 'Unlimited owner account' : configured ? 'Add tokens' : 'Stripe price required'}</button></form>
+      <form method="post" action="/billing/topup"><input type="hidden" name="package" value="${esc(pack.id)}"><input type="hidden" name="returnTo" value="${returnValue}"><button type="submit" ${configured && available ? '' : 'disabled'}>${esc(cta)}</button></form>
     </article>`;
   }).join('');
   const remaining = cur.unlimited ? '∞' : Math.round(Number(cur.remaining || 0));

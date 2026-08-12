@@ -126,3 +126,48 @@ test('unknown top-up pack is rejected before checkout and unsigned webhooks fail
   await assert.rejects(() => billing.createTopupCheckoutSession(creator, 'not-a-pack'), /valid token pack/i);
   assert.throws(() => billing.verifyStripeSignature('{}', ''), /Missing Stripe signature/i);
 });
+
+test('active accounts expose purchasable packs while expired-free accounts cannot enter checkout', async () => {
+  const active = {
+    id: 'topup-active', email: 'active@deenclipped.test', role: 'creator', createdAt: Date.now(),
+    billing: { plan: 'free', status: 'free', tokensUsed: 0, tokensReserved: 0, bonusTokens: 0, freeExpiresAt: Date.now() + 86_400_000 },
+  };
+  const expired = {
+    id: 'topup-expired', email: 'expired@deenclipped.test', role: 'creator', createdAt: Date.now() - 10 * 86_400_000,
+    billing: { plan: 'free', status: 'free', tokensUsed: 0, tokensReserved: 0, bonusTokens: 40, freeExpiresAt: Date.now() - 86_400_000 },
+  };
+  state.authUsers = [creator, active, expired];
+
+  const activeInfo = billing.publicBilling(active);
+  assert.equal(activeInfo.topupCheckoutConfigured, true);
+  assert.equal(activeInfo.canBuyTopups, true);
+  assert.equal(activeInfo.topupBlockCode, '');
+  assert.equal(activeInfo.topups.boost100.canPurchase, true);
+
+  const expiredInfo = billing.publicBilling(expired);
+  assert.equal(expiredInfo.canBuyTopups, false);
+  assert.equal(expiredInfo.topupBlockCode, 'topups_require_active_plan');
+  assert.equal(expiredInfo.topups.boost100.canPurchase, false);
+  await assert.rejects(
+    () => billing.createTopupCheckoutSession(expired, 'boost100'),
+    error => error.code === 'topups_require_active_plan' && error.expiredAt === expired.billing.freeExpiresAt,
+  );
+});
+
+test('past-due subscriptions cannot buy a top-up that would not restore access', async () => {
+  const pastDue = {
+    id: 'topup-past-due', email: 'pastdue@deenclipped.test', role: 'creator', createdAt: Date.now(),
+    billing: {
+      plan: 'monthly', status: 'past_due', tokensUsed: 0, tokensReserved: 0, bonusTokens: 25,
+      periodStart: Date.now(), periodEnd: Date.now() + 30 * 86_400_000,
+    },
+  };
+  state.authUsers = [creator, pastDue];
+  const info = billing.publicBilling(pastDue);
+  assert.equal(info.canBuyTopups, false);
+  assert.equal(info.topupBlockCode, 'billing_past_due');
+  await assert.rejects(
+    () => billing.createTopupCheckoutSession(pastDue, 'boost100'),
+    error => error.code === 'billing_past_due',
+  );
+});

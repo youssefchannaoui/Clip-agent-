@@ -124,13 +124,53 @@ test('billing API reports separated balances and rejects unknown top-up packs', 
   assert.equal(payload.current.bonusTokens, 25);
   assert.equal(payload.current.remaining, 55);
 
-  const invalid = await fetch(`${base}/api/billing/topup-checkout`, {
-    method: 'POST',
-    headers: { Cookie: creatorCookie, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ package: 'unknown-pack' }),
-  });
-  assert.equal(invalid.status, 400);
-  assert.match((await invalid.json()).error, /valid token pack/i);
+  for (const endpoint of ['/api/billing/topup-checkout', '/api/billing/topup']) {
+    const invalid = await fetch(`${base}${endpoint}`, {
+      method: 'POST',
+      headers: { Cookie: creatorCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ package: 'unknown-pack' }),
+    });
+    assert.equal(invalid.status, 400, endpoint);
+    assert.match((await invalid.json()).error, /valid token pack/i, endpoint);
+  }
+});
+
+test('top-up API returns actionable account-state codes before opening Stripe', async () => {
+  const originalBilling = structuredClone(creator.billing);
+  try {
+    creator.billing = {
+      ...creator.billing,
+      plan: 'free', status: 'free',
+      periodStart: Date.now() - 10 * 86_400_000,
+      freeExpiresAt: Date.now() - 86_400_000,
+    };
+    let response = await fetch(`${base}/api/billing/topup`, {
+      method: 'POST',
+      headers: { Cookie: creatorCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ package: 'boost100' }),
+    });
+    assert.equal(response.status, 400);
+    let payload = await response.json();
+    assert.equal(payload.code, 'topups_require_active_plan');
+    assert.equal(payload.expiredAt, creator.billing.freeExpiresAt);
+
+    creator.billing = {
+      ...creator.billing,
+      plan: 'monthly', status: 'past_due',
+      periodStart: Date.now(), periodEnd: Date.now() + 30 * 86_400_000,
+    };
+    response = await fetch(`${base}/api/billing/topup-checkout`, {
+      method: 'POST',
+      headers: { Cookie: creatorCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ package: 'boost100' }),
+    });
+    assert.equal(response.status, 400);
+    payload = await response.json();
+    assert.equal(payload.code, 'billing_past_due');
+    assert.equal(payload.plan, 'monthly');
+  } finally {
+    creator.billing = originalBilling;
+  }
 });
 
 test('Brand Kit enforces free watermarking and unlocks paid controls', async () => {

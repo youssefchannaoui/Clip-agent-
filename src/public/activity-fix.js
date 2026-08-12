@@ -9,6 +9,11 @@ const clone = v => JSON.parse(JSON.stringify(v || {}));
 const data = () => { try { return typeof DATA !== 'undefined' ? DATA : null; } catch { return null; } };
 const authedUrl = url => {
   try {
+    const value=String(url||'');
+    const resolved=new URL(value,window.location.href);
+    // Never append the legacy app password to a CDN, storage host or another
+    // external media URL. Those URLs carry their own access rules.
+    if(resolved.origin!==window.location.origin)return value;
     if (typeof withPw === 'function') return withPw(url);
     const password = typeof PW !== 'undefined' ? PW : '';
     if (!password) return url;
@@ -206,6 +211,13 @@ const STUDIO_NAV = [
   ['music','Audio','music'], ['insights','Insights','analytics'], ['automation','Settings','settings']
 ];
 const ACCOUNT_NAV = [['subscription','Subscription','billing']];
+// The browser never decides whether a paid feature is unlocked. This registry
+// only maps navigation to the server-computed billing feature used by
+// syncAccountExperience(); it keeps every Free / Pro badge consistent.
+const DC_V7_FEATURES = Object.freeze({
+  brand:{feature:'customBranding',label:'PRO'},
+  lab:{feature:'aiDirector',label:'PRO'},
+});
 const NAV = [...CREATE_NAV, ...PUBLISH_NAV, ...STUDIO_NAV, ...ACCOUNT_NAV];
 const MANAGE = [];
 const CUSTOM = new Set(['home','projects','review','editor','schedule','publishing','templates','brand','lab','quality','music','automation','insights','subscription','admin']);
@@ -1168,11 +1180,15 @@ function injectShell(){
   shellReady = true;
   const style = document.createElement('style');
   style.id = 'dcPhase4Styles'; style.textContent = css + billingCss + rangeChargeCss + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss + topbarCleanCss + trialUxCss + v4DashboardCss + v4WorkspaceCss + v4CinematicCss + v4DeclutterCss + v5ExperienceCss + publishingWorkspaceCss + premiumStudioCss; document.head.appendChild(style);
+  // Keep the established shell boot sequence stable; V7 is an additive class
+  // so the retired project browser is still removed before any view renders.
   document.body.classList.add('dc-app');
   hideLegacyProjectBrowser();
+  document.body.classList.add('dc-v7-shell');
+  document.body.dataset.dcVersion='v7';
 
   const side = document.createElement('aside'); side.id = 'dcSidebar';
-  side.innerHTML = `<div id="dcBrand"><div class="dc-logo"><svg viewBox="0 0 24 26" fill="none"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg></div><div class="dc-brand-copy"><strong>DeenClipped</strong><span>Creator intelligence studio</span></div><span class="dc-sidebar-plan" id="dcSidebarPlan">V6</span></div><div class="dc-nav-scroll"><div class="dc-nav-group"><div class="dc-nav-label"><span>Create</span><i></i></div>${CREATE_NAV.map(item=>navButton(...item)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Publish</span><i></i></div>${PUBLISH_NAV.map(item=>navButton(...item)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Studio</span><i></i></div>${STUDIO_NAV.map(item=>navButton(...item)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Account</span><i></i></div>${ACCOUNT_NAV.map(item=>navButton(...item)).join('')}</div><div class="dc-nav-group" id="dcAdminNav" style="display:none"><div class="dc-nav-label"><span>Admin</span><i></i></div>${navButton('admin','Admin console','analytics')}</div></div><div class="dc-sidebar-bottom"><button class="dc-collapse" id="dcCollapse"><span class="dc-nav-icon">${ICON.collapse}</span><span>Collapse sidebar</span></button></div>`;
+  side.innerHTML = `<div id="dcBrand"><div class="dc-logo"><svg viewBox="0 0 24 26" fill="none"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg></div><div class="dc-brand-copy"><strong>DeenClipped</strong><span>Creator intelligence studio</span></div><span class="dc-sidebar-plan" id="dcSidebarPlan">…</span></div><div class="dc-nav-scroll"><div class="dc-nav-group"><div class="dc-nav-label"><span>Create</span><i></i></div>${CREATE_NAV.map(item=>navButton(...item)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Publish</span><i></i></div>${PUBLISH_NAV.map(item=>navButton(...item)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Studio</span><i></i></div>${STUDIO_NAV.map(item=>navButton(...item)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Account</span><i></i></div>${ACCOUNT_NAV.map(item=>navButton(...item)).join('')}</div><div class="dc-nav-group" id="dcAdminNav" style="display:none"><div class="dc-nav-label"><span>Admin</span><i></i></div>${navButton('admin','Admin console','analytics')}</div></div><div class="dc-sidebar-bottom"><button class="dc-collapse" id="dcCollapse"><span class="dc-nav-icon">${ICON.collapse}</span><span>Collapse sidebar</span></button></div>`;
 
   const top = document.createElement('header'); top.id = 'dcTopbar';
   const appData = data() || {};
@@ -1180,7 +1196,7 @@ function injectShell(){
   const ownerFallback = bill?.current?.unlimited ? {name:'DeenClipped Admin', email:'Owner account'} : null;
   const signedUser = appData.user || appData.account || ownerFallback || {name:'Account', email:'Signed in'};
   const avatar = signedUser?.picture ? `<img src="${esc(signedUser.picture)}" alt="">` : `<span class="dc-user-avatar">${esc((signedUser?.name || signedUser?.email || 'D').slice(0,1).toUpperCase())}</span>`;
-  top.innerHTML = `<button class="dc-mobile-menu dc-svg" id="dcMobileMenu" type="button" aria-label="Open menu">${ICON.menu}</button><div class="dc-page-title"><strong id="dcPageName">Home</strong><span id="dcPageSub">Everything important in one place</span></div><div class="dc-global-search">${ICON.search}<input id="dcGlobalSearch" placeholder="Search projects, clips and posts"><div class="dc-search-results" id="dcSearchResults"></div></div><div class="dc-top-actions"><button class="dc-experience-badge" id="dcExperienceBadge" type="button"><i></i><span>Loading account</span></button><div class="dc-health" id="dcHealth"><i></i><span>Checking</span></div><button class="dc-token-pill" id="dcTokenPill" type="button" aria-label="Open tokens and plans">${ICON.tokens}<span class="dc-token-label">Tokens</span></button><button class="dc-btn secondary dc-tour-launch" id="dcTourLaunch" type="button">Demo</button><div class="dc-user-menu-wrap"><button class="dc-user-menu-button" id="dcUserMenuButton" type="button" aria-haspopup="menu" aria-expanded="false">${avatar}<span class="dc-user-copy"><b>${esc(signedUser.name || signedUser.email || 'Signed in')}</b><small>${esc(signedUser.email || 'Admin account')}</small></span><svg class="dc-user-chevron" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="dc-account-menu" id="dcAccountMenu" role="menu"><div class="dc-account-head"><strong>${esc(signedUser.name || 'DeenClipped account')}</strong><span>${esc(signedUser.email || 'Signed in')}</span></div><button class="dc-account-action" id="dcAccountBilling" type="button">Tokens & billing <b>Open</b></button><form class="dc-logout-form" method="post" action="/auth/logout"><button class="dc-logout-btn" type="submit">Log out</button></form></div></div><button class="dc-btn" id="dcNewProject"><span>＋ New</span></button></div>`;
+  top.innerHTML = `<button class="dc-mobile-menu dc-svg" id="dcMobileMenu" type="button" aria-label="Open menu">${ICON.menu}</button><div class="dc-page-title"><strong id="dcPageName">Home</strong><span id="dcPageSub">Everything important in one place</span></div><div class="dc-global-search">${ICON.search}<input id="dcGlobalSearch" placeholder="Search projects, clips and posts"><div class="dc-search-results" id="dcSearchResults"></div></div><div class="dc-top-actions"><button class="dc-experience-badge" id="dcExperienceBadge" type="button"><i></i><span>Loading account</span></button><div class="dc-health" id="dcHealth"><i></i><span>Checking</span></div><button class="dc-token-pill" id="dcTokenPill" type="button" aria-label="Open tokens and plans">${ICON.tokens}<span class="dc-token-label">Tokens</span></button><button class="dc-btn secondary dc-tour-launch" id="dcTourLaunch" type="button">Demo</button><div class="dc-user-menu-wrap"><button class="dc-user-menu-button" id="dcUserMenuButton" type="button" aria-haspopup="menu" aria-expanded="false">${avatar}<span class="dc-user-copy"><b>${esc(signedUser.name || signedUser.email || 'Signed in')}</b><small>${esc(signedUser.email || 'Admin account')}</small></span><svg class="dc-user-chevron" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="dc-account-menu" id="dcAccountMenu" role="menu"><div class="dc-account-head"><strong>${esc(signedUser.name || 'DeenClipped account')}</strong><span>${esc(signedUser.email || 'Signed in')}</span></div><button class="dc-account-action" id="dcAccountBilling" type="button">Tokens & billing <b>Open</b></button><button class="dc-account-action" id="dcAccountTour" type="button">Help for this page <b>Replay</b></button><form class="dc-logout-form" method="post" action="/auth/logout"><button class="dc-logout-btn" type="submit">Log out</button></form></div></div><button class="dc-btn" id="dcNewProject"><span>＋ New</span></button></div>`;
 
   const work = document.createElement('div'); work.id = 'dcWork'; work.setAttribute('role','status'); work.setAttribute('aria-live','polite');
   work.innerHTML = `<div class="dc-work-head"><span class="dc-work-toast-orb">${ICON.play}</span><div class="dc-work-toast-copy"><strong>Working…</strong><span>Saving changes</span></div><b class="dc-work-percent" id="dcWorkPercent"></b><button class="dc-work-expand" id="dcWorkExpand" type="button" aria-expanded="false" aria-label="Show activity detail">${ICON.chevron}</button><button id="dcWorkClose" type="button" aria-label="Hide progress notification">×</button><div class="dc-work-toast-progress"><i id="dcWorkBar"></i></div></div><div class="dc-work-panel" id="dcWorkPanel"></div>`;
@@ -1201,8 +1217,8 @@ function injectShell(){
 }
 
 function navButton(view, label, icon, badge=''){
-  const feature=view==='lab'?'aiDirector':view==='brand'?'customBranding':'';
-  return `<button class="dc-nav-button" type="button" data-dc-nav="${view}" ${feature?`data-premium-feature="${feature}"`:''} title="${esc(label)}"><span class="dc-nav-icon">${ICON[icon]}</span><span class="dc-nav-name">${esc(label)}</span>${badge?`<span class="dc-nav-badge" data-premium-stamp>${esc(badge)}</span>`:''}</button>`;
+  const gate=DC_V7_FEATURES[view],feature=gate?.feature||'';
+  return `<button class="dc-nav-button" type="button" data-dc-nav="${view}" ${feature?`data-premium-feature="${feature}"`:''} title="${esc(label)}"><span class="dc-nav-icon">${ICON[icon]}</span><span class="dc-nav-name">${esc(label)}</span>${badge?`<span class="dc-nav-badge" data-premium-stamp>${esc(gate?.label||badge)}</span>`:''}</button>`;
 }
 
 function bindGlobal(){
@@ -1229,6 +1245,7 @@ function bindGlobal(){
     btn?.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
   $('#dcAccountBilling')?.addEventListener('click', () => { $('#dcAccountMenu')?.classList.remove('show'); $('#dcUserMenuButton')?.setAttribute('aria-expanded','false'); go('subscription'); });
+  $('#dcAccountTour')?.addEventListener('click', () => { $('#dcAccountMenu')?.classList.remove('show'); $('#dcUserMenuButton')?.setAttribute('aria-expanded','false'); openPageTour(currentView,true); });
   document.addEventListener('click', event => { if (!event.target.closest?.('.dc-user-menu-wrap')) { $('#dcAccountMenu')?.classList.remove('show'); $('#dcUserMenuButton')?.setAttribute('aria-expanded','false'); } });
   $('#dcWorkClose').onclick = () => { const el=$('#dcWork'); if(el){ el.dataset.dismissed='1'; el.dataset.dismissedKey = el.dataset.workKey || ''; el.classList.remove('show'); } };
   $('#dcGlobalSearch').addEventListener('input', renderGlobalSearch);
@@ -1427,7 +1444,11 @@ function currentWorkItem(){
   if (pending) return {...pending, source:'request', key:`request:${pending.id || pending.url || Date.now()}`};
   const job = activeJobs()[0];
   if (!job) return null;
-  return {...job, source:'job', key:`job:${job.kind}:${job.title}:${job.stage}:${job.at || ''}`};
+  // The key deliberately excludes the changing stage/progress. Dismissing one
+  // job should keep that same job dismissed as it advances, while a genuinely
+  // new job still opens the dock automatically.
+  const globalActivityDockKey=job.id||job.batchId||`${job.kind}:${job.title}:${job.at||''}`;
+  return {...job, source:'job', key:`job:${globalActivityDockKey}`};
 }
 function bindWorkDock(){
   const el=$('#dcWork');if(!el||el.dataset.bound==='1')return;
@@ -1441,7 +1462,6 @@ function bindWorkDock(){
   });
 }
 function paintWork(){
-  bindWorkDock();
   bindWorkDock();
   const el = $('#dcWork'); if (!el) return;
   const item = currentWorkItem();
@@ -1494,6 +1514,7 @@ function go(view){
   // this pattern too, and it prevents the preview disappearing below a long
   // Captions panel. Narrow screens still use the normal document flow.
   document.body.classList.toggle('dc-templates-route',view==='templates');
+  if(view==='templates'&&templateWorkspaceTab==='shop')document.body.classList.remove('dc-templates-route');
   currentView = view;
   $$('[data-dc-nav]').forEach(b => b.classList.toggle('is-active', b.dataset.dcNav === view));
   const labels = {
@@ -1533,6 +1554,7 @@ function go(view){
   }
   lastDataSignature=structuralDataSignature(data());
   requestAnimationFrame(()=>animatePanel($(`#view-${view}`)));
+  if(changedView)requestAnimationFrame(()=>maybeStartPageTour(view));
   window.scrollTo({top:0, behavior:'auto'});
 }
 
@@ -1547,7 +1569,7 @@ function activeJobs(){
   (d.rerenderJobs || []).forEach(j => {
     if (['queued','processing'].includes(j.status)) {
       const clip = (d.clips || []).find(c => c.id === j.clipId);
-      jobs.push({kind:'render', title:`${j.clipTitle || clip?.title || 'Clip'}`, stage:stageWithQueue(j),
+      jobs.push({id:j.id||j.clipId,kind:'render', title:`${j.clipTitle || clip?.title || 'Clip'}`, stage:stageWithQueue(j),
         progress:Number(j.progress || 0), at:j.startedAt || j.createdAt,
         etaSec:Number.isFinite(Number(j.etaSec)) ? Number(j.etaSec) : null,
         batchId:j.batchId || '', batchLabel:j.batchLabel || '', batchTotal:Number(j.batchTotal || 0),
@@ -1596,8 +1618,8 @@ function renderHome(){
   const next = nextScheduledClip(clips);
   const exp=clientExperience(),experience=homeExperienceContent(exp,waiting),createLocked=!exp.canGenerate;
   panel.innerHTML = `
-    <div class="dc-home-v5 dc-home-v6" data-account-mode="${esc(exp.id)}">
-      <section class="dc-v5-hero dc-v6-hero" data-tour="home-hero">
+    <div class="dc-home-v5 dc-home-v6 dc-v7-home" data-account-mode="${esc(exp.id)}">
+      <section class="dc-v5-hero dc-v6-hero dc-v7-home-hero" data-tour="home-hero">
         <div class="dc-v5-hero-copy">
           <div class="dc-v5-eyebrow"><i></i> ${esc(experience.eyebrow)}</div>
           <h1>${esc(experience.headline).replace(/\n/g,'<br>')}</h1>
@@ -1611,7 +1633,7 @@ function renderHome(){
 
       ${homeExperienceStrip(exp,d)}
 
-      <section class="dc-v5-create ${createLocked?'is-locked':''}" data-tour="create-form">
+      <section class="dc-v5-create dc-v7-create ${createLocked?'is-locked':''}" data-tour="create-form">
         <div class="dc-v5-create-head"><div><h2>Create your clips</h2><p>Paste a supported video link or upload your original file.</p></div><span class="dc-v5-token-note">${uiIcon('tokens')} Token cost is confirmed before processing</span></div>
         ${createLocked?`<div class="dc-v6-create-lock"><span>${ICON.brand}</span><div><strong>${esc(exp.label)}</strong><p>${esc(exp.detail)}. Existing projects and editor access remain available.</p></div><button class="dc-btn" data-dc-nav="subscription">${exp.id==='premium_empty'?'Add tokens':'Unlock studio'}</button></div>`:''}
         <div class="dc-v5-url-row"><span class="dc-v5-url-brand">${socialSvg('youtube')}</span><input id="dcCreateUrl" placeholder="Paste a YouTube or video URL" ${createLocked?'disabled':''}><button class="dc-btn" id="dcGenerate" data-tour="generate-button" ${createLocked?'disabled':''}>Generate clips</button></div>
@@ -2241,7 +2263,7 @@ function renderProjects(){
   else projects.sort((a,b)=>Number(b.submittedAt||0)-Number(a.submittedAt||0));
   const hasAny=(d.projects||[]).length>0;
   const allClips=d.clips||[], waiting=allClips.filter(c=>c.status==='waiting').length, processing=(d.projects||[]).filter(p=>['queued','processing'].includes(p.status)).length, ready=allClips.filter(c=>['approved','ready','scheduled'].includes(c.status)).length;
-  panel.innerHTML=`<div class="dc-library-page"><section class="dc-library-hero"><div class="dc-library-hero-copy"><span class="dc-library-kicker">${ICON.projects} Source-first library</span><h1>Every lecture, clip and next action—organised.</h1><p>Keep the original source at the top level, then move cleanly from processing to review and publishing.</p></div><button class="dc-btn" data-dc-nav="home">＋ New project</button></section>
+  panel.innerHTML=`<div class="dc-library-page dc-v7-projects"><section class="dc-v7-page-title"><div><h1>Projects</h1><p>Your source library</p></div><button class="dc-btn" data-dc-nav="home">＋ New project</button></section>
     <div class="dc-library-metrics"><div><span class="gold">${ICON.projects}</span><strong>${(d.projects||[]).length}</strong><small>Projects</small></div><div><span class="purple">${ICON.editor}</span><strong>${allClips.length}</strong><small>Generated clips</small></div><div><span class="blue">${ICON.sparkles}</span><strong>${processing}</strong><small>Processing</small></div><div><span class="orange">${ICON.review}</span><strong>${waiting}</strong><small>In review</small></div><div><span class="green">${ICON.publish}</span><strong>${ready}</strong><small>Ready to publish</small></div></div>
     ${hasAny?`<div class="dc-library-toolbar"><div class="dc-library-search">${ICON.search}<input id="dcProjectSearch" placeholder="Search projects, lectures and sources" value="${esc(projectQuery)}"></div><select id="dcProjectFilter"><option value="all">All projects</option><option value="processing" ${projectFilter==='processing'?'selected':''}>Processing</option><option value="ready" ${projectFilter==='ready'?'selected':''}>Ready to review</option><option value="issues" ${projectFilter==='issues'?'selected':''}>Needs attention</option></select><select id="dcProjectSort"><option value="newest">Newest first</option><option value="oldest" ${projectSort==='oldest'?'selected':''}>Oldest first</option><option value="az" ${projectSort==='az'?'selected':''}>A–Z</option></select></div>`:''}
     ${hasAny?`<div class="dc-library-layout"><section class="dc-library-projects"><div class="dc-library-section-head"><div><h2>Your projects</h2><p>${projects.length} source${projects.length===1?'':'s'} in this view</p></div><span class="dc-pill">Source → clips → publish</span></div><div class="dc-library-rows">${projects.length?projects.map(p=>libraryProjectRow(p,allClips)).join(''):`<div class="dc-empty"><strong>No projects match</strong>Clear the search or choose another filter.</div>`}</div></section><aside class="dc-library-side">${libraryWorkflowCard(processing,waiting,ready)}${libraryPlatformsCard(d)}${libraryRecentClips(allClips)}</aside></div>`:`<section class="dc-empty-visual"><div class="dc-empty-visual-copy"><span>${ICON.projects} Your project library</span><h2>Start with one source video.</h2><p>Paste a supported link or upload your original video. DeenClipped keeps the source, generated clips and publishing status together.</p><button class="dc-btn" data-dc-nav="home">Create your first project</button></div><div class="dc-empty-visual-media"><img src="/marketing-assets/library-premium.webp" alt="DeenClipped project library preview"></div></section>`}
@@ -2319,7 +2341,7 @@ function renderReview(){
   const safeWaiting=waiting.filter(c=>!c.reviewRequired);
   const toolbar=allWaiting.length?`<div class="dc-review-toolbar pro"><select id="dcReviewFilter" aria-label="Filter clips"><option value="all">All clips (${allWaiting.length})</option><option value="strong" ${reviewFilter==='strong'?'selected':''}>Strong hooks (${strong})</option><option value="short" ${reviewFilter==='short'?'selected':''}>Under 60 seconds</option><option value="verified" ${reviewFilter==='verified'?'selected':''}>Render verified</option></select><select id="dcReviewSort" aria-label="Sort clips"><option value="score">Highest score</option><option value="duration" ${reviewSort==='duration'?'selected':''}>Shortest first</option></select><span class="spacer"></span><button class="dc-btn secondary" id="dcApproveVerified">Schedule verified</button><button class="dc-btn" id="dcScheduleAll" ${!safeWaiting.length?'disabled':''}>Schedule safe visible</button></div>`:'';
   const empty=allWaiting.length?`<div class="dc-review-empty-pro"><div><div class="dc-empty-icon">${ICON.review}</div><strong>No clips match</strong><p>Choose another filter to keep reviewing.</p><button class="dc-btn" data-review-filter="all">Show every clip</button></div></div>`:`<div class="dc-review-empty-pro visual"><div><div class="dc-empty-icon">${ICON.review}</div><strong>Your review queue is clear.</strong><p>New clips will appear here with their score, hook strength and suggested posting copy.</p><button class="dc-btn" data-dc-nav="home">Create new clips</button></div><img src="/marketing-assets/clip-review.webp" alt="DeenClipped clip review preview"></div>`;
-  panel.innerHTML=`<div class="dc-review-page-pro ${allWaiting.length?'':'is-empty'}"><section class="dc-review-hero-pro"><div><span class="dc-review-kicker">Final review</span><h1>Choose when each clip goes live.</h1><p>Check the hook, captions and posting copy, then post now or reserve the next publishing slot.</p></div><div class="dc-review-metrics-pro"><span><b>${allWaiting.length}</b><em>waiting</em></span><span><b>${strong}</b><em>strong hooks</em></span><span><b>${avg}</b><em>avg score</em></span></div></section>${toolbar}<div class="dc-review-list pro">${waiting.length?waiting.map(reviewRow).join(''):empty}</div></div>`;
+  panel.innerHTML=`<div class="dc-review-page-pro dc-v7-review ${allWaiting.length?'':'is-empty'}"><section class="dc-v7-page-title"><div><h1>Review</h1><p>Review AI-generated clips and approve the best ones.</p></div></section><div class="dc-review-metrics-pro dc-v7-review-metrics"><span><b>${allWaiting.length}</b><em>clips waiting</em></span><span><b>${strong}</b><em>strong hooks</em></span><span><b>${avg}</b><em>average score</em></span></div>${toolbar}<div class="dc-review-list pro">${waiting.length?waiting.map(reviewRow).join(''):empty}</div></div>`;
   if($('#dcApproveVerified'))$('#dcApproveVerified').onclick=approveVerified;
   if($('#dcScheduleAll'))$('#dcScheduleAll').onclick=()=>scheduleMany(safeWaiting.map(c=>c.id));
   if($('#dcReviewFilter'))$('#dcReviewFilter').onchange=e=>{reviewFilter=e.target.value;renderReview()};
@@ -3586,32 +3608,67 @@ function renderGlobalSearch(){
 }
 
 
-const GUIDE_STEPS = [
-  {view:'home',target:'[data-tour="home-hero"]',title:'Welcome to DeenClipped',copy:'This is the main workspace. The goal is simple: import a lecture, approve the best clips, polish the template, then publish or download.'},
+const GLOBAL_TOUR = [
+  {view:'home',target:'[data-tour="home-hero"]',title:'Welcome to DeenClipped',copy:'Turn one source into a week of clips, review the strongest moments, then publish when you are ready.'},
   {view:'home',target:'#dcTokenPill',title:'Your 3-day trial wallet',copy:'New accounts start with 40 tokens for generating and editing clips. Free downloads include a DeenClipped watermark; social posting unlocks with Premium.'},
-  {view:'home',target:'[data-tour="create-form"]',title:'Create your first clips',copy:'Paste a supported lecture link or upload a video, choose the look and clip length, then generate. The token estimate is always shown before processing.'},
-  {view:'home',target:'[data-tour="happening-now"]',title:'Working now and next action',copy:'Home shows the current job, latest result, next post and any attention items so users do not need to hunt through menus.'},
-  {view:'projects',target:'#view-projects',title:'Projects hold each lecture',copy:'Every lecture stays together with its clips, status, errors, thumbnails and history. Failed old projects can be retried or deleted.'},
-  {view:'review',target:'#view-review',title:'Clip Review is the approval queue',copy:'This is where users approve, reject, schedule, regenerate titles, make clips shorter or longer and open style/video edits.'},
-  {view:'editor',target:'#view-editor',title:'Editor for one clip',copy:'The editor is for precise changes only: captions, framing, template look, audio and export. The normal review page should handle quick clip actions.'},
-  {view:'schedule',target:'#view-schedule',title:'Publishing slots stay organised',copy:'Approved clips fill the next open slot. Premium accounts can post to connected channels; everyone can still preview and download their work.'},
-  {view:'publishing',target:'#view-publishing',title:'Connect your own channels',copy:'TikTok, YouTube, Instagram and Facebook connections stay private to your account, and nothing posts without the publishing rules you choose.'},
-  {view:'home',target:'#dcTopbar',title:'You are ready',copy:'Search stays at the top, billing is always one click away, and you can replay this guide from Demo whenever you need it.'}
+  {view:'home',target:'[data-tour="create-form"]',title:'Start with one source',copy:'Paste a supported link or upload your original video. You see the token cost before anything starts.'},
+  {view:'home',target:'#dcSidebar',title:'One simple workflow',copy:'Projects hold sources, Review is your approval queue, Publishing plans the calendar, and Studio keeps every clip consistent.'},
+  {view:'home',target:'#dcWork',title:'Work follows you',copy:'Uploads, renders and publishing progress stay available from every page. Open the activity panel for the full queue.'},
 ];
+const TOURS_BY_VIEW = Object.freeze({
+  home:[
+    {target:'[data-tour="home-hero"]',title:'Your command centre',copy:'The floating clips show real recent work. Start a source or jump straight to clips waiting for review.'},
+    {target:'[data-tour="create-form"]',title:'Create with your defaults',copy:'Choose a Template, clip count and length here. Upload and link imports use the same safe workflow.'},
+  ],
+  projects:[{target:'#view-projects .dc-library-toolbar, #view-projects',title:'Your source library',copy:'Search, filter and open a project without losing its processing, review or publishing state.'}],
+  review:[{target:'#view-review .dc-review-toolbar, #view-review',title:'Approve with context',copy:'Compare score, hook and grounded post copy, then approve, edit, schedule or remove the clip.'}],
+  editor:[{target:'#view-editor',title:'Precise clip editing',copy:'Use the fitted canvas, timeline and side tools for one clip. Export keeps the preview style and post details together.'}],
+  schedule:[{target:'#view-schedule',title:'Your publishing command centre',copy:'Keep the calendar you know, then use approval rules and open slots to control what can go live.'}],
+  publishing:[{target:'#view-publishing',title:'Connected destinations',copy:'Manage each account and its publishing permission. Nothing posts without the rules you approve.'}],
+  templates:[{target:'#view-templates',title:'Templates and Template Shop',copy:'Build your own reusable look or add a DeenClipped design. Locked products never silently change a clip.'}],
+  brand:[{target:'#view-brand',title:'Your visual identity',copy:'Preview your mark, colours and writing defaults before they are saved to future renders.'}],
+  lab:[{target:'#view-lab',title:'Evidence-based AI Director',copy:'Every recommendation is grounded in your own clips, transcript signals and connected performance data.'}],
+  music:[{target:'#view-music',title:'A consistent audio mix',copy:'Preview tracks, keep speech clear and save one global level for new renders.'}],
+  insights:[{target:'#view-insights',title:'What is working',copy:'Use real workspace and connected-platform signals to choose the next clip or topic.'}],
+  automation:[{target:'#view-automation',title:'Your existing controls',copy:'Generation, automation and alert settings remain together in the Settings layout you already know.'}],
+  subscription:[{target:'#view-subscription',title:'Plan and token wallet',copy:'See exact access, usage and costs before you upgrade or add tokens.'}],
+  admin:[{target:'#view-admin',title:'Owner operations',copy:'Monitor real subscriptions, jobs, services and issues without mixing admin controls into the creator workflow.'}],
+});
+let guideSteps = GLOBAL_TOUR;
+let guideKind = 'global';
 let guideIndex = 0;
 let guideRenderToken = 0;
-function openGuidedTour(index=0){
-  guideIndex = clamp(index,0,GUIDE_STEPS.length-1);
+let guideReturnScroll = null;
+function openGuidedTour(index=0,steps=GLOBAL_TOUR,kind='global'){
+  guideSteps=Array.isArray(steps)&&steps.length?steps:GLOBAL_TOUR;guideKind=kind;
+  guideIndex = clamp(index,0,guideSteps.length-1);
   let layer = $('#dcGuideLayer');
   if(!layer){
+    guideReturnScroll={x:window.scrollX,y:window.scrollY};
     layer=document.createElement('div');layer.id='dcGuideLayer';layer.className='dc-guide-layer';
     layer.innerHTML='<div class="dc-guide-spot" id="dcGuideSpot"></div><div class="dc-guide-card" id="dcGuideCard"><h3 id="dcGuideTitle"></h3><p id="dcGuideCopy"></p><div class="dc-guide-progress"><i id="dcGuideBar"></i></div><div class="dc-guide-foot"><span class="dc-guide-count" id="dcGuideCount"></span><button class="dc-btn secondary" id="dcGuideClose">Close</button><button class="dc-btn secondary" id="dcGuideBack">Back</button><button class="dc-btn" id="dcGuideNext">Next</button></div></div>';
     document.body.appendChild(layer);
-    $('#dcGuideClose').onclick=closeGuidedTour;$('#dcGuideBack').onclick=()=>{guideIndex=Math.max(0,guideIndex-1);renderGuidedTour()};$('#dcGuideNext').onclick=()=>{if(guideIndex>=GUIDE_STEPS.length-1)closeGuidedTour();else{guideIndex++;renderGuidedTour()}};
+    $('#dcGuideClose').onclick=closeGuidedTour;$('#dcGuideBack').onclick=()=>{guideIndex=Math.max(0,guideIndex-1);renderGuidedTour()};$('#dcGuideNext').onclick=()=>{if(guideIndex>=guideSteps.length-1)closeGuidedTour();else{guideIndex++;renderGuidedTour()}};
   }
   layer.classList.add('show');renderGuidedTour();
 }
-function closeGuidedTour(){seenSet('guided_demo','complete');$('#dcGuideLayer')?.remove()}
+function closeGuidedTour(){
+  if(guideKind==='global')seenSet('guided_demo','complete');
+  else if(guideKind.startsWith('view:'))seenSet('tab_tour',guideKind.slice(5));
+  $('#dcGuideLayer')?.remove();
+  const returnScroll=guideReturnScroll;guideReturnScroll=null;
+  if(returnScroll)requestAnimationFrame(()=>window.scrollTo({left:returnScroll.x,top:returnScroll.y,behavior:'auto'}));
+}
+function openViewTour(view=currentView,force=false){
+  const steps=TOURS_BY_VIEW[view];if(!steps?.length)return;
+  if(!force&&seenGet('tab_tour',view))return;
+  openGuidedTour(0,steps.map(step=>({...step,view})),`view:${view}`);
+}
+function openPageTour(view=currentView,force=false){openViewTour(view,force)}
+function maybeStartPageTour(view){
+  if(!seenGet('guided_demo','complete')||seenGet('tab_tour',view)||!TOURS_BY_VIEW[view]?.length)return;
+  setTimeout(()=>{if(currentView===view&&!$('#dcGuideLayer'))openViewTour(view)},520);
+}
 function visibleGuideTarget(selector){
   return $$(selector).find(element=>{
     if(!element?.isConnected)return false;
@@ -3621,12 +3678,12 @@ function visibleGuideTarget(selector){
 }
 function renderGuidedTour(){
   const token=++guideRenderToken;
-  const step=GUIDE_STEPS[guideIndex]||GUIDE_STEPS[0];
+  const step=guideSteps[guideIndex]||guideSteps[0];
   if(step.view && currentView!==step.view) go(step.view);
   setTimeout(()=>{
     if(token!==guideRenderToken)return;
     const target=visibleGuideTarget(step.target),spot=$('#dcGuideSpot'),card=$('#dcGuideCard');if(!spot||!card)return;
-    $('#dcGuideTitle').textContent=step.title;$('#dcGuideCopy').textContent=step.copy;$('#dcGuideCount').textContent=`${guideIndex+1}/${GUIDE_STEPS.length}`;$('#dcGuideBar')?.style.setProperty('width',`${((guideIndex+1)/GUIDE_STEPS.length)*100}%`);$('#dcGuideBack').disabled=guideIndex===0;$('#dcGuideNext').textContent=guideIndex>=GUIDE_STEPS.length-1?'Finish':'Next';
+    $('#dcGuideTitle').textContent=step.title;$('#dcGuideCopy').textContent=step.copy;$('#dcGuideCount').textContent=`${guideIndex+1}/${guideSteps.length}`;$('#dcGuideBar')?.style.setProperty('width',`${((guideIndex+1)/guideSteps.length)*100}%`);$('#dcGuideBack').disabled=guideIndex===0;$('#dcGuideNext').textContent=guideIndex>=guideSteps.length-1?'Finish':'Next';
     if(!target){spot.style.cssText='display:none';card.classList.add('dc-guide-missing');card.style.left=`${Math.max(14,(innerWidth-Math.min(360,innerWidth-28))/2)}px`;card.style.top=`${Math.max(14,(innerHeight-220)/2)}px`;return}
     card.classList.remove('dc-guide-missing');spot.style.display='block';target.scrollIntoView({block:'center',inline:'nearest',behavior:'auto'});
     setTimeout(()=>{
@@ -3658,11 +3715,11 @@ function providerSummary(info){
   if(info.provider==='tiktok')return `${info.account?.name||'TikTok account'} receives only clips you explicitly approve, using TikTok's current creator settings.`;
   return `${info.account?.name||'Account'} is ready for approved and scheduled clips.`;
 }
-function providerBadge(info){return !info.configured?'bad':info.enabled?'good':info.connected?'warn':''}
+function providerBadge(info){return !info.configured||info.status?.lastTestError?'bad':info.enabled?'good':info.connected?'warn':''}
 
 function premiumAccess(){
   const bill=billingInfo(),features=bill.features||{};
-  return Boolean(features.premium||bill.current?.unlimited||['weekly','monthly','yearly'].includes(String(bill.current?.plan||'')));
+  return Boolean(features.premium||bill.current?.unlimited);
 }
 function renderBrandKit(){
   const panel=$('#view-brand'),d=data();if(!panel||!d)return;
@@ -3672,8 +3729,8 @@ function renderBrandKit(){
   const positions=[['top-left','Top left'],['top-center','Top centre'],['top-right','Top right'],['bottom-left','Bottom left'],['bottom-center','Bottom centre'],['bottom-right','Bottom right']];
   const options=(list,current)=>list.map(([v,l])=>`<option value="${v}" ${String(current)===v?'selected':''}>${l}</option>`).join('');
   const lock=premium?'':'is-locked',dis=premium?'':'disabled';
-  panel.innerHTML=`<div class="dc-settings-hub dc-brand-page">
-    <section class="dc-settings-command"><div><span class="dc-settings-kicker">${ICON.brand} Brand Kit <b class="dc-inline-pro">PRO</b></span><h1>Make every clip unmistakably yours.</h1><p>Set it once. Every render, rerender and generated clip uses it.</p></div><div class="dc-settings-command-status"><span class="${premium?'on':''}"><i>${premium?ICON.check:ICON.warning}</i><b>${premium?'Premium':'Free plan'}</b><em>${premium?'full control':'mark required'}</em></span><span class="${enabled?'on':''}"><i>${ICON.brand}</i><b>${enabled?'Watermark on':'Watermark off'}</b><em>on exports</em></span><span class="${brand.brandLineEnabled&&premium?'on':''}"><i>${ICON.style}</i><b>${brand.brandLineEnabled&&premium?'Accent on':'Accent off'}</b><em>colour line</em></span></div></section>
+  panel.innerHTML=`<div class="dc-settings-hub dc-brand-page dc-v7-brand">
+    <section class="dc-settings-command"><div><span class="dc-settings-kicker">${ICON.brand} Brand Kit ${premium?'<b class="dc-inline-access">UNLOCKED</b>':'<b class="dc-inline-pro">PRO</b>'}</span><h1>Make every clip unmistakably yours.</h1><p>Set it once. Every render, rerender and generated clip uses it.</p></div><div class="dc-settings-command-status"><span class="${premium?'on':''}"><i>${premium?ICON.check:ICON.warning}</i><b>${premium?'Premium':'Free plan'}</b><em>${premium?'full control':'mark required'}</em></span><span class="${enabled?'on':''}"><i>${ICON.brand}</i><b>${enabled?'Watermark on':'Watermark off'}</b><em>on exports</em></span><span class="${brand.brandLineEnabled&&premium?'on':''}"><i>${ICON.style}</i><b>${brand.brandLineEnabled&&premium?'Accent on':'Accent off'}</b><em>colour line</em></span></div></section>
     ${premium?'':`<div class="dc-brand-entitlement free"><span>${ICON.warning}</span><div><strong>Free exports stay branded</strong><p>Every free render includes “DEENCLIPPED”. Upgrade to switch it off or use your own name.</p></div><button class="dc-btn" id="dcBrandUpgrade">Unlock branding</button></div>`}
     <form id="dcBrandForm" class="dc-brand-form-shell">
       <section class="dc-settings-section"><header><span>${ICON.brand}</span><div><small>Appearance</small><h2>Watermark</h2></div><b>${premium?'Editable':'Locked'}</b></header>
@@ -3727,7 +3784,17 @@ const DIRECTOR_CHIPS=[
   ['Which platform fits best?','platform'],
   ['What topics am I missing?','ideas'],
 ];
+const DIRECTOR_MODES=[
+  ['director','Director','What should I post next?'],
+  ['potential','Viral potential','Why is this clip strong?'],
+  ['hooks','Hooks','What is the hook?'],
+  ['titles','Titles & captions','Give me another title'],
+  ['trends','Trends','What topics am I missing?'],
+  ['audience','Audience','Which platform fits best?'],
+  ['posting','Posting','What should I post next?'],
+];
 const directorChat={messages:[],draft:'',focusId:''};
+let directorMode='director';
 function directorRanked(){return [...(data()?.clips||[])].sort((a,b)=>Number(b.score||0)-Number(a.score||0))}
 function directorFocus(){const clips=directorRanked();return clips.find(c=>c.id===directorChat.focusId)||clips[0]||null}
 function directorSay(role,parts){directorChat.messages.push({role,parts:Array.isArray(parts)?parts:[{type:'text',value:String(parts)}]})}
@@ -3821,7 +3888,7 @@ function directorAsk(question){
   $('#dcDirectorInput')?.focus();
 }
 function directorPartHtml(part,messageIndex,partIndex){
-  if(part.type==='copy')return `<div class="dc-director-copy"><div><small>${esc(part.label)}</small><p>${esc(part.value)}</p></div><button class="dc-btn secondary" data-director-copy="${messageIndex}:${partIndex}">Copy</button></div>`;
+  if(part.type==='copy'){const canApply=/^(Suggested title|Alternative \d+)$/i.test(String(part.label||''));return `<div class="dc-director-copy"><div><small>${esc(part.label)}</small><p>${esc(part.value)}</p></div><span>${canApply?`<button class="dc-btn" data-director-apply-title="${messageIndex}:${partIndex}">Apply to clip</button>`:''}<button class="dc-btn secondary" data-director-copy="${messageIndex}:${partIndex}">Copy</button></span></div>`;}
   if(part.type==='clips'){
     const clips=data()?.clips||[];
     return `<div class="dc-director-clips">${part.ids.map((id,order)=>{const clip=clips.find(c=>c.id===id);if(!clip)return '';return `<button data-edit-video-clip="${esc(clip.id)}"><i>${order+1}</i><span class="dc-director-thumb">${clip.thumbUrl?`<img src="${authedUrl(clip.thumbUrl)}" alt="">`:ICON.play}</span><b>${esc(shortText(clip.title||'Untitled clip',54))}</b><em>${Math.round(clip.score||0)}</em></button>`}).join('')}</div>`;
@@ -3832,16 +3899,29 @@ function directorPartHtml(part,messageIndex,partIndex){
   }
   return `<p>${esc(part.value)}</p>`;
 }
+function directorToolSurface(d,clips,focus){
+  const pack=focus?.growthPack||{},brief=pack.directorBrief||{},breakdown=focus?.scoreBreakdown||focus?.quality?.scoreBreakdown||{};
+  const topicCount=new Set(clips.map(labTopic).filter(topic=>topic!=='General reminders')).size,connected=connectedPlatformCount(d),audience=String(d.brandSettings?.audience||'').trim();
+  const tools=[
+    ['Hook AI',ICON.sparkles,brief.hookPreview?'Grounded':'Waiting',brief.hookPreview?'Transcript opening ready':'Needs a processed growth pack',Boolean(brief.hookPreview)],
+    ['Retention AI',ICON.analytics,brief.forecast||Number(breakdown.flow||breakdown.hook)>0?'Signals ready':'Waiting',brief.forecast?`${brief.forecast} forecast from clip signals`:Number(breakdown.flow||0)>0?'Quality dimensions available':'No external watch-time connected',Boolean(brief.forecast||Number(breakdown.flow||breakdown.hook)>0)],
+    ['Title AI',ICON.text,pack.primaryTitle?'Copy ready':'Waiting',pack.primaryTitle?'Grounded title pack available':'Needs grounded post copy',Boolean(pack.primaryTitle)],
+    ['Trend AI',ICON.analytics,clips.length?'Workspace-only':'Waiting',clips.length?`${topicCount||1} library theme${topicCount===1?'':'s'} · no invented live trends`:'Create clips to map topic gaps',Boolean(clips.length)],
+    ['Audience AI',ICON.social,brief.bestPlatforms?.length?'Platform fit':'Limited',brief.bestPlatforms?.length?`${brief.bestPlatforms.length} grounded platform matches`:audience?`Brand audience: ${audience}`:'No connected audience analytics',Boolean(brief.bestPlatforms?.length)],
+    ['Posting AI',ICON.publish,connected?'Ready':'Plan only',connected?`${connected} connected destination${connected===1?'':'s'}`:'Recommendations only until a channel connects',Boolean(connected)],
+  ];
+  return `<section class="dc-v7-ai-tools"><header><div><span>${ICON.sparkles}</span><div><strong>AI tools working together</strong><small>Every status below comes from this workspace. Missing data stays missing.</small></div></div><b>${tools.filter(tool=>tool[5]).length} active</b></header><div>${tools.map(([name,icon,status,copy,ready])=>`<button type="button" data-director-tool="${esc(name)}" class="${ready?'is-ready':'is-limited'}"><i>${icon}</i><span><strong>${esc(name)}</strong><em><u></u>${esc(status)}</em><small>${esc(copy)}</small></span></button>`).join('')}</div></section>`;
+}
 function renderCreatorLab(){
   const panel=$('#view-lab'),d=data();if(!panel||!d)return;
   const clips=d.clips||[],premium=Boolean(d.billing?.features?.creatorLab||d.billing?.current?.unlimited);
   const ranked=directorRanked(),avg=Math.round(ranked.reduce((sum,c)=>sum+Number(c.score||0),0)/Math.max(1,ranked.length));
   const ready=clips.filter(c=>c.musicVerified&&c.renderVerified).length,waiting=clips.filter(c=>c.status==='waiting').length;
   const focus=directorFocus();
-  const hero=`<section class="dc-settings-command"><div><span class="dc-settings-kicker">${ICON.lab} AI Director <b class="dc-inline-pro">PRO</b></span><h1>Ask what to post next.</h1><p>Answers come from what the speaker actually said in your lectures — never invented.</p></div><div class="dc-settings-command-status"><span class="${clips.length?'on':''}"><i>${ICON.lab}</i><b>${clips.length} analysed</b><em>clips</em></span><span class="${avg>=72?'on':''}"><i>${ICON.sparkles}</i><b>${avg} average</b><em>quality score</em></span><span class="${ready?'on':''}"><i>${ICON.check}</i><b>${ready} ready</b><em>export verified</em></span></div></section>`;
+  const hero=`<section class="dc-settings-command"><div><span class="dc-settings-kicker">${ICON.lab} AI Director ${premium?'<b class="dc-inline-access">UNLOCKED</b>':'<b class="dc-inline-pro">PRO</b>'}</span><h1>Ask what to post next.</h1><p>Answers come from what the speaker actually said in your lectures — never invented.</p></div><div class="dc-settings-command-status"><span class="${clips.length?'on':''}"><i>${ICON.lab}</i><b>${clips.length} analysed</b><em>clips</em></span><span class="${avg>=72?'on':''}"><i>${ICON.sparkles}</i><b>${avg} average</b><em>quality score</em></span><span class="${ready?'on':''}"><i>${ICON.check}</i><b>${ready} ready</b><em>export verified</em></span></div></section>`;
 
   if(!premium){
-    panel.innerHTML=`<div class="dc-settings-hub dc-director-page">${hero}<section class="dc-lab-locked"><div class="dc-lab-lock-icon">${ICON.lab}</div><span>Premium intelligence</span><h2>Ask your library what to post next.</h2><p>AI Director answers in plain language using the titles, hooks and captions DeenClipped already generated from your transcripts.</p><div class="dc-lab-teasers">${DIRECTOR_CHIPS.map(([label])=>`<span>${esc(label)}</span>`).join('')}</div><button class="dc-btn" id="dcLabUpgrade">Unlock AI Director</button></section></div>`;
+    panel.innerHTML=`<div class="dc-settings-hub dc-director-page dc-v7-director">${hero}<section class="dc-lab-locked"><div class="dc-lab-lock-icon">${ICON.lab}</div><span>Premium intelligence</span><h2>Ask your library what to post next.</h2><p>AI Director answers in plain language using the titles, hooks and captions DeenClipped already generated from your transcripts.</p><div class="dc-lab-teasers">${DIRECTOR_CHIPS.map(([label])=>`<span>${esc(label)}</span>`).join('')}</div><button class="dc-btn" id="dcLabUpgrade">Unlock AI Director</button></section></div>`;
     if($('#dcLabUpgrade'))$('#dcLabUpgrade').onclick=openBillingModal;
     requestAnimationFrame(()=>animatePanel(panel));
     return;
@@ -3852,7 +3932,9 @@ function renderCreatorLab(){
     :`<div class="dc-director-welcome"><span>${ICON.sparkles}</span><strong>Ask me anything about your clips.</strong><p>I read the transcripts DeenClipped already analysed, so nothing I suggest is made up.</p></div>`;
   const focusCard=focus?`<div class="dc-director-focus"><span class="dc-director-thumb">${focus.thumbUrl?`<img src="${authedUrl(focus.thumbUrl)}" alt="">`:ICON.play}</span><div><small>Working on</small><select id="dcDirectorFocus">${ranked.map(c=>`<option value="${esc(c.id)}" ${c.id===focus.id?'selected':''}>${esc(shortText(c.title||'Untitled clip',48))}</option>`).join('')}</select></div></div>`:'';
 
-  panel.innerHTML=`<div class="dc-settings-hub dc-director-page">${hero}
+  const modeBar=`<nav class="dc-v7-director-modes" aria-label="AI Director tools">${DIRECTOR_MODES.map(([id,label])=>`<button type="button" class="${directorMode===id?'is-active':''}" data-director-mode="${esc(id)}">${esc(label)}</button>`).join('')}</nav>`;
+  const potential=focus?`<section class="dc-v7-director-potential"><div class="dc-v7-potential-score" style="--score:${clamp(Math.round(Number(focus.score||0)),0,100)}"><strong>${Math.round(Number(focus.score||0))}</strong><span>Viral potential</span><small>workspace score</small></div><div><span>Grounded opportunity factors</span><h2>${esc(shortText(focus.title||'Focused clip',72))}</h2><div class="dc-lab-dimensions">${labDimensionRows(focus)}</div><p>A quality estimate from this clip's transcript and structure—not a promise of views.</p></div></section>`:'';
+  panel.innerHTML=`<div class="dc-settings-hub dc-director-page dc-v7-director">${hero}${modeBar}<div class="dc-v7-ai-overview">${potential}${directorToolSurface(d,clips,focus)}</div>
     <section class="dc-settings-section violet"><header><span>${ICON.sparkles}</span><div><small>Assistant</small><h2>Ask about your clips</h2></div><b>Grounded in your transcripts</b></header>
       <div class="dc-director-body">${focusCard}<div class="dc-director-thread" id="dcDirectorThread">${thread}</div>
         <div class="dc-director-chips">${DIRECTOR_CHIPS.map(([label])=>`<button data-director-chip="${esc(label)}">${esc(label)}</button>`).join('')}</div>
@@ -3865,11 +3947,17 @@ function renderCreatorLab(){
   $('#dcDirectorForm')?.addEventListener('submit',event=>{event.preventDefault();directorAsk($('#dcDirectorInput')?.value)});
   $('#dcDirectorInput')?.addEventListener('input',event=>{directorChat.draft=event.target.value});
   $('#dcDirectorFocus')?.addEventListener('change',event=>{directorChat.focusId=event.target.value;renderCreatorLab()});
+  $$('[data-director-mode]',panel).forEach(button=>button.addEventListener('click',()=>{const mode=DIRECTOR_MODES.find(item=>item[0]===button.dataset.directorMode);if(!mode)return;directorMode=mode[0];directorAsk(mode[2])}));
+  $$('[data-director-tool]',panel).forEach(button=>button.addEventListener('click',()=>{const tool=button.dataset.directorTool,mode=DIRECTOR_MODES.find(item=>tool.startsWith(item[1].split(' ')[0]))||DIRECTOR_MODES[0];directorMode=mode[0];directorAsk(mode[2])}));
   $$('[data-director-chip]',panel).forEach(button=>button.addEventListener('click',()=>directorAsk(button.dataset.directorChip)));
   $$('[data-director-copy]',panel).forEach(button=>button.addEventListener('click',async()=>{
     const [messageIndex,partIndex]=button.dataset.directorCopy.split(':').map(Number);
     const value=directorChat.messages[messageIndex]?.parts[partIndex]?.value||'';
     try{await navigator.clipboard.writeText(value);notify('Copied')}catch{notify('Copy was blocked by the browser','bad')}
+  }));
+  $$('[data-director-apply-title]',panel).forEach(button=>button.addEventListener('click',async()=>{
+    const [messageIndex,partIndex]=button.dataset.directorApplyTitle.split(':').map(Number),value=directorChat.messages[messageIndex]?.parts[partIndex]?.value||'',clip=directorFocus();if(!clip||!value)return;
+    try{button.disabled=true;button.textContent='Applying…';await callApi(`/api/clips/${encodeURIComponent(clip.id)}`,{method:'PATCH',body:JSON.stringify({title:value})});notify('Grounded title applied to the clip');await refreshData();renderCreatorLab()}catch(error){notify(error.message,'bad');button.disabled=false;button.textContent='Apply to clip'}
   }));
   const threadEl=$('#dcDirectorThread');if(threadEl)threadEl.scrollTop=threadEl.scrollHeight;
   requestAnimationFrame(()=>animatePanel(panel));
@@ -3886,6 +3974,127 @@ const STYLE_GROUPS=[
 ];
 const STYLE_FONTS=['DejaVu Sans','DejaVu Serif','Manrope','Roboto','Lato','Noto Sans','Noto Serif','Play','Liberation Sans','Liberation Serif','Amiri','Scheherazade New','Noto Naskh Arabic','Noto Kufi Arabic'];
 const styleStudio={draft:null,baseId:'',group:'',history:[],index:-1,dirty:false,menuOpen:false};
+let templateWorkspaceTab='mine';
+let templateShopProducts=[];
+let templateShopLoading=false;
+let templateShopError='';
+let templateShopFilter='all';
+let templateShopQuery='';
+
+async function loadTemplateShop(force=false){
+  if(templateShopLoading||(!force&&templateShopProducts.length))return;
+  templateShopLoading=true;templateShopError='';
+  try{
+    const result=await callApi('/api/template-shop');
+    templateShopProducts=Array.isArray(result)?result:Array.isArray(result?.products)?result.products:Array.isArray(result?.catalog)?result.catalog:[];
+  }catch(error){templateShopError=error.message||'Template Shop could not be loaded.'}
+  finally{templateShopLoading=false;if(currentView==='templates'&&templateWorkspaceTab==='shop')renderTemplatesPage()}
+}
+function templateShopTier(product){return String(product.tier||product.accessTier||'free').toLowerCase()}
+function normalizedTemplateShopProduct(product){
+  const accessType=String(product.access?.type||product.tier||'free').toLowerCase();
+  return {
+    ...product,
+    tier:accessType,
+    priceLabel:product.priceLabel||(accessType==='purchase'&&Number(product.access?.amount)>0?new Intl.NumberFormat(undefined,{style:'currency',currency:product.access?.currency||'AUD'}).format(Number(product.access.amount)/100):''),
+    ratios:product.ratios||(product.preview?.aspectRatio?[product.preview.aspectRatio]:[]),
+    capabilities:product.capabilities||product.features||[],
+    previewAssets:product.previewAssets||(product.preview?.posterUrl?{poster:product.preview.posterUrl}:{}),
+    canAdd:product.canAdd??product.canAcquire,
+    canApply:product.canApply??product.accessible,
+  };
+}
+function templateShopCta(product){
+  const state=String(product.accessState||'').toLowerCase();
+  if(['owned','acquired','purchased'].includes(state)||product.canApply)return ['Use template','use'];
+  if(state==='available_free'||product.canAdd&&templateShopTier(product)==='free')return ['Add free','acquire'];
+  if(state==='available_pro'||product.canAdd)return ['Add to My Templates','acquire'];
+  if(['locked_pro','pro_required'].includes(state))return ['Unlock with Pro','upgrade'];
+  if(['purchasable','purchase_required'].includes(state)||templateShopTier(product)==='purchase')return [`Purchase${product.priceLabel?` · ${product.priceLabel}`:''}`,'checkout'];
+  return ['View details','preview'];
+}
+function templateShopCard(product){
+  product=normalizedTemplateShopProduct(product);
+  const [cta,action]=templateShopCta(product),tier=templateShopTier(product),style=product.style||product.template||{};
+  const image=product.previewAssets?.poster||product.previewAssets?.image||product.previewUrl||'';
+  const preview=image?`<img src="${esc(image)}" alt="${esc(product.name||'Template')} preview">`:templatePreviewMarkup(style);
+  const ratios=(product.ratios||[]).slice(0,3),caps=(product.capabilities||[]).slice(0,3);
+  const customize=(product.canCustomize||['owned','acquired','purchased'].includes(String(product.accessState||'').toLowerCase()))?`<button class="dc-btn secondary" data-template-shop-action="customize" data-template-shop-id="${esc(product.id)}">Customize</button>`:'';
+  const badge=tier==='pro'?'PRO':tier==='purchase'?(product.priceLabel||'PREMIUM'):'FREE';
+  return `<article class="dc-v7-shop-card" data-shop-product="${esc(product.id)}"><button type="button" class="dc-v7-shop-preview" data-template-shop-action="preview" data-template-shop-id="${esc(product.id)}">${preview}<span>Preview on my clip</span></button><div class="dc-v7-shop-card-body"><div class="dc-v7-shop-card-top"><div><small>${esc(product.creator||'DeenClipped')}</small><h3>${esc(product.name||'Template')}</h3></div><b class="${esc(tier)}">${esc(badge)}</b></div><p>${esc(product.description||'A reusable, professionally designed clip look.')}</p><div class="dc-v7-shop-tags">${ratios.map(value=>`<span>${esc(value)}</span>`).join('')}${caps.map(value=>`<span>${esc(String(value).replace(/_/g,' '))}</span>`).join('')}</div><div class="dc-v7-shop-actions">${customize}<button class="dc-btn secondary" data-template-shop-action="preview" data-template-shop-id="${esc(product.id)}">Preview on my clip</button><button class="dc-btn" data-template-shop-action="${action}" data-template-shop-id="${esc(product.id)}">${esc(cta)}</button></div></div></article>`;
+}
+function renderTemplateShop(panel,d){
+  if(!templateShopProducts.length&&!templateShopLoading&&!templateShopError)queueMicrotask(()=>loadTemplateShop());
+  const products=templateShopProducts.filter(product=>{
+    const tier=templateShopTier(normalizedTemplateShopProduct(product)),matchTier=templateShopFilter==='all'||tier===templateShopFilter||(templateShopFilter==='premium'&&tier==='purchase');
+    const query=templateShopQuery.toLowerCase(),matchQuery=!query||`${product.name||''} ${product.description||''} ${(product.categories||[]).join(' ')}`.toLowerCase().includes(query);
+    return matchTier&&matchQuery;
+  });
+  panel.innerHTML=`<div class="dc-v7-templates dc-v7-template-shop"><header class="dc-v7-template-head"><div><span>DeenClipped designs</span><h1>Template Shop</h1><p>Add a polished look to My Templates, then customise only the parts the renderer supports.</p></div><button class="dc-btn secondary" data-template-tab="mine">Open My Templates</button></header><div class="dc-v7-template-tabs" role="tablist"><button type="button" data-template-tab="mine">My Templates</button><button type="button" class="is-active" data-template-tab="shop">Template Shop</button></div><div class="dc-v7-shop-toolbar"><label>${ICON.search}<input id="dcTemplateShopSearch" placeholder="Search templates" value="${esc(templateShopQuery)}"></label><div>${[['all','All'],['free','Free'],['pro','Included with Pro'],['premium','Premium']].map(([value,label])=>`<button type="button" class="${templateShopFilter===value?'is-active':''}" data-shop-filter="${value}">${label}</button>`).join('')}</div></div>${templateShopLoading?`<div class="dc-v7-shop-state"><span class="dc-spinner"></span><strong>Loading Template Shop…</strong></div>`:templateShopError?`<div class="dc-v7-shop-state bad"><strong>Template Shop could not be loaded.</strong><p>${esc(templateShopError)}</p><button class="dc-btn" id="dcTemplateShopRetry">Try again</button></div>`:`<div class="dc-v7-shop-grid">${products.length?products.map(templateShopCard).join(''):`<div class="dc-v7-shop-state"><strong>No templates match</strong><p>Clear the search or choose another category.</p></div>`}</div>`}<footer class="dc-v7-shop-truth"><span>${ICON.quality}</span><p><strong>Preview honestly.</strong> Shop cards are style illustrations; “Preview on my clip” uses a server preview and never changes your default, spends tokens or edits a clip.</p></footer></div>`;
+  $$('[data-template-tab]',panel).forEach(button=>button.addEventListener('click',()=>{templateWorkspaceTab=button.dataset.templateTab;syncTemplateRouteMode();renderTemplatesPage()}));
+  $$('[data-shop-filter]',panel).forEach(button=>button.addEventListener('click',()=>{templateShopFilter=button.dataset.shopFilter;renderTemplatesPage()}));
+  $('#dcTemplateShopSearch')?.addEventListener('input',event=>{templateShopQuery=event.target.value;renderTemplatesPage();const input=$('#dcTemplateShopSearch');input?.focus();input?.setSelectionRange(input.value.length,input.value.length)});
+  $('#dcTemplateShopRetry')?.addEventListener('click',()=>loadTemplateShop(true));
+  $$('[data-template-shop-action]',panel).forEach(button=>button.addEventListener('click',()=>handleTemplateShopAction(button.dataset.templateShopAction,button.dataset.templateShopId,button)));
+  requestAnimationFrame(()=>animatePanel(panel));
+}
+async function handleTemplateShopAction(action,id,button){
+  const product=templateShopProducts.find(item=>String(item.id)===String(id));if(!product)return notify('Template not found','bad');
+  if(action==='upgrade'){openBillingModal();return}
+  if(action==='use'){
+    templateWorkspaceTab='mine';syncTemplateRouteMode();
+    try{await selectStudioTemplate(product.templateId||product.id);renderTemplatesPage()}catch{}
+    return;
+  }
+  if(action==='customize'){
+    try{
+      button.disabled=true;button.textContent='Creating your copy…';
+      const result=await callApi(`/api/template-shop/${encodeURIComponent(id)}/customize`,{method:'POST',body:'{}'});
+      await refreshData();
+      if(result.template)styleStudioLoad(result.template);
+      templateWorkspaceTab='mine';syncTemplateRouteMode();renderTemplatesPage();notify('Custom copy added without changing your default');
+    }catch(error){notify(error.message,'bad');button.disabled=false;button.textContent='Customize'}
+    return;
+  }
+  if(action==='preview'){
+    const clip=[...(data()?.clips||[])].sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0))[0];
+    if(!clip)return notify('Create a clip first, then preview this Template on it.','bad');
+    const original=button.innerHTML;
+    try{button.disabled=true;if(button.matches('.dc-v7-shop-preview'))button.classList.add('is-loading');else button.textContent='Preparing preview…';const result=await callApi(`/api/template-shop/${encodeURIComponent(id)}/preview`,{method:'POST',body:JSON.stringify({clipId:clip.id})});openTemplateShopPreview(result,product);}
+    catch(error){notify(error.message,'bad')}finally{button.disabled=false;button.classList.remove('is-loading');button.innerHTML=original}
+    return;
+  }
+  try{
+    button.disabled=true;button.textContent=action==='checkout'?'Opening secure checkout…':'Adding…';
+    const result=await callApi(`/api/template-shop/${encodeURIComponent(id)}/${action==='checkout'?'checkout':'acquire'}`,{method:'POST',body:'{}'});
+    if(result.url){location.href=result.url;return}
+    notify('Template added to My Templates');await refreshData();await loadTemplateShop(true);templateWorkspaceTab='mine';syncTemplateRouteMode();renderTemplatesPage();
+  }catch(error){notify(error.message,'bad');button.disabled=false;renderTemplatesPage()}
+}
+
+function syncTemplateRouteMode(){document.body.classList.toggle('dc-templates-route',currentView==='templates'&&templateWorkspaceTab!=='shop')}
+function templateShopCaptionHtml(words,style,time){
+  const list=Array.isArray(words)?words:[],hold=Math.min(.2,Math.max(0,Number(style.captionHoldSeconds??.04))),index=list.findIndex(word=>time>=Number(word.start)&&time<Number(word.end)+hold);if(index<0)return'';
+  const mode=style.captionMode||'dynamic-stack',max=Math.max(1,Number(style.captionMaxWords||4)),groups=speechGroups(list,max,Number(style.captionClearPause||.42)),group=groups.find(item=>index>=item.startIndex&&index<=item.endIndex);if(!group)return'';
+  const visible=mode==='dynamic-stack'?list.slice(group.startIndex,index+1):list.slice(group.startIndex,group.endIndex+1);
+  return mode==='dynamic-stack'?visible.map((word,offset)=>`<span class="dc-caption-stack-line ${offset===visible.length-1?'active':''} ${isArabicWord(word.word)?'is-arabic':''}">${esc(word.word)}</span>`).join(''):visible.map((word,offset)=>`<span class="dc-caption-word ${group.startIndex+offset===index?'active':''} ${isArabicWord(word.word)?'is-arabic':''}">${esc(word.word)}</span>`).join(' ');
+}
+function openTemplateShopPreview(result,product){
+  $('#dcTemplatePreviewLayer')?.remove();
+  const style=result?.style||{},clip=result?.clip||{},source=clip.source||{},width=Math.max(1,Number(style.width||1080)),height=Math.max(1,Number(style.height||1920));
+  const media=source.kind==='video'?`<video id="dcTemplatePreviewMedia" src="${esc(authedUrl(source.url||''))}" playsinline preload="metadata" controls></video>`:`<img id="dcTemplatePreviewMedia" src="${esc(authedUrl(source.url||''))}" alt="${esc(clip.title||'Clip')} preview">`;
+  const layer=document.createElement('div');layer.id='dcTemplatePreviewLayer';layer.className='dc-template-preview-layer';
+  layer.innerHTML=`<section class="dc-template-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="dcTemplatePreviewTitle"><header><div><span>${ICON.style} Live style composition</span><h2 id="dcTemplatePreviewTitle">${esc(product?.name||result?.product?.name||'Template')} on “${esc(shortText(clip.title||'your clip',52))}”</h2><p>No tokens, no saved changes and no default change.</p></div><button type="button" id="dcTemplatePreviewClose" aria-label="Close preview">×</button></header><div class="dc-template-preview-body"><div class="dc-template-preview-stage"><div class="dc-template-preview-frame" data-fit="${esc(style.fitMode||'contain')}" style="aspect-ratio:${width}/${height};--preview-bg:${templateSafeColor(style.frameBackground,'#000000')}">${media}<div class="dc-template-preview-shade"></div><span class="dc-style-watermark" data-position="${esc(style.watermarkPosition||'top-center')}" style="color:${templateSafeColor(style.watermarkColor,'#FFFFFF')};opacity:${clamp(Number(style.watermarkOpacity||72),0,100)/100}">${esc(style.watermark||'')}</span><div class="dc-template-preview-caption ${esc(style.captionMode||'dynamic-stack')}" id="dcTemplatePreviewCaption" style="--dc-cap-highlight:${templateSafeColor(style.captionHighlight,'#D9B478')};left:${clamp(Number(style.captionPositionX??50),8,92)}%;top:${clamp(Number(style.captionPositionY??76),12,88)}%;font-family:${templateFontFamily(style.captionFont)};font-size:${clamp(Number(style.captionFontSize||82)/3.1,20,38)}px;font-weight:${clamp(Number(style.captionFontWeight||800),400,900)};line-height:${clamp(Number(style.captionLineHeight||.9),.65,1.4)};color:${templateSafeColor(style.captionPrimary)};-webkit-text-stroke:${clamp(Number(style.captionOutlineWidth||4)/3.2,0,3)}px ${templateSafeColor(style.captionOutline,'#09090A')};background:${templateRgba(style.captionBackground,style.captionBackgroundOpacity)}"></div>${style.brandLineEnabled?`<i class="dc-template-preview-brand-line" style="height:${clamp(Number(style.brandLineHeight||6)/3,1,8)}px;background:${templateSafeColor(style.brandLineColor,'#D9B478')}"></i>`:''}</div></div><aside><span class="dc-v7-preview-truth">Style preview</span><h3>What this confirms</h3><ul><li>Caption look, position and timing</li><li>Aspect ratio, crop mode and colour treatment</li><li>Your plan’s real watermark rules</li></ul><h3>What export finishes</h3><p>${esc((result?.limitations||[]).join(' ')||'Speaker tracking, installed fonts and encoding are finalised during export.')}</p><div><button class="dc-btn secondary" id="dcTemplatePreviewCancel">Close</button><button class="dc-btn" id="dcTemplatePreviewUse">${result?.product?.canApply?'Use this Template':'Open Template options'}</button></div></aside></div></section>`;
+  document.body.appendChild(layer);
+  const escape=event=>{if(event.key==='Escape')close()};
+  const close=()=>{const mediaEl=$('#dcTemplatePreviewMedia');if(mediaEl?.pause)mediaEl.pause();document.removeEventListener('keydown',escape);layer.remove()};
+  $('#dcTemplatePreviewClose').onclick=close;$('#dcTemplatePreviewCancel').onclick=close;layer.addEventListener('click',event=>{if(event.target===layer)close()});
+  $('#dcTemplatePreviewUse').onclick=()=>{close();const [label,action]=templateShopCta(normalizedTemplateShopProduct(templateShopProducts.find(item=>String(item.id)===String(product?.id))||product||{}));if(action==='preview')return;const card=$(`[data-shop-product="${CSS.escape(String(product?.id||''))}"]`),target=card?.querySelector(`[data-template-shop-action="${action}"]`);if(target)target.click();else notify(label)};
+  const mediaEl=$('#dcTemplatePreviewMedia'),caption=$('#dcTemplatePreviewCaption'),words=clip.words||[],sourceTime=source.timeBase==='source';
+  const paint=()=>{if(!caption)return;const raw=mediaEl?.tagName==='VIDEO'?Number(mediaEl.currentTime||0):0,local=Math.max(0,sourceTime?raw-Number(clip.startSec||0):raw);caption.innerHTML=templateShopCaptionHtml(words,style,local)||`<span>${esc(result?.product?.preview?.captionSample||'Style preview')}</span>`};
+  mediaEl?.addEventListener?.('timeupdate',paint);mediaEl?.addEventListener?.('loadedmetadata',()=>{if(mediaEl.tagName==='VIDEO'&&sourceTime&&Number(clip.startSec)>0){try{mediaEl.currentTime=Number(clip.startSec)}catch{}}paint()});paint();
+  document.addEventListener('keydown',escape);
+}
 
 function styleStudioLoad(template){
   styleStudio.draft=clone(template);styleStudio.baseId=template.id||'';
@@ -4005,6 +4214,7 @@ async function styleStudioCreate(){
 
 function renderTemplatesPage(){
   const panel=$('#view-templates'),d=data();if(!panel||!d)return;
+  if(templateWorkspaceTab==='shop'){renderTemplateShop(panel,d);return}
   const templates=d.templates||[];
   if(!templates.length){panel.innerHTML='<div class="dc-qc-empty">Default styles could not be loaded.</div>';return}
   const base=templates.find(t=>t.id===styleStudio.baseId)||d.selectedTemplate||templates[0];
@@ -4021,7 +4231,8 @@ function renderTemplatesPage(){
     ?`<div class="dc-style-panel-head"><button type="button" id="dcStyleBack" class="dc-icon-btn dc-svg" aria-label="Back to all settings">${ICON.back}</button><div><small>${esc(group[3])}</small><strong>${esc(group[1])}</strong></div></div><div class="dc-style-panel" id="dcStyleControls">${styleGroupControls(group[0])}</div>`
     :`<div class="dc-style-rail">${['Template','Style','Brand','Audio'].map(section=>`<small>${esc(section)}</small>${STYLE_GROUPS.filter(g=>g[3]===section).map(([id,label,icon])=>`<button type="button" data-style-group="${esc(id)}"><span>${ICON[icon]||ICON.style}</span><div><strong>${esc(label)}</strong><em>${esc(styleGroupSummary(id))}</em></div>${ICON.chevron}</button>`).join('')}`).join('')}</div>`;
 
-  panel.innerHTML=`<div class="dc-style-studio">
+  panel.innerHTML=`<div class="dc-style-studio dc-v7-templates">
+    <div class="dc-v7-template-tabs dc-v7-template-tabs-editor" role="tablist"><button type="button" class="is-active" data-template-tab="mine">My Templates</button><button type="button" data-template-tab="shop">Template Shop</button></div>
     <header class="dc-style-bar"><div class="dc-style-bar-title"><strong>Template editor</strong><span>Set the look once, then reuse it on any clip</span></div>
       <div class="dc-style-picker ${styleStudio.menuOpen?'is-open':''}"><small>Template</small><button type="button" id="dcStyleSwitch" class="dc-style-switch" aria-haspopup="true" aria-expanded="${styleStudio.menuOpen?'true':'false'}"><span>${esc(shortText(base.name||'Untitled',26))}${isDefault?' · default':''}</span>${ICON.chevron}</button>${styleStudio.menuOpen?`<div class="dc-style-menu" id="dcStyleMenu"><button type="button" class="dc-style-new" id="dcStyleNewMenu"><span>+</span>New template</button><div class="dc-style-menu-list">${templates.map(t=>styleTemplateCard(t,sourcePreview)).join('')}</div></div>`:''}</div>
       <div class="dc-style-bar-actions"><button type="button" class="dc-btn secondary dc-style-create" id="dcStyleNew">+ New</button>${isDefault?'<span class="dc-style-default-state">Default for new clips</span>':`<button type="button" class="dc-btn secondary" data-use-template="${esc(base.id)}">Set as default</button>`}<button type="button" class="dc-icon-btn dc-svg" id="dcStyleUndo" title="Undo" ${canUndo?'':'disabled'}>${ICON.undo}</button><button type="button" class="dc-icon-btn dc-svg" id="dcStyleRedo" title="Redo" ${canRedo?'':'disabled'}>${ICON.redo}</button><button type="button" class="dc-icon-btn dc-svg" id="dcStyleRevert" title="Discard changes" ${styleStudio.dirty?'':'disabled'}>${ICON.clock}</button><button class="dc-btn" id="dcStyleSave" ${styleStudio.dirty?'':'disabled'}>${styleStudio.dirty?'Save template':'Saved'}</button></div></header>
@@ -4031,6 +4242,7 @@ function renderTemplatesPage(){
   </div>`;
 
   $('#dcStyleSwitch')?.addEventListener('click',event=>{event.stopPropagation();styleStudio.menuOpen=!styleStudio.menuOpen;renderTemplatesPage()});
+  $$('[data-template-tab]',panel).forEach(button=>button.addEventListener('click',()=>{templateWorkspaceTab=button.dataset.templateTab;renderTemplatesPage()}));
   if(styleStudio.menuOpen){
     // Close on an outside click or Escape, the way every other menu here does.
     const dismiss=event=>{if(event.target.closest?.('.dc-style-picker'))return;styleStudio.menuOpen=false;document.removeEventListener('click',dismiss);renderTemplatesPage()};
@@ -4158,17 +4370,48 @@ async function selectStudioTemplate(id){if(!id)return notify('Choose a template 
 async function applyStudioTemplate(id){if(!id)return notify('Choose a template first','bad');if(!confirm('Apply this template to every existing clip that can be re-rendered? This queues new renders; already-posted files are not changed.'))return;try{const r=await callApi('/api/templates/apply-all',{method:'POST',body:JSON.stringify({templateId:id})});notify(`Queued ${r.queued||0} clips for template update`);await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
 async function duplicateStudioTemplate(id){const base=(DATA?.templates||[]).find(t=>t.id===id);try{const r=await callApi(`/api/templates/${encodeURIComponent(id)}/duplicate`,{method:'POST',body:JSON.stringify({name:`${base?.name||'Template'} Copy`,select:false})});notify('Custom template created without changing your default');await refreshData();if(r.template)styleStudioLoad(r.template);renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
 async function deleteStudioTemplate(id){if(!id)return;if(!confirm('Delete this custom template? Existing rendered videos remain unchanged.'))return;try{await callApi(`/api/templates/${encodeURIComponent(id)}`,{method:'DELETE'});notify('Custom template deleted');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
+function insightHookScore(clip){
+  const breakdown=clip?.scoreBreakdown||clip?.quality?.scoreBreakdown||{};
+  const value=breakdown.hook??breakdown.openingStrength??clip?.hookScore;
+  return Number.isFinite(Number(value))?clamp(Number(value),0,100):null;
+}
+function insightCreatedAt(clip){return Number(clip?.addedAt||clip?.postedAt||clip?.readyAt||clip?.scheduledAt||0)}
+function insightTrendMarkup(clips){
+  const ranked=[...clips].filter(clip=>Number.isFinite(Number(clip.score))).sort((a,b)=>insightCreatedAt(a)-insightCreatedAt(b));
+  if(!ranked.length)return `<div class="dc-insight-empty-chart"><span>${ICON.analytics}</span><strong>Your quality trend will appear here</strong><p>Generate clips to compare their workspace scores over time.</p></div>`;
+  const points=ranked.slice(-12),width=700,height=210,padX=24,padY=22,step=points.length>1?(width-padX*2)/(points.length-1):0;
+  const coords=points.map((clip,index)=>({clip,x:padX+index*step,y:height-padY-clamp(Number(clip.score||0),0,100)/100*(height-padY*2)}));
+  const polyline=coords.map(point=>`${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
+  const average=Math.round(points.reduce((sum,point)=>sum+Number(point.clip.score||0),0)/points.length);
+  const areaPath=`M ${coords[0].x} ${height-padY} L ${coords.map(point=>`${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' L ')} L ${coords.at(-1).x} ${height-padY} Z`;
+  return `<div class="dc-insight-chart-head"><div><strong>Workspace quality trend</strong><span>Latest ${points.length} scored clip${points.length===1?'':'s'} · not social view data</span></div><b>${average}<small>average</small></b></div><svg class="dc-insight-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Clip quality scores over time"><defs><linearGradient id="dcInsightFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e4ba68" stop-opacity=".28"/><stop offset="1" stop-color="#e4ba68" stop-opacity="0"/></linearGradient></defs><path d="${areaPath}" fill="url(#dcInsightFill)"/><polyline points="${polyline}" fill="none" stroke="#e4ba68" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${coords.map((point,index)=>`<circle cx="${point.x}" cy="${point.y}" r="${index===coords.length-1?6:4}" fill="#0c0d10" stroke="#f0c979" stroke-width="3"><title>${esc(shortText(point.clip.title||'Clip',48))}: ${Math.round(Number(point.clip.score||0))}/100</title></circle>`).join('')}</svg>`;
+}
+function insightTopClipRow(clip,index){
+  const hook=insightHookScore(clip),thumb=clip.thumbUrl?`<img src="${authedUrl(clip.thumbUrl)}" alt="">`:`<span>${ICON.play}</span>`;
+  return `<button class="dc-insight-top-row" type="button" data-edit-video-clip="${esc(clip.id)}"><i>${index+1}</i><span class="dc-insight-top-thumb">${thumb}</span><span><strong>${esc(shortText(clip.title||'Untitled clip',55))}</strong><small>${esc(labTopic(clip))}${hook!==null?` · Hook ${Math.round(hook)}`:''}</small></span><b>${Math.round(Number(clip.score||0))}<small>score</small></b>${ICON.chevron}</button>`;
+}
 function renderInsightsPage(){
   const panel=$('#view-insights'),d=data();if(!panel||!d)return;
-  const clips=d.clips||[], projects=d.projects||[];
-  const approved=clips.filter(c=>['approved','scheduled','publishing','posted'].includes(c.status)).length;
-  const waiting=clips.filter(c=>c.status==='waiting').length;
-  const avg=Math.round(clips.reduce((a,c)=>a+Number(c.score||0),0)/Math.max(1,clips.length));
-  const posted=clips.filter(c=>c.status==='posted').length;
-  const hookStrong=clips.filter(c=>Number(c.hookScore||c.score||0)>=85).length;
-  const failed=clips.filter(c=>String(c.status||'').includes('failed')).length + projects.filter(p=>String(p.status||'').includes('failed')).length;
-  const insightAction=clips.length?`<div class="dc-studio-actions"><button class="dc-btn" data-dc-nav="review">Review clips</button></div>`:`<div class="dc-studio-actions"><button class="dc-btn" data-dc-nav="home">Create clips</button></div>`;
-  panel.innerHTML=`<div class="dc-manage-page"><section class="dc-studio-hero"><div><span class="dc-manage-kicker">${ICON.analytics} Studio insights</span><h1>Clip quality before social analytics.</h1><p>Until TikTok and Instagram performance data is connected, this page focuses on the signals DeenClipped already knows: scores, approvals, failed jobs and publishing readiness.</p></div>${insightAction}</section><div class="dc-studio-strip"><div class="dc-studio-stat"><strong>${clips.length}</strong><span>clips generated</span></div><div class="dc-studio-stat"><strong>${avg}</strong><span>average score</span></div><div class="dc-studio-stat"><strong>${approved}</strong><span>approved / scheduled</span></div><div class="dc-studio-stat"><strong>${posted}</strong><span>posted clips</span></div></div><div class="dc-insight-grid"><section class="dc-insight-panel"><h2>Quality signals</h2>${qualityRow('Strong hooks',hookStrong,clips.length)}${qualityRow('Waiting review',waiting,clips.length)}${qualityRow('Approved flow',approved,clips.length)}${qualityRow('Needs attention',failed,Math.max(1,failed+clips.length))}</section><section class="dc-insight-panel"><h2>Best next actions</h2><div class="dc-studio-roadmap"><div class="dc-road-step"><span>${ICON.review}</span><div><strong>Approve the strongest clips</strong><em>${waiting} clips are waiting in Clip Review.</em></div></div><div class="dc-road-step"><span>${ICON.style}</span><div><strong>Keep one template live</strong><em>${esc(d.selectedTemplate?.name||'No template selected')}</em></div></div><div class="dc-road-step"><span>${ICON.social}</span><div><strong>Connect channels</strong><em>${connectedPlatformCount(d)} publishing destinations connected.</em></div></div></div></section></div></div>`;
+  const clips=d.clips||[],projects=d.projects||[];
+  const approvedOnly=clips.filter(c=>c.status==='approved').length,scheduled=clips.filter(c=>['scheduled','publishing'].includes(c.status)).length,waiting=clips.filter(c=>c.status==='waiting').length;
+  const posted=clips.filter(c=>c.status==='posted').length,avg=Math.round(clips.reduce((sum,c)=>sum+Number(c.score||0),0)/Math.max(1,clips.length));
+  const hooks=clips.map(insightHookScore).filter(value=>value!==null),strongHooks=hooks.filter(value=>value>=85).length;
+  const failedClips=clips.filter(c=>String(c.status||'').includes('failed')).length,failedProjects=projects.filter(p=>String(p.status||'').includes('failed')).length;
+  const top=[...clips].filter(c=>Number.isFinite(Number(c.score))).sort((a,b)=>Number(b.score||0)-Number(a.score||0)).slice(0,3);
+  const topics=new Map();clips.forEach(clip=>{const topic=labTopic(clip);topics.set(topic,(topics.get(topic)||0)+1)});
+  const themeRows=[...topics.entries()].sort((a,b)=>b[1]-a[1]).slice(0,4),largestTheme=Math.max(1,...themeRows.map(([,count])=>count));
+  const connected=connectedPlatformCount(d),attention=failedClips+failedProjects;
+  const next=waiting?{icon:ICON.review,title:`Review ${waiting} waiting clip${waiting===1?'':'s'}`,copy:'Approve the strongest grounded clips before choosing a posting slot.',action:'review',label:'Open Review'}
+    :attention?{icon:ICON.warning,title:`Resolve ${attention} failed item${attention===1?'':'s'}`,copy:'Open the affected project or clip and retry only after its error is clear.',action:'projects',label:'Open Projects'}
+    :!connected?{icon:ICON.social,title:'Connect your first publishing destination',copy:'Channel data is not connected yet, so this screen deliberately shows workspace signals only.',action:'publishing',label:'Open Channels'}
+    :{icon:ICON.lab,title:'Ask AI Director what to publish next',copy:'Use your ranked clips, grounded hooks and library themes to choose the next move.',action:'lab',label:'Open AI Director'};
+  panel.classList.add('dc-v7-insights');
+  panel.innerHTML=`<div class="dc-manage-page dc-insights-page"><section class="dc-v7-page-title"><div><h1>Insights</h1><p>Understand what makes your strongest clips work.</p></div><span class="dc-insight-source">${ICON.analytics}<b>Workspace signals</b><small>${connected?`${connected} publishing destination${connected===1?'':'s'} connected · social performance not imported`:'No social analytics connected'}</small></span></section>
+    <div class="dc-studio-strip"><div class="dc-studio-stat"><strong>${clips.length}</strong><span>clips generated</span></div><div class="dc-studio-stat"><strong>${avg}</strong><span>average quality score</span></div><div class="dc-studio-stat"><strong>${hooks.length?Math.round(strongHooks/hooks.length*100):0}%</strong><span>strong measured hooks</span></div><div class="dc-studio-stat"><strong>${posted}</strong><span>posted clips</span></div></div>
+    <div class="dc-insight-dashboard"><section class="dc-insight-panel dc-insight-trend">${insightTrendMarkup(clips)}</section><section class="dc-insight-panel dc-insight-ranked"><header><div><span>Ranked by workspace score</span><h2>Top clips</h2></div><button class="dc-text-action" data-dc-nav="review">View all →</button></header>${top.length?top.map(insightTopClipRow).join(''):`<div class="dc-insight-empty-small"><strong>No ranked clips yet</strong><span>Create clips to build this list.</span></div>`}</section>
+      <section class="dc-insight-panel dc-insight-themes"><header><div><span>Transcript themes</span><h2>Your content mix</h2></div><b>${themeRows.length} theme${themeRows.length===1?'':'s'}</b></header>${themeRows.length?themeRows.map(([topic,count])=>`<div><span>${esc(topic)}</span><i><em style="width:${Math.round(count/largestTheme*100)}%"></em></i><b>${count}</b></div>`).join(''):`<div class="dc-insight-empty-small"><strong>No themes yet</strong><span>Topics are derived only from your clip text.</span></div>`}<footer>Based on titles, descriptions and transcript wording—not audience demographics.</footer></section>
+      <section class="dc-insight-panel dc-insight-next"><span>${next.icon}</span><div><small>Recommended next</small><h2>${esc(next.title)}</h2><p>${esc(next.copy)}</p><button class="dc-btn" data-dc-nav="${esc(next.action)}">${esc(next.label)}</button></div></section></div>
+    <section class="dc-insight-health"><div><strong>Workflow health</strong><span>Clear lifecycle counts, kept separate from quality percentages.</span></div>${qualityRow('Waiting review',waiting,clips.length)}${qualityRow('Approved only',approvedOnly,clips.length)}${qualityRow('Scheduled / publishing',scheduled,clips.length)}${qualityRow('Failed clips',failedClips,clips.length)}${qualityRow('Failed projects',failedProjects,projects.length)}</section></div>`;
   requestAnimationFrame(()=>animatePanel(panel));
 }
 function qualityRow(label,value,total){const pct=Math.max(0,Math.min(100,Math.round(Number(value||0)/Math.max(1,Number(total||1))*100)));return `<div class="dc-quality-row"><span>${esc(label)}</span><div class="dc-quality-bar"><i style="width:${pct}%"></i></div><b>${pct}%</b></div>`}
@@ -4276,10 +4519,18 @@ function renderPublishingWorkspace(){
 }
 function renderConnections(){
   const panel=$('#view-publishing'),d=data();if(!panel||!d)return;
+  panel.classList.add('dc-v7-channels');
   const providers=['youtube','tiktok','instagram','facebook'].map(providerInfo);
   const connected=providers.filter(p=>p.connected).length, enabled=providers.filter(p=>p.enabled).length;
+  const automation=d.automationSettings||{},requiresManualReview=Boolean(automation.reviewBeforePosting);
+  const approvalCopy=requiresManualReview
+    ?'Every clip stays in Review until you approve it. Connected destinations receive only your approved or scheduled work.'
+    :automation.enabled
+      ?'Nothing publishes outside your saved approval rules. Verified clips that clear your score gates may move automatically; safety-flagged clips always wait for review.'
+      :'Automation is paused. Clips remain in Review until you approve and schedule them.';
+  const approvalMode=requiresManualReview||!automation.enabled?'Manual review':`Quality gates ${Number(automation.minimumScore||80)}+`;
   const destinationSettings=connected?`<section class="dc-settings-section blue"><header><span>${ICON.check}</span><div><small>Active</small><h2>Where approved clips go</h2></div><b>${enabled} of ${connected} on</b></header><div class="dc-channel-destinations">${providers.filter(p=>p.connected).map(p=>destinationControl(p)).join('')}<button class="dc-btn" id="dcSavePublishing">Save active destinations</button></div></section>`:'';
-  panel.innerHTML=`<div class="dc-settings-hub dc-channels-page"><section class="dc-settings-command"><div><span class="dc-settings-kicker">${ICON.social} Publishing hub</span><h1>Your channels, one approval flow.</h1><p>Connect each destination once. Nothing leaves the studio until you approve it.</p></div><div class="dc-settings-command-status"><span class="${connected?'on':''}"><i>${ICON.social}</i><b>${connected} of 4</b><em>connected</em></span><span class="${enabled?'on':''}"><i>${ICON.check}</i><b>${enabled} active</b><em>destinations</em></span><span class="${d.directPublishingEnabled?'on':''}"><i>${ICON.publish}</i><b>${d.directPublishingEnabled?'Ready':'Review'}</b><em>posting mode</em></span></div></section>
+  panel.innerHTML=`<div class="dc-settings-hub dc-channels-page"><section class="dc-settings-command"><div><span class="dc-settings-kicker">${ICON.social} Publishing hub</span><h1>Your channels, one approval flow.</h1><p>${esc(approvalCopy)}</p></div><div class="dc-settings-command-status"><span class="${connected?'on':''}"><i>${ICON.social}</i><b>${connected} of 4</b><em>connected</em></span><span class="${enabled?'on':''}"><i>${ICON.check}</i><b>${enabled} active</b><em>destinations</em></span><span class="${automation.enabled?'on':''}"><i>${ICON.publish}</i><b>${esc(approvalMode)}</b><em>approval mode</em></span></div></section>
     <section class="dc-settings-section"><header><span>${ICON.social}</span><div><small>Destinations</small><h2>Channels</h2></div><b>${connected} connected</b></header><div class="dc-channel-grid">${providers.map(connectionCard).join('')}</div></section>
     ${destinationSettings}</div>`;
   if($('#dcSavePublishing'))$('#dcSavePublishing').onclick=savePublishingRules;
@@ -4329,6 +4580,7 @@ async function savePublishingRules(){
 }
 function renderAudioLibrary(){
   const panel=$('#view-music'),d=data();if(!panel||!d)return;
+  panel.classList.add('dc-v7-audio');
   const tracks=d.tracks||[], settings=d.musicSettings||{};
   panel.innerHTML=`<div class="dc-manage-page"><section class="dc-manage-hero"><div><span class="dc-manage-kicker">${ICON.music} Audio library</span><h1>Clean background audio for every render.</h1><p>Upload nasheed tracks, preview them, remove old ones and keep the mix low under the speaker.</p></div><div class="dc-manage-metrics"><span><b>${tracks.length}</b><em>tracks</em></span><span><b>${settings.volumePercent||13}%</b><em>volume</em></span><span><b>${settings.shuffle!==false?'On':'Off'}</b><em>shuffle</em></span></div></section><div class="dc-settings-grid"><section class="dc-settings-panel"><h2>Upload nasheed</h2><p>Add a clean MP3, M4A, WAV or OGG track. It can rotate through new renders.</p><div class="dc-upload-zone"><input type="file" id="dcMusicFile" accept="audio/*"><button class="dc-btn" id="dcUploadMusic">Upload track</button></div></section><section class="dc-settings-panel"><h2>Global audio level</h2><p>Keep this low so speech stays clear.</p><div class="dc-settings-form"><label class="wide">Music volume %<input type="number" min="1" max="50" id="dcMusicVolume" value="${esc(settings.volumePercent||13)}"></label><button class="dc-btn wide" id="dcSaveMusicSettings">Save audio settings</button></div></section></div><div class="dc-manage-grid">${tracks.length?tracks.map(trackCard).join(''):`<div class="dc-review-empty-pro"><div><div class="dc-empty-icon">${ICON.music}</div><strong>No audio tracks yet</strong><p>Add a nasheed track to give rendered clips consistent background audio.</p></div></div>`}</div></div>`;
   $('#dcUploadMusic').onclick=uploadTrack;
@@ -4351,7 +4603,7 @@ function renderSettingsPage(){
   const auto=d.automationSettings||{},clip=d.clipSettings||{};
   const alerts=notificationPrefs(),permission=notificationPermissionCopy();
   const clipCount=Number(clip.clipsPerVideo||8),minSeconds=Number(clip.clipMinSeconds||30),maxSeconds=Number(clip.clipMaxSeconds||60);
-  const minimumScore=Number(auto.minimumScore||80),minimumQuality=Number(auto.minimumQuality||72),maxPerProject=Number(auto.maxPerProject||4),reviewRequired=auto.skipReviewRequired===false;
+  const minimumScore=Number(auto.minimumScore||80),minimumQuality=Number(auto.minimumQuality||72),maxPerProject=Number(auto.maxPerProject||4),reviewRequired=Boolean(auto.reviewBeforePosting);
   const alertToggle=(id,title,copy,checked)=>settingsToggleControl(id,title,copy,checked,'blue');
   const automationCopy=auto.enabled?`Clips need at least ${minimumScore}/100 score and ${minimumQuality}/100 quality. ${reviewRequired?'You still approve every post.':'Passing clips can move directly into the next slot.'}`:'Every generated clip waits for you in Review.';
   panel.innerHTML=`<div class="dc-settings-hub">
@@ -4373,7 +4625,7 @@ function renderSettingsPage(){
   requestAnimationFrame(()=>animatePanel(panel));
 }
 async function saveClipSettingsPanel(){try{await callApi('/api/clip-settings',{method:'POST',body:JSON.stringify({clipsPerVideo:Number($('#dcSetClipCount')?.value||8),clipMinSeconds:Number($('#dcSetMinSec')?.value||30),clipMaxSeconds:Number($('#dcSetMaxSec')?.value||60)})});notify('Generation settings saved');await refreshData();renderSettingsPage()}catch(e){notify(e.message,'bad')}}
-async function saveAutomationPanel(){try{await callApi('/api/automation-settings',{method:'POST',body:JSON.stringify({enabled:$('#dcAutoEnabled')?.checked,minimumScore:Number($('#dcAutoScore')?.value||80),minimumQuality:Number($('#dcAutoQuality')?.value||72),maxPerProject:Number($('#dcAutoMax')?.value||4),skipReviewRequired:!$('#dcReviewRequired')?.checked})});notify('Automation saved');await refreshData();renderSettingsPage()}catch(e){notify(e.message,'bad')}}
+async function saveAutomationPanel(){try{await callApi('/api/automation-settings',{method:'POST',body:JSON.stringify({enabled:$('#dcAutoEnabled')?.checked,minimumScore:Number($('#dcAutoScore')?.value||80),minimumQuality:Number($('#dcAutoQuality')?.value||72),maxPerProject:Number($('#dcAutoMax')?.value||4),reviewBeforePosting:Boolean($('#dcReviewRequired')?.checked)})});notify('Automation saved');await refreshData();renderSettingsPage()}catch(e){notify(e.message,'bad')}}
 function bindNotificationSettings(){
   const fields={dcAlertComplete:'completed',dcAlertPublishing:'publishing',dcAlertFailures:'failures',dcAlertStarted:'started',dcAlertSounds:'sounds',dcAlertRespectMedia:'respectMedia'};
   Object.entries(fields).forEach(([id,key])=>$('#'+id)?.addEventListener('change',event=>{const checked=event.currentTarget.checked;saveNotificationPrefs({[key]:checked});if(key==='sounds'&&checked)playNotificationSound('test',true)}));
@@ -4404,7 +4656,7 @@ function billingInfo(){return data()?.billing || {current:{plan:'free',remaining
 function clientExperience(){
   const bill=billingInfo(),cur=bill.current||{},provided=bill.experience||cur.experience;
   if(provided?.id)return provided;
-  const plan=String(cur.plan||'free'),premium=Boolean(cur.unlimited||bill.features?.premium||['weekly','monthly','yearly'].includes(plan));
+  const premium=Boolean(cur.unlimited||bill.features?.premium);
   const empty=!cur.unlimited&&Number(cur.remaining||0)<=0,expired=Boolean(cur.freeTier?.expired),pastDue=String(cur.status||'').toLowerCase()==='past_due';
   const id=cur.unlimited?'owner':pastDue?'premium_past_due':premium&&cur.trial?.active?'premium_trial':premium&&cur.cancelAtPeriodEnd?'premium_canceling':premium&&empty?'premium_empty':premium?'premium_active':expired?'free_expired':empty?'free_empty':'free_trial';
   const labels={owner:['Owner studio','Unlimited account access'],free_trial:['Free studio trial','Explore with a DeenClipped watermark'],free_empty:['Free tokens used','Browse your work or choose Premium'],free_expired:['Free trial ended','Browse your work or choose Premium'],premium_trial:['Premium trial','Every creator tool is unlocked'],premium_active:['Premium studio','Full creator workflow unlocked'],premium_empty:['Premium · add tokens','Processing and posting are paused'],premium_canceling:['Premium ending soon','Access continues until the period ends'],premium_past_due:['Payment needs attention','Update billing to resume processing']};
@@ -4457,7 +4709,7 @@ async function startSubscriptionCheckout(plan,button){
 async function startTopupCheckout(packageId,button){
   if(!packageId||button?.disabled)return;
   const original=button?.textContent||'Buy tokens';
-  try{if(button){button.disabled=true;button.textContent='Opening secure checkout…'}const res=await callApi('/api/billing/topup',{method:'POST',body:JSON.stringify({package:packageId})});if(res.url)location.href=res.url;else throw new Error('Stripe did not return a checkout URL.');}
+  try{if(button){button.disabled=true;button.textContent='Opening secure checkout…'}const res=await callApi('/api/billing/topup-checkout',{method:'POST',body:JSON.stringify({package:packageId})});if(res.url)location.href=res.url;else throw new Error('Stripe did not return a checkout URL.');}
   catch(e){notify(e.message,'bad');if(button){button.disabled=false;button.textContent=original}}
 }
 async function openBillingPortal(button){
@@ -4467,9 +4719,13 @@ async function openBillingPortal(button){
 }
 function renderSubscriptionPage(){
   const panel=$('#view-subscription'),d=data();if(!panel||!d)return;
+  panel.classList.add('dc-v7-subscription');
   const bill=billingInfo(),cur=bill.current||{},plans=bill.plans||{},topups=Object.values(bill.topups||{}),events=bill.recentEvents||[];
   const currentPlan=plans[cur.plan]||{name:cur.unlimited?'Owner':'Free',interval:cur.unlimited?'account':'one-time',tokens:cur.allowance||0,features:[]};
   const status=subscriptionStatus(cur),remaining=cur.unlimited?'∞':Math.max(0,Math.round(Number(cur.remaining||0))),allowance=cur.unlimited?'Unlimited':Math.max(0,Math.round(Number(cur.allowance||0)));
+  const topupUnavailable=cur.unlimited||String(cur.status||'').toLowerCase()==='past_due'||Boolean(cur.freeTier?.expired);
+  const canBuyTopups=Boolean(bill.canBuyTopups??bill.topupAvailable??(!topupUnavailable&&bill.topupCheckoutConfigured));
+  const topupDisabledCopy=cur.unlimited?'Unlimited already':String(cur.status||'').toLowerCase()==='past_due'?'Update billing first':cur.freeTier?.expired?'Choose a plan first':bill.topupBlockMessage||'Unavailable';
   const used=Math.max(0,Math.round(Number(cur.used||0))),reserved=Math.max(0,Math.round(Number(cur.reserved||0))),bonus=Math.max(0,Math.round(Number(cur.bonusTokens||0)));
   const rate=Math.max(.1,Number(bill.tokenRatePerMinute||1));
   const pct=cur.unlimited?100:Number(cur.allowance)>0?clamp(((Number(cur.used||0)+Number(cur.reserved||0))/Number(cur.allowance))*100,0,100):0;
@@ -4487,7 +4743,7 @@ function renderSubscriptionPage(){
     const added=event.type==='tokens_added';const amount=Math.round(Number(event.amount||0));
     return `<div class="dc-sub-event"><span class="dc-sub-event-icon ${added?'added':'used'}">${added?'+':'−'}</span><div><strong>${esc(event.message||event.reason||'Billing activity')}</strong><small>${esc(subscriptionDate(event.createdAt,true))}${event.remaining!==undefined?` · ${esc(Math.round(Number(event.remaining||0)))} tokens left`:''}</small></div><b class="${added?'added':''}">${added?'+':'−'}${esc(amount)}</b></div>`;
   }).join('');
-  const topupCards=topups.map(pack=>{const minutes=Math.max(1,Math.floor(Number(pack.tokens||0)/rate));return `<article class="dc-sub-topup ${pack.id==='boost300'?'featured':''}"><div class="dc-sub-topup-head"><span>${esc(pack.badge||'One-time pack')}</span>${pack.id==='boost300'?'<b>Most popular</b>':''}</div><div class="dc-sub-topup-amount"><strong>${esc(pack.tokens||0)}</strong><span>tokens</span></div><h3>${esc(pack.name||'Token top-up')}</h3><p>${esc(pack.description||'One-time tokens for your wallet.')}</p><div class="dc-sub-topup-meta"><span>${ICON.scissors} About ${esc(minutes)} source minutes</span><b>${esc(pack.priceLabel||'Price at checkout')}</b></div><button class="dc-btn ${pack.id==='boost300'?'':'secondary'}" data-sub-topup="${esc(pack.id)}" ${pack.enabled?'':'disabled'}>${pack.enabled?'Add to wallet':'Coming soon'}</button></article>`}).join('');
+  const topupCards=topups.map(pack=>{const minutes=Math.max(1,Math.floor(Number(pack.tokens||0)/rate)),available=Boolean(pack.canPurchase??(pack.enabled&&canBuyTopups));return `<article class="dc-sub-topup ${pack.id==='boost300'?'featured':''} ${available?'':'is-disabled'}"><div class="dc-sub-topup-head"><span>${esc(pack.badge||'One-time pack')}</span>${pack.id==='boost300'?'<b>Most popular</b>':''}</div><div class="dc-sub-topup-amount"><strong>${esc(pack.tokens||0)}</strong><span>tokens</span></div><h3>${esc(pack.name||'Token top-up')}</h3><p>${esc(pack.description||'One-time tokens for your wallet.')}</p><div class="dc-sub-topup-meta"><span>${ICON.scissors} About ${esc(minutes)} source minutes</span><b>${esc(pack.priceLabel||'Price at checkout')}</b></div><button class="dc-btn ${pack.id==='boost300'?'':'secondary'}" data-sub-topup="${esc(pack.id)}" ${available?'':'disabled'}>${available?'Add to wallet':pack.enabled?esc(topupDisabledCopy):'Coming soon'}</button></article>`}).join('');
   panel.innerHTML=`<div class="dc-subscription-page">
     <section class="dc-sub-command"><div><span class="dc-sub-kicker">${ICON.billing} Subscription centre</span><h1>One place for your plan, wallet and payments.</h1><p>Understand exactly what you have, what you have used and what happens next. Stripe securely handles payment details outside DeenClipped.</p></div><nav class="dc-sub-jump" aria-label="Subscription sections"><button class="is-active" data-sub-jump="dcSubOverview"><span>${ICON.tokens}</span><strong>Overview</strong><small>Plan & usage</small></button><button data-sub-jump="dcSubTopups"><span>${ICON.sparkles}</span><strong>Token shop</strong><small>One-time packs</small></button><button data-sub-jump="dcSubActivity"><span>${ICON.clock}</span><strong>Activity</strong><small>Wallet history</small></button></nav></section>
     <div class="dc-sub-layout" id="dcSubOverview">
@@ -4496,7 +4752,7 @@ function renderSubscriptionPage(){
         <section class="dc-sub-benefits"><div class="dc-sub-section-title"><div><span>Included with ${esc(currentPlan.name||cur.plan||'your plan')}</span><h2>Your unlocked workspace</h2><p>These features are available to this account right now.</p></div><b>${uniqueFeatures.length} included</b></div><div class="dc-sub-feature-list">${uniqueFeatures.map((feature,index)=>`<div><span>${ICON.check}</span><p><strong>${esc(feature)}</strong><small>${index===0?'Ready across exports and downloads.':'Available throughout your workspace.'}</small></p></div>`).join('')}</div></section>
       </main>
       <aside class="dc-sub-sidebar">
-        <section class="dc-sub-card dc-sub-account-card"><div class="dc-sub-card-head"><div><span>Account access</span><h2>Billing & payment</h2></div><span class="dc-secure-chip">${cur.unlimited?'Owner':'Private'}</span></div><div class="dc-sub-identity"><span>${String(email).slice(0,1).toUpperCase()}</span><div><strong>${esc(email)}</strong><small>${esc(interval)}</small></div></div><div class="dc-sub-payment-rows"><div><span>${esc(periodLabel)}</span><b>${esc(periodValue)}</b></div><div><span>Plan price</span><b>${esc(cur.unlimited?'Included':currentPlan.priceLabel||currentPlan.name||'Free')}</b></div><div><span>Payment</span><b>${cur.unlimited?'Not required':cur.stripeCustomerId?'Stripe secured':'Not added yet'}</b></div></div><button class="dc-btn wide secondary" id="dcSubPortal" ${cur.stripeCustomerId&&bill.portalConfigured&&!cur.unlimited?'':'disabled'}>${cur.unlimited?'No billing required':cur.stripeCustomerId?'Open billing & invoices':'No payment profile yet'}</button>${cur.cancelAtPeriodEnd?'<p class="dc-sub-cancel-note">Your plan is scheduled to end. Open billing before the access date if you want to keep it.</p>':'<p class="dc-sub-security">${ICON.brand} Complete card details are never stored by DeenClipped.</p>'}</section>
+        <section class="dc-sub-card dc-sub-account-card"><div class="dc-sub-card-head"><div><span>Account access</span><h2>Billing & payment</h2></div><span class="dc-secure-chip">${cur.unlimited?'Owner':'Private'}</span></div><div class="dc-sub-identity"><span>${String(email).slice(0,1).toUpperCase()}</span><div><strong>${esc(email)}</strong><small>${esc(interval)}</small></div></div><div class="dc-sub-payment-rows"><div><span>${esc(periodLabel)}</span><b>${esc(periodValue)}</b></div><div><span>Plan price</span><b>${esc(cur.unlimited?'Included':currentPlan.priceLabel||currentPlan.name||'Free')}</b></div><div><span>Payment</span><b>${cur.unlimited?'Not required':cur.stripeCustomerId?'Stripe secured':'Not added yet'}</b></div></div><button class="dc-btn wide secondary" id="dcSubPortal" ${cur.stripeCustomerId&&bill.portalConfigured&&!cur.unlimited?'':'disabled'}>${cur.unlimited?'No billing required':cur.stripeCustomerId?'Open billing & invoices':'No payment profile yet'}</button>${cur.cancelAtPeriodEnd?'<p class="dc-sub-cancel-note">Your plan is scheduled to end. Open billing before the access date if you want to keep it.</p>':`<p class="dc-sub-security">${ICON.brand} Complete card details are never stored by DeenClipped.</p>`}</section>
         <section class="dc-sub-help-card"><span>${ICON.sparkles}</span><div><strong>Need more room, not a new plan?</strong><p>Top-ups are one-time purchases. They stay in your wallet when your subscription renews.</p></div><button id="dcSubJumpTopups" ${cur.unlimited?'disabled':''}>${cur.unlimited?'Unlimited already':'Browse token packs'} ${ICON.chevron}</button></section>
       </aside>
     </div>
@@ -4966,6 +5222,7 @@ function adminServices(){
 
 function renderAdminPage(){
   const panel=$('#view-admin');if(!panel)return;
+  panel.classList.add('dc-v7-admin');
   if(!isOperator()){panel.innerHTML=`<div class="dc-empty v3"><div><div class="dc-empty-icon">${ICON.settings}</div><strong>Not available</strong></div></div>`;return}
   if(!adminOps&&!adminOpsError){
     panel.innerHTML=`<div class="dc-manage-page"><section class="dc-studio-hero"><div><span class="dc-manage-kicker">${ICON.analytics} Admin console</span><h1>Loading operations data…</h1><p>Reading storage totals, integration status and subscription records.</p></div></section></div>`;
@@ -5194,6 +5451,26 @@ body.dc-app .dc-billing-card{width:min(1320px,calc(100vw - 30px));max-height:cal
 `;
 try{const s=document.createElement('style');s.textContent=DC_ADMIN_CSS+DC_PRODUCT_CSS;document.head.append(s);}catch{}
 
-function boot(){injectShell();setTimeout(()=>{go('home');try{if(!seenGet('guided_demo','complete')){const start=()=>{if($('#app')&&!$('#app').classList.contains('hide')&&$('#view-home'))openGuidedTour(0);else setTimeout(start,400)};setTimeout(start,700)}}catch{}},80);setInterval(sync,900)}
+function v7InitialRoute(){try{const value=new URLSearchParams(location.search).get('route');return CUSTOM.has(value)&&value!=='editor'?value:'home'}catch{return'home'}}
+async function confirmTopupReturn(sessionId,attempt=0){
+  await refreshData();
+  const events=billingInfo().recentEvents||[];
+  const confirmed=events.find(event=>event.type==='tokens_added'&&(!sessionId||String(event.meta?.sessionId||'')===String(sessionId)));
+  if(confirmed){renderCurrent();updateTokenPill();notify(confirmed.message||'Tokens were added to your wallet.');return}
+  if(attempt<4){setTimeout(()=>confirmTopupReturn(sessionId,attempt+1),900+attempt*650);return}
+  renderCurrent();updateTokenPill();notify('Payment returned successfully. Your wallet will refresh when Stripe confirms the top-up.','good');
+}
+function handleV7Return(){
+  let query;try{query=new URLSearchParams(location.search)}catch{return}
+  const purchase=query.get('templatePurchase'),billing=query.get('billing'),sessionId=query.get('session_id')||'';
+  if(purchase){
+    templateWorkspaceTab=purchase==='success'?'mine':'shop';syncTemplateRouteMode();
+    if(currentView==='templates')renderTemplatesPage();
+    setTimeout(async()=>{if(purchase==='success'){await refreshData();await loadTemplateShop(true);renderTemplatesPage();notify('Template purchase confirmed. It is now in My Templates.')}else notify('Template checkout was cancelled. Nothing was charged.','bad')},260);
+  }else if(billing==='topup-success')setTimeout(()=>confirmTopupReturn(sessionId),240);
+  else if(billing==='success')setTimeout(async()=>{await refreshData();renderCurrent();updateTokenPill();notify('Your subscription is active.')},240);
+  if(purchase||billing){query.delete('templatePurchase');query.delete('billing');query.delete('session_id');const rest=query.toString();history.replaceState({},'',`${location.pathname}${rest?`?${rest}`:''}`)}
+}
+function boot(){injectShell();setTimeout(()=>{const initial=v7InitialRoute();go(initial);handleV7Return();try{if(initial==='home'&&!seenGet('guided_demo','complete')){const start=()=>{if($('#app')&&!$('#app').classList.contains('hide')&&$('#view-home'))openGuidedTour(0);else setTimeout(start,400)};setTimeout(start,700)}}catch{}},80);setInterval(sync,900)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
