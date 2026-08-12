@@ -2873,30 +2873,45 @@ function bindVideo(clip){
   const baked=!editorHasCleanSource(clip);
   document.body.classList.toggle('dc-editor-baked-preview',baked);
   applyMediaTimebase(clip,baked);
-  // A missing source does not fail fast. The browser retries and only gives
-  // up after many seconds, and the editor shows a black canvas for that whole
-  // time before `onerror` fires and the export is swapped in. Waiting on the
-  // network stack's own patience is the black screen users complain about.
+  // Waiting for a clean plate used to show a black canvas, so a 2.5s watchdog
+  // was added to give up early and swap in the export. Measured against the
+  // real thing, that bound was the bug: the clean plate is a full lecture in
+  // object storage behind a redirect, and metadata arrives at 2487ms, 2514ms,
+  // 2571ms for three clips of the same project. The cutoff sat *inside* the
+  // spread, so whether a clip fell back was a coin flip on every page load —
+  // and falling back means showing the captioned export, which is where the
+  // duplicate captions came from. An unpredictable editor, from one constant.
   //
-  // So put a bound on it: if metadata has not arrived by SOURCE_TIMEOUT_MS,
-  // take the same path `onerror` would have taken. Cleared as soon as the
-  // video reports it loaded, so a slow-but-working source is never cut off
-  // mid-flight.
-  const SOURCE_TIMEOUT_MS=2500;
+  // The black screen was a real complaint, but the answer to "nothing is on
+  // screen yet" is to say so, not to abandon a source that was about to
+  // arrive. So: show a loading state immediately, and keep the bound only as a
+  // genuine backstop, far outside any plausible load time.
+  const SOURCE_TIMEOUT_MS=20000;
   let sourceWatchdog=null;
+  const setLoading=on=>{
+    $('#dcVideoCanvas')?.classList.toggle('is-source-loading',on);
+    if(on){const s=$('#dcCaptionStatus');if(s)s.textContent='Loading the original footage…';}
+  };
   const initialise=()=>{
-    clearTimeout(sourceWatchdog);
-    if(!editor.sourceFallback){try{video.currentTime=start;if(bg)bg.currentTime=start}catch{}}
+    clearTimeout(sourceWatchdog);setLoading(false);
+    // editor.sourceBase, not a local: it is 0 for an export and clip.startSec
+    // for a clean plate, and this seek is the only thing that puts a lecture
+    // preview on the clip instead of the top of the file. It previously read a
+    // variable that no longer existed, inside a try/catch that swallowed the
+    // ReferenceError, so the seek silently never happened.
+    if(!editor.sourceFallback){try{video.currentTime=editor.sourceBase;if(bg)bg.currentTime=editor.sourceBase}catch{}}
     renderTimeline();updateCaptionAtTime(0);applyFrameAtTime(0);
   };
   video.onloadedmetadata=initialise;
+  if(!baked)setLoading(true);
   sourceWatchdog=setTimeout(()=>{
-    // readyState 0 means not even metadata arrived, so there is nothing to
-    // wait for that has not already had its chance.
+    // readyState 0 means not one byte of metadata arrived in twenty seconds,
+    // which is a dead source rather than a slow one.
     if(video.readyState===0)video.onerror?.();
   },SOURCE_TIMEOUT_MS);
   video.onerror=()=>{
     if(editor.sourceFallback)return;
+    clearTimeout(sourceWatchdog);setLoading(false);
     editor.sourceFallback=true;video.pause();if(bg)bg.pause();
     // cleanSource is a claim, not a guarantee. The server can only check that a
     // storage key is well-formed and that storage is configured — it cannot

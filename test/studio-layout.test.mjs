@@ -171,22 +171,60 @@ test('playback does not repeat work on every frame', () => {
     'only the block that changed should be touched');
   assert.match(body, /activeCaptionBlock/, 'the active block should be remembered between frames');
   assert.match(body, /isConnected/, 'a re-rendered timeline must invalidate the cached block');
-});test('the caption box is never hidden, in any state', () => {
-  // Broken twice: once when the baked-preview rule was written, and again
-  // when a revert restored it together with the test meant to prevent it.
-  // This asserts the invariant across the whole stylesheet rather than one
-  // rule, so it cannot come back through another path.
-  // Comments are stripped first: the explanation above these rules names the
-  // very declarations being searched for, and would match itself.
+});test('the caption box is hidden only where the edit could never be exported', () => {
+  // Third revision of this rule, so the evidence is written down rather than
+  // re-argued.
+  //
+  // The previous version asserted the box is never hidden in ANY state. Its
+  // reasoning was sound given what was known: a clip with no clean plate was
+  // believed to be the common case, so hiding the box would have removed
+  // caption positioning from most of the library.
+  //
+  // Measured against production on 12 Aug, that premise was false. Clips were
+  // not reaching the baked path because their sources were missing; they were
+  // reaching it because a 2.5s watchdog gave up on healthy sources. The clean
+  // plate is a full lecture in object storage behind a redirect, and metadata
+  // arrived at 2487ms, 2514ms and 2571ms for three clips of one project. The
+  // cutoff sat inside that spread, so the fallback fired at random.
+  //
+  // With the bound corrected the baked path is rare and genuinely terminal:
+  // the export has captions in its pixels and no footage survives to
+  // re-render from, so a draggable box there is a control that cannot act.
+  //
+  // Both concerns are therefore live, and this test holds both: the box must
+  // be hidden in the baked state, and must not be hidden anywhere else.
   const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
   const blocked = /display:\s*none|visibility:\s*hidden|pointer-events:\s*none/;
-  const offenders = (selector) => (bare.match(new RegExp(`[^{}]*${selector}[^{]*\\{[^}]*\\}`, 'g')) || [])
-    .filter(rule => !rule.slice(0, rule.indexOf('{')).includes('::'))
+  const rulesFor = (selector) => (bare.match(new RegExp(`[^{}]*${selector}[^{]*\\{[^}]*\\}`, 'g')) || [])
+    .filter(rule => !rule.slice(0, rule.indexOf('{')).includes('::'));
+  const hiding = (selector) => rulesFor(selector)
     .filter(rule => blocked.test(rule.slice(rule.indexOf('{'))))
-    .map(rule => rule.trim().slice(0, 80));
+    .map(rule => rule.slice(0, rule.indexOf('{')).trim());
 
-  assert.deepEqual(offenders('#dcCaptionOverlay'), [], 'a rule hides or disables the caption box');
-  assert.deepEqual(offenders('#dcResizeHandle'), [], 'a rule disables the resize handle');
+  const overlay = hiding('#dcCaptionOverlay');
+  assert.deepEqual(overlay, ['body.dc-editor-baked-preview #dcCaptionOverlay'],
+    'the box may only be hidden by the baked-preview state — and must be hidden there');
+
+  // The resize handle belongs to the video layer, which is editable in every
+  // state, so it has no equivalent exception.
+  assert.deepEqual(hiding('#dcResizeHandle'), [], 'a rule disables the resize handle');
+});
+
+test('the clean-source wait is not tight enough to fire on a healthy source', () => {
+  // The constant that made the editor unpredictable. Measured load times for
+  // the clean plate were 2487/2514/2571ms; the bound was 2500ms. Anything in
+  // that neighbourhood turns a working source into a coin flip, and losing
+  // the flip means the captioned export is shown with a live caption box on
+  // top of it.
+  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
+  const match = source.match(/const SOURCE_TIMEOUT_MS=(\d+);/);
+  assert.ok(match, 'the source timeout must stay a named constant');
+  assert.ok(Number(match[1]) >= 15000,
+    `the wait must be a backstop, not a race: got ${match[1]}ms against ~2.5s real load times`);
+
+  // And the wait itself has to be visible, or the bound gets tightened again
+  // to paper over a black canvas.
+  assert.match(source, /is-source-loading/, 'waiting must show a loading state');
 });
 
 test('the activity dock clips its contents to its own rounded corners', () => {
@@ -335,25 +373,58 @@ test('playback does not repeat work on every frame', () => {
   assert.match(body, /isConnected/, 'a re-rendered timeline must invalidate the cached block');
 });
 
-test('a missing clean source does not black-screen while the browser times out', () => {
+test('waiting for the clean source is explained, not raced', () => {
+  // Rewritten 12 Aug. The original concern — a black canvas while the browser
+  // works through its own retries — was real and is kept below. Its remedy was
+  // not: bounding the wait at 5s or less put the cutoff inside the measured
+  // load spread (2487/2514/2571ms), so healthy sources were abandoned at
+  // random and the captioned export was shown in their place.
+  //
+  // Two mechanisms, one for each half of the problem. A loading state answers
+  // "why is nothing on screen", immediately and for as long as it takes. The
+  // timer stays only as a backstop for a source that never arrives at all,
+  // which is why it now sits far outside any plausible load time.
   const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
   const start = source.indexOf('function bindVideo(clip)');
   const body = source.slice(start, source.indexOf('video.ontimeupdate', start));
 
-  // A missing file does not fail fast; the browser retries for many seconds
-  // and the canvas stays black until onerror finally fires.
-  assert.match(body, /SOURCE_TIMEOUT_MS\s*=\s*(\d+)/, 'the wait must be bounded');
-  const ms = Number(/SOURCE_TIMEOUT_MS\s*=\s*(\d+)/.exec(body)[1]);
-  assert.ok(ms > 0 && ms <= 5000, `${ms}ms is too long to stare at a black canvas`);
+  const ms = Number(/SOURCE_TIMEOUT_MS\s*=\s*(\d+)/.exec(body)?.[1]);
+  assert.ok(Number.isFinite(ms), 'the wait must stay bounded by a named constant');
+  assert.ok(ms >= 15000, `${ms}ms races a real clean-plate load; it must be a backstop`);
 
-  assert.match(body, /setTimeout\(/, 'the bound needs a timer');
+  assert.match(body, /setTimeout\(/, 'the backstop needs a timer');
   assert.match(body, /video\.readyState===0/, 'only give up when nothing arrived at all');
   assert.match(body, /video\.onerror\?\.\(\)/, 'timing out must take the same path as an error');
 
-  // And a slow-but-working source must never be cut off mid-load.
+  // The black canvas is answered here, not by the timer.
+  assert.match(body, /setLoading\(true\)/, 'the wait must be shown to the user');
+  assert.match(body, /is-source-loading/);
+
+  // A source that does load must cancel both the timer and the loading state.
   const init = source.slice(source.indexOf('const initialise=()=>{', start));
-  assert.match(init.slice(0, 200), /clearTimeout\(sourceWatchdog\)/,
+  assert.match(init.slice(0, 260), /clearTimeout\(sourceWatchdog\)/,
     'a source that does load must cancel the watchdog');
+  assert.match(init.slice(0, 260), /setLoading\(false\)/,
+    'and must clear the loading state');
+
+  // Failing must clear it too, or a dead source leaves "Loading…" forever.
+  const onerror = source.slice(source.indexOf('video.onerror=()=>{', start));
+  assert.match(onerror.slice(0, 200), /setLoading\(false\)/);
+});
+
+test('the clean plate is seeked to the clip, not left at the top of the lecture', () => {
+  // The clean plate is the whole lecture; the clip is a window inside it. This
+  // seek is the only thing that puts the preview on the clip. It read a local
+  // `start` that a refactor had removed, inside a try/catch that swallowed the
+  // ReferenceError — so it silently stopped happening and the editor previewed
+  // the wrong footage while every test still passed.
+  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
+  const start = source.indexOf('function bindVideo(clip)');
+  const init = source.slice(source.indexOf('const initialise=()=>{', start));
+  const body = init.slice(0, init.indexOf('};'));
+  assert.match(body, /video\.currentTime=editor\.sourceBase/,
+    'the seek must use the shared timebase, which is 0 for an export');
+  assert.doesNotMatch(body, /currentTime=start\b/, 'the removed local must not come back');
 });
 
 test('the editor loads the template the clip was actually rendered with', () => {
