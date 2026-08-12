@@ -13,7 +13,7 @@ test('the contract covers the schema minus a short, deliberate exclusion list', 
   const all = Object.keys(defaultTemplateDraft());
   const excluded = all.filter(key => !isClipStyleField(key)).sort();
   assert.deepEqual(excluded, [
-    'builtIn', 'description', 'editable', 'id', 'name', 'updatedAt', 'userId', 'version',
+    'builtIn', 'captionTimingOffsetMs', 'description', 'editable', 'id', 'name', 'updatedAt', 'userId', 'version',
   ], 'exclusions must stay explicit — adding one should require saying why');
   assert.equal(CLIP_STYLE_FIELDS.length, all.length - excluded.length);
 
@@ -30,6 +30,12 @@ test('framing stays excluded even though it is not in the schema today', () => {
   // schema they must not silently become part of every style.
   assert.equal(isClipStyleField('cropPositionX'), false);
   assert.equal(isClipStyleField('cropPositionY'), false);
+});
+
+test('a clip style never changes this clip\'s speech alignment', () => {
+  assert.equal(isClipStyleField('captionTimingOffsetMs'), false);
+  const settings = clipStyleSettings({ ...defaultTemplateDraft(), captionTimingOffsetMs: 640 });
+  assert.ok(!('captionTimingOffsetMs' in settings));
 });
 
 test('a style never carries its own identity onto a clip', () => {

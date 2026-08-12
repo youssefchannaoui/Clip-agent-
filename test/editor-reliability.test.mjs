@@ -6,7 +6,7 @@ const ui = fs.readFileSync(new URL('../src/public/activity-fix.js', import.meta.
 
 test('editor history preserves exact caption timing and framing state', () => {
   assert.match(ui, /captionWords:editor\.captionWords,captionSource:editor\.captionSource,framingPlan:editor\.framingPlan/);
-  const restore = ui.match(/function restoreHistory\(\)\{(.+)\}\nfunction markEditorDirty/);
+  const restore = ui.match(/function restoreHistory\(\)\{(.+)\}\nfunction scheduleEditorAutosave/);
   assert.ok(restore, 'restoreHistory should remain present');
   assert.match(restore[1], /snap\.captionWords/);
   assert.match(restore[1], /snap\.framingPlan/);
@@ -28,15 +28,16 @@ test('editor exposes explicit layers, safe zones, and keyboard precision control
 });
 
 test('local recovery and save status are visible to the creator', () => {
-  assert.match(ui, /version:2,draft:cleanDraft\(editor\.draft\),captionText:editor\.captionText/);
+  assert.match(ui, /version:3,draft:cleanDraft\(editor\.draft\),captionText:editor\.captionText,appliedStyleId:editor\.appliedStyleId/);
   assert.match(ui, /Draft backed up locally/);
-  assert.match(ui, /All changes saved/);
+  assert.match(ui, /Saved ✓/);
+  assert.match(ui, /Could not save/);
 });
 
 test('save and export cannot run over each other', () => {
-  assert.match(ui, /if\(!clip\|\|editor\.saving\|\|editor\.exporting\)return;editor\.saving=true/);
-  assert.match(ui, /if\(!clip\|\|editor\.exporting\|\|editor\.saving\)return;editor\.exporting=true/);
-  assert.match(ui, /finally\{editor\.saving=false/);
+  assert.match(ui, /if\(editor\.savePromise\)\{await editor\.savePromise/);
+  assert.match(ui, /if\(!\(await flushEditorAutosave\(\)\)\)/);
+  assert.match(ui, /editor\.saving=false;editor\.savePromise=null/);
   assert.match(ui, /finally\{editor\.exporting=false/);
 });
 

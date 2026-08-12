@@ -237,6 +237,8 @@ const editor = {
   framingMessage:'Active-speaker framing has not been analysed', framingRequest:0, framingTimer:null,
   canvasDragging:false, canvasDragStart:null, backendCaptionReady:false,
   selectedLayer:'captions', safeZones:true, localSavedAt:0, saving:false, exporting:false, captionTimingReference:[],
+  appliedStyleId:'', appliedStyleSnapshot:null, saveStatus:'saved', saveError:'',
+  saveRevision:0, savedRevision:0, saveTimer:null, savePromise:null,
 };
 
 const css = String.raw`
@@ -2163,7 +2165,7 @@ async function queueProjectImport(url,button,range={}){
   const [min,max]=$('#dcCreateDuration').value.split(',').map(Number);
   button.disabled=true; button.textContent='Queueing…';
   try{
-    await callApi('/api/template',{method:'POST',body:JSON.stringify({id:$('#dcCreateTemplate').value})});
+    await callApi('/api/template',{method:'POST',body:JSON.stringify({id:$('#dcCreateTemplate').value,propagate:false})});
     await callApi('/api/clip-settings',{method:'POST',body:JSON.stringify({clipsPerVideo:Number($('#dcCreateCount').value),clipMinSeconds:min,clipMaxSeconds:max})});
     const payload={urls:url,sourceStartSeconds:Math.max(0,Math.round(Number(range.sourceStartSeconds||0)))};
     if(Number.isFinite(Number(range.sourceEndSeconds))&&Number(range.sourceEndSeconds)>payload.sourceStartSeconds) payload.sourceEndSeconds=Math.round(Number(range.sourceEndSeconds));
@@ -2205,7 +2207,7 @@ async function queueVideoUpload(file,button,range={}){
   const [min,max]=$('#dcCreateDuration').value.split(',').map(Number);
   button.disabled=true;button.textContent='Uploading…';
   try{
-    await callApi('/api/template',{method:'POST',body:JSON.stringify({id:$('#dcCreateTemplate').value})});
+    await callApi('/api/template',{method:'POST',body:JSON.stringify({id:$('#dcCreateTemplate').value,propagate:false})});
     await callApi('/api/clip-settings',{method:'POST',body:JSON.stringify({clipsPerVideo:Number($('#dcCreateCount').value),clipMinSeconds:min,clipMaxSeconds:max})});
     const contentType=file.type||'video/mp4';
     const upload=await callApi('/api/uploads/presign',{method:'POST',body:JSON.stringify({fileName:file.name,contentType})});
@@ -2533,12 +2535,16 @@ async function ensureEditor(){
     // lookup by id returns whatever that template has become since — or, if it
     // was deleted, something unrelated — and the editable caption box then
     // floats somewhere the burned-in text is not.
-    const template = clone(clip.templateSnapshot || (d.templates||[]).find(t=>t.id===clip.templateId) || d.selectedTemplate || (d.templates||[])[0] || d.templateDraft || {});
+    const appliedStyleId=String(savedStyleId(clip)||'');
+    const appliedStyle=(d.templates||[]).find(t=>t.id===appliedStyleId)||null;
+    const template = clone(clip.templateSnapshot || appliedStyle || (d.templates||[]).find(t=>t.id===clip.templateId) || d.selectedTemplate || (d.templates||[])[0] || d.templateDraft || {});
     const saved=loadEditorDraft(clip.id);
-    editor.draft={...template,...(saved?.draft||{}),__clipId:clip.id};editor.draft.cropPositionX??=50;editor.draft.cropPositionY??=50;editor.draft.captionTimingOffsetMs??=0;
+    editor.appliedStyleId=String(saved?.appliedStyleId??clip.editorAppliedStyleId??clip.templateId??'');
+    editor.appliedStyleSnapshot=clone((d.templates||[]).find(t=>t.id===editor.appliedStyleId)||appliedStyle||template);
+    editor.draft={...template,...(clip.editorDraft||{}),...(saved?.draft||{}),__clipId:clip.id};editor.draft.cropPositionX??=50;editor.draft.cropPositionY??=50;editor.draft.captionTimingOffsetMs??=0;
     editor.captionText=saved?.captionText??clip.transcript??'';
     editor.trimIn=0;editor.trimOut=Math.max(.1,Number(clip.durationMs||0)/1000);
-    editor.dirty=Boolean(saved);editor.localSavedAt=Number(saved?.savedAt||0);editor.selectedLayer='captions';editor.history=[];editor.historyIndex=-1;editor.sourceFallback=false;editor.framingPlan=clip.smartFraming||null;editor.framingStatus=editor.framingPlan?'ready':'idle';editor.framingMessage=editor.framingPlan?'Using the framing saved with this render':'Smart framing has not been analysed';
+    editor.dirty=Boolean(saved);editor.localSavedAt=Number(saved?.savedAt||0);editor.saveRevision=editor.dirty?1:0;editor.savedRevision=0;editor.saveStatus=editor.dirty?'pending':'saved';editor.saveError='';editor.selectedLayer='captions';editor.history=[];editor.historyIndex=-1;editor.sourceFallback=false;editor.framingPlan=clip.smartFraming||null;editor.framingStatus=editor.framingPlan?'ready':'idle';editor.framingMessage=editor.framingPlan?'Using the framing saved with this render':'Smart framing has not been analysed';
     // Seeded from the server's claim once per clip. bindVideo() may later flip
     // it to true if that claim does not survive contact with a real load.
     // Set before the timebase, which depends on it.
@@ -2554,6 +2560,7 @@ async function ensureEditor(){
     // Fire and forget. Awaiting this would hold the editor blank on a network
     // round trip for a repair that is invisible when it succeeds.
     autoSyncCaptions(clip);
+    if(saved)scheduleEditorAutosave(300);
   }
   renderEditor(clip);
 }
@@ -2569,32 +2576,75 @@ async function loadCaptionWords(clip){
   }catch{editor.captionWords=approximateWords(editor.captionText,Math.max(.1,Number(clip.durationMs||0)/1000));editor.captionTimingReference=clone(editor.captionWords);editor.captionSource='fallback'}
 }
 function loadEditorDraft(id){try{return JSON.parse(localStorage.getItem(`dc-editor-${id}`)||'null')}catch{return null}}
-function saveEditorLocal(){try{editor.localSavedAt=Date.now();localStorage.setItem(`dc-editor-${editor.clipId}`,JSON.stringify({version:2,draft:cleanDraft(editor.draft),captionText:editor.captionText,savedAt:editor.localSavedAt}));updateEditorSaveState()}catch{}}
+function savedStyleId(clip){return clip?.editorAppliedStyleId||clip?.templateId||''}
+function saveEditorLocal(){try{editor.localSavedAt=Date.now();localStorage.setItem(`dc-editor-${editor.clipId}`,JSON.stringify({version:3,draft:cleanDraft(editor.draft),captionText:editor.captionText,appliedStyleId:editor.appliedStyleId,savedAt:editor.localSavedAt}));updateEditorSaveState()}catch{}}
 function clearEditorLocal(){try{localStorage.removeItem(`dc-editor-${editor.clipId}`)}catch{}}
+
+function clipStyleKeys(){
+  if(Array.isArray(DATA?.clipStyleFields)&&DATA.clipStyleFields.length)return DATA.clipStyleFields;
+  const excluded=new Set(['id','name','description','builtIn','editable','userId','version','updatedAt','cropPositionX','cropPositionY','captionTimingOffsetMs']);
+  return Object.keys(DATA?.templateDraft||editor.draft||{}).filter(key=>!excluded.has(key));
+}
+function clipStyleValues(source={}){const out={};for(const key of clipStyleKeys())if(source[key]!==undefined)out[key]=clone(source[key]);return out}
+function editorStyleHasDrift(){
+  const base=editor.appliedStyleSnapshot;if(!base||!editor.draft)return false;
+  return clipStyleKeys().some(key=>base[key]!==undefined&&JSON.stringify(editor.draft[key])!==JSON.stringify(base[key]));
+}
+function editorStylePickerMarkup(){
+  const all=DATA?.templates||[],builtIn=all.filter(style=>style.builtIn),mine=all.filter(style=>!style.builtIn),custom=editorStyleHasDrift();
+  const options=styles=>styles.map(style=>`<option value="${esc(style.id)}" ${style.id===editor.appliedStyleId?'selected':''}>${esc(style.name||'Untitled style')}</option>`).join('');
+  return `<label class="dc-editor-style-picker ${custom?'is-custom':''}" title="${custom?'This clip has custom changes':'Choose a Clip Style for this clip'}"><span>${custom?'Clip Style · Custom changes':'Clip Style'}</span><select id="dcEditorStyleSelect" aria-label="Clip Style"><option value="" ${editor.appliedStyleId?'':'selected'}>No style applied</option>${builtIn.length?`<optgroup label="Built-in styles">${options(builtIn)}</optgroup>`:''}${mine.length?`<optgroup label="My Clip Styles">${options(mine)}</optgroup>`:''}<optgroup label="Manage"><option value="__browse">Browse Clip Styles…</option><option value="__create">Create new Clip Style…</option></optgroup></select></label>`;
+}
+function mountEditorStylePicker(){
+  $('.dc-editor-style-picker')?.remove();const title=$('.dc-editor-title');if(!title)return;
+  title.insertAdjacentHTML('afterend',editorStylePickerMarkup());
+  $('#dcEditorStyleSelect')?.addEventListener('change',event=>applyEditorStyleSelection(event.target.value));
+}
+function updateEditorStyleState(){
+  const picker=$('.dc-editor-style-picker');if(!picker)return;
+  const custom=editorStyleHasDrift();picker.classList.toggle('is-custom',custom);picker.title=custom?'This clip has custom changes':'Choose a Clip Style for this clip';
+  const label=$('span',picker);if(label)label.textContent=custom?'Clip Style · Custom changes':'Clip Style';
+}
+function applyEditorStyleSelection(id){
+  if(id==='__browse'||id==='__create'){
+    go('templates');
+    if(id==='__create')requestAnimationFrame(()=>{styleStudio.menuOpen=true;renderTemplatesPage()});
+    return;
+  }
+  const style=(DATA?.templates||[]).find(item=>item.id===id);
+  if(!style){editor.appliedStyleId='';editor.appliedStyleSnapshot=null;markEditorDirty();pushHistory();return}
+  Object.assign(editor.draft,clipStyleValues(style));
+  editor.appliedStyleId=style.id;editor.appliedStyleSnapshot=clone(style);
+  markEditorDirty();pushHistory();renderEditorTool();updateEditorPreview();updateCaptionAtTime(editor.currentTime);renderTimeline();updateEditorStyleState();
+}
 
 function renderEditor(clip){
   const panel=$('#view-editor'),d=data();if(!panel||!clip)return;
   panel.classList.add('dc-editor-page');
   const source=editorSourceUrl(clip);
   panel.innerHTML=`<div class="dc-editor-header"><button class="dc-icon-btn dc-svg" id="dcEditorBack" title="Back to project">${ICON.back}</button><div class="dc-editor-title"><strong>${esc(clip.title||'Untitled clip')}</strong><span>${esc(clip.projectTitle||'Lecture')} · ${Math.round(clip.score||0)}/100 · <b id="dcEditorSaveState">${editor.dirty?'Draft backed up locally':'All changes saved'}</b></span></div><button class="dc-icon-btn dc-svg" id="dcUndo" title="Undo (⌘Z)" ${editor.historyIndex<=0?'disabled':''}>${ICON.undo}</button><button class="dc-icon-btn dc-svg" id="dcRedo" title="Redo (⇧⌘Z)" ${editor.historyIndex>=editor.history.length-1?'disabled':''}>${ICON.redo}</button><button class="dc-btn secondary" id="dcSaveDraft" title="Save and apply this template (⌘S)">Save</button><button class="dc-btn" id="dcRenderClip">Export video</button></div><div class="dc-editor-workspace"><nav class="dc-tool-rail">${EDITOR_SECTIONS.map(s=>toolButton(s.id,s.label,s.icon)).join('')}</nav><aside class="dc-tool-panel"><div class="dc-tool-head"><strong id="dcToolTitle">Captions</strong><span class="dc-pill ${editor.captionSource==='whisper'?'good':'warn'}" id="dcCaptionSource">${editor.captionSource==='whisper'?'Exact speech timing':editor.captionSource==='edited'?'Edited speech timing':'Estimated timing'}</span></div><div class="dc-tool-content" id="dcToolContent"></div></aside><main class="dc-canvas-area"><div class="dc-canvas-toolbar"><button class="dc-icon-btn dc-svg" id="dcPlayButton" title="Play / pause (Space)">${ICON.play}</button><span class="dc-timeline-time" id="dcCanvasTime">0:00 / ${formatClock(editor.trimOut)}</span><div class="dc-layer-switch" role="group" aria-label="Select editor layer"><button type="button" data-select-layer="video" class="${editor.selectedLayer==='video'?'on':''}">Video</button><button type="button" data-select-layer="captions" class="${editor.selectedLayer==='captions'?'on':''}">Captions</button></div><button type="button" class="dc-safe-toggle ${editor.safeZones?'on':''}" id="dcSafeZones" aria-pressed="${editor.safeZones}">Safe zones</button><span class="spacer"></span><button type="button" class="dc-btn secondary dc-caption-edit-shortcut" id="dcOpenCaptionText">Edit captions</button><span class="dc-zoom">Shift + arrows nudge · arrows seek</span></div><div class="dc-canvas-wrap"><div class="dc-video-canvas ${editor.selectedLayer==='video'?'is-video-selected':''}" id="dcVideoCanvas"><video id="dcEditorVideoBg" class="dc-video-layer dc-video-bg" src="${source}" preload="metadata" muted playsinline></video><video id="dcEditorVideo" class="dc-video-layer dc-video-fg" src="${source}" preload="metadata" playsinline></video><div class="dc-safe-zone ${editor.safeZones?'show':''}" id="dcSafeZone"><span>Keep text inside</span></div><div class="dc-framing-guide"></div><button type="button" class="dc-resize-handle" id="dcResizeHandle" aria-label="Resize video"></button><span class="dc-layer-badge" id="dcLayerBadge">Video layer</span><div class="dc-snap-guide vertical" id="dcSnapGuideV"></div><div class="dc-snap-guide horizontal" id="dcSnapGuideH"></div><div class="dc-caption-overlay ${editor.selectedLayer==='captions'?'is-selected':''}" id="dcCaptionOverlay" role="group" aria-label="Caption layer"></div><div class="dc-watermark" id="dcWatermark"></div><div class="dc-brand-line" id="dcBrandLine"></div><span class="dc-caption-status" id="dcCaptionStatus">Captions follow the spoken words</span></div></div></main></div><section class="dc-timeline"><div class="dc-timeline-top"><span class="dc-timeline-time" id="dcTimelineTime">0:00.0</span><span class="dc-timeline-help">Drag to scrub · click a caption to jump · Space to play</span><span class="spacer"></span><div class="dc-timeline-zoom" role="group" aria-label="Timeline zoom"><button type="button" class="dc-icon-btn" id="dcTimelineZoomOut" title="Zoom out" aria-label="Zoom out">−</button><button type="button" class="dc-icon-btn" id="dcTimelineZoomIn" title="Zoom in" aria-label="Zoom in">+</button><button type="button" class="dc-btn secondary" id="dcTimelineFit" title="Fit the whole clip in view">Fit</button></div></div><div class="dc-timeline-scroll" id="dcTimelineScroll"><div class="dc-ruler" id="dcRuler"><i class="dc-ruler-gutter"></i><div class="dc-ruler-marks" id="dcRulerMarks"></div></div><div class="dc-track-row"><div class="dc-track-label">Video</div><div class="dc-track-content"><div class="dc-video-block">${esc(clip.title||'Video')}</div></div></div><div class="dc-track-row"><div class="dc-track-label">Captions</div><div class="dc-track-content" id="dcCaptionTrack"></div></div><div class="dc-track-row"><div class="dc-track-label">Audio</div><div class="dc-track-content"><div class="dc-audio-block">${esc(clip.musicName||'Nasheed')}</div></div></div><div class="dc-playhead" id="dcPlayhead"></div><div class="dc-playhead-grip" id="dcPlayheadGrip"></div></div></section>`;
+  mountEditorStylePicker();$('#dcSaveDraft')?.remove();
   $('#dcEditorBack').onclick=()=>{selectedProjectId=clip.projectId;go('projects')};
-  $('#dcUndo').onclick=undoEditor;$('#dcRedo').onclick=redoEditor;$('#dcSaveDraft').onclick=saveEditorDraft;$('#dcRenderClip').onclick=openExportDialog;$('#dcPlayButton').onclick=togglePlayback;$('#dcOpenCaptionText')?.addEventListener('click',()=>{editor.tool='captions';editor.captionTab='text';renderEditorTool();setTimeout(()=>$('#dcCaptionText')?.focus(),0);});
+  $('#dcUndo').onclick=undoEditor;$('#dcRedo').onclick=redoEditor;$('#dcRenderClip').onclick=openExportDialog;$('#dcPlayButton').onclick=togglePlayback;$('#dcOpenCaptionText')?.addEventListener('click',()=>{editor.tool='captions';editor.captionTab='text';renderEditorTool();setTimeout(()=>$('#dcCaptionText')?.focus(),0);});
   $('#dcSafeZones')?.addEventListener('click',()=>{editor.safeZones=!editor.safeZones;$('#dcSafeZone')?.classList.toggle('show',editor.safeZones);$('#dcSafeZones')?.classList.toggle('on',editor.safeZones);$('#dcSafeZones')?.setAttribute('aria-pressed',String(editor.safeZones))});
-  bindVideo(clip);bindCanvasDrag();bindCaptionDrag();renderEditorTool();updateEditorPreview();renderTimeline();
+  bindVideo(clip);bindCanvasDrag();bindCaptionDrag();renderEditorTool();updateEditorPreview();renderTimeline();updateEditorSaveState();updateEditorStyleState();
   queueMicrotask(()=>verifyEditorControls());requestAnimationFrame(()=>animatePanel(panel));
   if(editor.draft.fitMode==='crop'&&editor.draft.smartFramingEnabled&&!editor.framingPlan)requestFramingPlan(true);
 }
 function toolButton(name,label,icon){return `<button class="dc-tool-button ${editor.tool===name?'on':''}" data-editor-tool="${name}" type="button"><span class="dc-tool-icon">${ICON[icon]}</span><span>${label}</span></button>`}
 function verifyEditorControls(){
-  const required=['dcEditorBack','dcUndo','dcRedo','dcSaveDraft','dcRenderClip','dcPlayButton'];
+  const required=['dcEditorBack','dcEditorStyleSelect','dcUndo','dcRedo','dcRenderClip','dcPlayButton'];
   const missing=required.filter(id=>!document.getElementById(id));
   if(missing.length)notify(`Editor controls failed to load: ${missing.join(', ')}`,'bad');
   $$('#view-editor button').forEach(button=>{if(!button.type)button.type='button'});
 }
 function updateEditorSaveState(){
   const state=$('#dcEditorSaveState');if(!state)return;
-  state.textContent=editor.dirty?`Draft backed up locally${editor.localSavedAt?' · just now':''}`:'All changes saved';
-  state.className=editor.dirty?'is-draft':'is-saved';
+  if(editor.saveStatus==='saving')state.textContent='Saving…';
+  else if(editor.saveStatus==='error')state.textContent='Could not save · press ⌘S to retry';
+  else if(editor.dirty)state.textContent=`Draft backed up locally${editor.localSavedAt?' · autosaving':''}`;
+  else state.textContent='Saved ✓';
+  state.className=editor.saveStatus==='error'?'is-error':editor.dirty?'is-draft':'is-saved';
 }
 function selectEditorLayer(layer){
   editor.selectedLayer=['video','captions'].includes(layer)?layer:'none';
@@ -2704,17 +2754,15 @@ function canvasTool(){
 
 function styleTool(){
   const selected=DATA?.selectedTemplate;
-  const clip=currentClip();
-  const clipTemplate=(DATA?.templates||[]).find(template=>template.id===clip?.templateId);
-  const savedName=selected?.name||'No template selected';
-  const savedType=selected?.builtIn?'Built-in template':'Your saved template';
-  const clipName=clipTemplate?.name||savedName;
-  const sameTemplate=!clipTemplate||!selected||clipTemplate.id===selected.id;
-  const templateStatus=`<div class="dc-simple-card" style="margin-bottom:12px"><strong>Saved default: ${esc(savedName)}</strong><span>${esc(savedType)} · All new clips use this template.</span>${sameTemplate?'':`<span style="margin-top:5px">This clip currently uses: <b style="color:var(--dc-text)">${esc(clipName)}</b></span>`}</div>`;
+  const applied=(DATA?.templates||[]).find(template=>template.id===editor.appliedStyleId);
+  const drift=editorStyleHasDrift(),appliedName=applied?.name||'No style applied';
+  const templateStatus=`<div class="dc-simple-card dc-style-state"><strong>This clip: ${esc(appliedName)}</strong><span class="${drift?'custom':''}">${drift?'This clip has custom changes.':'Matches the selected Clip Style.'}</span><span>Future clips still use: <b style="color:var(--dc-text)">${esc(selected?.name||'No default')}</b></span></div>`;
   // Branding moved out to its own Brand section: a Brand Kit is an account's
   // identity, a Clip Style is a per-clip look, and mixing them here was what
   // made the two read as the same thing.
-  return `${templateStatus}<div class="dc-section"><h3>Video look</h3>${selectField('Filter','filterPreset',[['natural','Natural'],['crisp','Crisp'],['warm','Warm'],['cinematic','Cinematic'],['monochrome','Monochrome'],['custom','Custom']])}${rangeField('Brightness','brightness',-1,1,.05)}${rangeField('Contrast','contrast',.5,2,.05)}${rangeField('Saturation','saturation',0,3,.05)}<details class="dc-advanced"><summary>Advanced image controls</summary><div style="margin-top:10px">${rangeField('Sharpen','sharpen',0,2,.05)}${rangeField('Vignette','vignette',0,1,.05)}</div></details></div><div class="dc-inline-actions"><button type="button" class="dc-btn secondary" id="dcSavePreset">Save as default for new clips</button><button type="button" class="dc-btn" id="dcApplyPresetAll">Apply default to new + old clips</button></div><div class="dc-caption-note" style="margin-top:7px">The saved default name is shown above. The second button saves the current look as that default and re-renders every existing clip with it.</div>`;
+  const clipActions=`<div class="dc-section"><h3>Clip Style actions</h3><div class="dc-clip-style-actions"><button type="button" class="dc-btn secondary" id="dcResetClipStyle" ${applied&&drift?'':'disabled'}>Reset to Clip Style</button><button type="button" class="dc-btn secondary" id="dcSaveClipStyleAsNew">Save changes as new Clip Style</button><button type="button" class="dc-btn secondary" id="dcUpdateClipStyle" ${applied&&!applied.builtIn&&drift?'':'disabled'}>Update existing Clip Style…</button></div><div class="dc-caption-note" style="margin-top:7px">These actions never change this clip's transcript, caption timing or crop position.</div></div>`;
+  const defaults=`<details class="dc-advanced"><summary>Default style for future clips</summary><div style="margin-top:10px"><div class="dc-inline-actions"><button type="button" class="dc-btn secondary" id="dcSavePreset">Save current look as default</button><button type="button" class="dc-btn" id="dcApplyPresetAll">Apply default to all clips</button></div><div class="dc-caption-note" style="margin-top:7px">Account-wide actions are separate from the Clip Style applied to this editor.</div></div></details>`;
+  return `${templateStatus}${clipActions}<div class="dc-section"><h3>Video look</h3>${selectField('Filter','filterPreset',[['natural','Natural'],['crisp','Crisp'],['warm','Warm'],['cinematic','Cinematic'],['monochrome','Monochrome'],['custom','Custom']])}${rangeField('Brightness','brightness',-1,1,.05)}${rangeField('Contrast','contrast',.5,2,.05)}${rangeField('Saturation','saturation',0,3,.05)}<details class="dc-advanced"><summary>Advanced image controls</summary><div style="margin-top:10px">${rangeField('Sharpen','sharpen',0,2,.05)}${rangeField('Vignette','vignette',0,1,.05)}</div></details></div>${defaults}`;
 }
 
 // Text overlays the user creates by hand: titles, speaker names, verse
@@ -2785,6 +2833,9 @@ function bindToolInputs(){
   $('#dcSaveAudio')?.addEventListener('click',saveAudioSettings);
   $('#dcSaveDetails')?.addEventListener('click',savePostDetails);
   $('#dcSavePreset')?.addEventListener('click',saveEditorPreset);$('#dcApplyPresetAll')?.addEventListener('click',applyPresetToAllClips);
+  $('#dcResetClipStyle')?.addEventListener('click',resetEditorToClipStyle);
+  $('#dcSaveClipStyleAsNew')?.addEventListener('click',saveClipStyleAsNew);
+  $('#dcUpdateClipStyle')?.addEventListener('click',updateAppliedClipStyle);
   $('#dcAnalyseFraming')?.addEventListener('click',()=>requestFramingPlan(true));
   $('#dcResetFraming')?.addEventListener('click',resetFraming);
 }
@@ -2802,15 +2853,20 @@ function changeTemplateInput(input){
 }
 function debouncedHistory(){clearTimeout(historyTimer);historyTimer=setTimeout(()=>pushHistory(),220)}
 function pushHistory(initial=false){
-  const snap=JSON.stringify({draft:cleanDraft(editor.draft),captionText:editor.captionText,captionWords:editor.captionWords,captionSource:editor.captionSource,framingPlan:editor.framingPlan});
+  const snap=JSON.stringify({draft:cleanDraft(editor.draft),captionText:editor.captionText,captionWords:editor.captionWords,captionSource:editor.captionSource,framingPlan:editor.framingPlan,appliedStyleId:editor.appliedStyleId,appliedStyleSnapshot:editor.appliedStyleSnapshot});
   if(!initial&&editor.history[editor.historyIndex]===snap)return;
   editor.history=editor.history.slice(0,editor.historyIndex+1);editor.history.push(snap);if(editor.history.length>40)editor.history.shift();editor.historyIndex=editor.history.length-1;
   $('#dcUndo')?.toggleAttribute('disabled',editor.historyIndex<=0);$('#dcRedo')?.toggleAttribute('disabled',editor.historyIndex>=editor.history.length-1);
 }
 function undoEditor(){if(editor.historyIndex<=0)return;editor.historyIndex--;restoreHistory()}
 function redoEditor(){if(editor.historyIndex>=editor.history.length-1)return;editor.historyIndex++;restoreHistory()}
-function restoreHistory(){const snap=JSON.parse(editor.history[editor.historyIndex]);editor.draft={...snap.draft,__clipId:editor.clipId};editor.captionText=snap.captionText;editor.captionWords=Array.isArray(snap.captionWords)?snap.captionWords:approximateWords(editor.captionText,Math.max(.1,editor.trimOut-editor.trimIn));editor.captionSource=snap.captionSource||'edited';editor.framingPlan=snap.framingPlan||null;markEditorDirty(false);renderEditorTool();updateEditorPreview();updateCaptionAtTime(editor.currentTime);renderTimeline();$('#dcUndo')?.toggleAttribute('disabled',editor.historyIndex<=0);$('#dcRedo')?.toggleAttribute('disabled',editor.historyIndex>=editor.history.length-1)}
-function markEditorDirty(){editor.dirty=true;saveEditorLocal()}
+function restoreHistory(){const snap=JSON.parse(editor.history[editor.historyIndex]);editor.draft={...snap.draft,__clipId:editor.clipId};editor.captionText=snap.captionText;editor.captionWords=Array.isArray(snap.captionWords)?snap.captionWords:approximateWords(editor.captionText,Math.max(.1,editor.trimOut-editor.trimIn));editor.captionSource=snap.captionSource||'edited';editor.framingPlan=snap.framingPlan||null;editor.appliedStyleId=snap.appliedStyleId||'';editor.appliedStyleSnapshot=snap.appliedStyleSnapshot||null;markEditorDirty();renderEditorTool();updateEditorPreview();updateCaptionAtTime(editor.currentTime);renderTimeline();updateEditorStyleState();$('#dcUndo')?.toggleAttribute('disabled',editor.historyIndex<=0);$('#dcRedo')?.toggleAttribute('disabled',editor.historyIndex>=editor.history.length-1)}
+function scheduleEditorAutosave(delay=700){
+  clearTimeout(editor.saveTimer);editor.saveTimer=setTimeout(()=>persistEditorDraft(),delay);
+}
+function markEditorDirty(){
+  editor.dirty=true;editor.saveRevision+=1;editor.saveStatus='pending';editor.saveError='';saveEditorLocal();updateEditorStyleState();scheduleEditorAutosave();
+}
 
 function applyCaptionStyle(id){
   const presets={
@@ -3353,26 +3409,37 @@ async function autoSyncCaptions(clip){
   }
 }
 
+async function persistEditorDraft(){
+  clearTimeout(editor.saveTimer);editor.saveTimer=null;
+  const clip=currentClip();if(!clip||!editor.draft)return false;
+  if(editor.savePromise){await editor.savePromise;if(!editor.dirty)return true}
+  if(!editor.dirty)return true;
+  const clipId=clip.id,revision=editor.saveRevision;
+  editor.saving=true;editor.saveStatus='saving';updateEditorSaveState();
+  editor.savePromise=(async()=>{
+    try{
+      const result=await callApi(`/api/clips/${encodeURIComponent(clipId)}`,{method:'PATCH',body:JSON.stringify({transcript:editor.captionText,editorDraft:cleanDraft(editor.draft),editorAppliedStyleId:editor.appliedStyleId})});
+      if(editor.clipId!==clipId)return true;
+      const local=(DATA?.clips||[]).find(item=>item.id===clipId);if(local&&result?.clip)Object.assign(local,result.clip);
+      editor.savedRevision=Math.max(editor.savedRevision,revision);
+      if(editor.saveRevision===revision){editor.dirty=false;editor.saveStatus='saved';editor.saveError='';clearEditorLocal()}
+      else{editor.saveStatus='pending';scheduleEditorAutosave(120)}
+      updateEditorSaveState();return true;
+    }catch(error){
+      if(editor.clipId===clipId){editor.dirty=true;editor.saveStatus='error';editor.saveError=error.message;saveEditorLocal();updateEditorSaveState()}
+      return false;
+    }finally{editor.saving=false;editor.savePromise=null}
+  })();
+  return editor.savePromise;
+}
+async function flushEditorAutosave(){
+  clearTimeout(editor.saveTimer);editor.saveTimer=null;
+  if(editor.savePromise)await editor.savePromise;
+  if(editor.dirty)await persistEditorDraft();
+  return !editor.dirty&&editor.saveStatus!=='error';
+}
 async function saveEditorDraft(){
-  const clip=currentClip();if(!clip||editor.saving||editor.exporting)return;editor.saving=true;const button=$('#dcSaveDraft');if(button){button.disabled=true;button.textContent='Saving + re-rendering…'};
-  try{
-    await savePostDetails(false);
-    await callApi(`/api/clips/${encodeURIComponent(clip.id)}`,{method:'PATCH',body:JSON.stringify({transcript:editor.captionText})});
-    const draft=cleanDraft(editor.draft),current=DATA?.selectedTemplate;
-    let result;
-    if(current?.builtIn){
-      result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...draft,id:'',name:'My DeenClipped Template'},select:true})});
-    }else if(current?.id){
-      result=await callApi(`/api/templates/${encodeURIComponent(current.id)}`,{method:'PUT',body:JSON.stringify({template:{...draft,id:current.id,name:current.name}})});
-    }else{
-      result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...draft,id:'',name:'My DeenClipped Template'},select:true})});
-    }
-    editor.draft={...clone(result.template),__clipId:clip.id};
-    editor.dirty=false;clearEditorLocal();
-    const count=Number(result.propagation?.queued||0);
-    notify(`Saved. ${count} unposted clip${count===1?'':'s'} queued with this exact template, including scheduled clips.`);
-    await refreshData();renderEditor(currentClip()||clip);
-  }catch(error){notify(error.message,'bad')}finally{editor.saving=false;if(button){button.disabled=false;button.textContent='Save'}}
+  const ok=await flushEditorAutosave();if(ok)notify('Editor changes saved');else notify(editor.saveError||'The editor could not save your changes.','bad');return ok;
 }
 async function savePostDetails(showToast=true){
   const clip=currentClip();if(!clip)return;
@@ -3383,8 +3450,36 @@ async function savePostDetails(showToast=true){
 async function saveAudioSettings(){
   try{await callApi('/api/music-settings',{method:'POST',body:JSON.stringify({volumePercent:Number(editor.draft.musicVolumePercent||13)})});notify('Music level saved');await refreshData()}catch(e){notify(e.message,'bad')}
 }
+function resetEditorToClipStyle(){
+  const style=(DATA?.templates||[]).find(item=>item.id===editor.appliedStyleId);if(!style)return;
+  Object.assign(editor.draft,clipStyleValues(style));editor.appliedStyleSnapshot=clone(style);
+  markEditorDirty();pushHistory();renderEditorTool();updateEditorPreview();updateCaptionAtTime(editor.currentTime);renderTimeline();mountEditorStylePicker();
+}
+async function saveClipStyleAsNew(){
+  const proposed=prompt('Name this Clip Style',`${currentClip()?.title||'My clip'} style`);if(proposed===null)return;
+  const name=String(proposed).trim();if(!name)return notify('Give the Clip Style a name.','bad');
+  const button=$('#dcSaveClipStyleAsNew');if(button){button.disabled=true;button.textContent='Saving…'}
+  try{
+    const result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...clipStyleValues(editor.draft),id:'',name},select:false})});
+    if(!result?.template)throw new Error('The Clip Style was not returned.');
+    DATA.templates=[...(DATA.templates||[]).filter(item=>item.id!==result.template.id),result.template];
+    editor.appliedStyleId=result.template.id;editor.appliedStyleSnapshot=clone(result.template);
+    markEditorDirty();pushHistory();renderEditorTool();mountEditorStylePicker();notify(`Saved “${result.template.name}” without changing your default.`);
+  }catch(error){notify(error.message,'bad')}finally{if(button){button.disabled=false;button.textContent='Save changes as new Clip Style'}}
+}
+async function updateAppliedClipStyle(){
+  const current=(DATA?.templates||[]).find(item=>item.id===editor.appliedStyleId);if(!current||current.builtIn)return;
+  if(!confirm(`Update “${current.name}” with this clip's reusable look?\n\nThis will not change other clips, this clip's transcript, caption timing or crop position.`))return;
+  const button=$('#dcUpdateClipStyle');if(button){button.disabled=true;button.textContent='Updating…'}
+  try{
+    const result=await callApi(`/api/templates/${encodeURIComponent(current.id)}`,{method:'PUT',body:JSON.stringify({template:{...clipStyleValues(editor.draft),id:current.id,name:current.name},propagate:false})});
+    if(!result?.template)throw new Error('The updated Clip Style was not returned.');
+    const index=(DATA.templates||[]).findIndex(item=>item.id===current.id);if(index>=0)DATA.templates[index]=result.template;
+    editor.appliedStyleSnapshot=clone(result.template);markEditorDirty();pushHistory();renderEditorTool();mountEditorStylePicker();notify(`Updated “${result.template.name}”. Other clips were not changed.`);
+  }catch(error){notify(error.message,'bad')}finally{if(button){button.disabled=false;button.textContent='Update existing Clip Style…'}}
+}
 async function saveEditorPreset(){
-  const clip=currentClip(),draft=cleanDraft(editor.draft);
+  const clip=currentClip(),draft=clipStyleValues(editor.draft);
   const current=DATA?.selectedTemplate,isBuiltIn=Boolean(current?.builtIn);
   // Built-in templates are protected, so the first save has to create your
   // own copy. After that this keeps updating that same one, which is what
@@ -3398,17 +3493,17 @@ async function saveEditorPreset(){
     let result;
     if(isBuiltIn){
       const name=prompt('Name your template',`${clip?.title?'My style':'My style'}`)||'My style';
-      result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...draft,id:'',name},select:true})});
+      result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...draft,id:'',name},select:true,propagate:false})});
     }else{
-      result=await callApi(`/api/templates/${encodeURIComponent(current.id)}`,{method:'PUT',body:JSON.stringify({template:{...draft,id:current.id,name:current.name}})});
-      await callApi('/api/template',{method:'POST',body:JSON.stringify({id:current.id})});
+      result=await callApi(`/api/templates/${encodeURIComponent(current.id)}`,{method:'PUT',body:JSON.stringify({template:{...draft,id:current.id,name:current.name},propagate:false})});
+      await callApi('/api/template',{method:'POST',body:JSON.stringify({id:current.id,propagate:false})});
     }
-    editor.draft={...clone(result.template),__clipId:clip?.id};
-    markEditorDirty(false);pushHistory();
-    notify('Saved. Every new clip now uses this look.');
+    editor.draft={...editor.draft,...clipStyleValues(result.template),__clipId:clip?.id};editor.appliedStyleId=result.template.id;editor.appliedStyleSnapshot=clone(result.template);
+    markEditorDirty();pushHistory();
+    notify('Saved. New clips will use this look; existing clips were not changed.');
     await refreshData();renderEditorTool();return result.template;
   }catch(e){notify(e.message,'bad');return null}
-  finally{if(button){button.disabled=false;button.textContent='Save as default for new clips'}}
+  finally{if(button){button.disabled=false;button.textContent='Save current look as default'}}
 }
 async function applyPresetToAllClips(){
   if(!confirm('Apply this exact layout to every existing clip?\n\nUnposted clips will be replaced. Posted clips will be created as new re-post variants.'))return;
@@ -3455,7 +3550,9 @@ function openExportDialog(){
   document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){close();document.removeEventListener('keydown',esc)}});
 }
 async function renderEditedClip(meta){
-  const clip=currentClip(),button=$('#dcRenderClip');if(!clip||editor.exporting||editor.saving)return;editor.exporting=true;if(button){button.disabled=true;button.textContent='Queueing…'};
+  const clip=currentClip(),button=$('#dcRenderClip');if(!clip||editor.exporting)return;
+  if(!(await flushEditorAutosave())){notify(editor.saveError||'Save the editor changes before exporting.','bad');return}
+  editor.exporting=true;if(button){button.disabled=true;button.textContent='Queueing…'};
   try{
     // Passed in from the export dialog, which has already closed by now. The
     // DOM lookups remain as a fallback for any caller that still has the
@@ -3862,10 +3959,10 @@ async function styleStudioSave(){
       // Built-in templates are editable:false on the server, so edits become
       // a new custom template rather than a failed write.
       const name=base&&draft.name===base.name?`${base.name} (custom)`:String(draft.name||'Custom template');
-      const result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...draft,name},select:true})});
+      const result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...draft,name},select:true,propagate:false})});
       saved=result.template;
     }else{
-      const result=await callApi(`/api/templates/${encodeURIComponent(base.id)}`,{method:'PUT',body:JSON.stringify({template:draft})});
+      const result=await callApi(`/api/templates/${encodeURIComponent(base.id)}`,{method:'PUT',body:JSON.stringify({template:draft,propagate:false})});
       saved=result.template;
     }
     await refreshData();
@@ -4029,7 +4126,7 @@ function templatePreviewMarkup(t,sourcePreview='',large=false){
   return `<div class="dc-style-phone ${large?'large':''}" data-fit="${esc(fit)}" data-caption-mode="${esc(mode)}" style="--style-bg:${templateSafeColor(t.frameBackground,'#000000')};--style-filter:${esc(filter)}">${media}<div class="dc-style-preview-shade"></div><span class="dc-style-sample-badge">Sample preview</span><span class="dc-style-watermark" data-position="${esc(watermarkPosition)}" style="color:${templateSafeColor(t.watermarkColor,'#FFFFFF')};opacity:${clamp(Number(t.watermarkOpacity||72),0,100)/100}">${esc(t.watermark||'DEENCLIPPED')}</span><div class="dc-style-caption ${esc(mode)}" style="--style-highlight:${highlight};left:${x}%;top:${y}%;font-family:${templateFontFamily(t.captionFont)};font-size:${fontSize}px;font-weight:${weight};letter-spacing:${letter}px;line-height:${lineHeight};color:${primary};-webkit-text-stroke:${outline}px ${outlineColor};text-shadow:0 ${shadow}px ${Math.max(2,shadow*3)}px #000;background:${background}">${caption}</div></div>`;
 }
 function openStyleEditorForClip(){const clip=[...(data()?.clips||[])].sort((a,b)=>Number(b.createdAt||b.renderedAt||0)-Number(a.createdAt||a.renderedAt||0))[0];if(!clip){go('home');return notify('Create a clip first, then turn its look into a reusable style')}openEditor(clip.id,'style')}
-async function selectStudioTemplate(id){if(!id)return notify('Choose a style first','bad');try{await callApi('/api/template',{method:'POST',body:JSON.stringify({id})});notify('Style set for new clips');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
+async function selectStudioTemplate(id){if(!id)return notify('Choose a style first','bad');try{await callApi('/api/template',{method:'POST',body:JSON.stringify({id,propagate:false})});notify('Style set for new clips; existing clips were not changed');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
 async function applyStudioTemplate(id){if(!id)return notify('Choose a style first','bad');if(!confirm('Apply the current style to every existing clip that can be re-rendered? This queues new renders; already-posted files are not changed.'))return;try{const r=await callApi('/api/templates/apply-all',{method:'POST',body:JSON.stringify({templateId:id})});notify(`Queued ${r.queued||0} clips for style update`);await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
 async function duplicateStudioTemplate(id){const base=(DATA?.templates||[]).find(t=>t.id===id);try{const r=await callApi(`/api/templates/${encodeURIComponent(id)}/duplicate`,{method:'POST',body:JSON.stringify({name:`${base?.name||'Style'} Copy`})});notify('Custom style created');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
 async function deleteStudioTemplate(id){if(!id)return;if(!confirm('Delete this custom style? Existing rendered videos remain unchanged.'))return;try{await callApi(`/api/templates/${encodeURIComponent(id)}`,{method:'DELETE'});notify('Custom style deleted');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
@@ -4959,12 +5056,14 @@ body.dc-project-open .dc-project-detail-page,body.dc-project-open .dc-project-cl
 @media(max-width:520px){.dc-admin-health{flex-direction:column}.dc-admin-quick-actions,.dc-admin-kpi-grid{grid-template-columns:1fr}.dc-admin-tabs{margin-left:-2px;margin-right:-2px}}
 
 /* --- Editor reliability and selection system ---------------------------- */
-#dcEditorSaveState{font-weight:750;color:var(--dc-green)}#dcEditorSaveState.is-draft{color:var(--dc-accent2)}
+#dcEditorSaveState{font-weight:750;color:var(--dc-green)}#dcEditorSaveState.is-draft{color:var(--dc-accent2)}#dcEditorSaveState.is-error{color:var(--dc-red)}
+.dc-editor-style-picker{width:min(210px,22vw);display:grid;gap:2px;flex:0 0 auto}.dc-editor-style-picker>span{font-size:7px;font-weight:850;letter-spacing:.08em;text-transform:uppercase;color:var(--dc-subtle)}.dc-editor-style-picker select{width:100%;height:31px;padding:0 26px 0 9px;border:1px solid var(--dc-line2);border-radius:8px;background:#0b0b0d;color:var(--dc-text);font-size:9px;font-weight:750}.dc-editor-style-picker.is-custom select{border-color:rgba(217,180,120,.58);box-shadow:0 0 0 1px rgba(217,180,120,.12)}
+.dc-clip-style-actions{display:grid;gap:7px}.dc-clip-style-actions .dc-btn{width:100%}.dc-style-state{margin-bottom:12px}.dc-style-state strong,.dc-style-state span{display:block}.dc-style-state span{margin-top:4px}.dc-style-state .custom{color:var(--dc-accent2)}
 .dc-layer-switch{display:flex;gap:3px;padding:3px;border:1px solid rgba(255,255,255,.08);border-radius:9px;background:#09090b}.dc-layer-switch button,.dc-safe-toggle{min-height:28px;padding:0 9px;border:0;border-radius:6px;background:transparent;color:var(--dc-subtle);font-size:8px;font-weight:800}.dc-layer-switch button.on,.dc-safe-toggle.on{background:rgba(217,180,120,.13);color:var(--dc-accent2);box-shadow:0 0 0 1px rgba(217,180,120,.22) inset}.dc-safe-toggle{border:1px solid rgba(255,255,255,.07)}
 .dc-video-canvas.is-video-selected{box-shadow:0 0 0 2px rgba(217,180,120,.72),0 26px 70px rgba(0,0,0,.58)!important}.dc-video-canvas.is-video-selected .dc-layer-badge{background:rgba(217,180,120,.9);color:#17120a}.dc-video-canvas:not(.is-video-selected) .dc-resize-handle{opacity:.55}
 .dc-safe-zone{position:absolute;inset:8% 7% 12%;z-index:12;display:none;border:1px dashed rgba(255,255,255,.38);border-radius:8px;pointer-events:none}.dc-safe-zone.show{display:block}.dc-safe-zone::before,.dc-safe-zone::after{content:'';position:absolute;background:rgba(255,255,255,.18)}.dc-safe-zone::before{left:50%;top:0;bottom:0;width:1px}.dc-safe-zone::after{left:0;right:0;top:50%;height:1px}.dc-safe-zone span{position:absolute;right:6px;top:6px;padding:3px 5px;border-radius:5px;background:#000a;color:#aaa;font-size:6px;letter-spacing:.07em;text-transform:uppercase}
 .dc-caption-overlay.is-selected{outline:2px solid rgba(255,255,255,.76);outline-offset:9px}.dc-caption-overlay.is-selected::before{content:'CAPTIONS';position:absolute;left:-10px;top:-28px;padding:4px 7px;border-radius:6px;background:rgba(217,180,120,.92);color:#17120a;font-size:6px;font-weight:950;letter-spacing:.08em;-webkit-text-stroke:0}.dc-caption-overlay.is-selected::after{border-color:var(--dc-accent2);background:#111}.dc-timeline-help{color:var(--dc-subtle);font-size:7.5px}
-@media(max-width:900px){.dc-canvas-toolbar{flex-wrap:wrap;height:auto!important;min-height:48px;padding-top:7px!important;padding-bottom:7px!important}.dc-canvas-toolbar .dc-zoom{display:none}.dc-layer-switch{order:4}.dc-safe-toggle{order:5}}
+@media(max-width:900px){.dc-editor-style-picker{width:150px}.dc-editor-style-picker>span{display:none}.dc-canvas-toolbar{flex-wrap:wrap;height:auto!important;min-height:48px;padding-top:7px!important;padding-bottom:7px!important}.dc-canvas-toolbar .dc-zoom{display:none}.dc-layer-switch{order:4}.dc-safe-toggle{order:5}}
 @media(max-width:520px){.dc-caption-edit-shortcut,.dc-safe-toggle{display:none}.dc-layer-switch button{padding:0 7px}.dc-timeline-help{display:none}}
 
 /* --- Sidebar / main content must never overlap --------------------------- */

@@ -306,9 +306,12 @@ export function defaultTemplateDraft() {
  *
  *   identity   copying `id`/`name` onto a clip makes it claim to *be* the
  *              style, so later edits appear to mutate the saved style.
- *   framing    cropPositionX/Y is where the subject sits in *this* clip. It
+ *   clip data  cropPositionX/Y is where the subject sits in *this* clip. It
  *              reads like part of the look, but applying one clip's framing to
  *              every other clip moves the speaker off-centre in all of them.
+ *              captionTimingOffsetMs is also clip-specific: it corrects the
+ *              speech alignment of one recording and must not move captions
+ *              in every clip that shares the same visual style.
  *
  * Derived from DEFAULTS rather than hand-listed, so a field added to the
  * schema cannot be quietly left out of styles — but the exclusions are
@@ -317,8 +320,8 @@ export function defaultTemplateDraft() {
 const STYLE_EXCLUDED_FIELDS = Object.freeze([
   // Identity of the style record itself.
   'id', 'name', 'description', 'builtIn', 'editable', 'userId', 'version', 'updatedAt',
-  // Per-clip framing. See above.
-  'cropPositionX', 'cropPositionY',
+  // Per-clip framing and speech alignment. See above.
+  'cropPositionX', 'cropPositionY', 'captionTimingOffsetMs',
 ]);
 
 export const CLIP_STYLE_FIELDS = Object.freeze(

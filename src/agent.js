@@ -7,6 +7,7 @@ import { nextSlot } from './slots.js';
 import * as engine from './local-engine.js';
 import * as social from './social.js';
 import * as billing from './billing.js';
+import * as templates from './templates.js';
 
 let timer = null;
 let ticking = false;
@@ -114,6 +115,34 @@ export function updateClip(id, fields = {}) {
 
   for (const key of ['title', 'description', 'hashtags']) {
     if (typeof fields[key] === 'string') clip[key] = fields[key].trim();
+  }
+
+  // Editor copy is clip-owned. It used to be sent by the browser but silently
+  // discarded here, which made transcript edits appear saved until reload.
+  if (typeof fields.transcript === 'string') clip.transcript = fields.transcript.trim().slice(0, 20000);
+
+  // Store a sanitised per-clip editor draft without turning it into a saved
+  // template. The style contract carries only reusable look fields; framing
+  // and caption timing are restored separately because they belong to this
+  // clip and must survive a style change.
+  if (fields.editorDraft && typeof fields.editorDraft === 'object' && !Array.isArray(fields.editorDraft)) {
+    const cleaned = templates.sanitiseTemplate(fields.editorDraft, {
+      id: 'editor-draft', builtIn: false, userId: ownerOfRecord(clip)?.id || '',
+    });
+    const draft = templates.clipStyleSettings(cleaned);
+    if (fields.editorDraft.cropPositionX !== undefined) draft.cropPositionX = Math.min(100, Math.max(0, Number(fields.editorDraft.cropPositionX) || 0));
+    if (fields.editorDraft.cropPositionY !== undefined) draft.cropPositionY = Math.min(100, Math.max(0, Number(fields.editorDraft.cropPositionY) || 0));
+    if (fields.editorDraft.captionTimingOffsetMs !== undefined) draft.captionTimingOffsetMs = Math.min(1500, Math.max(-1500, Number(fields.editorDraft.captionTimingOffsetMs) || 0));
+    // Manual crop supports a closer zoom than reusable automatic framing.
+    if (fields.editorDraft.smartFramingZoom !== undefined) draft.smartFramingZoom = Math.min(2.5, Math.max(.75, Number(fields.editorDraft.smartFramingZoom) || 1));
+    clip.editorDraft = draft;
+    clip.editorSavedAt = Date.now();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(fields, 'editorAppliedStyleId')) {
+    const styleId = String(fields.editorAppliedStyleId || '').trim();
+    if (styleId && !templates.templateById(styleId, ownerOfRecord(clip))) throw new Error('That Clip Style is not available.');
+    clip.editorAppliedStyleId = styleId || null;
   }
 
   const wantsTrimChange = Object.prototype.hasOwnProperty.call(fields, 'startSec')

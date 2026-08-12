@@ -341,7 +341,7 @@ function resolveCleanSource(clip) {
 }
 
 function publicClip(clip) {
-  const currentTemplate = templates.templateById(clip.templateId);
+  const currentTemplate = templates.templateById(clip.templateId, ownerOfRecord(clip));
   const rerender = latestRerender(clip.id);
   return {
     id: clip.id, projectId: clip.projectId, projectTitle: clip.projectTitle,
@@ -357,6 +357,12 @@ function publicClip(clip) {
     readyAt: clip.readyAt || null, postedAt: clip.postedAt,
     musicName: clip.musicName, musicVerified: Boolean(clip.musicVerified),
     templateId: clip.templateId, templateName: clip.templateName, templateVersion: clip.templateVersion || 1,
+    // The snapshot matches what the current render used. editorDraft is the
+    // latest autosaved workspace state and may be newer than that render.
+    templateSnapshot: clip.templateSnapshot ? templates.clipStyleSettings(clip.templateSnapshot) : null,
+    editorDraft: clip.editorDraft || null,
+    editorAppliedStyleId: clip.editorAppliedStyleId || null,
+    editorSavedAt: clip.editorSavedAt || null,
     templateOutdated: Boolean(currentTemplate && Number(currentTemplate.version || 1) > Number(clip.templateVersion || 1)),
     renderVersion: clip.renderVersion || 1, renderVerified: Boolean(clip.renderVerified),
     renderedWidth: clip.renderedWidth || null, renderedHeight: clip.renderedHeight || null,
@@ -381,7 +387,7 @@ function appState(user = null) {
   const clipsForUser = ownedBy(state.clips, user.id).filter(clip => projectIdsForUser.has(clip.projectId));
   return {
     engine: config.processingMode === 'remote' ? 'remote-worker' : 'self-hosted', user: auth.userPublic(user), auth: auth.publicConfig(), readiness, clipSettings: clipSettings(user), musicSettings: musicSettings(user), automationSettings: automationSettings(user),
-    selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(),
+    selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(), clipStyleFields: templates.CLIP_STYLE_FIELDS,
     tracks: audio.listNasheeds(user),
     projects: projectsForUser.map(project => ({
       id: project.id, title: project.title, url: project.url, engine: project.engine, status: project.status,
@@ -935,14 +941,14 @@ async function route(req, res, url) {
     catch (error) { return json(res, 400, errorBody(error)); }
   }
 
-  if (method === 'GET' && pathname === '/api/templates') return json(res, 200, { templates: templates.listTemplates(currentUser), selectedTemplate: templates.selectedTemplate(currentUser), draft: templates.defaultTemplateDraft() });
+  if (method === 'GET' && pathname === '/api/templates') return json(res, 200, { templates: templates.listTemplates(currentUser), selectedTemplate: templates.selectedTemplate(currentUser), draft: templates.defaultTemplateDraft(), clipStyleFields: templates.CLIP_STYLE_FIELDS });
   if (method === 'POST' && pathname === '/api/templates') {
     const body = await readBody(req);
     try {
       const template = templates.createTemplate(currentUser, body.template || body);
       const selected = body.select !== false;
       if (selected) templates.setSelectedTemplate(currentUser, template.id);
-      const propagation = selected ? queueTemplateForEveryUnpostedClip(template, currentUser, 'creating and selecting it') : { queued: 0, skipped: 0, errors: [] };
+      const propagation = selected && body.propagate !== false ? queueTemplateForEveryUnpostedClip(template, currentUser, 'creating and selecting it') : { queued: 0, skipped: 0, errors: [] };
       log(`Created template "${template.name}". It is ready for automated renders.`, 'info', currentUser.id);
       return json(res, 200, { ok: true, template, propagation });
     } catch (error) { return json(res, 400, errorBody(error)); }
@@ -962,7 +968,7 @@ async function route(req, res, url) {
     try {
       const template = templates.updateTemplate(currentUser, decodeURIComponent(templateMatch[1]), body.template || body);
       const selected = templates.selectedTemplate(currentUser);
-      const propagation = selected?.id === template.id
+      const propagation = body.propagate !== false && selected?.id === template.id
         ? queueTemplateForEveryUnpostedClip(template, currentUser, 'saving the active template')
         : { queued: 0, skipped: 0, errors: [] };
       log(`Saved template "${template.name}" version ${template.version}. New renders use it automatically.`, 'info', currentUser.id);
@@ -995,7 +1001,7 @@ async function route(req, res, url) {
     const body = await readBody(req);
     try {
       const template = templates.setSelectedTemplate(currentUser, String(body.id || ''));
-      const propagation = queueTemplateForEveryUnpostedClip(template, currentUser, 'selecting it as the default');
+      const propagation = body.propagate !== false ? queueTemplateForEveryUnpostedClip(template, currentUser, 'selecting it as the default') : { queued: 0, skipped: 0, errors: [] };
       log(`Automation template set to "${template.name}". Every new and unposted clip is locked to this saved version.`, 'info', currentUser.id);
       return json(res, 200, { ok: true, template, propagation });
     } catch (error) { return json(res, 400, errorBody(error)); }
