@@ -230,7 +230,10 @@ const editor = {
   tool:'captions', captionTab:'styles', clipId:'', draft:null, captionText:'', captionWords:[],
   captionSource:'fallback', dirty:false, loading:false, history:[], historyIndex:-1,
   currentTime:0, trimIn:0, trimOut:0, playing:false, search:'', presetId:'',
-  sourceBase:0, sourceEnd:0, sourceFallback:false, bakedPreview:false, panelCollapsed:false, framingPlan:null, framingStatus:'idle',
+  sourceBase:0, sourceEnd:0, sourceFallback:false, bakedPreview:false, panelCollapsed:false,
+  // 1 means fitted. Kept as a multiplier on Fit rather than absolute px/s so
+  // the clip still fills the frame after the panel or window is resized.
+  timelineZoom:1, framingPlan:null, framingStatus:'idle',
   framingMessage:'Active-speaker framing has not been analysed', framingRequest:0, framingTimer:null,
   canvasDragging:false, canvasDragStart:null, backendCaptionReady:false,
   selectedLayer:'captions', safeZones:true, localSavedAt:0, saving:false, exporting:false, captionTimingReference:[],
@@ -1479,6 +1482,11 @@ function formatClockTime(at){
 function go(view){
   const changedView=currentView!==view;
   if(view!=='projects')document.body.classList.remove('dc-project-open');
+  // The editor is a fixed application shell, not a page: it sizes itself from
+  // the viewport and scrolls only inside its own panels. Every other route is
+  // a normal scrolling page, so this must be scoped and must come off on the
+  // way out — leaving overflow:hidden on the body would break the whole app.
+  document.body.classList.toggle('dc-editor-route',view==='editor');
   currentView = view;
   $$('[data-dc-nav]').forEach(b => b.classList.toggle('is-active', b.dataset.dcNav === view));
   const labels = {
@@ -2535,6 +2543,9 @@ async function ensureEditor(){
     // it to true if that claim does not survive contact with a real load.
     // Set before the timebase, which depends on it.
     editor.bakedPreview=clip.cleanSource===false;
+    // Fit on first open, per the spec. Reset per clip rather than globally, so
+    // a zoom set on one clip does not follow you to the next one.
+    editor.timelineZoom=1;
     applyMediaTimebase(clip,editor.bakedPreview);
     editor.captionWords=approximateWords(editor.captionText,editor.trimOut);editor.captionTimingReference=clone(editor.captionWords);editor.captionSource='fallback';editor.backendCaptionReady=false;
     await loadCaptionWords(clip);
@@ -2565,7 +2576,7 @@ function renderEditor(clip){
   const panel=$('#view-editor'),d=data();if(!panel||!clip)return;
   panel.classList.add('dc-editor-page');
   const source=editorSourceUrl(clip);
-  panel.innerHTML=`<div class="dc-editor-header"><button class="dc-icon-btn dc-svg" id="dcEditorBack" title="Back to project">${ICON.back}</button><div class="dc-editor-title"><strong>${esc(clip.title||'Untitled clip')}</strong><span>${esc(clip.projectTitle||'Lecture')} · ${Math.round(clip.score||0)}/100 · <b id="dcEditorSaveState">${editor.dirty?'Draft backed up locally':'All changes saved'}</b></span></div><button class="dc-icon-btn dc-svg" id="dcUndo" title="Undo (⌘Z)" ${editor.historyIndex<=0?'disabled':''}>${ICON.undo}</button><button class="dc-icon-btn dc-svg" id="dcRedo" title="Redo (⇧⌘Z)" ${editor.historyIndex>=editor.history.length-1?'disabled':''}>${ICON.redo}</button><button class="dc-btn secondary" id="dcSaveDraft" title="Save and apply this template (⌘S)">Save</button><button class="dc-btn" id="dcRenderClip">Export video</button></div><div class="dc-editor-workspace"><nav class="dc-tool-rail">${EDITOR_SECTIONS.map(s=>toolButton(s.id,s.label,s.icon)).join('')}</nav><aside class="dc-tool-panel"><div class="dc-tool-head"><strong id="dcToolTitle">Captions</strong><span class="dc-pill ${editor.captionSource==='whisper'?'good':'warn'}" id="dcCaptionSource">${editor.captionSource==='whisper'?'Exact speech timing':editor.captionSource==='edited'?'Edited speech timing':'Estimated timing'}</span></div><div class="dc-tool-content" id="dcToolContent"></div></aside><main class="dc-canvas-area"><div class="dc-canvas-toolbar"><button class="dc-icon-btn dc-svg" id="dcPlayButton" title="Play / pause (Space)">${ICON.play}</button><span class="dc-timeline-time" id="dcCanvasTime">0:00 / ${formatClock(editor.trimOut)}</span><div class="dc-layer-switch" role="group" aria-label="Select editor layer"><button type="button" data-select-layer="video" class="${editor.selectedLayer==='video'?'on':''}">Video</button><button type="button" data-select-layer="captions" class="${editor.selectedLayer==='captions'?'on':''}">Captions</button></div><button type="button" class="dc-safe-toggle ${editor.safeZones?'on':''}" id="dcSafeZones" aria-pressed="${editor.safeZones}">Safe zones</button><span class="spacer"></span><button type="button" class="dc-btn secondary dc-caption-edit-shortcut" id="dcOpenCaptionText">Edit captions</button><span class="dc-zoom">Shift + arrows nudge · arrows seek</span></div><div class="dc-canvas-wrap"><div class="dc-video-canvas ${editor.selectedLayer==='video'?'is-video-selected':''}" id="dcVideoCanvas"><video id="dcEditorVideoBg" class="dc-video-layer dc-video-bg" src="${source}" preload="metadata" muted playsinline></video><video id="dcEditorVideo" class="dc-video-layer dc-video-fg" src="${source}" preload="metadata" playsinline></video><div class="dc-safe-zone ${editor.safeZones?'show':''}" id="dcSafeZone"><span>Keep text inside</span></div><div class="dc-framing-guide"></div><button type="button" class="dc-resize-handle" id="dcResizeHandle" aria-label="Resize video"></button><span class="dc-layer-badge" id="dcLayerBadge">Video layer</span><div class="dc-snap-guide vertical" id="dcSnapGuideV"></div><div class="dc-snap-guide horizontal" id="dcSnapGuideH"></div><div class="dc-caption-overlay ${editor.selectedLayer==='captions'?'is-selected':''}" id="dcCaptionOverlay" role="group" aria-label="Caption layer"></div><div class="dc-watermark" id="dcWatermark"></div><div class="dc-brand-line" id="dcBrandLine"></div><span class="dc-caption-status" id="dcCaptionStatus">Captions follow the spoken words</span></div></div></main><section class="dc-timeline"><div class="dc-timeline-top"><span class="dc-timeline-time" id="dcTimelineTime">0:00.0</span><span class="dc-timeline-help">Drag to scrub · click a caption to jump · Space to play</span><span class="spacer"></span></div><div class="dc-timeline-scroll" id="dcTimelineScroll"><div class="dc-ruler" id="dcRuler"><i class="dc-ruler-gutter"></i><div class="dc-ruler-marks" id="dcRulerMarks"></div></div><div class="dc-track-row"><div class="dc-track-label">Video</div><div class="dc-track-content"><div class="dc-video-block">${esc(clip.title||'Video')}</div></div></div><div class="dc-track-row"><div class="dc-track-label">Captions</div><div class="dc-track-content" id="dcCaptionTrack"></div></div><div class="dc-track-row"><div class="dc-track-label">Audio</div><div class="dc-track-content"><div class="dc-audio-block">${esc(clip.musicName||'Nasheed')}</div></div></div><div class="dc-playhead" id="dcPlayhead"></div><div class="dc-playhead-grip" id="dcPlayheadGrip"></div></div></section></div>`;
+  panel.innerHTML=`<div class="dc-editor-header"><button class="dc-icon-btn dc-svg" id="dcEditorBack" title="Back to project">${ICON.back}</button><div class="dc-editor-title"><strong>${esc(clip.title||'Untitled clip')}</strong><span>${esc(clip.projectTitle||'Lecture')} · ${Math.round(clip.score||0)}/100 · <b id="dcEditorSaveState">${editor.dirty?'Draft backed up locally':'All changes saved'}</b></span></div><button class="dc-icon-btn dc-svg" id="dcUndo" title="Undo (⌘Z)" ${editor.historyIndex<=0?'disabled':''}>${ICON.undo}</button><button class="dc-icon-btn dc-svg" id="dcRedo" title="Redo (⇧⌘Z)" ${editor.historyIndex>=editor.history.length-1?'disabled':''}>${ICON.redo}</button><button class="dc-btn secondary" id="dcSaveDraft" title="Save and apply this template (⌘S)">Save</button><button class="dc-btn" id="dcRenderClip">Export video</button></div><div class="dc-editor-workspace"><nav class="dc-tool-rail">${EDITOR_SECTIONS.map(s=>toolButton(s.id,s.label,s.icon)).join('')}</nav><aside class="dc-tool-panel"><div class="dc-tool-head"><strong id="dcToolTitle">Captions</strong><span class="dc-pill ${editor.captionSource==='whisper'?'good':'warn'}" id="dcCaptionSource">${editor.captionSource==='whisper'?'Exact speech timing':editor.captionSource==='edited'?'Edited speech timing':'Estimated timing'}</span></div><div class="dc-tool-content" id="dcToolContent"></div></aside><main class="dc-canvas-area"><div class="dc-canvas-toolbar"><button class="dc-icon-btn dc-svg" id="dcPlayButton" title="Play / pause (Space)">${ICON.play}</button><span class="dc-timeline-time" id="dcCanvasTime">0:00 / ${formatClock(editor.trimOut)}</span><div class="dc-layer-switch" role="group" aria-label="Select editor layer"><button type="button" data-select-layer="video" class="${editor.selectedLayer==='video'?'on':''}">Video</button><button type="button" data-select-layer="captions" class="${editor.selectedLayer==='captions'?'on':''}">Captions</button></div><button type="button" class="dc-safe-toggle ${editor.safeZones?'on':''}" id="dcSafeZones" aria-pressed="${editor.safeZones}">Safe zones</button><span class="spacer"></span><button type="button" class="dc-btn secondary dc-caption-edit-shortcut" id="dcOpenCaptionText">Edit captions</button><span class="dc-zoom">Shift + arrows nudge · arrows seek</span></div><div class="dc-canvas-wrap"><div class="dc-video-canvas ${editor.selectedLayer==='video'?'is-video-selected':''}" id="dcVideoCanvas"><video id="dcEditorVideoBg" class="dc-video-layer dc-video-bg" src="${source}" preload="metadata" muted playsinline></video><video id="dcEditorVideo" class="dc-video-layer dc-video-fg" src="${source}" preload="metadata" playsinline></video><div class="dc-safe-zone ${editor.safeZones?'show':''}" id="dcSafeZone"><span>Keep text inside</span></div><div class="dc-framing-guide"></div><button type="button" class="dc-resize-handle" id="dcResizeHandle" aria-label="Resize video"></button><span class="dc-layer-badge" id="dcLayerBadge">Video layer</span><div class="dc-snap-guide vertical" id="dcSnapGuideV"></div><div class="dc-snap-guide horizontal" id="dcSnapGuideH"></div><div class="dc-caption-overlay ${editor.selectedLayer==='captions'?'is-selected':''}" id="dcCaptionOverlay" role="group" aria-label="Caption layer"></div><div class="dc-watermark" id="dcWatermark"></div><div class="dc-brand-line" id="dcBrandLine"></div><span class="dc-caption-status" id="dcCaptionStatus">Captions follow the spoken words</span></div></div></main><section class="dc-timeline"><div class="dc-timeline-top"><span class="dc-timeline-time" id="dcTimelineTime">0:00.0</span><span class="dc-timeline-help">Drag to scrub · click a caption to jump · Space to play</span><span class="spacer"></span><div class="dc-timeline-zoom" role="group" aria-label="Timeline zoom"><button type="button" class="dc-icon-btn" id="dcTimelineZoomOut" title="Zoom out" aria-label="Zoom out">−</button><button type="button" class="dc-icon-btn" id="dcTimelineZoomIn" title="Zoom in" aria-label="Zoom in">+</button><button type="button" class="dc-btn secondary" id="dcTimelineFit" title="Fit the whole clip in view">Fit</button></div></div><div class="dc-timeline-scroll" id="dcTimelineScroll"><div class="dc-ruler" id="dcRuler"><i class="dc-ruler-gutter"></i><div class="dc-ruler-marks" id="dcRulerMarks"></div></div><div class="dc-track-row"><div class="dc-track-label">Video</div><div class="dc-track-content"><div class="dc-video-block">${esc(clip.title||'Video')}</div></div></div><div class="dc-track-row"><div class="dc-track-label">Captions</div><div class="dc-track-content" id="dcCaptionTrack"></div></div><div class="dc-track-row"><div class="dc-track-label">Audio</div><div class="dc-track-content"><div class="dc-audio-block">${esc(clip.musicName||'Nasheed')}</div></div></div><div class="dc-playhead" id="dcPlayhead"></div><div class="dc-playhead-grip" id="dcPlayheadGrip"></div></div></section></div>`;
   $('#dcEditorBack').onclick=()=>{selectedProjectId=clip.projectId;go('projects')};
   $('#dcUndo').onclick=undoEditor;$('#dcRedo').onclick=redoEditor;$('#dcSaveDraft').onclick=saveEditorDraft;$('#dcRenderClip').onclick=openExportDialog;$('#dcPlayButton').onclick=togglePlayback;$('#dcOpenCaptionText')?.addEventListener('click',()=>{editor.tool='captions';editor.captionTab='text';renderEditorTool();setTimeout(()=>$('#dcCaptionText')?.focus(),0);});
   $('#dcSafeZones')?.addEventListener('click',()=>{editor.safeZones=!editor.safeZones;$('#dcSafeZone')?.classList.toggle('show',editor.safeZones);$('#dcSafeZones')?.classList.toggle('on',editor.safeZones);$('#dcSafeZones')?.setAttribute('aria-pressed',String(editor.safeZones))});
@@ -2716,11 +2727,21 @@ function styleTool(){
 // would do nothing. The single existing `hook*` overlay is named here because
 // it is the nearest working thing and where these layers should migrate from.
 function textTool(){
-  const hookOn=Boolean(editor.draft.hookEnabled);
-  return `<div class="dc-section"><h3>Text layers</h3><div class="dc-simple-card"><strong>Not available yet</strong><span>Hand-placed titles, speaker names and verse references are next in this rebuild. They need a per-clip layer model and matching render support, so they are not wired to anything yet.</span></div></div>`
-    +`<div class="dc-section"><h3>Opening title</h3><div class="dc-caption-note" style="margin-bottom:9px">The one text overlay that does render today. It shows over the first seconds of the clip.</div>${checkField('Show an opening title','hookEnabled')}`
-    +(hookOn?`${colorField('Text colour','hookColor')}${colorField('Background','hookBackground')}${rangeField('Background opacity','hookBackgroundOpacity',0,1,.05)}${rangeField('Text size','hookFontSize',20,160,1)}${rangeField('Seconds on screen','hookDuration',0.5,8,.5)}`:'')
-    +`</div>`;
+  // Deliberately has no controls.
+  //
+  // An "Opening title" block was here, built from the hook* template fields.
+  // It could never do anything: sanitiseTemplate() sets `hookEnabled = false`
+  // unconditionally (templates.js, "Opening title cards are intentionally
+  // disabled"), and the worker has no hook rendering — HOOKS in clip_worker.py
+  // is an unrelated scoring word-list. The fields exist in the schema; the
+  // render path does not. Reading the schema and assuming the pipeline
+  // followed is how they got shipped.
+  //
+  // Real text layers need a per-clip layer model and overlay compositing in
+  // the worker, and the pipeline currently has no compositing path at all.
+  // Until then this says so, because a section that admits it is empty is
+  // more use than one that appears to work.
+  return `<div class="dc-section"><h3>Text layers</h3><div class="dc-simple-card"><strong>Not available yet</strong><span>Hand-placed titles, speaker names and verse references need a per-clip layer model and overlay support in the renderer. Neither exists yet, so there is nothing here that would reach your exported video.</span></div><p class="dc-caption-note" style="margin-top:9px">Spoken words are captioned automatically — see the Captions section.</p></div>`;
 }
 
 // A Brand Kit is the account's identity — logo, colours, watermark. A Clip
@@ -3032,6 +3053,7 @@ function bindVideo(clip){
   video.onplay=()=>{editor.playing=true;$('#dcPlayButton').innerHTML=ICON.pause;if(bg){syncBackgroundVideo(true);bg.play().catch(()=>{})}};
   video.onpause=()=>{editor.playing=false;$('#dcPlayButton').innerHTML=ICON.play;bg?.pause()};
   bindTimelineScrub();
+  bindTimelineZoom();
 }
 function togglePlayback(){const video=$('#dcEditorVideo');if(!video)return;if(video.currentTime<editor.sourceBase||video.currentTime>=editor.sourceEnd)video.currentTime=editor.sourceBase;video.paused?video.play():video.pause()}
 function seekEditor(seconds){const video=$('#dcEditorVideo'),bg=$('#dcEditorVideoBg');if(!video)return;const local=clamp(seconds,0,editor.trimOut);video.currentTime=editor.sourceBase+local;if(bg)bg.currentTime=video.currentTime;editor.currentTime=local;updateCaptionAtTime(local);applyFrameAtTime(local)}
@@ -3187,6 +3209,62 @@ function bindTimelineScrub(){
   scroll.addEventListener('pointerup',release);
   scroll.addEventListener('pointercancel',release);
 }
+// Zoom changes the visual scale only. It never touches trimIn/trimOut or any
+// caption timing — every position is derived from time through
+// timelineGeometry(), so nothing here can retime a clip.
+// Re-derive the scale when the frame changes size. At zoom 1 this keeps the
+// clip fitted through a window resize or a panel collapse, which is what makes
+// "fitted" a state rather than a one-off calculation. A deliberate zoom is
+// preserved because it is a multiplier, not an absolute px/s.
+function observeTimelineWidth(){
+  const scroll=$('#dcTimelineScroll');if(!scroll||typeof ResizeObserver!=='function')return;
+  editor.timelineResizeObserver?.disconnect();
+  let last=scroll.clientWidth;
+  editor.timelineResizeObserver=new ResizeObserver(()=>{
+    if(Math.abs(scroll.clientWidth-last)<2)return;
+    last=scroll.clientWidth;
+    renderTimeline();
+  });
+  editor.timelineResizeObserver.observe(scroll);
+}
+function bindTimelineZoom(){
+  const scroll=$('#dcTimelineScroll');if(!scroll)return;
+  observeTimelineWidth();
+  // Zoom about the playhead, so the moment you are looking at stays put
+  // instead of sliding off-screen as the scale grows.
+  const applyZoom=next=>{
+    const before=editor.currentTime;
+    editor.timelineZoom=clamp(next,1,40);
+    renderTimeline();
+    const geo=timelineGeometry();
+    if(geo){
+      const target=geo.left+(before/geo.duration)*geo.width;
+      scroll.scrollLeft=clamp(target-scroll.clientWidth/2,0,Math.max(0,scroll.scrollWidth-scroll.clientWidth));
+    }
+    updateTimelineZoomButtons();
+  };
+  $('#dcTimelineZoomIn')?.addEventListener('click',()=>applyZoom((editor.timelineZoom||1)*1.5));
+  $('#dcTimelineZoomOut')?.addEventListener('click',()=>applyZoom((editor.timelineZoom||1)/1.5));
+  $('#dcTimelineFit')?.addEventListener('click',()=>{fitTimeline();updateTimelineZoomButtons()});
+  // Shift+wheel pans, Cmd/Ctrl+wheel zooms — both are what a timeline is
+  // expected to do, and neither should scroll the page.
+  scroll.addEventListener('wheel',event=>{
+    if(event.ctrlKey||event.metaKey){
+      event.preventDefault();
+      applyZoom((editor.timelineZoom||1)*(event.deltaY<0?1.12:1/1.12));
+    }
+  },{passive:false});
+  updateTimelineZoomButtons();
+}
+function updateTimelineZoomButtons(){
+  const zoom=clamp(editor.timelineZoom||1,1,40);
+  const out=$('#dcTimelineZoomOut'),fit=$('#dcTimelineFit');
+  // At zoom 1 the clip already fills the frame, so zooming out further and
+  // "Fit" would both be no-ops. Saying so is better than letting them look
+  // available and do nothing.
+  if(out)out.disabled=zoom<=1;
+  if(fit)fit.disabled=zoom<=1;
+}
 function timelineGeometry(){
   const scroll=$('#dcTimelineScroll');if(!scroll)return null;
   const content=scroll.querySelector('.dc-track-content');if(!content)return null;
@@ -3194,9 +3272,39 @@ function timelineGeometry(){
   const left=contentRect.left-scrollRect.left+scroll.scrollLeft;
   return { left, width:Math.max(1,contentRect.width), duration:Math.max(.001,editor.trimOut||1) };
 }
+// Pixels per second at which the whole clip exactly fills the timeline.
+//
+// This replaces a hard-coded 46. Measured on a 35.92s clip in an 876px frame,
+// that constant produced a 1725px timeline — 1.97x too wide, so the clip could
+// never be seen at once no matter the screen. Fit is not a feature bolted on
+// top of that scale; it is what the scale should have been derived from.
+const TIMELINE_GUTTER=56;      // track label column, shared with .dc-track-row
+const TIMELINE_EDGE_PAD=12;    // intentional breathing room at both ends
+function timelineFitScale(duration){
+  const scroll=$('#dcTimelineScroll');
+  const usable=(scroll?.clientWidth||0)-TIMELINE_GUTTER-TIMELINE_EDGE_PAD*2;
+  // Before first layout clientWidth is 0. Falling through to a division would
+  // yield 0 px/s and collapse every position to the same point.
+  if(!(usable>0)||!(duration>0))return null;
+  return usable/duration;
+}
+// Zoom is a multiplier on Fit rather than an absolute px/s, so "fitted" stays
+// meaningful when the panel is resized: at zoom 1 the clip always fills the
+// frame, whatever the width.
+function timelineScale(duration){
+  const fit=timelineFitScale(duration);
+  if(fit===null)return 46;
+  return fit*clamp(editor.timelineZoom||1,1,40);
+}
+function fitTimeline(){
+  editor.timelineZoom=1;
+  const scroll=$('#dcTimelineScroll');if(scroll)scroll.scrollLeft=0;
+  renderTimeline();
+}
 function renderTimeline(){
   const duration=editor.trimOut||Math.max(.1,Number(currentClip()?.durationMs||0)/1000)||1,ruler=$('#dcRulerMarks'),track=$('#dcCaptionTrack'),scroll=$('#dcTimelineScroll');if(!ruler||!track)return;
-  editor.timelineWidth=Math.max(scroll?.clientWidth||0,72+Math.ceil(duration*46));
+  const perSecond=timelineScale(duration);
+  editor.timelineWidth=Math.max(scroll?.clientWidth||0,Math.ceil(TIMELINE_GUTTER+TIMELINE_EDGE_PAD*2+duration*perSecond));
   scroll?.style.setProperty('--dc-timeline-width',`${editor.timelineWidth}px`);
   // Marks now live inside a cell that shares the caption track's gutter, so
   // "0:15" on the ruler is directly above the words spoken at 0:15.

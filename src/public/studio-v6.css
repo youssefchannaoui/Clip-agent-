@@ -686,6 +686,62 @@ body.dc-app .dc-export-foot {
   border-top: 1px solid var(--v6-line, rgba(255,255,255,.08));
 }
 
+/* Timeline zoom cluster. Sits with the timeline it controls, per the spec's
+ * instruction to keep secondary project and account actions out of this strip. */
+body.dc-app .dc-timeline-zoom { display: flex; align-items: center; gap: 5px; }
+body.dc-app .dc-timeline-zoom .dc-icon-btn {
+  width: 24px; height: 24px; min-height: 0;
+  display: grid; place-items: center;
+  border: 1px solid var(--v6-line, rgba(255,255,255,.09));
+  border-radius: 6px;
+  font-size: 13px; line-height: 1;
+}
+body.dc-app .dc-timeline-zoom .dc-btn { min-height: 24px; padding: 0 10px; font-size: 9px; }
+body.dc-app .dc-timeline-zoom button:disabled { opacity: .38; cursor: default; }
+
+/* ------------------------------------------------------------------ *
+ * Fixed editor shell
+ *
+ * Measured before this rule existed, at 1440x756: the document scrolled by
+ * 96px. Three things stacked, and the arithmetic closed exactly.
+ *
+ *   .wrap reserved 202px of padding, !important -- 92 top (--dc-top + 24)
+ *   and 110 bottom, the latter to clear the floating activity dock on
+ *   scrolling pages. The editor does not need that clearance.
+ *
+ *   .dc-editor-page asked for calc(100vh - var(--dc-top) - 42px). The 42px
+ *   was an estimate of surrounding chrome; the real figure was 202px, so the
+ *   editor requested 646px inside a box with 554px of room.
+ *
+ *   min-height:650px then removed the ability to shrink, which is what made
+ *   it overflow on any laptop rather than merely on small windows.
+ *
+ *   92 + 650 + 110 = 852 = the measured scrollHeight.
+ *
+ * The fix is not a better subtraction. The editor now takes its height from
+ * its parent chain, so it cannot mis-guess what its ancestors consume -- the
+ * class of bug disappears rather than being corrected to a new wrong number.
+ *
+ * Scoped to the editor route, and only above the width where the layout
+ * stacks. Below that the editor reflows into a tall column and must keep
+ * scrolling normally.
+ * ------------------------------------------------------------------ */
+@media (min-width: 981px) {
+  body.dc-app.dc-editor-route { overflow: hidden; }
+  body.dc-app.dc-editor-route #app > .wrap {
+    height: 100vh;
+    box-sizing: border-box;
+    overflow: hidden;
+    /* Matches the !important it is replacing. The bottom 110px goes: nothing
+       floats over a shell that does not scroll. */
+    padding: calc(var(--dc-top) + 12px) 16px 16px calc(var(--dc-side) + 16px) !important;
+  }
+  body.dc-app.dc-editor-route .dc-editor-page {
+    height: 100%;
+    min-height: 0;
+  }
+}
+
 /* ------------------------------------------------------------------ *
  * Collapsing the tool panel
  *

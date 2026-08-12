@@ -141,6 +141,92 @@ test('both preview paths set the timebase through one function', () => {
     'the export fallback must rebase to media zero');
 });
 
+// Fit Timeline. The scale used to be a hard-coded 46 px/s: on a 35.92s clip in
+// an 876px frame that produced a 1725px timeline, 1.97x too wide, so the clip
+// could never be seen at once on any screen. Fit is the scale being derived
+// from the frame instead of asserted.
+function makeFit({ clientWidth = 876 } = {}) {
+  const body = ui.slice(ui.indexOf('const TIMELINE_GUTTER='));
+  const src = body.slice(0, body.indexOf('\nfunction renderTimeline'));
+  const editor = { timelineZoom: 1 };
+  const scope = new Function(
+    '$', 'editor', 'clamp',
+    `${src}\nreturn { timelineFitScale, timelineScale, editor, GUT: TIMELINE_GUTTER, PAD: TIMELINE_EDGE_PAD };`,
+  )(
+    sel => (sel === '#dcTimelineScroll' ? { clientWidth, scrollLeft: 0 } : null),
+    editor,
+    (n, a, b) => Math.min(b, Math.max(a, Number(n) || 0)),
+  );
+  return scope;
+}
+
+test('a fitted clip exactly fills the usable timeline width', () => {
+  const s = makeFit({ clientWidth: 876 });
+  const duration = 35.92;
+  const perSecond = s.timelineFitScale(duration);
+  const usable = 876 - s.GUT - s.PAD * 2;
+  assert.equal(Math.round(perSecond * duration), usable, 'the whole clip must span the usable width');
+  assert.ok(perSecond < 46, `fit (${perSecond.toFixed(1)}px/s) must be tighter than the old constant on this clip`);
+});
+
+test('fit adapts to the frame instead of asserting a constant', () => {
+  const duration = 35.92;
+  const narrow = makeFit({ clientWidth: 600 }).timelineFitScale(duration);
+  const wide = makeFit({ clientWidth: 1600 }).timelineFitScale(duration);
+  assert.ok(wide > narrow, 'a wider frame must give a larger scale, not the same one');
+});
+
+test('a long clip and a short clip both fit', () => {
+  const s = makeFit({ clientWidth: 876 });
+  const usable = 876 - s.GUT - s.PAD * 2;
+  for (const duration of [3, 35.92, 600]) {
+    assert.equal(Math.round(s.timelineFitScale(duration) * duration), usable, `${duration}s must fit`);
+  }
+});
+
+test('zero, negative and unmeasured widths cannot produce a broken scale', () => {
+  // A zero px/s collapses every position onto the same pixel; NaN propagates
+  // into every left offset on the timeline. Both look like a dead editor.
+  const s = makeFit({ clientWidth: 876 });
+  assert.equal(s.timelineFitScale(0), null, 'zero duration must not divide');
+  assert.equal(s.timelineFitScale(-5), null);
+  assert.equal(makeFit({ clientWidth: 0 }).timelineFitScale(30), null, 'pre-layout width must not divide');
+  // And the caller must still return something usable.
+  assert.ok(makeFit({ clientWidth: 0 }).timelineScale(30) > 0, 'a fallback scale is required');
+  assert.ok(Number.isFinite(s.timelineScale(0)));
+});
+
+test('zoom is a multiplier on fit, so resizing keeps a fitted clip fitted', () => {
+  // Storing absolute px/s would mean a fitted clip stops fitting the moment
+  // the panel is resized, which is what makes "fitted" a state rather than a
+  // one-off calculation.
+  const s = makeFit({ clientWidth: 876 });
+  const duration = 35.92;
+  assert.equal(s.timelineScale(duration), s.timelineFitScale(duration), 'zoom 1 is exactly fit');
+  s.editor.timelineZoom = 2;
+  assert.equal(s.timelineScale(duration), s.timelineFitScale(duration) * 2);
+});
+
+test('zoom cannot go below fit or run away', () => {
+  const s = makeFit({ clientWidth: 876 });
+  const duration = 35.92;
+  s.editor.timelineZoom = 0.1;
+  assert.equal(s.timelineScale(duration), s.timelineFitScale(duration), 'below 1x is clamped to fit');
+  s.editor.timelineZoom = 9999;
+  assert.equal(s.timelineScale(duration), s.timelineFitScale(duration) * 40, 'zoom is bounded');
+});
+
+test('zoom never touches timing data', () => {
+  // The whole risk of a zoom feature is that it retimes something. Every
+  // position is derived from time through timelineGeometry(), so the zoom
+  // handler must not write to any timing field.
+  const fn = ui.slice(ui.indexOf('function bindTimelineZoom(){'));
+  const body = fn.slice(0, fn.indexOf('\nfunction updateTimelineZoomButtons'));
+  for (const field of ['trimIn', 'trimOut', 'sourceBase', 'sourceEnd', 'captionWords', 'captionTimingOffsetMs']) {
+    assert.doesNotMatch(body, new RegExp(`${field}\\s*=`), `zoom must not write ${field}`);
+  }
+});
+
 test('the ruler shares the caption track gutter', () => {
   const css = ui.slice(ui.indexOf('.dc-ruler{'));
   const rule = css.slice(0, css.indexOf('}'));
