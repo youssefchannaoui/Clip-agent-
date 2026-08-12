@@ -92,16 +92,50 @@ const html = `<!doctype html>
   html,body{margin:0;height:100%;background:#0a0a0c;color:#e9e9ee;
     font-family:Manrope,system-ui,-apple-system,'Segoe UI',sans-serif}
   body{--dc-top:0px}
-  #view-editor{height:100vh;padding:10px;box-sizing:border-box}
+  .main-col{height:100vh}
+  #view-editor{height:100%;padding:10px;box-sizing:border-box}
+  #view-editor.hide{display:none}
   .preview-note{position:fixed;right:10px;bottom:10px;z-index:9999;padding:6px 10px;
     border-radius:8px;background:#000c;color:#8b8b96;font-size:10px;pointer-events:none}
+  /* The harness has to explain its own failures. Without this a thrown error
+     leaves a black page and the only way to read it is devtools, which is not
+     always reachable. */
+  #preview-error{position:fixed;inset:16px;z-index:10000;display:none;overflow:auto;
+    padding:16px 18px;border-radius:12px;border:1px solid #7a2f36;background:#160d0f;
+    color:#ffd9dd;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap}
+  #preview-error b{display:block;margin-bottom:8px;color:#ff8a95;font-size:13px}
+  #preview-report{position:fixed;left:10px;bottom:10px;right:280px;z-index:9998;
+    padding:5px 9px;border-radius:8px;background:#000c;color:#7d8fa0;
+    font:10px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
 </style>
 <body class="dc-app">
-<section id="view-editor"></section>
+<!-- The minimum shell go() touches. boot() normally injects the whole app
+     chrome; reproducing all of it would make this harness a second copy of
+     the app. These four are exactly what the router dereferences on its way
+     to the editor view, and nothing here affects how the editor renders. -->
+<span id="dcPageName" hidden></span><span id="dcPageSub" hidden></span>
+<div class="main-col">
+  <section id="view-editor" class="panel"></section>
+</div>
 <div class="preview-note">preview fixture · ${baked ? 'no clean source' : 'clean source'} · startSec ${START}s</div>
+<div id="preview-report"></div>
+<pre id="preview-error"></pre>
 <script>
 window.DATA = ${JSON.stringify(fixture)};
 window.PW = '';
+window.__previewFail = (label, err) => {
+  const box = document.getElementById('preview-error');
+  if (!box) return;
+  box.style.display = 'block';
+  box.innerHTML = '<b>' + label + '</b>';
+  // Safari's .stack omits the message, so print both or the useful half is lost.
+  const message = (err && err.message) ? err.message : String(err);
+  const stack = (err && err.stack) ? '\n\n' + err.stack : '';
+  box.append(message + stack);
+};
+addEventListener('error', e => window.__previewFail('Uncaught error', e.error || e.message));
+addEventListener('unhandledrejection', e => window.__previewFail('Unhandled rejection', e.reason));
 </script>
 <script>
 (() => {
@@ -126,9 +160,31 @@ const blankVideo = () => {
 
 window.__preview = { editor, renderEditor, openEditor, timelineGeometry, currentClip };
 
+const step = s => { const el = document.getElementById('preview-report'); if (el) el.textContent = 'step: ' + s; };
+
 (async () => {
+  try {
   editor.clipId = '';
-  await openEditor('clip_preview');
+  step('openEditor');
+  // Not awaited. openEditor() awaits loadCaptionWords(), which calls the API —
+  // on file:// that request never settles, so awaiting here hangs the harness
+  // before anything renders. The editor draws from local state regardless;
+  // captions simply stay on the evenly-spaced fallback, which is fine for a
+  // layout check and is itself one of the states worth looking at.
+  const opening = Promise.resolve(openEditor('clip_preview')).catch(err => window.__previewFail('openEditor rejected', err));
+  await Promise.race([opening, new Promise(r => setTimeout(r, 1200))]);
+  step('rendered');
+  if (!document.querySelector('.dc-tool-rail')) {
+    // Fall back to rendering the editor directly, so a stall in the async
+    // setup cannot leave a blank page with nothing to look at.
+    step('direct renderEditor');
+    const clip = (DATA.clips || [])[0];
+    editor.clipId = clip.id;
+    renderEditor(clip);
+  }
+  if (!document.querySelector('.dc-tool-rail')) {
+    throw new Error('renderEditor() produced no editor markup — check that the fixture satisfies currentClip().');
+  }
   // Stand in for media the harness cannot load, without touching the code
   // under test: give the elements a poster and a synthetic duration.
   const poster = blankVideo();
@@ -141,6 +197,32 @@ window.__preview = { editor, renderEditor, openEditor, timelineGeometry, current
   }
   renderTimeline();
   updatePlayhead(0);
+
+  // Rendering without throwing is not the same as being on screen. Report what
+  // actually laid out, so a blank page says why it is blank instead of leaving
+  // devtools as the only way to find out.
+  const panel = document.getElementById('view-editor');
+  const rail = document.querySelector('.dc-tool-rail');
+  const sections = [...document.querySelectorAll('[data-editor-tool]')].map(b => b.dataset.editorTool);
+  const box = el => { const r = el && el.getBoundingClientRect(); return r ? Math.round(r.width) + 'x' + Math.round(r.height) : 'none'; };
+  const report = {
+    'view-editor class': panel ? panel.className : 'MISSING',
+    'view-editor display': panel ? getComputedStyle(panel).display : 'n/a',
+    'view-editor size': box(panel),
+    'tool rail size': box(rail),
+    'sections': sections.join(', ') || 'NONE',
+    'tool panel size': box(document.querySelector('.dc-tool-panel')),
+    'canvas size': box(document.querySelector('.dc-video-canvas')),
+    'timeline size': box(document.querySelector('.dc-timeline-scroll')),
+  };
+  const laidOut = rail && rail.getBoundingClientRect().height > 0;
+  if (!laidOut) {
+    window.__previewFail('Editor rendered but is not on screen', new Error(
+      Object.entries(report).map(([k, v]) => k + ': ' + v).join('\\n')));
+  }
+  document.getElementById('preview-report').textContent =
+    sections.length + ' sections · ' + Object.entries(report).map(([k, v]) => k + ' ' + v).join(' · ');
+  } catch (err) { window.__previewFail('Preview harness failed', err); }
 })();
 })();
 </script>

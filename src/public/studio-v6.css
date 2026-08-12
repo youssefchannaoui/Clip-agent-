@@ -658,6 +658,50 @@ body.dc-editor-baked-preview #dcCaptionOverlay {
   display: none;
 }
 
+/* ------------------------------------------------------------------ *
+ * Export dialog
+ *
+ * Publishing metadata moved here from the Post sidebar tab. It reuses the
+ * billing layer's backdrop so there is one overlay treatment in the app.
+ * ------------------------------------------------------------------ */
+body.dc-app .dc-export-card {
+  width: min(560px, 94vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+body.dc-app .dc-export-head {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--v6-line, rgba(255,255,255,.08));
+}
+body.dc-app .dc-export-head strong { display: block; font-size: 14px; }
+body.dc-app .dc-export-head span { display: block; margin-top: 3px; font-size: 10px; color: var(--dc-muted); }
+body.dc-app .dc-export-head > div { flex: 1; min-width: 0; }
+body.dc-app .dc-export-body { flex: 1; overflow: auto; padding: 14px 16px; }
+body.dc-app .dc-export-foot {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--v6-line, rgba(255,255,255,.08));
+}
+
+/* ------------------------------------------------------------------ *
+ * Collapsing the tool panel
+ *
+ * Clicking the section you are already in collapses the panel, which is the
+ * only way to give the preview the full width without leaving the editor.
+ * The rail stays, so the way back is always visible — collapsing to nothing
+ * would leave no affordance to reopen.
+ * ------------------------------------------------------------------ */
+body.dc-editor-panel-collapsed .dc-editor-workspace { --dc-tool-panel: 0px; }
+body.dc-editor-panel-collapsed .dc-tool-panel {
+  opacity: 0;
+  pointer-events: none;
+  border-right-width: 0;
+}
+body.dc-app .dc-tool-panel { transition: opacity .14s ease; }
+
 /* Waiting for the clean plate is a normal few seconds, not a fault. Saying so
  * is what the watchdog was really reaching for. */
 body.dc-app .dc-video-canvas.is-source-loading::after {
