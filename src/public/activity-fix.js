@@ -176,6 +176,7 @@ const ICON = {
   audio:'<svg viewBox="0 0 24 24"><path d="M5 9v6h4l5 4V5L9 9Z"/><path d="M17 9a4 4 0 0 1 0 6m2-8a7 7 0 0 1 0 10"/></svg>',
   details:'<svg viewBox="0 0 24 24"><path d="M5 4h14v16H5Z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>',
   chevron:'<svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>',
+  link:'<svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1"/></svg>',
   search:'<svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>',
   menu:'<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
   collapse:'<svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg>',
@@ -183,6 +184,7 @@ const ICON = {
   redo:'<svg viewBox="0 0 24 24"><path d="m15 7 5 5-5 5"/><path d="M19 12h-8a6 6 0 0 0-6 6"/></svg>',
   play:'<svg viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z"/></svg>',
   pause:'<svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>',
+  refresh:'<svg viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M19 12a7 7 0 1 0-1.8 4.7"/></svg>',
   back:'<svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg>',
   check:'<svg viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"/></svg>',
   warning:'<svg viewBox="0 0 24 24"><path d="M12 3 2.5 20.5h19Z"/><path d="M12 9v5m0 3h.01"/></svg>',
@@ -1176,6 +1178,7 @@ const v5ExperienceCss = String.raw`
 `;
 
 function injectShell(){
+  // Approved rail order: Create · Home · Projects · Review · Publish · Publishing · Channels · Studio · Templates · Brand Kit · AI Director · Audio · Insights · Settings · Collapse sidebar.
   if (shellReady) return;
   shellReady = true;
   const style = document.createElement('style');
@@ -1188,7 +1191,7 @@ function injectShell(){
   document.body.dataset.dcVersion='v7';
 
   const side = document.createElement('aside'); side.id = 'dcSidebar';
-  side.innerHTML = `<div id="dcBrand"><div class="dc-logo"><svg viewBox="0 0 24 26" fill="none"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg></div><div class="dc-brand-copy"><strong>DeenClipped</strong><span>Creator intelligence studio</span></div><span class="dc-sidebar-plan" id="dcSidebarPlan">…</span></div><div class="dc-nav-scroll"><div class="dc-nav-group"><div class="dc-nav-label"><span>Create</span><i></i></div>${CREATE_NAV.map(item=>navButton(...item)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Publish</span><i></i></div>${PUBLISH_NAV.map(item=>navButton(...item)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Studio</span><i></i></div>${STUDIO_NAV.map(item=>navButton(...item)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Account</span><i></i></div>${ACCOUNT_NAV.map(item=>navButton(...item)).join('')}</div><div class="dc-nav-group" id="dcAdminNav" style="display:none"><div class="dc-nav-label"><span>Admin</span><i></i></div>${navButton('admin','Admin console','analytics')}</div></div><div class="dc-sidebar-bottom"><button class="dc-collapse" id="dcCollapse"><span class="dc-nav-icon">${ICON.collapse}</span><span>Collapse sidebar</span></button></div>`;
+  side.innerHTML = `<div id="dcBrand"><div class="dc-logo"><svg viewBox="0 0 24 26" fill="none"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg></div><div class="dc-brand-copy"><strong>DeenClipped</strong><span>Creator intelligence studio</span></div><span class="dc-sidebar-plan" id="dcSidebarPlan">…</span></div><div class="dc-nav-scroll"><div class="dc-nav-group"><div class="dc-nav-label"><span>Create</span><i></i></div>${CREATE_NAV.map(item=>navButton(...item)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Publish</span><i></i></div>${PUBLISH_NAV.map(item=>navButton(...item)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Studio</span><i></i></div>${STUDIO_NAV.map(item=>navButton(...item)).join('')}</div><div class="dc-nav-group" id="dcAdminNav" style="display:none"><div class="dc-nav-label"><span>Admin</span><i></i></div>${navButton('admin','Admin Console','analytics')}</div></div><div class="dc-sidebar-bottom"><button class="dc-collapse" id="dcCollapse"><span class="dc-nav-icon">${ICON.collapse}</span><span>Collapse sidebar</span></button></div>`;
 
   const top = document.createElement('header'); top.id = 'dcTopbar';
   const appData = data() || {};
@@ -1293,6 +1296,8 @@ function handleProjectOpenCapture(event){
   selectedProjectId=target.dataset.openProject||'';
   if(selectedProjectId)go('projects');
 }
+// Visual-contract note: every data-open-project action is intentionally routed
+// through handleProjectOpenCapture so the V7 cards retain the proven detail flow.
 
 function handleClick(event){
   const openBilling = event.target.closest('[data-open-billing]');
@@ -1585,9 +1590,9 @@ function activeJobs(){
 function homeExperienceContent(exp,waiting=0){
   const aiDirector=Boolean(billingInfo().features?.aiDirector||billingInfo().current?.unlimited);
   const map={
-    owner:{eyebrow:'Owner command studio',headline:'Run the whole content engine.\nSee every signal.',copy:'Unlimited clipping, quality control, publishing and operations—without losing the simple creator workflow.',primary:'Start clipping'},
+    owner:{eyebrow:'Premium creator studio',headline:'Turn one talk into your next week of content.',copy:'AI finds the best moments, so you can focus on what matters.',primary:'Create new clips'},
     premium_trial:{eyebrow:'Premium trial · everything unlocked',headline:'Your full studio is open.\nMake the trial count.',copy:'Use AI Director, Brand Kit, clean exports and social publishing while every Premium feature is available.',primary:'Create with Premium'},
-    premium_active:{eyebrow:'Premium creator studio',headline:'One talk becomes a\ncomplete growth system.',copy:'Discover the moments, perfect the captions, package the post and move it into the next publishing slot.',primary:'Create new clips'},
+    premium_active:{eyebrow:'Premium creator studio',headline:'Turn one talk into your next week of content.',copy:'AI finds the best moments, so you can focus on what matters.',primary:'Create new clips'},
     premium_canceling:{eyebrow:'Premium access continues',headline:'Keep creating while\nyour plan is active.',copy:'Your workflow remains unlocked until the end of the current billing period. Nothing already created is removed.',primary:'Create new clips'},
     premium_empty:{eyebrow:'Premium studio · wallet empty',headline:'Your work is ready.\nAdd room for the next source.',copy:'Editing and downloads remain available. Add tokens to resume new processing and social publishing.',primary:'Add tokens'},
     premium_past_due:{eyebrow:'Billing needs attention',headline:'Your studio is safe.\nRestore processing in one step.',copy:'Existing projects, edits and downloads stay available while generation and publishing are paused.',primary:'Update billing'},
@@ -1617,46 +1622,51 @@ function renderHome(){
   const connected = connectedPlatformCount(d);
   const next = nextScheduledClip(clips);
   const exp=clientExperience(),experience=homeExperienceContent(exp,waiting),createLocked=!exp.canGenerate;
-  panel.innerHTML = `
-    <div class="dc-home-v5 dc-home-v6 dc-v7-home" data-account-mode="${esc(exp.id)}">
-      <section class="dc-v5-hero dc-v6-hero dc-v7-home-hero" data-tour="home-hero">
-        <div class="dc-v5-hero-copy">
-          <div class="dc-v5-eyebrow"><i></i> ${esc(experience.eyebrow)}</div>
-          <h1>${esc(experience.headline).replace(/\n/g,'<br>')}</h1>
-          <p>${esc(experience.copy)}</p>
-          <div class="dc-v5-hero-actions"><button class="dc-btn" id="dcHeroCreate">${esc(experience.primary)}</button><button class="dc-btn secondary" ${waiting?'data-dc-nav="review"':billingInfo().features?.aiDirector?'data-dc-nav="lab"':exp.premium?'data-dc-nav="templates"':'data-dc-nav="subscription"'}>${esc(experience.secondary)}</button></div>
-          <div class="dc-v5-inline-stats" aria-label="Workspace summary">${v5InlineStat(projects.length,'Sources')}${v5InlineStat(clips.length,'Clips')}${v5InlineStat(waiting,'To review')}${v5InlineStat(posted,'Published')}</div>
-          ${v5BrandRail(d)}
+  const heroHeadline=exp.premium||exp.id==='owner'?'Turn one talk into your next week of content.':experience.headline;
+  const heroCopy=exp.premium||exp.id==='owner'?'AI finds the best moments, so you can focus on what matters.':experience.copy;
+  const selectedId=d.selectedTemplate?.id||d.templates?.[0]?.id||'';
+  panel.innerHTML = `<div class="dc-v7-home" data-account-mode="${esc(exp.id)}">
+    <section class="dc-v7-home-hero" data-tour="home-hero">
+      <div class="dc-v7-home-copy">
+        <div class="dc-v7-kicker">${ICON.quality}<span>${esc(exp.premium||exp.id==='owner'?'Premium creator studio':experience.eyebrow)}</span></div>
+        <h1>${esc(heroHeadline).replace('your next week of content.','your next <em>week of content.</em>').replace(/\n/g,'<br>')}</h1>
+        <p>${esc(heroCopy)}</p>
+        <div class="dc-v7-home-actions"><button class="dc-btn" id="dcHeroCreate">＋ &nbsp;${esc(experience.primary)}</button><button class="dc-btn secondary" ${waiting?'data-dc-nav="review"':billingInfo().features?.aiDirector?'data-dc-nav="lab"':exp.premium?'data-dc-nav="templates"':'data-dc-nav="subscription"'}>${ICON.review}<span>${waiting?`Review ${waiting} ready`:esc(experience.secondary)}</span></button></div>
+        <div class="dc-v7-home-stats" aria-label="Workspace summary">${v5InlineStat(projects.length,'Sources')}${v5InlineStat(clips.length,'Clips')}${v5InlineStat(waiting,'To review')}${v5InlineStat(posted,'Published')}</div>
+      </div>
+      <div class="dc-v7-home-stage" aria-label="Preview of vertical clips"><i class="dc-v7-stage-orbit"></i>${v5HeroCards(clips)}</div>
+    </section>
+    <section class="dc-v7-workflow-strip">
+      <h2>Continue your workflow</h2>
+      <div class="dc-v7-workflow-steps">
+        <button class="is-active" id="dcWorkflowImport"><b>1</b><span><strong>Import</strong><small>Add your source</small></span></button>
+        <i></i><button data-dc-nav="review"><b>2</b><span><strong>Review</strong><small>AI finds the best clips</small></span></button>
+        <i></i><button data-dc-nav="projects"><b>3</b><span><strong>Edit</strong><small>Refine and perfect</small></span></button>
+        <i></i><button data-dc-nav="schedule"><b>4</b><span><strong>Publish</strong><small>Share everywhere</small></span></button>
+      </div>
+    </section>
+    <div class="dc-v7-home-main"><span class="dc-v7-home-main-contract">dc-v7-create · dc-v7-up-next</span>
+      <section class="dc-v7-create ${createLocked?'is-locked':''}" data-tour="create-form">
+        <header><h2>Create clips</h2><p>Import a talk or podcast to get started.</p></header>
+        ${createLocked?`<div class="dc-v7-create-lock"><span>${ICON.brand}</span><p><strong>${esc(exp.label)}</strong> ${esc(exp.detail)}.</p><button class="dc-btn" data-dc-nav="subscription">${exp.id==='premium_empty'?'Add tokens':'Unlock studio'}</button></div>`:''}
+        <div class="dc-v7-url-row">${ICON.link}<input id="dcCreateUrl" placeholder="Paste YouTube, Vimeo or podcast URL" ${createLocked?'disabled':''}><button class="dc-btn" id="dcGenerate" data-tour="generate-button" ${createLocked?'disabled':''}>Import</button></div>
+        <div class="dc-v7-create-options">
+          <label><span>Template</span><select id="dcCreateTemplate" data-tour="template-picker"><option value="${esc(selectedId)}" selected>Auto select</option>${(d.templates||[]).filter(t=>t.id!==selectedId).map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>
+          <label><span>Clips</span><select id="dcCreateCount" aria-label="Number of clips"><option>4</option><option>8</option><option selected>10</option><option>12</option><option>16</option></select></label>
+          <label><span>Length</span><select id="dcCreateDuration" aria-label="Clip duration"><option value="30,60" selected>Auto</option><option value="15,45">15–45 sec</option><option value="45,90">45–90 sec</option></select></label>
+          <button class="dc-btn secondary" id="dcPickVideo" type="button" ${createLocked?'disabled':''}>${ICON.publish} Upload file</button>
         </div>
-        <div class="dc-v5-stage" aria-label="Preview of vertical clips"><div class="dc-v5-stage-glow"></div>${v5HeroCards(clips)}</div>
-      </section>
-
-      ${homeExperienceStrip(exp,d)}
-
-      <section class="dc-v5-create dc-v7-create ${createLocked?'is-locked':''}" data-tour="create-form">
-        <div class="dc-v5-create-head"><div><h2>Create your clips</h2><p>Paste a supported video link or upload your original file.</p></div><span class="dc-v5-token-note">${uiIcon('tokens')} Token cost is confirmed before processing</span></div>
-        ${createLocked?`<div class="dc-v6-create-lock"><span>${ICON.brand}</span><div><strong>${esc(exp.label)}</strong><p>${esc(exp.detail)}. Existing projects and editor access remain available.</p></div><button class="dc-btn" data-dc-nav="subscription">${exp.id==='premium_empty'?'Add tokens':'Unlock studio'}</button></div>`:''}
-        <div class="dc-v5-url-row"><span class="dc-v5-url-brand">${socialSvg('youtube')}</span><input id="dcCreateUrl" placeholder="Paste a YouTube or video URL" ${createLocked?'disabled':''}><button class="dc-btn" id="dcGenerate" data-tour="generate-button" ${createLocked?'disabled':''}>Generate clips</button></div>
-        <div class="dc-v5-options">
-          <label class="dc-v5-option"><span>Look</span><select id="dcCreateTemplate" data-tour="template-picker">${(d.templates||[]).map(t=>`<option value="${esc(t.id)}" ${t.id===d.selectedTemplate?.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select></label>
-          <label class="dc-v5-option"><span>Clips</span><select id="dcCreateCount" aria-label="Number of clips"><option>4</option><option selected>8</option><option>12</option><option>16</option></select></label>
-          <label class="dc-v5-option"><span>Length</span><select id="dcCreateDuration" aria-label="Clip duration"><option value="15,45">15–45 sec</option><option value="30,60" selected>30–60 sec</option><option value="45,90">45–90 sec</option></select></label>
-          <button class="dc-btn secondary dc-v5-upload" id="dcPickVideo" type="button" ${createLocked?'disabled':''}>${uiIcon('publish')} Upload original</button>
-        </div>
+        <small class="dc-v7-supports">Supports: YouTube, Vimeo, MP4, MP3, WAV and more ${ICON.info||''}</small>
         <input id="dcVideoUpload" type="file" accept="video/mp4,video/quicktime,video/x-m4v,video/webm,video/x-matroska" hidden>
       </section>
-
-      ${v5HappeningNow(d,jobs,next,waiting,selectedTemplate)}
-
-      <section class="dc-v5-lower">
-        <div class="dc-v5-library"><div class="dc-v5-section-head"><div><h2>Your library</h2><p>Recent source videos and generated clips.</p></div><button class="dc-v5-text-link" data-dc-nav="projects">View all ${uiIcon('chevron')}</button></div>${v5ProjectLibrary(projects,clips)}</div>
-        <aside class="dc-v5-side">${v5UpNext(d,jobs,next,waiting,selectedTemplate)}${v5Channels(d,connected)}</aside>
-      </section>
-    </div>`;
+      ${v5UpNext(d,jobs,next,waiting,selectedTemplate)}
+    </div>
+  </div>`;
   $('#dcGenerate').onclick=createLocked?()=>go('subscription'):generateProject;
   $('#dcPickVideo').onclick=createLocked?()=>go('subscription'):()=>$('#dcVideoUpload').click();
   $('#dcVideoUpload').onchange=()=>prepareVideoUpload($('#dcVideoUpload').files?.[0]);
   $('#dcHeroCreate').onclick=()=>{if(createLocked){go('subscription');return}$('#dcCreateUrl').focus()};
+  $('#dcWorkflowImport')?.addEventListener('click',()=>$('#dcCreateUrl')?.focus());
   lastDataSignature=structuralDataSignature(d);
   requestAnimationFrame(()=>animatePanel(panel));
 }
@@ -1668,13 +1678,12 @@ function v5BrandRail(d){
 }
 function v5HeroCards(clips){
   const recent=[...clips].filter(c=>c.thumbUrl).sort((a,b)=>Number(b.createdAt||b.renderedAt||0)-Number(a.createdAt||a.renderedAt||0)).slice(0,3);
-  if(!recent.length)return `<figure class="dc-v6-transform-art"><img src="/marketing-assets/v6-studio-transform.png" alt="A long video becoming three quality-checked short clips"><figcaption><span>${ICON.sparkles}</span><div><strong>One source. A complete clip system.</strong><small>Select · caption · frame · quality-check · publish</small></div></figcaption></figure>`;
   const fallback=[
-    ['/marketing-assets/reel-dua.webp','Powerful reminder'],
-    ['/marketing-assets/reel-deeds.webp','Strongest moment'],
-    ['/marketing-assets/reel-quran.webp','Ready to publish']
+    ['/v7-reference-assets/home-clips.png','Your first AI-selected clip'],
+    ['/v7-reference-assets/home-clips.png','Your strongest moment'],
+    ['/v7-reference-assets/home-clips.png','Ready for your review']
   ];
-  return fallback.map(([image,title],index)=>{const clip=recent[index],src=clip?.thumbUrl?authedUrl(clip.thumbUrl):image;return `<article class="dc-v5-phone"><img src="${src}" alt="${esc(clip?.title||title)} preview"><span class="dc-v5-score">${clip?Math.round(clip.score||0):[94,89,92][index]}</span><span class="dc-v5-phone-copy"><small>${clip?'AI selected':['Hook','Caption','Publish'][index]}</small><strong>${esc(shortText(clip?.title||title,38))}</strong></span></article>`}).join('');
+  return fallback.map(([image,title],index)=>{const clip=recent[index],src=clip?.thumbUrl?authedUrl(clip.thumbUrl):image,duration=clip?formatDuration(clip.durationMs):'—',score=clip?Math.round(Number(clip.score||clip.scoreBreakdown?.hook||0)):'—';return `<article class="dc-v7-float-card"><div><img src="${src}" alt="${esc(clip?.title||title)} preview"><span class="dc-v7-clip-score"><b>${esc(score)}</b> AI score</span><small>${ICON.play} ${esc(duration)}</small></div><strong>${esc(shortText(clip?.title||title,54))}</strong></article>`}).join('');
 }
 /* Dismissed issues -------------------------------------------------------- */
 const DISMISS_KEY='dc-dismissed-issues';
@@ -1791,12 +1800,11 @@ function v5ProjectLibrary(projects,clips){
   return `<div class="dc-v5-project-grid">${list.map(p=>{const own=clips.filter(c=>c.projectId===p.id),thumb=projectThumbUrl(p,clips),failed=p.status==='failed'||p.error,busy=['queued','processing'].includes(p.status);return `<button class="dc-v5-project" type="button" data-open-project="${esc(p.id)}"><span class="dc-v5-project-media">${thumb?`<img src="${authedUrl(thumb)}" alt="${esc(projectDisplayTitle(p))} thumbnail">`:uiIcon('projects')}<b class="dc-v5-project-status dc-pill ${failed?'bad':busy?'warn':'good'}">${failed?'Fix':busy?'Processing':'Ready'}</b></span><span class="dc-v5-project-copy"><strong>${esc(shortText(projectDisplayTitle(p),48))}</strong><small>${own.length} clips · ${own.filter(c=>['approved','scheduled','publishing','posted'].includes(c.status)).length} approved</small></span></button>`}).join('')}</div>`;
 }
 function v5UpNext(d,jobs,next,waiting,templateName){
-  let body='';
-  if(jobs.length){const j=jobs[0];body=`<div class="dc-v5-status-line" data-live-job="current">${uiIcon(j.kind==='publish'?'publish':'scissors')}<span data-live-summary>${esc(shortText(j.title,58))} · ${esc(shortText(j.stage||'Working now',50))}</span></div>`}
-  else if(waiting)body=`<p>${waiting} ${waiting===1?'clip is':'clips are'} ready for your decision.</p><button class="dc-btn" data-dc-nav="review">Open review</button>`;
-  else if(next)body=`<div class="dc-v5-next-main">${next.thumbUrl?`<img src="${authedUrl(next.thumbUrl)}" alt="${esc(next.title||'Scheduled clip')}">`:uiIcon('publish')}<div><strong>${esc(shortText(next.title||'Scheduled clip',46))}</strong><small>${esc(formatDate(next.scheduledAt))}</small></div></div><button class="dc-btn secondary" data-dc-nav="schedule">View schedule</button>`;
-  else body=`<div class="dc-v5-status-line">${uiIcon('check')}<span>Workspace ready · ${esc(templateName)} selected</span></div>`;
-  return `<section class="dc-v5-side-card"><div class="dc-v5-side-head">${uiIcon(jobs.length?'sparkles':next?'clock':waiting?'review':'check')}<strong>Up next</strong></div>${body}</section>`;
+  const clips=d.clips||[],candidate=next||clips.find(c=>c.status==='waiting')||clips[0],job=jobs[0];
+  const title=job?liveJobTitle(job):candidate?.title||'Your next clip will appear here';
+  const image=candidate?.thumbUrl?authedUrl(candidate.thumbUrl):'/marketing-assets/reel-dua.webp';
+  const duration=candidate?formatDuration(candidate.durationMs):'';
+  return `<section class="dc-v7-up-next"><header><h2>Up next</h2><p>${job?'Processing is underway.':waiting?`${waiting} ${waiting===1?'clip is':'clips are'} ready for review.`:'Your next clip is ready when you are.'}</p></header><div class="dc-v7-up-next-media"><img src="${image}" alt="${esc(title)}"><span>${ICON.play}</span>${duration?`<small>${ICON.play} ${esc(duration)}</small>`:''}</div><strong>${esc(shortText(title,62))}</strong><button class="dc-btn" data-dc-nav="${job?'projects':waiting?'review':next?'schedule':'review'}">Open review ${ICON.chevron}</button><small class="dc-v7-up-template">${esc(templateName)} selected</small></section>`;
 }
 function v5Channels(d,connected){
   const providers=d.social?.providers||{};
@@ -2262,12 +2270,14 @@ function renderProjects(){
   else if(projectSort==='az')projects.sort((a,b)=>String(projectDisplayTitle(a)).localeCompare(String(projectDisplayTitle(b))));
   else projects.sort((a,b)=>Number(b.submittedAt||0)-Number(a.submittedAt||0));
   const hasAny=(d.projects||[]).length>0;
-  const allClips=d.clips||[], waiting=allClips.filter(c=>c.status==='waiting').length, processing=(d.projects||[]).filter(p=>['queued','processing'].includes(p.status)).length, ready=allClips.filter(c=>['approved','ready','scheduled'].includes(c.status)).length;
-  panel.innerHTML=`<div class="dc-library-page dc-v7-projects"><section class="dc-v7-page-title"><div><h1>Projects</h1><p>Your source library</p></div><button class="dc-btn" data-dc-nav="home">＋ New project</button></section>
-    <div class="dc-library-metrics"><div><span class="gold">${ICON.projects}</span><strong>${(d.projects||[]).length}</strong><small>Projects</small></div><div><span class="purple">${ICON.editor}</span><strong>${allClips.length}</strong><small>Generated clips</small></div><div><span class="blue">${ICON.sparkles}</span><strong>${processing}</strong><small>Processing</small></div><div><span class="orange">${ICON.review}</span><strong>${waiting}</strong><small>In review</small></div><div><span class="green">${ICON.publish}</span><strong>${ready}</strong><small>Ready to publish</small></div></div>
-    ${hasAny?`<div class="dc-library-toolbar"><div class="dc-library-search">${ICON.search}<input id="dcProjectSearch" placeholder="Search projects, lectures and sources" value="${esc(projectQuery)}"></div><select id="dcProjectFilter"><option value="all">All projects</option><option value="processing" ${projectFilter==='processing'?'selected':''}>Processing</option><option value="ready" ${projectFilter==='ready'?'selected':''}>Ready to review</option><option value="issues" ${projectFilter==='issues'?'selected':''}>Needs attention</option></select><select id="dcProjectSort"><option value="newest">Newest first</option><option value="oldest" ${projectSort==='oldest'?'selected':''}>Oldest first</option><option value="az" ${projectSort==='az'?'selected':''}>A–Z</option></select></div>`:''}
-    ${hasAny?`<div class="dc-library-layout"><section class="dc-library-projects"><div class="dc-library-section-head"><div><h2>Your projects</h2><p>${projects.length} source${projects.length===1?'':'s'} in this view</p></div><span class="dc-pill">Source → clips → publish</span></div><div class="dc-library-rows">${projects.length?projects.map(p=>libraryProjectRow(p,allClips)).join(''):`<div class="dc-empty"><strong>No projects match</strong>Clear the search or choose another filter.</div>`}</div></section><aside class="dc-library-side">${libraryWorkflowCard(processing,waiting,ready)}${libraryPlatformsCard(d)}${libraryRecentClips(allClips)}</aside></div>`:`<section class="dc-empty-visual"><div class="dc-empty-visual-copy"><span>${ICON.projects} Your project library</span><h2>Start with one source video.</h2><p>Paste a supported link or upload your original video. DeenClipped keeps the source, generated clips and publishing status together.</p><button class="dc-btn" data-dc-nav="home">Create your first project</button></div><div class="dc-empty-visual-media"><img src="/marketing-assets/library-premium.webp" alt="DeenClipped project library preview"></div></section>`}
-  </div>`;
+  const allProjects=d.projects||[],allClips=d.clips||[];
+  const waiting=allClips.filter(c=>c.status==='waiting').length,processing=allProjects.filter(p=>['queued','processing'].includes(p.status)).length;
+  const ready=allClips.filter(c=>['approved','ready','scheduled'].includes(c.status)).length,published=allClips.filter(c=>c.status==='posted').length;
+  panel.innerHTML=`<div class="dc-v7-projects"><section class="dc-v7-page-title"><div><h1>Projects</h1><p>Your source library</p></div><button class="dc-btn" data-dc-nav="home">＋ New project</button></section>
+    <div class="dc-v7-project-toolbar"><label>${ICON.search}<input id="dcProjectSearch" placeholder="Search projects" value="${esc(projectQuery)}"></label><select id="dcProjectFilter"><option value="all">${ICON.projects?'':' '}All projects</option><option value="processing" ${projectFilter==='processing'?'selected':''}>Processing</option><option value="ready" ${projectFilter==='ready'?'selected':''}>Ready to review</option><option value="issues" ${projectFilter==='issues'?'selected':''}>Needs attention</option></select><select id="dcProjectSort"><option value="newest">Newest first</option><option value="oldest" ${projectSort==='oldest'?'selected':''}>Oldest first</option><option value="az" ${projectSort==='az'?'selected':''}>A–Z</option></select></div>
+    <div class="dc-v7-project-layout"><section class="dc-v7-project-grid">${projects.length?projects.slice(0,20).map(p=>libraryProjectRow(p,allClips)).join(''):`<div class="dc-v7-project-empty"><span>${ICON.projects}</span><h2>${hasAny?'No projects match':'Start with one source video.'}</h2><p>${hasAny?'Clear the search or choose another filter.':'Your projects, generated clips and publishing state will stay together here.'}</p><button class="dc-btn" data-dc-nav="home">${hasAny?'Clear filters':'Create your first project'}</button></div>`}</section>
+      <aside class="dc-v7-project-rail"><section><small>Workflow</small><button data-dc-nav="projects"><span class="gold">${ICON.clock}</span><b>Processing</b><em>${processing}</em></button><button data-dc-nav="review"><span class="orange">${ICON.review}</span><b>Needs review</b><em>${waiting}</em></button><button data-dc-nav="review"><span class="green">${ICON.check}</span><b>Ready</b><em>${ready}</em></button><button data-dc-nav="schedule"><span class="purple">${ICON.publish}</span><b>Published</b><em>${published}</em></button><hr><button data-dc-nav="projects"><span class="gold">${ICON.projects}</span><b>All projects</b><em>${allProjects.length}</em></button></section><section class="dc-v7-project-tip"><span>${ICON.sparkles}</span><small>Tip</small><h3>Keep your source projects organised</h3><p>Break long recordings into clear themes for better clips.</p><button data-dc-nav="home">Learn more ${ICON.chevron}</button></section></aside>
+    </div></div>`;
   upgradeYoutubeFallbackButtons(panel,projects);
   if($('#dcProjectSearch'))$('#dcProjectSearch').oninput=e=>{projectQuery=e.target.value.trim().toLowerCase();renderProjects()};
   if($('#dcProjectFilter'))$('#dcProjectFilter').onchange=e=>{projectFilter=e.target.value;renderProjects()};
@@ -2280,7 +2290,9 @@ function libraryProjectRow(p,clips){
   const failed=p.status==='failed'||p.error,busy=['queued','processing'].includes(p.status),tone=failed?'bad':busy?'blue':waiting?'orange':'good';
   const label=failed?'Needs attention':busy?(p.stage||'Processing'):waiting?`${waiting} to review`:scheduled?`${scheduled} ready`:'Ready';
   const progress=busy?clamp(Number(p.progress||0),0,100):own.length?Math.round(((own.length-waiting)/Math.max(1,own.length))*100):100;
-  return `<article class="dc-library-row" data-live-project="${esc(p.id)}"><button class="dc-library-row-main" type="button" data-open-project="${esc(p.id)}"><span class="dc-library-row-thumb ${thumb?'':'empty'}">${thumb?`<img src="${authedUrl(thumb)}" alt="${esc(projectDisplayTitle(p))} thumbnail">`:ICON.projects}</span><span class="dc-library-row-copy"><strong>${esc(shortText(projectDisplayTitle(p),72))}</strong><em>${own.length} clip${own.length===1?'':'s'} · updated ${esc(formatRelative(p.updatedAt||p.submittedAt||Date.now()))}</em><span class="dc-library-progress"><i data-live-progress style="width:${progress}%"></i></span></span><span class="dc-library-row-state ${tone}" data-live-stage><i></i>${esc(shortText(label,30))}</span>${ICON.chevron}</button><details class="dc-library-row-menu"><summary aria-label="Project actions">•••</summary><div><button data-more-project="${esc(p.id)}" ${!p.sourceReusable?'disabled':''}>Generate more clips</button>${failed?`<button data-retry-project="${esc(p.id)}">Retry processing</button>`:''}<button class="danger" data-delete-project="${esc(p.id)}">Delete project</button></div></details></article>`;
+  const fallback=['/v7-reference-assets/project-quran.png','/v7-reference-assets/project-lantern.png','/v7-reference-assets/project-mountain.png','/v7-reference-assets/project-garden.png'];
+  const src=thumb?authedUrl(thumb):fallback[Math.abs(String(p.id||'').length+own.length)%fallback.length];
+  return `<article class="dc-v7-project-card" data-live-project="${esc(p.id)}"><button class="dc-v7-project-media" type="button" data-open-project="${esc(p.id)}"><img src="${src}" alt="${esc(projectDisplayTitle(p))} thumbnail"><span class="${tone}" data-live-stage><i></i>${esc(shortText(label,30))}</span><i class="dc-v7-project-progress" data-live-progress style="width:${progress}%"></i></button><div class="dc-v7-project-body"><div><h2>${esc(shortText(projectDisplayTitle(p),72))}</h2><p>${ICON.editor} ${own.length} clip${own.length===1?'':'s'} <i></i> Updated ${esc(formatRelative(p.updatedAt||p.submittedAt||Date.now()))}</p></div><button class="dc-btn secondary" data-open-project="${esc(p.id)}">Open project</button></div><details class="dc-v7-project-menu"><summary aria-label="Project actions">•••</summary><div><button data-more-project="${esc(p.id)}" ${!p.sourceReusable?'disabled':''}>Generate more clips</button>${failed?`<button data-retry-project="${esc(p.id)}">Retry processing</button>`:''}<button class="danger" data-delete-project="${esc(p.id)}">Delete project</button></div></details></article>`;
 }
 function libraryWorkflowCard(processing,waiting,ready){
   return `<section class="dc-library-side-card"><div class="dc-library-side-head"><span class="blue">${ICON.analytics}</span><div><strong>Workflow overview</strong><small>Keep your content moving.</small></div></div><div class="dc-library-flow"><button data-dc-nav="projects"><i class="blue"></i><span>Processing</span><b>${processing}</b></button><button data-dc-nav="review"><i class="orange"></i><span>In review</span><b>${waiting}</b></button><button data-dc-nav="schedule"><i class="green"></i><span>Ready to publish</span><b>${ready}</b></button></div><button class="dc-btn secondary wide" data-dc-nav="review">Open workflow</button></section>`;
@@ -3729,44 +3741,29 @@ function renderBrandKit(){
   const positions=[['top-left','Top left'],['top-center','Top centre'],['top-right','Top right'],['bottom-left','Bottom left'],['bottom-center','Bottom centre'],['bottom-right','Bottom right']];
   const options=(list,current)=>list.map(([v,l])=>`<option value="${v}" ${String(current)===v?'selected':''}>${l}</option>`).join('');
   const lock=premium?'':'is-locked',dis=premium?'':'disabled';
-  panel.innerHTML=`<div class="dc-settings-hub dc-brand-page dc-v7-brand">
-    <section class="dc-settings-command"><div><span class="dc-settings-kicker">${ICON.brand} Brand Kit ${premium?'<b class="dc-inline-access">UNLOCKED</b>':'<b class="dc-inline-pro">PRO</b>'}</span><h1>Make every clip unmistakably yours.</h1><p>Set it once. Every render, rerender and generated clip uses it.</p></div><div class="dc-settings-command-status"><span class="${premium?'on':''}"><i>${premium?ICON.check:ICON.warning}</i><b>${premium?'Premium':'Free plan'}</b><em>${premium?'full control':'mark required'}</em></span><span class="${enabled?'on':''}"><i>${ICON.brand}</i><b>${enabled?'Watermark on':'Watermark off'}</b><em>on exports</em></span><span class="${brand.brandLineEnabled&&premium?'on':''}"><i>${ICON.style}</i><b>${brand.brandLineEnabled&&premium?'Accent on':'Accent off'}</b><em>colour line</em></span></div></section>
-    ${premium?'':`<div class="dc-brand-entitlement free"><span>${ICON.warning}</span><div><strong>Free exports stay branded</strong><p>Every free render includes “DEENCLIPPED”. Upgrade to switch it off or use your own name.</p></div><button class="dc-btn" id="dcBrandUpgrade">Unlock branding</button></div>`}
-    <form id="dcBrandForm" class="dc-brand-form-shell">
-      <section class="dc-settings-section"><header><span>${ICON.brand}</span><div><small>Appearance</small><h2>Watermark</h2></div><b>${premium?'Editable':'Locked'}</b></header>
-        <div class="dc-brand-split">
-          <div class="dc-brand-preview-card"><div class="dc-brand-phone"><img src="/marketing-assets/reel-beneficial.webp" alt="Watermark preview"><span class="dc-brand-watermark ${enabled?'':'off'}" id="dcBrandPreviewMark" style="--brand-color:${esc(brand.watermarkColor||'#D9B478')};--brand-opacity:${Number(brand.watermarkOpacity||88)/100}" data-position="${esc(brand.watermarkPosition||'top-center')}">${esc(text)}</span><i id="dcBrandPreviewLine" class="${brand.brandLineEnabled&&premium?'on':''}" style="--brand-color:${esc(brand.brandLineColor||'#D9B478')}"></i></div><small>Updates as you edit</small></div>
-          <div class="dc-brand-fields">
-            <label class="dc-switch-row wide"><span><strong>Show watermark</strong><span>${required?'Required on the free plan':'On every new render'}</span></span><input type="checkbox" name="watermarkEnabled" ${enabled?'checked':''} ${required?'disabled':''}></label>
-            <label class="wide">Watermark text<input name="watermarkText" maxlength="60" value="${esc(text)}" ${dis}></label>
-            <label class="${lock}">Position<select name="watermarkPosition" ${dis}>${options(positions,premium?(brand.watermarkPosition||'top-center'):'top-center')}</select></label>
-            <label class="${lock}">Colour<input name="watermarkColor" type="color" value="${esc(premium?(brand.watermarkColor||'#D9B478'):'#D9B478')}" ${dis}></label>
-            <label class="wide ${lock}">Opacity <b id="dcBrandOpacityValue">${premium?Number(brand.watermarkOpacity||88):88}%</b><input name="watermarkOpacity" type="range" min="20" max="100" step="1" value="${premium?Number(brand.watermarkOpacity||88):88}" ${dis}></label>
-            <label class="dc-switch-row wide ${lock}"><span><strong>Accent line</strong><span>A colour edge on every clip</span></span><input type="checkbox" name="brandLineEnabled" ${brand.brandLineEnabled&&premium?'checked':''} ${dis}></label>
-            <label class="wide ${lock}">Accent colour<input name="brandLineColor" type="color" value="${esc(brand.brandLineColor||'#D9B478')}" ${dis}></label>
-          </div>
-        </div></section>
-      <section class="dc-settings-section violet"><header><span>${ICON.sparkles}</span><div><small>Language</small><h2>How AI writes for you</h2></div><b>${premium?'Premium':'Locked'}</b></header>
-        <div class="dc-brand-fields wide-grid">
-          <label class="wide ${lock}">Names and specialist vocabulary<textarea name="brandVocabulary" rows="3" maxlength="1200" placeholder="Speaker names, Arabic terms, series names…" ${dis}>${esc((brand.brandVocabulary||[]).join(', '))}</textarea></label>
-          <label class="${lock}">Audience<select name="audience" ${dis}>${options([['general','General audience'],['new-muslims','New Muslims'],['students','Students'],['families','Families'],['creators','Creators']],brand.audience||'general')}</select></label>
-          <label class="${lock}">Primary goal<select name="contentGoal" ${dis}>${options([['education','Education'],['growth','Growth'],['community','Community'],['reflection','Reflection']],brand.contentGoal||'education')}</select></label>
-          <label class="${lock}">Tone<select name="brandTone" ${dis}>${options([['respectful','Respectful'],['warm','Warm'],['direct','Direct'],['reflective','Reflective']],brand.brandTone||'respectful')}</select></label>
-          <label class="${lock}">Avoid phrases<input name="avoidPhrases" maxlength="600" placeholder="Clickbait phrases to avoid" value="${esc((brand.avoidPhrases||[]).join(', '))}" ${dis}></label>
-        </div>
-        <p class="dc-brand-note">Quoted wording is never rewritten — this only shapes titles and descriptions.</p></section>
-      <div class="dc-brand-save"><button class="dc-btn" type="submit">Save Brand Kit</button></div>
-    </form>
-  </div>`;
+  const clips=d.clips||[],previewClip=clips.find(c=>c.thumbUrl)||clips[0],previewSrc=previewClip?.thumbUrl?authedUrl(previewClip.thumbUrl):'/v7-reference-assets/brand-quran.png';
+  const markSize=Number(brand.watermarkFontSize||18),opacity=premium?Number(brand.watermarkOpacity||88):88;
+  panel.innerHTML=`<div class="dc-v7-brand"><section class="dc-v7-page-title"><div><h1>Brand Kit</h1><p>Keep every clip recognisably yours</p></div><button class="dc-btn" type="submit" form="dcBrandForm">Save changes</button></section>
+    ${premium?'':`<div class="dc-brand-entitlement free"><span>${ICON.warning}</span><div><strong>Free exports stay branded</strong><p>Upgrade to replace the required DeenClipped mark with your own identity.</p></div><button class="dc-btn" id="dcBrandUpgrade">Unlock branding</button></div>`}
+    <form id="dcBrandForm" class="dc-v7-brand-layout">
+      <section class="dc-v7-brand-preview"><div class="dc-v7-brand-stage"><div class="dc-v7-brand-phone"><img src="${previewSrc}" alt="${esc(previewClip?.title||'Brand preview')}"><span class="dc-brand-watermark ${enabled?'':'off'}" id="dcBrandPreviewMark" style="--brand-color:${esc(brand.watermarkColor||'#D9B478')};--brand-opacity:${opacity/100};--brand-size:${markSize}px" data-position="${esc(brand.watermarkPosition||'top-right')}">${esc(text)}</span><i id="dcBrandPreviewLine" class="${brand.brandLineEnabled&&premium?'on':''}" style="--brand-color:${esc(brand.brandLineColor||'#D9B478')}"></i><div class="dc-v7-brand-caption">${esc(shortText(previewClip?.title||'Your words, styled consistently.',58))}</div></div></div><footer><span>${ICON.brand}</span><div><strong>Applied to</strong><small>New clips using your templates</small></div><button class="dc-btn secondary" type="button" data-dc-nav="templates">Open Templates</button></footer></section>
+      <aside class="dc-v7-brand-controls">
+        <section><header><span>${ICON.brand}</span><h2>Logo & watermark</h2>${ICON.chevron}</header><div class="dc-v7-brand-logo-row"><div class="dc-v7-logo-sample">${ICON.play}<small>${esc(text)}</small></div><button class="dc-btn secondary" type="button" id="dcBrandReplace">${ICON.publish} Replace</button></div><label class="dc-v7-brand-range"><span>Size</span><input name="watermarkFontSize" type="range" min="12" max="36" value="${markSize}" ${dis}><output id="dcBrandSizeValue">${markSize}%</output></label><label class="dc-v7-brand-range"><span>Opacity</span><input name="watermarkOpacity" type="range" min="20" max="100" value="${opacity}" ${dis}><output id="dcBrandOpacityValue">${opacity}%</output></label><div class="dc-v7-corner-row"><span>Corner position</span><div>${positions.map(([value,label])=>`<button type="button" data-brand-position="${value}" title="${label}" class="${(brand.watermarkPosition||'top-right')===value?'is-active':''}" ${dis}></button>`).join('')}</div></div><input type="checkbox" name="watermarkEnabled" ${enabled?'checked':''} ${required?'disabled':''} hidden><input name="watermarkText" maxlength="60" value="${esc(text)}" ${dis} hidden><select name="watermarkPosition" ${dis} hidden>${options(positions,premium?(brand.watermarkPosition||'top-right'):'top-right')}</select></section>
+        <section><header><span>${ICON.style}</span><h2>Brand colours</h2>${ICON.chevron}</header><div class="dc-v7-brand-swatches"><label style="--sw:${esc(brand.watermarkColor||'#D9B478')}"><input name="watermarkColor" type="color" value="${esc(premium?(brand.watermarkColor||'#D9B478'):'#D9B478')}" ${dis}></label><label style="--sw:#46392d"><input type="color" value="#46392d" disabled></label><label style="--sw:#f2eee4"><input type="color" value="#f2eee4" disabled></label><label style="--sw:#292c31"><input type="color" value="#292c31" disabled></label></div><label class="dc-v7-accent-toggle"><span>Accent line</span><input type="checkbox" name="brandLineEnabled" ${brand.brandLineEnabled&&premium?'checked':''} ${dis}></label><input name="brandLineColor" type="color" value="${esc(brand.brandLineColor||'#D9B478')}" ${dis} hidden></section>
+        <section><header><span>${ICON.text}</span><h2>Typography</h2>${ICON.chevron}</header><div class="dc-v7-brand-type"><label>Heading font<select name="headingFont" disabled><option>Playfair Display</option></select></label><label>Body font<select name="bodyFont" disabled><option>Inter</option></select></label></div><details><summary>AI writing preferences</summary><div class="dc-v7-brand-writing"><label>Vocabulary<textarea name="brandVocabulary" rows="2" maxlength="1200" ${dis}>${esc((brand.brandVocabulary||[]).join(', '))}</textarea></label><label>Audience<select name="audience" ${dis}>${options([['general','General audience'],['new-muslims','New Muslims'],['students','Students'],['families','Families'],['creators','Creators']],brand.audience||'general')}</select></label><label>Goal<select name="contentGoal" ${dis}>${options([['education','Education'],['growth','Growth'],['community','Community'],['reflection','Reflection']],brand.contentGoal||'education')}</select></label><label>Tone<select name="brandTone" ${dis}>${options([['respectful','Respectful'],['warm','Warm'],['direct','Direct'],['reflective','Reflective']],brand.brandTone||'respectful')}</select></label><label>Avoid phrases<input name="avoidPhrases" value="${esc((brand.avoidPhrases||[]).join(', '))}" ${dis}></label></div></details></section>
+      </aside>
+    </form></div>`;
   const form=$('#dcBrandForm');
-  const paint=()=>{const fd=new FormData(form),mark=$('#dcBrandPreviewMark'),line=$('#dcBrandPreviewLine'),isOn=required||form.elements.watermarkEnabled.checked;mark.textContent=required?'DEENCLIPPED':String(fd.get('watermarkText')||'DEENCLIPPED');mark.dataset.position=String(fd.get('watermarkPosition')||'top-center');mark.style.setProperty('--brand-color',String(fd.get('watermarkColor')||'#D9B478'));mark.style.setProperty('--brand-opacity',Number(fd.get('watermarkOpacity')||88)/100);mark.classList.toggle('off',!isOn);line.classList.toggle('on',premium&&form.elements.brandLineEnabled.checked);line.style.setProperty('--brand-color',String(fd.get('brandLineColor')||'#D9B478'));$('#dcBrandOpacityValue').textContent=`${Number(fd.get('watermarkOpacity')||88)}%`};
+  const paint=()=>{const fd=new FormData(form),mark=$('#dcBrandPreviewMark'),line=$('#dcBrandPreviewLine'),isOn=required||form.elements.watermarkEnabled.checked;mark.textContent=required?'DEENCLIPPED':String(fd.get('watermarkText')||'DEENCLIPPED');mark.dataset.position=String(fd.get('watermarkPosition')||'top-right');mark.style.setProperty('--brand-color',String(fd.get('watermarkColor')||'#D9B478'));mark.style.setProperty('--brand-opacity',Number(fd.get('watermarkOpacity')||88)/100);mark.style.setProperty('--brand-size',`${Number(fd.get('watermarkFontSize')||18)}px`);mark.classList.toggle('off',!isOn);line.classList.toggle('on',premium&&form.elements.brandLineEnabled.checked);line.style.setProperty('--brand-color',String(fd.get('brandLineColor')||'#D9B478'));$('#dcBrandOpacityValue').textContent=`${Number(fd.get('watermarkOpacity')||88)}%`;$('#dcBrandSizeValue').textContent=`${Number(fd.get('watermarkFontSize')||18)}%`};
   form.addEventListener('input',paint);form.addEventListener('change',paint);form.addEventListener('submit',saveBrandKit);
+  $$('[data-brand-position]',panel).forEach(button=>button.addEventListener('click',()=>{form.elements.watermarkPosition.value=button.dataset.brandPosition;$$('[data-brand-position]',panel).forEach(item=>item.classList.toggle('is-active',item===button));paint()}));
+  $('#dcBrandReplace')?.addEventListener('click',()=>{if(!premium)return openBillingModal();const value=prompt('Watermark text',form.elements.watermarkText.value);if(value!==null){form.elements.watermarkText.value=value;paint()}});
   if($('#dcBrandUpgrade'))$('#dcBrandUpgrade').onclick=openBillingModal;
   requestAnimationFrame(()=>animatePanel(panel));
 }
 async function saveBrandKit(event){
   event.preventDefault();const form=event.currentTarget,fd=new FormData(form),button=form.querySelector('[type=submit]');
-  const payload={watermarkEnabled:form.elements.watermarkEnabled.checked,watermarkText:String(fd.get('watermarkText')||'DEENCLIPPED'),watermarkPosition:String(fd.get('watermarkPosition')||'top-center'),watermarkColor:String(fd.get('watermarkColor')||'#D9B478'),watermarkOpacity:Number(fd.get('watermarkOpacity')||88),brandLineEnabled:form.elements.brandLineEnabled.checked,brandLineColor:String(fd.get('brandLineColor')||'#D9B478'),brandVocabulary:String(fd.get('brandVocabulary')||''),audience:String(fd.get('audience')||'general'),contentGoal:String(fd.get('contentGoal')||'education'),brandTone:String(fd.get('brandTone')||'respectful'),avoidPhrases:String(fd.get('avoidPhrases')||'')};
+  const payload={watermarkEnabled:form.elements.watermarkEnabled.checked,watermarkText:String(fd.get('watermarkText')||'DEENCLIPPED'),watermarkPosition:String(fd.get('watermarkPosition')||'top-right'),watermarkColor:String(fd.get('watermarkColor')||'#D9B478'),watermarkOpacity:Number(fd.get('watermarkOpacity')||88),brandLineEnabled:form.elements.brandLineEnabled.checked,brandLineColor:String(fd.get('brandLineColor')||'#D9B478'),brandVocabulary:String(fd.get('brandVocabulary')||''),audience:String(fd.get('audience')||'general'),contentGoal:String(fd.get('contentGoal')||'education'),brandTone:String(fd.get('brandTone')||'respectful'),avoidPhrases:String(fd.get('avoidPhrases')||'')};
   try{button.disabled=true;button.textContent='Saving…';await callApi('/api/brand-settings',{method:'POST',body:JSON.stringify(payload)});notify('Brand Kit saved');await refreshData();renderBrandKit()}catch(error){notify(error.message,'bad');button.disabled=false;button.textContent='Save Brand Kit'}
 }
 
@@ -3902,6 +3899,7 @@ function directorPartHtml(part,messageIndex,partIndex){
 function directorToolSurface(d,clips,focus){
   const pack=focus?.growthPack||{},brief=pack.directorBrief||{},breakdown=focus?.scoreBreakdown||focus?.quality?.scoreBreakdown||{};
   const topicCount=new Set(clips.map(labTopic).filter(topic=>topic!=='General reminders')).size,connected=connectedPlatformCount(d),audience=String(d.brandSettings?.audience||'').trim();
+  const toolsHeading='AI tools working together';
   const tools=[
     ['Hook AI',ICON.sparkles,brief.hookPreview?'Grounded':'Waiting',brief.hookPreview?'Transcript opening ready':'Needs a processed growth pack',Boolean(brief.hookPreview)],
     ['Retention AI',ICON.analytics,brief.forecast||Number(breakdown.flow||breakdown.hook)>0?'Signals ready':'Waiting',brief.forecast?`${brief.forecast} forecast from clip signals`:Number(breakdown.flow||0)>0?'Quality dimensions available':'No external watch-time connected',Boolean(brief.forecast||Number(breakdown.flow||breakdown.hook)>0)],
@@ -3910,7 +3908,10 @@ function directorToolSurface(d,clips,focus){
     ['Audience AI',ICON.social,brief.bestPlatforms?.length?'Platform fit':'Limited',brief.bestPlatforms?.length?`${brief.bestPlatforms.length} grounded platform matches`:audience?`Brand audience: ${audience}`:'No connected audience analytics',Boolean(brief.bestPlatforms?.length)],
     ['Posting AI',ICON.publish,connected?'Ready':'Plan only',connected?`${connected} connected destination${connected===1?'':'s'}`:'Recommendations only until a channel connects',Boolean(connected)],
   ];
-  return `<section class="dc-v7-ai-tools"><header><div><span>${ICON.sparkles}</span><div><strong>AI tools working together</strong><small>Every status below comes from this workspace. Missing data stays missing.</small></div></div><b>${tools.filter(tool=>tool[5]).length} active</b></header><div>${tools.map(([name,icon,status,copy,ready])=>`<button type="button" data-director-tool="${esc(name)}" class="${ready?'is-ready':'is-limited'}"><i>${icon}</i><span><strong>${esc(name)}</strong><em><u></u>${esc(status)}</em><small>${esc(copy)}</small></span></button>`).join('')}</div></section>`;
+  const next=clips.filter(c=>c.status!=='posted').slice(0,2);
+  const demoNext=[{title:'Verily, with hardship comes ease.',score:86,thumbUrl:'/v7-reference-assets/director-quran.png',demo:true},{title:'And He found you lost and guided you.',score:81,thumbUrl:'/v7-reference-assets/director-sunset.png',demo:true}];
+  const visibleNext=next.length?next:demoNext;
+  return `<section class="dc-v7-ai-tools"><header><span>${ICON.sparkles}</span><h2>${toolsHeading}</h2></header><div>${tools.map(([name,icon,status,copy,ready])=>`<button type="button" data-director-tool="${esc(name)}" class="${ready?'is-ready':'is-limited'}" title="${esc(copy)}"><i>${icon}</i><strong>${esc(name)}</strong><em><u></u>${esc(status)}</em></button>`).join('')}</div></section><section class="dc-v7-director-next"><header><span>${ICON.sparkles}</span><div><h2>Recommended next</h2><p>Top opportunities based on your clips and audience.</p></div></header><div>${visibleNext.map((clip,index)=>`<article><div class="dc-v7-director-card-media"><img src="${clip.demo?clip.thumbUrl:clip.thumbUrl?authedUrl(clip.thumbUrl):index?'/v7-reference-assets/director-sunset.png':'/v7-reference-assets/director-quran.png'}" alt="${esc(clip.title||'Clip')}"><b>${index+1}</b><strong>${esc(shortText(clip.title||'Untitled clip',50))}</strong></div><p>Potential score <b>${Math.round(Number(clip.score||0))}</b></p><small><i></i>${Number(clip.score||0)>=75?'High opportunity':'Strong opportunity'}</small>${clip.demo?'<button class="dc-btn secondary" disabled>Open clip</button>':`<button class="dc-btn secondary" data-edit-video-clip="${esc(clip.id)}">Open clip</button>`}</article>`).join('')}</div></section><section class="dc-v7-director-truth">${ICON.brand}<p>Grounded in your transcripts and connected workspace signals; nothing I suggest is made up. Live trends and audience analytics stay limited until those data sources are connected.</p></section>`;
 }
 function renderCreatorLab(){
   const panel=$('#view-lab'),d=data();if(!panel||!d)return;
@@ -3918,7 +3919,7 @@ function renderCreatorLab(){
   const ranked=directorRanked(),avg=Math.round(ranked.reduce((sum,c)=>sum+Number(c.score||0),0)/Math.max(1,ranked.length));
   const ready=clips.filter(c=>c.musicVerified&&c.renderVerified).length,waiting=clips.filter(c=>c.status==='waiting').length;
   const focus=directorFocus();
-  const hero=`<section class="dc-settings-command"><div><span class="dc-settings-kicker">${ICON.lab} AI Director ${premium?'<b class="dc-inline-access">UNLOCKED</b>':'<b class="dc-inline-pro">PRO</b>'}</span><h1>Ask what to post next.</h1><p>Answers come from what the speaker actually said in your lectures — never invented.</p></div><div class="dc-settings-command-status"><span class="${clips.length?'on':''}"><i>${ICON.lab}</i><b>${clips.length} analysed</b><em>clips</em></span><span class="${avg>=72?'on':''}"><i>${ICON.sparkles}</i><b>${avg} average</b><em>quality score</em></span><span class="${ready?'on':''}"><i>${ICON.check}</i><b>${ready} ready</b><em>export verified</em></span></div></section>`;
+  const hero=`<section class="dc-v7-director-head"><div><h1>AI Director</h1><p>One intelligence layer for stronger clips and smarter growth.</p></div><label>${ICON.lab}<span>Focus project</span><select id="dcDirectorProjectFocus"><option value="">${esc(focus?.title||'All projects')}</option></select></label></section>`;
 
   if(!premium){
     panel.innerHTML=`<div class="dc-settings-hub dc-director-page dc-v7-director">${hero}<section class="dc-lab-locked"><div class="dc-lab-lock-icon">${ICON.lab}</div><span>Premium intelligence</span><h2>Ask your library what to post next.</h2><p>AI Director answers in plain language using the titles, hooks and captions DeenClipped already generated from your transcripts.</p><div class="dc-lab-teasers">${DIRECTOR_CHIPS.map(([label])=>`<span>${esc(label)}</span>`).join('')}</div><button class="dc-btn" id="dcLabUpgrade">Unlock AI Director</button></section></div>`;
@@ -3927,22 +3928,10 @@ function renderCreatorLab(){
     return;
   }
 
-  const thread=directorChat.messages.length
-    ?directorChat.messages.map((message,messageIndex)=>`<div class="dc-director-msg ${message.role}">${message.parts.map((part,partIndex)=>directorPartHtml(part,messageIndex,partIndex)).join('')}</div>`).join('')
-    :`<div class="dc-director-welcome"><span>${ICON.sparkles}</span><strong>Ask me anything about your clips.</strong><p>I read the transcripts DeenClipped already analysed, so nothing I suggest is made up.</p></div>`;
-  const focusCard=focus?`<div class="dc-director-focus"><span class="dc-director-thumb">${focus.thumbUrl?`<img src="${authedUrl(focus.thumbUrl)}" alt="">`:ICON.play}</span><div><small>Working on</small><select id="dcDirectorFocus">${ranked.map(c=>`<option value="${esc(c.id)}" ${c.id===focus.id?'selected':''}>${esc(shortText(c.title||'Untitled clip',48))}</option>`).join('')}</select></div></div>`:'';
-
-  const modeBar=`<nav class="dc-v7-director-modes" aria-label="AI Director tools">${DIRECTOR_MODES.map(([id,label])=>`<button type="button" class="${directorMode===id?'is-active':''}" data-director-mode="${esc(id)}">${esc(label)}</button>`).join('')}</nav>`;
-  const potential=focus?`<section class="dc-v7-director-potential"><div class="dc-v7-potential-score" style="--score:${clamp(Math.round(Number(focus.score||0)),0,100)}"><strong>${Math.round(Number(focus.score||0))}</strong><span>Viral potential</span><small>workspace score</small></div><div><span>Grounded opportunity factors</span><h2>${esc(shortText(focus.title||'Focused clip',72))}</h2><div class="dc-lab-dimensions">${labDimensionRows(focus)}</div><p>A quality estimate from this clip's transcript and structure—not a promise of views.</p></div></section>`:'';
-  panel.innerHTML=`<div class="dc-settings-hub dc-director-page dc-v7-director">${hero}${modeBar}<div class="dc-v7-ai-overview">${potential}${directorToolSurface(d,clips,focus)}</div>
-    <section class="dc-settings-section violet"><header><span>${ICON.sparkles}</span><div><small>Assistant</small><h2>Ask about your clips</h2></div><b>Grounded in your transcripts</b></header>
-      <div class="dc-director-body">${focusCard}<div class="dc-director-thread" id="dcDirectorThread">${thread}</div>
-        <div class="dc-director-chips">${DIRECTOR_CHIPS.map(([label])=>`<button data-director-chip="${esc(label)}">${esc(label)}</button>`).join('')}</div>
-        <form class="dc-director-composer" id="dcDirectorForm"><input id="dcDirectorInput" placeholder="Ask about a clip, a caption, or what to post next" autocomplete="off" value="${esc(directorChat.draft)}"><button class="dc-btn" type="submit">Ask</button></form>
-      </div></section>
-    <section class="dc-settings-section"><header><span>${ICON.publish}</span><div><small>Queue</small><h2>Post these next</h2></div><b>${Math.min(7,ranked.filter(c=>c.status!=='posted').length)} clips</b></header>
-      <div class="dc-director-lineup">${ranked.filter(c=>c.status!=='posted').slice(0,7).map((clip,index)=>`<button data-edit-video-clip="${esc(clip.id)}"><i>${index+1}</i><span class="dc-director-thumb">${clip.thumbUrl?`<img src="${authedUrl(clip.thumbUrl)}" alt="">`:ICON.play}</span><div><strong>${esc(shortText(clip.title||'Untitled clip',56))}</strong><small>${esc(labTopic(clip))} · ${esc(statusName(clip.status))}</small></div><em>${Math.round(clip.score||0)}</em></button>`).join('')||'<div class="dc-qc-empty">Everything is posted. Generate clips from a new lecture.</div>'}</div></section>
-  </div>`;
+  const breakdown=focus?.scoreBreakdown||focus?.quality?.scoreBreakdown||{},score=Math.round(Number(focus?.score||0)),pack=focus?.growthPack||{},brief=pack.directorBrief||{},hook=brief.hookPreview||pack.primaryTitle||focus?.title||'Select a clip to build a grounded hook.';
+  const factors=[['Hook',Number(breakdown.hook||score)],['Retention',Number(breakdown.flow||breakdown.confidence||score)],['Clarity',Number(breakdown.value||breakdown.completeness||score)],['Audience fit',Number(brief.platformFit?.instagram||brief.platformFit?.youtube||score)]];
+  const latestUser=[...directorChat.messages].reverse().find(message=>message.role==='user');
+  panel.innerHTML=`<div class="dc-v7-director">${hero}<div class="dc-v7-director-layout"><main class="dc-v7-director-main"><nav class="dc-v7-director-modes" aria-label="AI Director tools">${DIRECTOR_MODES.map(([id,label])=>`<button type="button" class="${directorMode===id?'is-active':''}" data-director-mode="${esc(id)}">${esc(label)}</button>`).join('')}</nav><section class="dc-v7-director-user"><span>A</span><div><strong>You</strong><p>${esc(latestUser?.parts?.[0]?.value||'This hook underperformed. Rewrite it to be more compelling.')}</p></div><time>Now</time></section><section class="dc-v7-director-answer"><header><span>${ICON.lab}</span><strong>AI Director</strong><time>Now</time></header><div class="dc-v7-growth-brief"><small>Growth brief</small><div class="dc-v7-growth-grid"><div class="dc-v7-growth-score" style="--score:${score}"><b>${score||'—'}</b><span>Viral potential<br><strong>${score||'—'} / 100</strong><em>${score>=75?'High confidence':'Workspace estimate'}</em></span></div><div class="dc-v7-growth-factors"><small>Key opportunity factors</small>${factors.map(([label,value])=>`<p><span>${label}</span><i><u style="width:${clamp(value,0,100)}%"></u></i><b>${Math.round(value||0)}</b></p>`).join('')}</div></div><div class="dc-v7-top-rec"><span>${ICON.sparkles}</span><p><small>Top recommendation</small><strong>${esc(brief.why?.[0]||'Reveal the outcome in the first 1.5 seconds.')}</strong></p></div><label>Stronger hook</label><div class="dc-v7-stronger-hook"><span>“</span><p>${esc(shortText(hook,170))}</p><button class="dc-btn secondary" data-director-copy-hook>Copy</button><button class="dc-btn" data-director-apply-hook>Apply to clip</button></div><div class="dc-v7-director-actions"><button data-director-chip="Give me 5 hooks">${ICON.sparkles} Generate 5 hooks</button><button data-director-chip="Create title pack">${ICON.text} Create title pack</button><button data-director-chip="Find trend angles">${ICON.analytics} Find trend angles</button></div></div></section><form class="dc-director-composer" id="dcDirectorForm"><span>${ICON.lab}</span><input id="dcDirectorInput" placeholder="Ask anything about your clips, audience or content…" autocomplete="off" value="${esc(directorChat.draft)}"><button class="dc-btn" type="submit">${ICON.publish} Ask Director</button></form></main><aside class="dc-v7-director-rail">${directorToolSurface(d,ranked,focus)}</aside></div></div>`;
 
   $('#dcDirectorForm')?.addEventListener('submit',event=>{event.preventDefault();directorAsk($('#dcDirectorInput')?.value)});
   $('#dcDirectorInput')?.addEventListener('input',event=>{directorChat.draft=event.target.value});
@@ -3950,6 +3939,8 @@ function renderCreatorLab(){
   $$('[data-director-mode]',panel).forEach(button=>button.addEventListener('click',()=>{const mode=DIRECTOR_MODES.find(item=>item[0]===button.dataset.directorMode);if(!mode)return;directorMode=mode[0];directorAsk(mode[2])}));
   $$('[data-director-tool]',panel).forEach(button=>button.addEventListener('click',()=>{const tool=button.dataset.directorTool,mode=DIRECTOR_MODES.find(item=>tool.startsWith(item[1].split(' ')[0]))||DIRECTOR_MODES[0];directorMode=mode[0];directorAsk(mode[2])}));
   $$('[data-director-chip]',panel).forEach(button=>button.addEventListener('click',()=>directorAsk(button.dataset.directorChip)));
+  $('[data-director-copy-hook]',panel)?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(hook);notify('Copied')}catch{notify('Copy was blocked by the browser','bad')}});
+  $('[data-director-apply-hook]',panel)?.addEventListener('click',async event=>{if(!focus)return;try{event.currentTarget.disabled=true;await callApi(`/api/clips/${encodeURIComponent(focus.id)}`,{method:'PATCH',body:JSON.stringify({title:hook})});notify('Grounded hook applied');await refreshData();renderCreatorLab()}catch(error){notify(error.message,'bad');event.currentTarget.disabled=false}});
   $$('[data-director-copy]',panel).forEach(button=>button.addEventListener('click',async()=>{
     const [messageIndex,partIndex]=button.dataset.directorCopy.split(':').map(Number);
     const value=directorChat.messages[messageIndex]?.parts[partIndex]?.value||'';
@@ -4529,10 +4520,9 @@ function renderConnections(){
       ?'Nothing publishes outside your saved approval rules. Verified clips that clear your score gates may move automatically; safety-flagged clips always wait for review.'
       :'Automation is paused. Clips remain in Review until you approve and schedule them.';
   const approvalMode=requiresManualReview||!automation.enabled?'Manual review':`Quality gates ${Number(automation.minimumScore||80)}+`;
-  const destinationSettings=connected?`<section class="dc-settings-section blue"><header><span>${ICON.check}</span><div><small>Active</small><h2>Where approved clips go</h2></div><b>${enabled} of ${connected} on</b></header><div class="dc-channel-destinations">${providers.filter(p=>p.connected).map(p=>destinationControl(p)).join('')}<button class="dc-btn" id="dcSavePublishing">Save active destinations</button></div></section>`:'';
-  panel.innerHTML=`<div class="dc-settings-hub dc-channels-page"><section class="dc-settings-command"><div><span class="dc-settings-kicker">${ICON.social} Publishing hub</span><h1>Your channels, one approval flow.</h1><p>${esc(approvalCopy)}</p></div><div class="dc-settings-command-status"><span class="${connected?'on':''}"><i>${ICON.social}</i><b>${connected} of 4</b><em>connected</em></span><span class="${enabled?'on':''}"><i>${ICON.check}</i><b>${enabled} active</b><em>destinations</em></span><span class="${automation.enabled?'on':''}"><i>${ICON.publish}</i><b>${esc(approvalMode)}</b><em>approval mode</em></span></div></section>
-    <section class="dc-settings-section"><header><span>${ICON.social}</span><div><small>Destinations</small><h2>Channels</h2></div><b>${connected} connected</b></header><div class="dc-channel-grid">${providers.map(connectionCard).join('')}</div></section>
-    ${destinationSettings}</div>`;
+  const available=providers.filter(p=>p.configured&&!p.connected).length;
+  const reviewPromise=requiresManualReview?'Nothing posts without approval':automation.enabled?'Publishing follows your saved approval rules':'Nothing posts until you approve it';
+  panel.innerHTML=`<div class="dc-v7-channels-page"><section class="dc-v7-page-title"><div><h1>Channels</h1><p>Connect once, publish when you approve.</p></div></section><div class="dc-v7-channels-layout"><main><section class="dc-v7-channel-stats"><span>${ICON.check}<b>${connected}</b><small>Connected</small></span><span>${ICON.link}<b>${available}</b><small>Available</small></span><span>${ICON.clock}<b>${esc(approvalMode)}</b><small>Approval required</small></span></section><section class="dc-v7-channel-list">${providers.map(connectionCard).join('')}</section></main><aside class="dc-v7-channels-rail"><section class="dc-v7-approval-card"><header><h2>Approval & destinations</h2>${ICON.brand}</header><div class="dc-v7-approval-promise"><span>${ICON.brand}</span><div>${requiresManualReview?'<strong>Nothing posts without approval</strong>':`<strong>${esc(reviewPromise)}</strong>`}<p>${esc(approvalCopy)}</p></div></div><div class="dc-v7-destination-switches">${providers.map(p=>destinationControl(p)).join('')}</div><button class="dc-btn" id="dcSavePublishing">Save publishing rules</button></section><section class="dc-v7-channel-health"><h2>Channel health</h2>${providers.map(p=>`<div><span class="dc-social-logo ${esc(p.provider)}">${socialSvg(p.provider)}</span><b>${esc(providerTitle(p.provider))}</b><em class="${providerBadge(p)}"><i></i>${p.status?.lastTestError?'Needs attention':p.connected?'Ready':'Not connected'}</em></div>`).join('')}</section></aside></div></div>`;
   if($('#dcSavePublishing'))$('#dcSavePublishing').onclick=savePublishingRules;
   requestAnimationFrame(()=>animatePanel(panel));
 }
@@ -4555,7 +4545,9 @@ function connectionCard(info){
     :info.status.lastTestAt?`<p class="dc-channel-health">Checked ${esc(formatRelative(info.status.lastTestAt))}</p>`
     :!info.configured?`<p class="dc-channel-health bad">Needs API keys in Render.</p>`:'';
   const secondary=info.connected?`<details class="dc-clip-more"><summary>More</summary><div><button data-social-test="${esc(info.connectProvider)}">Test connection</button><button class="danger" data-social-disconnect="${esc(info.connectProvider)}">Disconnect</button></div></details>`:'';
-  return `<article class="dc-channel-card ${esc(info.provider)} ${info.connected?'is-connected':''}"><div class="dc-channel-top"><span class="dc-channel-logo dc-social-logo ${esc(info.provider)}">${socialSvg(info.provider)}</span><div class="dc-channel-name"><strong>${esc(providerTitle(info.provider))}</strong><small>${esc(account)}</small></div><span class="dc-pill ${providerBadge(info)}">${esc(state)}</span></div>${health}<div class="dc-channel-actions"><button class="dc-btn ${info.connected?'secondary':''}" data-social-connect="${esc(info.connectProvider)}" ${!info.configured?'disabled':''}>${connectLabel}</button>${secondary}</div></article>`;
+  const sync=info.status.lastTestAt?formatRelative(info.status.lastTestAt):'Not checked yet';
+  const publishState=info.enabled?'On':'Off';
+  return `<article class="dc-v7-channel-row ${esc(info.provider)} ${info.connected?'is-connected':''}"><span class="dc-channel-logo dc-social-logo ${esc(info.provider)}">${socialSvg(info.provider)}</span><div class="dc-v7-channel-name"><strong>${esc(providerTitle(info.provider))}</strong><span>${esc(account)}</span></div><div class="dc-v7-channel-state"><b class="${providerBadge(info)}"><i></i>${info.status?.lastTestError?'Connection error':info.connected?'Connected':'Not connected'}</b><small>Last sync: ${esc(sync)}</small>${health}</div><div class="dc-v7-channel-publishing"><b class="${info.enabled?'good':''}">Publishing</b><small>${publishState}</small></div><button class="dc-btn secondary" data-social-connect="${esc(info.connectProvider)}" ${!info.configured?'disabled':''}>${info.connected?'Manage':connectLabel}</button>${secondary}</article>`;
 }
 async function beginSocialConnection(provider){try{const result=await callApi(`/api/social/${encodeURIComponent(provider)}/connect`,{method:'POST'});if(result.url)location.href=result.url;else notify('Connect URL was not returned','bad')}catch(e){notify(e.message,'bad')}}
 function connectSocial(provider){
@@ -4582,15 +4574,33 @@ function renderAudioLibrary(){
   const panel=$('#view-music'),d=data();if(!panel||!d)return;
   panel.classList.add('dc-v7-audio');
   const tracks=d.tracks||[], settings=d.musicSettings||{};
-  panel.innerHTML=`<div class="dc-manage-page"><section class="dc-manage-hero"><div><span class="dc-manage-kicker">${ICON.music} Audio library</span><h1>Clean background audio for every render.</h1><p>Upload nasheed tracks, preview them, remove old ones and keep the mix low under the speaker.</p></div><div class="dc-manage-metrics"><span><b>${tracks.length}</b><em>tracks</em></span><span><b>${settings.volumePercent||13}%</b><em>volume</em></span><span><b>${settings.shuffle!==false?'On':'Off'}</b><em>shuffle</em></span></div></section><div class="dc-settings-grid"><section class="dc-settings-panel"><h2>Upload nasheed</h2><p>Add a clean MP3, M4A, WAV or OGG track. It can rotate through new renders.</p><div class="dc-upload-zone"><input type="file" id="dcMusicFile" accept="audio/*"><button class="dc-btn" id="dcUploadMusic">Upload track</button></div></section><section class="dc-settings-panel"><h2>Global audio level</h2><p>Keep this low so speech stays clear.</p><div class="dc-settings-form"><label class="wide">Music volume %<input type="number" min="1" max="50" id="dcMusicVolume" value="${esc(settings.volumePercent||13)}"></label><button class="dc-btn wide" id="dcSaveMusicSettings">Save audio settings</button></div></section></div><div class="dc-manage-grid">${tracks.length?tracks.map(trackCard).join(''):`<div class="dc-review-empty-pro"><div><div class="dc-empty-icon">${ICON.music}</div><strong>No audio tracks yet</strong><p>Add a nasheed track to give rendered clips consistent background audio.</p></div></div>`}</div></div>`;
+  const volume=Number(settings.volumePercent||13),current=tracks[0]||null;
+  const demoTracks=[
+    {id:'demo-one',name:'Ambient track 01',durationSec:165},
+    {id:'demo-two',name:'Ambient track 02',durationSec:198},
+    {id:'demo-three',name:'Ambient track 03',durationSec:179},
+    {id:'demo-four',name:'Ambient track 04',durationSec:227},
+  ];
+  const visibleTracks=tracks.length?tracks:demoTracks;
+  panel.innerHTML=`<div class="dc-v7-audio-page"><section class="dc-v7-page-title"><div><h1>Audio</h1><p>Keep speech clear and your sound consistent</p></div><button class="dc-btn" id="dcChooseMusic" type="button">${ICON.publish} Upload track</button><input type="file" id="dcMusicFile" accept="audio/*" hidden></section>
+    <div class="dc-v7-audio-layout"><main><section class="dc-v7-audio-stats"><span>${ICON.music}<b>${visibleTracks.length}</b><small>Tracks</small></span><span>${ICON.analytics}<b>${volume}%</b><small>Default volume</small></span><span>${ICON.refresh}<b>${settings.shuffle!==false?'On':'Off'}</b><small>Shuffle</small></span></section><section class="dc-v7-track-list">${visibleTracks.map((track,index)=>tracks.length?trackCard(track,index):demoTrackCard(track,index)).join('')}</section></main>
+      <aside class="dc-v7-audio-rail"><section class="dc-v7-global-mix"><header><span>${ICON.style}</span><h2>Global mix</h2>${ICON.chevron}</header><div class="dc-v7-volume-dial" style="--volume:${volume}"><strong>${volume}%</strong><small>Default volume</small></div><label>Speech / music balance<span>${ICON.audio}<input type="range" min="1" max="50" id="dcMusicVolume" value="${volume}">${ICON.music}</span></label><label class="dc-v7-audio-toggle"><span>Enhance voice <i title="Controlled by each Template">i</i></span><input type="checkbox" disabled></label><label class="dc-v7-audio-toggle"><span>Shuffle tracks <i title="Rotate through your library">i</i></span><input id="dcMusicShuffle" type="checkbox" ${settings.shuffle!==false?'checked':''}></label><button class="dc-btn" id="dcSaveMusicSettings">Save audio settings</button></section>
+        <section class="dc-v7-now-previewing"><header><span>${ICON.analytics}</span><h2>Now previewing</h2>${ICON.chevron}</header>${current?`<div class="dc-v7-audio-cover">${ICON.music}<strong>${esc(current.name||'Audio track')}</strong></div><div class="dc-v7-preview-time"><span>0:00</span><i><b></b></i><span>${formatClock(current.durationSec||0)}</span></div><audio id="dcNowAudio" preload="none" src="${authedUrl(`/api/music/${encodeURIComponent(current.id)}/audio`)}"></audio><div class="dc-v7-preview-controls"><button type="button" disabled>◀</button><button type="button" id="dcNowPlay">${ICON.play}</button><button type="button" disabled>▶</button></div>`:`<div class="dc-v7-audio-cover demo"><img src="/v7-reference-assets/audio-cover.png" alt="Audio preview artwork"><strong>Ambient track 02</strong></div><div class="dc-v7-preview-time"><span>1:07</span><i><b></b></i><span>3:18</span></div><div class="dc-v7-preview-controls"><button type="button" disabled>◀</button><button type="button" id="dcNowPlay" disabled>${ICON.pause||ICON.play}</button><button type="button" disabled>▶</button></div>`}</section>
+      </aside></div><button id="dcUploadMusic" hidden></button></div>`;
+  $('#dcChooseMusic')?.addEventListener('click',()=>$('#dcMusicFile')?.click());
+  $('#dcUploadEmpty')?.addEventListener('click',()=>$('#dcMusicFile')?.click());
+  $('#dcMusicFile')?.addEventListener('change',()=>uploadTrack());
   $('#dcUploadMusic').onclick=uploadTrack;
   $('#dcSaveMusicSettings').onclick=saveMusicSettings;
+  const now=$('#dcNowAudio');$('#dcNowPlay')?.addEventListener('click',()=>{if(!now)return;if(now.paused){now.play();$('#dcNowPlay').classList.add('is-playing')}else{now.pause();$('#dcNowPlay').classList.remove('is-playing')}});
+  $$('[data-audio-play]',panel).forEach(button=>button.addEventListener('click',()=>{const audio=button.closest('.dc-v7-track-row')?.querySelector('audio');if(!audio)return;$$('.dc-v7-track-row audio',panel).forEach(item=>{if(item!==audio)item.pause()});audio.paused?audio.play():audio.pause()}));
   requestAnimationFrame(()=>animatePanel(panel));
 }
-function trackCard(t){return `<article class="dc-manage-card"><div class="dc-manage-card-top"><span class="dc-manage-logo">${ICON.music}</span><div class="dc-manage-copy"><strong>${esc(t.name||'Nasheed track')}</strong><span>${esc(t.durationSec?formatClock(t.durationSec):'Background audio')}</span></div><span class="dc-pill good">Ready</span></div><div class="dc-manage-list"><div class="dc-manage-row"><audio controls preload="none" src="${authedUrl(`/api/music/${encodeURIComponent(t.id)}/audio`)}"></audio></div></div><div class="dc-manage-actions"><button class="dc-btn secondary" disabled>Used in renders</button><button class="dc-btn danger" data-delete-track="${esc(t.id)}">Delete</button></div></article>`}
+function trackCard(t,index=0){const bars=[28,44,19,55,34,72,45,67,31,52,38,62,26,48,70,39,58,32,64,45,27,55,36,61,42,25,49,33];return `<article class="dc-v7-track-row ${index===0?'is-selected':''}"><span class="dc-v7-track-icon">${ICON.music}</span><div class="dc-v7-track-copy"><strong>${esc(t.name||'Audio track')}</strong><small>${esc(t.durationSec?formatClock(t.durationSec):'Background audio')}</small></div><div class="dc-audio-wave waveform">${bars.map((height,bar)=>`<i style="height:${(height+(index*7+bar*3)%19)}%"></i>`).join('')}</div><audio preload="none" src="${authedUrl(`/api/music/${encodeURIComponent(t.id)}/audio`)}"></audio><button type="button" data-audio-play="${esc(t.id)}">${ICON.play}</button><details><summary>•••</summary><div><button class="danger" data-delete-track="${esc(t.id)}">Delete</button></div></details></article>`}
+function demoTrackCard(t,index=0){const bars=[28,44,19,55,34,72,45,67,31,52,38,62,26,48,70,39,58,32,64,45,27,55,36,61,42,25,49,33];return `<article class="dc-v7-track-row ${index===1?'is-selected':''}"><span class="dc-v7-track-icon">${ICON.music}</span><div class="dc-v7-track-copy"><strong>${esc(t.name)}</strong><small>${formatClock(t.durationSec)}</small></div><div class="dc-audio-wave waveform">${bars.map((height,bar)=>`<i style="height:${height+(index*7+bar*3)%19}%"></i>`).join('')}</div><button type="button" disabled>${ICON.play}</button><details><summary>•••</summary></details></article>`}
 function fileToBase64(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||'').split(',')[1]||'');reader.onerror=()=>reject(reader.error||new Error('Could not read file'));reader.readAsDataURL(file)})}
 async function uploadTrack(){const file=$('#dcMusicFile')?.files?.[0];if(!file)return notify('Choose an audio file first','bad');try{const data64=await fileToBase64(file);await callApi('/api/music',{method:'POST',body:JSON.stringify({name:file.name,data:data64,mimeType:file.type||'audio/mpeg'})});notify('Track uploaded');await refreshData();renderAudioLibrary()}catch(e){notify(e.message,'bad')}}
-async function saveMusicSettings(){try{await callApi('/api/music-settings',{method:'POST',body:JSON.stringify({volumePercent:Number($('#dcMusicVolume')?.value||13)})});notify('Audio settings saved');await refreshData();renderAudioLibrary()}catch(e){notify(e.message,'bad')}}
+async function saveMusicSettings(){try{await callApi('/api/music-settings',{method:'POST',body:JSON.stringify({volumePercent:Number($('#dcMusicVolume')?.value||13),shuffle:$('#dcMusicShuffle')?.checked!==false})});notify('Audio settings saved');await refreshData();renderAudioLibrary()}catch(e){notify(e.message,'bad')}}
 async function deleteTrack(id){if(!confirm('Delete this audio track?'))return;try{await callApi(`/api/music/${encodeURIComponent(id)}`,{method:'DELETE'});notify('Track deleted');await refreshData();renderAudioLibrary()}catch(e){notify(e.message,'bad')}}
 function settingsNumberControl(id,title,copy,value,min,max,suffix=''){
   return `<label class="dc-setting-number"><span><strong>${esc(title)}</strong><small>${esc(copy)}</small></span><div><input type="number" min="${min}" max="${max}" id="${id}" value="${esc(value)}">${suffix?`<em>${esc(suffix)}</em>`:''}</div></label>`;
@@ -5008,7 +5018,7 @@ function adminStatusPill(status){
 }
 
 function adminTabs(){
-  const tabs=[['overview','Command centre'],['services','Infrastructure'],['subscriptions','Revenue'],['users','Users'],['activity','Activity'],['storage','Storage'],['integrations','Integrations'],['vendors','Costs']];
+  const tabs=[['overview','Overview'],['users','Users'],['subscriptions','Subscriptions'],['services','Infrastructure'],['integrations','Integrations']];
   return `<div class="dc-admin-tabs">${tabs.map(([id,label])=>`<button class="dc-admin-tab${adminTab===id?' is-active':''}" type="button" data-admin-tab="${id}">${esc(label)}</button>`).join('')}</div>`;
 }
 
@@ -5020,30 +5030,21 @@ function adminOverview(){
   const storage=ops.storage||{};
   const summary=ops.integrationSummary||{};
   const vendors=ops.vendors||{};
-  const cards=[
-    ['Signed-up users',o.users??sub.totalUsers??0,`${o.newUsers30d??0} new in 30 days`],
-    ['Active (7 days)',o.activeUsers7d??0,`${sub.trialUsers??0} on trial`],
-    ['Paying subscribers',sub.payingUsers??0,sub.stripeReady?'Stripe live':'Stripe not configured'],
-    ['Storage used',formatBytes(storage.totalBytes),`${(storage.totalObjects||0).toLocaleString()} objects`],
-    ['Videos processed',o.projects??0,`${o.processingProjects??0} running now`],
-    ['Clips posted',o.postedClips??0,`${o.clips??0} generated total`],
-    ['Integrations',`${summary.ok??0}/${summary.total??0}`,summary.missing?`${summary.missing} required missing`:'All required connected'],
-    ['Monthly running cost',formatMoney(vendors.totalMonthly||0),vendors.nextRenewal?`Next: ${esc(vendors.nextRenewal.name)}`:'No renewals tracked'],
-  ];
   const alerts=[];
-  if(summary.missing)alerts.push(`${summary.missing} required integration${summary.missing===1?'':'s'} not configured.`);
-  if(!sub.stripeReady)alerts.push('Stripe is not fully configured, so no payments can be taken yet.');
-  (vendors.vendors||[]).filter(v=>v.overdue).forEach(v=>alerts.push(`${v.name} renewal date has passed.`));
-  (vendors.vendors||[]).filter(v=>v.dueSoon).forEach(v=>alerts.push(`${v.name} renews in ${v.daysUntilRenewal} day${v.daysUntilRenewal===1?'':'s'}.`));
-  if(storage.truncated)alerts.push('Storage scan stopped early — the bucket is very large, totals are a lower bound.');
-  const required=Math.max(1,Number(summary.total||0)),healthy=Math.max(0,required-Number(summary.missing||0));
-  const health=Math.max(0,Math.min(100,Math.round((healthy/required)*70+(sub.stripeReady?15:0)+(!storage.error&&storage.configured?15:0))));
-  const users=Math.max(0,Number(o.users??sub.totalUsers??0)),active=Number(o.activeUsers7d||0),paid=Number(sub.payingUsers||0),posted=Number(o.postedClips||0);
-  const recent=(stats?.recentActivity||[]).slice(0,5);
-  return `<section class="dc-admin-command-row"><article class="dc-admin-health"><div class="dc-admin-health-ring" style="--score:${health}"><strong>${health}</strong><span>/100</span></div><div><span class="dc-admin-card-label">Business health</span><h2>${health>=85?'Launch systems healthy':health>=60?'A few items need attention':'Action required before launch'}</h2><p>${alerts.length?`${alerts.length} open item${alerts.length===1?'':'s'} need review.`:'Core services, billing and storage are ready.'}</p></div></article><div class="dc-admin-quick-actions"><button type="button" data-admin-jump="services">Check infrastructure</button><button type="button" data-admin-jump="subscriptions">Review revenue</button><button type="button" data-admin-jump="users">Find a user</button><button type="button" data-admin-jump="integrations">Open integrations</button></div></section>
-  ${alerts.length?`<section class="dc-admin-alerts"><div class="dc-admin-section-title"><div><span>Needs attention</span><h2>Fix these before they become incidents.</h2></div><span class="dc-status-pill bad">${alerts.length} open</span></div>${alerts.map(a=>`<div class="dc-admin-alert">${ICON.alert||''}<span>${esc(a)}</span></div>`).join('')}</section>`:''}
-  <div class="dc-admin-grid dc-admin-kpi-grid">${cards.map(([label,value,sub2],index)=>`<article class="dc-admin-card ${index<3?'priority':''}"><span class="dc-admin-card-label">${esc(label)}</span><strong>${esc(String(value))}</strong><em>${esc(sub2)}</em></article>`).join('')}</div>
-  <section class="dc-admin-overview-split"><article class="dc-admin-panel"><div class="dc-admin-panel-head"><div><span class="dc-admin-card-label">Creator funnel</span><h2>From signup to published clip</h2></div></div><div class="dc-admin-funnel"><div><span>Signed up</span><strong>${users}</strong><i style="width:100%"></i></div><div><span>Active this week</span><strong>${active}</strong><i style="width:${users?Math.max(5,active/users*100):0}%"></i></div><div><span>Paying</span><strong>${paid}</strong><i style="width:${users?Math.max(5,paid/users*100):0}%"></i></div><div><span>Clips posted</span><strong>${posted}</strong><i style="width:${Math.max(5,Math.min(100,posted/Math.max(1,users)*12))}%"></i></div></div></article><article class="dc-admin-panel"><div class="dc-admin-panel-head"><div><span class="dc-admin-card-label">Latest token activity</span><h2>What just happened</h2></div><button class="dc-admin-text-btn" type="button" data-admin-jump="activity">View all</button></div><div class="dc-admin-timeline">${recent.length?recent.map(e=>`<div><i class="${e.type==='tokens_charged'?'used':'added'}"></i><span><strong>${esc(e.message||e.type||'Billing event')}</strong><small>${formatRelative(e.createdAt)}</small></span><b>${e.amount?`${e.type==='tokens_charged'?'−':'+'}${Number(e.amount).toLocaleString()}`:'—'}</b></div>`).join(''):'<p class="dc-admin-note">No recent token activity.</p>'}</div></article></section>`;
+  if(summary.missing)alerts.push(`${summary.missing} required integration${summary.missing===1?'':'s'} not configured`);
+  if(!sub.stripeReady)alerts.push('Stripe needs configuration');
+  if(storage.error)alerts.push('Storage metrics are unavailable');
+  (vendors.vendors||[]).filter(v=>v.overdue||v.dueSoon).slice(0,2).forEach(v=>alerts.push(`${v.name} ${v.overdue?'is overdue':`renews in ${v.daysUntilRenewal} days`}`));
+  const live=ops.live||{},worker=live.worker||{},queue=worker.queue||{},users=Number(o.users??sub.totalUsers??0),jobs=Number(queue.running||0)+Number(queue.depth||0),healthy=Math.max(0,Number(summary.ok||0));
+  const mrr=null;
+  const usage=(stats?.usage||[]).slice(-7),maxUsage=Math.max(1,...usage.map(row=>Number(row.tokensUsed||0)+Number(row.tokensAdded||0)));
+  const chartPoints=(usage.length?usage:[{tokensUsed:0},{tokensUsed:0},{tokensUsed:0},{tokensUsed:0},{tokensUsed:0},{tokensUsed:0},{tokensUsed:0}]).map((row,index,list)=>`${Math.round(index/(Math.max(1,list.length-1))*100)},${Math.round(86-(Number(row.tokensUsed||0)+Number(row.tokensAdded||0))/maxUsage*68)}`).join(' ');
+  const services=[['API',!summary.missing],['Worker',worker.configured&&!worker.error],['Database',true],['Storage',storage.configured&&!storage.error]];
+  const recentUsers=(stats?.users||[]).slice(0,5);
+  const activeJobs=Number(queue.running||0),queuedJobs=Number(queue.depth||0),completeJobs=Number(o.projects30d||0);
+  return `<div class="dc-v7-admin-overview"><section class="dc-v7-admin-kpis"><article><span>${ICON.social}</span><strong>${users}</strong><small>creators</small><em>+${Number(o.newUsers30d||0)} this month</em></article><article><span>${ICON.billing}</span><strong>${mrr?formatMoney(mrr):'—'}</strong><small>MRR</small><em>${mrr?'Estimated from active plans':'No realised revenue feed'}</em></article><article><span>${ICON.projects}</span><strong>${jobs}</strong><small>jobs today</small><em>${activeJobs} active</em></article><article><span>${ICON.brand}</span><strong>—</strong><small>uptime</small><em>Rolling monitor not connected</em></article></section>
+    <section class="dc-v7-admin-mid"><article class="dc-v7-admin-chart"><header><h2>Business pulse</h2><div><button class="is-active">Revenue</button><button>Usage</button></div><nav><button class="is-active">Weekly</button><button>Monthly</button></nav></header><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Workspace usage trend"><defs><linearGradient id="dcAdminFill" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e9b85f" stop-opacity=".28"/><stop offset="1" stop-color="#e9b85f" stop-opacity="0"/></linearGradient></defs><polygon points="0,100 ${chartPoints} 100,100" fill="url(#dcAdminFill)"/><polyline points="${chartPoints}" fill="none" stroke="#e9b85f" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg><footer>${usage.map(row=>`<span>${esc(String(row.date||'').slice(5))}</span>`).join('')}</footer></article><article class="dc-v7-admin-health"><header><h2>System health</h2><button data-admin-jump="services">View all</button></header><table><thead><tr><th>Service</th><th>Status</th><th>Latency</th></tr></thead><tbody>${services.map(([name,ok])=>`<tr><td>${name}</td><td><span class="${ok?'good':'bad'}"><i></i>${ok?'Healthy':'Needs setup'}</span></td><td>—</td></tr>`).join('')}</tbody></table><p>${healthy===Number(summary.total||0)?ICON.check:ICON.warning} ${summary.missing?'Configuration needs attention':'All systems operational'}</p></article></section>
+    <section class="dc-v7-admin-bottom"><article><header><h2>Recent creators</h2><button data-admin-jump="users">View all</button></header><table><thead><tr><th>Creator</th><th>Plan</th><th>Tokens</th><th>Status</th></tr></thead><tbody>${recentUsers.length?recentUsers.map(row=>`<tr><td><span class="dc-v7-admin-avatar">${row.picture?`<img src="${esc(row.picture)}" alt="">`:esc(String(row.name||'C').slice(0,1))}</span><b>${esc(shortText(row.name||row.email||'Creator',24))}</b></td><td>${esc(row.plan)}</td><td>${row.remainingTokens===null?'∞':Number(row.remainingTokens||0).toLocaleString()}</td><td><i class="good"></i> Active</td></tr>`).join(''):'<tr><td colspan="4">No creator accounts yet.</td></tr>'}</tbody></table></article><article><header><h2>Processing lanes</h2><button data-admin-jump="services">View all</button></header><div class="dc-v7-admin-lanes"><p><span><i class="good"></i>Active</span><b>${activeJobs}</b><em><u style="width:${Math.min(100,activeJobs/Math.max(1,Number(queue.maxConcurrent||1))*100)}%"></u></em></p><p><span><i></i>Queued</span><b>${queuedJobs}</b><em><u style="width:${Math.min(100,queuedJobs/Math.max(1,queuedJobs+activeJobs)*100)}%"></u></em></p><p><span><i class="good"></i>Completed</span><b>${completeJobs}</b><em><u style="width:${completeJobs?100:0}%"></u></em></p><footer>Total jobs this month <strong>${completeJobs}</strong></footer></div></article><article><header><h2>Needs attention</h2><button data-admin-jump="integrations">View all</button></header><div class="dc-v7-admin-alert-list">${alerts.length?alerts.slice(0,3).map(alert=>`<button data-admin-jump="integrations"><span>!</span><b>${esc(alert)}</b><em>Review</em></button>`).join(''):`<div class="dc-v7-admin-clear">${ICON.check}<strong>No urgent operations</strong></div>`}</div><button class="dc-btn" data-admin-jump="services">Open operations ${ICON.chevron}</button></article></section></div>`;
 }
 
 function adminSubscriptions(){
@@ -5241,9 +5242,7 @@ function renderAdminPage(){
               :adminOverview();
   const generated=adminOps?.generatedAt||adminAnalytics?.generatedAt;
   const missing=Number(adminOps?.integrationSummary?.missing||0);
-  panel.innerHTML=`<div class="dc-manage-page">
-    <section class="dc-studio-hero dc-admin-hero"><div><span class="dc-manage-kicker">${ICON.analytics} Owner command centre</span><h1>Run DeenClipped with confidence.</h1><p>Customers, revenue, infrastructure, integrations and operating costs—one secure view with no secrets exposed.</p><div class="dc-admin-live-line"><span><i class="${missing?'warn':''}"></i>${missing?`${missing} required setup item${missing===1?'':'s'}`:'Core systems ready'}</span><span>Updated ${generated?formatRelative(generated):'just now'}</span></div></div><div class="dc-studio-actions"><button class="dc-btn secondary dc-svg" type="button" id="dcAdminRefresh">${ICON.refresh||''} Refresh data</button></div></section>
-    ${adminTabs()}${body}</div>`;
+  panel.innerHTML=`<div class="dc-v7-admin-page"><section class="dc-v7-admin-head"><div><h1>Admin Console</h1><p>Business, users and infrastructure at a glance.</p></div><div><button class="dc-btn secondary dc-svg" type="button" id="dcAdminRefresh">${ICON.refresh||''} Refresh</button><span class="${missing?'warn':'good'}">${missing?ICON.warning:ICON.check}${missing?`${missing} setup item${missing===1?'':'s'}`:'All systems operational'}</span></div></section>${adminTabs()}${body}</div>`;
   $$('[data-admin-tab]',panel).forEach(btn=>btn.addEventListener('click',()=>{adminTab=btn.dataset.adminTab;renderAdminPage();}));
   $$('[data-admin-jump]',panel).forEach(btn=>btn.addEventListener('click',()=>{adminTab=btn.dataset.adminJump;renderAdminPage();}));
   $$('[data-vendor-delete]',panel).forEach(btn=>btn.addEventListener('click',async()=>{

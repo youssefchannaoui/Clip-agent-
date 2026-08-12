@@ -1156,7 +1156,7 @@ async function route(req, res, url) {
   if (method === 'POST' && pathname === '/api/music-settings') {
     const body = await readBody(req); const volumePercent = Math.round(Number(body.volumePercent));
     if (!Number.isFinite(volumePercent) || volumePercent < 1 || volumePercent > 50) return json(res, 400, { error: 'Background music volume must be between 1% and 50%.' });
-    setMusicSettings(currentUser, { volumePercent, required: true, shuffle: true }); return json(res, 200, { ok: true, settings: musicSettings(currentUser) });
+    setMusicSettings(currentUser, { volumePercent, required: true, shuffle: body.shuffle !== false }); return json(res, 200, { ok: true, settings: musicSettings(currentUser) });
   }
   const musicAudio = pathname.match(/^\/api\/music\/([^/]+)\/audio$/);
   if (method === 'GET' && musicAudio) {
