@@ -736,8 +736,24 @@ body.dc-app .dc-timeline-zoom button:disabled { opacity: .38; cursor: default; }
        floats over a shell that does not scroll. */
     padding: calc(var(--dc-top) + 12px) 16px 16px calc(var(--dc-side) + 16px) !important;
   }
+  /* Percentage height on .dc-editor-page cannot resolve through auto-height
+     ancestors. Without this chain the page sizes itself from its inspector
+     content, so each sidebar tab produces a different shell even though the
+     document itself is clipped. */
+  body.dc-app.dc-editor-route #app > .wrap > .shell,
+  body.dc-app.dc-editor-route #app > .wrap > .shell > .main-col {
+    height: 100%;
+    min-height: 0;
+  }
   body.dc-app.dc-editor-route .dc-editor-page {
     height: 100%;
+    min-height: 0;
+  }
+  /* A later legacy rule gives the workspace height:calc(100% - 58px).
+     Inside the new three-row shell that overflows its allocated middle row
+     and pushes the timeline below the viewport. Let the grid row own it. */
+  body.dc-app.dc-editor-route .dc-editor-workspace {
+    height: auto;
     min-height: 0;
   }
 }

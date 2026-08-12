@@ -104,4 +104,8 @@ test('the editor route disables page scrolling, and only that route', () => {
   // Scoped by a class that is toggled off on leaving, or every other page breaks.
   assert.match(ui, /classList\.toggle\('dc-editor-route',view==='editor'\)/,
     'the route class must be set from the router and removed on the way out');
+  assert.match(css, /#app\s*>\s*\.wrap\s*>\s*\.shell[\s\S]*?#app\s*>\s*\.wrap\s*>\s*\.shell\s*>\s*\.main-col[\s\S]*?height:\s*100%/,
+    'the editor height must resolve through the complete parent chain');
+  assert.match(css, /body\.dc-app\.dc-editor-route\s+\.dc-editor-workspace\s*\{[\s\S]*?height:\s*auto/,
+    'the workspace must not keep the legacy calc height inside the shell grid');
 });
