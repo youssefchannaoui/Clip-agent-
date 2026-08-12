@@ -210,6 +210,48 @@ test('playback does not repeat work on every frame', () => {
   assert.deepEqual(hiding('#dcResizeHandle'), [], 'a rule disables the resize handle');
 });
 
+test('collapsing the tool panel works at every breakpoint', () => {
+  // Found live: the collapse set --dc-tool-panel to 0 and the body class
+  // toggled, but the panel stayed 340px wide. The base rule read the variable
+  // while three responsive overrides re-hardcoded the width, so the variable
+  // only won at whichever breakpoint was not overridden.
+  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
+  const rules = [...source.matchAll(/\.dc-editor-workspace\{[^}]*grid-template-columns:([^;}]*)/g)].map(m => m[1].trim());
+  assert.ok(rules.length >= 4, 'expected the base rule plus responsive overrides');
+
+  // Split on top-level whitespace only — minmax(390px,1fr) is one column.
+  const columns = rule => {
+    const out = []; let depth = 0, token = '';
+    for (const ch of rule) {
+      if (ch === '(') depth++;
+      if (ch === ')') depth--;
+      if (/\s/.test(ch) && depth === 0) { if (token) out.push(token); token = ''; continue; }
+      token += ch;
+    }
+    if (token) out.push(token);
+    return out;
+  };
+
+  // Only three-column layouts have a tool panel distinct from the preview. The
+  // narrow breakpoints stack to two columns or one, where the panel *is* the
+  // main column and collapsing it would leave nothing to show.
+  const withPanel = rules.filter(rule => columns(rule).length >= 3);
+  assert.ok(withPanel.length >= 2, 'expected several three-column layouts');
+  for (const rule of withPanel) {
+    assert.match(columns(rule)[1], /var\(--dc-tool-panel/,
+      `this breakpoint hardcodes the panel width and will ignore the collapse: ${rule}`);
+  }
+});
+
+test('the loading sentence is cleared when the source arrives', () => {
+  // Found live: the class was removed so the animation stopped, but the words
+  // "Loading the original footage…" stayed under a video that had loaded.
+  const source = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 'utf8');
+  const fn = source.slice(source.indexOf('const setLoading=on=>{'));
+  const body = fn.slice(0, fn.indexOf('};'));
+  assert.match(body, /textContent=on\?/, 'the status text must depend on the loading state, not only be set when true');
+});
+
 test('the clean-source wait is not tight enough to fire on a healthy source', () => {
   // The constant that made the editor unpredictable. Measured load times for
   // the clean plate were 2487/2514/2571ms; the bound was 2500ms. Anything in
