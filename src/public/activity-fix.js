@@ -202,7 +202,7 @@ const PUBLISH_NAV = [
   ['schedule','Publishing','publish'], ['publishing','Channels','social']
 ];
 const STUDIO_NAV = [
-  ['templates','Clip Styles','style'], ['brand','Brand Kit','brand','PRO'], ['lab','AI Director','lab','PRO'],
+  ['templates','Templates','style'], ['brand','Brand Kit','brand','PRO'], ['lab','AI Director','lab','PRO'],
   ['music','Audio','music'], ['insights','Insights','analytics'], ['automation','Settings','settings']
 ];
 const ACCOUNT_NAV = [['subscription','Subscription','billing']];
@@ -1495,7 +1495,7 @@ function go(view){
     home:['Home','Everything important in one place'], projects:['Projects','Lectures and all generated clips'],
     review:['Clip Review','Approve AI clips before posting'], editor:['Editor','Edit the selected clip'],
     schedule:['Publishing','Post now, download, or schedule your clips'], insights:['Insights','Clip quality and studio signals'],
-    publishing:['Channels','Connected publishing destinations'], templates:['Clip Styles','Choose how new clips look'], music:['Audio','Background tracks and audio level'],
+    publishing:['Channels','Connected publishing destinations'], templates:['Templates','Build a reusable look for every clip'], music:['Audio','Background tracks and audio level'],
     brand:['Brand Kit','Watermark, colours and visual identity'], lab:['AI Director','Growth strategy and explainable clip intelligence'],
     automation:['Settings','Generation rules and studio controls'], subscription:['Subscription','Plan, tokens and payment details'],
     admin:['Admin','Subscriptions, storage, integrations and sign-ups']
@@ -1569,13 +1569,13 @@ function homeExperienceContent(exp,waiting=0){
     free_trial:{eyebrow:'Free 3-day creator trial',headline:'Create your first clips.\nLearn the whole workflow.',copy:'Use 40 tokens to generate, edit and download watermarked clips. Premium publishing stays locked until you choose a plan.',primary:'Start free'},
   };
   const profile=map[exp.id]||map.free_trial;
-  return{...profile,secondary:waiting?`Review ${waiting} ready`:aiDirector?'Open AI Director':exp.premium?'Open Clip Styles':'See what Premium unlocks'};
+  return{...profile,secondary:waiting?`Review ${waiting} ready`:aiDirector?'Open AI Director':exp.premium?'Open Templates':'See what Premium unlocks'};
 }
 function homeExperienceStrip(exp,d){
   const projects=d.projects||[],clips=d.clips||[],connected=connectedPlatformCount(d),ready=clips.filter(c=>c.musicVerified&&c.renderVerified).length,features=billingInfo().features||{},aiDirector=Boolean(features.aiDirector||billingInfo().current?.unlimited);
   if(exp.id==='owner')return `<section class="dc-v6-mode-card owner"><div><span>${ICON.analytics}</span><small>Owner view</small><strong>Creator workflow + live operations</strong><p>The customer experience stays clean while Admin Console carries worker lanes, subscriptions, storage and provider health.</p></div><button class="dc-btn secondary" data-dc-nav="admin">Open operations</button></section>`;
   if(exp.browseOnly||exp.id==='premium_empty')return `<section class="dc-v6-mode-card attention"><div><span>${ICON.tokens}</span><small>${esc(exp.label)}</small><strong>Your existing workspace remains available.</strong><p>${esc(exp.detail)}. Projects, edits and downloads are not deleted.</p></div><button class="dc-btn" data-dc-nav="subscription">${exp.id==='premium_empty'?'Add tokens':'Compare plans'}</button></section>`;
-  if(exp.premium)return `<section class="dc-v6-mode-card premium"><div><span>${ICON.sparkles}</span><small>${exp.id==='premium_trial'?'Premium trial path':'Premium workflow'}</small><strong>${ready} quality-ready clips · ${connected} connected channels</strong><p>${aiDirector?'AI Director, active-speaker framing, Brand Kit and publishing preflight are unlocked.':'Brand Kit, clean exports and social publishing are unlocked. Upgrade when you need AI Director and active-speaker framing.'}</p></div><div class="dc-v6-mode-actions"><button class="dc-btn secondary" data-dc-nav="templates">Open Clip Styles</button><button class="dc-btn" ${aiDirector?'data-dc-nav="lab"':'data-dc-nav="subscription"'}>${aiDirector?'Open AI Director':'Explore studio plans'}</button></div></section>`;
+  if(exp.premium)return `<section class="dc-v6-mode-card premium"><div><span>${ICON.sparkles}</span><small>${exp.id==='premium_trial'?'Premium trial path':'Premium workflow'}</small><strong>${ready} quality-ready clips · ${connected} connected channels</strong><p>${aiDirector?'AI Director, active-speaker framing, Brand Kit and publishing preflight are unlocked.':'Brand Kit, clean exports and social publishing are unlocked. Upgrade when you need AI Director and active-speaker framing.'}</p></div><div class="dc-v6-mode-actions"><button class="dc-btn secondary" data-dc-nav="templates">Open Templates</button><button class="dc-btn" ${aiDirector?'data-dc-nav="lab"':'data-dc-nav="subscription"'}>${aiDirector?'Open AI Director':'Explore studio plans'}</button></div></section>`;
   const steps=[['Import',projects.length>0],['Review',clips.length>0],['Style',Boolean(d.selectedTemplate)],['Publish',false]];
   return `<section class="dc-v6-trial-path"><div><small>Your free path</small><strong>See the product before you subscribe.</strong><p>Downloads include the DeenClipped watermark; social posting unlocks on Premium.</p></div><div class="dc-v6-trial-steps">${steps.map(([label,done],index)=>`<span class="${done?'done':index===3?'locked':''}"><i>${done?ICON.check:index===3?ICON.brand:index+1}</i><b>${esc(label)}</b><em>${index===3?'Premium':done?'Complete':'Next'}</em></span>`).join('')}</div><button class="dc-btn secondary" data-dc-nav="subscription">Compare Premium</button></section>`;
 }
@@ -2592,8 +2592,8 @@ function editorStyleHasDrift(){
 }
 function editorStylePickerMarkup(){
   const all=DATA?.templates||[],builtIn=all.filter(style=>style.builtIn),mine=all.filter(style=>!style.builtIn),custom=editorStyleHasDrift();
-  const options=styles=>styles.map(style=>`<option value="${esc(style.id)}" ${style.id===editor.appliedStyleId?'selected':''}>${esc(style.name||'Untitled style')}</option>`).join('');
-  return `<label class="dc-editor-style-picker ${custom?'is-custom':''}" title="${custom?'This clip has custom changes':'Choose a Clip Style for this clip'}"><span>${custom?'Clip Style · Custom changes':'Clip Style'}</span><select id="dcEditorStyleSelect" aria-label="Clip Style"><option value="" ${editor.appliedStyleId?'':'selected'}>No style applied</option>${builtIn.length?`<optgroup label="Built-in styles">${options(builtIn)}</optgroup>`:''}${mine.length?`<optgroup label="My Clip Styles">${options(mine)}</optgroup>`:''}<optgroup label="Manage"><option value="__browse">Browse Clip Styles…</option><option value="__create">Create new Clip Style…</option></optgroup></select></label>`;
+  const options=styles=>styles.map(style=>`<option value="${esc(style.id)}" ${style.id===editor.appliedStyleId?'selected':''}>${esc(style.name||'Untitled template')}</option>`).join('');
+  return `<label class="dc-editor-style-picker ${custom?'is-custom':''}" title="${custom?'This clip has custom changes':'Choose a Template for this clip'}"><span>${custom?'Template · Custom changes':'Template'}</span><select id="dcEditorStyleSelect" aria-label="Template"><option value="" ${editor.appliedStyleId?'':'selected'}>No template applied</option>${builtIn.length?`<optgroup label="Built-in templates">${options(builtIn)}</optgroup>`:''}${mine.length?`<optgroup label="My Templates">${options(mine)}</optgroup>`:''}<optgroup label="Manage"><option value="__browse">Browse Templates…</option><option value="__create">Create new Template…</option></optgroup></select></label>`;
 }
 function mountEditorStylePicker(){
   $('.dc-editor-style-picker')?.remove();const title=$('.dc-editor-title');if(!title)return;
@@ -2602,8 +2602,8 @@ function mountEditorStylePicker(){
 }
 function updateEditorStyleState(){
   const picker=$('.dc-editor-style-picker');if(!picker)return;
-  const custom=editorStyleHasDrift();picker.classList.toggle('is-custom',custom);picker.title=custom?'This clip has custom changes':'Choose a Clip Style for this clip';
-  const label=$('span',picker);if(label)label.textContent=custom?'Clip Style · Custom changes':'Clip Style';
+  const custom=editorStyleHasDrift();picker.classList.toggle('is-custom',custom);picker.title=custom?'This clip has custom changes':'Choose a Template for this clip';
+  const label=$('span',picker);if(label)label.textContent=custom?'Template · Custom changes':'Template';
 }
 function applyEditorStyleSelection(id){
   if(id==='__browse'||id==='__create'){
@@ -2756,12 +2756,12 @@ function styleTool(){
   const selected=DATA?.selectedTemplate;
   const applied=(DATA?.templates||[]).find(template=>template.id===editor.appliedStyleId);
   const drift=editorStyleHasDrift(),appliedName=applied?.name||'No style applied';
-  const templateStatus=`<div class="dc-simple-card dc-style-state"><strong>This clip: ${esc(appliedName)}</strong><span class="${drift?'custom':''}">${drift?'This clip has custom changes.':'Matches the selected Clip Style.'}</span><span>Future clips still use: <b style="color:var(--dc-text)">${esc(selected?.name||'No default')}</b></span></div>`;
+  const templateStatus=`<div class="dc-simple-card dc-style-state"><strong>This clip: ${esc(appliedName)}</strong><span class="${drift?'custom':''}">${drift?'This clip has custom changes.':'Matches the selected Template.'}</span><span>Future clips still use: <b style="color:var(--dc-text)">${esc(selected?.name||'No default')}</b></span></div>`;
   // Branding moved out to its own Brand section: a Brand Kit is an account's
   // identity, a Clip Style is a per-clip look, and mixing them here was what
   // made the two read as the same thing.
-  const clipActions=`<div class="dc-section"><h3>Clip Style actions</h3><div class="dc-clip-style-actions"><button type="button" class="dc-btn secondary" id="dcResetClipStyle" ${applied&&drift?'':'disabled'}>Reset to Clip Style</button><button type="button" class="dc-btn secondary" id="dcSaveClipStyleAsNew">Save changes as new Clip Style</button><button type="button" class="dc-btn secondary" id="dcUpdateClipStyle" ${applied&&!applied.builtIn&&drift?'':'disabled'}>Update existing Clip Style…</button></div><div class="dc-caption-note" style="margin-top:7px">These actions never change this clip's transcript, caption timing or crop position.</div></div>`;
-  const defaults=`<details class="dc-advanced"><summary>Default style for future clips</summary><div style="margin-top:10px"><div class="dc-inline-actions"><button type="button" class="dc-btn secondary" id="dcSavePreset">Save current look as default</button><button type="button" class="dc-btn" id="dcApplyPresetAll">Apply default to all clips</button></div><div class="dc-caption-note" style="margin-top:7px">Account-wide actions are separate from the Clip Style applied to this editor.</div></div></details>`;
+  const clipActions=`<div class="dc-section"><h3>Template actions</h3><div class="dc-clip-style-actions"><button type="button" class="dc-btn secondary" id="dcResetClipStyle" ${applied&&drift?'':'disabled'}>Reset to Template</button><button type="button" class="dc-btn secondary" id="dcSaveClipStyleAsNew">Save changes as new Template</button><button type="button" class="dc-btn secondary" id="dcUpdateClipStyle" ${applied&&!applied.builtIn&&drift?'':'disabled'}>Update existing Template…</button></div><div class="dc-caption-note" style="margin-top:7px">These actions never change this clip's transcript, caption timing or crop position.</div></div>`;
+  const defaults=`<details class="dc-advanced"><summary>Default Template for future clips</summary><div style="margin-top:10px"><div class="dc-inline-actions"><button type="button" class="dc-btn secondary" id="dcSavePreset">Save current look as default</button><button type="button" class="dc-btn" id="dcApplyPresetAll">Apply default to all clips</button></div><div class="dc-caption-note" style="margin-top:7px">Account-wide actions are separate from the Template applied to this editor.</div></div></details>`;
   return `${templateStatus}${clipActions}<div class="dc-section"><h3>Video look</h3>${selectField('Filter','filterPreset',[['natural','Natural'],['crisp','Crisp'],['warm','Warm'],['cinematic','Cinematic'],['monochrome','Monochrome'],['custom','Custom']])}${rangeField('Brightness','brightness',-1,1,.05)}${rangeField('Contrast','contrast',.5,2,.05)}${rangeField('Saturation','saturation',0,3,.05)}<details class="dc-advanced"><summary>Advanced image controls</summary><div style="margin-top:10px">${rangeField('Sharpen','sharpen',0,2,.05)}${rangeField('Vignette','vignette',0,1,.05)}</div></details></div>${defaults}`;
 }
 
@@ -2801,7 +2801,7 @@ function brandTool(){
   // Per §7 the section stays visible without premium, and the upgrade prompt
   // appears on use rather than as standing advertising.
   const overlay=`<div class="dc-section"><h3>On this clip</h3>${checkField('Show watermark','watermark')}${editor.draft.watermark?`${colorField('Watermark colour','watermarkColor')}${selectField('Position','watermarkPosition',[['top-left','Top left'],['top-center','Top centre'],['top-right','Top right'],['bottom-left','Bottom left'],['bottom-center','Bottom centre'],['bottom-right','Bottom right']])}${rangeField('Size','watermarkFontSize',10,90,1)}${rangeField('Opacity','watermarkOpacity',0,1,.05)}<details class="dc-advanced"><summary>More settings</summary><div style="margin-top:10px">${rangeField('Horizontal margin','watermarkMarginH',0,300,5)}${rangeField('Vertical margin','watermarkMarginV',0,300,5)}</div></details>`:''}${checkField('Show brand line','brandLineEnabled')}${editor.draft.brandLineEnabled?`${colorField('Brand line colour','brandLineColor')}${rangeField('Brand line height','brandLineHeight',1,24,1)}`:''}</div>`;
-  const distinction=`<div class="dc-caption-note" style="margin-top:10px"><b>Brand Kit</b> is your logo, fonts, colours and watermark — it belongs to your account.<br><b>Clip Style</b> is a reusable editing look applied to individual clips.</div>`;
+  const distinction=`<div class="dc-caption-note" style="margin-top:10px"><b>Brand Kit</b> is your logo, fonts, colours and watermark — it belongs to your account.<br><b>Template</b> is a reusable editing look applied to individual clips.</div>`;
   return `<div class="dc-section"><h3>Brand Kit</h3>${summary}</div>${overlay}${distinction}`;
 }
 
@@ -3456,16 +3456,16 @@ function resetEditorToClipStyle(){
   markEditorDirty();pushHistory();renderEditorTool();updateEditorPreview();updateCaptionAtTime(editor.currentTime);renderTimeline();mountEditorStylePicker();
 }
 async function saveClipStyleAsNew(){
-  const proposed=prompt('Name this Clip Style',`${currentClip()?.title||'My clip'} style`);if(proposed===null)return;
-  const name=String(proposed).trim();if(!name)return notify('Give the Clip Style a name.','bad');
+  const proposed=prompt('Name this Template',`${currentClip()?.title||'My clip'} template`);if(proposed===null)return;
+  const name=String(proposed).trim();if(!name)return notify('Give the Template a name.','bad');
   const button=$('#dcSaveClipStyleAsNew');if(button){button.disabled=true;button.textContent='Saving…'}
   try{
     const result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...clipStyleValues(editor.draft),id:'',name},select:false})});
-    if(!result?.template)throw new Error('The Clip Style was not returned.');
+    if(!result?.template)throw new Error('The Template was not returned.');
     DATA.templates=[...(DATA.templates||[]).filter(item=>item.id!==result.template.id),result.template];
     editor.appliedStyleId=result.template.id;editor.appliedStyleSnapshot=clone(result.template);
     markEditorDirty();pushHistory();renderEditorTool();mountEditorStylePicker();notify(`Saved “${result.template.name}” without changing your default.`);
-  }catch(error){notify(error.message,'bad')}finally{if(button){button.disabled=false;button.textContent='Save changes as new Clip Style'}}
+  }catch(error){notify(error.message,'bad')}finally{if(button){button.disabled=false;button.textContent='Save changes as new Template'}}
 }
 async function updateAppliedClipStyle(){
   const current=(DATA?.templates||[]).find(item=>item.id===editor.appliedStyleId);if(!current||current.builtIn)return;
@@ -3473,10 +3473,10 @@ async function updateAppliedClipStyle(){
   const button=$('#dcUpdateClipStyle');if(button){button.disabled=true;button.textContent='Updating…'}
   try{
     const result=await callApi(`/api/templates/${encodeURIComponent(current.id)}`,{method:'PUT',body:JSON.stringify({template:{...clipStyleValues(editor.draft),id:current.id,name:current.name},propagate:false})});
-    if(!result?.template)throw new Error('The updated Clip Style was not returned.');
+    if(!result?.template)throw new Error('The updated Template was not returned.');
     const index=(DATA.templates||[]).findIndex(item=>item.id===current.id);if(index>=0)DATA.templates[index]=result.template;
     editor.appliedStyleSnapshot=clone(result.template);markEditorDirty();pushHistory();renderEditorTool();mountEditorStylePicker();notify(`Updated “${result.template.name}”. Other clips were not changed.`);
-  }catch(error){notify(error.message,'bad')}finally{if(button){button.disabled=false;button.textContent='Update existing Clip Style…'}}
+  }catch(error){notify(error.message,'bad')}finally{if(button){button.disabled=false;button.textContent='Update existing Template…'}}
 }
 async function saveEditorPreset(){
   const clip=currentClip(),draft=clipStyleValues(editor.draft);
@@ -3871,12 +3871,13 @@ function renderCreatorLab(){
 }
 
 const STYLE_GROUPS=[
+  ['details','Template details','details','Template'],
   ['layout','Clip layout','style','Style'],
   ['captions','Captions','captions','Style'],
   ['headline','Auto headline','details','Style'],
   ['framing','Speaker framing','canvas','Style'],
   ['overlay','Overlay','brand','Brand'],
-  ['audio','Audio','audio','Brand'],
+  ['audio','Voice & music','audio','Audio'],
 ];
 const STYLE_FONTS=['DejaVu Sans','DejaVu Serif','Manrope','Roboto','Lato','Noto Sans','Noto Serif','Play','Liberation Sans','Liberation Serif','Amiri','Scheherazade New','Noto Naskh Arabic','Noto Kufi Arabic'];
 const styleStudio={draft:null,baseId:'',group:'',history:[],index:-1,dirty:false,menuOpen:false};
@@ -3903,19 +3904,32 @@ function styleColor(key,label){return `<label class="dc-style-ctl">${esc(label)}
 function styleRange(key,label,min,max,step,suffix){const value=Number(styleField(key,min));return `<label class="dc-style-ctl wide">${esc(label)} <b data-style-out="${esc(key)}">${value}${esc(suffix||'')}</b><input type="range" min="${min}" max="${max}" step="${step}" data-style-key="${esc(key)}" data-style-type="number" data-style-suffix="${esc(suffix||'')}" value="${value}"></label>`}
 function styleSelect(key,label,list){return `<label class="dc-style-ctl">${esc(label)}<select data-style-key="${esc(key)}" data-style-type="text">${list.map(v=>{const [value,text]=Array.isArray(v)?v:[v,v];return `<option value="${esc(value)}" ${String(styleField(key,''))===String(value)?'selected':''}>${esc(text)}</option>`}).join('')}</select></label>`}
 function styleText(key,label,max){return `<label class="dc-style-ctl wide">${esc(label)}<input type="text" maxlength="${Number(max)||60}" data-style-key="${esc(key)}" data-style-type="text" value="${esc(styleField(key,''))}"></label>`}
+function styleRatio(){
+  const width=Number(styleField('width',1080)),height=Number(styleField('height',1920));
+  const ratio=width===height?'1:1':Math.abs(width/height-4/5)<.02?'4:5':width>height?'16:9':'9:16';
+  return `<div class="dc-style-seg dc-style-ratios" role="group" aria-label="Output aspect ratio">${[['9:16','9:16'],['4:5','4:5'],['1:1','1:1'],['16:9','16:9']].map(([value,label])=>`<button type="button" data-style-ratio="${value}" class="${ratio===value?'on':''}">${label}</button>`).join('')}</div>`;
+}
+function styleRatioLabel(d=styleStudio.draft||{}){
+  const width=Number(d.width||1080),height=Number(d.height||1920);
+  if(width===height)return '1:1';
+  if(Math.abs(width/height-4/5)<.02)return '4:5';
+  return width>height?'16:9':'9:16';
+}
 
 function styleGroupSummary(id){
   const d=styleStudio.draft||{};
-  if(id==='layout')return `${templateFitLabel(d.fitMode)} · ${esc(String(d.filterPreset||'natural'))}`;
+  if(id==='details')return d.builtIn?'Built-in · save as a copy':'Custom · rename anytime';
+  if(id==='layout')return `${styleRatioLabel(d)} · ${templateFitLabel(d.fitMode)} · ${esc(String(d.filterPreset||'natural'))}`;
   if(id==='captions')return `${templateModeLabel(d.captionMode)} · ${esc(String(d.captionFont||'Default'))}`;
   if(id==='headline')return d.hookEnabled?`On · ${Number(d.hookDuration||0)}s`:'Off';
   if(id==='framing')return d.smartFramingEnabled?`Tracking · ${esc(String(d.smartFramingBias||'auto'))}`:'Off';
   if(id==='overlay')return `${d.watermark?esc(shortText(d.watermark,14)):'No mark'}${d.brandLineEnabled?' · accent':''}`;
-  if(id==='audio')return d.voiceEnhance?'Voice enhanced':'Raw audio';
+  if(id==='audio')return `${d.voiceEnhance?'Voice enhanced':'Raw voice'} · music ${Number(data()?.musicSettings?.volumePercent||13)}%`;
   return '';
 }
 function styleGroupControls(id){
-  if(id==='layout')return `${styleSeg('fitMode',[['contain','Fit whole frame'],['blur','Blurred sides'],['crop','Fill 9:16']])}
+  if(id==='details')return `${styleText('name','Template name',70)}${styleText('description','Description',120)}<p class="dc-style-hint">Give the template a clear name so it is easy to choose from the clip editor. Editing a built-in template creates your own protected copy when you save.</p>`;
+  if(id==='layout')return `<p class="dc-style-hint">Output ratio</p>${styleRatio()}${styleSeg('fitMode',[['contain','Fit whole frame'],['blur','Blurred sides'],['crop','Fill frame']])}
     ${styleColor('frameBackground','Background')}${styleSelect('filterPreset','Colour look',[['natural','Natural'],['crisp','Crisp'],['warm','Warm'],['cinematic','Cinematic'],['monochrome','Monochrome']])}
     ${styleRange('blurStrength','Side blur',0,60,1,'')}${styleRange('brightness','Brightness',-0.3,0.3,0.01,'')}${styleRange('contrast','Contrast',0.6,1.6,0.01,'')}${styleRange('saturation','Saturation',0,2,0.01,'')}${styleRange('sharpen','Sharpen',0,1.5,0.05,'')}${styleRange('vignette','Vignette',0,1,0.05,'')}`;
   if(id==='captions')return `${styleSeg('captionMode',[['dynamic-stack','Word stack'],['word','Word highlight'],['phrase','Phrase']])}
@@ -3938,14 +3952,15 @@ function styleGroupControls(id){
     ${styleColor('watermarkColor','Colour')}${styleRange('watermarkOpacity','Opacity',0,100,1,'%')}${styleRange('watermarkFontSize','Size',14,64,1,'')}
     ${styleToggle('brandLineEnabled','Accent line','A colour edge along the clip')}${styleColor('brandLineColor','Accent colour')}${styleRange('brandLineHeight','Accent thickness',2,24,1,'')}`;
   if(id==='audio')return `${styleToggle('voiceEnhance','Enhance voice','Level and clean the speaker before mixing music under it')}
-    <p class="dc-style-hint">Background tracks and volume live in Audio.</p>`;
+    <div class="dc-style-audio-link"><div><strong>Background music</strong><span>${Number(data()?.musicSettings?.volumePercent||13)}% global mix · ${(data()?.tracks||[]).length} track${(data()?.tracks||[]).length===1?'':'s'} ready</span></div><button type="button" class="dc-btn secondary" data-dc-nav="music">Open Audio</button></div>
+    <p class="dc-style-hint">Voice enhancement belongs to this template. Music choice and volume stay global so a template never points to a deleted audio file.</p>`;
   return '';
 }
 
 function styleTemplateCard(t,sourcePreview){
   const editing=t.id===styleStudio.baseId, isDefault=data()?.selectedTemplate?.id===t.id;
   const swatches=[t.captionPrimary,t.captionHighlight,t.watermarkColor,t.brandLineColor].filter(Boolean).slice(0,4);
-  const more=`<details class="dc-clip-more"><summary>More</summary><div><button data-duplicate-template="${esc(t.id)}">Duplicate</button>${isDefault?'':`<button data-use-template="${esc(t.id)}">Use for new clips</button>`}${t.builtIn?'':`<button class="danger" data-delete-template="${esc(t.id)}">Delete</button>`}</div></details>`;
+  const more=`<details class="dc-clip-more"><summary>More</summary><div><button data-duplicate-template="${esc(t.id)}">Duplicate</button>${isDefault?'':`<button data-use-template="${esc(t.id)}">Set as default</button>`}<button data-apply-template="${esc(t.id)}">Apply to existing clips</button>${t.builtIn?'':`<button class="danger" data-delete-template="${esc(t.id)}">Delete</button>`}</div></details>`;
   return `<div class="dc-style-row ${editing?'is-editing':''}"><button type="button" class="dc-style-row-main" data-style-open="${esc(t.id)}" aria-label="Edit ${esc(t.name||'template')}"><span class="dc-style-row-art">${templatePreviewMarkup(t,sourcePreview)}</span><span class="dc-style-row-copy"><strong>${esc(shortText(t.name||'Untitled',26))}</strong><small>${t.builtIn?'Built-in':'Custom'}</small></span><span class="dc-style-swatches">${swatches.map(c=>`<i style="background:${esc(templateSafeColor(c))}"></i>`).join('')}</span>${isDefault?'<b class="dc-style-flag">Default</b>':''}</button>${more}</div>`;
 }
 
@@ -3975,7 +3990,7 @@ async function styleStudioCreate(){
   const base=styleStudio.baseId||data()?.selectedTemplate?.id;
   if(!base)return notify('No template to start from','bad');
   try{
-    const result=await callApi(`/api/templates/${encodeURIComponent(base)}/duplicate`,{method:'POST',body:JSON.stringify({name:'New template'})});
+    const result=await callApi(`/api/templates/${encodeURIComponent(base)}/duplicate`,{method:'POST',body:JSON.stringify({name:'New template',select:false})});
     await refreshData();
     if(result.template)styleStudioLoad(result.template);
     notify('New template created');
@@ -3993,17 +4008,21 @@ function renderTemplatesPage(){
   const sourcePreview=(d.projects||[]).map(project=>projectThumbUrl(project,[])).find(Boolean)||'';
   const canUndo=styleStudio.index>0,canRedo=styleStudio.index<styleStudio.history.length-1;
   const group=STYLE_GROUPS.find(g=>g[0]===styleStudio.group);
+  const isDefault=d.selectedTemplate?.id===base.id;
+  const ratio=styleRatioLabel(draft);
+  const stageWidth=ratio==='16:9'?'min(650px,72vw)':ratio==='1:1'?'min(440px,68vw)':ratio==='4:5'?'min(350px,64vw)':'min(300px,62vw)';
 
   const rail=group
     ?`<div class="dc-style-panel-head"><button type="button" id="dcStyleBack" class="dc-icon-btn dc-svg" aria-label="Back to all settings">${ICON.back}</button><div><small>${esc(group[3])}</small><strong>${esc(group[1])}</strong></div></div><div class="dc-style-panel" id="dcStyleControls">${styleGroupControls(group[0])}</div>`
-    :`<div class="dc-style-rail">${['Style','Brand'].map(section=>`<small>${esc(section)}</small>${STYLE_GROUPS.filter(g=>g[3]===section).map(([id,label,icon])=>`<button type="button" data-style-group="${esc(id)}"><span>${ICON[icon]||ICON.style}</span><div><strong>${esc(label)}</strong><em>${esc(styleGroupSummary(id))}</em></div>${ICON.chevron}</button>`).join('')}`).join('')}</div>`;
+    :`<div class="dc-style-rail">${['Template','Style','Brand','Audio'].map(section=>`<small>${esc(section)}</small>${STYLE_GROUPS.filter(g=>g[3]===section).map(([id,label,icon])=>`<button type="button" data-style-group="${esc(id)}"><span>${ICON[icon]||ICON.style}</span><div><strong>${esc(label)}</strong><em>${esc(styleGroupSummary(id))}</em></div>${ICON.chevron}</button>`).join('')}`).join('')}</div>`;
 
   panel.innerHTML=`<div class="dc-style-studio">
-    <header class="dc-style-bar"><div class="dc-style-bar-title"><strong>Clip styles</strong><span>Build the look every new clip uses</span></div>
-      <div class="dc-style-picker ${styleStudio.menuOpen?'is-open':''}"><button type="button" id="dcStyleSwitch" class="dc-style-switch" aria-haspopup="true" aria-expanded="${styleStudio.menuOpen?'true':'false'}"><span>${esc(shortText(base.name||'Untitled',26))}${d.selectedTemplate?.id===base.id?' · default':''}</span>${ICON.chevron}</button>${styleStudio.menuOpen?`<div class="dc-style-menu" id="dcStyleMenu"><button type="button" class="dc-style-new" id="dcStyleNew"><span>+</span>New template</button><div class="dc-style-menu-list">${templates.map(t=>styleTemplateCard(t,sourcePreview)).join('')}</div></div>`:''}</div>
-      <div class="dc-style-bar-actions"><button type="button" class="dc-icon-btn dc-svg" id="dcStyleUndo" title="Undo" ${canUndo?'':'disabled'}>${ICON.undo}</button><button type="button" class="dc-icon-btn dc-svg" id="dcStyleRedo" title="Redo" ${canRedo?'':'disabled'}>${ICON.redo}</button><button type="button" class="dc-icon-btn dc-svg" id="dcStyleRevert" title="Discard changes" ${styleStudio.dirty?'':'disabled'}>${ICON.clock}</button><button class="dc-btn" id="dcStyleSave" ${styleStudio.dirty?'':'disabled'}>${styleStudio.dirty?'Save template':'Saved'}</button></div></header>
+    <header class="dc-style-bar"><div class="dc-style-bar-title"><strong>Template editor</strong><span>Set the look once, then reuse it on any clip</span></div>
+      <div class="dc-style-picker ${styleStudio.menuOpen?'is-open':''}"><small>Template</small><button type="button" id="dcStyleSwitch" class="dc-style-switch" aria-haspopup="true" aria-expanded="${styleStudio.menuOpen?'true':'false'}"><span>${esc(shortText(base.name||'Untitled',26))}${isDefault?' · default':''}</span>${ICON.chevron}</button>${styleStudio.menuOpen?`<div class="dc-style-menu" id="dcStyleMenu"><button type="button" class="dc-style-new" id="dcStyleNewMenu"><span>+</span>New template</button><div class="dc-style-menu-list">${templates.map(t=>styleTemplateCard(t,sourcePreview)).join('')}</div></div>`:''}</div>
+      <div class="dc-style-bar-actions"><button type="button" class="dc-btn secondary dc-style-create" id="dcStyleNew">+ New</button>${isDefault?'<span class="dc-style-default-state">Default for new clips</span>':`<button type="button" class="dc-btn secondary" data-use-template="${esc(base.id)}">Set as default</button>`}<button type="button" class="dc-icon-btn dc-svg" id="dcStyleUndo" title="Undo" ${canUndo?'':'disabled'}>${ICON.undo}</button><button type="button" class="dc-icon-btn dc-svg" id="dcStyleRedo" title="Redo" ${canRedo?'':'disabled'}>${ICON.redo}</button><button type="button" class="dc-icon-btn dc-svg" id="dcStyleRevert" title="Discard changes" ${styleStudio.dirty?'':'disabled'}>${ICON.clock}</button><button class="dc-btn" id="dcStyleSave" ${styleStudio.dirty?'':'disabled'}>${styleStudio.dirty?'Save template':'Saved'}</button></div></header>
+    <div class="dc-style-scope"><span>${ICON.check}</span><p><strong>${isDefault?'This template is automatic for new clips.':'You are previewing a saved template.'}</strong> Existing clips stay unchanged unless you choose “Apply to existing clips” from the template menu.</p></div>
     <div class="dc-style-workspace"><aside class="dc-style-side">${rail}</aside>
-      <main class="dc-style-stage"><div class="dc-style-stage-frame">${styleStageInner(sourcePreview)}</div><p class="dc-style-stage-note">Drag the caption to move it · drag its bottom-right corner to resize</p></main></div>
+      <main class="dc-style-stage"><div class="dc-style-stage-frame" style="aspect-ratio:${Number(draft.width||1080)}/${Number(draft.height||1920)};width:${stageWidth}">${styleStageInner(sourcePreview)}</div><p class="dc-style-stage-note">${esc(ratio)} preview · drag the caption to move it · drag its bottom-right corner to resize</p></main></div>
   </div>`;
 
   $('#dcStyleSwitch')?.addEventListener('click',event=>{event.stopPropagation();styleStudio.menuOpen=!styleStudio.menuOpen;renderTemplatesPage()});
@@ -4018,11 +4037,15 @@ function renderTemplatesPage(){
   $('#dcStyleRevert')?.addEventListener('click',styleStudioRevert);
   $('#dcStyleSave')?.addEventListener('click',styleStudioSave);
   $('#dcStyleNew')?.addEventListener('click',styleStudioCreate);
+  $('#dcStyleNewMenu')?.addEventListener('click',styleStudioCreate);
   $('#dcStyleBack')?.addEventListener('click',()=>{styleStudio.group='';renderTemplatesPage()});
   $$('[data-style-group]',panel).forEach(button=>button.addEventListener('click',()=>{styleStudio.group=button.dataset.styleGroup;renderTemplatesPage()}));
   $$('[data-style-open]',panel).forEach(button=>button.addEventListener('click',()=>{const next=templates.find(t=>t.id===button.dataset.styleOpen);if(next){styleStudioLoad(next);styleStudio.menuOpen=false;renderTemplatesPage()}}));
   $$('[data-style-seg]',panel).forEach(button=>button.addEventListener('click',()=>{styleStudioSet(button.dataset.styleSeg,button.dataset.styleValue);renderTemplatesPage()}));
-  bindStyleCaptionDrag(sourcePreview);
+  $$('[data-style-ratio]',panel).forEach(button=>button.addEventListener('click',()=>{
+    const size={'9:16':[1080,1920],'4:5':[1080,1350],'1:1':[1080,1080],'16:9':[1920,1080]}[button.dataset.styleRatio];
+    if(!size)return;styleStudio.draft.width=size[0];styleStudio.draft.height=size[1];styleStudioPush();renderTemplatesPage();
+  }));
   bindStyleCaptionDrag(sourcePreview);
   const controls=$('#dcStyleControls');
   if(controls){
@@ -4125,11 +4148,11 @@ function templatePreviewMarkup(t,sourcePreview='',large=false){
   const media=sourcePreview?`<img class="dc-style-phone-back" src="${authedUrl(sourcePreview)}" alt=""><img class="dc-style-phone-front" src="${authedUrl(sourcePreview)}" alt="Sample source preview">`:`<div class="dc-style-sample-scene"><i></i><b></b><em></em></div>`;
   return `<div class="dc-style-phone ${large?'large':''}" data-fit="${esc(fit)}" data-caption-mode="${esc(mode)}" style="--style-bg:${templateSafeColor(t.frameBackground,'#000000')};--style-filter:${esc(filter)}">${media}<div class="dc-style-preview-shade"></div><span class="dc-style-sample-badge">Sample preview</span><span class="dc-style-watermark" data-position="${esc(watermarkPosition)}" style="color:${templateSafeColor(t.watermarkColor,'#FFFFFF')};opacity:${clamp(Number(t.watermarkOpacity||72),0,100)/100}">${esc(t.watermark||'DEENCLIPPED')}</span><div class="dc-style-caption ${esc(mode)}" style="--style-highlight:${highlight};left:${x}%;top:${y}%;font-family:${templateFontFamily(t.captionFont)};font-size:${fontSize}px;font-weight:${weight};letter-spacing:${letter}px;line-height:${lineHeight};color:${primary};-webkit-text-stroke:${outline}px ${outlineColor};text-shadow:0 ${shadow}px ${Math.max(2,shadow*3)}px #000;background:${background}">${caption}</div></div>`;
 }
-function openStyleEditorForClip(){const clip=[...(data()?.clips||[])].sort((a,b)=>Number(b.createdAt||b.renderedAt||0)-Number(a.createdAt||a.renderedAt||0))[0];if(!clip){go('home');return notify('Create a clip first, then turn its look into a reusable style')}openEditor(clip.id,'style')}
-async function selectStudioTemplate(id){if(!id)return notify('Choose a style first','bad');try{await callApi('/api/template',{method:'POST',body:JSON.stringify({id,propagate:false})});notify('Style set for new clips; existing clips were not changed');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
-async function applyStudioTemplate(id){if(!id)return notify('Choose a style first','bad');if(!confirm('Apply the current style to every existing clip that can be re-rendered? This queues new renders; already-posted files are not changed.'))return;try{const r=await callApi('/api/templates/apply-all',{method:'POST',body:JSON.stringify({templateId:id})});notify(`Queued ${r.queued||0} clips for style update`);await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
-async function duplicateStudioTemplate(id){const base=(DATA?.templates||[]).find(t=>t.id===id);try{const r=await callApi(`/api/templates/${encodeURIComponent(id)}/duplicate`,{method:'POST',body:JSON.stringify({name:`${base?.name||'Style'} Copy`})});notify('Custom style created');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
-async function deleteStudioTemplate(id){if(!id)return;if(!confirm('Delete this custom style? Existing rendered videos remain unchanged.'))return;try{await callApi(`/api/templates/${encodeURIComponent(id)}`,{method:'DELETE'});notify('Custom style deleted');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
+function openStyleEditorForClip(){const clip=[...(data()?.clips||[])].sort((a,b)=>Number(b.createdAt||b.renderedAt||0)-Number(a.createdAt||a.renderedAt||0))[0];if(!clip){go('home');return notify('Create a clip first, then turn its look into a reusable template')}openEditor(clip.id,'style')}
+async function selectStudioTemplate(id){if(!id)return notify('Choose a template first','bad');try{await callApi('/api/template',{method:'POST',body:JSON.stringify({id,propagate:false})});notify('Default template updated; existing clips were not changed');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
+async function applyStudioTemplate(id){if(!id)return notify('Choose a template first','bad');if(!confirm('Apply this template to every existing clip that can be re-rendered? This queues new renders; already-posted files are not changed.'))return;try{const r=await callApi('/api/templates/apply-all',{method:'POST',body:JSON.stringify({templateId:id})});notify(`Queued ${r.queued||0} clips for template update`);await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
+async function duplicateStudioTemplate(id){const base=(DATA?.templates||[]).find(t=>t.id===id);try{const r=await callApi(`/api/templates/${encodeURIComponent(id)}/duplicate`,{method:'POST',body:JSON.stringify({name:`${base?.name||'Template'} Copy`,select:false})});notify('Custom template created without changing your default');await refreshData();if(r.template)styleStudioLoad(r.template);renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
+async function deleteStudioTemplate(id){if(!id)return;if(!confirm('Delete this custom template? Existing rendered videos remain unchanged.'))return;try{await callApi(`/api/templates/${encodeURIComponent(id)}`,{method:'DELETE'});notify('Custom template deleted');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
 function renderInsightsPage(){
   const panel=$('#view-insights'),d=data();if(!panel||!d)return;
   const clips=d.clips||[], projects=d.projects||[];

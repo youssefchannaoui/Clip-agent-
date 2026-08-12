@@ -958,7 +958,9 @@ async function route(req, res, url) {
     const body = await readBody(req);
     try {
       const template = templates.duplicateTemplate(currentUser, decodeURIComponent(duplicateTemplate[1]), body.name);
-      templates.setSelectedTemplate(currentUser, template.id);
+      // Duplicating is a library action, not a default-template decision.
+      // Only change automation when the caller explicitly asks for it.
+      if (body.select === true) templates.setSelectedTemplate(currentUser, template.id);
       return json(res, 200, { ok: true, template });
     } catch (error) { return json(res, 400, errorBody(error)); }
   }

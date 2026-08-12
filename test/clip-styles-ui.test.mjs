@@ -4,13 +4,30 @@ import fs from 'node:fs';
 
 const ui = fs.readFileSync(new URL('../src/public/activity-fix.js', import.meta.url), 'utf8');
 
-test('Clip Styles is a template studio with the full editing chrome', () => {
-  assert.match(ui, /\['templates','Clip Styles','style'\]/);
+test('Templates is a focused template studio with the full editing chrome', () => {
+  assert.match(ui, /\['templates','Templates','style'\]/);
   assert.match(ui, /function renderTemplatesPage\(\)/);
   // Top bar: switch template, undo, redo, discard, save.
   for (const id of ['dcStyleSwitch', 'dcStyleUndo', 'dcStyleRedo', 'dcStyleRevert', 'dcStyleSave', 'dcStyleNew']) {
     assert.match(ui, new RegExp(id), `${id} should exist`);
   }
+});
+
+test('template management is clear and does not silently change the default', () => {
+  const server = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+  assert.match(ui, /Set as default/);
+  assert.match(ui, /Apply to existing clips/);
+  assert.match(ui, /Existing clips stay unchanged/);
+  assert.match(server, /if \(body\.select === true\) templates\.setSelectedTemplate/);
+});
+
+test('templates support the same core output ratios as the clip editor', () => {
+  for (const ratio of ['9:16', '4:5', '1:1', '16:9']) {
+    assert.match(ui, new RegExp(`data-style-ratio=\\"\\$\\{value\\}\\"`));
+    assert.match(ui, new RegExp(`'${ratio}'`));
+  }
+  assert.match(ui, /styleStudio\.draft\.width=size\[0\]/);
+  assert.match(ui, /styleStudio\.draft\.height=size\[1\]/);
 });
 
 test('every settings group is backed by real template fields', () => {
@@ -54,6 +71,7 @@ test('templates can still be duplicated, deleted and made the default', () => {
   assert.match(ui, /data-duplicate-template/);
   assert.match(ui, /data-delete-template/);
   assert.match(ui, /data-use-template/);
+  assert.match(ui, /data-apply-template/);
   assert.match(ui, /\/duplicate/);
 });
 

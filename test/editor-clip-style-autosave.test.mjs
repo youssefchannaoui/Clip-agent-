@@ -9,10 +9,10 @@ const ui = fs.readFileSync(path.join(root, 'src', 'public', 'activity-fix.js'), 
 const server = fs.readFileSync(path.join(root, 'src', 'server.js'), 'utf8');
 const agent = fs.readFileSync(path.join(root, 'src', 'agent.js'), 'utf8');
 
-test('the editor header contains a real Clip Style selector', () => {
+test('the editor header contains a real Template selector', () => {
   assert.match(ui, /id="dcEditorStyleSelect"/);
-  assert.match(ui, /Browse Clip Styles…/);
-  assert.match(ui, /Create new Clip Style…/);
+  assert.match(ui, /Browse Templates…/);
+  assert.match(ui, /Create new Template…/);
   assert.match(ui, /mountEditorStylePicker\(\)/,
     'the selector must be mounted beside the clip title');
   assert.match(ui, /\$\('#dcSaveDraft'\)\?\.remove\(\)/,
