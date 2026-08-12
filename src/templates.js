@@ -295,3 +295,67 @@ function allTemplateIds() {
 export function defaultTemplateDraft() {
   return sanitiseTemplate({ ...DEFAULTS, id: 'new-template', name: 'New Template' }, { id: 'new-template', builtIn: false });
 }
+
+/**
+ * The Clip Style contract: exactly which fields applying a style may write.
+ *
+ * Without this list "apply a style" means "spread the whole template over the
+ * clip", which silently carries identity (a style's own name and id) and
+ * per-clip framing along with the look. The two categories excluded below are
+ * the ones that actually cause damage:
+ *
+ *   identity   copying `id`/`name` onto a clip makes it claim to *be* the
+ *              style, so later edits appear to mutate the saved style.
+ *   framing    cropPositionX/Y is where the subject sits in *this* clip. It
+ *              reads like part of the look, but applying one clip's framing to
+ *              every other clip moves the speaker off-centre in all of them.
+ *
+ * Derived from DEFAULTS rather than hand-listed, so a field added to the
+ * schema cannot be quietly left out of styles — but the exclusions are
+ * explicit, so adding one is a deliberate act with a reason attached.
+ */
+const STYLE_EXCLUDED_FIELDS = Object.freeze([
+  // Identity of the style record itself.
+  'id', 'name', 'description', 'builtIn', 'editable', 'userId', 'version', 'updatedAt',
+  // Per-clip framing. See above.
+  'cropPositionX', 'cropPositionY',
+]);
+
+export const CLIP_STYLE_FIELDS = Object.freeze(
+  Object.keys(DEFAULTS).filter(key => !STYLE_EXCLUDED_FIELDS.includes(key)).sort(),
+);
+
+/** True when a field may be written by applying a Clip Style. */
+export function isClipStyleField(key) {
+  return CLIP_STYLE_FIELDS.includes(String(key));
+}
+
+/**
+ * The settings a Clip Style contributes to a clip — a copy, never a reference.
+ *
+ * Callers must treat the result as the complete set of changes applying a
+ * style makes. Anything absent here is clip-owned and has to survive untouched:
+ * the video, transcript wording, clip timing, text layers and this clip's
+ * framing.
+ */
+export function clipStyleSettings(template = {}) {
+  const out = {};
+  for (const key of CLIP_STYLE_FIELDS) {
+    if (template[key] !== undefined) out[key] = template[key];
+  }
+  return JSON.parse(JSON.stringify(out));
+}
+
+/**
+ * Fields where a clip has diverged from the style it has applied.
+ *
+ * Drives the "This clip has custom changes" state, and decides what
+ * "Reset to style" puts back. Compared by value, so re-selecting the same
+ * option does not count as a change.
+ */
+export function clipStyleDrift(clip = {}, template = {}) {
+  return CLIP_STYLE_FIELDS.filter(key => {
+    if (template[key] === undefined || clip[key] === undefined) return false;
+    return JSON.stringify(clip[key]) !== JSON.stringify(template[key]);
+  });
+}
