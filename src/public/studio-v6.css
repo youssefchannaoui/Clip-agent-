@@ -510,8 +510,8 @@ body.dc-app .dc-style-stage-note { margin:0;color:var(--v6-muted);font-size:8.5p
   body.dc-app.dc-templates-route .dc-style-stage { min-height:0;overflow:hidden;align-content:center; }
   body.dc-app.dc-templates-route .dc-style-stage-frame.ratio-9-16,
   body.dc-app.dc-templates-route .dc-style-stage-frame.ratio-4-5,
-  body.dc-app.dc-templates-route .dc-style-stage-frame.ratio-1-1 { height:calc(100% - 26px);width:auto!important;max-height:none; }
-  body.dc-app.dc-templates-route .dc-style-stage-frame.ratio-16-9 { width:min(650px,100%)!important;max-height:calc(100% - 26px); }
+  body.dc-app.dc-templates-route .dc-style-stage-frame.ratio-1-1 { height:clamp(300px,calc(100dvh - 310px),560px);width:auto!important;max-height:none; }
+  body.dc-app.dc-templates-route .dc-style-stage-frame.ratio-16-9 { width:min(650px,100%)!important;max-height:none; }
 }
 body.dc-app .dc-product-hero h1,body.dc-app .dc-style-hero h1,body.dc-app .dc-settings-command h1,body.dc-app .dc-review-hero-pro h1 { letter-spacing:-.05em; }
 body.dc-app .dc-inline-pro { margin-left:6px;padding:4px 7px;border-radius:999px;background:linear-gradient(135deg,var(--v6-gold-bright),var(--v6-gold));color:#171006;font-size:6px;letter-spacing:.08em;vertical-align:middle; }

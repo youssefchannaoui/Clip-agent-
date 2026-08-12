@@ -35,6 +35,8 @@ test('the desktop Templates workspace is fitted and only its settings scroll', (
   assert.match(ui, /classList\.toggle\('dc-templates-route',view==='templates'\)/);
   assert.match(css, /body\.dc-app\.dc-templates-route \{ overflow:hidden; \}/);
   assert.match(css, /\.dc-style-rail,[\s\S]*\.dc-style-panel \{ height:100%;min-height:0;max-height:none;overflow-y:auto/);
+  assert.match(css, /height:clamp\(300px,calc\(100dvh - 310px\),560px\)/,
+    'the preview must resolve from the viewport, not an indefinite grid-row percentage');
 });
 
 test('every settings group is backed by real template fields', () => {
