@@ -30,6 +30,13 @@ test('templates support the same core output ratios as the clip editor', () => {
   assert.match(ui, /styleStudio\.draft\.height=size\[1\]/);
 });
 
+test('the desktop Templates workspace is fitted and only its settings scroll', () => {
+  const css = fs.readFileSync(new URL('../src/public/studio-v6.css', import.meta.url), 'utf8');
+  assert.match(ui, /classList\.toggle\('dc-templates-route',view==='templates'\)/);
+  assert.match(css, /body\.dc-app\.dc-templates-route \{ overflow:hidden; \}/);
+  assert.match(css, /\.dc-style-rail,[\s\S]*\.dc-style-panel \{ height:100%;min-height:0;max-height:none;overflow-y:auto/);
+});
+
 test('every settings group is backed by real template fields', () => {
   // A control that writes a field the renderer does not read is a lie about
   // what the export will look like, so each group is pinned to its fields.

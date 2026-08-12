@@ -1489,6 +1489,11 @@ function go(view){
   // a normal scrolling page, so this must be scoped and must come off on the
   // way out — leaving overflow:hidden on the body would break the whole app.
   document.body.classList.toggle('dc-editor-route',view==='editor');
+  // Templates follows the same application-shell rule at desktop widths:
+  // the canvas stays fixed while only the settings rail scrolls. Opus uses
+  // this pattern too, and it prevents the preview disappearing below a long
+  // Captions panel. Narrow screens still use the normal document flow.
+  document.body.classList.toggle('dc-templates-route',view==='templates');
   currentView = view;
   $$('[data-dc-nav]').forEach(b => b.classList.toggle('is-active', b.dataset.dcNav === view));
   const labels = {
@@ -4022,7 +4027,7 @@ function renderTemplatesPage(){
       <div class="dc-style-bar-actions"><button type="button" class="dc-btn secondary dc-style-create" id="dcStyleNew">+ New</button>${isDefault?'<span class="dc-style-default-state">Default for new clips</span>':`<button type="button" class="dc-btn secondary" data-use-template="${esc(base.id)}">Set as default</button>`}<button type="button" class="dc-icon-btn dc-svg" id="dcStyleUndo" title="Undo" ${canUndo?'':'disabled'}>${ICON.undo}</button><button type="button" class="dc-icon-btn dc-svg" id="dcStyleRedo" title="Redo" ${canRedo?'':'disabled'}>${ICON.redo}</button><button type="button" class="dc-icon-btn dc-svg" id="dcStyleRevert" title="Discard changes" ${styleStudio.dirty?'':'disabled'}>${ICON.clock}</button><button class="dc-btn" id="dcStyleSave" ${styleStudio.dirty?'':'disabled'}>${styleStudio.dirty?'Save template':'Saved'}</button></div></header>
     <div class="dc-style-scope"><span>${ICON.check}</span><p><strong>${isDefault?'This template is automatic for new clips.':'You are previewing a saved template.'}</strong> Existing clips stay unchanged unless you choose “Apply to existing clips” from the template menu.</p></div>
     <div class="dc-style-workspace"><aside class="dc-style-side">${rail}</aside>
-      <main class="dc-style-stage"><div class="dc-style-stage-frame" style="aspect-ratio:${Number(draft.width||1080)}/${Number(draft.height||1920)};width:${stageWidth}">${styleStageInner(sourcePreview)}</div><p class="dc-style-stage-note">${esc(ratio)} preview · drag the caption to move it · drag its bottom-right corner to resize</p></main></div>
+      <main class="dc-style-stage"><div class="dc-style-stage-frame ratio-${ratio.replace(':','-')}" style="aspect-ratio:${Number(draft.width||1080)}/${Number(draft.height||1920)};width:${stageWidth}">${styleStageInner(sourcePreview)}</div><p class="dc-style-stage-note">${esc(ratio)} preview · drag the caption to move it · drag its bottom-right corner to resize</p></main></div>
   </div>`;
 
   $('#dcStyleSwitch')?.addEventListener('click',event=>{event.stopPropagation();styleStudio.menuOpen=!styleStudio.menuOpen;renderTemplatesPage()});

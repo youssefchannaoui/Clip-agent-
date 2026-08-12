@@ -483,6 +483,36 @@ body.dc-app .dc-style-stage-note { margin:0;color:var(--v6-muted);font-size:8.5p
   body.dc-app .dc-style-bar-actions { justify-content:flex-end; }
 }
 @media (max-width:620px) { body.dc-app .dc-style-panel { grid-template-columns:1fr; } }
+
+/* Keep Templates fitted to the desktop viewport like the clip editor. The
+ * document itself does not scroll; the left settings list/panel does, while
+ * the live preview remains visible. Below the stacking breakpoint the page
+ * returns to normal document flow. */
+@media (min-width:1101px) and (min-height:620px) {
+  body.dc-app.dc-templates-route { overflow:hidden; }
+  body.dc-app.dc-templates-route #app>.wrap {
+    height:100vh;
+    box-sizing:border-box;
+    overflow:hidden;
+    padding:calc(var(--dc-top) + 12px) 16px 16px calc(var(--dc-side) + 16px)!important;
+  }
+  body.dc-app.dc-templates-route #app>.wrap>.shell,
+  body.dc-app.dc-templates-route #app>.wrap>.shell>.main-col,
+  body.dc-app.dc-templates-route #view-templates,
+  body.dc-app.dc-templates-route .dc-style-studio { height:100%;min-height:0; }
+  body.dc-app.dc-templates-route #view-templates,
+  body.dc-app.dc-templates-route .dc-style-studio { overflow:hidden; }
+  body.dc-app.dc-templates-route .dc-style-studio { grid-template-rows:auto auto minmax(0,1fr); }
+  body.dc-app.dc-templates-route .dc-style-workspace { min-height:0;align-items:stretch; }
+  body.dc-app.dc-templates-route .dc-style-side { min-height:0;overflow:hidden; }
+  body.dc-app.dc-templates-route .dc-style-rail,
+  body.dc-app.dc-templates-route .dc-style-panel { height:100%;min-height:0;max-height:none;overflow-y:auto;overscroll-behavior:contain; }
+  body.dc-app.dc-templates-route .dc-style-stage { min-height:0;overflow:hidden;align-content:center; }
+  body.dc-app.dc-templates-route .dc-style-stage-frame.ratio-9-16,
+  body.dc-app.dc-templates-route .dc-style-stage-frame.ratio-4-5,
+  body.dc-app.dc-templates-route .dc-style-stage-frame.ratio-1-1 { height:calc(100% - 26px);width:auto!important;max-height:none; }
+  body.dc-app.dc-templates-route .dc-style-stage-frame.ratio-16-9 { width:min(650px,100%)!important;max-height:calc(100% - 26px); }
+}
 body.dc-app .dc-product-hero h1,body.dc-app .dc-style-hero h1,body.dc-app .dc-settings-command h1,body.dc-app .dc-review-hero-pro h1 { letter-spacing:-.05em; }
 body.dc-app .dc-inline-pro { margin-left:6px;padding:4px 7px;border-radius:999px;background:linear-gradient(135deg,var(--v6-gold-bright),var(--v6-gold));color:#171006;font-size:6px;letter-spacing:.08em;vertical-align:middle; }
 body.dc-app .dc-filterbar,body.dc-app .dc-project-detail-filter,body.dc-app .dc-review-toolbar.pro { padding:10px;border:1px solid var(--v6-line);border-radius:16px;background:rgba(15,16,21,.70); }
