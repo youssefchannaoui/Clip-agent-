@@ -22,8 +22,6 @@ const boolean = (value, fallback) => {
   return /^(1|true|yes|on)$/i.test(String(value));
 };
 
-const maxConcurrentJobs = Math.max(1, Math.round(number(process.env.MAX_CONCURRENT_JOBS, 1)));
-
 export const config = {
   root,
   dataDir: process.env.DATA_DIR || path.join(root, 'data'),
@@ -38,31 +36,15 @@ export const config = {
   workerScript: path.join(root, 'worker', 'clip_worker.py'),
   ffmpegPath: process.env.FFMPEG_PATH || 'ffmpeg',
   ffprobePath: process.env.FFPROBE_PATH || 'ffprobe',
-  aiModel: process.env.CLIP_AI_MODEL || 'large-v3-turbo',
+  aiModel: process.env.CLIP_AI_MODEL || 'small',
   aiDevice: process.env.CLIP_AI_DEVICE || 'auto',
   aiComputeType: process.env.CLIP_AI_COMPUTE_TYPE || 'int8',
   aiTask: process.env.CLIP_AI_TASK || 'transcribe',
   aiLanguage: process.env.CLIP_AI_LANGUAGE || '',
-  maxConcurrentJobs,
-  // No single account may hold every processing slot. Half the slots by
-  // default, so one customer applying a template to forty clips still leaves
-  // room for another customer's first import. Never below one, or nothing runs.
-  maxConcurrentJobsPerUser: Math.max(1, Math.min(
-    maxConcurrentJobs,
-    Math.round(number(process.env.MAX_CONCURRENT_JOBS_PER_USER, Math.ceil(maxConcurrentJobs / 2))),
-  )),
+  maxConcurrentJobs: Math.max(1, Math.round(number(process.env.MAX_CONCURRENT_JOBS, 1))),
   maxSourceMinutes: Math.max(5, number(process.env.MAX_SOURCE_MINUTES, 180)),
   maxVideoUploadBytes: Math.max(50, number(process.env.MAX_VIDEO_UPLOAD_MB, 2048)) * 1024 * 1024,
   keepSourceFiles: boolean(process.env.KEEP_SOURCE_FILES, true),
-  videoPreset: ['slow', 'medium', 'fast'].includes(String(process.env.VIDEO_PRESET || '').toLowerCase())
-    ? String(process.env.VIDEO_PRESET).toLowerCase() : 'medium',
-  videoCrf: Math.max(16, Math.min(23, Math.round(number(process.env.VIDEO_CRF, 18)))),
-  // Render bulk template re-renders with a fast encoder preset so a batch
-  // comes back quickly, and upgrade a clip to export quality on demand before
-  // it can be downloaded or published. Off by default: it makes the batch feel
-  // fast but costs a second encode for every clip actually used, which is the
-  // wrong trade on a small box.
-  previewBatchRenders: boolean(process.env.PREVIEW_BATCH_RENDERS, false),
 
   processingMode: String(process.env.PROCESSING_MODE || (process.env.WORKER_BASE_URL ? 'remote' : 'local')).toLowerCase(),
   workerBaseUrl: (process.env.WORKER_BASE_URL || '').replace(/\/+$/, ''),
@@ -104,11 +86,7 @@ export const config = {
 
   authRequired: boolean(process.env.AUTH_REQUIRED, Boolean(process.env.GOOGLE_SIGNIN_CLIENT_ID || process.env.APPLE_SIGNIN_CLIENT_ID || process.env.APP_PASSWORD)),
   emailSigninEnabled: boolean(process.env.EMAIL_SIGNIN_ENABLED, true),
-  emailRegistrationEnabled: boolean(process.env.EMAIL_REGISTRATION_ENABLED, false),
   sessionSecret: process.env.APP_SESSION_SECRET || process.env.SOCIAL_TOKEN_KEY || process.env.APP_PASSWORD || 'dev-session-secret-change-me',
-  cloudflareApiToken: process.env.CLOUDFLARE_API_TOKEN || '',
-  cloudflareAccountId: process.env.CLOUDFLARE_ACCOUNT_ID || '',
-  hetznerApiToken: process.env.HETZNER_API_TOKEN || '',
   adminEmail: process.env.ADMIN_EMAIL || 'admin@deenclipped.local',
   adminName: process.env.ADMIN_NAME || 'DeenClipped Admin',
 
@@ -160,29 +138,14 @@ export const config = {
   planPriceWeeklyLabel: process.env.PLAN_PRICE_WEEKLY_LABEL || 'Price set in Stripe',
   planPriceMonthlyLabel: process.env.PLAN_PRICE_MONTHLY_LABEL || 'Price set in Stripe',
   planPriceYearlyLabel: process.env.PLAN_PRICE_YEARLY_LABEL || 'Price set in Stripe',
-  topupPrice100Label: process.env.TOPUP_PRICE_100_LABEL || 'A$8.99',
-  topupPrice300Label: process.env.TOPUP_PRICE_300_LABEL || 'A$24.49',
-  topupPrice750Label: process.env.TOPUP_PRICE_750_LABEL || 'A$59.99',
+  topupPrice100Label: process.env.TOPUP_PRICE_100_LABEL || 'A$4.99',
+  topupPrice300Label: process.env.TOPUP_PRICE_300_LABEL || 'A$11.99',
+  topupPrice750Label: process.env.TOPUP_PRICE_750_LABEL || 'A$24.99',
   stripeTrialDays: Math.max(0, Math.round(number(process.env.STRIPE_TRIAL_DAYS, 7))),
-  // Trials only make sense where the trial is shorter than the billing
-  // cycle. A 7-day trial on a 7-day Weekly plan is a free first period.
-  trialPlans: String(process.env.TRIAL_PLANS || 'monthly,yearly')
-    .split(',').map(value => value.trim().toLowerCase()).filter(Boolean),
-  stripeCouponMonthly: process.env.STRIPE_COUPON_MONTHLY || '',
-  planPriceMonthlyListLabel: process.env.PLAN_PRICE_MONTHLY_LIST_LABEL || '',
-  freeTierDays: Math.max(0, Math.round(number(process.env.FREE_TIER_DAYS, 3))),
-  // Privacy-friendly analytics (Plausible, Umami, Fathom). Both must be set
-  // or nothing is injected — no silent half-configured tracking.
-  analyticsScriptUrl: process.env.ANALYTICS_SCRIPT_URL || '',
-  analyticsSiteId: process.env.ANALYTICS_SITE_ID || '',
-  // A real sample clip. The section does not render until this is set.
-  demoVideoUrl: process.env.DEMO_VIDEO_URL || '',
-  demoVideoPoster: process.env.DEMO_VIDEO_POSTER || '/marketing-assets/reel-winter.webp',
-  socialImagePath: process.env.SOCIAL_IMAGE_PATH || '/marketing-assets/og-cover.png',
   tokensFree: Math.max(0, Math.round(number(process.env.TOKENS_FREE, 40))),
-  tokensWeekly: Math.max(1, Math.round(number(process.env.TOKENS_WEEKLY, 75))),
-  tokensMonthly: Math.max(1, Math.round(number(process.env.TOKENS_MONTHLY, 400))),
-  tokensYearly: Math.max(1, Math.round(number(process.env.TOKENS_YEARLY, 4800))),
+  tokensWeekly: Math.max(1, Math.round(number(process.env.TOKENS_WEEKLY, 120))),
+  tokensMonthly: Math.max(1, Math.round(number(process.env.TOKENS_MONTHLY, 650))),
+  tokensYearly: Math.max(1, Math.round(number(process.env.TOKENS_YEARLY, 9000))),
   tokensPerMinute: Math.max(0.1, number(process.env.TOKENS_PER_MINUTE, 1)),
   minimumTokensToStart: Math.max(1, Math.round(number(process.env.MINIMUM_TOKENS_TO_START, 10))),
   tiktokRedirectUri: process.env.TIKTOK_REDIRECT_URI || '',
@@ -205,26 +168,4 @@ if (!config.password) {
 }
 if (config.authRequired && config.sessionSecret === 'dev-session-secret-change-me') {
   console.warn('[warn] APP_SESSION_SECRET is not set. Set a long random secret before public launch.');
-}
-
-export function productionConfigurationErrors() {
-  const errors = [];
-  if (!config.authRequired) errors.push('AUTH_REQUIRED must be enabled.');
-  if (!config.sessionSecret || config.sessionSecret === 'dev-session-secret-change-me' || config.sessionSecret.length < 32) errors.push('APP_SESSION_SECRET must contain at least 32 characters.');
-  if (config.password && config.password.length < 12) errors.push('APP_PASSWORD must contain at least 12 characters when the admin password fallback is enabled.');
-  if (config.socialPublishEnabled && (!config.socialTokenKey || config.socialTokenKey.length < 32)) errors.push('SOCIAL_TOKEN_KEY must contain at least 32 characters when social publishing is enabled.');
-  if (config.processingMode === 'remote') {
-    if (!config.workerBaseUrl) errors.push('WORKER_BASE_URL is required for remote processing.');
-    if (!config.workerSharedSecret || config.workerSharedSecret.length < 32) errors.push('WORKER_SHARED_SECRET must contain at least 32 characters.');
-    if (!config.workerCallbackSecret || config.workerCallbackSecret.length < 32) errors.push('WORKER_CALLBACK_SECRET must contain at least 32 characters.');
-    if (!config.objectStorageEndpoint || !config.objectStorageBucket || !config.objectStorageAccessKey || !config.objectStorageSecretKey) errors.push('Object storage credentials are required for remote processing.');
-  }
-  if (config.stripeEnabled) {
-    if (!config.stripeSecretKey) errors.push('STRIPE_SECRET_KEY is required when Stripe is enabled.');
-    if (!config.stripeWebhookSecret) errors.push('STRIPE_WEBHOOK_SECRET is required when Stripe is enabled.');
-    if (!config.stripePriceWeekly || !config.stripePriceMonthly || !config.stripePriceYearly) errors.push('All subscription Stripe price IDs are required when Stripe is enabled.');
-    if (!config.stripePriceTopup100 || !config.stripePriceTopup300 || !config.stripePriceTopup750) errors.push('All token top-up Stripe price IDs are required when Stripe is enabled.');
-    if (config.planPriceMonthlyListLabel && !config.stripeCouponMonthly) errors.push('STRIPE_COUPON_MONTHLY is required when a discounted Monthly list price is advertised.');
-  }
-  return errors;
 }

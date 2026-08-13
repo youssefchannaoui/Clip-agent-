@@ -8,7 +8,6 @@ import {
 } from './tenancy.js';
 
 const stateFile = path.join(config.dataDir, 'state.json');
-const backupStateFile = `${stateFile}.bak`;
 
 /**
  * Settings that used to be one global value shared by everybody. They are now
@@ -32,10 +31,6 @@ export function settingDefaults() {
       minimumScore: 80,
       minimumQuality: 72,
       maxPerProject: 4,
-      // When true, automatic scoring may rank clips but must leave every clip
-      // in Review until a person approves or posts it. `skipReviewRequired` is
-      // retained below only for data/API compatibility with older builds.
-      reviewBeforePosting: false,
       skipReviewRequired: true,
     },
     publishingSettings: {
@@ -44,20 +39,6 @@ export function settingDefaults() {
       instagram: { enabled: false, accountId: '', shareToFeed: true },
       facebook: { enabled: false, accountId: '' },
       tiktok: { enabled: false, accountId: '', privacy: 'SELF_ONLY', allowComments: true, allowDuet: false, allowStitch: false },
-    },
-    brandSettings: {
-      watermarkEnabled: true,
-      watermarkText: 'DEENCLIPPED',
-      watermarkPosition: 'top-center',
-      watermarkColor: '#D9B478',
-      watermarkOpacity: 88,
-      brandLineEnabled: false,
-      brandLineColor: '#D9B478',
-      brandVocabulary: [],
-      audience: 'general',
-      contentGoal: 'education',
-      brandTone: 'respectful',
-      avoidPhrases: [],
     },
     selectedTemplateId: config.defaultTemplateId,
   };
@@ -77,9 +58,6 @@ function blankState() {
     authOAuthStates: {},
     authSettings: { onboardingComplete: false },
     userSettings: {},
-    // Server-owned Template Shop grants. Every record is scoped to one user;
-    // the browser never decides whether a paid product is unlocked.
-    templateEntitlements: [],
     log: [],
     legacyState: null,
   };
@@ -101,7 +79,6 @@ function migrate(parsed) {
       authOAuthStates: parsed.authOAuthStates && typeof parsed.authOAuthStates === 'object' ? parsed.authOAuthStates : {},
       authSettings: { ...fresh.authSettings, ...(parsed.authSettings || {}) },
       userSettings: parsed.userSettings && typeof parsed.userSettings === 'object' ? parsed.userSettings : {},
-      templateEntitlements: Array.isArray(parsed.templateEntitlements) ? parsed.templateEntitlements : [],
       // The old global settings are deliberately carried through untouched so
       // that migrateToMultiTenant can move them to the owner's account below.
     };
@@ -118,34 +95,25 @@ function migrate(parsed) {
   return fresh;
 }
 
-function readStateFile(file) {
-  const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('State root must be an object.');
-  return migrate(parsed);
-}
-
 function load() {
-  if (!fs.existsSync(stateFile)) return blankState();
-  try { return readStateFile(stateFile); }
-  catch (primaryError) {
-    try {
-      const recovered = readStateFile(backupStateFile);
-      console.error(`[error] Recovered application state from backup after the primary state file failed: ${primaryError.message}`);
-      return recovered;
-    } catch (backupError) {
-      throw new Error(`Application state is unreadable; refusing to boot empty. Primary: ${primaryError.message}. Backup: ${backupError.message}`);
-    }
-  }
+  try { return migrate(JSON.parse(fs.readFileSync(stateFile, 'utf8'))); }
+  catch { return blankState(); }
 }
 
 export const state = load();
+let writing = false;
+let dirty = false;
 
 export function save() {
+  if (writing) { dirty = true; return; }
+  writing = true;
   fs.mkdirSync(path.dirname(stateFile), { recursive: true });
   const tmp = `${stateFile}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(state, null, 2), { encoding: 'utf8', mode: 0o600 });
-  if (fs.existsSync(stateFile)) fs.copyFileSync(stateFile, backupStateFile);
-  fs.renameSync(tmp, stateFile);
+  fs.writeFile(tmp, JSON.stringify(state, null, 2), error => {
+    if (!error) { try { fs.renameSync(tmp, stateFile); } catch {} }
+    writing = false;
+    if (dirty) { dirty = false; save(); }
+  });
 }
 
 /**
@@ -241,41 +209,12 @@ export function setMusicSettings(user, next) {
 }
 
 export function automationSettings(user) {
-  const defaults = settingDefaults().automationSettings;
-  const stored = readSetting(user, 'automationSettings') || {};
-  // V7 briefly represented its "Review before posting" checkbox by writing
-  // skipReviewRequired=false. Preserve that user's choice when the canonical
-  // field is absent. Older builds used the same false value to allow flagged
-  // quotations through automation; interpreting it as full human review is
-  // the only safe migration. Review-required clips are now always excluded.
-  const reviewBeforePosting = typeof stored.reviewBeforePosting === 'boolean'
-    ? stored.reviewBeforePosting
-    : Object.prototype.hasOwnProperty.call(stored, 'skipReviewRequired') && stored.skipReviewRequired === false;
-  return {
-    ...defaults,
-    ...stored,
-    reviewBeforePosting,
-    // This compatibility field now expresses the invariant rather than a
-    // user-overridable safety bypass: flagged clips always stay in Review.
-    skipReviewRequired: true,
-  };
+  return { ...settingDefaults().automationSettings, ...(readSetting(user, 'automationSettings') || {}) };
 }
 export function setAutomationSettings(user, next) {
   const id = userIdOf(user);
   if (!id) throw new Error('Settings need an account.');
-  const current = automationSettings(user);
-  const incoming = next && typeof next === 'object' ? next : {};
-  const reviewBeforePosting = typeof incoming.reviewBeforePosting === 'boolean'
-    ? incoming.reviewBeforePosting
-    : Object.prototype.hasOwnProperty.call(incoming, 'skipReviewRequired')
-      ? incoming.skipReviewRequired === false
-      : current.reviewBeforePosting;
-  writeUserSetting(state, id, 'automationSettings', {
-    ...current,
-    ...incoming,
-    reviewBeforePosting,
-    skipReviewRequired: true,
-  });
+  writeUserSetting(state, id, 'automationSettings', { ...automationSettings(user), ...next });
   save();
   return automationSettings(user);
 }
@@ -304,17 +243,6 @@ export function setPublishingSettings(user, next) {
   });
   save();
   return publishingSettings(user);
-}
-
-export function brandSettings(user) {
-  return { ...settingDefaults().brandSettings, ...(readSetting(user, 'brandSettings') || {}) };
-}
-export function setBrandSettings(user, next) {
-  const id = userIdOf(user);
-  if (!id) throw new Error('Brand settings need an account.');
-  writeUserSetting(state, id, 'brandSettings', { ...brandSettings(user), ...next });
-  save();
-  return brandSettings(user);
 }
 
 export function selectedTemplateId(user) {

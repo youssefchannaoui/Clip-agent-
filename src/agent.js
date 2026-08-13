@@ -6,8 +6,6 @@ import { ownedBy, ownerOf } from './tenancy.js';
 import { nextSlot } from './slots.js';
 import * as engine from './local-engine.js';
 import * as social from './social.js';
-import * as billing from './billing.js';
-import * as templates from './templates.js';
 
 let timer = null;
 let ticking = false;
@@ -23,28 +21,6 @@ function removeDataFile(file) {
 function activeTarget(target) { return ['scheduled', 'retrying', 'publishing', 'processing'].includes(target.status); }
 function finishedTarget(target) { return ['posted', 'failed', 'blocked'].includes(target.status); }
 
-function automaticReviewBlockReason(clip) {
-  if (!clip || clip.approvedBy === 'manual') return '';
-  // Missing approval provenance is not treated as consent. This catches stale
-  // scheduled records from older builds as well as current automation output.
-  if (clip.reviewRequired) return 'This clip is marked for human review.';
-  if (automationSettings(ownerOfRecord(clip)).reviewBeforePosting) return 'Review before posting is enabled.';
-  return '';
-}
-
-function holdAutomaticClipForReview(clip, reason) {
-  if (!clip || clip.status === 'posted') return false;
-  clip.status = 'waiting';
-  clip.scheduledAt = null;
-  clip.readyAt = null;
-  clip.approvedAt = null;
-  clip.approvedBy = null;
-  clip.targets = [];
-  save();
-  log(`Held "${clip.title}" for human review: ${reason}`, 'warn', ownerOf(clip));
-  return true;
-}
-
 export async function submitVideo(url, title = '', userId = '', options = {}) { return engine.submitVideo(url, title, userId, options); }
 export async function sourceInfo(url) { return engine.sourceInfo(url); }
 
@@ -56,22 +32,7 @@ export function approveClip(id) {
   clip.status = 'approved'; clip.approvedAt = Date.now(); clip.approvedBy = 'manual';
   const publishing = publishingSettings(ownerOfRecord(clip));
   if (publishing.enabled && publishing.tiktok?.enabled) clip.tiktokConsentAt = Date.now();
-  save();
-  try {
-    // Approval is the scheduling decision: reserve the next free posting slot
-    // before replying so the interface never briefly leaves a clip in limbo.
-    return scheduleApprovedClip(clip);
-  } catch (error) {
-    // Keep review recoverable when a destination was disconnected or another
-    // scheduling prerequisite changed while the reviewer had the page open.
-    clip.status = 'waiting';
-    clip.scheduledAt = null;
-    clip.approvedAt = null;
-    clip.approvedBy = null;
-    clip.targets = [];
-    save();
-    throw error;
-  }
+  save(); tick().catch(() => {}); return clip;
 }
 
 export function scheduleSelected(ids = []) {
@@ -139,34 +100,6 @@ export function updateClip(id, fields = {}) {
     if (typeof fields[key] === 'string') clip[key] = fields[key].trim();
   }
 
-  // Editor copy is clip-owned. It used to be sent by the browser but silently
-  // discarded here, which made transcript edits appear saved until reload.
-  if (typeof fields.transcript === 'string') clip.transcript = fields.transcript.trim().slice(0, 20000);
-
-  // Store a sanitised per-clip editor draft without turning it into a saved
-  // template. The style contract carries only reusable look fields; framing
-  // and caption timing are restored separately because they belong to this
-  // clip and must survive a style change.
-  if (fields.editorDraft && typeof fields.editorDraft === 'object' && !Array.isArray(fields.editorDraft)) {
-    const cleaned = templates.sanitiseTemplate(fields.editorDraft, {
-      id: 'editor-draft', builtIn: false, userId: ownerOfRecord(clip)?.id || '',
-    });
-    const draft = templates.clipStyleSettings(cleaned);
-    if (fields.editorDraft.cropPositionX !== undefined) draft.cropPositionX = Math.min(100, Math.max(0, Number(fields.editorDraft.cropPositionX) || 0));
-    if (fields.editorDraft.cropPositionY !== undefined) draft.cropPositionY = Math.min(100, Math.max(0, Number(fields.editorDraft.cropPositionY) || 0));
-    if (fields.editorDraft.captionTimingOffsetMs !== undefined) draft.captionTimingOffsetMs = Math.min(1500, Math.max(-1500, Number(fields.editorDraft.captionTimingOffsetMs) || 0));
-    // Manual crop supports a closer zoom than reusable automatic framing.
-    if (fields.editorDraft.smartFramingZoom !== undefined) draft.smartFramingZoom = Math.min(2.5, Math.max(.75, Number(fields.editorDraft.smartFramingZoom) || 1));
-    clip.editorDraft = draft;
-    clip.editorSavedAt = Date.now();
-  }
-
-  if (Object.prototype.hasOwnProperty.call(fields, 'editorAppliedStyleId')) {
-    const styleId = String(fields.editorAppliedStyleId || '').trim();
-    if (styleId && !templates.templateById(styleId, ownerOfRecord(clip))) throw new Error('That Clip Style is not available.');
-    clip.editorAppliedStyleId = styleId || null;
-  }
-
   const wantsTrimChange = Object.prototype.hasOwnProperty.call(fields, 'startSec')
     || Object.prototype.hasOwnProperty.call(fields, 'endSec')
     || Object.prototype.hasOwnProperty.call(fields, 'durationMs');
@@ -207,7 +140,6 @@ function setTargets(clip) {
   // up uploaded to somebody else's channel.
   const settings = publishingSettings(ownerOfRecord(clip));
   if (!settings.enabled) { clip.targets = []; return; }
-  billing.assertCanPublish(ownerOfRecord(clip), 'schedule social posts');
   const targets = social.enabledTargetsForClip(clip);
   if (!targets.length) {
     if (clip.approvedBy === 'automation' && settings.tiktok?.enabled) {
@@ -220,11 +152,6 @@ function setTargets(clip) {
 
 export function scheduleApprovedClip(clip) {
   if (clip.status !== 'approved') return clip;
-  const reviewBlock = automaticReviewBlockReason(clip);
-  if (reviewBlock) {
-    holdAutomaticClipForReview(clip, reviewBlock);
-    return clip;
-  }
   const taken = ownedBy(state.clips, ownerOf(clip)).map(item => item.scheduledAt).filter(Boolean);
   clip.scheduledAt = clip.scheduledAt || nextSlot(taken);
   setTargets(clip);
@@ -275,12 +202,8 @@ function applyAutomation() {
 function applyAutomationForOwner(ownerId, ownerClips) {
   const owner = ownerOfRecord({ userId: ownerId });
   const settings = automationSettings(owner);
-  if (!settings.enabled || settings.reviewBeforePosting) return;
+  if (!settings.enabled) return;
   const publish = publishingSettings(owner);
-  if (publish.enabled) {
-    try { billing.assertCanPublish(owner, 'use automatic publishing'); }
-    catch { return; }
-  }
   const enabledAutomaticProviders = ['youtube', 'instagram', 'facebook'].filter(provider => publish[provider]?.enabled);
   if (publish.enabled && !enabledAutomaticProviders.length) return; // TikTok cannot be silently auto-consented.
   const projects = new Map();
@@ -296,9 +219,7 @@ function applyAutomationForOwner(ownerId, ownerClips) {
       .filter(clip => clip.status === 'waiting' && clip.musicVerified && clip.renderVerified)
       .filter(clip => Number(clip.score || 0) >= settings.minimumScore)
       .filter(clip => Number(clip.quality?.overall || 0) >= settings.minimumQuality)
-      // Safety annotations are authoritative. No preference can let a clip
-      // marked reviewRequired bypass the human review queue.
-      .filter(clip => !clip.reviewRequired)
+      .filter(clip => !settings.skipReviewRequired || !clip.reviewRequired)
       .sort((a, b) => Number(b.quality?.overall || b.score || 0) - Number(a.quality?.overall || a.score || 0));
     for (const clip of eligible.slice(0, remaining)) {
       clip.status = 'approved'; clip.approvedAt = Date.now(); clip.approvedBy = 'automation';
@@ -328,11 +249,6 @@ function updateClipPublishingStatus(clip) {
 }
 
 async function processTarget(clip, target) {
-  const reviewBlock = automaticReviewBlockReason(clip);
-  if (reviewBlock) {
-    holdAutomaticClipForReview(clip, reviewBlock);
-    return;
-  }
   const now = Date.now();
   if (target.nextTryAt && target.nextTryAt > now) return;
   if (target.processingStartedAt && now - target.processingStartedAt > config.socialProcessingTimeoutMs) {
@@ -351,13 +267,6 @@ async function processTarget(clip, target) {
       log(`Preparing "${clip.title}" for ${target.provider}.`, 'info', ownerOf(clip));
       const file = await engine.socialPublishFile(clip.id, target.provider);
       try {
-        // Re-check after media preparation because the owner can enable human
-        // review while that asynchronous work is in progress.
-        const latestReviewBlock = automaticReviewBlockReason(clip);
-        if (latestReviewBlock) {
-          holdAutomaticClipForReview(clip, latestReviewBlock);
-          return;
-        }
         target.stage = `Uploading video to ${target.provider}`; target.updatedAt = Date.now(); save();
         log(`Uploading "${clip.title}" to ${target.provider}.`, 'info', ownerOf(clip));
         result = await social.publishTarget(clip, target, file);
@@ -393,29 +302,6 @@ async function processTarget(clip, target) {
 
 async function publishClip(clip) {
   if (publishing.has(clip.id)) return;
-  const reviewBlock = automaticReviewBlockReason(clip);
-  if (reviewBlock) {
-    holdAutomaticClipForReview(clip, reviewBlock);
-    return;
-  }
-  try {
-    billing.assertCanPublish(ownerOfRecord(clip), 'publish clips');
-  } catch (error) {
-    for (const target of clip.targets || []) {
-      if (!activeTarget(target)) continue;
-      target.status = 'blocked';
-      target.stage = 'Upgrade required';
-      target.error = error.message;
-      target.nextTryAt = null;
-      target.updatedAt = Date.now();
-    }
-    clip.status = 'ready';
-    clip.readyAt = clip.readyAt || Date.now();
-    clip.scheduledAt = null;
-    save();
-    log(`Publishing paused for "${clip.title}": ${error.message}`, 'warn', ownerOf(clip));
-    return;
-  }
   publishing.add(clip.id);
   try {
     for (const target of clip.targets || []) {
@@ -428,14 +314,8 @@ async function publishClip(clip) {
 export async function publishNow(id) {
   const clip = clipById(id);
   if (!clip) throw new Error('That clip no longer exists.');
-  billing.assertCanPublish(ownerOfRecord(clip), 'post this clip');
   if (!clip.musicVerified || !clip.renderVerified) throw new Error('The clip has not passed render verification.');
   if (['posted', 'publishing'].includes(clip.status)) throw new Error(`This clip is already ${clip.status}.`);
-  // Clicking Post now is an explicit human decision, including for a clip that
-  // automation scheduled earlier. Record that review before the safety guards
-  // below decide whether it may leave the system.
-  clip.approvedBy = 'manual';
-  clip.approvedAt = Date.now();
   if (clip.status === 'waiting') {
     clip.status = 'approved'; clip.approvedAt = Date.now(); clip.approvedBy = 'manual';
     const publishing = publishingSettings(ownerOfRecord(clip));
@@ -473,10 +353,6 @@ export async function publishNow(id) {
 export function retryPublishing(id, provider = '') {
   const clip = clipById(id);
   if (!clip) throw new Error('That clip no longer exists.');
-  billing.assertCanPublish(ownerOfRecord(clip), 'retry this post');
-  // Retry is also an explicit human publishing action.
-  clip.approvedBy = 'manual';
-  clip.approvedAt = Date.now();
   const targets = (clip.targets || []).filter(target => !provider || target.provider === provider);
   if (!targets.length) throw new Error('No matching publishing destination exists for this clip.');
   for (const target of targets) {
@@ -495,11 +371,6 @@ export async function tick() {
   try {
     applyAutomation();
     for (const clip of state.clips) {
-      const reviewBlock = automaticReviewBlockReason(clip);
-      if (reviewBlock && ['approved', 'scheduled', 'ready', 'publish_failed'].includes(clip.status)) {
-        holdAutomaticClipForReview(clip, reviewBlock);
-        continue;
-      }
       if (clip.status === 'approved') {
         try { scheduleApprovedClip(clip); }
         catch (error) {

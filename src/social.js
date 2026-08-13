@@ -9,49 +9,6 @@ const PROVIDERS = ['youtube', 'instagram', 'facebook', 'tiktok'];
 const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-/**
- * Open an upload stream that cannot take the process down.
- *
- * A ReadStream that emits 'error' with no listener attached is rethrown by
- * Node as an uncaught exception, which terminates the server. That is
- * exactly how one missing publish-cache file turned a failed YouTube upload
- * into a repeating production outage: the upload fails, the caller deletes
- * the cached file in its `finally`, and the still-open stream then errors
- * with ENOENT against a process that is not listening.
- *
- * Publishing is best-effort and retried, so a missing file is a normal
- * retryable condition, never a fatal one.
- */
-function publishReadStream(file, options = {}, provider = '', onProgress) {
-  if (!file || !fs.existsSync(file)) {
-    throw new SocialError(
-      'The prepared upload file is no longer available. It will be rebuilt on the next attempt.',
-      { retryable: true, provider },
-    );
-  }
-  const stream = fs.createReadStream(file, options);
-  // The listener alone is what prevents the crash. fetch() still rejects on
-  // a broken stream, so the failure surfaces normally through the caller.
-  stream.on('error', () => {});
-  if (onProgress) {
-    // Without this, the UI only learns about progress at chunk boundaries.
-    // Most clips are one or two chunks, so the bar sat at 0% for the whole
-    // upload and then jumped to done. Throttled so we're not calling save()
-    // on every TCP packet.
-    let sent = 0;
-    let lastReport = 0;
-    stream.on('data', chunk => {
-      sent += chunk.length;
-      const now = Date.now();
-      if (now - lastReport >= 400) {
-        lastReport = now;
-        onProgress(sent);
-      }
-    });
-  }
-  return stream;
-}
-
 class SocialError extends Error {
   constructor(message, { retryable = false, status = 0, provider = '' } = {}) {
     super(message);
@@ -551,17 +508,8 @@ export async function testConnection(provider, accountId = '', user) {
   }
 }
 
-function platformCopy(clip, provider = '') {
-  const specific = clip?.platformMetadata?.[provider];
-  const metadata = specific && typeof specific === 'object' ? specific : {};
-  const title = String(metadata.title || clip?.title || '').trim();
-  const suppliedCaption = String(metadata.caption || metadata.description || '').trim();
-  const fallbackCaption = [clip?.description, clip?.hashtags].filter(Boolean).join('\n\n').trim();
-  return { title, caption: suppliedCaption || fallbackCaption };
-}
-
-function captionText(clip, max = 2200, provider = '') {
-  return platformCopy(clip, provider).caption.slice(0, max);
+function captionText(clip, max = 2200) {
+  return [clip.description, clip.hashtags].filter(Boolean).join('\n\n').trim().slice(0, max);
 }
 
 async function youtubeUploadStatus(uploadUrl, accessToken, totalSize) {
@@ -588,6 +536,7 @@ async function youtubeUploadStatus(uploadUrl, accessToken, totalSize) {
 async function uploadYouTube(clip, target, file, userId) {
   const accessToken = await youtubeToken(userId);
   const stat = fs.statSync(file);
+  const bytes = fs.readFileSync(file);
   target.providerState ||= {};
   let uploadUrl = target.providerState.uploadUrl || '';
   let offset = Math.max(0, Number(target.providerState.offset || 0));
@@ -616,8 +565,8 @@ async function uploadYouTube(clip, target, file, userId) {
     const hashtags = String(clip.hashtags || '').match(/#[\p{L}\p{N}_]+/gu)?.map(tag => tag.slice(1)).slice(0, 20) || [];
     const metadata = {
       snippet: {
-        title: String(platformCopy(clip, 'youtube').title || 'DeenClipped reminder').slice(0, 100),
-        description: captionText(clip, 5000, 'youtube'),
+        title: String(clip.title || 'DeenClipped reminder').slice(0, 100),
+        description: captionText(clip, 5000),
         categoryId: target.settings.categoryId || '22',
         ...(hashtags.length ? { tags: hashtags } : {}),
       },
@@ -652,15 +601,7 @@ async function uploadYouTube(clip, target, file, userId) {
   let failures = 0;
   while (offset < stat.size) {
     const endExclusive = Math.min(stat.size, offset + chunkSize);
-    const chunkStart = offset;
-    const body = publishReadStream(file, { start: offset, end: endExclusive - 1 }, 'youtube', sentInChunk => {
-      // Optimistic: reports bytes actually written to the socket for this
-      // chunk. If the chunk fails, the catch block below re-queries YouTube
-      // for the real confirmed offset before continuing, so this can never
-      // leave a wrong number behind.
-      target.providerState = { ...target.providerState, stage: 'uploading', totalSize: stat.size, offset: chunkStart + sentInChunk };
-      save();
-    });
+    const body = bytes.subarray(offset, endExclusive);
     target.providerState = { ...target.providerState, stage: 'uploading', totalSize: stat.size, offset };
     save();
     try {
@@ -669,14 +610,10 @@ async function uploadYouTube(clip, target, file, userId) {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'video/mp4',
-          // A ReadStream has no .length, so this used to send the literal
-          // string "undefined" and undici rejected the request as
-          // "fetch failed" before it ever reached YouTube.
-          'Content-Length': String(endExclusive - offset),
+          'Content-Length': String(body.length),
           'Content-Range': `bytes ${offset}-${endExclusive - 1}/${stat.size}`,
         },
         body,
-        duplex: 'half',
         signal: AbortSignal.timeout(10 * 60_000),
       });
       if (res.ok) {
@@ -751,13 +688,11 @@ async function uploadFacebook(clip, target, file, userId) {
   }
 
   if (!['uploaded', 'published'].includes(target.providerState.stage)) {
-    const size = fs.statSync(file).size;
-    const bytes = publishReadStream(file, {}, target.provider || '');
+    const bytes = fs.readFileSync(file);
     const upload = await fetch(uploadUrl, {
       method: 'POST',
-      headers: { Authorization: `OAuth ${accessToken}`, offset: '0', file_size: String(size), 'Content-Type': 'application/octet-stream' },
+      headers: { Authorization: `OAuth ${accessToken}`, offset: '0', file_size: String(bytes.length), 'Content-Type': 'application/octet-stream' },
       body: bytes,
-      duplex: 'half',
       signal: AbortSignal.timeout(10 * 60_000),
     });
     if (!upload.ok) {
@@ -776,7 +711,7 @@ async function uploadFacebook(clip, target, file, userId) {
   if (target.providerState.stage !== 'published') {
     const finishParams = new URLSearchParams({
       upload_phase: 'finish', access_token: accessToken, video_id: videoId, video_state: 'PUBLISHED',
-      description: captionText(clip, 5000, 'facebook'), title: platformCopy(clip, 'facebook').title.slice(0, 255),
+      description: captionText(clip, 5000), title: String(clip.title || '').slice(0, 255),
     });
     const finish = await jsonRequest(`${config.metaGraphBase}/${config.metaGraphVersion}/${encodeURIComponent(account.pageId)}/video_reels?${finishParams}`, { method: 'POST' }, 'Facebook');
     if (!finish?.success) throw new SocialError('Facebook did not confirm that the Reel was published.', { retryable: true, provider: 'facebook' });
@@ -795,7 +730,7 @@ async function uploadFacebook(clip, target, file, userId) {
 async function startInstagram(clip, target, userId) {
   const { account, accessToken } = metaPage(target.accountId, 'instagram', userId);
   const body = new URLSearchParams({
-    media_type: 'REELS', video_url: publicMediaUrl(clip.id), caption: captionText(clip, 2200, 'instagram'),
+    media_type: 'REELS', video_url: publicMediaUrl(clip.id), caption: captionText(clip, 2200),
     share_to_feed: target.settings.shareToFeed === false ? 'false' : 'true', access_token: accessToken,
   });
   const container = await jsonRequest(`${config.metaGraphBase}/${config.metaGraphVersion}/${encodeURIComponent(account.instagramId)}/media`, {
@@ -894,7 +829,7 @@ async function startTikTok(clip, target, file, userId) {
   if (!publishId || !uploadUrl) {
     const body = {
       post_info: {
-        title: (platformCopy(clip, 'tiktok').caption || [clip.title, captionText(clip, 2100)].filter(Boolean).join('\n\n')).slice(0, 2200),
+        title: [clip.title, captionText(clip, 2100)].filter(Boolean).join('\n\n').slice(0, 2200),
         privacy_level: privacy,
         disable_comment: Boolean(creator.comment_disabled) || target.settings.allowComments === false,
         disable_duet: Boolean(creator.duet_disabled) || target.settings.allowDuet !== true,
@@ -1036,5 +971,5 @@ export function targetPublic(target) {
   };
 }
 
-export const __test = { tiktokChunks, captionText, platformCopy, selectedAccount, publishReadStream };
+export const __test = { tiktokChunks, captionText, selectedAccount };
 export { SocialError };

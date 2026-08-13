@@ -1,0 +1,30 @@
+{
+  "engineVersion": 4,
+  "projects": [],
+  "clips": [],
+  "rerenderJobs": [],
+  "socialConnections": {},
+  "oauthStates": {},
+  "publishJobs": [],
+  "authUsers": [
+    {
+      "id": "user_admin",
+      "email": "admin@deenclipped.local",
+      "name": "DeenClipped Admin",
+      "role": "owner",
+      "picture": "",
+      "providers": {},
+      "createdAt": 1786119473084,
+      "updatedAt": 1786119473084,
+      "lastLoginAt": null
+    }
+  ],
+  "authSessions": [],
+  "authOAuthStates": {},
+  "authSettings": {
+    "onboardingComplete": false
+  },
+  "userSettings": {},
+  "log": [],
+  "legacyState": null
+}

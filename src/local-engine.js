@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { config } from './config.js';
-import { state, save, log, clipSettings, musicSettings, brandSettings, ownerOfRecord } from './store.js';
+import { state, save, log, clipSettings, musicSettings, ownerOfRecord } from './store.js';
 import { selectedTemplate, templateById } from './templates.js';
 import { withOwner, ownerOf } from './tenancy.js';
 import { workerMusicTracks } from './audio.js';
@@ -77,47 +77,12 @@ async function cacheRemotePublishClip(clip) {
  * signed-in user, so the owner is resolved from the record instead.
  */
 function sharedSettings(user) {
-  const brand = brandSettings(user);
   return {
     ...clipSettings(user), ...musicSettings(user),
     model: config.aiModel, device: config.aiDevice, computeType: config.aiComputeType,
     task: config.aiTask, language: config.aiLanguage, maxSourceMinutes: config.maxSourceMinutes,
     keepSourceFiles: config.keepSourceFiles, ollamaUrl: config.ollamaUrl, ollamaModel: config.ollamaModel,
-    videoPreset: config.videoPreset, videoCrf: config.videoCrf,
-    brandVocabulary: brand.brandVocabulary || [], audience: brand.audience || 'general',
-    contentGoal: brand.contentGoal || 'education', brandTone: brand.brandTone || 'respectful',
-    avoidPhrases: brand.avoidPhrases || [],
   };
-}
-
-/**
- * Resolve the template that is actually sent to FFmpeg. Watermark entitlement
- * lives here instead of in the browser so free accounts cannot remove the
- * DeenClipped mark by editing a request or a saved template file.
- */
-export function effectiveTemplateForUser(user, sourceTemplate = null) {
-  const source = sourceTemplate || selectedTemplate(user) || {};
-  const template = structuredClone(source);
-  const access = billing.featureAccess(user);
-  const brand = brandSettings(user);
-  if (access.watermarkRequired) {
-    template.watermark = 'DEENCLIPPED';
-    template.watermarkOpacity = Math.max(72, Number(brand.watermarkOpacity || 88));
-    template.watermarkPosition = 'top-center';
-    template.watermarkColor = '#D9B478';
-    template.brandLineEnabled = false;
-  } else {
-    template.watermark = brand.watermarkEnabled === false ? '' : String(brand.watermarkText || 'DEENCLIPPED').trim().slice(0, 60);
-    template.watermarkOpacity = Number(brand.watermarkOpacity ?? template.watermarkOpacity ?? 88);
-    template.watermarkPosition = brand.watermarkPosition || template.watermarkPosition || 'top-center';
-    template.watermarkColor = brand.watermarkColor || template.watermarkColor || '#D9B478';
-  }
-  if (access.customBranding) {
-    template.brandLineEnabled = Boolean(brand.brandLineEnabled);
-    template.brandLineColor = brand.brandLineColor || template.brandLineColor || '#D9B478';
-  }
-  template.watermarkRequired = access.watermarkRequired;
-  return template;
 }
 
 function remoteProcessing() { return config.processingMode === 'remote'; }
@@ -309,25 +274,7 @@ export async function sourceInfo(url) {
   if (!value) throw new Error('No source URL supplied.');
   if (remoteProcessing()) {
     const parsed = parseYouTubeUrl(value);
-    // yt-dlp and ffprobe do not exist on the web service, but the YouTube Data
-    // API and the public watch page are ordinary HTTPS calls that work here.
-    // Trying them means the token estimate is based on the real length instead
-    // of forcing the person to type it in by hand every single time.
-    try {
-      const apiInfo = await sourceInfoViaYouTubeDataApi(value);
-      if (apiInfo?.durationSec) return { ...apiInfo, durationKnown: true, extractor: 'youtube-data-api' };
-    } catch { /* fall through to the HTML page */ }
-    try {
-      const htmlInfo = await sourceInfoViaYouTubeHtml(value);
-      if (htmlInfo?.durationSec) return { ...htmlInfo, durationKnown: true, extractor: 'youtube-html' };
-    } catch { /* fall through to manual entry */ }
-    return {
-      url: parsed.canonicalUrl, title: parsed.canonicalUrl, durationSec: null, durationKnown: false,
-      thumbnail: fallbackThumb(parsed.canonicalUrl), extractor: 'validated-only',
-      warning: config.youtubeDataApiKey
-        ? 'Could not read the duration from YouTube; enter it manually.'
-        : 'Set YOUTUBE_DATA_API_KEY for reliable duration lookup.',
-    };
+    return { url: parsed.canonicalUrl, title: parsed.canonicalUrl, durationSec: null, durationKnown: false, thumbnail: fallbackThumb(parsed.canonicalUrl), extractor: 'validated-only' };
   }
   const warnings = [];
 
@@ -376,7 +323,7 @@ function validateSubmission(url, user, options = {}) {
   else if (!/^https?:\/\//i.test(value) && !value.startsWith('file://') && !path.isAbsolute(value)) {
     throw new Error('Use a complete http(s) video link.');
   }
-  const template = effectiveTemplateForUser(user, selectedTemplate(user));
+  const template = selectedTemplate(user);
   if (!template?.id) throw new Error('Select a valid template before submitting.');
   const tracks = workerMusicTracks(user);
   if (!tracks.length) throw new Error('Music is required on every clip. Upload at least one nasheed first.');
@@ -438,10 +385,6 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
       : { type: 'youtube', url: parseYouTubeUrl(value).canonicalUrl },
     template, musicTracks: remoteMusicTracks(tracks, user.id), settings: sharedSettings(user),
     requestedClipCount: clipSettings(user).clipsPerVideo,
-    // The worker rotates between accounts rather than running strict FIFO, so
-    // it needs to know whose job this is. Fairness only — the worker never
-    // uses this to decide who may see what.
-    tenant: user.id,
     sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
     callbackUrl: config.publicBaseUrl ? `${config.publicBaseUrl}/api/worker-callbacks/${encodeURIComponent(projectId)}` : '',
   } : {
@@ -462,26 +405,9 @@ function parseWorkerLine(record, line) {
   let payload;
   try { payload = JSON.parse(line); } catch { return; }
   if (payload.type === 'progress') {
-    const stage = String(payload.stage || 'Processing');
-    // The worker already reports all of this on every step. Keeping only
-    // stage+progress is why the UI had no ETA and no clip counter.
-    const num = value => (Number.isFinite(Number(value)) ? Number(value) : null);
-    record.stage = stage;
+    record.stage = String(payload.stage || 'Processing');
     record.progress = Math.max(0, Math.min(100, Number(payload.progress) || 0));
-    record.etaSec = num(payload.etaSec);
-    record.currentClip = num(payload.currentClip);
-    record.totalClips = num(payload.totalClips);
-    record.sourceDurationSec = num(payload.sourceDurationSec);
-    record.processedSec = num(payload.processedSec);
     record.status = 'processing';
-    if (!record.startedAt) record.startedAt = Date.now();
-    // One entry per distinct stage, so the log reads as steps rather than
-    // one line per percentage tick. Bounded so state.json cannot grow.
-    record.stages = Array.isArray(record.stages) ? record.stages : [];
-    if (record.stages[record.stages.length - 1]?.stage !== stage) {
-      record.stages.push({ stage, at: Date.now(), progress: record.progress });
-      if (record.stages.length > 40) record.stages = record.stages.slice(-40);
-    }
     record.updatedAt = Date.now();
     save();
   } else if (payload.type === 'warning') {
@@ -548,19 +474,16 @@ export function acceptRemoteUpdate(projectId, update) {
   if (!project || project.engine !== 'remote') return null;
   if (update.status === 'completed' && update.result && project.status !== 'done') {
     importResultObject(project, update.result, 'remote-worker');
-    project.queuePosition = 0;
   } else if (update.status === 'failed') {
     project.status = 'failed'; project.stage = 'failed'; project.progress = Number(update.progress || project.progress || 0);
-    project.queuePosition = 0;
     project.error = customerSafeProjectError(update.error || 'The external worker failed.').message;
     project.errorCode = 'processing_failed'; project.updatedAt = Date.now(); save();
   } else if (update.status === 'cancelled') {
-    project.status = 'cancelled'; project.stage = 'cancelled'; project.queuePosition = 0; project.updatedAt = Date.now(); save();
+    project.status = 'cancelled'; project.stage = 'cancelled'; project.updatedAt = Date.now(); save();
   } else if (project.status !== 'done') {
     project.status = update.status === 'queued' ? 'queued' : 'processing';
     project.stage = String(update.stage || update.status || 'processing');
     project.progress = Math.max(0, Math.min(100, Number(update.progress) || 0));
-    project.queuePosition = Math.max(0, Number(update.queuePosition || 0));
     project.updatedAt = Date.now(); save();
   }
   return project;
@@ -613,21 +536,18 @@ async function runRemoteAux(project, jobRecord, kind) {
       const update = await workerClient.getJob(jobRecord.id);
       jobRecord.stage = String(update.stage || update.status || 'processing');
       jobRecord.progress = Math.max(0, Math.min(100, Number(update.progress) || 0));
-      jobRecord.queuePosition = Math.max(0, Number(update.queuePosition || 0));
       jobRecord.status = update.status === 'queued' ? 'queued' : 'processing'; save();
       if (update.status === 'completed') {
-        jobRecord.queuePosition = 0;
         if (kind === 'more') importMoreResultObject(project, jobRecord, update.result || {}, 'remote-worker');
         else importRerenderResultObject(jobRecord, update.result || {});
         return;
       }
       if (update.status === 'failed') throw new Error(update.error || 'The external worker failed.');
-      if (update.status === 'cancelled') { jobRecord.status = 'cancelled'; jobRecord.stage = 'cancelled'; jobRecord.queuePosition = 0; save(); return; }
+      if (update.status === 'cancelled') { jobRecord.status = 'cancelled'; jobRecord.stage = 'cancelled'; save(); return; }
       await new Promise(resolve => setTimeout(resolve, config.workerPollIntervalMs));
     }
     throw new Error('The processing worker exceeded the job timeout.');
   } catch (error) {
-    jobRecord.queuePosition = 0;
     jobRecord.status = error.code === 'worker_unavailable' ? 'queued' : 'failed';
     jobRecord.stage = error.code === 'worker_unavailable' ? 'Worker unavailable — retrying' : 'failed';
     jobRecord.error = error.message;
@@ -802,7 +722,7 @@ async function runVizardProject(project) {
     project.vizardShareLink = result.shareLink || project.vizardShareLink || null;
     save();
 
-    const template = effectiveTemplateForUser(owner, selectedTemplate(owner));
+    const template = selectedTemplate(owner);
     const tracks = workerMusicTracks(owner);
     if (!template?.id || !tracks.length) throw new Error('A saved template and at least one nasheed are required to finish these clips.');
     const imported = [];
@@ -922,7 +842,6 @@ function importRerenderResultObject(jobRecord, result) {
   if (!rendered?.renderVerified || !rendered?.musicVerified) throw new Error('The re-render did not pass verification.');
   const original = clipById(jobRecord.clipId);
   if (!original) throw new Error('The original clip was removed before the re-render completed.');
-  jobRecord.finishedAt = Date.now();
   const newer = state.rerenderJobs.find(item => item.clipId === jobRecord.clipId && !item.asVariant && item.createdAt > jobRecord.createdAt && ['queued', 'processing', 'done'].includes(item.status));
   if (!jobRecord.asVariant && newer) {
     jobRecord.status = 'superseded';
@@ -956,9 +875,6 @@ function importRerenderResultObject(jobRecord, result) {
     Object.assign(original, rendered, preserved, {
       renderVersion: (original.renderVersion || 1) + 1,
       rerenderedAt: Date.now(),
-      // Which quality this file actually is. A preview-tier clip is fine to
-      // watch in the app but must be upgraded before it leaves the platform.
-      renderTier: jobRecord.renderTier === 'preview' ? 'preview' : 'export',
     });
     for (const oldFile of oldFiles) {
       if (oldFile && ![original.clipFile, original.thumbFile].includes(oldFile)) removeDataFile(oldFile);
@@ -1023,7 +939,7 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   const count = Math.max(1, Math.min(20, Math.round(Number(requestedCount) || 8)));
   const owner = ownerOfRecord(project);
   billing.assertCanSpend(owner, billing.tokenCostForSeconds(count * (clipSettings(owner).clipMaxSeconds || 60)), 'generate more clips');
-  const template = effectiveTemplateForUser(owner, selectedTemplate(owner));
+  const template = selectedTemplate(owner);
   if (!template?.id) throw new Error('Choose a valid saved template.');
   const tracks = workerMusicTracks(owner);
   if (!tracks.length) throw new Error('Music is mandatory. Upload at least one nasheed first.');
@@ -1043,7 +959,7 @@ export function queueMoreClips(projectId, requestedCount = 8) {
     source: { type: 'object_storage', objectKey: project.sourceObjectKey, title: project.title },
     transcript: { objectKey: project.transcriptObjectKey }, existingRanges,
     template, musicTracks: remoteMusicTracks(tracks, owner.id), settings: { ...sharedSettings(owner), clipsPerVideo: count },
-    tenant: owner.id, callbackUrl: '',
+    callbackUrl: '',
   } : {
     mode: 'more_clips', id: moreId, projectId: project.id, projectTitle: project.title, requestedCount: count,
     sourceFile: project.sourceFile, transcriptFile: project.transcriptFile, transcriptSegments, existingRanges,
@@ -1065,10 +981,7 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   return record;
 }
 
-/** Framing choices a single clip may override without editing the template. */
-const FRAMING_BIASES = ['auto', 'left', 'center', 'right'];
-
-export function queueClipRerender(clipId, templateId, { asVariant = false, batchId = '', batchLabel = '', batchTotal = 0, framingBias = undefined } = {}) {
+export function queueClipRerender(clipId, templateId, { asVariant = false } = {}) {
   const clip = clipById(clipId);
   if (!clip) throw new Error('That clip does not exist.');
   if (clip.status === 'posted' && !asVariant) throw new Error('A posted video cannot be changed. Create a re-post variant instead.');
@@ -1076,24 +989,8 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, batch
   const sourceFile = clip.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
   if ((!sourceFile || !fs.existsSync(sourceFile)) && !(project?.engine === 'remote' && project.sourceObjectKey)) throw new Error('The original source file is unavailable. Keep source files enabled to re-render clips.');
   const owner = ownerOfRecord(clip);
-  const baseTemplate = effectiveTemplateForUser(owner, templateById(templateId, owner) || selectedTemplate(owner));
-  if (!baseTemplate?.id) throw new Error('Choose a valid saved template.');
-
-  // A per-clip framing nudge, for the one clip where the automatic choice is
-  // wrong. Editing the template instead would re-render every unposted clip
-  // the account owns, which is a lot of collateral for fixing one shot.
-  if (framingBias !== undefined) {
-    if (!FRAMING_BIASES.includes(String(framingBias))) throw new Error('Choose a valid framing option.');
-    clip.framingBias = String(framingBias) === 'auto' ? null : String(framingBias);
-  }
-  const template = clip.framingBias
-    ? { ...baseTemplate, smartFramingBias: clip.framingBias }
-    : baseTemplate;
-
-  // Only a bulk template application renders at preview quality, and only
-  // when the operator has opted in. A single deliberate re-render, and every
-  // upgrade requested by a download or a publish, is always export quality.
-  const previewQuality = Boolean(config.previewBatchRenders && batchId);
+  const template = templateById(templateId, owner) || selectedTemplate(owner);
+  if (!template?.id) throw new Error('Choose a valid saved template.');
   const tracks = workerMusicTracks(owner);
   if (!tracks.length) throw new Error('Music is mandatory. Upload at least one nasheed first.');
   const transcriptSegments = project.transcriptFile && fs.existsSync(project.transcriptFile)
@@ -1108,28 +1005,21 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, batch
     mode: 'rerender', id: rerenderId, projectId: project.id, clipIdOverride: outputClipId,
     source: { type: 'object_storage', objectKey: project.sourceObjectKey, title: project.title },
     transcript: { objectKey: project.transcriptObjectKey || '' }, template,
-    musicTracks: remoteMusicTracks(tracks, owner.id), settings: { ...sharedSettings(owner), previewQuality },
+    musicTracks: remoteMusicTracks(tracks, owner.id), settings: sharedSettings(owner),
     clip: {
       id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
       startSec: clip.startSec, endSec: clip.endSec, score: clip.score, scoreReasons: clip.scoreReasons,
       reviewRequired: clip.reviewRequired,
-    },
-    // Lets the worker skip speaker analysis when nothing that decides framing
-    // has changed. It re-checks the signature itself, so a stale plan is
-    // ignored rather than trusted.
-    cropPlan: clip.cropPlan || null,
-    tenant: owner.id, callbackUrl: '',
+    }, callbackUrl: '',
   } : {
     mode: 'rerender', id: rerenderId, projectId: project.id, clipIdOverride: outputClipId,
     sourceFile, outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
-    template, musicTracks: tracks, settings: { ...sharedSettings(owner), previewQuality },
-    transcriptSegments,
+    template, musicTracks: tracks, settings: sharedSettings(owner), transcriptSegments,
     clip: {
       id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
       startSec: clip.startSec, endSec: clip.endSec, score: clip.score, scoreReasons: clip.scoreReasons,
       reviewRequired: clip.reviewRequired,
     },
-    cropPlan: clip.cropPlan || null,
   };
   const file = path.join(dir, 'job.json');
   fs.writeFileSync(file, JSON.stringify(payload, null, 2));
@@ -1137,10 +1027,6 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, batch
     id: rerenderId, clipId: clip.id, templateId: template.id, templateName: template.name,
     asVariant: Boolean(asVariant), status: 'queued', stage: 'Waiting to re-render', progress: 0, engine: project.engine === 'remote' ? 'remote' : 'self-hosted',
     createdAt: Date.now(), jobFile: file, resultPath,
-    clipTitle: clip.title || '', projectId: project.id, projectTitle: project.title || '',
-    batchId: String(batchId || ''), batchLabel: String(batchLabel || ''), batchTotal: Number(batchTotal || 0),
-    renderTier: previewQuality ? 'preview' : 'export',
-    stages: [], etaSec: null, currentClip: null, totalClips: null, startedAt: null,
   }, ownerOf(clip));
   state.rerenderJobs.unshift(record);
   state.rerenderJobs = state.rerenderJobs.slice(0, 60);
@@ -1150,100 +1036,21 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, batch
   return record;
 }
 
-/**
- * Fair queuing across accounts.
- *
- * This queue used to be a single global FIFO ordered by arrival time. That is
- * invisible with one customer and indefensible with ten: saving a template
- * queues a re-render of every unposted clip its owner has
- * (`queueTemplateForEveryUnpostedClip` in server.js), so forty of one
- * customer's jobs sat in front of another customer's brand-new import.
- *
- * Work is now taken round-robin by owner. Each account's queued jobs are
- * ranked within their own group by arrival, that rank is offset by however
- * many jobs the account already has running, and the global order is by rank
- * first and arrival second. Twenty jobs from A followed by one from B run
- * A, B, A, A, … instead of leaving B twenty-first.
- *
- * The rank is recomputed from state on every pass rather than carried in a
- * cursor, so a restart cannot lose its place in the rotation or strand an
- * account. Render order is a scheduling decision, not persisted data.
- */
-const ownerKey = value => value || '';
-const queuedAt = candidate => Number(candidate.at) || 0;
-/** Background bulk work sorts behind an account's own foreground jobs. */
-const batchRank = candidate => (candidate.item?.batchId ? 1 : 0);
-
-/** How many jobs each account currently has in flight, by owner id. */
-function runningOwnerCounts() {
-  const counts = new Map();
-  const bump = owner => counts.set(ownerKey(owner), (counts.get(ownerKey(owner)) || 0) + 1);
-  for (const project of state.projects) {
-    if (running.has(project.id)) bump(ownerOf(project));
-    // `moreJob` is nested inside its project and carries no owner of its own.
-    if (project.moreJob?.id && running.has(project.moreJob.id)) bump(ownerOf(project));
-  }
-  for (const job of state.rerenderJobs) {
-    if (running.has(job.id)) bump(ownerOf(job));
-  }
-  return counts;
-}
-
-/** Everything waiting for a slot, tagged with the account that owns it. */
-function queuedCandidates() {
-  return [
-    ...state.projects.filter(item => item.engine === 'remote' && item.status === 'queued' && Number(item.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote', item, at: item.submittedAt, owner: ownerOf(item) })),
-    ...state.projects.filter(item => item.engine === 'self-hosted' && item.status === 'queued').map(item => ({ type: 'project', item, at: item.submittedAt, owner: ownerOf(item) })),
-    ...state.projects.filter(item => item.engine === 'vizard' && item.status === 'queued').map(item => ({ type: 'vizard', item, at: item.submittedAt, owner: ownerOf(item) })),
-    ...state.projects.filter(item => item.moreJob?.engine === 'remote' && item.moreJob.status === 'queued' && Number(item.moreJob.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote-more', item: item.moreJob, project: item, at: item.moreJob.createdAt, owner: ownerOf(item) })),
-    ...state.projects.filter(item => item.moreJob?.engine !== 'remote' && item.moreJob?.status === 'queued').map(item => ({ type: 'more', item: item.moreJob, project: item, at: item.moreJob.createdAt, owner: ownerOf(item) })),
-    ...state.rerenderJobs.filter(item => item.engine === 'remote' && item.status === 'queued' && Number(item.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote-rerender', item, project: projectById(clipById(item.clipId)?.projectId), at: item.createdAt, owner: ownerOf(item) })),
-    ...state.rerenderJobs.filter(item => item.engine !== 'remote' && item.status === 'queued').map(item => ({ type: 'rerender', item, at: item.createdAt, owner: ownerOf(item) })),
-  ];
-}
-
-/**
- * Order candidates round-robin by owner, skipping accounts that already hold
- * their share of the slots. Exported so the ordering can be tested without
- * spawning a renderer.
- */
-export function fairQueueOrder(candidates, runningCounts = new Map(), maxPerOwner = Infinity) {
-  const groups = new Map();
-  for (const candidate of candidates) {
-    const key = ownerKey(candidate.owner);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(candidate);
-  }
-  const ranked = [];
-  for (const [key, group] of groups) {
-    const active = runningCounts.get(key) || 0;
-    // This account is already using its allowance. Its remaining work waits
-    // for one of its own jobs to finish, rather than taking someone else's turn.
-    if (active >= maxPerOwner) continue;
-    // Within one account, a bulk template batch yields to that account's own
-    // foreground work. Otherwise saving a template monopolises the owner's
-    // turn: they queue forty re-renders, import a lecture, and wait for all
-    // forty first. Ordering inside each class is still arrival order.
-    group.sort((a, b) => batchRank(a) - batchRank(b) || queuedAt(a) - queuedAt(b));
-    group.forEach((candidate, index) => ranked.push({ ...candidate, rank: active + index }));
-  }
-  return ranked.sort((a, b) => a.rank - b.rank || queuedAt(a) - queuedAt(b));
-}
-
-/** The order queued work will actually be dispatched in, right now. */
-export function plannedQueueOrder() {
-  return fairQueueOrder(queuedCandidates(), runningOwnerCounts(), config.maxConcurrentJobsPerUser);
-}
-
 export async function pump() {
   if (pumping) return;
   pumping = true;
   try {
     while (running.size < config.maxConcurrentJobs) {
-      const next = plannedQueueOrder()[0];
-      // Nothing queued, or everything queued belongs to accounts already at
-      // their slot allowance. Each running job calls pump() again when it
-      // finishes, so the held-back work is picked up then.
+      const candidates = [
+        ...state.projects.filter(item => item.engine === 'remote' && item.status === 'queued' && Number(item.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote', item, at: item.submittedAt })),
+        ...state.projects.filter(item => item.engine === 'self-hosted' && item.status === 'queued').map(item => ({ type: 'project', item, at: item.submittedAt })),
+        ...state.projects.filter(item => item.engine === 'vizard' && item.status === 'queued').map(item => ({ type: 'vizard', item, at: item.submittedAt })),
+        ...state.projects.filter(item => item.moreJob?.engine === 'remote' && item.moreJob.status === 'queued' && Number(item.moreJob.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote-more', item: item.moreJob, project: item, at: item.moreJob.createdAt })),
+        ...state.projects.filter(item => item.moreJob?.engine !== 'remote' && item.moreJob?.status === 'queued').map(item => ({ type: 'more', item: item.moreJob, project: item, at: item.moreJob.createdAt })),
+        ...state.rerenderJobs.filter(item => item.engine === 'remote' && item.status === 'queued' && Number(item.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote-rerender', item, project: projectById(clipById(item.clipId)?.projectId), at: item.createdAt })),
+        ...state.rerenderJobs.filter(item => item.engine !== 'remote' && item.status === 'queued').map(item => ({ type: 'rerender', item, at: item.createdAt })),
+      ].sort((a, b) => a.at - b.at);
+      const next = candidates[0];
       if (!next) break;
       if (next.type === 'remote') runRemoteProject(next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
       else if (next.type === 'remote-more') runRemoteAux(next.project, next.item, 'more').catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
@@ -1282,41 +1089,9 @@ function runWorkerJob(jobPath, resultPath, label = 'Render') {
  * derivative is rendered automatically while the user's normal branded clip
  * remains unchanged for every other destination.
  */
-/**
- * Make sure a clip is export quality before it leaves the platform.
- *
- * A bulk template application may have rendered it with a fast encoder preset
- * so the batch came back quickly. That file is fine to review in the app and
- * is not fine to publish or hand to a customer, so the first request that
- * would send it outside queues the full-quality render instead.
- *
- * Deliberately not a blocking re-encode: a render takes minutes and an HTTP
- * request cannot wait for one. The caller gets a clear, retryable error and
- * the work is already moving.
- */
-export function assertExportQuality(clip) {
-  if (!clip || clip.renderTier !== 'preview') return clip;
-  const pending = state.rerenderJobs.some(job =>
-    job.clipId === clip.id && job.renderTier !== 'preview' && ['queued', 'processing'].includes(job.status));
-  if (!pending) {
-    try {
-      queueClipRerender(clip.id, clip.templateId || '', { asVariant: false });
-    } catch (error) {
-      const failure = new Error(`This clip needs a full-quality render first, which could not be started: ${error.message}`);
-      failure.statusCode = 409;
-      throw failure;
-    }
-  }
-  const error = new Error('This clip is still a fast preview. The full-quality version is rendering now — try again shortly.');
-  error.statusCode = 409;
-  error.code = 'export_render_pending';
-  throw error;
-}
-
 export async function socialPublishFile(clipId, provider) {
   const clip = clipById(clipId);
   if (!clip) throw new Error('That clip does not exist.');
-  assertExportQuality(clip);
   if (clip.clipUrl) {
     if (provider === 'instagram') return null;
     if (provider === 'tiktok') {
@@ -1413,7 +1188,7 @@ export function retryProject(projectId) {
   if (!fs.existsSync(jobFile(projectId))) throw new Error('The project job file is missing. Submit the video again.');
   const job = JSON.parse(fs.readFileSync(jobFile(projectId), 'utf8'));
   const projectOwner = ownerOfRecord(project);
-  const template = effectiveTemplateForUser(projectOwner, selectedTemplate(projectOwner)); const tracks = workerMusicTracks(projectOwner);
+  const template = selectedTemplate(projectOwner); const tracks = workerMusicTracks(projectOwner);
   if (!template?.id) throw new Error('Select a template before retrying.');
   if (!tracks.length) throw new Error('Upload at least one nasheed before retrying.');
   job.template = template; job.musicTracks = tracks; job.settings = sharedSettings(projectOwner);

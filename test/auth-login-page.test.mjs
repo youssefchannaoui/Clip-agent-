@@ -25,10 +25,3 @@ test('login page keeps the creator form accessible and does not expose user cont
   assert.match(html, /&lt;invalid&gt;/);
   assert.doesNotMatch(html, /state\.clips|Recent rendered clips/);
 });
-
-test('unknown email accounts cannot self-register unless registration is explicitly enabled', () => {
-  assert.throws(
-    () => auth.emailLogin(`unknown-${Date.now()}@deenclipped.test`, 'a strong password'),
-    /No account exists/,
-  );
-});

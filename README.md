@@ -1,4 +1,4 @@
-# DeenClipped AI 4.0 — Web app + resource-aware processing worker
+# DeenClipped AI 3.0 — Web app + external processing worker
 
 DeenClipped AI keeps the polished editor and publishing workspace while moving video import, Whisper, FFmpeg, rendering, and media storage off the lightweight Render web service.
 
@@ -103,16 +103,11 @@ Set the OAuth app audience to **External**, publish it to **In production**, and
 
 ```env
 AUTH_REQUIRED=true
-APP_SESSION_SECRET=<stable-random-secret-at-least-32-characters>
-EMAIL_SIGNIN_ENABLED=true
-EMAIL_REGISTRATION_ENABLED=false
 PUBLIC_BASE_URL=https://deenclipped.online
 GOOGLE_SIGNIN_CLIENT_ID=
 GOOGLE_SIGNIN_CLIENT_SECRET=
 GOOGLE_SIGNIN_REDIRECT_URI=https://deenclipped.online/auth/google/callback
 ```
-
-Keep email registration disabled for launch unless a verified invite or email-confirmation flow is added. Existing email accounts can still sign in, and new users can use verified Google OAuth.
 
 Google compares redirect URIs exactly, including scheme, hostname, path and trailing slash. Account sign-in credentials are intentionally separate from the YouTube publishing credentials.
 
@@ -127,8 +122,6 @@ The complete Google OAuth and YouTube approval checklist, scope justifications, 
 ## YouTube source imports
 
 Do not request or store customer browser cookies. YouTube URLs are validated on Render and sent as metadata to the worker. The worker calls the configurable managed provider; the default FFMPEGAPI adapter follows its documented `youtube_to_mp4` response. Playlists, unsupported URLs, provider failures, and oversized videos direct the user to **Upload MP4**. MP4, MOV, M4V, WebM and MKV uploads go directly from the browser to object storage.
-
-Set `VIDEO_IMPORT_ALLOWED_DOWNLOAD_HOSTS` to the import provider hostname plus every CDN/storage hostname that provider documents for returned download URLs. The worker rejects undeclared hosts to prevent server-side request forgery.
 
 ## Local installation
 

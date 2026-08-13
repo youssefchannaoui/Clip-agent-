@@ -9,20 +9,12 @@ ENV PYTHONUNBUFFERED=1 \
     FFPROBE_PATH=ffprobe \
     WHISPER_DEVICE=cpu \
     WHISPER_COMPUTE_TYPE=int8 \
-    WHISPER_MODEL=large-v3-turbo \
-    WHISPER_BEAM_SIZE=5 \
-    WHISPER_CPU_THREADS=2 \
-    FFMPEG_THREADS=2 \
-    VIDEO_PRESET=medium \
-    VIDEO_CRF=18 \
-    WORKER_MAX_CONCURRENT_JOBS=2 \
-    WORKER_MAX_HEAVY_JOBS=1
+    WHISPER_MODEL=small \
+    FFMPEG_THREADS=4 \
+    WORKER_MAX_CONCURRENT_JOBS=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg ca-certificates curl fontconfig fonts-dejavu-core \
-    fonts-lato fonts-liberation2 fonts-roboto fonts-noto-core fonts-noto-extra \
-    fonts-cantarell fonts-manrope fonts-play fonts-sil-andika fonts-sil-charis \
-    fonts-freefont-ttf fonts-texgyre fonts-urw-base35 \
     fonts-hosny-amiri fonts-sil-scheherazade \
     && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
@@ -34,7 +26,7 @@ RUN python -m pip install --upgrade pip setuptools wheel \
 
 COPY worker /app/worker
 RUN mkdir -p /var/lib/deenclipped/jobs /var/lib/deenclipped/tmp /var/lib/deenclipped/models \
-    && python -m py_compile /app/worker/service.py /app/worker/import_providers.py /app/worker/object_storage.py /app/worker/intelligence.py /app/worker/audio_features.py /app/worker/clip_worker.py
+    && python -m py_compile /app/worker/service.py /app/worker/import_providers.py /app/worker/object_storage.py /app/worker/clip_worker.py
 
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=8s --start-period=30s --retries=3 \

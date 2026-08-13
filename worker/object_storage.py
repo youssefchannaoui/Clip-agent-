@@ -23,38 +23,19 @@ class ObjectStorage:
             if not self.configured:
                 raise RuntimeError("S3-compatible object storage is not configured.")
             import boto3
-            from botocore.config import Config
             self._client = boto3.client(
                 "s3", endpoint_url=self.endpoint, region_name=self.region,
                 aws_access_key_id=os.getenv("OBJECT_STORAGE_ACCESS_KEY"),
                 aws_secret_access_key=os.getenv("OBJECT_STORAGE_SECRET_KEY"),
-                config=Config(
-                    connect_timeout=15,
-                    read_timeout=120,
-                    retries={"max_attempts": 5, "mode": "adaptive"},
-                ),
             )
         return self._client
 
     def download(self, key: str, destination: Path) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        temporary = destination.with_name(destination.name + ".part")
-        temporary.unlink(missing_ok=True)
-        try:
-            self.client.download_file(self.bucket, key, str(temporary))
-            if not temporary.is_file() or temporary.stat().st_size <= 0:
-                raise RuntimeError("Object storage returned a missing or empty file.")
-            os.replace(temporary, destination)
-        finally:
-            temporary.unlink(missing_ok=True)
+        self.client.download_file(self.bucket, key, str(destination))
 
     def upload(self, source: Path, key: str, content_type: str) -> dict:
-        if not source.is_file() or source.stat().st_size <= 0:
-            raise RuntimeError("The file selected for object-storage upload is missing or empty.")
         self.client.upload_file(str(source), self.bucket, key, ExtraArgs={"ContentType": content_type})
-        uploaded = self.client.head_object(Bucket=self.bucket, Key=key)
-        if int(uploaded.get("ContentLength") or -1) != source.stat().st_size:
-            raise RuntimeError("Object-storage verification found an incomplete upload.")
         quoted = "/".join(__import__("urllib.parse", fromlist=["quote"]).quote(part, safe="") for part in key.split("/"))
         url = f"{self.public_url}/{quoted}" if self.public_url else f"{self.endpoint}/{self.bucket}/{quoted}"
         return {"key": key, "url": url}

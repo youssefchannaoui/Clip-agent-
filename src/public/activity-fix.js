@@ -9,11 +9,6 @@ const clone = v => JSON.parse(JSON.stringify(v || {}));
 const data = () => { try { return typeof DATA !== 'undefined' ? DATA : null; } catch { return null; } };
 const authedUrl = url => {
   try {
-    const value=String(url||'');
-    const resolved=new URL(value,window.location.href);
-    // Never append the legacy app password to a CDN, storage host or another
-    // external media URL. Those URLs carry their own access rules.
-    if(resolved.origin!==window.location.origin)return value;
     if (typeof withPw === 'function') return withPw(url);
     const password = typeof PW !== 'undefined' ? PW : '';
     if (!password) return url;
@@ -30,9 +25,7 @@ const callApi = async (url, options={}) => {
   try { payload = text ? JSON.parse(text) : {}; } catch { payload = {error:text}; }
   if (!response.ok) {
     if (response.status === 401 && payload.loginRequired) { window.location.href = '/login?returnTo=' + encodeURIComponent(location.pathname + location.search); return new Promise(()=>{}); }
-    const error = new Error(payload.error || `${response.status} ${response.statusText}`);
-    Object.assign(error, payload);
-    throw error;
+    throw new Error(payload.error || `${response.status} ${response.statusText}`);
   }
   return payload;
 };
@@ -41,142 +34,22 @@ const notify = (message, kind='good') => {
   console[kind === 'bad' ? 'error' : 'log'](message);
 };
 
-const NOTIFICATION_DEFAULTS = Object.freeze({
-  desktop:false, sounds:false, respectMedia:true, started:false, completed:true, publishing:true, failures:true, volume:55,
-});
-let notificationAudio = null;
-let workflowBaseline = null;
-let workflowBaselineUser = '';
-
-function notificationUserKey(){
-  const d=data();
-  return String(d?.user?.id||d?.user?.email||d?.account?.id||'anon').replace(/[^a-zA-Z0-9_.@-]/g,'_');
-}
-function notificationStorageKey(){return `dc_notification_settings_${notificationUserKey()}`}
-function notificationPrefs(){
-  try{return {...NOTIFICATION_DEFAULTS,...JSON.parse(localStorage.getItem(notificationStorageKey())||'{}')}}catch{return {...NOTIFICATION_DEFAULTS}}
-}
-function saveNotificationPrefs(patch={}){
-  const next={...notificationPrefs(),...patch};
-  next.volume=clamp(next.volume,0,100);
-  try{localStorage.setItem(notificationStorageKey(),JSON.stringify(next))}catch{}
-  return next;
-}
-function notificationPermission(){
-  if(!('Notification' in window))return'unsupported';
-  return Notification.permission||'default';
-}
-function notificationPermissionCopy(){
-  const permission=notificationPermission(),enabled=notificationPrefs().desktop&&permission==='granted';
-  if(permission==='unsupported')return{tone:'bad',label:'Unavailable',copy:'This browser does not expose desktop notifications.'};
-  if(permission==='denied')return{tone:'bad',label:'Blocked',copy:'Open this site’s browser settings and change Notifications to Allow.'};
-  if(enabled)return{tone:'good',label:'Allowed',copy:'Chrome or Safari can alert you while DeenClipped is open.'};
-  if(permission==='granted')return{tone:'warn',label:'Paused',copy:'Browser permission is allowed, but DeenClipped alerts are paused.'};
-  return{tone:'warn',label:'Not enabled',copy:'Choose Enable notifications, then press Allow in your browser.'};
-}
-async function requestDesktopNotifications(){
-  if(!('Notification' in window)){notify('Desktop notifications are not supported in this browser.','bad');return false}
-  if(Notification.permission==='denied'){notify('Notifications are blocked. Open the site settings in Chrome or Safari and choose Allow.','bad');return false}
-  const permission=await Notification.requestPermission();
-  const allowed=permission==='granted';
-  saveNotificationPrefs({desktop:allowed});
-  if(allowed){
-    pushDesktopNotification('DeenClipped notifications are on','We’ll tell you when clips finish, posts go live, or something needs attention.','notifications-ready','automation',true);
-    playNotificationSound('complete',true);
-    notify('Browser notifications enabled','good');
-  }else notify('Notifications were not enabled. You can try again from Settings.','bad');
-  return allowed;
-}
-function createNotificationAudio(){
-  if(notificationAudio)return notificationAudio;
-  const AudioContextClass=window.AudioContext||window.webkitAudioContext;
-  if(!AudioContextClass)return null;
-  try{notificationAudio=new AudioContextClass();return notificationAudio}catch{return null}
-}
-function playNotificationSound(kind='complete',force=false){
-  const prefs=notificationPrefs();if(!force&&!prefs.sounds)return;
-  if(!force&&prefs.respectMedia&&$$('video,audio').some(media=>!media.paused&&!media.ended))return;
-  const context=createNotificationAudio();if(!context)return;
-  const patterns={start:[[392,0,.08],[523,.10,.10]],complete:[[523,0,.09],[659,.11,.09],[784,.22,.16]],published:[[587,0,.08],[784,.1,.10],[988,.22,.18]],failure:[[330,0,.12],[247,.15,.18]],test:[[523,0,.08],[659,.1,.08],[880,.2,.16]]};
-  const notes=patterns[kind]||patterns.complete,volume=clamp(prefs.volume,0,100)/100;
-  try{
-    if(context.state==='suspended')context.resume().catch(()=>{});
-    const base=context.currentTime+.015;
-    notes.forEach(([frequency,offset,duration])=>{
-      const oscillator=context.createOscillator(),gain=context.createGain();
-      oscillator.type=kind==='failure'?'triangle':'sine';oscillator.frequency.value=frequency;
-      gain.gain.setValueAtTime(.0001,base+offset);gain.gain.exponentialRampToValueAtTime(Math.max(.0001,.12*volume),base+offset+.015);gain.gain.exponentialRampToValueAtTime(.0001,base+offset+duration);
-      oscillator.connect(gain);gain.connect(context.destination);oscillator.start(base+offset);oscillator.stop(base+offset+duration+.025);
-    });
-  }catch{}
-}
-function pushDesktopNotification(title,body,tag,view='home',force=false){
-  const prefs=notificationPrefs();
-  if(notificationPermission()!=='granted'||(!force&&!prefs.desktop))return null;
-  try{
-    const notice=new Notification(title,{body,tag:`deenclipped-${tag}`,icon:'/marketing-assets/apple-touch-icon.png',badge:'/marketing-assets/favicon-32.png',silent:true});
-    notice.onclick=()=>{window.focus();notice.close();if(view)go(view)};
-    return notice;
-  }catch{return null}
-}
-function workflowSnapshot(d){
-  const snapshot={};
-  (d?.projects||[]).forEach(project=>{
-    snapshot[`project:${project.id}`]={status:project.status,title:project.title||'Lecture',kind:'project'};
-    if(project.moreJob)snapshot[`more:${project.id}`]={status:project.moreJob.status,title:project.title||'Lecture',kind:'more'};
-  });
-  (d?.rerenderJobs||[]).forEach(job=>{
-    const clip=(d.clips||[]).find(item=>item.id===job.clipId);
-    snapshot[`render:${job.id||job.clipId}`]={status:job.status,title:clip?.title||'Clip',kind:'render'};
-  });
-  (d?.clips||[]).forEach(clip=>(clip.targets||[]).forEach(target=>{
-    snapshot[`publish:${clip.id}:${target.provider}`]={status:target.status,title:clip.title||'Clip',provider:target.provider,kind:'publish'};
-  }));
-  return snapshot;
-}
-function workflowSignal(kind,title,body,tag,view){
-  const prefs=notificationPrefs();
-  if(kind==='start'&&!prefs.started)return;
-  if(kind==='complete'&&!prefs.completed)return;
-  if(kind==='published'&&!prefs.publishing)return;
-  if(kind==='failure'&&!prefs.failures)return;
-  playNotificationSound(kind);
-  pushDesktopNotification(title,body,tag,view);
-}
-function detectWorkflowSignals(d){
-  const user=notificationUserKey(),current=workflowSnapshot(d);
-  if(!workflowBaseline||workflowBaselineUser!==user){workflowBaseline=current;workflowBaselineUser=user;return}
-  const active=new Set(['queued','processing','retrying','publishing','uploading','rendering','transcribing','analysing','creating clips']);
-  Object.entries(current).forEach(([key,item])=>{
-    const previous=workflowBaseline[key];if(!previous||previous.status===item.status)return;
-    if(!active.has(previous.status)&&active.has(item.status))workflowSignal('start','DeenClipped is working',`${item.title} has started ${item.kind==='publish'?'publishing':'processing'}.`,`${key}:start`,item.kind==='publish'?'schedule':'home');
-    if(active.has(previous.status)&&['completed','done','waiting','ready'].includes(item.status))workflowSignal('complete','Your clips are ready',`${item.title} finished processing and is ready to review.`,`${key}:complete`,'review');
-    if(item.kind==='publish'&&item.status==='posted')workflowSignal('published','Your clip is live',`${item.title} finished publishing to ${item.provider||'your channel'}.`,`${key}:posted`,'schedule');
-    if(item.status==='failed'||item.status==='publish_failed')workflowSignal('failure','DeenClipped needs your attention',`${item.title} did not finish. Open the workspace to review the error.`,`${key}:failed`,item.kind==='publish'?'schedule':'projects');
-  });
-  workflowBaseline=current;
-}
-
 const ICON = {
-  home:'<svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/><path d="m9 21 6 0"/></svg>',
-  projects:'<svg viewBox="0 0 24 24"><path d="M3 7.5h6l2-2h10v14H3Z"/><path d="M3 10h18"/></svg>',
-  review:'<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 3v3h6V3M8 13l2.3 2.3L16.5 9"/></svg>',
-  editor:'<svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16Z"/><path d="m13.5 6.5 4 4M4 12H2m20 0h-2M12 4V2m0 20v-2"/></svg>',
-  publish:'<svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/></svg>',
-  analytics:'<svg viewBox="0 0 24 24"><path d="M4 20V10m5 10V4m6 16v-7m5 7H2"/><path d="m4 7 5-4 6 6 5-4"/></svg>',
-  social:'<svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="m8.7 10.7 6.6-3.4m-6.6 6 6.6 3.4"/></svg>',
-  music:'<svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/><path d="M9 9l11-2"/></svg>',
-  settings:'<svg viewBox="0 0 24 24"><path d="M4 7h10m4 0h2M4 17h2m4 0h10M4 12h3m4 0h9"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/><circle cx="9" cy="12" r="2"/></svg>',
+  home:'<svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3Z"/></svg>',
+  projects:'<svg viewBox="0 0 24 24"><path d="M3.5 6.5h6l1.8 2h9.2v11H3.5Z"/></svg>',
+  review:'<svg viewBox="0 0 24 24"><path d="M5 4h14v16H5Z"/><path d="m8 12 2.2 2.2L16 8.5"/></svg>',
+  editor:'<svg viewBox="0 0 24 24"><path d="m4 16.5 9-9 3.5 3.5-9 9H4Z"/><path d="m15 6 1.5-1.5a2 2 0 0 1 2.8 0l.2.2a2 2 0 0 1 0 2.8L18 9"/></svg>',
+  publish:'<svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 20h16"/></svg>',
+  analytics:'<svg viewBox="0 0 24 24"><path d="M4 20V11m5 9V4m6 16v-7m5 7H2"/></svg>',
+  social:'<svg viewBox="0 0 24 24"><circle cx="7" cy="12" r="3"/><circle cx="17" cy="6" r="3"/><circle cx="17" cy="18" r="3"/><path d="m9.5 10.5 5-3m-5 6 5 3"/></svg>',
+  music:'<svg viewBox="0 0 24 24"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>',
+  settings:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>',
   captions:'<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 10a3 3 0 1 0 0 4m7-4a3 3 0 1 0 0 4"/></svg>',
-  // A serif "T" on a baseline: hand-placed type, deliberately unlike the
-  // speech-bubble reading of the captions mark next to it.
-  text:'<svg viewBox="0 0 24 24"><path d="M5 6V4h14v2"/><path d="M12 4v14"/><path d="M9 18h6"/><path d="M4 21h16"/></svg>',
   canvas:'<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8v8H8Z"/></svg>',
   style:'<svg viewBox="0 0 24 24"><path d="M12 3 4 8v8l8 5 8-5V8Z"/><path d="m4 8 8 5 8-5M12 13v8"/></svg>',
   audio:'<svg viewBox="0 0 24 24"><path d="M5 9v6h4l5 4V5L9 9Z"/><path d="M17 9a4 4 0 0 1 0 6m2-8a7 7 0 0 1 0 10"/></svg>',
   details:'<svg viewBox="0 0 24 24"><path d="M5 4h14v16H5Z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>',
   chevron:'<svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>',
-  link:'<svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1"/></svg>',
   search:'<svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>',
   menu:'<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
   collapse:'<svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg>',
@@ -184,18 +57,13 @@ const ICON = {
   redo:'<svg viewBox="0 0 24 24"><path d="m15 7 5 5-5 5"/><path d="M19 12h-8a6 6 0 0 0-6 6"/></svg>',
   play:'<svg viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z"/></svg>',
   pause:'<svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>',
-  refresh:'<svg viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M19 12a7 7 0 1 0-1.8 4.7"/></svg>',
   back:'<svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg>',
   check:'<svg viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"/></svg>',
   warning:'<svg viewBox="0 0 24 24"><path d="M12 3 2.5 20.5h19Z"/><path d="M12 9v5m0 3h.01"/></svg>',
   clock:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   sparkles:'<svg viewBox="0 0 24 24"><path d="M12 3 13.8 8.2 19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z"/><path d="M19 15l.9 2.6 2.6.9-2.6.9L19 23l-.9-2.6-2.6-.9 2.6-.9Z"/></svg>',
   tokens:'<svg viewBox="0 0 24 24"><path d="M12 3 20 7.5v9L12 21l-8-4.5v-9Z"/><path d="M8.3 9.7 12 7.7l3.7 2-3.7 2.1Z"/><path d="M12 11.8v4.5"/></svg>',
-  billing:'<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3 9h18M7 15h4"/></svg>',
   scissors:'<svg viewBox="0 0 24 24"><circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="M8.7 8.7 20 20M8.7 15.3 20 4"/></svg>',
-  brand:'<svg viewBox="0 0 24 24"><path d="M12 3 4 7v6c0 4.6 3.1 7.1 8 8 4.9-.9 8-3.4 8-8V7Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>',
-  lab:'<svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v5l-5 9a2.5 2.5 0 0 0 2.2 4h9.6A2.5 2.5 0 0 0 19 17l-5-9V3"/><path d="M7.5 16h9M9.5 12h5"/></svg>',
-  quality:'<svg viewBox="0 0 24 24"><path d="M12 3 4 7v5c0 4.8 3.1 7.7 8 9 4.9-1.3 8-4.2 8-9V7Z"/><path d="m8.5 12.2 2.2 2.2 4.9-5"/><path d="M12 3v3"/></svg>',
   youtube:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31.5 31.5 0 0 0 0 12a31.5 31.5 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31.5 31.5 0 0 0 24 12a31.5 31.5 0 0 0-.5-5.8ZM9.6 15.6V8.4l6.3 3.6-6.3 3.6Z"/></svg>',
   tiktok:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.7 2c.4 3.2 2.2 5.1 5.3 5.3v3.6c-1.8.2-3.5-.4-5.2-1.5v6.8c0 8.6-9.4 11.3-13.2 5.1-2.5-4.1-1-11.3 7-11.6v3.8c-.6.1-1.2.2-1.7.4-1.6.5-2.5 2-2.2 3.7.6 3.2 6.3 4.1 5.8-2.1V2h4.2Z"/></svg>',
   instagram:'<svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="1" fill="currentColor" stroke="none"/></svg>',
@@ -206,35 +74,23 @@ const CREATE_NAV = [
   ['home','Home','home'], ['projects','Projects','projects'], ['review','Review','review']
 ];
 const PUBLISH_NAV = [
-  ['schedule','Publishing','publish'], ['publishing','Channels','social']
+  ['schedule','Schedule','publish'], ['publishing','Channels','social']
 ];
 const STUDIO_NAV = [
-  ['templates','Templates','style'], ['brand','Brand Kit','brand','PRO'], ['lab','AI Director','lab','PRO'],
-  ['music','Audio','music'], ['insights','Insights','analytics'], ['automation','Settings','settings']
+  ['templates','Templates','style'], ['music','Audio','music'], ['insights','Insights','analytics'], ['automation','Settings','settings']
 ];
-const ACCOUNT_NAV = [['subscription','Subscription','billing']];
-// The browser never decides whether a paid feature is unlocked. This registry
-// only maps navigation to the server-computed billing feature used by
-// syncAccountExperience(); it keeps every Free / Pro badge consistent.
-const DC_V7_FEATURES = Object.freeze({
-  brand:{feature:'customBranding',label:'PRO'},
-  lab:{feature:'aiDirector',label:'PRO'},
-});
-const NAV = [...CREATE_NAV, ...PUBLISH_NAV, ...STUDIO_NAV, ...ACCOUNT_NAV];
+const NAV = [...CREATE_NAV, ...PUBLISH_NAV, ...STUDIO_NAV];
 const MANAGE = [];
-const CUSTOM = new Set(['home','projects','review','editor','schedule','publishing','templates','brand','lab','quality','music','automation','insights','subscription','admin']);
+const CUSTOM = new Set(['home','projects','review','editor','publishing','templates','music','automation','insights']);
 
 let currentView = 'home';
 let selectedProjectId = '';
-let reviewFocusClipId = '';
 let selectedClipId = '';
 let projectQuery = '';
 let projectFilter = 'all';
 let projectSort = 'newest';
 let reviewFilter = 'all';
 let reviewSort = 'score';
-let publishingQueueTab = 'slots';
-let publishingSlotDays = 5;
 let shellReady = false;
 let lastDataSignature = '';
 let lastWriteAt = 0;
@@ -244,15 +100,9 @@ const editor = {
   tool:'captions', captionTab:'styles', clipId:'', draft:null, captionText:'', captionWords:[],
   captionSource:'fallback', dirty:false, loading:false, history:[], historyIndex:-1,
   currentTime:0, trimIn:0, trimOut:0, playing:false, search:'', presetId:'',
-  sourceBase:0, sourceEnd:0, sourceFallback:false, bakedPreview:false, panelCollapsed:false,
-  // 1 means fitted. Kept as a multiplier on Fit rather than absolute px/s so
-  // the clip still fills the frame after the panel or window is resized.
-  timelineZoom:1, framingPlan:null, framingStatus:'idle',
+  sourceBase:0, sourceEnd:0, sourceFallback:false, framingPlan:null, framingStatus:'idle',
   framingMessage:'Active-speaker framing has not been analysed', framingRequest:0, framingTimer:null,
   canvasDragging:false, canvasDragStart:null, backendCaptionReady:false,
-  selectedLayer:'captions', safeZones:true, localSavedAt:0, saving:false, exporting:false, captionTimingReference:[],
-  appliedStyleId:'', appliedStyleSnapshot:null, saveStatus:'saved', saveError:'',
-  saveRevision:0, savedRevision:0, saveTimer:null, savePromise:null,
 };
 
 const css = String.raw`
@@ -263,20 +113,11 @@ const css = String.raw`
 .dc-btn{min-height:38px;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:0 13px;border:1px solid transparent;border-radius:8px;background:var(--dc-accent);color:#191207;font-size:11px;font-weight:650;white-space:nowrap}.dc-btn:hover:not(:disabled){background:var(--dc-accent2)}.dc-btn.secondary{background:transparent;color:var(--dc-text);border-color:var(--dc-line)}.dc-btn.secondary:hover:not(:disabled){background:var(--dc-panel2);border-color:var(--dc-line2)}.dc-btn.danger{background:transparent;color:var(--dc-red);border-color:rgba(239,107,122,.3)}.dc-btn:disabled{opacity:.45;cursor:not-allowed}.dc-icon-btn{width:36px;height:36px;display:grid;place-items:center;border:1px solid var(--dc-line);border-radius:8px;color:var(--dc-muted)}.dc-icon-btn:hover:not(:disabled){background:var(--dc-panel2);color:var(--dc-text)}.dc-page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:17px}.dc-page-head h1{font-size:26px;margin:0;letter-spacing:-.02em}.dc-page-head p{font-size:11px;color:var(--dc-muted);margin:5px 0 0}.dc-card{background:var(--dc-panel);border:1px solid var(--dc-line);border-radius:var(--dc-radius)}.dc-card-pad{padding:17px}.dc-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:13px}.dc-card-head h2{font-size:13px;margin:0}.dc-card-head p{font-size:9px;color:var(--dc-muted);margin:3px 0 0}.dc-pill{display:inline-flex;align-items:center;min-height:22px;padding:0 8px;border-radius:999px;background:var(--dc-panel3);color:var(--dc-muted);font-size:9px}.dc-pill.good{background:rgba(83,199,139,.1);color:var(--dc-green)}.dc-pill.warn{background:rgba(229,169,87,.1);color:var(--dc-orange)}.dc-pill.bad{background:rgba(239,107,122,.1);color:var(--dc-red)}.dc-empty{padding:26px 16px;text-align:center;color:var(--dc-muted);font-size:10px;border:1px dashed var(--dc-line);border-radius:8px}.dc-empty strong{display:block;color:var(--dc-text);font-size:12px;margin-bottom:4px}
 .dc-create-card{padding:22px;background:linear-gradient(135deg,#18130d,#111113 48%);border-color:rgba(217,180,120,.25)}.dc-create-card h2{font-size:23px;margin:0}.dc-create-card>p{font-size:10px;color:var(--dc-muted);margin:6px 0 15px}.dc-create-grid{display:grid;grid-template-columns:minmax(260px,1fr) 170px 120px 145px auto;gap:8px}.dc-create-grid input,.dc-create-grid select,.dc-filterbar input,.dc-filterbar select,.dc-tool-panel input,.dc-tool-panel select,.dc-tool-panel textarea{width:100%;height:38px;min-height:38px;padding:0 10px;border:1px solid var(--dc-line);border-radius:8px;background:#0b0b0d;color:var(--dc-text)}.dc-tool-panel textarea{height:auto;min-height:88px;padding:9px;resize:vertical}.dc-home-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}.dc-metric{padding:14px;background:var(--dc-panel);border:1px solid var(--dc-line);border-radius:9px}.dc-metric strong,.dc-metric span{display:block}.dc-metric strong{font-size:21px}.dc-metric span{font-size:9px;color:var(--dc-muted);margin-top:3px}.dc-home-grid{display:grid;grid-template-columns:minmax(0,1.32fr) minmax(330px,.68fr);gap:14px}.dc-stack{display:flex;flex-direction:column;gap:14px}.dc-now-list,.dc-row-list{display:flex;flex-direction:column;gap:7px}.dc-now-row,.dc-list-row{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--dc-line);border-radius:8px;background:#0b0b0d}.dc-now-main,.dc-list-copy{flex:1;min-width:0}.dc-now-main strong,.dc-now-main span,.dc-list-copy strong,.dc-list-copy span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-now-main strong,.dc-list-copy strong{font-size:10.5px}.dc-now-main span,.dc-list-copy span{font-size:9px;color:var(--dc-muted);margin-top:2px}.dc-spinner{width:13px;height:13px;flex:0 0 13px;border:2px solid var(--dc-line2);border-top-color:var(--dc-accent);border-radius:50%;animation:dcSpin .8s linear infinite}.dc-progress{height:3px;margin-top:7px;background:var(--dc-line);border-radius:99px;overflow:hidden}.dc-progress i{display:block;height:100%;background:var(--dc-accent)}.dc-thumb{width:58px;height:38px;flex:0 0 58px;object-fit:cover;border-radius:5px;background:#000}.dc-social-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.dc-social-card{padding:11px;border:1px solid var(--dc-line);border-radius:8px;background:#0b0b0d}.dc-social-top{display:flex;align-items:center;gap:8px}.dc-social-logo{width:29px;height:29px;display:grid;place-items:center;border-radius:8px;background:var(--dc-panel3);font-size:10px;font-weight:800}.dc-social-copy{flex:1;min-width:0}.dc-social-copy strong,.dc-social-copy span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-social-copy strong{font-size:10px}.dc-social-copy span{font-size:8.5px;color:var(--dc-muted);margin-top:2px}.dc-social-card .dc-btn{width:100%;height:31px;min-height:31px;margin-top:8px;font-size:9px}
 .dc-filterbar{display:grid;grid-template-columns:minmax(220px,1fr) 170px 170px;gap:8px;margin-bottom:13px}.dc-project-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px}.dc-project-card{overflow:hidden;background:var(--dc-panel);border:1px solid var(--dc-line);border-radius:10px}.dc-project-cover{height:150px;position:relative;background:#0b0b0d;overflow:hidden}.dc-project-cover img{width:100%;height:100%;object-fit:cover;filter:brightness(.78)}.dc-project-cover .dc-project-status{position:absolute;top:10px;right:10px}.dc-project-body{padding:14px}.dc-project-body h3{font-size:13px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-project-body p{font-size:9px;color:var(--dc-muted);margin:5px 0 12px}.dc-project-stats{display:flex;gap:12px;margin-bottom:12px}.dc-project-stat strong,.dc-project-stat span{display:block}.dc-project-stat strong{font-size:12px}.dc-project-stat span{font-size:8px;color:var(--dc-subtle)}.dc-project-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}.dc-project-detail-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}.dc-project-detail-copy{flex:1}.dc-project-detail-copy h1{font-size:20px;margin:0}.dc-project-detail-copy p{font-size:10px;color:var(--dc-muted);margin:4px 0 0}.dc-clip-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.dc-clip-card{overflow:hidden;background:var(--dc-panel);border:1px solid var(--dc-line);border-radius:10px}.dc-clip-media{position:relative;width:100%;aspect-ratio:9/16;background:#000;overflow:hidden}.dc-clip-media img{width:100%;height:100%;object-fit:cover}.dc-score{position:absolute;left:9px;bottom:9px;min-width:30px;height:24px;padding:0 7px;display:grid;place-items:center;border-radius:999px;background:#0a0a0dcc;color:#b9ff69;font-size:10px;font-weight:800}.dc-duration{position:absolute;right:9px;top:9px;padding:4px 7px;border-radius:999px;background:#0a0a0dcc;color:#fff;font-size:9px}.dc-clip-body{padding:12px}.dc-clip-body h3{font-size:11px;line-height:1.35;margin:0;min-height:30px}.dc-clip-body p{font-size:8.5px;color:var(--dc-muted);margin:5px 0 10px}.dc-clip-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}.dc-clip-actions .dc-btn{width:100%;min-width:0;padding:0 7px;font-size:9.5px}.dc-review-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}.dc-review-toolbar .spacer{flex:1}
-.dc-editor-page{max-width:none!important;height:calc(100vh - var(--dc-top) - 42px);min-height:650px;display:grid;grid-template-rows:auto minmax(0,1fr) var(--dc-timeline-h,clamp(124px,18vh,174px));min-width:0;overflow:hidden}.dc-editor-header{height:52px;display:flex;align-items:center;gap:9px;padding:0 11px;border:1px solid var(--dc-line);border-bottom:0;border-radius:10px 10px 0 0;background:var(--dc-panel)}.dc-editor-title{flex:1;min-width:0}.dc-editor-title strong,.dc-editor-title span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-editor-title strong{font-size:11px}.dc-editor-title span{font-size:8.5px;color:var(--dc-muted);margin-top:2px}.dc-editor-workspace{min-height:0;min-width:0;display:grid;grid-template-columns:62px var(--dc-tool-panel,292px) minmax(0,1fr);transition:grid-template-columns .18s ease;border:1px solid var(--dc-line);border-bottom:0;overflow:hidden;background:#080809}.dc-tool-rail{min-height:0;overflow:hidden auto;padding:8px 6px;background:#0d0d0f;border-right:1px solid var(--dc-line);display:flex;flex-direction:column;gap:5px}.dc-tool-button{width:50px;min-height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border-radius:8px;color:var(--dc-subtle)}.dc-tool-button:hover{background:var(--dc-panel2);color:var(--dc-text)}.dc-tool-button.on{background:rgba(217,180,120,.12);color:var(--dc-accent2)}.dc-tool-icon{width:20px;height:20px}.dc-tool-button span{font-size:7.5px}.dc-tool-panel{min-height:0;min-width:0;display:grid;grid-template-rows:auto minmax(0,1fr);background:var(--dc-panel);border-right:1px solid var(--dc-line);overflow:hidden}.dc-tool-head{height:50px;flex:0 0 50px;display:flex;align-items:center;justify-content:space-between;padding:0 13px;border-bottom:1px solid var(--dc-line)}.dc-tool-head strong{font-size:11px}.dc-tool-content{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:12px}.dc-subtabs{display:flex;gap:4px;padding:4px;background:#0b0b0d;border:1px solid var(--dc-line);border-radius:8px;margin-bottom:12px}.dc-subtabs button{flex:1;min-height:30px;border-radius:6px;color:var(--dc-muted);font-size:8.5px}.dc-subtabs button.on{background:var(--dc-panel3);color:var(--dc-text)}.dc-section{margin-bottom:16px}.dc-section h3{font-size:9px;color:var(--dc-accent2);text-transform:uppercase;letter-spacing:.08em;margin:0 0 8px}.dc-field{margin-bottom:9px}.dc-field>label{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:8.5px;color:var(--dc-muted);margin-bottom:5px}.dc-field>label b{color:var(--dc-text);font-size:8px}.dc-field input[type=range]{height:22px;padding:0;background:transparent;border:0}.dc-field input[type=color]{height:36px;padding:3px}.dc-check{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:7px!important;font-size:9px!important;color:var(--dc-muted)!important}.dc-check input{width:15px!important;height:15px!important;min-height:15px!important}.dc-style-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.dc-style-card{min-height:76px;padding:9px;border:1px solid var(--dc-line);border-radius:8px;background:#0b0b0d;color:var(--dc-muted);text-align:left}.dc-style-card:hover,.dc-style-card.on{border-color:rgba(217,180,120,.65);color:var(--dc-text)}.dc-style-preview{height:31px;display:grid;place-items:center;border-radius:5px;background:#25252a;color:#fff;font-size:9px;font-weight:800;overflow:hidden}.dc-style-card b,.dc-style-card span{display:block}.dc-style-card b{font-size:8.5px;margin-top:7px}.dc-style-card span{font-size:7.5px;color:var(--dc-subtle);margin-top:2px}.dc-color-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.dc-position-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.dc-position-grid button{height:34px;border:1px solid var(--dc-line);border-radius:6px;color:var(--dc-subtle)}.dc-position-grid button.on{border-color:var(--dc-accent);background:rgba(217,180,120,.12);color:var(--dc-accent2)}.dc-caption-editor{min-height:160px!important;line-height:1.5}.dc-caption-note{padding:9px;border:1px solid var(--dc-line);border-radius:7px;background:#0b0b0d;color:var(--dc-muted);font-size:8px;line-height:1.5}.dc-caption-list{display:flex;flex-direction:column;gap:5px;max-height:260px;overflow:auto}.dc-caption-line{display:grid;grid-template-columns:40px 1fr;gap:7px;padding:7px;border:1px solid var(--dc-line);border-radius:7px;background:#0b0b0d}.dc-caption-line span{font-size:8px;color:var(--dc-subtle)}.dc-caption-line b{font-size:8.5px;line-height:1.4}.dc-canvas-area{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;background:#070708}.dc-canvas-toolbar{height:48px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--dc-line);background:#0c0c0e}.dc-canvas-toolbar .spacer{flex:1}.dc-zoom{font-size:8.5px;color:var(--dc-muted)}.dc-canvas-wrap{flex:1;min-height:0;display:grid;place-items:center;padding:16px;overflow:hidden;background-image:linear-gradient(45deg,#111 25%,transparent 25%),linear-gradient(-45deg,#111 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#111 75%),linear-gradient(-45deg,transparent 75%,#111 75%);background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0}.dc-video-canvas{position:relative;height:100%;max-height:100%;max-width:100%;width:auto;aspect-ratio:9/16;background:#000;overflow:hidden;box-shadow:0 18px 60px #000;border-radius:2px}.dc-video-canvas video{width:100%;height:100%;object-fit:contain}.dc-caption-overlay{position:absolute;left:50%;top:58%;width:86%;z-index:14;display:flex;flex-direction:column;align-items:center;pointer-events:auto;touch-action:none;cursor:grab;font-weight:800;line-height:.95;text-align:center;color:#fff;font-size:28px;-webkit-text-stroke:1.4px #000;paint-order:stroke fill;transform:translate(-50%,-50%);user-select:none}.dc-caption-overlay.is-dragging{cursor:grabbing}.dc-caption-overlay.is-resizing{cursor:nwse-resize}.dc-caption-overlay.is-selected{outline:1px solid rgba(255,255,255,.72);outline-offset:8px}.dc-caption-overlay.is-selected::after,.dc-caption-overlay.is-dragging::after,.dc-caption-overlay.is-resizing::after{content:'';position:absolute;right:-14px;bottom:-14px;width:28px;height:28px;border:3px solid #fff;border-radius:999px;background:rgba(0,0,0,.88);box-shadow:0 2px 14px #000;cursor:nwse-resize}.dc-caption-overlay.align-left{text-align:left;align-items:flex-start}.dc-caption-overlay.align-right{text-align:right;align-items:flex-end}.dc-snap-guide{position:absolute;z-index:18;pointer-events:none;display:none;background:rgba(217,180,120,.72);box-shadow:0 0 8px rgba(217,180,120,.3)}.dc-snap-guide.show{display:block}.dc-snap-guide.vertical{top:0;bottom:0;width:1px}.dc-snap-guide.horizontal{left:0;right:0;height:1px}.dc-caption-word{display:inline-block;margin:0 .08em}.dc-caption-word.active{color:var(--dc-cap-highlight,#fff);font-family:var(--dc-cap-highlight-font,serif);font-style:var(--dc-cap-highlight-style,italic);text-shadow:0 0 var(--dc-cap-highlight-glow,0px) currentColor;transform:scale(1.08)}.dc-caption-stack-line{display:block}.dc-caption-stack-line.active{color:var(--dc-cap-highlight,#fff);font-family:var(--dc-cap-highlight-font,serif);font-style:var(--dc-cap-highlight-style,italic);text-shadow:0 0 var(--dc-cap-highlight-glow,0px) currentColor;transform:scale(1.08)}.dc-caption-word.is-arabic,.dc-caption-stack-line.is-arabic{font-family:var(--dc-cap-arabic-font,Amiri),serif;font-style:normal}.dc-caption-bg{padding:.12em .28em;border-radius:.18em;background:var(--dc-cap-bg-color,transparent)}.dc-watermark{position:absolute;z-index:5;color:#d9b478;font-size:11px;font-weight:800;letter-spacing:.08em}.dc-watermark.top-left{top:4%;left:4%}.dc-watermark.top-center{top:4%;left:50%;transform:translateX(-50%)}.dc-watermark.top-right{top:4%;right:4%}.dc-watermark.bottom-left{bottom:4%;left:4%}.dc-watermark.bottom-center{bottom:4%;left:50%;transform:translateX(-50%)}.dc-watermark.bottom-right{bottom:4%;right:4%}.dc-brand-line{position:absolute;left:0;right:0;bottom:0;height:4px;background:var(--dc-accent)}.dc-caption-status{position:absolute;left:8px;bottom:8px;z-index:7;padding:4px 6px;border-radius:5px;background:#000b;color:#bbb;font-size:7px}.dc-timeline{display:flex;flex-direction:column;min-height:0;min-width:0;padding:9px 11px 10px;background:var(--dc-panel);border:1px solid var(--dc-line);border-radius:0 0 10px 10px;overflow:hidden}.dc-timeline-top{height:28px;flex:0 0 28px;display:flex;align-items:center;gap:8px}.dc-timeline-time{font-variant-numeric:tabular-nums;color:var(--dc-muted);font-size:8.5px}.dc-timeline-top .spacer{flex:1}.dc-timeline-scroll{position:relative;flex:1;min-height:0;overflow:auto;border:1px solid var(--dc-line);border-radius:7px;background:#0b0b0d}/* Same 56px gutter as .dc-track-row, so a ruler mark sits directly above the
-   caption spoken at that moment. They were previously measured from different
-   origins and silently disagreed. */
-.dc-ruler{position:sticky;top:0;z-index:9;height:20px;min-width:var(--dc-timeline-width,100%);display:grid;grid-template-columns:56px 1fr;border-bottom:1px solid var(--dc-line);background:#0e0e10;cursor:ew-resize}.dc-ruler-gutter{border-right:1px solid var(--dc-line)}.dc-ruler-marks{position:relative}.dc-ruler-marks span{position:absolute;top:5px;font-size:7px;color:var(--dc-subtle);transform:translateX(-50%);pointer-events:none;white-space:nowrap}.dc-track-row{height:33px;min-width:var(--dc-timeline-width,100%);display:grid;grid-template-columns:56px 1fr;border-bottom:1px solid rgba(41,41,47,.8)}.dc-track-row:last-child{border-bottom:0}.dc-track-label{display:flex;align-items:center;padding:0 7px;border-right:1px solid var(--dc-line);font-size:7.5px;color:var(--dc-subtle)}.dc-track-content{position:relative;overflow:hidden}.dc-video-block,.dc-audio-block{position:absolute;top:5px;bottom:5px;left:1%;right:1%;border-radius:4px;background:#325c7e;color:#dcefff;font-size:7px;display:flex;align-items:center;padding:0 6px}.dc-audio-block{background:#4e6540;color:#e5f8d7}.dc-caption-block{position:absolute;top:4px;bottom:4px;border-radius:4px;background:#6a4e7d;color:#f3e6fb;font-size:6.5px;display:flex;align-items:center;padding:0 4px;overflow:hidden;white-space:nowrap;cursor:pointer;border:1px solid transparent}.dc-caption-block.active{border-color:#fff;background:#8b61a4}.dc-playhead{position:absolute;top:0;bottom:0;width:1px;background:var(--dc-accent);z-index:12;pointer-events:none}.dc-playhead::before{content:'';position:absolute;top:2px;left:-6px;width:13px;height:13px;border-radius:3px;background:var(--dc-accent);box-shadow:0 1px 4px rgba(0,0,0,.6)}
-/* The grab target is deliberately far wider than the 1px line it moves; a
-   hairline is not a pointer target. It sits above the tracks so a drag that
-   starts on the head scrubs instead of selecting whatever caption is under it. */
-.dc-playhead-grip{position:absolute;top:0;bottom:0;width:17px;margin-left:-8px;z-index:13;cursor:ew-resize;touch-action:none}
-.dc-timeline-scroll.is-scrubbing{cursor:ew-resize}
-.dc-timeline-scroll.is-scrubbing .dc-caption-block{pointer-events:none}
+.dc-editor-page{max-width:none!important;height:calc(100vh - var(--dc-top) - 42px);min-height:650px}.dc-editor-header{height:52px;display:flex;align-items:center;gap:9px;padding:0 11px;border:1px solid var(--dc-line);border-bottom:0;border-radius:10px 10px 0 0;background:var(--dc-panel)}.dc-editor-title{flex:1;min-width:0}.dc-editor-title strong,.dc-editor-title span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-editor-title strong{font-size:11px}.dc-editor-title span{font-size:8.5px;color:var(--dc-muted);margin-top:2px}.dc-editor-workspace{height:calc(100% - 52px);display:grid;grid-template-columns:62px 292px minmax(390px,1fr);grid-template-rows:minmax(0,1fr) 174px;border:1px solid var(--dc-line);border-radius:0 0 10px 10px;overflow:hidden;background:#080809}.dc-tool-rail{grid-row:1/3;padding:8px 6px;background:#0d0d0f;border-right:1px solid var(--dc-line);display:flex;flex-direction:column;gap:5px}.dc-tool-button{width:50px;min-height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border-radius:8px;color:var(--dc-subtle)}.dc-tool-button:hover{background:var(--dc-panel2);color:var(--dc-text)}.dc-tool-button.on{background:rgba(217,180,120,.12);color:var(--dc-accent2)}.dc-tool-icon{width:20px;height:20px}.dc-tool-button span{font-size:7.5px}.dc-tool-panel{grid-row:1/3;display:flex;flex-direction:column;background:var(--dc-panel);border-right:1px solid var(--dc-line);overflow:hidden}.dc-tool-head{height:50px;flex:0 0 50px;display:flex;align-items:center;justify-content:space-between;padding:0 13px;border-bottom:1px solid var(--dc-line)}.dc-tool-head strong{font-size:11px}.dc-tool-content{flex:1;overflow:auto;padding:12px}.dc-subtabs{display:flex;gap:4px;padding:4px;background:#0b0b0d;border:1px solid var(--dc-line);border-radius:8px;margin-bottom:12px}.dc-subtabs button{flex:1;min-height:30px;border-radius:6px;color:var(--dc-muted);font-size:8.5px}.dc-subtabs button.on{background:var(--dc-panel3);color:var(--dc-text)}.dc-section{margin-bottom:16px}.dc-section h3{font-size:9px;color:var(--dc-accent2);text-transform:uppercase;letter-spacing:.08em;margin:0 0 8px}.dc-field{margin-bottom:9px}.dc-field>label{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:8.5px;color:var(--dc-muted);margin-bottom:5px}.dc-field>label b{color:var(--dc-text);font-size:8px}.dc-field input[type=range]{height:22px;padding:0;background:transparent;border:0}.dc-field input[type=color]{height:36px;padding:3px}.dc-check{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:7px!important;font-size:9px!important;color:var(--dc-muted)!important}.dc-check input{width:15px!important;height:15px!important;min-height:15px!important}.dc-style-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.dc-style-card{min-height:76px;padding:9px;border:1px solid var(--dc-line);border-radius:8px;background:#0b0b0d;color:var(--dc-muted);text-align:left}.dc-style-card:hover,.dc-style-card.on{border-color:rgba(217,180,120,.65);color:var(--dc-text)}.dc-style-preview{height:31px;display:grid;place-items:center;border-radius:5px;background:#25252a;color:#fff;font-size:9px;font-weight:800;overflow:hidden}.dc-style-card b,.dc-style-card span{display:block}.dc-style-card b{font-size:8.5px;margin-top:7px}.dc-style-card span{font-size:7.5px;color:var(--dc-subtle);margin-top:2px}.dc-color-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.dc-position-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.dc-position-grid button{height:34px;border:1px solid var(--dc-line);border-radius:6px;color:var(--dc-subtle)}.dc-position-grid button.on{border-color:var(--dc-accent);background:rgba(217,180,120,.12);color:var(--dc-accent2)}.dc-caption-editor{min-height:160px!important;line-height:1.5}.dc-caption-note{padding:9px;border:1px solid var(--dc-line);border-radius:7px;background:#0b0b0d;color:var(--dc-muted);font-size:8px;line-height:1.5}.dc-caption-list{display:flex;flex-direction:column;gap:5px;max-height:260px;overflow:auto}.dc-caption-line{display:grid;grid-template-columns:40px 1fr;gap:7px;padding:7px;border:1px solid var(--dc-line);border-radius:7px;background:#0b0b0d}.dc-caption-line span{font-size:8px;color:var(--dc-subtle)}.dc-caption-line b{font-size:8.5px;line-height:1.4}.dc-canvas-area{grid-column:3;grid-row:1;display:flex;flex-direction:column;min-width:0;background:#070708}.dc-canvas-toolbar{height:48px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--dc-line);background:#0c0c0e}.dc-canvas-toolbar .spacer{flex:1}.dc-zoom{font-size:8.5px;color:var(--dc-muted)}.dc-canvas-wrap{flex:1;display:grid;place-items:center;padding:16px;overflow:hidden;background-image:linear-gradient(45deg,#111 25%,transparent 25%),linear-gradient(-45deg,#111 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#111 75%),linear-gradient(-45deg,transparent 75%,#111 75%);background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0}.dc-video-canvas{position:relative;height:min(59vh,610px);max-width:100%;aspect-ratio:9/16;background:#000;overflow:hidden;box-shadow:0 18px 60px #000;border-radius:2px}.dc-video-canvas video{width:100%;height:100%;object-fit:contain}.dc-caption-overlay{position:absolute;left:50%;top:58%;width:86%;z-index:14;display:flex;flex-direction:column;align-items:center;pointer-events:auto;touch-action:none;cursor:grab;font-weight:800;line-height:.95;text-align:center;color:#fff;font-size:28px;-webkit-text-stroke:1.4px #000;paint-order:stroke fill;transform:translate(-50%,-50%);user-select:none}.dc-caption-overlay.is-dragging{cursor:grabbing}.dc-caption-overlay.is-resizing{cursor:nwse-resize}.dc-caption-overlay.is-selected{outline:1px solid rgba(255,255,255,.72);outline-offset:8px}.dc-caption-overlay.is-selected::after,.dc-caption-overlay.is-dragging::after,.dc-caption-overlay.is-resizing::after{content:'';position:absolute;right:-14px;bottom:-14px;width:28px;height:28px;border:3px solid #fff;border-radius:999px;background:rgba(0,0,0,.88);box-shadow:0 2px 14px #000;cursor:nwse-resize}.dc-caption-overlay.align-left{text-align:left;align-items:flex-start}.dc-caption-overlay.align-right{text-align:right;align-items:flex-end}.dc-snap-guide{position:absolute;z-index:18;pointer-events:none;display:none;background:rgba(217,180,120,.72);box-shadow:0 0 8px rgba(217,180,120,.3)}.dc-snap-guide.show{display:block}.dc-snap-guide.vertical{top:0;bottom:0;width:1px}.dc-snap-guide.horizontal{left:0;right:0;height:1px}.dc-caption-word{display:inline-block;margin:0 .08em}.dc-caption-word.active{color:var(--dc-cap-highlight,#fff);font-family:var(--dc-cap-highlight-font,serif);font-style:var(--dc-cap-highlight-style,italic);text-shadow:0 0 var(--dc-cap-highlight-glow,0px) currentColor;transform:scale(1.08)}.dc-caption-stack-line{display:block}.dc-caption-stack-line.active{color:var(--dc-cap-highlight,#fff);font-family:var(--dc-cap-highlight-font,serif);font-style:var(--dc-cap-highlight-style,italic);text-shadow:0 0 var(--dc-cap-highlight-glow,0px) currentColor;transform:scale(1.08)}.dc-caption-word.is-arabic,.dc-caption-stack-line.is-arabic{font-family:var(--dc-cap-arabic-font,Amiri),serif;font-style:normal}.dc-caption-bg{padding:.12em .28em;border-radius:.18em;background:var(--dc-cap-bg-color,transparent)}.dc-watermark{position:absolute;z-index:5;color:#d9b478;font-size:11px;font-weight:800;letter-spacing:.08em}.dc-watermark.top-left{top:4%;left:4%}.dc-watermark.top-center{top:4%;left:50%;transform:translateX(-50%)}.dc-watermark.top-right{top:4%;right:4%}.dc-watermark.bottom-left{bottom:4%;left:4%}.dc-watermark.bottom-center{bottom:4%;left:50%;transform:translateX(-50%)}.dc-watermark.bottom-right{bottom:4%;right:4%}.dc-brand-line{position:absolute;left:0;right:0;bottom:0;height:4px;background:var(--dc-accent)}.dc-caption-status{position:absolute;left:8px;bottom:8px;z-index:7;padding:4px 6px;border-radius:5px;background:#000b;color:#bbb;font-size:7px}.dc-timeline{grid-column:3;grid-row:2;padding:9px 11px 10px;background:var(--dc-panel);border-top:1px solid var(--dc-line);overflow:hidden}.dc-timeline-top{height:28px;display:flex;align-items:center;gap:8px}.dc-timeline-time{font-variant-numeric:tabular-nums;color:var(--dc-muted);font-size:8.5px}.dc-timeline-top .spacer{flex:1}.dc-timeline-scroll{position:relative;height:124px;overflow:auto;border:1px solid var(--dc-line);border-radius:7px;background:#0b0b0d}.dc-ruler{position:relative;height:20px;min-width:var(--dc-timeline-width,100%);border-bottom:1px solid var(--dc-line);background:#0e0e10}.dc-ruler span{position:absolute;top:5px;font-size:7px;color:var(--dc-subtle);transform:translateX(-50%)}.dc-track-row{height:33px;min-width:var(--dc-timeline-width,100%);display:grid;grid-template-columns:56px 1fr;border-bottom:1px solid rgba(41,41,47,.8)}.dc-track-row:last-child{border-bottom:0}.dc-track-label{display:flex;align-items:center;padding:0 7px;border-right:1px solid var(--dc-line);font-size:7.5px;color:var(--dc-subtle)}.dc-track-content{position:relative;overflow:hidden}.dc-video-block,.dc-audio-block{position:absolute;top:5px;bottom:5px;left:1%;right:1%;border-radius:4px;background:#325c7e;color:#dcefff;font-size:7px;display:flex;align-items:center;padding:0 6px}.dc-audio-block{background:#4e6540;color:#e5f8d7}.dc-caption-block{position:absolute;top:4px;bottom:4px;border-radius:4px;background:#6a4e7d;color:#f3e6fb;font-size:6.5px;display:flex;align-items:center;padding:0 4px;overflow:hidden;white-space:nowrap;cursor:pointer;border:1px solid transparent}.dc-caption-block.active{border-color:#fff;background:#8b61a4}.dc-playhead{position:absolute;top:20px;bottom:0;width:1px;background:var(--dc-accent);z-index:8;pointer-events:none}.dc-playhead::before{content:'';position:absolute;top:-4px;left:-4px;width:9px;height:9px;border-radius:50%;background:var(--dc-accent)}
 #dcWork{position:fixed;left:50%;bottom:22px;z-index:300;display:none;align-items:center;gap:12px;width:min(620px,calc(100vw - 34px));min-height:62px;padding:10px 48px 10px 16px;border:1px solid rgba(217,180,120,.34);border-radius:999px;background:linear-gradient(135deg,rgba(18,18,22,.78),rgba(9,9,11,.66));box-shadow:0 0 0 1px rgba(255,255,255,.045) inset,0 0 34px rgba(217,180,120,.22),0 20px 70px rgba(0,0,0,.48);backdrop-filter:blur(20px) saturate(1.18);transform:translate(-50%,18px) scale(.98);opacity:0;overflow:hidden;pointer-events:none}#dcWork.show{display:flex;pointer-events:auto;animation:dcWorkIn .28s cubic-bezier(.2,.8,.2,1) forwards}#dcWork::before{content:'';position:absolute;inset:-2px;background:linear-gradient(100deg,transparent,rgba(217,180,120,.15),rgba(85,183,255,.10),transparent);transform:translateX(-110%);animation:dcWorkGlow 2.3s linear infinite;pointer-events:none}#dcWork .dc-work-toast-orb{position:relative;z-index:1;width:38px;height:38px;flex:0 0 38px;border-radius:50%;display:grid;place-items:center;background:rgba(217,180,120,.14);color:var(--dc-accent2);box-shadow:0 0 0 6px rgba(217,180,120,.06)}#dcWork .dc-work-toast-copy{position:relative;z-index:1;min-width:0;flex:1}#dcWork strong,#dcWork span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#dcWork strong{font-size:12px;letter-spacing:.01em}#dcWork span{font-size:9px;color:var(--dc-muted);margin-top:3px}#dcWork .dc-work-toast-progress{position:absolute;left:58px;right:58px;bottom:7px;height:3px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden}#dcWork .dc-work-toast-progress i{display:block;width:42%;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--dc-accent),var(--dc-accent2));animation:dcWorkBar 1.25s ease-in-out infinite}#dcWorkClose{position:absolute;right:10px;top:8px;z-index:2;width:24px;height:24px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.09);border-radius:50%;background:rgba(0,0,0,.32);color:var(--dc-muted);font-size:14px;line-height:1}#dcWorkClose:hover{color:var(--dc-text);border-color:rgba(255,255,255,.18)}#dcShade{display:none;position:fixed;inset:0;z-index:185;background:#0009}
 @keyframes dcSpin{to{transform:rotate(360deg)}}@keyframes dcPulse{50%{opacity:.35}}@keyframes dcWorkIn{to{opacity:1;transform:translate(-50%,0) scale(1)}}@keyframes dcWorkGlow{to{transform:translateX(110%)}}@keyframes dcWorkBar{0%{transform:translateX(-90%);width:28%}50%{width:58%}100%{transform:translateX(245%);width:28%}}
-@media(max-width:1250px){:root{--dc-side:208px}.dc-create-grid{grid-template-columns:minmax(220px,1fr) 150px 110px 135px}.dc-create-grid .dc-btn{grid-column:1/-1}.dc-home-grid{grid-template-columns:1fr}.dc-editor-workspace{grid-template-columns:58px var(--dc-tool-panel,260px) minmax(350px,1fr)}}
-@media(max-width:980px){:root{--dc-side:72px}body:not(.dc-side-expanded) .dc-brand-copy,body:not(.dc-side-expanded) .dc-nav-label,body:not(.dc-side-expanded) .dc-nav-name,body:not(.dc-side-expanded) .dc-collapse span{display:none}body:not(.dc-side-expanded) #dcBrand,body:not(.dc-side-expanded) .dc-nav-button,body:not(.dc-side-expanded) .dc-collapse{justify-content:center;padding-left:0;padding-right:0}.dc-home-metrics{grid-template-columns:1fr 1fr}.dc-create-grid{grid-template-columns:1fr 1fr}.dc-create-grid input{grid-column:1/-1}.dc-project-grid{grid-template-columns:repeat(auto-fit,minmax(255px,1fr))}.dc-editor-page{display:block;height:auto;min-height:0;overflow:visible}.dc-editor-workspace{height:auto;grid-template-columns:58px minmax(260px,1fr);grid-template-rows:360px minmax(520px,auto)}.dc-tool-rail{grid-row:1/3}.dc-tool-panel{grid-column:2;grid-row:1;max-height:360px;border-right:0;border-bottom:1px solid var(--dc-line)}.dc-canvas-area{grid-column:2;grid-row:2;min-height:520px}.dc-timeline{max-height:210px}.dc-tool-content{max-height:310px}.dc-video-canvas{height:min(55vh,520px)}}
+@media(max-width:1250px){:root{--dc-side:208px}.dc-create-grid{grid-template-columns:minmax(220px,1fr) 150px 110px 135px}.dc-create-grid .dc-btn{grid-column:1/-1}.dc-home-grid{grid-template-columns:1fr}.dc-editor-workspace{grid-template-columns:58px 260px minmax(350px,1fr)}}
+@media(max-width:980px){:root{--dc-side:72px}body:not(.dc-side-expanded) .dc-brand-copy,body:not(.dc-side-expanded) .dc-nav-label,body:not(.dc-side-expanded) .dc-nav-name,body:not(.dc-side-expanded) .dc-collapse span{display:none}body:not(.dc-side-expanded) #dcBrand,body:not(.dc-side-expanded) .dc-nav-button,body:not(.dc-side-expanded) .dc-collapse{justify-content:center;padding-left:0;padding-right:0}.dc-home-metrics{grid-template-columns:1fr 1fr}.dc-create-grid{grid-template-columns:1fr 1fr}.dc-create-grid input{grid-column:1/-1}.dc-project-grid{grid-template-columns:repeat(auto-fit,minmax(255px,1fr))}.dc-editor-page{height:auto;min-height:0}.dc-editor-workspace{height:auto;grid-template-columns:58px minmax(260px,1fr);grid-template-rows:360px minmax(520px,auto) 174px}.dc-tool-rail{grid-row:1/4}.dc-tool-panel{grid-column:2;grid-row:1;max-height:360px;border-right:0;border-bottom:1px solid var(--dc-line)}.dc-canvas-area{grid-column:2;grid-row:2;min-height:520px}.dc-timeline{grid-column:2;grid-row:3}.dc-tool-content{max-height:310px}.dc-video-canvas{height:min(55vh,520px)}}
 @media(max-width:720px){:root{--dc-side:0px;--dc-top:58px}body.dc-app #app>.wrap{padding:calc(var(--dc-top) + env(safe-area-inset-top) + 12px) 10px calc(82px + env(safe-area-inset-bottom))!important}#dcSidebar{width:min(280px,86vw);transform:translateX(-102%);padding-top:env(safe-area-inset-top);box-shadow:var(--dc-shadow)}body.dc-menu-open #dcSidebar{transform:translateX(0)}body.dc-menu-open #dcShade{display:block}#dcTopbar{left:0;top:env(safe-area-inset-top);height:58px;padding:0 10px}.dc-mobile-menu{display:grid;place-items:center}.dc-page-title{min-width:0;flex:1}.dc-page-title span,.dc-global-search,.dc-health{display:none}.dc-top-actions .dc-btn{padding:0 10px}.dc-create-card{padding:16px}.dc-create-card h2{font-size:19px}.dc-create-grid,.dc-filterbar,.dc-social-grid{grid-template-columns:1fr}.dc-create-grid input{grid-column:auto}.dc-home-metrics{grid-template-columns:1fr 1fr}.dc-page-head h1{font-size:21px}.dc-project-grid,.dc-clip-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.dc-project-cover{height:110px}.dc-project-actions,.dc-clip-actions{grid-template-columns:1fr}.dc-editor-header{position:sticky;top:calc(58px + env(safe-area-inset-top));z-index:10}.dc-editor-workspace{grid-template-columns:1fr;grid-template-rows:58px auto minmax(470px,auto) 174px}.dc-tool-rail{grid-column:1;grid-row:1;flex-direction:row;overflow:auto;border-right:0;border-bottom:1px solid var(--dc-line);padding:4px}.dc-tool-button{min-width:58px;height:49px;min-height:49px}.dc-tool-panel{grid-column:1;grid-row:2;max-height:none}.dc-tool-content{max-height:none}.dc-canvas-area{grid-column:1;grid-row:3;min-height:470px}.dc-timeline{grid-column:1;grid-row:4}.dc-video-canvas{height:min(54dvh,490px)}.dc-style-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:460px){.dc-project-grid,.dc-clip-grid{grid-template-columns:1fr}.dc-home-metrics{grid-template-columns:1fr 1fr}.dc-page-title strong{font-size:12px}.dc-top-actions .dc-btn span{display:none}.dc-caption-overlay{font-size:22px}.dc-editor-header .dc-pill{display:none}.dc-style-grid{grid-template-columns:1fr 1fr}}
 
@@ -392,11 +233,11 @@ const css = String.raw`
 .dc-frame-note{padding:9px 10px;border-radius:8px;background:rgba(217,180,120,.06);color:var(--dc-muted);font-size:8.5px;line-height:1.5;margin-top:8px}
 .dc-ai-primary{width:100%;min-height:44px;margin-top:8px}.dc-framing-state{margin-top:10px}
 .dc-caption-warning{font-size:9px}.dc-project-actions{grid-template-columns:1fr}.dc-clip-actions{grid-template-columns:1fr 1fr}
-.dc-editor-workspace{grid-template-columns:62px var(--dc-tool-panel,340px) minmax(390px,1fr)}.dc-editor-header{height:58px}.dc-editor-workspace{height:calc(100% - 58px)}
+.dc-editor-workspace{grid-template-columns:62px 340px minmax(390px,1fr)}.dc-editor-header{height:58px}.dc-editor-workspace{height:calc(100% - 58px)}
 .dc-editor-header .dc-btn{min-height:36px}.dc-editor-header .dc-pill{display:none}
 .dc-canvas-toolbar .dc-zoom{max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dc-timeline-top .dc-btn{display:none}
-@media(max-width:1250px){.dc-editor-workspace{grid-template-columns:58px var(--dc-tool-panel,300px) minmax(350px,1fr)}}
+@media(max-width:1250px){.dc-editor-workspace{grid-template-columns:58px 300px minmax(350px,1fr)}}
 @media(max-width:720px){.dc-sync-actions{grid-template-columns:1fr 1fr}.dc-sync-actions .dc-btn:first-child{grid-column:1/-1}.dc-fill-options{grid-template-columns:1fr}.dc-editor-header{height:auto;min-height:58px;padding:8px}.dc-editor-title span{display:none}}
 
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}}
@@ -472,7 +313,6 @@ body.dc-side-collapsed .dc-sidebar-live{display:none}
 const v3ProjectCss = String.raw`
 /* V3E: project detail fit, cleaner home, complete clip actions */
 body.dc-app{overflow-x:hidden!important}
-body.dc-app #libraryBrowser{display:none!important}
 body.dc-project-open .library-browser-foot,body.dc-project-open .library-actions,body.dc-project-open .bulk-actions{display:none!important}
 body.dc-project-open #view-projects{width:100%!important;max-width:none!important;overflow:visible!important}
 body.dc-project-open .main-col,body.dc-project-open #app>.wrap{overflow-x:hidden!important}
@@ -848,74 +688,6 @@ body.dc-app #view-schedule .slot-card.open .slot-media{
 
 `;
 
-const publishingWorkspaceCss = String.raw`
-/* Publishing workspace: the real product now matches the polished launch preview. */
-body.dc-app #view-schedule{max-width:1540px;margin:0 auto}
-.dc-publish-page{display:grid;gap:14px}
-.dc-publish-hero{position:relative;overflow:hidden;display:flex;align-items:flex-end;justify-content:space-between;gap:22px;padding:26px 28px;border:1px solid rgba(217,180,120,.2);border-radius:26px;background:radial-gradient(circle at 4% 0,rgba(217,180,120,.16),transparent 36%),radial-gradient(circle at 92% 15%,rgba(90,174,255,.09),transparent 32%),linear-gradient(145deg,#151519,#0c0c0f);box-shadow:0 26px 70px rgba(0,0,0,.22)}
-.dc-publish-hero:after{content:'';position:absolute;right:-80px;top:-110px;width:310px;height:310px;border:1px solid rgba(217,180,120,.09);border-radius:50%;box-shadow:0 0 90px rgba(217,180,120,.05);pointer-events:none}
-.dc-publish-kicker{display:inline-flex;align-items:center;gap:7px;color:var(--dc-accent2);font-size:9px;font-weight:850;letter-spacing:.12em;text-transform:uppercase}.dc-publish-kicker svg{width:15px;height:15px}
-.dc-publish-hero h1{margin:8px 0 7px;font-size:clamp(30px,3vw,42px);line-height:.98;letter-spacing:-.05em}.dc-publish-hero p{max-width:640px;margin:0;color:var(--dc-muted);font-size:11px;line-height:1.55}
-.dc-publish-summary{position:relative;z-index:1;display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.dc-publish-summary span{min-width:78px;padding:11px 13px;border:1px solid rgba(255,255,255,.075);border-radius:15px;background:rgba(0,0,0,.28)}.dc-publish-summary b,.dc-publish-summary em{display:block}.dc-publish-summary b{font-size:18px}.dc-publish-summary em{margin-top:2px;color:var(--dc-subtle);font-size:8px;font-style:normal}
-.dc-publish-layout{display:grid;grid-template-columns:minmax(0,1fr) 318px;gap:14px;align-items:start}
-.dc-publish-board,.dc-publish-side-card{overflow:hidden;border:1px solid rgba(255,255,255,.08);border-radius:24px;background:linear-gradient(180deg,#141417,#0d0d10);box-shadow:0 22px 60px rgba(0,0,0,.2)}
-.dc-publish-tabs{display:flex;min-height:60px;padding:0 16px;border-bottom:1px solid rgba(255,255,255,.075);background:rgba(255,255,255,.012)}
-.dc-publish-tab{position:relative;display:inline-flex;align-items:center;gap:8px;padding:0 17px;color:var(--dc-muted);font-size:10px;font-weight:720}.dc-publish-tab b{display:grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:rgba(255,255,255,.055);font-size:8px}.dc-publish-tab:hover{color:var(--dc-text)}.dc-publish-tab.on{color:var(--dc-text)}.dc-publish-tab.on:after{content:'';position:absolute;left:15px;right:15px;bottom:0;height:2px;background:linear-gradient(90deg,var(--dc-accent),var(--dc-accent2));box-shadow:0 0 16px rgba(217,180,120,.25)}.dc-publish-tab.on b{background:rgba(217,180,120,.13);color:var(--dc-accent2)}
-.dc-publish-slot-wrap{padding:14px;background:radial-gradient(circle at 100% 0,rgba(217,180,120,.055),transparent 30%)}.dc-publish-slot-tools{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:3px 3px 13px}.dc-publish-slot-tools strong,.dc-publish-slot-tools span{display:block}.dc-publish-slot-tools strong{font-size:11px}.dc-publish-slot-tools span{margin-top:3px;color:var(--dc-subtle);font-size:8px}.dc-publish-slot-tools .sched-range{display:flex;gap:4px;padding:4px;border:1px solid rgba(255,255,255,.07);border-radius:12px;background:rgba(0,0,0,.23)}.dc-publish-slot-tools .sched-range button{min-height:29px;padding:0 11px;border-radius:8px;color:var(--dc-muted);font-size:8px;font-weight:750}.dc-publish-slot-tools .sched-range button.on{background:rgba(217,180,120,.13);color:var(--dc-accent2);box-shadow:inset 0 0 0 1px rgba(217,180,120,.14)}.dc-publish-slot-wrap .schedule-board{border-radius:18px!important;box-shadow:none!important}.dc-publish-slot-wrap .slot-media svg{width:23px;height:23px}.dc-publish-slot-wrap .slot-open-icon{font-size:23px;color:var(--dc-accent2)}
-.dc-publish-columns{display:grid;grid-template-columns:minmax(260px,1.35fr) minmax(130px,.62fr) minmax(130px,.55fr) minmax(250px,.95fr);gap:14px;padding:11px 18px;border-bottom:1px solid rgba(255,255,255,.055);color:var(--dc-subtle);font-size:8px;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
-.dc-publish-list{display:grid}.dc-publish-row{display:grid;grid-template-columns:minmax(260px,1.35fr) minmax(130px,.62fr) minmax(130px,.55fr) minmax(250px,.95fr);gap:14px;align-items:center;min-height:112px;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.06);transition:background .2s ease}.dc-publish-row:hover{background:rgba(255,255,255,.025)}.dc-publish-row:last-child{border-bottom:0}
-.dc-publish-clip{display:grid;grid-template-columns:78px minmax(0,1fr);gap:12px;align-items:center}.dc-publish-thumb{position:relative;width:78px;height:78px;overflow:hidden;border-radius:13px;background:#08080a;border:1px solid rgba(255,255,255,.08)}.dc-publish-thumb img{width:100%;height:100%;object-fit:cover}.dc-publish-thumb>span{position:absolute;right:5px;bottom:5px;min-height:18px;padding:0 5px;display:grid;place-items:center;border-radius:6px;background:rgba(0,0,0,.76);font-size:7px;color:#fff}.dc-publish-thumb.empty{display:grid;place-items:center;color:var(--dc-accent)}.dc-publish-thumb.empty svg{width:24px;height:24px}
-.dc-publish-copy strong,.dc-publish-copy span{display:block}.dc-publish-copy strong{font-size:11px;line-height:1.35}.dc-publish-copy span{margin-top:5px;color:var(--dc-subtle);font-size:8.5px}.dc-publish-when{display:flex;gap:8px;align-items:flex-start}.dc-publish-when>span{width:27px;height:27px;display:grid;place-items:center;flex:0 0 27px;border-radius:9px;background:rgba(217,180,120,.08);color:var(--dc-accent2)}.dc-publish-when svg{width:14px;height:14px}.dc-publish-when b,.dc-publish-when em{display:block}.dc-publish-when b{font-size:9.5px}.dc-publish-when em{margin-top:3px;color:var(--dc-subtle);font-size:8px;font-style:normal}
-.dc-publish-brands{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.dc-publish-brand{width:29px;height:29px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.08);border-radius:9px;background:#19191d;color:#84848e}.dc-publish-brand svg{width:15px;height:15px}.dc-publish-brand.youtube.on{color:#ff4c55;background:rgba(255,76,85,.08)}.dc-publish-brand.tiktok.on{color:#fff}.dc-publish-brand.instagram.on{color:#f578c5;background:rgba(245,120,197,.08)}.dc-publish-brand.facebook.on{color:#6c9cff;background:rgba(108,156,255,.08)}.dc-publish-brand-more{font-size:8px;color:var(--dc-muted)}
-.dc-publish-actions{display:flex;justify-content:flex-end;align-items:center;gap:7px}.dc-publish-actions .dc-btn{min-height:35px;padding:0 11px;font-size:9px}.dc-publish-actions .dc-btn.primary{min-width:86px}.dc-publish-more{width:34px;height:34px;display:grid;place-items:center;color:var(--dc-muted);border-radius:9px}.dc-publish-more:hover{background:rgba(255,255,255,.05);color:var(--dc-text)}
-.dc-publish-empty{min-height:330px;display:grid;place-items:center;padding:34px;text-align:center}.dc-publish-empty>div{max-width:350px}.dc-publish-empty .dc-empty-icon{margin:0 auto 14px}.dc-publish-empty strong{display:block;font-size:15px}.dc-publish-empty p{margin:7px 0 16px;color:var(--dc-muted);font-size:10px;line-height:1.5}
-.dc-publish-board-foot{display:flex;align-items:center;justify-content:center;gap:10px;padding:13px;border-top:1px solid rgba(255,255,255,.065);color:var(--dc-muted);font-size:9px}.dc-publish-board-foot button{color:var(--dc-accent2);font-weight:750}.dc-publish-board-foot svg{width:14px;height:14px}
-.dc-publish-side{display:grid;gap:14px}.dc-publish-side-card{padding:15px}.dc-publish-side-head{display:flex;align-items:center;gap:9px;margin-bottom:13px}.dc-publish-side-head>span{width:31px;height:31px;display:grid;place-items:center;border-radius:10px;background:rgba(217,180,120,.09);color:var(--dc-accent2)}.dc-publish-side-head svg{width:16px;height:16px}.dc-publish-side-head strong,.dc-publish-side-head small{display:block}.dc-publish-side-head strong{font-size:11px}.dc-publish-side-head small{margin-top:2px;color:var(--dc-subtle);font-size:8px}
-.dc-publish-connection-list{display:grid;gap:6px}.dc-publish-connection{display:grid;grid-template-columns:31px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px;border:1px solid rgba(255,255,255,.06);border-radius:12px;background:rgba(0,0,0,.18)}.dc-publish-connection .dc-publish-brand{width:31px;height:31px}.dc-publish-connection strong,.dc-publish-connection small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-publish-connection strong{font-size:9px}.dc-publish-connection small{margin-top:2px;color:var(--dc-subtle);font-size:7.5px}.dc-publish-connection .dc-pill{min-height:20px;padding:0 7px;font-size:7px}
-.dc-publish-connect{width:100%;margin-top:9px}.dc-publish-previews{display:grid;grid-template-columns:1fr 1fr;gap:8px}.dc-publish-preview{position:relative;aspect-ratio:9/14;overflow:hidden;border-radius:13px;background:#08080a;border:1px solid rgba(255,255,255,.08)}.dc-publish-preview img{width:100%;height:100%;object-fit:cover;transition:transform .35s ease}.dc-publish-preview:hover img{transform:scale(1.04)}.dc-publish-preview span{position:absolute;left:7px;right:7px;bottom:7px;padding:6px;border-radius:8px;background:rgba(0,0,0,.72);color:#fff;font-size:7px;line-height:1.3}.dc-publish-preview.empty{display:grid;place-items:center;color:var(--dc-subtle)}
-@media(max-width:1220px){.dc-publish-layout{grid-template-columns:1fr}.dc-publish-side{grid-template-columns:1fr 1fr}.dc-publish-columns,.dc-publish-row{grid-template-columns:minmax(240px,1.25fr) minmax(120px,.62fr) minmax(120px,.5fr) minmax(230px,.9fr)}}
-@media(max-width:900px){.dc-publish-hero{align-items:flex-start;flex-direction:column}.dc-publish-summary{justify-content:flex-start}.dc-publish-columns{display:none}.dc-publish-row{grid-template-columns:minmax(0,1fr) auto}.dc-publish-when,.dc-publish-brands{grid-column:1}.dc-publish-actions{grid-column:2;grid-row:1/4;flex-direction:column;align-items:stretch}.dc-publish-side{grid-template-columns:1fr 1fr}}
-@media(max-width:620px){.dc-publish-hero{padding:21px}.dc-publish-tabs{padding:0;overflow:auto}.dc-publish-tab{padding:0 12px}.dc-publish-row{grid-template-columns:1fr;padding:14px}.dc-publish-actions{grid-column:1;grid-row:auto;flex-direction:row;justify-content:flex-start;flex-wrap:wrap}.dc-publish-side{grid-template-columns:1fr}.dc-publish-summary span{min-width:72px}.dc-publish-board-foot{flex-wrap:wrap;text-align:center}.dc-publish-slot-tools{align-items:flex-start;flex-direction:column}.dc-publish-slot-tools .sched-range{width:100%}.dc-publish-slot-tools .sched-range button{flex:1}.dc-publish-slot-wrap{padding:10px}}
-`;
-
-const premiumStudioCss = String.raw`
-/* DeenClipped visual system: restrained colour, clearer hierarchy, real icon language. */
-:root{--dc-blue:#65a9ff;--dc-purple:#ad8cff;--dc-pink:#f17ab8;--dc-teal:#5ed6c5;--dc-green:#63d89a;--dc-orange:#efb45f;--dc-gold:#dfb86f}
-body.dc-app{background:radial-gradient(circle at 76% -10%,rgba(76,101,170,.08),transparent 35%),radial-gradient(circle at 12% 110%,rgba(217,180,120,.07),transparent 34%),#070709!important}
-#dcSidebar{background:linear-gradient(180deg,rgba(14,14,17,.98),rgba(8,8,11,.99));box-shadow:20px 0 70px rgba(0,0,0,.18)}
-.dc-logo{background:radial-gradient(circle at 35% 20%,rgba(255,229,174,.18),transparent 45%),rgba(217,180,120,.08);box-shadow:0 0 26px rgba(217,180,120,.08),inset 0 0 0 1px rgba(255,255,255,.025)}
-.dc-nav-button{position:relative;border:1px solid transparent}.dc-nav-button .dc-nav-icon{border-radius:8px;transition:color .2s ease,background .2s ease,box-shadow .2s ease}.dc-nav-button .dc-nav-icon svg{width:18px;height:18px}
-.dc-nav-button[data-dc-nav="home"] .dc-nav-icon,.dc-nav-button[data-dc-nav="projects"] .dc-nav-icon{color:var(--dc-gold)}
-.dc-nav-button[data-dc-nav="review"] .dc-nav-icon{color:var(--dc-orange)}.dc-nav-button[data-dc-nav="schedule"] .dc-nav-icon{color:var(--dc-green)}.dc-nav-button[data-dc-nav="publishing"] .dc-nav-icon{color:var(--dc-purple)}
-.dc-nav-button[data-dc-nav="templates"] .dc-nav-icon{color:var(--dc-pink)}.dc-nav-button[data-dc-nav="music"] .dc-nav-icon{color:var(--dc-teal)}.dc-nav-button[data-dc-nav="insights"] .dc-nav-icon{color:var(--dc-blue)}.dc-nav-button[data-dc-nav="automation"] .dc-nav-icon{color:#9ca8bd}
-.dc-nav-button.is-active{border-color:rgba(255,255,255,.055);background:linear-gradient(90deg,rgba(217,180,120,.13),rgba(255,255,255,.025))}.dc-nav-button.is-active .dc-nav-icon{background:rgba(255,255,255,.05);box-shadow:0 0 22px currentColor}
-.dc-btn:not(.secondary):not(.danger){background:linear-gradient(135deg,#f0cb83,#d9ab5e);box-shadow:0 10px 28px rgba(217,180,120,.13),inset 0 1px rgba(255,255,255,.35)}.dc-btn:not(.secondary):not(.danger):hover:not(:disabled){background:linear-gradient(135deg,#f8dda8,#e2b96f);transform:translateY(-1px)}
-.dc-pill.good{background:rgba(99,216,154,.1);color:var(--dc-green);border:1px solid rgba(99,216,154,.12)}.dc-pill.warn{background:rgba(239,180,95,.1);color:var(--dc-orange);border:1px solid rgba(239,180,95,.12)}.dc-pill.bad{border:1px solid rgba(239,107,122,.13)}
-.dc-social-logo.youtube,.dc-manage-logo.youtube{color:#ff4c55!important;background:rgba(255,76,85,.09)!important}.dc-social-logo.tiktok,.dc-manage-logo.tiktok{color:#fff!important;background:linear-gradient(135deg,rgba(37,244,238,.12),rgba(254,44,85,.12))!important}.dc-social-logo.instagram,.dc-manage-logo.instagram{color:#f17ab8!important;background:linear-gradient(145deg,rgba(157,78,221,.14),rgba(255,112,67,.11))!important}.dc-social-logo.facebook,.dc-manage-logo.facebook{color:#6c9cff!important;background:rgba(108,156,255,.1)!important}
-.dc-manage-card,.dc-template-card,.dc-settings-panel,.dc-insight-panel,.dc-project-card{background:radial-gradient(circle at 100% 0,rgba(255,255,255,.028),transparent 33%),linear-gradient(150deg,#16161a,#0d0d10)!important}
-
-/* Source-first Projects library. */
-.dc-library-page{display:grid;gap:14px}.dc-library-hero{position:relative;overflow:hidden;display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:27px 29px;border:1px solid rgba(217,180,120,.19);border-radius:27px;background:radial-gradient(circle at 7% 0,rgba(217,180,120,.17),transparent 36%),radial-gradient(circle at 91% 12%,rgba(101,169,255,.1),transparent 31%),linear-gradient(145deg,#16161a,#0c0c0f);box-shadow:0 28px 75px rgba(0,0,0,.23)}
-.dc-library-hero:after{content:'';position:absolute;right:7%;top:-155px;width:330px;height:330px;border-radius:50%;border:1px solid rgba(101,169,255,.09);box-shadow:0 0 100px rgba(101,169,255,.06);pointer-events:none}.dc-library-hero-copy{position:relative;z-index:1}.dc-library-kicker{display:inline-flex;align-items:center;gap:8px;color:var(--dc-accent2);font-size:9px;font-weight:850;letter-spacing:.12em;text-transform:uppercase}.dc-library-kicker svg{width:16px;height:16px}.dc-library-hero h1{max-width:760px;margin:9px 0 7px;font-size:clamp(30px,3.4vw,45px);line-height:1;letter-spacing:-.052em}.dc-library-hero p{max-width:660px;margin:0;color:var(--dc-muted);font-size:11px;line-height:1.55}.dc-library-hero>.dc-btn{position:relative;z-index:1}
-.dc-library-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}.dc-library-metrics>div{display:grid;grid-template-columns:37px auto;grid-template-rows:auto auto;column-gap:10px;align-items:center;padding:12px 14px;border:1px solid rgba(255,255,255,.07);border-radius:16px;background:linear-gradient(145deg,#151519,#0d0d10)}.dc-library-metrics>div>span{grid-row:1/3;width:37px;height:37px;display:grid;place-items:center;border-radius:12px}.dc-library-metrics svg{width:18px;height:18px}.dc-library-metrics strong{font-size:17px}.dc-library-metrics small{color:var(--dc-subtle);font-size:8px}.dc-library-metrics .gold,.dc-library-side-head .gold{color:var(--dc-gold);background:rgba(223,184,111,.1)}.dc-library-metrics .purple,.dc-library-side-head .purple{color:var(--dc-purple);background:rgba(173,140,255,.1)}.dc-library-metrics .blue,.dc-library-side-head .blue{color:var(--dc-blue);background:rgba(101,169,255,.1)}.dc-library-metrics .orange,.dc-library-side-head .orange{color:var(--dc-orange);background:rgba(239,180,95,.1)}.dc-library-metrics .green,.dc-library-side-head .green{color:var(--dc-green);background:rgba(99,216,154,.1)}
-.dc-library-toolbar{display:grid;grid-template-columns:minmax(260px,1fr) 180px 160px;gap:8px}.dc-library-toolbar input,.dc-library-toolbar select{width:100%;height:42px;min-height:42px;border:1px solid rgba(255,255,255,.075);border-radius:12px;background:#101014;color:var(--dc-text)}.dc-library-search{position:relative}.dc-library-search>svg{position:absolute;left:13px;top:13px;width:16px;height:16px;fill:none;stroke:var(--dc-subtle);stroke-width:1.8;z-index:1}.dc-library-search input{padding-left:39px}
-.dc-library-layout{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:14px;align-items:start}.dc-library-projects,.dc-library-side-card{overflow:hidden;border:1px solid rgba(255,255,255,.075);border-radius:22px;background:linear-gradient(180deg,#141417,#0d0d10);box-shadow:0 22px 56px rgba(0,0,0,.17)}.dc-library-section-head{min-height:60px;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 17px;border-bottom:1px solid rgba(255,255,255,.065)}.dc-library-section-head h2,.dc-library-section-head p{margin:0}.dc-library-section-head h2{font-size:13px}.dc-library-section-head p{margin-top:3px;color:var(--dc-subtle);font-size:8px}
-.dc-library-row{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 44px;border-bottom:1px solid rgba(255,255,255,.055);transition:background .2s ease}.dc-library-row:last-child{border-bottom:0}.dc-library-row:hover{background:rgba(255,255,255,.025)}.dc-library-row-main{display:grid;grid-template-columns:82px minmax(0,1fr) minmax(105px,auto) 18px;gap:13px;align-items:center;min-height:94px;padding:13px 5px 13px 17px;text-align:left;color:var(--dc-text)}.dc-library-row-main>svg{width:16px;height:16px;color:var(--dc-subtle)}.dc-library-row-thumb{width:82px;height:64px;overflow:hidden;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:#09090b}.dc-library-row-thumb img{width:100%;height:100%;object-fit:cover}.dc-library-row-thumb.empty{display:grid;place-items:center;color:var(--dc-gold);background:radial-gradient(circle at 50% 20%,rgba(217,180,120,.16),transparent 50%),#0c0c0f}.dc-library-row-thumb.empty svg{width:24px;height:24px}.dc-library-row-copy strong,.dc-library-row-copy em{display:block}.dc-library-row-copy strong{font-size:11px;line-height:1.35}.dc-library-row-copy em{margin-top:4px;color:var(--dc-subtle);font-size:8px;font-style:normal}.dc-library-progress{display:block;height:3px;margin-top:9px;border-radius:99px;background:rgba(255,255,255,.06);overflow:hidden}.dc-library-progress i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--dc-gold),var(--dc-blue))}.dc-library-row-state{display:flex;align-items:center;justify-content:flex-start;gap:7px;color:var(--dc-muted);font-size:8px;white-space:nowrap}.dc-library-row-state i{width:7px;height:7px;border-radius:50%;background:var(--dc-green);box-shadow:0 0 12px currentColor}.dc-library-row-state.blue{color:var(--dc-blue)}.dc-library-row-state.blue i{background:var(--dc-blue)}.dc-library-row-state.orange{color:var(--dc-orange)}.dc-library-row-state.orange i{background:var(--dc-orange)}.dc-library-row-state.bad{color:var(--dc-red)}.dc-library-row-state.bad i{background:var(--dc-red)}
-.dc-library-row-menu{position:relative;display:grid;place-items:center}.dc-library-row-menu summary{width:34px;height:34px;display:grid;place-items:center;border-radius:9px;color:var(--dc-muted);cursor:pointer;list-style:none}.dc-library-row-menu summary::-webkit-details-marker{display:none}.dc-library-row-menu summary:hover{background:rgba(255,255,255,.05);color:var(--dc-text)}.dc-library-row-menu>div{position:absolute;z-index:30;right:8px;top:64px;width:170px;padding:6px;border:1px solid var(--dc-line2);border-radius:11px;background:#18181c;box-shadow:0 20px 50px #000}.dc-library-row-menu>div button{width:100%;padding:9px;border-radius:7px;color:var(--dc-text);font-size:9px;text-align:left}.dc-library-row-menu>div button:hover{background:rgba(255,255,255,.05)}.dc-library-row-menu>div button.danger{color:var(--dc-red)}
-.dc-library-side{display:grid;gap:12px}.dc-library-side-card{padding:14px}.dc-library-side-head{display:flex;align-items:center;gap:9px;margin-bottom:11px}.dc-library-side-head>span{width:34px;height:34px;display:grid;place-items:center;border-radius:11px}.dc-library-side-head svg{width:17px;height:17px}.dc-library-side-head strong,.dc-library-side-head small{display:block}.dc-library-side-head strong{font-size:10px}.dc-library-side-head small{margin-top:2px;color:var(--dc-subtle);font-size:7.5px}.dc-library-side-card>.wide{width:100%;margin-top:9px}
-.dc-library-flow{display:grid;gap:5px}.dc-library-flow button{display:grid;grid-template-columns:7px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px;border-radius:9px;color:var(--dc-muted);font-size:8.5px;text-align:left}.dc-library-flow button:hover{background:rgba(255,255,255,.035)}.dc-library-flow i{width:7px;height:7px;border-radius:50%}.dc-library-flow i.blue{background:var(--dc-blue)}.dc-library-flow i.orange{background:var(--dc-orange)}.dc-library-flow i.green{background:var(--dc-green)}.dc-library-flow b{color:var(--dc-text)}
-.dc-library-platforms{display:grid;gap:5px}.dc-library-platforms>div{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px}.dc-library-platforms .dc-publish-brand{width:26px;height:26px}.dc-library-platforms b{font-size:8.5px}.dc-library-platforms em{color:var(--dc-subtle);font-size:7px;font-style:normal}.dc-library-platforms em.on{color:var(--dc-green)}.dc-library-recent{display:grid;gap:5px}.dc-library-recent>button{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px;border-radius:9px;text-align:left;color:var(--dc-text)}.dc-library-recent>button:hover{background:rgba(255,255,255,.035)}.dc-library-recent img,.dc-library-recent>button>span{width:40px;height:31px;object-fit:cover;border-radius:7px;background:#09090b;display:grid;place-items:center}.dc-library-recent svg{width:14px;height:14px}.dc-library-recent strong{font-size:8.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-library-recent em{color:var(--dc-subtle);font-size:7px;font-style:normal}
-
-/* Editor now reads as a creative suite rather than a flat form. */
-body.dc-app .dc-editor-page{filter:drop-shadow(0 24px 70px rgba(0,0,0,.22))}.dc-editor-header{position:relative!important;border-color:rgba(217,180,120,.19)!important;background:radial-gradient(circle at 70% -180%,rgba(217,180,120,.16),transparent 48%),linear-gradient(180deg,#19191d,#111114)!important}.dc-editor-header:after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent,var(--dc-gold),var(--dc-purple),transparent);opacity:.45}.dc-editor-workspace{border-color:rgba(255,255,255,.09)!important;background:#08080b!important;box-shadow:inset 0 1px rgba(255,255,255,.025)}
-.dc-tool-rail{background:linear-gradient(180deg,#111116,#0a0a0d)!important}.dc-tool-button{min-height:58px!important;border:1px solid transparent!important}.dc-tool-button .dc-tool-icon{width:30px;height:30px;display:grid;place-items:center;border-radius:10px;background:rgba(255,255,255,.035)}.dc-tool-button .dc-tool-icon svg{width:17px;height:17px}.dc-tool-button[data-editor-tool="captions"]{color:var(--dc-purple)}.dc-tool-button[data-editor-tool="canvas"]{color:var(--dc-blue)}.dc-tool-button[data-editor-tool="style"]{color:var(--dc-pink)}.dc-tool-button[data-editor-tool="audio"]{color:var(--dc-teal)}.dc-tool-button[data-editor-tool="details"]{color:var(--dc-orange)}.dc-tool-button.on{border-color:rgba(255,255,255,.07)!important;background:linear-gradient(145deg,rgba(255,255,255,.075),rgba(255,255,255,.025))!important;box-shadow:inset 3px 0 currentColor}.dc-tool-button.on .dc-tool-icon{background:color-mix(in srgb,currentColor 15%,transparent);box-shadow:0 0 24px color-mix(in srgb,currentColor 15%,transparent)}
-.dc-tool-panel{background:radial-gradient(circle at 0 0,rgba(173,140,255,.045),transparent 30%),linear-gradient(180deg,#151519,#0e0e11)!important}.dc-tool-head{background:rgba(255,255,255,.012)}.dc-tool-content::-webkit-scrollbar{width:7px}.dc-tool-content::-webkit-scrollbar-thumb{background:#34343c;border-radius:99px}.dc-subtabs{border-radius:11px!important}.dc-subtabs button.on{background:linear-gradient(145deg,#2a2a31,#1d1d22)!important;box-shadow:0 5px 16px rgba(0,0,0,.2)}.dc-style-card{border-radius:11px!important;background:linear-gradient(145deg,#121216,#0b0b0e)!important}.dc-style-card:hover,.dc-style-card.on{box-shadow:0 12px 28px rgba(0,0,0,.24)}
-.dc-canvas-area{background:#08080b!important}.dc-canvas-toolbar{background:linear-gradient(180deg,#111115,#0d0d10)!important}.dc-canvas-wrap{background-image:radial-gradient(circle at 50% 45%,rgba(101,169,255,.07),transparent 38%),linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px)!important;background-size:auto,24px 24px,24px 24px!important;background-position:center,center,center!important}.dc-video-canvas{border:1px solid rgba(255,255,255,.11);box-shadow:0 30px 90px #000,0 0 0 1px rgba(217,180,120,.07),0 0 55px rgba(101,169,255,.05)!important}.dc-layer-switch,.dc-safe-toggle{border-radius:9px!important}.dc-layer-switch button.on,.dc-safe-toggle.on{background:rgba(101,169,255,.11)!important;color:#b9d8ff!important;border-color:rgba(101,169,255,.2)!important}.dc-caption-status{background:rgba(8,8,11,.82)!important;border:1px solid rgba(173,140,255,.18);color:#d8caff!important;backdrop-filter:blur(8px)}
-.dc-timeline{background:linear-gradient(180deg,#141418,#0e0e11)!important}.dc-timeline-scroll{border-radius:10px!important}.dc-video-block{background:linear-gradient(90deg,#285c87,#3f82b5)!important}.dc-caption-block{background:linear-gradient(90deg,#5d4380,#8560a8)!important}.dc-caption-block.active{background:linear-gradient(90deg,#8462ab,#b084dc)!important}.dc-audio-block{background:linear-gradient(90deg,#365d4a,#52866a)!important}.dc-playhead{box-shadow:0 0 14px rgba(217,180,120,.45)}
-@media(max-width:1180px){.dc-library-layout{grid-template-columns:1fr}.dc-library-side{grid-template-columns:repeat(3,minmax(0,1fr))}.dc-library-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media(max-width:760px){.dc-library-hero{align-items:flex-start;flex-direction:column;padding:21px}.dc-library-metrics{grid-template-columns:1fr 1fr}.dc-library-toolbar{grid-template-columns:1fr}.dc-library-side{grid-template-columns:1fr}.dc-library-row-main{grid-template-columns:66px minmax(0,1fr) 16px}.dc-library-row-thumb{width:66px;height:54px}.dc-library-row-state{grid-column:2}.dc-library-row-main>svg{grid-column:3;grid-row:1}.dc-library-section-head>.dc-pill{display:none}}
-`;
-
 
 const topbarCleanCss = String.raw`
 /* Phase billing topbar cleanup */
@@ -975,12 +747,6 @@ body.dc-app .dc-token-pill.warn{background:rgba(229,169,87,.09);border-color:rgb
 .dc-charge-head span,.dc-billing-notice-head span{display:inline-flex;align-items:center;gap:8px;color:var(--dc-accent2);font-size:9px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.dc-charge-head h2,.dc-billing-notice-head h2{margin:9px 0 0;font-size:25px;line-height:1.06;letter-spacing:-.04em}.dc-charge-head p,.dc-billing-notice-head p{margin:8px 0 0;color:var(--dc-muted);font-size:11px;line-height:1.55}.dc-charge-close,.dc-notice-close{width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,.10);background:#0b0b0d;color:var(--dc-muted);font-size:19px}.dc-charge-close:hover,.dc-notice-close:hover{color:var(--dc-text);border-color:rgba(255,255,255,.18)}
 .dc-charge-body{padding:18px 22px 22px}.dc-charge-summary{display:flex;align-items:center;gap:12px;padding:12px 13px;margin-bottom:12px;border:1px solid rgba(217,180,120,.18);border-radius:16px;background:linear-gradient(135deg,rgba(217,180,120,.10),rgba(255,255,255,.025))}.dc-charge-summary i{width:11px;height:11px;flex:0 0 11px;border-radius:999px;background:var(--dc-accent);box-shadow:0 0 0 5px rgba(217,180,120,.08)}.dc-charge-summary strong,.dc-charge-summary span{display:block}.dc-charge-summary strong{font-size:12px}.dc-charge-summary span{font-size:10px;color:var(--dc-muted);margin-top:2px}.dc-charge-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:10px;margin-bottom:10px}.dc-charge-tile{padding:14px;border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(255,255,255,.032)}.dc-charge-tile strong,.dc-charge-tile span{display:block}.dc-charge-tile strong{font-size:25px;letter-spacing:-.045em}.dc-charge-tile span{font-size:10px;color:var(--dc-muted);margin-top:4px}.dc-charge-estimate{display:grid;grid-template-columns:minmax(0,1fr) 146px;gap:10px;align-items:stretch;padding:12px;border:1px solid rgba(217,180,120,.22);border-radius:17px;background:rgba(217,180,120,.055);margin-bottom:12px}.dc-charge-estimate label{display:block;font-size:10px;color:var(--dc-muted)}.dc-charge-estimate input{width:100%;height:44px;margin-top:7px;padding:0 12px;border:1px solid rgba(255,255,255,.10);border-radius:12px;background:#0b0b0d;color:var(--dc-text);font-size:18px;font-weight:850}.dc-charge-cost{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:10px 12px;border:1px solid rgba(255,255,255,.08);border-radius:13px;background:rgba(0,0,0,.22)}.dc-charge-estimate b{display:block;font-size:30px;line-height:.95;letter-spacing:-.055em;color:var(--dc-accent2)}.dc-charge-estimate small{display:block;color:var(--dc-muted);font-size:9px;margin-top:6px;line-height:1.35}.dc-charge-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}.dc-charge-step{display:flex;gap:8px;align-items:flex-start;padding:10px;border:1px solid rgba(255,255,255,.07);border-radius:13px;background:rgba(255,255,255,.025)}.dc-charge-step b{width:21px;height:21px;flex:0 0 21px;border-radius:50%;display:grid;place-items:center;background:rgba(217,180,120,.12);color:var(--dc-accent2);font-size:10px}.dc-charge-step strong,.dc-charge-step span{display:block}.dc-charge-step strong{font-size:10px}.dc-charge-step span{font-size:8.6px;color:var(--dc-muted);margin-top:2px;line-height:1.35}.dc-charge-terms{display:grid;gap:8px;margin:14px 0}.dc-charge-terms span{display:flex;align-items:center;gap:9px;color:var(--dc-muted);font-size:10px;line-height:1.35}.dc-charge-terms span::before{content:'✓';width:18px;height:18px;flex:0 0 18px;display:grid;place-items:center;border-radius:50%;background:rgba(83,199,139,.10);color:var(--dc-green);font-weight:900}.dc-charge-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;margin-top:14px}.dc-charge-actions .dc-btn{min-height:44px;border-radius:999px}.dc-charge-actions .dc-btn:first-child{min-width:0}.dc-charge-muted{grid-column:1/-1;min-height:20px;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.025);color:var(--dc-muted);font-size:10px;line-height:1.35}.dc-charge-muted.warn{background:rgba(229,169,87,.09);color:var(--dc-orange);border:1px solid rgba(229,169,87,.20)}.dc-billing-notice-body{padding:20px 24px 24px}.dc-billing-notice-actions{display:flex;gap:10px;align-items:center;justify-content:flex-end;margin-top:18px}.dc-billing-notice-actions .dc-btn{border-radius:999px;min-height:42px}.dc-token-toast{position:fixed;right:22px;bottom:92px;z-index:515;max-width:360px;padding:14px 16px;border:1px solid rgba(217,180,120,.25);border-radius:18px;background:rgba(16,16,19,.88);box-shadow:0 18px 60px rgba(0,0,0,.42),0 0 28px rgba(217,180,120,.13);backdrop-filter:blur(18px);animation:dcViewReveal .22s ease both}.dc-token-toast strong,.dc-token-toast span{display:block}.dc-token-toast strong{font-size:12px}.dc-token-toast span{font-size:10px;color:var(--dc-muted);margin-top:4px;line-height:1.4}.dc-token-toast.good{border-color:rgba(83,199,139,.25)}.dc-token-toast.warn{border-color:rgba(229,169,87,.30)}.dc-trial-mini{display:inline-flex;align-items:center;gap:5px;margin-left:2px;padding-left:6px;border-left:1px solid rgba(255,255,255,.10);font-size:8px;color:inherit;font-weight:850;font-style:normal}
 .dc-youtube-consent-card .dc-charge-terms{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.dc-youtube-consent-card .dc-charge-terms span{min-height:62px;align-items:flex-start;padding:11px 12px;border:1px solid rgba(255,255,255,.07);border-radius:14px;background:rgba(255,255,255,.025);font-size:10px}.dc-youtube-consent-card .dc-charge-terms span::before{margin-top:1px}.dc-youtube-consent-card .dc-charge-muted a{color:var(--dc-accent2)}
-.dc-billing-notice-card{width:min(500px,calc(100vw - 28px));border-radius:20px;background:radial-gradient(circle at 8% 0%,rgba(217,180,120,.10),transparent 32%),linear-gradient(180deg,#141416,#0a0a0c)}
-.dc-billing-notice-card .dc-billing-notice-head{padding:24px 24px 18px}.dc-billing-notice-card .dc-billing-notice-head h2{font-size:27px;line-height:1.08;margin-top:10px}.dc-billing-notice-card .dc-billing-notice-head p{max-width:390px;font-size:12px;line-height:1.6;margin-top:9px}
-.dc-billing-notice-card .dc-billing-notice-body{padding:18px 24px 24px}.dc-billing-notice-card .dc-charge-terms{display:grid;grid-template-columns:1fr;gap:0;margin:0;border:1px solid rgba(255,255,255,.075);border-radius:14px;background:rgba(255,255,255,.018);overflow:hidden}
-.dc-billing-notice-card .dc-charge-terms span{min-height:45px;padding:10px 13px;border-bottom:1px solid rgba(255,255,255,.06);font-size:11px;line-height:1.4}.dc-billing-notice-card .dc-charge-terms span:last-child{border-bottom:0}.dc-billing-notice-card .dc-charge-terms span::before{width:20px;height:20px;flex-basis:20px}
-.dc-billing-notice-card .dc-billing-notice-actions{display:grid;grid-template-columns:1fr 1.35fr;gap:10px;margin-top:16px}.dc-billing-notice-card .dc-billing-notice-actions .dc-btn{width:100%;min-height:44px;border-radius:12px}
-.dc-notice-mark{width:7px;height:7px;border-radius:50%;background:var(--dc-accent);box-shadow:0 0 0 4px rgba(217,180,120,.10)}
 @media(max-width:720px){.dc-charge-card{width:calc(100vw - 18px)}.dc-charge-grid,.dc-charge-estimate,.dc-charge-steps{grid-template-columns:1fr}.dc-charge-actions,.dc-billing-notice-actions{grid-template-columns:1fr;flex-direction:column;align-items:stretch}.dc-token-toast{left:12px;right:12px;bottom:84px;max-width:none}}
 @media(max-width:620px){.dc-youtube-consent-card .dc-charge-terms{grid-template-columns:1fr}}
 
@@ -1065,60 +831,6 @@ body.dc-app .dc-billing-foot{padding:0 24px 20px;margin-top:0}
 body.dc-app .dc-billing-note span{font-size:9px}
 @media(max-height:760px){body.dc-app .dc-billing-card{max-height:calc(100dvh - 28px)}body.dc-app .dc-billing-head{padding:16px 20px 8px}body.dc-app .dc-billing-head h2{font-size:24px;margin-top:8px}body.dc-app .dc-billing-head p{font-size:10px;line-height:1.45}body.dc-app .dc-billing-kicker{min-height:24px;font-size:8.5px}body.dc-app .dc-billing-status{padding:0 20px 10px}body.dc-app .dc-usage-value{font-size:36px}body.dc-app .dc-plan-grid{padding:0 20px 10px}body.dc-app .dc-plan-card{min-height:184px;padding:13px}body.dc-app .dc-plan-card .tokens{font-size:28px}body.dc-app .dc-plan-card p{margin:6px 0 8px}body.dc-app .dc-charge-terms{margin:0 20px 10px!important}body.dc-app .dc-billing-foot{padding:0 20px 14px}}
 @media(max-width:860px){body.dc-app .dc-billing-card{width:calc(100vw - 22px);overflow-y:auto}body.dc-app .dc-billing-status,body.dc-app .dc-plan-grid,body.dc-app .dc-charge-terms{grid-template-columns:1fr}body.dc-app .dc-charge-terms span{border-radius:12px}body.dc-app .dc-usage-row{align-items:flex-start;flex-direction:column}body.dc-app .dc-usage-meta{width:100%;min-width:0}}
-/* Precision pass: consistent optical centring, readable compact text and a calmer token modal. */
-body.dc-app .dc-btn,body.dc-app .dc-pill,body.dc-app .dc-status-pill,body.dc-app .dc-billing-kicker,body.dc-app .dc-token-pill{display:inline-flex;align-items:center;justify-content:center;text-align:center;line-height:1.2}
-body.dc-app .dc-btn{min-height:40px;padding-top:9px;padding-bottom:9px}
-body.dc-app .dc-pill,body.dc-app .dc-status-pill{min-height:26px;padding:5px 10px}
-body.dc-app .dc-billing-card{background:radial-gradient(circle at 14% 0%,rgba(217,180,120,.13),transparent 32%),linear-gradient(180deg,#141416,#0b0b0d 72%)}
-body.dc-app .dc-billing-head p,body.dc-app .dc-rate-panel p,body.dc-app .dc-plan-card p{font-size:11.5px}
-body.dc-app .dc-usage-mini span,body.dc-app .dc-plan-features span,body.dc-app .dc-billing-note span{font-size:10px;line-height:1.45}
-body.dc-app .dc-plan-card{min-height:224px}body.dc-app .dc-plan-card .dc-btn{min-height:40px;font-size:11px}
-body.dc-app .dc-billing-card{width:min(940px,calc(100vw - 36px));border-radius:22px}
-body.dc-app .dc-billing-head{padding:24px 26px 15px}.dc-billing-head h2{max-width:700px}
-body.dc-app .dc-billing-status{padding:0 26px 14px;grid-template-columns:minmax(0,1.2fr) minmax(260px,.8fr)}
-body.dc-app .dc-usage-panel,body.dc-app .dc-rate-panel{padding:17px;border-radius:17px}
-body.dc-app .dc-usage-row{display:grid;grid-template-columns:minmax(170px,1fr) 240px;align-items:end;gap:18px}.dc-usage-value{font-size:48px}
-body.dc-app .dc-usage-meta{min-width:0}.dc-usage-mini{padding:10px 11px}
-body.dc-app .dc-billing-card>.dc-charge-terms{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px!important;margin:0 26px 14px!important}
-body.dc-app .dc-billing-card>.dc-charge-terms span{min-height:50px;padding:10px 11px;border:1px solid rgba(255,255,255,.07);border-radius:12px;background:rgba(255,255,255,.022);align-items:flex-start;font-size:9.5px}
-body.dc-app .dc-billing-card>.dc-charge-terms span::before{margin-top:1px}
-body.dc-app .dc-plan-grid{padding:0 26px 16px}.dc-plan-card{border-radius:17px}
-/* Calm, plan-first billing layout inspired by the clearest parts of modern creator pricing pages. */
-body.dc-app .dc-billing-card{width:min(1060px,calc(100vw - 36px));background:radial-gradient(circle at 50% -18%,rgba(217,180,120,.12),transparent 38%),linear-gradient(180deg,#121214,#09090b 78%)}
-body.dc-app .dc-billing-head{padding:25px 30px 18px;text-align:center;grid-template-columns:40px minmax(0,1fr) 40px}
-body.dc-app .dc-billing-head>div{grid-column:2}.dc-billing-head .dc-billing-close{grid-column:3;grid-row:1}
-body.dc-app .dc-billing-kicker{margin:0 auto;min-height:28px}
-body.dc-app .dc-billing-head h2{max-width:none;margin-top:11px;font-size:31px}
-body.dc-app .dc-billing-head p{max-width:none;margin-top:7px;font-size:11.5px}
-body.dc-app .dc-billing-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;width:min(610px,calc(100% - 60px));margin:0 auto 18px;padding:4px;border:1px solid rgba(255,255,255,.10);border-radius:999px;background:#09090b}
-body.dc-app .dc-billing-tabs button{min-height:43px;display:flex;align-items:center;justify-content:center;gap:6px;padding:0 14px;border:0;border-radius:999px;background:transparent;color:var(--dc-muted);font-size:11px;font-weight:850;cursor:pointer;transition:background .18s ease,color .18s ease,box-shadow .18s ease}
-body.dc-app .dc-billing-tabs button:hover{color:var(--dc-text)}.dc-billing-tabs button.active{background:linear-gradient(180deg,#343438,#29292d);color:var(--dc-text);box-shadow:0 5px 16px rgba(0,0,0,.24),0 0 0 1px rgba(255,255,255,.055) inset}.dc-billing-tabs button small{padding:3px 6px;border-radius:999px;background:rgba(217,180,120,.10);color:var(--dc-accent2);font-size:7px;letter-spacing:.04em;text-transform:uppercase}
-body.dc-app .dc-wallet-strip{position:relative;display:grid;grid-template-columns:1.05fr 1fr 1fr 1fr auto;gap:0;align-items:center;margin:0 30px 22px;padding:13px 15px 17px;border:1px solid rgba(255,255,255,.085);border-radius:17px;background:rgba(255,255,255,.025)}
-body.dc-app .dc-wallet-strip>div:not(.dc-wallet-progress){min-width:0;padding:2px 15px;border-right:1px solid rgba(255,255,255,.07)}
-body.dc-app .dc-wallet-strip>div:first-child{padding-left:3px}.dc-wallet-strip>div:nth-child(4){border-right:0}
-body.dc-app .dc-wallet-strip span,body.dc-app .dc-wallet-strip strong{display:block}.dc-wallet-strip>div>span{color:var(--dc-muted);font-size:8.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:800}.dc-wallet-strip strong{margin-top:4px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dc-wallet-strip>div:first-child strong{font-size:22px;color:var(--dc-accent2)}.dc-wallet-strip small{color:var(--dc-muted);font-size:9px;font-weight:750}
-body.dc-app .dc-wallet-strip>.dc-status-pill{justify-self:end;margin-left:10px;white-space:nowrap}
-body.dc-app .dc-wallet-progress{position:absolute;left:15px;right:15px;bottom:8px;height:3px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden}.dc-wallet-progress i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--dc-green),var(--dc-accent2))}
-body.dc-app .dc-plan-grid{display:block;width:min(560px,100%);margin:0 auto;padding:0 30px 18px}
-body.dc-app .dc-tab-plan[hidden]{display:none!important}.dc-tab-plan.active{animation:dcViewReveal .22s ease both}
-body.dc-app .dc-plan-card{overflow:visible;min-height:390px;padding:0;border-radius:22px;background:#131315}
-body.dc-app .dc-plan-card::before{display:none}.dc-plan-card.featured{border-color:rgba(217,180,120,.68);box-shadow:0 0 0 1px rgba(217,180,120,.14),0 22px 65px rgba(0,0,0,.28)}
-body.dc-app .dc-plan-featured-label{height:38px;display:flex;align-items:center;justify-content:center;margin:-1px -1px 0;border-radius:22px 22px 0 0;background:linear-gradient(110deg,#d2a85f,#efd18e);color:#17120a;font-size:10px;font-weight:950;letter-spacing:.12em;text-transform:uppercase}
-body.dc-app .dc-plan-content{display:flex;flex-direction:column;min-height:390px;padding:21px}.dc-plan-card.featured .dc-plan-content{min-height:351px}
-body.dc-app .dc-plan-top{min-height:44px;align-items:flex-start}.dc-plan-top>div>span{display:block;margin-top:4px;color:var(--dc-muted);font-size:9px}.dc-plan-card h3{font-size:20px;text-transform:capitalize}
-body.dc-app .dc-plan-price{margin-top:20px;color:var(--dc-text);font-size:24px;font-weight:900;letter-spacing:-.04em}.dc-plan-price span{color:var(--dc-muted);font-size:9px;font-weight:750;letter-spacing:0}
-body.dc-app .dc-plan-card .tokens{margin-top:9px;color:var(--dc-accent2);font-size:31px}.dc-plan-card .tokens span{color:var(--dc-muted);font-size:9px}
-body.dc-app .dc-plan-card p{min-height:36px;margin:9px 0 0;color:#aaa9b0;font-size:10px;line-height:1.55}
-body.dc-app .dc-plan-divider{height:1px;margin:15px 0;background:rgba(255,255,255,.075)}
-body.dc-app .dc-plan-features{gap:10px;margin:0 0 18px}.dc-plan-features span{font-size:10px;color:#c2c1c7}.dc-plan-features span::before{background:rgba(217,180,120,.11);color:var(--dc-accent2)}
-body.dc-app .dc-plan-card .dc-btn{min-height:44px;margin-top:auto;border-radius:999px;font-size:11px}.dc-plan-card.featured .dc-btn:not(.secondary){background:linear-gradient(110deg,#d2a85f,#efd18e);color:#17120a}
-body.dc-app .dc-billing-explainer{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 30px 16px;padding:14px 16px;border:1px solid rgba(255,255,255,.075);border-radius:16px;background:rgba(255,255,255,.02)}.dc-billing-explainer span{position:relative;padding-left:25px;color:var(--dc-muted);font-size:9px;line-height:1.4}.dc-billing-explainer span::before{content:'✓';position:absolute;left:0;top:1px;width:17px;height:17px;display:grid;place-items:center;border-radius:50%;background:rgba(83,199,139,.11);color:var(--dc-green);font-size:10px;font-weight:900}.dc-billing-explainer b{display:block;margin-bottom:2px;color:var(--dc-text);font-size:9.5px}
-body.dc-app .dc-billing-foot{margin:0;padding:0 30px 24px}
-@media(max-width:860px){body.dc-app .dc-billing-head{padding-left:18px;padding-right:18px}body.dc-app .dc-billing-tabs{width:calc(100% - 36px)}body.dc-app .dc-billing-tabs button{padding:0 8px}.dc-billing-tabs button small{display:none}body.dc-app .dc-wallet-strip{grid-template-columns:1fr 1fr;margin-left:18px;margin-right:18px;gap:12px}.dc-wallet-strip>div{border-right:0!important;padding:2px!important}.dc-wallet-strip>.dc-status-pill{grid-column:1/-1;justify-self:start;margin:0}.dc-wallet-progress{left:12px!important;right:12px!important}.dc-plan-grid{padding-left:18px!important;padding-right:18px!important}.dc-plan-card,.dc-plan-content{min-height:0!important}.dc-billing-explainer{grid-template-columns:1fr!important;margin-left:18px!important;margin-right:18px!important}.dc-billing-foot{padding-left:18px!important;padding-right:18px!important}}
-.dc-tiktok-controls{grid-column:1/-1;display:grid;grid-template-columns:minmax(170px,.7fr) repeat(3,minmax(0,1fr));gap:10px;padding:14px;border:1px solid rgba(37,244,238,.16);border-radius:16px;background:rgba(37,244,238,.035)}
-.dc-tiktok-controls>label:first-child{display:grid;gap:7px;color:var(--dc-muted);font-size:10px;font-weight:700}.dc-tiktok-controls select{width:100%;min-height:42px;border:1px solid rgba(255,255,255,.10);border-radius:11px;background:#0b0b0d;color:var(--dc-text);padding:0 11px}
-.dc-tiktok-controls .dc-switch-row{min-height:66px;margin:0}.dc-tiktok-review-note{grid-column:1/-1;margin:0;color:var(--dc-muted);font-size:10px;line-height:1.5}.dc-tiktok-review-note b{color:var(--dc-text)}
-@media(max-width:980px){.dc-tiktok-controls{grid-template-columns:1fr 1fr}}@media(max-width:860px){body.dc-app .dc-usage-row{grid-template-columns:1fr}body.dc-app .dc-billing-card>.dc-charge-terms{grid-template-columns:1fr 1fr}}@media(max-width:620px){.dc-tiktok-controls{grid-template-columns:1fr}body.dc-app .dc-billing-card>.dc-charge-terms{grid-template-columns:1fr}}
 @media(max-width:620px){body.dc-app .dc-youtube-consent-card .dc-charge-terms{grid-template-columns:1fr!important}}
 
 `;
@@ -1164,7 +876,6 @@ const v5ExperienceCss = String.raw`
 .dc-ui-icon svg,.dc-empty-icon svg,.dc-empty-visual-copy>span svg,.dc-live-icon svg,.dc-v4-next-icon svg,.dc-dock-head>span svg,.dc-manage-kicker svg,.dc-manage-logo:not(.dc-social-logo) svg,.dc-flow-card-g>span svg,.dc-road-step>span svg{fill:none!important;stroke:currentColor!important;stroke-width:1.8!important;stroke-linecap:round!important;stroke-linejoin:round!important}.dc-empty-visual-copy>span svg{width:16px;height:16px}.dc-v5-brand.youtube svg,.dc-v5-brand.tiktok svg,.dc-v5-brand.facebook svg,.dc-v5-url-brand svg,.dc-social-logo.youtube svg,.dc-social-logo.tiktok svg,.dc-social-logo.facebook svg{fill:currentColor!important;stroke:none!important}.dc-v5-brand.instagram svg,.dc-social-logo.instagram svg{fill:none!important;stroke:currentColor!important;stroke-width:2!important}.dc-v5-brand.instagram svg circle:last-child,.dc-social-logo.instagram svg circle:last-child{fill:currentColor!important;stroke:none!important}
 /* Carry the new visual language through the rest of the workspace. */
 .dc-page-head,.dc-review-hero-pro,.dc-manage-hero,.dc-studio-hero{border-radius:25px!important;border-color:rgba(255,255,255,.09)!important;background:radial-gradient(circle at 100% 0,rgba(55,113,151,.1),transparent 35%),linear-gradient(145deg,#151518,#0d0e11)!important}.dc-project-card,.dc-review-item,.dc-manage-card,.dc-template-card,.dc-settings-panel,.dc-insight-panel{border-color:rgba(255,255,255,.08)!important;box-shadow:0 20px 55px rgba(0,0,0,.18)!important}.dc-manage-metrics{gap:22px}.dc-manage-metrics span{min-width:0!important;padding:0 0 0 18px!important;border:0!important;border-left:1px solid rgba(255,255,255,.1)!important;border-radius:0!important;background:transparent!important}.dc-studio-strip{display:flex!important;align-items:center;gap:0!important;padding:2px 4px;overflow:auto}.dc-studio-stat{min-width:160px;padding:0 24px!important;border:0!important;border-right:1px solid rgba(255,255,255,.09)!important;border-radius:0!important;background:transparent!important}.dc-studio-stat:last-child{border-right:0!important}.dc-nav-button.is-active{background:linear-gradient(90deg,rgba(221,183,118,.15),rgba(221,183,118,.06))!important}.dc-btn{font-weight:760!important}.dc-btn.secondary{background:#0c0d0f!important}
-.dc-review-item.needs-check{border-color:rgba(239,107,122,.34)!important}.dc-review-safety{display:grid;grid-template-columns:28px minmax(0,1fr);gap:9px;align-items:center;padding:9px 10px;border:1px solid rgba(239,107,122,.24);border-radius:12px;background:rgba(239,107,122,.07);color:#ef8290}.dc-review-safety>span{width:28px;height:28px;display:grid;place-items:center;border-radius:9px;background:rgba(239,107,122,.11)}.dc-review-safety svg{width:15px;height:15px;fill:none!important;stroke:currentColor!important;stroke-width:1.8!important}.dc-review-safety strong,.dc-review-safety p{display:block;margin:0}.dc-review-safety strong{font-size:9.5px}.dc-review-safety p{margin-top:2px;color:#b98e94;font-size:8.5px;line-height:1.4}
 /* One motion language: ambient colour, useful live states and tactile depth. */
 .dc-v5-hero{background-size:135% 135%,125% 125%,100% 100%;animation:dcV5Aurora 16s ease-in-out infinite;will-change:background-position}.dc-v5-hero::before{transform:translateX(-35%);animation:dcV5Sheen 9s ease-in-out infinite}.dc-v5-hero::after{animation:dcV5Orbit 13s ease-in-out infinite}.dc-v5-eyebrow i{animation:dcV5ReadyPulse 2.8s ease-in-out infinite}.dc-v5-stage-glow{animation:dcV5GlowBreath 5.8s ease-in-out infinite}.dc-v5-phone{will-change:transform;animation:dcV5Float 7s ease-in-out infinite}.dc-v5-phone:nth-of-type(3){animation-delay:-2.3s}.dc-v5-phone:nth-of-type(4){animation-delay:-4.6s}.dc-v5-phone:hover{animation:none}.dc-v5-phone img{transition:transform .55s cubic-bezier(.2,.75,.25,1),filter .35s ease}.dc-v5-phone:hover img{transform:scale(1.035);filter:saturate(1.08)}.dc-v5-score{animation:dcV5ScoreBreath 4.2s ease-in-out infinite}.dc-v5-hero-actions .dc-btn:first-child::after{content:'';position:absolute;inset:-60% auto -60% -45%;width:38%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.42),transparent);transform:skewX(-18deg) translateX(-210%);animation:dcV5ButtonGlint 5.4s ease-in-out infinite;pointer-events:none}
 .dc-v5-create,.dc-v5-library,.dc-v5-side-card,.dc-v5-project{transition:transform .28s cubic-bezier(.2,.75,.25,1),border-color .28s ease,box-shadow .28s ease,background .28s ease}.dc-v5-create:focus-within{border-color:rgba(221,183,118,.34);box-shadow:0 22px 65px rgba(0,0,0,.28),0 0 0 1px rgba(221,183,118,.06) inset}.dc-v5-url-brand{animation:dcV5SourcePulse 4.5s ease-in-out infinite}.dc-v5-option{transition:border-color .2s ease,background .2s ease,transform .2s ease}.dc-v5-option:hover,.dc-v5-option:focus-within{border-color:rgba(221,183,118,.24);background:#0e0e11;transform:translateY(-1px)}
@@ -1178,20 +889,14 @@ const v5ExperienceCss = String.raw`
 `;
 
 function injectShell(){
-  // Approved rail order: Create · Home · Projects · Review · Publish · Publishing · Channels · Studio · Templates · Brand Kit · AI Director · Audio · Insights · Settings · Collapse sidebar.
   if (shellReady) return;
   shellReady = true;
   const style = document.createElement('style');
-  style.id = 'dcPhase4Styles'; style.textContent = css + billingCss + rangeChargeCss + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss + topbarCleanCss + trialUxCss + v4DashboardCss + v4WorkspaceCss + v4CinematicCss + v4DeclutterCss + v5ExperienceCss + publishingWorkspaceCss + premiumStudioCss; document.head.appendChild(style);
-  // Keep the established shell boot sequence stable; V7 is an additive class
-  // so the retired project browser is still removed before any view renders.
+  style.id = 'dcPhase4Styles'; style.textContent = css + billingCss + rangeChargeCss + v3Css + v3ProjectCss + clipToolsCss + scheduleKeepCss + topbarCleanCss + trialUxCss + v4DashboardCss + v4WorkspaceCss + v4CinematicCss + v4DeclutterCss + v5ExperienceCss; document.head.appendChild(style);
   document.body.classList.add('dc-app');
-  hideLegacyProjectBrowser();
-  document.body.classList.add('dc-v7-shell');
-  document.body.dataset.dcVersion='v7';
 
   const side = document.createElement('aside'); side.id = 'dcSidebar';
-  side.innerHTML = `<div id="dcBrand"><div class="dc-logo"><svg viewBox="0 0 24 26" fill="none"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg></div><div class="dc-brand-copy"><strong>DeenClipped</strong><span>Creator intelligence studio</span></div><span class="dc-sidebar-plan" id="dcSidebarPlan">…</span></div><div class="dc-nav-scroll"><div class="dc-nav-group"><div class="dc-nav-label"><span>Create</span><i></i></div>${CREATE_NAV.map(item=>navButton(...item)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Publish</span><i></i></div>${PUBLISH_NAV.map(item=>navButton(...item)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Studio</span><i></i></div>${STUDIO_NAV.map(item=>navButton(...item)).join('')}</div><div class="dc-nav-group" id="dcAdminNav" style="display:none"><div class="dc-nav-label"><span>Admin</span><i></i></div>${navButton('admin','Admin Console','analytics')}</div></div><div class="dc-sidebar-bottom"><button class="dc-collapse" id="dcCollapse"><span class="dc-nav-icon">${ICON.collapse}</span><span>Collapse sidebar</span></button></div>`;
+  side.innerHTML = `<div id="dcBrand"><div class="dc-logo"><svg viewBox="0 0 24 26" fill="none"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg></div><div class="dc-brand-copy"><strong>DeenClipped</strong><span>AI clip workspace</span></div></div><div class="dc-nav-scroll"><div class="dc-nav-group"><div class="dc-nav-label"><span>Create</span><i></i></div>${CREATE_NAV.map(([v,l,i])=>navButton(v,l,i)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Publish</span><i></i></div>${PUBLISH_NAV.map(([v,l,i])=>navButton(v,l,i)).join('')}</div><div class="dc-nav-group"><div class="dc-nav-label"><span>Studio</span><i></i></div>${STUDIO_NAV.map(([v,l,i])=>navButton(v,l,i)).join('')}</div></div><div class="dc-sidebar-bottom"><button class="dc-collapse" id="dcCollapse"><span class="dc-nav-icon">${ICON.collapse}</span><span>Collapse sidebar</span></button></div>`;
 
   const top = document.createElement('header'); top.id = 'dcTopbar';
   const appData = data() || {};
@@ -1199,16 +904,16 @@ function injectShell(){
   const ownerFallback = bill?.current?.unlimited ? {name:'DeenClipped Admin', email:'Owner account'} : null;
   const signedUser = appData.user || appData.account || ownerFallback || {name:'Account', email:'Signed in'};
   const avatar = signedUser?.picture ? `<img src="${esc(signedUser.picture)}" alt="">` : `<span class="dc-user-avatar">${esc((signedUser?.name || signedUser?.email || 'D').slice(0,1).toUpperCase())}</span>`;
-  top.innerHTML = `<button class="dc-mobile-menu dc-svg" id="dcMobileMenu" type="button" aria-label="Open menu">${ICON.menu}</button><div class="dc-page-title"><strong id="dcPageName">Home</strong><span id="dcPageSub">Everything important in one place</span></div><div class="dc-global-search">${ICON.search}<input id="dcGlobalSearch" placeholder="Search projects, clips and posts"><div class="dc-search-results" id="dcSearchResults"></div></div><div class="dc-top-actions"><button class="dc-experience-badge" id="dcExperienceBadge" type="button"><i></i><span>Loading account</span></button><div class="dc-health" id="dcHealth"><i></i><span>Checking</span></div><button class="dc-token-pill" id="dcTokenPill" type="button" aria-label="Open tokens and plans">${ICON.tokens}<span class="dc-token-label">Tokens</span></button><button class="dc-btn secondary dc-tour-launch" id="dcTourLaunch" type="button">Demo</button><div class="dc-user-menu-wrap"><button class="dc-user-menu-button" id="dcUserMenuButton" type="button" aria-haspopup="menu" aria-expanded="false">${avatar}<span class="dc-user-copy"><b>${esc(signedUser.name || signedUser.email || 'Signed in')}</b><small>${esc(signedUser.email || 'Admin account')}</small></span><svg class="dc-user-chevron" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="dc-account-menu" id="dcAccountMenu" role="menu"><div class="dc-account-head"><strong>${esc(signedUser.name || 'DeenClipped account')}</strong><span>${esc(signedUser.email || 'Signed in')}</span></div><button class="dc-account-action" id="dcAccountBilling" type="button">Tokens & billing <b>Open</b></button><button class="dc-account-action" id="dcAccountTour" type="button">Help for this page <b>Replay</b></button><form class="dc-logout-form" method="post" action="/auth/logout"><button class="dc-logout-btn" type="submit">Log out</button></form></div></div><button class="dc-btn" id="dcNewProject"><span>＋ New</span></button></div>`;
+  top.innerHTML = `<button class="dc-mobile-menu dc-svg" id="dcMobileMenu" type="button" aria-label="Open menu">${ICON.menu}</button><div class="dc-page-title"><strong id="dcPageName">Home</strong><span id="dcPageSub">Everything important in one place</span></div><div class="dc-global-search">${ICON.search}<input id="dcGlobalSearch" placeholder="Search projects and clips"><div class="dc-search-results" id="dcSearchResults"></div></div><div class="dc-top-actions"><div class="dc-health" id="dcHealth"><i></i><span>Checking</span></div><button class="dc-token-pill" id="dcTokenPill" type="button" aria-label="Open tokens and plans">${ICON.tokens}<span class="dc-token-label">Tokens</span></button><button class="dc-btn secondary dc-tour-launch" id="dcTourLaunch" type="button">Demo</button><div class="dc-user-menu-wrap"><button class="dc-user-menu-button" id="dcUserMenuButton" type="button" aria-haspopup="menu" aria-expanded="false">${avatar}<span class="dc-user-copy"><b>${esc(signedUser.name || signedUser.email || 'Signed in')}</b><small>${esc(signedUser.email || 'Admin account')}</small></span><svg class="dc-user-chevron" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="dc-account-menu" id="dcAccountMenu" role="menu"><div class="dc-account-head"><strong>${esc(signedUser.name || 'DeenClipped account')}</strong><span>${esc(signedUser.email || 'Signed in')}</span></div><button class="dc-account-action" id="dcAccountBilling" type="button">Tokens & billing <b>Open</b></button><form class="dc-logout-form" method="post" action="/auth/logout"><button class="dc-logout-btn" type="submit">Log out</button></form></div></div><button class="dc-btn" id="dcNewProject"><span>＋ New</span></button></div>`;
 
   const work = document.createElement('div'); work.id = 'dcWork'; work.setAttribute('role','status'); work.setAttribute('aria-live','polite');
-  work.innerHTML = `<div class="dc-work-head"><span class="dc-work-toast-orb">${ICON.play}</span><div class="dc-work-toast-copy"><strong>Working…</strong><span>Saving changes</span></div><b class="dc-work-percent" id="dcWorkPercent"></b><button class="dc-work-expand" id="dcWorkExpand" type="button" aria-expanded="false" aria-label="Show activity detail">${ICON.chevron}</button><button id="dcWorkClose" type="button" aria-label="Hide progress notification">×</button><div class="dc-work-toast-progress"><i id="dcWorkBar"></i></div></div><div class="dc-work-panel" id="dcWorkPanel"></div>`;
+  work.innerHTML = `<span class="dc-work-toast-orb">${ICON.play}</span><div class="dc-work-toast-copy"><strong>Working…</strong><span>Saving changes</span></div><button id="dcWorkClose" type="button" aria-label="Hide progress notification">×</button><div class="dc-work-toast-progress"><i></i></div>`;
   const shade = document.createElement('button'); shade.id = 'dcShade'; shade.type='button'; shade.setAttribute('aria-label','Close menu');
   document.body.append(side, top, shade, work);
 
   const main = $('.main-col');
   if (main) {
-    for (const name of ['home','projects','review','editor','publishing','templates','brand','lab','quality','music','automation','insights','subscription','admin']) {
+    for (const name of ['home','projects','review','editor','publishing','templates','music','automation','insights']) {
       if (!$(`#view-${name}`)) {
         const panel = document.createElement('section'); panel.id = `view-${name}`; panel.className = 'panel hide';
         main.prepend(panel);
@@ -1219,13 +924,11 @@ function injectShell(){
   bindGlobal();
 }
 
-function navButton(view, label, icon, badge=''){
-  const gate=DC_V7_FEATURES[view],feature=gate?.feature||'';
-  return `<button class="dc-nav-button" type="button" data-dc-nav="${view}" ${feature?`data-premium-feature="${feature}"`:''} title="${esc(label)}"><span class="dc-nav-icon">${ICON[icon]}</span><span class="dc-nav-name">${esc(label)}</span>${badge?`<span class="dc-nav-badge" data-premium-stamp>${esc(gate?.label||badge)}</span>`:''}</button>`;
+function navButton(view, label, icon){
+  return `<button class="dc-nav-button" type="button" data-dc-nav="${view}" title="${esc(label)}"><span class="dc-nav-icon">${ICON[icon]}</span><span class="dc-nav-name">${esc(label)}</span></button>`;
 }
 
 function bindGlobal(){
-  document.addEventListener('click', handleProjectOpenCapture, true);
   document.addEventListener('click', handleClick);
   document.addEventListener('pointerdown', createRipple);
   $('#dcCollapse').onclick = () => {
@@ -1235,10 +938,9 @@ function bindGlobal(){
   if (localStorage.getItem('dc-side-collapsed') === '1') document.body.classList.add('dc-side-collapsed');
   $('#dcMobileMenu').onclick = () => document.body.classList.add('dc-menu-open');
   $('#dcShade').onclick = () => document.body.classList.remove('dc-menu-open');
-  $('#dcNewProject').onclick = () => { const exp=clientExperience();if(!exp.canGenerate){go('subscription');return}go('home'); setTimeout(() => $('#dcCreateUrl')?.focus(), 30); };
+  $('#dcNewProject').onclick = () => { go('home'); setTimeout(() => $('#dcCreateUrl')?.focus(), 30); };
   $('#dcTourLaunch').onclick = () => openGuidedTour(0);
-  $('#dcTokenPill').onclick = () => go('subscription');
-  $('#dcExperienceBadge').onclick = () => go('subscription');
+  $('#dcTokenPill').onclick = openBillingModal;
   $('#dcUserMenuButton')?.addEventListener('click', event => {
     event.stopPropagation();
     const menu = $('#dcAccountMenu');
@@ -1247,65 +949,21 @@ function bindGlobal(){
     menu?.classList.toggle('show', open);
     btn?.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
-  $('#dcAccountBilling')?.addEventListener('click', () => { $('#dcAccountMenu')?.classList.remove('show'); $('#dcUserMenuButton')?.setAttribute('aria-expanded','false'); go('subscription'); });
-  $('#dcAccountTour')?.addEventListener('click', () => { $('#dcAccountMenu')?.classList.remove('show'); $('#dcUserMenuButton')?.setAttribute('aria-expanded','false'); openPageTour(currentView,true); });
+  $('#dcAccountBilling')?.addEventListener('click', () => { $('#dcAccountMenu')?.classList.remove('show'); $('#dcUserMenuButton')?.setAttribute('aria-expanded','false'); openBillingModal(); });
   document.addEventListener('click', event => { if (!event.target.closest?.('.dc-user-menu-wrap')) { $('#dcAccountMenu')?.classList.remove('show'); $('#dcUserMenuButton')?.setAttribute('aria-expanded','false'); } });
   $('#dcWorkClose').onclick = () => { const el=$('#dcWork'); if(el){ el.dataset.dismissed='1'; el.dataset.dismissedKey = el.dataset.workKey || ''; el.classList.remove('show'); } };
   $('#dcGlobalSearch').addEventListener('input', renderGlobalSearch);
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape') { document.body.classList.remove('dc-menu-open'); $('#dcSearchResults')?.classList.remove('show');if(currentView==='editor')selectEditorLayer('none'); }
+    if (event.key === 'Escape') { document.body.classList.remove('dc-menu-open'); $('#dcSearchResults')?.classList.remove('show'); }
     const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '');
     if (!typing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redoEditor() : undoEditor(); }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && currentView === 'editor') { event.preventDefault(); saveEditorDraft(); }
     if (!typing && event.code === 'Space' && currentView === 'editor') { event.preventDefault(); togglePlayback(); }
-    if (!typing && currentView==='editor' && /^Arrow/.test(event.key)) {
-      event.preventDefault();
-      if(event.shiftKey){const step=event.altKey?5:1;const dx=event.key==='ArrowLeft'?-step:event.key==='ArrowRight'?step:0,dy=event.key==='ArrowUp'?-step:event.key==='ArrowDown'?step:0;nudgeEditorLayer(dx,dy)}
-      else if(event.key==='ArrowLeft'||event.key==='ArrowRight')seekEditor(editor.currentTime+(event.key==='ArrowLeft'?-1:1));
-    }
   });
   window.addEventListener('deen:api-start', onApiStart);
   window.addEventListener('deen:api-end', onApiEnd);
-  window.addEventListener('deen:open-project', event => {
-    const projectId=String(event.detail?.projectId||'');
-    if(!projectId)return;
-    hideLegacyProjectBrowser();
-    selectedProjectId=projectId;
-    go('projects');
-  });
 }
-
-function hideLegacyProjectBrowser(){
-  const legacy=$('#libraryBrowser');
-  const wasOpen=Boolean(legacy&&!legacy.classList.contains('hide'));
-  if(legacy)legacy.remove();
-  try{
-    if(typeof LIBRARY_PROJECT_ID!=='undefined')LIBRARY_PROJECT_ID='';
-    if(typeof LIBRARY_SELECTED!=='undefined')LIBRARY_SELECTED.clear();
-  }catch{}
-  if(wasOpen&&!$('#dcBillingLayer')&&!$('#dcGuideLayer')&&!$('#videoModal:not(.hide)')&&!$('#rerenderModal:not(.hide)'))document.body.style.overflow='';
-}
-
-function handleProjectOpenCapture(event){
-  if(!document.body.classList.contains('dc-app'))return;
-  const target=event.target instanceof Element?event.target.closest('[data-open-project]'):null;
-  if(!target)return;
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  hideLegacyProjectBrowser();
-  selectedProjectId=target.dataset.openProject||'';
-  if(selectedProjectId)go('projects');
-}
-// Visual-contract note: every data-open-project action is intentionally routed
-// through handleProjectOpenCapture so the V7 cards retain the proven detail flow.
 
 function handleClick(event){
-  const openBilling = event.target.closest('[data-open-billing]');
-  if (openBilling) { openBillingModal(); return; }
-  const publishTab = event.target.closest('[data-publish-tab]');
-  if (publishTab) { publishingQueueTab = publishTab.dataset.publishTab || 'slots'; renderPublishingWorkspace(); return; }
-  const slotRange = event.target.closest('[data-publish-slot-days]');
-  if (slotRange) { publishingSlotDays = Math.max(1,Math.min(14,Number(slotRange.dataset.publishSlotDays)||5)); renderPublishingWorkspace(); return; }
   const nav = event.target.closest('[data-dc-nav]');
   if (nav) { go(nav.dataset.dcNav); document.body.classList.remove('dc-menu-open'); return; }
   const result = event.target.closest('[data-search-type]');
@@ -1317,9 +975,7 @@ function handleClick(event){
     return;
   }
   const project = event.target.closest('[data-open-project]');
-  if (project) { hideLegacyProjectBrowser(); selectedProjectId = project.dataset.openProject; go('projects'); return; }
-  const reviewClip = event.target.closest('[data-review-clip]');
-  if (reviewClip) { reviewFocusClipId=reviewClip.dataset.reviewClip||''; reviewFilter='all'; go('review'); return; }
+  if (project) { selectedProjectId = project.dataset.openProject; go('projects'); return; }
   const editStyle = event.target.closest('[data-edit-style-clip]'); if (editStyle) { openEditor(editStyle.dataset.editStyleClip, 'style'); return; }
   const editVideo = event.target.closest('[data-edit-video-clip]'); if (editVideo) { openEditor(editVideo.dataset.editVideoClip, 'canvas'); return; }
   const edit = event.target.closest('[data-edit-clip]'); if (edit) { openEditor(edit.dataset.editClip, 'captions'); return; }
@@ -1330,13 +986,11 @@ function handleClick(event){
   const schedule = event.target.closest('[data-schedule-clip]'); if (schedule) { scheduleClip(schedule.dataset.scheduleClip); return; }
   const approve = event.target.closest('[data-approve-clip]'); if (approve) { approveClip(approve.dataset.approveClip); return; }
   const post = event.target.closest('[data-post-clip]'); if (post) { postClip(post.dataset.postClip); return; }
-  const openIssues = event.target.closest('[data-open-issues]'); if (openIssues) { openIssuesPanel(); return; }
   const discard = event.target.closest('[data-delete-clip]'); if (discard) { deleteClip(discard.dataset.deleteClip); return; }
   const retry = event.target.closest('[data-retry-project]'); if (retry) { retryProject(retry.dataset.retryProject); return; }
   const uploadFallback = event.target.closest('[data-upload-fallback]'); if (uploadFallback) { go('home'); requestAnimationFrame(()=>$('#dcVideoUpload')?.click()); return; }
   const more = event.target.closest('[data-more-project]'); if (more) { generateMore(more.dataset.moreProject); return; }
   const delProject = event.target.closest('[data-delete-project]'); if (delProject) { deleteProject(delProject.dataset.deleteProject); return; }
-  const openStyleEditor = event.target.closest('[data-open-style-editor]'); if (openStyleEditor) { openStyleEditorForClip(); return; }
   const useTemplate = event.target.closest('[data-use-template]'); if (useTemplate) { selectStudioTemplate(useTemplate.dataset.useTemplate); return; }
   const applyTemplate = event.target.closest('[data-apply-template]'); if (applyTemplate) { applyStudioTemplate(applyTemplate.dataset.applyTemplate); return; }
   const duplicateTemplate = event.target.closest('[data-duplicate-template]'); if (duplicateTemplate) { duplicateStudioTemplate(duplicateTemplate.dataset.duplicateTemplate); return; }
@@ -1345,18 +999,7 @@ function handleClick(event){
   const socialTest = event.target.closest('[data-social-test]'); if (socialTest) { testSocial(socialTest.dataset.socialTest); return; }
   const socialDisconnect = event.target.closest('[data-social-disconnect]'); if (socialDisconnect) { disconnectSocial(socialDisconnect.dataset.socialDisconnect); return; }
   const musicDelete = event.target.closest('[data-delete-track]'); if (musicDelete) { deleteTrack(musicDelete.dataset.deleteTrack); return; }
-  const tool = event.target.closest('[data-editor-tool]');
-  if (tool) {
-    // Clicking the section you are already in collapses the panel, which is
-    // the only way to give the preview the full width without leaving the
-    // editor. Choosing any other section always opens.
-    const next = tool.dataset.editorTool;
-    editor.panelCollapsed = next === editor.tool ? !editor.panelCollapsed : false;
-    editor.tool = next;
-    renderEditorTool();
-    return;
-  }
-  const layer = event.target.closest('[data-select-layer]'); if (layer) { selectEditorLayer(layer.dataset.selectLayer); return; }
+  const tool = event.target.closest('[data-editor-tool]'); if (tool) { editor.tool = tool.dataset.editorTool; renderEditorTool(); return; }
   const tab = event.target.closest('[data-caption-tab]'); if (tab) { editor.captionTab = tab.dataset.captionTab; renderEditorTool(); return; }
   const style = event.target.closest('[data-caption-style]'); if (style) { applyCaptionStyle(style.dataset.captionStyle); return; }
   const position = event.target.closest('[data-caption-position]'); if (position) { applyCaptionPosition(position.dataset.captionPosition); return; }
@@ -1400,136 +1043,38 @@ function workToastCopy(item){
   if(/\/api\/clips/.test(url))return{title:'Saving clip changes',detail:'Updating this clip and refreshing the workspace.'};
   return{title:'Saving changes',detail:'DeenClipped is updating your workspace.'};
 }
-function formatEta(seconds){
-  const value=Number(seconds);
-  if(!Number.isFinite(value)||value<=0)return '';
-  if(value<45)return 'less than a minute left';
-  const minutes=Math.round(value/60);
-  if(minutes<60)return `about ${minutes} min left`;
-  const hours=Math.floor(minutes/60);
-  return `about ${hours}h ${minutes%60}m left`;
-}
-function activityModel(){
-  const d=data();if(!d)return null;
-  const jobs=activeJobs();
-  const rerenders=(d.rerenderJobs||[]);
-  const running=jobs.filter(job=>job.batchId);
-  const batchId=running[0]?.batchId||'';
-  if(batchId){
-    const all=rerenders.filter(j=>j.batchId===batchId);
-    const done=all.filter(j=>['done','failed','cancelled'].includes(j.status));
-    const total=Math.max(Number(all[0]?.batchTotal||0),all.length);
-    const active=all.filter(j=>j.status==='processing');
-    // Measured, not guessed: how long finished jobs in THIS batch took.
-    const samples=done.map(j=>Number(j.finishedAt||0)-Number(j.startedAt||0)).filter(ms=>ms>1000);
-    const perJob=samples.length?samples.reduce((sum,ms)=>sum+ms,0)/samples.length/1000:null;
-    const remaining=Math.max(0,total-done.length);
-    const partial=active.length?Number(active[0].progress||0)/100:0;
-    const eta=perJob!==null?Math.round(perJob*Math.max(0,remaining-partial)):null;
-    const percent=total?Math.round(((done.length+partial)/total)*100):0;
-    return {
-      kind:'batch', title:all[0]?.batchLabel||'Applying template',
-      subtitle:`${done.length} of ${total} done`, percent:clamp(percent,0,100), eta,
-      jobs:all.map(j=>({id:j.id,title:j.clipTitle||'Clip',stage:j.stage||j.status,progress:Number(j.progress||0),status:j.status,stages:j.stages||[]})),
-      log:(active[0]?.stages||done[done.length-1]?.stages||[]).slice(-6),
-    };
-  }
-  if(!jobs.length)return null;
-  const job=jobs[0];
-  return {
-    kind:job.kind, title:job.title||'Working', subtitle:job.stage||'Working now',
-    percent:Number.isFinite(Number(job.progress))?clamp(Math.round(Number(job.progress)),0,100):null,
-    eta:job.etaSec??null,
-    jobs:jobs.map(j=>({id:j.title,title:j.title,stage:j.stage,progress:Number(j.progress||0),status:j.status||'processing',stages:j.stages||[]})),
-    log:(job.stages||[]).slice(-6),
-  };
-}
 function currentWorkItem(){
   const pending = [...requestMap.values()].at(-1);
   if (pending) return {...pending, source:'request', key:`request:${pending.id || pending.url || Date.now()}`};
+  if (currentView === 'home') return null;
   const job = activeJobs()[0];
   if (!job) return null;
-  // The key deliberately excludes the changing stage/progress. Dismissing one
-  // job should keep that same job dismissed as it advances, while a genuinely
-  // new job still opens the dock automatically.
-  const globalActivityDockKey=job.id||job.batchId||`${job.kind}:${job.title}:${job.at||''}`;
-  return {...job, source:'job', key:`job:${globalActivityDockKey}`};
-}
-function bindWorkDock(){
-  const el=$('#dcWork');if(!el||el.dataset.bound==='1')return;
-  el.dataset.bound='1';
-  $('#dcWorkExpand',el)?.addEventListener('click',event=>{
-    event.stopPropagation();
-    const open=!el.classList.contains('is-expanded');
-    el.classList.toggle('is-expanded',open);
-    $('#dcWorkExpand',el)?.setAttribute('aria-expanded',String(open));
-    paintWork();
-  });
+  return {...job, source:'job', key:`job:${job.kind}:${job.title}:${job.stage}:${job.at || ''}`};
 }
 function paintWork(){
-  bindWorkDock();
   const el = $('#dcWork'); if (!el) return;
   const item = currentWorkItem();
   if (!item){ el.classList.remove('show'); delete el.dataset.dismissed; delete el.dataset.dismissedKey; return; }
   const key = item.key || `${item.source || 'work'}:${item.id || item.url || item.title || ''}`;
   if (el.dataset.workKey !== key){ el.dataset.workKey = key; delete el.dataset.dismissed; delete el.dataset.dismissedKey; }
   if (el.dataset.dismissed === '1' && el.dataset.dismissedKey === key){ el.classList.remove('show'); return; }
-  const model=item.source==='job'?activityModel():null;
-  const copy=model?{title:model.title,detail:[model.subtitle,model.percent===null?'':`${model.percent}%`,formatEta(model.eta)].filter(Boolean).join(' · ')}:workToastCopy(item);
+  const copy=workToastCopy(item);
   $('strong', el).textContent=copy.title;
   $('.dc-work-toast-copy span', el).textContent=copy.detail;
-  // A real bar. This used to be a fixed 42% sliver on an infinite loop, which
-  // is why it always looked stuck.
-  const bar=$('#dcWorkBar',el),percentEl=$('#dcWorkPercent',el);
-  const percent=model?model.percent:null;
-  if(bar){
-    const known=Number.isFinite(Number(percent));
-    bar.classList.toggle('is-indeterminate',!known);
-    bar.style.width=known?`${clamp(Number(percent),0,100)}%`:'';
-  }
-  if(percentEl)percentEl.textContent=Number.isFinite(Number(percent))?`${percent}%`:'';
-  const expand=$('#dcWorkExpand',el),panel=$('#dcWorkPanel',el);
-  if(expand)expand.hidden=!model;
-  if(panel&&model&&el.classList.contains('is-expanded')){
-    const rows=model.jobs.map(job=>{
-      const pct=clamp(Math.round(Number(job.progress||0)),0,100);
-      const state=job.status==='done'?'done':job.status==='failed'?'fail':job.status==='processing'?'live':'wait';
-      return `<div class="dc-work-job ${state}"><span class="dc-work-dot"></span><div><strong>${esc(shortText(job.title,42))}</strong><small>${esc(shortText(job.stage||job.status||'Waiting',54))}</small></div><i>${state==='done'?'Done':state==='fail'?'Failed':state==='wait'?'Queued':`${pct}%`}</i><div class="dc-work-job-bar"><b style="width:${state==='done'?100:pct}%"></b></div></div>`;
-    }).join('');
-    const log=(model.log||[]).map(entry=>`<li><time>${esc(formatClockTime(entry.at))}</time>${esc(shortText(entry.stage||'',60))}</li>`).join('');
-    panel.innerHTML=`<div class="dc-work-jobs">${rows||'<div class="dc-work-empty">Nothing queued.</div>'}</div>${log?`<ul class="dc-work-log">${log}</ul>`:''}`;
-  }else if(panel&&!el.classList.contains('is-expanded')){panel.innerHTML=''}
   el.classList.add('show');
-}
-function formatClockTime(at){
-  const value=Number(at);if(!Number.isFinite(value)||value<=0)return '';
-  try{return new Date(value).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'})}catch{return ''}
 }
 
 function go(view){
   const changedView=currentView!==view;
   if(view!=='projects')document.body.classList.remove('dc-project-open');
-  // The editor is a fixed application shell, not a page: it sizes itself from
-  // the viewport and scrolls only inside its own panels. Every other route is
-  // a normal scrolling page, so this must be scoped and must come off on the
-  // way out — leaving overflow:hidden on the body would break the whole app.
-  document.body.classList.toggle('dc-editor-route',view==='editor');
-  // Templates follows the same application-shell rule at desktop widths:
-  // the canvas stays fixed while only the settings rail scrolls. Opus uses
-  // this pattern too, and it prevents the preview disappearing below a long
-  // Captions panel. Narrow screens still use the normal document flow.
-  document.body.classList.toggle('dc-templates-route',view==='templates');
-  if(view==='templates'&&templateWorkspaceTab==='shop')document.body.classList.remove('dc-templates-route');
   currentView = view;
   $$('[data-dc-nav]').forEach(b => b.classList.toggle('is-active', b.dataset.dcNav === view));
   const labels = {
     home:['Home','Everything important in one place'], projects:['Projects','Lectures and all generated clips'],
     review:['Clip Review','Approve AI clips before posting'], editor:['Editor','Edit the selected clip'],
-    schedule:['Publishing','Post now, download, or schedule your clips'], insights:['Insights','Clip quality and studio signals'],
-    publishing:['Channels','Connected publishing destinations'], templates:['Templates','Build a reusable look for every clip'], music:['Audio','Background tracks and audio level'],
-    brand:['Brand Kit','Watermark, colours and visual identity'], lab:['AI Director','Growth strategy and explainable clip intelligence'],
-    automation:['Settings','Generation rules and studio controls'], subscription:['Subscription','Plan, tokens and payment details'],
-    admin:['Admin','Subscriptions, storage, integrations and sign-ups']
+    schedule:['Schedule','Queued posts and delivery timing'], insights:['Insights','Clip quality and studio signals'],
+    publishing:['Channels','Connected publishing destinations'], templates:['Templates','Caption styles and reusable looks'], music:['Audio','Background tracks and audio level'],
+    automation:['Settings','Generation rules and studio controls']
   };
   $('#dcPageName').textContent = labels[view]?.[0] || view;
   $('#dcPageSub').textContent = labels[view]?.[1] || '';
@@ -1538,47 +1083,35 @@ function go(view){
   if (CUSTOM.has(view)) {
     $$('.main-col > .panel').forEach(p => p.classList.add('hide'));
     $(`#view-${view}`)?.classList.remove('hide');
-    if (view === 'admin') renderAdminPage();
     if (view === 'home') renderHome();
     if (view === 'projects') renderProjects();
     if (view === 'review') renderReview();
     if (view === 'editor') ensureEditor();
-    if (view === 'schedule') renderPublishingWorkspace();
     if (view === 'publishing') renderConnections();
     if (view === 'templates') renderTemplatesPage();
-    if (view === 'brand') renderBrandKit();
-    if (view === 'lab') renderCreatorLab();
     if (view === 'music') renderAudioLibrary();
     if (view === 'insights') renderInsightsPage();
     if (view === 'automation') renderSettingsPage();
-    if (view === 'subscription') renderSubscriptionPage();
   } else if (typeof showView === 'function') {
     showView(view);
   } else {
     $$('.main-col > .panel').forEach(p => p.classList.toggle('hide', p.id !== `view-${view}`));
   }
-  lastDataSignature=structuralDataSignature(data());
   requestAnimationFrame(()=>animatePanel($(`#view-${view}`)));
-  if(changedView)requestAnimationFrame(()=>maybeStartPageTour(view));
   window.scrollTo({top:0, behavior:'auto'});
 }
 
 function activeJobs(){
   const d = data(); if (!d) return [];
   const jobs = [];
-  const stageWithQueue=item=>Number(item?.queuePosition||0)>0?`${item.stage||'Queued'} · position ${Math.round(item.queuePosition)}`:(item?.stage||item?.status);
   (d.projects || []).forEach(p => {
-    if (['queued','processing'].includes(p.status)) jobs.push({kind:'project', title:p.title || 'Lecture', stage:stageWithQueue(p), progress:Number(p.progress || 0), at:p.startedAt || p.submittedAt, etaSec:Number.isFinite(Number(p.etaSec))?Number(p.etaSec):null, stages:Array.isArray(p.stages)?p.stages:[], status:p.status});
-    if (p.moreJob && ['queued','processing'].includes(p.moreJob.status)) jobs.push({kind:'project', title:`More clips · ${p.title || 'Lecture'}`, stage:stageWithQueue(p.moreJob), progress:Number(p.moreJob.progress || 0), at:p.moreJob.startedAt || p.moreJob.createdAt});
+    if (['queued','processing'].includes(p.status)) jobs.push({kind:'project', title:p.title || 'Lecture', stage:p.stage || p.status, progress:Number(p.progress || 0), at:p.startedAt || p.submittedAt});
+    if (p.moreJob && ['queued','processing'].includes(p.moreJob.status)) jobs.push({kind:'project', title:`More clips · ${p.title || 'Lecture'}`, stage:p.moreJob.stage || p.moreJob.status, progress:Number(p.moreJob.progress || 0), at:p.moreJob.startedAt || p.moreJob.createdAt});
   });
   (d.rerenderJobs || []).forEach(j => {
     if (['queued','processing'].includes(j.status)) {
       const clip = (d.clips || []).find(c => c.id === j.clipId);
-      jobs.push({id:j.id||j.clipId,kind:'render', title:`${j.clipTitle || clip?.title || 'Clip'}`, stage:stageWithQueue(j),
-        progress:Number(j.progress || 0), at:j.startedAt || j.createdAt,
-        etaSec:Number.isFinite(Number(j.etaSec)) ? Number(j.etaSec) : null,
-        batchId:j.batchId || '', batchLabel:j.batchLabel || '', batchTotal:Number(j.batchTotal || 0),
-        stages:Array.isArray(j.stages) ? j.stages : [], status:j.status});
+      jobs.push({kind:'render', title:`Editing ${clip?.title || 'clip'}`, stage:j.stage || j.status, progress:Number(j.progress || 0), at:j.startedAt || j.createdAt});
     }
   });
   (d.clips || []).forEach(c => (c.targets || []).forEach(t => {
@@ -1587,30 +1120,6 @@ function activeJobs(){
   return jobs.sort((a,b)=>Number(b.at||0)-Number(a.at||0));
 }
 
-function homeExperienceContent(exp,waiting=0){
-  const aiDirector=Boolean(billingInfo().features?.aiDirector||billingInfo().current?.unlimited);
-  const map={
-    owner:{eyebrow:'Premium creator studio',headline:'Turn one talk into your next week of content.',copy:'AI finds the best moments, so you can focus on what matters.',primary:'Create new clips'},
-    premium_trial:{eyebrow:'Premium trial · everything unlocked',headline:'Your full studio is open.\nMake the trial count.',copy:'Use AI Director, Brand Kit, clean exports and social publishing while every Premium feature is available.',primary:'Create with Premium'},
-    premium_active:{eyebrow:'Premium creator studio',headline:'Turn one talk into your next week of content.',copy:'AI finds the best moments, so you can focus on what matters.',primary:'Create new clips'},
-    premium_canceling:{eyebrow:'Premium access continues',headline:'Keep creating while\nyour plan is active.',copy:'Your workflow remains unlocked until the end of the current billing period. Nothing already created is removed.',primary:'Create new clips'},
-    premium_empty:{eyebrow:'Premium studio · wallet empty',headline:'Your work is ready.\nAdd room for the next source.',copy:'Editing and downloads remain available. Add tokens to resume new processing and social publishing.',primary:'Add tokens'},
-    premium_past_due:{eyebrow:'Billing needs attention',headline:'Your studio is safe.\nRestore processing in one step.',copy:'Existing projects, edits and downloads stay available while generation and publishing are paused.',primary:'Update billing'},
-    free_empty:{eyebrow:'Free preview complete',headline:'You built the first clips.\nUnlock clean publishing.',copy:'Keep browsing and editing your work. Premium removes the watermark and opens Brand Kit, AI Director and social publishing.',primary:'See Premium'},
-    free_expired:{eyebrow:'Free trial complete',headline:'Everything you made is safe.\nContinue when ready.',copy:'Browse projects and edit existing clips without pressure. Choose a plan to restart generation and unlock publishing.',primary:'Choose a plan'},
-    free_trial:{eyebrow:'Free 3-day creator trial',headline:'Create your first clips.\nLearn the whole workflow.',copy:'Use 40 tokens to generate, edit and download watermarked clips. Premium publishing stays locked until you choose a plan.',primary:'Start free'},
-  };
-  const profile=map[exp.id]||map.free_trial;
-  return{...profile,secondary:waiting?`Review ${waiting} ready`:aiDirector?'Open AI Director':exp.premium?'Open Templates':'See what Premium unlocks'};
-}
-function homeExperienceStrip(exp,d){
-  const projects=d.projects||[],clips=d.clips||[],connected=connectedPlatformCount(d),ready=clips.filter(c=>c.musicVerified&&c.renderVerified).length,features=billingInfo().features||{},aiDirector=Boolean(features.aiDirector||billingInfo().current?.unlimited);
-  if(exp.id==='owner')return `<section class="dc-v6-mode-card owner"><div><span>${ICON.analytics}</span><small>Owner view</small><strong>Creator workflow + live operations</strong><p>The customer experience stays clean while Admin Console carries worker lanes, subscriptions, storage and provider health.</p></div><button class="dc-btn secondary" data-dc-nav="admin">Open operations</button></section>`;
-  if(exp.browseOnly||exp.id==='premium_empty')return `<section class="dc-v6-mode-card attention"><div><span>${ICON.tokens}</span><small>${esc(exp.label)}</small><strong>Your existing workspace remains available.</strong><p>${esc(exp.detail)}. Projects, edits and downloads are not deleted.</p></div><button class="dc-btn" data-dc-nav="subscription">${exp.id==='premium_empty'?'Add tokens':'Compare plans'}</button></section>`;
-  if(exp.premium)return `<section class="dc-v6-mode-card premium"><div><span>${ICON.sparkles}</span><small>${exp.id==='premium_trial'?'Premium trial path':'Premium workflow'}</small><strong>${ready} quality-ready clips · ${connected} connected channels</strong><p>${aiDirector?'AI Director, active-speaker framing, Brand Kit and publishing preflight are unlocked.':'Brand Kit, clean exports and social publishing are unlocked. Upgrade when you need AI Director and active-speaker framing.'}</p></div><div class="dc-v6-mode-actions"><button class="dc-btn secondary" data-dc-nav="templates">Open Templates</button><button class="dc-btn" ${aiDirector?'data-dc-nav="lab"':'data-dc-nav="subscription"'}>${aiDirector?'Open AI Director':'Explore studio plans'}</button></div></section>`;
-  const steps=[['Import',projects.length>0],['Review',clips.length>0],['Style',Boolean(d.selectedTemplate)],['Publish',false]];
-  return `<section class="dc-v6-trial-path"><div><small>Your free path</small><strong>See the product before you subscribe.</strong><p>Downloads include the DeenClipped watermark; social posting unlocks on Premium.</p></div><div class="dc-v6-trial-steps">${steps.map(([label,done],index)=>`<span class="${done?'done':index===3?'locked':''}"><i>${done?ICON.check:index===3?ICON.brand:index+1}</i><b>${esc(label)}</b><em>${index===3?'Premium':done?'Complete':'Next'}</em></span>`).join('')}</div><button class="dc-btn secondary" data-dc-nav="subscription">Compare Premium</button></section>`;
-}
 function renderHome(){
   const panel = $('#view-home'), d = data(); if (!panel || !d) return;
   document.body.classList.remove('dc-project-open');
@@ -1621,53 +1130,43 @@ function renderHome(){
   const selectedTemplate = d.selectedTemplate?.name || d.templateDraft?.name || 'Choose template';
   const connected = connectedPlatformCount(d);
   const next = nextScheduledClip(clips);
-  const exp=clientExperience(),experience=homeExperienceContent(exp,waiting),createLocked=!exp.canGenerate;
-  const heroHeadline=exp.premium||exp.id==='owner'?'Turn one talk into your next week of content.':experience.headline;
-  const heroCopy=exp.premium||exp.id==='owner'?'AI finds the best moments, so you can focus on what matters.':experience.copy;
-  const selectedId=d.selectedTemplate?.id||d.templates?.[0]?.id||'';
-  panel.innerHTML = `<div class="dc-v7-home" data-account-mode="${esc(exp.id)}">
-    <section class="dc-v7-home-hero" data-tour="home-hero">
-      <div class="dc-v7-home-copy">
-        <div class="dc-v7-kicker">${ICON.quality}<span>${esc(exp.premium||exp.id==='owner'?'Premium creator studio':experience.eyebrow)}</span></div>
-        <h1>${esc(heroHeadline).replace('your next week of content.','your next <em>week of content.</em>').replace(/\n/g,'<br>')}</h1>
-        <p>${esc(heroCopy)}</p>
-        <div class="dc-v7-home-actions"><button class="dc-btn" id="dcHeroCreate">＋ &nbsp;${esc(experience.primary)}</button><button class="dc-btn secondary" ${waiting?'data-dc-nav="review"':billingInfo().features?.aiDirector?'data-dc-nav="lab"':exp.premium?'data-dc-nav="templates"':'data-dc-nav="subscription"'}>${ICON.review}<span>${waiting?`Review ${waiting} ready`:esc(experience.secondary)}</span></button></div>
-        <div class="dc-v7-home-stats" aria-label="Workspace summary">${v5InlineStat(projects.length,'Sources')}${v5InlineStat(clips.length,'Clips')}${v5InlineStat(waiting,'To review')}${v5InlineStat(posted,'Published')}</div>
-      </div>
-      <div class="dc-v7-home-stage" aria-label="Preview of vertical clips"><i class="dc-v7-stage-orbit"></i>${v5HeroCards(clips)}</div>
-    </section>
-    <section class="dc-v7-workflow-strip">
-      <h2>Continue your workflow</h2>
-      <div class="dc-v7-workflow-steps">
-        <button class="is-active" id="dcWorkflowImport"><b>1</b><span><strong>Import</strong><small>Add your source</small></span></button>
-        <i></i><button data-dc-nav="review"><b>2</b><span><strong>Review</strong><small>AI finds the best clips</small></span></button>
-        <i></i><button data-dc-nav="projects"><b>3</b><span><strong>Edit</strong><small>Refine and perfect</small></span></button>
-        <i></i><button data-dc-nav="schedule"><b>4</b><span><strong>Publish</strong><small>Share everywhere</small></span></button>
-      </div>
-    </section>
-    <div class="dc-v7-home-main"><span class="dc-v7-home-main-contract">dc-v7-create · dc-v7-up-next</span>
-      <section class="dc-v7-create ${createLocked?'is-locked':''}" data-tour="create-form">
-        <header><h2>Create clips</h2><p>Import a talk or podcast to get started.</p></header>
-        ${createLocked?`<div class="dc-v7-create-lock"><span>${ICON.brand}</span><p><strong>${esc(exp.label)}</strong> ${esc(exp.detail)}.</p><button class="dc-btn" data-dc-nav="subscription">${exp.id==='premium_empty'?'Add tokens':'Unlock studio'}</button></div>`:''}
-        <div class="dc-v7-url-row">${ICON.link}<input id="dcCreateUrl" placeholder="Paste YouTube, Vimeo or podcast URL" ${createLocked?'disabled':''}><button class="dc-btn" id="dcGenerate" data-tour="generate-button" ${createLocked?'disabled':''}>Import</button></div>
-        <div class="dc-v7-create-options">
-          <label><span>Template</span><select id="dcCreateTemplate" data-tour="template-picker"><option value="${esc(selectedId)}" selected>Auto select</option>${(d.templates||[]).filter(t=>t.id!==selectedId).map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>
-          <label><span>Clips</span><select id="dcCreateCount" aria-label="Number of clips"><option>4</option><option>8</option><option selected>10</option><option>12</option><option>16</option></select></label>
-          <label><span>Length</span><select id="dcCreateDuration" aria-label="Clip duration"><option value="30,60" selected>Auto</option><option value="15,45">15–45 sec</option><option value="45,90">45–90 sec</option></select></label>
-          <button class="dc-btn secondary" id="dcPickVideo" type="button" ${createLocked?'disabled':''}>${ICON.publish} Upload file</button>
+  panel.innerHTML = `
+    <div class="dc-home-v5">
+      <section class="dc-v5-hero" data-tour="home-hero">
+        <div class="dc-v5-hero-copy">
+          <div class="dc-v5-eyebrow"><i></i> AI clip studio</div>
+          <h1>One talk.<br>Your next month of content.</h1>
+          <p>DeenClipped finds the strongest moments, builds clean vertical clips and prepares them for every channel—while you stay in control of what gets published.</p>
+          <div class="dc-v5-hero-actions"><button class="dc-btn" id="dcHeroCreate">Start clipping</button>${waiting?`<button class="dc-btn secondary" data-dc-nav="review">Review ${waiting} ready</button>`:''}</div>
+          <div class="dc-v5-inline-stats" aria-label="Workspace summary">${v5InlineStat(projects.length,'Sources')}${v5InlineStat(clips.length,'Clips')}${v5InlineStat(waiting,'To review')}${v5InlineStat(posted,'Published')}</div>
+          ${v5BrandRail(d)}
         </div>
-        <small class="dc-v7-supports">Supports: YouTube, Vimeo, MP4, MP3, WAV and more ${ICON.info||''}</small>
+        <div class="dc-v5-stage" aria-label="Preview of vertical clips"><div class="dc-v5-stage-glow"></div>${v5HeroCards(clips)}</div>
+      </section>
+
+      <section class="dc-v5-create" data-tour="create-form">
+        <div class="dc-v5-create-head"><div><h2>Create your clips</h2><p>Paste a supported video link or upload your original file.</p></div><span class="dc-v5-token-note">${uiIcon('tokens')} Token cost is confirmed before processing</span></div>
+        <div class="dc-v5-url-row"><span class="dc-v5-url-brand">${socialSvg('youtube')}</span><input id="dcCreateUrl" placeholder="Paste a YouTube or video URL"><button class="dc-btn" id="dcGenerate" data-tour="generate-button">Generate clips</button></div>
+        <div class="dc-v5-options">
+          <label class="dc-v5-option"><span>Look</span><select id="dcCreateTemplate" data-tour="template-picker">${(d.templates||[]).map(t=>`<option value="${esc(t.id)}" ${t.id===d.selectedTemplate?.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select></label>
+          <label class="dc-v5-option"><span>Clips</span><select id="dcCreateCount" aria-label="Number of clips"><option>4</option><option selected>8</option><option>12</option><option>16</option></select></label>
+          <label class="dc-v5-option"><span>Length</span><select id="dcCreateDuration" aria-label="Clip duration"><option value="15,45">15–45 sec</option><option value="30,60" selected>30–60 sec</option><option value="45,90">45–90 sec</option></select></label>
+          <button class="dc-btn secondary dc-v5-upload" id="dcPickVideo" type="button">${uiIcon('publish')} Upload original</button>
+        </div>
         <input id="dcVideoUpload" type="file" accept="video/mp4,video/quicktime,video/x-m4v,video/webm,video/x-matroska" hidden>
       </section>
-      ${v5UpNext(d,jobs,next,waiting,selectedTemplate)}
-    </div>
-  </div>`;
-  $('#dcGenerate').onclick=createLocked?()=>go('subscription'):generateProject;
-  $('#dcPickVideo').onclick=createLocked?()=>go('subscription'):()=>$('#dcVideoUpload').click();
+
+      ${v5HappeningNow(d,jobs,next,waiting,selectedTemplate)}
+
+      <section class="dc-v5-lower">
+        <div class="dc-v5-library"><div class="dc-v5-section-head"><div><h2>Your library</h2><p>Recent source videos and generated clips.</p></div><button class="dc-v5-text-link" data-dc-nav="projects">View all ${uiIcon('chevron')}</button></div>${v5ProjectLibrary(projects,clips)}</div>
+        <aside class="dc-v5-side">${v5UpNext(d,jobs,next,waiting,selectedTemplate)}${v5Channels(d,connected)}</aside>
+      </section>
+    </div>`;
+  $('#dcGenerate').onclick=generateProject;
+  $('#dcPickVideo').onclick=()=>$('#dcVideoUpload').click();
   $('#dcVideoUpload').onchange=()=>prepareVideoUpload($('#dcVideoUpload').files?.[0]);
-  $('#dcHeroCreate').onclick=()=>{if(createLocked){go('subscription');return}$('#dcCreateUrl').focus()};
-  $('#dcWorkflowImport')?.addEventListener('click',()=>$('#dcCreateUrl')?.focus());
-  lastDataSignature=structuralDataSignature(d);
+  $('#dcHeroCreate').onclick=()=>$('#dcCreateUrl').focus();
   requestAnimationFrame(()=>animatePanel(panel));
 }
 function uiIcon(name){return `<span class="dc-ui-icon">${ICON[name]||ICON.sparkles}</span>`}
@@ -1679,79 +1178,11 @@ function v5BrandRail(d){
 function v5HeroCards(clips){
   const recent=[...clips].filter(c=>c.thumbUrl).sort((a,b)=>Number(b.createdAt||b.renderedAt||0)-Number(a.createdAt||a.renderedAt||0)).slice(0,3);
   const fallback=[
-    ['/v7-reference-assets/home-clips.png','Your first AI-selected clip'],
-    ['/v7-reference-assets/home-clips.png','Your strongest moment'],
-    ['/v7-reference-assets/home-clips.png','Ready for your review']
+    ['/marketing-assets/reel-dua.webp','Powerful reminder'],
+    ['/marketing-assets/reel-deeds.webp','Strongest moment'],
+    ['/marketing-assets/reel-quran.webp','Ready to publish']
   ];
-  return fallback.map(([image,title],index)=>{const clip=recent[index],src=clip?.thumbUrl?authedUrl(clip.thumbUrl):image,duration=clip?formatDuration(clip.durationMs):'—',score=clip?Math.round(Number(clip.score||clip.scoreBreakdown?.hook||0)):'—';return `<article class="dc-v7-float-card"><div><img src="${src}" alt="${esc(clip?.title||title)} preview"><span class="dc-v7-clip-score"><b>${esc(score)}</b> AI score</span><small>${ICON.play} ${esc(duration)}</small></div><strong>${esc(shortText(clip?.title||title,54))}</strong></article>`}).join('');
-}
-/* Dismissed issues -------------------------------------------------------- */
-const DISMISS_KEY='dc-dismissed-issues';
-function dismissedIssues(){
-  try{const raw=localStorage.getItem(DISMISS_KEY);const list=raw?JSON.parse(raw):[];return Array.isArray(list)?list:[]}catch{return []}
-}
-function issueKey(issue){return `${issue.kind}:${issue.id}:${issue.at||0}`}
-function dismissIssue(key){
-  try{const list=dismissedIssues();if(!list.includes(key)){list.push(key);localStorage.setItem(DISMISS_KEY,JSON.stringify(list.slice(-200)))}}catch{}
-}
-function clearDismissedIssues(){try{localStorage.removeItem(DISMISS_KEY)}catch{}}
-/* Recent activity --------------------------------------------------------- */
-function recentActivity(d,limit=14){
-  const items=[];
-  (d.projects||[]).forEach(p=>{
-    const title=projectDisplayTitle(p);
-    if(p.status==='done')items.push({tone:'good',text:`${title} finished · ${p.clipCount||0} clips`,at:p.completedAt||p.updatedAt});
-    else if(p.status==='failed'||p.error)items.push({tone:'bad',text:`${title} failed`,at:p.updatedAt||p.completedAt});
-    else if(['queued','processing'].includes(p.status))items.push({tone:'live',text:`${title} · ${p.stage||'processing'}`,at:p.updatedAt||p.startedAt||p.submittedAt});
-  });
-  (d.clips||[]).forEach(c=>{
-    const title=shortText(c.title||'Clip',40);
-    if(c.status==='posted')items.push({tone:'good',text:`Posted · ${title}`,at:c.postedAt||c.updatedAt});
-    else if(c.status==='publish_failed')items.push({tone:'bad',text:`Publish failed · ${title}`,at:c.updatedAt});
-    else if(c.status==='scheduled'&&c.scheduledAt)items.push({tone:'live',text:`Scheduled · ${title}`,at:c.scheduledAt});
-  });
-  return items.filter(i=>Number(i.at)).sort((a,b)=>Number(b.at||0)-Number(a.at||0)).slice(0,limit);
-}
-/* Issues + activity drawer ------------------------------------------------ */
-function closeIssuesPanel(){const el=document.getElementById('dcIssuesPanel');if(el)el.remove()}
-function openIssuesPanel(){
-  const d=data();if(!d)return;
-  closeIssuesPanel();
-  const issues=workspaceFailures(d),activity=recentActivity(d);
-  const wrap=document.createElement('div');
-  wrap.id='dcIssuesPanel';
-  wrap.setAttribute('style','position:fixed;inset:0;z-index:9000;display:flex;justify-content:flex-end;background:rgba(6,6,10,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);');
-  const issueRows=issues.length?issues.map(issue=>`<div style="display:flex;gap:12px;align-items:flex-start;padding:14px;border:1px solid rgba(255,255,255,.09);border-radius:14px;background:rgba(255,255,255,.035);margin-bottom:10px">
-      <span style="width:8px;height:8px;border-radius:99px;background:#ff6b6b;margin-top:7px;flex:none"></span>
-      <div style="flex:1;min-width:0">
-        <strong style="display:block;font-size:13.5px;line-height:1.35">${esc(shortText(issue.title,70))}</strong>
-        <span style="display:block;color:rgba(255,255,255,.62);font-size:12px;margin-top:3px">${esc(shortText(issue.detail,150))}</span>
-        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">${v5FailureAction(issue)}<button class="dc-btn secondary" data-dismiss-issue="${esc(issueKey(issue))}">Dismiss</button></div>
-      </div></div>`).join(''):`<div style="padding:20px;text-align:center;color:rgba(255,255,255,.55);font-size:13px">Nothing needs attention.</div>`;
-  const activityRows=activity.length?activity.map(a=>`<div style="display:flex;gap:10px;align-items:center;padding:9px 2px;border-bottom:1px solid rgba(255,255,255,.05)">
-      <span style="width:6px;height:6px;border-radius:99px;flex:none;background:${a.tone==='bad'?'#ff6b6b':a.tone==='live'?'#f5c451':'#4ade80'}"></span>
-      <span style="flex:1;min-width:0;font-size:12.5px;color:rgba(255,255,255,.85);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.text)}</span>
-      <span style="font-size:11px;color:rgba(255,255,255,.4);flex:none">${esc(formatDate(a.at))}</span>
-    </div>`).join(''):`<div style="padding:14px 2px;color:rgba(255,255,255,.45);font-size:12.5px">No recent activity yet.</div>`;
-  wrap.innerHTML=`<aside style="width:min(430px,100%);height:100%;overflow:auto;background:rgba(18,18,24,.92);border-left:1px solid rgba(255,255,255,.10);padding:22px;box-shadow:-30px 0 60px rgba(0,0,0,.45)">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
-      <strong style="font-size:16px;letter-spacing:-.01em">Issues & activity</strong>
-      <button id="dcIssuesClose" class="dc-btn secondary" type="button" aria-label="Close">Close</button>
-    </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 10px">
-      <span style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.5)">Needs attention${issues.length?` · ${issues.length}`:''}</span>
-      ${issues.length?`<button class="dc-btn secondary" id="dcDismissAll" type="button">Dismiss all</button>`:`<button class="dc-btn secondary" id="dcRestoreDismissed" type="button">Restore dismissed</button>`}
-    </div>
-    ${issueRows}
-    <div style="margin:22px 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.5)">Recently</div>
-    ${activityRows}
-  </aside>`;
-  document.body.appendChild(wrap);
-  wrap.addEventListener('click',e=>{if(e.target===wrap)closeIssuesPanel()});
-  const closeBtn=wrap.querySelector('#dcIssuesClose');if(closeBtn)closeBtn.onclick=closeIssuesPanel;
-  const dismissAll=wrap.querySelector('#dcDismissAll');if(dismissAll)dismissAll.onclick=()=>{issues.forEach(i=>dismissIssue(issueKey(i)));openIssuesPanel();try{sync()}catch{}};
-  const restore=wrap.querySelector('#dcRestoreDismissed');if(restore)restore.onclick=()=>{clearDismissedIssues();openIssuesPanel();try{sync()}catch{}};
-  wrap.querySelectorAll('[data-dismiss-issue]').forEach(btn=>{btn.onclick=()=>{dismissIssue(btn.dataset.dismissIssue);openIssuesPanel();try{sync()}catch{}}});
+  return fallback.map(([image,title],index)=>{const clip=recent[index],src=clip?.thumbUrl?authedUrl(clip.thumbUrl):image;return `<article class="dc-v5-phone"><img src="${src}" alt="${esc(clip?.title||title)} preview"><span class="dc-v5-score">${clip?Math.round(clip.score||0):[94,89,92][index]}</span><span class="dc-v5-phone-copy"><small>${clip?'AI selected':['Hook','Caption','Publish'][index]}</small><strong>${esc(shortText(clip?.title||title,38))}</strong></span></article>`}).join('');
 }
 function workspaceFailures(d){
   const issues=[];
@@ -1761,8 +1192,7 @@ function workspaceFailures(d){
   });
   (d.rerenderJobs||[]).forEach(j=>{if(j.status==='failed'){const clip=(d.clips||[]).find(c=>c.id===j.clipId);issues.push({kind:'render',id:j.clipId,title:`Edit failed · ${clip?.title||'Clip'}`,detail:shortError(j.error||j.stage||'The edited clip could not be rendered.'),at:j.updatedAt||j.completedAt||j.startedAt||j.createdAt})}});
   (d.clips||[]).forEach(c=>{const failed=(c.targets||[]).filter(t=>t.status==='failed');if(c.status==='publish_failed'||failed.length){const target=failed[0];issues.push({kind:'publish',id:c.id,title:`Publish failed · ${c.title||'Clip'}`,detail:shortError(target?.error||target?.stage||c.error||'A connected channel rejected this upload.'),at:target?.updatedAt||c.updatedAt||c.postedAt||c.createdAt})}});
-  const dismissed=dismissedIssues();
-  return issues.filter(issue=>!dismissed.includes(issueKey(issue))).sort((a,b)=>Number(b.at||0)-Number(a.at||0));
+  return issues.sort((a,b)=>Number(b.at||0)-Number(a.at||0));
 }
 function v5FailureAction(issue){
   if(issue.kind==='project')return `<button class="dc-btn danger" data-retry-project="${esc(issue.id)}">Retry</button>`;
@@ -1770,26 +1200,10 @@ function v5FailureAction(issue){
   if(issue.kind==='render')return `<button class="dc-btn secondary" data-edit-video-clip="${esc(issue.id)}">Open editor</button>`;
   return `<button class="dc-btn secondary" data-dc-nav="schedule">Open status</button>`;
 }
-/**
- * A readable name for whatever is running right now.
- *
- * The Happening Now bar printed `job.title` straight out, so a fresh import
- * showed the raw watch URL — the least useful string available, and the first
- * thing a user sees on the home screen. The project list already solved this
- * with `cleanUrlTitle`; this reuses it rather than inventing a second answer.
- */
-function liveJobTitle(job){
-  const raw=String(job?.title||'').trim();
-  if(!raw)return 'Working now';
-  return /^https?:\/\//i.test(raw)?(cleanUrlTitle(raw)||raw):raw;
-}
 function v5HappeningNow(d,jobs,next,waiting,templateName){
   const issues=workspaceFailures(d);
-  // Live work always wins this slot. A failure from days ago must never hide
-  // the job that is running right now; unresolved issues are surfaced as a
-  // badge here and in full via the issues panel in the top bar.
-  if(jobs.length){const job=jobs[0],progress=Number.isFinite(job.progress)?Math.round(job.progress):null;return `<section class="dc-v5-now" data-tour="happening-now" data-live-job="current"><span class="dc-v5-now-icon live">${uiIcon(job.kind==='publish'?'publish':job.kind==='render'?'editor':'sparkles')}</span><div class="dc-v5-now-copy"><small>Happening now</small><strong data-live-title>${esc(shortText(liveJobTitle(job),72))}</strong><span data-live-stage>${esc(shortText(job.stage||'Working now',90))}</span><div class="dc-v5-now-progress" data-live-progress-wrap ${progress===null?'hidden':''}><i data-live-progress style="width:${clamp(progress||0,0,100)}%"></i></div></div>${issues.length?`<button class="dc-pill bad" data-open-issues="1" title="Open issues">${issues.length} ${issues.length===1?'issue':'issues'}</button>`:''}<span class="dc-pill warn" data-live-percent>${progress!==null?`${progress}%`:'Live'}</span></section>`}
-  if(issues.length){const issue=issues[0];return `<section class="dc-v5-now fail" data-tour="happening-now"><span class="dc-v5-now-icon fail">${uiIcon('warning')}</span><div class="dc-v5-now-copy"><small>Needs attention${issues.length>1?` · ${issues.length} issues`:''}</small><strong>${esc(shortText(issue.title,72))}</strong><span>${esc(shortText(issue.detail,110))}</span></div>${issues.length>1?`<button class="dc-btn secondary" data-open-issues="1">View all</button>`:''}${v5FailureAction(issue)}</section>`}
+  if(issues.length){const issue=issues[0];return `<section class="dc-v5-now fail" data-tour="happening-now"><span class="dc-v5-now-icon fail">${uiIcon('warning')}</span><div class="dc-v5-now-copy"><small>Needs attention${issues.length>1?` · ${issues.length} issues`:''}</small><strong>${esc(shortText(issue.title,72))}</strong><span>${esc(shortText(issue.detail,110))}</span></div>${v5FailureAction(issue)}</section>`}
+  if(jobs.length){const job=jobs[0],progress=Number.isFinite(job.progress)?Math.round(job.progress):null;return `<section class="dc-v5-now" data-tour="happening-now"><span class="dc-v5-now-icon live">${uiIcon(job.kind==='publish'?'publish':job.kind==='render'?'editor':'sparkles')}</span><div class="dc-v5-now-copy"><small>Happening now</small><strong>${esc(shortText(job.title,72))}</strong><span>${esc(shortText(job.stage||'Working now',90))}</span>${progress!==null?`<div class="dc-v5-now-progress"><i style="width:${clamp(progress,0,100)}%"></i></div>`:''}</div><span class="dc-pill warn">${progress!==null?`${progress}%`:'Live'}</span></section>`}
   if(waiting)return `<section class="dc-v5-now" data-tour="happening-now"><span class="dc-v5-now-icon">${uiIcon('review')}</span><div class="dc-v5-now-copy"><small>Happening now</small><strong>${waiting} ${waiting===1?'clip is':'clips are'} ready to review</strong><span>Choose the strongest moments before they enter the publishing queue.</span></div><button class="dc-btn secondary" data-dc-nav="review">Review clips</button></section>`;
   if(next)return `<section class="dc-v5-now" data-tour="happening-now"><span class="dc-v5-now-icon live">${uiIcon('clock')}</span><div class="dc-v5-now-copy"><small>Happening now</small><strong>${esc(shortText(next.title||'Your next clip',72))}</strong><span>Scheduled for ${esc(formatDate(next.scheduledAt))}</span></div><button class="dc-btn secondary" data-dc-nav="schedule">View schedule</button></section>`;
   return `<section class="dc-v5-now" data-tour="happening-now"><span class="dc-v5-now-icon live">${uiIcon('check')}</span><div class="dc-v5-now-copy"><small>Happening now</small><strong>Your studio is ready for the next source</strong><span>${esc(templateName)} is selected. Nothing is processing right now.</span></div><span class="dc-pill good">Ready</span></section>`;
@@ -1800,11 +1214,12 @@ function v5ProjectLibrary(projects,clips){
   return `<div class="dc-v5-project-grid">${list.map(p=>{const own=clips.filter(c=>c.projectId===p.id),thumb=projectThumbUrl(p,clips),failed=p.status==='failed'||p.error,busy=['queued','processing'].includes(p.status);return `<button class="dc-v5-project" type="button" data-open-project="${esc(p.id)}"><span class="dc-v5-project-media">${thumb?`<img src="${authedUrl(thumb)}" alt="${esc(projectDisplayTitle(p))} thumbnail">`:uiIcon('projects')}<b class="dc-v5-project-status dc-pill ${failed?'bad':busy?'warn':'good'}">${failed?'Fix':busy?'Processing':'Ready'}</b></span><span class="dc-v5-project-copy"><strong>${esc(shortText(projectDisplayTitle(p),48))}</strong><small>${own.length} clips · ${own.filter(c=>['approved','scheduled','publishing','posted'].includes(c.status)).length} approved</small></span></button>`}).join('')}</div>`;
 }
 function v5UpNext(d,jobs,next,waiting,templateName){
-  const clips=d.clips||[],candidate=next||clips.find(c=>c.status==='waiting')||clips[0],job=jobs[0];
-  const title=job?liveJobTitle(job):candidate?.title||'Your next clip will appear here';
-  const image=candidate?.thumbUrl?authedUrl(candidate.thumbUrl):'/marketing-assets/reel-dua.webp';
-  const duration=candidate?formatDuration(candidate.durationMs):'';
-  return `<section class="dc-v7-up-next"><header><h2>Up next</h2><p>${job?'Processing is underway.':waiting?`${waiting} ${waiting===1?'clip is':'clips are'} ready for review.`:'Your next clip is ready when you are.'}</p></header><div class="dc-v7-up-next-media"><img src="${image}" alt="${esc(title)}"><span>${ICON.play}</span>${duration?`<small>${ICON.play} ${esc(duration)}</small>`:''}</div><strong>${esc(shortText(title,62))}</strong><button class="dc-btn" data-dc-nav="${job?'projects':waiting?'review':next?'schedule':'review'}">Open review ${ICON.chevron}</button><small class="dc-v7-up-template">${esc(templateName)} selected</small></section>`;
+  let body='';
+  if(jobs.length){const j=jobs[0];body=`<div class="dc-v5-status-line">${uiIcon(j.kind==='publish'?'publish':'scissors')}<span>${esc(shortText(j.title,58))} · ${esc(shortText(j.stage||'Working now',50))}</span></div>`}
+  else if(waiting)body=`<p>${waiting} ${waiting===1?'clip is':'clips are'} ready for your decision.</p><button class="dc-btn" data-dc-nav="review">Open review</button>`;
+  else if(next)body=`<div class="dc-v5-next-main">${next.thumbUrl?`<img src="${authedUrl(next.thumbUrl)}" alt="${esc(next.title||'Scheduled clip')}">`:uiIcon('publish')}<div><strong>${esc(shortText(next.title||'Scheduled clip',46))}</strong><small>${esc(formatDate(next.scheduledAt))}</small></div></div><button class="dc-btn secondary" data-dc-nav="schedule">View schedule</button>`;
+  else body=`<div class="dc-v5-status-line">${uiIcon('check')}<span>Workspace ready · ${esc(templateName)} selected</span></div>`;
+  return `<section class="dc-v5-side-card"><div class="dc-v5-side-head">${uiIcon(jobs.length?'sparkles':next?'clock':waiting?'review':'check')}<strong>Up next</strong></div>${body}</section>`;
 }
 function v5Channels(d,connected){
   const providers=d.social?.providers||{};
@@ -2200,7 +1615,7 @@ async function queueProjectImport(url,button,range={}){
   const [min,max]=$('#dcCreateDuration').value.split(',').map(Number);
   button.disabled=true; button.textContent='Queueing…';
   try{
-    await callApi('/api/template',{method:'POST',body:JSON.stringify({id:$('#dcCreateTemplate').value,propagate:false})});
+    await callApi('/api/template',{method:'POST',body:JSON.stringify({id:$('#dcCreateTemplate').value})});
     await callApi('/api/clip-settings',{method:'POST',body:JSON.stringify({clipsPerVideo:Number($('#dcCreateCount').value),clipMinSeconds:min,clipMaxSeconds:max})});
     const payload={urls:url,sourceStartSeconds:Math.max(0,Math.round(Number(range.sourceStartSeconds||0)))};
     if(Number.isFinite(Number(range.sourceEndSeconds))&&Number(range.sourceEndSeconds)>payload.sourceStartSeconds) payload.sourceEndSeconds=Math.round(Number(range.sourceEndSeconds));
@@ -2242,7 +1657,7 @@ async function queueVideoUpload(file,button,range={}){
   const [min,max]=$('#dcCreateDuration').value.split(',').map(Number);
   button.disabled=true;button.textContent='Uploading…';
   try{
-    await callApi('/api/template',{method:'POST',body:JSON.stringify({id:$('#dcCreateTemplate').value,propagate:false})});
+    await callApi('/api/template',{method:'POST',body:JSON.stringify({id:$('#dcCreateTemplate').value})});
     await callApi('/api/clip-settings',{method:'POST',body:JSON.stringify({clipsPerVideo:Number($('#dcCreateCount').value),clipMinSeconds:min,clipMaxSeconds:max})});
     const contentType=file.type||'video/mp4';
     const upload=await callApi('/api/uploads/presign',{method:'POST',body:JSON.stringify({fileName:file.name,contentType})});
@@ -2257,7 +1672,6 @@ async function queueVideoUpload(file,button,range={}){
 
 function renderProjects(){
   const panel=$('#view-projects'),d=data();if(!panel||!d)return;
-  hideLegacyProjectBrowser();
   if(selectedProjectId){renderProjectDetail(panel,d);return}
   document.body.classList.remove('dc-project-open');
   panel.classList.remove('dc-project-detail-view');
@@ -2270,40 +1684,12 @@ function renderProjects(){
   else if(projectSort==='az')projects.sort((a,b)=>String(projectDisplayTitle(a)).localeCompare(String(projectDisplayTitle(b))));
   else projects.sort((a,b)=>Number(b.submittedAt||0)-Number(a.submittedAt||0));
   const hasAny=(d.projects||[]).length>0;
-  const allProjects=d.projects||[],allClips=d.clips||[];
-  const waiting=allClips.filter(c=>c.status==='waiting').length,processing=allProjects.filter(p=>['queued','processing'].includes(p.status)).length;
-  const ready=allClips.filter(c=>['approved','ready','scheduled'].includes(c.status)).length,published=allClips.filter(c=>c.status==='posted').length;
-  panel.innerHTML=`<div class="dc-v7-projects"><section class="dc-v7-page-title"><div><h1>Projects</h1><p>Your source library</p></div><button class="dc-btn" data-dc-nav="home">＋ New project</button></section>
-    <div class="dc-v7-project-toolbar"><label>${ICON.search}<input id="dcProjectSearch" placeholder="Search projects" value="${esc(projectQuery)}"></label><select id="dcProjectFilter"><option value="all">${ICON.projects?'':' '}All projects</option><option value="processing" ${projectFilter==='processing'?'selected':''}>Processing</option><option value="ready" ${projectFilter==='ready'?'selected':''}>Ready to review</option><option value="issues" ${projectFilter==='issues'?'selected':''}>Needs attention</option></select><select id="dcProjectSort"><option value="newest">Newest first</option><option value="oldest" ${projectSort==='oldest'?'selected':''}>Oldest first</option><option value="az" ${projectSort==='az'?'selected':''}>A–Z</option></select></div>
-    <div class="dc-v7-project-layout"><section class="dc-v7-project-grid">${projects.length?projects.slice(0,20).map(p=>libraryProjectRow(p,allClips)).join(''):`<div class="dc-v7-project-empty"><span>${ICON.projects}</span><h2>${hasAny?'No projects match':'Start with one source video.'}</h2><p>${hasAny?'Clear the search or choose another filter.':'Your projects, generated clips and publishing state will stay together here.'}</p><button class="dc-btn" data-dc-nav="home">${hasAny?'Clear filters':'Create your first project'}</button></div>`}</section>
-      <aside class="dc-v7-project-rail"><section><small>Workflow</small><button data-dc-nav="projects"><span class="gold">${ICON.clock}</span><b>Processing</b><em>${processing}</em></button><button data-dc-nav="review"><span class="orange">${ICON.review}</span><b>Needs review</b><em>${waiting}</em></button><button data-dc-nav="review"><span class="green">${ICON.check}</span><b>Ready</b><em>${ready}</em></button><button data-dc-nav="schedule"><span class="purple">${ICON.publish}</span><b>Published</b><em>${published}</em></button><hr><button data-dc-nav="projects"><span class="gold">${ICON.projects}</span><b>All projects</b><em>${allProjects.length}</em></button></section><section class="dc-v7-project-tip"><span>${ICON.sparkles}</span><small>Tip</small><h3>Keep your source projects organised</h3><p>Break long recordings into clear themes for better clips.</p><button data-dc-nav="home">Learn more ${ICON.chevron}</button></section></aside>
-    </div></div>`;
+  panel.innerHTML=`<div class="dc-page-head"><div><h1>Projects</h1><p>Your source videos and every clip created from them.</p></div>${hasAny?'<button class="dc-btn" data-dc-nav="home">＋ New project</button>':''}</div>${hasAny?`<div class="dc-filterbar"><input id="dcProjectSearch" placeholder="Search projects" value="${esc(projectQuery)}"><select id="dcProjectFilter"><option value="all">All projects</option><option value="processing" ${projectFilter==='processing'?'selected':''}>Processing</option><option value="ready" ${projectFilter==='ready'?'selected':''}>Ready to review</option><option value="issues" ${projectFilter==='issues'?'selected':''}>Needs attention</option></select><select id="dcProjectSort"><option value="newest">Newest first</option><option value="oldest" ${projectSort==='oldest'?'selected':''}>Oldest first</option><option value="az" ${projectSort==='az'?'selected':''}>A–Z</option></select></div>`:''}<div class="dc-project-grid">${projects.length?projects.map(p=>projectCard(p,d.clips||[])).join(''):hasAny?`<div class="dc-empty"><strong>No projects match</strong>Clear the search or choose another filter.</div>`:`<section class="dc-empty-visual"><div class="dc-empty-visual-copy"><span>${ICON.projects} Your project library</span><h2>Start with one source video.</h2><p>Paste a supported link or upload your original video. DeenClipped keeps the source, generated clips and publishing status together.</p><button class="dc-btn" data-dc-nav="home">Create your first project</button></div><div class="dc-empty-visual-media"><img src="/marketing-assets/library-premium.webp" alt="DeenClipped project library preview"></div></section>`}</div>`;
   upgradeYoutubeFallbackButtons(panel,projects);
   if($('#dcProjectSearch'))$('#dcProjectSearch').oninput=e=>{projectQuery=e.target.value.trim().toLowerCase();renderProjects()};
   if($('#dcProjectFilter'))$('#dcProjectFilter').onchange=e=>{projectFilter=e.target.value;renderProjects()};
   if($('#dcProjectSort'))$('#dcProjectSort').onchange=e=>{projectSort=e.target.value;renderProjects()};
-  lastDataSignature=structuralDataSignature(d);
   requestAnimationFrame(()=>animatePanel(panel));
-}
-function libraryProjectRow(p,clips){
-  const own=clips.filter(c=>c.projectId===p.id),thumb=projectThumbUrl(p,clips),waiting=own.filter(c=>c.status==='waiting').length,scheduled=own.filter(c=>['approved','ready','scheduled','publishing'].includes(c.status)).length;
-  const failed=p.status==='failed'||p.error,busy=['queued','processing'].includes(p.status),tone=failed?'bad':busy?'blue':waiting?'orange':'good';
-  const label=failed?'Needs attention':busy?(p.stage||'Processing'):waiting?`${waiting} to review`:scheduled?`${scheduled} ready`:'Ready';
-  const progress=busy?clamp(Number(p.progress||0),0,100):own.length?Math.round(((own.length-waiting)/Math.max(1,own.length))*100):100;
-  const fallback=['/v7-reference-assets/project-quran.png','/v7-reference-assets/project-lantern.png','/v7-reference-assets/project-mountain.png','/v7-reference-assets/project-garden.png'];
-  const src=thumb?authedUrl(thumb):fallback[Math.abs(String(p.id||'').length+own.length)%fallback.length];
-  return `<article class="dc-v7-project-card" data-live-project="${esc(p.id)}"><button class="dc-v7-project-media" type="button" data-open-project="${esc(p.id)}"><img src="${src}" alt="${esc(projectDisplayTitle(p))} thumbnail"><span class="${tone}" data-live-stage><i></i>${esc(shortText(label,30))}</span><i class="dc-v7-project-progress" data-live-progress style="width:${progress}%"></i></button><div class="dc-v7-project-body"><div><h2>${esc(shortText(projectDisplayTitle(p),72))}</h2><p>${ICON.editor} ${own.length} clip${own.length===1?'':'s'} <i></i> Updated ${esc(formatRelative(p.updatedAt||p.submittedAt||Date.now()))}</p></div><button class="dc-btn secondary" data-open-project="${esc(p.id)}">Open project</button></div><details class="dc-v7-project-menu"><summary aria-label="Project actions">•••</summary><div><button data-more-project="${esc(p.id)}" ${!p.sourceReusable?'disabled':''}>Generate more clips</button>${failed?`<button data-retry-project="${esc(p.id)}">Retry processing</button>`:''}<button class="danger" data-delete-project="${esc(p.id)}">Delete project</button></div></details></article>`;
-}
-function libraryWorkflowCard(processing,waiting,ready){
-  return `<section class="dc-library-side-card"><div class="dc-library-side-head"><span class="blue">${ICON.analytics}</span><div><strong>Workflow overview</strong><small>Keep your content moving.</small></div></div><div class="dc-library-flow"><button data-dc-nav="projects"><i class="blue"></i><span>Processing</span><b>${processing}</b></button><button data-dc-nav="review"><i class="orange"></i><span>In review</span><b>${waiting}</b></button><button data-dc-nav="schedule"><i class="green"></i><span>Ready to publish</span><b>${ready}</b></button></div><button class="dc-btn secondary wide" data-dc-nav="review">Open workflow</button></section>`;
-}
-function libraryPlatformsCard(d){
-  const infos=['youtube','tiktok','instagram','facebook'].map(providerInfo);
-  return `<section class="dc-library-side-card"><div class="dc-library-side-head"><span class="purple">${ICON.social}</span><div><strong>Platform connections</strong><small>Where your clips can publish.</small></div></div><div class="dc-library-platforms">${infos.map(info=>`<div><span class="dc-publish-brand ${info.provider} ${info.connected?'on':''}">${socialSvg(info.provider)}</span><b>${esc(providerTitle(info.provider).replace(' Shorts','').replace(' Reels',''))}</b><em class="${info.connected?'on':''}">${info.connected?'Connected':'Connect'}</em></div>`).join('')}</div><button class="dc-btn secondary wide" data-dc-nav="publishing">Manage channels</button></section>`;
-}
-function libraryRecentClips(clips){
-  const recent=[...clips].sort((a,b)=>Number(b.createdAt||b.renderedAt||0)-Number(a.createdAt||a.renderedAt||0)).slice(0,3);
-  return `<section class="dc-library-side-card"><div class="dc-library-side-head"><span class="gold">${ICON.play}</span><div><strong>Recent clips</strong><small>Your latest generated moments.</small></div></div><div class="dc-library-recent">${recent.length?recent.map(c=>`<button type="button" data-edit-style-clip="${esc(c.id)}">${c.thumbUrl?`<img src="${authedUrl(c.thumbUrl)}" alt="">`:`<span>${ICON.play}</span>`}<strong>${esc(shortText(c.title||'Untitled clip',38))}</strong><em>${formatDuration(c.durationMs)}</em></button>`).join(''):`<div class="dc-empty"><strong>No clips yet</strong>Create a project to fill this list.</div>`}</div></section>`;
 }
 function projectCard(p,clips){
   const own=clips.filter(c=>c.projectId===p.id),thumb=projectThumbUrl(p,clips),waiting=own.filter(c=>c.status==='waiting').length,scheduled=own.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length;
@@ -2320,10 +1706,9 @@ function renderProjectDetail(panel,d){
   const clips=(d.clips||[]).filter(c=>c.projectId===p.id).sort((a,b)=>Number(b.score||0)-Number(a.score||0));
   const title=projectDisplayTitle(p), thumb=projectThumbUrl(p,d.clips||clips);
   const waiting=clips.filter(c=>c.status==='waiting').length, scheduled=clips.filter(c=>['approved','scheduled','publishing'].includes(c.status)).length, posted=clips.filter(c=>c.status==='posted').length, failed=p.status==='failed'||p.error;
-  panel.innerHTML=`<div class="dc-project-detail-page"><div class="dc-project-detail-hero"><button class="dc-icon-btn dc-svg" id="dcBackProjects" title="Back to projects">${ICON.back}</button><div class="dc-project-detail-thumb">${thumb?`<img src="${authedUrl(thumb)}" alt="${esc(title)} thumbnail">`:`<div class="dc-project-placeholder">${ICON.projects}<span>Lecture</span></div>`}</div><div class="dc-project-detail-info"><span class="dc-pill ${failed?'bad':['queued','processing'].includes(p.status)?'warn':'good'}">${failed?'Needs retry':statusName(p.status)}</span><h1>${esc(title)}</h1><p>${clips.length} clips · ${posted} posted · ${scheduled} scheduled</p></div><div class="dc-project-detail-actions"><button class="dc-btn secondary" data-more-project="${esc(p.id)}" ${!p.sourceReusable?'disabled':''}>Generate more</button>${failed?`<button class="dc-btn secondary" data-retry-project="${esc(p.id)}">Retry</button>`:''}<button class="dc-btn danger" data-delete-project="${esc(p.id)}">Delete project</button></div></div><div class="dc-project-detail-stats">${metric(clips.length,'Clips')}${metric(waiting,'Review')}${metric(scheduled,'Scheduled')}${metric(posted,'Posted')}${metric(Math.round((clips[0]?.score||0)),'Top score')}</div>${failed?`<div class="dc-project-error-mini">${esc(shortError(p.error||p.stage))}</div>`:''}${p.moreJob&&['queued','processing'].includes(p.moreJob.status)?`<div class="dc-card dc-card-pad" data-live-more-job="${esc(p.id)}"><div class="dc-now-row"><span class="dc-spinner"></span><div class="dc-now-main"><strong data-live-stage>${esc(p.moreJob.stage||'Generating more clips')}</strong><span>Reusing saved lecture and transcript.</span><div class="dc-progress"><i data-live-progress style="width:${clamp(p.moreJob.progress,0,100)}%"></i></div></div><span class="dc-pill warn" data-live-percent>${Math.round(p.moreJob.progress||0)}%</span></div></div>`:''}<div class="dc-project-detail-filter"><select><option>All clips</option><option>Waiting review</option><option>Scheduled</option><option>Posted</option></select><select><option>Highest score</option><option>Newest first</option><option>Longest</option></select><span class="dc-pill">${clips.length} clips</span><button class="dc-btn secondary" data-more-project="${esc(p.id)}" ${!p.sourceReusable?'disabled':''}>More clips</button></div><div class="dc-project-clip-grid">${clips.length?clips.map(c=>clipCard(c,{detail:true})).join(''):`<div class="dc-empty dc-empty-full"><strong>No clips yet</strong>${['queued','processing'].includes(p.status)?'Processing is still underway.':'Generate more clips from this lecture.'}</div>`}</div></div>`;
+  panel.innerHTML=`<div class="dc-project-detail-page"><div class="dc-project-detail-hero"><button class="dc-icon-btn dc-svg" id="dcBackProjects" title="Back to projects">${ICON.back}</button><div class="dc-project-detail-thumb">${thumb?`<img src="${authedUrl(thumb)}" alt="${esc(title)} thumbnail">`:`<div class="dc-project-placeholder">${ICON.projects}<span>Lecture</span></div>`}</div><div class="dc-project-detail-info"><span class="dc-pill ${failed?'bad':['queued','processing'].includes(p.status)?'warn':'good'}">${failed?'Needs retry':statusName(p.status)}</span><h1>${esc(title)}</h1><p>${clips.length} clips · ${posted} posted · ${scheduled} scheduled</p></div><div class="dc-project-detail-actions"><button class="dc-btn secondary" data-more-project="${esc(p.id)}" ${!p.sourceReusable?'disabled':''}>Generate more</button>${failed?`<button class="dc-btn secondary" data-retry-project="${esc(p.id)}">Retry</button>`:''}<button class="dc-btn danger" data-delete-project="${esc(p.id)}">Delete project</button></div></div><div class="dc-project-detail-stats">${metric(clips.length,'Clips')}${metric(waiting,'Review')}${metric(scheduled,'Scheduled')}${metric(posted,'Posted')}${metric(Math.round((clips[0]?.score||0)),'Top score')}</div>${failed?`<div class="dc-project-error-mini">${esc(shortError(p.error||p.stage))}</div>`:''}${p.moreJob&&['queued','processing'].includes(p.moreJob.status)?`<div class="dc-card dc-card-pad"><div class="dc-now-row"><span class="dc-spinner"></span><div class="dc-now-main"><strong>${esc(p.moreJob.stage||'Generating more clips')}</strong><span>Reusing saved lecture and transcript.</span><div class="dc-progress"><i style="width:${clamp(p.moreJob.progress,0,100)}%"></i></div></div><span class="dc-pill warn">${Math.round(p.moreJob.progress||0)}%</span></div></div>`:''}<div class="dc-project-detail-filter"><select><option>All clips</option><option>Waiting review</option><option>Scheduled</option><option>Posted</option></select><select><option>Highest score</option><option>Newest first</option><option>Longest</option></select><span class="dc-pill">${clips.length} clips</span><button class="dc-btn secondary" data-more-project="${esc(p.id)}" ${!p.sourceReusable?'disabled':''}>More clips</button></div><div class="dc-project-clip-grid">${clips.length?clips.map(c=>clipCard(c,{detail:true})).join(''):`<div class="dc-empty dc-empty-full"><strong>No clips yet</strong>${['queued','processing'].includes(p.status)?'Processing is still underway.':'Generate more clips from this lecture.'}</div>`}</div></div>`;
   upgradeYoutubeFallbackButtons(panel,[p]);
   $('#dcBackProjects').onclick=()=>{selectedProjectId='';document.body.classList.remove('dc-project-open');renderProjects()};
-  lastDataSignature=structuralDataSignature(d);
   requestAnimationFrame(()=>animatePanel(panel));
 }
 function upgradeYoutubeFallbackButtons(panel,projects){
@@ -2335,11 +1720,11 @@ function upgradeYoutubeFallbackButtons(panel,projects){
   }
 }
 function clipCard(c,opts={}){
-  const reviewAction=c.status==='waiting'?`<button class="dc-btn" data-review-clip="${esc(c.id)}">Approve</button>`:'';
-  const scheduleAction=['approved','scheduled','publishing'].includes(c.status)?`<button class="dc-btn secondary" data-dc-nav="publishing">View schedule</button>`:'';
+  const canPost=['approved','ready','publish_failed','scheduled'].includes(c.status);
+  const canSchedule=c.status==='waiting';
   const title=shortText(c.title||'Untitled clip', opts.detail?54:44);
   const sub=c.scheduledAt?`Scheduled · ${formatDate(c.scheduledAt)}`:statusName(c.status);
-  return `<article class="dc-clip-card v3-full"><div class="dc-clip-media"><button class="dc-clip-media-button" data-edit-style-clip="${esc(c.id)}" type="button">${clipThumb(c)}</button><span class="dc-score">${Math.round(c.score||0)}</span><span class="dc-duration">${formatDuration(c.durationMs)}</span><span class="dc-clip-state dc-pill ${c.status==='posted'?'good':c.status==='waiting'?'warn':c.status==='publish_failed'?'bad':''}">${statusName(c.status)}</span></div><div class="dc-clip-body"><h3>${esc(title)}</h3><p>${esc(sub)}</p><div class="dc-clip-actions"><button class="dc-btn secondary" data-edit-style-clip="${esc(c.id)}">Edit style</button><button class="dc-btn secondary" data-edit-video-clip="${esc(c.id)}">Edit video</button>${reviewAction}${scheduleAction}<button class="dc-btn secondary" data-download-clip="${esc(c.id)}">Download</button><button class="dc-btn danger" data-delete-clip="${esc(c.id)}">Delete</button></div></div></article>`;
+  return `<article class="dc-clip-card v3-full"><div class="dc-clip-media"><button class="dc-clip-media-button" data-edit-style-clip="${esc(c.id)}" type="button">${clipThumb(c)}</button><span class="dc-score">${Math.round(c.score||0)}</span><span class="dc-duration">${formatDuration(c.durationMs)}</span><span class="dc-clip-state dc-pill ${c.status==='posted'?'good':c.status==='waiting'?'warn':c.status==='publish_failed'?'bad':''}">${statusName(c.status)}</span></div><div class="dc-clip-body"><h3>${esc(title)}</h3><p>${esc(sub)}</p><div class="dc-clip-actions"><button class="dc-btn" data-edit-style-clip="${esc(c.id)}">Edit style</button><button class="dc-btn secondary" data-edit-video-clip="${esc(c.id)}">Edit video</button>${canPost?`<button class="dc-btn secondary" data-post-clip="${esc(c.id)}">Post now</button>`:canSchedule?`<button class="dc-btn secondary" data-schedule-clip="${esc(c.id)}">Schedule</button>`:`<button class="dc-btn secondary" data-download-clip="${esc(c.id)}">Download</button>`}<button class="dc-btn secondary" data-download-clip="${esc(c.id)}">Download</button><button class="dc-btn danger" data-delete-clip="${esc(c.id)}">Delete</button></div></div></article>`;
 }
 
 function renderReview(){
@@ -2349,32 +1734,19 @@ function renderReview(){
   const avg=allWaiting.length?Math.round(allWaiting.reduce((sum,c)=>sum+Number(c.score||0),0)/allWaiting.length):0;
   let waiting=allWaiting.filter(c=>reviewFilter==='strong'?hookInfo(c).strong:reviewFilter==='short'?Number(c.durationMs||0)<=60000:reviewFilter==='verified'?Boolean(c.musicVerified&&c.renderVerified):true);
   waiting.sort(reviewSort==='duration'?(a,b)=>Number(a.durationMs||0)-Number(b.durationMs||0):(a,b)=>Number(b.score||0)-Number(a.score||0));
-  if(reviewFocusClipId)waiting.sort((a,b)=>(a.id===reviewFocusClipId?-1:0)-(b.id===reviewFocusClipId?-1:0));
-  const safeWaiting=waiting.filter(c=>!c.reviewRequired);
-  const toolbar=allWaiting.length?`<div class="dc-review-toolbar pro"><select id="dcReviewFilter" aria-label="Filter clips"><option value="all">All clips (${allWaiting.length})</option><option value="strong" ${reviewFilter==='strong'?'selected':''}>Strong hooks (${strong})</option><option value="short" ${reviewFilter==='short'?'selected':''}>Under 60 seconds</option><option value="verified" ${reviewFilter==='verified'?'selected':''}>Render verified</option></select><select id="dcReviewSort" aria-label="Sort clips"><option value="score">Highest score</option><option value="duration" ${reviewSort==='duration'?'selected':''}>Shortest first</option></select><span class="spacer"></span><button class="dc-btn secondary" id="dcApproveVerified">Schedule verified</button><button class="dc-btn" id="dcScheduleAll" ${!safeWaiting.length?'disabled':''}>Schedule safe visible</button></div>`:'';
+  const toolbar=allWaiting.length?`<div class="dc-review-toolbar pro"><select id="dcReviewFilter" aria-label="Filter clips"><option value="all">All clips (${allWaiting.length})</option><option value="strong" ${reviewFilter==='strong'?'selected':''}>Strong hooks (${strong})</option><option value="short" ${reviewFilter==='short'?'selected':''}>Under 60 seconds</option><option value="verified" ${reviewFilter==='verified'?'selected':''}>Render verified</option></select><select id="dcReviewSort" aria-label="Sort clips"><option value="score">Highest score</option><option value="duration" ${reviewSort==='duration'?'selected':''}>Shortest first</option></select><span class="spacer"></span><button class="dc-btn secondary" id="dcApproveVerified">Approve verified</button><button class="dc-btn" id="dcScheduleAll" ${!waiting.length?'disabled':''}>Schedule visible</button></div>`:'';
   const empty=allWaiting.length?`<div class="dc-review-empty-pro"><div><div class="dc-empty-icon">${ICON.review}</div><strong>No clips match</strong><p>Choose another filter to keep reviewing.</p><button class="dc-btn" data-review-filter="all">Show every clip</button></div></div>`:`<div class="dc-review-empty-pro visual"><div><div class="dc-empty-icon">${ICON.review}</div><strong>Your review queue is clear.</strong><p>New clips will appear here with their score, hook strength and suggested posting copy.</p><button class="dc-btn" data-dc-nav="home">Create new clips</button></div><img src="/marketing-assets/clip-review.webp" alt="DeenClipped clip review preview"></div>`;
-  panel.innerHTML=`<div class="dc-review-page-pro dc-v7-review ${allWaiting.length?'':'is-empty'}"><section class="dc-v7-page-title"><div><h1>Review</h1><p>Review AI-generated clips and approve the best ones.</p></div></section><div class="dc-review-metrics-pro dc-v7-review-metrics"><span><b>${allWaiting.length}</b><em>clips waiting</em></span><span><b>${strong}</b><em>strong hooks</em></span><span><b>${avg}</b><em>average score</em></span></div>${toolbar}<div class="dc-review-list pro">${waiting.length?waiting.map(reviewRow).join(''):empty}</div></div>`;
+  panel.innerHTML=`<div class="dc-review-page-pro ${allWaiting.length?'':'is-empty'}"><section class="dc-review-hero-pro"><div><span class="dc-review-kicker">Clip approval</span><h1>Choose the clips worth publishing.</h1><p>See the hook, duration and posting copy at a glance. Open the editor only when a clip needs your touch.</p></div><div class="dc-review-metrics-pro"><span><b>${allWaiting.length}</b><em>waiting</em></span><span><b>${strong}</b><em>strong hooks</em></span><span><b>${avg}</b><em>avg score</em></span></div></section>${toolbar}<div class="dc-review-list pro">${waiting.length?waiting.map(reviewRow).join(''):empty}</div></div>`;
   if($('#dcApproveVerified'))$('#dcApproveVerified').onclick=approveVerified;
-  if($('#dcScheduleAll'))$('#dcScheduleAll').onclick=()=>scheduleMany(safeWaiting.map(c=>c.id));
+  if($('#dcScheduleAll'))$('#dcScheduleAll').onclick=()=>scheduleMany(waiting.map(c=>c.id));
   if($('#dcReviewFilter'))$('#dcReviewFilter').onchange=e=>{reviewFilter=e.target.value;renderReview()};
   if($('#dcReviewSort'))$('#dcReviewSort').onchange=e=>{reviewSort=e.target.value;renderReview()};
   $$('[data-review-filter]',panel).forEach(button=>button.onclick=()=>{reviewFilter=button.dataset.reviewFilter;renderReview()});
-  requestAnimationFrame(()=>{animatePanel(panel);if(reviewFocusClipId)panel.querySelector(`[data-review-row="${CSS.escape(reviewFocusClipId)}"]`)?.scrollIntoView({block:'center',behavior:'smooth'})});
+  requestAnimationFrame(()=>animatePanel(panel));
 }
 function reviewRow(c){
-  const hook=hookInfo(c), copy=socialCopyForClip(c), quality=clipQualityScore(c), confidence=clipTranscriptConfidence(c);
-  const needsCheck=Boolean(c.reviewRequired)||(confidence!==null&&confidence<68);
-  const warnings=[...(Array.isArray(c.quality?.warnings)?c.quality.warnings:[]),...(c.scoreReasons||[]).filter(reason=>/review|confidence|quotation/i.test(reason))];
-  const warningCopy=warnings[0]||'Check the spoken words and any quotation before publishing.';
-  return `<article class="dc-review-item pro ${c.id===reviewFocusClipId?'is-focused':''} ${needsCheck?'needs-check':''}" data-review-row="${esc(c.id)}"><button class="dc-review-media" type="button" data-edit-clip="${esc(c.id)}" aria-label="Open ${esc(c.title||'clip')}">${c.thumbUrl?`<img src="${authedUrl(c.thumbUrl)}" alt="${esc(c.title||'Clip')} thumbnail">`:''}<span class="dc-review-score">${Math.round(c.score||0)}</span></button><div class="dc-review-main"><div class="dc-review-title-row"><h3>${esc(c.title||copy.title)}</h3><small>${formatDuration(c.durationMs)} · quality ${quality}/100${confidence===null?'':` · transcript ${confidence}%`}</small></div>${needsCheck?`<div class="dc-review-safety"><span>${ICON.warning}</span><div><strong>Human check required</strong><p>${esc(warningCopy)}</p></div></div>`:''}<div class="dc-hook-strip"><div class="dc-hook-card"><strong><span class="dc-hook-badge ${hook.strong?'good':'warn'}">${hook.strong?'Strong':'Needs work'} hook</span></strong><p>${esc(hook.suggestion)}</p></div><div class="dc-copy-card"><strong>Grounded post suggestion</strong><div class="dc-copy-grid"><div class="dc-copy-mini"><b>Caption</b><span>${esc(copy.tiktok)}</span></div><div class="dc-copy-mini"><b>Shorts title</b><span>${esc(copy.youtube)}</span></div></div></div></div><div class="dc-review-actions pro clear"><button class="dc-btn" data-post-clip="${esc(c.id)}">Post now</button><button class="dc-btn secondary" data-schedule-clip="${esc(c.id)}">Schedule</button><button class="dc-btn secondary" data-edit-style-clip="${esc(c.id)}">Open editor</button><details class="dc-clip-more"><summary>More</summary><div><button data-regenerate-title="${esc(c.id)}">Try another grounded title</button><button data-make-shorter="${esc(c.id)}">Make shorter</button><button data-make-longer="${esc(c.id)}">Make longer</button><button class="danger" data-delete-clip="${esc(c.id)}">Delete clip</button></div></details></div></div></article>`;
-}
-function clipQualityScore(c){
-  const value=typeof c?.quality==='object'?c.quality?.overall:c?.quality;
-  return Math.round(clamp(Number(value??c?.score??0),0,100));
-}
-function clipTranscriptConfidence(c){
-  const value=c?.confidence??c?.quality?.transcriptConfidence??c?.scoreBreakdown?.confidence;
-  return Number.isFinite(Number(value))?Math.round(clamp(Number(value),0,100)):null;
+  const hook=hookInfo(c), copy=socialCopyForClip(c);
+  return `<article class="dc-review-item pro"><button class="dc-review-media" type="button" data-edit-clip="${esc(c.id)}" aria-label="Open ${esc(c.title||'clip')}">${c.thumbUrl?`<img src="${authedUrl(c.thumbUrl)}" alt="${esc(c.title||'Clip')} thumbnail">`:''}<span class="dc-review-score">${Math.round(c.score||0)}</span></button><div class="dc-review-main"><div class="dc-review-title-row"><h3>${esc(c.title||copy.title)}</h3><small>${formatDuration(c.durationMs)} · quality ${Math.round(c.quality||c.score||0)}/100</small></div><div class="dc-hook-strip"><div class="dc-hook-card"><strong><span class="dc-hook-badge ${hook.strong?'good':'warn'}">${hook.strong?'Strong':'Needs work'} hook</span></strong><p>${esc(hook.suggestion)}</p></div><div class="dc-copy-card"><strong>Suggested post</strong><div class="dc-copy-grid"><div class="dc-copy-mini"><b>Caption</b><span>${esc(copy.tiktok)}</span></div><div class="dc-copy-mini"><b>Shorts title</b><span>${esc(copy.youtube)}</span></div></div></div></div><div class="dc-review-actions pro clear"><button class="dc-btn" data-approve-clip="${esc(c.id)}">Approve</button><button class="dc-btn secondary" data-edit-style-clip="${esc(c.id)}">Open editor</button><details class="dc-clip-more"><summary>More</summary><div><button data-regenerate-title="${esc(c.id)}">Regenerate title</button><button data-make-shorter="${esc(c.id)}">Make shorter</button><button data-make-longer="${esc(c.id)}">Make longer</button><button class="danger" data-delete-clip="${esc(c.id)}">Delete clip</button></div></details></div></div></article>`;
 }
 function clipReviewText(c){
   return String(c.transcript||c.description||c.title||'').replace(/\s+/g,' ').trim();
@@ -2397,18 +1769,13 @@ function cleanTitlePhrase(text){
 }
 function titleCaseSimple(text){return String(text||'').toLowerCase().replace(/\b\w/g,m=>m.toUpperCase())}
 function socialCopyForClip(c,variant=0){
-  const text=clipReviewText(c), growth=c?.growthPack||{}, platforms=c?.platformMetadata||growth.platforms||{};
-  const base=cleanTitlePhrase(text||c.title||'DeenClipped clip');
-  const ideas=[growth.primaryTitle,...(growth.alternateTitles||[]),c.title,base].map(value=>String(value||'').trim()).filter(Boolean);
-  const unique=[...new Map(ideas.map(value=>[value.toLowerCase(),value])).values()];
-  const title=shortText(unique[Math.abs(Number(variant)||0)%Math.max(1,unique.length)]||base,72);
-  const description=String(c?.description||'').trim();
-  const tiktok=shortText(platforms.tiktok?.caption||[title,description].filter(Boolean).join('. '),2200);
-  const instagram=shortText(platforms.instagram?.caption||[description,title].filter(Boolean).join('. '),2200);
-  const youtube=shortText(platforms.youtube?.title||title,100);
-  const rawTags=Array.isArray(c?.hashtags)?c.hashtags:String(c?.hashtags||'').split(/\s+/);
-  const hashtags=rawTags.map(value=>String(value||'').trim()).filter(value=>value.startsWith('#'));
-  if(!hashtags.length)hashtags.push('#DeenClipped');
+  const text=clipReviewText(c), base=cleanTitlePhrase(text||c.title||'Islamic reminder');
+  const ideas=[base,`A reminder about ${base.toLowerCase()}`,`${base} — Islamic reminder`,`${base} in one minute`].filter(Boolean);
+  const title=shortText(ideas[Math.abs(Number(variant)||0)%ideas.length],72);
+  const tiktok=shortText(`${title}. A short reminder to reflect on and act on.`,110);
+  const instagram=shortText(`${title}. Save this reminder and share it with someone who may benefit.`,125);
+  const youtube=shortText(title,80);
+  const hashtags=['#Islam','#MuslimReminder','#Dawah','#Quran','#DeenClipped'];
   return {title,tiktok,instagram,youtube,hashtags};
 }
 async function regenerateClipCopy(id){
@@ -2441,42 +1808,25 @@ async function adjustClipLength(id,mode){
   }catch(e){notify(e.message,'bad')}
 }
 async function approveVerified(){
-  const list=(data()?.clips||[]).filter(c=>c.status==='waiting'&&c.musicVerified&&c.renderVerified&&!c.reviewRequired);if(!list.length)return notify('No verified clips are clear of review warnings','bad');
+  const list=(data()?.clips||[]).filter(c=>c.status==='waiting'&&c.musicVerified&&c.renderVerified);if(!list.length)return notify('No verified waiting clips','bad');
   try{for(const c of list)await callApi(`/api/clips/${encodeURIComponent(c.id)}`,{method:'PATCH',body:JSON.stringify({status:'approved'})});notify(`${list.length} clips approved`);await refreshData();renderReview()}catch(e){notify(e.message,'bad')}
 }
 async function approveClip(id){
-  try{const result=await callApi(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'approved'})});notify(result.clip?.scheduledLabel?`Approved · next slot ${result.clip.scheduledLabel}`:'Clip approved and scheduled');await refreshData();renderReview()}catch(e){if(!handlePublishingError(e))notify(e.message,'bad')}
+  try{await callApi(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'approved'})});notify('Clip approved');await refreshData();renderReview()}catch(e){notify(e.message,'bad')}
 }
 async function scheduleMany(ids){
   if(!ids.length)return;if(!confirm(`Schedule ${ids.length} clip${ids.length===1?'':'s'}?`))return;
-  try{const result=await callApi('/api/clips/schedule-selected',{method:'POST',body:JSON.stringify({ids})});notify(`${result.scheduled||0} clips scheduled`,result.failed?'bad':'good');await refreshData();renderReview()}catch(e){if(!handlePublishingError(e))notify(e.message,'bad')}
+  try{const result=await callApi('/api/clips/schedule-selected',{method:'POST',body:JSON.stringify({ids})});notify(`${result.scheduled||0} clips scheduled`,result.failed?'bad':'good');await refreshData();renderReview()}catch(e){notify(e.message,'bad')}
 }
 async function scheduleClip(id){await scheduleMany([id]);if(currentView==='projects')renderProjects()}
-async function postClip(id){const access=publishingAccess();if(!access.allowed){openBillingModal();return}if(!confirm('Post this clip now to the enabled destinations?'))return;try{await callApi(`/api/clips/${encodeURIComponent(id)}/publish`,{method:'POST'});notify('Publishing transfer created');await refreshData();renderCurrent()}catch(e){if(!handlePublishingError(e))notify(e.message,'bad')}}
+async function postClip(id){if(!confirm('Post this clip now to the enabled destinations?'))return;try{await callApi(`/api/clips/${encodeURIComponent(id)}/publish`,{method:'POST'});notify('Publishing transfer created');await refreshData();renderCurrent()}catch(e){notify(e.message,'bad')}}
 async function deleteClip(id){if(!confirm('Discard this clip permanently?'))return;try{await callApi(`/api/clips/${encodeURIComponent(id)}`,{method:'DELETE'});notify('Clip discarded');await refreshData();renderCurrent()}catch(e){notify(e.message,'bad')}}
 async function retryProject(id){try{await callApi(`/api/projects/${encodeURIComponent(id)}/retry`,{method:'POST'});notify('Project queued again');await refreshData();renderProjects()}catch(e){notify(e.message,'bad')}}
 async function generateMore(id){const amount=Number(prompt('How many new clips?', '8'));if(!Number.isFinite(amount)||amount<1)return;try{await callApi(`/api/projects/${encodeURIComponent(id)}/more-clips`,{method:'POST',body:JSON.stringify({count:Math.min(20,Math.round(amount))})});notify('More clips queued');await refreshData();renderProjects()}catch(e){notify(e.message,'bad')}}
 async function deleteProject(id){if(!confirm('Delete this project and its generated clips?'))return;try{await callApi(`/api/projects/${encodeURIComponent(id)}`,{method:'DELETE'});notify('Project deleted');selectedProjectId='';await refreshData();renderProjects()}catch(e){notify(e.message,'bad')}}
 
 
-// A clip only has a caption-free plate when the server says so. Asking for the
-// preview anyway and waiting for the <video> to error was how this used to work,
-// which meant the editor spent its first seconds in a state it already knew was
-// wrong, then reconfigured itself in front of the user.
-function editorHasCleanSource(clip){
-  // editor.bakedPreview is the runtime answer and outranks the server's claim,
-  // because the server can only verify that a storage key is well-formed — not
-  // that the object behind it still exists. Once a load has actually failed we
-  // know better than the flag does, and that verdict has to survive the
-  // re-renders that follow, or the editor would retry and flicker on every one.
-  if(clip&&editor.clipId===clip.id&&editor.bakedPreview)return false;
-  return clip?.cleanSource!==false;
-}
-function editorSourceUrl(clip){
-  return editorHasCleanSource(clip)
-    ? authedUrl(`/api/clips/${encodeURIComponent(clip.id)}/source-preview`)
-    : authedUrl(`/api/clips/${encodeURIComponent(clip.id)}/video`);
-}
+function editorSourceUrl(clip){return authedUrl(`/api/clips/${encodeURIComponent(clip.id)}/source-preview`)}
 function createRipple(event){
   const target=event.target.closest('.dc-btn,.dc-icon-btn,.dc-nav-button,.dc-tool-button,.dc-style-card,.dc-fill-option');
   if(!target||target.disabled)return;
@@ -2502,15 +1852,12 @@ function requestFramingPlan(immediate=false){
   clearTimeout(editor.framingTimer);
   const d=editor.draft,clip=currentClip();
   if(!clip||!d||d.fitMode!=='crop'||!d.smartFramingEnabled){editor.framingStatus='idle';editor.framingPlan=null;updateEditorPreview();if(editor.tool==='canvas')renderEditorTool();return}
-  if(!billingInfo().features?.advancedFraming&&!billingInfo().current?.unlimited){
-    editor.draft.smartFramingEnabled=false;editor.framingStatus='idle';editor.framingPlan=null;editor.framingMessage='AI speaker focus requires Monthly or Yearly Premium.';renderEditorTool();updateEditorPreview();openBillingModal();return;
-  }
   editor.framingTimer=setTimeout(async()=>{
     const request=++editor.framingRequest;editor.framingStatus='analysing';editor.framingMessage='Detecting faces and mouth movement';updateEditorPreview();if(editor.tool==='canvas')renderEditorTool();
     try{
       const result=await callApi(`/api/clips/${encodeURIComponent(clip.id)}/framing-preview`,{method:'POST',body:JSON.stringify({
         width:Number(d.width||1080),height:Number(d.height||1920),bias:d.smartFramingBias||'auto',
-        padding:Number(d.smartFramingPadding??.18),zoom:Number(d.smartFramingZoom??1),smoothing:Number(d.smartFramingSmoothing??.68),sampleHz:3
+        padding:Number(d.smartFramingPadding??.18),zoom:Number(d.smartFramingZoom??1),smoothing:Number(d.smartFramingSmoothing??.82)
       })});
       if(request!==editor.framingRequest)return;
       if(!result.plan?.available)throw new Error(result.plan?.reason||'No face or subject could be detected.');
@@ -2569,37 +1916,15 @@ async function ensureEditor(){
   if(editor.clipId!==clip.id){
     const pendingTool=editor.pendingTool||'captions', pendingTab=editor.pendingCaptionTab||'styles'; editor.pendingTool=''; editor.pendingCaptionTab='';
     editor.loading=true; editor.clipId=clip.id; editor.tool=pendingTool;editor.captionTab=pendingTool==='captions'?pendingTab:'styles';editor.search='';
-    // The snapshot is the template this clip was actually rendered with, so it
-    // is the only thing that matches the captions baked into the video. A
-    // lookup by id returns whatever that template has become since — or, if it
-    // was deleted, something unrelated — and the editable caption box then
-    // floats somewhere the burned-in text is not.
-    const appliedStyleId=String(savedStyleId(clip)||'');
-    const appliedStyle=(d.templates||[]).find(t=>t.id===appliedStyleId)||null;
-    const template = clone(clip.templateSnapshot || appliedStyle || (d.templates||[]).find(t=>t.id===clip.templateId) || d.selectedTemplate || (d.templates||[])[0] || d.templateDraft || {});
+    const template=(d.templates||[]).find(t=>t.id===clip.templateId)||d.selectedTemplate||(d.templates||[])[0]||d.templateDraft||{};
     const saved=loadEditorDraft(clip.id);
-    editor.appliedStyleId=String(saved?.appliedStyleId??clip.editorAppliedStyleId??clip.templateId??'');
-    editor.appliedStyleSnapshot=clone((d.templates||[]).find(t=>t.id===editor.appliedStyleId)||appliedStyle||template);
-    editor.draft={...template,...(clip.editorDraft||{}),...(saved?.draft||{}),__clipId:clip.id};editor.draft.cropPositionX??=50;editor.draft.cropPositionY??=50;editor.draft.captionTimingOffsetMs??=0;
+    editor.draft={...clone(template),...(saved?.draft||{}),__clipId:clip.id};editor.draft.cropPositionX??=50;editor.draft.cropPositionY??=50;editor.draft.captionTimingOffsetMs??=-120;
     editor.captionText=saved?.captionText??clip.transcript??'';
     editor.trimIn=0;editor.trimOut=Math.max(.1,Number(clip.durationMs||0)/1000);
-    editor.dirty=Boolean(saved);editor.localSavedAt=Number(saved?.savedAt||0);editor.saveRevision=editor.dirty?1:0;editor.savedRevision=0;editor.saveStatus=editor.dirty?'pending':'saved';editor.saveError='';editor.selectedLayer='captions';editor.history=[];editor.historyIndex=-1;editor.sourceFallback=false;editor.framingPlan=clip.smartFraming||null;editor.framingStatus=editor.framingPlan?'ready':'idle';editor.framingMessage=editor.framingPlan?'Using the framing saved with this render':'Smart framing has not been analysed';
-    // Seeded from the server's claim once per clip. bindVideo() may later flip
-    // it to true if that claim does not survive contact with a real load.
-    // Set before the timebase, which depends on it.
-    editor.bakedPreview=clip.cleanSource===false;
-    // Fit on first open, per the spec. Reset per clip rather than globally, so
-    // a zoom set on one clip does not follow you to the next one.
-    editor.timelineZoom=1;
-    applyMediaTimebase(clip,editor.bakedPreview);
-    editor.captionWords=approximateWords(editor.captionText,editor.trimOut);editor.captionTimingReference=clone(editor.captionWords);editor.captionSource='fallback';editor.backendCaptionReady=false;
+    editor.dirty=Boolean(saved);editor.history=[];editor.historyIndex=-1;editor.sourceBase=Number(clip.startSec||0);editor.sourceEnd=Number(clip.endSec||editor.sourceBase+editor.trimOut);editor.sourceFallback=false;editor.framingPlan=clip.smartFraming||null;editor.framingStatus=editor.framingPlan?'ready':'idle';editor.framingMessage=editor.framingPlan?'Using the framing saved with this render':'Smart framing has not been analysed';pushHistory(true);
+    editor.captionWords=approximateWords(editor.captionText,editor.trimOut);editor.captionSource='fallback';editor.backendCaptionReady=false;
     await loadCaptionWords(clip);
-    pushHistory(true);
     editor.loading=false;
-    // Fire and forget. Awaiting this would hold the editor blank on a network
-    // round trip for a repair that is invisible when it succeeds.
-    autoSyncCaptions(clip);
-    if(saved)scheduleEditorAutosave(300);
   }
   renderEditor(clip);
 }
@@ -2608,160 +1933,50 @@ async function loadCaptionWords(clip){
     const payload=await callApi(`/api/clips/${encodeURIComponent(clip.id)}/captions`);
     if(editor.clipId!==clip.id)return;
     if(Array.isArray(payload.words)&&payload.words.length){
-      const timed=payload.words.map(w=>({start:Number(w.start),end:Number(w.end),word:String(w.word||'').trim()})).filter(w=>w.word&&w.end>w.start).sort((a,b)=>a.start-b.start);
-      editor.captionTimingReference=clone(timed);editor.captionWords=editor.dirty?mapEditedWordsToSpeech(editor.captionText,timed,Math.max(.1,editor.trimOut)):timed;
-      editor.captionSource=editor.dirty?'edited':payload.exact?'whisper':payload.edited?'edited':'fallback';editor.backendCaptionReady=true;editor.captionSyncStatus='idle';editor.captionSyncMessage=payload.synced?'Clip-specific speech timing loaded':'';if(!editor.dirty&&payload.transcript)editor.captionText=payload.transcript;
+      editor.captionWords=payload.words.map(w=>({start:Number(w.start),end:Number(w.end),word:String(w.word||'').trim()})).filter(w=>w.word&&w.end>w.start).sort((a,b)=>a.start-b.start);
+      editor.captionSource=payload.exact?'whisper':payload.edited?'edited':'fallback';editor.backendCaptionReady=true;editor.captionSyncStatus='idle';editor.captionSyncMessage=payload.synced?'Clip-specific speech timing loaded':'';if(!editor.dirty&&payload.transcript)editor.captionText=payload.transcript;
     }
-  }catch{editor.captionWords=approximateWords(editor.captionText,Math.max(.1,Number(clip.durationMs||0)/1000));editor.captionTimingReference=clone(editor.captionWords);editor.captionSource='fallback'}
+  }catch{editor.captionWords=approximateWords(editor.captionText,Math.max(.1,Number(clip.durationMs||0)/1000));editor.captionSource='fallback'}
 }
 function loadEditorDraft(id){try{return JSON.parse(localStorage.getItem(`dc-editor-${id}`)||'null')}catch{return null}}
-function savedStyleId(clip){return clip?.editorAppliedStyleId||clip?.templateId||''}
-function saveEditorLocal(){try{editor.localSavedAt=Date.now();localStorage.setItem(`dc-editor-${editor.clipId}`,JSON.stringify({version:3,draft:cleanDraft(editor.draft),captionText:editor.captionText,appliedStyleId:editor.appliedStyleId,savedAt:editor.localSavedAt}));updateEditorSaveState()}catch{}}
+function saveEditorLocal(){try{localStorage.setItem(`dc-editor-${editor.clipId}`,JSON.stringify({draft:cleanDraft(editor.draft),captionText:editor.captionText,savedAt:Date.now()}))}catch{}}
 function clearEditorLocal(){try{localStorage.removeItem(`dc-editor-${editor.clipId}`)}catch{}}
-
-function clipStyleKeys(){
-  if(Array.isArray(DATA?.clipStyleFields)&&DATA.clipStyleFields.length)return DATA.clipStyleFields;
-  const excluded=new Set(['id','name','description','builtIn','editable','userId','version','updatedAt','cropPositionX','cropPositionY','captionTimingOffsetMs']);
-  return Object.keys(DATA?.templateDraft||editor.draft||{}).filter(key=>!excluded.has(key));
-}
-function clipStyleValues(source={}){const out={};for(const key of clipStyleKeys())if(source[key]!==undefined)out[key]=clone(source[key]);return out}
-function editorStyleHasDrift(){
-  const base=editor.appliedStyleSnapshot;if(!base||!editor.draft)return false;
-  return clipStyleKeys().some(key=>base[key]!==undefined&&JSON.stringify(editor.draft[key])!==JSON.stringify(base[key]));
-}
-function editorStylePickerMarkup(){
-  const all=DATA?.templates||[],builtIn=all.filter(style=>style.builtIn),mine=all.filter(style=>!style.builtIn),custom=editorStyleHasDrift();
-  const options=styles=>styles.map(style=>`<option value="${esc(style.id)}" ${style.id===editor.appliedStyleId?'selected':''}>${esc(style.name||'Untitled template')}</option>`).join('');
-  return `<label class="dc-editor-style-picker ${custom?'is-custom':''}" title="${custom?'This clip has custom changes':'Choose a Template for this clip'}"><span>${custom?'Template · Custom changes':'Template'}</span><select id="dcEditorStyleSelect" aria-label="Template"><option value="" ${editor.appliedStyleId?'':'selected'}>No template applied</option>${builtIn.length?`<optgroup label="Built-in templates">${options(builtIn)}</optgroup>`:''}${mine.length?`<optgroup label="My Templates">${options(mine)}</optgroup>`:''}<optgroup label="Manage"><option value="__browse">Browse Templates…</option><option value="__create">Create new Template…</option></optgroup></select></label>`;
-}
-function mountEditorStylePicker(){
-  $('.dc-editor-style-picker')?.remove();const title=$('.dc-editor-title');if(!title)return;
-  title.insertAdjacentHTML('afterend',editorStylePickerMarkup());
-  $('#dcEditorStyleSelect')?.addEventListener('change',event=>applyEditorStyleSelection(event.target.value));
-}
-function updateEditorStyleState(){
-  const picker=$('.dc-editor-style-picker');if(!picker)return;
-  const custom=editorStyleHasDrift();picker.classList.toggle('is-custom',custom);picker.title=custom?'This clip has custom changes':'Choose a Template for this clip';
-  const label=$('span',picker);if(label)label.textContent=custom?'Template · Custom changes':'Template';
-}
-function applyEditorStyleSelection(id){
-  if(id==='__browse'||id==='__create'){
-    go('templates');
-    if(id==='__create')requestAnimationFrame(()=>{styleStudio.menuOpen=true;renderTemplatesPage()});
-    return;
-  }
-  const style=(DATA?.templates||[]).find(item=>item.id===id);
-  if(!style){editor.appliedStyleId='';editor.appliedStyleSnapshot=null;markEditorDirty();pushHistory();return}
-  Object.assign(editor.draft,clipStyleValues(style));
-  editor.appliedStyleId=style.id;editor.appliedStyleSnapshot=clone(style);
-  markEditorDirty();pushHistory();renderEditorTool();updateEditorPreview();updateCaptionAtTime(editor.currentTime);renderTimeline();updateEditorStyleState();
-}
 
 function renderEditor(clip){
   const panel=$('#view-editor'),d=data();if(!panel||!clip)return;
   panel.classList.add('dc-editor-page');
   const source=editorSourceUrl(clip);
-  panel.innerHTML=`<div class="dc-editor-header"><button class="dc-icon-btn dc-svg" id="dcEditorBack" title="Back to project">${ICON.back}</button><div class="dc-editor-title"><strong>${esc(clip.title||'Untitled clip')}</strong><span>${esc(clip.projectTitle||'Lecture')} · ${Math.round(clip.score||0)}/100 · <b id="dcEditorSaveState">${editor.dirty?'Draft backed up locally':'All changes saved'}</b></span></div><button class="dc-icon-btn dc-svg" id="dcUndo" title="Undo (⌘Z)" ${editor.historyIndex<=0?'disabled':''}>${ICON.undo}</button><button class="dc-icon-btn dc-svg" id="dcRedo" title="Redo (⇧⌘Z)" ${editor.historyIndex>=editor.history.length-1?'disabled':''}>${ICON.redo}</button><button class="dc-btn secondary" id="dcSaveDraft" title="Save and apply this template (⌘S)">Save</button><button class="dc-btn" id="dcRenderClip">Export video</button></div><div class="dc-editor-workspace"><nav class="dc-tool-rail">${EDITOR_SECTIONS.map(s=>toolButton(s.id,s.label,s.icon)).join('')}</nav><aside class="dc-tool-panel"><div class="dc-tool-head"><strong id="dcToolTitle">Captions</strong><span class="dc-pill ${editor.captionSource==='whisper'?'good':'warn'}" id="dcCaptionSource">${editor.captionSource==='whisper'?'Exact speech timing':editor.captionSource==='edited'?'Edited speech timing':'Estimated timing'}</span></div><div class="dc-tool-content" id="dcToolContent"></div></aside><main class="dc-canvas-area"><div class="dc-canvas-toolbar"><button class="dc-icon-btn dc-svg" id="dcPlayButton" title="Play / pause (Space)">${ICON.play}</button><span class="dc-timeline-time" id="dcCanvasTime">0:00 / ${formatClock(editor.trimOut)}</span><div class="dc-layer-switch" role="group" aria-label="Select editor layer"><button type="button" data-select-layer="video" class="${editor.selectedLayer==='video'?'on':''}">Video</button><button type="button" data-select-layer="captions" class="${editor.selectedLayer==='captions'?'on':''}">Captions</button></div><button type="button" class="dc-safe-toggle ${editor.safeZones?'on':''}" id="dcSafeZones" aria-pressed="${editor.safeZones}">Safe zones</button><span class="spacer"></span><button type="button" class="dc-btn secondary dc-caption-edit-shortcut" id="dcOpenCaptionText">Edit captions</button><span class="dc-zoom">Shift + arrows nudge · arrows seek</span></div><div class="dc-canvas-wrap"><div class="dc-video-canvas ${editor.selectedLayer==='video'?'is-video-selected':''}" id="dcVideoCanvas"><video id="dcEditorVideoBg" class="dc-video-layer dc-video-bg" src="${source}" preload="metadata" muted playsinline></video><video id="dcEditorVideo" class="dc-video-layer dc-video-fg" src="${source}" preload="metadata" playsinline></video><div class="dc-safe-zone ${editor.safeZones?'show':''}" id="dcSafeZone"><span>Keep text inside</span></div><div class="dc-framing-guide"></div><button type="button" class="dc-resize-handle" id="dcResizeHandle" aria-label="Resize video"></button><span class="dc-layer-badge" id="dcLayerBadge">Video layer</span><div class="dc-snap-guide vertical" id="dcSnapGuideV"></div><div class="dc-snap-guide horizontal" id="dcSnapGuideH"></div><div class="dc-caption-overlay ${editor.selectedLayer==='captions'?'is-selected':''}" id="dcCaptionOverlay" role="group" aria-label="Caption layer"></div><div class="dc-watermark" id="dcWatermark"></div><div class="dc-brand-line" id="dcBrandLine"></div><span class="dc-caption-status" id="dcCaptionStatus">Captions follow the spoken words</span></div></div></main></div><section class="dc-timeline"><div class="dc-timeline-top"><span class="dc-timeline-time" id="dcTimelineTime">0:00.0</span><span class="dc-timeline-help">Drag to scrub · click a caption to jump · Space to play</span><span class="spacer"></span><div class="dc-timeline-zoom" role="group" aria-label="Timeline zoom"><button type="button" class="dc-icon-btn" id="dcTimelineZoomOut" title="Zoom out" aria-label="Zoom out">−</button><button type="button" class="dc-icon-btn" id="dcTimelineZoomIn" title="Zoom in" aria-label="Zoom in">+</button><button type="button" class="dc-btn secondary" id="dcTimelineFit" title="Fit the whole clip in view">Fit</button></div></div><div class="dc-timeline-scroll" id="dcTimelineScroll"><div class="dc-ruler" id="dcRuler"><i class="dc-ruler-gutter"></i><div class="dc-ruler-marks" id="dcRulerMarks"></div></div><div class="dc-track-row"><div class="dc-track-label">Video</div><div class="dc-track-content"><div class="dc-video-block">${esc(clip.title||'Video')}</div></div></div><div class="dc-track-row"><div class="dc-track-label">Captions</div><div class="dc-track-content" id="dcCaptionTrack"></div></div><div class="dc-track-row"><div class="dc-track-label">Audio</div><div class="dc-track-content"><div class="dc-audio-block">${esc(clip.musicName||'Nasheed')}</div></div></div><div class="dc-playhead" id="dcPlayhead"></div><div class="dc-playhead-grip" id="dcPlayheadGrip"></div></div></section>`;
-  mountEditorStylePicker();$('#dcSaveDraft')?.remove();
+  panel.innerHTML=`<div class="dc-editor-header"><button class="dc-icon-btn dc-svg" id="dcEditorBack" title="Back to project">${ICON.back}</button><div class="dc-editor-title"><strong>${esc(clip.title||'Untitled clip')}</strong><span>${esc(clip.projectTitle||'Lecture')} · ${Math.round(clip.score||0)}/100 · ${editor.dirty?'Unsaved changes':'Saved'}</span></div><button class="dc-icon-btn dc-svg" id="dcUndo" title="Undo" ${editor.historyIndex<=0?'disabled':''}>${ICON.undo}</button><button class="dc-icon-btn dc-svg" id="dcRedo" title="Redo" ${editor.historyIndex>=editor.history.length-1?'disabled':''}>${ICON.redo}</button><button class="dc-btn secondary" id="dcSaveDraft">Save</button><button class="dc-btn" id="dcRenderClip">Export video</button></div><div class="dc-editor-workspace"><nav class="dc-tool-rail">${toolButton('captions','Captions','captions')}${toolButton('canvas','Canvas','canvas')}${toolButton('style','Look','style')}${toolButton('audio','Audio','audio')}${toolButton('details','Post','details')}</nav><aside class="dc-tool-panel"><div class="dc-tool-head"><strong id="dcToolTitle">Captions</strong><span class="dc-pill ${editor.captionSource==='whisper'?'good':'warn'}" id="dcCaptionSource">${editor.captionSource==='whisper'?'Exact speech timing':editor.captionSource==='edited'?'Edited speech timing':'Estimated timing'}</span></div><div class="dc-tool-content" id="dcToolContent"></div></aside><main class="dc-canvas-area"><div class="dc-canvas-toolbar"><button class="dc-icon-btn dc-svg" id="dcPlayButton">${ICON.play}</button><span class="dc-timeline-time" id="dcCanvasTime">0:00 / ${formatClock(editor.trimOut)}</span><span class="spacer"></span><button type="button" class="dc-btn secondary dc-caption-edit-shortcut" id="dcOpenCaptionText">Edit captions</button><span class="dc-zoom">Preview · drag video or captions</span></div><div class="dc-canvas-wrap"><div class="dc-video-canvas" id="dcVideoCanvas"><video id="dcEditorVideoBg" class="dc-video-layer dc-video-bg" src="${source}" preload="metadata" muted playsinline></video><video id="dcEditorVideo" class="dc-video-layer dc-video-fg" src="${source}" preload="metadata" playsinline></video><div class="dc-framing-guide"></div><button type="button" class="dc-resize-handle" id="dcResizeHandle" aria-label="Resize video"></button><span class="dc-layer-badge" id="dcLayerBadge">Video layer</span><div class="dc-snap-guide vertical" id="dcSnapGuideV"></div><div class="dc-snap-guide horizontal" id="dcSnapGuideH"></div><div class="dc-caption-overlay" id="dcCaptionOverlay" role="group" aria-label="Caption layer"></div><div class="dc-watermark" id="dcWatermark"></div><div class="dc-brand-line" id="dcBrandLine"></div><span class="dc-caption-status" id="dcCaptionStatus">Captions follow the spoken words</span></div></div></main><section class="dc-timeline"><div class="dc-timeline-top"><span class="dc-timeline-time" id="dcTimelineTime">0:00.0</span><span class="spacer"></span></div><div class="dc-timeline-scroll" id="dcTimelineScroll"><div class="dc-ruler" id="dcRuler"></div><div class="dc-track-row"><div class="dc-track-label">Video</div><div class="dc-track-content"><div class="dc-video-block">${esc(clip.title||'Video')}</div></div></div><div class="dc-track-row"><div class="dc-track-label">Captions</div><div class="dc-track-content" id="dcCaptionTrack"></div></div><div class="dc-track-row"><div class="dc-track-label">Audio</div><div class="dc-track-content"><div class="dc-audio-block">${esc(clip.musicName||'Nasheed')}</div></div></div><div class="dc-playhead" id="dcPlayhead"></div></div></section></div>`;
   $('#dcEditorBack').onclick=()=>{selectedProjectId=clip.projectId;go('projects')};
-  $('#dcUndo').onclick=undoEditor;$('#dcRedo').onclick=redoEditor;$('#dcRenderClip').onclick=openExportDialog;$('#dcPlayButton').onclick=togglePlayback;$('#dcOpenCaptionText')?.addEventListener('click',()=>{editor.tool='captions';editor.captionTab='text';renderEditorTool();setTimeout(()=>$('#dcCaptionText')?.focus(),0);});
-  $('#dcSafeZones')?.addEventListener('click',()=>{editor.safeZones=!editor.safeZones;$('#dcSafeZone')?.classList.toggle('show',editor.safeZones);$('#dcSafeZones')?.classList.toggle('on',editor.safeZones);$('#dcSafeZones')?.setAttribute('aria-pressed',String(editor.safeZones))});
-  bindVideo(clip);bindCanvasDrag();bindCaptionDrag();renderEditorTool();updateEditorPreview();renderTimeline();updateEditorSaveState();updateEditorStyleState();
+  $('#dcUndo').onclick=undoEditor;$('#dcRedo').onclick=redoEditor;$('#dcSaveDraft').onclick=saveEditorDraft;$('#dcRenderClip').onclick=renderEditedClip;$('#dcPlayButton').onclick=togglePlayback;$('#dcOpenCaptionText')?.addEventListener('click',()=>{editor.tool='captions';editor.captionTab='text';renderEditorTool();setTimeout(()=>$('#dcCaptionText')?.focus(),0);});
+  bindVideo(clip);bindCanvasDrag();bindCaptionDrag();renderEditorTool();updateEditorPreview();renderTimeline();
   queueMicrotask(()=>verifyEditorControls());requestAnimationFrame(()=>animatePanel(panel));
   if(editor.draft.fitMode==='crop'&&editor.draft.smartFramingEnabled&&!editor.framingPlan)requestFramingPlan(true);
 }
 function toolButton(name,label,icon){return `<button class="dc-tool-button ${editor.tool===name?'on':''}" data-editor-tool="${name}" type="button"><span class="dc-tool-icon">${ICON[icon]}</span><span>${label}</span></button>`}
 function verifyEditorControls(){
-  const required=['dcEditorBack','dcEditorStyleSelect','dcUndo','dcRedo','dcRenderClip','dcPlayButton'];
+  const required=['dcEditorBack','dcUndo','dcRedo','dcSaveDraft','dcRenderClip','dcPlayButton'];
   const missing=required.filter(id=>!document.getElementById(id));
   if(missing.length)notify(`Editor controls failed to load: ${missing.join(', ')}`,'bad');
   $$('#view-editor button').forEach(button=>{if(!button.type)button.type='button'});
 }
-function updateEditorSaveState(){
-  const state=$('#dcEditorSaveState');if(!state)return;
-  if(editor.saveStatus==='saving')state.textContent='Saving…';
-  else if(editor.saveStatus==='error')state.textContent='Could not save · press ⌘S to retry';
-  else if(editor.dirty)state.textContent=`Draft backed up locally${editor.localSavedAt?' · autosaving':''}`;
-  else state.textContent='Saved ✓';
-  state.className=editor.saveStatus==='error'?'is-error':editor.dirty?'is-draft':'is-saved';
-}
-function selectEditorLayer(layer){
-  editor.selectedLayer=['video','captions'].includes(layer)?layer:'none';
-  const canvas=$('#dcVideoCanvas'),caption=$('#dcCaptionOverlay');
-  canvas?.classList.toggle('is-video-selected',editor.selectedLayer==='video');caption?.classList.toggle('is-selected',editor.selectedLayer==='captions');
-  $$('[data-select-layer]').forEach(button=>button.classList.toggle('on',button.dataset.selectLayer===editor.selectedLayer));
-  if(editor.selectedLayer==='video'){editor.tool='canvas';renderEditorTool()}else if(editor.selectedLayer==='captions'&&editor.tool!=='captions'){editor.tool='captions';renderEditorTool()}
-}
-function nudgeEditorLayer(dx,dy){
-  if(!editor.draft||editor.selectedLayer==='none')return;
-  if(editor.selectedLayer==='video'){
-    if(editor.draft.fitMode!=='crop')editor.draft.fitMode='crop';switchToManualFraming('Manual crop nudged with keyboard');
-    editor.draft.cropPositionX=clamp(Number(editor.draft.cropPositionX??50)-dx,0,100);editor.draft.cropPositionY=clamp(Number(editor.draft.cropPositionY??50)-dy,0,100);applyFrameAtTime(editor.currentTime);
-  }else{
-    editor.draft.captionPositionX=clamp(Number(editor.draft.captionPositionX??50)+dx,7,93);editor.draft.captionPositionY=clamp(Number(editor.draft.captionPositionY??58)+dy,8,88);updateEditorPreview();
-  }
-  markEditorDirty();debouncedHistory();
-}
-// The six sidebar sections, in order. Declared once so the rail, the panel
-// title and the dispatch cannot drift apart — previously each was written out
-// separately and a rename had to be made in three places.
-//
-// `details` (Post) is deliberately absent: publishing metadata moves into the
-// Export flow. Its controls are not deleted, they are rendered there instead.
-const EDITOR_SECTIONS=[
-  {id:'captions',label:'Captions',icon:'captions',render:()=>captionTool()},
-  {id:'text',    label:'Text',    icon:'text',    render:()=>textTool()},
-  {id:'canvas',  label:'Canvas',  icon:'canvas',  render:()=>canvasTool()},
-  {id:'style',   label:'Style',   icon:'style',   render:()=>styleTool()},
-  {id:'audio',   label:'Audio',   icon:'audio',   render:()=>audioTool()},
-  {id:'brand',   label:'Brand',   icon:'brand',   render:()=>brandTool()},
-];
-function editorSection(id){return EDITOR_SECTIONS.find(s=>s.id===id)||EDITOR_SECTIONS[0]}
 function renderEditorTool(){
-  // `details` was a valid tool until Post moved to Export; a saved session or
-  // a deep link can still ask for it.
-  if(!EDITOR_SECTIONS.some(s=>s.id===editor.tool))editor.tool='captions';
-  const section=editorSection(editor.tool);
-  const titleEl=$('#dcToolTitle');if(titleEl)titleEl.textContent=section.label;
-  $$('[data-editor-tool]').forEach(b=>{
-    const on=b.dataset.editorTool===editor.tool;
-    b.classList.toggle('on',on);b.setAttribute('aria-expanded',String(on&&!editor.panelCollapsed));
-  });
-  document.body.classList.toggle('dc-editor-panel-collapsed',Boolean(editor.panelCollapsed));
+  const title={captions:'Captions',canvas:'Canvas',style:'Look',audio:'Audio',details:'Post details'}[editor.tool];$('#dcToolTitle').textContent=title;$$('[data-editor-tool]').forEach(b=>b.classList.toggle('on',b.dataset.editorTool===editor.tool));
   const box=$('#dcToolContent');if(!box)return;
-  box.innerHTML=section.render();
+  if(editor.tool==='captions')box.innerHTML=captionTool();
+  if(editor.tool==='canvas')box.innerHTML=canvasTool();
+  if(editor.tool==='style')box.innerHTML=styleTool();
+  if(editor.tool==='audio')box.innerHTML=audioTool();
+  if(editor.tool==='details')box.innerHTML=detailsTool();
   box.classList.remove('dc-panel-swap');void box.offsetWidth;box.classList.add('dc-panel-swap');
   bindToolInputs();
 }
 function captionTool(){
-  // A clip with no clean plate has its captions painted into the picture, so
-  // their *appearance* is fixed. Their *wording* is not: the transcript is
-  // separate data used for search, post copy and any future re-render, and
-  // editing it has nothing to do with where text sits on a frame.
-  //
-  // The first version of this panel returned early here and replaced the whole
-  // section with an explanation, which took the transcript editor down with the
-  // styling controls that genuinely cannot be applied. Locking the part that
-  // cannot work is right; locking the part that can is the same mistake in the
-  // other direction.
-  const baked=!editorHasCleanSource(currentClip());
-  if(baked){
-    const notice=`<div class="dc-sync-card is-locked"><div class="dc-sync-top"><i class="dc-sync-dot warn"></i><div class="dc-sync-copy"><strong>Caption appearance is fixed for this clip</strong><span>The original footage is gone, so these captions are part of the picture and cannot be restyled or moved. You can still correct the wording below.</span></div></div></div>`;
-    return `${notice}${captionTextPanel()}`;
-  }
-  // Captions synchronise themselves. The old panel led with a "Sync captions"
-  // button, which asked the user to perform a repair the app already knows how
-  // to run — every clip has Whisper word timings on the server, so there was
-  // never a case where the right answer was "not synced". autoSyncCaptions()
-  // now fires on open; this panel only reports state and offers the fine
-  // timing nudge, which is a genuine creative choice rather than a repair.
-  const busy=editor.captionSyncStatus==='syncing';
-  const exact=editor.captionSource==='whisper';
-  const offset=Number(editor.draft.captionTimingOffsetMs??0);
-  const state=busy?'busy':exact?'good':editor.captionSource==='edited'?'good':'';
-  const title=busy?'Synchronising to speech…':exact?'Synced to speech':editor.captionSource==='edited'?'Your edits, on speech timing':'Estimated timing';
-  const detail=busy?'Loading the exact word timestamps for this clip.':exact?'Every word follows its own timestamp and captions clear during silence.':editor.captionSource==='edited'?'Your wording, mapped onto the spoken timing.':'Exact timing was unavailable for this clip, so words are spaced evenly.';
-  return `<div class="dc-sync-card"><div class="dc-sync-top"><i class="dc-sync-dot ${state}"></i><div class="dc-sync-copy"><strong>${title}</strong><span>${detail}</span></div></div><div class="dc-field" style="margin-top:11px"><div class="dc-timing-readout"><span>Nudge timing</span><b id="dcTimingLabel">${formatCaptionOffset(offset)}</b></div><input type="range" data-template-key="captionTimingOffsetMs" value="${offset}" min="-1500" max="1500" step="20"></div><div class="dc-sync-actions"><button type="button" class="dc-btn secondary" data-caption-nudge="-100">Earlier</button><button type="button" class="dc-btn secondary" data-caption-nudge="100">Later</button></div></div><div class="dc-subtabs">${['styles','text','format','position'].map(x=>`<button type="button" class="${editor.captionTab===x?'on':''}" data-caption-tab="${x}">${x[0].toUpperCase()+x.slice(1)}</button>`).join('')}</div>${editor.captionTab==='styles'?captionStyles():editor.captionTab==='text'?captionTextPanel():editor.captionTab==='format'?captionFormat():captionPosition()}`;
+  const exact=editor.captionSource==='whisper',busy=editor.captionSyncStatus==='syncing';
+  const offset=Number(editor.draft.captionTimingOffsetMs??-120);
+  const syncTitle=busy?'Synchronising speech…':exact?'Speech timing synced':editor.captionSource==='edited'?'Edited timing':'Timing needs synchronising';
+  const syncText=busy?'Re-transcribing this exact clip and rebuilding word timestamps.':exact?'Whisper word timestamps are loaded for this clip.':'Use Auto-sync before the final export so captions follow the voice.';
+  return `<div class="dc-sync-card"><div class="dc-sync-top"><i class="dc-sync-dot ${busy?'busy':exact?'good':''}"></i><div class="dc-sync-copy"><strong>${syncTitle}</strong><span>${syncText}</span></div></div><div class="dc-sync-actions"><button type="button" class="dc-btn ${exact?'secondary':''}" id="dcSyncCaptions" ${busy?'disabled':''}>${busy?'Syncing…':'Auto-sync captions'}</button><button type="button" class="dc-btn secondary" data-caption-nudge="-100">Earlier</button><button type="button" class="dc-btn secondary" data-caption-nudge="100">Later</button></div><div class="dc-field" style="margin-top:11px"><div class="dc-timing-readout"><span>Fine timing</span><b id="dcTimingLabel">${formatCaptionOffset(offset)}</b></div><input type="range" data-template-key="captionTimingOffsetMs" value="${offset}" min="-1000" max="1000" step="20"></div></div><div class="dc-subtabs">${['styles','text','format','position'].map(x=>`<button type="button" class="${editor.captionTab===x?'on':''}" data-caption-tab="${x}">${x[0].toUpperCase()+x.slice(1)}</button>`).join('')}</div>${editor.captionTab==='styles'?captionStyles():editor.captionTab==='text'?captionTextPanel():editor.captionTab==='format'?captionFormat():captionPosition()}`;
 }
 
 function captionStyles(){
@@ -2770,16 +1985,15 @@ function captionStyles(){
 }
 
 function captionStylePreview(id){
-  if(id==='gold')return'color:#d9b478;-webkit-text-stroke:1px #000';if(id==='clean')return'font-weight:600;background:#0008';if(id==='arabic')return"font-family:Amiri,serif;font-size:15px";if(id==='bold')return'font-size:13px;font-weight:900';if(id==='cinema')return"font-family:'Noto Serif',serif;font-size:11px";return'font-family:Manrope,sans-serif;font-weight:900';
+  if(id==='gold')return'color:#d9b478;-webkit-text-stroke:1px #000';if(id==='clean')return'font-weight:600;background:#0008';if(id==='arabic')return"font-family:Amiri,serif;font-size:15px";if(id==='bold')return'font-size:13px;font-weight:900';if(id==='cinema')return"font-family:'Playfair Display',serif;font-size:11px";return'font-weight:900';
 }
 function captionTextPanel(){
   const groups=captionSegments().slice(0,30);
   return `<div class="dc-section"><h3>Edit caption transcript</h3><textarea class="dc-caption-editor" id="dcCaptionText">${esc(editor.captionText)}</textarea><div class="dc-caption-note" style="margin-top:7px">Whisper word timings are preserved. When words are changed, DeenClipped maps them onto the original speech spans instead of stretching captions across silence.</div></div><div class="dc-section"><h3>Speech-timed segments</h3><div class="dc-caption-list">${groups.map(g=>`<button class="dc-caption-line" data-caption-start="${g.start}"><span>${formatClock(g.start)}</span><b>${esc(g.text)}</b></button>`).join('')}</div></div>`; 
 }
 function captionFormat(){
-  const fonts=[['Manrope','Manrope'],['Roboto','Roboto'],['Lato','Lato'],['Noto Sans','Noto Sans'],['Noto Serif','Noto Serif'],['Cantarell','Cantarell'],['Play','Play'],['Andika','Andika'],['FreeSans','Free Sans'],['FreeSerif','Free Serif'],['Nimbus Sans','Nimbus Sans'],['Nimbus Roman','Nimbus Roman'],['TeX Gyre Heros','TeX Gyre Heros'],['TeX Gyre Adventor','TeX Gyre Adventor'],['Liberation Sans','Liberation Sans'],['Liberation Serif','Liberation Serif'],['DejaVu Sans','DejaVu Sans'],['DejaVu Serif','DejaVu Serif'],['Amiri','Amiri'],['Scheherazade New','Scheherazade Arabic'],['Noto Naskh Arabic','Noto Naskh Arabic'],['Noto Kufi Arabic','Noto Kufi Arabic']];
-  const emphasis=[['Noto Serif','Noto Serif'],['FreeSerif','Free Serif'],['Nimbus Roman','Nimbus Roman'],['DejaVu Serif','DejaVu Serif'],['Liberation Serif','Liberation Serif'],['Manrope','Manrope'],['Roboto','Roboto'],['Lato','Lato'],['Amiri','Amiri']];
-  return `<div class="dc-section"><h3>Type and layout</h3>${selectField('Caption mode','captionMode',[['dynamic-stack','Dynamic pop'],['word','Word highlight'],['phrase','Phrase captions']])}${selectField('Main font','captionFont',fonts)}${selectField('Important-word font','captionHighlightFont',emphasis)}${selectField('Arabic font','captionArabicFont',[['Amiri','Amiri'],['Scheherazade New','Scheherazade Arabic'],['Noto Naskh Arabic','Noto Naskh Arabic'],['Noto Kufi Arabic','Noto Kufi Arabic'],['Noto Sans Arabic','Noto Sans Arabic']])}${rangeField('Font size','captionFontSize',24,180,1)}${rangeField('Font weight','captionFontWeight',400,900,100)}${rangeField('Letter spacing','captionLetterSpacing',-4,12,.5)}${rangeField('Words per caption','captionMaxWords',1,12,1)}${checkField('Italic important words','captionHighlightItalic')}${checkField('Uppercase captions','captionUppercase')}</div><div class="dc-section"><h3>Speech flow</h3>${rangeField('Clear on silent gap','captionClearPause',.15,2,.05)}${rangeField('Hold after each word','captionHoldSeconds',0,.2,.01)}${rangeField('Maximum stacked words','captionStackMaxWords',1,6,1)}${rangeField('Stack frequency','captionStackProbability',0,1,.05)}<div class="dc-caption-note">Silence always clears the caption. These controls only decide how quickly it clears and how spoken words build on screen.</div></div><div class="dc-section"><h3>Clean emphasis</h3>${rangeField('Important-word glow','captionHighlightGlow',0,30,1)}<div class="dc-color-grid">${colorField('Text','captionPrimary')}${colorField('Important word','captionHighlight')}${colorField('Outline','captionOutline')}${colorField('Background','captionBackground')}</div>${rangeField('Outline','captionOutlineWidth',0,14,1)}${rangeField('Shadow','captionShadow',0,8,.5)}${rangeField('Background opacity','captionBackgroundOpacity',0,100,1)}${rangeField('Line spacing','captionLineHeight',.65,1.4,.05)}</div>`;
+  const d=editor.draft;
+  return `<div class="dc-section"><h3>Behaviour</h3>${selectField('Caption mode','captionMode',[['dynamic-stack','Dynamic pop'],['word','Word highlight'],['phrase','Phrase captions']])}${selectField('Main font','captionFont',[['DejaVu Sans','DejaVu Sans'],['Amiri','Amiri'],['Scheherazade New','Scheherazade Arabic']])}${selectField('Important-word font','captionHighlightFont',[['DejaVu Serif','DejaVu Serif'],['DejaVu Sans','DejaVu Sans'],['Amiri','Amiri']])}${selectField('Arabic font','captionArabicFont',[['Amiri','Amiri'],['Scheherazade New','Scheherazade Arabic'],['DejaVu Sans','DejaVu Sans']])}${rangeField('Font size','captionFontSize',24,140,1)}${rangeField('Words per caption','captionMaxWords',1,12,1)}${checkField('Italic important words','captionHighlightItalic')}${checkField('Uppercase captions','captionUppercase')}</div><div class="dc-section"><h3>Clean emphasis</h3>${rangeField('Important-word glow','captionHighlightGlow',0,30,1)}<div class="dc-color-grid">${colorField('Text','captionPrimary')}${colorField('Important word','captionHighlight')}${colorField('Outline','captionOutline')}${colorField('Background','captionBackground')}</div>${rangeField('Outline','captionOutlineWidth',0,14,1)}${rangeField('Background opacity','captionBackgroundOpacity',0,100,1)}${rangeField('Line spacing','captionLineHeight',.65,1.4,.05)}</div>`;
 }
 function captionPosition(){
   const key=`${editor.draft.captionPosition||'middle'}-${editor.draft.captionHorizontal||'center'}`;
@@ -2787,61 +2001,20 @@ function captionPosition(){
   return `<div class="dc-section"><h3>Position</h3><div class="dc-position-grid">${positions.map(([p,l])=>`<button type="button" class="${p===key?'on':''}" data-caption-position="${p}">${l}</button>`).join('')}</div></div><div class="dc-section"><h3>Margins</h3>${rangeField('Vertical margin','captionMarginV',20,800,5)}${rangeField('Horizontal margin','captionMarginH',20,700,5)}</div>`;
 }
 function canvasTool(){
-  const [stateTitle,stateText]=framingStatusCopy(),fill=editor.draft.fitMode||'contain',aiAllowed=Boolean(billingInfo().features?.advancedFraming||billingInfo().current?.unlimited),ai=aiAllowed&&fill==='crop'&&Boolean(editor.draft.smartFramingEnabled),ratio=ratioValue();
-  return `<div class="dc-canvas-explainer"><b>Canvas changes only the video.</b> Captions stay in the position selected under Captions.</div><div class="dc-section"><h3>1 · Output frame</h3><div class="dc-segmented"><button type="button" class="${ratio==='9:16'?'on':''}" data-frame-ratio="9:16">Portrait 9:16</button><button type="button" class="${ratio==='16:9'?'on':''}" data-frame-ratio="16:9">Landscape 16:9</button></div><details class="dc-advanced"><summary>More frame sizes</summary><div style="margin-top:10px">${selectField('Other ratio','__ratio',[['9:16','Vertical 9:16'],['4:5','Portrait 4:5'],['1:1','Square 1:1'],['16:9','Landscape 16:9']])}</div></details></div><div class="dc-section"><h3>2 · Fit imported video</h3><div class="dc-fill-options"><button type="button" aria-pressed="${fill==='contain'}" class="dc-fill-option ${fill==='contain'?'on':''}" data-fill-mode="contain"><span class="dc-fill-swatch contain"></span><b>Fit</b><span>Show the complete source</span></button><button type="button" aria-pressed="${fill==='blur'}" class="dc-fill-option ${fill==='blur'?'on':''}" data-fill-mode="blur"><span class="dc-fill-swatch blur"></span><b>Blur</b><span>Full source over background</span></button><button type="button" aria-pressed="${fill==='crop'}" class="dc-fill-option ${fill==='crop'?'on':''}" data-fill-mode="crop"><span class="dc-fill-swatch crop"></span><b>Fill</b><span>Cover frame and crop edges</span></button></div><div class="dc-frame-note">${fill==='crop'?'Fill enlarges the imported video until the entire frame is covered. A landscape source becomes a proper vertical crop without stretching.':fill==='blur'?'The complete source stays visible while a blurred copy fills empty space.':'Nothing is cropped; empty space remains where needed.'}</div></div>${fill==='blur'?`<div class="dc-simple-card"><strong>Blur background</strong><span>The foreground remains sharp.</span>${rangeField('Blur strength','blurStrength',0,60,1)}</div>`:''}${fill==='crop'?`<div class="dc-section"><h3>3 · Framing</h3><div class="dc-segmented"><button type="button" class="${!ai?'on':''}" data-framing-mode="manual">Manual</button><button type="button" class="${ai?'on':''} ${!aiAllowed?'is-pro-locked':''}" ${aiAllowed?'data-framing-mode="ai"':'data-open-billing'}>AI speaker focus ${aiAllowed?'':'· PRO'}</button></div>${!aiAllowed?`<div class="dc-editor-pro-lock"><span>${ICON.sparkles}</span><div><strong>Active-speaker framing</strong><p>Monthly and Yearly Premium analyse faces and mouth movement, then smoothly follow whoever is speaking.</p></div><button class="dc-btn secondary" data-open-billing>Compare plans</button></div>`:ai?`<div class="dc-simple-card" style="margin-top:10px"><strong>Follow the person speaking</strong><span>DeenClipped analyses faces and mouth movement through the clip, then creates smooth crop keyframes. Captions are not touched.</span><button type="button" class="dc-btn dc-ai-primary" id="dcAnalyseFraming" ${editor.framingStatus==='analysing'?'disabled':''}>${editor.framingStatus==='analysing'?'Analysing speaker…':'Analyse and track speaker'}</button><div class="dc-framing-state ${editor.framingStatus}"><i></i><div><strong>${esc(stateTitle)}</strong><span>${esc(stateText)}</span></div></div><details class="dc-advanced"><summary>Advanced tracking controls</summary><div style="margin-top:10px">${selectField('Fallback focus','smartFramingBias',[['auto','Automatic'],['left','Prefer left person'],['center','Prefer centre'],['right','Prefer right person']])}${rangeField('Crop zoom','smartFramingZoom',.75,1.35,.05)}${rangeField('Space around person','smartFramingPadding',.05,.45,.01)}${rangeField('Movement smoothing','smartFramingSmoothing',0,.95,.05)}<button type="button" class="dc-btn secondary" id="dcResetFraming" style="width:100%">Reset tracking</button></div></details></div>`:`<div class="dc-simple-card" style="margin-top:10px"><strong>Position the crop</strong><span>Drag the video to reposition it. Drag the white circle in the bottom-right corner to resize/zoom it.</span>${rangeField('Video size / zoom','smartFramingZoom',.75,2.5,.05)}<button type="button" class="dc-btn secondary" id="dcResetFraming" style="width:100%">Centre and reset size</button><details class="dc-advanced"><summary>Exact crop position</summary><div style="margin-top:10px">${rangeField('Horizontal','cropPositionX',0,100,1)}${rangeField('Vertical','cropPositionY',0,100,1)}</div></details></div>`}</div>`:''}${editor.captionSource==='fallback'?'<div class="dc-caption-warning">Caption timing is still estimated. Open Captions and press Auto-sync before exporting.</div>':''}`;
+  const [stateTitle,stateText]=framingStatusCopy(),fill=editor.draft.fitMode||'contain',ai=fill==='crop'&&Boolean(editor.draft.smartFramingEnabled),ratio=ratioValue();
+  return `<div class="dc-canvas-explainer"><b>Canvas changes only the video.</b> Captions stay in the position selected under Captions.</div><div class="dc-section"><h3>1 · Output frame</h3><div class="dc-segmented"><button type="button" class="${ratio==='9:16'?'on':''}" data-frame-ratio="9:16">Portrait 9:16</button><button type="button" class="${ratio==='16:9'?'on':''}" data-frame-ratio="16:9">Landscape 16:9</button></div><details class="dc-advanced"><summary>More frame sizes</summary><div style="margin-top:10px">${selectField('Other ratio','__ratio',[['9:16','Vertical 9:16'],['4:5','Portrait 4:5'],['1:1','Square 1:1'],['16:9','Landscape 16:9']])}</div></details></div><div class="dc-section"><h3>2 · Fit imported video</h3><div class="dc-fill-options"><button type="button" aria-pressed="${fill==='contain'}" class="dc-fill-option ${fill==='contain'?'on':''}" data-fill-mode="contain"><span class="dc-fill-swatch contain"></span><b>Fit</b><span>Show the complete source</span></button><button type="button" aria-pressed="${fill==='blur'}" class="dc-fill-option ${fill==='blur'?'on':''}" data-fill-mode="blur"><span class="dc-fill-swatch blur"></span><b>Blur</b><span>Full source over background</span></button><button type="button" aria-pressed="${fill==='crop'}" class="dc-fill-option ${fill==='crop'?'on':''}" data-fill-mode="crop"><span class="dc-fill-swatch crop"></span><b>Fill</b><span>Cover frame and crop edges</span></button></div><div class="dc-frame-note">${fill==='crop'?'Fill enlarges the imported video until the entire frame is covered. A landscape source becomes a proper vertical crop without stretching.':fill==='blur'?'The complete source stays visible while a blurred copy fills empty space.':'Nothing is cropped; empty space remains where needed.'}</div></div>${fill==='blur'?`<div class="dc-simple-card"><strong>Blur background</strong><span>The foreground remains sharp.</span>${rangeField('Blur strength','blurStrength',0,60,1)}</div>`:''}${fill==='crop'?`<div class="dc-section"><h3>3 · Framing</h3><div class="dc-segmented"><button type="button" class="${!ai?'on':''}" data-framing-mode="manual">Manual</button><button type="button" class="${ai?'on':''}" data-framing-mode="ai">AI speaker focus</button></div>${ai?`<div class="dc-simple-card" style="margin-top:10px"><strong>Follow the person speaking</strong><span>DeenClipped analyses faces and mouth movement through the clip, then creates smooth crop keyframes. Captions are not touched.</span><button type="button" class="dc-btn dc-ai-primary" id="dcAnalyseFraming" ${editor.framingStatus==='analysing'?'disabled':''}>${editor.framingStatus==='analysing'?'Analysing speaker…':'Analyse and track speaker'}</button><div class="dc-framing-state ${editor.framingStatus}"><i></i><div><strong>${esc(stateTitle)}</strong><span>${esc(stateText)}</span></div></div><details class="dc-advanced"><summary>Advanced tracking controls</summary><div style="margin-top:10px">${selectField('Fallback focus','smartFramingBias',[['auto','Automatic'],['left','Prefer left person'],['center','Prefer centre'],['right','Prefer right person']])}${rangeField('Crop zoom','smartFramingZoom',.75,1.35,.05)}${rangeField('Space around person','smartFramingPadding',.05,.45,.01)}${rangeField('Movement smoothing','smartFramingSmoothing',0,.95,.05)}<button type="button" class="dc-btn secondary" id="dcResetFraming" style="width:100%">Reset tracking</button></div></details></div>`:`<div class="dc-simple-card" style="margin-top:10px"><strong>Position the crop</strong><span>Drag the video to reposition it. Drag the white circle in the bottom-right corner to resize/zoom it.</span>${rangeField('Video size / zoom','smartFramingZoom',.75,2.5,.05)}<button type="button" class="dc-btn secondary" id="dcResetFraming" style="width:100%">Centre and reset size</button><details class="dc-advanced"><summary>Exact crop position</summary><div style="margin-top:10px">${rangeField('Horizontal','cropPositionX',0,100,1)}${rangeField('Vertical','cropPositionY',0,100,1)}</div></details></div>`}</div>`:''}${editor.captionSource==='fallback'?'<div class="dc-caption-warning">Caption timing is still estimated. Open Captions and press Auto-sync before exporting.</div>':''}`;
 }
 
 function styleTool(){
   const selected=DATA?.selectedTemplate;
-  const applied=(DATA?.templates||[]).find(template=>template.id===editor.appliedStyleId);
-  const drift=editorStyleHasDrift(),appliedName=applied?.name||'No style applied';
-  const templateStatus=`<div class="dc-simple-card dc-style-state"><strong>This clip: ${esc(appliedName)}</strong><span class="${drift?'custom':''}">${drift?'This clip has custom changes.':'Matches the selected Template.'}</span><span>Future clips still use: <b style="color:var(--dc-text)">${esc(selected?.name||'No default')}</b></span></div>`;
-  // Branding moved out to its own Brand section: a Brand Kit is an account's
-  // identity, a Clip Style is a per-clip look, and mixing them here was what
-  // made the two read as the same thing.
-  const clipActions=`<div class="dc-section"><h3>Template actions</h3><div class="dc-clip-style-actions"><button type="button" class="dc-btn secondary" id="dcResetClipStyle" ${applied&&drift?'':'disabled'}>Reset to Template</button><button type="button" class="dc-btn secondary" id="dcSaveClipStyleAsNew">Save changes as new Template</button><button type="button" class="dc-btn secondary" id="dcUpdateClipStyle" ${applied&&!applied.builtIn&&drift?'':'disabled'}>Update existing Template…</button></div><div class="dc-caption-note" style="margin-top:7px">These actions never change this clip's transcript, caption timing or crop position.</div></div>`;
-  const defaults=`<details class="dc-advanced"><summary>Default Template for future clips</summary><div style="margin-top:10px"><div class="dc-inline-actions"><button type="button" class="dc-btn secondary" id="dcSavePreset">Save current look as default</button><button type="button" class="dc-btn" id="dcApplyPresetAll">Apply default to all clips</button></div><div class="dc-caption-note" style="margin-top:7px">Account-wide actions are separate from the Template applied to this editor.</div></div></details>`;
-  return `${templateStatus}${clipActions}<div class="dc-section"><h3>Video look</h3>${selectField('Filter','filterPreset',[['natural','Natural'],['crisp','Crisp'],['warm','Warm'],['cinematic','Cinematic'],['monochrome','Monochrome'],['custom','Custom']])}${rangeField('Brightness','brightness',-1,1,.05)}${rangeField('Contrast','contrast',.5,2,.05)}${rangeField('Saturation','saturation',0,3,.05)}<details class="dc-advanced"><summary>Advanced image controls</summary><div style="margin-top:10px">${rangeField('Sharpen','sharpen',0,2,.05)}${rangeField('Vignette','vignette',0,1,.05)}</div></details></div>${defaults}`;
-}
-
-// Text overlays the user creates by hand: titles, speaker names, verse
-// references, calls to action. Distinct from Captions, which are generated
-// from speech and cannot be authored.
-//
-// There is no data model for these yet — see EDITOR-STEP1-AUDIT.md §2. The
-// section exists so the sidebar is the shape the spec describes, and states
-// plainly that the feature is not built rather than showing controls that
-// would do nothing. The single existing `hook*` overlay is named here because
-// it is the nearest working thing and where these layers should migrate from.
-function textTool(){
-  // Deliberately has no controls.
-  //
-  // An "Opening title" block was here, built from the hook* template fields.
-  // It could never do anything: sanitiseTemplate() sets `hookEnabled = false`
-  // unconditionally (templates.js, "Opening title cards are intentionally
-  // disabled"), and the worker has no hook rendering — HOOKS in clip_worker.py
-  // is an unrelated scoring word-list. The fields exist in the schema; the
-  // render path does not. Reading the schema and assuming the pipeline
-  // followed is how they got shipped.
-  //
-  // Real text layers need a per-clip layer model and overlay compositing in
-  // the worker, and the pipeline currently has no compositing path at all.
-  // Until then this says so, because a section that admits it is empty is
-  // more use than one that appears to work.
-  return `<div class="dc-section"><h3>Text layers</h3><div class="dc-simple-card"><strong>Not available yet</strong><span>Hand-placed titles, speaker names and verse references need a per-clip layer model and overlay support in the renderer. Neither exists yet, so there is nothing here that would reach your exported video.</span></div><p class="dc-caption-note" style="margin-top:9px">Spoken words are captioned automatically — see the Captions section.</p></div>`;
-}
-
-// A Brand Kit is the account's identity — logo, colours, watermark. A Clip
-// Style is a reusable look applied to one clip. They were previously shown in
-// the same panel, which is why they read as the same object.
-function brandTool(){
-  const premium=Boolean(billingInfo().features?.customBranding),brand=data()?.brandSettings||{};
-  const summary=`<div class="dc-editor-brand-summary ${premium?'premium':'locked'}"><span>${ICON.brand}</span><div><strong>${premium?(brand.watermarkEnabled===false?'Clean export enabled':esc(brand.watermarkText||'DEENCLIPPED')):'DeenClipped watermark required'}</strong><small>${premium?'Your global Brand Kit is applied safely during rendering.':'Free exports are branded. Upgrade to customise or remove the watermark.'}</small></div><button type="button" class="dc-btn secondary" data-dc-nav="brand">${premium?'Open Brand Kit':'View premium'}</button></div>`;
-  // Per §7 the section stays visible without premium, and the upgrade prompt
-  // appears on use rather than as standing advertising.
-  const overlay=`<div class="dc-section"><h3>On this clip</h3>${checkField('Show watermark','watermark')}${editor.draft.watermark?`${colorField('Watermark colour','watermarkColor')}${selectField('Position','watermarkPosition',[['top-left','Top left'],['top-center','Top centre'],['top-right','Top right'],['bottom-left','Bottom left'],['bottom-center','Bottom centre'],['bottom-right','Bottom right']])}${rangeField('Size','watermarkFontSize',10,90,1)}${rangeField('Opacity','watermarkOpacity',0,1,.05)}<details class="dc-advanced"><summary>More settings</summary><div style="margin-top:10px">${rangeField('Horizontal margin','watermarkMarginH',0,300,5)}${rangeField('Vertical margin','watermarkMarginV',0,300,5)}</div></details>`:''}${checkField('Show brand line','brandLineEnabled')}${editor.draft.brandLineEnabled?`${colorField('Brand line colour','brandLineColor')}${rangeField('Brand line height','brandLineHeight',1,24,1)}`:''}</div>`;
-  const distinction=`<div class="dc-caption-note" style="margin-top:10px"><b>Brand Kit</b> is your logo, fonts, colours and watermark — it belongs to your account.<br><b>Template</b> is a reusable editing look applied to individual clips.</div>`;
-  return `<div class="dc-section"><h3>Brand Kit</h3>${summary}</div>${overlay}${distinction}`;
+  const clip=currentClip();
+  const clipTemplate=(DATA?.templates||[]).find(template=>template.id===clip?.templateId);
+  const savedName=selected?.name||'No template selected';
+  const savedType=selected?.builtIn?'Built-in template':'Your saved template';
+  const clipName=clipTemplate?.name||savedName;
+  const sameTemplate=!clipTemplate||!selected||clipTemplate.id===selected.id;
+  const templateStatus=`<div class="dc-simple-card" style="margin-bottom:12px"><strong>Saved default: ${esc(savedName)}</strong><span>${esc(savedType)} · All new clips use this template.</span>${sameTemplate?'':`<span style="margin-top:5px">This clip currently uses: <b style="color:var(--dc-text)">${esc(clipName)}</b></span>`}</div>`;
+  return `${templateStatus}<div class="dc-section"><h3>Video look</h3>${selectField('Filter','filterPreset',[['natural','Natural'],['crisp','Crisp'],['warm','Warm'],['cinematic','Cinematic'],['monochrome','Monochrome'],['custom','Custom']])}${rangeField('Brightness','brightness',-1,1,.05)}${rangeField('Contrast','contrast',.5,2,.05)}${rangeField('Saturation','saturation',0,3,.05)}<details class="dc-advanced"><summary>Advanced image controls</summary><div style="margin-top:10px">${rangeField('Sharpen','sharpen',0,2,.05)}${rangeField('Vignette','vignette',0,1,.05)}</div></details></div><div class="dc-section"><h3>Branding</h3>${textField('Watermark','watermark')}${selectField('Watermark position','watermarkPosition',[['top-left','Top left'],['top-center','Top centre'],['top-right','Top right'],['bottom-left','Bottom left'],['bottom-center','Bottom centre'],['bottom-right','Bottom right']])}<details class="dc-advanced"><summary>Advanced branding controls</summary><div style="margin-top:10px">${rangeField('Watermark size','watermarkFontSize',12,90,1)}${rangeField('Watermark opacity','watermarkOpacity',0,100,1)}${colorField('Watermark colour','watermarkColor')}${checkField('Brand line','brandLineEnabled')}${colorField('Brand line colour','brandLineColor')}</div></details></div><div class="dc-inline-actions"><button type="button" class="dc-btn secondary" id="dcSavePreset">Save as default for new clips</button><button type="button" class="dc-btn" id="dcApplyPresetAll">Apply default to new + old clips</button></div><div class="dc-caption-note" style="margin-top:7px">The saved default name is shown above. The second button saves the current look as that default and re-renders every existing clip with it.</div>`;
 }
 
 function audioTool(){
@@ -2867,14 +2040,12 @@ function bindToolInputs(){
     const handler=()=>changeTemplateInput(input);input.addEventListener('input',handler);input.addEventListener('change',handler);
   });
   $('#dcCaptionText')?.addEventListener('input',event=>{
-    editor.captionText=event.target.value;editor.captionWords=mapEditedWordsToSpeech(editor.captionText,editor.captionTimingReference.length?editor.captionTimingReference:editor.captionWords,Math.max(.1,editor.trimOut-editor.trimIn));editor.captionSource='edited';markEditorDirty();updateCaptionAtTime(editor.currentTime);renderTimeline();debouncedHistory();
+    editor.captionText=event.target.value;editor.captionWords=mapEditedWordsToSpeech(editor.captionText,editor.captionWords,Math.max(.1,editor.trimOut-editor.trimIn));editor.captionSource='edited';markEditorDirty();updateCaptionAtTime(editor.currentTime);renderTimeline();debouncedHistory();
   });
   $('#dcSaveAudio')?.addEventListener('click',saveAudioSettings);
   $('#dcSaveDetails')?.addEventListener('click',savePostDetails);
   $('#dcSavePreset')?.addEventListener('click',saveEditorPreset);$('#dcApplyPresetAll')?.addEventListener('click',applyPresetToAllClips);
-  $('#dcResetClipStyle')?.addEventListener('click',resetEditorToClipStyle);
-  $('#dcSaveClipStyleAsNew')?.addEventListener('click',saveClipStyleAsNew);
-  $('#dcUpdateClipStyle')?.addEventListener('click',updateAppliedClipStyle);
+  $('#dcSyncCaptions')?.addEventListener('click',resyncCaptions);
   $('#dcAnalyseFraming')?.addEventListener('click',()=>requestFramingPlan(true));
   $('#dcResetFraming')?.addEventListener('click',resetFraming);
 }
@@ -2892,29 +2063,24 @@ function changeTemplateInput(input){
 }
 function debouncedHistory(){clearTimeout(historyTimer);historyTimer=setTimeout(()=>pushHistory(),220)}
 function pushHistory(initial=false){
-  const snap=JSON.stringify({draft:cleanDraft(editor.draft),captionText:editor.captionText,captionWords:editor.captionWords,captionSource:editor.captionSource,framingPlan:editor.framingPlan,appliedStyleId:editor.appliedStyleId,appliedStyleSnapshot:editor.appliedStyleSnapshot});
+  const snap=JSON.stringify({draft:cleanDraft(editor.draft),captionText:editor.captionText});
   if(!initial&&editor.history[editor.historyIndex]===snap)return;
   editor.history=editor.history.slice(0,editor.historyIndex+1);editor.history.push(snap);if(editor.history.length>40)editor.history.shift();editor.historyIndex=editor.history.length-1;
   $('#dcUndo')?.toggleAttribute('disabled',editor.historyIndex<=0);$('#dcRedo')?.toggleAttribute('disabled',editor.historyIndex>=editor.history.length-1);
 }
 function undoEditor(){if(editor.historyIndex<=0)return;editor.historyIndex--;restoreHistory()}
 function redoEditor(){if(editor.historyIndex>=editor.history.length-1)return;editor.historyIndex++;restoreHistory()}
-function restoreHistory(){const snap=JSON.parse(editor.history[editor.historyIndex]);editor.draft={...snap.draft,__clipId:editor.clipId};editor.captionText=snap.captionText;editor.captionWords=Array.isArray(snap.captionWords)?snap.captionWords:approximateWords(editor.captionText,Math.max(.1,editor.trimOut-editor.trimIn));editor.captionSource=snap.captionSource||'edited';editor.framingPlan=snap.framingPlan||null;editor.appliedStyleId=snap.appliedStyleId||'';editor.appliedStyleSnapshot=snap.appliedStyleSnapshot||null;markEditorDirty();renderEditorTool();updateEditorPreview();updateCaptionAtTime(editor.currentTime);renderTimeline();updateEditorStyleState();$('#dcUndo')?.toggleAttribute('disabled',editor.historyIndex<=0);$('#dcRedo')?.toggleAttribute('disabled',editor.historyIndex>=editor.history.length-1)}
-function scheduleEditorAutosave(delay=700){
-  clearTimeout(editor.saveTimer);editor.saveTimer=setTimeout(()=>persistEditorDraft(),delay);
-}
-function markEditorDirty(){
-  editor.dirty=true;editor.saveRevision+=1;editor.saveStatus='pending';editor.saveError='';saveEditorLocal();updateEditorStyleState();scheduleEditorAutosave();
-}
+function restoreHistory(){const snap=JSON.parse(editor.history[editor.historyIndex]);editor.draft={...snap.draft,__clipId:editor.clipId};editor.captionText=snap.captionText;editor.captionWords=approximateWords(editor.captionText,Math.max(.1,editor.trimOut-editor.trimIn));markEditorDirty(false);renderEditor(currentClip())}
+function markEditorDirty(push=true){editor.dirty=true;saveEditorLocal();const title=$('.dc-editor-title span');if(title)title.textContent=`${currentClip()?.projectTitle||'Lecture'} · ${Math.round(currentClip()?.score||0)}/100 · Unsaved changes`;if(push)saveEditorLocal()}
 
 function applyCaptionStyle(id){
   const presets={
-    viral:{captionMode:'dynamic-stack',captionFont:'Manrope',captionFontWeight:900,captionFontSize:100,captionPrimary:'#FFFFFF',captionHighlight:'#D9B478',captionOutline:'#09090A',captionOutlineWidth:5,captionBackgroundOpacity:0,captionPosition:'middle',captionHorizontal:'center',captionMaxWords:4,captionUppercase:false},
-    gold:{captionMode:'word',captionFont:'Lato',captionFontWeight:900,captionFontSize:92,captionPrimary:'#FFFFFF',captionHighlight:'#D9B478',captionOutline:'#000000',captionOutlineWidth:5,captionPosition:'middle',captionHorizontal:'center',captionMaxWords:5},
-    clean:{captionMode:'phrase',captionFont:'Roboto',captionFontWeight:700,captionFontSize:72,captionPrimary:'#FFFFFF',captionHighlight:'#FFFFFF',captionOutline:'#000000',captionOutlineWidth:2,captionBackground:'#000000',captionBackgroundOpacity:55,captionPosition:'bottom',captionHorizontal:'center',captionMaxWords:7},
+    viral:{captionMode:'dynamic-stack',captionFont:'Poppins',captionFontSize:100,captionPrimary:'#FFFFFF',captionHighlight:'#D9B478',captionOutline:'#09090A',captionOutlineWidth:5,captionBackgroundOpacity:0,captionPosition:'middle',captionHorizontal:'center',captionMaxWords:4,captionUppercase:false},
+    gold:{captionMode:'word',captionFont:'Montserrat',captionFontSize:92,captionPrimary:'#FFFFFF',captionHighlight:'#D9B478',captionOutline:'#000000',captionOutlineWidth:5,captionPosition:'middle',captionHorizontal:'center',captionMaxWords:5},
+    clean:{captionMode:'phrase',captionFont:'Poppins',captionFontSize:72,captionPrimary:'#FFFFFF',captionHighlight:'#FFFFFF',captionOutline:'#000000',captionOutlineWidth:2,captionBackground:'#000000',captionBackgroundOpacity:55,captionPosition:'bottom',captionHorizontal:'center',captionMaxWords:7},
     arabic:{captionMode:'phrase',captionFont:'Amiri',captionFontSize:94,captionPrimary:'#FFFFFF',captionHighlight:'#D9B478',captionOutline:'#000000',captionOutlineWidth:4,captionBackgroundOpacity:30,captionPosition:'bottom',captionHorizontal:'right',captionMaxWords:8},
-    bold:{captionMode:'dynamic-stack',captionFont:'Manrope',captionFontWeight:900,captionFontSize:122,captionPrimary:'#FFFFFF',captionHighlight:'#D9B478',captionOutline:'#000000',captionOutlineWidth:7,captionPosition:'middle',captionHorizontal:'center',captionMaxWords:3,captionUppercase:true},
-    cinema:{captionMode:'phrase',captionFont:'Noto Serif',captionFontWeight:700,captionFontSize:70,captionPrimary:'#FFFFFF',captionHighlight:'#D9B478',captionOutline:'#000000',captionOutlineWidth:3,captionBackgroundOpacity:0,captionPosition:'bottom',captionHorizontal:'center',captionMaxWords:8}
+    bold:{captionMode:'dynamic-stack',captionFont:'Poppins',captionFontSize:122,captionPrimary:'#FFFFFF',captionHighlight:'#D9B478',captionOutline:'#000000',captionOutlineWidth:7,captionPosition:'middle',captionHorizontal:'center',captionMaxWords:3,captionUppercase:true},
+    cinema:{captionMode:'phrase',captionFont:'Playfair Display',captionFontSize:70,captionPrimary:'#FFFFFF',captionHighlight:'#D9B478',captionOutline:'#000000',captionOutlineWidth:3,captionBackgroundOpacity:0,captionPosition:'bottom',captionHorizontal:'center',captionMaxWords:8}
   };
   Object.assign(editor.draft,presets[id]||{});markEditorDirty();pushHistory();renderEditorTool();updateEditorPreview();updateCaptionAtTime(editor.currentTime);renderTimeline();
 }
@@ -2927,9 +2093,8 @@ function applyCaptionPosition(value){
   markEditorDirty();pushHistory();renderEditorTool();updateEditorPreview();
 }
 function applyQuickLayout(id){
-  if(id==='speaker'&&!billingInfo().features?.advancedFraming&&!billingInfo().current?.unlimited){openBillingModal();return}
   editor.draft.cropPositionX??=50;editor.draft.cropPositionY??=50;
-  if(id==='speaker')Object.assign(editor.draft,{fitMode:'crop',smartFramingEnabled:true,smartFramingBias:'auto',smartFramingZoom:1,smartFramingPadding:.18,smartFramingSmoothing:.68});
+  if(id==='speaker')Object.assign(editor.draft,{fitMode:'crop',smartFramingEnabled:true,smartFramingBias:'auto',smartFramingZoom:1,smartFramingPadding:.18,smartFramingSmoothing:.78});
   if(id==='full')Object.assign(editor.draft,{fitMode:'contain',smartFramingEnabled:false});
   if(id==='blur')Object.assign(editor.draft,{fitMode:'blur',smartFramingEnabled:false,blurStrength:Number(editor.draft.blurStrength||28)});
   if(id==='fill')Object.assign(editor.draft,{fitMode:'crop',smartFramingEnabled:false,cropPositionX:50,cropPositionY:50});
@@ -2955,7 +2120,7 @@ function bindCanvasDrag(){
   const ensureManual=()=>{if(!editor.draft)return false;if(editor.draft.fitMode!=='crop'){editor.draft.fitMode='crop';editor.draft.cropPositionX??=50;editor.draft.cropPositionY??=50;}switchToManualFraming('Manual crop selected by dragging the video');return true};
   video.onpointerdown=event=>{
     if(event.button!==undefined&&event.button!==0)return;
-    if(!ensureManual())return;selectEditorLayer('video');
+    if(!ensureManual())return;
     drag={x:event.clientX,y:event.clientY,px:Number(editor.draft.cropPositionX??50),py:Number(editor.draft.cropPositionY??50),pointerId:event.pointerId};
     canvas.classList.add('is-dragging','is-manual-crop');video.setPointerCapture?.(event.pointerId);event.stopPropagation();event.preventDefault();
   };
@@ -2979,17 +2144,12 @@ function bindCanvasDrag(){
     const finishResize=event=>{if(!resize||(event&&event.pointerId!==resize.pointerId))return;resize=null;canvas.classList.remove('is-resizing');markEditorDirty();pushHistory();renderEditorTool()};
     handle.onpointerup=finishResize;handle.onpointercancel=finishResize;
   }
-  canvas.onwheel=event=>{if(editor.draft?.fitMode!=='crop')return;event.preventDefault();selectEditorLayer('video');switchToManualFraming('Manual crop selected by zooming');editor.draft.smartFramingZoom=clamp(Number(editor.draft.smartFramingZoom||1)+(event.deltaY<0?.05:-.05),.75,2.5);applyFrameAtTime(editor.currentTime);markEditorDirty();debouncedHistory()};
+  canvas.onwheel=event=>{if(editor.draft?.fitMode!=='crop')return;event.preventDefault();switchToManualFraming('Manual crop selected by zooming');editor.draft.smartFramingZoom=clamp(Number(editor.draft.smartFramingZoom||1)+(event.deltaY<0?.05:-.05),.75,2.5);applyFrameAtTime(editor.currentTime);markEditorDirty(false)};
 }
 
 function bindCaptionDrag(){
   const canvas=$('#dcVideoCanvas'),overlay=$('#dcCaptionOverlay'),guideV=$('#dcSnapGuideV'),guideH=$('#dcSnapGuideH');
   if(!canvas||!overlay)return;
-  // On a clip with no clean plate the video already has captions painted into
-  // it, and no re-render can replace them because the original footage is gone.
-  // A draggable box here would move a caption that cannot be exported — the
-  // control would appear to work and then be silently discarded.
-  if(!editorHasCleanSource(currentClip()))return;
   let drag=null;
   const snapPoints=[25,50,75],snapDistance=2.5;
   const showGuide=(guide,value,vertical)=>{if(!guide)return;guide.classList.add('show');guide.style[vertical?'left':'top']=`${value}%`};
@@ -2998,7 +2158,7 @@ function bindCaptionDrag(){
   overlay.ondblclick=()=>{editor.tool='captions';editor.captionTab='text';renderEditorTool();setTimeout(()=>$('#dcCaptionText')?.focus(),0)};
   overlay.onpointerdown=event=>{
     if(event.button!==undefined&&event.button!==0)return;
-    selectEditorLayer('captions');const rect=canvas.getBoundingClientRect();
+    const rect=canvas.getBoundingClientRect();
     const mode=isResizeHit(event)?'resize':'move';
     drag={mode,pointerId:event.pointerId,startClientX:event.clientX,startClientY:event.clientY,startX:Number(editor.draft.captionPositionX??50),startY:Number(editor.draft.captionPositionY??58),startSize:Number(editor.draft.captionFontSize||96),rect};
     overlay.classList.add(mode==='resize'?'is-resizing':'is-dragging','is-selected');overlay.setPointerCapture?.(event.pointerId);event.stopPropagation();event.preventDefault();
@@ -3027,118 +2187,23 @@ function bindCaptionDrag(){
     drag=null;hideGuides();overlay.classList.remove('is-dragging','is-resizing');markEditorDirty();pushHistory();renderEditorTool();
   };
   overlay.onpointerup=finish;overlay.onpointercancel=finish;
-  canvas.addEventListener('pointerdown',event=>{if(!event.target.closest('#dcCaptionOverlay')&&!event.target.closest('#dcResizeHandle'))selectEditorLayer(event.target.closest('.dc-video-layer')?'video':'none')});
+  canvas.addEventListener('pointerdown',event=>{if(!event.target.closest('#dcCaptionOverlay'))overlay.classList.remove('is-selected')});
 }
 
-// The editor works in clip-local time (0 .. duration) but drives a <video>
-// element in media time, and the two differ depending on which file is loaded.
-//
-//   clean plate  the whole lecture. Clip-local 0 is at clip.startSec, so every
-//                seek must be offset by it.
-//   export       the clip itself, already trimmed. Clip-local 0 is media 0, and
-//                applying the offset seeks past the end of the file.
-//
-// Getting this wrong does not look like an off-by-one; it looks like the editor
-// is dead. On a 37-second export with startSec 300, every seek resolves to 337s,
-// which clamps to the end, and ontimeupdate computes a negative local time that
-// clamps to 0 — so the playhead never moves, captions never advance, and both
-// dragging and clicking a caption appear to do nothing at all.
-function applyMediaTimebase(clip,baked){
-  const start=Number(clip.startSec||0);
-  const end=Number(clip.endSec||start+Number(clip.durationMs||0)/1000);
-  const duration=Math.max(.1,end-start);
-  editor.trimOut=duration;
-  editor.sourceBase=baked?0:start;
-  editor.sourceEnd=baked?duration:end;
-}
 function bindVideo(clip){
   const video=$('#dcEditorVideo'),bg=$('#dcEditorVideoBg');if(!video)return;
-  // Set per clip from what the server already told us, so the editor never
-  // renders one state and then corrects itself. Must be assigned both ways:
-  // the previous clip's state must not follow a clip that has a clean plate.
-  // Reset per bind so a fresh onerror can fire; bakedPreview is deliberately
-  // not reset here, because it is set once per clip and must outlive re-renders.
-  editor.sourceFallback=false;
-  const baked=!editorHasCleanSource(clip);
-  document.body.classList.toggle('dc-editor-baked-preview',baked);
-  applyMediaTimebase(clip,baked);
-  // Waiting for a clean plate used to show a black canvas, so a 2.5s watchdog
-  // was added to give up early and swap in the export. Measured against the
-  // real thing, that bound was the bug: the clean plate is a full lecture in
-  // object storage behind a redirect, and metadata arrives at 2487ms, 2514ms,
-  // 2571ms for three clips of the same project. The cutoff sat *inside* the
-  // spread, so whether a clip fell back was a coin flip on every page load —
-  // and falling back means showing the captioned export, which is where the
-  // duplicate captions came from. An unpredictable editor, from one constant.
-  //
-  // The black screen was a real complaint, but the answer to "nothing is on
-  // screen yet" is to say so, not to abandon a source that was about to
-  // arrive. So: show a loading state immediately, and keep the bound only as a
-  // genuine backstop, far outside any plausible load time.
-  const SOURCE_TIMEOUT_MS=20000;
-  let sourceWatchdog=null;
-  const setLoading=on=>{
-    $('#dcVideoCanvas')?.classList.toggle('is-source-loading',on);
-    const s=$('#dcCaptionStatus');if(!s)return;
-    // Clearing the class but not the sentence left "Loading the original
-    // footage…" under a video that had already loaded — the animation stopped
-    // and the words stayed, which reads as a stuck editor.
-    s.textContent=on?'Loading the original footage…':'Captions follow the spoken words';
-  };
+  const start=Number(clip.startSec||0),end=Number(clip.endSec||start+Number(clip.durationMs||0)/1000);
+  editor.sourceBase=start;editor.sourceEnd=end;editor.trimOut=Math.max(.1,end-start);
   const initialise=()=>{
-    clearTimeout(sourceWatchdog);setLoading(false);
-    // editor.sourceBase, not a local: it is 0 for an export and clip.startSec
-    // for a clean plate, and this seek is the only thing that puts a lecture
-    // preview on the clip instead of the top of the file. It previously read a
-    // variable that no longer existed, inside a try/catch that swallowed the
-    // ReferenceError, so the seek silently never happened.
-    if(!editor.sourceFallback){try{video.currentTime=editor.sourceBase;if(bg)bg.currentTime=editor.sourceBase}catch{}}
+    if(!editor.sourceFallback){try{video.currentTime=start;if(bg)bg.currentTime=start}catch{}}
     renderTimeline();updateCaptionAtTime(0);applyFrameAtTime(0);
   };
   video.onloadedmetadata=initialise;
-  if(!baked)setLoading(true);
-  sourceWatchdog=setTimeout(()=>{
-    // readyState 0 means not one byte of metadata arrived in twenty seconds,
-    // which is a dead source rather than a slow one.
-    if(video.readyState===0)video.onerror?.();
-  },SOURCE_TIMEOUT_MS);
   video.onerror=()=>{
     if(editor.sourceFallback)return;
-    clearTimeout(sourceWatchdog);setLoading(false);
     editor.sourceFallback=true;video.pause();if(bg)bg.pause();
-    // cleanSource is a claim, not a guarantee. The server can only check that a
-    // storage key is well-formed and that storage is configured — it cannot
-    // know the object is still there, or that presigning will succeed. When
-    // that claim turns out to be wrong we must still show something, or the
-    // canvas is simply dead.
-    //
-    // So: fall back to the rendered export, but enter baked mode at the same
-    // time. That is the part the old code got wrong — it fell back and left the
-    // draggable caption box on screen, over an export that already had captions
-    // painted into it. Degrading the preview is fine; degrading it into two
-    // sets of captions is not.
-    if(editorHasCleanSource(clip)){
-      const exportUrl=authedUrl(`/api/clips/${encodeURIComponent(clip.id)}/video`);
-      editor.bakedPreview=true;
-      // The file about to load is the trimmed clip, not the lecture, so the
-      // timebase set for a clean plate no longer applies. Without this the
-      // fallback produces a visible but completely unresponsive editor.
-      applyMediaTimebase(clip,true);
-      document.body.classList.add('dc-editor-baked-preview');
-      video.onerror=()=>{
-        const status=$('#dcCaptionStatus');if(status)status.textContent='This clip’s video could not be loaded';
-        notify('This clip’s video could not be loaded. Try reloading the page; if it persists the clip may need to be rendered again.','bad');
-      };
-      video.src=exportUrl;video.load();
-      if(bg){bg.onerror=null;bg.src=exportUrl;bg.load();}
-      // The caption panel and the drag binding both read this, so they have to
-      // be rebuilt now that the answer has changed.
-      renderEditorTool();
-      const status=$('#dcCaptionStatus');if(status)status.textContent='Showing the rendered export — its captions are part of the picture';
-      return;
-    }
-    const status=$('#dcCaptionStatus');if(status)status.textContent='This clip’s video could not be loaded';
-    notify('This clip’s video could not be loaded. Try reloading the page; if it persists the clip may need to be rendered again.','bad');
+    const status=$('#dcCaptionStatus');if(status)status.textContent='Original source unavailable — preview fallback disabled to prevent doubled captions';
+    notify('The original lecture file is unavailable. The editor will not load the rendered clip because that would duplicate burned-in captions.','bad');
   };
   video.ontimeupdate=()=>{
     const local=clamp(video.currentTime-editor.sourceBase,0,editor.trimOut);editor.currentTime=local;syncBackgroundVideo();updatePlayhead(local);updateCaptionAtTime(local);applyFrameAtTime(local);
@@ -3147,42 +2212,11 @@ function bindVideo(clip){
   };
   video.onplay=()=>{editor.playing=true;$('#dcPlayButton').innerHTML=ICON.pause;if(bg){syncBackgroundVideo(true);bg.play().catch(()=>{})}};
   video.onpause=()=>{editor.playing=false;$('#dcPlayButton').innerHTML=ICON.play;bg?.pause()};
-  bindTimelineScrub();
-  bindTimelineZoom();
+  $('#dcTimelineScroll').addEventListener('click',event=>{if(event.target.closest('[data-caption-start]'))return;const content=event.target.closest('.dc-track-content,.dc-ruler');if(!content)return;const rect=content.getBoundingClientRect();seekEditor(clamp((event.clientX-rect.left)/rect.width,0,1)*editor.trimOut)});
 }
 function togglePlayback(){const video=$('#dcEditorVideo');if(!video)return;if(video.currentTime<editor.sourceBase||video.currentTime>=editor.sourceEnd)video.currentTime=editor.sourceBase;video.paused?video.play():video.pause()}
 function seekEditor(seconds){const video=$('#dcEditorVideo'),bg=$('#dcEditorVideoBg');if(!video)return;const local=clamp(seconds,0,editor.trimOut);video.currentTime=editor.sourceBase+local;if(bg)bg.currentTime=video.currentTime;editor.currentTime=local;updateCaptionAtTime(local);applyFrameAtTime(local)}
-// The block highlighted on the timeline, so playback does not walk every
-// caption element on every frame just to discover nothing changed.
-let activeCaptionBlock=null;
-function updatePlayhead(time){
-  const geo=timelineGeometry();
-  if(geo){
-    const left=geo.left+clamp(time/geo.duration,0,1)*geo.width;
-    const head=$('#dcPlayhead');if(head)head.style.left=`${left}px`;
-    const grip=$('#dcPlayheadGrip');if(grip)grip.style.left=`${left}px`;
-  }
-  // `applyFrameAtTime` used to be called here as well as by the caller on
-  // every `ontimeupdate`, so the whole frame transform was recomputed twice
-  // per tick for nothing.
-  //
-  // The caption blocks were also re-queried and every one of them had its
-  // class toggled each frame. On a word-level track that is hundreds of
-  // elements a second, and all but one toggle is a no-op. Only the block
-  // that actually changed is touched now.
-  if(activeCaptionBlock&&!activeCaptionBlock.isConnected)activeCaptionBlock=null;
-  if(activeCaptionBlock){
-    const start=Number(activeCaptionBlock.dataset.captionStart),end=Number(activeCaptionBlock.dataset.captionEnd);
-    if(time>=start&&time<end)return;
-    activeCaptionBlock.classList.remove('active');
-    activeCaptionBlock=null;
-  }
-  for(const block of $$('.dc-caption-block')){
-    if(time>=Number(block.dataset.captionStart)&&time<Number(block.dataset.captionEnd)){
-      block.classList.add('active');activeCaptionBlock=block;break;
-    }
-  }
-}
+function updatePlayhead(time){const duration=editor.trimOut||1,scroll=$('#dcTimelineScroll'),width=editor.timelineWidth||scroll?.clientWidth||0;const left=72+(time/duration)*Math.max(1,width-72);const head=$('#dcPlayhead');if(head)head.style.left=`${left}px`;applyFrameAtTime(time);$$('.dc-caption-block').forEach(b=>b.classList.toggle('active',time>=Number(b.dataset.captionStart)&&time<Number(b.dataset.captionEnd)))}
 
 function updateEditorPreview(){
   const d=editor.draft,canvas=$('#dcVideoCanvas'),video=$('#dcEditorVideo'),bg=$('#dcEditorVideoBg'),overlay=$('#dcCaptionOverlay'),water=$('#dcWatermark'),line=$('#dcBrandLine');if(!canvas||!d)return;
@@ -3192,7 +2226,7 @@ function updateEditorPreview(){
   video.style.filter=`${filters[d.filterPreset]||''} brightness(${1+Number(d.brightness||0)}) contrast(${Number(d.contrast||1)}) saturate(${Number(d.saturation||1)})`;
   const keepOverlayState = ['is-selected','is-dragging','is-resizing'].filter(cls=>overlay.classList.contains(cls));
   overlay.className=`dc-caption-overlay align-${d.captionHorizontal||'center'} ${keepOverlayState.join(' ')}`.trim();overlay.style.left=`${clamp(Number(d.captionPositionX??50),7,93)}%`;overlay.style.top=`${clamp(Number(d.captionPositionY??58),8,88)}%`;
-  overlay.style.fontFamily=d.captionFont||'Manrope';overlay.style.fontSize=`${clamp(Number(d.captionFontSize||96)/3.45,15,52)}px`;overlay.style.fontWeight=String(clamp(Number(d.captionFontWeight||800),400,900));overlay.style.letterSpacing=`${clamp(Number(d.captionLetterSpacing||0)/3.45,-1.2,3.5)}px`;overlay.style.color=d.captionPrimary||'#fff';overlay.style.webkitTextStroke=`${Number(d.captionOutlineWidth||0)/3}px ${d.captionOutline||'#000'}`;overlay.style.textShadow=`0 ${clamp(Number(d.captionShadow||0)/2,0,4)}px ${clamp(Number(d.captionShadow||0)*1.8,0,12)}px rgba(0,0,0,.58)`;overlay.style.textTransform=d.captionUppercase?'uppercase':'none';overlay.style.setProperty('--dc-cap-highlight',d.captionHighlight||'#fff');overlay.style.setProperty('--dc-cap-highlight-font',d.captionHighlightFont||'Noto Serif');overlay.style.setProperty('--dc-cap-arabic-font',d.captionArabicFont||'Amiri');overlay.style.setProperty('--dc-cap-highlight-style',d.captionHighlightItalic===false?'normal':'italic');overlay.style.setProperty('--dc-cap-highlight-glow',`${clamp(Number(d.captionHighlightGlow||0)/2.5,0,14)}px`);overlay.style.setProperty('--dc-cap-bg-color',hexAlpha(d.captionBackground||'#000000',clamp(Number(d.captionBackgroundOpacity||0)/100,0,1)));overlay.style.lineHeight=String(d.captionLineHeight||.9);
+  overlay.style.fontFamily=d.captionFont||'Poppins';overlay.style.fontSize=`${clamp(Number(d.captionFontSize||96)/3.45,15,47)}px`;overlay.style.color=d.captionPrimary||'#fff';overlay.style.webkitTextStroke=`${Number(d.captionOutlineWidth||0)/3}px ${d.captionOutline||'#000'}`;overlay.style.textShadow=`0 ${clamp(Number(d.captionShadow||0)/2,0,4)}px ${clamp(Number(d.captionShadow||0)*1.8,0,12)}px rgba(0,0,0,.58)`;overlay.style.textTransform=d.captionUppercase?'uppercase':'none';overlay.style.setProperty('--dc-cap-highlight',d.captionHighlight||'#fff');overlay.style.setProperty('--dc-cap-highlight-font',d.captionHighlightFont||'DejaVu Serif');overlay.style.setProperty('--dc-cap-arabic-font',d.captionArabicFont||'Amiri');overlay.style.setProperty('--dc-cap-highlight-style',d.captionHighlightItalic===false?'normal':'italic');overlay.style.setProperty('--dc-cap-highlight-glow',`${clamp(Number(d.captionHighlightGlow||0)/2.5,0,14)}px`);overlay.style.setProperty('--dc-cap-bg-color',hexAlpha(d.captionBackground||'#000000',clamp(Number(d.captionBackgroundOpacity||0)/100,0,1)));overlay.style.lineHeight=String(d.captionLineHeight||.9);
   water.textContent=d.watermark||'';water.className=`dc-watermark ${d.watermarkPosition||'top-center'}`;water.style.color=d.watermarkColor||'#d9b478';water.style.opacity=clamp(Number(d.watermarkOpacity||100)/100,0,1);water.style.fontSize=`${clamp(Number(d.watermarkFontSize||28)/2.3,7,28)}px`;
   line.style.display=d.brandLineEnabled?'block':'none';line.style.background=d.brandLineColor||'#d9b478';applyFrameAtTime(editor.currentTime);
 }
@@ -3213,11 +2247,11 @@ function updateCaptionAtTime(time){
 function isArabicWord(value){return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(String(value||''))}
 function captionHtmlAtTime(time){
   const words=editor.captionWords;if(!words.length)return'';
-  const offset=Number(editor.draft.captionTimingOffsetMs??0)/1000;
+  const offset=Number(editor.draft.captionTimingOffsetMs??-120)/1000;
   const speechTime=time-offset;
-  const hold=Math.min(.2,Math.max(0,Number(editor.draft.captionHoldSeconds??.04)));
+  const hold=Math.min(.09,Math.max(0,Number(editor.draft.captionHoldSeconds??.06)));
   const index=words.findIndex(w=>speechTime>=Number(w.start)&&speechTime<Number(w.end)+hold);if(index<0)return'';
-  const mode=editor.draft.captionMode||'dynamic-stack',max=Math.max(1,Number(editor.draft.captionMaxWords||4)),groups=speechGroups(words,max,Number(editor.draft.captionClearPause||.42)),group=groups.find(g=>index>=g.startIndex&&index<=g.endIndex);
+  const mode=editor.draft.captionMode||'dynamic-stack',max=Math.max(1,Number(editor.draft.captionMaxWords||4)),groups=speechGroups(words,max),group=groups.find(g=>index>=g.startIndex&&index<=g.endIndex);
   if(!group)return'';
   const visible=mode==='dynamic-stack'?words.slice(group.startIndex,index+1):words.slice(group.startIndex,group.endIndex+1);
   const html=mode==='dynamic-stack'
@@ -3229,11 +2263,11 @@ function captionHtmlAtTime(time){
 function approximateWords(text,duration){
   const tokens=String(text||'').trim().split(/\s+/).filter(Boolean);if(!tokens.length)return[];const step=Math.max(.12,duration/tokens.length);return tokens.map((word,i)=>({word,start:i*step,end:Math.min(duration,(i+1)*step)}));
 }
-function speechGroups(words,maxWords,clearPause=.42){
+function speechGroups(words,maxWords){
   const groups=[];let start=0;
   for(let i=0;i<words.length;i++){
     const current=words[i],next=words[i+1],count=i-start+1,punctuation=/[.!?…][”"'’)]?$/.test(String(current.word||'')),gap=next?Number(next.start)-Number(current.end):Infinity;
-    if(count>=maxWords||punctuation||gap>=clamp(Number(clearPause)||.42,.15,2)||!next){groups.push({startIndex:start,endIndex:i,start:Number(words[start].start),end:Number(current.end),text:words.slice(start,i+1).map(w=>w.word).join(' ')});start=i+1}
+    if(count>=maxWords||punctuation||gap>=.34||!next){groups.push({startIndex:start,endIndex:i,start:Number(words[start].start),end:Number(current.end),text:words.slice(start,i+1).map(w=>w.word).join(' ')});start=i+1}
   }
   return groups;
 }
@@ -3250,159 +2284,11 @@ function mapEditedWordsToSpeech(text,reference,duration){
     return{word,start,end:Math.max(start+.08,Math.min(duration,estimatedEnd))};
   });
 }
-function captionSegments(){const offset=Number(editor.draft.captionTimingOffsetMs??0)/1000;return speechGroups(editor.captionWords,Math.max(1,Number(editor.draft.captionMaxWords||4)),Number(editor.draft.captionClearPause||.42)).map(g=>({start:clamp(g.start+offset,0,editor.trimOut),end:clamp(g.end+offset,0,editor.trimOut),text:g.text})).filter(g=>g.end>g.start)}
-// The one place that answers "where does time t sit on screen".
-//
-// This used to be answered three different ways: ruler labels were a percentage
-// of the full scroll width, caption blocks were a percentage of the track
-// content box (which starts after the 56px label gutter), and the playhead was
-// `72 + fraction * (width - 72)` pixels from the scroll container. Three
-// origins, none of them equal, so the playhead never landed on the caption you
-// clicked and the ruler agreed with neither. Measuring one real track element
-// means the gutter can change in CSS without silently desyncing the playhead.
-// Press anywhere on the ruler or the tracks and drag: the playhead follows the
-// pointer until release. Previously this was a single click handler, so the
-// only way to reach a moment was to guess it in one go — and because the click
-// measured from the track content while the playhead drew from the scroll
-// container, even that guess landed in the wrong place.
-function bindTimelineScrub(){
-  const scroll=$('#dcTimelineScroll');if(!scroll)return;
-  let pointerId=null,wasPlaying=false;
-  const timeAt=clientX=>{
-    const geo=timelineGeometry();if(!geo)return null;
-    const rect=scroll.getBoundingClientRect();
-    const x=clientX-rect.left+scroll.scrollLeft-geo.left;
-    return clamp(x/geo.width,0,1)*geo.duration;
-  };
-  const scrubbable=target=>Boolean(target.closest('.dc-track-content,.dc-ruler,.dc-ruler-marks,.dc-playhead-grip'));
-  scroll.addEventListener('pointerdown',event=>{
-    if(event.button!==undefined&&event.button!==0)return;
-    // A caption block is a jump target, not a scrub surface — clicking one
-    // should land exactly on that line rather than wherever the pointer fell.
-    if(event.target.closest('[data-caption-start]'))return;
-    if(!scrubbable(event.target))return;
-    const time=timeAt(event.clientX);if(time===null)return;
-    pointerId=event.pointerId;
-    // Scrubbing a playing video fights the ontimeupdate handler for the
-    // playhead. Pause for the gesture and restore after, so a drag on a
-    // playing clip does not stutter backwards.
-    const video=$('#dcEditorVideo');wasPlaying=Boolean(video&&!video.paused);
-    if(wasPlaying)video.pause();
-    scroll.classList.add('is-scrubbing');
-    scroll.setPointerCapture?.(event.pointerId);
-    seekEditor(time);event.preventDefault();
-  });
-  scroll.addEventListener('pointermove',event=>{
-    if(pointerId===null||event.pointerId!==pointerId)return;
-    const time=timeAt(event.clientX);if(time!==null)seekEditor(time);
-  });
-  const release=event=>{
-    if(pointerId===null||(event&&event.pointerId!==undefined&&event.pointerId!==pointerId))return;
-    pointerId=null;scroll.classList.remove('is-scrubbing');
-    if(wasPlaying){wasPlaying=false;$('#dcEditorVideo')?.play?.().catch(()=>{});}
-  };
-  scroll.addEventListener('pointerup',release);
-  scroll.addEventListener('pointercancel',release);
-}
-// Zoom changes the visual scale only. It never touches trimIn/trimOut or any
-// caption timing — every position is derived from time through
-// timelineGeometry(), so nothing here can retime a clip.
-// Re-derive the scale when the frame changes size. At zoom 1 this keeps the
-// clip fitted through a window resize or a panel collapse, which is what makes
-// "fitted" a state rather than a one-off calculation. A deliberate zoom is
-// preserved because it is a multiplier, not an absolute px/s.
-function observeTimelineWidth(){
-  const scroll=$('#dcTimelineScroll');if(!scroll||typeof ResizeObserver!=='function')return;
-  editor.timelineResizeObserver?.disconnect();
-  let last=scroll.clientWidth;
-  editor.timelineResizeObserver=new ResizeObserver(()=>{
-    if(Math.abs(scroll.clientWidth-last)<2)return;
-    last=scroll.clientWidth;
-    renderTimeline();
-  });
-  editor.timelineResizeObserver.observe(scroll);
-}
-function bindTimelineZoom(){
-  const scroll=$('#dcTimelineScroll');if(!scroll)return;
-  observeTimelineWidth();
-  // Zoom about the playhead, so the moment you are looking at stays put
-  // instead of sliding off-screen as the scale grows.
-  const applyZoom=next=>{
-    const before=editor.currentTime;
-    editor.timelineZoom=clamp(next,1,40);
-    renderTimeline();
-    const geo=timelineGeometry();
-    if(geo){
-      const target=geo.left+(before/geo.duration)*geo.width;
-      scroll.scrollLeft=clamp(target-scroll.clientWidth/2,0,Math.max(0,scroll.scrollWidth-scroll.clientWidth));
-    }
-    updateTimelineZoomButtons();
-  };
-  $('#dcTimelineZoomIn')?.addEventListener('click',()=>applyZoom((editor.timelineZoom||1)*1.5));
-  $('#dcTimelineZoomOut')?.addEventListener('click',()=>applyZoom((editor.timelineZoom||1)/1.5));
-  $('#dcTimelineFit')?.addEventListener('click',()=>{fitTimeline();updateTimelineZoomButtons()});
-  // Shift+wheel pans, Cmd/Ctrl+wheel zooms — both are what a timeline is
-  // expected to do, and neither should scroll the page.
-  scroll.addEventListener('wheel',event=>{
-    if(event.ctrlKey||event.metaKey){
-      event.preventDefault();
-      applyZoom((editor.timelineZoom||1)*(event.deltaY<0?1.12:1/1.12));
-    }
-  },{passive:false});
-  updateTimelineZoomButtons();
-}
-function updateTimelineZoomButtons(){
-  const zoom=clamp(editor.timelineZoom||1,1,40);
-  const out=$('#dcTimelineZoomOut'),fit=$('#dcTimelineFit');
-  // At zoom 1 the clip already fills the frame, so zooming out further and
-  // "Fit" would both be no-ops. Saying so is better than letting them look
-  // available and do nothing.
-  if(out)out.disabled=zoom<=1;
-  if(fit)fit.disabled=zoom<=1;
-}
-function timelineGeometry(){
-  const scroll=$('#dcTimelineScroll');if(!scroll)return null;
-  const content=scroll.querySelector('.dc-track-content');if(!content)return null;
-  const scrollRect=scroll.getBoundingClientRect(),contentRect=content.getBoundingClientRect();
-  const left=contentRect.left-scrollRect.left+scroll.scrollLeft;
-  return { left, width:Math.max(1,contentRect.width), duration:Math.max(.001,editor.trimOut||1) };
-}
-// Pixels per second at which the whole clip exactly fills the timeline.
-//
-// This replaces a hard-coded 46. Measured on a 35.92s clip in an 876px frame,
-// that constant produced a 1725px timeline — 1.97x too wide, so the clip could
-// never be seen at once no matter the screen. Fit is not a feature bolted on
-// top of that scale; it is what the scale should have been derived from.
-const TIMELINE_GUTTER=56;      // track label column, shared with .dc-track-row
-const TIMELINE_EDGE_PAD=12;    // intentional breathing room at both ends
-function timelineFitScale(duration){
-  const scroll=$('#dcTimelineScroll');
-  const usable=(scroll?.clientWidth||0)-TIMELINE_GUTTER-TIMELINE_EDGE_PAD*2;
-  // Before first layout clientWidth is 0. Falling through to a division would
-  // yield 0 px/s and collapse every position to the same point.
-  if(!(usable>0)||!(duration>0))return null;
-  return usable/duration;
-}
-// Zoom is a multiplier on Fit rather than an absolute px/s, so "fitted" stays
-// meaningful when the panel is resized: at zoom 1 the clip always fills the
-// frame, whatever the width.
-function timelineScale(duration){
-  const fit=timelineFitScale(duration);
-  if(fit===null)return 46;
-  return fit*clamp(editor.timelineZoom||1,1,40);
-}
-function fitTimeline(){
-  editor.timelineZoom=1;
-  const scroll=$('#dcTimelineScroll');if(scroll)scroll.scrollLeft=0;
-  renderTimeline();
-}
+function captionSegments(){const offset=Number(editor.draft.captionTimingOffsetMs??-120)/1000;return speechGroups(editor.captionWords,Math.max(1,Number(editor.draft.captionMaxWords||4))).map(g=>({start:clamp(g.start+offset,0,editor.trimOut),end:clamp(g.end+offset,0,editor.trimOut),text:g.text})).filter(g=>g.end>g.start)}
 function renderTimeline(){
-  const duration=editor.trimOut||Math.max(.1,Number(currentClip()?.durationMs||0)/1000)||1,ruler=$('#dcRulerMarks'),track=$('#dcCaptionTrack'),scroll=$('#dcTimelineScroll');if(!ruler||!track)return;
-  const perSecond=timelineScale(duration);
-  editor.timelineWidth=Math.max(scroll?.clientWidth||0,Math.ceil(TIMELINE_GUTTER+TIMELINE_EDGE_PAD*2+duration*perSecond));
+  const duration=editor.trimOut||Math.max(.1,Number(currentClip()?.durationMs||0)/1000)||1,ruler=$('#dcRuler'),track=$('#dcCaptionTrack'),scroll=$('#dcTimelineScroll');if(!ruler||!track)return;
+  editor.timelineWidth=Math.max(scroll?.clientWidth||0,72+Math.ceil(duration*46));
   scroll?.style.setProperty('--dc-timeline-width',`${editor.timelineWidth}px`);
-  // Marks now live inside a cell that shares the caption track's gutter, so
-  // "0:15" on the ruler is directly above the words spoken at 0:15.
   ruler.innerHTML=Array.from({length:6},(_,i)=>`<span style="left:${i*20}%">${formatClock(duration*i/5)}</span>`).join('');
   const segments=captionSegments();
   track.innerHTML=segments.map(s=>{const left=100*s.start/duration,width=Math.max(1.8,100*(s.end-s.start)/duration);return `<button class="dc-caption-block" title="${esc(s.text)}" data-caption-start="${s.start}" data-caption-end="${s.end}" style="left:${left}%;width:${width}%;min-width:96px">${esc(s.text)}</button>`}).join('');
@@ -3415,70 +2301,41 @@ function formatCaptionOffset(value){
   return `${Math.abs(ms)} ms ${ms<0?'earlier':'later'}`;
 }
 function nudgeCaptionTiming(amount){
-  editor.draft.captionTimingOffsetMs=clamp(Number(editor.draft.captionTimingOffsetMs??0)+Number(amount||0),-1500,1500);
+  editor.draft.captionTimingOffsetMs=clamp(Number(editor.draft.captionTimingOffsetMs??-120)+Number(amount||0),-1000,1000);
   markEditorDirty();pushHistory();renderEditorTool();updateCaptionAtTime(editor.currentTime);renderTimeline();
 }
-// Runs itself when the editor opens on a clip whose words are not already on
-// exact speech timing. Deliberately quiet: no success toast, and a failure
-// leaves the evenly-spaced fallback in place rather than interrupting, because
-// the user did not ask for this and estimated captions are still usable.
-async function autoSyncCaptions(clip){
-  if(!clip||editor.captionSyncStatus==='syncing')return;
-  // 'edited' means the user rewrote the words themselves; re-pulling Whisper
-  // would throw that away. Only an un-touched estimate is worth repairing.
-  if(editor.captionSource==='whisper'||editor.captionSource==='edited')return;
-  const clipId=clip.id;
+async function resyncCaptions(){
+  const clip=currentClip(),button=$('#dcSyncCaptions');if(!clip||editor.captionSyncStatus==='syncing')return;
   editor.captionSyncStatus='syncing';renderEditorTool();
   try{
-    const payload=await callApi(`/api/clips/${encodeURIComponent(clipId)}/captions/resync`,{method:'POST',body:'{}'});
-    // The user can move to another clip while this is in flight.
-    if(editor.clipId!==clipId)return;
+    const payload=await callApi(`/api/clips/${encodeURIComponent(clip.id)}/captions/resync`,{method:'POST',body:'{}'});
     if(!Array.isArray(payload.words)||!payload.words.length)throw new Error('No speech timestamps were returned.');
-    const words=payload.words.map(w=>({start:Number(w.start),end:Number(w.end),word:String(w.word||'').trim()})).filter(w=>w.word&&w.end>w.start).sort((a,b)=>a.start-b.start);
-    if(!words.length)throw new Error('No usable speech timestamps were returned.');
-    editor.captionWords=words;editor.captionTimingReference=clone(words);
-    editor.captionText=payload.transcript||words.map(w=>w.word).join(' ');
-    editor.captionSource='whisper';editor.captionSyncStatus='idle';editor.draft.captionTimingOffsetMs=0;
-    // Not markEditorDirty(): recovering the correct timing is not a user edit,
-    // and flagging it as one would make every clip open with unsaved changes.
-    renderEditorTool();updateCaptionAtTime(editor.currentTime);renderTimeline();
-  }catch(error){
-    if(editor.clipId!==clipId)return;
-    editor.captionSyncStatus='idle';editor.captionSyncMessage=error.message;renderEditorTool();
-  }
+    editor.captionWords=payload.words.map(w=>({start:Number(w.start),end:Number(w.end),word:String(w.word||'').trim()})).filter(w=>w.word&&w.end>w.start).sort((a,b)=>a.start-b.start);
+    editor.captionText=payload.transcript||editor.captionWords.map(w=>w.word).join(' ');
+    editor.captionSource='whisper';editor.captionSyncStatus='idle';editor.draft.captionTimingOffsetMs=-120;markEditorDirty();pushHistory();renderEditorTool();updateCaptionAtTime(editor.currentTime);renderTimeline();notify('Captions synchronised to this clip');
+  }catch(error){editor.captionSyncStatus='error';editor.captionSyncMessage=error.message;notify(error.message,'bad');renderEditorTool()}
 }
 
-async function persistEditorDraft(){
-  clearTimeout(editor.saveTimer);editor.saveTimer=null;
-  const clip=currentClip();if(!clip||!editor.draft)return false;
-  if(editor.savePromise){await editor.savePromise;if(!editor.dirty)return true}
-  if(!editor.dirty)return true;
-  const clipId=clip.id,revision=editor.saveRevision;
-  editor.saving=true;editor.saveStatus='saving';updateEditorSaveState();
-  editor.savePromise=(async()=>{
-    try{
-      const result=await callApi(`/api/clips/${encodeURIComponent(clipId)}`,{method:'PATCH',body:JSON.stringify({transcript:editor.captionText,editorDraft:cleanDraft(editor.draft),editorAppliedStyleId:editor.appliedStyleId})});
-      if(editor.clipId!==clipId)return true;
-      const local=(DATA?.clips||[]).find(item=>item.id===clipId);if(local&&result?.clip)Object.assign(local,result.clip);
-      editor.savedRevision=Math.max(editor.savedRevision,revision);
-      if(editor.saveRevision===revision){editor.dirty=false;editor.saveStatus='saved';editor.saveError='';clearEditorLocal()}
-      else{editor.saveStatus='pending';scheduleEditorAutosave(120)}
-      updateEditorSaveState();return true;
-    }catch(error){
-      if(editor.clipId===clipId){editor.dirty=true;editor.saveStatus='error';editor.saveError=error.message;saveEditorLocal();updateEditorSaveState()}
-      return false;
-    }finally{editor.saving=false;editor.savePromise=null}
-  })();
-  return editor.savePromise;
-}
-async function flushEditorAutosave(){
-  clearTimeout(editor.saveTimer);editor.saveTimer=null;
-  if(editor.savePromise)await editor.savePromise;
-  if(editor.dirty)await persistEditorDraft();
-  return !editor.dirty&&editor.saveStatus!=='error';
-}
 async function saveEditorDraft(){
-  const ok=await flushEditorAutosave();if(ok)notify('Editor changes saved');else notify(editor.saveError||'The editor could not save your changes.','bad');return ok;
+  const clip=currentClip();if(!clip)return;const button=$('#dcSaveDraft');button.disabled=true;button.textContent='Saving + re-rendering…';
+  try{
+    await savePostDetails(false);
+    await callApi(`/api/clips/${encodeURIComponent(clip.id)}`,{method:'PATCH',body:JSON.stringify({transcript:editor.captionText})});
+    const draft=cleanDraft(editor.draft),current=DATA?.selectedTemplate;
+    let result;
+    if(current?.builtIn){
+      result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...draft,id:'',name:'My DeenClipped Template'},select:true})});
+    }else if(current?.id){
+      result=await callApi(`/api/templates/${encodeURIComponent(current.id)}`,{method:'PUT',body:JSON.stringify({template:{...draft,id:current.id,name:current.name}})});
+    }else{
+      result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...draft,id:'',name:'My DeenClipped Template'},select:true})});
+    }
+    editor.draft={...clone(result.template),__clipId:clip.id};
+    editor.dirty=false;clearEditorLocal();
+    const count=Number(result.propagation?.queued||0);
+    notify(`Saved. ${count} unposted clip${count===1?'':'s'} queued with this exact template, including scheduled clips.`);
+    await refreshData();renderEditor(currentClip()||clip);
+  }catch(error){notify(error.message,'bad')}finally{if(button){button.disabled=false;button.textContent='Save'}}
 }
 async function savePostDetails(showToast=true){
   const clip=currentClip();if(!clip)return;
@@ -3489,36 +2346,8 @@ async function savePostDetails(showToast=true){
 async function saveAudioSettings(){
   try{await callApi('/api/music-settings',{method:'POST',body:JSON.stringify({volumePercent:Number(editor.draft.musicVolumePercent||13)})});notify('Music level saved');await refreshData()}catch(e){notify(e.message,'bad')}
 }
-function resetEditorToClipStyle(){
-  const style=(DATA?.templates||[]).find(item=>item.id===editor.appliedStyleId);if(!style)return;
-  Object.assign(editor.draft,clipStyleValues(style));editor.appliedStyleSnapshot=clone(style);
-  markEditorDirty();pushHistory();renderEditorTool();updateEditorPreview();updateCaptionAtTime(editor.currentTime);renderTimeline();mountEditorStylePicker();
-}
-async function saveClipStyleAsNew(){
-  const proposed=prompt('Name this Template',`${currentClip()?.title||'My clip'} template`);if(proposed===null)return;
-  const name=String(proposed).trim();if(!name)return notify('Give the Template a name.','bad');
-  const button=$('#dcSaveClipStyleAsNew');if(button){button.disabled=true;button.textContent='Saving…'}
-  try{
-    const result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...clipStyleValues(editor.draft),id:'',name},select:false})});
-    if(!result?.template)throw new Error('The Template was not returned.');
-    DATA.templates=[...(DATA.templates||[]).filter(item=>item.id!==result.template.id),result.template];
-    editor.appliedStyleId=result.template.id;editor.appliedStyleSnapshot=clone(result.template);
-    markEditorDirty();pushHistory();renderEditorTool();mountEditorStylePicker();notify(`Saved “${result.template.name}” without changing your default.`);
-  }catch(error){notify(error.message,'bad')}finally{if(button){button.disabled=false;button.textContent='Save changes as new Template'}}
-}
-async function updateAppliedClipStyle(){
-  const current=(DATA?.templates||[]).find(item=>item.id===editor.appliedStyleId);if(!current||current.builtIn)return;
-  if(!confirm(`Update “${current.name}” with this clip's reusable look?\n\nThis will not change other clips, this clip's transcript, caption timing or crop position.`))return;
-  const button=$('#dcUpdateClipStyle');if(button){button.disabled=true;button.textContent='Updating…'}
-  try{
-    const result=await callApi(`/api/templates/${encodeURIComponent(current.id)}`,{method:'PUT',body:JSON.stringify({template:{...clipStyleValues(editor.draft),id:current.id,name:current.name},propagate:false})});
-    if(!result?.template)throw new Error('The updated Template was not returned.');
-    const index=(DATA.templates||[]).findIndex(item=>item.id===current.id);if(index>=0)DATA.templates[index]=result.template;
-    editor.appliedStyleSnapshot=clone(result.template);markEditorDirty();pushHistory();renderEditorTool();mountEditorStylePicker();notify(`Updated “${result.template.name}”. Other clips were not changed.`);
-  }catch(error){notify(error.message,'bad')}finally{if(button){button.disabled=false;button.textContent='Update existing Template…'}}
-}
 async function saveEditorPreset(){
-  const clip=currentClip(),draft=clipStyleValues(editor.draft);
+  const clip=currentClip(),draft=cleanDraft(editor.draft);
   const current=DATA?.selectedTemplate,isBuiltIn=Boolean(current?.builtIn);
   // Built-in templates are protected, so the first save has to create your
   // own copy. After that this keeps updating that same one, which is what
@@ -3532,17 +2361,17 @@ async function saveEditorPreset(){
     let result;
     if(isBuiltIn){
       const name=prompt('Name your template',`${clip?.title?'My style':'My style'}`)||'My style';
-      result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...draft,id:'',name},select:true,propagate:false})});
+      result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...draft,id:'',name},select:true})});
     }else{
-      result=await callApi(`/api/templates/${encodeURIComponent(current.id)}`,{method:'PUT',body:JSON.stringify({template:{...draft,id:current.id,name:current.name},propagate:false})});
-      await callApi('/api/template',{method:'POST',body:JSON.stringify({id:current.id,propagate:false})});
+      result=await callApi(`/api/templates/${encodeURIComponent(current.id)}`,{method:'PUT',body:JSON.stringify({template:{...draft,id:current.id,name:current.name}})});
+      await callApi('/api/template',{method:'POST',body:JSON.stringify({id:current.id})});
     }
-    editor.draft={...editor.draft,...clipStyleValues(result.template),__clipId:clip?.id};editor.appliedStyleId=result.template.id;editor.appliedStyleSnapshot=clone(result.template);
-    markEditorDirty();pushHistory();
-    notify('Saved. New clips will use this look; existing clips were not changed.');
+    editor.draft={...clone(result.template),__clipId:clip?.id};
+    markEditorDirty(false);pushHistory();
+    notify('Saved. Every new clip now uses this look.');
     await refreshData();renderEditorTool();return result.template;
   }catch(e){notify(e.message,'bad');return null}
-  finally{if(button){button.disabled=false;button.textContent='Save current look as default'}}
+  finally{if(button){button.disabled=false;button.textContent='Save as default for new clips'}}
 }
 async function applyPresetToAllClips(){
   if(!confirm('Apply this exact layout to every existing clip?\n\nUnposted clips will be replaced. Posted clips will be created as new re-post variants.'))return;
@@ -3554,58 +2383,17 @@ async function applyPresetToAllClips(){
   }catch(e){notify(e.message,'bad')}finally{if(button){button.disabled=false;button.textContent='Apply default to new + old clips'}}
 }
 
-// Export is where publishing metadata now lives. It did not move because the
-// sidebar was crowded — it moved because title, description and hashtags are
-// decisions about a finished clip, not edits to it, and asking for them in a
-// sidebar tab meant they were filled in before the clip was even watched.
-//
-// detailsTool() is reused verbatim rather than reimplemented, so the same
-// #dcMetaTitle / #dcMetaDescription / #dcMetaHashtags ids renderEditedClip()
-// already reads are the ones on screen.
-function openExportDialog(){
-  const clip=currentClip();if(!clip)return;
-  $('#dcExportLayer')?.remove();
-  const layer=document.createElement('div');
-  layer.id='dcExportLayer';layer.className='dc-billing-layer show';
-  layer.innerHTML=`<div class="dc-billing-card dc-export-card" role="dialog" aria-modal="true" aria-label="Export clip">
-    <div class="dc-export-head"><div><strong>Export “${esc(clip.title||'clip')}”</strong><span>Rendered with the look you have set. Nothing is published yet.</span></div><button type="button" class="dc-icon-btn dc-svg" id="dcExportClose" aria-label="Close">${ICON.back}</button></div>
-    <div class="dc-export-body">${detailsTool()}</div>
-    <div class="dc-export-foot"><button type="button" class="dc-btn secondary" id="dcExportCancel">Cancel</button><button type="button" class="dc-btn" id="dcExportConfirm">Render export</button></div>
-  </div>`;
-  document.body.append(layer);
-  const close=()=>layer.remove();
-  layer.addEventListener('click',e=>{if(e.target===layer)close()});
-  $('#dcExportClose').onclick=close;$('#dcExportCancel').onclick=close;
-  // The dialog owns the save button that detailsTool() renders; rebind it here
-  // because bindToolInputs() only runs for the sidebar panel.
-  $('#dcSaveDetails')?.addEventListener('click',savePostDetails);
-  $('#dcExportConfirm').onclick=async()=>{
-    // Read the fields before the dialog closes — renderEditedClip() looks them
-    // up in the DOM, and they only exist inside this layer.
-    const meta={title:$('#dcMetaTitle')?.value,description:$('#dcMetaDescription')?.value,hashtags:$('#dcMetaHashtags')?.value};
-    close();
-    await renderEditedClip(meta);
-  };
-  document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){close();document.removeEventListener('keydown',esc)}});
-}
-async function renderEditedClip(meta){
-  const clip=currentClip(),button=$('#dcRenderClip');if(!clip||editor.exporting)return;
-  if(!(await flushEditorAutosave())){notify(editor.saveError||'Save the editor changes before exporting.','bad');return}
-  editor.exporting=true;if(button){button.disabled=true;button.textContent='Queueing…'};
+async function renderEditedClip(){
+  const clip=currentClip(),button=$('#dcRenderClip');if(!clip)return;button.disabled=true;button.textContent='Queueing…';
   try{
-    // Passed in from the export dialog, which has already closed by now. The
-    // DOM lookups remain as a fallback for any caller that still has the
-    // fields on screen; `??` keeps the clip's own values when neither exists.
-    const title=meta?.title??$('#dcMetaTitle')?.value??clip.title;
-    const description=meta?.description??$('#dcMetaDescription')?.value??clip.description;
-    const hashtags=meta?.hashtags??$('#dcMetaHashtags')?.value??clip.hashtags;
+    const title=$('#dcMetaTitle')?.value??clip.title,description=$('#dcMetaDescription')?.value??clip.description,hashtags=$('#dcMetaHashtags')?.value??clip.hashtags;
     await callApi(`/api/clips/${encodeURIComponent(clip.id)}`,{method:'PATCH',body:JSON.stringify({title,description,hashtags,transcript:editor.captionText})});
     if(editor.draft.musicVolumePercent)await callApi('/api/music-settings',{method:'POST',body:JSON.stringify({volumePercent:Number(editor.draft.musicVolumePercent)})});
     const template=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...cleanDraft(editor.draft),id:'',name:`${clip.title||'Clip'} · Editor`},select:false})});
     const asVariant=clip.status==='posted';
     await callApi(`/api/clips/${encodeURIComponent(clip.id)}/rerender`,{method:'POST',body:JSON.stringify({templateId:template.template.id,asVariant})});
     editor.dirty=false;clearEditorLocal();notify(asVariant?'Edited repost variant queued':'Edited clip queued for rendering');await refreshData();go('home');
-  }catch(error){notify(error.message,'bad')}finally{editor.exporting=false;if(button){button.disabled=false;button.textContent='Export video'}}
+  }catch(error){notify(error.message,'bad')}finally{if(button){button.disabled=false;button.textContent='Export video'}}
 }
 function cleanDraft(value){const d=clone(value);for(const key of ['__clipId','builtIn','editable','updatedAt','version','musicVolumePercent'])delete d[key];return d}
 function currentClip(){return (data()?.clips||[]).find(c=>c.id===editor.clipId)||null}
@@ -3620,95 +2408,54 @@ function renderGlobalSearch(){
 }
 
 
-const GLOBAL_TOUR = [
-  {view:'home',target:'[data-tour="home-hero"]',title:'Welcome to DeenClipped',copy:'Turn one source into a week of clips, review the strongest moments, then publish when you are ready.'},
-  {view:'home',target:'#dcTokenPill',title:'Your 3-day trial wallet',copy:'New accounts start with 40 tokens for generating and editing clips. Free downloads include a DeenClipped watermark; social posting unlocks with Premium.'},
-  {view:'home',target:'[data-tour="create-form"]',title:'Start with one source',copy:'Paste a supported link or upload your original video. You see the token cost before anything starts.'},
-  {view:'home',target:'#dcSidebar',title:'One simple workflow',copy:'Projects hold sources, Review is your approval queue, Publishing plans the calendar, and Studio keeps every clip consistent.'},
-  {view:'home',target:'#dcWork',title:'Work follows you',copy:'Uploads, renders and publishing progress stay available from every page. Open the activity panel for the full queue.'},
+const GUIDE_STEPS = [
+  {view:'home',target:'[data-tour="home-hero"]',title:'Welcome to DeenClipped',copy:'This is the main workspace. The goal is simple: import a lecture, approve the best clips, polish the template, then publish or download.'},
+  {view:'home',target:'[data-tour="create-form"]',title:'1. Paste your lecture link',copy:'Paste one YouTube or video URL here. For a public launch this will later sit behind login so every user has their own projects and accounts.'},
+  {view:'home',target:'[data-tour="template-picker"]',title:'2. Choose the default template',copy:'Pick the caption look before generating. Template changes should flow through new clips and queued unposted clips.'},
+  {view:'home',target:'[data-tour="generate-button"]',title:'3. Generate clips',copy:'This starts the worker: download, transcribe, find strong moments, render thumbnails and create clip options.'},
+  {view:'home',target:'[data-tour="happening-now"]',title:'Working now and next action',copy:'Home shows the current job, latest result, next post and any attention items so users do not need to hunt through menus.'},
+  {view:'projects',target:'#view-projects',title:'Projects hold each lecture',copy:'Every lecture stays together with its clips, status, errors, thumbnails and history. Failed old projects can be retried or deleted.'},
+  {view:'review',target:'#view-review',title:'Clip Review is the approval queue',copy:'This is where users approve, reject, schedule, regenerate titles, make clips shorter or longer and open style/video edits.'},
+  {view:'editor',target:'#view-editor',title:'Editor for one clip',copy:'The editor is for precise changes only: captions, framing, template look, audio and export. The normal review page should handle quick clip actions.'},
+  {view:'schedule',target:'[data-dc-nav="schedule"]',title:'Schedule shows posting windows',copy:'Approved clips live here before posting. Users can post now, download, or check what is coming next.'},
+  {view:'publishing',target:'#view-publishing',title:'Platforms connect accounts',copy:'TikTok, YouTube, Instagram and Facebook connections belong here. Every creator connects only their own account and can disconnect it at any time.'},
+  {view:'templates',target:'#view-templates',title:'Templates control the look',copy:'Saved looks, defaults and reusable caption styles belong here so clips stay consistent across new and queued videos.'},
+  {view:'music',target:'#view-music',title:'Nasheeds control background audio',copy:'Users can upload, preview and delete nasheed tracks, then keep the mix low under the speaker.'},
+  {view:'insights',target:'#view-insights',title:'Insights are clip-quality signals',copy:'This should focus on hook scores, approvals, failed clips, template performance and workflow issues. Real social analytics can come later.'},
+  {view:'automation',target:'#view-automation',title:'Studio Settings',copy:'Generation defaults, automation rules and posting controls live here.'},
+  {view:'home',target:'#dcTopbar',title:'Search and guided demo',copy:'The top bar stays consistent. Users can search projects and clips or rerun this guided demo any time from the button.'},
+  {view:'home',target:'#dcNewProject',title:'Private creator workspace',copy:'Sign-in, billing, projects and platform connections stay separated for every creator account.'}
 ];
-const TOURS_BY_VIEW = Object.freeze({
-  home:[
-    {target:'[data-tour="home-hero"]',title:'Your command centre',copy:'The floating clips show real recent work. Start a source or jump straight to clips waiting for review.'},
-    {target:'[data-tour="create-form"]',title:'Create with your defaults',copy:'Choose a Template, clip count and length here. Upload and link imports use the same safe workflow.'},
-  ],
-  projects:[{target:'#view-projects .dc-library-toolbar, #view-projects',title:'Your source library',copy:'Search, filter and open a project without losing its processing, review or publishing state.'}],
-  review:[{target:'#view-review .dc-review-toolbar, #view-review',title:'Approve with context',copy:'Compare score, hook and grounded post copy, then approve, edit, schedule or remove the clip.'}],
-  editor:[{target:'#view-editor',title:'Precise clip editing',copy:'Use the fitted canvas, timeline and side tools for one clip. Export keeps the preview style and post details together.'}],
-  schedule:[{target:'#view-schedule',title:'Your publishing command centre',copy:'Keep the calendar you know, then use approval rules and open slots to control what can go live.'}],
-  publishing:[{target:'#view-publishing',title:'Connected destinations',copy:'Manage each account and its publishing permission. Nothing posts without the rules you approve.'}],
-  templates:[{target:'#view-templates',title:'Templates and Template Shop',copy:'Build your own reusable look or add a DeenClipped design. Locked products never silently change a clip.'}],
-  brand:[{target:'#view-brand',title:'Your visual identity',copy:'Preview your mark, colours and writing defaults before they are saved to future renders.'}],
-  lab:[{target:'#view-lab',title:'Evidence-based AI Director',copy:'Every recommendation is grounded in your own clips, transcript signals and connected performance data.'}],
-  music:[{target:'#view-music',title:'A consistent audio mix',copy:'Preview tracks, keep speech clear and save one global level for new renders.'}],
-  insights:[{target:'#view-insights',title:'What is working',copy:'Use real workspace and connected-platform signals to choose the next clip or topic.'}],
-  automation:[{target:'#view-automation',title:'Your existing controls',copy:'Generation, automation and alert settings remain together in the Settings layout you already know.'}],
-  subscription:[{target:'#view-subscription',title:'Plan and token wallet',copy:'See exact access, usage and costs before you upgrade or add tokens.'}],
-  admin:[{target:'#view-admin',title:'Owner operations',copy:'Monitor real subscriptions, jobs, services and issues without mixing admin controls into the creator workflow.'}],
-});
-let guideSteps = GLOBAL_TOUR;
-let guideKind = 'global';
 let guideIndex = 0;
-let guideRenderToken = 0;
-let guideReturnScroll = null;
-function openGuidedTour(index=0,steps=GLOBAL_TOUR,kind='global'){
-  guideSteps=Array.isArray(steps)&&steps.length?steps:GLOBAL_TOUR;guideKind=kind;
-  guideIndex = clamp(index,0,guideSteps.length-1);
+function openGuidedTour(index=0){
+  guideIndex = clamp(index,0,GUIDE_STEPS.length-1);
   let layer = $('#dcGuideLayer');
   if(!layer){
-    guideReturnScroll={x:window.scrollX,y:window.scrollY};
     layer=document.createElement('div');layer.id='dcGuideLayer';layer.className='dc-guide-layer';
     layer.innerHTML='<div class="dc-guide-spot" id="dcGuideSpot"></div><div class="dc-guide-card" id="dcGuideCard"><h3 id="dcGuideTitle"></h3><p id="dcGuideCopy"></p><div class="dc-guide-progress"><i id="dcGuideBar"></i></div><div class="dc-guide-foot"><span class="dc-guide-count" id="dcGuideCount"></span><button class="dc-btn secondary" id="dcGuideClose">Close</button><button class="dc-btn secondary" id="dcGuideBack">Back</button><button class="dc-btn" id="dcGuideNext">Next</button></div></div>';
     document.body.appendChild(layer);
-    $('#dcGuideClose').onclick=closeGuidedTour;$('#dcGuideBack').onclick=()=>{guideIndex=Math.max(0,guideIndex-1);renderGuidedTour()};$('#dcGuideNext').onclick=()=>{if(guideIndex>=guideSteps.length-1)closeGuidedTour();else{guideIndex++;renderGuidedTour()}};
+    $('#dcGuideClose').onclick=closeGuidedTour;$('#dcGuideBack').onclick=()=>{guideIndex=Math.max(0,guideIndex-1);renderGuidedTour()};$('#dcGuideNext').onclick=()=>{if(guideIndex>=GUIDE_STEPS.length-1)closeGuidedTour();else{guideIndex++;renderGuidedTour()}};
   }
   layer.classList.add('show');renderGuidedTour();
 }
-function closeGuidedTour(){
-  if(guideKind==='global')seenSet('guided_demo','complete');
-  else if(guideKind.startsWith('view:'))seenSet('tab_tour',guideKind.slice(5));
-  $('#dcGuideLayer')?.remove();
-  const returnScroll=guideReturnScroll;guideReturnScroll=null;
-  if(returnScroll)requestAnimationFrame(()=>window.scrollTo({left:returnScroll.x,top:returnScroll.y,behavior:'auto'}));
-}
-function openViewTour(view=currentView,force=false){
-  const steps=TOURS_BY_VIEW[view];if(!steps?.length)return;
-  if(!force&&seenGet('tab_tour',view))return;
-  openGuidedTour(0,steps.map(step=>({...step,view})),`view:${view}`);
-}
-function openPageTour(view=currentView,force=false){openViewTour(view,force)}
-function maybeStartPageTour(view){
-  if(!seenGet('guided_demo','complete')||seenGet('tab_tour',view)||!TOURS_BY_VIEW[view]?.length)return;
-  setTimeout(()=>{if(currentView===view&&!$('#dcGuideLayer'))openViewTour(view)},520);
-}
-function visibleGuideTarget(selector){
-  return $$(selector).find(element=>{
-    if(!element?.isConnected)return false;
-    const rect=element.getBoundingClientRect(),style=getComputedStyle(element);
-    return rect.width>8&&rect.height>8&&style.display!=='none'&&style.visibility!=='hidden'&&Number(style.opacity||1)>.02;
-  })||null;
-}
+function closeGuidedTour(){ try{localStorage.setItem('dc-guided-demo-complete','1')}catch{} $('#dcGuideLayer')?.remove(); }
 function renderGuidedTour(){
-  const token=++guideRenderToken;
-  const step=guideSteps[guideIndex]||guideSteps[0];
+  const step=GUIDE_STEPS[guideIndex]||GUIDE_STEPS[0];
   if(step.view && currentView!==step.view) go(step.view);
   setTimeout(()=>{
-    if(token!==guideRenderToken)return;
-    const target=visibleGuideTarget(step.target),spot=$('#dcGuideSpot'),card=$('#dcGuideCard');if(!spot||!card)return;
-    $('#dcGuideTitle').textContent=step.title;$('#dcGuideCopy').textContent=step.copy;$('#dcGuideCount').textContent=`${guideIndex+1}/${guideSteps.length}`;$('#dcGuideBar')?.style.setProperty('width',`${((guideIndex+1)/guideSteps.length)*100}%`);$('#dcGuideBack').disabled=guideIndex===0;$('#dcGuideNext').textContent=guideIndex>=guideSteps.length-1?'Finish':'Next';
-    if(!target){spot.style.cssText='display:none';card.classList.add('dc-guide-missing');card.style.left=`${Math.max(14,(innerWidth-Math.min(360,innerWidth-28))/2)}px`;card.style.top=`${Math.max(14,(innerHeight-220)/2)}px`;return}
-    card.classList.remove('dc-guide-missing');spot.style.display='block';target.scrollIntoView({block:'center',inline:'nearest',behavior:'auto'});
+    const target=$(step.target),spot=$('#dcGuideSpot'),card=$('#dcGuideCard');if(!spot||!card)return;
+    $('#dcGuideTitle').textContent=step.title;$('#dcGuideCopy').textContent=step.copy;$('#dcGuideCount').textContent=`${guideIndex+1}/${GUIDE_STEPS.length}`;$('#dcGuideBar')?.style.setProperty('width',`${((guideIndex+1)/GUIDE_STEPS.length)*100}%`);$('#dcGuideBack').disabled=guideIndex===0;$('#dcGuideNext').textContent=guideIndex>=GUIDE_STEPS.length-1?'Finish':'Next';
+    if(!target){spot.style.cssText='left:50%;top:50%;width:1px;height:1px';card.classList.add('dc-guide-missing');return}
+    card.classList.remove('dc-guide-missing');target.scrollIntoView({block:'center',inline:'center',behavior:'smooth'});
     setTimeout(()=>{
-      if(token!==guideRenderToken)return;
-      const liveTarget=visibleGuideTarget(step.target);if(!liveTarget){renderGuidedTour();return}
-      const r=liveTarget.getBoundingClientRect(),pad=8;
-      const left=Math.max(8,r.left-pad),top=Math.max(8,r.top-pad),right=Math.min(window.innerWidth-8,r.right+pad),bottom=Math.min(window.innerHeight-8,r.bottom+pad),width=Math.max(18,right-left),height=Math.max(18,bottom-top);
+      const r=target.getBoundingClientRect(),pad=8;
+      const left=Math.max(8,r.left-pad),top=Math.max(8,r.top-pad),width=Math.min(window.innerWidth-16,r.width+pad*2),height=Math.min(window.innerHeight-16,r.height+pad*2);
       spot.style.left=`${left}px`;spot.style.top=`${top}px`;spot.style.width=`${width}px`;spot.style.height=`${height}px`;
       const cardW=Math.min(360,window.innerWidth-28);let cx=Math.min(window.innerWidth-cardW-14,Math.max(14,left));let cy=top+height+14;
       if(cy+190>window.innerHeight)cy=Math.max(14,top-204);
       card.style.left=`${cx}px`;card.style.top=`${cy}px`;card.style.width=`${cardW}px`;
-    },70);
-  },70);
+    },170);
+  },80);
 }
 
 function providerInfo(provider){
@@ -3724,830 +2471,57 @@ function providerSummary(info){
   if(!info.configured)return 'Needs API keys in Render environment variables.';
   if(!info.connected)return 'Ready to connect this publishing destination.';
   if(!info.enabled)return `${info.account?.name||'Connected account'} is connected. Turn it on when you are ready.`;
-  if(info.provider==='tiktok')return `${info.account?.name||'TikTok account'} receives only clips you explicitly approve, using TikTok's current creator settings.`;
+  if(info.provider==='tiktok')return `${info.account?.name||'TikTok account'} receives user-approved clips as drafts.`;
   return `${info.account?.name||'Account'} is ready for approved and scheduled clips.`;
 }
-function providerBadge(info){return !info.configured||info.status?.lastTestError?'bad':info.enabled?'good':info.connected?'warn':''}
-
-function premiumAccess(){
-  const bill=billingInfo(),features=bill.features||{};
-  return Boolean(features.premium||bill.current?.unlimited);
-}
-function renderBrandKit(){
-  const panel=$('#view-brand'),d=data();if(!panel||!d)return;
-  const brand=d.brandSettings||{},premium=premiumAccess(),required=Boolean(d.billing?.features?.watermarkRequired);
-  const text=required?'DEENCLIPPED':String(brand.watermarkText||'DEENCLIPPED');
-  const enabled=required||brand.watermarkEnabled!==false;
-  const positions=[['top-left','Top left'],['top-center','Top centre'],['top-right','Top right'],['bottom-left','Bottom left'],['bottom-center','Bottom centre'],['bottom-right','Bottom right']];
-  const options=(list,current)=>list.map(([v,l])=>`<option value="${v}" ${String(current)===v?'selected':''}>${l}</option>`).join('');
-  const lock=premium?'':'is-locked',dis=premium?'':'disabled';
-  const clips=d.clips||[],previewClip=clips.find(c=>c.thumbUrl)||clips[0],previewSrc=previewClip?.thumbUrl?authedUrl(previewClip.thumbUrl):'/v7-reference-assets/brand-quran.png';
-  const markSize=Number(brand.watermarkFontSize||18),opacity=premium?Number(brand.watermarkOpacity||88):88;
-  panel.innerHTML=`<div class="dc-v7-brand"><section class="dc-v7-page-title"><div><h1>Brand Kit</h1><p>Keep every clip recognisably yours</p></div><button class="dc-btn" type="submit" form="dcBrandForm">Save changes</button></section>
-    ${premium?'':`<div class="dc-brand-entitlement free"><span>${ICON.warning}</span><div><strong>Free exports stay branded</strong><p>Upgrade to replace the required DeenClipped mark with your own identity.</p></div><button class="dc-btn" id="dcBrandUpgrade">Unlock branding</button></div>`}
-    <form id="dcBrandForm" class="dc-v7-brand-layout">
-      <section class="dc-v7-brand-preview"><div class="dc-v7-brand-stage"><div class="dc-v7-brand-phone"><img src="${previewSrc}" alt="${esc(previewClip?.title||'Brand preview')}"><span class="dc-brand-watermark ${enabled?'':'off'}" id="dcBrandPreviewMark" style="--brand-color:${esc(brand.watermarkColor||'#D9B478')};--brand-opacity:${opacity/100};--brand-size:${markSize}px" data-position="${esc(brand.watermarkPosition||'top-right')}">${esc(text)}</span><i id="dcBrandPreviewLine" class="${brand.brandLineEnabled&&premium?'on':''}" style="--brand-color:${esc(brand.brandLineColor||'#D9B478')}"></i><div class="dc-v7-brand-caption">${esc(shortText(previewClip?.title||'Your words, styled consistently.',58))}</div></div></div><footer><span>${ICON.brand}</span><div><strong>Applied to</strong><small>New clips using your templates</small></div><button class="dc-btn secondary" type="button" data-dc-nav="templates">Open Templates</button></footer></section>
-      <aside class="dc-v7-brand-controls">
-        <section><header><span>${ICON.brand}</span><h2>Logo & watermark</h2>${ICON.chevron}</header><div class="dc-v7-brand-logo-row"><div class="dc-v7-logo-sample">${ICON.play}<small>${esc(text)}</small></div><button class="dc-btn secondary" type="button" id="dcBrandReplace">${ICON.publish} Replace</button></div><label class="dc-v7-brand-range"><span>Size</span><input name="watermarkFontSize" type="range" min="12" max="36" value="${markSize}" ${dis}><output id="dcBrandSizeValue">${markSize}%</output></label><label class="dc-v7-brand-range"><span>Opacity</span><input name="watermarkOpacity" type="range" min="20" max="100" value="${opacity}" ${dis}><output id="dcBrandOpacityValue">${opacity}%</output></label><div class="dc-v7-corner-row"><span>Corner position</span><div>${positions.map(([value,label])=>`<button type="button" data-brand-position="${value}" title="${label}" class="${(brand.watermarkPosition||'top-right')===value?'is-active':''}" ${dis}></button>`).join('')}</div></div><input type="checkbox" name="watermarkEnabled" ${enabled?'checked':''} ${required?'disabled':''} hidden><input name="watermarkText" maxlength="60" value="${esc(text)}" ${dis} hidden><select name="watermarkPosition" ${dis} hidden>${options(positions,premium?(brand.watermarkPosition||'top-right'):'top-right')}</select></section>
-        <section><header><span>${ICON.style}</span><h2>Brand colours</h2>${ICON.chevron}</header><div class="dc-v7-brand-swatches"><label style="--sw:${esc(brand.watermarkColor||'#D9B478')}"><input name="watermarkColor" type="color" value="${esc(premium?(brand.watermarkColor||'#D9B478'):'#D9B478')}" ${dis}></label><label style="--sw:#46392d"><input type="color" value="#46392d" disabled></label><label style="--sw:#f2eee4"><input type="color" value="#f2eee4" disabled></label><label style="--sw:#292c31"><input type="color" value="#292c31" disabled></label></div><label class="dc-v7-accent-toggle"><span>Accent line</span><input type="checkbox" name="brandLineEnabled" ${brand.brandLineEnabled&&premium?'checked':''} ${dis}></label><input name="brandLineColor" type="color" value="${esc(brand.brandLineColor||'#D9B478')}" ${dis} hidden></section>
-        <section><header><span>${ICON.text}</span><h2>Typography</h2>${ICON.chevron}</header><div class="dc-v7-brand-type"><label>Heading font<select name="headingFont" disabled><option>Playfair Display</option></select></label><label>Body font<select name="bodyFont" disabled><option>Inter</option></select></label></div><details><summary>AI writing preferences</summary><div class="dc-v7-brand-writing"><label>Vocabulary<textarea name="brandVocabulary" rows="2" maxlength="1200" ${dis}>${esc((brand.brandVocabulary||[]).join(', '))}</textarea></label><label>Audience<select name="audience" ${dis}>${options([['general','General audience'],['new-muslims','New Muslims'],['students','Students'],['families','Families'],['creators','Creators']],brand.audience||'general')}</select></label><label>Goal<select name="contentGoal" ${dis}>${options([['education','Education'],['growth','Growth'],['community','Community'],['reflection','Reflection']],brand.contentGoal||'education')}</select></label><label>Tone<select name="brandTone" ${dis}>${options([['respectful','Respectful'],['warm','Warm'],['direct','Direct'],['reflective','Reflective']],brand.brandTone||'respectful')}</select></label><label>Avoid phrases<input name="avoidPhrases" value="${esc((brand.avoidPhrases||[]).join(', '))}" ${dis}></label></div></details></section>
-      </aside>
-    </form></div>`;
-  const form=$('#dcBrandForm');
-  const paint=()=>{const fd=new FormData(form),mark=$('#dcBrandPreviewMark'),line=$('#dcBrandPreviewLine'),isOn=required||form.elements.watermarkEnabled.checked;mark.textContent=required?'DEENCLIPPED':String(fd.get('watermarkText')||'DEENCLIPPED');mark.dataset.position=String(fd.get('watermarkPosition')||'top-right');mark.style.setProperty('--brand-color',String(fd.get('watermarkColor')||'#D9B478'));mark.style.setProperty('--brand-opacity',Number(fd.get('watermarkOpacity')||88)/100);mark.style.setProperty('--brand-size',`${Number(fd.get('watermarkFontSize')||18)}px`);mark.classList.toggle('off',!isOn);line.classList.toggle('on',premium&&form.elements.brandLineEnabled.checked);line.style.setProperty('--brand-color',String(fd.get('brandLineColor')||'#D9B478'));$('#dcBrandOpacityValue').textContent=`${Number(fd.get('watermarkOpacity')||88)}%`;$('#dcBrandSizeValue').textContent=`${Number(fd.get('watermarkFontSize')||18)}%`};
-  form.addEventListener('input',paint);form.addEventListener('change',paint);form.addEventListener('submit',saveBrandKit);
-  $$('[data-brand-position]',panel).forEach(button=>button.addEventListener('click',()=>{form.elements.watermarkPosition.value=button.dataset.brandPosition;$$('[data-brand-position]',panel).forEach(item=>item.classList.toggle('is-active',item===button));paint()}));
-  $('#dcBrandReplace')?.addEventListener('click',()=>{if(!premium)return openBillingModal();const value=prompt('Watermark text',form.elements.watermarkText.value);if(value!==null){form.elements.watermarkText.value=value;paint()}});
-  if($('#dcBrandUpgrade'))$('#dcBrandUpgrade').onclick=openBillingModal;
-  requestAnimationFrame(()=>animatePanel(panel));
-}
-async function saveBrandKit(event){
-  event.preventDefault();const form=event.currentTarget,fd=new FormData(form),button=form.querySelector('[type=submit]');
-  const payload={watermarkEnabled:form.elements.watermarkEnabled.checked,watermarkText:String(fd.get('watermarkText')||'DEENCLIPPED'),watermarkPosition:String(fd.get('watermarkPosition')||'top-right'),watermarkColor:String(fd.get('watermarkColor')||'#D9B478'),watermarkOpacity:Number(fd.get('watermarkOpacity')||88),brandLineEnabled:form.elements.brandLineEnabled.checked,brandLineColor:String(fd.get('brandLineColor')||'#D9B478'),brandVocabulary:String(fd.get('brandVocabulary')||''),audience:String(fd.get('audience')||'general'),contentGoal:String(fd.get('contentGoal')||'education'),brandTone:String(fd.get('brandTone')||'respectful'),avoidPhrases:String(fd.get('avoidPhrases')||'')};
-  try{button.disabled=true;button.textContent='Saving…';await callApi('/api/brand-settings',{method:'POST',body:JSON.stringify(payload)});notify('Brand Kit saved');await refreshData();renderBrandKit()}catch(error){notify(error.message,'bad');button.disabled=false;button.textContent='Save Brand Kit'}
-}
-
-const LAB_TOPICS=[
-  ['Faith',['allah','faith','iman','tawakkul','trust','belief']],['Quran',['quran','surah','ayah','verse','recite']],['Prayer',['salah','prayer','sujood','masjid']],
-  ['Character',['character','kindness','patience','sabr','honest','mercy']],['Dua',['dua','supplication','ask allah']],['Family',['family','parent','mother','father','marriage','children']],
-  ['Akhirah',['akhirah','jannah','hellfire','death','judgement']],['Purpose',['purpose','dunya','life','success','deeds']]
-];
-function labTopic(clip){const text=`${clip.title||''} ${clip.description||''} ${clip.transcript||''}`.toLowerCase();return LAB_TOPICS.find(([,words])=>words.some(word=>text.includes(word)))?.[0]||'General reminders'}
-function labDimensionRows(clip){const d=clip.scoreBreakdown||clip.quality?.scoreBreakdown||{};return[['First 3s','openingStrength'],['Hook','hook'],['Flow','flow'],['Value','value'],['Payoff','payoffStrength'],['Complete','completeness'],['Specific','specificity'],['Timing','confidence']].map(([label,key])=>{const fallback=key==='openingStrength'?d.hook:key==='payoffStrength'?d.completeness:undefined,value=clamp(Number(d[key]??fallback??clip[key]??clip.quality?.[key]??0),0,100);return `<span><b>${esc(label)}</b><i><em style="width:${value}%"></em></i><strong>${Math.round(value)}</strong></span>`}).join('')}
-const DIRECTOR_CHIPS=[
-  ['What should I post next?','next'],
-  ['Write captions for this clip','caption'],
-  ['Give me another title','title'],
-  ['Which platform fits best?','platform'],
-  ['What topics am I missing?','ideas'],
-];
-const DIRECTOR_MODES=[
-  ['director','Director','What should I post next?'],
-  ['potential','Viral potential','Why is this clip strong?'],
-  ['hooks','Hooks','What is the hook?'],
-  ['titles','Titles & captions','Give me another title'],
-  ['trends','Trends','What topics am I missing?'],
-  ['audience','Audience','Which platform fits best?'],
-  ['posting','Posting','What should I post next?'],
-];
-const directorChat={messages:[],draft:'',focusId:''};
-let directorMode='director';
-function directorRanked(){return [...(data()?.clips||[])].sort((a,b)=>Number(b.score||0)-Number(a.score||0))}
-function directorFocus(){const clips=directorRanked();return clips.find(c=>c.id===directorChat.focusId)||clips[0]||null}
-function directorSay(role,parts){directorChat.messages.push({role,parts:Array.isArray(parts)?parts:[{type:'text',value:String(parts)}]})}
-function directorMissingPack(clip){
-  return [{type:'text',value:`"${shortText(clip.title||'This clip',60)}" was processed before DeenClipped started generating post copy, so I have no grounded titles or captions for it. Re-process that lecture and I'll have them.`}];
-}
-function directorAnswer(question){
-  const text=String(question||'').toLowerCase().trim();
-  const clips=directorRanked(),clip=directorFocus();
-  const has=(...words)=>words.some(word=>text.includes(word));
-  if(!clips.length)return [{type:'text',value:'You have no clips yet. Generate some from a lecture and I can suggest what to post, write captions and pick platforms.'}];
-
-  if(has('next','lineup','week','schedule','order','first'))
-    {const queue=clips.filter(c=>c.status!=='posted').slice(0,7);
-     return queue.length?[{type:'text',value:`Post these in this order — ranked by how well each one holds attention.`},{type:'clips',ids:queue.map(c=>c.id)}]:[{type:'text',value:'Every clip you have is already posted. Generate more from a new lecture.'}];}
-
-  if(!clip)return [{type:'text',value:'Pick a clip first and I can work on it.'}];
-  const pack=clip.growthPack||{},brief=pack.directorBrief||{},platforms=pack.platforms||{};
-
-  if(has('caption','description','write','copy','post text')){
-    if(!platforms.tiktok&&!platforms.youtube)return directorMissingPack(clip);
-    const parts=[{type:'text',value:`Grounded captions for "${shortText(clip.title||'this clip',52)}" — every line comes from the transcript.`}];
-    if(platforms.youtube?.title)parts.push({type:'copy',label:'YouTube title',value:platforms.youtube.title});
-    if(platforms.youtube?.description)parts.push({type:'copy',label:'YouTube description',value:platforms.youtube.description});
-    if(platforms.tiktok?.caption)parts.push({type:'copy',label:'TikTok caption',value:platforms.tiktok.caption});
-    if(platforms.instagram?.caption)parts.push({type:'copy',label:'Instagram caption',value:platforms.instagram.caption});
-    return parts;
-  }
-
-  if(has('title','headline','name it','rename')){
-    const titles=[pack.primaryTitle,...(pack.alternateTitles||[])].filter(Boolean);
-    if(!titles.length)return directorMissingPack(clip);
-    return [{type:'text',value:'Every one of these is drawn from what the speaker actually said:'},...titles.map((value,index)=>({type:'copy',label:index?`Alternative ${index}`:'Suggested title',value}))];
-  }
-
-  if(has('hashtag','tag','search','seo','discover')){
-    const terms=pack.searchTerms||[];const tags=String(clip.hashtags||'').trim();
-    if(!terms.length&&!tags)return directorMissingPack(clip);
-    const parts=[{type:'text',value:'Tags and search terms taken from the topic of this clip:'}];
-    if(tags)parts.push({type:'copy',label:'Hashtags',value:tags});
-    if(terms.length)parts.push({type:'copy',label:'Search terms',value:terms.join(', ')});
-    return parts;
-  }
-
-  if(has('hook','opening','first three','first 3','start','payoff','ending')){
-    if(!brief.hookPreview&&!brief.payoffPreview)return directorMissingPack(clip);
-    const parts=[];
-    if(brief.hookPreview)parts.push({type:'text',value:`Opening line: "${brief.hookPreview}"`});
-    if(brief.payoffPreview)parts.push({type:'text',value:`Closing payoff: "${brief.payoffPreview}"`});
-    parts.push({type:'text',value:'If the opening does not stand alone without context, trim the clip so it starts later.'});
-    return parts;
-  }
-
-  if(has('platform','where','youtube','tiktok','instagram','facebook','best fit')){
-    const fit=brief.platformFit||{};const best=brief.bestPlatforms||[];
-    if(!best.length)return directorMissingPack(clip);
-    const names={youtube:'YouTube Shorts',tiktok:'TikTok',instagram:'Instagram Reels',facebook:'Facebook Reels'};
-    const ordered=Object.entries(fit).sort((a,b)=>b[1]-a[1]).map(([key,value])=>`${names[key]||key} ${Math.round(value)}`).join(' · ');
-    return [{type:'text',value:`Best fit: ${best.map(name=>names[name]||name).join(' and ')}.`},{type:'text',value:`Scored across all four: ${ordered}.`}];
-  }
-
-  if(has('why','score','strong','good','work','retention')){
-    const reasons=[...(brief.why||[]),...(clip.scoreReasons||[])].filter(Boolean).slice(0,4);
-    const parts=[{type:'text',value:`"${shortText(clip.title||'This clip',52)}" scores ${Math.round(clip.score||0)} out of 100.${brief.forecast?` Retention forecast: ${brief.forecast}.`:''}`}];
-    if(reasons.length)parts.push({type:'text',value:reasons.join(' · ')});
-    if(clip.scoreBreakdown||clip.quality?.scoreBreakdown)parts.push({type:'dimensions',id:clip.id});
-    return parts;
-  }
-
-  if(has('idea','topic','gap','cover','missing','content')){
-    const counts=new Map();clips.forEach(c=>{const topic=labTopic(c);counts.set(topic,(counts.get(topic)||0)+1)});
-    const gaps=LAB_TOPICS.map(([name])=>name).filter(name=>!counts.has(name));
-    const covered=[...counts.entries()].sort((a,b)=>b[1]-a[1]).slice(0,3).map(([name,count])=>`${name} (${count})`).join(', ');
-    const parts=[{type:'text',value:covered?`You post most about ${covered}.`:'Your clips do not group into a clear topic yet.'}];
-    parts.push({type:'text',value:gaps.length?`Nothing in your library covers ${gaps.slice(0,4).join(', ')} — lectures on those would widen your reach.`:'Your main topics are all represented, so keep going deeper rather than wider.'});
-    return parts;
-  }
-
-  return [
-    {type:'text',value:"I can only answer from the clips you've generated, and that one is outside what I can see."},
-    {type:'text',value:'Ask me what to post next, for captions, titles, hashtags, the hook, which platform fits, why a clip scores well, or which topics you are missing.'},
-  ];
-}
-function directorAsk(question){
-  const clean=String(question||'').trim();if(!clean)return;
-  directorSay('user',[{type:'text',value:clean}]);
-  directorSay('director',directorAnswer(clean));
-  directorChat.draft='';
-  renderCreatorLab();
-  const thread=$('#dcDirectorThread');if(thread)thread.scrollTop=thread.scrollHeight;
-  $('#dcDirectorInput')?.focus();
-}
-function directorPartHtml(part,messageIndex,partIndex){
-  if(part.type==='copy'){const canApply=/^(Suggested title|Alternative \d+)$/i.test(String(part.label||''));return `<div class="dc-director-copy"><div><small>${esc(part.label)}</small><p>${esc(part.value)}</p></div><span>${canApply?`<button class="dc-btn" data-director-apply-title="${messageIndex}:${partIndex}">Apply to clip</button>`:''}<button class="dc-btn secondary" data-director-copy="${messageIndex}:${partIndex}">Copy</button></span></div>`;}
-  if(part.type==='clips'){
-    const clips=data()?.clips||[];
-    return `<div class="dc-director-clips">${part.ids.map((id,order)=>{const clip=clips.find(c=>c.id===id);if(!clip)return '';return `<button data-edit-video-clip="${esc(clip.id)}"><i>${order+1}</i><span class="dc-director-thumb">${clip.thumbUrl?`<img src="${authedUrl(clip.thumbUrl)}" alt="">`:ICON.play}</span><b>${esc(shortText(clip.title||'Untitled clip',54))}</b><em>${Math.round(clip.score||0)}</em></button>`}).join('')}</div>`;
-  }
-  if(part.type==='dimensions'){
-    const clip=(data()?.clips||[]).find(c=>c.id===part.id);
-    return clip?`<div class="dc-lab-dimensions">${labDimensionRows(clip)}</div>`:'';
-  }
-  return `<p>${esc(part.value)}</p>`;
-}
-function directorToolSurface(d,clips,focus){
-  const pack=focus?.growthPack||{},brief=pack.directorBrief||{},breakdown=focus?.scoreBreakdown||focus?.quality?.scoreBreakdown||{};
-  const topicCount=new Set(clips.map(labTopic).filter(topic=>topic!=='General reminders')).size,connected=connectedPlatformCount(d),audience=String(d.brandSettings?.audience||'').trim();
-  const toolsHeading='AI tools working together';
-  const tools=[
-    ['Hook AI',ICON.sparkles,brief.hookPreview?'Grounded':'Waiting',brief.hookPreview?'Transcript opening ready':'Needs a processed growth pack',Boolean(brief.hookPreview)],
-    ['Retention AI',ICON.analytics,brief.forecast||Number(breakdown.flow||breakdown.hook)>0?'Signals ready':'Waiting',brief.forecast?`${brief.forecast} forecast from clip signals`:Number(breakdown.flow||0)>0?'Quality dimensions available':'No external watch-time connected',Boolean(brief.forecast||Number(breakdown.flow||breakdown.hook)>0)],
-    ['Title AI',ICON.text,pack.primaryTitle?'Copy ready':'Waiting',pack.primaryTitle?'Grounded title pack available':'Needs grounded post copy',Boolean(pack.primaryTitle)],
-    ['Trend AI',ICON.analytics,clips.length?'Workspace-only':'Waiting',clips.length?`${topicCount||1} library theme${topicCount===1?'':'s'} · no invented live trends`:'Create clips to map topic gaps',Boolean(clips.length)],
-    ['Audience AI',ICON.social,brief.bestPlatforms?.length?'Platform fit':'Limited',brief.bestPlatforms?.length?`${brief.bestPlatforms.length} grounded platform matches`:audience?`Brand audience: ${audience}`:'No connected audience analytics',Boolean(brief.bestPlatforms?.length)],
-    ['Posting AI',ICON.publish,connected?'Ready':'Plan only',connected?`${connected} connected destination${connected===1?'':'s'}`:'Recommendations only until a channel connects',Boolean(connected)],
-  ];
-  const next=clips.filter(c=>c.status!=='posted').slice(0,2);
-  const demoNext=[{title:'Verily, with hardship comes ease.',score:86,thumbUrl:'/v7-reference-assets/director-quran.png',demo:true},{title:'And He found you lost and guided you.',score:81,thumbUrl:'/v7-reference-assets/director-sunset.png',demo:true}];
-  const visibleNext=next.length?next:demoNext;
-  return `<section class="dc-v7-ai-tools"><header><span>${ICON.sparkles}</span><h2>${toolsHeading}</h2></header><div>${tools.map(([name,icon,status,copy,ready])=>`<button type="button" data-director-tool="${esc(name)}" class="${ready?'is-ready':'is-limited'}" title="${esc(copy)}"><i>${icon}</i><strong>${esc(name)}</strong><em><u></u>${esc(status)}</em></button>`).join('')}</div></section><section class="dc-v7-director-next"><header><span>${ICON.sparkles}</span><div><h2>Recommended next</h2><p>Top opportunities based on your clips and audience.</p></div></header><div>${visibleNext.map((clip,index)=>`<article><div class="dc-v7-director-card-media"><img src="${clip.demo?clip.thumbUrl:clip.thumbUrl?authedUrl(clip.thumbUrl):index?'/v7-reference-assets/director-sunset.png':'/v7-reference-assets/director-quran.png'}" alt="${esc(clip.title||'Clip')}"><b>${index+1}</b><strong>${esc(shortText(clip.title||'Untitled clip',50))}</strong></div><p>Potential score <b>${Math.round(Number(clip.score||0))}</b></p><small><i></i>${Number(clip.score||0)>=75?'High opportunity':'Strong opportunity'}</small>${clip.demo?'<button class="dc-btn secondary" disabled>Open clip</button>':`<button class="dc-btn secondary" data-edit-video-clip="${esc(clip.id)}">Open clip</button>`}</article>`).join('')}</div></section><section class="dc-v7-director-truth">${ICON.brand}<p>Grounded in your transcripts and connected workspace signals; nothing I suggest is made up. Live trends and audience analytics stay limited until those data sources are connected.</p></section>`;
-}
-function renderCreatorLab(){
-  const panel=$('#view-lab'),d=data();if(!panel||!d)return;
-  const clips=d.clips||[],premium=Boolean(d.billing?.features?.creatorLab||d.billing?.current?.unlimited);
-  const ranked=directorRanked(),avg=Math.round(ranked.reduce((sum,c)=>sum+Number(c.score||0),0)/Math.max(1,ranked.length));
-  const ready=clips.filter(c=>c.musicVerified&&c.renderVerified).length,waiting=clips.filter(c=>c.status==='waiting').length;
-  const focus=directorFocus();
-  const hero=`<section class="dc-v7-director-head"><div><h1>AI Director</h1><p>One intelligence layer for stronger clips and smarter growth.</p></div><label>${ICON.lab}<span>Focus project</span><select id="dcDirectorProjectFocus"><option value="">${esc(focus?.title||'All projects')}</option></select></label></section>`;
-
-  if(!premium){
-    panel.innerHTML=`<div class="dc-settings-hub dc-director-page dc-v7-director">${hero}<section class="dc-lab-locked"><div class="dc-lab-lock-icon">${ICON.lab}</div><span>Premium intelligence</span><h2>Ask your library what to post next.</h2><p>AI Director answers in plain language using the titles, hooks and captions DeenClipped already generated from your transcripts.</p><div class="dc-lab-teasers">${DIRECTOR_CHIPS.map(([label])=>`<span>${esc(label)}</span>`).join('')}</div><button class="dc-btn" id="dcLabUpgrade">Unlock AI Director</button></section></div>`;
-    if($('#dcLabUpgrade'))$('#dcLabUpgrade').onclick=openBillingModal;
-    requestAnimationFrame(()=>animatePanel(panel));
-    return;
-  }
-
-  const breakdown=focus?.scoreBreakdown||focus?.quality?.scoreBreakdown||{},score=Math.round(Number(focus?.score||0)),pack=focus?.growthPack||{},brief=pack.directorBrief||{},hook=brief.hookPreview||pack.primaryTitle||focus?.title||'Select a clip to build a grounded hook.';
-  const factors=[['Hook',Number(breakdown.hook||score)],['Retention',Number(breakdown.flow||breakdown.confidence||score)],['Clarity',Number(breakdown.value||breakdown.completeness||score)],['Audience fit',Number(brief.platformFit?.instagram||brief.platformFit?.youtube||score)]];
-  const latestUser=[...directorChat.messages].reverse().find(message=>message.role==='user');
-  panel.innerHTML=`<div class="dc-v7-director">${hero}<div class="dc-v7-director-layout"><main class="dc-v7-director-main"><nav class="dc-v7-director-modes" aria-label="AI Director tools">${DIRECTOR_MODES.map(([id,label])=>`<button type="button" class="${directorMode===id?'is-active':''}" data-director-mode="${esc(id)}">${esc(label)}</button>`).join('')}</nav><section class="dc-v7-director-user"><span>A</span><div><strong>You</strong><p>${esc(latestUser?.parts?.[0]?.value||'This hook underperformed. Rewrite it to be more compelling.')}</p></div><time>Now</time></section><section class="dc-v7-director-answer"><header><span>${ICON.lab}</span><strong>AI Director</strong><time>Now</time></header><div class="dc-v7-growth-brief"><small>Growth brief</small><div class="dc-v7-growth-grid"><div class="dc-v7-growth-score" style="--score:${score}"><b>${score||'—'}</b><span>Viral potential<br><strong>${score||'—'} / 100</strong><em>${score>=75?'High confidence':'Workspace estimate'}</em></span></div><div class="dc-v7-growth-factors"><small>Key opportunity factors</small>${factors.map(([label,value])=>`<p><span>${label}</span><i><u style="width:${clamp(value,0,100)}%"></u></i><b>${Math.round(value||0)}</b></p>`).join('')}</div></div><div class="dc-v7-top-rec"><span>${ICON.sparkles}</span><p><small>Top recommendation</small><strong>${esc(brief.why?.[0]||'Reveal the outcome in the first 1.5 seconds.')}</strong></p></div><label>Stronger hook</label><div class="dc-v7-stronger-hook"><span>“</span><p>${esc(shortText(hook,170))}</p><button class="dc-btn secondary" data-director-copy-hook>Copy</button><button class="dc-btn" data-director-apply-hook>Apply to clip</button></div><div class="dc-v7-director-actions"><button data-director-chip="Give me 5 hooks">${ICON.sparkles} Generate 5 hooks</button><button data-director-chip="Create title pack">${ICON.text} Create title pack</button><button data-director-chip="Find trend angles">${ICON.analytics} Find trend angles</button></div></div></section><form class="dc-director-composer" id="dcDirectorForm"><span>${ICON.lab}</span><input id="dcDirectorInput" placeholder="Ask anything about your clips, audience or content…" autocomplete="off" value="${esc(directorChat.draft)}"><button class="dc-btn" type="submit">${ICON.publish} Ask Director</button></form></main><aside class="dc-v7-director-rail">${directorToolSurface(d,ranked,focus)}</aside></div></div>`;
-
-  $('#dcDirectorForm')?.addEventListener('submit',event=>{event.preventDefault();directorAsk($('#dcDirectorInput')?.value)});
-  $('#dcDirectorInput')?.addEventListener('input',event=>{directorChat.draft=event.target.value});
-  $('#dcDirectorFocus')?.addEventListener('change',event=>{directorChat.focusId=event.target.value;renderCreatorLab()});
-  $$('[data-director-mode]',panel).forEach(button=>button.addEventListener('click',()=>{const mode=DIRECTOR_MODES.find(item=>item[0]===button.dataset.directorMode);if(!mode)return;directorMode=mode[0];directorAsk(mode[2])}));
-  $$('[data-director-tool]',panel).forEach(button=>button.addEventListener('click',()=>{const tool=button.dataset.directorTool,mode=DIRECTOR_MODES.find(item=>tool.startsWith(item[1].split(' ')[0]))||DIRECTOR_MODES[0];directorMode=mode[0];directorAsk(mode[2])}));
-  $$('[data-director-chip]',panel).forEach(button=>button.addEventListener('click',()=>directorAsk(button.dataset.directorChip)));
-  $('[data-director-copy-hook]',panel)?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(hook);notify('Copied')}catch{notify('Copy was blocked by the browser','bad')}});
-  $('[data-director-apply-hook]',panel)?.addEventListener('click',async event=>{if(!focus)return;try{event.currentTarget.disabled=true;await callApi(`/api/clips/${encodeURIComponent(focus.id)}`,{method:'PATCH',body:JSON.stringify({title:hook})});notify('Grounded hook applied');await refreshData();renderCreatorLab()}catch(error){notify(error.message,'bad');event.currentTarget.disabled=false}});
-  $$('[data-director-copy]',panel).forEach(button=>button.addEventListener('click',async()=>{
-    const [messageIndex,partIndex]=button.dataset.directorCopy.split(':').map(Number);
-    const value=directorChat.messages[messageIndex]?.parts[partIndex]?.value||'';
-    try{await navigator.clipboard.writeText(value);notify('Copied')}catch{notify('Copy was blocked by the browser','bad')}
-  }));
-  $$('[data-director-apply-title]',panel).forEach(button=>button.addEventListener('click',async()=>{
-    const [messageIndex,partIndex]=button.dataset.directorApplyTitle.split(':').map(Number),value=directorChat.messages[messageIndex]?.parts[partIndex]?.value||'',clip=directorFocus();if(!clip||!value)return;
-    try{button.disabled=true;button.textContent='Applying…';await callApi(`/api/clips/${encodeURIComponent(clip.id)}`,{method:'PATCH',body:JSON.stringify({title:value})});notify('Grounded title applied to the clip');await refreshData();renderCreatorLab()}catch(error){notify(error.message,'bad');button.disabled=false;button.textContent='Apply to clip'}
-  }));
-  const threadEl=$('#dcDirectorThread');if(threadEl)threadEl.scrollTop=threadEl.scrollHeight;
-  requestAnimationFrame(()=>animatePanel(panel));
-}
-
-const STYLE_GROUPS=[
-  ['details','Template details','details','Template'],
-  ['layout','Clip layout','style','Style'],
-  ['captions','Captions','captions','Style'],
-  ['headline','Auto headline','details','Style'],
-  ['framing','Speaker framing','canvas','Style'],
-  ['overlay','Overlay','brand','Brand'],
-  ['audio','Voice & music','audio','Audio'],
-];
-const STYLE_FONTS=['DejaVu Sans','DejaVu Serif','Manrope','Roboto','Lato','Noto Sans','Noto Serif','Play','Liberation Sans','Liberation Serif','Amiri','Scheherazade New','Noto Naskh Arabic','Noto Kufi Arabic'];
-const styleStudio={draft:null,baseId:'',group:'',history:[],index:-1,dirty:false,menuOpen:false};
-let templateWorkspaceTab='mine';
-let templateShopProducts=[];
-let templateShopLoading=false;
-let templateShopError='';
-let templateShopFilter='all';
-let templateShopQuery='';
-
-async function loadTemplateShop(force=false){
-  if(templateShopLoading||(!force&&templateShopProducts.length))return;
-  templateShopLoading=true;templateShopError='';
-  try{
-    const result=await callApi('/api/template-shop');
-    templateShopProducts=Array.isArray(result)?result:Array.isArray(result?.products)?result.products:Array.isArray(result?.catalog)?result.catalog:[];
-  }catch(error){templateShopError=error.message||'Template Shop could not be loaded.'}
-  finally{templateShopLoading=false;if(currentView==='templates'&&templateWorkspaceTab==='shop')renderTemplatesPage()}
-}
-function templateShopTier(product){return String(product.tier||product.accessTier||'free').toLowerCase()}
-function normalizedTemplateShopProduct(product){
-  const accessType=String(product.access?.type||product.tier||'free').toLowerCase();
-  return {
-    ...product,
-    tier:accessType,
-    priceLabel:product.priceLabel||(accessType==='purchase'&&Number(product.access?.amount)>0?new Intl.NumberFormat(undefined,{style:'currency',currency:product.access?.currency||'AUD'}).format(Number(product.access.amount)/100):''),
-    ratios:product.ratios||(product.preview?.aspectRatio?[product.preview.aspectRatio]:[]),
-    capabilities:product.capabilities||product.features||[],
-    previewAssets:product.previewAssets||(product.preview?.posterUrl?{poster:product.preview.posterUrl}:{}),
-    canAdd:product.canAdd??product.canAcquire,
-    canApply:product.canApply??product.accessible,
-  };
-}
-function templateShopCta(product){
-  const state=String(product.accessState||'').toLowerCase();
-  if(['owned','acquired','purchased'].includes(state)||product.canApply)return ['Use template','use'];
-  if(state==='available_free'||product.canAdd&&templateShopTier(product)==='free')return ['Add free','acquire'];
-  if(state==='available_pro'||product.canAdd)return ['Add to My Templates','acquire'];
-  if(['locked_pro','pro_required'].includes(state))return ['Unlock with Pro','upgrade'];
-  if(['purchasable','purchase_required'].includes(state)||templateShopTier(product)==='purchase')return [`Purchase${product.priceLabel?` · ${product.priceLabel}`:''}`,'checkout'];
-  return ['View details','preview'];
-}
-function templateShopCard(product){
-  product=normalizedTemplateShopProduct(product);
-  const [cta,action]=templateShopCta(product),tier=templateShopTier(product),style=product.style||product.template||{};
-  const image=product.previewAssets?.poster||product.previewAssets?.image||product.previewUrl||'';
-  const preview=image?`<img src="${esc(image)}" alt="${esc(product.name||'Template')} preview">`:templatePreviewMarkup(style);
-  const ratios=(product.ratios||[]).slice(0,3),caps=(product.capabilities||[]).slice(0,3);
-  const customize=(product.canCustomize||['owned','acquired','purchased'].includes(String(product.accessState||'').toLowerCase()))?`<button class="dc-btn secondary" data-template-shop-action="customize" data-template-shop-id="${esc(product.id)}">Customize</button>`:'';
-  const badge=tier==='pro'?'PRO':tier==='purchase'?(product.priceLabel||'PREMIUM'):'FREE';
-  return `<article class="dc-v7-shop-card" data-shop-product="${esc(product.id)}"><button type="button" class="dc-v7-shop-preview" data-template-shop-action="preview" data-template-shop-id="${esc(product.id)}">${preview}<span>Preview on my clip</span></button><div class="dc-v7-shop-card-body"><div class="dc-v7-shop-card-top"><div><small>${esc(product.creator||'DeenClipped')}</small><h3>${esc(product.name||'Template')}</h3></div><b class="${esc(tier)}">${esc(badge)}</b></div><p>${esc(product.description||'A reusable, professionally designed clip look.')}</p><div class="dc-v7-shop-tags">${ratios.map(value=>`<span>${esc(value)}</span>`).join('')}${caps.map(value=>`<span>${esc(String(value).replace(/_/g,' '))}</span>`).join('')}</div><div class="dc-v7-shop-actions">${customize}<button class="dc-btn secondary" data-template-shop-action="preview" data-template-shop-id="${esc(product.id)}">Preview on my clip</button><button class="dc-btn" data-template-shop-action="${action}" data-template-shop-id="${esc(product.id)}">${esc(cta)}</button></div></div></article>`;
-}
-function renderTemplateShop(panel,d){
-  if(!templateShopProducts.length&&!templateShopLoading&&!templateShopError)queueMicrotask(()=>loadTemplateShop());
-  const products=templateShopProducts.filter(product=>{
-    const tier=templateShopTier(normalizedTemplateShopProduct(product)),matchTier=templateShopFilter==='all'||tier===templateShopFilter||(templateShopFilter==='premium'&&tier==='purchase');
-    const query=templateShopQuery.toLowerCase(),matchQuery=!query||`${product.name||''} ${product.description||''} ${(product.categories||[]).join(' ')}`.toLowerCase().includes(query);
-    return matchTier&&matchQuery;
-  });
-  panel.innerHTML=`<div class="dc-v7-templates dc-v7-template-shop"><header class="dc-v7-template-head"><div><span>DeenClipped designs</span><h1>Template Shop</h1><p>Add a polished look to My Templates, then customise only the parts the renderer supports.</p></div><button class="dc-btn secondary" data-template-tab="mine">Open My Templates</button></header><div class="dc-v7-template-tabs" role="tablist"><button type="button" data-template-tab="mine">My Templates</button><button type="button" class="is-active" data-template-tab="shop">Template Shop</button></div><div class="dc-v7-shop-toolbar"><label>${ICON.search}<input id="dcTemplateShopSearch" placeholder="Search templates" value="${esc(templateShopQuery)}"></label><div>${[['all','All'],['free','Free'],['pro','Included with Pro'],['premium','Premium']].map(([value,label])=>`<button type="button" class="${templateShopFilter===value?'is-active':''}" data-shop-filter="${value}">${label}</button>`).join('')}</div></div>${templateShopLoading?`<div class="dc-v7-shop-state"><span class="dc-spinner"></span><strong>Loading Template Shop…</strong></div>`:templateShopError?`<div class="dc-v7-shop-state bad"><strong>Template Shop could not be loaded.</strong><p>${esc(templateShopError)}</p><button class="dc-btn" id="dcTemplateShopRetry">Try again</button></div>`:`<div class="dc-v7-shop-grid">${products.length?products.map(templateShopCard).join(''):`<div class="dc-v7-shop-state"><strong>No templates match</strong><p>Clear the search or choose another category.</p></div>`}</div>`}<footer class="dc-v7-shop-truth"><span>${ICON.quality}</span><p><strong>Preview honestly.</strong> Shop cards are style illustrations; “Preview on my clip” uses a server preview and never changes your default, spends tokens or edits a clip.</p></footer></div>`;
-  $$('[data-template-tab]',panel).forEach(button=>button.addEventListener('click',()=>{templateWorkspaceTab=button.dataset.templateTab;syncTemplateRouteMode();renderTemplatesPage()}));
-  $$('[data-shop-filter]',panel).forEach(button=>button.addEventListener('click',()=>{templateShopFilter=button.dataset.shopFilter;renderTemplatesPage()}));
-  $('#dcTemplateShopSearch')?.addEventListener('input',event=>{templateShopQuery=event.target.value;renderTemplatesPage();const input=$('#dcTemplateShopSearch');input?.focus();input?.setSelectionRange(input.value.length,input.value.length)});
-  $('#dcTemplateShopRetry')?.addEventListener('click',()=>loadTemplateShop(true));
-  $$('[data-template-shop-action]',panel).forEach(button=>button.addEventListener('click',()=>handleTemplateShopAction(button.dataset.templateShopAction,button.dataset.templateShopId,button)));
-  requestAnimationFrame(()=>animatePanel(panel));
-}
-async function handleTemplateShopAction(action,id,button){
-  const product=templateShopProducts.find(item=>String(item.id)===String(id));if(!product)return notify('Template not found','bad');
-  if(action==='upgrade'){openBillingModal();return}
-  if(action==='use'){
-    templateWorkspaceTab='mine';syncTemplateRouteMode();
-    try{await selectStudioTemplate(product.templateId||product.id);renderTemplatesPage()}catch{}
-    return;
-  }
-  if(action==='customize'){
-    try{
-      button.disabled=true;button.textContent='Creating your copy…';
-      const result=await callApi(`/api/template-shop/${encodeURIComponent(id)}/customize`,{method:'POST',body:'{}'});
-      await refreshData();
-      if(result.template)styleStudioLoad(result.template);
-      templateWorkspaceTab='mine';syncTemplateRouteMode();renderTemplatesPage();notify('Custom copy added without changing your default');
-    }catch(error){notify(error.message,'bad');button.disabled=false;button.textContent='Customize'}
-    return;
-  }
-  if(action==='preview'){
-    const clip=[...(data()?.clips||[])].sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0))[0];
-    if(!clip)return notify('Create a clip first, then preview this Template on it.','bad');
-    const original=button.innerHTML;
-    try{button.disabled=true;if(button.matches('.dc-v7-shop-preview'))button.classList.add('is-loading');else button.textContent='Preparing preview…';const result=await callApi(`/api/template-shop/${encodeURIComponent(id)}/preview`,{method:'POST',body:JSON.stringify({clipId:clip.id})});openTemplateShopPreview(result,product);}
-    catch(error){notify(error.message,'bad')}finally{button.disabled=false;button.classList.remove('is-loading');button.innerHTML=original}
-    return;
-  }
-  try{
-    button.disabled=true;button.textContent=action==='checkout'?'Opening secure checkout…':'Adding…';
-    const result=await callApi(`/api/template-shop/${encodeURIComponent(id)}/${action==='checkout'?'checkout':'acquire'}`,{method:'POST',body:'{}'});
-    if(result.url){location.href=result.url;return}
-    notify('Template added to My Templates');await refreshData();await loadTemplateShop(true);templateWorkspaceTab='mine';syncTemplateRouteMode();renderTemplatesPage();
-  }catch(error){notify(error.message,'bad');button.disabled=false;renderTemplatesPage()}
-}
-
-function syncTemplateRouteMode(){document.body.classList.toggle('dc-templates-route',currentView==='templates'&&templateWorkspaceTab!=='shop')}
-function templateShopCaptionHtml(words,style,time){
-  const list=Array.isArray(words)?words:[],hold=Math.min(.2,Math.max(0,Number(style.captionHoldSeconds??.04))),index=list.findIndex(word=>time>=Number(word.start)&&time<Number(word.end)+hold);if(index<0)return'';
-  const mode=style.captionMode||'dynamic-stack',max=Math.max(1,Number(style.captionMaxWords||4)),groups=speechGroups(list,max,Number(style.captionClearPause||.42)),group=groups.find(item=>index>=item.startIndex&&index<=item.endIndex);if(!group)return'';
-  const visible=mode==='dynamic-stack'?list.slice(group.startIndex,index+1):list.slice(group.startIndex,group.endIndex+1);
-  return mode==='dynamic-stack'?visible.map((word,offset)=>`<span class="dc-caption-stack-line ${offset===visible.length-1?'active':''} ${isArabicWord(word.word)?'is-arabic':''}">${esc(word.word)}</span>`).join(''):visible.map((word,offset)=>`<span class="dc-caption-word ${group.startIndex+offset===index?'active':''} ${isArabicWord(word.word)?'is-arabic':''}">${esc(word.word)}</span>`).join(' ');
-}
-function openTemplateShopPreview(result,product){
-  $('#dcTemplatePreviewLayer')?.remove();
-  const style=result?.style||{},clip=result?.clip||{},source=clip.source||{},width=Math.max(1,Number(style.width||1080)),height=Math.max(1,Number(style.height||1920));
-  const media=source.kind==='video'?`<video id="dcTemplatePreviewMedia" src="${esc(authedUrl(source.url||''))}" playsinline preload="metadata" controls></video>`:`<img id="dcTemplatePreviewMedia" src="${esc(authedUrl(source.url||''))}" alt="${esc(clip.title||'Clip')} preview">`;
-  const layer=document.createElement('div');layer.id='dcTemplatePreviewLayer';layer.className='dc-template-preview-layer';
-  layer.innerHTML=`<section class="dc-template-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="dcTemplatePreviewTitle"><header><div><span>${ICON.style} Live style composition</span><h2 id="dcTemplatePreviewTitle">${esc(product?.name||result?.product?.name||'Template')} on “${esc(shortText(clip.title||'your clip',52))}”</h2><p>No tokens, no saved changes and no default change.</p></div><button type="button" id="dcTemplatePreviewClose" aria-label="Close preview">×</button></header><div class="dc-template-preview-body"><div class="dc-template-preview-stage"><div class="dc-template-preview-frame" data-fit="${esc(style.fitMode||'contain')}" style="aspect-ratio:${width}/${height};--preview-bg:${templateSafeColor(style.frameBackground,'#000000')}">${media}<div class="dc-template-preview-shade"></div><span class="dc-style-watermark" data-position="${esc(style.watermarkPosition||'top-center')}" style="color:${templateSafeColor(style.watermarkColor,'#FFFFFF')};opacity:${clamp(Number(style.watermarkOpacity||72),0,100)/100}">${esc(style.watermark||'')}</span><div class="dc-template-preview-caption ${esc(style.captionMode||'dynamic-stack')}" id="dcTemplatePreviewCaption" style="--dc-cap-highlight:${templateSafeColor(style.captionHighlight,'#D9B478')};left:${clamp(Number(style.captionPositionX??50),8,92)}%;top:${clamp(Number(style.captionPositionY??76),12,88)}%;font-family:${templateFontFamily(style.captionFont)};font-size:${clamp(Number(style.captionFontSize||82)/3.1,20,38)}px;font-weight:${clamp(Number(style.captionFontWeight||800),400,900)};line-height:${clamp(Number(style.captionLineHeight||.9),.65,1.4)};color:${templateSafeColor(style.captionPrimary)};-webkit-text-stroke:${clamp(Number(style.captionOutlineWidth||4)/3.2,0,3)}px ${templateSafeColor(style.captionOutline,'#09090A')};background:${templateRgba(style.captionBackground,style.captionBackgroundOpacity)}"></div>${style.brandLineEnabled?`<i class="dc-template-preview-brand-line" style="height:${clamp(Number(style.brandLineHeight||6)/3,1,8)}px;background:${templateSafeColor(style.brandLineColor,'#D9B478')}"></i>`:''}</div></div><aside><span class="dc-v7-preview-truth">Style preview</span><h3>What this confirms</h3><ul><li>Caption look, position and timing</li><li>Aspect ratio, crop mode and colour treatment</li><li>Your plan’s real watermark rules</li></ul><h3>What export finishes</h3><p>${esc((result?.limitations||[]).join(' ')||'Speaker tracking, installed fonts and encoding are finalised during export.')}</p><div><button class="dc-btn secondary" id="dcTemplatePreviewCancel">Close</button><button class="dc-btn" id="dcTemplatePreviewUse">${result?.product?.canApply?'Use this Template':'Open Template options'}</button></div></aside></div></section>`;
-  document.body.appendChild(layer);
-  const escape=event=>{if(event.key==='Escape')close()};
-  const close=()=>{const mediaEl=$('#dcTemplatePreviewMedia');if(mediaEl?.pause)mediaEl.pause();document.removeEventListener('keydown',escape);layer.remove()};
-  $('#dcTemplatePreviewClose').onclick=close;$('#dcTemplatePreviewCancel').onclick=close;layer.addEventListener('click',event=>{if(event.target===layer)close()});
-  $('#dcTemplatePreviewUse').onclick=()=>{close();const [label,action]=templateShopCta(normalizedTemplateShopProduct(templateShopProducts.find(item=>String(item.id)===String(product?.id))||product||{}));if(action==='preview')return;const card=$(`[data-shop-product="${CSS.escape(String(product?.id||''))}"]`),target=card?.querySelector(`[data-template-shop-action="${action}"]`);if(target)target.click();else notify(label)};
-  const mediaEl=$('#dcTemplatePreviewMedia'),caption=$('#dcTemplatePreviewCaption'),words=clip.words||[],sourceTime=source.timeBase==='source';
-  const paint=()=>{if(!caption)return;const raw=mediaEl?.tagName==='VIDEO'?Number(mediaEl.currentTime||0):0,local=Math.max(0,sourceTime?raw-Number(clip.startSec||0):raw);caption.innerHTML=templateShopCaptionHtml(words,style,local)||`<span>${esc(result?.product?.preview?.captionSample||'Style preview')}</span>`};
-  mediaEl?.addEventListener?.('timeupdate',paint);mediaEl?.addEventListener?.('loadedmetadata',()=>{if(mediaEl.tagName==='VIDEO'&&sourceTime&&Number(clip.startSec)>0){try{mediaEl.currentTime=Number(clip.startSec)}catch{}}paint()});paint();
-  document.addEventListener('keydown',escape);
-}
-
-function styleStudioLoad(template){
-  styleStudio.draft=clone(template);styleStudio.baseId=template.id||'';
-  styleStudio.history=[clone(template)];styleStudio.index=0;styleStudio.dirty=false;styleStudio.group='';styleStudio.menuOpen=false;
-}
-function styleStudioPush(){
-  styleStudio.history=styleStudio.history.slice(0,styleStudio.index+1);
-  styleStudio.history.push(clone(styleStudio.draft));
-  if(styleStudio.history.length>60)styleStudio.history.shift();
-  styleStudio.index=styleStudio.history.length-1;styleStudio.dirty=true;
-}
-function styleStudioSet(key,value){if(!styleStudio.draft)return;styleStudio.draft[key]=value;styleStudioPush()}
-function styleStudioUndo(){if(styleStudio.index<=0)return;styleStudio.index--;styleStudio.draft=clone(styleStudio.history[styleStudio.index]);styleStudio.dirty=true;renderTemplatesPage()}
-function styleStudioRedo(){if(styleStudio.index>=styleStudio.history.length-1)return;styleStudio.index++;styleStudio.draft=clone(styleStudio.history[styleStudio.index]);styleStudio.dirty=true;renderTemplatesPage()}
-function styleStudioRevert(){const base=(data()?.templates||[]).find(t=>t.id===styleStudio.baseId);if(!base)return;styleStudioLoad(base);renderTemplatesPage();notify('Reverted to the saved template')}
-
-function styleField(key,fallback){const value=styleStudio.draft?.[key];return value===undefined||value===null?fallback:value}
-function styleSeg(key,list){return `<div class="dc-style-seg" role="group">${list.map(([value,label])=>`<button type="button" data-style-seg="${esc(key)}" data-style-value="${esc(value)}" class="${String(styleField(key,''))===value?'on':''}">${esc(label)}</button>`).join('')}</div>`}
-function styleToggle(key,label,hint){return `<label class="dc-switch-row"><span><strong>${esc(label)}</strong><span>${esc(hint||'')}</span></span><input type="checkbox" data-style-key="${esc(key)}" data-style-type="bool" ${styleField(key,false)?'checked':''}></label>`}
-function styleColor(key,label){return `<label class="dc-style-ctl">${esc(label)}<input type="color" data-style-key="${esc(key)}" data-style-type="text" value="${esc(templateSafeColor(styleField(key,'#FFFFFF')))}"></label>`}
-function styleRange(key,label,min,max,step,suffix){const value=Number(styleField(key,min));return `<label class="dc-style-ctl wide">${esc(label)} <b data-style-out="${esc(key)}">${value}${esc(suffix||'')}</b><input type="range" min="${min}" max="${max}" step="${step}" data-style-key="${esc(key)}" data-style-type="number" data-style-suffix="${esc(suffix||'')}" value="${value}"></label>`}
-function styleSelect(key,label,list){return `<label class="dc-style-ctl">${esc(label)}<select data-style-key="${esc(key)}" data-style-type="text">${list.map(v=>{const [value,text]=Array.isArray(v)?v:[v,v];return `<option value="${esc(value)}" ${String(styleField(key,''))===String(value)?'selected':''}>${esc(text)}</option>`}).join('')}</select></label>`}
-function styleText(key,label,max){return `<label class="dc-style-ctl wide">${esc(label)}<input type="text" maxlength="${Number(max)||60}" data-style-key="${esc(key)}" data-style-type="text" value="${esc(styleField(key,''))}"></label>`}
-function styleRatio(){
-  const width=Number(styleField('width',1080)),height=Number(styleField('height',1920));
-  const ratio=width===height?'1:1':Math.abs(width/height-4/5)<.02?'4:5':width>height?'16:9':'9:16';
-  return `<div class="dc-style-seg dc-style-ratios" role="group" aria-label="Output aspect ratio">${[['9:16','9:16'],['4:5','4:5'],['1:1','1:1'],['16:9','16:9']].map(([value,label])=>`<button type="button" data-style-ratio="${value}" class="${ratio===value?'on':''}">${label}</button>`).join('')}</div>`;
-}
-function styleRatioLabel(d=styleStudio.draft||{}){
-  const width=Number(d.width||1080),height=Number(d.height||1920);
-  if(width===height)return '1:1';
-  if(Math.abs(width/height-4/5)<.02)return '4:5';
-  return width>height?'16:9':'9:16';
-}
-
-function styleGroupSummary(id){
-  const d=styleStudio.draft||{};
-  if(id==='details')return d.builtIn?'Built-in · save as a copy':'Custom · rename anytime';
-  if(id==='layout')return `${styleRatioLabel(d)} · ${templateFitLabel(d.fitMode)} · ${esc(String(d.filterPreset||'natural'))}`;
-  if(id==='captions')return `${templateModeLabel(d.captionMode)} · ${esc(String(d.captionFont||'Default'))}`;
-  if(id==='headline')return d.hookEnabled?`On · ${Number(d.hookDuration||0)}s`:'Off';
-  if(id==='framing')return d.smartFramingEnabled?`Tracking · ${esc(String(d.smartFramingBias||'auto'))}`:'Off';
-  if(id==='overlay')return `${d.watermark?esc(shortText(d.watermark,14)):'No mark'}${d.brandLineEnabled?' · accent':''}`;
-  if(id==='audio')return `${d.voiceEnhance?'Voice enhanced':'Raw voice'} · music ${Number(data()?.musicSettings?.volumePercent||13)}%`;
-  return '';
-}
-function styleGroupControls(id){
-  if(id==='details')return `${styleText('name','Template name',70)}${styleText('description','Description',120)}<p class="dc-style-hint">Give the template a clear name so it is easy to choose from the clip editor. Editing a built-in template creates your own protected copy when you save.</p>`;
-  if(id==='layout')return `<p class="dc-style-hint">Output ratio</p>${styleRatio()}${styleSeg('fitMode',[['contain','Fit whole frame'],['blur','Blurred sides'],['crop','Fill frame']])}
-    ${styleColor('frameBackground','Background')}${styleSelect('filterPreset','Colour look',[['natural','Natural'],['crisp','Crisp'],['warm','Warm'],['cinematic','Cinematic'],['monochrome','Monochrome']])}
-    ${styleRange('blurStrength','Side blur',0,60,1,'')}${styleRange('brightness','Brightness',-0.3,0.3,0.01,'')}${styleRange('contrast','Contrast',0.6,1.6,0.01,'')}${styleRange('saturation','Saturation',0,2,0.01,'')}${styleRange('sharpen','Sharpen',0,1.5,0.05,'')}${styleRange('vignette','Vignette',0,1,0.05,'')}`;
-  if(id==='captions')return `${styleSeg('captionMode',[['dynamic-stack','Word stack'],['word','Word highlight'],['phrase','Phrase']])}
-    ${styleSelect('captionFont','Main font',STYLE_FONTS)}${styleSelect('captionHighlightFont','Highlight font',STYLE_FONTS)}${styleSelect('captionArabicFont','Arabic font',STYLE_FONTS)}
-    ${styleColor('captionPrimary','Text')}${styleColor('captionHighlight','Highlight')}${styleColor('captionOutline','Outline')}${styleColor('captionBackground','Card')}
-    ${styleToggle('captionUppercase','Uppercase','Force capitals on every caption')}${styleToggle('captionHighlightItalic','Italic highlight','Slant the highlighted word')}
-    ${styleRange('captionFontSize','Size',40,160,1,'')}${styleRange('captionFontWeight','Weight',400,900,50,'')}${styleRange('captionOutlineWidth','Outline width',0,12,0.5,'')}${styleRange('captionShadow','Shadow',0,8,0.5,'')}
-    ${styleRange('captionBackgroundOpacity','Card opacity',0,100,1,'%')}${styleRange('captionLetterSpacing','Letter spacing',-4,12,0.5,'')}${styleRange('captionLineHeight','Line height',0.65,1.4,0.01,'')}
-    ${styleRange('captionPositionX','Horizontal',8,92,1,'%')}${styleRange('captionPositionY','Vertical',12,88,1,'%')}
-    ${styleRange('captionMaxWords','Words per card',1,8,1,'')}${styleRange('captionClearPause','Clear after pause',0,2,0.05,'s')}${styleRange('captionHoldSeconds','Hold',0,1,0.02,'s')}${styleRange('captionTimingOffsetMs','Timing offset',-400,400,10,'ms')}`;
-  if(id==='headline')return `${styleToggle('hookEnabled','Show auto headline','A short title card over the opening seconds')}
-    ${styleColor('hookColor','Text')}${styleColor('hookBackground','Background')}
-    ${styleRange('hookDuration','Duration',0.8,6,0.1,'s')}${styleRange('hookFontSize','Size',28,96,1,'')}${styleRange('hookBackgroundOpacity','Background opacity',0,100,1,'%')}`;
-  if(id==='framing')return `${styleToggle('smartFramingEnabled','Track the speaker','Keeps the face centred when filling 9:16')}
-    ${styleSelect('smartFramingBias','Bias',[['auto','Automatic'],['left','Left'],['center','Centre'],['right','Right']])}
-    ${styleRange('smartFramingPadding','Padding',0.05,0.45,0.01,'')}${styleRange('smartFramingZoom','Zoom',0.75,1.35,0.01,'')}${styleRange('smartFramingSmoothing','Smoothing',0,0.95,0.01,'')}
-    <p class="dc-style-hint">Only applies when the layout is set to fill 9:16.</p>`;
-  if(id==='overlay')return `${styleText('watermark','Watermark text',60)}
-    ${styleSelect('watermarkPosition','Position',[['top-left','Top left'],['top-center','Top centre'],['top-right','Top right'],['bottom-left','Bottom left'],['bottom-center','Bottom centre'],['bottom-right','Bottom right']])}
-    ${styleColor('watermarkColor','Colour')}${styleRange('watermarkOpacity','Opacity',0,100,1,'%')}${styleRange('watermarkFontSize','Size',14,64,1,'')}
-    ${styleToggle('brandLineEnabled','Accent line','A colour edge along the clip')}${styleColor('brandLineColor','Accent colour')}${styleRange('brandLineHeight','Accent thickness',2,24,1,'')}`;
-  if(id==='audio')return `${styleToggle('voiceEnhance','Enhance voice','Level and clean the speaker before mixing music under it')}
-    <div class="dc-style-audio-link"><div><strong>Background music</strong><span>${Number(data()?.musicSettings?.volumePercent||13)}% global mix · ${(data()?.tracks||[]).length} track${(data()?.tracks||[]).length===1?'':'s'} ready</span></div><button type="button" class="dc-btn secondary" data-dc-nav="music">Open Audio</button></div>
-    <p class="dc-style-hint">Voice enhancement belongs to this template. Music choice and volume stay global so a template never points to a deleted audio file.</p>`;
-  return '';
-}
-
-function styleTemplateCard(t,sourcePreview){
-  const editing=t.id===styleStudio.baseId, isDefault=data()?.selectedTemplate?.id===t.id;
-  const swatches=[t.captionPrimary,t.captionHighlight,t.watermarkColor,t.brandLineColor].filter(Boolean).slice(0,4);
-  const more=`<details class="dc-clip-more"><summary>More</summary><div><button data-duplicate-template="${esc(t.id)}">Duplicate</button>${isDefault?'':`<button data-use-template="${esc(t.id)}">Set as default</button>`}<button data-apply-template="${esc(t.id)}">Apply to existing clips</button>${t.builtIn?'':`<button class="danger" data-delete-template="${esc(t.id)}">Delete</button>`}</div></details>`;
-  return `<div class="dc-style-row ${editing?'is-editing':''}"><button type="button" class="dc-style-row-main" data-style-open="${esc(t.id)}" aria-label="Edit ${esc(t.name||'template')}"><span class="dc-style-row-art">${templatePreviewMarkup(t,sourcePreview)}</span><span class="dc-style-row-copy"><strong>${esc(shortText(t.name||'Untitled',26))}</strong><small>${t.builtIn?'Built-in':'Custom'}</small></span><span class="dc-style-swatches">${swatches.map(c=>`<i style="background:${esc(templateSafeColor(c))}"></i>`).join('')}</span>${isDefault?'<b class="dc-style-flag">Default</b>':''}</button>${more}</div>`;
-}
-
-async function styleStudioSave(){
-  const draft=styleStudio.draft;if(!draft)return;
-  const base=(data()?.templates||[]).find(t=>t.id===styleStudio.baseId);
-  const button=$('#dcStyleSave');if(button){button.disabled=true;button.textContent='Saving…'}
-  try{
-    let saved;
-    if(!base||base.builtIn){
-      // Built-in templates are editable:false on the server, so edits become
-      // a new custom template rather than a failed write.
-      const name=base&&draft.name===base.name?`${base.name} (custom)`:String(draft.name||'Custom template');
-      const result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...draft,name},select:true,propagate:false})});
-      saved=result.template;
-    }else{
-      const result=await callApi(`/api/templates/${encodeURIComponent(base.id)}`,{method:'PUT',body:JSON.stringify({template:draft,propagate:false})});
-      saved=result.template;
-    }
-    await refreshData();
-    if(saved)styleStudioLoad(saved);
-    notify('Template saved');
-  }catch(error){notify(error.message,'bad')}
-  renderTemplatesPage();
-}
-async function styleStudioCreate(){
-  const base=styleStudio.baseId||data()?.selectedTemplate?.id;
-  if(!base)return notify('No template to start from','bad');
-  try{
-    const result=await callApi(`/api/templates/${encodeURIComponent(base)}/duplicate`,{method:'POST',body:JSON.stringify({name:'New template',select:false})});
-    await refreshData();
-    if(result.template)styleStudioLoad(result.template);
-    notify('New template created');
-  }catch(error){notify(error.message,'bad')}
-  renderTemplatesPage();
-}
+function providerBadge(info){return !info.configured?'bad':info.enabled?'good':info.connected?'warn':''}
 
 function renderTemplatesPage(){
   const panel=$('#view-templates'),d=data();if(!panel||!d)return;
-  if(templateWorkspaceTab==='shop'){renderTemplateShop(panel,d);return}
-  const templates=d.templates||[];
-  if(!templates.length){panel.innerHTML='<div class="dc-qc-empty">Default styles could not be loaded.</div>';return}
-  const base=templates.find(t=>t.id===styleStudio.baseId)||d.selectedTemplate||templates[0];
-  if(!styleStudio.draft||!templates.some(t=>t.id===styleStudio.baseId))styleStudioLoad(base);
-  const draft=styleStudio.draft;
-  const sourcePreview=(d.projects||[]).map(project=>projectThumbUrl(project,[])).find(Boolean)||'';
-  const canUndo=styleStudio.index>0,canRedo=styleStudio.index<styleStudio.history.length-1;
-  const group=STYLE_GROUPS.find(g=>g[0]===styleStudio.group);
-  const isDefault=d.selectedTemplate?.id===base.id;
-  const ratio=styleRatioLabel(draft);
-  const stageWidth=ratio==='16:9'?'min(650px,72vw)':ratio==='1:1'?'min(440px,68vw)':ratio==='4:5'?'min(350px,64vw)':'min(300px,62vw)';
-
-  const rail=group
-    ?`<div class="dc-style-panel-head"><button type="button" id="dcStyleBack" class="dc-icon-btn dc-svg" aria-label="Back to all settings">${ICON.back}</button><div><small>${esc(group[3])}</small><strong>${esc(group[1])}</strong></div></div><div class="dc-style-panel" id="dcStyleControls">${styleGroupControls(group[0])}</div>`
-    :`<div class="dc-style-rail">${['Template','Style','Brand','Audio'].map(section=>`<small>${esc(section)}</small>${STYLE_GROUPS.filter(g=>g[3]===section).map(([id,label,icon])=>`<button type="button" data-style-group="${esc(id)}"><span>${ICON[icon]||ICON.style}</span><div><strong>${esc(label)}</strong><em>${esc(styleGroupSummary(id))}</em></div>${ICON.chevron}</button>`).join('')}`).join('')}</div>`;
-
-  panel.innerHTML=`<div class="dc-style-studio dc-v7-templates">
-    <div class="dc-v7-template-tabs dc-v7-template-tabs-editor" role="tablist"><button type="button" class="is-active" data-template-tab="mine">My Templates</button><button type="button" data-template-tab="shop">Template Shop</button></div>
-    <header class="dc-style-bar"><div class="dc-style-bar-title"><strong>Template editor</strong><span>Set the look once, then reuse it on any clip</span></div>
-      <div class="dc-style-picker ${styleStudio.menuOpen?'is-open':''}"><small>Template</small><button type="button" id="dcStyleSwitch" class="dc-style-switch" aria-haspopup="true" aria-expanded="${styleStudio.menuOpen?'true':'false'}"><span>${esc(shortText(base.name||'Untitled',26))}${isDefault?' · default':''}</span>${ICON.chevron}</button>${styleStudio.menuOpen?`<div class="dc-style-menu" id="dcStyleMenu"><button type="button" class="dc-style-new" id="dcStyleNewMenu"><span>+</span>New template</button><div class="dc-style-menu-list">${templates.map(t=>styleTemplateCard(t,sourcePreview)).join('')}</div></div>`:''}</div>
-      <div class="dc-style-bar-actions"><button type="button" class="dc-btn secondary dc-style-create" id="dcStyleNew">+ New</button>${isDefault?'<span class="dc-style-default-state">Default for new clips</span>':`<button type="button" class="dc-btn secondary" data-use-template="${esc(base.id)}">Set as default</button>`}<button type="button" class="dc-icon-btn dc-svg" id="dcStyleUndo" title="Undo" ${canUndo?'':'disabled'}>${ICON.undo}</button><button type="button" class="dc-icon-btn dc-svg" id="dcStyleRedo" title="Redo" ${canRedo?'':'disabled'}>${ICON.redo}</button><button type="button" class="dc-icon-btn dc-svg" id="dcStyleRevert" title="Discard changes" ${styleStudio.dirty?'':'disabled'}>${ICON.clock}</button><button class="dc-btn" id="dcStyleSave" ${styleStudio.dirty?'':'disabled'}>${styleStudio.dirty?'Save template':'Saved'}</button></div></header>
-    <div class="dc-style-scope"><span>${ICON.check}</span><p><strong>${isDefault?'This template is automatic for new clips.':'You are previewing a saved template.'}</strong> Existing clips stay unchanged unless you choose “Apply to existing clips” from the template menu.</p></div>
-    <div class="dc-style-workspace"><aside class="dc-style-side">${rail}</aside>
-      <main class="dc-style-stage"><div class="dc-style-stage-frame ratio-${ratio.replace(':','-')}" style="aspect-ratio:${Number(draft.width||1080)}/${Number(draft.height||1920)};width:${stageWidth}">${styleStageInner(sourcePreview)}</div><p class="dc-style-stage-note">${esc(ratio)} preview · drag the caption to move it · drag its bottom-right corner to resize</p></main></div>
-  </div>`;
-
-  $('#dcStyleSwitch')?.addEventListener('click',event=>{event.stopPropagation();styleStudio.menuOpen=!styleStudio.menuOpen;renderTemplatesPage()});
-  $$('[data-template-tab]',panel).forEach(button=>button.addEventListener('click',()=>{templateWorkspaceTab=button.dataset.templateTab;renderTemplatesPage()}));
-  if(styleStudio.menuOpen){
-    // Close on an outside click or Escape, the way every other menu here does.
-    const dismiss=event=>{if(event.target.closest?.('.dc-style-picker'))return;styleStudio.menuOpen=false;document.removeEventListener('click',dismiss);renderTemplatesPage()};
-    const escape=event=>{if(event.key!=='Escape')return;styleStudio.menuOpen=false;document.removeEventListener('keydown',escape);renderTemplatesPage()};
-    setTimeout(()=>{document.addEventListener('click',dismiss);document.addEventListener('keydown',escape)},0);
-  }
-  $('#dcStyleUndo')?.addEventListener('click',styleStudioUndo);
-  $('#dcStyleRedo')?.addEventListener('click',styleStudioRedo);
-  $('#dcStyleRevert')?.addEventListener('click',styleStudioRevert);
-  $('#dcStyleSave')?.addEventListener('click',styleStudioSave);
-  $('#dcStyleNew')?.addEventListener('click',styleStudioCreate);
-  $('#dcStyleNewMenu')?.addEventListener('click',styleStudioCreate);
-  $('#dcStyleBack')?.addEventListener('click',()=>{styleStudio.group='';renderTemplatesPage()});
-  $$('[data-style-group]',panel).forEach(button=>button.addEventListener('click',()=>{styleStudio.group=button.dataset.styleGroup;renderTemplatesPage()}));
-  $$('[data-style-open]',panel).forEach(button=>button.addEventListener('click',()=>{const next=templates.find(t=>t.id===button.dataset.styleOpen);if(next){styleStudioLoad(next);styleStudio.menuOpen=false;renderTemplatesPage()}}));
-  $$('[data-style-seg]',panel).forEach(button=>button.addEventListener('click',()=>{styleStudioSet(button.dataset.styleSeg,button.dataset.styleValue);renderTemplatesPage()}));
-  $$('[data-style-ratio]',panel).forEach(button=>button.addEventListener('click',()=>{
-    const size={'9:16':[1080,1920],'4:5':[1080,1350],'1:1':[1080,1080],'16:9':[1920,1080]}[button.dataset.styleRatio];
-    if(!size)return;styleStudio.draft.width=size[0];styleStudio.draft.height=size[1];styleStudioPush();renderTemplatesPage();
-  }));
-  bindStyleCaptionDrag(sourcePreview);
-  const controls=$('#dcStyleControls');
-  if(controls){
-    // Ranges repaint the preview live without re-rendering the panel, so the
-    // slider keeps focus while dragging.
-    controls.addEventListener('input',event=>{
-      const key=event.target.dataset.styleKey;if(!key)return;
-      const type=event.target.dataset.styleType;
-      const value=type==='number'?Number(event.target.value):type==='bool'?event.target.checked:event.target.value;
-      styleStudio.draft[key]=value;styleStudio.dirty=true;
-      const out=controls.querySelector(`[data-style-out="${CSS.escape(key)}"]`);
-      if(out)out.textContent=`${value}${event.target.dataset.styleSuffix||''}`;
-      styleStudioPaint(sourcePreview);
-    });
-    controls.addEventListener('change',event=>{if(event.target.dataset.styleKey)styleStudioPush()});
-  }
+  const templates=d.templates||[], selected=d.selectedTemplate||templates[0]||{};
+  const custom=templates.filter(t=>!t.builtIn).length;
+  const bulkAction=(d.clips||[]).length?`<div class="dc-studio-actions"><button class="dc-btn secondary" data-apply-template="${esc(selected.id||'')}">Apply default to clips</button></div>`:'';
+  panel.innerHTML=`<div class="dc-manage-page"><section class="dc-studio-hero"><div><span class="dc-manage-kicker">${ICON.style} Studio templates</span><h1>One look for every clip.</h1><p>Choose the default caption style here. Open a real clip when you want to make detailed visual changes.</p></div>${bulkAction}</section><div class="dc-studio-strip"><div class="dc-studio-stat"><strong>${templates.length}</strong><span>saved templates</span></div><div class="dc-studio-stat"><strong>${custom}</strong><span>custom looks</span></div><div class="dc-studio-stat"><strong>${esc(selected.name||'None')}</strong><span>current default</span></div></div><div class="dc-template-grid">${templates.map(templateCard).join('')||`<div class="dc-empty"><strong>No templates yet</strong><span>Save a look from the editor to reuse it here.</span></div>`}</div></div>`;
   requestAnimationFrame(()=>animatePanel(panel));
 }
-function styleStageInner(sourcePreview){
-  return `${templatePreviewMarkup(styleStudio.draft,sourcePreview,true)}<i class="dc-style-guide v" data-style-guide="v"></i><i class="dc-style-guide h" data-style-guide="h"></i>`;
+function templateCard(t){
+  const selected=DATA?.selectedTemplate?.id===t.id;
+  const more=`<details class="dc-clip-more"><summary>More</summary><div><button data-duplicate-template="${esc(t.id)}">Duplicate template</button>${!t.builtIn?`<button class="danger" data-delete-template="${esc(t.id)}">Delete template</button>`:''}</div></details>`;
+  return `<article class="dc-template-card"><div class="dc-template-preview"><div class="dc-template-caption"><span>${esc(t.caption?.highlightStyle==='serif-italic'?'Modern':'BOLD')}</span><br><span style="font-size:.72em;color:${esc(t.caption?.highlightColor||'#fff')}">${esc(shortText(t.name||'Template',18))}</span></div></div><div class="dc-template-card-body"><div style="display:flex;align-items:center;gap:8px;justify-content:space-between"><h3>${esc(t.name||'Template')}</h3><span class="dc-pill ${selected?'good':''}">${selected?'Current':t.builtIn?'Built-in':'Custom'}</span></div><p>${esc(selected?'This look is used for new clips.':t.builtIn?'A ready-to-use DeenClipped caption style.':'Your reusable custom caption style.')}</p><div class="dc-template-actions simple"><button class="dc-btn" data-use-template="${esc(t.id)}" ${selected?'disabled':''}>${selected?'Current template':'Use template'}</button>${more}</div></div></article>`;
 }
-function bindStyleCaptionDrag(sourcePreview){
-  const frame=$('.dc-style-stage-frame');if(!frame||!styleStudio.draft)return;
-  const caption=frame.querySelector('.dc-style-caption');if(!caption)return;
-  const guideV=frame.querySelector('[data-style-guide="v"]'),guideH=frame.querySelector('[data-style-guide="h"]');
-  // Same snap behaviour as the clip editor so the two surfaces feel identical.
-  const snapPoints=[25,50,75],snapDistance=2.5;
-  const showGuide=(guide,value,vertical)=>{if(!guide)return;guide.classList.add('show');guide.style[vertical?'left':'top']=`${value}%`};
-  const hideGuides=()=>{guideV?.classList.remove('show');guideH?.classList.remove('show')};
-  const previewSize=value=>clamp(Number(value||82)/3.1,20,38);
-  let drag=null;
-  caption.onpointerdown=event=>{
-    if(event.button!==undefined&&event.button!==0)return;
-    const box=caption.getBoundingClientRect(),rect=frame.getBoundingClientRect();
-    const mode=(event.clientX>=box.right-20&&event.clientY>=box.bottom-20)?'resize':'move';
-    drag={mode,pointerId:event.pointerId,startClientX:event.clientX,startClientY:event.clientY,
-      startX:Number(styleStudio.draft.captionPositionX??50),startY:Number(styleStudio.draft.captionPositionY??58),
-      startSize:Number(styleStudio.draft.captionFontSize||96),rect,x:Number(styleStudio.draft.captionPositionX??50),
-      y:Number(styleStudio.draft.captionPositionY??58),size:Number(styleStudio.draft.captionFontSize||96)};
-    caption.classList.add(mode==='resize'?'is-resizing':'is-dragging');
-    caption.setPointerCapture?.(event.pointerId);event.preventDefault();event.stopPropagation();
-  };
-  caption.onpointermove=event=>{
-    if(!drag||event.pointerId!==drag.pointerId)return;
-    if(drag.mode==='resize'){
-      const delta=(event.clientX-drag.startClientX+event.clientY-drag.startClientY)/2;
-      drag.size=clamp(drag.startSize+delta/Math.max(1,drag.rect.height)*260,24,160);
-      caption.style.fontSize=`${previewSize(drag.size)}px`;
-      return;
-    }
-    let x=drag.startX+(event.clientX-drag.startClientX)/Math.max(1,drag.rect.width)*100;
-    let y=drag.startY+(event.clientY-drag.startClientY)/Math.max(1,drag.rect.height)*100;
-    hideGuides();
-    for(const point of snapPoints){if(Math.abs(x-point)<=snapDistance){x=point;showGuide(guideV,point,true);break}}
-    for(const point of snapPoints){if(Math.abs(y-point)<=snapDistance){y=point;showGuide(guideH,point,false);break}}
-    drag.x=clamp(x,8,92);drag.y=clamp(y,12,88);
-    caption.style.left=`${drag.x}%`;caption.style.top=`${drag.y}%`;
-  };
-  const finish=event=>{
-    if(!drag||(event&&event.pointerId!==undefined&&event.pointerId!==drag.pointerId))return;
-    const {mode,x,y,size}=drag;drag=null;hideGuides();
-    caption.classList.remove('is-dragging','is-resizing');
-    // One history entry per gesture, not one per pointermove.
-    if(mode==='resize')styleStudio.draft.captionFontSize=Math.round(size);
-    else{styleStudio.draft.captionPositionX=Math.round(x);styleStudio.draft.captionPositionY=Math.round(y)}
-    styleStudioPush();
-    renderTemplatesPage();
-  };
-  caption.onpointerup=finish;caption.onpointercancel=finish;
-}
-function styleStudioPaint(sourcePreview){
-  const frame=$('.dc-style-stage-frame');if(!frame||!styleStudio.draft)return;
-  frame.innerHTML=styleStageInner(sourcePreview);
-  bindStyleCaptionDrag(sourcePreview);
-  const save=$('#dcStyleSave');if(save){save.disabled=false;save.textContent='Save template'}
-  const revert=$('#dcStyleRevert');if(revert)revert.disabled=false;
-}
-function templateSafeColor(value,fallback='#FFFFFF'){return /^#[0-9A-F]{6}$/i.test(String(value||''))?String(value).toUpperCase():fallback}
-function templateRgba(value,opacity){const color=templateSafeColor(value,'#000000'),alpha=clamp(Number(opacity||0),0,100)/100;return `rgba(${parseInt(color.slice(1,3),16)},${parseInt(color.slice(3,5),16)},${parseInt(color.slice(5,7),16)},${alpha})`}
-function templateFontFamily(value){
-  const fonts={'Manrope':'Manrope, sans-serif','Roboto':'Roboto, sans-serif','Lato':'Lato, sans-serif','Noto Sans':'Noto Sans, sans-serif','Noto Serif':'Noto Serif, serif','Cantarell':'Cantarell, sans-serif','Play':'Play, sans-serif','Andika':'Andika, sans-serif','FreeSans':'FreeSans, sans-serif','FreeSerif':'FreeSerif, serif','Nimbus Sans':'Nimbus Sans, sans-serif','Nimbus Roman':'Nimbus Roman, serif','TeX Gyre Heros':'TeX Gyre Heros, sans-serif','TeX Gyre Adventor':'TeX Gyre Adventor, sans-serif','Liberation Sans':'Liberation Sans, sans-serif','Liberation Serif':'Liberation Serif, serif','DejaVu Sans':'DejaVu Sans, sans-serif','DejaVu Serif':'DejaVu Serif, serif','Amiri':'Amiri, serif','Scheherazade New':'Scheherazade New, serif','Noto Naskh Arabic':'Noto Naskh Arabic, serif','Noto Kufi Arabic':'Noto Kufi Arabic, sans-serif'};
-  return fonts[String(value||'')]||'Manrope, sans-serif';
-}
-function templateModeLabel(mode){return mode==='phrase'?'Phrase captions':mode==='word'?'Word highlight':'Dynamic word stack'}
-function templateFitLabel(mode){return mode==='crop'?'Full-frame crop':mode==='blur'?'Blurred background':'Full source visible'}
-function templatePreviewWords(mode){
-  if(mode==='phrase')return `<span>Faith grows through patient action.</span>`;
-  if(mode==='word')return `<span>Small acts build</span><em>real faith</em>`;
-  return `<span>STAY</span><em>CONSISTENT</em>`;
-}
-function templatePreviewMarkup(t,sourcePreview='',large=false){
-  const mode=['phrase','word','dynamic-stack'].includes(t.captionMode)?t.captionMode:'dynamic-stack';
-  const fit=['contain','blur','crop'].includes(t.fitMode)?t.fitMode:'contain';
-  const x=clamp(Number(t.captionPositionX??({left:24,center:50,right:76}[t.captionHorizontal]||50)),8,92),y=clamp(Number(t.captionPositionY??({top:26,middle:56,bottom:76}[t.captionPosition]||56)),12,88);
-  const fontSize=clamp(Number(t.captionFontSize||82)/(large?3.1:4.8),large?20:14,large?38:26),weight=clamp(Number(t.captionFontWeight||800),400,900),outline=clamp(Number(t.captionOutlineWidth||4)/(large?3.2:4.8),0,3),shadow=clamp(Number(t.captionShadow||1),0,7);
-  const primary=templateSafeColor(t.captionPrimary),highlight=templateSafeColor(t.captionHighlight,primary),outlineColor=templateSafeColor(t.captionOutline,'#09090A'),background=templateRgba(t.captionBackground,t.captionBackgroundOpacity),lineHeight=clamp(Number(t.captionLineHeight||.9),.65,1.4),letter=clamp(Number(t.captionLetterSpacing||0),-4,12)/(large?2.2:3.2);
-  const filter={natural:'none',crisp:'contrast(1.08) saturate(1.08)',warm:'sepia(.15) saturate(1.12)',cinematic:'contrast(1.14) saturate(.84)',monochrome:'grayscale(1)',custom:'none'}[t.filterPreset]||'none';
-  const caption=templatePreviewWords(mode);
-  const watermarkPosition=['top-left','top-center','top-right','bottom-left','bottom-center','bottom-right'].includes(t.watermarkPosition)?t.watermarkPosition:'top-center';
-  const media=sourcePreview?`<img class="dc-style-phone-back" src="${authedUrl(sourcePreview)}" alt=""><img class="dc-style-phone-front" src="${authedUrl(sourcePreview)}" alt="Sample source preview">`:`<div class="dc-style-sample-scene"><i></i><b></b><em></em></div>`;
-  return `<div class="dc-style-phone ${large?'large':''}" data-fit="${esc(fit)}" data-caption-mode="${esc(mode)}" style="--style-bg:${templateSafeColor(t.frameBackground,'#000000')};--style-filter:${esc(filter)}">${media}<div class="dc-style-preview-shade"></div><span class="dc-style-sample-badge">Sample preview</span><span class="dc-style-watermark" data-position="${esc(watermarkPosition)}" style="color:${templateSafeColor(t.watermarkColor,'#FFFFFF')};opacity:${clamp(Number(t.watermarkOpacity||72),0,100)/100}">${esc(t.watermark||'DEENCLIPPED')}</span><div class="dc-style-caption ${esc(mode)}" style="--style-highlight:${highlight};left:${x}%;top:${y}%;font-family:${templateFontFamily(t.captionFont)};font-size:${fontSize}px;font-weight:${weight};letter-spacing:${letter}px;line-height:${lineHeight};color:${primary};-webkit-text-stroke:${outline}px ${outlineColor};text-shadow:0 ${shadow}px ${Math.max(2,shadow*3)}px #000;background:${background}">${caption}</div></div>`;
-}
-function openStyleEditorForClip(){const clip=[...(data()?.clips||[])].sort((a,b)=>Number(b.createdAt||b.renderedAt||0)-Number(a.createdAt||a.renderedAt||0))[0];if(!clip){go('home');return notify('Create a clip first, then turn its look into a reusable template')}openEditor(clip.id,'style')}
-async function selectStudioTemplate(id){if(!id)return notify('Choose a template first','bad');try{await callApi('/api/template',{method:'POST',body:JSON.stringify({id,propagate:false})});notify('Default template updated; existing clips were not changed');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
-async function applyStudioTemplate(id){if(!id)return notify('Choose a template first','bad');if(!confirm('Apply this template to every existing clip that can be re-rendered? This queues new renders; already-posted files are not changed.'))return;try{const r=await callApi('/api/templates/apply-all',{method:'POST',body:JSON.stringify({templateId:id})});notify(`Queued ${r.queued||0} clips for template update`);await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
-async function duplicateStudioTemplate(id){const base=(DATA?.templates||[]).find(t=>t.id===id);try{const r=await callApi(`/api/templates/${encodeURIComponent(id)}/duplicate`,{method:'POST',body:JSON.stringify({name:`${base?.name||'Template'} Copy`,select:false})});notify('Custom template created without changing your default');await refreshData();if(r.template)styleStudioLoad(r.template);renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
-async function deleteStudioTemplate(id){if(!id)return;if(!confirm('Delete this custom template? Existing rendered videos remain unchanged.'))return;try{await callApi(`/api/templates/${encodeURIComponent(id)}`,{method:'DELETE'});notify('Custom template deleted');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
-function insightHookScore(clip){
-  const breakdown=clip?.scoreBreakdown||clip?.quality?.scoreBreakdown||{};
-  const value=breakdown.hook??breakdown.openingStrength??clip?.hookScore;
-  return Number.isFinite(Number(value))?clamp(Number(value),0,100):null;
-}
-function insightCreatedAt(clip){return Number(clip?.addedAt||clip?.postedAt||clip?.readyAt||clip?.scheduledAt||0)}
-function insightTrendMarkup(clips){
-  const ranked=[...clips].filter(clip=>Number.isFinite(Number(clip.score))).sort((a,b)=>insightCreatedAt(a)-insightCreatedAt(b));
-  if(!ranked.length)return `<div class="dc-insight-empty-chart"><span>${ICON.analytics}</span><strong>Your quality trend will appear here</strong><p>Generate clips to compare their workspace scores over time.</p></div>`;
-  const points=ranked.slice(-12),width=700,height=210,padX=24,padY=22,step=points.length>1?(width-padX*2)/(points.length-1):0;
-  const coords=points.map((clip,index)=>({clip,x:padX+index*step,y:height-padY-clamp(Number(clip.score||0),0,100)/100*(height-padY*2)}));
-  const polyline=coords.map(point=>`${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
-  const average=Math.round(points.reduce((sum,point)=>sum+Number(point.clip.score||0),0)/points.length);
-  const areaPath=`M ${coords[0].x} ${height-padY} L ${coords.map(point=>`${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' L ')} L ${coords.at(-1).x} ${height-padY} Z`;
-  return `<div class="dc-insight-chart-head"><div><strong>Workspace quality trend</strong><span>Latest ${points.length} scored clip${points.length===1?'':'s'} · not social view data</span></div><b>${average}<small>average</small></b></div><svg class="dc-insight-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Clip quality scores over time"><defs><linearGradient id="dcInsightFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e4ba68" stop-opacity=".28"/><stop offset="1" stop-color="#e4ba68" stop-opacity="0"/></linearGradient></defs><path d="${areaPath}" fill="url(#dcInsightFill)"/><polyline points="${polyline}" fill="none" stroke="#e4ba68" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${coords.map((point,index)=>`<circle cx="${point.x}" cy="${point.y}" r="${index===coords.length-1?6:4}" fill="#0c0d10" stroke="#f0c979" stroke-width="3"><title>${esc(shortText(point.clip.title||'Clip',48))}: ${Math.round(Number(point.clip.score||0))}/100</title></circle>`).join('')}</svg>`;
-}
-function insightTopClipRow(clip,index){
-  const hook=insightHookScore(clip),thumb=clip.thumbUrl?`<img src="${authedUrl(clip.thumbUrl)}" alt="">`:`<span>${ICON.play}</span>`;
-  return `<button class="dc-insight-top-row" type="button" data-edit-video-clip="${esc(clip.id)}"><i>${index+1}</i><span class="dc-insight-top-thumb">${thumb}</span><span><strong>${esc(shortText(clip.title||'Untitled clip',55))}</strong><small>${esc(labTopic(clip))}${hook!==null?` · Hook ${Math.round(hook)}`:''}</small></span><b>${Math.round(Number(clip.score||0))}<small>score</small></b>${ICON.chevron}</button>`;
-}
+async function selectStudioTemplate(id){if(!id)return notify('Choose a template first','bad');try{await callApi('/api/template',{method:'POST',body:JSON.stringify({id})});notify('Template set as default');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
+async function applyStudioTemplate(id){if(!id)return notify('Choose a template first','bad');if(!confirm('Apply this template to all existing clips that can be re-rendered?'))return;try{const r=await callApi('/api/templates/apply-all',{method:'POST',body:JSON.stringify({templateId:id})});notify(`Queued ${r.queued||0} clips for template update`);await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
+async function duplicateStudioTemplate(id){const base=(DATA?.templates||[]).find(t=>t.id===id);try{const r=await callApi(`/api/templates/${encodeURIComponent(id)}/duplicate`,{method:'POST',body:JSON.stringify({name:`${base?.name||'Template'} Copy`})});notify('Template duplicated');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
+async function deleteStudioTemplate(id){if(!id)return;if(!confirm('Delete this custom template? Existing rendered videos remain unchanged.'))return;try{await callApi(`/api/templates/${encodeURIComponent(id)}`,{method:'DELETE'});notify('Template deleted');await refreshData();renderTemplatesPage()}catch(e){notify(e.message,'bad')}}
 function renderInsightsPage(){
   const panel=$('#view-insights'),d=data();if(!panel||!d)return;
-  const clips=d.clips||[],projects=d.projects||[];
-  const approvedOnly=clips.filter(c=>c.status==='approved').length,scheduled=clips.filter(c=>['scheduled','publishing'].includes(c.status)).length,waiting=clips.filter(c=>c.status==='waiting').length;
-  const posted=clips.filter(c=>c.status==='posted').length,avg=Math.round(clips.reduce((sum,c)=>sum+Number(c.score||0),0)/Math.max(1,clips.length));
-  const hooks=clips.map(insightHookScore).filter(value=>value!==null),strongHooks=hooks.filter(value=>value>=85).length;
-  const failedClips=clips.filter(c=>String(c.status||'').includes('failed')).length,failedProjects=projects.filter(p=>String(p.status||'').includes('failed')).length;
-  const top=[...clips].filter(c=>Number.isFinite(Number(c.score))).sort((a,b)=>Number(b.score||0)-Number(a.score||0)).slice(0,3);
-  const topics=new Map();clips.forEach(clip=>{const topic=labTopic(clip);topics.set(topic,(topics.get(topic)||0)+1)});
-  const themeRows=[...topics.entries()].sort((a,b)=>b[1]-a[1]).slice(0,4),largestTheme=Math.max(1,...themeRows.map(([,count])=>count));
-  const connected=connectedPlatformCount(d),attention=failedClips+failedProjects;
-  const next=waiting?{icon:ICON.review,title:`Review ${waiting} waiting clip${waiting===1?'':'s'}`,copy:'Approve the strongest grounded clips before choosing a posting slot.',action:'review',label:'Open Review'}
-    :attention?{icon:ICON.warning,title:`Resolve ${attention} failed item${attention===1?'':'s'}`,copy:'Open the affected project or clip and retry only after its error is clear.',action:'projects',label:'Open Projects'}
-    :!connected?{icon:ICON.social,title:'Connect your first publishing destination',copy:'Channel data is not connected yet, so this screen deliberately shows workspace signals only.',action:'publishing',label:'Open Channels'}
-    :{icon:ICON.lab,title:'Ask AI Director what to publish next',copy:'Use your ranked clips, grounded hooks and library themes to choose the next move.',action:'lab',label:'Open AI Director'};
-  panel.classList.add('dc-v7-insights');
-  panel.innerHTML=`<div class="dc-manage-page dc-insights-page"><section class="dc-v7-page-title"><div><h1>Insights</h1><p>Understand what makes your strongest clips work.</p></div><span class="dc-insight-source">${ICON.analytics}<b>Workspace signals</b><small>${connected?`${connected} publishing destination${connected===1?'':'s'} connected · social performance not imported`:'No social analytics connected'}</small></span></section>
-    <div class="dc-studio-strip"><div class="dc-studio-stat"><strong>${clips.length}</strong><span>clips generated</span></div><div class="dc-studio-stat"><strong>${avg}</strong><span>average quality score</span></div><div class="dc-studio-stat"><strong>${hooks.length?Math.round(strongHooks/hooks.length*100):0}%</strong><span>strong measured hooks</span></div><div class="dc-studio-stat"><strong>${posted}</strong><span>posted clips</span></div></div>
-    <div class="dc-insight-dashboard"><section class="dc-insight-panel dc-insight-trend">${insightTrendMarkup(clips)}</section><section class="dc-insight-panel dc-insight-ranked"><header><div><span>Ranked by workspace score</span><h2>Top clips</h2></div><button class="dc-text-action" data-dc-nav="review">View all →</button></header>${top.length?top.map(insightTopClipRow).join(''):`<div class="dc-insight-empty-small"><strong>No ranked clips yet</strong><span>Create clips to build this list.</span></div>`}</section>
-      <section class="dc-insight-panel dc-insight-themes"><header><div><span>Transcript themes</span><h2>Your content mix</h2></div><b>${themeRows.length} theme${themeRows.length===1?'':'s'}</b></header>${themeRows.length?themeRows.map(([topic,count])=>`<div><span>${esc(topic)}</span><i><em style="width:${Math.round(count/largestTheme*100)}%"></em></i><b>${count}</b></div>`).join(''):`<div class="dc-insight-empty-small"><strong>No themes yet</strong><span>Topics are derived only from your clip text.</span></div>`}<footer>Based on titles, descriptions and transcript wording—not audience demographics.</footer></section>
-      <section class="dc-insight-panel dc-insight-next"><span>${next.icon}</span><div><small>Recommended next</small><h2>${esc(next.title)}</h2><p>${esc(next.copy)}</p><button class="dc-btn" data-dc-nav="${esc(next.action)}">${esc(next.label)}</button></div></section></div>
-    <section class="dc-insight-health"><div><strong>Workflow health</strong><span>Clear lifecycle counts, kept separate from quality percentages.</span></div>${qualityRow('Waiting review',waiting,clips.length)}${qualityRow('Approved only',approvedOnly,clips.length)}${qualityRow('Scheduled / publishing',scheduled,clips.length)}${qualityRow('Failed clips',failedClips,clips.length)}${qualityRow('Failed projects',failedProjects,projects.length)}</section></div>`;
+  const clips=d.clips||[], projects=d.projects||[];
+  const approved=clips.filter(c=>['approved','scheduled','publishing','posted'].includes(c.status)).length;
+  const waiting=clips.filter(c=>c.status==='waiting').length;
+  const avg=Math.round(clips.reduce((a,c)=>a+Number(c.score||0),0)/Math.max(1,clips.length));
+  const posted=clips.filter(c=>c.status==='posted').length;
+  const hookStrong=clips.filter(c=>Number(c.hookScore||c.score||0)>=85).length;
+  const failed=clips.filter(c=>String(c.status||'').includes('failed')).length + projects.filter(p=>String(p.status||'').includes('failed')).length;
+  const insightAction=clips.length?`<div class="dc-studio-actions"><button class="dc-btn" data-dc-nav="review">Review clips</button></div>`:`<div class="dc-studio-actions"><button class="dc-btn" data-dc-nav="home">Create clips</button></div>`;
+  panel.innerHTML=`<div class="dc-manage-page"><section class="dc-studio-hero"><div><span class="dc-manage-kicker">${ICON.analytics} Studio insights</span><h1>Clip quality before social analytics.</h1><p>Until TikTok and Instagram performance data is connected, this page focuses on the signals DeenClipped already knows: scores, approvals, failed jobs and publishing readiness.</p></div>${insightAction}</section><div class="dc-studio-strip"><div class="dc-studio-stat"><strong>${clips.length}</strong><span>clips generated</span></div><div class="dc-studio-stat"><strong>${avg}</strong><span>average score</span></div><div class="dc-studio-stat"><strong>${approved}</strong><span>approved / scheduled</span></div><div class="dc-studio-stat"><strong>${posted}</strong><span>posted clips</span></div></div><div class="dc-insight-grid"><section class="dc-insight-panel"><h2>Quality signals</h2>${qualityRow('Strong hooks',hookStrong,clips.length)}${qualityRow('Waiting review',waiting,clips.length)}${qualityRow('Approved flow',approved,clips.length)}${qualityRow('Needs attention',failed,Math.max(1,failed+clips.length))}</section><section class="dc-insight-panel"><h2>Best next actions</h2><div class="dc-studio-roadmap"><div class="dc-road-step"><span>${ICON.review}</span><div><strong>Approve the strongest clips</strong><em>${waiting} clips are waiting in Clip Review.</em></div></div><div class="dc-road-step"><span>${ICON.style}</span><div><strong>Keep one template live</strong><em>${esc(d.selectedTemplate?.name||'No template selected')}</em></div></div><div class="dc-road-step"><span>${ICON.social}</span><div><strong>Connect channels</strong><em>${connectedPlatformCount(d)} publishing destinations connected.</em></div></div></div></section></div></div>`;
   requestAnimationFrame(()=>animatePanel(panel));
 }
 function qualityRow(label,value,total){const pct=Math.max(0,Math.min(100,Math.round(Number(value||0)/Math.max(1,Number(total||1))*100)));return `<div class="dc-quality-row"><span>${esc(label)}</span><div class="dc-quality-bar"><i style="width:${pct}%"></i></div><b>${pct}%</b></div>`}
 function connectedPlatformCount(d){const providers=d.social?.providers||{};return ['youtube','tiktok','instagram','facebook'].filter(p=>providerInfo(p).connected||providers[p]?.connected).length}
-function publishingClipGroups(d){
-  const clips=d.clips||[];
-  return {
-    queue:clips.filter(c=>['approved','ready','publish_failed'].includes(c.status)),
-    scheduled:clips.filter(c=>['scheduled','publishing'].includes(c.status)).sort((a,b)=>Number(a.scheduledAt||Infinity)-Number(b.scheduledAt||Infinity)),
-    posted:clips.filter(c=>c.status==='posted').sort((a,b)=>Number(b.postedAt||b.updatedAt||0)-Number(a.postedAt||a.updatedAt||0))
-  };
-}
-function publishingProvidersForClip(clip,providerInfos){
-  const explicit=(clip.targets||[]).map(target=>typeof target==='string'?target:target?.provider).filter(Boolean);
-  const enabled=providerInfos.filter(info=>info.connected&&info.enabled).map(info=>info.provider);
-  const connected=providerInfos.filter(info=>info.connected).map(info=>info.provider);
-  const keys=[...new Set(explicit.length?explicit:enabled.length?enabled:connected)];
-  return keys.length?keys:['youtube','tiktok','instagram','facebook'];
-}
-function publishingWhen(clip,tab){
-  const value=tab==='posted'?(clip.postedAt||clip.updatedAt):clip.scheduledAt;
-  if(!value)return {primary:tab==='queue'?'Ready now':tab==='posted'?'Published':'Not scheduled',secondary:tab==='queue'?'Choose when to publish':'—'};
-  const date=new Date(Number(value));
-  if(Number.isNaN(date.getTime()))return {primary:statusName(clip.status),secondary:'—'};
-  return {
-    primary:new Intl.DateTimeFormat('en-AU',{weekday:'short',day:'numeric',month:'short'}).format(date),
-    secondary:new Intl.DateTimeFormat('en-AU',{hour:'2-digit',minute:'2-digit'}).format(date)
-  };
-}
-function publishingRow(clip,tab,providerInfos,projects){
-  const providers=publishingProvidersForClip(clip,providerInfos),when=publishingWhen(clip,tab);
-  const project=projects.find(item=>item.id===clip.projectId);
-  const source=projectDisplayTitle(project||{})||'DeenClipped project';
-  const thumb=clip.thumbUrl?`<img src="${authedUrl(clip.thumbUrl)}" alt="${esc(clip.title||'Clip')} thumbnail">`:ICON.play;
-  const brands=providers.slice(0,3).map(key=>`<span class="dc-publish-brand ${esc(key)} ${providerInfos.find(info=>info.provider===key)?.connected?'on':''}" title="${esc(providerTitle(key))}">${socialSvg(key)}</span>`).join('');
-  const more=providers.length>3?`<span class="dc-publish-brand-more">+${providers.length-3}</span>`:'';
-  let primary='';
-  if(tab==='queue')primary=`${publishingButton(clip.status==='publish_failed'?'Retry post':'Post now',`data-post-clip="${esc(clip.id)}"`,'primary')}${publishingButton('Schedule',`data-schedule-clip="${esc(clip.id)}"`,'secondary')}`;
-  else if(tab==='scheduled')primary=clip.status==='publishing'?`<button class="dc-btn secondary" disabled>Sending…</button>`:publishingButton('Post now',`data-post-clip="${esc(clip.id)}"`,'primary');
-  const score=Math.round(Number(clip.score||0));
-  return `<article class="dc-publish-row">
-    <div class="dc-publish-clip"><button class="dc-publish-thumb ${clip.thumbUrl?'':'empty'}" type="button" data-edit-style-clip="${esc(clip.id)}">${thumb}<span>${formatDuration(clip.durationMs)}</span></button><div class="dc-publish-copy"><strong>${esc(shortText(clip.title||'Untitled clip',64))}</strong><span>${esc(shortText(source,48))}</span><span class="dc-publish-meta"><i class="${score>=85?'score':'attention'}">${score?`${score}/100`:'Needs score'}</i><i>${esc(statusName(clip.status))}</i></span></div></div>
-    <div class="dc-publish-when"><span>${ICON.clock}</span><div><b>${esc(when.primary)}</b><em>${esc(when.secondary)}</em></div></div>
-    <div class="dc-publish-brands">${brands}${more}</div>
-    <div class="dc-publish-actions">${primary}<button class="dc-btn secondary" data-download-clip="${esc(clip.id)}">Download</button><button class="dc-publish-more" type="button" data-edit-style-clip="${esc(clip.id)}" title="Open editor" aria-label="Open clip editor">•••</button></div>
-  </article>`;
-}
-function publishingConnection(info){
-  const state=!info.configured?'Setup needed':info.connected?'Connected':'Not connected';
-  const name=info.account?.name||providerTitle(info.provider);
-  return `<div class="dc-publish-connection"><span class="dc-publish-brand ${esc(info.provider)} ${info.connected?'on':''}">${socialSvg(info.provider)}</span><div><strong>${esc(providerTitle(info.provider))}</strong><small>${esc(info.connected?name:state)}</small><small class="dc-publish-connection-status"><i class="${info.connected?'on':''}"></i>${esc(state)}</small></div><button type="button" class="dc-publish-connection-action" data-dc-nav="publishing">${info.connected?'Manage':'Connect'}</button></div>`;
-}
-function publishingZoneOffset(date,timeZone){
-  const parts=new Intl.DateTimeFormat('en-US',{timeZone,hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}).formatToParts(date).reduce((out,part)=>{if(part.type!=='literal')out[part.type]=Number(part.value);return out},{});
-  return Date.UTC(parts.year,parts.month-1,parts.day,parts.hour%24,parts.minute,parts.second)-date.getTime();
-}
-function publishingWallToInstant(y,m,day,hh,mm,timeZone){
-  const guess=Date.UTC(y,m-1,day,hh,mm,0);let stamp=guess-publishingZoneOffset(new Date(guess),timeZone);stamp=guess-publishingZoneOffset(new Date(stamp),timeZone);return stamp;
-}
-function publishingScheduleSlots(d,days=5){
-  const zone=d.timezone||'Australia/Perth',parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).filter(part=>part.type!=='literal').map(part=>[part.type,Number(part.value)])),slots=[];
-  for(let offset=0;offset<days;offset++){
-    const base=new Date(Date.UTC(parts.year,parts.month-1,parts.day+offset)),y=base.getUTCFullYear(),m=base.getUTCMonth()+1,day=base.getUTCDate();
-    for(const time of d.postTimes||[]){const [hh,mm]=String(time).split(':').map(Number);if(!Number.isFinite(hh)||!Number.isFinite(mm))continue;slots.push({dayKey:`${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`,time,at:publishingWallToInstant(y,m,day,hh,mm,zone)})}
-  }
-  return slots;
-}
-function publishingSlotBoard(d,projects){
-  const slots=publishingScheduleSlots(d,publishingSlotDays),scheduled=(d.clips||[]).filter(clip=>Number(clip.scheduledAt)>0),now=Date.now();
-  const occupied=new Set(),clipFor=slot=>{const clip=scheduled.find(item=>!occupied.has(item.id)&&Math.abs(Number(item.scheduledAt)-slot.at)<90000);if(clip)occupied.add(clip.id);return clip};
-  const rows=slots.map(slot=>({slot,clip:clipFor(slot)})),nextOpen=rows.find(item=>!item.clip&&item.slot.at>=now),zone=d.timezone||'Australia/Perth';
-  if(!rows.length)return `<div class="dc-publish-empty"><div><div class="dc-empty-icon">${ICON.clock}</div><strong>No posting slots configured</strong><p>Add posting times to the server configuration, then approved clips will reserve them automatically.</p></div></div>`;
-  let currentDay='';
-  return `<div class="dc-publish-slot-tools"><div><strong>Automatic slot queue</strong><span>${esc(zone)} · approve a clip and it takes the next open time</span></div><div class="sched-range" aria-label="Schedule range"><button class="${publishingSlotDays===1?'on':''}" data-publish-slot-days="1">Today</button><button class="${publishingSlotDays===5?'on':''}" data-publish-slot-days="5">5 days</button><button class="${publishingSlotDays===14?'on':''}" data-publish-slot-days="14">2 weeks</button></div></div><div class="schedule-board">${rows.map(({slot,clip})=>{
-    let day='';
-    if(slot.dayKey!==currentDay){currentDay=slot.dayKey;const label=new Intl.DateTimeFormat('en-AU',{timeZone:zone,weekday:'long',day:'numeric',month:'long'}).format(new Date(slot.at));day=`<div class="board-day ${slot.dayKey===rows[0]?.slot.dayKey?'today':''}"><span class="code">${esc(label)}</span><span class="board-day-n">${(d.postTimes||[]).length} posting windows</span></div>`}
-    const isNext=!clip&&nextOpen?.slot.at===slot.at,project=clip?projects.find(item=>item.id===clip.projectId):null,source=clip?(projectDisplayTitle(project||{})||clip.projectTitle||'DeenClipped project'):'';
-    const media=clip?(clip.thumbUrl?`<img src="${authedUrl(clip.thumbUrl)}" alt="${esc(clip.title||'Clip')} thumbnail">`:ICON.play):`<span class="slot-open-icon">+</span>`;
-    const badges=clip?`<div class="slot-badges"><span class="safe-badge ${clip.musicVerified?'good':'bad'}">Music</span><span class="safe-badge ${clip.renderVerified?'good':'bad'}">Render</span><span class="safe-badge">${esc(statusName(clip.status))}</span></div>`:'';
-    const actions=clip?`${publishingButton('Post now',`data-post-clip="${esc(clip.id)}"`)}<button class="dc-btn secondary" data-download-clip="${esc(clip.id)}">Download</button><button class="dc-btn secondary" data-edit-style-clip="${esc(clip.id)}">Preview</button>`:`<span class="slot-status">${isNext?'Next available':'Available'}</span>`;
-    return `${day}<article class="slot-card ${clip?'':'open'} ${isNext?'next':''} ${slot.at<now?'past':''}"><div class="slot-time">${esc(slot.time)}</div><button class="slot-media ${clip?'':'empty'}" type="button" ${clip?`data-edit-style-clip="${esc(clip.id)}"`:''}>${media}</button><div class="slot-what"><div class="slot-title">${clip?esc(clip.title||'Untitled clip'):'Open posting slot'}</div><div class="slot-from">${clip?esc(source):isNext?'The next approved clip will be placed here':'Approve clips to fill the schedule automatically'}</div>${badges}</div><div class="slot-actions">${actions}</div></article>`;
-  }).join('')}</div>`;
-}
-function renderPublishingWorkspace(){
-  const panel=$('#view-schedule'),d=data();if(!panel||!d)return;
-  const groups=publishingClipGroups(d),providers=['youtube','tiktok','instagram','facebook'].map(providerInfo),projects=d.projects||[];
-  if(!['slots','queue','posted'].includes(publishingQueueTab))publishingQueueTab='slots';
-  const active=groups[publishingQueueTab]||[], connected=providers.filter(info=>info.connected).length;
-  const previewPool=[...groups.queue,...groups.scheduled,...groups.posted].filter(clip=>clip.thumbUrl).slice(0,2);
-  const access=publishingAccess();
-  const accessBanner=access.allowed?'':`<section class="dc-publish-access"><span>${ICON.billing}</span><div><strong>${esc(access.title)}</strong><p>${esc(access.copy)}</p></div><button class="dc-btn" data-open-billing>${esc(access.action)}</button></section>`;
-  const rows=active.length?active.map(clip=>publishingRow(clip,publishingQueueTab,providers,projects)).join(''):`<div class="dc-publish-empty"><div><div class="dc-empty-icon">${publishingQueueTab==='posted'?ICON.check:ICON.publish}</div><strong>${publishingQueueTab==='queue'?'Nothing waiting to publish':publishingQueueTab==='scheduled'?'No scheduled posts':'No published clips yet'}</strong><p>${publishingQueueTab==='queue'?'Approve a clip in Review and it will appear here, ready for posting or scheduling.':publishingQueueTab==='scheduled'?'Schedule an approved clip and its delivery time will show here.':'Published clips and their download links will stay easy to find here.'}</p><button class="dc-btn" data-dc-nav="review">Open Review</button></div></div>`;
-  const boardContent=publishingQueueTab==='slots'?`<div class="dc-publish-slot-wrap">${publishingSlotBoard(d,projects)}</div>`:`<div class="dc-publish-columns"><span>Clip</span><span>Publish time</span><span>Channels</span><span>Actions</span></div><div class="dc-publish-list">${rows}</div>`;
-  const previews=previewPool.length?previewPool.map(clip=>{const platform=publishingProvidersForClip(clip,providers)[0]||'youtube';return `<button class="dc-publish-preview" type="button" data-edit-style-clip="${esc(clip.id)}">${clip.thumbUrl?`<img src="${authedUrl(clip.thumbUrl)}" alt="${esc(clip.title||'Clip')} preview">`:''}<i class="dc-publish-preview-platform ${esc(platform)}">${socialSvg(platform)}</i><span>${esc(shortText(clip.title||'Clip',42))}</span></button>`}).join(''):`<div class="dc-publish-preview empty">${ICON.play}</div><div class="dc-publish-preview empty">${ICON.play}</div>`;
-  const nextClip=groups.scheduled[0]||groups.queue[0]||null,nextTab=groups.scheduled[0]?'scheduled':'queue',nextWhen=nextClip?publishingWhen(nextClip,nextTab):null;
-  const nextCard=nextClip?`<section class="dc-publish-side-card dc-publish-next"><div class="dc-publish-next-head"><span>${ICON.clock} Up next</span><span class="dc-pill ${nextTab==='scheduled'?'good':'warn'}">${nextTab==='scheduled'?'Scheduled':'Ready'}</span></div><div class="dc-publish-next-body"><div class="dc-publish-next-content"><button class="dc-publish-next-media" type="button" data-edit-style-clip="${esc(nextClip.id)}" aria-label="Preview ${esc(nextClip.title||'next clip')}"><span class="dc-publish-next-fallback">${ICON.play}</span>${nextClip.thumbUrl?`<img src="${authedUrl(nextClip.thumbUrl)}" alt="${esc(nextClip.title||'Scheduled clip')} thumbnail">`:''}<small>${formatDuration(nextClip.durationMs)}</small></button><div class="dc-publish-next-copy"><strong>${esc(shortText(nextClip.title||'Untitled clip',70))}</strong><span>${esc(nextWhen.primary)} · ${esc(nextWhen.secondary)}</span>${nextClip.projectTitle?`<em>${esc(shortText(nextClip.projectTitle,46))}</em>`:''}</div></div><div class="dc-publish-next-actions"><button class="dc-btn secondary" data-edit-style-clip="${esc(nextClip.id)}">Preview</button>${nextTab==='queue'?publishingButton('Schedule',`data-schedule-clip="${esc(nextClip.id)}"`):publishingButton('Post now',`data-post-clip="${esc(nextClip.id)}"`)}</div></div></section>`:`<section class="dc-publish-side-card dc-publish-next"><div class="dc-publish-next-head"><span>${ICON.clock} Up next</span><span class="dc-pill">Clear</span></div><div class="dc-publish-next-body"><strong>Your publishing queue is clear.</strong><span>Approve a clip and its next action will appear here.</span><div class="dc-publish-next-actions"><button class="dc-btn secondary" data-dc-nav="review">Open Review</button></div></div></section>`;
-  panel.innerHTML=`<div class="dc-publish-page">
-    <section class="dc-publish-hero"><div><span class="dc-publish-kicker">${ICON.publish} Publishing command centre</span><h1>Every clip, channel and posting window—in one view.</h1><p>Review the final look, choose the right channels, then post now or schedule for later. Nothing leaves your workspace without your approval.</p><div class="dc-publish-hero-actions"><button class="dc-btn secondary" data-dc-nav="review">Review clips</button><button class="dc-btn" data-dc-nav="publishing">Manage channels</button></div></div><div class="dc-publish-summary"><span class="ready"><b>${groups.queue.length}</b><em>ready</em></span><span class="scheduled"><b>${groups.scheduled.length}</b><em>scheduled</em></span><span class="posted"><b>${groups.posted.length}</b><em>posted</em></span></div></section>
-    ${accessBanner}<div class="dc-publish-layout"><section class="dc-publish-board"><div class="dc-publish-board-top"><div class="dc-publish-live"><span>${ICON.analytics}</span><div><strong>Live publishing queue</strong><small>${publishingQueueTab==='slots'?'Approve a clip and it moves straight into the next open slot':`${connected} of 4 channels connected · manual approval stays on`}</small></div></div><div class="dc-publish-board-tools"><span class="dc-publish-health ${connected?'ready':''}"><i></i>${connected?`${connected} channel${connected===1?'':'s'} ready`:'Connect a channel'}</span><button class="dc-btn secondary" data-dc-nav="publishing">Connections</button></div></div><nav class="dc-publish-tabs" aria-label="Publishing status"><button class="dc-publish-tab ${publishingQueueTab==='slots'?'on':''}" data-publish-tab="slots">Slots <b>${(d.postTimes||[]).length}</b></button><button class="dc-publish-tab ${publishingQueueTab==='queue'?'on':''}" data-publish-tab="queue">Publishing queue <b>${groups.queue.length}</b></button><button class="dc-publish-tab ${publishingQueueTab==='posted'?'on':''}" data-publish-tab="posted">Posted <b>${groups.posted.length}</b></button></nav>${boardContent}<div class="dc-publish-board-foot"><span>Want to post to more platforms?</span><button data-dc-nav="publishing">Connect more accounts →</button></div></section>
-      <aside class="dc-publish-side">${nextCard}<section class="dc-publish-side-card"><div class="dc-publish-side-head"><span>${ICON.social}</span><div><strong>Platform connections</strong><small>Your own accounts and pages.</small></div></div><div class="dc-publish-connection-list">${providers.map(publishingConnection).join('')}</div><button class="dc-btn secondary dc-publish-connect" data-dc-nav="publishing">＋ Connect more platforms</button></section><section class="dc-publish-side-card"><div class="dc-publish-side-head"><span>${ICON.play}</span><div><strong>Quick preview</strong><small>Check the final crop before posting.</small></div></div><div class="dc-publish-previews">${previews}</div></section></aside>
-    </div>
-  </div>`;
-  $$('.dc-publish-next-media img',panel).forEach(img=>img.addEventListener('error',()=>img.remove(),{once:true}));
-  requestAnimationFrame(()=>animatePanel(panel));
-}
 function renderConnections(){
   const panel=$('#view-publishing'),d=data();if(!panel||!d)return;
-  panel.classList.add('dc-v7-channels');
   const providers=['youtube','tiktok','instagram','facebook'].map(providerInfo);
   const connected=providers.filter(p=>p.connected).length, enabled=providers.filter(p=>p.enabled).length;
-  const automation=d.automationSettings||{},requiresManualReview=Boolean(automation.reviewBeforePosting);
-  const approvalCopy=requiresManualReview
-    ?'Every clip stays in Review until you approve it. Connected destinations receive only your approved or scheduled work.'
-    :automation.enabled
-      ?'Nothing publishes outside your saved approval rules. Verified clips that clear your score gates may move automatically; safety-flagged clips always wait for review.'
-      :'Automation is paused. Clips remain in Review until you approve and schedule them.';
-  const approvalMode=requiresManualReview||!automation.enabled?'Manual review':`Quality gates ${Number(automation.minimumScore||80)}+`;
-  const available=providers.filter(p=>p.configured&&!p.connected).length;
-  const reviewPromise=requiresManualReview?'Nothing posts without approval':automation.enabled?'Publishing follows your saved approval rules':'Nothing posts until you approve it';
-  panel.innerHTML=`<div class="dc-v7-channels-page"><section class="dc-v7-page-title"><div><h1>Channels</h1><p>Connect once, publish when you approve.</p></div></section><div class="dc-v7-channels-layout"><main><section class="dc-v7-channel-stats"><span>${ICON.check}<b>${connected}</b><small>Connected</small></span><span>${ICON.link}<b>${available}</b><small>Available</small></span><span>${ICON.clock}<b>${esc(approvalMode)}</b><small>Approval required</small></span></section><section class="dc-v7-channel-list">${providers.map(connectionCard).join('')}</section></main><aside class="dc-v7-channels-rail"><section class="dc-v7-approval-card"><header><h2>Approval & destinations</h2>${ICON.brand}</header><div class="dc-v7-approval-promise"><span>${ICON.brand}</span><div>${requiresManualReview?'<strong>Nothing posts without approval</strong>':`<strong>${esc(reviewPromise)}</strong>`}<p>${esc(approvalCopy)}</p></div></div><div class="dc-v7-destination-switches">${providers.map(p=>destinationControl(p)).join('')}</div><button class="dc-btn" id="dcSavePublishing">Save publishing rules</button></section><section class="dc-v7-channel-health"><h2>Channel health</h2>${providers.map(p=>`<div><span class="dc-social-logo ${esc(p.provider)}">${socialSvg(p.provider)}</span><b>${esc(providerTitle(p.provider))}</b><em class="${providerBadge(p)}"><i></i>${p.status?.lastTestError?'Needs attention':p.connected?'Ready':'Not connected'}</em></div>`).join('')}</section></aside></div></div>`;
+  const destinationSettings=connected?`<section class="dc-settings-panel"><h2>Active destinations</h2><p>Only connected channels appear here. TikTok uploads remain drafts for the creator to review in TikTok.</p><div class="dc-settings-form">${providers.filter(p=>p.connected).map(p=>`<label class="dc-switch-row"><span><strong>${esc(providerTitle(p.provider))}</strong><span>${esc(p.account?.name||'Connected account')}</span></span><input type="checkbox" id="dcPub_${esc(p.provider)}" ${p.enabled?'checked':''}></label>`).join('')}<button class="dc-btn wide" id="dcSavePublishing">Save active destinations</button></div></section>`:'';
+  panel.innerHTML=`<div class="dc-manage-page"><section class="dc-manage-hero"><div><span class="dc-manage-kicker">${ICON.social} Publishing hub</span><h1>Your channels, one approval flow.</h1><p>Connect each destination once. You still choose which clips are approved, scheduled or sent as drafts.</p></div><div class="dc-manage-metrics"><span><b>${connected}</b><em>connected</em></span><span><b>${enabled}</b><em>active</em></span><span><b>${d.directPublishingEnabled?'Ready':'Review'}</b><em>posting mode</em></span></div></section><div class="dc-manage-grid">${providers.map(connectionCard).join('')}</div>${destinationSettings}</div>`;
   if($('#dcSavePublishing'))$('#dcSavePublishing').onclick=savePublishingRules;
   requestAnimationFrame(()=>animatePanel(panel));
-}
-function destinationControl(info){
-  const base=`<label class="dc-switch-row wide"><span><strong>${esc(providerTitle(info.provider))}</strong><span>${esc(info.account?.name||'Connected account')}</span></span><input type="checkbox" id="dcPub_${esc(info.provider)}" ${info.enabled?'checked':''}></label>`;
-  if(info.provider!=='tiktok')return base;
-  const creator=info.account?.creatorInfo||{}, options=Array.isArray(creator.privacy_level_options)?creator.privacy_level_options:[];
-  const privacy=info.setting?.privacy||'SELF_ONLY';
-  const labels={SELF_ONLY:'Only me',MUTUAL_FOLLOW_FRIENDS:'Friends',FOLLOWER_OF_CREATOR:'Followers',PUBLIC_TO_EVERYONE:'Everyone'};
-  const choices=(options.length?options:['SELF_ONLY']).map(value=>`<option value="${esc(value)}" ${value===privacy?'selected':''}>${esc(labels[value]||value)}</option>`).join('');
-  return `${base}<div class="dc-tiktok-controls"><label>Privacy<select id="dcTikTokPrivacy">${choices}</select></label><label class="dc-switch-row"><span><strong>Allow comments</strong><span>${creator.comment_disabled?'Unavailable for this account':'Viewer comments on this post'}</span></span><input type="checkbox" id="dcTikTokComments" ${info.setting?.allowComments!==false&&!creator.comment_disabled?'checked':''} ${creator.comment_disabled?'disabled':''}></label><label class="dc-switch-row"><span><strong>Allow Duet</strong><span>${creator.duet_disabled?'Unavailable for this account':'Let viewers create Duets'}</span></span><input type="checkbox" id="dcTikTokDuet" ${info.setting?.allowDuet&&!creator.duet_disabled?'checked':''} ${creator.duet_disabled?'disabled':''}></label><label class="dc-switch-row"><span><strong>Allow Stitch</strong><span>${creator.stitch_disabled?'Unavailable for this account':'Let viewers create Stitches'}</span></span><input type="checkbox" id="dcTikTokStitch" ${info.setting?.allowStitch&&!creator.stitch_disabled?'checked':''} ${creator.stitch_disabled?'disabled':''}></label><p class="dc-tiktok-review-note">Posting as <b>${esc(info.account?.name||'TikTok creator')}</b>${creator.max_video_post_duration_sec?` · maximum ${esc(creator.max_video_post_duration_sec)} seconds`:''}. Test the connection again whenever TikTok options change.</p></div>`;
 }
 function connectionCard(info){
   const connectLabel=info.connected?'Reconnect':'Connect';
   const account=info.account?.name||'No account linked';
-  const state=info.enabled?'Active':info.connected?'Connected':info.configured?'Not connected':'Setup needed';
-  // Only surface a live health line when there is something real to report;
-  // a card that always carries a sentence is what made this page noisy.
-  const health=info.status.lastTestError?`<p class="dc-channel-health bad">${esc(shortError(info.status.lastTestError))}</p>`
-    :info.status.lastTestAt?`<p class="dc-channel-health">Checked ${esc(formatRelative(info.status.lastTestAt))}</p>`
-    :!info.configured?`<p class="dc-channel-health bad">Needs API keys in Render.</p>`:'';
   const secondary=info.connected?`<details class="dc-clip-more"><summary>More</summary><div><button data-social-test="${esc(info.connectProvider)}">Test connection</button><button class="danger" data-social-disconnect="${esc(info.connectProvider)}">Disconnect</button></div></details>`:'';
-  const sync=info.status.lastTestAt?formatRelative(info.status.lastTestAt):'Not checked yet';
-  const publishState=info.enabled?'On':'Off';
-  return `<article class="dc-v7-channel-row ${esc(info.provider)} ${info.connected?'is-connected':''}"><span class="dc-channel-logo dc-social-logo ${esc(info.provider)}">${socialSvg(info.provider)}</span><div class="dc-v7-channel-name"><strong>${esc(providerTitle(info.provider))}</strong><span>${esc(account)}</span></div><div class="dc-v7-channel-state"><b class="${providerBadge(info)}"><i></i>${info.status?.lastTestError?'Connection error':info.connected?'Connected':'Not connected'}</b><small>Last sync: ${esc(sync)}</small>${health}</div><div class="dc-v7-channel-publishing"><b class="${info.enabled?'good':''}">Publishing</b><small>${publishState}</small></div><button class="dc-btn secondary" data-social-connect="${esc(info.connectProvider)}" ${!info.configured?'disabled':''}>${info.connected?'Manage':connectLabel}</button>${secondary}</article>`;
+  return `<article class="dc-manage-card"><div class="dc-manage-card-top"><span class="dc-manage-logo dc-social-logo ${esc(info.provider)}">${socialSvg(info.provider)}</span><div class="dc-manage-copy"><strong>${esc(providerTitle(info.provider))}</strong><span>${esc(providerSummary(info))}</span></div><span class="dc-pill ${providerBadge(info)}">${info.enabled?'Active':info.connected?'Connected':info.configured?'Not connected':'Setup needed'}</span></div><div class="dc-manage-list"><div class="dc-manage-row"><div><strong>${esc(account)}</strong><span>${info.status.lastTestAt?`Checked ${formatRelative(info.status.lastTestAt)}`:info.status.lastTestError?`Connection issue: ${shortError(info.status.lastTestError)}`:info.connected?'Ready to test and publish.':'Connect to make this destination available.'}</span></div></div></div><div class="dc-manage-actions simple ${info.connected?'two':''}"><button class="dc-btn" data-social-connect="${esc(info.connectProvider)}" ${!info.configured?'disabled':''}>${connectLabel}</button>${secondary}</div></article>`;
 }
 async function beginSocialConnection(provider){try{const result=await callApi(`/api/social/${encodeURIComponent(provider)}/connect`,{method:'POST'});if(result.url)location.href=result.url;else notify('Connect URL was not returned','bad')}catch(e){notify(e.message,'bad')}}
 function connectSocial(provider){
@@ -4565,86 +2539,40 @@ async function testSocial(provider){try{await callApi(`/api/social/${encodeURICo
 async function disconnectSocial(provider){if(!confirm(`Disconnect ${provider}?`))return;try{await callApi(`/api/social/${encodeURIComponent(provider)}/disconnect`,{method:'POST'});notify('Disconnected');await refreshData();renderConnections()}catch(e){notify(e.message,'bad')}}
 async function savePublishingRules(){
   const d=data()||{}, current=d.publishingSettings||{};
-  const next={enabled:false,youtube:{...(current.youtube||{}),enabled:$('#dcPub_youtube')?.checked||false},instagram:{...(current.instagram||{}),enabled:$('#dcPub_instagram')?.checked||false,shareToFeed:true},facebook:{...(current.facebook||{}),enabled:$('#dcPub_facebook')?.checked||false},tiktok:{...(current.tiktok||{}),enabled:$('#dcPub_tiktok')?.checked||false,privacy:$('#dcTikTokPrivacy')?.value||current.tiktok?.privacy||'SELF_ONLY',allowComments:$('#dcTikTokComments')?.checked??current.tiktok?.allowComments!==false,allowDuet:$('#dcTikTokDuet')?.checked??Boolean(current.tiktok?.allowDuet),allowStitch:$('#dcTikTokStitch')?.checked??Boolean(current.tiktok?.allowStitch)}};
+  const next={enabled:false,youtube:{...(current.youtube||{}),enabled:$('#dcPub_youtube')?.checked||false},instagram:{...(current.instagram||{}),enabled:$('#dcPub_instagram')?.checked||false,shareToFeed:true},facebook:{...(current.facebook||{}),enabled:$('#dcPub_facebook')?.checked||false},tiktok:{...(current.tiktok||{}),enabled:$('#dcPub_tiktok')?.checked||false,allowComments:current.tiktok?.allowComments!==false,allowDuet:Boolean(current.tiktok?.allowDuet),allowStitch:Boolean(current.tiktok?.allowStitch)}};
   next.enabled=['youtube','instagram','facebook','tiktok'].some(p=>next[p].enabled);
   ['youtube','instagram','facebook','tiktok'].forEach(p=>{const info=providerInfo(p);if(info.account&&!next[p].accountId)next[p].accountId=info.account.id});
   try{await callApi('/api/publishing-settings',{method:'POST',body:JSON.stringify(next)});notify('Publishing rules saved');await refreshData();renderConnections()}catch(e){notify(e.message,'bad')}
 }
 function renderAudioLibrary(){
   const panel=$('#view-music'),d=data();if(!panel||!d)return;
-  panel.classList.add('dc-v7-audio');
   const tracks=d.tracks||[], settings=d.musicSettings||{};
-  const volume=Number(settings.volumePercent||13),current=tracks[0]||null;
-  const demoTracks=[
-    {id:'demo-one',name:'Ambient track 01',durationSec:165},
-    {id:'demo-two',name:'Ambient track 02',durationSec:198},
-    {id:'demo-three',name:'Ambient track 03',durationSec:179},
-    {id:'demo-four',name:'Ambient track 04',durationSec:227},
-  ];
-  const visibleTracks=tracks.length?tracks:demoTracks;
-  panel.innerHTML=`<div class="dc-v7-audio-page"><section class="dc-v7-page-title"><div><h1>Audio</h1><p>Keep speech clear and your sound consistent</p></div><button class="dc-btn" id="dcChooseMusic" type="button">${ICON.publish} Upload track</button><input type="file" id="dcMusicFile" accept="audio/*" hidden></section>
-    <div class="dc-v7-audio-layout"><main><section class="dc-v7-audio-stats"><span>${ICON.music}<b>${visibleTracks.length}</b><small>Tracks</small></span><span>${ICON.analytics}<b>${volume}%</b><small>Default volume</small></span><span>${ICON.refresh}<b>${settings.shuffle!==false?'On':'Off'}</b><small>Shuffle</small></span></section><section class="dc-v7-track-list">${visibleTracks.map((track,index)=>tracks.length?trackCard(track,index):demoTrackCard(track,index)).join('')}</section></main>
-      <aside class="dc-v7-audio-rail"><section class="dc-v7-global-mix"><header><span>${ICON.style}</span><h2>Global mix</h2>${ICON.chevron}</header><div class="dc-v7-volume-dial" style="--volume:${volume}"><strong>${volume}%</strong><small>Default volume</small></div><label>Speech / music balance<span>${ICON.audio}<input type="range" min="1" max="50" id="dcMusicVolume" value="${volume}">${ICON.music}</span></label><label class="dc-v7-audio-toggle"><span>Enhance voice <i title="Controlled by each Template">i</i></span><input type="checkbox" disabled></label><label class="dc-v7-audio-toggle"><span>Shuffle tracks <i title="Rotate through your library">i</i></span><input id="dcMusicShuffle" type="checkbox" ${settings.shuffle!==false?'checked':''}></label><button class="dc-btn" id="dcSaveMusicSettings">Save audio settings</button></section>
-        <section class="dc-v7-now-previewing"><header><span>${ICON.analytics}</span><h2>Now previewing</h2>${ICON.chevron}</header>${current?`<div class="dc-v7-audio-cover">${ICON.music}<strong>${esc(current.name||'Audio track')}</strong></div><div class="dc-v7-preview-time"><span>0:00</span><i><b></b></i><span>${formatClock(current.durationSec||0)}</span></div><audio id="dcNowAudio" preload="none" src="${authedUrl(`/api/music/${encodeURIComponent(current.id)}/audio`)}"></audio><div class="dc-v7-preview-controls"><button type="button" disabled>◀</button><button type="button" id="dcNowPlay">${ICON.play}</button><button type="button" disabled>▶</button></div>`:`<div class="dc-v7-audio-cover demo"><img src="/v7-reference-assets/audio-cover.png" alt="Audio preview artwork"><strong>Ambient track 02</strong></div><div class="dc-v7-preview-time"><span>1:07</span><i><b></b></i><span>3:18</span></div><div class="dc-v7-preview-controls"><button type="button" disabled>◀</button><button type="button" id="dcNowPlay" disabled>${ICON.pause||ICON.play}</button><button type="button" disabled>▶</button></div>`}</section>
-      </aside></div><button id="dcUploadMusic" hidden></button></div>`;
-  $('#dcChooseMusic')?.addEventListener('click',()=>$('#dcMusicFile')?.click());
-  $('#dcUploadEmpty')?.addEventListener('click',()=>$('#dcMusicFile')?.click());
-  $('#dcMusicFile')?.addEventListener('change',()=>uploadTrack());
+  panel.innerHTML=`<div class="dc-manage-page"><section class="dc-manage-hero"><div><span class="dc-manage-kicker">${ICON.music} Audio library</span><h1>Clean background audio for every render.</h1><p>Upload nasheed tracks, preview them, remove old ones and keep the mix low under the speaker.</p></div><div class="dc-manage-metrics"><span><b>${tracks.length}</b><em>tracks</em></span><span><b>${settings.volumePercent||13}%</b><em>volume</em></span><span><b>${settings.shuffle!==false?'On':'Off'}</b><em>shuffle</em></span></div></section><div class="dc-settings-grid"><section class="dc-settings-panel"><h2>Upload nasheed</h2><p>Add a clean MP3, M4A, WAV or OGG track. It can rotate through new renders.</p><div class="dc-upload-zone"><input type="file" id="dcMusicFile" accept="audio/*"><button class="dc-btn" id="dcUploadMusic">Upload track</button></div></section><section class="dc-settings-panel"><h2>Global audio level</h2><p>Keep this low so speech stays clear.</p><div class="dc-settings-form"><label class="wide">Music volume %<input type="number" min="1" max="50" id="dcMusicVolume" value="${esc(settings.volumePercent||13)}"></label><button class="dc-btn wide" id="dcSaveMusicSettings">Save audio settings</button></div></section></div><div class="dc-manage-grid">${tracks.length?tracks.map(trackCard).join(''):`<div class="dc-review-empty-pro"><div><div class="dc-empty-icon">${ICON.music}</div><strong>No audio tracks yet</strong><p>Add a nasheed track to give rendered clips consistent background audio.</p></div></div>`}</div></div>`;
   $('#dcUploadMusic').onclick=uploadTrack;
   $('#dcSaveMusicSettings').onclick=saveMusicSettings;
-  const now=$('#dcNowAudio');$('#dcNowPlay')?.addEventListener('click',()=>{if(!now)return;if(now.paused){now.play();$('#dcNowPlay').classList.add('is-playing')}else{now.pause();$('#dcNowPlay').classList.remove('is-playing')}});
-  $$('[data-audio-play]',panel).forEach(button=>button.addEventListener('click',()=>{const audio=button.closest('.dc-v7-track-row')?.querySelector('audio');if(!audio)return;$$('.dc-v7-track-row audio',panel).forEach(item=>{if(item!==audio)item.pause()});audio.paused?audio.play():audio.pause()}));
   requestAnimationFrame(()=>animatePanel(panel));
 }
-function trackCard(t,index=0){const bars=[28,44,19,55,34,72,45,67,31,52,38,62,26,48,70,39,58,32,64,45,27,55,36,61,42,25,49,33];return `<article class="dc-v7-track-row ${index===0?'is-selected':''}"><span class="dc-v7-track-icon">${ICON.music}</span><div class="dc-v7-track-copy"><strong>${esc(t.name||'Audio track')}</strong><small>${esc(t.durationSec?formatClock(t.durationSec):'Background audio')}</small></div><div class="dc-audio-wave waveform">${bars.map((height,bar)=>`<i style="height:${(height+(index*7+bar*3)%19)}%"></i>`).join('')}</div><audio preload="none" src="${authedUrl(`/api/music/${encodeURIComponent(t.id)}/audio`)}"></audio><button type="button" data-audio-play="${esc(t.id)}">${ICON.play}</button><details><summary>•••</summary><div><button class="danger" data-delete-track="${esc(t.id)}">Delete</button></div></details></article>`}
-function demoTrackCard(t,index=0){const bars=[28,44,19,55,34,72,45,67,31,52,38,62,26,48,70,39,58,32,64,45,27,55,36,61,42,25,49,33];return `<article class="dc-v7-track-row ${index===1?'is-selected':''}"><span class="dc-v7-track-icon">${ICON.music}</span><div class="dc-v7-track-copy"><strong>${esc(t.name)}</strong><small>${formatClock(t.durationSec)}</small></div><div class="dc-audio-wave waveform">${bars.map((height,bar)=>`<i style="height:${height+(index*7+bar*3)%19}%"></i>`).join('')}</div><button type="button" disabled>${ICON.play}</button><details><summary>•••</summary></details></article>`}
+function trackCard(t){return `<article class="dc-manage-card"><div class="dc-manage-card-top"><span class="dc-manage-logo">${ICON.music}</span><div class="dc-manage-copy"><strong>${esc(t.name||'Nasheed track')}</strong><span>${esc(t.durationSec?formatClock(t.durationSec):'Background audio')}</span></div><span class="dc-pill good">Ready</span></div><div class="dc-manage-list"><div class="dc-manage-row"><audio controls preload="none" src="${authedUrl(`/api/music/${encodeURIComponent(t.id)}/audio`)}"></audio></div></div><div class="dc-manage-actions"><button class="dc-btn secondary" disabled>Used in renders</button><button class="dc-btn danger" data-delete-track="${esc(t.id)}">Delete</button></div></article>`}
 function fileToBase64(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||'').split(',')[1]||'');reader.onerror=()=>reject(reader.error||new Error('Could not read file'));reader.readAsDataURL(file)})}
 async function uploadTrack(){const file=$('#dcMusicFile')?.files?.[0];if(!file)return notify('Choose an audio file first','bad');try{const data64=await fileToBase64(file);await callApi('/api/music',{method:'POST',body:JSON.stringify({name:file.name,data:data64,mimeType:file.type||'audio/mpeg'})});notify('Track uploaded');await refreshData();renderAudioLibrary()}catch(e){notify(e.message,'bad')}}
-async function saveMusicSettings(){try{await callApi('/api/music-settings',{method:'POST',body:JSON.stringify({volumePercent:Number($('#dcMusicVolume')?.value||13),shuffle:$('#dcMusicShuffle')?.checked!==false})});notify('Audio settings saved');await refreshData();renderAudioLibrary()}catch(e){notify(e.message,'bad')}}
+async function saveMusicSettings(){try{await callApi('/api/music-settings',{method:'POST',body:JSON.stringify({volumePercent:Number($('#dcMusicVolume')?.value||13)})});notify('Audio settings saved');await refreshData();renderAudioLibrary()}catch(e){notify(e.message,'bad')}}
 async function deleteTrack(id){if(!confirm('Delete this audio track?'))return;try{await callApi(`/api/music/${encodeURIComponent(id)}`,{method:'DELETE'});notify('Track deleted');await refreshData();renderAudioLibrary()}catch(e){notify(e.message,'bad')}}
-function settingsNumberControl(id,title,copy,value,min,max,suffix=''){
-  return `<label class="dc-setting-number"><span><strong>${esc(title)}</strong><small>${esc(copy)}</small></span><div><input type="number" min="${min}" max="${max}" id="${id}" value="${esc(value)}">${suffix?`<em>${esc(suffix)}</em>`:''}</div></label>`;
-}
-function settingsToggleControl(id,title,copy,checked,accent='gold'){
-  return `<label class="dc-setting-toggle ${accent}"><span><strong>${esc(title)}</strong><small>${esc(copy)}</small></span><input type="checkbox" id="${id}" ${checked?'checked':''}><i aria-hidden="true"></i></label>`;
-}
 function renderSettingsPage(){
   const panel=$('#view-automation'),d=data();if(!panel||!d)return;
-  const auto=d.automationSettings||{},clip=d.clipSettings||{};
-  const alerts=notificationPrefs(),permission=notificationPermissionCopy();
-  const clipCount=Number(clip.clipsPerVideo||8),minSeconds=Number(clip.clipMinSeconds||30),maxSeconds=Number(clip.clipMaxSeconds||60);
-  const minimumScore=Number(auto.minimumScore||80),minimumQuality=Number(auto.minimumQuality||72),maxPerProject=Number(auto.maxPerProject||4),reviewRequired=Boolean(auto.reviewBeforePosting);
-  const alertToggle=(id,title,copy,checked)=>settingsToggleControl(id,title,copy,checked,'blue');
-  const automationCopy=auto.enabled?`Clips need at least ${minimumScore}/100 score and ${minimumQuality}/100 quality. ${reviewRequired?'You still approve every post.':'Passing clips can move directly into the next slot.'}`:'Every generated clip waits for you in Review.';
-  panel.innerHTML=`<div class="dc-settings-hub">
-    <section class="dc-settings-command"><div><span class="dc-settings-kicker">${ICON.settings} Workspace controls</span><h1>Your studio, tuned your way.</h1><p>Set the defaults once. Every new import, review decision and browser alert follows these rules.</p></div><div class="dc-settings-command-status"><span class="${auto.enabled?'on':''}"><i>${ICON.sparkles}</i><b>${auto.enabled?'Automation on':'Manual review'}</b><em>Approval flow</em></span><span><i>${ICON.scissors}</i><b>${clipCount} clips</b><em>Per lecture</em></span><span class="${permission.tone==='good'?'on':''}"><i>${ICON.publish}</i><b>${esc(permission.label)}</b><em>Browser alerts</em></span></div></section>
-    <div class="dc-settings-layout"><aside class="dc-settings-rail"><small>Settings</small><button class="is-active" data-settings-jump="dcSettingsGeneration"><span>${ICON.scissors}</span><div><strong>Generation</strong><em>Length and quantity</em></div>${ICON.chevron}</button><button data-settings-jump="dcSettingsAutomation"><span>${ICON.sparkles}</span><div><strong>Automation</strong><em>Approval safeguards</em></div>${ICON.chevron}</button><button data-settings-jump="dcSettingsAlerts"><span>${ICON.publish}</span><div><strong>Notifications</strong><em>Browser and sounds</em></div>${ICON.chevron}</button><div class="dc-settings-privacy"><span>${ICON.brand}</span><div><strong>Private by design</strong><p>These settings belong to this workspace. Source files are never shared with another account.</p></div></div></aside>
-      <main class="dc-settings-main">
-        <section class="dc-settings-section gold" id="dcSettingsGeneration"><header><span>${ICON.scissors}</span><div><small>01 · Creation defaults</small><h2>Clip generation</h2><p>Applied to new lecture imports. Existing projects keep their current settings.</p></div><b>${clipCount} clips · ${minSeconds}–${maxSeconds}s</b></header><div class="dc-setting-control-grid">${settingsNumberControl('dcSetClipCount','Clips per lecture','How many options AI should prepare',clipCount,1,30)}${settingsNumberControl('dcSetMinSec','Minimum duration','Avoid clips that feel incomplete',minSeconds,3,180,'sec')}${settingsNumberControl('dcSetMaxSec','Maximum duration','Keep clips suited to short-form feeds',maxSeconds,3,180,'sec')}</div><footer><p><span>${ICON.check}</span>Token estimates still appear before processing starts.</p><button class="dc-btn" id="dcSaveClipSettings">Save generation</button></footer></section>
-        <section class="dc-settings-section violet" id="dcSettingsAutomation"><header><span>${ICON.sparkles}</span><div><small>02 · Approval flow</small><h2>Automation rules</h2><p>Choose how confidently scored clips move from generation into your publishing workflow.</p></div><b>${auto.enabled?'Active':'Paused'}</b></header><div class="dc-settings-master">${settingsToggleControl('dcAutoEnabled','Automatic approval','Move only strong, complete clips into the publishing workflow',auto.enabled,'violet')}<div><span>${ICON.review}</span><p><strong>${auto.enabled?'Your quality gates are active':'Nothing moves without you'}</strong><small>${esc(automationCopy)}</small></p></div></div><div class="dc-setting-control-grid automation">${settingsNumberControl('dcAutoScore','Minimum AI score','Hook strength and standalone value',minimumScore,1,100,'/100')}${settingsNumberControl('dcAutoQuality','Minimum quality','Speech, timing and render confidence',minimumQuality,1,100,'/100')}${settingsNumberControl('dcAutoMax','Maximum per project','Prevents one lecture filling the queue',maxPerProject,1,20)}${settingsToggleControl('dcReviewRequired','Review before posting','Keep a final human check before anything goes live',reviewRequired,'green')}</div><footer><p><span>${ICON.warning}</span>TikTok always requires explicit creator approval before a post.</p><button class="dc-btn" id="dcSaveAutomation">Save automation</button></footer></section>
-        <section class="dc-settings-section blue" id="dcSettingsAlerts"><header><span>${ICON.publish}</span><div><small>03 · Stay informed</small><h2>Notifications & sounds</h2><p>Choose what DeenClipped announces while you work elsewhere.</p></div><b class="dc-alert-status ${permission.tone}"><i></i>${esc(permission.label)}</b></header><div class="dc-alert-grid">
-          <article class="dc-alert-card"><div class="dc-alert-card-head"><span>${ICON.publish}</span><div><strong>Desktop notifications</strong><small>${esc(permission.copy)}</small></div></div><div class="dc-alert-options">${alertToggle('dcAlertComplete','Clips ready','Processing or a re-render finished',alerts.completed)}${alertToggle('dcAlertPublishing','Post published','A platform confirmed the upload',alerts.publishing)}${alertToggle('dcAlertFailures','Needs attention','Processing or publishing failed',alerts.failures)}${alertToggle('dcAlertStarted','Processing started','An optional early progress alert',alerts.started)}</div><div class="dc-alert-actions"><button class="dc-btn" id="dcEnableNotifications" ${notificationPermission()==='unsupported'||notificationPermission()==='denied'?'disabled':''}>${notificationPermission()==='granted'?(alerts.desktop?'Notifications enabled':'Resume notifications'):'Enable notifications'}</button><button class="dc-btn secondary" id="dcPauseNotifications" ${!alerts.desktop?'disabled':''}>Pause</button><button class="dc-btn secondary" id="dcTestNotification" ${notificationPermission()!=='granted'?'disabled':''}>Send test</button></div><div class="dc-browser-note">Chrome: click the lock icon → Site settings → Notifications. Safari: Safari Settings → Websites → Notifications. Alerts currently run while DeenClipped is open.</div></article>
-          <article class="dc-alert-card"><div class="dc-alert-card-head"><span>${ICON.audio}</span><div><strong>Workflow sounds</strong><small>Short, subtle chimes—never speech or music over your editor.</small></div></div><div class="dc-alert-options compact">${alertToggle('dcAlertSounds','Sounds enabled','Play chimes for selected events',alerts.sounds)}${alertToggle('dcAlertRespectMedia','Respect playback','Stay silent while media is playing',alerts.respectMedia)}</div><div class="dc-alert-volume-head"><span><strong>Sound level</strong><small>Only affects DeenClipped alerts</small></span><output id="dcAlertVolumeOut">${esc(alerts.volume)}%</output></div><div class="dc-volume-row"><input type="range" min="0" max="100" step="5" id="dcAlertVolume" value="${esc(alerts.volume)}"></div><div class="dc-alert-actions"><button class="dc-btn secondary" id="dcTestSound">Play test sound</button></div><div class="dc-browser-note">Saved to this browser and kept separate for each DeenClipped account.</div></article>
-        </div></section>
-      </main></div>
+  const auto=d.automationSettings||{}, clip=d.clipSettings||{};
+  panel.innerHTML=`<div class="dc-manage-page">
+    <section class="dc-manage-hero"><div><span class="dc-manage-kicker">${ICON.settings} Studio settings</span><h1>Real controls for generation and posting.</h1><p>Tune clip generation and automatic approval behaviour. Source uploads stay inside each customer’s private workspace.</p></div><div class="dc-manage-metrics"><span><b>${auto.enabled?'On':'Off'}</b><em>automation</em></span><span><b>${auto.minimumScore||80}+</b><em>score</em></span><span><b>${clip.clipMaxSeconds||60}s</b><em>max length</em></span></div></section>
+    <div class="dc-settings-grid">
+      <section class="dc-settings-panel"><h2>Clip generation</h2><p>These defaults apply to new lecture imports.</p><div class="dc-settings-form"><label>Clips per lecture<input type="number" min="1" max="30" id="dcSetClipCount" value="${esc(clip.clipsPerVideo||8)}"></label><label>Minimum seconds<input type="number" min="3" max="180" id="dcSetMinSec" value="${esc(clip.clipMinSeconds||30)}"></label><label>Maximum seconds<input type="number" min="3" max="180" id="dcSetMaxSec" value="${esc(clip.clipMaxSeconds||60)}"></label><button class="dc-btn wide" id="dcSaveClipSettings">Save generation settings</button></div></section>
+      <section class="dc-settings-panel"><h2>Automation rules</h2><p>Controls which generated clips are allowed into the automatic workflow.</p><div class="dc-settings-form"><label class="dc-switch-row wide"><span><strong>Automation enabled</strong><span>Approve strong clips automatically</span></span><input type="checkbox" id="dcAutoEnabled" ${auto.enabled?'checked':''}></label><label>Minimum score<input type="number" min="1" max="100" id="dcAutoScore" value="${esc(auto.minimumScore||80)}"></label><label>Minimum quality<input type="number" min="1" max="100" id="dcAutoQuality" value="${esc(auto.minimumQuality||72)}"></label><label>Max per project<input type="number" min="1" max="20" id="dcAutoMax" value="${esc(auto.maxPerProject||4)}"></label><label class="dc-switch-row"><span><strong>Review required</strong><span>Keep manual check before posting</span></span><input type="checkbox" id="dcReviewRequired" ${auto.skipReviewRequired===false?'checked':''}></label><button class="dc-btn wide" id="dcSaveAutomation">Save automation</button></div></section>
+    </div>
   </div>`;
   $('#dcSaveClipSettings').onclick=saveClipSettingsPanel;
   $('#dcSaveAutomation').onclick=saveAutomationPanel;
-  $$('[data-settings-jump]',panel).forEach(button=>button.addEventListener('click',()=>{const target=$('#'+button.dataset.settingsJump);if(!target)return;$$('[data-settings-jump]',panel).forEach(item=>item.classList.toggle('is-active',item===button));target.scrollIntoView({behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})}));
-  bindNotificationSettings();
   requestAnimationFrame(()=>animatePanel(panel));
 }
 async function saveClipSettingsPanel(){try{await callApi('/api/clip-settings',{method:'POST',body:JSON.stringify({clipsPerVideo:Number($('#dcSetClipCount')?.value||8),clipMinSeconds:Number($('#dcSetMinSec')?.value||30),clipMaxSeconds:Number($('#dcSetMaxSec')?.value||60)})});notify('Generation settings saved');await refreshData();renderSettingsPage()}catch(e){notify(e.message,'bad')}}
-async function saveAutomationPanel(){try{await callApi('/api/automation-settings',{method:'POST',body:JSON.stringify({enabled:$('#dcAutoEnabled')?.checked,minimumScore:Number($('#dcAutoScore')?.value||80),minimumQuality:Number($('#dcAutoQuality')?.value||72),maxPerProject:Number($('#dcAutoMax')?.value||4),reviewBeforePosting:Boolean($('#dcReviewRequired')?.checked)})});notify('Automation saved');await refreshData();renderSettingsPage()}catch(e){notify(e.message,'bad')}}
-function bindNotificationSettings(){
-  const fields={dcAlertComplete:'completed',dcAlertPublishing:'publishing',dcAlertFailures:'failures',dcAlertStarted:'started',dcAlertSounds:'sounds',dcAlertRespectMedia:'respectMedia'};
-  Object.entries(fields).forEach(([id,key])=>$('#'+id)?.addEventListener('change',event=>{const checked=event.currentTarget.checked;saveNotificationPrefs({[key]:checked});if(key==='sounds'&&checked)playNotificationSound('test',true)}));
-  $('#dcAlertVolume')?.addEventListener('input',event=>{const volume=Number(event.currentTarget.value||0);saveNotificationPrefs({volume});if($('#dcAlertVolumeOut'))$('#dcAlertVolumeOut').textContent=`${volume}%`});
-  $('#dcEnableNotifications')?.addEventListener('click',async()=>{await requestDesktopNotifications();renderSettingsPage()});
-  $('#dcPauseNotifications')?.addEventListener('click',()=>{saveNotificationPrefs({desktop:false});notify('Desktop notifications paused');renderSettingsPage()});
-  $('#dcTestSound')?.addEventListener('click',()=>{saveNotificationPrefs({sounds:true});playNotificationSound('test',true);if($('#dcAlertSounds'))$('#dcAlertSounds').checked=true;notify('Sound is working','good')});
-  $('#dcTestNotification')?.addEventListener('click',()=>{saveNotificationPrefs({desktop:true});pushDesktopNotification('DeenClipped test','Notifications are working. We’ll use this for finished clips and publishing updates.','test','home',true);notify('Test notification sent','good')});
-}
+async function saveAutomationPanel(){try{await callApi('/api/automation-settings',{method:'POST',body:JSON.stringify({enabled:$('#dcAutoEnabled')?.checked,minimumScore:Number($('#dcAutoScore')?.value||80),minimumQuality:Number($('#dcAutoQuality')?.value||72),maxPerProject:Number($('#dcAutoMax')?.value||4),skipReviewRequired:!$('#dcReviewRequired')?.checked})});notify('Automation saved');await refreshData();renderSettingsPage()}catch(e){notify(e.message,'bad')}}
 function renderSidebarLive(){
   const box=$('#dcSidebarLive'),d=data();if(!box||!d)return;
   const jobs=activeJobs();const clips=d.clips||[];
@@ -4662,120 +2590,7 @@ function renderSidebarLive(){
   box.innerHTML=`<div class="dc-now-topline"><span class="dc-now-chip ${busy?'busy':'good'}">${busy?'Live':'Ready'}</span><span class="dc-now-title">Happening now</span></div><div class="dc-now-focus"><span class="dc-now-focus-icon">${icon}</span><div><strong>${esc(title)}</strong><span>${esc(stage)}</span></div></div><div class="dc-now-progress"><i style="width:${pct}%"></i></div>${nextLine}<div class="dc-now-mini-stats"><span><b>${waiting}</b><em>review</em></span><span><b>${scheduled}</b><em>scheduled</em></span></div><div class="dc-sidebar-live-foot"><button class="dc-btn secondary" data-dc-nav="review">Review</button><button class="dc-btn secondary" data-dc-nav="schedule">Schedule</button></div>`;
 }
 
-function billingInfo(){return data()?.billing || {current:{plan:'free',remaining:0,used:0,allowance:0},features:{socialPublishing:false,canPublish:false,publishingBlockCode:'publishing_requires_premium'},plans:{},tokenRatePerMinute:1}}
-function clientExperience(){
-  const bill=billingInfo(),cur=bill.current||{},provided=bill.experience||cur.experience;
-  if(provided?.id)return provided;
-  const premium=Boolean(cur.unlimited||bill.features?.premium);
-  const empty=!cur.unlimited&&Number(cur.remaining||0)<=0,expired=Boolean(cur.freeTier?.expired),pastDue=String(cur.status||'').toLowerCase()==='past_due';
-  const id=cur.unlimited?'owner':pastDue?'premium_past_due':premium&&cur.trial?.active?'premium_trial':premium&&cur.cancelAtPeriodEnd?'premium_canceling':premium&&empty?'premium_empty':premium?'premium_active':expired?'free_expired':empty?'free_empty':'free_trial';
-  const labels={owner:['Owner studio','Unlimited account access'],free_trial:['Free studio trial','Explore with a DeenClipped watermark'],free_empty:['Free tokens used','Browse your work or choose Premium'],free_expired:['Free trial ended','Browse your work or choose Premium'],premium_trial:['Premium trial','Every creator tool is unlocked'],premium_active:['Premium studio','Full creator workflow unlocked'],premium_empty:['Premium · add tokens','Processing and posting are paused'],premium_canceling:['Premium ending soon','Access continues until the period ends'],premium_past_due:['Payment needs attention','Update billing to resume processing']};
-  const browseOnly=['free_empty','free_expired','premium_past_due'].includes(id);
-  return{id,label:labels[id]?.[0]||'DeenClipped account',detail:labels[id]?.[1]||'',premium:id==='owner'||id.startsWith('premium_'),browseOnly,canGenerate:cur.unlimited||(!browseOnly&&!empty),canEdit:true,canDownload:true,canPublish:Boolean(cur.unlimited||bill.features?.canPublish),watermarkRequired:!premium,showUpgrade:!cur.unlimited&&!['premium_active','premium_trial','premium_canceling'].includes(id)};
-}
-function syncAccountExperience(){
-  const exp=clientExperience();document.body.dataset.dcExperience=exp.id;document.body.classList.toggle('dc-premium',Boolean(exp.premium));document.body.classList.toggle('dc-browse-only',Boolean(exp.browseOnly));
-  const badge=$('#dcExperienceBadge');if(badge){badge.className=`dc-experience-badge ${exp.premium?'premium':'free'} ${exp.browseOnly?'attention':''}`;$('span',badge).textContent=exp.label;badge.title=exp.detail}
-  const side=$('#dcSidebarPlan');if(side){side.textContent=exp.id==='owner'?'OWNER':exp.premium?'PRO':'FREE';side.className=`dc-sidebar-plan ${exp.premium?'premium':'free'}`}
-  $$('[data-premium-stamp]').forEach(stamp=>{const feature=stamp.closest('[data-premium-feature]')?.dataset.premiumFeature,unlocked=Boolean(billingInfo().current?.unlimited||(feature&&billingInfo().features?.[feature]));stamp.textContent=unlocked?'✓':'PRO';stamp.classList.toggle('unlocked',unlocked)});
-  const create=$('#dcNewProject');if(create){create.classList.toggle('secondary',!exp.canGenerate);create.innerHTML=exp.canGenerate?'<span>＋ New</span>':'<span>Unlock studio</span>';create.title=exp.canGenerate?'Create a new clipping project':exp.detail}
-  return exp;
-}
-function publishingAccess(){
-  const bill=billingInfo(),cur=bill.current||{},features=bill.features||{};
-  if(cur.unlimited||features.canPublish)return{allowed:true,code:'',title:'Publishing ready',copy:'Your account can publish to connected channels.',action:'Post now'};
-  if(features.publishingBlockCode==='publishing_tokens_empty'||(features.socialPublishing!==false&&Number(cur.remaining||0)<=0))return{allowed:false,code:'publishing_tokens_empty',title:'Add tokens to keep posting',copy:'Your wallet is at zero. Existing clips stay available, but social posting pauses until you add tokens or change plan.',action:'Add tokens'};
-  return{allowed:false,code:'publishing_requires_premium',title:'Publishing unlocks with Premium',copy:'Your 3-day, 40-token trial is for browsing, generating, editing and watermarked downloads. Choose Weekly, Monthly or Yearly when you are ready to post.',action:'View Premium'};
-}
-function publishingButton(label='Post now',attributes='',extra=''){
-  const access=publishingAccess();
-  return access.allowed?`<button class="dc-btn ${extra}" ${attributes}>${esc(label)}</button>`:`<button class="dc-btn ${extra}" data-open-billing>${esc(access.action)}</button>`;
-}
-function handlePublishingError(error){
-  if(!['publishing_requires_premium','publishing_tokens_empty','free_expired','insufficient_tokens'].includes(String(error?.code||'')))return false;
-  notify(error.message||'Choose a plan to continue.','bad');
-  $('.billing-block')?.remove();
-  openBillingModal();
-  return true;
-}
-function subscriptionDate(value,withTime=false){
-  const stamp=Number(value||0);if(!stamp)return'—';
-  return new Intl.DateTimeFormat('en-AU',withTime?{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}:{day:'numeric',month:'short',year:'numeric'}).format(new Date(stamp));
-}
-function subscriptionStatus(cur={}){
-  if(cur.unlimited)return{label:'Owner access',tone:'owner',detail:'No token or billing limits'};
-  if(cur.cancelAtPeriodEnd)return{label:'Ending soon',tone:'warn',detail:`Access continues until ${subscriptionDate(cur.periodEnd||cur.cancelAt)}`};
-  if(cur.trial?.active)return{label:'Trial active',tone:'good',detail:`${cur.trial.daysLeft||1} day${cur.trial.daysLeft===1?'':'s'} remaining`};
-  if(cur.freeTier?.onFree)return cur.freeTier.expired?{label:'Free access ended',tone:'bad',detail:'Choose a plan to resume processing'}:{label:'Free access',tone:'free',detail:`${cur.freeTier.daysLeft??0} day${cur.freeTier.daysLeft===1?'':'s'} remaining`};
-  if(String(cur.status||'').toLowerCase()==='past_due')return{label:'Payment needed',tone:'bad',detail:'Update your payment method to keep access'};
-  return{label:'Active',tone:'good',detail:'Your subscription is running normally'};
-}
-async function startSubscriptionCheckout(plan,button){
-  if(!plan||button?.disabled)return;
-  const original=button?.textContent||'Choose plan';
-  try{if(button){button.disabled=true;button.textContent='Opening secure checkout…'}const res=await callApi('/api/billing/checkout',{method:'POST',body:JSON.stringify({plan})});if(res.url)location.href=res.url;else throw new Error('Stripe did not return a checkout URL.');}
-  catch(e){notify(e.message,'bad');if(button){button.disabled=false;button.textContent=original}}
-}
-async function startTopupCheckout(packageId,button){
-  if(!packageId||button?.disabled)return;
-  const original=button?.textContent||'Buy tokens';
-  try{if(button){button.disabled=true;button.textContent='Opening secure checkout…'}const res=await callApi('/api/billing/topup-checkout',{method:'POST',body:JSON.stringify({package:packageId})});if(res.url)location.href=res.url;else throw new Error('Stripe did not return a checkout URL.');}
-  catch(e){notify(e.message,'bad');if(button){button.disabled=false;button.textContent=original}}
-}
-async function openBillingPortal(button){
-  const original=button?.textContent||'Billing & invoice details';
-  try{if(button){button.disabled=true;button.textContent='Opening Stripe…'}const res=await callApi('/api/billing/portal',{method:'POST',body:'{}'});if(res.url)location.href=res.url;else throw new Error('Stripe did not return a billing portal URL.');}
-  catch(e){notify(e.message,'bad');if(button){button.disabled=false;button.textContent=original}}
-}
-function renderSubscriptionPage(){
-  const panel=$('#view-subscription'),d=data();if(!panel||!d)return;
-  panel.classList.add('dc-v7-subscription');
-  const bill=billingInfo(),cur=bill.current||{},plans=bill.plans||{},topups=Object.values(bill.topups||{}),events=bill.recentEvents||[];
-  const currentPlan=plans[cur.plan]||{name:cur.unlimited?'Owner':'Free',interval:cur.unlimited?'account':'one-time',tokens:cur.allowance||0,features:[]};
-  const status=subscriptionStatus(cur),remaining=cur.unlimited?'∞':Math.max(0,Math.round(Number(cur.remaining||0))),allowance=cur.unlimited?'Unlimited':Math.max(0,Math.round(Number(cur.allowance||0)));
-  const topupUnavailable=cur.unlimited||String(cur.status||'').toLowerCase()==='past_due'||Boolean(cur.freeTier?.expired);
-  const canBuyTopups=Boolean(bill.canBuyTopups??bill.topupAvailable??(!topupUnavailable&&bill.topupCheckoutConfigured));
-  const topupDisabledCopy=cur.unlimited?'Unlimited already':String(cur.status||'').toLowerCase()==='past_due'?'Update billing first':cur.freeTier?.expired?'Choose a plan first':bill.topupBlockMessage||'Unavailable';
-  const used=Math.max(0,Math.round(Number(cur.used||0))),reserved=Math.max(0,Math.round(Number(cur.reserved||0))),bonus=Math.max(0,Math.round(Number(cur.bonusTokens||0)));
-  const rate=Math.max(.1,Number(bill.tokenRatePerMinute||1));
-  const pct=cur.unlimited?100:Number(cur.allowance)>0?clamp(((Number(cur.used||0)+Number(cur.reserved||0))/Number(cur.allowance))*100,0,100):0;
-  const planFeatures=[...(currentPlan.features||[])];
-  if(bill.features?.premium)planFeatures.push('Clean exports without forced watermark','Custom Brand Kit');
-  if(bill.features?.creatorLab)planFeatures.push('AI Director intelligence');
-  if(bill.features?.batchPublishing)planFeatures.push('Batch scheduling and publishing');
-  if(!planFeatures.length)planFeatures.push('Exact word-sync captions','Editor and clip review','DeenClipped branded exports');
-  const uniqueFeatures=[...new Set(planFeatures)];
-  const periodLabel=cur.unlimited?'Plan access':cur.cancelAtPeriodEnd?'Access until':cur.trial?.active?'Trial ends':cur.freeTier?.onFree?'Free access ends':cur.periodEnd?'Next renewal':'Billing period';
-  const periodValue=cur.unlimited?'No expiry':subscriptionDate(cur.trial?.active?cur.trial.endsAt:cur.freeTier?.onFree?cur.freeTier.expiresAt:cur.periodEnd);
-  const email=d.user?.email||d.account?.email||'Signed-in account';
-  const interval=currentPlan.interval==='one-time'?'Free access':`${String(currentPlan.interval||'account').replace(/^./,c=>c.toUpperCase())} billing`;
-  const eventRows=events.slice(0,6).map(event=>{
-    const added=event.type==='tokens_added';const amount=Math.round(Number(event.amount||0));
-    return `<div class="dc-sub-event"><span class="dc-sub-event-icon ${added?'added':'used'}">${added?'+':'−'}</span><div><strong>${esc(event.message||event.reason||'Billing activity')}</strong><small>${esc(subscriptionDate(event.createdAt,true))}${event.remaining!==undefined?` · ${esc(Math.round(Number(event.remaining||0)))} tokens left`:''}</small></div><b class="${added?'added':''}">${added?'+':'−'}${esc(amount)}</b></div>`;
-  }).join('');
-  const topupCards=topups.map(pack=>{const minutes=Math.max(1,Math.floor(Number(pack.tokens||0)/rate)),available=Boolean(pack.canPurchase??(pack.enabled&&canBuyTopups));return `<article class="dc-sub-topup ${pack.id==='boost300'?'featured':''} ${available?'':'is-disabled'}"><div class="dc-sub-topup-head"><span>${esc(pack.badge||'One-time pack')}</span>${pack.id==='boost300'?'<b>Most popular</b>':''}</div><div class="dc-sub-topup-amount"><strong>${esc(pack.tokens||0)}</strong><span>tokens</span></div><h3>${esc(pack.name||'Token top-up')}</h3><p>${esc(pack.description||'One-time tokens for your wallet.')}</p><div class="dc-sub-topup-meta"><span>${ICON.scissors} About ${esc(minutes)} source minutes</span><b>${esc(pack.priceLabel||'Price at checkout')}</b></div><button class="dc-btn ${pack.id==='boost300'?'':'secondary'}" data-sub-topup="${esc(pack.id)}" ${available?'':'disabled'}>${available?'Add to wallet':pack.enabled?esc(topupDisabledCopy):'Coming soon'}</button></article>`}).join('');
-  panel.innerHTML=`<div class="dc-subscription-page">
-    <section class="dc-sub-command"><div><span class="dc-sub-kicker">${ICON.billing} Subscription centre</span><h1>One place for your plan, wallet and payments.</h1><p>Understand exactly what you have, what you have used and what happens next. Stripe securely handles payment details outside DeenClipped.</p></div><nav class="dc-sub-jump" aria-label="Subscription sections"><button class="is-active" data-sub-jump="dcSubOverview"><span>${ICON.tokens}</span><strong>Overview</strong><small>Plan & usage</small></button><button data-sub-jump="dcSubTopups"><span>${ICON.sparkles}</span><strong>Token shop</strong><small>One-time packs</small></button><button data-sub-jump="dcSubActivity"><span>${ICON.clock}</span><strong>Activity</strong><small>Wallet history</small></button></nav></section>
-    <div class="dc-sub-layout" id="dcSubOverview">
-      <main class="dc-sub-primary">
-        <section class="dc-sub-membership"><header><div><span>Current membership</span><h2>${esc(currentPlan.name||cur.plan||'Free')}</h2><p>${esc(status.detail)}</p></div><b class="dc-sub-status ${status.tone}"><i></i>${esc(status.label)}</b></header><div class="dc-sub-wallet"><div class="dc-sub-balance"><small>Available to create</small><strong>${esc(remaining)}</strong><span>${cur.unlimited?'Unlimited access':'tokens in your wallet'}</span></div><div class="dc-sub-wallet-stats"><span><small>Plan allowance</small><b>${esc(allowance)}</b></span><span><small>Used this period</small><b>${esc(used)}</b></span><span><small>Top-up balance</small><b>${esc(bonus)}</b></span></div></div><div class="dc-sub-usage"><div><span>${cur.unlimited?'Owner access has no usage limit':'Current-period usage'}</span><b>${cur.unlimited?'Unlimited':`${esc(used)} used${reserved?` · ${esc(reserved)} reserved`:''}`}</b></div><i><em style="width:${pct}%"></em></i></div><div class="dc-sub-membership-foot"><div><span>${ICON.tokens}</span><p><strong>${esc(rate)} token per source minute</strong><small>You always confirm the estimate before processing.</small></p></div><div class="dc-sub-actions"><button class="dc-btn secondary" id="dcSubCompare">See all plans</button><button class="dc-btn" id="dcSubChangePlan">${cur.unlimited?'View plan options':'Change plan'}</button></div></div></section>
-        <section class="dc-sub-benefits"><div class="dc-sub-section-title"><div><span>Included with ${esc(currentPlan.name||cur.plan||'your plan')}</span><h2>Your unlocked workspace</h2><p>These features are available to this account right now.</p></div><b>${uniqueFeatures.length} included</b></div><div class="dc-sub-feature-list">${uniqueFeatures.map((feature,index)=>`<div><span>${ICON.check}</span><p><strong>${esc(feature)}</strong><small>${index===0?'Ready across exports and downloads.':'Available throughout your workspace.'}</small></p></div>`).join('')}</div></section>
-      </main>
-      <aside class="dc-sub-sidebar">
-        <section class="dc-sub-card dc-sub-account-card"><div class="dc-sub-card-head"><div><span>Account access</span><h2>Billing & payment</h2></div><span class="dc-secure-chip">${cur.unlimited?'Owner':'Private'}</span></div><div class="dc-sub-identity"><span>${String(email).slice(0,1).toUpperCase()}</span><div><strong>${esc(email)}</strong><small>${esc(interval)}</small></div></div><div class="dc-sub-payment-rows"><div><span>${esc(periodLabel)}</span><b>${esc(periodValue)}</b></div><div><span>Plan price</span><b>${esc(cur.unlimited?'Included':currentPlan.priceLabel||currentPlan.name||'Free')}</b></div><div><span>Payment</span><b>${cur.unlimited?'Not required':cur.stripeCustomerId?'Stripe secured':'Not added yet'}</b></div></div><button class="dc-btn wide secondary" id="dcSubPortal" ${cur.stripeCustomerId&&bill.portalConfigured&&!cur.unlimited?'':'disabled'}>${cur.unlimited?'No billing required':cur.stripeCustomerId?'Open billing & invoices':'No payment profile yet'}</button>${cur.cancelAtPeriodEnd?'<p class="dc-sub-cancel-note">Your plan is scheduled to end. Open billing before the access date if you want to keep it.</p>':`<p class="dc-sub-security">${ICON.brand} Complete card details are never stored by DeenClipped.</p>`}</section>
-        <section class="dc-sub-help-card"><span>${ICON.sparkles}</span><div><strong>Need more room, not a new plan?</strong><p>Top-ups are one-time purchases. They stay in your wallet when your subscription renews.</p></div><button id="dcSubJumpTopups" ${cur.unlimited?'disabled':''}>${cur.unlimited?'Unlimited already':'Browse token packs'} ${ICON.chevron}</button></section>
-      </aside>
-    </div>
-    <section class="dc-sub-section dc-sub-shop" id="dcSubTopups"><div class="dc-sub-section-head"><div><span>Token shop</span><h2>Add tokens without changing your plan</h2><p>Choose a one-time pack for a busy week, a long lecture or a larger campaign.</p></div><div class="dc-sub-rate"><span>${ICON.tokens}</span><strong>${esc(rate)} token</strong><small>per source minute</small></div></div><div class="dc-sub-topup-grid">${topupCards||'<div class="dc-empty"><strong>No top-up packs configured</strong><span>Your plan allowance is still available.</span></div>'}</div><footer><span>${ICON.check} Purchased top-up tokens do not expire when your subscription renews.</span><button class="dc-text-action" id="dcSubCompareBottom">Compare subscriptions →</button></footer></section>
-    <section class="dc-sub-card dc-sub-activity" id="dcSubActivity"><div class="dc-sub-card-head"><div><span>Account timeline</span><h2>Recent wallet activity</h2><p>Every token charge and top-up appears here after it is confirmed.</p></div><span class="dc-secure-chip">${events.length?`Latest ${Math.min(events.length,6)}`:'Up to date'}</span></div><div class="dc-sub-event-list">${eventRows||`<div class="dc-sub-empty"><span>${ICON.billing}</span><strong>No billing activity yet</strong><p>Token charges and top-ups will appear here after your first import or purchase.</p></div>`}</div></section>
-  </div>`;
-  $('#dcSubChangePlan').onclick=openBillingModal;$('#dcSubCompare').onclick=openBillingModal;$('#dcSubCompareBottom').onclick=openBillingModal;
-  $('#dcSubJumpTopups')?.addEventListener('click',()=>$('#dcSubTopups')?.scrollIntoView({behavior:'smooth',block:'start'}));
-  $('#dcSubPortal')?.addEventListener('click',event=>openBillingPortal(event.currentTarget));
-  $$('[data-sub-jump]',panel).forEach(button=>button.addEventListener('click',()=>{const target=$(`#${button.dataset.subJump}`);if(!target)return;$$('[data-sub-jump]',panel).forEach(item=>item.classList.toggle('is-active',item===button));target.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})}));
-  $$('[data-sub-topup]',panel).forEach(button=>button.addEventListener('click',()=>startTopupCheckout(button.dataset.subTopup,button)));
-  requestAnimationFrame(()=>animatePanel(panel));
-}
+function billingInfo(){return data()?.billing || {current:{plan:'free',remaining:0,used:0,allowance:0},plans:{},tokenRatePerMinute:1}}
 function updateTokenPill(){
   const pill=$('#dcTokenPill'); if(!pill)return;
   const bill=billingInfo(),cur=bill.current||{},trial=cur.trial||{};
@@ -4791,7 +2606,7 @@ function updateTokenPill(){
 }
 function openBillingModal(){
   $('#dcBillingLayer')?.remove();
-  const bill=billingInfo(),cur=bill.current||{},plans=bill.plans||{},trial=cur.trial||{},freeTier=cur.freeTier||{};
+  const bill=billingInfo(),cur=bill.current||{},plans=bill.plans||{},trial=cur.trial||{};
   const currentPlan=cur.plan||'free';
   const unlimited=!!cur.unlimited;
   const allowance=Math.max(0,Number(cur.allowance||0));
@@ -4801,22 +2616,23 @@ function openBillingModal(){
   const rate=Number(bill.tokenRatePerMinute||1);
   const pct=unlimited?100:allowance?clamp(((used+reserved)/allowance)*100,0,100):0;
   const minutesFor=tokens=>Math.max(1,Math.floor(Number(tokens||0)/Math.max(.1,rate)));
-  const intervalWord={free:'free access',weekly:'week',monthly:'month',yearly:'year'};
-  const sortPlans=['free','weekly','monthly','yearly'];
+  const intervalWord={weekly:'week',monthly:'month',yearly:'year'};
+  const sortPlans=['weekly','monthly','yearly'];
   const trialDays=Math.max(0,Number(bill.trialDays||7));
+  const terms=(bill.terms&&bill.terms.length?bill.terms:[`${rate} token/min for source videos`, 'Charged after duration is known', 'Template rerenders are free', `${trialDays}-day trial on paid plans`]);
   const planCards=sortPlans.map(id=>{
     const plan=plans[id]||{};
-    const isFree=id==='free';
-    const isCurrent=currentPlan===id && (isFree||cur.status!=='free');
-    const enabled=isFree||plan.enabled!==false&&plan.priceId;
+    const isCurrent=currentPlan===id && cur.status!=='free';
+    const enabled=plan.enabled!==false&&plan.priceId;
     const featured=id==='monthly';
     const tokens=Number(plan.tokens||0);
-    const label=isFree?(isCurrent?'Keep browsing':'Explore free'):isCurrent?'Current plan':enabled?(plan.trialEligible?`Start ${trialDays}-day trial`:`Subscribe ${id}`):'Stripe price needed';
-    const featureCopy=[`${minutesFor(tokens)} source minutes`,...(Array.isArray(plan.features)?plan.features:[]),...(isFree?['Browse, edit and download','Social posting not included']:['Social publishing included'])];
-    const subtitle=isFree?'Try DeenClipped first':id==='weekly'?'Cheapest paid option':id==='monthly'?'Creator favourite':'Best long-term value';
-    const price=isFree?'Free':plan.priceLabel||'Price shown at checkout';
-    const action=isFree?'data-billing-free':`data-billing-checkout="${esc(id)}"`;
-    return `<article id="dcBillingPlan_${esc(id)}" class="dc-plan-card ${featured?'featured':''} ${isCurrent?'current':''}" data-billing-plan="${esc(id)}">${featured?'<div class="dc-plan-featured-label">Most popular</div>':''}<div class="dc-plan-content"><div class="dc-plan-top"><div><h3>${esc(plan.name||id)}</h3><span>${esc(subtitle)}</span></div>${!featured||isCurrent?`<span class="badge">${esc(isCurrent?'Active':plan.badge||(isFree?'Free':'Plan'))}</span>`:''}</div><div class="dc-plan-price">${esc(price)}${isFree?'':`<span> / ${esc(intervalWord[id]||id)}</span>`}</div><div class="tokens">${esc(tokens)} <span>tokens included</span></div><p>${esc(plan.description||'Token allowance for clipping lectures.')}</p><div class="dc-plan-divider"></div><div class="dc-plan-features">${featureCopy.map(item=>`<span>${esc(item)}</span>`).join('')}</div><button class="dc-btn ${isCurrent?'secondary':''}" ${action} ${enabled&&!isCurrent?'':'disabled'}>${esc(label)}</button></div></article>`;
+    const label=isCurrent?'Current plan':enabled?`Start ${trialDays}-day trial`:'Stripe price needed';
+    const featureCopy=id==='weekly'
+      ? ['Small weekly pack', `${minutesFor(tokens)} source minutes`, 'Good for testing']
+      : id==='monthly'
+        ? ['Best creator balance', `${minutesFor(tokens)} source minutes`, 'Most flexible']
+        : ['Big yearly token bank', `${minutesFor(tokens)} source minutes`, 'Lowest effort'];
+    return `<article class="dc-plan-card ${featured?'featured':''} ${isCurrent?'current':''}"><div class="dc-plan-top"><div><h3>${esc(plan.name||id)}</h3></div><span class="badge">${esc(isCurrent?'Active':plan.badge||(featured?'Popular':'Plan'))}</span></div><div class="tokens">${esc(tokens)} <span>tokens / ${esc(intervalWord[id]||id)}</span></div><p>${esc(plan.description||'Token allowance for clipping lectures.')}</p><div class="dc-plan-features">${featureCopy.map(item=>`<span>${esc(item)}</span>`).join('')}</div><button class="dc-btn ${isCurrent?'secondary':''}" data-billing-checkout="${esc(id)}" ${enabled&&!isCurrent?'':'disabled'}>${esc(label)}</button></article>`;
   }).join('');
   const usageLabel=unlimited?'Unlimited':trial.active?'Trial wallet':'Available now';
   const usageValue=unlimited?'∞':String(Math.round(remaining));
@@ -4824,13 +2640,12 @@ function openBillingModal(){
   const allowanceCopy=unlimited?'Owner account':`${Math.round(allowance)} allowance`;
   const spentCopy=unlimited?'No charges':`${Math.round(used)} used${reserved?` · ${Math.round(reserved)} reserved`:''}`;
   const billingReady=!!bill.stripeConfigured;
-  const trialStatus=trial.active?`Paid trial ends in ${trial.daysLeft} day${trial.daysLeft===1?'':'s'}`:freeTier.onFree&&!freeTier.expired?`${freeTier.daysLeft??0} days of free access left`:trial.ended||freeTier.expired?'Trial ended':`${trialDays}-day paid trial available`;
+  const trialStatus=trial.active?`Trial ends in ${trial.daysLeft} day${trial.daysLeft===1?'':'s'}`:trial.ended?'Trial ended':`${trialDays}-day trial available`;
   const layer=document.createElement('div');layer.id='dcBillingLayer';layer.className='dc-billing-layer show';
-  layer.innerHTML=`<section class="dc-billing-card" role="dialog" aria-modal="true" aria-labelledby="dcBillingTitle"><div class="dc-billing-head"><div><span class="dc-billing-kicker">${ICON.tokens} Tokens & billing</span><h2 id="dcBillingTitle">Every option, side by side.</h2><p>Free is for exploring with watermarked downloads. Weekly, Monthly and Yearly unlock social publishing—choose the pace that fits you.</p></div><button class="dc-billing-close" id="dcBillingClose" type="button" aria-label="Close">×</button></div><div class="dc-wallet-strip"><div><span>${esc(usageLabel)}</span><strong>${esc(usageValue)} <small>${esc(usageSub)}</small></strong></div><div><span>Current allowance</span><strong>${esc(allowanceCopy)}</strong></div><div><span>Usage</span><strong>${esc(spentCopy)}</strong></div><div><span>Source rate</span><strong>${esc(rate)} <small>token/min</small></strong></div><span class="dc-status-pill ${unlimited?'warn':trial.active?'good':''}">${esc(unlimited?'Admin mode':trialStatus)}</span><div class="dc-wallet-progress" aria-hidden="true"><i style="width:${pct}%"></i></div></div><div class="dc-plan-grid">${planCards}</div><div class="dc-billing-explainer"><span><b>Explore free</b>40 tokens for 3 days, with DeenClipped watermark.</span><span><b>Publish on Premium</b>Weekly, Monthly and Yearly can post to connected channels.</span><span><b>Edits stay free</b>Template updates and rerenders use no tokens.</span></div><div class="dc-billing-foot"><div class="dc-billing-note"><i class="${billingReady?'':'warn'}"></i><span>${billingReady?'Secure checkout powered by Stripe.':'Stripe checkout is being configured.'}</span></div><button class="dc-btn secondary" id="dcBillingPortal" type="button" ${cur.stripeCustomerId?'':'disabled'}>Manage billing</button></div></section>`;
+  layer.innerHTML=`<section class="dc-billing-card" role="dialog" aria-modal="true" aria-labelledby="dcBillingTitle"><div class="dc-billing-head"><div><span class="dc-billing-kicker">${ICON.tokens} Tokens & billing</span><h2 id="dcBillingTitle">Tokens that stay clear before you render.</h2><p>Every import shows an estimate first. Source videos cost <b>${esc(rate)} token/min</b>; template rerenders and style fixes are free.</p></div><button class="dc-billing-close" id="dcBillingClose" type="button" aria-label="Close">×</button></div><div class="dc-billing-status"><div class="dc-usage-panel"><div class="dc-panel-label"><span>${esc(usageLabel)}</span><span class="dc-status-pill ${unlimited?'warn':trial.active?'good':''}">${esc(unlimited?'Admin mode':trialStatus)}</span></div><div class="dc-usage-row"><div class="dc-usage-value">${esc(usageValue)}<span>${esc(usageSub)}</span></div><div class="dc-usage-meta"><div class="dc-usage-mini"><b>${esc(allowanceCopy)}</b><span>Current period</span></div><div class="dc-usage-mini"><b>${esc(spentCopy)}</b><span>Usage status</span></div></div></div><div class="dc-usage-bar" aria-hidden="true"><i style="width:${pct}%"></i></div></div><div class="dc-rate-panel"><div class="dc-panel-label"><span>Charge rules</span><span class="dc-status-pill warn">Transparent</span></div><div class="dc-rate-big">${esc(rate)} <span>token/min</span></div><p>A 45 minute lecture costs about <b>${Math.ceil(45*rate)} tokens</b>. You confirm the estimate before starting.</p><div class="dc-rate-steps"><span>1. Estimate</span><span>2. Render</span><span>3. Charge exact</span></div></div></div><div class="dc-charge-terms" style="margin:0 30px 18px">${terms.map(item=>`<span>${esc(item)}</span>`).join('')}</div><div class="dc-plan-grid">${planCards}</div><div class="dc-billing-foot"><div class="dc-billing-note"><i class="${billingReady?'':'warn'}"></i><span>${billingReady?'Stripe Checkout is connected.':'Stripe is not configured yet. Add secret key, webhook secret and price IDs in Render.'}</span></div><button class="dc-btn secondary" id="dcBillingPortal" type="button" ${cur.stripeCustomerId?'':'disabled'}>Manage billing</button></div></section>`;
   document.body.append(layer);
   $('#dcBillingClose').onclick=()=>layer.remove();
   layer.addEventListener('click',event=>{if(event.target===layer)layer.remove()});
-  $('[data-billing-free]',layer)?.addEventListener('click',()=>layer.remove());
   $$('[data-billing-checkout]',layer).forEach(btn=>btn.addEventListener('click',async()=>{
     const plan=btn.dataset.billingCheckout; if(!plan||btn.disabled)return;
     try{btn.disabled=true;btn.textContent='Opening Stripe…';const res=await callApi('/api/billing/checkout',{method:'POST',body:JSON.stringify({plan})}); if(res.url) location.href=res.url; else throw new Error('Stripe did not return a checkout URL.');}
@@ -4865,9 +2680,8 @@ function showBillingNotice(notice){
   seenSet('billing_notice',notice.id);
   $('#dcBillingNoticeLayer')?.remove();
   const layer=document.createElement('div'); layer.id='dcBillingNoticeLayer'; layer.className='dc-billing-notice-layer';
-  const points=notice.kind==='free_welcome'?['40 tokens for 3 days','Generate, edit and download with a watermark','Social posting unlocks with Premium']:notice.kind==='tokens_empty'?['Your existing clips stay available','Generating and posting pause at zero','Choose a plan or add a token pack']:notice.kind==='trial_ended'||notice.kind==='free_expired'?['Your existing projects and clips stay safe','New processing resumes as soon as you choose a plan','Plans and token usage stay available from the top bar']:['Tokens are shown before each import',`Paid-plan trials last ${billingInfo().trialDays||7} days`,'Manage your plan any time from the token button'];
-  const laterLabel=notice.kind==='free_welcome'?'Keep browsing':'Not now';
-  layer.innerHTML=`<section class="dc-billing-notice-card" role="dialog" aria-modal="true"><div class="dc-billing-notice-head"><div><span><i class="dc-notice-mark"></i> Billing update</span><h2>${esc(notice.title||'Account update')}</h2><p>${esc(notice.message||'Review your tokens and plan.')}</p></div><button class="dc-notice-close" id="dcBillingNoticeClose" type="button" aria-label="Close">×</button></div><div class="dc-billing-notice-body"><div class="dc-charge-terms">${points.map(point=>`<span>${esc(point)}</span>`).join('')}</div><div class="dc-billing-notice-actions"><button class="dc-btn secondary" id="dcBillingNoticeLater" type="button">${esc(laterLabel)}</button><button class="dc-btn" id="dcBillingNoticeAction" type="button">${esc(notice.action||'View plans')}</button></div></div></section>`;
+  const icon=notice.kind==='trial_ended'?'⚠':notice.kind==='low_tokens'?'◔':'✓';
+  layer.innerHTML=`<section class="dc-billing-notice-card" role="dialog" aria-modal="true"><div class="dc-billing-notice-head"><div><span>${icon} Billing update</span><h2>${esc(notice.title||'Account update')}</h2><p>${esc(notice.message||'Review your tokens and plan.')}</p></div><button class="dc-notice-close" id="dcBillingNoticeClose" type="button" aria-label="Close">×</button></div><div class="dc-billing-notice-body"><div class="dc-charge-terms"><span>Tokens are shown before each import</span><span>Trials last ${esc(billingInfo().trialDays||7)} days on paid plans</span><span>You can manage billing any time from the token button</span></div><div class="dc-billing-notice-actions"><button class="dc-btn secondary" id="dcBillingNoticeLater" type="button">Later</button><button class="dc-btn" id="dcBillingNoticeAction" type="button">${esc(notice.action||'Open billing')}</button></div></div></section>`;
   document.body.append(layer);
   const close=()=>layer.remove();
   $('#dcBillingNoticeClose').onclick=close; $('#dcBillingNoticeLater').onclick=close;
@@ -4875,12 +2689,10 @@ function showBillingNotice(notice){
   layer.addEventListener('click',event=>{if(event.target===layer)close()});
 }
 function maybeShowBillingNotices(){
-  if($('#dcGuideLayer')||$('#dcBillingLayer')||$('#dcBillingNoticeLayer'))return;
   const notices=billingInfo().notices||[];
-  const unseen=notices.find(notice=>notice?.id&&!seenGet('billing_notice',notice.id));
-  if(unseen)showBillingNotice(unseen);
+  if(notices.length)showBillingNotice(notices[0]);
 }
-function renderCurrent(){if(currentView==='admin')renderAdminPage();if(currentView==='home')renderHome();if(currentView==='projects')renderProjects();if(currentView==='review')renderReview();if(currentView==='editor')ensureEditor();if(currentView==='schedule')renderPublishingWorkspace();if(currentView==='publishing')renderConnections();if(currentView==='templates')renderTemplatesPage();if(currentView==='brand')renderBrandKit();if(currentView==='lab')renderCreatorLab();if(currentView==='music')renderAudioLibrary();if(currentView==='insights')renderInsightsPage();if(currentView==='automation')renderSettingsPage();if(currentView==='subscription')renderSubscriptionPage();lastDataSignature=structuralDataSignature(data())}
+function renderCurrent(){if(currentView==='home')renderHome();if(currentView==='projects')renderProjects();if(currentView==='review')renderReview();if(currentView==='editor')ensureEditor();if(currentView==='publishing')renderConnections();if(currentView==='templates')renderTemplatesPage();if(currentView==='music')renderAudioLibrary();if(currentView==='insights')renderInsightsPage();if(currentView==='automation')renderSettingsPage()}
 async function refreshData(){if(typeof refresh==='function')return refresh();try{DATA=await callApi('/api/state')}catch{}}
 function hexAlpha(hex,alpha){const value=String(hex||'#000000').replace('#','');if(!/^[0-9a-fA-F]{6}$/.test(value))return `rgba(0,0,0,${alpha})`;const n=parseInt(value,16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${alpha})`}
 function formatDuration(ms){const s=Math.max(0,Math.round(Number(ms||0)/1000));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}
@@ -4889,587 +2701,16 @@ function formatDate(value){if(!value)return'—';return new Intl.DateTimeFormat(
 function formatRelative(value){const diff=Date.now()-Number(value||0);if(diff<60000)return'Just now';if(diff<3600000)return`${Math.round(diff/60000)}m ago`;if(diff<86400000)return`${Math.round(diff/3600000)}h ago`;return`${Math.round(diff/86400000)}d ago`}
 function statusName(value){const map={queued:'Queued',processing:'Processing',done:'Ready',completed:'Ready',waiting:'Ready to review',approved:'Approved',scheduled:'Scheduled',publishing:'Publishing',posted:'Posted',publish_failed:'Publish failed',failed:'Failed',ready:'Ready'};return map[value]||String(value||'Draft').replace(/_/g,' ').replace(/\b\w/g,m=>m.toUpperCase())}
 
-function structuralDataSignature(d=data()){
-  if(!d)return'';
-  const providers=Object.entries(d.social?.providers||{}).map(([key,value])=>[key,Boolean(value?.configured),Boolean(value?.connected),(value?.accounts||[]).map(account=>account.id)]);
-  const current=d.billing?.current||{};
-  return JSON.stringify({
-    p:(d.projects||[]).map(p=>[p.id,p.status,Boolean(p.error),p.moreJob?.status,Boolean(p.moreJob?.error),Boolean(p.sourceReusable)]),
-    c:(d.clips||[]).map(c=>[c.id,c.status,c.scheduledAt,c.postedAt,(c.targets||[]).map(t=>[t.provider,t.status])]),
-    r:(d.rerenderJobs||[]).map(r=>[r.id,r.status,Boolean(r.error)]),
-    s:providers,t:d.selectedTemplate?.id||'',a:(d.tracks||[]).map(track=>track.id),
-    b:[current.plan,current.remaining,current.used,current.periodEnd,current.cancelAtPeriodEnd,current.trial?.active,current.freeTier?.expired]
-  });
-}
-
-function patchLiveProgress(){
-  const d=data();if(!d)return;
-  const current=activeJobs()[0];
-  if(current){
-    const progress=Number.isFinite(Number(current.progress))?clamp(Number(current.progress),0,100):null;
-    $$('[data-live-job="current"]').forEach(root=>{
-      const title=$('[data-live-title]',root),stage=$('[data-live-stage]',root),summary=$('[data-live-summary]',root),bar=$('[data-live-progress]',root),wrap=$('[data-live-progress-wrap]',root),percent=$('[data-live-percent]',root);
-      if(title)title.textContent=shortText(current.title||'Working now',72);
-      if(stage)stage.textContent=shortText(current.stage||'Working now',90);
-      if(summary)summary.textContent=`${shortText(current.title||'Working now',58)} · ${shortText(current.stage||'Working now',50)}`;
-      if(bar&&progress!==null)bar.style.width=`${progress}%`;
-      if(wrap)wrap.hidden=progress===null;
-      if(percent)percent.textContent=progress===null?'Live':`${Math.round(progress)}%`;
-    });
-  }
-  const projects=new Map((d.projects||[]).map(project=>[String(project.id),project]));
-  $$('[data-live-project]').forEach(root=>{
-    const project=projects.get(root.dataset.liveProject);if(!project)return;
-    const busy=['queued','processing'].includes(project.status);if(!busy)return;
-    const progress=clamp(Number(project.progress||0),0,100),bar=$('[data-live-progress]',root),stage=$('[data-live-stage]',root);
-    if(bar)bar.style.width=`${progress}%`;
-    if(stage){const queue=Number(project.queuePosition||0)>0?` · #${Math.round(project.queuePosition)}`:'';stage.lastChild.textContent=shortText(`${project.stage||'Processing'}${queue}`,30);stage.className='dc-library-row-state blue'}
-  });
-  $$('[data-live-more-job]').forEach(root=>{
-    const project=projects.get(root.dataset.liveMoreJob),job=project?.moreJob;if(!job)return;
-    const progress=clamp(Number(job.progress||0),0,100),bar=$('[data-live-progress]',root),stage=$('[data-live-stage]',root),percent=$('[data-live-percent]',root);
-    if(bar)bar.style.width=`${progress}%`;if(stage)stage.textContent=job.stage||'Generating more clips';if(percent)percent.textContent=`${Math.round(progress)}%`;
-  });
-}
-
 function sync(){
   injectShell();
-  hideLegacyProjectBrowser();
   const live=Boolean($('#app')&&!$('#app').classList.contains('hide'));
   $('#dcSidebar').style.display=live?'flex':'none';$('#dcTopbar').style.display=live?'flex':'none';
   if(!live||!data())return;
-  // Only one view panel may ever be visible. The original app still controls
-  // the legacy library/queue panels, so if both scripts touch visibility at
-  // once a stale panel can be left on screen and appear to overlap the
-  // sidebar. Re-asserting it here means any such race self-corrects.
-  if(currentView){
-    const active=`view-${currentView}`;
-    $$('.main-col > .panel').forEach(p=>{
-      const shouldHide=p.id!==active;
-      if(p.classList.contains('hide')!==shouldHide)p.classList.toggle('hide',shouldHide);
-    });
-  }
-  const adminNav=$('#dcAdminNav');if(adminNav)adminNav.style.display=isOperator()?'':'none';
-  syncAccountExperience();
-  detectWorkflowSignals(data());
-  const jobs=activeJobs(),issues=workspaceFailures(data()),health=$('#dcHealth');health.className=`dc-health ${issues.length?'bad':jobs.length?'busy':!data().readiness?.ready?'bad':''}`;$('span',health).textContent=issues.length?`${issues.length} ${issues.length===1?'issue':'issues'}`:jobs.length?`${jobs.length} active`:data().readiness?.ready?'Ready':'Setup needed';health.style.cursor='pointer';health.onclick=()=>openIssuesPanel();updateTokenPill();maybeShowBillingNotices();maybeShowTokenEvents();
-  const signature=structuralDataSignature(data());
+  const jobs=activeJobs(),issues=workspaceFailures(data()),health=$('#dcHealth');health.className=`dc-health ${issues.length?'bad':jobs.length?'busy':!data().readiness?.ready?'bad':''}`;$('span',health).textContent=issues.length?`${issues.length} ${issues.length===1?'issue':'issues'}`:jobs.length?`${jobs.length} active`:data().readiness?.ready?'Ready':'Setup needed';updateTokenPill();maybeShowBillingNotices();maybeShowTokenEvents();
+  const signature=JSON.stringify({p:(data().projects||[]).map(p=>[p.id,p.status,p.progress,p.moreJob?.status,p.moreJob?.progress]),c:(data().clips||[]).map(c=>[c.id,c.status,c.scheduledAt,c.postedAt,c.rerender?.status]),r:(data().rerenderJobs||[]).map(r=>[r.id,r.status,r.progress]),s:data().social?.providers});
   if(signature!==lastDataSignature){lastDataSignature=signature;if(currentView!=='editor'||!editor.dirty)renderCurrent();else{renderTimeline();}}
-  patchLiveProgress();
   paintWork();
 }
-/* ==========================================================================
- * ADMIN CONSOLE  (owner / admin accounts only)
- * ========================================================================== */
-
-let adminOps = null;
-let adminOpsLoading = false;
-let adminOpsError = '';
-let adminTab = 'overview';
-let adminAnalytics = null;
-let adminUserQuery = '';
-let adminUserPlan = 'all';
-
-function isOperator(){
-  const role=String(data()?.role||'').toLowerCase();
-  return role==='owner'||role==='admin';
-}
-
-function formatBytes(bytes){
-  const n=Number(bytes||0);
-  if(!Number.isFinite(n)||n<=0)return '0 B';
-  const units=['B','KB','MB','GB','TB'];
-  const i=Math.min(units.length-1,Math.floor(Math.log(n)/Math.log(1024)));
-  return `${(n/Math.pow(1024,i)).toFixed(i===0?0:i===1?0:2)} ${units[i]}`;
-}
-function formatMoney(amount,currency='USD'){
-  const n=Number(amount||0);
-  try{return new Intl.NumberFormat('en-AU',{style:'currency',currency,maximumFractionDigits:2}).format(n)}
-  catch{return `${currency} ${n.toFixed(2)}`}
-}
-function formatDay(value){
-  if(!value)return '—';
-  return new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',year:'numeric'}).format(new Date(Number(value)));
-}
-
-async function loadAdminOps(force=false){
-  if(adminOpsLoading)return;
-  if(adminOps&&!force)return;
-  adminOpsLoading=true;adminOpsError='';
-  try{
-    const [ops,stats]=await Promise.all([
-      callApi('/api/admin/operations'),
-      callApi('/api/admin/analytics').catch(()=>null)
-    ]);
-    adminOps=ops;
-    if(stats)adminAnalytics=stats;
-  }catch(error){
-    adminOpsError=error.message||'Could not load admin data.';
-  }finally{
-    adminOpsLoading=false;
-    if(currentView==='admin')renderAdminPage();
-  }
-}
-
-function adminStatusPill(status){
-  if(status==='ok')return `<span class="dc-status-pill good">Connected</span>`;
-  if(status==='missing')return `<span class="dc-status-pill bad">Missing</span>`;
-  return `<span class="dc-status-pill">Optional</span>`;
-}
-
-function adminTabs(){
-  const tabs=[['overview','Overview'],['users','Users'],['subscriptions','Subscriptions'],['services','Infrastructure'],['integrations','Integrations']];
-  return `<div class="dc-admin-tabs">${tabs.map(([id,label])=>`<button class="dc-admin-tab${adminTab===id?' is-active':''}" type="button" data-admin-tab="${id}">${esc(label)}</button>`).join('')}</div>`;
-}
-
-function adminOverview(){
-  const ops=adminOps,stats=adminAnalytics;
-  if(!ops)return '';
-  const o=stats?.overview||{};
-  const sub=ops.subscriptions||{};
-  const storage=ops.storage||{};
-  const summary=ops.integrationSummary||{};
-  const vendors=ops.vendors||{};
-  const alerts=[];
-  if(summary.missing)alerts.push(`${summary.missing} required integration${summary.missing===1?'':'s'} not configured`);
-  if(!sub.stripeReady)alerts.push('Stripe needs configuration');
-  if(storage.error)alerts.push('Storage metrics are unavailable');
-  (vendors.vendors||[]).filter(v=>v.overdue||v.dueSoon).slice(0,2).forEach(v=>alerts.push(`${v.name} ${v.overdue?'is overdue':`renews in ${v.daysUntilRenewal} days`}`));
-  const live=ops.live||{},worker=live.worker||{},queue=worker.queue||{},users=Number(o.users??sub.totalUsers??0),jobs=Number(queue.running||0)+Number(queue.depth||0),healthy=Math.max(0,Number(summary.ok||0));
-  const mrr=null;
-  const usage=(stats?.usage||[]).slice(-7),maxUsage=Math.max(1,...usage.map(row=>Number(row.tokensUsed||0)+Number(row.tokensAdded||0)));
-  const chartPoints=(usage.length?usage:[{tokensUsed:0},{tokensUsed:0},{tokensUsed:0},{tokensUsed:0},{tokensUsed:0},{tokensUsed:0},{tokensUsed:0}]).map((row,index,list)=>`${Math.round(index/(Math.max(1,list.length-1))*100)},${Math.round(86-(Number(row.tokensUsed||0)+Number(row.tokensAdded||0))/maxUsage*68)}`).join(' ');
-  const services=[['API',!summary.missing],['Worker',worker.configured&&!worker.error],['Database',true],['Storage',storage.configured&&!storage.error]];
-  const recentUsers=(stats?.users||[]).slice(0,5);
-  const activeJobs=Number(queue.running||0),queuedJobs=Number(queue.depth||0),completeJobs=Number(o.projects30d||0);
-  return `<div class="dc-v7-admin-overview"><section class="dc-v7-admin-kpis"><article><span>${ICON.social}</span><strong>${users}</strong><small>creators</small><em>+${Number(o.newUsers30d||0)} this month</em></article><article><span>${ICON.billing}</span><strong>${mrr?formatMoney(mrr):'—'}</strong><small>MRR</small><em>${mrr?'Estimated from active plans':'No realised revenue feed'}</em></article><article><span>${ICON.projects}</span><strong>${jobs}</strong><small>jobs today</small><em>${activeJobs} active</em></article><article><span>${ICON.brand}</span><strong>—</strong><small>uptime</small><em>Rolling monitor not connected</em></article></section>
-    <section class="dc-v7-admin-mid"><article class="dc-v7-admin-chart"><header><h2>Business pulse</h2><div><button class="is-active">Revenue</button><button>Usage</button></div><nav><button class="is-active">Weekly</button><button>Monthly</button></nav></header><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Workspace usage trend"><defs><linearGradient id="dcAdminFill" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e9b85f" stop-opacity=".28"/><stop offset="1" stop-color="#e9b85f" stop-opacity="0"/></linearGradient></defs><polygon points="0,100 ${chartPoints} 100,100" fill="url(#dcAdminFill)"/><polyline points="${chartPoints}" fill="none" stroke="#e9b85f" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg><footer>${usage.map(row=>`<span>${esc(String(row.date||'').slice(5))}</span>`).join('')}</footer></article><article class="dc-v7-admin-health"><header><h2>System health</h2><button data-admin-jump="services">View all</button></header><table><thead><tr><th>Service</th><th>Status</th><th>Latency</th></tr></thead><tbody>${services.map(([name,ok])=>`<tr><td>${name}</td><td><span class="${ok?'good':'bad'}"><i></i>${ok?'Healthy':'Needs setup'}</span></td><td>—</td></tr>`).join('')}</tbody></table><p>${healthy===Number(summary.total||0)?ICON.check:ICON.warning} ${summary.missing?'Configuration needs attention':'All systems operational'}</p></article></section>
-    <section class="dc-v7-admin-bottom"><article><header><h2>Recent creators</h2><button data-admin-jump="users">View all</button></header><table><thead><tr><th>Creator</th><th>Plan</th><th>Tokens</th><th>Status</th></tr></thead><tbody>${recentUsers.length?recentUsers.map(row=>`<tr><td><span class="dc-v7-admin-avatar">${row.picture?`<img src="${esc(row.picture)}" alt="">`:esc(String(row.name||'C').slice(0,1))}</span><b>${esc(shortText(row.name||row.email||'Creator',24))}</b></td><td>${esc(row.plan)}</td><td>${row.remainingTokens===null?'∞':Number(row.remainingTokens||0).toLocaleString()}</td><td><i class="good"></i> Active</td></tr>`).join(''):'<tr><td colspan="4">No creator accounts yet.</td></tr>'}</tbody></table></article><article><header><h2>Processing lanes</h2><button data-admin-jump="services">View all</button></header><div class="dc-v7-admin-lanes"><p><span><i class="good"></i>Active</span><b>${activeJobs}</b><em><u style="width:${Math.min(100,activeJobs/Math.max(1,Number(queue.maxConcurrent||1))*100)}%"></u></em></p><p><span><i></i>Queued</span><b>${queuedJobs}</b><em><u style="width:${Math.min(100,queuedJobs/Math.max(1,queuedJobs+activeJobs)*100)}%"></u></em></p><p><span><i class="good"></i>Completed</span><b>${completeJobs}</b><em><u style="width:${completeJobs?100:0}%"></u></em></p><footer>Total jobs this month <strong>${completeJobs}</strong></footer></div></article><article><header><h2>Needs attention</h2><button data-admin-jump="integrations">View all</button></header><div class="dc-v7-admin-alert-list">${alerts.length?alerts.slice(0,3).map(alert=>`<button data-admin-jump="integrations"><span>!</span><b>${esc(alert)}</b><em>Review</em></button>`).join(''):`<div class="dc-v7-admin-clear">${ICON.check}<strong>No urgent operations</strong></div>`}</div><button class="dc-btn" data-admin-jump="services">Open operations ${ICON.chevron}</button></article></section></div>`;
-}
-
-function adminSubscriptions(){
-  const sub=adminOps?.subscriptions;if(!sub)return '';
-  const prices=sub.planPrices||{};
-  const planRows=(sub.plans||[]).map(p=>`<tr><td><strong>${esc(p.plan)}</strong>${prices[p.plan]?`<span class="dc-admin-dim"> · ${esc(prices[p.plan])}</span>`:''}</td><td>${p.users}</td><td>${p.active}</td><td>${p.trialing}</td><td>${p.canceled}</td></tr>`).join('');
-  const renewalRows=(sub.upcomingRenewals||[]).map(r=>`<tr><td><strong>${esc(r.name)}</strong><span class="dc-admin-dim">${esc(r.email)}</span></td><td>${esc(r.plan)}</td><td>${esc(r.status)}</td><td>${formatDay(r.renewsAt)}</td><td>${r.daysUntil<0?'<span class="dc-status-pill bad">Overdue</span>':`${r.daysUntil}d`}</td></tr>`).join('');
-  return `<section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>Plans</h2>${sub.stripeReady?`<span class="dc-status-pill good">Stripe live</span>`:`<span class="dc-status-pill bad">Stripe not configured</span>`}</div>
-    <p class="dc-admin-note">${sub.payingUsers||0} paying · ${sub.trialUsers||0} trialing · ${sub.totalUsers||0} total accounts. Trial length ${sub.trialDays||0} days.</p>
-    <table class="dc-admin-table"><thead><tr><th>Plan</th><th>Users</th><th>Active</th><th>Trialing</th><th>Cancelled</th></tr></thead><tbody>${planRows||'<tr><td colspan="5">No plan data yet.</td></tr>'}</tbody></table></section>
-  <section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>Upcoming renewals</h2></div>
-    <table class="dc-admin-table"><thead><tr><th>Account</th><th>Plan</th><th>Status</th><th>Renews</th><th>In</th></tr></thead><tbody>${renewalRows||'<tr><td colspan="5">No subscription renewals scheduled.</td></tr>'}</tbody></table></section>`;
-}
-
-function adminStorage(){
-  const s=adminOps?.storage;if(!s)return '';
-  if(!s.configured)return `<section class="dc-admin-panel"><h2>Storage</h2><p class="dc-admin-note">Object storage is not configured.</p></section>`;
-  if(s.error)return `<section class="dc-admin-panel"><h2>Storage</h2><p class="dc-admin-note">Could not read the bucket: ${esc(s.error)}</p></section>`;
-  const max=Math.max(1,...(s.folders||[]).map(f=>f.bytes));
-  const rows=(s.folders||[]).map(f=>`<div class="dc-quality-row"><span>${esc(f.prefix)}/</span><div class="dc-quality-bar"><i style="width:${Math.round(f.bytes/max*100)}%"></i></div><b>${formatBytes(f.bytes)}</b></div><div class="dc-admin-dim" style="margin:-4px 0 10px">${f.objects.toLocaleString()} objects</div>`).join('');
-  return `<section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>${esc(s.bucket)}</h2><span class="dc-status-pill">${esc(s.region)}</span></div>
-    <div class="dc-admin-grid">
-      <article class="dc-admin-card"><span class="dc-admin-card-label">Total stored</span><strong>${formatBytes(s.totalBytes)}</strong><em>${(s.totalObjects||0).toLocaleString()} objects</em></article>
-      <article class="dc-admin-card"><span class="dc-admin-card-label">Oldest file</span><strong>${formatDay(s.oldestAt)}</strong><em>first upload</em></article>
-      <article class="dc-admin-card"><span class="dc-admin-card-label">Newest file</span><strong>${formatDay(s.newestAt)}</strong><em>most recent write</em></article>
-    </div>
-    ${s.truncated?`<p class="dc-admin-note">Scan stopped after ${s.scannedPages} pages — totals are a lower bound.</p>`:''}
-    <h3 class="dc-admin-subhead">Breakdown by folder</h3>${rows||'<p class="dc-admin-note">Bucket is empty.</p>'}</section>`;
-}
-
-function adminIntegrations(){
-  const rows=adminOps?.integrations||[];
-  const grouped=new Map();
-  rows.forEach(r=>{const list=grouped.get(r.category)||[];list.push(r);grouped.set(r.category,list)});
-  return [...grouped.entries()].map(([category,items])=>`<section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>${esc(category)}</h2></div>
-    <div class="dc-admin-list">${items.map(item=>`<div class="dc-admin-row"><div class="dc-admin-row-copy"><strong>${esc(item.name)}${item.required?'<em class="dc-admin-req">required</em>':''}</strong><span>${esc(item.detail)}</span><span class="dc-admin-dim">${item.envKeys.map(esc).join(' · ')}</span></div><div class="dc-admin-row-actions">${adminStatusPill(item.status)}${item.dashboard?`<a class="dc-btn secondary" href="${esc(item.dashboard)}" target="_blank" rel="noopener noreferrer">Open</a>`:''}</div></div>`).join('')}</div></section>`).join('');
-}
-
-function adminVendors(){
-  const v=adminOps?.vendors;if(!v)return '';
-  const rows=(v.vendors||[]).map(row=>`<div class="dc-admin-row"><div class="dc-admin-row-copy"><strong>${esc(row.name)}</strong><span>${esc(row.plan||'—')} · ${formatMoney(row.cost,row.currency)} ${esc(row.cycle)}</span>${row.notes?`<span class="dc-admin-dim">${esc(row.notes)}</span>`:''}</div><div class="dc-admin-row-actions">${row.renewsAt?`<span class="dc-status-pill${row.overdue?' bad':row.dueSoon?' warn':''}">${row.overdue?'Overdue':`${formatDay(row.renewsAt)}`}</span>`:'<span class="dc-status-pill">No date</span>'}${row.url?`<a class="dc-btn secondary" href="${esc(row.url)}" target="_blank" rel="noopener noreferrer">Open</a>`:''}<button class="dc-btn secondary" type="button" data-vendor-delete="${esc(row.id)}">Remove</button></div></div>`).join('');
-  return `<section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>What you pay for</h2><span class="dc-status-pill">${formatMoney(v.totalMonthly||0)} / month</span></div>
-    <p class="dc-admin-note">These services have no API to query, so record them here to keep every renewal date in one place.</p>
-    <div class="dc-admin-list">${rows||'<p class="dc-admin-note">Nothing recorded yet.</p>'}</div>
-    <h3 class="dc-admin-subhead">Add or update</h3>
-    <form class="dc-admin-form" id="dcVendorForm">
-      <label>Service<input name="name" placeholder="SocialKit" required></label>
-      <label>Plan<input name="plan" placeholder="Pro"></label>
-      <label>Cost<input name="cost" type="number" min="0" step="0.01" placeholder="29"></label>
-      <label>Currency<input name="currency" value="USD" maxlength="6"></label>
-      <label>Billing cycle<select name="cycle"><option value="monthly">Monthly</option><option value="yearly">Yearly</option><option value="weekly">Weekly</option><option value="one-off">One-off</option></select></label>
-      <label>Next payment<input name="renewsAt" type="date"></label>
-      <label class="wide">Dashboard URL<input name="url" type="url" placeholder="https://..."></label>
-      <label class="wide">Notes<input name="notes" placeholder="Card ending 1234"></label>
-      <div class="wide"><button class="dc-btn" type="submit">Save service</button></div>
-    </form></section>`;
-}
-
-function adminUsers(){
-  const users=adminAnalytics?.users||[];
-  const query=adminUserQuery.trim().toLowerCase();
-  const filtered=users.filter(u=>(adminUserPlan==='all'||u.plan===adminUserPlan)&&(!query||`${u.name} ${u.email} ${u.plan} ${u.billingStatus} ${u.role}`.toLowerCase().includes(query)));
-  const rows=filtered.slice(0,250).map(u=>`<tr><td><strong>${esc(u.name)}</strong><span class="dc-admin-dim">${esc(u.email)}</span></td><td><span class="dc-status-pill ${u.plan==='monthly'||u.plan==='yearly'?'good':''}">${esc(u.plan)}</span></td><td>${esc(u.billingStatus)}</td><td><strong>${u.remainingTokens===null?'∞':Number(u.remainingTokens||0).toLocaleString()}</strong><span class="dc-admin-dim">${Number(u.tokensUsed||0).toLocaleString()} used</span></td><td>${u.projects}</td><td>${u.clips}</td><td>${u.posted}</td><td>${u.failed?`<span class="dc-status-pill bad">${u.failed}</span>`:'0'}</td><td>${u.lastLoginAt?formatRelative(u.lastLoginAt):'Never'}</td></tr>`).join('');
-  return `<section class="dc-admin-panel dc-admin-users-panel"><div class="dc-admin-panel-head"><div><span class="dc-admin-card-label">Account directory</span><h2>Users and customer health</h2><p class="dc-admin-note">Search accounts, inspect product usage and export the current operational view.</p></div><span class="dc-status-pill">${filtered.length} of ${users.length}</span></div><div class="dc-admin-user-tools"><label class="dc-admin-search-box"><span>⌕</span><input id="dcAdminUserSearch" type="search" value="${esc(adminUserQuery)}" placeholder="Search name, email, role or status"></label><select id="dcAdminPlanFilter" aria-label="Filter users by plan"><option value="all">All plans</option>${['free','weekly','monthly','yearly','admin'].map(p=>`<option value="${p}" ${adminUserPlan===p?'selected':''}>${p[0].toUpperCase()+p.slice(1)}</option>`).join('')}</select><button class="dc-btn secondary" type="button" id="dcAdminExportUsers">Export CSV</button></div><table class="dc-admin-table"><thead><tr><th>Account</th><th>Plan</th><th>Status</th><th>Tokens</th><th>Videos</th><th>Clips</th><th>Posted</th><th>Failures</th><th>Last seen</th></tr></thead><tbody>${rows||'<tr><td colspan="9">No accounts match these filters.</td></tr>'}</tbody></table></section>`;
-}
-
-function adminActivity(){
-  const billing=adminAnalytics?.recentActivity||[],app=adminAnalytics?.recentApplicationActivity||[];
-  const events=[...billing.map(e=>({...e,kind:'billing',label:e.message||e.type||'Billing activity'})),...app.map((e,index)=>({...e,id:`app_${index}`,kind:'system',label:`${String(e.level||'info').toUpperCase()} application event`}))].sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0)).slice(0,80);
-  return `<section class="dc-admin-panel"><div class="dc-admin-panel-head"><div><span class="dc-admin-card-label">Audit stream</span><h2>Recent account and system activity</h2><p class="dc-admin-note">A read-only operational trail. Sensitive payloads and credentials are never included.</p></div><span class="dc-status-pill">${events.length} events</span></div><div class="dc-admin-activity-list">${events.length?events.map(e=>`<div class="dc-admin-activity-item"><span class="dc-admin-activity-icon ${esc(e.kind)}">${e.kind==='billing'?'$':'•'}</span><div><strong>${esc(e.label)}</strong><span>${e.userId?`User ${esc(String(e.userId).slice(0,12))} · `:''}${esc(formatDay(e.createdAt))} · ${esc(formatRelative(e.createdAt))}</span></div><b>${e.amount?`${e.type==='tokens_charged'?'−':'+'}${Number(e.amount).toLocaleString()} tokens`:esc(e.level||e.kind)}</b></div>`).join(''):'<p class="dc-admin-note">No recent activity has been recorded.</p>'}</div></section>`;
-}
-
-function exportAdminUsers(){
-  const users=adminAnalytics?.users||[];
-  const headings=['Name','Email','Role','Plan','Billing status','Tokens remaining','Tokens used','Projects','Clips','Posted','Failures','Joined','Last login'];
-  const cell=value=>`"${String(value??'').replace(/"/g,'""')}"`;
-  const rows=users.map(u=>[u.name,u.email,u.role,u.plan,u.billingStatus,u.remainingTokens===null?'unlimited':u.remainingTokens,u.tokensUsed,u.projects,u.clips,u.posted,u.failed,new Date(u.createdAt||0).toISOString(),u.lastLoginAt?new Date(u.lastLoginAt).toISOString():'']);
-  const blob=new Blob([[headings,...rows].map(row=>row.map(cell).join(',')).join('\n')],{type:'text/csv;charset=utf-8'});
-  const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`deenclipped-users-${new Date().toISOString().slice(0,10)}.csv`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-}
-
-
-function adminMeter(label,percent,detail,tone=''){
-  const pct=percent===null||percent===undefined?null:Math.max(0,Math.min(100,Number(percent)));
-  return `<div class="dc-quality-row"><span>${esc(label)}</span><div class="dc-quality-bar${tone?' '+tone:''}"><i style="width:${pct===null?0:pct}%"></i></div><b>${pct===null?'—':pct+'%'}</b></div>${detail?`<div class="dc-admin-dim" style="margin:-4px 0 10px">${esc(detail)}</div>`:''}`;
-}
-
-function adminServices(){
-  const live=adminOps?.live;
-  if(!live)return `<section class="dc-admin-panel"><h2>Services</h2><p class="dc-admin-note">No live metric data in this response.</p></section>`;
-  if(live.error)return `<section class="dc-admin-panel"><h2>Services</h2><p class="dc-admin-note">Could not read live metrics: ${esc(live.error)}</p></section>`;
-
-  /* ---- Worker box ---- */
-  const w=live.worker||{};
-  let workerPanel;
-  if(!w.configured){
-    workerPanel=`<p class="dc-admin-note">The processing worker is not configured.</p>`;
-  }else if(w.error){
-    workerPanel=`<p class="dc-admin-note">Worker unreachable: ${esc(w.error)}</p>`;
-  }else{
-    const cpu=w.cpu||{},mem=w.memory||{},disk=w.disk||{},q=w.queue||{};
-    const la=cpu.loadAverage;
-    const upt=w.uptimeSeconds?`${Math.floor(w.uptimeSeconds/86400)}d ${Math.floor((w.uptimeSeconds%86400)/3600)}h`:'—';
-    workerPanel=`${w.legacy?`<p class="dc-admin-note">${esc(w.note||'Worker needs rebuilding for full metrics.')}</p>`:''}
-      <div class="dc-admin-grid">
-        <article class="dc-admin-card"><span class="dc-admin-card-label">CPU</span><strong>${cpu.percent===null||cpu.percent===undefined?'—':cpu.percent+'%'}</strong><em>${cpu.cores?cpu.cores+' cores':'—'}${la?` · load ${la['1m']}`:''}</em></article>
-        <article class="dc-admin-card"><span class="dc-admin-card-label">Memory</span><strong>${mem.percent===null||mem.percent===undefined?'—':mem.percent+'%'}</strong><em>${mem.usedBytes?formatBytes(mem.usedBytes):'—'} of ${mem.totalBytes?formatBytes(mem.totalBytes):'—'}</em></article>
-        <article class="dc-admin-card"><span class="dc-admin-card-label">Disk</span><strong>${disk.percent===null||disk.percent===undefined?'—':disk.percent+'%'}</strong><em>${disk.freeBytes?formatBytes(disk.freeBytes)+' free':'—'}</em></article>
-        <article class="dc-admin-card"><span class="dc-admin-card-label">Worker lanes</span><strong>${q.running??0} / ${q.maxConcurrent??'—'}</strong><em>${q.depth??0} waiting · AI/render ${q.heavyRunning??0} / ${q.maxHeavy??'—'} · up ${upt}</em></article>
-      </div>
-      ${adminMeter('CPU',cpu.percent,cpu.cores?`${cpu.cores} cores available`:'')}
-      ${adminMeter('Memory',mem.percent,mem.totalBytes?`${formatBytes(mem.usedBytes||0)} of ${formatBytes(mem.totalBytes)}`:'')}
-      ${adminMeter('Disk',disk.percent,disk.totalBytes?`${formatBytes(disk.freeBytes||0)} free of ${formatBytes(disk.totalBytes)}`:'')}`;
-  }
-
-  /* ---- Hetzner billing ---- */
-  const h=live.hetzner||{};
-  let hetznerPanel;
-  if(!h.configured){
-    hetznerPanel=`<p class="dc-admin-note">Add <b>${esc((h.envKeys||['HETZNER_API_TOKEN']).join(', '))}</b> in Render to show server type, cost and bandwidth.</p>`;
-  }else if(h.error){
-    hetznerPanel=`<p class="dc-admin-note">Hetzner API error: ${esc(h.error)}</p>`;
-  }else{
-    hetznerPanel=(h.servers||[]).map(s=>`<div class="dc-admin-row"><div class="dc-admin-row-copy"><strong>${esc(s.name)} <span class="dc-admin-req">${esc(s.serverType)}</span></strong><span>${s.cores} vCPU · ${s.memoryGb} GB RAM · ${s.diskGb} GB disk · ${esc(s.location)}</span><span class="dc-admin-dim">Traffic ${s.outgoingTrafficBytes?formatBytes(s.outgoingTrafficBytes):'0 B'} of ${s.includedTrafficBytes?formatBytes(s.includedTrafficBytes):'—'}${s.trafficPercent!==null?` (${s.trafficPercent}%)`:''}</span></div><div class="dc-admin-row-actions"><span class="dc-status-pill${s.status==='running'?' good':' bad'}">${esc(s.status)}</span><span class="dc-status-pill">${s.monthlyCost?`€${s.monthlyCost.toFixed(2)}/mo`:'—'}</span></div></div>`).join('')
-      ||`<p class="dc-admin-note">No servers returned by the Hetzner API.</p>`;
-  }
-
-  /* ---- Cloudflare R2 ---- */
-  const c=live.cloudflare||{};
-  let cfPanel;
-  if(!c.configured){
-    cfPanel=`<p class="dc-admin-note">Add <b>${esc((c.envKeys||['CLOUDFLARE_API_TOKEN','CLOUDFLARE_ACCOUNT_ID']).join(', '))}</b> in Render to show R2 operation counts and free-tier headroom.</p>`;
-  }else if(c.error){
-    cfPanel=`<p class="dc-admin-note">Cloudflare API error: ${esc(c.error)}</p>`;
-  }else{
-    const ft=c.freeTier||{};
-    const aPct=ft.classA?Math.min(100,Math.round(c.classAOperations/ft.classA*100)):null;
-    const bPct=ft.classB?Math.min(100,Math.round(c.classBOperations/ft.classB*100)):null;
-    cfPanel=`<div class="dc-admin-grid">
-        <article class="dc-admin-card"><span class="dc-admin-card-label">Class A ops</span><strong>${(c.classAOperations||0).toLocaleString()}</strong><em>writes · last ${c.windowDays} days</em></article>
-        <article class="dc-admin-card"><span class="dc-admin-card-label">Class B ops</span><strong>${(c.classBOperations||0).toLocaleString()}</strong><em>reads · last ${c.windowDays} days</em></article>
-        <article class="dc-admin-card"><span class="dc-admin-card-label">Stored</span><strong>${c.storedBytes?formatBytes(c.storedBytes):'—'}</strong><em>${c.objectCount?c.objectCount.toLocaleString()+' objects':'per Cloudflare'}</em></article>
-      </div>
-      ${adminMeter('Class A free tier',aPct,`${(c.classAOperations||0).toLocaleString()} of ${(ft.classA||0).toLocaleString()} free writes/month`)}
-      ${adminMeter('Class B free tier',bPct,`${(c.classBOperations||0).toLocaleString()} of ${(ft.classB||0).toLocaleString()} free reads/month`)}
-      ${(c.byAction||[]).length?`<h3 class="dc-admin-subhead">By operation</h3><table class="dc-admin-table"><thead><tr><th>Operation</th><th>Requests</th></tr></thead><tbody>${c.byAction.map(r=>`<tr><td>${esc(r.action)}</td><td>${r.requests.toLocaleString()}</td></tr>`).join('')}</tbody></table>`:''}`;
-  }
-
-  /* ---- SocialKit (estimated) ---- */
-  const s=live.socialkit||{};
-  let skPanel;
-  if(!s.applicable){
-    skPanel=`<p class="dc-admin-note">Import provider is <b>${esc(s.provider||'none')}</b>, so no SocialKit credits are consumed.</p>`;
-  }else{
-    skPanel=`<p class="dc-admin-note"><b>Estimated.</b> SocialKit has no usage API, so this is calculated from your own imports at 1 credit per source minute. Treat the SocialKit dashboard as the source of truth.</p>
-      <div class="dc-admin-grid">
-        <article class="dc-admin-card"><span class="dc-admin-card-label">Credits used (est.)</span><strong>${(s.creditsUsedEstimate||0).toLocaleString()}</strong><em>${s.importsThisWindow||0} link imports this period</em></article>
-        <article class="dc-admin-card"><span class="dc-admin-card-label">Remaining (est.)</span><strong>${s.creditsRemainingEstimate===null||s.creditsRemainingEstimate===undefined?'—':s.creditsRemainingEstimate.toLocaleString()}</strong><em>${s.planCredits?`of ${s.planCredits.toLocaleString()} plan credits`:'set plan size below'}</em></article>
-        <article class="dc-admin-card"><span class="dc-admin-card-label">Period started</span><strong>${formatDay(s.windowStart)}</strong><em>day ${s.daysIntoWindow??0}${s.resetDay?` · resets day ${s.resetDay}`:' · rolling 30 days'}</em></article>
-        <article class="dc-admin-card"><span class="dc-admin-card-label">Previous period</span><strong>${(s.previousPeriod?.creditsUsed||0).toLocaleString()}</strong><em>${s.previousPeriod?.imports||0} imports last cycle</em></article>
-      </div>
-      ${s.percentUsed!==null&&s.percentUsed!==undefined?adminMeter('Plan credits used',s.percentUsed,`${(s.creditsUsedEstimate||0).toLocaleString()} of ${(s.planCredits||0).toLocaleString()}`):''}
-      <h3 class="dc-admin-subhead">Plan details</h3>
-      <form class="dc-admin-form" id="dcSocialkitForm">
-        <label>Monthly plan credits<input name="planCredits" type="number" min="0" step="1" value="${s.planCredits||''}" placeholder="12000"></label>
-        <label>Resets on day of month<input name="resetDay" type="number" min="1" max="31" step="1" value="${s.resetDay||''}" placeholder="7"></label>
-        <div class="wide"><button class="dc-btn" type="submit">Save plan details</button></div>
-      </form>`;
-  }
-
-  return `<section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>Processing worker</h2><span class="dc-status-pill">${live.at?formatRelative(live.at):''}</span></div>${workerPanel}</section>
-    <section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>Hetzner Cloud</h2>${h.configured&&!h.error?`<span class="dc-status-pill">€${(h.totalMonthlyCost||0).toFixed(2)}/mo</span>`:''}</div>${hetznerPanel}</section>
-    <section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>Cloudflare R2</h2></div>${cfPanel}</section>
-    <section class="dc-admin-panel"><div class="dc-admin-panel-head"><h2>SocialKit credits</h2><span class="dc-status-pill warn">Estimate</span></div>${skPanel}</section>`;
-}
-
-function renderAdminPage(){
-  const panel=$('#view-admin');if(!panel)return;
-  panel.classList.add('dc-v7-admin');
-  if(!isOperator()){panel.innerHTML=`<div class="dc-empty v3"><div><div class="dc-empty-icon">${ICON.settings}</div><strong>Not available</strong></div></div>`;return}
-  if(!adminOps&&!adminOpsError){
-    panel.innerHTML=`<div class="dc-manage-page"><section class="dc-studio-hero"><div><span class="dc-manage-kicker">${ICON.analytics} Admin console</span><h1>Loading operations data…</h1><p>Reading storage totals, integration status and subscription records.</p></div></section></div>`;
-    loadAdminOps();return;
-  }
-  const body=adminOpsError
-    ? `<section class="dc-admin-panel"><h2>Could not load</h2><p class="dc-admin-note">${esc(adminOpsError)}</p><button class="dc-btn" type="button" id="dcAdminRetry">Try again</button></section>`
-    : adminTab==='overview'?adminOverview()
-      :adminTab==='services'?adminServices()
-      :adminTab==='subscriptions'?adminSubscriptions()
-        :adminTab==='users'?adminUsers()
-          :adminTab==='activity'?adminActivity()
-            :adminTab==='storage'?adminStorage()
-          :adminTab==='integrations'?adminIntegrations()
-            :adminTab==='vendors'?adminVendors()
-              :adminOverview();
-  const generated=adminOps?.generatedAt||adminAnalytics?.generatedAt;
-  const missing=Number(adminOps?.integrationSummary?.missing||0);
-  panel.innerHTML=`<div class="dc-v7-admin-page"><section class="dc-v7-admin-head"><div><h1>Admin Console</h1><p>Business, users and infrastructure at a glance.</p></div><div><button class="dc-btn secondary dc-svg" type="button" id="dcAdminRefresh">${ICON.refresh||''} Refresh</button><span class="${missing?'warn':'good'}">${missing?ICON.warning:ICON.check}${missing?`${missing} setup item${missing===1?'':'s'}`:'All systems operational'}</span></div></section>${adminTabs()}${body}</div>`;
-  $$('[data-admin-tab]',panel).forEach(btn=>btn.addEventListener('click',()=>{adminTab=btn.dataset.adminTab;renderAdminPage();}));
-  $$('[data-admin-jump]',panel).forEach(btn=>btn.addEventListener('click',()=>{adminTab=btn.dataset.adminJump;renderAdminPage();}));
-  $$('[data-vendor-delete]',panel).forEach(btn=>btn.addEventListener('click',async()=>{
-    try{await callApi(`/api/admin/vendors/${encodeURIComponent(btn.dataset.vendorDelete)}`,{method:'DELETE'});notify('Removed.','good');adminOps=null;renderAdminPage();}
-    catch(error){notify(error.message,'bad')}
-  }));
-  $('#dcAdminRefresh')?.addEventListener('click',()=>{adminOps=null;adminAnalytics=null;renderAdminPage();});
-  $('#dcAdminRetry')?.addEventListener('click',()=>{adminOpsError='';adminOps=null;renderAdminPage();});
-  let userSearchTimer;
-  $('#dcAdminUserSearch')?.addEventListener('input',event=>{clearTimeout(userSearchTimer);const value=event.target.value;userSearchTimer=setTimeout(()=>{adminUserQuery=value;renderAdminPage();const input=$('#dcAdminUserSearch');if(input){input.focus();input.setSelectionRange(input.value.length,input.value.length)}},180)});
-  $('#dcAdminPlanFilter')?.addEventListener('change',event=>{adminUserPlan=event.target.value;renderAdminPage()});
-  $('#dcAdminExportUsers')?.addEventListener('click',exportAdminUsers);
-  $('#dcSocialkitForm')?.addEventListener('submit',async event=>{
-    event.preventDefault();
-    const fd=new FormData(event.target);
-    try{
-      await callApi('/api/admin/service-meta',{method:'POST',body:JSON.stringify({service:'socialkit',planCredits:Number(fd.get('planCredits')||0),resetDay:Number(fd.get('resetDay')||0)})});
-      notify('Saved.','good');adminOps=null;renderAdminPage();
-    }catch(error){notify(error.message,'bad')}
-  });
-  $('#dcVendorForm')?.addEventListener('submit',async event=>{
-    event.preventDefault();
-    const form=event.target,fd=new FormData(form);
-    const renews=String(fd.get('renewsAt')||'');
-    const payload={
-      name:String(fd.get('name')||''),plan:String(fd.get('plan')||''),
-      cost:Number(fd.get('cost')||0),currency:String(fd.get('currency')||'USD'),
-      cycle:String(fd.get('cycle')||'monthly'),url:String(fd.get('url')||''),
-      notes:String(fd.get('notes')||''),renewsAt:renews?Date.parse(`${renews}T12:00:00`):0,
-    };
-    try{
-      await callApi('/api/admin/vendors',{method:'POST',body:JSON.stringify(payload)});
-      notify('Saved.','good');adminOps=null;renderAdminPage();
-    }catch(error){notify(error.message,'bad')}
-  });
-  requestAnimationFrame(()=>animatePanel(panel));
-}
-
-const DC_ADMIN_CSS = `
-/* --- Admin console ------------------------------------------------------- */
-.dc-admin-tabs{position:sticky;top:68px;z-index:12;display:flex;gap:4px;overflow-x:auto;margin:0;padding:5px;border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(11,11,13,.88);backdrop-filter:blur(18px);scrollbar-width:none}
-.dc-admin-tabs::-webkit-scrollbar{display:none}
-#dcSidebar{background:#0c0c0e!important;z-index:400!important}
-#dcTopbar{z-index:390!important}
-body.dc-app .main-col>.panel{position:relative;z-index:1}
-body.dc-app #app>.wrap{box-sizing:border-box}
-body.dc-project-open .dc-project-detail-page,body.dc-project-open .dc-project-clip-grid{min-width:0!important;max-width:100%!important}
-.dc-manage-page>*{min-width:0;max-width:100%}
-.dc-admin-grid,.dc-admin-panel,.dc-admin-list,.dc-admin-row{min-width:0;max-width:100%}
-.dc-admin-table{display:block;overflow-x:auto;white-space:nowrap}
-.dc-admin-row-copy strong,.dc-admin-row-copy span{overflow-wrap:anywhere}
-.dc-admin-tab{min-height:38px;flex:0 0 auto;padding:0 14px;border:0;border-radius:11px;background:transparent;color:var(--dc-muted);font-size:10px;font-weight:800}
-.dc-admin-tab:hover{color:var(--dc-text);border-color:rgba(221,183,118,.3)}
-.dc-admin-tab.is-active{background:linear-gradient(145deg,rgba(217,180,120,.19),rgba(217,180,120,.08));box-shadow:0 0 0 1px rgba(217,180,120,.28) inset;color:var(--dc-accent2)}
-.dc-admin-hero{border-color:rgba(217,180,120,.25)!important;background:radial-gradient(circle at 86% 5%,rgba(217,180,120,.18),transparent 35%),radial-gradient(circle at 15% 120%,rgba(66,168,255,.09),transparent 30%),linear-gradient(145deg,#18140f,#101014 62%)!important}
-.dc-admin-live-line{display:flex;gap:14px;flex-wrap:wrap;margin-top:13px;color:var(--dc-muted);font-size:9px}.dc-admin-live-line span{display:inline-flex;align-items:center;gap:6px}.dc-admin-live-line i{width:7px;height:7px;border-radius:50%;background:var(--dc-green);box-shadow:0 0 0 4px rgba(83,199,139,.09)}.dc-admin-live-line i.warn{background:var(--dc-orange);box-shadow:0 0 0 4px rgba(229,169,87,.09)}
-.dc-admin-command-row{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);gap:12px}.dc-admin-health{display:flex;align-items:center;gap:18px;padding:20px;border:1px solid rgba(217,180,120,.18);border-radius:22px;background:linear-gradient(145deg,rgba(217,180,120,.08),rgba(255,255,255,.022))}.dc-admin-health-ring{--score:0;position:relative;width:94px;height:94px;flex:0 0 94px;display:grid;place-content:center;text-align:center;border-radius:50%;background:radial-gradient(circle at center,#111114 58%,transparent 60%),conic-gradient(var(--dc-accent2) calc(var(--score)*1%),rgba(255,255,255,.07) 0)}.dc-admin-health-ring strong{font-size:28px;line-height:1;letter-spacing:-.05em}.dc-admin-health-ring span{margin-top:2px;color:var(--dc-muted);font-size:8px}.dc-admin-health h2{margin:5px 0 4px;font-size:19px}.dc-admin-health p{margin:0;color:var(--dc-muted);font-size:10px}.dc-admin-quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.dc-admin-quick-actions button{min-height:55px;padding:0 13px;border:1px solid rgba(255,255,255,.075);border-radius:15px;background:linear-gradient(145deg,#151519,#0d0d10);color:var(--dc-muted);font-size:10px;font-weight:750;text-align:left}.dc-admin-quick-actions button:hover{border-color:rgba(217,180,120,.26);color:var(--dc-text);transform:translateY(-1px)}
-.dc-admin-section-title{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:3px}.dc-admin-section-title span:first-child{color:#ffb3b3;font-size:8px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.dc-admin-section-title h2{margin:4px 0 0;font-size:15px;color:var(--dc-text)}
-.dc-admin-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
-.dc-admin-card{padding:15px;border:1px solid var(--dc-line);border-radius:18px;background:linear-gradient(145deg,#151519,#0d0d10)}
-.dc-admin-kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.dc-admin-card.priority{border-color:rgba(217,180,120,.16);background:radial-gradient(circle at 100% 0,rgba(217,180,120,.09),transparent 45%),linear-gradient(145deg,#171619,#0d0d10)}
-.dc-admin-card-label{display:block;color:var(--dc-subtle);font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
-.dc-admin-card strong{display:block;font-size:24px;margin:7px 0 3px;letter-spacing:-.02em}
-.dc-admin-card em{display:block;font-style:normal;color:var(--dc-muted);font-size:9.5px}
-.dc-admin-panel{padding:16px;border:1px solid var(--dc-line);border-radius:22px;background:linear-gradient(145deg,#151519,#0d0d10)}
-.dc-admin-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
-.dc-admin-panel h2{font-size:16px;margin:0}
-.dc-admin-panel-head>div>.dc-admin-note{margin:5px 0 0}.dc-admin-overview-split{display:grid;grid-template-columns:1fr 1fr;gap:10px}.dc-admin-funnel{display:grid;gap:12px}.dc-admin-funnel>div{position:relative;display:grid;grid-template-columns:1fr auto;gap:8px;padding-bottom:8px}.dc-admin-funnel span{color:var(--dc-muted);font-size:10px}.dc-admin-funnel strong{font-size:11px}.dc-admin-funnel i{position:absolute;left:0;bottom:0;height:4px;max-width:100%;border-radius:999px;background:linear-gradient(90deg,var(--dc-accent),var(--dc-accent2))}.dc-admin-text-btn{border:0;background:transparent;color:var(--dc-accent2);font-size:9px;font-weight:800}.dc-admin-timeline{display:grid}.dc-admin-timeline>div{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:9px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.055)}.dc-admin-timeline>div:last-child{border-bottom:0}.dc-admin-timeline i{width:8px;height:8px;border-radius:50%;background:var(--dc-green)}.dc-admin-timeline i.used{background:var(--dc-accent)}.dc-admin-timeline span strong,.dc-admin-timeline span small{display:block}.dc-admin-timeline span strong{font-size:9.5px}.dc-admin-timeline span small{margin-top:2px;color:var(--dc-subtle);font-size:8px}.dc-admin-timeline>div>b{color:var(--dc-accent2);font-size:10px}
-.dc-admin-subhead{font-size:12px;margin:16px 0 8px;color:var(--dc-muted)}
-.dc-admin-note{margin:0 0 12px;color:var(--dc-muted);font-size:10.5px;line-height:1.55}
-.dc-admin-dim{display:block;color:var(--dc-subtle);font-size:9px;margin-top:2px}
-.dc-admin-list{display:grid;gap:8px}
-.dc-admin-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px;border:1px solid rgba(255,255,255,.065);border-radius:13px;background:rgba(0,0,0,.22)}
-.dc-admin-row-copy{min-width:0}
-.dc-admin-row-copy strong{display:block;font-size:11.5px}
-.dc-admin-row-copy span{display:block;font-size:9.5px;color:var(--dc-muted);margin-top:3px}
-.dc-admin-row-actions{display:flex;align-items:center;gap:8px;flex:0 0 auto}
-.dc-admin-row-actions .dc-btn{min-height:30px;font-size:9.5px;padding:0 10px}
-.dc-admin-req{font-style:normal;margin-left:7px;padding:2px 6px;border-radius:999px;background:rgba(217,180,120,.14);color:var(--dc-accent2);font-size:8px;letter-spacing:.06em;text-transform:uppercase}
-.dc-admin-table{width:100%;border-collapse:collapse;font-size:10.5px}
-.dc-admin-table th{text-align:left;padding:8px 10px;color:var(--dc-subtle);font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--dc-line)}
-.dc-admin-table td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
-.dc-admin-table tr:last-child td{border-bottom:0}
-.dc-admin-table strong{font-size:11px}
-.dc-admin-users-panel{overflow:hidden}.dc-admin-users-panel>.dc-admin-table{margin:0 -16px -16px;width:calc(100% + 32px)}.dc-admin-user-tools{display:grid;grid-template-columns:minmax(220px,1fr) 150px auto;gap:8px;margin:12px 0}.dc-admin-search-box{position:relative}.dc-admin-search-box span{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--dc-subtle)}.dc-admin-search-box input,.dc-admin-user-tools select{width:100%;height:40px;border:1px solid var(--dc-line);border-radius:11px;background:#0b0b0d;color:var(--dc-text)}.dc-admin-search-box input{padding:0 12px 0 34px}.dc-admin-user-tools select{padding:0 10px}.dc-admin-user-tools .dc-btn{height:40px}
-.dc-admin-activity-list{display:grid}.dc-admin-activity-item{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:11px;align-items:center;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.055)}.dc-admin-activity-item:last-child{border-bottom:0}.dc-admin-activity-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:rgba(255,255,255,.055);color:var(--dc-muted);font-weight:900}.dc-admin-activity-icon.billing{background:rgba(217,180,120,.11);color:var(--dc-accent2)}.dc-admin-activity-item>div strong,.dc-admin-activity-item>div span{display:block}.dc-admin-activity-item>div strong{font-size:10px}.dc-admin-activity-item>div span{margin-top:3px;color:var(--dc-subtle);font-size:8.5px}.dc-admin-activity-item>b{color:var(--dc-muted);font-size:9px;text-transform:capitalize}
-.dc-admin-alerts{display:grid;gap:7px}
-.dc-admin-alert{display:flex;align-items:center;gap:9px;padding:10px 12px;border:1px solid rgba(255,138,138,.24);border-radius:12px;background:rgba(255,90,90,.07);color:#ffb3b3;font-size:10.5px}
-.dc-admin-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.dc-admin-form label{display:grid;gap:6px;color:var(--dc-muted);font-size:9px}
-.dc-admin-form input,.dc-admin-form select{width:100%;height:38px;padding:0 10px;border:1px solid var(--dc-line);border-radius:10px;background:#0b0b0d;color:var(--dc-text)}
-.dc-admin-form .wide{grid-column:1/-1}
-@media(max-width:1050px){.dc-admin-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dc-admin-command-row,.dc-admin-overview-split{grid-template-columns:1fr}}
-@media(max-width:820px){.dc-admin-form{grid-template-columns:1fr}.dc-admin-row{flex-direction:column;align-items:flex-start}.dc-admin-user-tools{grid-template-columns:1fr}.dc-admin-tabs{top:60px}.dc-admin-command-row{grid-template-columns:1fr}.dc-admin-health{align-items:flex-start}.dc-admin-activity-item{grid-template-columns:30px minmax(0,1fr)}.dc-admin-activity-item>b{grid-column:2}.dc-admin-kpi-grid{grid-template-columns:1fr 1fr}}
-@media(max-width:520px){.dc-admin-health{flex-direction:column}.dc-admin-quick-actions,.dc-admin-kpi-grid{grid-template-columns:1fr}.dc-admin-tabs{margin-left:-2px;margin-right:-2px}}
-
-/* --- Editor reliability and selection system ---------------------------- */
-#dcEditorSaveState{font-weight:750;color:var(--dc-green)}#dcEditorSaveState.is-draft{color:var(--dc-accent2)}#dcEditorSaveState.is-error{color:var(--dc-red)}
-.dc-editor-style-picker{width:min(210px,22vw);display:grid;gap:2px;flex:0 0 auto}.dc-editor-style-picker>span{font-size:7px;font-weight:850;letter-spacing:.08em;text-transform:uppercase;color:var(--dc-subtle)}.dc-editor-style-picker select{width:100%;height:31px;padding:0 26px 0 9px;border:1px solid var(--dc-line2);border-radius:8px;background:#0b0b0d;color:var(--dc-text);font-size:9px;font-weight:750}.dc-editor-style-picker.is-custom select{border-color:rgba(217,180,120,.58);box-shadow:0 0 0 1px rgba(217,180,120,.12)}
-.dc-clip-style-actions{display:grid;gap:7px}.dc-clip-style-actions .dc-btn{width:100%}.dc-style-state{margin-bottom:12px}.dc-style-state strong,.dc-style-state span{display:block}.dc-style-state span{margin-top:4px}.dc-style-state .custom{color:var(--dc-accent2)}
-.dc-layer-switch{display:flex;gap:3px;padding:3px;border:1px solid rgba(255,255,255,.08);border-radius:9px;background:#09090b}.dc-layer-switch button,.dc-safe-toggle{min-height:28px;padding:0 9px;border:0;border-radius:6px;background:transparent;color:var(--dc-subtle);font-size:8px;font-weight:800}.dc-layer-switch button.on,.dc-safe-toggle.on{background:rgba(217,180,120,.13);color:var(--dc-accent2);box-shadow:0 0 0 1px rgba(217,180,120,.22) inset}.dc-safe-toggle{border:1px solid rgba(255,255,255,.07)}
-.dc-video-canvas.is-video-selected{box-shadow:0 0 0 2px rgba(217,180,120,.72),0 26px 70px rgba(0,0,0,.58)!important}.dc-video-canvas.is-video-selected .dc-layer-badge{background:rgba(217,180,120,.9);color:#17120a}.dc-video-canvas:not(.is-video-selected) .dc-resize-handle{opacity:.55}
-.dc-safe-zone{position:absolute;inset:8% 7% 12%;z-index:12;display:none;border:1px dashed rgba(255,255,255,.38);border-radius:8px;pointer-events:none}.dc-safe-zone.show{display:block}.dc-safe-zone::before,.dc-safe-zone::after{content:'';position:absolute;background:rgba(255,255,255,.18)}.dc-safe-zone::before{left:50%;top:0;bottom:0;width:1px}.dc-safe-zone::after{left:0;right:0;top:50%;height:1px}.dc-safe-zone span{position:absolute;right:6px;top:6px;padding:3px 5px;border-radius:5px;background:#000a;color:#aaa;font-size:6px;letter-spacing:.07em;text-transform:uppercase}
-.dc-caption-overlay.is-selected{outline:2px solid rgba(255,255,255,.76);outline-offset:9px}.dc-caption-overlay.is-selected::before{content:'CAPTIONS';position:absolute;left:-10px;top:-28px;padding:4px 7px;border-radius:6px;background:rgba(217,180,120,.92);color:#17120a;font-size:6px;font-weight:950;letter-spacing:.08em;-webkit-text-stroke:0}.dc-caption-overlay.is-selected::after{border-color:var(--dc-accent2);background:#111}.dc-timeline-help{color:var(--dc-subtle);font-size:7.5px}
-@media(max-width:900px){.dc-editor-style-picker{width:150px}.dc-editor-style-picker>span{display:none}.dc-canvas-toolbar{flex-wrap:wrap;height:auto!important;min-height:48px;padding-top:7px!important;padding-bottom:7px!important}.dc-canvas-toolbar .dc-zoom{display:none}.dc-layer-switch{order:4}.dc-safe-toggle{order:5}}
-@media(max-width:520px){.dc-caption-edit-shortcut,.dc-safe-toggle{display:none}.dc-layer-switch button{padding:0 7px}.dc-timeline-help{display:none}}
-
-/* --- Sidebar / main content must never overlap --------------------------- */
-/* The sidebar is position:fixed, so any horizontal overflow in a panel used
-   to slide underneath it and make the page look broken. Clipping overflow on
-   the scroll container and pinning the panel's own stacking context keeps the
-   two permanently separated. */
-body.dc-app #app>.wrap{max-width:100vw;overflow-x:clip}
-body.dc-app .main-col,body.dc-app .main-col>.panel{min-width:0;max-width:100%}
-body.dc-app .main-col>.panel{position:relative;z-index:1}
-#dcSidebar{z-index:190}
-#dcTopbar{z-index:180}
-body.dc-project-open #view-projects{width:100%!important;max-width:100%!important;overflow:visible!important;position:relative;z-index:1}
-body.dc-project-open .main-col,body.dc-project-open #app>.wrap{overflow-x:clip!important}
-
-/* --- Floating hero clips: wider, more staggered, less clumped ------------- */
-.dc-v5-stage{min-height:350px}
-.dc-v5-phone:nth-of-type(2){left:0%;top:26%;--rot:-12deg;z-index:2}
-.dc-v5-phone:nth-of-type(3){left:33%;top:0%;--rot:2deg;z-index:4}
-.dc-v5-phone:nth-of-type(4){right:0%;top:23%;--rot:12deg;z-index:2}
-.dc-v5-phone:nth-of-type(3){width:166px}
-.dc-v5-phone:nth-of-type(2),.dc-v5-phone:nth-of-type(4){width:142px}
-.dc-v5-phone:nth-of-type(2){animation-duration:8.5s;animation-delay:-1.1s}
-.dc-v5-phone:nth-of-type(3){animation-duration:7s;animation-delay:-3.4s}
-.dc-v5-phone:nth-of-type(4){animation-duration:9.5s;animation-delay:-5.8s}
-.dc-v5-phone:hover{transform:rotate(0) translateY(-12px) scale(1.04);z-index:6}
-@media(max-width:860px){
-  .dc-v5-stage{min-height:300px}
-  .dc-v5-phone:nth-of-type(3){width:138px}
-  .dc-v5-phone:nth-of-type(2),.dc-v5-phone:nth-of-type(4){width:120px}
-  .dc-v5-phone:nth-of-type(2){left:1%;top:24%}
-  .dc-v5-phone:nth-of-type(4){right:1%;top:22%}
-}
-`;
-const DC_PRODUCT_CSS = `
-/* --- Product-wide premium system --------------------------------------- */
-:root{--dc-page-accent:#d9b478;--dc-page-soft:rgba(217,180,120,.12)}
-body.dc-app{background:radial-gradient(circle at 82% -10%,rgba(67,132,195,.08),transparent 34%),radial-gradient(circle at 18% 108%,rgba(217,180,120,.06),transparent 30%),#09090b!important}
-body.dc-app #app>.wrap::before{content:'';position:fixed;z-index:-1;left:var(--dc-side);right:0;top:var(--dc-top);height:240px;background:linear-gradient(180deg,var(--dc-page-soft),transparent);opacity:.35;pointer-events:none}
-body.dc-app .main-col>.panel{--page-accent:var(--dc-page-accent);--page-soft:var(--dc-page-soft);isolation:isolate}
-#view-home{--page-accent:#d9b478;--page-soft:rgba(217,180,120,.12)}#view-projects{--page-accent:#72b7ff;--page-soft:rgba(75,151,228,.12)}#view-review{--page-accent:#edb763;--page-soft:rgba(237,183,99,.12)}#view-editor{--page-accent:#b796ff;--page-soft:rgba(159,117,244,.12)}#view-schedule{--page-accent:#70d7a2;--page-soft:rgba(84,201,143,.11)}#view-publishing{--page-accent:#66d5ff;--page-soft:rgba(71,189,232,.11)}#view-templates{--page-accent:#d9b478;--page-soft:rgba(217,180,120,.12)}#view-brand{--page-accent:#efc976;--page-soft:rgba(239,201,118,.13)}#view-lab{--page-accent:#b590ff;--page-soft:rgba(155,111,240,.13)}#view-music{--page-accent:#ff8fc9;--page-soft:rgba(235,104,173,.12)}#view-insights{--page-accent:#71d6a0;--page-soft:rgba(83,199,139,.12)}#view-automation{--page-accent:#8eb9ff;--page-soft:rgba(97,151,233,.12)}#view-subscription{--page-accent:#e8bd76;--page-soft:rgba(232,189,118,.13)}
-body.dc-app .dc-page-head,body.dc-app .dc-review-hero-pro,body.dc-app .dc-manage-hero,body.dc-app .dc-studio-hero,body.dc-app .dc-publish-hero,body.dc-app .dc-product-hero{border-color:color-mix(in srgb,var(--page-accent) 25%,transparent)!important;background:radial-gradient(circle at 7% 0,var(--page-soft),transparent 35%),radial-gradient(circle at 92% 18%,rgba(78,145,223,.07),transparent 27%),linear-gradient(145deg,#17171b,#0c0c0f)!important;box-shadow:0 25px 75px rgba(0,0,0,.22)}
-body.dc-app .dc-page-head::before,body.dc-app .dc-manage-hero::before,body.dc-app .dc-studio-hero::before,body.dc-app .dc-product-hero::before{content:'';position:absolute;left:24px;right:24px;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent,var(--page-accent),transparent);opacity:.42}
-#dcTopbar{background:rgba(11,11,14,.84)!important;box-shadow:0 10px 35px rgba(0,0,0,.18);backdrop-filter:blur(22px) saturate(1.2)}#dcSidebar{background:linear-gradient(180deg,#0d0d10,#09090b)!important;box-shadow:12px 0 40px rgba(0,0,0,.12)}
-.dc-nav-button[data-dc-nav=projects] .dc-nav-icon{color:#72b7ff}.dc-nav-button[data-dc-nav=review] .dc-nav-icon{color:#edb763}.dc-nav-button[data-dc-nav=schedule] .dc-nav-icon{color:#70d7a2}.dc-nav-button[data-dc-nav=publishing] .dc-nav-icon{color:#66d5ff}.dc-nav-button[data-dc-nav=editor] .dc-nav-icon{color:#b796ff}.dc-nav-button[data-dc-nav=brand] .dc-nav-icon{color:#efc976}.dc-nav-button[data-dc-nav=lab] .dc-nav-icon{color:#b590ff}.dc-nav-button[data-dc-nav=music] .dc-nav-icon{color:#ff8fc9}.dc-nav-button[data-dc-nav=insights] .dc-nav-icon{color:#71d6a0}.dc-nav-button[data-dc-nav=automation] .dc-nav-icon{color:#8eb9ff}.dc-nav-button[data-dc-nav=subscription] .dc-nav-icon{color:#e8bd76}
-.dc-nav-button.is-active{background:linear-gradient(90deg,color-mix(in srgb,currentColor 10%,transparent),rgba(255,255,255,.025))!important;box-shadow:0 0 0 1px rgba(255,255,255,.035) inset}.dc-nav-button.is-active::before{content:'';position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:99px;background:currentColor;box-shadow:0 0 18px currentColor}.dc-nav-button[data-dc-nav=brand] .dc-nav-name::after,.dc-nav-button[data-dc-nav=lab] .dc-nav-name::after{content:'PRO';display:inline-flex;margin-left:7px;padding:2px 5px;border:1px solid rgba(217,180,120,.2);border-radius:99px;background:rgba(217,180,120,.08);color:#e8c37f;font-size:6px;font-weight:950;letter-spacing:.08em;vertical-align:middle}
-.dc-product-hero{position:relative;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:center;padding:30px;border:1px solid var(--dc-line);border-radius:28px}.dc-product-kicker{display:inline-flex;align-items:center;gap:8px;color:var(--page-accent);font-size:9px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.dc-product-kicker svg{width:16px;height:16px}.dc-product-hero h1{max-width:760px;margin:10px 0 8px;font-size:clamp(32px,4vw,50px);line-height:.96;letter-spacing:-.055em}.dc-product-hero p{max-width:720px;margin:0;color:var(--dc-muted);font-size:12px;line-height:1.6}
-.dc-premium-orb{width:180px;min-height:150px;display:grid;place-items:center;align-content:center;text-align:center;padding:18px;border:1px solid rgba(255,255,255,.09);border-radius:25px;background:radial-gradient(circle at 50% 10%,rgba(255,255,255,.08),transparent 55%),rgba(0,0,0,.18)}.dc-premium-orb>span{width:48px;height:48px;display:grid;place-items:center;border-radius:16px;background:rgba(255,255,255,.055);color:var(--dc-muted)}.dc-premium-orb.on>span{background:rgba(217,180,120,.13);color:#efc976;box-shadow:0 0 30px rgba(217,180,120,.12)}.dc-premium-orb svg{width:25px;height:25px}.dc-premium-orb strong,.dc-premium-orb small{display:block}.dc-premium-orb strong{margin-top:10px;font-size:12px}.dc-premium-orb small{margin-top:3px;color:var(--dc-muted);font-size:8.5px}
-.dc-brand-page,.dc-lab-page{display:grid;gap:15px}.dc-brand-layout{display:grid;grid-template-columns:minmax(300px,.75fr) minmax(430px,1.25fr);gap:15px}.dc-brand-preview-card,.dc-brand-controls,.dc-lab-panel,.dc-lab-locked{border:1px solid var(--dc-line);border-radius:25px;background:linear-gradient(145deg,#16161a,#0c0c0f);box-shadow:0 22px 65px rgba(0,0,0,.18)}.dc-brand-preview-card{min-height:610px;display:grid;place-items:center;align-content:center;padding:24px}.dc-brand-phone{position:relative;width:min(270px,80%);aspect-ratio:9/16;overflow:hidden;border:1px solid rgba(239,201,118,.35);border-radius:27px;background:#050506;box-shadow:0 28px 75px rgba(0,0,0,.5),0 0 35px rgba(239,201,118,.08)}.dc-brand-phone img{width:100%;height:100%;object-fit:cover;filter:saturate(.78) brightness(.8)}.dc-brand-watermark{position:absolute;z-index:3;padding:5px 8px;border-radius:7px;background:rgba(0,0,0,.48);color:var(--brand-color);font-size:10px;font-weight:950;letter-spacing:.15em;opacity:var(--brand-opacity);transition:.2s ease}.dc-brand-watermark.off{opacity:0}.dc-brand-watermark[data-position=top-left]{left:8%;top:7%}.dc-brand-watermark[data-position=top-center]{left:50%;top:7%;transform:translateX(-50%)}.dc-brand-watermark[data-position=top-right]{right:8%;top:7%}.dc-brand-watermark[data-position=bottom-left]{left:8%;bottom:7%}.dc-brand-watermark[data-position=bottom-center]{left:50%;bottom:7%;transform:translateX(-50%)}.dc-brand-watermark[data-position=bottom-right]{right:8%;bottom:7%}.dc-brand-phone>i{position:absolute;inset:auto 0 0;height:0;background:var(--brand-color);transition:height .2s}.dc-brand-phone>i.on{height:7px}.dc-brand-caption{position:absolute;left:10%;right:10%;top:52%;text-align:center;color:white;font:900 22px/1 Manrope,sans-serif;text-shadow:0 2px 10px #000;-webkit-text-stroke:1px #000}.dc-brand-caption em{color:#efc976;font-family:serif}.dc-brand-preview-copy{text-align:center;margin-top:17px}.dc-brand-preview-copy strong,.dc-brand-preview-copy span{display:block}.dc-brand-preview-copy strong{font-size:13px}.dc-brand-preview-copy span{margin-top:4px;color:var(--dc-muted);font-size:9px}
-.dc-brand-controls{padding:20px}.dc-brand-entitlement{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:12px;align-items:center;margin-bottom:15px;padding:14px;border:1px solid rgba(255,255,255,.075);border-radius:18px;background:rgba(255,255,255,.025)}.dc-brand-entitlement>span{width:42px;height:42px;display:grid;place-items:center;border-radius:14px;background:rgba(217,180,120,.10);color:#efc976}.dc-brand-entitlement.free>span{background:rgba(229,169,87,.10);color:var(--dc-orange)}.dc-brand-entitlement svg{width:22px;height:22px}.dc-brand-entitlement strong{font-size:12px}.dc-brand-entitlement p{margin:4px 0 0;color:var(--dc-muted);font-size:9.5px;line-height:1.45}.dc-brand-form{display:grid;grid-template-columns:1fr 1fr;gap:10px}.dc-brand-form>label{display:grid;gap:7px;padding:12px;border:1px solid rgba(255,255,255,.065);border-radius:15px;background:rgba(0,0,0,.18);color:var(--dc-muted);font-size:9px}.dc-brand-form .wide{grid-column:1/-1}.dc-brand-form input:not([type=checkbox]):not([type=range]),.dc-brand-form select{width:100%;height:42px;padding:0 11px;border:1px solid var(--dc-line);border-radius:11px;background:#09090b;color:var(--dc-text)}.dc-brand-form textarea{width:100%;min-height:78px;resize:vertical;padding:11px;border:1px solid var(--dc-line);border-radius:11px;background:#09090b;color:var(--dc-text);font:inherit;line-height:1.5}.dc-brand-ai-head{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:11px;align-items:center;margin-top:6px;padding:14px;border:1px solid rgba(147,103,255,.2);border-radius:16px;background:linear-gradient(135deg,rgba(147,103,255,.11),rgba(217,180,120,.055))}.dc-brand-ai-head>span{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:rgba(147,103,255,.14);color:#b99cff}.dc-brand-ai-head svg{width:20px}.dc-brand-ai-head strong{display:block;font-size:11px}.dc-brand-ai-head p{margin:3px 0 0;color:var(--dc-muted);font-size:8.5px;line-height:1.45}.dc-brand-ai-head>b{padding:5px 8px;border-radius:999px;background:rgba(217,180,120,.12);color:#efc976;font-size:8px}.dc-brand-form input[type=color]{padding:4px!important}.dc-brand-form input[type=range]{width:100%;accent-color:#d9b478}.dc-brand-form label>b{justify-self:end;color:var(--dc-text)}.dc-brand-form .is-locked{opacity:.52}.dc-feature-ribbon{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.dc-feature-ribbon article{display:grid;grid-template-columns:38px 1fr;gap:2px 11px;padding:15px;border:1px solid var(--dc-line);border-radius:19px;background:linear-gradient(145deg,#151519,#0d0d10)}.dc-feature-ribbon article>span{grid-row:1/3;width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:var(--page-soft);color:var(--page-accent)}.dc-feature-ribbon svg{width:20px;height:20px}.dc-feature-ribbon strong{font-size:11px}.dc-feature-ribbon p{margin:3px 0 0;color:var(--dc-muted);font-size:8.5px;line-height:1.45}
-.dc-editor-brand-summary{display:grid;grid-template-columns:36px minmax(0,1fr);gap:10px;align-items:center;padding:12px;border:1px solid rgba(255,255,255,.075);border-radius:14px;background:rgba(0,0,0,.22)}.dc-editor-brand-summary>span{width:36px;height:36px;display:grid;place-items:center;border-radius:11px;background:rgba(217,180,120,.11);color:#efc976}.dc-editor-brand-summary svg{width:19px;height:19px}.dc-editor-brand-summary strong,.dc-editor-brand-summary small{display:block}.dc-editor-brand-summary strong{font-size:10px}.dc-editor-brand-summary small{margin-top:3px;color:var(--dc-muted);font-size:8px;line-height:1.35}.dc-editor-brand-summary .dc-btn{grid-column:1/-1;width:100%}.dc-editor-brand-summary.locked{border-color:rgba(229,169,87,.2)}
-.dc-product-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}.dc-product-stats>span{min-width:110px;padding:11px;border:1px solid rgba(255,255,255,.075);border-radius:14px;background:rgba(0,0,0,.19)}.dc-product-stats b,.dc-product-stats em{display:block}.dc-product-stats b{font-size:23px}.dc-product-stats em{margin-top:2px;color:var(--dc-muted);font-size:8px;font-style:normal}.dc-lab-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}.dc-lab-panel{padding:18px}.dc-lab-panel.wide{grid-column:1/-1}.dc-lab-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:13px}.dc-lab-head span{color:#b590ff;font-size:8px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.dc-lab-head h2{margin:4px 0 0;font-size:16px}.dc-lab-lineup{display:grid;grid-template-columns:1fr 1fr;gap:8px}.dc-lab-lineup>button{display:grid;grid-template-columns:34px minmax(0,1fr) 20px;gap:10px;align-items:center;padding:11px;border:1px solid rgba(255,255,255,.065);border-radius:14px;background:rgba(0,0,0,.19);color:var(--dc-text);text-align:left}.dc-lab-lineup>button:hover{border-color:rgba(181,144,255,.3);transform:translateY(-1px)}.dc-lab-lineup>button>span{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:rgba(181,144,255,.10);color:#c8acff;font-size:9px;font-weight:900}.dc-lab-lineup strong,.dc-lab-lineup small{display:block}.dc-lab-lineup strong{font-size:10.5px}.dc-lab-lineup small{margin-top:3px;color:var(--dc-muted);font-size:8px}.dc-lab-lineup i{color:var(--dc-subtle)}.dc-lab-lineup svg{width:16px;height:16px}.dc-topic-cloud{display:flex;gap:8px;flex-wrap:wrap}.dc-topic-cloud>span{display:inline-flex;align-items:center;gap:7px;padding:9px 11px;border:1px solid rgba(181,144,255,.13);border-radius:999px;background:rgba(181,144,255,.055);font-size:calc(8px + var(--weight)*.7px)}.dc-topic-cloud em{min-width:21px;height:21px;display:grid;place-items:center;border-radius:99px;background:rgba(181,144,255,.13);color:#c8acff;font-size:8px;font-style:normal}.dc-gap-list{display:grid;gap:8px}.dc-gap-list>div{display:grid;grid-template-columns:34px 1fr;gap:10px;align-items:center;padding:10px;border:1px solid rgba(255,255,255,.06);border-radius:13px;background:rgba(0,0,0,.17)}.dc-gap-list>div>span{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:rgba(181,144,255,.1);color:#c8acff}.dc-gap-list svg{width:18px;height:18px}.dc-gap-list p{margin:0}.dc-gap-list strong,.dc-gap-list small{display:block}.dc-gap-list strong{font-size:10px}.dc-gap-list small{margin-top:2px;color:var(--dc-muted);font-size:8px}.dc-lab-hooks{display:grid;gap:8px}.dc-lab-hooks article{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:11px;align-items:center;padding:10px;border:1px solid rgba(255,255,255,.06);border-radius:14px;background:rgba(0,0,0,.17)}.dc-lab-hooks article>span{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:rgba(113,214,160,.09);color:#71d6a0;font-weight:950}.dc-lab-hooks strong,.dc-lab-hooks small{display:block}.dc-lab-hooks strong{font-size:10.5px}.dc-lab-hooks small{margin-top:3px;color:var(--dc-muted);font-size:8px}.dc-lab-empty{grid-column:1/-1;padding:25px;text-align:center;color:var(--dc-muted);font-size:10px}.dc-lab-locked{position:relative;overflow:hidden;min-height:470px;display:grid;place-items:center;align-content:center;text-align:center;padding:34px;background:radial-gradient(circle at 50% 12%,rgba(181,144,255,.13),transparent 36%),linear-gradient(145deg,#16141d,#0c0c0f)}.dc-lab-lock-icon{width:68px;height:68px;display:grid;place-items:center;border:1px solid rgba(181,144,255,.22);border-radius:22px;background:rgba(181,144,255,.09);color:#c8acff;box-shadow:0 0 45px rgba(181,144,255,.10)}.dc-lab-lock-icon svg{width:33px;height:33px}.dc-lab-locked>span{margin-top:18px;color:#c8acff;font-size:8px;font-weight:900;letter-spacing:.13em;text-transform:uppercase}.dc-lab-locked h2{max-width:620px;margin:8px 0 8px;font-size:32px;letter-spacing:-.045em}.dc-lab-locked p{max-width:650px;margin:0;color:var(--dc-muted);font-size:11px;line-height:1.6}.dc-lab-teasers{display:flex;gap:7px;flex-wrap:wrap;justify-content:center;margin:18px 0}.dc-lab-teasers span{padding:8px 10px;border:1px solid rgba(181,144,255,.14);border-radius:99px;background:rgba(181,144,255,.055);color:#c9b0f8;font-size:8.5px}
-.dc-lab-intelligence.standalone{border-color:rgba(181,144,255,.2);background:radial-gradient(circle at 100% 0,rgba(181,144,255,.1),transparent 35%),linear-gradient(145deg,#17161c,#0c0c0f)}.dc-lab-intelligence-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(280px,.75fr);gap:14px}.dc-lab-intelligence-grid>div,.dc-lab-intelligence-grid>aside{padding:15px;border:1px solid rgba(255,255,255,.065);border-radius:17px;background:rgba(0,0,0,.19)}.dc-lab-intelligence-grid>div>strong{font-size:13px}.dc-lab-intelligence-grid>div>p,.dc-lab-intelligence-grid>aside>p{margin:6px 0 12px;color:var(--dc-muted);font-size:8.5px;line-height:1.5}.dc-lab-dimensions{display:grid;gap:7px}.dc-lab-dimensions>span{display:grid;grid-template-columns:62px minmax(80px,1fr) 27px;gap:8px;align-items:center}.dc-lab-dimensions b,.dc-lab-dimensions strong{font-size:7.5px}.dc-lab-dimensions strong{text-align:right;color:#cdb6ff}.dc-lab-dimensions i{height:5px;overflow:hidden;border-radius:99px;background:#292831}.dc-lab-dimensions em{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#8868db,#c5a8ff)}.dc-lab-intelligence-grid>aside>small{color:#b590ff;font-size:7px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.dc-lab-intelligence-grid>aside h3{margin:6px 0 0;font-size:15px}.dc-lab-intelligence-grid>aside>div{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px}.dc-lab-intelligence-grid>aside>div span{padding:5px 7px;border-radius:999px;background:rgba(181,144,255,.1);color:#cfb7ff;font-size:7px}.dc-lab-intelligence-grid>aside .dc-btn{width:100%}
-/* Subscription account centre */
-.dc-subscription-page{display:grid;gap:16px}.dc-subscription-page svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.dc-sub-command{position:relative;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:28px;align-items:center;padding:27px 29px;border:1px solid rgba(226,184,116,.2);border-radius:27px;background:radial-gradient(circle at 3% 0,rgba(226,184,116,.17),transparent 36%),radial-gradient(circle at 92% 0,rgba(108,111,231,.12),transparent 31%),linear-gradient(145deg,#18171b,#0b0c10);box-shadow:0 24px 70px rgba(0,0,0,.24)}.dc-sub-command::after{content:'';position:absolute;right:-90px;bottom:-170px;width:390px;height:390px;border:1px solid rgba(255,255,255,.045);border-radius:50%;pointer-events:none}.dc-sub-kicker{display:inline-flex;align-items:center;gap:8px;color:#e7bd7b;font-size:8px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.dc-sub-kicker svg{width:16px;height:16px}.dc-sub-command h1{max-width:760px;margin:9px 0 7px;font-size:clamp(32px,3.7vw,48px);line-height:.98;letter-spacing:-.052em}.dc-sub-command>div>p{max-width:720px;margin:0;color:var(--dc-muted);font-size:10px;line-height:1.6}.dc-sub-jump{position:relative;z-index:1;display:grid;grid-template-columns:repeat(3,112px);overflow:hidden;border:1px solid rgba(255,255,255,.075);border-radius:19px;background:rgba(3,4,7,.42)}.dc-sub-jump button{min-height:106px;display:flex;flex-direction:column;justify-content:center;padding:13px;border:0;border-right:1px solid rgba(255,255,255,.065);background:transparent;color:var(--dc-muted);text-align:left;transition:.18s}.dc-sub-jump button:last-child{border-right:0}.dc-sub-jump button:hover,.dc-sub-jump button.is-active{background:linear-gradient(145deg,rgba(226,184,116,.13),rgba(226,184,116,.025));color:#fff}.dc-sub-jump button>span{width:30px;height:30px;display:grid;place-items:center;margin-bottom:9px;border-radius:9px;background:rgba(255,255,255,.045);color:#dfb778}.dc-sub-jump svg{width:15px;height:15px}.dc-sub-jump strong,.dc-sub-jump small{display:block}.dc-sub-jump strong{font-size:9px}.dc-sub-jump small{margin-top:3px;color:var(--dc-subtle);font-size:6.8px}
-.dc-sub-layout{scroll-margin-top:86px;display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;align-items:start}.dc-sub-primary{min-width:0;display:grid;gap:16px}.dc-sub-membership,.dc-sub-benefits,.dc-sub-card,.dc-sub-section{border:1px solid rgba(255,255,255,.075);border-radius:24px;background:radial-gradient(circle at 100% 0,rgba(255,255,255,.04),transparent 33%),linear-gradient(150deg,#17171b,#0b0b0e);box-shadow:0 22px 60px rgba(0,0,0,.18)}.dc-sub-membership{overflow:hidden}.dc-sub-membership>header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:20px 21px;border-bottom:1px solid rgba(255,255,255,.06);background:linear-gradient(90deg,rgba(226,184,116,.09),transparent 58%)}.dc-sub-membership>header>div>span,.dc-sub-section-title>div>span,.dc-sub-card-head>div>span,.dc-sub-section-head>div>span{display:block;color:#deb676;font-size:7.5px;font-weight:900;letter-spacing:.11em;text-transform:uppercase}.dc-sub-membership>header h2{margin:4px 0 2px;font-size:24px;letter-spacing:-.035em}.dc-sub-membership>header p{margin:0;color:var(--dc-muted);font-size:8.5px}.dc-sub-status{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 10px;border:1px solid rgba(83,199,139,.2);border-radius:99px;background:rgba(83,199,139,.08);color:#74d9a5;font-size:7.5px;white-space:nowrap}.dc-sub-status i{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}.dc-sub-status.warn{border-color:rgba(229,169,87,.25);background:rgba(229,169,87,.09);color:#e9b66b}.dc-sub-status.bad{border-color:rgba(239,107,122,.25);background:rgba(239,107,122,.09);color:#f18591}.dc-sub-status.free{border-color:rgba(114,183,255,.2);background:rgba(114,183,255,.08);color:#87c5ff}.dc-sub-status.owner{border-color:rgba(232,189,118,.25);background:rgba(232,189,118,.09);color:#efcf98}.dc-sub-wallet{display:grid;grid-template-columns:minmax(200px,.72fr) minmax(360px,1.28fr);gap:12px;padding:18px 20px 14px}.dc-sub-balance{position:relative;overflow:hidden;padding:20px;border:1px solid rgba(226,184,116,.18);border-radius:18px;background:radial-gradient(circle at 100% 0,rgba(226,184,116,.15),transparent 47%),rgba(226,184,116,.045)}.dc-sub-balance::after{content:'';position:absolute;right:-32px;bottom:-55px;width:130px;height:130px;border:19px solid rgba(226,184,116,.045);border-radius:50%}.dc-sub-balance small,.dc-sub-balance strong,.dc-sub-balance span{position:relative;z-index:1;display:block}.dc-sub-balance small{color:#dfb778;font-size:7.5px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.dc-sub-balance strong{margin-top:8px;font-size:48px;line-height:.9;letter-spacing:-.065em}.dc-sub-balance span{margin-top:8px;color:var(--dc-muted);font-size:8px}.dc-sub-wallet-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.dc-sub-wallet-stats>span{display:flex;flex-direction:column;justify-content:center;padding:14px;border:1px solid rgba(255,255,255,.065);border-radius:16px;background:rgba(0,0,0,.19)}.dc-sub-wallet-stats small,.dc-sub-wallet-stats b{display:block}.dc-sub-wallet-stats small{min-height:24px;color:var(--dc-subtle);font-size:7px;line-height:1.35}.dc-sub-wallet-stats b{margin-top:7px;font-size:20px;letter-spacing:-.04em}.dc-sub-usage{padding:0 20px 18px}.dc-sub-usage>div{display:flex;justify-content:space-between;gap:10px;color:var(--dc-muted);font-size:7.5px}.dc-sub-usage>div b{color:var(--dc-text);font-weight:650}.dc-sub-usage>i{display:block;height:6px;margin-top:8px;overflow:hidden;border-radius:99px;background:#29292d}.dc-sub-usage>i em{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#deb676,#f0d29a);box-shadow:0 0 14px rgba(222,182,118,.26)}.dc-sub-membership-foot{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 20px;border-top:1px solid rgba(255,255,255,.055);background:rgba(0,0,0,.13)}.dc-sub-membership-foot>div:first-child{display:grid;grid-template-columns:34px minmax(0,1fr);gap:9px;align-items:center}.dc-sub-membership-foot>div:first-child>span{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:rgba(226,184,116,.1);color:#dfb778}.dc-sub-membership-foot svg{width:17px;height:17px}.dc-sub-membership-foot p{margin:0}.dc-sub-membership-foot strong,.dc-sub-membership-foot small{display:block}.dc-sub-membership-foot strong{font-size:8.5px}.dc-sub-membership-foot small{margin-top:3px;color:var(--dc-subtle);font-size:7px}.dc-sub-actions{display:flex;gap:7px}.dc-sub-actions .dc-btn{min-height:36px;padding:0 12px;font-size:7.8px}
-.dc-sub-benefits{padding:20px}.dc-sub-section-title{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:14px}.dc-sub-section-title h2{margin:5px 0 2px;font-size:19px}.dc-sub-section-title p,.dc-sub-card-head p{margin:0;color:var(--dc-muted);font-size:8px}.dc-sub-section-title>b{padding:7px 9px;border:1px solid rgba(83,199,139,.15);border-radius:99px;background:rgba(83,199,139,.06);color:#70d7a2;font-size:7px;white-space:nowrap}.dc-sub-feature-list{display:grid;grid-template-columns:1fr 1fr;gap:8px}.dc-sub-feature-list>div{display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;align-items:center;min-height:58px;padding:10px;border:1px solid rgba(255,255,255,.055);border-radius:14px;background:rgba(0,0,0,.17)}.dc-sub-feature-list>div>span{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:rgba(83,199,139,.09);color:#65d099}.dc-sub-feature-list svg{width:16px;height:16px;stroke-width:2}.dc-sub-feature-list p{margin:0}.dc-sub-feature-list strong,.dc-sub-feature-list small{display:block}.dc-sub-feature-list strong{font-size:8.8px;line-height:1.35}.dc-sub-feature-list small{margin-top:3px;color:var(--dc-subtle);font-size:6.8px;line-height:1.35}
-.dc-sub-sidebar{position:sticky;top:86px;display:grid;gap:12px}.dc-sub-card{padding:18px}.dc-sub-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.dc-sub-card-head h2{margin:5px 0 2px;font-size:17px}.dc-secure-chip{display:inline-flex;align-items:center;min-height:25px;padding:0 8px;border:1px solid rgba(114,183,255,.17);border-radius:99px;background:rgba(114,183,255,.07);color:#8bc6ff;font-size:7px;font-weight:850;white-space:nowrap}.dc-sub-identity{display:grid;grid-template-columns:39px minmax(0,1fr);gap:10px;align-items:center;padding:10px;border:1px solid rgba(255,255,255,.06);border-radius:14px;background:rgba(0,0,0,.18)}.dc-sub-identity>span{width:39px;height:39px;display:grid;place-items:center;border-radius:12px;background:linear-gradient(145deg,rgba(226,184,116,.23),rgba(226,184,116,.08));color:#efcc92;font-size:14px;font-weight:850}.dc-sub-identity strong,.dc-sub-identity small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dc-sub-identity strong{font-size:8.5px}.dc-sub-identity small{margin-top:3px;color:var(--dc-subtle);font-size:7px}.dc-sub-payment-rows{display:grid;margin:10px 0 13px}.dc-sub-payment-rows>div{display:flex;justify-content:space-between;gap:13px;padding:9px 1px;border-bottom:1px solid rgba(255,255,255,.055)}.dc-sub-payment-rows span{color:var(--dc-muted);font-size:7.8px}.dc-sub-payment-rows b{max-width:58%;font-size:8px;text-align:right}.dc-sub-account-card .wide{width:100%;min-height:37px;font-size:7.8px}.dc-sub-security,.dc-sub-cancel-note{margin:10px 0 0;color:var(--dc-subtle);font-size:7px;line-height:1.45;text-align:center}.dc-sub-security{display:flex;align-items:center;justify-content:center;gap:5px}.dc-sub-security svg{width:12px;height:12px;color:#79dbaa}.dc-sub-cancel-note{padding:9px;border:1px solid rgba(229,169,87,.16);border-radius:10px;background:rgba(229,169,87,.055);color:#e5b979;text-align:left}.dc-sub-help-card{display:grid;grid-template-columns:38px minmax(0,1fr);gap:10px;padding:15px;border:1px solid rgba(189,155,255,.13);border-radius:20px;background:radial-gradient(circle at 100% 0,rgba(142,99,226,.11),transparent 40%),linear-gradient(145deg,#15141a,#0b0b0e)}.dc-sub-help-card>span{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:rgba(189,155,255,.11);color:#c2a0ff}.dc-sub-help-card>span svg{width:18px;height:18px}.dc-sub-help-card strong{font-size:9px}.dc-sub-help-card p{margin:4px 0 0;color:var(--dc-muted);font-size:7px;line-height:1.45}.dc-sub-help-card button{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;min-height:35px;padding:0 10px;border:1px solid rgba(189,155,255,.13);border-radius:10px;background:rgba(189,155,255,.065);color:#d2bbff;font-size:7.5px;font-weight:800}.dc-sub-help-card button:hover{background:rgba(189,155,255,.11)}.dc-sub-help-card button:disabled{opacity:.5;cursor:not-allowed}.dc-sub-help-card button svg{width:13px;height:13px}
-.dc-sub-section{scroll-margin-top:86px;padding:20px}.dc-sub-section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:15px}.dc-sub-section-head h2{margin:5px 0 3px;font-size:21px;letter-spacing:-.025em}.dc-sub-section-head p{margin:0;color:var(--dc-muted);font-size:8.5px}.dc-sub-rate{display:grid;grid-template-columns:30px auto;column-gap:8px;align-items:center;padding:8px 11px;border:1px solid rgba(226,184,116,.17);border-radius:13px;background:rgba(226,184,116,.055)}.dc-sub-rate>span{grid-row:1/3;width:30px;height:30px;display:grid;place-items:center;border-radius:9px;background:rgba(226,184,116,.1);color:#deb676}.dc-sub-rate svg{width:15px;height:15px}.dc-sub-rate strong,.dc-sub-rate small{display:block}.dc-sub-rate strong{color:#e9c68d;font-size:8px}.dc-sub-rate small{color:var(--dc-subtle);font-size:6.8px}.dc-sub-topup-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.dc-sub-topup{position:relative;overflow:hidden;display:flex;flex-direction:column;padding:16px;border:1px solid rgba(255,255,255,.065);border-radius:19px;background:linear-gradient(150deg,rgba(24,24,28,.96),rgba(8,8,10,.96))}.dc-sub-topup.featured{border-color:rgba(226,184,116,.32);background:radial-gradient(circle at 100% 0,rgba(226,184,116,.14),transparent 42%),linear-gradient(150deg,#1b1919,#0a0a0c);box-shadow:0 18px 45px rgba(0,0,0,.26),0 0 0 1px rgba(226,184,116,.05)}.dc-sub-topup-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.dc-sub-topup-head>span{color:#deb676;font-size:6.8px;font-weight:900;letter-spacing:.09em;text-transform:uppercase}.dc-sub-topup-head>b{padding:5px 7px;border-radius:99px;background:rgba(226,184,116,.12);color:#e9c58b;font-size:6.5px}.dc-sub-topup-amount{display:flex;align-items:flex-end;gap:7px;margin-top:17px}.dc-sub-topup-amount strong{font-size:34px;line-height:.85;letter-spacing:-.06em}.dc-sub-topup-amount span{color:var(--dc-muted);font-size:8px}.dc-sub-topup h3{margin:15px 0 4px;font-size:13px}.dc-sub-topup>p{min-height:34px;margin:0;color:var(--dc-muted);font-size:7.5px;line-height:1.45}.dc-sub-topup-meta{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-top:13px;padding-top:11px;border-top:1px solid rgba(255,255,255,.055)}.dc-sub-topup-meta>span{display:flex;align-items:center;gap:5px;color:var(--dc-subtle);font-size:6.8px}.dc-sub-topup-meta svg{width:12px;height:12px}.dc-sub-topup-meta>b{color:#e7bf82;font-size:8.5px}.dc-sub-topup .dc-btn{width:100%;min-height:36px;margin-top:13px;font-size:7.8px}.dc-sub-section>footer{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:14px;padding-top:13px;border-top:1px solid rgba(255,255,255,.055)}.dc-sub-section>footer>span{display:flex;align-items:center;gap:6px;color:var(--dc-muted);font-size:7.3px}.dc-sub-section>footer svg{width:13px;height:13px;color:#68d39b}.dc-text-action{border:0;background:transparent;color:#e8bd76;font-size:8px;font-weight:800;white-space:nowrap}.dc-text-action:hover{color:#f4d9a5}
-.dc-sub-activity{scroll-margin-top:86px;padding:20px}.dc-sub-event-list{display:grid}.dc-sub-event{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.055)}.dc-sub-event:last-child{border-bottom:0}.dc-sub-event-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:rgba(232,189,118,.09);color:#e8bd76;font-size:15px;font-weight:700}.dc-sub-event-icon.added{background:rgba(83,199,139,.09);color:#69d39c}.dc-sub-event>div strong,.dc-sub-event>div small{display:block}.dc-sub-event>div strong{font-size:9px}.dc-sub-event>div small{margin-top:3px;color:var(--dc-subtle);font-size:7.5px}.dc-sub-event>b{color:#e8bd76;font-size:10px}.dc-sub-event>b.added{color:#69d39c}.dc-sub-empty{display:grid;place-items:center;padding:28px;text-align:center}.dc-sub-empty>span{width:48px;height:48px;display:grid;place-items:center;border:1px solid rgba(232,189,118,.15);border-radius:16px;background:rgba(232,189,118,.06);color:#e8bd76}.dc-sub-empty svg{width:23px;height:23px}.dc-sub-empty strong{margin-top:11px;font-size:11px}.dc-sub-empty p{max-width:420px;margin:4px 0 0;color:var(--dc-muted);font-size:8px;line-height:1.5}
-@media(max-width:1180px){.dc-sub-command{grid-template-columns:1fr}.dc-sub-jump{width:100%;grid-template-columns:repeat(3,1fr)}.dc-sub-jump button{min-height:78px;display:grid;grid-template-columns:30px 1fr;column-gap:9px;align-content:center}.dc-sub-jump button>span{grid-row:1/3;margin:0}.dc-sub-layout{grid-template-columns:1fr}.dc-sub-sidebar{position:static;grid-template-columns:1fr 1fr}.dc-sub-help-card{align-self:stretch}.dc-sub-wallet{grid-template-columns:minmax(190px,.6fr) minmax(360px,1.4fr)}}
-@media(max-width:820px){.dc-sub-wallet{grid-template-columns:1fr}.dc-sub-feature-list,.dc-sub-topup-grid{grid-template-columns:1fr}.dc-sub-sidebar{grid-template-columns:1fr}.dc-sub-section-head,.dc-sub-section-title{align-items:flex-start;flex-direction:column}.dc-sub-section-title>b{align-self:flex-start}.dc-sub-membership-foot{align-items:flex-start;flex-direction:column}.dc-sub-actions{width:100%}.dc-sub-actions .dc-btn{flex:1}.dc-sub-topup>p{min-height:0}}
-@media(max-width:560px){.dc-sub-command{padding:21px;border-radius:22px}.dc-sub-command h1{font-size:33px}.dc-sub-jump{grid-template-columns:1fr}.dc-sub-jump button{border-right:0;border-bottom:1px solid rgba(255,255,255,.065)}.dc-sub-jump button:last-child{border-bottom:0}.dc-sub-membership>header,.dc-sub-card-head{align-items:flex-start;flex-direction:column}.dc-sub-wallet-stats{grid-template-columns:1fr 1fr}.dc-sub-wallet-stats>span:last-child{grid-column:1/-1}.dc-sub-actions{flex-direction:column}.dc-sub-section,.dc-sub-benefits,.dc-sub-card{padding:15px;border-radius:19px}.dc-sub-section>footer{align-items:flex-start;flex-direction:column}.dc-sub-topup-meta{align-items:flex-start;flex-direction:column}}
-
-/* Clip styles: accurate previews and a clear default workflow */
-.dc-styles-page{display:grid;gap:16px}.dc-style-hero{position:relative;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:28px;align-items:center;padding:28px 30px;border:1px solid rgba(217,180,120,.22);border-radius:27px;background:radial-gradient(circle at 5% 0,rgba(217,180,120,.16),transparent 36%),radial-gradient(circle at 92% 10%,rgba(130,97,225,.12),transparent 32%),linear-gradient(145deg,#171619,#0c0d10);box-shadow:0 24px 70px rgba(0,0,0,.25)}.dc-style-kicker{display:inline-flex;align-items:center;gap:8px;color:#e7bf7d;font-size:8px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.dc-style-kicker svg{width:16px;height:16px}.dc-style-hero h1{max-width:720px;margin:10px 0 8px;font-size:clamp(32px,4vw,48px);line-height:.98;letter-spacing:-.05em}.dc-style-hero p{max-width:720px;margin:0;color:var(--dc-muted);font-size:11px;line-height:1.6}.dc-style-steps{display:flex;align-items:center;gap:8px;padding:12px;border:1px solid rgba(255,255,255,.075);border-radius:18px;background:rgba(0,0,0,.24)}.dc-style-steps>span{min-width:76px;text-align:center}.dc-style-steps b{width:28px;height:28px;display:grid;place-items:center;margin:0 auto;border-radius:9px;background:rgba(217,180,120,.13);color:#e7bf7d;font-size:10px}.dc-style-steps em{display:block;margin-top:6px;color:var(--dc-muted);font-size:7px;font-style:normal;white-space:nowrap}.dc-style-steps>i{width:20px;height:1px;background:linear-gradient(90deg,rgba(217,180,120,.45),rgba(255,255,255,.08))}
-.dc-style-current{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:14px;align-items:center;padding:17px 18px;border:1px solid rgba(99,209,153,.2);border-radius:21px;background:linear-gradient(110deg,rgba(99,209,153,.085),rgba(255,255,255,.02) 48%,rgba(217,180,120,.045));box-shadow:0 16px 44px rgba(0,0,0,.18)}.dc-style-current-icon{width:48px;height:48px;display:grid;place-items:center;border-radius:15px;background:rgba(99,209,153,.12);color:#72dca6}.dc-style-current-icon svg{width:23px;height:23px}.dc-style-current small{color:#72dca6;font-size:7.5px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.dc-style-current h2{margin:4px 0 0;font-size:19px}.dc-style-current p{margin:4px 0 0;color:var(--dc-muted);font-size:8.5px;line-height:1.45}.dc-style-current-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.dc-style-current-actions .dc-btn{min-height:36px;padding:0 11px;font-size:8px}
-.dc-style-library{padding:20px;border:1px solid rgba(255,255,255,.07);border-radius:25px;background:linear-gradient(150deg,rgba(22,22,26,.92),rgba(10,10,13,.94));box-shadow:0 22px 60px rgba(0,0,0,.17)}.dc-style-section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:15px}.dc-style-section-head>div>span{color:#e2b977;font-size:7.5px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.dc-style-section-head h2{margin:5px 0 3px;font-size:20px;letter-spacing:-.025em}.dc-style-section-head p{max-width:720px;margin:0;color:var(--dc-muted);font-size:8.5px;line-height:1.5}.dc-style-count{padding:7px 10px;border:1px solid rgba(255,255,255,.07);border-radius:999px;background:rgba(255,255,255,.025);color:var(--dc-muted);font-size:8px;white-space:nowrap}.dc-style-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.dc-style-card{overflow:hidden!important;border:1px solid rgba(255,255,255,.085)!important;border-radius:22px!important;background:linear-gradient(155deg,#17171b,#0c0c0f)!important;box-shadow:0 18px 50px rgba(0,0,0,.23)!important}.dc-style-card.is-current{border-color:rgba(99,209,153,.36)!important;box-shadow:0 20px 58px rgba(0,0,0,.28),0 0 0 1px rgba(99,209,153,.08)!important}.dc-style-card-preview{position:relative;width:100%;min-height:300px;display:grid;place-items:center;overflow:hidden;border-bottom:1px solid rgba(255,255,255,.065);background:radial-gradient(circle at 50% 32%,rgba(217,180,120,.1),transparent 32%),linear-gradient(145deg,#1d1c21,#0c0c0f)}.dc-style-card-preview::before{content:'';position:absolute;inset:0;background:linear-gradient(110deg,transparent 35%,rgba(255,255,255,.035),transparent 63%);transform:translateX(-100%);transition:transform .6s ease}.dc-style-card-preview:hover::before{transform:translateX(100%)}.dc-style-enlarge{position:absolute;z-index:6;right:11px;bottom:11px;display:flex;align-items:center;gap:5px;min-height:25px;padding:0 8px;border:1px solid rgba(255,255,255,.1);border-radius:999px;background:rgba(4,4,6,.78);color:#fff;font-size:7px;opacity:0;transform:translateY(4px);transition:.2s}.dc-style-enlarge svg{width:11px;height:11px}.dc-style-card-preview:hover .dc-style-enlarge{opacity:1;transform:none}
-.dc-style-phone{position:relative;width:142px;aspect-ratio:9/16;overflow:hidden;border:1px solid rgba(255,255,255,.16);border-radius:18px;background:var(--style-bg,#000);box-shadow:0 24px 58px rgba(0,0,0,.48),0 0 28px rgba(217,180,120,.06);isolation:isolate}.dc-style-phone.large{width:min(290px,78vw);border-radius:27px;box-shadow:0 32px 90px rgba(0,0,0,.62),0 0 45px rgba(217,180,120,.09)}.dc-style-phone-back,.dc-style-phone-front{position:absolute;inset:0;width:100%;height:100%;display:block;filter:var(--style-filter,none)}.dc-style-phone-back{z-index:0;object-fit:cover;opacity:0;transform:scale(1.17);filter:var(--style-filter,none) blur(16px) brightness(.62)}.dc-style-phone-front{z-index:1;object-fit:contain}.dc-style-phone[data-fit=blur] .dc-style-phone-back{opacity:1}.dc-style-phone[data-fit=blur] .dc-style-phone-front{object-fit:contain}.dc-style-phone[data-fit=crop] .dc-style-phone-front{object-fit:cover}.dc-style-phone[data-fit=contain] .dc-style-phone-front{object-fit:contain}.dc-style-sample-scene{position:absolute;inset:0;z-index:0;overflow:hidden;background:radial-gradient(circle at 50% 23%,rgba(217,180,120,.24),transparent 22%),linear-gradient(160deg,#2b2830,#101013 55%,#050506)}.dc-style-sample-scene i{position:absolute;left:50%;top:20%;width:34%;aspect-ratio:1;border-radius:50%;background:linear-gradient(145deg,#b99472,#5d4639);transform:translateX(-50%)}.dc-style-sample-scene b{position:absolute;left:18%;right:18%;bottom:5%;height:61%;border-radius:48% 48% 10% 10%;background:linear-gradient(145deg,#373039,#141317)}.dc-style-sample-scene em{position:absolute;right:19%;top:42%;width:9%;height:36%;border-radius:999px;background:#070708;transform:rotate(-8deg);box-shadow:0 0 0 3px #38343b}.dc-style-sample-badge{position:absolute;z-index:6;left:8px;top:8px;padding:4px 6px;border:1px solid rgba(255,255,255,.11);border-radius:999px;background:rgba(4,4,6,.72);color:rgba(255,255,255,.72);font-size:5.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}.dc-style-phone.large .dc-style-sample-badge{left:13px;top:13px;padding:5px 8px;font-size:7px}.dc-style-caption{position:absolute;z-index:4;max-width:84%;padding:2px 5px;border-radius:5px;text-align:center;transform:translate(-50%,-50%);overflow-wrap:anywhere}.dc-style-caption span,.dc-style-caption em{font:inherit;color:inherit}.dc-style-caption em{color:var(--style-highlight,#d9b478);font-style:italic}.dc-style-caption.dynamic-stack span,.dc-style-caption.dynamic-stack em{display:block}.dc-style-caption.phrase{max-width:90%}.dc-style-caption.phrase em{display:none}.dc-style-watermark{position:absolute;z-index:5;padding:3px 5px;border-radius:4px;background:rgba(0,0,0,.36);font-size:5.5px;font-weight:900;letter-spacing:.1em}.dc-style-phone.large .dc-style-watermark{padding:5px 7px;font-size:8px}.dc-style-watermark[data-position=top-left]{left:7%;top:7%}.dc-style-watermark[data-position=top-center]{left:50%;top:7%;transform:translateX(-50%)}.dc-style-watermark[data-position=top-right]{right:7%;top:7%}.dc-style-watermark[data-position=bottom-left]{left:7%;bottom:7%}.dc-style-watermark[data-position=bottom-center]{left:50%;bottom:7%;transform:translateX(-50%)}.dc-style-watermark[data-position=bottom-right]{right:7%;bottom:7%}
-.dc-style-card-body{padding:15px}.dc-style-card-title{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.dc-style-card-title small{display:block;color:#dcb475;font-size:6.5px;font-weight:900;letter-spacing:.09em;text-transform:uppercase}.dc-style-card-title h3{margin:4px 0 0;font-size:15px}.dc-style-card-body>p{min-height:39px;margin:8px 0 11px;color:var(--dc-muted);font-size:8.5px;line-height:1.5}.dc-style-specs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px}.dc-style-specs span{padding:5px 7px;border:1px solid rgba(255,255,255,.06);border-radius:999px;background:rgba(255,255,255,.025);color:var(--dc-subtle);font-size:6.7px}.dc-style-card-actions{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:7px}.dc-style-card-actions .dc-btn{min-width:0;min-height:36px;padding:0 10px;font-size:7.8px}.dc-style-card-actions .dc-clip-more summary{width:36px;height:36px;display:grid;place-items:center;border:1px solid var(--dc-line);border-radius:10px;background:#0b0b0d;font-size:0}.dc-style-card-actions .dc-clip-more summary::after{content:'•••';font-size:9px;letter-spacing:1px}.dc-style-empty{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:13px;align-items:center;padding:17px;border:1px dashed rgba(217,180,120,.2);border-radius:18px;background:rgba(217,180,120,.035)}.dc-style-empty>span{width:44px;height:44px;display:grid;place-items:center;border-radius:14px;background:rgba(217,180,120,.1);color:#e0b777}.dc-style-empty svg{width:22px;height:22px}.dc-style-empty strong{font-size:11px}.dc-style-empty p{margin:3px 0 0;color:var(--dc-muted);font-size:8px}.dc-style-footnote{margin:-4px 4px 4px;color:var(--dc-subtle);font-size:7.5px;text-align:center}
-.dc-style-modal-layer{position:fixed;z-index:720;inset:0;display:grid;place-items:center;padding:20px;background:rgba(2,2,4,.82);backdrop-filter:blur(18px)}.dc-style-modal{width:min(850px,calc(100vw - 28px));max-height:calc(100dvh - 28px);overflow:auto;display:grid;grid-template-columns:minmax(320px,.9fr) minmax(360px,1.1fr);border:1px solid rgba(217,180,120,.24);border-radius:27px;background:linear-gradient(145deg,#17171b,#0b0b0e);box-shadow:0 40px 120px rgba(0,0,0,.72)}.dc-style-modal-visual{min-height:620px;display:grid;place-items:center;padding:28px;background:radial-gradient(circle at 50% 38%,rgba(217,180,120,.13),transparent 34%),linear-gradient(145deg,#1e1c21,#0a0a0c)}.dc-style-modal-copy{position:relative;padding:36px 30px;align-self:center}.dc-style-modal-close{position:absolute;right:18px;top:17px;width:38px;height:38px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.09);border-radius:50%;background:#0b0b0d;color:#fff;font-size:21px}.dc-style-modal-copy>span{color:#e3b978;font-size:8px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.dc-style-modal-copy h2{margin:8px 0 8px;font-size:34px;letter-spacing:-.045em}.dc-style-modal-copy>p{margin:0;color:var(--dc-muted);font-size:10px;line-height:1.6}.dc-style-modal-note{margin-top:18px;padding:13px;border:1px solid rgba(217,180,120,.15);border-radius:14px;background:rgba(217,180,120,.055)}.dc-style-modal-note b,.dc-style-modal-note span{display:block}.dc-style-modal-note b{font-size:9px}.dc-style-modal-note span{margin-top:4px;color:var(--dc-muted);font-size:8px}.dc-style-modal-specs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:13px}.dc-style-modal-specs>div{padding:11px;border:1px solid rgba(255,255,255,.065);border-radius:13px;background:rgba(0,0,0,.19)}.dc-style-modal-specs small,.dc-style-modal-specs strong{display:block}.dc-style-modal-specs small{color:var(--dc-subtle);font-size:7px}.dc-style-modal-specs strong{margin-top:4px;font-size:9px}.dc-style-modal-specs strong i{display:inline-block;width:8px;height:8px;margin-right:5px;border-radius:50%}.dc-style-modal-warning{margin-top:14px!important;padding:10px;border-left:2px solid #e3b978;background:rgba(255,255,255,.02);font-size:8px!important}.dc-style-modal-actions{display:flex;gap:8px;margin-top:16px}.dc-style-modal-actions .dc-btn{flex:1}
-@media(max-width:1150px){.dc-style-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dc-style-hero{grid-template-columns:1fr}.dc-style-steps{justify-self:start}.dc-style-current{grid-template-columns:48px minmax(0,1fr)}.dc-style-current-actions{grid-column:1/-1;justify-content:flex-start}}
-@media(max-width:760px){.dc-style-hero{padding:22px}.dc-style-steps{width:100%;overflow:auto}.dc-style-steps>span{min-width:70px}.dc-style-library{padding:14px}.dc-style-grid{grid-template-columns:1fr}.dc-style-section-head{align-items:flex-start;flex-direction:column}.dc-style-card-preview{min-height:340px}.dc-style-phone{width:168px}.dc-style-current{grid-template-columns:42px 1fr}.dc-style-current-icon{width:42px;height:42px}.dc-style-current-actions{display:grid;grid-template-columns:1fr;width:100%}.dc-style-empty{grid-template-columns:40px 1fr}.dc-style-empty .dc-btn{grid-column:1/-1}.dc-style-modal{grid-template-columns:1fr}.dc-style-modal-visual{min-height:520px}.dc-style-modal-copy{padding:28px 20px}.dc-style-modal-copy h2{font-size:28px}}
-
-/* Settings control centre */
-.dc-settings-hub{display:grid;gap:16px}.dc-settings-command{position:relative;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:28px;align-items:center;padding:28px 30px;border:1px solid rgba(217,180,120,.18);border-radius:27px;background:radial-gradient(circle at 2% 0,rgba(217,180,120,.16),transparent 36%),radial-gradient(circle at 90% 0,rgba(115,139,255,.12),transparent 32%),linear-gradient(145deg,#18171b,#0c0d11);box-shadow:0 24px 68px rgba(0,0,0,.24)}.dc-settings-command::after{content:'';position:absolute;right:-80px;bottom:-120px;width:320px;height:320px;border:1px solid rgba(255,255,255,.04);border-radius:50%;pointer-events:none}.dc-settings-kicker{display:inline-flex;align-items:center;gap:8px;color:#e5b978;font-size:8px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.dc-settings-kicker svg{width:16px;height:16px}.dc-settings-command h1{max-width:760px;margin:10px 0 8px;font-size:clamp(34px,4vw,50px);line-height:.98;letter-spacing:-.055em}.dc-settings-command>div>p{max-width:760px;margin:0;color:var(--dc-muted);font-size:10.5px;line-height:1.6}.dc-settings-command-status{position:relative;z-index:1;display:grid;grid-template-columns:repeat(3,minmax(118px,1fr));overflow:hidden;border:1px solid rgba(255,255,255,.07);border-radius:19px;background:rgba(4,5,7,.42)}.dc-settings-command-status>span{min-height:112px;display:flex;flex-direction:column;justify-content:center;padding:15px 17px;border-right:1px solid rgba(255,255,255,.065)}.dc-settings-command-status>span:last-child{border-right:0}.dc-settings-command-status i{width:30px;height:30px;display:grid;place-items:center;margin-bottom:10px;border-radius:9px;background:rgba(255,255,255,.045);color:var(--dc-muted)}.dc-settings-command-status .on i{background:rgba(106,218,163,.11);color:#72dda9}.dc-settings-command-status svg{width:15px;height:15px}.dc-settings-command-status b,.dc-settings-command-status em{display:block}.dc-settings-command-status b{font-size:11px;white-space:nowrap}.dc-settings-command-status em{margin-top:4px;color:var(--dc-subtle);font-size:7px;font-style:normal;text-transform:uppercase;letter-spacing:.07em}
-.dc-settings-kicker svg,.dc-settings-command-status svg,.dc-settings-rail>button>span svg,.dc-settings-privacy>span svg,.dc-settings-section>header>span svg,.dc-settings-master>div>span svg,.dc-settings-section .dc-alert-card-head>span svg,.dc-settings-section>footer p span svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
-.dc-settings-layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:16px;align-items:start}.dc-settings-rail{position:sticky;top:86px;display:grid;gap:7px;padding:13px;border:1px solid rgba(255,255,255,.07);border-radius:22px;background:linear-gradient(155deg,#151519,#0b0b0e);box-shadow:0 20px 56px rgba(0,0,0,.19)}.dc-settings-rail>small{padding:6px 8px 9px;color:var(--dc-subtle);font-size:7px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.dc-settings-rail>button{display:grid;grid-template-columns:36px minmax(0,1fr) 15px;gap:10px;align-items:center;width:100%;padding:10px;border:1px solid transparent;border-radius:14px;color:var(--dc-muted);text-align:left;transition:.18s}.dc-settings-rail>button:hover,.dc-settings-rail>button.is-active{border-color:rgba(217,180,120,.14);background:linear-gradient(90deg,rgba(217,180,120,.12),rgba(217,180,120,.035));color:var(--dc-text)}.dc-settings-rail>button>span{width:36px;height:36px;display:grid;place-items:center;border-radius:11px;background:rgba(255,255,255,.045);color:#dcb474}.dc-settings-rail>button>span svg{width:18px;height:18px}.dc-settings-rail>button>svg{width:13px;height:13px;opacity:.4}.dc-settings-rail strong,.dc-settings-rail em{display:block}.dc-settings-rail strong{font-size:9px}.dc-settings-rail em{margin-top:3px;color:var(--dc-subtle);font-size:7px;font-style:normal}.dc-settings-privacy{display:grid;grid-template-columns:32px 1fr;gap:10px;margin-top:8px;padding:12px;border:1px solid rgba(102,213,255,.09);border-radius:15px;background:rgba(102,213,255,.035)}.dc-settings-privacy>span{width:32px;height:32px;display:grid;place-items:center;border-radius:10px;background:rgba(102,213,255,.08);color:#88dfff}.dc-settings-privacy svg{width:16px;height:16px}.dc-settings-privacy strong{font-size:8.5px}.dc-settings-privacy p{margin:4px 0 0;color:var(--dc-subtle);font-size:7px;line-height:1.5}.dc-settings-main{min-width:0;display:grid;gap:16px}
-.dc-settings-section{--setting-accent:#deb676;--setting-soft:rgba(222,182,118,.1);scroll-margin-top:86px;overflow:hidden;border:1px solid rgba(255,255,255,.075);border-radius:24px;background:radial-gradient(circle at 100% 0,var(--setting-soft),transparent 34%),linear-gradient(155deg,#17171b,#0c0c0f);box-shadow:0 22px 62px rgba(0,0,0,.19)}.dc-settings-section.violet{--setting-accent:#bd9bff;--setting-soft:rgba(142,99,226,.11)}.dc-settings-section.blue{--setting-accent:#8dc9ff;--setting-soft:rgba(76,155,228,.1)}.dc-settings-section>header{display:grid;grid-template-columns:46px minmax(0,1fr) auto;gap:13px;align-items:center;padding:19px 20px;border-bottom:1px solid rgba(255,255,255,.065);background:linear-gradient(90deg,var(--setting-soft),transparent 58%)}.dc-settings-section>header>span{width:46px;height:46px;display:grid;place-items:center;border-radius:14px;background:var(--setting-soft);color:var(--setting-accent)}.dc-settings-section>header>span svg{width:22px;height:22px}.dc-settings-section>header small{color:var(--setting-accent);font-size:7px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.dc-settings-section>header h2{margin:4px 0 2px;font-size:18px}.dc-settings-section>header p{margin:0;color:var(--dc-muted);font-size:8.5px;line-height:1.45}.dc-settings-section>header>b{min-width:92px;padding:8px 10px;border:1px solid rgba(255,255,255,.07);border-radius:999px;background:rgba(0,0,0,.2);color:var(--setting-accent);font-size:7.5px;text-align:center;white-space:nowrap}.dc-setting-control-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:18px 20px}.dc-setting-control-grid.automation{grid-template-columns:repeat(3,minmax(0,1fr));padding-top:10px}.dc-setting-number{min-width:0;display:grid;gap:12px;padding:14px;border:1px solid rgba(255,255,255,.065);border-radius:16px;background:rgba(2,2,4,.23)}.dc-setting-number>span strong,.dc-setting-number>span small{display:block}.dc-setting-number>span strong{font-size:9.5px}.dc-setting-number>span small{margin-top:4px;color:var(--dc-subtle);font-size:7px;line-height:1.4}.dc-setting-number>div{position:relative}.dc-setting-number input{width:100%;height:47px;padding:0 58px 0 13px;border:1px solid rgba(255,255,255,.09);border-radius:12px;background:#09090b;color:#fff;font-size:17px;font-weight:780;outline:0}.dc-setting-number input:focus{border-color:var(--setting-accent);box-shadow:0 0 0 3px var(--setting-soft)}.dc-setting-number em{position:absolute;right:12px;top:50%;color:var(--dc-subtle);font-size:7px;font-style:normal;transform:translateY(-50%)}
-.dc-setting-toggle{position:relative;min-height:72px;display:grid;grid-template-columns:minmax(0,1fr) 40px;gap:12px;align-items:center;padding:13px 14px;border:1px solid rgba(255,255,255,.065);border-radius:16px;background:rgba(2,2,4,.23);cursor:pointer}.dc-setting-toggle>span strong,.dc-setting-toggle>span small{display:block}.dc-setting-toggle>span strong{font-size:9.5px}.dc-setting-toggle>span small{margin-top:4px;color:var(--dc-subtle);font-size:7px;line-height:1.4}.dc-setting-toggle input{position:absolute;width:1px;height:1px;opacity:0}.dc-setting-toggle>i{position:relative;width:40px;height:23px;border:1px solid rgba(255,255,255,.11);border-radius:999px;background:#08080a;transition:.2s}.dc-setting-toggle>i::after{content:'';position:absolute;left:3px;top:3px;width:15px;height:15px;border-radius:50%;background:#777983;box-shadow:0 2px 7px rgba(0,0,0,.45);transition:.2s}.dc-setting-toggle input:checked+i{border-color:rgba(217,180,120,.38);background:rgba(217,180,120,.2)}.dc-setting-toggle input:checked+i::after{transform:translateX(17px);background:#e0b875}.dc-setting-toggle.violet input:checked+i{border-color:rgba(189,155,255,.4);background:rgba(142,99,226,.24)}.dc-setting-toggle.violet input:checked+i::after{background:#c5a4ff}.dc-setting-toggle.green input:checked+i{border-color:rgba(108,222,165,.4);background:rgba(108,222,165,.2)}.dc-setting-toggle.green input:checked+i::after{background:#75dfaa}.dc-setting-toggle.blue input:checked+i{border-color:rgba(141,201,255,.42);background:rgba(76,155,228,.22)}.dc-setting-toggle.blue input:checked+i::after{background:#94ceff}.dc-setting-toggle input:focus-visible+i{outline:2px solid var(--setting-accent);outline-offset:3px}.dc-settings-master{display:grid;grid-template-columns:minmax(300px,.9fr) minmax(300px,1.1fr);gap:10px;padding:18px 20px 0}.dc-settings-master>.dc-setting-toggle{min-height:88px}.dc-settings-master>div{display:grid;grid-template-columns:38px minmax(0,1fr);gap:10px;align-items:center;padding:13px 14px;border:1px solid rgba(189,155,255,.1);border-radius:16px;background:rgba(142,99,226,.045)}.dc-settings-master>div>span{width:38px;height:38px;display:grid;place-items:center;border-radius:11px;background:rgba(189,155,255,.1);color:#c2a0ff}.dc-settings-master>div svg{width:18px;height:18px}.dc-settings-master p{margin:0}.dc-settings-master strong,.dc-settings-master small{display:block}.dc-settings-master strong{font-size:9px}.dc-settings-master small{margin-top:4px;color:var(--dc-muted);font-size:7px;line-height:1.45}.dc-settings-section>footer{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 20px;border-top:1px solid rgba(255,255,255,.055);background:rgba(0,0,0,.13)}.dc-settings-section>footer p{display:flex;align-items:center;gap:8px;margin:0;color:var(--dc-muted);font-size:7.5px}.dc-settings-section>footer p span{color:var(--setting-accent)}.dc-settings-section>footer svg{width:14px;height:14px}.dc-settings-section>footer .dc-btn{min-width:155px;min-height:38px;font-size:8px}
-.dc-settings-section .dc-alert-grid{gap:12px;padding:18px 20px 20px}.dc-settings-section .dc-alert-card{display:flex;flex-direction:column;padding:16px;border-radius:18px;background:rgba(2,2,4,.24)}.dc-settings-section .dc-alert-options{grid-template-columns:1fr 1fr;gap:8px}.dc-settings-section .dc-alert-options.compact{grid-template-columns:1fr}.dc-settings-section .dc-setting-toggle{min-height:70px}.dc-settings-section .dc-alert-actions{margin-top:auto;padding-top:14px}.dc-alert-volume-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-top:16px}.dc-alert-volume-head strong,.dc-alert-volume-head small{display:block}.dc-alert-volume-head strong{font-size:9px}.dc-alert-volume-head small{margin-top:3px;color:var(--dc-subtle);font-size:7px}.dc-alert-volume-head output{min-width:47px;padding:6px 8px;border:1px solid rgba(255,255,255,.07);border-radius:9px;background:#09090b;color:#9bd3ff;font-size:8px;text-align:center}.dc-settings-section .dc-volume-row{display:block;margin-top:11px}.dc-settings-section .dc-volume-row input{width:100%;accent-color:#82c7ff}.dc-settings-section .dc-browser-note{margin-top:12px}
-@media(max-width:1180px){.dc-settings-command{grid-template-columns:1fr}.dc-settings-command-status{width:100%}.dc-settings-layout{grid-template-columns:1fr}.dc-settings-rail{position:static;grid-template-columns:repeat(3,1fr)}.dc-settings-rail>small,.dc-settings-privacy{grid-column:1/-1}.dc-settings-rail>button{grid-template-columns:32px minmax(0,1fr)}.dc-settings-rail>button>svg{display:none}.dc-settings-rail>button>span{width:32px;height:32px}.dc-settings-privacy{display:none}}
-@media(max-width:850px){.dc-setting-control-grid,.dc-setting-control-grid.automation,.dc-settings-master,.dc-settings-section .dc-alert-grid{grid-template-columns:1fr 1fr}.dc-settings-master>.dc-setting-toggle,.dc-settings-master>div{min-width:0}.dc-settings-section .dc-alert-options{grid-template-columns:1fr}}
-@media(max-width:650px){.dc-settings-command{padding:22px}.dc-settings-command-status{grid-template-columns:1fr}.dc-settings-command-status>span{min-height:78px;display:grid;grid-template-columns:32px 1fr;column-gap:10px;align-content:center;border-right:0;border-bottom:1px solid rgba(255,255,255,.065)}.dc-settings-command-status>span:last-child{border-bottom:0}.dc-settings-command-status i{grid-row:1/3;margin:0}.dc-settings-rail{grid-template-columns:1fr}.dc-settings-rail>small{grid-column:auto}.dc-setting-control-grid,.dc-setting-control-grid.automation,.dc-settings-master,.dc-settings-section .dc-alert-grid{grid-template-columns:1fr}.dc-settings-section>header{grid-template-columns:42px 1fr}.dc-settings-section>header>span{width:42px;height:42px}.dc-settings-section>header>b{grid-column:1/-1;justify-self:start}.dc-settings-section>footer{align-items:flex-start;flex-direction:column}.dc-settings-section>footer .dc-btn{width:100%}}
-
-/* Browser notifications and workflow sounds */
-.dc-alert-settings{grid-column:1/-1;position:relative;overflow:hidden;background:radial-gradient(circle at 100% 0,rgba(142,185,255,.11),transparent 36%),linear-gradient(145deg,#151519,#0d0d10)}.dc-alert-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:14px}.dc-alert-head p{margin-bottom:0}.dc-alert-status{display:inline-flex;align-items:center;gap:7px;min-height:29px;padding:0 10px;border:1px solid rgba(255,255,255,.08);border-radius:999px;color:var(--dc-muted);background:rgba(0,0,0,.2);font-size:8px;font-weight:850;white-space:nowrap}.dc-alert-status i{width:7px;height:7px;border-radius:50%;background:var(--dc-orange);box-shadow:0 0 10px currentColor}.dc-alert-status.good{color:var(--dc-green)}.dc-alert-status.bad{color:var(--dc-red)}.dc-alert-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.dc-alert-card{padding:14px;border:1px solid rgba(255,255,255,.065);border-radius:17px;background:rgba(0,0,0,.22)}.dc-alert-card-head{display:flex;align-items:center;gap:10px;margin-bottom:11px}.dc-alert-card-head>span{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:rgba(142,185,255,.1);color:#9bc4ff}.dc-alert-card-head svg{width:19px;height:19px}.dc-alert-card-head strong,.dc-alert-card-head small{display:block}.dc-alert-card-head strong{font-size:11px}.dc-alert-card-head small{margin-top:3px;color:var(--dc-muted);font-size:8.5px;line-height:1.4}.dc-alert-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:11px}.dc-alert-actions .dc-btn{min-height:34px;padding:0 11px;font-size:8.5px}.dc-alert-options{display:grid;grid-template-columns:1fr 1fr;gap:7px}.dc-alert-options .dc-switch-row{min-height:58px;padding:9px}.dc-alert-options .dc-switch-row strong{font-size:9.5px}.dc-alert-options .dc-switch-row span span{font-size:7.7px}.dc-volume-row{display:grid;grid-template-columns:minmax(0,1fr) 42px;gap:10px;align-items:center;margin-top:10px}.dc-volume-row input{width:100%;accent-color:var(--dc-accent)}.dc-volume-row output{height:30px;display:grid;place-items:center;border:1px solid var(--dc-line);border-radius:9px;background:#0b0b0d;color:var(--dc-accent2);font-size:8.5px}.dc-browser-note{margin-top:10px;padding:9px 10px;border:1px solid rgba(255,255,255,.055);border-radius:11px;background:rgba(255,255,255,.025);color:var(--dc-subtle);font-size:7.8px;line-height:1.5}
-@media(max-width:820px){.dc-alert-grid,.dc-alert-options{grid-template-columns:1fr}.dc-alert-head{align-items:flex-start;flex-direction:column}}
-
-/* Publishing v4 control-room layer */
-.dc-publish-board-top{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.065);background:linear-gradient(90deg,rgba(112,215,162,.055),transparent 44%)}.dc-publish-live{display:flex;align-items:center;gap:10px}.dc-publish-live>span{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:rgba(112,215,162,.09);color:#70d7a2}.dc-publish-live svg{width:18px;height:18px}.dc-publish-live strong,.dc-publish-live small{display:block}.dc-publish-live strong{font-size:10px}.dc-publish-live small{margin-top:2px;color:var(--dc-subtle);font-size:8px}.dc-publish-board-tools{display:flex;align-items:center;gap:7px}.dc-publish-board-tools .dc-btn{min-height:34px;padding:0 11px;font-size:8.5px}.dc-publish-health{display:inline-flex;align-items:center;gap:7px;min-height:29px;padding:0 10px;border:1px solid rgba(255,255,255,.07);border-radius:999px;background:rgba(0,0,0,.2);color:var(--dc-muted);font-size:8px}.dc-publish-health i{width:6px;height:6px;border-radius:50%;background:var(--dc-orange);box-shadow:0 0 9px currentColor}.dc-publish-health.ready i{background:#70d7a2}.dc-publish-meta{display:flex!important;align-items:center;gap:6px!important;margin-top:7px!important}.dc-publish-meta i{display:inline-flex;align-items:center;min-height:20px;padding:0 7px;border-radius:999px;background:rgba(255,255,255,.045);color:var(--dc-muted);font-size:7px;font-style:normal}.dc-publish-meta i.score{background:rgba(112,215,162,.08);color:#8ce8b9}.dc-publish-meta i.attention{background:rgba(237,183,99,.09);color:#edb763}.dc-publish-row{position:relative}.dc-publish-row:before{content:'';position:absolute;left:0;top:18px;bottom:18px;width:2px;border-radius:99px;background:transparent}.dc-publish-row:hover:before{background:var(--dc-accent)}.dc-publish-hero>div:first-child{min-width:0}.dc-publish-summary{flex:0 0 246px;display:grid;grid-template-columns:repeat(3,1fr);flex-wrap:nowrap}.dc-publish-summary span{min-width:0}.dc-publish-empty .dc-empty-icon{width:58px;height:58px;display:grid;place-items:center;margin:0 auto 14px;border:1px solid rgba(112,215,162,.14);border-radius:18px;background:rgba(112,215,162,.06);color:#70d7a2}.dc-publish-empty .dc-empty-icon svg{width:27px;height:27px}
-.dc-publish-connection-action{min-height:27px;padding:0 9px;border:1px solid rgba(255,255,255,.09);border-radius:8px;color:var(--dc-text);font-size:7.5px;font-weight:760}.dc-publish-connection-action:hover{border-color:rgba(102,213,255,.32);background:rgba(102,213,255,.06)}.dc-publish-connection-status{display:flex!important;align-items:center;gap:5px!important;margin-top:3px!important}.dc-publish-connection-status i{width:5px;height:5px;border-radius:50%;background:var(--dc-orange)}.dc-publish-connection-status i.on{background:#70d7a2;box-shadow:0 0 8px rgba(112,215,162,.42)}.dc-publish-preview-platform{position:absolute;z-index:2;right:7px;top:7px;width:25px;height:25px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.12);border-radius:8px;background:rgba(5,5,6,.76);color:#fff}.dc-publish-preview-platform svg{width:13px;height:13px}.dc-publish-next{padding:16px;background:radial-gradient(circle at 90% 0,rgba(112,215,162,.1),transparent 43%),linear-gradient(145deg,#15171a,#0d0d10)}.dc-publish-next-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.dc-publish-next-head>span:first-child{display:flex;align-items:center;gap:7px;color:#86e6b5;font-size:8px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.dc-publish-next-head svg{width:14px;height:14px}.dc-publish-next-body{margin-top:13px;padding:13px;border:1px solid rgba(255,255,255,.065);border-radius:15px;background:rgba(0,0,0,.22)}.dc-publish-next-content{display:grid;grid-template-columns:70px minmax(0,1fr);gap:12px;align-items:center}.dc-publish-next-media{position:relative;width:70px;height:96px;overflow:hidden;border:1px solid rgba(255,255,255,.09);border-radius:12px;background:linear-gradient(145deg,rgba(112,215,162,.09),rgba(255,255,255,.025));color:#86e6b5}.dc-publish-next-media:hover{border-color:rgba(134,230,181,.34);transform:translateY(-1px)}.dc-publish-next-media img{position:absolute;z-index:1;inset:0;width:100%;height:100%;object-fit:cover}.dc-publish-next-fallback{position:absolute;inset:0!important;display:grid!important;place-items:center;margin:0!important;color:#86e6b5!important}.dc-publish-next-fallback svg{width:23px;height:23px}.dc-publish-next-media small{position:absolute;z-index:2;right:5px;bottom:5px;min-width:28px;padding:3px 5px;border-radius:999px;background:rgba(3,4,5,.8);color:#fff;font-size:7px;text-align:center}.dc-publish-next-copy{min-width:0}.dc-publish-next-body strong,.dc-publish-next-body span{display:block}.dc-publish-next-body strong{font-size:11px;line-height:1.4}.dc-publish-next-body span{margin-top:5px;color:var(--dc-subtle);font-size:8px}.dc-publish-next-copy em{display:block;margin-top:7px;overflow:hidden;color:var(--dc-muted);font-size:7.5px;font-style:normal;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}.dc-publish-next-actions{display:flex;gap:7px;margin-top:11px}.dc-publish-next-actions .dc-btn{flex:1;min-height:34px;padding:0 9px;font-size:8px}.dc-publish-hero-actions{position:relative;z-index:1;display:flex;align-items:center;gap:8px;margin-top:13px}.dc-publish-hero-actions .dc-btn{min-height:36px;padding:0 13px;font-size:8.5px}.dc-publish-summary span.ready b{color:#8ce8b9}.dc-publish-summary span.scheduled b{color:#8eb9ff}.dc-publish-summary span.posted b{color:#d9b478}
-.dc-publish-access{display:grid;grid-template-columns:42px minmax(0,1fr) auto;align-items:center;gap:14px;padding:15px 17px;border:1px solid rgba(217,180,120,.26);border-radius:18px;background:linear-gradient(110deg,rgba(217,180,120,.12),rgba(217,180,120,.035));box-shadow:0 18px 48px rgba(0,0,0,.18)}.dc-publish-access>span{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:rgba(217,180,120,.13);color:var(--dc-accent2)}.dc-publish-access svg{width:21px;height:21px}.dc-publish-access strong{display:block;font-size:12px}.dc-publish-access p{margin:4px 0 0;color:var(--dc-muted);font-size:9px;line-height:1.45}.dc-publish-access .dc-btn{min-width:126px}
-body.dc-app .dc-billing-card{width:min(1320px,calc(100vw - 30px));max-height:calc(100dvh - 24px);overflow-y:auto}body.dc-app .dc-plan-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));width:auto;margin:0;padding:0 30px 18px;gap:12px}body.dc-app .dc-plan-card{min-width:0;min-height:418px}body.dc-app .dc-plan-content{min-height:418px;padding:19px}.dc-plan-card.featured .dc-plan-content{min-height:379px}body.dc-app .dc-plan-card p{min-height:48px}body.dc-app .dc-plan-features{gap:8px}.dc-plan-features span{align-items:flex-start}
-@media(max-width:1120px){body.dc-app .dc-plan-grid{grid-template-columns:repeat(2,minmax(0,1fr))}body.dc-app .dc-plan-card,body.dc-app .dc-plan-content{min-height:0}.dc-plan-card.featured .dc-plan-content{min-height:0}}
-@media(max-width:1050px){.dc-brand-layout{grid-template-columns:1fr}.dc-brand-preview-card{min-height:520px}.dc-product-hero{grid-template-columns:1fr}.dc-premium-orb{width:100%;min-height:110px;grid-template-columns:48px auto;column-gap:12px;text-align:left}.dc-premium-orb>span{grid-row:1/3}.dc-product-stats{width:100%;grid-template-columns:repeat(4,1fr)}}
-@media(max-width:760px){.dc-feature-ribbon,.dc-lab-grid,.dc-lab-lineup,.dc-lab-intelligence-grid{grid-template-columns:1fr}.dc-lab-panel.wide{grid-column:auto}.dc-product-stats{grid-template-columns:1fr 1fr}.dc-brand-form{grid-template-columns:1fr}.dc-brand-form .wide{grid-column:auto}.dc-brand-entitlement,.dc-brand-ai-head{grid-template-columns:38px 1fr}.dc-brand-entitlement .dc-btn,.dc-brand-ai-head>b{grid-column:1/-1}.dc-lab-hooks article{grid-template-columns:38px 1fr}.dc-lab-hooks article .dc-btn{grid-column:1/-1}.dc-feature-ribbon article{grid-template-columns:34px 1fr}.dc-publish-board-top{align-items:flex-start;flex-direction:column}.dc-publish-board-tools{width:100%;justify-content:space-between}.dc-publish-hero-actions{flex-wrap:wrap}}
-@media(max-width:520px){.dc-product-hero{padding:22px;border-radius:22px}.dc-product-hero h1{font-size:34px}.dc-brand-controls{padding:14px}.dc-brand-preview-card{min-height:480px;padding:15px}.dc-brand-phone{width:220px}.dc-product-stats{grid-template-columns:1fr 1fr}.dc-lab-locked{padding:28px 18px}.dc-lab-locked h2{font-size:27px}}
-@media(max-width:680px){body.dc-app .dc-plan-grid{grid-template-columns:1fr;padding-left:16px!important;padding-right:16px!important}.dc-publish-access{grid-template-columns:38px 1fr}.dc-publish-access .dc-btn{grid-column:1/-1;width:100%}}
-`;
-try{const s=document.createElement('style');s.textContent=DC_ADMIN_CSS+DC_PRODUCT_CSS;document.head.append(s);}catch{}
-
-function v7InitialRoute(){try{const value=new URLSearchParams(location.search).get('route');return CUSTOM.has(value)&&value!=='editor'?value:'home'}catch{return'home'}}
-async function confirmTopupReturn(sessionId,attempt=0){
-  await refreshData();
-  const events=billingInfo().recentEvents||[];
-  const confirmed=events.find(event=>event.type==='tokens_added'&&(!sessionId||String(event.meta?.sessionId||'')===String(sessionId)));
-  if(confirmed){renderCurrent();updateTokenPill();notify(confirmed.message||'Tokens were added to your wallet.');return}
-  if(attempt<4){setTimeout(()=>confirmTopupReturn(sessionId,attempt+1),900+attempt*650);return}
-  renderCurrent();updateTokenPill();notify('Payment returned successfully. Your wallet will refresh when Stripe confirms the top-up.','good');
-}
-function handleV7Return(){
-  let query;try{query=new URLSearchParams(location.search)}catch{return}
-  const purchase=query.get('templatePurchase'),billing=query.get('billing'),sessionId=query.get('session_id')||'';
-  if(purchase){
-    templateWorkspaceTab=purchase==='success'?'mine':'shop';syncTemplateRouteMode();
-    if(currentView==='templates')renderTemplatesPage();
-    setTimeout(async()=>{if(purchase==='success'){await refreshData();await loadTemplateShop(true);renderTemplatesPage();notify('Template purchase confirmed. It is now in My Templates.')}else notify('Template checkout was cancelled. Nothing was charged.','bad')},260);
-  }else if(billing==='topup-success')setTimeout(()=>confirmTopupReturn(sessionId),240);
-  else if(billing==='success')setTimeout(async()=>{await refreshData();renderCurrent();updateTokenPill();notify('Your subscription is active.')},240);
-  if(purchase||billing){query.delete('templatePurchase');query.delete('billing');query.delete('session_id');const rest=query.toString();history.replaceState({},'',`${location.pathname}${rest?`?${rest}`:''}`)}
-}
-function boot(){injectShell();setTimeout(()=>{const initial=v7InitialRoute();go(initial);handleV7Return();try{if(initial==='home'&&!seenGet('guided_demo','complete')){const start=()=>{if($('#app')&&!$('#app').classList.contains('hide')&&$('#view-home'))openGuidedTour(0);else setTimeout(start,400)};setTimeout(start,700)}}catch{}},80);setInterval(sync,900)}
+function boot(){injectShell();setTimeout(()=>{go('home');try{if(localStorage.getItem('dc-guided-demo-complete')!=='1')setTimeout(()=>openGuidedTour(0),700)}catch{}},80);setInterval(sync,900)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();

@@ -47,21 +47,6 @@ test('worker job creation is signed and secrets never enter the JSON body', asyn
   assert.equal(captured.options.headers['x-deenclipped-signature'], expected);
 });
 
-test('speaker framing analysis is signed and sent to the worker', async () => {
-  let captured;
-  global.fetch = async (url, options) => {
-    captured = { url: String(url), options };
-    return new Response(JSON.stringify({ plan: { available: true, method: 'active-speaker', keyframes: [] } }), { status: 200 });
-  };
-  const result = await worker.analyseFraming({ sourceKey: 'projects/project_1/source.mp4', duration: 30 });
-  assert.equal(result.plan.method, 'active-speaker');
-  assert.equal(captured.url, 'https://worker.test/framing');
-  assert.doesNotMatch(captured.options.body, /worker-test-secret/);
-  const timestamp = captured.options.headers['x-deenclipped-timestamp'];
-  const expected = crypto.createHmac('sha256', process.env.WORKER_SHARED_SECRET).update(`${timestamp}\nPOST\n/framing\n${captured.options.body}`).digest('hex');
-  assert.equal(captured.options.headers['x-deenclipped-signature'], expected);
-});
-
 test('worker progress and provider failures are returned without losing the stage', async () => {
   global.fetch = async () => new Response(JSON.stringify({ id: 'project_1', status: 'transcribing', stage: 'transcribing', progress: 42 }), { status: 200 });
   assert.deepEqual(await worker.getJob('project_1'), { id: 'project_1', status: 'transcribing', stage: 'transcribing', progress: 42 });

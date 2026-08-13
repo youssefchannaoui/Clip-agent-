@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="DeenClipped AI">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Andika:wght@400;700&family=Cantarell:wght@400;700&family=Inter:wght@400;450;500;600;700&family=Lato:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Manrope:wght@400;500;600;700;800&family=Noto+Kufi+Arabic:wght@400;500;600;700;800;900&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Noto+Sans:wght@400;500;600;700;800;900&family=Noto+Sans+Arabic:wght@400;500;600;700;800;900&family=Noto+Serif:wght@400;500;600;700;800;900&family=Outfit:wght@500;600;700&family=Play:wght@400;700&family=Roboto:wght@400;500;700;900&family=Scheherazade+New:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#09090A;
@@ -1385,7 +1385,7 @@ select:focus{outline:none;border-color:var(--blue)}
               <div class="mini-head"><h3>Approval rules</h3><span>Quality gate</span></div>
               <div class="editor-stack">
                 <label class="editor-toggle"><input type="checkbox" id="autoEnabled">Automatically approve and schedule strong clips</label>
-                <label class="editor-toggle"><input type="checkbox" id="skipQuotes">Review every clip before posting</label>
+                <label class="editor-toggle"><input type="checkbox" id="skipQuotes">Hold possible Quran or hadith quotations for review</label>
                 <div class="editor-grid">
                   <div class="editor-row"><label>Minimum content score</label><input id="minimumScore" type="number" min="1" max="100"></div>
                   <div class="editor-row"><label>Minimum rendered quality</label><input id="minimumQuality" type="number" min="1" max="100"></div>
@@ -1548,18 +1548,6 @@ select:focus{outline:none;border-color:var(--blue)}
 </div>
 
 <div class="toasts" id="toasts"></div>
-<style>
-.billing-block{position:fixed;inset:0;z-index:9000;display:grid;place-items:center;padding:20px;background:rgba(4,4,6,.72);backdrop-filter:blur(6px)}
-.billing-block-card{position:relative;width:min(430px,100%);padding:26px;border-radius:22px;border:1px solid rgba(228,188,113,.34);background:linear-gradient(170deg,#17171b,#0b0b0d);box-shadow:0 30px 90px rgba(0,0,0,.55);color:#faf8f3}
-.billing-block-card h3{margin:0 0 10px;font-size:21px;letter-spacing:-.03em}
-.billing-block-card p{margin:0 0 20px;font-size:13.5px;line-height:1.6;color:#aaa6a0}
-.billing-block-row{display:flex;flex-wrap:wrap;gap:9px}
-.billing-block-row a{flex:1 1 150px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;border-radius:12px;font-size:13px;font-weight:850;text-decoration:none}
-.billing-block-primary{background:linear-gradient(135deg,#f2d696,#e4bc71);color:#171108}
-.billing-block-secondary{border:1px solid rgba(255,255,255,.14);color:#faf8f3}
-.billing-block-close{position:absolute;top:12px;right:12px;width:30px;height:30px;border:0;border-radius:9px;background:transparent;color:#aaa6a0;font-size:19px;line-height:1;cursor:pointer}
-.billing-block-close:hover{background:rgba(255,255,255,.07);color:#faf8f3}
-</style>
 
 <script>
 'use strict';
@@ -1601,99 +1589,19 @@ let TOUR_INDEX=0;
 function renderTour(){const step=TOUR_STEPS[TOUR_INDEX]||TOUR_STEPS[0];$('#tourIcon').innerHTML=ICONS[step[0]]||ICONS.sparkles;$('#tourTitle').textContent=step[1];$('#tourCopy').textContent=step[2];$('#tourCount').textContent=`Step ${TOUR_INDEX+1} of ${TOUR_STEPS.length}`;$('#tourProgress').style.width=`${((TOUR_INDEX+1)/TOUR_STEPS.length)*100}%`;$('#tourBack').disabled=TOUR_INDEX===0;$('#tourNext').textContent=TOUR_INDEX===TOUR_STEPS.length-1?'Finish':'Next'}
 function openTour(force=false){TOUR_INDEX=0;renderTour();$('#tourModal')?.classList.remove('hide');if(force)localStorage.setItem('deenTourSeen','1')}
 function closeTour(){localStorage.setItem('deenTourSeen','1');$('#tourModal')?.classList.add('hide')}
-// The account-scoped workspace guide in activity-fix.js owns first-run
-// onboarding. Keeping this legacy modal manual prevents two tours opening on
-// top of each other for a brand-new account.
-function maybeOpenTour(){}
+function maybeOpenTour(){if(localStorage.getItem('deenTourSeen'))return;setTimeout(()=>openTour(false),600)}
 function visualEmpty(title,note,iconName='sparkles',action='') {return `<div class="empty-visual"><div class="empty-visual-icon">${ICONS[iconName]||ICONS.sparkles}</div><div class="empty-visual-title">${esc(title)}</div><div class="empty-visual-note">${esc(note)}</div>${action?`<div style="margin-top:16px">${action}</div>`:''}</div>`}
 
 const when=ms=>ms?new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}).format(new Date(ms)):'—';
 const age=ms=>{if(!ms)return'';const d=Date.now()-ms;if(d<60000)return'now';if(d<3600000)return`${Math.floor(d/60000)}m ago`;if(d<86400000)return`${Math.floor(d/3600000)}h ago`;return`${Math.floor(d/86400000)}d ago`};
 function toast(message,type=''){const box=$('#toasts');if(!box)return;const n=document.createElement('div');n.className=`toast ${type}`;n.textContent=message;box.append(n);setTimeout(()=>n.remove(),3600)}
-// A toast is the wrong shape for "you cannot continue until you pay": it
-// disappears in 3.6s and offers nowhere to go. These two refusals get a
-// modal with the actual next step instead.
-const BILLING_BLOCKS={
-  free_expired:{
-    title:'Your free trial has ended',
-    body:()=>'The free tier runs for a few days so you can try the studio. Choose a plan to keep generating clips — everything you have already made stays where it is.',
-    primary:{label:'See plans',href:'/plans'},
-    secondary:null,
-  },
-  insufficient_tokens:{
-    title:'Not enough tokens',
-    body:e=>{
-      const short=Number(e.shortfall||0),need=Number(e.needed||0),have=Number(e.remaining||0);
-      if(short>0)return `This needs about ${need} tokens and you have ${have}. You are ${short} short.`;
-      return 'You do not have enough tokens left for this job.';
-    },
-    primary:{label:'Upgrade plan',href:'/plans'},
-    secondary:{label:'Buy a token pack',href:'/plans#token-shop'},
-  },
-  publishing_requires_premium:{
-    title:'Publishing unlocks with Premium',
-    body:()=>'Your free 3-day, 40-token trial lets you browse, generate, edit and download watermarked clips. Choose Weekly, Monthly or Yearly when you are ready to post.',
-    primary:{label:'See Premium plans',href:'/plans'},
-    secondary:null,
-  },
-  publishing_tokens_empty:{
-    title:'Add tokens before posting',
-    body:()=>'Your wallet is at zero. Your existing clips stay available, but social posting is paused until you add tokens or change plan.',
-    primary:{label:'Add tokens',href:'/plans#token-shop'},
-    secondary:{label:'Compare plans',href:'/plans'},
-  },
-};
-let BILLING_MODAL=null;
-function showBillingBlock(error){
-  const spec=BILLING_BLOCKS[error&&error.code];
-  if(!spec)return false;
-  if(BILLING_MODAL)BILLING_MODAL.remove();
-  const wrap=document.createElement('div');
-  wrap.className='billing-block';
-  wrap.setAttribute('role','dialog');
-  wrap.setAttribute('aria-modal','true');
-  const card=document.createElement('div');
-  card.className='billing-block-card';
-  const h=document.createElement('h3');h.textContent=spec.title;
-  const p=document.createElement('p');p.textContent=spec.body(error||{});
-  const row=document.createElement('div');row.className='billing-block-row';
-  const primary=document.createElement('a');
-  primary.className='billing-block-primary';
-  primary.href=spec.primary.href;primary.textContent=spec.primary.label;
-  row.append(primary);
-  if(spec.secondary){
-    const secondary=document.createElement('a');
-    secondary.className='billing-block-secondary';
-    secondary.href=spec.secondary.href;secondary.textContent=spec.secondary.label;
-    row.append(secondary);
-  }
-  const close=document.createElement('button');
-  close.type='button';close.className='billing-block-close';
-  close.setAttribute('aria-label','Close');close.textContent='\u00d7';
-  const dismiss=()=>{wrap.remove();if(BILLING_MODAL===wrap)BILLING_MODAL=null;};
-  close.addEventListener('click',dismiss);
-  wrap.addEventListener('click',event=>{if(event.target===wrap)dismiss();});
-  document.addEventListener('keydown',function onKey(event){
-    if(event.key!=='Escape')return;
-    dismiss();document.removeEventListener('keydown',onKey);
-  });
-  card.append(close,h,p,row);
-  wrap.append(card);
-  document.body.append(wrap);
-  BILLING_MODAL=wrap;
-  primary.focus();
-  return true;
-}
 let API_SEQUENCE=0;
 async function api(url,options={}){
   const method=String(options.method||'GET').toUpperCase(),requestId=`api-${++API_SEQUENCE}`;
   if(method!=='GET')window.dispatchEvent(new CustomEvent('deen:api-start',{detail:{id:requestId,url,method}}));
   try{
     const r=await fetch(url,{...options,headers:{'Content-Type':'application/json','x-app-password':PW,...(options.headers||{})}});let b={};try{b=await r.json()}catch{}
-    if(!r.ok){const err=new Error(b.error||`Request failed (${r.status})`);
-      if(b.code){err.code=b.code;for(const k of ['needed','remaining','shortfall','plan','expiredAt'])if(b[k]!==undefined)err[k]=b[k];
-        showBillingBlock(err);}
-      throw err;}
+    if(!r.ok)throw new Error(b.error||`Request failed (${r.status})`);
     if(method!=='GET')window.dispatchEvent(new CustomEvent('deen:api-end',{detail:{id:requestId,url,method,ok:true,result:b}}));
     return b;
   }catch(error){
@@ -1713,7 +1621,7 @@ function downloadClip(id){location.href=withPw(`/api/clips/${encodeURIComponent(
 async function copyText(text){await navigator.clipboard.writeText(text);toast('Copied','good')}
 
 async function boot(){try{DATA=await api('/api/state');localStorage.setItem('deenPw',PW);$('#gate')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#app')?.classList.remove('hide');renderAll();handleOAuthResult();maybeOpenTour();return true}catch(e){$('#app')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#gate')?.classList.remove('hide');if($('#gateErr'))$('#gateErr').textContent=e.message;return false}}
-async function refresh({quiet=true}={}){try{DATA=await api('/api/state');if(!document.body.classList.contains('dc-app'))renderAll()}catch(e){if(!quiet)toast(e.message,'bad')}}
+async function refresh({quiet=true}={}){try{DATA=await api('/api/state');renderAll()}catch(e){if(!quiet)toast(e.message,'bad')}}
 function handleOAuthResult(){const q=new URLSearchParams(location.search);if(!q.get('social'))return;toast(q.get('social')==='connected'?`${q.get('provider')} connected`:q.get('message')||'Connection failed',q.get('social')==='connected'?'good':'bad');history.replaceState({},'',location.pathname)}
 
 function showView(name,direction=1){const previous=$('.panel:not(.hide)');ACTIVE_VIEW=name;$$('.tab').forEach(b=>b.classList.toggle('on',b.dataset.view===name));$$('.panel').forEach(p=>p.classList.toggle('hide',p.id!==`view-${name}`));const next=$(`#view-${CSS.escape(name)}`);if(next&&next!==previous){next.classList.remove('slide-fwd','slide-back');void next.offsetWidth;next.classList.add(direction>=0?'slide-fwd':'slide-back');setTimeout(()=>next.classList.remove('slide-fwd','slide-back'),380)}if(name==='templates')loadTemplateEditor(DATA?.selectedTemplate?.id);if(name==='publishing')renderPublishing();if(name==='automation')renderAutomation()}
@@ -1819,10 +1727,6 @@ function libraryClipPosted(c){return c.status==='posted'||(c.targets||[]).some(t
 function libraryClipActive(c){return c.status==='publishing'||(c.targets||[]).some(t=>['publishing','processing'].includes(t.status))}
 function libraryClipAvailable(c){return !libraryClipPosted(c)&&!libraryClipActive(c)}
 function openProjectClips(projectId){
-  if(document.body.classList.contains('dc-app')){
-    window.dispatchEvent(new CustomEvent('deen:open-project',{detail:{projectId}}));
-    return;
-  }
   const project=DATA?.projects?.find(x=>x.id===projectId);
   if(!project)return toast('That lecture is no longer available','bad');
   LIBRARY_PROJECT_ID=projectId;LIBRARY_SELECTED.clear();
@@ -1884,7 +1788,7 @@ async function generateMoreFromProject(projectId){
   setBusy($('#generateMoreProject'),false);
 }
 
-function renderLibrary(){if(!DATA)return;let projects=[...DATA.projects];const query=($('#librarySearch')?.value||'').toLowerCase();projects=projects.filter(p=>!query||`${p.title} ${p.url} ${p.id}`.toLowerCase().includes(query));if(LIB_FILTER==='working')projects=projects.filter(p=>['queued','processing'].includes(p.status));if(LIB_FILTER==='issues')projects=projects.filter(p=>p.status==='failed'||p.error);if(LIB_FILTER==='available')projects=projects.filter(p=>projectClips(p.id).some(c=>c.status==='waiting'));if(LIB_FILTER==='external')projects=[];if(LIB_SORT==='az')projects.sort((a,b)=>String(a.title).localeCompare(String(b.title)));else if(LIB_SORT==='progress')projects.sort((a,b)=>Number(b.progress||0)-Number(a.progress||0));else if(LIB_SORT==='available')projects.sort((a,b)=>projectClips(b.id).filter(c=>c.status==='waiting').length-projectClips(a.id).filter(c=>c.status==='waiting').length);else projects.sort((a,b)=>Number(b.submittedAt||0)-Number(a.submittedAt||0));const complete=DATA.projects.filter(p=>p.status==='completed').length,working=DATA.projects.filter(p=>['queued','processing'].includes(p.status)).length,issues=DATA.projects.filter(p=>p.status==='failed').length;if($('#libraryStats'))$('#libraryStats').innerHTML=`<div class="library-stat"><strong>${DATA.projects.length}</strong><span>Lectures</span></div><div class="library-stat"><strong>${DATA.clips.length}</strong><span>Generated clips</span></div><div class="library-stat"><strong>${working}</strong><span>Processing</span></div><div class="library-stat"><strong>${issues}</strong><span>Issues</span></div>`;if($('#libraryList'))$('#libraryList').innerHTML=projects.length?`<div class="lec-grid">${projects.map(projectCard).join('')}</div>`:visualEmpty('No lectures found','Your imported lectures will appear here with large thumbnails, clip counts and status.','library','<button class="btn btn-ghost btn-sm" data-go="queue">Import a lecture</button>');$('#libraryList')?.querySelectorAll('[data-open-project]').forEach(b=>b.onclick=e=>{e.stopPropagation();openProjectClips(b.dataset.openProject)});bindQueueActions()}
+function renderLibrary(){if(!DATA)return;let projects=[...DATA.projects];const query=($('#librarySearch')?.value||'').toLowerCase();projects=projects.filter(p=>!query||`${p.title} ${p.url} ${p.id}`.toLowerCase().includes(query));if(LIB_FILTER==='working')projects=projects.filter(p=>['queued','processing'].includes(p.status));if(LIB_FILTER==='issues')projects=projects.filter(p=>p.status==='failed'||p.error);if(LIB_FILTER==='available')projects=projects.filter(p=>projectClips(p.id).some(c=>c.status==='waiting'));if(LIB_FILTER==='external')projects=[];if(LIB_SORT==='az')projects.sort((a,b)=>String(a.title).localeCompare(String(b.title)));else if(LIB_SORT==='progress')projects.sort((a,b)=>Number(b.progress||0)-Number(a.progress||0));else if(LIB_SORT==='available')projects.sort((a,b)=>projectClips(b.id).filter(c=>c.status==='waiting').length-projectClips(a.id).filter(c=>c.status==='waiting').length);else projects.sort((a,b)=>Number(b.submittedAt||0)-Number(a.submittedAt||0));const complete=DATA.projects.filter(p=>p.status==='completed').length,working=DATA.projects.filter(p=>['queued','processing'].includes(p.status)).length,issues=DATA.projects.filter(p=>p.status==='failed').length;if($('#libraryStats'))$('#libraryStats').innerHTML=`<div class="library-stat"><strong>${DATA.projects.length}</strong><span>Lectures</span></div><div class="library-stat"><strong>${DATA.clips.length}</strong><span>Generated clips</span></div><div class="library-stat"><strong>${working}</strong><span>Processing</span></div><div class="library-stat"><strong>${issues}</strong><span>Issues</span></div>`;if($('#libraryList'))$('#libraryList').innerHTML=projects.length?`<div class="lec-grid">${projects.map(projectCard).join('')}</div>`:visualEmpty('No lectures found','Your imported lectures will appear here with large thumbnails, clip counts and status.','library','<button class="btn btn-ghost btn-sm" data-go="queue">Import a lecture</button>');$$('[data-open-project]').forEach(b=>b.onclick=e=>{e.stopPropagation();openProjectClips(b.dataset.openProject)});bindQueueActions()}
 function renderTemplateSelect(){if(!DATA)return;if($('#tplPick')){$('#tplPick').innerHTML=DATA.templates.map(t=>`<option value="${esc(t.id)}">${esc(t.name)} · v${Number(t.version||1)}</option>`).join('');$('#tplPick').value=DATA.selectedTemplate?.id||''}if($('#tplNote')){const t=DATA.selectedTemplate;$('#tplNote').textContent=t?`${t.width}×${t.height} · ${t.fitMode} fit · ${t.captionMode} captions · no intro card`:'Choose a saved template before processing.'}}
 function editorField(label,key,type='text',opts=''){const v=TEMPLATE_DRAFT?.[key];if(type==='checkbox')return `<label class="editor-toggle"><input type="checkbox" data-template="${key}" ${v?'checked':''}>${esc(label)}</label>`;const mobile=type==='number'?' inputmode="decimal" enterkeyhint="done" ':' enterkeyhint="done" ';return `<div class="editor-row"><label>${esc(label)}</label><input type="${type}" data-template="${key}" value="${esc(v??'')}" ${mobile} ${opts}></div>`}
 function editorSelect(label,key,options){const v=TEMPLATE_DRAFT?.[key];return `<div class="editor-row"><label>${esc(label)}</label><select data-template="${key}">${options.map(x=>`<option value="${esc(x[0])}" ${x[0]===v?'selected':''}>${esc(x[1])}</option>`).join('')}</select></div>`}
@@ -2007,7 +1911,7 @@ function providerCard(name){
 function renderPublishing(){if(!DATA||!$('#platformGrid'))return;const p=DATA.publishingSettings||{},social=DATA.social||{};$('#publishingEnabled').checked=Boolean(p.enabled);$('#platformGrid').innerHTML=['youtube','instagram','facebook','tiktok'].map(providerCard).join('');const targets=DATA.clips.flatMap(c=>(c.targets||[]).map(t=>({...t,title:c.title,clipId:c.id}))).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));$('#publishHistory').innerHTML=targets.length?targets.slice(0,30).map(t=>{const pct=Number.isFinite(t.progressPercent)?t.progressPercent:null;const detail=t.error||t.platformStatus||t.stage||t.status;return `<div class="target-line" style="align-items:flex-start"><span class="target-dot ${esc(t.status)}" style="margin-top:7px"></span><strong>${esc(t.provider)}</strong><span>${esc(t.title)}</span><span class="spacer ${t.status==='failed'?'status-bad':t.status==='posted'?'status-good':'code'}"><b>${esc(t.stage||t.status)}</b>${pct!==null?` · ${pct}%`:''}<br><small>${esc(detail)}${t.attempts?` · attempt ${t.attempts}`:''}${t.updatedAt?` · updated ${age(t.updatedAt)}`:''}</small>${pct!==null&&t.status!=='posted'?`<div class="stage-bar" style="margin-top:6px;min-width:220px"><div class="stage-fill" style="width:${pct}%"></div></div>`:''}</span>${t.postUrl?`<a href="${esc(t.postUrl)}" target="_blank" rel="noopener">Open post</a>`:''}${t.status==='failed'?`<button class="btn btn-ghost btn-sm" data-retry-target="${esc(t.clipId)}" data-provider="${esc(t.provider)}">Retry</button>`:''}</div>`}).join(''):'<span class="note">No platform transfers yet. Press Post now on a scheduled clip to begin.</span>';if($('#publishingIssues'))$('#publishingIssues').innerHTML=(social.issues||[]).length?(social.issues||[]).map(x=>`<div class="lec-warn">${esc(x)}</div>`).join(''):'<div class="style-note status-good">Publishing security and public URL checks passed.</div>';bindPublishingActions()}
 function bindPublishingActions(){$$('[data-social-connect]').forEach(b=>b.onclick=async()=>{setBusy(b,true,'Opening…');try{const r=await api(`/api/social/${b.dataset.socialConnect}/connect`,{method:'POST'});location.href=r.url}catch(e){toast(e.message,'bad');setBusy(b,false)}});$$('[data-social-disconnect]').forEach(b=>b.onclick=async()=>{if(!confirm('Disconnect this account and disable future uploads?'))return;try{await api(`/api/social/${b.dataset.socialDisconnect}/disconnect`,{method:'POST'});toast('Account disconnected');await refresh()}catch(e){toast(e.message,'bad')}});$$('[data-social-test]').forEach(b=>b.onclick=async()=>{const name=b.dataset.socialTest,account=$(`[data-publish-account="${name}"]`)?.value||'';setBusy(b,true,'Testing…');try{await api(`/api/social/${name}/test`,{method:'POST',body:JSON.stringify({accountId:account})});toast(`${name} connection works`,'good');await refresh()}catch(e){toast(e.message,'bad')}setBusy(b,false)});$$('[data-retry-target]').forEach(b=>b.onclick=async()=>{try{await api(`/api/clips/${encodeURIComponent(b.dataset.retryTarget)}/retry-publish`,{method:'POST',body:JSON.stringify({provider:b.dataset.provider})});toast('Publishing retry queued','good');await refresh()}catch(e){toast(e.message,'bad')}})}
 
-function renderAutomation(){if(!DATA||!$('#autoEnabled'))return;const a=DATA.automationSettings||{},c=DATA.clipSettings||{};$('#autoEnabled').checked=Boolean(a.enabled);$('#skipQuotes').checked=Boolean(a.reviewBeforePosting);$('#minimumScore').value=a.minimumScore;$('#minimumQuality').value=a.minimumQuality;$('#maxPerProject').value=a.maxPerProject;$('#clipCount').value=c.clipsPerVideo;$('#clipMin').value=c.clipMinSeconds;$('#clipMax').value=c.clipMaxSeconds;$('#automationSummary').innerHTML=`<div class="figs">${metric('AI model',DATA.readiness?.model||'—','Local transcription')}${metric('Active jobs',DATA.activeJobs,'Processing workers')}${metric('Auto score',`${a.minimumScore}+`,'Content threshold')}${metric('Quality',`${a.minimumQuality}+`,'Render threshold')}</div>`}
+function renderAutomation(){if(!DATA||!$('#autoEnabled'))return;const a=DATA.automationSettings||{},c=DATA.clipSettings||{};$('#autoEnabled').checked=Boolean(a.enabled);$('#skipQuotes').checked=Boolean(a.skipReviewRequired);$('#minimumScore').value=a.minimumScore;$('#minimumQuality').value=a.minimumQuality;$('#maxPerProject').value=a.maxPerProject;$('#clipCount').value=c.clipsPerVideo;$('#clipMin').value=c.clipMinSeconds;$('#clipMax').value=c.clipMaxSeconds;$('#automationSummary').innerHTML=`<div class="figs">${metric('AI model',DATA.readiness?.model||'—','Local transcription')}${metric('Active jobs',DATA.activeJobs,'Processing workers')}${metric('Auto score',`${a.minimumScore}+`,'Content threshold')}${metric('Quality',`${a.minimumQuality}+`,'Render threshold')}</div>`}
 
 function renderSide(){if(!DATA)return;const next=nextScheduledClip();if($('#nextStatusPill')){$('#nextStatusPill').textContent=next?'Scheduled':'Open';$('#nextStatusPill').className=`side-pill ${next?'good':'warn'}`}if($('#nextBox'))$('#nextBox').innerHTML=next?`<div class="side-next"><button class="side-next-media" data-preview="${esc(next.id)}"><img src="${withPw(next.thumbUrl)}" alt="${esc(next.title)}"></button><div><div class="side-next-count">${countdown(next.scheduledAt)}</div><div class="side-next-title">${esc(next.title)}</div><div class="side-next-meta">${esc(next.scheduledLabel||when(next.scheduledAt))}</div></div></div><div class="side-action-row"><button class="btn btn-sm" data-publish="${esc(next.id)}">Post now</button><button class="btn btn-ghost btn-sm" data-preview="${esc(next.id)}">Preview</button></div>`:'<div class="now-idle">No future clip is scheduled. Approve a verified clip or enable automation.</div>';const today=new Date().toLocaleDateString('en-CA',{timeZone:DATA.timezone});const todayClips=DATA.clips.filter(c=>c.scheduledAt&&new Date(c.scheduledAt).toLocaleDateString('en-CA',{timeZone:DATA.timezone})===today);if($('#sideToday'))$('#sideToday').innerHTML=`<div class="side-stats"><div class="side-stat"><strong>${todayClips.length}</strong><span>scheduled today</span></div><div class="side-stat"><strong>${todayClips.filter(c=>c.status==='posted').length}</strong><span>posted today</span></div><div class="side-stat"><strong>${DATA.clips.filter(c=>c.status==='waiting').length}</strong><span>need review</span></div><div class="side-stat"><strong>${DATA.activeJobs}</strong><span>active jobs</span></div></div>`;const active=[];
   DATA.projects.filter(p=>['queued','processing'].includes(p.status)).forEach(p=>active.push({title:p.title,stage:p.stage,progress:Number(p.progress||0)}));
@@ -2044,7 +1948,7 @@ $('#refreshLibrary').onclick=()=>refresh({quiet:false});$('#librarySearch').onin
 $('#tplPick').onchange=async()=>{try{await api('/api/template',{method:'POST',body:JSON.stringify({id:$('#tplPick').value})});toast('Automatic template changed','good');await refresh()}catch(e){toast(e.message,'bad')}};$('#countPick').onchange=()=>{$('#clipCount').value=$('#countPick').value||8};$('#saveCount').onclick=async()=>{const count=Number($('#countPick').value||8),min=Number($('#durMin').value),max=Number($('#durMax').value);try{await api('/api/clip-settings',{method:'POST',body:JSON.stringify({clipsPerVideo:count,clipMinSeconds:min,clipMaxSeconds:max})});toast('Clip settings saved','good');await refresh()}catch(e){toast(e.message,'bad')}};$('#refreshAcc').onclick=()=>showView('publishing');
 $('#templatePreset').onchange=()=>loadTemplateEditor($('#templatePreset').value);$('#newTemplate').onclick=()=>{TEMPLATE_DRAFT=structuredClone(DATA.templateDraft);TEMPLATE_DRAFT.name='New DeenClipped Template';EDITING_TEMPLATE_ID='';renderTemplateEditor()};$('#duplicateTemplate').onclick=async()=>{if(!EDITING_TEMPLATE_ID)return;try{const r=await api(`/api/templates/${encodeURIComponent(EDITING_TEMPLATE_ID)}/duplicate`,{method:'POST',body:JSON.stringify({name:`${TEMPLATE_DRAFT.name} Copy`})});toast('Template duplicated','good');await refresh();loadTemplateEditor(r.template.id)}catch(e){toast(e.message,'bad')}};$('#saveTemplate').onclick=async()=>{try{let r;if(EDITING_TEMPLATE_ID&&!TEMPLATE_DRAFT.builtIn)r=await api(`/api/templates/${encodeURIComponent(EDITING_TEMPLATE_ID)}`,{method:'PUT',body:JSON.stringify({template:TEMPLATE_DRAFT})});else r=await api('/api/templates',{method:'POST',body:JSON.stringify({template:{...TEMPLATE_DRAFT,id:''},select:true})});toast('Template saved','good');await refresh();loadTemplateEditor(r.template.id)}catch(e){toast(e.message,'bad')}};$('#deleteTemplate').onclick=async()=>{if(!EDITING_TEMPLATE_ID||TEMPLATE_DRAFT.builtIn)return;if(!confirm('Delete this template? Existing rendered videos remain unchanged.'))return;try{await api(`/api/templates/${encodeURIComponent(EDITING_TEMPLATE_ID)}`,{method:'DELETE'});toast('Template deleted');await refresh();loadTemplateEditor(DATA.selectedTemplate?.id)}catch(e){toast(e.message,'bad')}};$('#useTemplate').onclick=async()=>{if(!EDITING_TEMPLATE_ID)return toast('Save this template first','bad');try{await api('/api/template',{method:'POST',body:JSON.stringify({id:EDITING_TEMPLATE_ID})});toast('Template selected for all new clips','good');await refresh()}catch(e){toast(e.message,'bad')}};
 $('#savePublishing').onclick=async()=>{const current=DATA.publishingSettings;const body={enabled:$('#publishingEnabled').checked};for(const n of ['youtube','instagram','facebook','tiktok'])body[n]={...current[n],enabled:Boolean($(`[data-publish-enabled="${n}"]`)?.checked),accountId:$(`[data-publish-account="${n}"]`)?.value||current[n]?.accountId||''};body.youtube.privacy=$('#youtubePrivacy')?.value||current.youtube.privacy;body.tiktok.privacy=$('#tiktokPrivacy')?.value||current.tiktok.privacy;try{await api('/api/publishing-settings',{method:'POST',body:JSON.stringify(body)});toast('Publishing settings saved','good');await refresh()}catch(e){toast(e.message,'bad')}};
-$('#saveAutomation').onclick=async()=>{try{await api('/api/automation-settings',{method:'POST',body:JSON.stringify({enabled:$('#autoEnabled').checked,minimumScore:Number($('#minimumScore').value),minimumQuality:Number($('#minimumQuality').value),maxPerProject:Number($('#maxPerProject').value),reviewBeforePosting:$('#skipQuotes').checked})});toast('Automation saved','good');await refresh()}catch(e){toast(e.message,'bad')}};$('#saveClipSettings').onclick=async()=>{try{await api('/api/clip-settings',{method:'POST',body:JSON.stringify({clipsPerVideo:Number($('#clipCount').value),clipMinSeconds:Number($('#clipMin').value),clipMaxSeconds:Number($('#clipMax').value)})});toast('Generation settings saved','good');await refresh()}catch(e){toast(e.message,'bad')}};$('#runDiagnostics').onclick=async()=>{setBusy($('#runDiagnostics'),true,'Checking…');$('#diagnostics').textContent='Running checks…';try{const r=await api('/api/diagnostics');$('#diagnostics').textContent=JSON.stringify(r,null,2);toast(r.ok?'System check passed':'System check found a problem',r.ok?'good':'bad')}catch(e){$('#diagnostics').textContent=e.message;toast(e.message,'bad')}setBusy($('#runDiagnostics'),false)};
+$('#saveAutomation').onclick=async()=>{try{await api('/api/automation-settings',{method:'POST',body:JSON.stringify({enabled:$('#autoEnabled').checked,minimumScore:Number($('#minimumScore').value),minimumQuality:Number($('#minimumQuality').value),maxPerProject:Number($('#maxPerProject').value),skipReviewRequired:$('#skipQuotes').checked})});toast('Automation saved','good');await refresh()}catch(e){toast(e.message,'bad')}};$('#saveClipSettings').onclick=async()=>{try{await api('/api/clip-settings',{method:'POST',body:JSON.stringify({clipsPerVideo:Number($('#clipCount').value),clipMinSeconds:Number($('#clipMin').value),clipMaxSeconds:Number($('#clipMax').value)})});toast('Generation settings saved','good');await refresh()}catch(e){toast(e.message,'bad')}};$('#runDiagnostics').onclick=async()=>{setBusy($('#runDiagnostics'),true,'Checking…');$('#diagnostics').textContent='Running checks…';try{const r=await api('/api/diagnostics');$('#diagnostics').textContent=JSON.stringify(r,null,2);toast(r.ok?'System check passed':'System check found a problem',r.ok?'good':'bad')}catch(e){$('#diagnostics').textContent=e.message;toast(e.message,'bad')}setBusy($('#runDiagnostics'),false)};
 $('#cancelRerender').onclick=()=>$('#rerenderModal').classList.add('hide');$('#confirmRerender').onclick=async()=>{const id=$('#rerenderClipId').value;setBusy($('#confirmRerender'),true,'Queueing…');try{await api(`/api/clips/${encodeURIComponent(id)}/rerender`,{method:'POST',body:JSON.stringify({templateId:$('#rerenderTemplate').value,asVariant:$('#rerenderVariant').checked})});toast('New render queued','good');$('#rerenderModal').classList.add('hide');await refresh()}catch(e){toast(e.message,'bad')}setBusy($('#confirmRerender'),false)};$('#closePreview').onclick=()=>{$('#previewVideo').pause();$('#previewVideo').removeAttribute('src');$('#videoModal').classList.add('hide')};
 
 

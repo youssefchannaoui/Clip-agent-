@@ -35,19 +35,13 @@ function icon(name) {
 
 function navActions(currentUser) {
   if (currentUser) return `<div class="nav-actions"><a class="button primary compact" href="/app">My dashboard ${icon('arrow')}</a></div>`;
-  return `<div class="nav-actions"><a class="button text-button" href="/login?returnTo=/app">Sign in</a><a class="button primary compact" href="/login?returnTo=/app">Start free ${icon('arrow')}</a></div>`;
+  return `<div class="nav-actions"><a class="button text-button" href="/login?returnTo=/app">Sign in</a><a class="button primary compact" href="/login?returnTo=/app">Get started ${icon('arrow')}</a></div>`;
 }
 
 function layout({ base, currentUser, title, description, canonicalPath = '/', body }) {
-  const origin = String(base || 'https://deenclipped.online').replace(/\/+$/, '');
-  const canonical = `${origin}${canonicalPath === '/' ? '' : canonicalPath}`;
+  const canonical = `${String(base || 'https://deenclipped.online').replace(/\/+$/, '')}${canonicalPath === '/' ? '' : canonicalPath}`;
   const safeTitle = escapeHtml(title);
   const safeDescription = escapeHtml(description);
-  // Social scrapers do not resolve relative URLs — this has to be absolute.
-  const socialImage = escapeHtml(`${origin}${config.socialImagePath}`);
-  const analyticsTag = config.analyticsScriptUrl && config.analyticsSiteId
-    ? `<script defer data-website-id="${escapeHtml(config.analyticsSiteId)}" data-domain="${escapeHtml(config.analyticsSiteId)}" src="${escapeHtml(config.analyticsScriptUrl)}"></script>`
-    : '';
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -60,21 +54,8 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
   <meta property="og:description" content="${safeDescription}">
   <meta property="og:type" content="website">
   <meta property="og:url" content="${canonical}">
-  <meta property="og:site_name" content="DeenClipped">
-  <meta property="og:locale" content="en_AU">
-  <meta property="og:image" content="${socialImage}">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="DeenClipped — turn long lectures into short clips with Arabic and English captions">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="${safeTitle}">
-  <meta name="twitter:description" content="${safeDescription}">
-  <meta name="twitter:image" content="${socialImage}">
-  <link rel="icon" type="image/png" sizes="32x32" href="/marketing-assets/favicon-32.png">
-  <link rel="apple-touch-icon" href="/marketing-assets/apple-touch-icon.png">
   <link rel="canonical" href="${canonical}">
   <link rel="stylesheet" href="/marketing.css">
-  ${analyticsTag}
 </head>
 <body>
   <header class="site-header">
@@ -136,44 +117,25 @@ function reelCard([src, alt], className = '') {
   return `<figure class="reel-card ${className}"><img src="/marketing-assets/${src}" alt="${alt}" loading="lazy"><span class="reel-badge">9:16</span></figure>`;
 }
 
-// Pulls the numeric amount out of a configured label like 'A$29.99' so the
-// savings maths follows configuration instead of being hardcoded here.
-function labelAmount(label) {
-  const match = String(label || '').match(/([\d]+(?:\.[\d]+)?)/);
-  return match ? Number(match[1]) : 0;
-}
-
-function perMinuteRate(label, tokens) {
-  const amount = labelAmount(label);
-  const count = Number(tokens || 0);
-  if (!amount || !count) return '';
-  return `${((amount / count) * 100).toFixed(1)}c per source minute`;
-}
-
 function pricingCards(currentUser = null) {
   const accountUrl = currentUser ? '/plans' : '/login?returnTo=/plans';
-  const monthlyAmount = labelAmount(config.planPriceMonthlyLabel);
-  const yearlyAmount = labelAmount(config.planPriceYearlyLabel);
-  const yearlySaving = monthlyAmount && yearlyAmount
-    ? Math.round((1 - (yearlyAmount / 12) / monthlyAmount) * 100)
-    : 0;
   const plans = [
-    { id: 'free', kicker: 'Start', name: 'Free', price: 'A$0', tokens: config.tokensFree, interval: 'starter tokens', copy: config.freeTierDays > 0 ? `Explore the complete workflow free for ${config.freeTierDays} days.` : 'Explore the complete workflow before choosing a paid plan.', enabled: true, features: ['Exact word-sync captions and editor', 'Review, templates and publishing', 'DeenClipped watermark on exports'] },
-    { id: 'weekly', kicker: 'Flexible', name: 'Weekly', price: config.planPriceWeeklyLabel, tokens: config.tokensWeekly, interval: 'tokens/week', copy: 'For occasional lectures, events and short campaigns.', enabled: Boolean(config.stripePriceWeekly), features: ['Remove or customise the watermark', 'Brand Kit and advanced editor', 'Unlimited ordinary rerenders'] },
-    { id: 'monthly', kicker: 'Consistent', name: 'Monthly', price: config.planPriceMonthlyLabel, listPrice: config.planPriceMonthlyListLabel, tokens: config.tokensMonthly, interval: 'tokens/month', copy: 'For creators building a dependable short-form schedule.', enabled: Boolean(config.stripePriceMonthly), popular: true, features: ['Everything in Weekly', 'AI Director intelligence', 'Batch scheduling and publishing'] },
-    { id: 'yearly', kicker: 'Best value', name: 'Yearly', price: config.planPriceYearlyLabel, tokens: config.tokensYearly, interval: 'tokens/year', copy: 'For higher-volume clipping across the full year.', enabled: Boolean(config.stripePriceYearly), saving: yearlySaving, perMonth: yearlyAmount ? (yearlyAmount / 12).toFixed(2) : '', features: ['Everything in Monthly', 'Largest annual token bank', 'Full premium creator workflow'] },
+    { id: 'free', kicker: 'Start', name: 'Free', price: 'A$0', tokens: config.tokensFree, interval: 'starter tokens', copy: 'Explore the complete workflow before choosing a paid plan.', enabled: true },
+    { id: 'weekly', kicker: 'Flexible', name: 'Weekly', price: config.planPriceWeeklyLabel, tokens: config.tokensWeekly, interval: 'tokens/week', copy: 'For occasional lectures, events and short campaigns.', enabled: Boolean(config.stripePriceWeekly) },
+    { id: 'monthly', kicker: 'Consistent', name: 'Monthly', price: config.planPriceMonthlyLabel, tokens: config.tokensMonthly, interval: 'tokens/month', copy: 'For creators building a dependable short-form schedule.', enabled: Boolean(config.stripePriceMonthly), popular: true },
+    { id: 'yearly', kicker: 'Best value', name: 'Yearly', price: config.planPriceYearlyLabel, tokens: config.tokensYearly, interval: 'tokens/year', copy: 'For higher-volume clipping across the full year.', enabled: Boolean(config.stripePriceYearly) },
   ];
-  return `<div class="pricing-grid">${plans.map(plan => `<article class="price-card ${plan.popular ? 'popular' : ''}">${plan.popular ? '<span class="popular-label">Most popular</span>' : ''}${plan.saving > 0 ? `<span class="popular-label saving">Save ${plan.saving}%</span>` : ''}<span class="plan-kicker">${escapeHtml(plan.kicker)}</span><h3>${escapeHtml(plan.name)}</h3><div class="plan-price-label">${plan.listPrice ? `<s>${escapeHtml(plan.listPrice)}</s> ` : ''}${escapeHtml(plan.price)}</div>${plan.perMonth ? `<div class="plan-permonth">works out to A$${escapeHtml(plan.perMonth)} a month</div>` : ''}<div class="price">${escapeHtml(plan.tokens)} <small>${escapeHtml(plan.interval)}</small></div><p>${escapeHtml(plan.copy)}</p>${perMinuteRate(plan.price, plan.tokens) ? `<div class="plan-permin">${escapeHtml(perMinuteRate(plan.price, plan.tokens))}</div>` : ''}<ul>${plan.features.map(feature => `<li>${escapeHtml(feature)}</li>`).join('')}</ul>${plan.enabled ? `<a class="button ${plan.popular ? 'primary' : 'secondary'} full" href="${accountUrl}">${plan.id === 'free' ? 'Start free' : `Choose ${escapeHtml(plan.name.toLowerCase())}`}</a>` : '<span class="button secondary full disabled" aria-disabled="true">Stripe price not configured</span>'}</article>`).join('')}</div>`;
+  return `<div class="pricing-grid">${plans.map(plan => `<article class="price-card ${plan.popular ? 'popular' : ''}">${plan.popular ? '<span class="popular-label">Most popular</span>' : ''}<span class="plan-kicker">${escapeHtml(plan.kicker)}</span><h3>${escapeHtml(plan.name)}</h3><div class="plan-price-label">${escapeHtml(plan.price)}</div><div class="price">${escapeHtml(plan.tokens)} <small>${escapeHtml(plan.interval)}</small></div><p>${escapeHtml(plan.copy)}</p><ul><li>Selected source-time processing</li><li>Review, editor and templates included</li><li>Ordinary template rerenders are free</li></ul>${plan.enabled ? `<a class="button ${plan.popular ? 'primary' : 'secondary'} full" href="${accountUrl}">${plan.id === 'free' ? 'Start free' : `Choose ${escapeHtml(plan.name.toLowerCase())}`}</a>` : '<span class="button secondary full disabled" aria-disabled="true">Stripe price not configured</span>'}</article>`).join('')}</div>`;
 }
 
 function tokenShop(currentUser = null) {
   const accountUrl = currentUser ? '/plans#token-shop' : '/login?returnTo=/plans';
   const packs = [
     { name: 'Quick boost', tokens: 100, price: config.topupPrice100Label, enabled: Boolean(config.stripePriceTopup100) },
-    { name: 'Creator boost', tokens: 300, price: config.topupPrice300Label, enabled: Boolean(config.stripePriceTopup300), popular: true, label: 'Best seller' },
+    { name: 'Creator boost', tokens: 300, price: config.topupPrice300Label, enabled: Boolean(config.stripePriceTopup300), popular: true },
     { name: 'Studio boost', tokens: 750, price: config.topupPrice750Label, enabled: Boolean(config.stripePriceTopup750) },
   ];
-  return `<section class="token-shop reveal" id="token-shop"><div class="pricing-section-head"><span class="section-label">Token shop</span><h2>Add tokens without changing your plan.</h2><p>One-time top-ups work with free, weekly, monthly and yearly accounts. Purchased tokens stay available through subscription renewals until you use them.</p></div><div class="topup-grid">${packs.map(pack => `<article class="topup-card ${pack.popular ? 'popular' : ''}">${pack.popular ? `<span class="popular-label">${escapeHtml(pack.label || 'Best seller')}</span>` : ''}<span class="plan-kicker">One-time purchase</span><h3>${escapeHtml(pack.name)}</h3><strong>+${escapeHtml(pack.tokens)}</strong><small>tokens</small><div class="topup-price">${escapeHtml(pack.price)}</div>${pack.enabled ? `<a class="button ${pack.popular ? 'primary' : 'secondary'} full" href="${accountUrl}">Open token shop</a>` : '<span class="button secondary full disabled" aria-disabled="true">Stripe price not configured</span>'}</article>`).join('')}</div><p class="token-shop-note">Stripe Checkout handles payment securely. DeenClipped never stores raw card details, and tokens are credited only after a verified successful Stripe webhook.</p></section>`;
+  return `<section class="token-shop reveal" id="token-shop"><div class="pricing-section-head"><span class="section-label">Token shop</span><h2>Add tokens without changing your plan.</h2><p>One-time top-ups work with free, weekly, monthly and yearly accounts. Purchased tokens stay available through subscription renewals until you use them.</p></div><div class="topup-grid">${packs.map(pack => `<article class="topup-card ${pack.popular ? 'popular' : ''}">${pack.popular ? '<span class="popular-label">Most popular</span>' : ''}<span class="plan-kicker">One-time purchase</span><h3>${escapeHtml(pack.name)}</h3><strong>+${escapeHtml(pack.tokens)}</strong><small>tokens</small><div class="topup-price">${escapeHtml(pack.price)}</div>${pack.enabled ? `<a class="button ${pack.popular ? 'primary' : 'secondary'} full" href="${accountUrl}">Open token shop</a>` : '<span class="button secondary full disabled" aria-disabled="true">Stripe price not configured</span>'}</article>`).join('')}</div><p class="token-shop-note">Stripe Checkout handles payment securely. DeenClipped never stores raw card details, and tokens are credited only after a verified successful Stripe webhook.</p></section>`;
 }
 
 function faqBlock() {
@@ -183,35 +145,19 @@ function faqBlock() {
     <details><summary>Does publishing go to my own channel?</summary><p>Yes. Each DeenClipped user connects their own supported social accounts, and publishing uses that user's saved connection.</p></details>
     <details><summary>Can I review clips before posting?</summary><p>Yes. The workflow is review-first. You can approve, edit, regenerate, shorten, lengthen or remove clips before they are posted.</p></details>
     <details><summary>How are tokens calculated?</summary><p>One token represents one selected source-video minute. You see the estimated usage before confirming a generation.</p></details>
-    <details><summary>Does it handle Arabic captions?</summary><p>Yes. Clips can carry Arabic, English or both together, with right-to-left text handled correctly. This is the main reason DeenClipped exists rather than a general-purpose clipping tool.</p></details>
-    <details><summary>Is my content used to train AI models?</summary><p>No. Your uploads and generated clips are processed to produce your clips and nothing else. They are not used as training data.</p></details>
-    <details><summary>What happens to my clips if I cancel?</summary><p>Cancelling stops future billing. You keep access until the end of the period you have already paid for, and you can download anything you have made before then.</p></details>
-    <details><summary>Can I cancel any time?</summary><p>Yes, from the billing portal, without contacting support. There is no minimum term on any plan.</p></details>
-    <details><summary>Do unused tokens roll over?</summary><p>Subscription tokens refresh each period and do not accumulate. One-time top-up tokens are different: they stay in your wallet until you use them, including across renewals.</p></details>
   </div>`;
-}
-
-// A video product with no video on it is a hard sell. Renders only when
-// DEMO_VIDEO_URL is set, so it stays hidden until there is a clip worth showing.
-function demoBlock() {
-  if (!config.demoVideoUrl) return '';
-  return `<section class="section wrap demo-section reveal">
-    <div class="section-head"><span class="section-label">See the output</span><h2>A real clip, start to finish.</h2><p>No mockups. This is what comes out of a single lecture import.</p></div>
-    <div class="demo-frame"><video controls playsinline preload="none" poster="${escapeHtml(config.demoVideoPoster)}" src="${escapeHtml(config.demoVideoUrl)}"></video></div>
-  </section>`;
 }
 
 export function home({ base, currentUser }) {
   const body = `
   <main>
     <section class="hero wrap">
-      <span class="eyebrow"><i></i>Built for khutbahs, halaqas and long-form lectures</span>
-      <h1>Turn long lectures into <span>short clips that get watched.</span></h1>
-      <p class="hero-copy">DeenClipped finds the strongest moments in a lecture, cuts them vertical, burns in Arabic and English captions, and publishes to your own channels. Built for sermons rather than podcasts, so the captioning and pacing actually fit the material.</p>
+      <span class="eyebrow"><i></i>Built for lecture-to-short workflows</span>
+      <h1>Turn long lectures into <span>powerful short clips.</span></h1>
+      <p class="hero-copy">DeenClipped finds strong moments, creates vertical clips, adds captions, gives you a real editor, and helps publish to your connected platforms.</p>
       <p class="purpose-line"><strong>DeenClipped</strong> is a web application that helps users create, edit, and publish short-form clips from long videos.</p>
       ${sourceForm()}
       <div class="hero-actions"><a class="button secondary" href="/features">Explore the workflow</a><a class="button text-link" href="/pricing">View pricing ${icon('arrow')}</a></div>
-      <p class="hero-reassure">Start free with ${config.tokensFree} tokens${config.freeTierDays > 0 ? ` for ${config.freeTierDays} days` : ''} &middot; no card needed &middot; cancel any time</p>
 
       <div class="hero-product reveal">
         <div class="hero-glow"></div>
@@ -225,8 +171,6 @@ export function home({ base, currentUser }) {
       </div>
       <div class="capability-rail reveal"><span>${icon('link')} Import a source</span><i>${icon('arrow')}</i><span>${icon('clips')} Find strong moments</span><i>${icon('arrow')}</i><span>${icon('edit')} Refine every clip</span><i>${icon('arrow')}</i><span>${icon('publish')} Publish or schedule</span></div>
     </section>
-
-    ${demoBlock()}
 
     <section class="reel-showcase" aria-label="Examples of vertical clips created with DeenClipped">
       <div class="reel-marquee">
@@ -315,7 +259,7 @@ export function home({ base, currentUser }) {
 
     <section class="section final-section"><div class="wrap final-cta reveal"><div><span class="section-label">Start creating</span><h2>Turn the next lecture into clips worth watching.</h2><p>Bring in a source, choose the range and build a review-ready set of short clips in one connected workspace.</p></div><a class="button primary" href="/login?returnTo=/app">Open DeenClipped ${icon('arrow')}</a></div></section>
   </main>`;
-  return layout({ base, currentUser, title: 'DeenClipped — Turn Islamic lectures into short clips with captions', description: 'Turn long lectures and khutbahs into vertical short clips with Arabic and English captions, then publish to your own TikTok, YouTube and Instagram. Free to start.', canonicalPath: '/', body });
+  return layout({ base, currentUser, title: 'DeenClipped', description: 'DeenClipped is a web application that helps users create, edit, and publish short-form clips from long videos.', canonicalPath: '/', body });
 }
 
 export function features({ base, currentUser }) {
@@ -327,8 +271,6 @@ export function features({ base, currentUser }) {
         <article>${icon('captions')}<h3>Captions</h3><p>Create readable captions and position them around the speaker.</p></article>
         <article>${icon('edit')}<h3>Editor</h3><p>Adjust framing, video position, captions, audio and timing.</p></article>
         <article>${icon('template')}<h3>Templates</h3><p>Reuse consistent caption, branding and layout choices.</p></article>
-        <article>${icon('template')}<h3>Brand Kit</h3><p>Control watermark, signature line, colour and placement once, then keep every export consistent.</p></article>
-        <article>${icon('spark')}<h3>AI Director</h3><p>See your strongest hooks, topic coverage, content gaps and a ranked weekly publishing lineup.</p></article>
         <article>${icon('calendar')}<h3>Scheduling</h3><p>Place approved clips into clear publishing windows.</p></article>
         <article>${icon('account')}<h3>Own account connections</h3><p>Each user connects and publishes to their own supported channels.</p></article>
       </div>
@@ -340,12 +282,12 @@ export function features({ base, currentUser }) {
       <div class="final-cta reveal"><div><span class="section-label">See it together</span><h2>Open one workspace instead of five separate tools.</h2><p>Start from the source video and continue through generation, review, editing and publishing.</p></div><a class="button primary" href="/login?returnTo=/app">Open DeenClipped ${icon('arrow')}</a></div>
     </div></section>
   </main>`;
-  return layout({ base, currentUser, title: 'Features — bilingual captions, vertical framing, scheduled publishing | DeenClipped', description: 'AI clip discovery, Arabic and English captions, reusable templates, a real editor, review-before-posting and scheduling to your own channels.', canonicalPath: '/features', body });
+  return layout({ base, currentUser, title: 'Features — DeenClipped', description: 'Explore DeenClipped AI clipping, captions, templates, review, editing, scheduling and social publishing features.', canonicalPath: '/features', body });
 }
 
 export function pricing({ base, currentUser }) {
-  const body = `<main><section class="page-hero pricing-hero wrap"><span class="eyebrow"><i></i>Affordable creator pricing</span><h1>Choose a plan. Add tokens only when you need them.</h1><p>Pay for the selected source time you process. Subscription allowances refresh normally, while one-time top-up tokens remain in your wallet until used.</p><div class="pricing-trust"><span>Free starter access</span><span>Secure Stripe Checkout</span><span>No raw card storage</span></div></section><section class="page-content"><div class="wrap"><div class="pricing-section-head"><span class="section-label">Subscriptions</span><h2>Built for different publishing rhythms.</h2><p>Start small, publish consistently, or lock in the best annual value. Every plan bills in source minutes, so you only pay for the footage you actually process.</p></div>${pricingCards(currentUser)}<p class="pricing-compare">Opus Clip Pro is US$29 a month for 300 minutes. DeenClipped Monthly gives you ${config.tokensMonthly} minutes for ${escapeHtml(config.planPriceMonthlyLabel)} &mdash; roughly half the cost per minute of video.</p>${tokenShop(currentUser)}<div class="pricing-explainer"><div><span class="section-label">How tokens work</span><h2>Clear before you render.</h2><p>DeenClipped reads the source duration, lets you select a start and end time, then estimates usage from that selected range. Subscription allowance is used before purchased top-ups.</p>${checkItem(`${config.tokensPerMinute} token per source minute`,'Usage follows the selected source window.')}${checkItem('Editing stays fair','Reviewing, template changes and ordinary template rerenders do not unnecessarily consume tokens.')}${checkItem('Top-ups persist','Purchased tokens do not disappear when a subscription renews or is cancelled.')}</div><div class="product-frame"><img src="/marketing-assets/workflow-premium.webp" alt="DeenClipped token and workflow overview"></div></div></div></section></main>`;
-  return layout({ base, currentUser, title: 'Pricing — from A$9.99/week, about half the cost of Opus Clip | DeenClipped', description: 'One token per source minute. Free tier to start, weekly, monthly and yearly plans, plus one-time token packs that never expire.', canonicalPath: '/pricing', body });
+  const body = `<main><section class="page-hero pricing-hero wrap"><span class="eyebrow"><i></i>Affordable creator pricing</span><h1>Choose a plan. Add tokens only when you need them.</h1><p>Pay for the selected source time you process. Subscription allowances refresh normally, while one-time top-up tokens remain in your wallet until used.</p><div class="pricing-trust"><span>Free starter access</span><span>Secure Stripe Checkout</span><span>No raw card storage</span></div></section><section class="page-content"><div class="wrap"><div class="pricing-section-head"><span class="section-label">Subscriptions</span><h2>Built for different publishing rhythms.</h2><p>Prices remain configuration-driven until the final Stripe products are confirmed.</p></div>${pricingCards(currentUser)}${tokenShop(currentUser)}<div class="pricing-explainer"><div><span class="section-label">How tokens work</span><h2>Clear before you render.</h2><p>DeenClipped reads the source duration, lets you select a start and end time, then estimates usage from that selected range. Subscription allowance is used before purchased top-ups.</p>${checkItem(`${config.tokensPerMinute} token per source minute`,'Usage follows the selected source window.')}${checkItem('Editing stays fair','Reviewing, template changes and ordinary template rerenders do not unnecessarily consume tokens.')}${checkItem('Top-ups persist','Purchased tokens do not disappear when a subscription renews or is cancelled.')}</div><div class="product-frame"><img src="/marketing-assets/workflow-premium.webp" alt="DeenClipped token and workflow overview"></div></div></div></section></main>`;
+  return layout({ base, currentUser, title: 'Pricing & Token Shop — DeenClipped', description: 'Compare DeenClipped free, weekly, monthly and yearly plans and optional one-time token packs.', canonicalPath: '/pricing', body });
 }
 
 export function contact({ base, currentUser }) {

@@ -5,10 +5,10 @@ Production uses two services. Render serves the website, authentication, metadat
 ## Required infrastructure
 
 - Render Starter web service with the 1 GB metadata disk from `render.yaml`.
-- A third-party Linux compute server sized for the chosen Whisper model and concurrent workload.
+- Ubuntu 24.04 VPS with 4–6 vCPU, 8–12 GB RAM, and at least 100 GB disk.
 - S3-compatible bucket with CORS allowing `PUT` from `https://deenclipped.online` and `GET`/`HEAD` for the configured public media hostname.
 - A FFMPEGAPI key. The adapter uses the official `POST /api/youtube_to_mp4` contract with `X-API-Key`, `youtube_url`, and the returned `success`, `download_url`, `filename`, and `title` fields.
-- Two random secrets of at least 32 characters: one for web-to-worker requests and one for worker callbacks/assets.
+- A random shared secret of at least 32 characters. Use the same value on Render and the worker.
 
 Generate secrets:
 
@@ -29,8 +29,8 @@ Set every `sync: false` value in the Render dashboard. The processing-specific v
 ```env
 PROCESSING_MODE=remote
 WORKER_BASE_URL=https://worker.deenclipped.online
-WORKER_SHARED_SECRET=<web-to-worker-secret>
-WORKER_CALLBACK_SECRET=<worker-to-web-secret>
+WORKER_SHARED_SECRET=<same-long-random-secret-as-worker>
+WORKER_CALLBACK_SECRET=<same-long-random-secret-as-worker>
 VIDEO_IMPORT_PROVIDER=ffmpegapi
 VIDEO_IMPORT_API_URL=https://ffmpegapi.net
 VIDEO_IMPORT_API_KEY=<provider-key>
@@ -51,13 +51,9 @@ Publishing remains compatible with the existing platform integrations. Instagram
 Install Docker and its Compose plugin using the official Docker repository, clone the repository, and create `worker/.env`:
 
 ```env
-WORKER_SHARED_SECRET=<web-to-worker-secret>
-WORKER_CALLBACK_SECRET=<worker-to-web-secret>
+WORKER_SHARED_SECRET=<same-long-random-secret-as-render>
 WORKER_PORT=8080
-WORKER_MAX_CONCURRENT_JOBS=2
-WORKER_MAX_HEAVY_JOBS=1
-WORKER_JOB_TIMEOUT_MINUTES=180
-WORKER_CALLBACK_ATTEMPTS=4
+WORKER_MAX_CONCURRENT_JOBS=1
 WORKER_MAX_DOWNLOAD_MB=4096
 WORKER_MIN_FREE_GB=10
 WORKER_TEMP_TTL_HOURS=24
@@ -66,7 +62,7 @@ VIDEO_IMPORT_PROVIDER=ffmpegapi
 VIDEO_IMPORT_API_URL=https://ffmpegapi.net
 VIDEO_IMPORT_API_KEY=<provider-key>
 VIDEO_IMPORT_TIMEOUT_MS=1800000
-VIDEO_IMPORT_ALLOWED_DOWNLOAD_HOSTS=<provider-host,comma-separated-provider-cdn-hosts>
+VIDEO_IMPORT_ALLOWED_DOWNLOAD_HOSTS=ffmpegapi.net
 
 OBJECT_STORAGE_ENDPOINT=https://<s3-endpoint>
 OBJECT_STORAGE_REGION=<region-or-auto>
@@ -77,12 +73,8 @@ OBJECT_STORAGE_PUBLIC_URL=https://<public-media-host>
 
 WHISPER_DEVICE=cpu
 WHISPER_COMPUTE_TYPE=int8
-WHISPER_MODEL=large-v3-turbo
-WHISPER_BEAM_SIZE=5
-WHISPER_CPU_THREADS=2
-FFMPEG_THREADS=2
-VIDEO_PRESET=medium
-VIDEO_CRF=18
+WHISPER_MODEL=small
+FFMPEG_THREADS=4
 ```
 
 Start the worker from the repository root:
@@ -101,7 +93,7 @@ docker compose -f worker/docker-compose.yml up -d --build
 
 The Compose service binds to `127.0.0.1:8080`. Put Caddy, Nginx, or Cloudflare Tunnel in front of it for HTTPS. Allow inbound TCP 22 only from the administrator IP and inbound 443 from Render or the tunnel. Do not expose port 8080 publicly. Every worker endpoint, including health and readiness, requires a timestamped HMAC signature.
 
-The worker persists job status and model cache in its Docker volume. On the current 2-vCPU/4-GB host, two jobs may import, prepare or upload concurrently while a heavy-work semaphore permits only one Whisper/FFmpeg pipeline at a time. It requeues interrupted jobs after restart, checks disk space, enforces download and runtime limits, supports process-tree cancellation, verifies object uploads, retries callbacks, removes each job's temporary directory in `finally`, and removes abandoned temporary directories at startup.
+The worker persists job status and model cache in its Docker volume. It requeues interrupted jobs after restart, processes one job at a time, checks disk space, enforces download limits, supports cancellation, removes each job's temporary directory in `finally`, and removes abandoned temporary directories at startup.
 
 ## Operational checks
 

@@ -1,7 +1,7 @@
 {
   "id": "deenclipped-gold",
-  "name": "Starter",
-  "description": "A plain starting point. Duplicate it and make it yours.",
+  "name": "DeenClipped Gold",
+  "description": "Large viral stacked captions, full-frame fitting, warm gold highlights and a clean voice-first mix.",
   "version": 2,
   "width": 1080,
   "height": 1920,
@@ -49,6 +49,5 @@
   "smartFramingEnabled": true,
   "smartFramingBias": "auto",
   "smartFramingPadding": 0.18,
-  "smartFramingZoom": 1.0,
-  "smartFramingSmoothing": 0.68
+  "smartFramingZoom": 1.0
 }

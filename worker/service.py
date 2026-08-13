@@ -1,4 +1,4 @@
-"""Authenticated, persistent and resource-aware DeenClipped processing service."""
+"""Authenticated, persistent, single-concurrency DeenClipped processing service."""
 from __future__ import annotations
 
 import hashlib
@@ -6,7 +6,6 @@ import hmac
 import json
 import os
 import queue
-import re
 import shutil
 import signal
 import subprocess
@@ -18,7 +17,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-import worker_metrics
 from import_providers import ImportProviderError, download_https, provider_for
 from object_storage import ObjectStorage
 
@@ -28,40 +26,10 @@ JOBS_DIR = DATA_DIR / "jobs"
 TEMP_DIR = Path(os.getenv("WORKER_TEMP_DIR", str(DATA_DIR / "tmp"))).resolve()
 PORT = int(os.getenv("WORKER_PORT", "8080"))
 MAX_CONCURRENT = max(1, int(os.getenv("WORKER_MAX_CONCURRENT_JOBS", "1")))
-MAX_HEAVY = max(1, min(MAX_CONCURRENT, int(os.getenv("WORKER_MAX_HEAVY_JOBS", "1"))))
-JOB_PROCESS_TIMEOUT_SECONDS = max(15 * 60, int(os.getenv("WORKER_JOB_TIMEOUT_MINUTES", "180")) * 60)
-CALLBACK_ATTEMPTS = max(1, min(6, int(os.getenv("WORKER_CALLBACK_ATTEMPTS", "4"))))
 MAX_DOWNLOAD_BYTES = max(50, int(os.getenv("WORKER_MAX_DOWNLOAD_MB", "4096"))) * 1024 * 1024
 MIN_FREE_BYTES = max(1, int(os.getenv("WORKER_MIN_FREE_GB", "10"))) * 1024**3
 JOB_TTL_SECONDS = max(3600, int(os.getenv("WORKER_TEMP_TTL_HOURS", "24")) * 3600)
 SHARED_SECRET = os.getenv("WORKER_SHARED_SECRET", "")
-CALLBACK_SECRET = os.getenv("WORKER_CALLBACK_SECRET", SHARED_SECRET)
-FRAMING_CACHE_LOCK = threading.RLock()
-
-
-def terminate_process_tree(child: subprocess.Popen, grace_seconds: float = 6.0) -> None:
-    """Stop a worker and every FFmpeg/Whisper descendant it launched."""
-    if child.poll() is not None:
-        return
-    try:
-        os.killpg(child.pid, signal.SIGTERM)
-    except (OSError, ProcessLookupError):
-        try:
-            child.terminate()
-        except OSError:
-            return
-    try:
-        child.wait(timeout=max(0.1, grace_seconds))
-        return
-    except subprocess.TimeoutExpired:
-        pass
-    try:
-        os.killpg(child.pid, signal.SIGKILL)
-    except (OSError, ProcessLookupError):
-        try:
-            child.kill()
-        except OSError:
-            pass
 
 
 def now_ms() -> int:
@@ -75,96 +43,6 @@ def clean_error(exc: BaseException) -> str:
         if secret:
             text = text.replace(secret, "[redacted]")
     return text[-1500:] or "Processing failed."
-
-
-def tenant_of(record: dict[str, Any]) -> str:
-    """The account a job belongs to, read from either its payload or its status.
-
-    Used only to keep the queue fair — never for access control, which the
-    web service already enforces before a job reaches this worker.
-
-    Older callers do not send `tenant`. Those jobs share the empty tenant,
-    which behaves exactly like the previous single global FIFO — so a version
-    skew between the web service and this worker degrades to the old
-    behaviour rather than misattributing anyone's work.
-    """
-    value = str(record.get("tenant") or "")
-    return value[:120]
-
-
-class FairQueue:
-    """A job queue that rotates between accounts instead of running in arrival order.
-
-    The worker previously used a plain `queue.Queue`, so one customer applying
-    a template to forty clips pushed forty jobs ahead of every other
-    customer's. One heavy slot meant the second customer waited for all forty.
-
-    Jobs are held in one FIFO per tenant, and `get` takes the next job from
-    each tenant in turn. Within an account, order is still arrival order; only
-    the choice of *which* account goes next changed.
-    """
-
-    def __init__(self) -> None:
-        self.condition = threading.Condition(threading.Lock())
-        self.pending: dict[str, list[str]] = {}
-        self.rotation: list[str] = []
-        self.count = 0
-
-    def put(self, job_id: str, tenant: str = "") -> None:
-        with self.condition:
-            if tenant not in self.pending:
-                self.pending[tenant] = []
-                self.rotation.append(tenant)
-            self.pending[tenant].append(job_id)
-            self.count += 1
-            self.condition.notify()
-
-    def get(self, timeout: float | None = None) -> str:
-        """Next job in fair order. Raises `queue.Empty` on timeout, like `queue.Queue`."""
-        with self.condition:
-            if self.count == 0 and not self.condition.wait_for(lambda: self.count > 0, timeout):
-                raise queue.Empty
-            if self.count == 0:
-                raise queue.Empty
-            tenant = self.rotation.pop(0)
-            jobs = self.pending[tenant]
-            job_id = jobs.pop(0)
-            self.count -= 1
-            if jobs:
-                # Back of the rotation: this account waits for everyone else
-                # holding work before its next job is considered.
-                self.rotation.append(tenant)
-            else:
-                del self.pending[tenant]
-            return job_id
-
-    def snapshot(self) -> list[str]:
-        """The order jobs will actually come out in, for accurate queue positions.
-
-        Simulated rather than read off insertion order, because after fair
-        rotation those two are no longer the same and the position drives the
-        wait estimate the customer sees.
-        """
-        with self.condition:
-            pending = {tenant: list(jobs) for tenant, jobs in self.pending.items()}
-            rotation = list(self.rotation)
-        order: list[str] = []
-        while rotation:
-            tenant = rotation.pop(0)
-            jobs = pending.get(tenant) or []
-            if not jobs:
-                continue
-            order.append(jobs.pop(0))
-            if jobs:
-                rotation.append(tenant)
-        return order
-
-    def get_nowait(self) -> str:
-        return self.get(timeout=0)
-
-    def qsize(self) -> int:
-        with self.condition:
-            return self.count
 
 
 class JobStore:
@@ -206,10 +84,6 @@ class JobStore:
                 "id": job_id, "status": "queued", "stage": "queued", "progress": 0,
                 "createdAt": now_ms(), "updatedAt": now_ms(), "cancelRequested": False,
                 "result": None, "error": None,
-                # Which account queued this. Held on the status rather than only
-                # in the payload so a restart can rebuild the fair rotation
-                # without re-reading every payload from disk.
-                "tenant": tenant_of(payload),
             }
             self.write(job_id, status)
             return status, True
@@ -238,7 +112,7 @@ class JobStore:
                 status = json.loads(status_path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 continue
-            if status.get("status") in {"queued", "importing", "downloading", "waiting for processing capacity", "extracting audio", "transcribing", "analysing", "creating clips", "rendering", "uploading", "processing"}:
+            if status.get("status") in {"queued", "importing", "downloading", "extracting audio", "transcribing", "analysing", "creating clips", "rendering", "uploading", "processing"}:
                 status.update(status="queued", stage="queued", progress=min(5, int(status.get("progress") or 0)), error=None)
                 self.write(str(status["id"]), status)
                 recovered.append(str(status["id"]))
@@ -249,35 +123,21 @@ class Processor:
     def __init__(self, store: JobStore) -> None:
         self.store = store
         self.storage = ObjectStorage()
-        self.queue = FairQueue()
+        self.queue: queue.Queue[str] = queue.Queue()
         self.running: dict[str, subprocess.Popen] = {}
-        self.active_jobs: set[str] = set()
         self.lock = threading.RLock()
         self.stop = threading.Event()
-        self.heavy_slots = threading.BoundedSemaphore(MAX_HEAVY)
-        self.heavy_running = 0
         self.threads = [threading.Thread(target=self.loop, name=f"job-{index}", daemon=True) for index in range(MAX_CONCURRENT)]
 
     def start(self) -> None:
         for job_id in self.store.recover():
-            self.queue.put(job_id, tenant_of(self.store.read(job_id) or {}))
-        self.refresh_queue_positions()
+            self.queue.put(job_id)
         self.cleanup_abandoned()
         for thread in self.threads:
             thread.start()
 
-    def submit(self, job_id: str, tenant: str = "") -> None:
-        self.queue.put(job_id, tenant)
-        self.refresh_queue_positions()
-
-    def refresh_queue_positions(self) -> None:
-        """Keep every queued job's displayed position accurate as work moves."""
-        pending = self.queue.snapshot()
-        for position, queued_id in enumerate(pending, start=1):
-            try:
-                self.store.update(queued_id, queuePosition=position)
-            except KeyError:
-                continue
+    def submit(self, job_id: str) -> None:
+        self.queue.put(job_id)
 
     def cancelled(self, job_id: str) -> bool:
         return bool(self.store.read(job_id).get("cancelRequested"))
@@ -293,7 +153,7 @@ class Processor:
         with self.lock:
             child = self.running.get(job_id)
         if child and child.poll() is None:
-            terminate_process_tree(child)
+            child.terminate()
         return status
 
     def progress(self, job_id: str, stage: str, progress: int) -> None:
@@ -308,50 +168,15 @@ class Processor:
         body = json.dumps(status, separators=(",", ":")).encode()
         timestamp = str(now_ms())
         path = __import__("urllib.parse", fromlist=["urlparse"]).urlparse(url).path
-        signature = hmac.new(CALLBACK_SECRET.encode(), f"{timestamp}\nPOST\n{path}\n{body.decode()}".encode(), hashlib.sha256).hexdigest()
+        signature = hmac.new(SHARED_SECRET.encode(), f"{timestamp}\nPOST\n{path}\n{body.decode()}".encode(), hashlib.sha256).hexdigest()
         request = urllib.request.Request(url, data=body, method="POST", headers={
             "Content-Type": "application/json", "X-DeenClipped-Timestamp": timestamp,
             "X-DeenClipped-Signature": signature, "User-Agent": "DeenClipped-Worker/1.0",
         })
-        last_error = ""
-        delays = (0.0, 1.0, 3.0, 7.0, 12.0, 20.0)
-        for attempt in range(CALLBACK_ATTEMPTS):
-            if delays[attempt]:
-                time.sleep(delays[attempt])
-            try:
-                urllib.request.urlopen(request, timeout=15).close()
-                return
-            except Exception as exc:
-                last_error = clean_error(exc)
-        print(json.dumps({
-            "type": "callback_failed", "jobId": status.get("id"),
-            "attempts": CALLBACK_ATTEMPTS, "error": last_error,
-        }), flush=True)
-
-    def acquire_heavy_slot(self, job_id: str) -> None:
-        announced = False
-        while not self.stop.is_set():
-            if self.cancelled(job_id):
-                raise ImportProviderError("Job cancelled.")
-            if self.heavy_slots.acquire(timeout=0.5):
-                with self.lock:
-                    self.heavy_running += 1
-                return
-            if not announced:
-                status = self.store.read(job_id) or {}
-                self.store.update(
-                    job_id,
-                    status="waiting for processing capacity",
-                    stage="waiting for processing capacity",
-                    progress=max(9, int(status.get("progress") or 0)),
-                )
-                announced = True
-        raise RuntimeError("The worker is shutting down.")
-
-    def release_heavy_slot(self) -> None:
-        with self.lock:
-            self.heavy_running = max(0, self.heavy_running - 1)
-        self.heavy_slots.release()
+        try:
+            urllib.request.urlopen(request, timeout=15).close()
+        except Exception:
+            pass
 
     def fetch_music(self, payload: dict[str, Any], work: Path) -> list[dict[str, str]]:
         tracks = []
@@ -371,13 +196,12 @@ class Processor:
             **os.environ,
             "WHISPER_DEVICE": os.getenv("WHISPER_DEVICE", "cpu"),
             "WHISPER_COMPUTE_TYPE": os.getenv("WHISPER_COMPUTE_TYPE", "int8"),
-            "WHISPER_MODEL": os.getenv("WHISPER_MODEL", "large-v3-turbo"),
+            "WHISPER_MODEL": os.getenv("WHISPER_MODEL", "small"),
             "FFMPEG_THREADS": os.getenv("FFMPEG_THREADS", "4"),
         }
         child = subprocess.Popen(
             [sys.executable, str(ROOT / "worker" / "clip_worker.py"), str(job_file)],
             cwd=ROOT, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            start_new_session=True,
         )
         with self.lock:
             self.running[job_id] = child
@@ -390,34 +214,11 @@ class Processor:
                 del stderr_lines[:-80]
 
         threading.Thread(target=collect_stderr, daemon=True).start()
-        stdout_lines: queue.Queue[str | None] = queue.Queue()
-
-        def collect_stdout() -> None:
-            assert child.stdout
-            for stdout_line in child.stdout:
-                stdout_lines.put(stdout_line)
-            stdout_lines.put(None)
-
-        threading.Thread(target=collect_stdout, daemon=True).start()
         reported_error = ""
-        started = time.monotonic()
-        timed_out = False
-        stdout_closed = False
-        while child.poll() is None or not stdout_closed or not stdout_lines.empty():
+        for line in child.stdout:
             if self.cancelled(job_id):
-                terminate_process_tree(child)
+                child.terminate()
                 break
-            if time.monotonic() - started > JOB_PROCESS_TIMEOUT_SECONDS:
-                timed_out = True
-                terminate_process_tree(child)
-                break
-            try:
-                line = stdout_lines.get(timeout=1.0)
-            except queue.Empty:
-                continue
-            if line is None:
-                stdout_closed = True
-                continue
             try:
                 event = json.loads(line)
             except ValueError:
@@ -428,17 +229,11 @@ class Processor:
                 raw = str(event.get("stage") or "processing").lower()
                 stage = "extracting audio" if "audio" in raw else "transcribing" if "transcri" in raw else "analysing" if "analys" in raw or "candidate" in raw else "rendering" if "render" in raw or "verif" in raw else "creating clips"
                 self.store.update(job_id, status=stage, stage=stage, progress=int(event.get("progress") or 0))
-        try:
-            code = child.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            terminate_process_tree(child, grace_seconds=1)
-            code = child.wait()
+        code = child.wait()
         with self.lock:
             self.running.pop(job_id, None)
         if self.cancelled(job_id):
             raise ImportProviderError("Job cancelled.")
-        if timed_out:
-            raise RuntimeError(f"Processing exceeded the {JOB_PROCESS_TIMEOUT_SECONDS // 60}-minute safety limit.")
         if code != 0 or not result_path.exists():
             detail = reported_error or " ".join(stderr_lines[-10:]).strip()
             if not detail:
@@ -483,7 +278,6 @@ class Processor:
         if work.exists():
             shutil.rmtree(work)
         work.mkdir(parents=True)
-        heavy_acquired = False
         try:
             if shutil.disk_usage(TEMP_DIR).free < MIN_FREE_BYTES:
                 raise RuntimeError("The worker does not have enough free temporary disk space.")
@@ -513,10 +307,8 @@ class Processor:
                     **(payload.get("settings") or {}),
                     "device": os.getenv("WHISPER_DEVICE", "cpu"),
                     "computeType": os.getenv("WHISPER_COMPUTE_TYPE", "int8"),
-                    "model": os.getenv("WHISPER_MODEL", "large-v3-turbo"),
+                    "model": os.getenv("WHISPER_MODEL", "small"),
                     "ffmpegThreads": max(1, int(os.getenv("FFMPEG_THREADS", "4"))),
-                    "videoPreset": os.getenv("VIDEO_PRESET", str((payload.get("settings") or {}).get("videoPreset") or "medium")),
-                    "videoCrf": int(os.getenv("VIDEO_CRF", str((payload.get("settings") or {}).get("videoCrf") or "18"))),
                 },
                 "sourceStartSec": payload.get("sourceStartSec") or 0,
                 "sourceEndSec": payload.get("sourceEndSec"),
@@ -536,11 +328,7 @@ class Processor:
                 )
             job_path = work / "job.json"
             job_path.write_text(json.dumps(worker_job, indent=2), encoding="utf-8")
-            self.acquire_heavy_slot(job_id)
-            heavy_acquired = True
             result = self.run_clip_worker(job_id, job_path, result_path)
-            self.release_heavy_slot()
-            heavy_acquired = False
             public_result = self.upload_result(job_id, result)
             status = self.store.update(job_id, status="completed", stage="completed", progress=100, result=public_result, error=None, completedAt=now_ms())
             self.callback(payload, status)
@@ -551,8 +339,6 @@ class Processor:
                 status = self.store.update(job_id, status="failed", stage="failed", error=clean_error(exc), completedAt=now_ms())
             self.callback(payload, status)
         finally:
-            if heavy_acquired:
-                self.release_heavy_slot()
             shutil.rmtree(work, ignore_errors=True)
 
     def loop(self) -> None:
@@ -561,17 +347,10 @@ class Processor:
                 job_id = self.queue.get(timeout=1)
             except queue.Empty:
                 continue
-            self.refresh_queue_positions()
             status = self.store.read(job_id)
             if status and status.get("status") == "queued" and not status.get("cancelRequested"):
-                with self.lock:
-                    self.active_jobs.add(job_id)
-                try:
-                    self.store.update(job_id, queuePosition=0)
-                    self.process(job_id)
-                finally:
-                    with self.lock:
-                        self.active_jobs.discard(job_id)
+                self.process(job_id)
+            self.queue.task_done()
 
     def cleanup_abandoned(self) -> None:
         cutoff = time.time() - JOB_TTL_SECONDS
@@ -598,92 +377,6 @@ def authenticated(timestamp: str, method: str, pathname: str, body: bytes, suppl
     message = f"{timestamp}\n{method.upper()}\n{pathname}\n{body.decode('utf-8')}".encode()
     expected = hmac.new(SHARED_SECRET.encode(), message, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, supplied)
-
-
-def analyse_framing(payload: dict[str, Any]) -> dict[str, Any]:
-    """Download a stored source and return an active-speaker crop plan."""
-    source_key = str(payload.get("sourceKey") or "")
-    if (
-        not source_key
-        or len(source_key) > 512
-        or ".." in source_key
-        or not re.fullmatch(r"(?:projects|uploads)/[A-Za-z0-9._/-]+", source_key)
-    ):
-        raise ValueError("A valid stored source key is required.")
-    duration = float(payload.get("duration") or 0)
-    if duration < 0.25 or duration > 180:
-        raise ValueError("Framing analysis supports clips between 0.25 and 180 seconds.")
-    width = max(240, min(4096, int(payload.get("width") or 1080)))
-    height = max(240, min(4096, int(payload.get("height") or 1920)))
-    bias = str(payload.get("bias") or "auto")
-    if bias not in {"auto", "left", "center", "right"}:
-        raise ValueError("The framing bias is invalid.")
-
-    spans: list[list[float]] = []
-    for item in list(payload.get("speechSpans") or [])[:5000]:
-        if not isinstance(item, (list, tuple)) or len(item) != 2:
-            continue
-        start, end = max(0.0, float(item[0])), min(duration, float(item[1]))
-        if end > start:
-            spans.append([round(start, 3), round(end, 3)])
-
-    storage = ObjectStorage()
-    if not storage.configured:
-        raise RuntimeError("Object storage is not configured on the worker.")
-    if shutil.disk_usage(TEMP_DIR).free < MIN_FREE_BYTES:
-        raise RuntimeError("The worker does not have enough temporary disk space for framing analysis.")
-
-    work_dir = TEMP_DIR / f"framing-{now_ms()}-{threading.get_ident()}"
-    cache_dir = TEMP_DIR / "framing-cache"
-    source_file = cache_dir / f"{hashlib.sha256(source_key.encode()).hexdigest()}.mp4"
-    request_file = work_dir / "request.json"
-    work_dir.mkdir(parents=True, exist_ok=False)
-    try:
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        with FRAMING_CACHE_LOCK:
-            if not source_file.exists() or source_file.stat().st_size == 0:
-                partial = source_file.with_suffix(f".{threading.get_ident()}.part")
-                try:
-                    storage.download(source_key, partial)
-                    partial.replace(source_file)
-                finally:
-                    partial.unlink(missing_ok=True)
-            source_file.touch()
-            cache_dir.touch()
-        request = {
-            "source": str(source_file), "ffprobe": os.getenv("FFPROBE_PATH", "ffprobe"),
-            "start": max(0.0, float(payload.get("start") or 0)), "duration": duration,
-            "width": width, "height": height, "bias": bias,
-            "padding": max(0.05, min(0.45, float(payload.get("padding", 0.18)))),
-            "zoom": max(0.75, min(1.35, float(payload.get("zoom", 1.0)))),
-            "smoothing": max(0.0, min(0.95, float(payload.get("smoothing", 0.68)))),
-            "sampleHz": max(1.0, min(5.0, float(payload.get("sampleHz", 3.0)))),
-            "speechSpans": spans,
-            # Only the caption geometry travels, not the whole template: it is
-            # all the framing decision reads, and a preview that ignored it
-            # would show a different composition from the finished render.
-            "template": {
-                "captionPositionX": max(0.0, min(100.0, float(payload.get("captionPositionX", 50)))),
-                "captionPositionY": max(0.0, min(100.0, float(payload.get("captionPositionY", 58)))),
-            },
-            "dwellSeconds": max(0.0, min(5.0, float(payload.get("dwellSeconds", 1.2)))),
-        }
-        request_file.write_text(json.dumps(request), encoding="utf-8")
-        result = subprocess.run(
-            [sys.executable, str(ROOT / "worker" / "clip_worker.py"), "--framing", str(request_file)],
-            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            timeout=210, check=False,
-        )
-        if result.returncode != 0:
-            detail = (result.stderr or result.stdout).strip().splitlines()
-            raise RuntimeError(detail[-1] if detail else "Speaker analysis returned no result.")
-        response = json.loads(result.stdout or "{}")
-        plan = response.get("plan")
-        if not isinstance(plan, dict):
-            raise RuntimeError("Speaker analysis returned an invalid result.")
-        return plan
-    finally:
-        shutil.rmtree(work_dir, ignore_errors=True)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -716,39 +409,16 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(401, {"error": "Authentication required.", "code": "unauthorized"})
         if self.command == "GET" and path == "/health":
             return self.send_json(200, {"ok": True, "service": "deenclipped-worker"})
-        if self.command == "GET" and path == "/metrics":
-            return self.send_json(200, worker_metrics.snapshot(
-                str(TEMP_DIR),
-                queue_depth=PROCESSOR.queue.qsize(),
-                running=len(PROCESSOR.active_jobs),
-                max_concurrent=MAX_CONCURRENT,
-                heavy_running=PROCESSOR.heavy_running,
-                max_heavy=MAX_HEAVY,
-            ))
         if self.command == "GET" and path == "/readiness":
             free = shutil.disk_usage(TEMP_DIR).free
             ready = bool(ObjectStorage().configured and free >= MIN_FREE_BYTES)
-            return self.send_json(200 if ready else 503, {
-                "ready": ready, "freeBytes": free, "queueDepth": PROCESSOR.queue.qsize(),
-                "running": len(PROCESSOR.active_jobs), "maxConcurrent": MAX_CONCURRENT,
-                "heavyRunning": PROCESSOR.heavy_running, "maxHeavy": MAX_HEAVY,
-            })
-        if self.command == "POST" and path == "/framing":
-            try:
-                payload = json.loads(body or b"{}")
-                return self.send_json(200, {"plan": analyse_framing(payload)})
-            except ValueError as exc:
-                return self.send_json(400, {"error": clean_error(exc), "code": "invalid_framing_request"})
-            except subprocess.TimeoutExpired:
-                return self.send_json(503, {"error": "Speaker analysis took too long. Try again.", "code": "framing_timeout"})
-            except Exception as exc:
-                return self.send_json(503, {"error": clean_error(exc), "code": "framing_unavailable"})
+            return self.send_json(200 if ready else 503, {"ready": ready, "freeBytes": free, "queueDepth": PROCESSOR.queue.qsize(), "running": len(PROCESSOR.running)})
         if self.command == "POST" and path == "/jobs":
             try:
                 payload = json.loads(body or b"{}")
                 status, created = STORE.create(payload)
                 if created:
-                    PROCESSOR.submit(str(status["id"]), tenant_of(payload))
+                    PROCESSOR.submit(str(status["id"]))
                 return self.send_json(202 if created else 200, status)
             except (ValueError, OSError) as exc:
                 return self.send_json(400, {"error": clean_error(exc), "code": "invalid_job"})
@@ -770,17 +440,12 @@ class Handler(BaseHTTPRequestHandler):
 def main() -> int:
     if not SHARED_SECRET or len(SHARED_SECRET) < 32:
         raise SystemExit("WORKER_SHARED_SECRET must contain at least 32 characters.")
-    if not CALLBACK_SECRET or len(CALLBACK_SECRET) < 32:
-        raise SystemExit("WORKER_CALLBACK_SECRET must contain at least 32 characters.")
     PROCESSOR.start()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     stop = lambda *_: threading.Thread(target=server.shutdown, daemon=True).start()
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
-    print(json.dumps({
-        "type": "startup", "port": PORT, "concurrency": MAX_CONCURRENT,
-        "heavyConcurrency": MAX_HEAVY, "jobTimeoutMinutes": JOB_PROCESS_TIMEOUT_SECONDS // 60,
-    }), flush=True)
+    print(json.dumps({"type": "startup", "port": PORT, "concurrency": MAX_CONCURRENT}), flush=True)
     server.serve_forever()
     return 0
 

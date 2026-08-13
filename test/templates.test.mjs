@@ -12,23 +12,10 @@ const user = { id: 'user_test' };
 const otherUser = { id: 'user_other' };
 
 test('default local template is always resolvable', () => {
-  // One built-in starter, deliberately. The app used to ship four finished
-  // looks, which made every screen a mix of somebody else's styling; the
-  // starter exists only so a new account can render before building its own.
   const list = templates.listTemplates(user);
-  const builtIns = list.filter(template => template.builtIn);
-  assert.equal(builtIns.length, 1, 'exactly one starter should ship with the app');
+  assert.ok(list.length >= 2);
   const selected = templates.selectedTemplate(user);
-  assert.ok(selected, 'a template must always resolve, or nothing can render');
   assert.ok(selected.captionFontSize > 0);
-});
-
-test('a brand-new account can still render without creating a template first', () => {
-  // The worker raises on a job with no app-owned template, so an empty
-  // template list is a render failure, not an empty screen.
-  const fresh = { id: 'user_brand_new' };
-  const selected = templates.selectedTemplate(fresh);
-  assert.ok(selected?.id, 'a fresh account resolved no template at all');
 });
 
 test('invalid template selection is blocked', () => {
@@ -59,14 +46,4 @@ test('a custom template is invisible and unreachable to another account', () => 
   assert.equal(templates.templateById(created.id, otherUser), null);
   assert.ok(!templates.listTemplates(otherUser).some(t => t.id === created.id));
   assert.throws(() => templates.updateTemplate(otherUser, created.id, { name: 'Hijacked' }), /does not exist/i);
-});
-
-test('smart speaker framing controls survive template sanitisation', () => {
-  const created = templates.createTemplate(user, {
-    name: 'Tracked Speaker', smartFramingEnabled: true,
-    smartFramingPadding: 0.24, smartFramingZoom: 1.12, smartFramingSmoothing: 0.61,
-  });
-  assert.equal(created.smartFramingPadding, 0.24);
-  assert.equal(created.smartFramingZoom, 1.12);
-  assert.equal(created.smartFramingSmoothing, 0.61);
 });

@@ -3,11 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
-import { config, productionConfigurationErrors } from './config.js';
+import { config } from './config.js';
 import {
   state, save, log, logFor, clipSettings, setClipSettings, musicSettings, setMusicSettings,
   automationSettings, setAutomationSettings, publishingSettings, setPublishingSettings,
-  brandSettings, setBrandSettings, ownerOfRecord,
 } from './store.js';
 import { ownedBy, findOwned } from './tenancy.js';
 import * as audio from './audio.js';
@@ -21,7 +20,6 @@ import * as auth from './auth.js';
 import * as billing from './billing.js';
 import * as marketing from './marketing.js';
 import * as admin from './admin.js';
-import * as adminOps from './admin-ops.js';
 import { saveVideoUpload, removeUploadedFile } from './uploads.js';
 import * as objectStorage from './object-storage.js';
 import { assertStorageObjectKey } from './video-import.js';
@@ -30,16 +28,8 @@ import * as workerClient from './worker-client.js';
 const page = path.join(config.root, 'src', 'public', 'index.html');
 const activityFixPage = path.join(config.root, 'src', 'public', 'activity-fix.js');
 const premiumDashboardPage = path.join(config.root, 'src', 'public', 'premium-dashboard.js');
-const studioV6CssPage = path.join(config.root, 'src', 'public', 'studio-v6.css');
 const marketingCssPage = path.join(config.root, 'src', 'public', 'marketing.css');
 const marketingJsPage = path.join(config.root, 'src', 'public', 'marketing.js');
-function assetVersion(file) {
-  try { return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex').slice(0, 12); }
-  catch { return 'missing'; }
-}
-const activityFixVersion = assetVersion(activityFixPage);
-const premiumDashboardVersion = assetVersion(premiumDashboardPage);
-const studioV6CssVersion = assetVersion(studioV6CssPage);
 // Marketing images are looked for in a dedicated subfolder first, then in
 // src/public itself. They are currently committed directly to src/public, so
 // serving only from the subfolder means every request 404s against a directory
@@ -50,55 +40,6 @@ const marketingAssetDirs = [
   path.resolve(config.root, 'src', 'public'),
 ];
 
-// BillingError and friends carry a machine-readable `code` plus the token
-// numbers. Without this the client only sees a sentence and cannot tell an
-// out-of-tokens refusal apart from any other 400.
-function errorBody(error) {
-  const body = { error: error?.message || 'Something went wrong.' };
-  if (!error?.code) return body;
-  body.code = error.code;
-  for (const key of ['needed', 'remaining', 'shortfall', 'plan', 'expiredAt']) {
-    if (error[key] !== undefined) body[key] = error[key];
-  }
-  return body;
-}
-
-function cleanBrandSettings(input = {}, user = null) {
-  const current = brandSettings(user);
-  const features = billing.featureAccess(user);
-  const positions = new Set(['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right']);
-  const cleanColor = (value, fallback) => /^#[0-9A-F]{6}$/i.test(String(value || '')) ? String(value).toUpperCase() : fallback;
-  const cleanList = (value, fallback = []) => {
-    if (value === undefined || value === null) return fallback;
-    const source = Array.isArray(value) ? value : String(value ?? '').split(/[,\n]/);
-    const cleaned = source.map(item => String(item || '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60)).filter(Boolean);
-    return [...new Set(cleaned)].slice(0, 80);
-  };
-  const audiences = new Set(['general', 'new-muslims', 'students', 'families', 'creators']);
-  const goals = new Set(['education', 'growth', 'community', 'reflection']);
-  const tones = new Set(['respectful', 'warm', 'direct', 'reflective']);
-  const audience = String(input.audience ?? current.audience ?? 'general');
-  const contentGoal = String(input.contentGoal ?? current.contentGoal ?? 'education');
-  const brandTone = String(input.brandTone ?? current.brandTone ?? 'respectful');
-  const opacity = features.watermarkRequired ? 88 : Math.max(20, Math.min(100, Math.round(Number(input.watermarkOpacity ?? current.watermarkOpacity ?? 88))));
-  return {
-    watermarkEnabled: features.canRemoveWatermark ? input.watermarkEnabled !== false : true,
-    watermarkText: features.customBranding
-      ? (String(input.watermarkText ?? current.watermarkText ?? 'DEENCLIPPED').trim().slice(0, 60) || 'DEENCLIPPED')
-      : 'DEENCLIPPED',
-    watermarkPosition: features.customBranding && positions.has(String(input.watermarkPosition)) ? String(input.watermarkPosition) : 'top-center',
-    watermarkColor: features.customBranding ? cleanColor(input.watermarkColor, current.watermarkColor || '#D9B478') : '#D9B478',
-    watermarkOpacity: opacity,
-    brandLineEnabled: features.customBranding ? Boolean(input.brandLineEnabled) : false,
-    brandLineColor: cleanColor(input.brandLineColor, current.brandLineColor || '#D9B478'),
-    brandVocabulary: features.customBranding ? cleanList(input.brandVocabulary, current.brandVocabulary || []) : [],
-    audience: features.customBranding && audiences.has(audience) ? audience : 'general',
-    contentGoal: features.customBranding && goals.has(contentGoal) ? contentGoal : 'education',
-    brandTone: features.customBranding && tones.has(brandTone) ? brandTone : 'respectful',
-    avoidPhrases: features.customBranding ? cleanList(input.avoidPhrases, current.avoidPhrases || []).slice(0, 30) : [],
-  };
-}
-
 function json(res, status, value) {
   const body = JSON.stringify(value);
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
@@ -106,29 +47,6 @@ function json(res, status, value) {
 }
 function redirect(res, location) { res.writeHead(302, { Location: location, 'Cache-Control': 'no-store' }); res.end(); }
 function temporaryRedirect(res, location) { res.writeHead(307, { Location: location, 'Cache-Control': 'private, no-store' }); res.end(); }
-
-async function projectTranscriptSegments(project) {
-  if (!project) return [];
-  let parsed = null;
-  if (project.transcriptFile && fs.existsSync(project.transcriptFile)) {
-    parsed = JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8'));
-  } else if (project.transcriptObjectKey && objectStorage.configured()) {
-    const key = String(project.transcriptObjectKey || '');
-    if (!/^projects\/[A-Za-z0-9._/-]+\/transcript\.json$/.test(key) || key.includes('..')) {
-      throw new Error('The stored transcript reference is invalid.');
-    }
-    const response = await fetch(objectStorage.presign({ method: 'GET', key, expiresSec: 120 }), {
-      signal: AbortSignal.timeout(12_000),
-    });
-    if (!response.ok) throw new Error(`Stored transcript download failed with status ${response.status}.`);
-    const declaredSize = Number(response.headers.get('content-length') || 0);
-    if (declaredSize > 20 * 1024 * 1024) throw new Error('The stored transcript is unexpectedly large.');
-    const body = await response.text();
-    if (Buffer.byteLength(body) > 20 * 1024 * 1024) throw new Error('The stored transcript is unexpectedly large.');
-    parsed = JSON.parse(body);
-  }
-  return Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.segments) ? parsed.segments : []);
-}
 
 function redirectWithCookies(res, location, cookies = []) {
   const headers = { Location: location, 'Cache-Control': 'no-store' };
@@ -139,36 +57,6 @@ function html(res, status, value) {
   const body = Buffer.from(String(value));
   res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
   res.end(body);
-}
-
-function applySecurityHeaders(res) {
-  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(self)');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: https:; media-src 'self' blob: https:; connect-src 'self' https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com");
-}
-
-const authAttempts = new Map();
-function requestIp(req) {
-  return String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').split(',')[0].trim();
-}
-function authRateLimited(req) {
-  const key = requestIp(req);
-  const now = Date.now();
-  const recent = (authAttempts.get(key) || []).filter(at => now - at < 15 * 60_000);
-  recent.push(now);
-  authAttempts.set(key, recent);
-  return recent.length > 12;
-}
-function unsafeCrossSiteRequest(req, url) {
-  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method || 'GET')) return false;
-  if (url.pathname === '/api/billing/webhook' || url.pathname === '/auth/apple/callback' || url.pathname.startsWith('/api/worker-callbacks/')) return false;
-  if (String(req.headers['sec-fetch-site'] || '').toLowerCase() === 'cross-site') return true;
-  const origin = String(req.headers.origin || '');
-  if (!origin) return false;
-  try { return new URL(origin).origin !== new URL(publicBase(req)).origin; } catch { return true; }
 }
 
 function publicBase(req) {
@@ -190,9 +78,8 @@ function serveAppShell(req, res, url, currentUser) {
   if (auth.enabled() && !currentUser) return redirect(res, `/login?returnTo=${encodeURIComponent('/app' + (url.search || ''))}`);
   if (auth.enabled() && currentUser && billing.needsPlanChoice(currentUser)) return redirect(res, `/plans?returnTo=${encodeURIComponent('/app' + (url.search || ''))}`);
   let html = fs.readFileSync(page, 'utf8');
-  if (!html.includes('/studio-v6.css')) html = html.replace('</head>', `<link rel="stylesheet" href="/studio-v6.css?v=${studioV6CssVersion}">\n</head>`);
-  if (!html.includes('/activity-fix.js')) html = html.replace('</body>', `<script src="/activity-fix.js?v=${activityFixVersion}"></script>\n</body>`);
-  if (!html.includes('/premium-dashboard.js')) html = html.replace('</body>', `<script src="/premium-dashboard.js?v=${premiumDashboardVersion}"></script>\n</body>`);
+  if (!html.includes('/activity-fix.js')) html = html.replace('</body>', '<script src="/activity-fix.js"></script>\n</body>');
+  if (!html.includes('/premium-dashboard.js')) html = html.replace('</body>', '<script src="/premium-dashboard.js"></script>\n</body>');
   const body = Buffer.from(html);
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
   return res.end(body);
@@ -234,17 +121,13 @@ function queueTemplateForEveryUnpostedClip(template, user, reason = 'template up
   let queued = 0;
   let skipped = 0;
   const errors = [];
-  // One id per action, so the browser can group these jobs and count them
-  // instead of showing four unrelated bars.
-  const batchId = `batch_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-  const eligible = ownedBy(state.clips, user?.id).filter(clip => clip.status !== 'posted' && !clip.variantOf).length;
   // Only the acting account's clips. This used to sweep `state.clips`, so one
   // customer saving a template queued a re-render of every other customer's
   // work onto their own template.
   for (const clip of ownedBy(state.clips, user?.id)) {
     if (clip.status === 'posted' || clip.variantOf) { skipped += 1; continue; }
     try {
-      agent.engine.queueClipRerender(clip.id, template.id, { asVariant: false, batchId, batchLabel: `Applying "${template.name}"`, batchTotal: eligible });
+      agent.engine.queueClipRerender(clip.id, template.id, { asVariant: false });
       queued += 1;
     } catch (error) {
       skipped += 1;
@@ -262,8 +145,8 @@ function sameSecret(a, b) {
 function verifyWorkerRequest(req, pathname, rawBody) {
   const timestamp = String(req.headers['x-deenclipped-timestamp'] || '');
   const supplied = String(req.headers['x-deenclipped-signature'] || '');
-  if (!config.workerCallbackSecret || !timestamp || !supplied || Math.abs(Date.now() - Number(timestamp)) > 5 * 60_000) return false;
-  const expected = crypto.createHmac('sha256', config.workerCallbackSecret).update(`${timestamp}\n${req.method || 'GET'}\n${pathname}\n${rawBody}`).digest('hex');
+  if (!config.workerSharedSecret || !timestamp || !supplied || Math.abs(Date.now() - Number(timestamp)) > 5 * 60_000) return false;
+  const expected = crypto.createHmac('sha256', config.workerSharedSecret).update(`${timestamp}\n${req.method || 'GET'}\n${pathname}\n${rawBody}`).digest('hex');
   return sameSecret(expected, supplied);
 }
 function authed(req, url) { return !config.password || sameSecret(req.headers['x-app-password'] || url.searchParams.get('pw') || '', config.password); }
@@ -309,142 +192,26 @@ function streamFile(req, res, file, { downloadName = '', contentType = '', cache
 }
 
 function latestRerender(clipId) { return state.rerenderJobs.find(job => job.clipId === clipId) || null; }
-// Where a clip's *caption-free* video comes from, or null when none survives.
-//
-// This matters more than it looks. A clip whose clean plate is gone can only be
-// previewed using its own rendered export, and that export already has captions
-// painted into its pixels — so the editor would show baked captions with a
-// draggable caption box floating on top of them. Two sets of words, one of
-// which silently ignores every control in the panel.
-//
-// Three engines, and only one of them keeps a clean plate:
-//   remote      the worker uploads source.mp4 to object storage. Editable.
-//   self-hosted the source sits on Render's disk, which is wiped on restart.
-//   vizard      a third party returns finished, already-captioned clips. There
-//               is no clean plate and there never will be one.
-//
-// Both the preview route and publicClip() read this, so what the editor is told
-// and what the route actually serves cannot drift apart.
-function resolveCleanSource(clip) {
-  if (!clip) return null;
-  const project = state.projects.find(item => item.id === clip.projectId) || null;
-  const localFile = clip.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
-  if (localFile && fs.existsSync(localFile)) return { kind: 'file', file: localFile };
-  const key = String(clip.sourceObjectKey || project?.sourceObjectKey || '').trim();
-  if (key) {
-    if (!/^projects\/[A-Za-z0-9._/-]+\/source\.mp4$/.test(key) || key.split('/').includes('..')) return null;
-    if (!objectStorage.configured()) return null;
-    return { kind: 'object', key };
-  }
-  if (project?.sourceUrl) return { kind: 'url', url: project.sourceUrl };
-  return null;
-}
-
-function previewSourceForClip(clip) {
-  const resolved = resolveCleanSource(clip);
-  if (resolved?.kind === 'object') {
-    // Keep the browser on an owner-checked same-origin URL. That route signs
-    // and redirects to private storage only after access is verified; it also
-    // avoids a client password query invalidating the storage signature.
-    return { kind: 'video', url: `/api/clips/${encodeURIComponent(clip.id)}/source-preview`, timeBase: 'source' };
-  }
-  if (resolved?.kind === 'url' && /^https:\/\//i.test(String(resolved.url || ''))) {
-    return { kind: 'video', url: resolved.url, timeBase: 'source' };
-  }
-  if (resolved?.kind === 'file') {
-    // Never expose a server path. The existing owner-checked source endpoint
-    // streams the same file and is suitable for a browser-side composition.
-    return { kind: 'video', url: `/api/clips/${encodeURIComponent(clip.id)}/source-preview`, timeBase: 'source' };
-  }
-  if (clip.thumbUrl) return { kind: 'image', url: clip.thumbUrl, timeBase: 'clip' };
-  if (clip.clipUrl) return { kind: 'video', url: clip.clipUrl, timeBase: 'clip' };
-  return { kind: 'image', url: `/api/clips/${encodeURIComponent(clip.id)}/thumb`, timeBase: 'clip' };
-}
-
-async function templateShopPreviewPayload(user, productId, clip) {
-  const product = templates.templateShopProduct(productId, user);
-  const sourceStyle = templates.templateShopPreviewStyle(productId);
-  if (!product || !sourceStyle) throw Object.assign(new Error('That Template Shop item does not exist.'), { statusCode: 404 });
-
-  // The same server-owned style contract and watermark authority as export.
-  // No renderer job is queued: this is a browser composition over the user's
-  // own source, so it spends no tokens and cannot mutate the clip or template.
-  const style = agent.engine.effectiveTemplateForUser(user, sourceStyle);
-  const startSec = Math.max(0, Number(clip.startSec) || 0);
-  const endSec = Math.max(startSec, Number(clip.endSec) || startSec + (Number(clip.durationMs) || 0) / 1000);
-  let words = [];
-  try {
-    words = wordsForClip(await projectTranscriptSegments(state.projects.find(item => item.id === clip.projectId)), startSec, endSec);
-  } catch { words = []; }
-  if (!words.length) {
-    const text = String(clip.transcript || clip.description || product.preview.captionSample || 'Preview').trim();
-    const parts = text.split(/\s+/).filter(Boolean).slice(0, 80);
-    const duration = Math.max(1, endSec - startSec);
-    words = parts.map((word, index) => ({
-      word,
-      start: (index / Math.max(1, parts.length)) * duration,
-      end: ((index + 0.8) / Math.max(1, parts.length)) * duration,
-    }));
-  }
-  return {
-    ok: true,
-    mode: 'style_composition',
-    exportIdentical: false,
-    tokenCost: 0,
-    mutatesClip: false,
-    product,
-    clip: {
-      id: clip.id,
-      title: String(clip.title || ''),
-      startSec,
-      endSec,
-      durationSec: Math.max(0, endSec - startSec),
-      source: previewSourceForClip(clip),
-      words: words.slice(0, 500),
-    },
-    style: templates.clipStyleSettings(style),
-    message: 'Preview ready. This is a live style composition, not a rendered export; framing, font availability and final encoding can differ slightly.',
-    limitations: [
-      'No video file was rendered or saved.',
-      'Automatic speaker tracking, final font rendering and encoding are only exact in the exported render.',
-    ],
-  };
-}
-
 function publicClip(clip) {
-  const currentTemplate = templates.templateById(clip.templateId, ownerOfRecord(clip));
+  const currentTemplate = templates.templateById(clip.templateId);
   const rerender = latestRerender(clip.id);
   return {
     id: clip.id, projectId: clip.projectId, projectTitle: clip.projectTitle,
     title: clip.title, description: clip.description, hashtags: clip.hashtags, transcript: clip.transcript,
     score: clip.score, scoreReasons: clip.scoreReasons || [], quality: clip.quality || null,
-    scoreBreakdown: clip.scoreBreakdown || clip.quality?.scoreBreakdown || null,
-    confidence: Number.isFinite(Number(clip.confidence)) ? Number(clip.confidence) : null,
-    intelligenceSignals: clip.intelligenceSignals || null,
-    growthPack: clip.growthPack || null, platformMetadata: clip.platformMetadata || null,
     reviewRequired: Boolean(clip.reviewRequired), startSec: clip.startSec, endSec: clip.endSec, durationMs: clip.durationMs,
     status: clip.status, approvedBy: clip.approvedBy || null,
     scheduledAt: clip.scheduledAt, scheduledLabel: clip.scheduledAt ? formatLocal(clip.scheduledAt) : null,
     readyAt: clip.readyAt || null, postedAt: clip.postedAt,
     musicName: clip.musicName, musicVerified: Boolean(clip.musicVerified),
     templateId: clip.templateId, templateName: clip.templateName, templateVersion: clip.templateVersion || 1,
-    // The snapshot matches what the current render used. editorDraft is the
-    // latest autosaved workspace state and may be newer than that render.
-    templateSnapshot: clip.templateSnapshot ? templates.clipStyleSettings(clip.templateSnapshot) : null,
-    editorDraft: clip.editorDraft || null,
-    editorAppliedStyleId: clip.editorAppliedStyleId || null,
-    editorSavedAt: clip.editorSavedAt || null,
     templateOutdated: Boolean(currentTemplate && Number(currentTemplate.version || 1) > Number(clip.templateVersion || 1)),
     renderVersion: clip.renderVersion || 1, renderVerified: Boolean(clip.renderVerified),
     renderedWidth: clip.renderedWidth || null, renderedHeight: clip.renderedHeight || null,
-    smartFraming: clip.smartFraming || null,
     variantOf: clip.variantOf || null, addedAt: clip.addedAt,
     targets: (clip.targets || []).map(social.targetPublic),
     rerender: rerender ? { id: rerender.id, status: rerender.status, stage: rerender.stage, progress: rerender.progress, error: rerender.error || null, asVariant: rerender.asVariant } : null,
     videoUrl: clip.clipUrl || `/api/clips/${encodeURIComponent(clip.id)}/video`, thumbUrl: clip.thumbUrl || `/api/clips/${encodeURIComponent(clip.id)}/thumb`,
-    // Told to the editor up front so it can disable caption placement instead
-    // of discovering the problem when the <video> element fails to load.
-    cleanSource: Boolean(resolveCleanSource(clip)),
   };
 }
 
@@ -458,13 +225,11 @@ function appState(user = null) {
   const clipsForUser = ownedBy(state.clips, user.id).filter(clip => projectIdsForUser.has(clip.projectId));
   return {
     engine: config.processingMode === 'remote' ? 'remote-worker' : 'self-hosted', user: auth.userPublic(user), auth: auth.publicConfig(), readiness, clipSettings: clipSettings(user), musicSettings: musicSettings(user), automationSettings: automationSettings(user),
-    selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(), clipStyleFields: templates.CLIP_STYLE_FIELDS,
-    templateShop: templates.listTemplateShop(user),
+    selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(),
     tracks: audio.listNasheeds(user),
     projects: projectsForUser.map(project => ({
       id: project.id, title: project.title, url: project.url, engine: project.engine, status: project.status,
       stage: project.stage, progress: project.progress || 0, error: project.error || null, errorCode: project.errorCode || null,
-      queuePosition: Math.max(0, Number(project.queuePosition || 0)),
       submittedAt: project.submittedAt, completedAt: project.completedAt || null, clipCount: project.clipCount || 0,
       durationSec: project.durationSec || project.sourceDurationSec || null, sourceDurationSec: project.sourceDurationSec || null, sourceThumbUrl: project.sourceThumbUrl || null, sourceTitle: project.sourceTitle || null, templateIdUsed: project.templateIdUsed,
       templateNameUsed: project.templateNameUsed, templateVersionUsed: project.templateVersionUsed || 1, musicRequired: true,
@@ -472,7 +237,6 @@ function appState(user = null) {
       moreJob: project.moreJob ? {
         id: project.moreJob.id, status: project.moreJob.status, stage: project.moreJob.stage,
         progress: project.moreJob.progress || 0, error: project.moreJob.error || null,
-        queuePosition: Math.max(0, Number(project.moreJob.queuePosition || 0)),
         requestedCount: project.moreJob.requestedCount || 0, importedCount: project.moreJob.importedCount || 0,
         createdAt: project.moreJob.createdAt || null, startedAt: project.moreJob.startedAt || null,
         completedAt: project.moreJob.completedAt || null, updatedAt: project.moreJob.updatedAt || null,
@@ -480,26 +244,10 @@ function appState(user = null) {
       } : null,
     })),
     clips: clipsForUser.map(publicClip),
-    rerenderJobs: ownedBy(state.rerenderJobs, user.id)
-      .filter(job => clipsForUser.some(clip => clip.id === job.clipId))
-      .slice(0, 30)
-      .map(job => ({
-        id: job.id, clipId: job.clipId, status: job.status, stage: job.stage, progress: job.progress,
-        error: job.error || null, asVariant: Boolean(job.asVariant), engine: job.engine || '',
-        createdAt: job.createdAt || null, startedAt: job.startedAt || null, updatedAt: job.updatedAt || null,
-        finishedAt: job.finishedAt || null,
-        clipTitle: job.clipTitle || '', projectTitle: job.projectTitle || '',
-        templateName: job.templateName || '',
-        batchId: job.batchId || '', batchLabel: job.batchLabel || '', batchTotal: Number(job.batchTotal || 0),
-        etaSec: Number.isFinite(Number(job.etaSec)) ? Number(job.etaSec) : null,
-        currentClip: job.currentClip ?? null, totalClips: job.totalClips ?? null,
-        stages: Array.isArray(job.stages) ? job.stages.slice(-12) : [],
-      })),
+    rerenderJobs: ownedBy(state.rerenderJobs, user.id).filter(job => clipsForUser.some(clip => clip.id === job.clipId)).slice(0, 30),
     postTimes: config.postTimes, timezone: config.timezone, activeJobs: agent.engine.activeJobCount(),
     log: logFor(user, 60), directPublishingEnabled: config.socialPublishEnabled,
     publishingSettings: publishingSettings(user), social: social.connectionStatus(user), billing: billing.publicBilling(user),
-    brandSettings: cleanBrandSettings(brandSettings(user), user),
-    role: String(user?.role || 'creator').toLowerCase(),
   };
 }
 
@@ -518,14 +266,6 @@ function runDoctor() {
 async function route(req, res, url) {
   const { pathname } = url; const method = req.method || 'GET';
   if (pathname === '/healthz') return json(res, 200, { ok: true, engine: config.processingMode === 'remote' ? 'remote-worker' : 'self-hosted' });
-  if (pathname === '/readyz') {
-    const errors = productionConfigurationErrors();
-    try { fs.accessSync(config.dataDir, fs.constants.R_OK | fs.constants.W_OK); } catch { errors.push('Persistent data storage is not readable and writable.'); }
-    if (config.processingMode === 'remote' && !errors.some(item => item.startsWith('WORKER_'))) {
-      try { await workerClient.readiness(); } catch (error) { errors.push(`External worker is not ready: ${error.message}`); }
-    }
-    return json(res, errors.length ? 503 : 200, { ok: errors.length === 0, engine: config.processingMode, checks: errors.length ? errors : ['configuration', 'storage', 'worker'] });
-  }
   const workerCallback = pathname.match(/^\/api\/worker-callbacks\/([^/]+)$/);
   if (method === 'POST' && workerCallback) {
     const raw = await readRawBody(req, 5_000_000);
@@ -552,7 +292,7 @@ async function route(req, res, url) {
       billing.handleWebhookEvent(event);
       return json(res, 200, { received: true });
     } catch (error) {
-      return json(res, 400, errorBody(error));
+      return json(res, 400, { error: error.message });
     }
   }
 
@@ -643,57 +383,6 @@ async function route(req, res, url) {
     const contentType = extension === '.webp' ? 'image/webp' : extension === '.png' ? 'image/png' : extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg' : extension === '.svg' ? 'image/svg+xml' : 'application/octet-stream';
     return streamFile(req, res, file, { contentType, cacheControl: 'public, max-age=86400' });
   }
-  if (method === 'GET' && pathname === '/robots.txt') {
-    const origin = marketingContext(req).base;
-    const body = [
-      'User-agent: *',
-      'Allow: /',
-      // Everything below is behind login. Indexing it wastes crawl budget
-      // and surfaces endpoints that should not be in search results.
-      'Disallow: /app',
-      'Disallow: /plans',
-      'Disallow: /admin',
-      'Disallow: /auth/',
-      'Disallow: /api/',
-      'Disallow: /billing/',
-      '',
-      `Sitemap: ${origin}/sitemap.xml`,
-      '',
-    ].join('\n');
-    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
-    return res.end(body);
-  }
-  if (method === 'GET' && pathname === '/sitemap.xml') {
-    const origin = marketingContext(req).base;
-    const pages = [
-      { path: '/', priority: '1.0', freq: 'weekly' },
-      { path: '/features', priority: '0.8', freq: 'monthly' },
-      { path: '/pricing', priority: '0.9', freq: 'weekly' },
-      { path: '/contact', priority: '0.4', freq: 'yearly' },
-      { path: '/privacy', priority: '0.3', freq: 'yearly' },
-      { path: '/terms', priority: '0.3', freq: 'yearly' },
-    ];
-    const today = new Date().toISOString().slice(0, 10);
-    const body = `<?xml version="1.0" encoding="UTF-8"?>\n`
-      + `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`
-      + pages.map(page => `  <url><loc>${origin}${page.path === '/' ? '' : page.path}</loc>`
-        + `<lastmod>${today}</lastmod><changefreq>${page.freq}</changefreq>`
-        + `<priority>${page.priority}</priority></url>`).join('\n')
-      + `\n</urlset>\n`;
-    res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
-    return res.end(body);
-  }
-  // Browsers request these at the root regardless of what the HTML declares.
-  if (method === 'GET' && (pathname === '/favicon.ico' || pathname === '/favicon.png')) {
-    const file = path.resolve(config.root, 'src', 'public', 'marketing-assets', 'favicon-32.png');
-    if (!fs.existsSync(file)) return json(res, 404, { error: 'Favicon not found.' });
-    return streamFile(req, res, file, { contentType: 'image/png', cacheControl: 'public, max-age=604800' });
-  }
-  if (method === 'GET' && pathname === '/apple-touch-icon.png') {
-    const file = path.resolve(config.root, 'src', 'public', 'marketing-assets', 'apple-touch-icon.png');
-    if (!fs.existsSync(file)) return json(res, 404, { error: 'Icon not found.' });
-    return streamFile(req, res, file, { contentType: 'image/png', cacheControl: 'public, max-age=604800' });
-  }
   if (method === 'GET' && pathname === '/features') return html(res, 200, featuresPage(req));
   if (method === 'GET' && pathname === '/pricing') return html(res, 200, pricingPage(req));
   if (method === 'GET' && pathname === '/contact') return html(res, 200, contactPage(req));
@@ -719,12 +408,6 @@ async function route(req, res, url) {
     res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
     return res.end(body);
   }
-  if (method === 'GET' && pathname === '/studio-v6.css') {
-    if (!fs.existsSync(studioV6CssPage)) return json(res, 404, { error: 'Studio V6 stylesheet not found.' });
-    const body = fs.readFileSync(studioV6CssPage);
-    res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
-    return res.end(body);
-  }
   const oauthCallback = pathname.match(/^\/auth\/(youtube|meta|tiktok)\/callback$/);
   if (method === 'GET' && oauthCallback) {
     const provider = oauthCallback[1];
@@ -746,10 +429,6 @@ async function route(req, res, url) {
     if (!allowed) return json(res, 403, { error: 'This media link is invalid or expired.' });
     const remoteClip = state.clips.find(item => item.id === clipId);
     if (remoteClip?.clipUrl) return temporaryRedirect(res, remoteClip.clipUrl);
-    // This signed link is what a social platform fetches the video from, so
-    // a preview-quality file reaching it would be published at that quality.
-    try { agent.engine.assertExportQuality(remoteClip); }
-    catch (error) { return json(res, error.statusCode || 409, errorBody(error)); }
     const file = agent.engine.clipFilePath(clipId, 'video');
     return streamFile(req, res, file, { cacheControl: 'public, max-age=3600, immutable' });
   }
@@ -801,87 +480,40 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/api/auth/me') return json(res, 200, { user: auth.userPublic(currentUser), auth: auth.publicConfig() });
   if (method === 'GET' && pathname === '/api/state') return json(res, 200, appState(currentUser));
   if (method === 'GET' && pathname === '/api/billing') return json(res, 200, billing.publicBilling(currentUser));
-  if (method === 'GET' && pathname === '/api/brand-settings') {
-    return json(res, 200, { settings: cleanBrandSettings(brandSettings(currentUser), currentUser), features: billing.featureAccess(currentUser) });
-  }
-  if (method === 'POST' && pathname === '/api/brand-settings') {
-    const body = await readBody(req);
-    try {
-      const settings = setBrandSettings(currentUser, cleanBrandSettings(body, currentUser));
-      log(`Brand Kit updated${billing.featureAccess(currentUser).watermarkRequired ? ' with the required free-plan watermark' : ''}.`, 'info', currentUser.id);
-      return json(res, 200, { ok: true, settings: cleanBrandSettings(settings, currentUser), features: billing.featureAccess(currentUser) });
-    } catch (error) { return json(res, 400, errorBody(error)); }
-  }
   if (method === 'POST' && pathname === '/api/billing/estimate') {
     const body = await readBody(req);
     try { return json(res, 200, billing.estimateTokenCharge(currentUser, Number(body.minutes || body.sourceMinutes || 0))); }
-    catch (error) { return json(res, 400, errorBody(error)); }
+    catch (error) { return json(res, 400, { error: error.message }); }
   }
   if (method === 'POST' && pathname === '/api/billing/checkout') {
     const body = await readBody(req);
     try { return json(res, 200, await billing.createCheckoutSession(currentUser, String(body.plan || ''))); }
-    catch (error) { return json(res, 400, errorBody(error)); }
+    catch (error) { return json(res, 400, { error: error.message }); }
   }
-  // `/topup-checkout` is canonical. Keep `/topup` as a compatibility alias
-  // for the V7 dashboard so a cached client cannot silently lose checkout.
-  if (method === 'POST' && ['/api/billing/topup-checkout', '/api/billing/topup'].includes(pathname)) {
+  if (method === 'POST' && pathname === '/api/billing/topup-checkout') {
     const body = await readBody(req);
     try { return json(res, 200, await billing.createTopupCheckoutSession(currentUser, String(body.package || ''))); }
-    catch (error) { return json(res, 400, errorBody(error)); }
+    catch (error) { return json(res, 400, { error: error.message }); }
   }
   if (method === 'POST' && pathname === '/api/billing/portal') {
     try { return json(res, 200, await billing.createPortalSession(currentUser)); }
-    catch (error) { return json(res, 400, errorBody(error)); }
+    catch (error) { return json(res, 400, { error: error.message }); }
   }
 
   if (method === 'GET' && pathname === '/api/admin/analytics') {
     try { requireOperator(currentUser); return json(res, 200, admin.analytics(currentUser)); }
-    catch (error) { return json(res, error.statusCode || 404, errorBody(error)); }
-  }
-
-  if (method === 'GET' && pathname === '/api/admin/operations') {
-    try { requireOperator(currentUser); return json(res, 200, await adminOps.operations(currentUser)); }
-    catch (error) { return json(res, error.statusCode || 404, errorBody(error)); }
-  }
-
-  if (method === 'POST' && pathname === '/api/admin/service-meta') {
-    try {
-      requireOperator(currentUser);
-      const body = await readBody(req);
-      return json(res, 200, adminOps.saveServiceMeta(currentUser, body));
-    } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
-  }
-
-  if (method === 'GET' && pathname === '/api/admin/vendors') {
-    try { requireOperator(currentUser); return json(res, 200, adminOps.listVendors(currentUser)); }
-    catch (error) { return json(res, error.statusCode || 404, errorBody(error)); }
-  }
-
-  if (method === 'POST' && pathname === '/api/admin/vendors') {
-    try {
-      requireOperator(currentUser);
-      const body = await readBody(req);
-      return json(res, 200, adminOps.saveVendor(currentUser, body));
-    } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
-  }
-
-  if (method === 'DELETE' && pathname.startsWith('/api/admin/vendors/')) {
-    try {
-      requireOperator(currentUser);
-      const id = decodeURIComponent(pathname.slice('/api/admin/vendors/'.length));
-      return json(res, 200, adminOps.deleteVendor(currentUser, id));
-    } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
+    catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
   }
 
   const socialConnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok)\/connect$/);
   if (method === 'POST' && socialConnect) {
     try { return json(res, 200, { url: social.oauthStartUrl(socialConnect[1], currentUser?.id) }); }
-    catch (error) { return json(res, 400, errorBody(error)); }
+    catch (error) { return json(res, 400, { error: error.message }); }
   }
   const socialDisconnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok)\/disconnect$/);
   if (method === 'POST' && socialDisconnect) {
     try { await social.disconnect(socialDisconnect[1], currentUser); return json(res, 200, { ok: true }); }
-    catch (error) { return json(res, 400, errorBody(error)); }
+    catch (error) { return json(res, 400, { error: error.message }); }
   }
   const socialTest = pathname.match(/^\/api\/social\/(youtube|meta|tiktok)\/test$/);
   if (method === 'POST' && socialTest) {
@@ -912,7 +544,7 @@ async function route(req, res, url) {
       log(`Automatic publishing ${next.enabled ? 'enabled' : 'paused'} for ${['youtube','instagram','facebook','tiktok'].filter(provider => next[provider].enabled).join(', ') || 'no destinations'}.`, 'info', currentUser.id);
       agent.tick().catch(() => {});
       return json(res, 200, { ok: true, settings: publishingSettings(currentUser), social: social.connectionStatus(currentUser) });
-    } catch (error) { return json(res, 400, errorBody(error)); }
+    } catch (error) { return json(res, 400, { error: error.message }); }
   }
 
   if (method === 'POST' && pathname === '/api/source-info') {
@@ -938,7 +570,7 @@ async function route(req, res, url) {
     try {
       const upload = objectStorage.createUpload(currentUser.id, String(body.fileName || ''), String(body.contentType || 'video/mp4'));
       return json(res, 200, { ok: true, ...upload });
-    } catch (error) { return json(res, 400, errorBody(error)); }
+    } catch (error) { return json(res, 400, { error: error.message }); }
   }
 
   if (method === 'POST' && pathname === '/api/videos') {
@@ -952,7 +584,7 @@ async function route(req, res, url) {
           sourceRange: { startSec: Number(body.sourceStartSeconds || 0), endSec: Number(body.sourceEndSeconds) || null },
         });
         return json(res, 201, { ok: true, projectId });
-      } catch (error) { return json(res, 400, errorBody(error)); }
+      } catch (error) { return json(res, 400, { error: error.message }); }
     }
     const urls = String(body.urls || '').split(/[\n,]+/).map(value => value.trim()).filter(Boolean);
     if (!urls.length) return json(res, 400, { error: 'Paste at least one video link.' });
@@ -991,14 +623,14 @@ async function route(req, res, url) {
       return json(res, 201, { ok: true, projectId, fileName: upload.fileName, size: upload.size });
     } catch (error) {
       if (upload?.filePath) removeUploadedFile(upload.filePath);
-      return json(res, error.statusCode || 400, errorBody(error));
+      return json(res, error.statusCode || 400, { error: error.message });
     }
   }
 
   const projectRetry = pathname.match(/^\/api\/projects\/([^/]+)\/retry$/);
   if (method === 'POST' && projectRetry) {
     try { const id = decodeURIComponent(projectRetry[1]); assertCanAccessProject(currentUser, id); return json(res, 200, { ok: true, project: agent.engine.retryProject(id) }); }
-    catch (error) { return json(res, 400, errorBody(error)); }
+    catch (error) { return json(res, 400, { error: error.message }); }
   }
   const projectMore = pathname.match(/^\/api\/projects\/([^/]+)\/more-clips$/);
   if (method === 'POST' && projectMore) {
@@ -1007,72 +639,34 @@ async function route(req, res, url) {
       const id = decodeURIComponent(projectMore[1]); assertCanAccessProject(currentUser, id);
       const job = agent.engine.queueMoreClips(id, Number(body.count || 8));
       return json(res, 202, { ok: true, job });
-    } catch (error) { return json(res, 400, errorBody(error)); }
+    } catch (error) { return json(res, 400, { error: error.message }); }
   }
   const projectMatch = pathname.match(/^\/api\/projects\/([^/]+)$/);
   if (method === 'DELETE' && projectMatch) {
     try { const id = decodeURIComponent(projectMatch[1]); assertCanAccessProject(currentUser, id); agent.engine.deleteProject(id); return json(res, 200, { ok: true }); }
-    catch (error) { return json(res, 400, errorBody(error)); }
+    catch (error) { return json(res, 400, { error: error.message }); }
   }
 
-  if (method === 'GET' && pathname === '/api/templates') return json(res, 200, { templates: templates.listTemplates(currentUser), selectedTemplate: templates.selectedTemplate(currentUser), draft: templates.defaultTemplateDraft(), clipStyleFields: templates.CLIP_STYLE_FIELDS });
-  if (method === 'GET' && pathname === '/api/template-shop') {
-    return json(res, 200, { products: templates.listTemplateShop(currentUser) });
-  }
-  const acquireShopTemplate = pathname.match(/^\/api\/template-shop\/([^/]+)\/acquire$/);
-  if (method === 'POST' && acquireShopTemplate) {
-    try {
-      const result = templates.acquireTemplateShopProduct(currentUser, decodeURIComponent(acquireShopTemplate[1]));
-      log(`Added Template Shop item "${result.product.name}" to the library.`, 'info', currentUser.id);
-      return json(res, 200, { ok: true, ...result, templates: templates.listTemplates(currentUser) });
-    } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
-  }
-  const previewShopTemplate = pathname.match(/^\/api\/template-shop\/([^/]+)\/preview$/);
-  if (method === 'POST' && previewShopTemplate) {
-    const body = await readBody(req);
-    try {
-      const clip = assertCanAccessClip(currentUser, String(body.clipId || ''));
-      return json(res, 200, await templateShopPreviewPayload(currentUser, decodeURIComponent(previewShopTemplate[1]), clip));
-    } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
-  }
-  const customizeShopTemplate = pathname.match(/^\/api\/template-shop\/([^/]+)\/customize$/);
-  if (method === 'POST' && customizeShopTemplate) {
-    const body = await readBody(req);
-    try {
-      const result = templates.customizeTemplateShopProduct(currentUser, decodeURIComponent(customizeShopTemplate[1]), body.name);
-      // A customised copy is never silently made the automation default.
-      log(`Created an editable copy of "${result.product.name}".`, 'info', currentUser.id);
-      return json(res, 201, { ok: true, ...result, selected: false });
-    } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
-  }
-  const checkoutShopTemplate = pathname.match(/^\/api\/template-shop\/([^/]+)\/checkout$/);
-  if (method === 'POST' && checkoutShopTemplate) {
-    try {
-      const session = await billing.createTemplateCheckoutSession(currentUser, decodeURIComponent(checkoutShopTemplate[1]));
-      return json(res, 200, { ok: true, ...session });
-    } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
-  }
+  if (method === 'GET' && pathname === '/api/templates') return json(res, 200, { templates: templates.listTemplates(currentUser), selectedTemplate: templates.selectedTemplate(currentUser), draft: templates.defaultTemplateDraft() });
   if (method === 'POST' && pathname === '/api/templates') {
     const body = await readBody(req);
     try {
       const template = templates.createTemplate(currentUser, body.template || body);
       const selected = body.select !== false;
       if (selected) templates.setSelectedTemplate(currentUser, template.id);
-      const propagation = selected && body.propagate !== false ? queueTemplateForEveryUnpostedClip(template, currentUser, 'creating and selecting it') : { queued: 0, skipped: 0, errors: [] };
+      const propagation = selected ? queueTemplateForEveryUnpostedClip(template, currentUser, 'creating and selecting it') : { queued: 0, skipped: 0, errors: [] };
       log(`Created template "${template.name}". It is ready for automated renders.`, 'info', currentUser.id);
       return json(res, 200, { ok: true, template, propagation });
-    } catch (error) { return json(res, 400, errorBody(error)); }
+    } catch (error) { return json(res, 400, { error: error.message }); }
   }
   const duplicateTemplate = pathname.match(/^\/api\/templates\/([^/]+)\/duplicate$/);
   if (method === 'POST' && duplicateTemplate) {
     const body = await readBody(req);
     try {
       const template = templates.duplicateTemplate(currentUser, decodeURIComponent(duplicateTemplate[1]), body.name);
-      // Duplicating is a library action, not a default-template decision.
-      // Only change automation when the caller explicitly asks for it.
-      if (body.select === true) templates.setSelectedTemplate(currentUser, template.id);
+      templates.setSelectedTemplate(currentUser, template.id);
       return json(res, 200, { ok: true, template });
-    } catch (error) { return json(res, 400, errorBody(error)); }
+    } catch (error) { return json(res, 400, { error: error.message }); }
   }
   const templateMatch = pathname.match(/^\/api\/templates\/([^/]+)$/);
   if (method === 'PUT' && templateMatch) {
@@ -1080,16 +674,16 @@ async function route(req, res, url) {
     try {
       const template = templates.updateTemplate(currentUser, decodeURIComponent(templateMatch[1]), body.template || body);
       const selected = templates.selectedTemplate(currentUser);
-      const propagation = body.propagate !== false && selected?.id === template.id
+      const propagation = selected?.id === template.id
         ? queueTemplateForEveryUnpostedClip(template, currentUser, 'saving the active template')
         : { queued: 0, skipped: 0, errors: [] };
       log(`Saved template "${template.name}" version ${template.version}. New renders use it automatically.`, 'info', currentUser.id);
       return json(res, 200, { ok: true, template, propagation });
-    } catch (error) { return json(res, 400, errorBody(error)); }
+    } catch (error) { return json(res, 400, { error: error.message }); }
   }
   if (method === 'DELETE' && templateMatch) {
     try { templates.deleteTemplate(currentUser, decodeURIComponent(templateMatch[1])); return json(res, 200, { ok: true }); }
-    catch (error) { return json(res, 400, errorBody(error)); }
+    catch (error) { return json(res, 400, { error: error.message }); }
   }
   if (method === 'POST' && pathname === '/api/templates/apply-all') {
     const body = await readBody(req);
@@ -1113,10 +707,10 @@ async function route(req, res, url) {
     const body = await readBody(req);
     try {
       const template = templates.setSelectedTemplate(currentUser, String(body.id || ''));
-      const propagation = body.propagate !== false ? queueTemplateForEveryUnpostedClip(template, currentUser, 'selecting it as the default') : { queued: 0, skipped: 0, errors: [] };
+      const propagation = queueTemplateForEveryUnpostedClip(template, currentUser, 'selecting it as the default');
       log(`Automation template set to "${template.name}". Every new and unposted clip is locked to this saved version.`, 'info', currentUser.id);
       return json(res, 200, { ok: true, template, propagation });
-    } catch (error) { return json(res, 400, errorBody(error)); }
+    } catch (error) { return json(res, 400, { error: error.message }); }
   }
 
   if (method === 'POST' && pathname === '/api/clip-settings') {
@@ -1129,20 +723,14 @@ async function route(req, res, url) {
   }
   if (method === 'POST' && pathname === '/api/automation-settings') {
     const body = await readBody(req);
-    const current = automationSettings(currentUser);
-    const reviewBeforePosting = typeof body.reviewBeforePosting === 'boolean'
-      ? body.reviewBeforePosting
-      : Object.prototype.hasOwnProperty.call(body, 'skipReviewRequired')
-        ? body.skipReviewRequired === false
-        : current.reviewBeforePosting;
     const clean = {
       enabled: Boolean(body.enabled), minimumScore: Math.round(Number(body.minimumScore)), minimumQuality: Math.round(Number(body.minimumQuality)),
-      maxPerProject: Math.round(Number(body.maxPerProject)), reviewBeforePosting, skipReviewRequired: true,
+      maxPerProject: Math.round(Number(body.maxPerProject)), skipReviewRequired: body.skipReviewRequired !== false,
     };
     if (!Number.isFinite(clean.minimumScore) || clean.minimumScore < 1 || clean.minimumScore > 100) return json(res, 400, { error: 'Minimum score must be 1–100.' });
     if (!Number.isFinite(clean.minimumQuality) || clean.minimumQuality < 1 || clean.minimumQuality > 100) return json(res, 400, { error: 'Minimum quality must be 1–100.' });
     if (!Number.isFinite(clean.maxPerProject) || clean.maxPerProject < 1 || clean.maxPerProject > 20) return json(res, 400, { error: 'Automatic clips per source must be 1–20.' });
-    setAutomationSettings(currentUser, clean); log(`Automation ${clean.enabled ? 'enabled' : 'paused'}: score ${clean.minimumScore}+, quality ${clean.minimumQuality}+, up to ${clean.maxPerProject} per source${clean.reviewBeforePosting ? ', human review before posting' : ''}.`, 'info', currentUser.id);
+    setAutomationSettings(currentUser, clean); log(`Automation ${clean.enabled ? 'enabled' : 'paused'}: score ${clean.minimumScore}+, quality ${clean.minimumQuality}+, up to ${clean.maxPerProject} per source.`, 'info', currentUser.id);
     agent.tick().catch(() => {});
     return json(res, 200, { ok: true, settings: automationSettings(currentUser) });
   }
@@ -1151,12 +739,12 @@ async function route(req, res, url) {
   if (method === 'POST' && pathname === '/api/music') {
     const body = await readBody(req, 60 * 1024 * 1024);
     try { const track = await audio.saveNasheed(currentUser, body.name, body.data, body.mimeType); log(`Added "${track.name}". The renderer can rotate it across clips.`, 'info', currentUser.id); return json(res, 200, { ok: true, track }); }
-    catch (error) { return json(res, 400, errorBody(error)); }
+    catch (error) { return json(res, 400, { error: error.message }); }
   }
   if (method === 'POST' && pathname === '/api/music-settings') {
     const body = await readBody(req); const volumePercent = Math.round(Number(body.volumePercent));
     if (!Number.isFinite(volumePercent) || volumePercent < 1 || volumePercent > 50) return json(res, 400, { error: 'Background music volume must be between 1% and 50%.' });
-    setMusicSettings(currentUser, { volumePercent, required: true, shuffle: body.shuffle !== false }); return json(res, 200, { ok: true, settings: musicSettings(currentUser) });
+    setMusicSettings(currentUser, { volumePercent, required: true, shuffle: true }); return json(res, 200, { ok: true, settings: musicSettings(currentUser) });
   }
   const musicAudio = pathname.match(/^\/api\/music\/([^/]+)\/audio$/);
   if (method === 'GET' && musicAudio) {
@@ -1169,7 +757,7 @@ async function route(req, res, url) {
 
   if (pathname === '/api/diagnostics') {
     try { requireOperator(currentUser); }
-    catch (error) { return json(res, error.statusCode || 404, errorBody(error)); }
+    catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
   }
   if (method === 'GET' && pathname === '/api/diagnostics') {
     if (config.processingMode === 'remote') {
@@ -1190,48 +778,27 @@ async function route(req, res, url) {
       for (const id of (Array.isArray(body.ids) ? body.ids : [])) assertCanAccessClip(currentUser, String(id));
       const summary = agent.scheduleSelected(body.ids);
       return json(res, 200, { ok: summary.failed === 0, ...summary });
-    } catch (error) { return json(res, 400, errorBody(error)); }
+    } catch (error) { return json(res, 400, { error: error.message }); }
   }
 
   const sourcePreview = pathname.match(/^\/api\/clips\/([^/]+)\/source-preview$/);
   if (method === 'GET' && sourcePreview) {
-    let clip; try { clip = assertCanAccessClip(currentUser, decodeURIComponent(sourcePreview[1])); } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
-    if (!clip) return json(res, 404, { error: 'Clip not found.' });
-    // Same resolver publicClip() reports from, so `cleanSource: true` and a 404
-    // here can never disagree.
-    const resolved = resolveCleanSource(clip);
-    if (!resolved) return json(res, 404, { error: 'The clean source video is unavailable.' });
-    if (resolved.kind === 'file') return streamFile(req, res, resolved.file, { contentType: 'video/mp4' });
-    // Remote workers keep the clean project source in private object storage.
-    // The persisted sourceUrl is the bucket address, not necessarily a public
-    // URL, so redirecting to it directly makes the editor report a missing file
-    // even though the object exists. Sign a short-lived owner-scoped preview URL
-    // instead. Access to this route has already been checked through the clip.
-    if (resolved.kind === 'object') {
-      try {
-        return temporaryRedirect(res, objectStorage.presign({ method: 'GET', key: resolved.key, expiresSec: 900 }));
-      } catch (error) {
-        return json(res, 503, { error: `The clean source preview could not be prepared: ${error.message}` });
-      }
-    }
-    // Deliberately public/external source URLs created by older imports.
-    return temporaryRedirect(res, resolved.url);
+    let clip; try { clip = assertCanAccessClip(currentUser, decodeURIComponent(sourcePreview[1])); } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+    const project = clip ? state.projects.find(item => item.id === clip.projectId) : null;
+    const sourceFile = clip?.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
+    if (project?.sourceUrl) return temporaryRedirect(res, project.sourceUrl);
+    if (!clip || !sourceFile || !fs.existsSync(sourceFile)) return json(res, 404, { error: 'Original source video is unavailable.' });
+    return streamFile(req, res, sourceFile, { contentType: 'video/mp4' });
   }
 
   const clipVideo = pathname.match(/^\/api\/clips\/([^/]+)\/(video|download|thumb)$/);
   if (method === 'GET' && clipVideo) {
     const id = decodeURIComponent(clipVideo[1]); const kind = clipVideo[2];
-    let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 400, errorBody(error)); }
+    let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
     const remoteUrl = kind === 'thumb' ? clip?.thumbUrl : clip?.clipUrl;
     if (remoteUrl) return temporaryRedirect(res, remoteUrl);
     const file = agent.engine.clipFilePath(id, kind === 'thumb' ? 'thumb' : 'video'); if (!file) return json(res, 404, { error: 'Rendered file not found.' });
     if (kind === 'thumb') return streamFile(req, res, file, { contentType: 'image/jpeg' });
-    // A fast preview render may be streamed for review inside the app, but
-    // never handed over as a file the customer keeps.
-    if (kind === 'download') {
-      try { agent.engine.assertExportQuality(clip); }
-      catch (error) { return json(res, error.statusCode || 409, errorBody(error)); }
-    }
     const filename = `${(clip?.title || 'deenclipped').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 70) || 'deenclipped'}.mp4`;
     return streamFile(req, res, file, kind === 'download' ? { downloadName: filename } : {});
   }
@@ -1239,37 +806,29 @@ async function route(req, res, url) {
   const rerenderClip = pathname.match(/^\/api\/clips\/([^/]+)\/rerender$/);
   if (method === 'POST' && rerenderClip) {
     const body = await readBody(req);
-    try {
-      const id = decodeURIComponent(rerenderClip[1]);
-      assertCanAccessClip(currentUser, id);
-      const options = { asVariant: Boolean(body.asVariant) };
-      // Only forward a framing choice the caller actually made, so a plain
-      // re-render does not silently clear an override set earlier.
-      if (body.framingBias !== undefined) options.framingBias = String(body.framingBias);
-      return json(res, 202, { ok: true, job: agent.engine.queueClipRerender(id, String(body.templateId || ''), options) });
-    }
-    catch (error) { return json(res, 400, errorBody(error)); }
+    try { const id = decodeURIComponent(rerenderClip[1]); assertCanAccessClip(currentUser, id); return json(res, 202, { ok: true, job: agent.engine.queueClipRerender(id, String(body.templateId || ''), { asVariant: Boolean(body.asVariant) }) }); }
+    catch (error) { return json(res, 400, { error: error.message }); }
   }
   const clipPublish = pathname.match(/^\/api\/clips\/([^/]+)\/publish$/);
   if (method === 'POST' && clipPublish) {
     try { const id = decodeURIComponent(clipPublish[1]); assertCanAccessClip(currentUser, id); return json(res, 200, { ok: true, clip: publicClip(await agent.publishNow(id)) }); }
-    catch (error) { return json(res, 400, errorBody(error)); }
+    catch (error) { return json(res, 400, { error: error.message }); }
   }
   const clipRetryPublish = pathname.match(/^\/api\/clips\/([^/]+)\/retry-publish$/);
   if (method === 'POST' && clipRetryPublish) {
     const body = await readBody(req);
     try { const id = decodeURIComponent(clipRetryPublish[1]); assertCanAccessClip(currentUser, id); return json(res, 200, { ok: true, clip: publicClip(agent.retryPublishing(id, String(body.provider || ''))) }); }
-    catch (error) { return json(res, 400, errorBody(error)); }
+    catch (error) { return json(res, 400, { error: error.message }); }
   }
   const clipReady = pathname.match(/^\/api\/clips\/([^/]+)\/ready$/);
   if (method === 'POST' && clipReady) {
     try { const id = decodeURIComponent(clipReady[1]); assertCanAccessClip(currentUser, id); return json(res, 200, { ok: true, clip: publicClip(agent.readyNow(id)) }); }
-    catch (error) { return json(res, 400, errorBody(error)); }
+    catch (error) { return json(res, 400, { error: error.message }); }
   }
   const clipPosted = pathname.match(/^\/api\/clips\/([^/]+)\/posted$/);
   if (method === 'POST' && clipPosted) {
     try { const id = decodeURIComponent(clipPosted[1]); assertCanAccessClip(currentUser, id); return json(res, 200, { ok: true, clip: publicClip(agent.markPosted(id)) }); }
-    catch (error) { return json(res, 400, errorBody(error)); }
+    catch (error) { return json(res, 400, { error: error.message }); }
   }
   // Real speech timing for one clip.
   //
@@ -1283,7 +842,7 @@ async function route(req, res, url) {
   const clipCaptions = pathname.match(/^\/api\/clips\/([^/]+)\/captions$/);
   if (method === 'GET' && clipCaptions) {
     const id = decodeURIComponent(clipCaptions[1]);
-    let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 403, errorBody(error)); }
+    let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 403, { error: error.message }); }
 
     const project = state.projects.find(item => item.id === clip.projectId);
     const clipStart = Number(clip.startSec) || 0;
@@ -1292,9 +851,10 @@ async function route(req, res, url) {
 
     let words = [];
     let exact = false;
-    if ((project?.transcriptFile && fs.existsSync(project.transcriptFile)) || project?.transcriptObjectKey) {
+    if (project?.transcriptFile && fs.existsSync(project.transcriptFile)) {
       try {
-        const segments = await projectTranscriptSegments(project);
+        const parsed = JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8'));
+        const segments = Array.isArray(parsed) ? parsed : (parsed.segments || []);
         words = wordsForClip(segments, clipStart, clipEnd);
         exact = words.length > 0;
       } catch {
@@ -1318,15 +878,16 @@ async function route(req, res, url) {
   const clipResync = pathname.match(/^\/api\/clips\/([^/]+)\/captions\/resync$/);
   if (method === 'POST' && clipResync) {
     const id = decodeURIComponent(clipResync[1]);
-    let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 403, errorBody(error)); }
+    let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 403, { error: error.message }); }
     const project = state.projects.find(item => item.id === clip.projectId);
-    if ((!project?.transcriptFile || !fs.existsSync(project.transcriptFile)) && !project?.transcriptObjectKey) {
+    if (!project?.transcriptFile || !fs.existsSync(project.transcriptFile)) {
       return json(res, 400, { error: 'No transcript is stored for this lecture, so speech timing cannot be recovered.' });
     }
     const clipStart = Number(clip.startSec) || 0;
     const clipEnd = Number(clip.endSec) || (clipStart + (Number(clip.durationMs) || 0) / 1000);
     try {
-      const segments = await projectTranscriptSegments(project);
+      const parsed = JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8'));
+      const segments = Array.isArray(parsed) ? parsed : (parsed.segments || []);
       const words = wordsForClip(segments, clipStart, clipEnd);
       if (!words.length) return json(res, 400, { error: 'No speech was found inside this clip.' });
       return json(res, 200, {
@@ -1345,65 +906,44 @@ async function route(req, res, url) {
   const clipFraming = pathname.match(/^\/api\/clips\/([^/]+)\/framing-preview$/);
   if (method === 'POST' && clipFraming) {
     const id = decodeURIComponent(clipFraming[1]);
-    let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 403, errorBody(error)); }
-    if (!billing.featureAccess(currentUser).advancedFraming) {
-      return json(res, 403, {
-        error: 'AI active-speaker framing is included with Monthly and Yearly Premium.',
-        code: 'premium_feature',
-        feature: 'advancedFraming',
-      });
-    }
+    let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 403, { error: error.message }); }
     const project = state.projects.find(item => item.id === clip.projectId);
-    const body = await readBody(req);
-    const clipStart = Number(clip.startSec) || 0;
-    const clipEnd = Number(clip.endSec) || (clipStart + (Number(clip.durationMs) || 0) / 1000);
-    const duration = Math.max(0, clipEnd - clipStart);
-    if (duration < 0.25 || duration > 180) {
-      return json(res, 400, { error: 'This clip duration cannot be analysed for framing.' });
-    }
-
-    // Give the tracker the real speech spans so it holds position during
-    // silence instead of chasing detector noise when nobody is talking.
-    let speechSpans = [];
-    try {
-      const segments = await projectTranscriptSegments(project);
-      speechSpans = wordsForClip(segments, clipStart, clipEnd).map(w => [w.start, w.end]);
-    } catch { speechSpans = []; }
-
-    const requestPayload = {
-      start: clipStart, duration,
-      width: Number(body.width) || 1080, height: Number(body.height) || 1920,
-      bias: String(body.bias || 'auto'), padding: Number(body.padding ?? 0.18),
-      zoom: Number(body.zoom ?? 1), smoothing: Number(body.smoothing ?? 0.68),
-      sampleHz: Math.max(1, Math.min(5, Number(body.sampleHz) || 3)), speechSpans,
-    };
     const sourceFile = clip?.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
-
-    // Production clips live in object storage and are rendered by the
-    // third-party worker. Analyse them there instead of incorrectly claiming
-    // the source has disappeared just because Render has no local copy.
-    if ((!sourceFile || !fs.existsSync(sourceFile)) && project?.sourceObjectKey && workerClient.configured()) {
-      try {
-        const result = await workerClient.analyseFraming({ ...requestPayload, sourceKey: project.sourceObjectKey });
-        return json(res, 200, { plan: result.plan || result });
-      } catch (error) {
-        return json(res, 200, { plan: { available: false, reason: `Speaker analysis is temporarily unavailable: ${error.message}` } });
-      }
-    }
     if (!sourceFile || !fs.existsSync(sourceFile)) {
       return json(res, 200, { plan: { available: false, reason: 'The original video is no longer stored, so framing cannot be analysed.' } });
     }
 
+    const body = await readBody(req);
+    const clipStart = Number(clip.startSec) || 0;
+    const clipEnd = Number(clip.endSec) || (clipStart + (Number(clip.durationMs) || 0) / 1000);
+    const duration = Math.max(0, clipEnd - clipStart);
+
+    // Give the tracker the real speech spans so it holds position during
+    // silence instead of chasing detector noise when nobody is talking.
+    let speechSpans = [];
+    if (project.transcriptFile && fs.existsSync(project.transcriptFile)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8'));
+        const segments = Array.isArray(parsed) ? parsed : (parsed.segments || []);
+        speechSpans = wordsForClip(segments, clipStart, clipEnd).map(w => [w.start, w.end]);
+      } catch { speechSpans = []; }
+    }
+
     const requestFile = path.join(config.dataDir, `framing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`);
     fs.writeFileSync(requestFile, JSON.stringify({
-      ...requestPayload, source: sourceFile, ffprobe: config.ffprobePath || 'ffprobe',
+      source: sourceFile, ffprobe: config.ffprobePath || 'ffprobe',
+      start: clipStart, duration,
+      width: Number(body.width) || 1080, height: Number(body.height) || 1920,
+      bias: String(body.bias || 'auto'), padding: Number(body.padding ?? 0.18),
+      zoom: Number(body.zoom ?? 1), smoothing: Number(body.smoothing ?? 0.82),
+      speechSpans,
     }));
 
     try {
       const plan = await new Promise((resolve) => {
         const child = spawn(config.pythonBin, [config.workerScript, '--framing', requestFile], { stdio: ['ignore', 'pipe', 'pipe'] });
         let out = '', err = '';
-        const timer = setTimeout(() => { child.kill('SIGKILL'); resolve({ available: false, reason: 'Framing analysis took too long and was stopped.' }); }, 180000);
+        const timer = setTimeout(() => { child.kill('SIGKILL'); resolve({ available: false, reason: 'Framing analysis took too long and was stopped.' }); }, 120000);
         child.stdout.on('data', d => { out += d; });
         child.stderr.on('data', d => { err += d; });
         child.on('error', e => { clearTimeout(timer); resolve({ available: false, reason: `The analyser could not start: ${e.message}` }); });
@@ -1427,23 +967,17 @@ async function route(req, res, url) {
       agent.updateClip(id, body); let clip;
       if (body.status === 'approved') clip = agent.approveClip(id); else if (body.status === 'waiting') clip = agent.pullBack(id); else clip = state.clips.find(item => item.id === id);
       return json(res, 200, { ok: true, clip: publicClip(clip) });
-    } catch (error) { return json(res, 400, errorBody(error)); }
+    } catch (error) { return json(res, 400, { error: error.message }); }
   }
   if (clipMatch && method === 'DELETE') {
     try { const id = decodeURIComponent(clipMatch[1]); assertCanAccessClip(currentUser, id); agent.deleteClip(id); return json(res, 200, { ok: true }); }
-    catch (error) { return json(res, 400, errorBody(error)); }
+    catch (error) { return json(res, 400, { error: error.message }); }
   }
   return json(res, 404, { error: 'Not found.' });
 }
 
 export const server = http.createServer((req, res) => {
-  applySecurityHeaders(res);
   let url; try { url = new URL(req.url, `http://${req.headers.host || 'localhost'}`); } catch { return json(res, 400, { error: 'Bad request.' }); }
-  if (unsafeCrossSiteRequest(req, url)) return json(res, 403, { error: 'Cross-site request blocked.' });
-  if (req.method === 'POST' && ['/auth/email', '/auth/password'].includes(url.pathname) && authRateLimited(req)) {
-    res.setHeader('Retry-After', '900');
-    return json(res, 429, { error: 'Too many sign-in attempts. Try again in 15 minutes.' });
-  }
-  route(req, res, url).catch(error => { console.error(error); if (!res.headersSent) json(res, 500, errorBody(error)); });
+  route(req, res, url).catch(error => { console.error(error); if (!res.headersSent) json(res, 500, { error: error.message || 'Unexpected server error.' }); });
 });
 server.listen(config.port, () => { console.log(`DeenClipped self-hosted engine listening on http://localhost:${config.port}`); agent.start(); });
