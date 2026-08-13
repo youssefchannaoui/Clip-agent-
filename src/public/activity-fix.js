@@ -1611,6 +1611,59 @@ function homeExperienceStrip(exp,d){
   const steps=[['Import',projects.length>0],['Review',clips.length>0],['Style',Boolean(d.selectedTemplate)],['Publish',false]];
   return `<section class="dc-v6-trial-path"><div><small>Your free path</small><strong>See the product before you subscribe.</strong><p>Downloads include the DeenClipped watermark; social posting unlocks on Premium.</p></div><div class="dc-v6-trial-steps">${steps.map(([label,done],index)=>`<span class="${done?'done':index===3?'locked':''}"><i>${done?ICON.check:index===3?ICON.brand:index+1}</i><b>${esc(label)}</b><em>${index===3?'Premium':done?'Complete':'Next'}</em></span>`).join('')}</div><button class="dc-btn secondary" data-dc-nav="subscription">Compare Premium</button></section>`;
 }
+// The hero headline is three deliberate lines with only the last two words in
+// gold. Built here rather than by string-replacing a sentence, because that
+// approach silently produced a plain headline the moment the copy changed —
+// the replace target stopped matching and nothing said so.
+function v7Headline(){
+  return `One talk.<br>Your next month of<br><em>content.</em>`;
+}
+
+// Scheduled next. Reads the same publishingClipGroups() the Publishing screen
+// uses, so the two can never disagree about what is queued.
+function v7Scheduled(d){
+  const scheduled=publishingClipGroups(d).scheduled.slice(0,3);
+  const rows=scheduled.map(clip=>{
+    const target=(clip.targets||[]).find(t=>t.enabled)||(clip.targets||[])[0];
+    const provider=target?.provider||'youtube';
+    const when=Number(clip.scheduledAt)?formatLocal(clip.scheduledAt):'Awaiting a slot';
+    const image=clip.thumbUrl?authedUrl(clip.thumbUrl):'/marketing-assets/reel-dua.webp';
+    return `<li><img src="${esc(image)}" alt="" loading="lazy"><span class="dc-v7-sched-mark ${esc(provider)}">${socialSvg(provider)}</span><div><strong>${esc(shortText(clip.title||'Clip',44))}</strong><small>${esc(when)}</small></div><i class="dc-v7-chip">Scheduled</i></li>`;
+  }).join('');
+  const body=rows||`<li class="dc-v7-empty">Nothing scheduled yet. Approve a clip and pick a time.</li>`;
+  return `<section class="dc-v7-side-card"><header><h2>Scheduled next</h2><button type="button" class="dc-v7-side-link" data-dc-nav="schedule">View calendar ${ICON.clock}</button></header><ul class="dc-v7-sched">${body}</ul>${scheduled.length?`<button type="button" class="dc-v7-side-more" data-dc-nav="schedule">View all scheduled ${ICON.chevron}</button>`:''}</section>`;
+}
+
+// Recent activity. recentActivity() already assembles and sorts this from
+// projects and clips; this only presents it.
+function v7Activity(d){
+  const items=recentActivity(d,5);
+  const rows=items.map(item=>`<li class="tone-${esc(item.tone)}"><span class="dc-v7-act-mark">${item.tone==='bad'?ICON.warning:item.tone==='live'?ICON.clock:ICON.check}</span><div><strong>${esc(item.text)}</strong></div><small>${esc(formatRelative(item.at))}</small></li>`).join('');
+  const body=rows||`<li class="dc-v7-empty">Activity from your imports and posts will show up here.</li>`;
+  return `<section class="dc-v7-side-card"><header><h2>Recent activity</h2><button type="button" class="dc-v7-side-link" data-dc-nav="insights">View all activity ${ICON.review}</button></header><ul class="dc-v7-activity">${body}</ul></section>`;
+}
+
+// Your uploads. Sources the customer has brought in, newest first — the thing
+// the old home had no answer for beyond "Up next".
+function v7Uploads(d){
+  const projects=[...(d.projects||[])].sort((a,b)=>Number(b.submittedAt||b.updatedAt||0)-Number(a.submittedAt||a.updatedAt||0)).slice(0,5);
+  const rows=projects.map(p=>{
+    const clip=(d.clips||[]).find(c=>c.projectId===p.id&&c.thumbUrl);
+    const image=clip?.thumbUrl?authedUrl(clip.thumbUrl):'/marketing-assets/reel-dua.webp';
+    const kind=/podcast|\.mp3|audio/i.test(`${p.url||''} ${p.title||''}`)?'MP3':'MP4';
+    const seconds=Number(p.durationSec||0);
+    const duration=seconds>0?`${Math.floor(seconds/60)}:${String(Math.round(seconds%60)).padStart(2,'0')}`:'—';
+    const added=Number(p.submittedAt||p.updatedAt)?formatLocal(p.submittedAt||p.updatedAt):'—';
+    const percent=Math.round(Number(p.progress||0));
+    const status=p.status==='done'?`<i class="dc-v7-status good">${ICON.check} Ready</i>`
+      :p.status==='failed'||p.error?`<i class="dc-v7-status bad">${ICON.warning} Failed</i>`
+      :`<i class="dc-v7-status live">Processing ${percent}%</i>`;
+    return `<tr data-project-open="${esc(p.id)}"><td class="dc-v7-up-name"><img src="${esc(image)}" alt="" loading="lazy"><span>${esc(shortText(projectDisplayTitle(p),46))}</span></td><td>${kind}</td><td>${esc(duration)}</td><td>${esc(added)}</td><td>${status}</td></tr>`;
+  }).join('');
+  const body=rows||`<tr><td colspan="5" class="dc-v7-empty">Nothing imported yet. Paste a link above to get started.</td></tr>`;
+  return `<section class="dc-v7-uploads"><header><h2>Your uploads</h2><button type="button" class="dc-btn secondary" id="dcUploadsPick">${ICON.publish} Upload</button></header><table class="dc-v7-uploads-table"><thead><tr><th>Name</th><th>Type</th><th>Duration</th><th>Date added</th><th>Status</th></tr></thead><tbody>${body}</tbody></table><button type="button" class="dc-v7-side-more" data-dc-nav="projects">View all uploads ${ICON.chevron}</button></section>`;
+}
+
 function renderHome(){
   const panel = $('#view-home'), d = data(); if (!panel || !d) return;
   document.body.classList.remove('dc-project-open');
@@ -1623,50 +1676,54 @@ function renderHome(){
   const next = nextScheduledClip(clips);
   const exp=clientExperience(),experience=homeExperienceContent(exp,waiting),createLocked=!exp.canGenerate;
   const heroHeadline=exp.premium||exp.id==='owner'?'Turn one talk into your next week of content.':experience.headline;
-  const heroCopy=exp.premium||exp.id==='owner'?'AI finds the best moments, so you can focus on what matters.':experience.copy;
+  const heroCopy=exp.premium||exp.id==='owner'?'DeenClipped finds the strongest moments, builds clean vertical clips and prepares them for every channel — while you stay in control of what gets published.':experience.copy;
   const selectedId=d.selectedTemplate?.id||d.templates?.[0]?.id||'';
   panel.innerHTML = `<div class="dc-v7-home" data-account-mode="${esc(exp.id)}">
     <section class="dc-v7-home-hero" data-tour="home-hero">
       <div class="dc-v7-home-copy">
-        <div class="dc-v7-kicker">${ICON.quality}<span>${esc(exp.premium||exp.id==='owner'?'Premium creator studio':experience.eyebrow)}</span></div>
-        <h1>${esc(heroHeadline).replace('your next week of content.','your next <em>week of content.</em>').replace(/\n/g,'<br>')}</h1>
+        <div class="dc-v7-kicker">${ICON.sparkles||ICON.quality}<span>${esc(exp.premium||exp.id==='owner'?'AI clip studio':experience.eyebrow)}</span></div>
+        <h1>${exp.premium||exp.id==='owner'?v7Headline():esc(heroHeadline).replace(/\n/g,'<br>')}</h1>
         <p>${esc(heroCopy)}</p>
         <div class="dc-v7-home-actions"><button class="dc-btn" id="dcHeroCreate">＋ &nbsp;${esc(experience.primary)}</button><button class="dc-btn secondary" ${waiting?'data-dc-nav="review"':billingInfo().features?.aiDirector?'data-dc-nav="lab"':exp.premium?'data-dc-nav="templates"':'data-dc-nav="subscription"'}>${ICON.review}<span>${waiting?`Review ${waiting} ready`:esc(experience.secondary)}</span></button></div>
         <div class="dc-v7-home-stats" aria-label="Workspace summary">${v5InlineStat(projects.length,'Sources')}${v5InlineStat(clips.length,'Clips')}${v5InlineStat(waiting,'To review')}${v5InlineStat(posted,'Published')}</div>
       </div>
       <div class="dc-v7-home-stage" aria-label="Preview of vertical clips"><i class="dc-v7-stage-orbit"></i>${v5HeroCards(clips)}</div>
     </section>
-    <section class="dc-v7-workflow-strip">
-      <h2>Continue your workflow</h2>
-      <div class="dc-v7-workflow-steps">
-        <button class="is-active" id="dcWorkflowImport"><b>1</b><span><strong>Import</strong><small>Add your source</small></span></button>
-        <i></i><button data-dc-nav="review"><b>2</b><span><strong>Review</strong><small>AI finds the best clips</small></span></button>
-        <i></i><button data-dc-nav="projects"><b>3</b><span><strong>Edit</strong><small>Refine and perfect</small></span></button>
-        <i></i><button data-dc-nav="schedule"><b>4</b><span><strong>Publish</strong><small>Share everywhere</small></span></button>
-      </div>
-    </section>
-    <div class="dc-v7-home-main"><span class="dc-v7-home-main-contract">dc-v7-create · dc-v7-up-next</span>
+    <div class="dc-v7-home-main"><span class="dc-v7-home-main-contract">dc-v7-create · dc-v7-side</span>
+      <div class="dc-v7-home-left">
       <section class="dc-v7-create ${createLocked?'is-locked':''}" data-tour="create-form">
-        <header><h2>Create clips</h2><p>Import a talk or podcast to get started.</p></header>
+        <header><h2>Create clips</h2><p>Paste a supported video link or upload your original file.</p></header>
         ${createLocked?`<div class="dc-v7-create-lock"><span>${ICON.brand}</span><p><strong>${esc(exp.label)}</strong> ${esc(exp.detail)}.</p><button class="dc-btn" data-dc-nav="subscription">${exp.id==='premium_empty'?'Add tokens':'Unlock studio'}</button></div>`:''}
-        <div class="dc-v7-url-row">${ICON.link}<input id="dcCreateUrl" placeholder="Paste YouTube, Vimeo or podcast URL" ${createLocked?'disabled':''}><button class="dc-btn" id="dcGenerate" data-tour="generate-button" ${createLocked?'disabled':''}>Import</button></div>
-        <div class="dc-v7-create-options">
-          <label><span>Template</span><select id="dcCreateTemplate" data-tour="template-picker"><option value="${esc(selectedId)}" selected>Auto select</option>${(d.templates||[]).filter(t=>t.id!==selectedId).map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>
-          <label><span>Clips</span><select id="dcCreateCount" aria-label="Number of clips"><option>4</option><option>8</option><option selected>10</option><option>12</option><option>16</option></select></label>
-          <label><span>Length</span><select id="dcCreateDuration" aria-label="Clip duration"><option value="30,60" selected>Auto</option><option value="15,45">15–45 sec</option><option value="45,90">45–90 sec</option></select></label>
-          <button class="dc-btn secondary" id="dcPickVideo" type="button" ${createLocked?'disabled':''}>${ICON.publish} Upload file</button>
+        <div class="dc-v7-create-grid">
+          <div class="dc-v7-create-inputs">
+            <div class="dc-v7-url-row"><span class="dc-v7-url-mark youtube">${socialSvg('youtube')}</span><input id="dcCreateUrl" placeholder="Paste a YouTube or video URL" ${createLocked?'disabled':''}></div>
+            <div class="dc-v7-create-options">
+              <label><span>Template</span><select id="dcCreateTemplate" data-tour="template-picker"><option value="${esc(selectedId)}" selected>${esc(selectedTemplate)}</option>${(d.templates||[]).filter(t=>t.id!==selectedId).map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></label>
+              <label><span>Clip length</span><select id="dcCreateDuration" aria-label="Clip duration"><option value="30,60" selected>30–60 sec</option><option value="15,45">15–45 sec</option><option value="45,90">45–90 sec</option></select></label>
+              <label><span>Output</span><select id="dcCreateRatio" aria-label="Output aspect ratio"><option value="9:16" selected>9:16 Vertical</option><option value="1:1">1:1 Square</option><option value="16:9">16:9 Landscape</option></select></label>
+            </div>
+          </div>
+          <div class="dc-v7-create-actions">
+            <button class="dc-btn" id="dcGenerate" data-tour="generate-button" ${createLocked?'disabled':''}>Generate clips ${ICON.sparkles||''}</button>
+            <button class="dc-btn secondary" id="dcPickVideo" type="button" ${createLocked?'disabled':''}>${ICON.publish} Upload original</button>
+          </div>
         </div>
+        <input id="dcCreateCount" type="hidden" value="10">
         <small class="dc-v7-supports">Supports: YouTube, Vimeo, MP4, MP3, WAV and more ${ICON.info||''}</small>
         <input id="dcVideoUpload" type="file" accept="video/mp4,video/quicktime,video/x-m4v,video/webm,video/x-matroska" hidden>
       </section>
-      ${v5UpNext(d,jobs,next,waiting,selectedTemplate)}
+        ${v7Uploads(d)}
+      </div>
+      <aside class="dc-v7-home-side">${v7Scheduled(d)}${v7Activity(d)}</aside>
     </div>
   </div>`;
   $('#dcGenerate').onclick=createLocked?()=>go('subscription'):generateProject;
   $('#dcPickVideo').onclick=createLocked?()=>go('subscription'):()=>$('#dcVideoUpload').click();
   $('#dcVideoUpload').onchange=()=>prepareVideoUpload($('#dcVideoUpload').files?.[0]);
   $('#dcHeroCreate').onclick=()=>{if(createLocked){go('subscription');return}$('#dcCreateUrl').focus()};
-  $('#dcWorkflowImport')?.addEventListener('click',()=>$('#dcCreateUrl')?.focus());
+  // Both upload entry points open the same picker; the uploads table's button
+  // is the one people reach for once they already have sources.
+  $('#dcUploadsPick')?.addEventListener('click',()=>{if(createLocked){go('subscription');return}$('#dcVideoUpload').click()});
   lastDataSignature=structuralDataSignature(d);
   requestAnimationFrame(()=>animatePanel(panel));
 }

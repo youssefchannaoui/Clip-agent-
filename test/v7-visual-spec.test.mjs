@@ -63,39 +63,67 @@ test('the shared V7 shell matches the approved desktop frame and navigation hier
     'top-bar controls must keep the mockup order: search, plan, health, tokens, account, New');
 });
 
-test('Home matches the approved hero, four-step workflow and two-card creation area', () => {
+test('Home matches the approved hero, creation area and right-hand rail', () => {
+  // Updated 12 Aug to the reference the customer approved. The previous
+  // version pinned the earlier V7 screen: a "Continue your workflow" strip and
+  // a two-card row of Create clips / Up next. Both were deliberately replaced
+  //
+  //   the workflow strip      four buttons that only navigated to screens
+  //                           already one click away in the rail
+  //   Up next                 became "Scheduled next", showing the real queue
+  //                           rather than a single next clip
+  //   the two-card row        Create clips now takes the wide column with
+  //                           uploads beneath it, and scheduling plus activity
+  //                           moved to a narrower rail
+  //
+  // Kept from the old assertions: the hero summary counts and the requirement
+  // that hero cards use real clip scores and durations.
   const profile = functionBody(ui, 'homeExperienceContent');
   const home = functionBody(ui, 'renderHome');
   const cards = functionBody(ui, 'v5HeroCards');
-  const upNext = functionBody(ui, 'v5UpNext');
-  const source = `${profile}\n${home}\n${cards}\n${upNext}`;
+  const scheduled = functionBody(ui, 'v7Scheduled');
+  const activity = functionBody(ui, 'v7Activity');
+  const uploads = functionBody(ui, 'v7Uploads');
+  const source = `${profile}\n${home}\n${cards}\n${scheduled}`;
 
-  assertText(profile, [
-    'Premium creator studio',
-    'Turn one talk into your next week of content.',
-    'AI finds the best moments, so you can focus on what matters.',
-    'Create new clips',
-  ], 'the Premium Home hero');
+  const headline = functionBody(ui, 'v7Headline');
+  assertText(headline, ['One talk.', 'Your next month of', 'content.'], 'the approved three-line hero headline');
+  assert.match(headline, /<em>content\.<\/em>/,
+    'only the closing words are emphasised, so the gold lands on "content."');
+  assert.match(home, /v7Headline\(\)/, 'the hero must use the built headline, not a string replace');
   assert.match(profile, /Review\s+\$\{?waiting|`Review \$\{waiting\} ready`/,
     'the secondary hero action must show the real number of clips ready for review');
   assertText(home, ['Sources', 'Clips', 'To review', 'Published'], 'the hero workspace summary');
-  assertClass(home, 'dc-v7-workflow-strip', 'Home');
-  assertInOrder(home, ['Continue your workflow', 'Import', 'Review', 'Edit', 'Publish'],
-    'the Home workflow strip');
+
+  // The strip and the old card are gone, not merely hidden.
+  assert.doesNotMatch(home, /dc-v7-workflow-strip/, 'the workflow strip was removed');
+  assert.doesNotMatch(home, /Continue your workflow/);
+  assert.doesNotMatch(home, /v5UpNext\(/, 'Up next was replaced by Scheduled next');
+
   assertClass(home, 'dc-v7-home-main', 'Home');
-  assert.match(home, /dc-v7-home-main[\s\S]*dc-v7-create[\s\S]*dc-v7-up-next/,
-    'Create clips and Up next must be siblings in the approved lower two-column frame');
-  assertText(home, ['Create clips', 'Import a talk or podcast to get started.', 'Template', 'Auto select',
-    'Clips', '10', 'Length', 'Auto', 'Upload file'], 'the approved Create clips card');
-  assertText(upNext, ['Up next', 'Open review'], 'the approved Up next card');
+  assert.match(home, /dc-v7-home-left[\s\S]*dc-v7-create[\s\S]*v7Uploads\([\s\S]*dc-v7-home-side/,
+    'Create clips and uploads take the wide column; the rail follows it');
+  assertText(home, ['Create clips', 'Paste a supported video link or upload your original file.',
+    'Template', 'Clip length', 'Output', '9:16 Vertical', 'Generate clips', 'Upload original'],
+    'the approved Create clips card');
+  assertText(scheduled, ['Scheduled next', 'View calendar'], 'the Scheduled next rail card');
+  assertText(activity, ['Recent activity', 'View all activity'], 'the Recent activity rail card');
+  assertText(uploads, ['Your uploads', 'Name', 'Type', 'Duration', 'Date added', 'Status'],
+    'the uploads table');
+
+  // The rail must read live data, or it is decoration.
+  assert.match(scheduled, /publishingClipGroups\(/, 'Scheduled next must use the real publishing queue');
+  assert.match(activity, /recentActivity\(/, 'Recent activity must use the real activity feed');
 
   assert.match(cards, /clips[\s\S]*(?:score|scoreBreakdown)/,
     'floating hero cards must use real clip scores');
   assert.match(cards, /(?:durationMs|formatDuration|formatClock)/,
     'floating hero cards must show each real clip duration');
   assert.match(cards, /thumbUrl/, 'floating hero cards must use real thumbnails when available');
-  assert.match(upNext, /(?:thumbUrl|title|waiting|jobs)/,
-    'Up next must be derived from real workspace state');
+  // Was `upNext`; the card it referred to is now Scheduled next. The intent is
+  // unchanged — the rail must be derived from real workspace state, not props.
+  assert.match(scheduled, /(?:thumbUrl|scheduledAt|targets)/,
+    'Scheduled next must be derived from real workspace state');
 });
 
 test('Projects matches the approved two-column visual library with workflow and tip rail', () => {
