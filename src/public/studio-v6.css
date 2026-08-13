@@ -729,140 +729,262 @@ body.dc-app .dc-export-foot {
   border-top: 1px solid var(--v6-line, rgba(255,255,255,.08));
 }
 
-/* ------------------------------------------------------------------ *
- * Home: two columns — work on the left, what's coming up on the right
+/* ==================================================================== *
+ * Home — sized to the approved 1536x1024 reference
  *
- * The previous layout put "Create clips" and "Up next" side by side at
- * 1.04fr/.96fr, which made the primary action share equal billing with a
- * status card. Creating is the main job on this screen, so it takes the wide
- * column, with uploads beneath it; scheduling and activity are reference
- * material and sit in a narrower rail.
- * ------------------------------------------------------------------ */
+ * The structural problem this fixes: nothing set a maximum content width, so
+ * on a 2880px monitor every column simply doubled. A dashboard is not a
+ * marketing page — past a point, extra viewport should become margin, not
+ * bigger cards. So one clamp governs the whole page and the columns inside it
+ * are fixed or fractional against that, never against the viewport.
+ *
+ * Sizes below come from the reference, not from taste.
+ * ==================================================================== */
+body.dc-app .dc-v7-home {
+  width: min(calc(100vw - 270px), 1320px);
+  margin-inline: auto;
+  display: grid;
+  gap: 20px;
+}
+
+/* --- Hero: full width, above the two-column area ------------------- */
+body.dc-app .dc-v7-home-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 41fr) minmax(0, 59fr);
+  gap: 24px;
+  align-items: center;
+  min-height: 455px;
+}
+body.dc-app .dc-v7-home-copy { min-width: 0; }
+body.dc-app .dc-v7-home-hero h1 {
+  margin: 10px 0 14px;
+  font-size: 54px;
+  line-height: 1.03;
+  letter-spacing: -.03em;
+}
+body.dc-app .dc-v7-home-hero h1 em { font-style: normal; color: var(--v6-gold, #e0ba75); }
+body.dc-app .dc-v7-home-hero > .dc-v7-home-copy > p {
+  max-width: 470px;
+  margin: 0 0 22px;
+  font-size: 15.5px;
+  line-height: 1.55;
+  color: var(--dc-muted);
+}
+body.dc-app .dc-v7-home-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+body.dc-app .dc-v7-home-actions .dc-btn {
+  min-width: 168px; min-height: 50px;
+  justify-content: center; border-radius: 12px; font-size: 13px;
+}
+
+/* Stats: a contained strip beside the hero copy, not a full-width band. */
+body.dc-app .dc-v7-home-stats {
+  max-width: 540px;
+  min-height: 74px;
+  margin-top: 22px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: center;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 16px;
+  background: rgba(255,255,255,.018);
+}
+
+/* Connected channels. Placed here rather than the top bar or a card of its
+   own — see v7ReadyFor(). */
+body.dc-app .dc-v7-ready { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+body.dc-app .dc-v7-ready > span { font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--dc-subtle); }
+body.dc-app .dc-v7-ready-marks { display: flex; gap: 9px; }
+body.dc-app .dc-v7-ready-mark {
+  position: relative;
+  width: 38px; height: 38px;
+  display: grid; place-items: center;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 11px;
+  background: rgba(255,255,255,.03);
+}
+body.dc-app .dc-v7-ready-mark svg { width: 17px; height: 17px; }
+body.dc-app .dc-v7-ready-mark.youtube { color: #ff456b; }
+body.dc-app .dc-v7-ready-mark.tiktok { color: #4ff5ef; }
+body.dc-app .dc-v7-ready-mark.instagram { color: #ff91c4; }
+body.dc-app .dc-v7-ready-mark.facebook { color: #8bbcff; }
+/* The dot is the entire signal: this channel will actually receive a post. */
+body.dc-app .dc-v7-ready-mark i {
+  position: absolute; top: -3px; right: -3px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #4ade80; box-shadow: 0 0 0 2px #0b0b0d, 0 0 8px rgba(74,222,128,.55);
+}
+body.dc-app .dc-v7-ready-mark:not(.is-live) { opacity: .5; }
+body.dc-app .dc-v7-ready-mark:hover { border-color: rgba(255,255,255,.2); opacity: 1; }
+
+/* --- Hero stage: overlapping cards, centre dominant ---------------- */
+body.dc-app .dc-v7-home-stage {
+  position: relative;
+  min-height: 420px;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+}
+/* Bounded glow. Left unbounded it washed the whole page. */
+body.dc-app .dc-v7-stage-orbit {
+  position: absolute;
+  width: min(700px, 100%); height: 460px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 38% 45%, rgba(224,186,117,.16), transparent 58%),
+    radial-gradient(circle at 78% 60%, rgba(96,142,220,.11), transparent 62%);
+  filter: blur(2px);
+  pointer-events: none;
+}
+
+/* --- Lower dashboard: main column + narrow rail -------------------- */
 body.dc-app .dc-v7-home-main {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1.62fr) minmax(300px, .78fr);
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) 310px;
+  gap: 20px;
   align-items: start;
 }
 body.dc-app .dc-v7-home-left { display: grid; gap: 18px; min-width: 0; }
 body.dc-app .dc-v7-home-side { display: grid; gap: 18px; min-width: 0; align-content: start; }
 
-/* Create clips: inputs take the room, actions stack at the right so the gold
-   Generate button is always the widest thing the eye lands on. */
-body.dc-app .dc-v7-create-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(178px, auto);
-  gap: 14px;
-  align-items: start;
+/* --- Create clips -------------------------------------------------- */
+body.dc-app .dc-v7-create { padding: 22px !important; border-radius: 18px !important; }
+body.dc-app .dc-v7-create > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+body.dc-app .dc-v7-create-note {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--dc-muted); font-size: 10px; white-space: nowrap;
 }
-body.dc-app .dc-v7-create-inputs { display: grid; gap: 10px; min-width: 0; }
-body.dc-app .dc-v7-create-actions { display: grid; gap: 9px; align-content: start; }
-body.dc-app .dc-v7-create-actions .dc-btn { width: 100%; justify-content: center; }
+body.dc-app .dc-v7-create-note svg { width: 13px; height: 13px; }
+@media (max-width: 1099px) { body.dc-app .dc-v7-create-note { display: none; } }
+body.dc-app .dc-v7-create-grid { display: grid; gap: 14px; }
+body.dc-app .dc-v7-create-inputs { display: grid; gap: 12px; min-width: 0; }
+/* The URL row dominates, with the primary action beside it rather than below. */
 body.dc-app .dc-v7-url-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: 52px minmax(0, 1fr) minmax(172px, auto);
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 body.dc-app .dc-v7-url-mark {
-  width: 38px; height: 38px;
+  width: 52px; height: 52px;
   display: grid; place-items: center;
-  border-radius: 10px;
+  border-radius: 12px;
   background: rgba(255,0,51,.14);
   color: #ff456b;
 }
-body.dc-app .dc-v7-url-mark svg { width: 19px; height: 19px; }
-body.dc-app .dc-v7-create-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
-body.dc-app .dc-v7-create-options label { display: grid; gap: 4px; min-width: 0; }
-body.dc-app .dc-v7-create-options label > span { font-size: 9px; color: var(--dc-muted); }
-
-/* Side cards: Scheduled next, Recent activity */
-body.dc-app .dc-v7-side-card {
-  padding: 16px;
-  border: 1px solid var(--v7-spec-line, rgba(255,255,255,.08));
-  border-radius: 14px;
-  background: linear-gradient(145deg, #14161a, #0e1014);
-}
-body.dc-app .dc-v7-side-card header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
-body.dc-app .dc-v7-side-card header h2 { margin: 0; font-size: 15px; }
-body.dc-app .dc-v7-side-link,
-body.dc-app .dc-v7-side-more {
-  display: inline-flex; align-items: center; gap: 5px;
-  color: var(--dc-muted); font-size: 10px; background: none; border: 0;
-}
-body.dc-app .dc-v7-side-link svg, body.dc-app .dc-v7-side-more svg { width: 12px; height: 12px; }
-body.dc-app .dc-v7-side-link:hover, body.dc-app .dc-v7-side-more:hover { color: var(--dc-text); }
-body.dc-app .dc-v7-side-more { width: 100%; justify-content: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.06); }
-
-body.dc-app .dc-v7-sched, body.dc-app .dc-v7-activity { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
-body.dc-app .dc-v7-sched li {
-  position: relative;
+body.dc-app .dc-v7-url-mark svg { width: 22px; height: 22px; }
+body.dc-app .dc-v7-url-row input { height: 52px; border-radius: 12px; }
+body.dc-app .dc-v7-url-row .dc-btn { min-height: 52px; border-radius: 12px; justify-content: center; }
+body.dc-app .dc-v7-create-options {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
-  align-items: center; gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(172px, auto);
+  gap: 12px;
+  align-items: end;
 }
-body.dc-app .dc-v7-sched li img { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: #000; }
-/* The platform mark overlaps the thumbnail corner, so the row reads as
-   "this clip, going to this channel" rather than two separate facts. */
-body.dc-app .dc-v7-sched-mark {
-  position: absolute; left: 30px; top: 50%; transform: translateY(-2px);
-  width: 20px; height: 20px; display: grid; place-items: center;
-  border-radius: 6px; background: #101216; box-shadow: 0 0 0 2px #0e1014;
-}
-body.dc-app .dc-v7-sched-mark svg { width: 12px; height: 12px; }
-body.dc-app .dc-v7-sched li strong { display: block; font-size: 11px; line-height: 1.35; }
-body.dc-app .dc-v7-sched li small { display: block; margin-top: 3px; font-size: 9px; color: var(--dc-muted); }
-body.dc-app .dc-v7-chip {
-  padding: 3px 8px; border-radius: 999px; font-style: normal; font-size: 8.5px;
-  background: rgba(88,214,141,.12); color: #86e0ab; white-space: nowrap;
-}
+body.dc-app .dc-v7-create-options label { display: grid; gap: 5px; min-width: 0; }
+body.dc-app .dc-v7-create-options label > span { font-size: 9.5px; color: var(--dc-muted); }
+body.dc-app .dc-v7-create-options select { height: 52px; border-radius: 12px; }
+body.dc-app .dc-v7-create-options .dc-btn { min-height: 52px; border-radius: 12px; justify-content: center; }
 
-body.dc-app .dc-v7-activity li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center; gap: 9px; }
-body.dc-app .dc-v7-act-mark { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 8px; background: rgba(255,255,255,.05); color: var(--dc-muted); }
-body.dc-app .dc-v7-act-mark svg { width: 13px; height: 13px; }
-body.dc-app .dc-v7-activity li.tone-good .dc-v7-act-mark { background: rgba(88,214,141,.12); color: #86e0ab; }
-body.dc-app .dc-v7-activity li.tone-bad .dc-v7-act-mark { background: rgba(255,107,122,.12); color: #ff8a95; }
-body.dc-app .dc-v7-activity li.tone-live .dc-v7-act-mark { background: rgba(224,186,117,.14); color: var(--v6-gold, #e0ba75); }
-body.dc-app .dc-v7-activity li strong { display: block; font-size: 10.5px; font-weight: 600; line-height: 1.4; }
-body.dc-app .dc-v7-activity li small { font-size: 9px; color: var(--dc-muted); white-space: nowrap; }
-body.dc-app .dc-v7-empty { padding: 14px 2px; color: var(--dc-muted); font-size: 10px; line-height: 1.5; }
-
-/* Your uploads */
+/* --- Your uploads: compact library table --------------------------- */
 body.dc-app .dc-v7-uploads {
-  padding: 17px;
-  border: 1px solid var(--v7-spec-line, rgba(255,255,255,.08));
+  padding: 20px;
+  border: 1px solid rgba(255,255,255,.07);
   border-radius: 18px;
   background: linear-gradient(145deg, #14161a, #0e1014);
   min-width: 0;
 }
 body.dc-app .dc-v7-uploads header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 body.dc-app .dc-v7-uploads header h2 { margin: 0; font-size: 16px; }
-body.dc-app .dc-v7-uploads-table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+body.dc-app .dc-v7-uploads-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 body.dc-app .dc-v7-uploads-table th {
-  text-align: left; padding: 0 8px 8px; font-size: 9px; font-weight: 600;
+  text-align: left; padding: 0 10px 9px; font-size: 9.5px; font-weight: 600;
   color: var(--dc-muted); border-bottom: 1px solid rgba(255,255,255,.07);
 }
-body.dc-app .dc-v7-uploads-table td { padding: 9px 8px; border-bottom: 1px solid rgba(255,255,255,.045); }
+body.dc-app .dc-v7-uploads-table td { height: 50px; padding: 0 10px; border-bottom: 1px solid rgba(255,255,255,.045); }
 body.dc-app .dc-v7-uploads-table tbody tr { cursor: pointer; }
 body.dc-app .dc-v7-uploads-table tbody tr:hover td { background: rgba(255,255,255,.028); }
-body.dc-app .dc-v7-up-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
-body.dc-app .dc-v7-up-name img { width: 34px; height: 26px; border-radius: 5px; object-fit: cover; background: #000; flex: 0 0 auto; }
+body.dc-app .dc-v7-up-name { display: flex; align-items: center; gap: 11px; min-width: 0; }
+/* Small, not 9:16 — this is a table, not a gallery. */
+body.dc-app .dc-v7-up-name img { width: 42px; height: 30px; border-radius: 6px; object-fit: cover; background: #000; flex: 0 0 auto; }
 body.dc-app .dc-v7-up-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-body.dc-app .dc-v7-status { display: inline-flex; align-items: center; gap: 5px; font-style: normal; font-size: 9.5px; }
+body.dc-app .dc-v7-status { display: inline-flex; align-items: center; gap: 5px; font-style: normal; font-size: 10px; }
 body.dc-app .dc-v7-status svg { width: 12px; height: 12px; }
 body.dc-app .dc-v7-status.good { color: #86e0ab; }
 body.dc-app .dc-v7-status.bad { color: #ff8a95; }
 body.dc-app .dc-v7-status.live { color: var(--v6-gold, #e0ba75); }
 
-/* Below this width the rail would squeeze the create form rather than help,
-   so it moves under the main column instead of shrinking further. */
-@media (max-width: 1180px) {
+/* --- Right rail: deliberately secondary ---------------------------- */
+body.dc-app .dc-v7-side-card {
+  padding: 17px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 16px;
+  background: linear-gradient(145deg, #14161a, #0e1014);
+}
+body.dc-app .dc-v7-side-card header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 13px; }
+body.dc-app .dc-v7-side-card header h2 { margin: 0; font-size: 14.5px; }
+body.dc-app .dc-v7-side-link,
+body.dc-app .dc-v7-side-more {
+  display: inline-flex; align-items: center; gap: 5px;
+  color: var(--dc-muted); font-size: 9.5px; background: none; border: 0;
+}
+body.dc-app .dc-v7-side-link svg, body.dc-app .dc-v7-side-more svg { width: 12px; height: 12px; }
+body.dc-app .dc-v7-side-link:hover, body.dc-app .dc-v7-side-more:hover { color: var(--dc-text); }
+body.dc-app .dc-v7-side-more { width: 100%; justify-content: center; margin-top: 11px; padding-top: 11px; border-top: 1px solid rgba(255,255,255,.06); }
+
+body.dc-app .dc-v7-sched, body.dc-app .dc-v7-activity { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+body.dc-app .dc-v7-sched li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center; gap: 11px;
+}
+body.dc-app .dc-v7-sched li img { width: 46px; height: 46px; border-radius: 9px; object-fit: cover; background: #000; }
+body.dc-app .dc-v7-sched-mark {
+  position: absolute; left: 30px; bottom: 4px;
+  width: 22px; height: 22px; display: grid; place-items: center;
+  border-radius: 7px; background: #101216; box-shadow: 0 0 0 2px #0e1014;
+}
+body.dc-app .dc-v7-sched-mark svg { width: 12px; height: 12px; }
+body.dc-app .dc-v7-sched-mark.youtube { color: #ff456b; }
+body.dc-app .dc-v7-sched-mark.tiktok { color: #4ff5ef; }
+body.dc-app .dc-v7-sched-mark.instagram { color: #ff91c4; }
+body.dc-app .dc-v7-sched-mark.facebook { color: #8bbcff; }
+body.dc-app .dc-v7-sched li strong { display: block; font-size: 11px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+body.dc-app .dc-v7-sched li small { display: block; margin-top: 3px; font-size: 9px; color: var(--dc-muted); }
+body.dc-app .dc-v7-chip {
+  padding: 3px 8px; border-radius: 999px; font-style: normal; font-size: 8.5px;
+  background: rgba(88,214,141,.12); color: #86e0ab; white-space: nowrap;
+}
+
+body.dc-app .dc-v7-activity li { min-height: 58px; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+body.dc-app .dc-v7-act-mark { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 9px; background: rgba(255,255,255,.05); color: var(--dc-muted); }
+body.dc-app .dc-v7-act-mark svg { width: 13px; height: 13px; }
+body.dc-app .dc-v7-activity li.tone-good .dc-v7-act-mark { background: rgba(88,214,141,.12); color: #86e0ab; }
+body.dc-app .dc-v7-activity li.tone-bad .dc-v7-act-mark { background: rgba(255,107,122,.12); color: #ff8a95; }
+body.dc-app .dc-v7-activity li.tone-live .dc-v7-act-mark { background: rgba(224,186,117,.14); color: var(--v6-gold, #e0ba75); }
+body.dc-app .dc-v7-activity li strong { display: block; font-size: 10.5px; font-weight: 600; line-height: 1.4; }
+body.dc-app .dc-v7-activity li small { font-size: 9px; color: var(--dc-muted); white-space: nowrap; }
+body.dc-app .dc-v7-empty { padding: 16px 2px; color: var(--dc-muted); font-size: 10px; line-height: 1.55; }
+
+/* --- Breakpoints ---------------------------------------------------
+ * The rail holds at 1440 and 1536. It only narrows on medium desktop and
+ * only moves underneath below 1100px, where keeping it would squeeze the
+ * create form rather than help. */
+@media (max-width: 1399px) {
+  body.dc-app .dc-v7-home-main { grid-template-columns: minmax(0, 1fr) 280px; }
+  body.dc-app .dc-v7-home-hero h1 { font-size: 48px; }
+  body.dc-app .dc-v7-home-hero { min-height: 420px; }
+}
+@media (max-width: 1099px) {
+  body.dc-app .dc-v7-home { width: min(calc(100vw - 120px), 1320px); }
+  body.dc-app .dc-v7-home-hero { grid-template-columns: minmax(0, 1fr); min-height: 0; }
   body.dc-app .dc-v7-home-main { grid-template-columns: minmax(0, 1fr); }
-  body.dc-app .dc-v7-home-side { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  body.dc-app .dc-v7-home-side { grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); }
+  body.dc-app .dc-v7-home-hero h1 { font-size: 40px; }
 }
 @media (max-width: 860px) {
-  body.dc-app .dc-v7-create-grid { grid-template-columns: minmax(0, 1fr); }
+  body.dc-app .dc-v7-url-row,
   body.dc-app .dc-v7-create-options { grid-template-columns: minmax(0, 1fr); }
 }
 

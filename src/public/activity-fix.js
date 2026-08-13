@@ -1619,6 +1619,27 @@ function v7Headline(){
   return `One talk.<br>Your next month of<br><em>content.</em>`;
 }
 
+// Connected channels, shown beside the hero stats.
+//
+// Placement was specified twice over by elimination: not in the top bar, and
+// not as a separate "Connected channels" card lower down. It belongs with the
+// stats because it answers the same question they do — what state is this
+// workspace in — and because "ready for" is only meaningful next to the count
+// of clips that are ready.
+//
+// The dot is the whole point: it distinguishes a channel that will actually
+// receive a post from one that is merely listed.
+function v7ReadyFor(){
+  const providers=['youtube','tiktok','instagram','facebook'];
+  const marks=providers.map(provider=>{
+    const info=providerInfo(provider);
+    const live=Boolean(info.connected&&info.enabled);
+    const label=`${providerTitle(provider)} — ${info.connected?(info.enabled?'connected':'connected, publishing off'):'not connected'}`;
+    return `<button type="button" class="dc-v7-ready-mark ${esc(provider)} ${live?'is-live':''}" data-dc-nav="publishing" title="${esc(label)}" aria-label="${esc(label)}">${socialSvg(provider)}${live?'<i></i>':''}</button>`;
+  }).join('');
+  return `<div class="dc-v7-ready" aria-label="Connected channels"><span>Ready for</span><div class="dc-v7-ready-marks">${marks}</div></div>`;
+}
+
 // Scheduled next. Reads the same publishingClipGroups() the Publishing screen
 // uses, so the two can never disagree about what is queued.
 function v7Scheduled(d){
@@ -1684,15 +1705,16 @@ function renderHome(){
         <div class="dc-v7-kicker">${ICON.sparkles||ICON.quality}<span>${esc(exp.premium||exp.id==='owner'?'AI clip studio':experience.eyebrow)}</span></div>
         <h1>${exp.premium||exp.id==='owner'?v7Headline():esc(heroHeadline).replace(/\n/g,'<br>')}</h1>
         <p>${esc(heroCopy)}</p>
-        <div class="dc-v7-home-actions"><button class="dc-btn" id="dcHeroCreate">＋ &nbsp;${esc(experience.primary)}</button><button class="dc-btn secondary" ${waiting?'data-dc-nav="review"':billingInfo().features?.aiDirector?'data-dc-nav="lab"':exp.premium?'data-dc-nav="templates"':'data-dc-nav="subscription"'}>${ICON.review}<span>${waiting?`Review ${waiting} ready`:esc(experience.secondary)}</span></button></div>
+        <div class="dc-v7-home-actions"><button class="dc-btn" id="dcHeroCreate">＋ &nbsp;${esc(exp.premium||exp.id==='owner'?'Start clipping':experience.primary)}</button><button class="dc-btn secondary" ${waiting?'data-dc-nav="review"':billingInfo().features?.aiDirector?'data-dc-nav="lab"':exp.premium?'data-dc-nav="templates"':'data-dc-nav="subscription"'}>${ICON.review}<span>${waiting?`Review ${waiting} ready`:esc(experience.secondary)}</span></button></div>
         <div class="dc-v7-home-stats" aria-label="Workspace summary">${v5InlineStat(projects.length,'Sources')}${v5InlineStat(clips.length,'Clips')}${v5InlineStat(waiting,'To review')}${v5InlineStat(posted,'Published')}</div>
+        ${v7ReadyFor()}
       </div>
       <div class="dc-v7-home-stage" aria-label="Preview of vertical clips"><i class="dc-v7-stage-orbit"></i>${v5HeroCards(clips)}</div>
     </section>
     <div class="dc-v7-home-main"><span class="dc-v7-home-main-contract">dc-v7-create · dc-v7-side</span>
       <div class="dc-v7-home-left">
       <section class="dc-v7-create ${createLocked?'is-locked':''}" data-tour="create-form">
-        <header><h2>Create clips</h2><p>Paste a supported video link or upload your original file.</p></header>
+        <header><div><h2>Create your clips</h2><p>Paste a supported video link or upload your original file.</p></div><span class="dc-v7-create-note">${ICON.brand} Token cost is confirmed before processing</span></header>
         ${createLocked?`<div class="dc-v7-create-lock"><span>${ICON.brand}</span><p><strong>${esc(exp.label)}</strong> ${esc(exp.detail)}.</p><button class="dc-btn" data-dc-nav="subscription">${exp.id==='premium_empty'?'Add tokens':'Unlock studio'}</button></div>`:''}
         <div class="dc-v7-create-grid">
           <div class="dc-v7-create-inputs">

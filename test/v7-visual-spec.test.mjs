@@ -103,9 +103,11 @@ test('Home matches the approved hero, creation area and right-hand rail', () => 
   assertClass(home, 'dc-v7-home-main', 'Home');
   assert.match(home, /dc-v7-home-left[\s\S]*dc-v7-create[\s\S]*v7Uploads\([\s\S]*dc-v7-home-side/,
     'Create clips and uploads take the wide column; the rail follows it');
-  assertText(home, ['Create clips', 'Paste a supported video link or upload your original file.',
-    'Template', 'Clip length', 'Output', '9:16 Vertical', 'Generate clips', 'Upload original'],
+  assertText(home, ['Create your clips', 'Paste a supported video link or upload your original file.',
+    'Template', 'Clip length', 'Output', '9:16 Vertical', 'Generate clips', 'Upload original',
+    'Token cost is confirmed before processing'],
     'the approved Create clips card');
+  assertText(home, ['Start clipping'], 'the approved primary hero action');
   assertText(scheduled, ['Scheduled next', 'View calendar'], 'the Scheduled next rail card');
   assertText(activity, ['Recent activity', 'View all activity'], 'the Recent activity rail card');
   assertText(uploads, ['Your uploads', 'Name', 'Type', 'Duration', 'Date added', 'Status'],
