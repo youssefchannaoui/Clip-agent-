@@ -1626,7 +1626,7 @@ function v7Scheduled(d){
   const rows=scheduled.map(clip=>{
     const target=(clip.targets||[]).find(t=>t.enabled)||(clip.targets||[])[0];
     const provider=target?.provider||'youtube';
-    const when=Number(clip.scheduledAt)?formatLocal(clip.scheduledAt):'Awaiting a slot';
+    const when=clip.scheduledLabel||(Number(clip.scheduledAt)?formatDate(clip.scheduledAt):'Awaiting a slot');
     const image=clip.thumbUrl?authedUrl(clip.thumbUrl):'/marketing-assets/reel-dua.webp';
     return `<li><img src="${esc(image)}" alt="" loading="lazy"><span class="dc-v7-sched-mark ${esc(provider)}">${socialSvg(provider)}</span><div><strong>${esc(shortText(clip.title||'Clip',44))}</strong><small>${esc(when)}</small></div><i class="dc-v7-chip">Scheduled</i></li>`;
   }).join('');
@@ -1653,7 +1653,7 @@ function v7Uploads(d){
     const kind=/podcast|\.mp3|audio/i.test(`${p.url||''} ${p.title||''}`)?'MP3':'MP4';
     const seconds=Number(p.durationSec||0);
     const duration=seconds>0?`${Math.floor(seconds/60)}:${String(Math.round(seconds%60)).padStart(2,'0')}`:'—';
-    const added=Number(p.submittedAt||p.updatedAt)?formatLocal(p.submittedAt||p.updatedAt):'—';
+    const added=formatDate(p.submittedAt||p.updatedAt);
     const percent=Math.round(Number(p.progress||0));
     const status=p.status==='done'?`<i class="dc-v7-status good">${ICON.check} Ready</i>`
       :p.status==='failed'||p.error?`<i class="dc-v7-status bad">${ICON.warning} Failed</i>`
