@@ -1466,10 +1466,25 @@
       // its AI rows (filler words, long pauses, keyword highlighter, caption
       // emojis, stock B-roll) have no field at all -- the render pipeline has no
       // concat/trim/atrim/select, so none of them can be produced.
-      tplList: templates.map(function (t) { return t.name; }),
-      activeTpl: activeTemplate ? activeTemplate.name : '',
+      // The design renders <option value="{{ opt }}"> over a list of strings, so
+      // selection is keyed by name and two templates sharing a name would be
+      // indistinguishable. Disambiguated here until the design can emit ids.
+      tplList: templates.map(function (t, i) {
+        var clash = templates.filter(function (o) { return o.name === t.name; }).length > 1;
+        return clash ? t.name + ' (' + (i + 1) + ')' : t.name;
+      }),
+      activeTpl: (function () {
+        if (!activeTemplate) return '';
+        var i = templates.findIndex ? templates.findIndex(function (t) { return t.id === activeTemplate.id; }) : -1;
+        var clash = templates.filter(function (o) { return o.name === activeTemplate.name; }).length > 1;
+        return clash && i > -1 ? activeTemplate.name + ' (' + (i + 1) + ')' : activeTemplate.name;
+      })(),
       setActiveTpl: function (e) {
-        var picked = templates.filter(function (t) { return t.name === e.target.value; })[0];
+        var label = e.target.value;
+        var picked = templates.filter(function (t, i) {
+          var clash = templates.filter(function (o) { return o.name === t.name; }).length > 1;
+          return (clash ? t.name + ' (' + (i + 1) + ')' : t.name) === label;
+        })[0];
         if (picked) global.StudioAdapter.onSelectTemplate(picked.id);
       },
       tplStyleRows: tplRow([

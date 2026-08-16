@@ -142,20 +142,26 @@ Hetzner box is redeployed:
 
 ## 5. Still open after the 16–17 Aug QA pass
 
-Fixed elsewhere; these need a decision or a backend and are deliberately not
-faked in the meantime.
+Everything else from that pass is fixed. What remains needs a design change, not
+a code change here.
 
-- **`tokensReserved` is always 0.** It is zeroed but never incremented
-  (`billing.js`), while the Tokens screen surfaces it as "Reserved for running
-  jobs". So remaining-token figures ignore work in flight and an account can
-  overdraw. Fixing it means reserving at job start and releasing on completion or
-  failure — real money, so it is not a change to make casually.
-- **No stall watchdog.** `clip_worker.py` emits heartbeats every 10s and both
-  consumers parse and discard them. If ffmpeg or faster-whisper hangs, the job
-  timeout eventually fires (and now cancels the worker-side job), but nothing
-  notices the stall in between and the UI shows a frozen percentage.
-- **Template options are keyed by name, not id.** The design renders
-  `<option value="{{ opt }}">` over a list of strings, so renaming a template
-  breaks selection. Fixing it properly needs the design to emit `{id, name}`.
+- **Template options are keyed by name.** The design renders
+  `<option value="{{ opt }}">` over a list of strings, so two templates with the
+  same name are indistinguishable. Worked around by numbering duplicates
+  ("Gold (1)", "Gold (2)"), which is a label, not a fix. The design should emit
+  `{ id, name }` and bind the id.
+- **The unread dot has no binding.** It is a bare `<span>` compiled in
+  unconditionally, so it can only be hidden from `index.html` via CSS targeting
+  the Phosphor icon class. A `sc-if` on an `unread` binding would remove that
+  workaround.
+- **Read state is per browser.** There is no read/seen field or route on the
+  server, so "mark all read" is remembered in localStorage with a memory
+  fallback. Persisting it properly needs a field on the account.
 - **Performance and Arabic & terms still have no backend.** Unchanged from
-  section 3.
+  section 3: no view/save/watch metrics are collected anywhere, and there is no
+  glossary in the data model.
+- **Reservation is only as good as the estimate.** Tokens are now held against a
+  job before it runs, but in remote mode the source duration is unknown until the
+  worker downloads it, so nothing can be held for an untrimmed remote job. The
+  charge still lands on completion; the hold is an improvement where the length
+  is knowable, not a guarantee everywhere.

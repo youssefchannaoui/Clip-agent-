@@ -269,6 +269,47 @@ export function estimateTokenCharge(user, minutes = 0) {
   };
 }
 
+// Reserving holds tokens against work that has started but not yet been charged.
+// tokensReserved was already subtracted from availability everywhere, but nothing
+// ever set it, so remaining-token figures ignored jobs in flight and an account
+// could start more work than it could pay for.
+export function reserveTokens(userId, tokens, meta = {}) {
+  ensureBillingState();
+  const user = (state.authUsers || []).find(item => item.id === userId);
+  if (!user || isUnlimited(user)) return { reserved: 0, unlimited: true };
+  const amount = Math.max(0, Math.ceil(Number(tokens || 0)));
+  if (!amount) return { reserved: 0, unlimited: false };
+  const billing = ensureUserBilling(user);
+  const planAllowance = allowance(billing.plan || 'free');
+  const used = Math.max(0, Number(billing.tokensUsed || 0));
+  const reserved = Math.max(0, Number(billing.tokensReserved || 0));
+  const available = Math.max(0, planAllowance - used - reserved) + Math.max(0, Number(billing.bonusTokens || 0));
+  if (available < amount) {
+    throw new Error(`Not enough tokens. This job needs about ${amount}, but only ${available} are available.`);
+  }
+  billing.tokensReserved = reserved + amount;
+  user.updatedAt = now();
+  save();
+  return { reserved: amount, unlimited: false, meta };
+}
+
+// Releasing is always safe to call, including twice: a reservation that is no
+// longer held simply clamps at zero. Charging happens separately, once the real
+// duration is known.
+export function releaseTokens(userId, tokens) {
+  ensureBillingState();
+  const user = (state.authUsers || []).find(item => item.id === userId);
+  if (!user || isUnlimited(user)) return { released: 0 };
+  const amount = Math.max(0, Math.ceil(Number(tokens || 0)));
+  if (!amount) return { released: 0 };
+  const billing = ensureUserBilling(user);
+  const before = Math.max(0, Number(billing.tokensReserved || 0));
+  billing.tokensReserved = Math.max(0, before - amount);
+  user.updatedAt = now();
+  save();
+  return { released: before - billing.tokensReserved };
+}
+
 export function chargeTokens(userId, tokens, reason = 'usage', meta = {}) {
   ensureBillingState();
   const user = (state.authUsers || []).find(item => item.id === userId);

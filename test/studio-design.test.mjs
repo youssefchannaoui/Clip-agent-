@@ -991,3 +991,26 @@ test('a select renders its chosen option, not the first one', () => {
   const runtime = fs.readFileSync(path.join(ROOT, 'src/public/studio-runtime.js'), 'utf8');
   assert.match(runtime, /select\[value\]/, 'form values are applied as properties after render');
 });
+
+test('templates sharing a name stay individually selectable', () => {
+  // The design renders <option value="{{ opt }}"> over strings, so selection is
+  // keyed by name; two templates called the same thing were indistinguishable.
+  Object.assign(StudioAdapter.ui, { screen: 'templates' });
+  const templates = [{ id: 'a', name: 'Gold' }, { id: 'b', name: 'Gold' }, { id: 'c', name: 'Clean' }];
+  const vals = StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates, selectedTemplate: templates[1] });
+  assert.deepEqual(vals.tplList, ['Gold (1)', 'Gold (2)', 'Clean']);
+  assert.equal(vals.activeTpl, 'Gold (2)', 'the active option must match one of the rendered labels');
+
+  let picked = null;
+  StudioAdapter.onSelectTemplate = id => { picked = id; };
+  vals.setActiveTpl({ target: { value: 'Gold (2)' } });
+  assert.equal(picked, 'b');
+});
+
+test('a single template keeps its plain name', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'templates' });
+  const templates = [{ id: 'a', name: 'Gold' }, { id: 'c', name: 'Clean' }];
+  const vals = StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates, selectedTemplate: templates[0] });
+  assert.deepEqual(vals.tplList, ['Gold', 'Clean']);
+  assert.equal(vals.activeTpl, 'Gold');
+});

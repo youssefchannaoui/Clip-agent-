@@ -225,6 +225,11 @@ class Processor:
                 continue
             if event.get("type") == "error":
                 reported_error = str(event.get("error") or "").strip()
+            if event.get("type") == "heartbeat":
+                # The worker beats every 10s. Recording it is what lets the
+                # caller tell "still working" apart from "hung": without this
+                # both look identical -- a percentage that stops moving.
+                self.store.update(job_id, heartbeatAt=now_ms())
             if event.get("type") == "progress":
                 # Pass the worker's own words and its phase through untouched.
                 # Rewriting the prose here destroyed the distinction between

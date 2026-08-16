@@ -32,6 +32,33 @@ function jobFile(projectId) { return path.join(jobsDir, projectId, 'job.json'); 
 // Roughly five minutes of 30s retries before a lecture is failed with a message
 // rather than looping in silence.
 const MAX_WORKER_RETRIES = 10;
+
+// The worker beats every 10s, so several minutes of total silence means it is
+// hung rather than busy. Generous, because a slow transcription is not a stall.
+const STALL_TIMEOUT_MS = 5 * 60_000;
+
+// Tokens are charged per source minute once the real duration is known. Until
+// then a job holds an estimate, so a second job cannot be started against tokens
+// the first one is about to spend.
+function reserveProjectHold(project, seconds) {
+  const estimate = Number(seconds || 0);
+  if (!estimate) return;
+  try {
+    const held = billing.reserveTokens(ownerOf(project), billing.tokenCostForSeconds(estimate), { projectId: project.id });
+    if (held.reserved) project.tokensReserved = held.reserved;
+  } catch (error) {
+    // Surfaced by the caller: a job that cannot be paid for must not start.
+    throw error;
+  }
+}
+
+// Safe to call more than once; a hold already released clamps at zero.
+function releaseProjectHold(project) {
+  const held = Number(project.tokensReserved || 0);
+  if (!held) return;
+  project.tokensReserved = 0;
+  try { billing.releaseTokens(ownerOf(project), held); } catch { /* nothing to release */ }
+}
 function resultFile(projectId) { return path.join(jobsDir, projectId, 'result.json'); }
 function removeDataFile(file) {
   if (!file) return;
@@ -398,6 +425,16 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     settings: sharedSettings(user), sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
     sourceTitle: sourceMeta?.title || null, sourceDurationSec: sourceMeta?.durationSec || null, sourceThumbUrl: sourceMeta?.thumbnail || null,
   };
+  // Hold an estimate against the account before the job starts. A trimmed range
+  // is exact; a known full duration is next best. In remote mode neither is
+  // available until the worker downloads the source, so nothing is held and the
+  // charge still happens on completion -- the hold is an improvement where the
+  // length is knowable, not a guarantee everywhere.
+  const estimateSeconds = sourceRange.endSec
+    ? sourceRange.endSec - (sourceRange.startSec || 0)
+    : Number(sourceMeta?.durationSec || 0);
+  reserveProjectHold(project, estimateSeconds);
+
   fs.writeFileSync(jobFile(projectId), JSON.stringify(job, null, 2));
   const rangeCopy = sourceRange.endSec ? ` · source window ${Math.round(sourceRange.startSec / 60)}–${Math.round(sourceRange.endSec / 60)} min` : (sourceRange.startSec ? ` · source starts at ${Math.round(sourceRange.startSec / 60)} min` : '');
   log(`Queued "${project.title}" for ${useRemote ? 'the external processing worker' : useVizard ? 'secure YouTube import and DeenClipped rendering' : 'the self-hosted clip AI'} using template "${template.name}"${rangeCopy}.`, 'info', user.id);
@@ -417,6 +454,12 @@ function parseWorkerLine(record, line) {
     record.status = 'processing';
     record.updatedAt = Date.now();
     save();
+  } else if (payload.type === 'heartbeat') {
+    // Proof of life between progress events. Transcription can run for minutes
+    // without advancing a percentage, so silence is the only usable stall
+    // signal and it needs its own timestamp.
+    record.heartbeatAt = Date.now();
+    record.updatedAt = Date.now();
   } else if (payload.type === 'warning') {
     log(String(payload.warning || 'The worker reported a warning.'), 'warn');
   } else if (payload.type === 'error') {
@@ -462,6 +505,9 @@ function importResultObject(project, result, engine = 'self-hosted') {
   project.status = 'done'; project.stage = 'Clips are ready for review'; project.progress = 100;
   project.completedAt = Date.now(); project.error = null;
   try {
+    // The hold goes back first, so the real charge is measured against true
+    // availability rather than against the estimate that was reserved.
+    releaseProjectHold(project);
     const charge = billing.chargeSourceMinutes(ownerOf(project), Number(project.durationSec || 0), { projectId: project.id, title: project.title });
     if (charge.charged) project.tokensCharged = charge.charged;
   } catch (error) {
@@ -482,7 +528,7 @@ export function acceptRemoteUpdate(projectId, update) {
   if (update.status === 'completed' && update.result && project.status !== 'done') {
     importResultObject(project, update.result, 'remote-worker');
   } else if (update.status === 'failed') {
-    project.status = 'failed'; project.stage = 'failed'; project.progress = Number(update.progress || project.progress || 0);
+    project.status = 'failed'; releaseProjectHold(project); project.stage = 'failed'; project.progress = Number(update.progress || project.progress || 0);
     project.error = customerSafeProjectError(update.error || 'The external worker failed.').message;
     project.errorCode = 'processing_failed'; project.updatedAt = Date.now(); save();
   } else if (update.status === 'cancelled') {
@@ -499,7 +545,7 @@ export function acceptRemoteUpdate(projectId, update) {
 async function runRemoteProject(project) {
   const file = jobFile(project.id);
   if (!fs.existsSync(file)) {
-    project.status = 'failed'; project.stage = 'failed'; project.error = 'The remote job metadata is missing. Submit the video again.'; save(); return;
+    project.status = 'failed'; releaseProjectHold(project); project.stage = 'failed'; project.error = 'The remote job metadata is missing. Submit the video again.'; save(); return;
   }
   const payload = JSON.parse(fs.readFileSync(file, 'utf8'));
   // A retried project carries a fresh worker job id so the worker treats it as a
@@ -512,10 +558,23 @@ async function runRemoteProject(project) {
   project.workerRetries = project.workerRetries || 0;
   try {
     await workerClient.createJob(payload);
+    let lastMovementAt = Date.now();
+    let lastSignature = '';
     while (Date.now() - started < config.workerJobTimeoutMs) {
       const update = await workerClient.getJob(workerJobId);
       acceptRemoteUpdate(project.id, update);
       if (['completed', 'failed', 'cancelled'].includes(update.status)) return;
+      // Any of these moving means the worker is alive. The heartbeat covers the
+      // long quiet stretches -- transcription can run for minutes without the
+      // percentage changing -- so a job that stops emitting all three is hung,
+      // not slow, and there is no reason to hold the single worker slot for it
+      // until the full job timeout expires.
+      const signature = `${update.stage || ''}|${update.progress || 0}|${update.heartbeatAt || 0}`;
+      if (signature !== lastSignature) { lastSignature = signature; lastMovementAt = Date.now(); }
+      else if (Date.now() - lastMovementAt > STALL_TIMEOUT_MS) {
+        await workerClient.cancelJob(workerJobId).catch(() => {});
+        throw new Error('The processing worker stopped responding partway through. The job can be retried safely.');
+      }
       await new Promise(resolve => setTimeout(resolve, config.workerPollIntervalMs));
     }
     // Tell the worker to stop before giving up locally. Without this the run
@@ -541,6 +600,8 @@ async function runRemoteProject(project) {
         ? 'The processing worker has been unreachable for several minutes. Retry once it is back.'
         : error.message;
       project.errorCode = exhausted ? 'worker_unavailable_exhausted' : (error.code || 'processing_failed');
+      // A failed job must not keep holding tokens. A retry re-reserves.
+      if (project.status === 'failed') releaseProjectHold(project);
       if (unavailable && !exhausted) project.nextRetryAt = Date.now() + 30_000;
       save();
       if (unavailable && !exhausted) setTimeout(() => pump().catch(() => {}), 30_000);
@@ -601,7 +662,7 @@ function runProject(project) {
   return new Promise(resolve => {
     const file = jobFile(project.id);
     if (!fs.existsSync(file)) {
-      project.status = 'failed'; project.error = 'The job file is missing. Retry the project.'; save(); resolve(); return;
+      project.status = 'failed'; releaseProjectHold(project); project.error = 'The job file is missing. Retry the project.'; save(); resolve(); return;
     }
     project.status = 'processing'; project.stage = 'Starting the local AI worker';
     project.progress = Math.max(1, project.progress || 0); project.startedAt = Date.now(); project.error = null; save();
@@ -624,7 +685,7 @@ function runProject(project) {
         if (code === 0 && fs.existsSync(resultFile(project.id))) importResult(project, resultFile(project.id));
         else { finishFailed(project, stderr, code, 'Processing'); log(`Could not process "${project.title}": ${project.error}`, 'error', ownerOf(project)); }
       } catch (error) {
-        project.status = 'failed'; project.stage = 'Could not import rendered clips'; project.error = error.message; save();
+        project.status = 'failed'; releaseProjectHold(project); project.stage = 'Could not import rendered clips'; project.error = error.message; save();
         log(`Could not import "${project.title}": ${error.message}`, 'error', ownerOf(project));
       }
       resolve(); pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
@@ -782,7 +843,7 @@ async function runVizardProject(project) {
     log(`${imported.length} YouTube clips are ready from "${project.title}". Vizard selected the moments; DeenClipped applied and verified the final template, captions and music.`, 'info', ownerOf(project));
   } catch (error) {
     if (!projectById(project.id) || control.cancelled) return;
-    project.status = 'failed';
+    project.status = 'failed'; releaseProjectHold(project);
     project.stage = 'YouTube import failed';
     project.error = String(error?.message || 'The YouTube video could not be processed.').slice(0, 1800);
     project.errorCode = error?.code ? `vizard_${error.code}` : 'vizard_import_failed';
