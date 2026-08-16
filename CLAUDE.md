@@ -1,20 +1,18 @@
 # DeenClipped — working agreement
 
-## Ownership split (set 12 Aug 2026, by Youssef)
+## Ownership (set 16 Aug 2026, by Youssef)
 
-**Claude does workers and systems. ChatGPT does layout. Claude stays out of
-layout.**
+**Claude owns everything, layout included.** The 12 Aug split that reserved
+layout, CSS and visual design for ChatGPT was removed on 16 Aug: "you are now
+doing everything ChatGPT does — it's all Claude."
 
 | Area | Owner |
 |---|---|
-| `worker/` — clip pipeline, scoring, transcription, rendering, framing, Arabic | **Claude** |
-| `src/server.js`, `src/local-engine.js` — queueing, jobs, routes, storage | **Claude** |
-| `src/templates.js` — schema, Clip Style contract | **Claude** |
-| Data models, APIs, tests, audits, deploys | **Claude** |
-| Editor shell, sidebar, timeline, CSS, visual design, spacing, sizing | **ChatGPT** |
-| Anything about how a screen *looks* or *fits* | **ChatGPT** |
+| Everything in this repo | **Claude** |
 
-### Why
+### The history that split existed for
+
+Keep this. The ownership changed; the failure mode did not.
 
 Claude repeatedly changed editor layout on 11–12 Aug and repeatedly got it
 wrong — a preview sized against the wrong box, a timeline nested in the wrong
@@ -22,19 +20,13 @@ grid, a panel collapse that did not collapse, and a shell restructure that
 left the editor visibly broken on the live site. Each attempt passed a green
 test suite, because the failures were visual and the tests were not.
 
-The split exists because of that track record, not as a general rule about
-what Claude can do.
-
 ### What this means in practice
 
-- Claude does **not** edit CSS, grid/flex structure, sizing, spacing, or
-  markup whose purpose is appearance — even to "quickly fix" something.
-- If Claude finds a layout bug, Claude **reports it with measurements** and
-  hands it to ChatGPT. Claude does not fix it.
-- If a systems change would alter layout, Claude flags the layout impact and
-  stops at the boundary.
-- Claude may still **measure** layout in the browser and produce evidence —
-  observation is useful, editing is not.
+- **A green suite is never verification for anything visual.** Look at the
+  screen — screenshot it, measure it — before calling a layout change done.
+- Layout is now in scope, but it remains the work most likely to ship broken
+  while tests stay green. Treat it with more caution than the systems code,
+  not less.
 - Two agents must never edit the same file at once. On 12 Aug Claude and
   Claude Code both edited `src/public/activity-fix.js` with opposite
   intentions and reversed each other's work three times.

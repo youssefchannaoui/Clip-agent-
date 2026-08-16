@@ -46,10 +46,20 @@
   }
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
 
+  // Clip lengths are seconds-scale, so m:ss reads naturally.
   function secsToClock(s) {
     if (!s && s !== 0) return '';
     var m = Math.floor(s / 60), r = Math.round(s % 60);
     return m + ':' + (r < 10 ? '0' : '') + r;
+  }
+  // Lecture lengths are hours-scale, where m:ss would render 3720s as "62:00"
+  // and read as sixty-two seconds.
+  function humanDuration(s) {
+    if (!s && s !== 0) return '';
+    var mins = Math.round(s / 60);
+    if (mins < 60) return mins + 'm';
+    var h = Math.floor(mins / 60), m = mins % 60;
+    return m ? h + 'h ' + m + 'm' : h + 'h';
   }
   function since(iso) {
     if (!iso) return '';
@@ -76,6 +86,15 @@
       return c.status === 'ready' && !c.approvedBy && !c.scheduledAt && !c.postedAt;
     });
   }
+
+  // Collage geometry for Home's floating clip previews — reproduced from the
+  // design so the drift and overlap match what was drawn.
+  var FLOAT_POS = [
+    { top: '0px', left: '6px', rot: '-4deg', delay: '0s', dur: '7.5s', w: '124px' },
+    { top: '54px', left: '148px', rot: '3deg', delay: '.8s', dur: '8.5s', w: '138px' },
+    { top: '186px', left: '18px', rot: '2deg', delay: '.4s', dur: '9s', w: '132px' },
+    { top: '248px', left: '166px', rot: '-3deg', delay: '1.2s', dur: '8s', w: '118px' },
+  ];
 
   // ── navigation ────────────────────────────────────────────────────────────
 
@@ -142,6 +161,7 @@
     var needsCount = pending.length;
     var scheduled = clips.filter(function (c) { return c.scheduledAt && !c.postedAt; })
       .sort(function (a, b) { return new Date(a.scheduledAt) - new Date(b.scheduledAt); });
+    var recent4 = clips.slice(-4).reverse();
 
     var planLabel = current.unlimited ? 'Unlimited'
       : (current.plan ? current.plan.charAt(0).toUpperCase() + current.plan.slice(1) : 'Free');
@@ -240,7 +260,7 @@
         var processing = p.status !== 'ready' && p.status !== 'failed';
         return {
           title: p.title || p.sourceTitle || 'Untitled lecture',
-          meta: secsToClock(p.durationSec || p.sourceDurationSec) + ' · ' + since(p.submittedAt),
+          meta: humanDuration(p.durationSec || p.sourceDurationSec) + ' · ' + since(p.submittedAt),
           clips: plural(p.clipCount || 0, 'clip'),
           chip: processing ? 'Processing' : 'Ready',
           chipStyle: 'padding: 2px 7px; border-radius: 20px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; border: 1px solid ' +
@@ -275,16 +295,21 @@
         };
       }),
 
-      floaters: clips.slice(0, 4).map(function (c) {
-        var state = c.postedAt ? 'approved' : c.approvedBy || c.scheduledAt ? 'approved' : null;
+      // The collage on Home. Positions, rotations and drift timings are the
+      // design's own; only the clips filling them are real.
+      floaters: FLOAT_POS.map(function (p, i) {
+        var c = recent4[i];
+        var state = !c ? null : c.postedAt || c.approvedBy || c.scheduledAt ? 'approved' : null;
         return {
-          empty: false,
-          has: true,
-          score: c.score || '',
+          empty: !c,
+          has: Boolean(c),
+          score: c ? c.score || '' : '',
           stateLabel: state === 'approved' ? 'Approved' : 'In review',
           stateStyle: 'position: absolute; bottom: 6px; left: 6px; display: flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 20px; font-size: 8.5px; font-weight: 700; border: 1px solid ' +
-            (state === 'approved' ? 'rgba(127,209,166,.4); background: rgba(10,10,12,.82); color: #7FD1A6;' : 'rgba(217,180,120,.4); background: rgba(10,10,12,.82); color: #F0D6A6;'),
-          thumbStyle: 'position: absolute; inset: 0; border-radius: 10px; background: ' + thumb(c.thumbUrl) + ';',
+            (state === 'approved' ? 'rgba(127,209,166,.4); background: rgba(10,10,12,.82); color: #7FD1A6;' : 'rgba(217,180,120,.36); background: rgba(10,10,12,.82); color: #F0D6A6;'),
+          style: 'position: absolute; top: ' + p.top + '; left: ' + p.left + '; width: ' + p.w + '; aspect-ratio: 9 / 16; border-radius: 11px; overflow: hidden; rotate: ' + p.rot + '; animation: dcFloat ' + p.dur + ' ease-in-out ' + p.delay + ' infinite;' +
+            (c ? ' border: 1px solid #26262A; background: ' + thumb(c.thumbUrl) + '; box-shadow: 0 18px 40px rgba(0,0,0,.5);'
+               : ' border: 1px dashed #2C2C32; background: rgba(18,18,20,.5); display: grid; place-items: center;'),
         };
       }),
 

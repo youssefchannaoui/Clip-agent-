@@ -326,3 +326,84 @@ test('the adapter supplies every binding the template actually reads', () => {
   assert.ok(!missing.includes('pageTitle'));
   assert.ok(!missing.includes('lectures'), 'Home bindings are supplied');
 });
+
+test('lecture length reads as hours, not as an ambiguous m:ss clock', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'home' });
+  const vals = StudioAdapter.bindings({
+    projects: [
+      { id: 'a', title: 'Long', status: 'ready', durationSec: 3720, submittedAt: Date.now() },
+      { id: 'b', title: 'Short', status: 'ready', durationSec: 1500, submittedAt: Date.now() },
+    ],
+  });
+  assert.match(vals.lectures[0].meta, /^1h 2m ·/, '3720s is an hour and two minutes');
+  assert.match(vals.lectures[1].meta, /^25m ·/);
+});
+
+test('Home floaters carry the design collage geometry', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'home' });
+  const vals = StudioAdapter.bindings(SAMPLE_STATE);
+  assert.equal(vals.floaters.length, 4, 'four collage slots regardless of clip count');
+  for (const f of vals.floaters) {
+    assert.match(f.style, /position: absolute/);
+    assert.match(f.style, /rotate: -?[\d.]+deg/);
+    assert.match(f.style, /animation: dcFloat/);
+  }
+});
+
+test('empty collage slots are marked empty rather than rendering a blank card', () => {
+  const vals = StudioAdapter.bindings({ clips: [{ id: 'c', title: 'only one', status: 'ready' }] });
+  assert.equal(vals.floaters[0].has, true);
+  assert.equal(vals.floaters[3].empty, true);
+  assert.match(vals.floaters[3].style, /dashed/);
+});
+
+// ── wiring ─────────────────────────────────────────────────────────────────
+// The server serves static files by explicit route, so a generated file is
+// invisible until it is listed. That is easy to miss on a re-import.
+
+test('every studio asset the page requests has a server route', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const server = fs.readFileSync(path.join(ROOT, 'src/server.js'), 'utf8');
+  const referenced = [...html.matchAll(/(?:src|href)="(\/studio-[\w.-]+)"/g)].map(m => m[1]);
+  assert.ok(referenced.length >= 4, 'the page pulls in the studio bundle');
+  for (const asset of new Set(referenced)) {
+    assert.ok(server.includes(`'${asset}'`), `${asset} needs a route in server.js or it 404s`);
+  }
+});
+
+test('every studio asset with a route exists on disk', () => {
+  const server = fs.readFileSync(path.join(ROOT, 'src/server.js'), 'utf8');
+  const block = server.slice(server.indexOf('const STUDIO_ASSETS'), server.indexOf('};', server.indexOf('const STUDIO_ASSETS')));
+  const files = [...block.matchAll(/studioAsset\('([^']+)'\)/g)].map(m => m[1]);
+  assert.ok(files.length >= 4);
+  for (const f of files) {
+    assert.ok(fs.existsSync(path.join(ROOT, 'src/public', f)), `${f} missing — run npm run design:import`);
+  }
+});
+
+test('the approve call matches the endpoint the server actually exposes', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const call = /StudioAdapter\.onApprove\s*=[^;]+/.exec(html)[0];
+  assert.match(call, /'PATCH'/, 'clips are updated with PATCH /api/clips/:id');
+  assert.match(call, /JSON\.stringify/, 'api() forwards options to fetch, so body must be a string');
+});
+
+test('the studio mount point does not become a flex or grid container', () => {
+  // The design's own root is a height:100vh grid with an `auto minmax(0,1fr)`
+  // column pair. Making the mount point a flex/grid container turns that root
+  // into a non-growing item and the 1fr column collapses to content width,
+  // leaving dead space to the right of the page.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const rule = /body\.studio-active\s+#studio\s*\{([^}]*)\}/.exec(html);
+  assert.ok(rule, 'the mount point has a visibility rule');
+  assert.doesNotMatch(rule[1], /display:\s*(flex|grid)/, 'must stay a plain block');
+});
+
+test('the generated root still relies on being a full-height grid', () => {
+  // If a re-import changes this, the mount rule above needs revisiting.
+  const css = fs.readFileSync(path.join(ROOT, 'src/public/studio-styles.generated.css'), 'utf8');
+  const root = /\.s0\{([^}]*)\}/.exec(css);
+  assert.ok(root, 'the root class is emitted');
+  assert.match(root[1], /display: grid/);
+  assert.match(root[1], /height: 100vh/);
+});

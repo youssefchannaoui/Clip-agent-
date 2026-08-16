@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<!--
+  Standalone preview of the imported Studio dashboard, with sample state.
+
+  Open this file directly in a browser (no server, no login) to see what an
+  import produced. Useful after `npm run design:import` to check a re-import
+  before wiring anything, and as the surface to screenshot when reviewing a
+  layout change.
+
+  This file is NOT served to customers — it lives in design/, not src/public/.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio dashboard — design preview</title>
+<link rel="stylesheet" href="../src/public/studio-styles.generated.css">
+<style>
+  html, body { margin: 0; height: 100%; background: #09090A; color: #F2F2F4; font-family: Inter, system-ui, sans-serif; }
+  #studio { display: flex; height: 100vh; min-height: 0; }
+  #preview-bar {
+    position: fixed; bottom: 12px; left: 50%; translate: -50% 0; z-index: 999;
+    display: flex; gap: 6px; align-items: center; padding: 7px 10px;
+    border: 1px solid #26262A; border-radius: 24px; background: rgba(18,18,20,.94);
+    box-shadow: 0 16px 40px rgba(0,0,0,.6); font-size: 11.5px;
+  }
+  #preview-bar button {
+    padding: 4px 9px; border: 1px solid #26262A; border-radius: 14px;
+    background: #17171A; color: #A2A2AA; font: inherit; cursor: pointer;
+  }
+  #preview-bar button:hover { color: #F2F2F4; border-color: #34343A; }
+  #preview-bar span { color: #6E6E76; padding-right: 4px; }
+</style>
+</head>
+<body>
+<div id="studio"></div>
+<div id="preview-bar"><span>preview</span></div>
+
+<script src="../src/public/studio-template.generated.js"></script>
+<script src="../src/public/studio-runtime.js"></script>
+<script src="../src/public/studio-adapter.js"></script>
+<script>
+// Sample state shaped like /api/state, so the preview exercises the same
+// mapping the live dashboard uses.
+var SAMPLE = {
+  user: { email: 'youssef@deenclipped.online' },
+  engine: 'remote-worker',
+  projects: [
+    { id: 'p1', title: 'The Night Prayer and its Rewards', status: 'ready', clipCount: 6, durationSec: 3720, submittedAt: Date.now() - 7200e3, sourceThumbUrl: null },
+    { id: 'p2', title: 'Patience in Times of Hardship', status: 'processing', clipCount: 0, durationSec: 2400, submittedAt: Date.now() - 600e3, sourceThumbUrl: null },
+    { id: 'p3', title: 'The Manners of the Seeker of Knowledge', status: 'ready', clipCount: 4, durationSec: 4980, submittedAt: Date.now() - 86400e3, sourceThumbUrl: null },
+    { id: 'p4', title: 'Sincerity in Worship', status: 'ready', clipCount: 5, durationSec: 3120, submittedAt: Date.now() - 172800e3, sourceThumbUrl: null }
+  ],
+  clips: [
+    { id: 'c1', title: 'Whoever wakes up safe in his home', status: 'ready', score: 92, durationMs: 38000, reviewRequired: true, targets: [] },
+    { id: 'c2', title: 'Three duʿāʾ that are never turned back', status: 'ready', score: 88, durationMs: 44000, targets: [] },
+    { id: 'c3', title: 'He did not say the reciter was wrong', status: 'ready', score: 84, durationMs: 36000, targets: [] },
+    { id: 'c4', title: 'The dunyā is a prison for the believer', status: 'scheduled', score: 81, durationMs: 41000, scheduledAt: new Date(Date.now() + 3600e3).toISOString(), targets: [{ platform: 'youtube' }] },
+    { id: 'c5', title: 'Beneficial knowledge and accepted deeds', status: 'scheduled', score: 79, durationMs: 39000, scheduledAt: new Date(Date.now() + 7200e3).toISOString(), targets: [{ platform: 'instagram' }] },
+    { id: 'c6', title: 'Halal earnings and barakah', status: 'posted', score: 86, durationMs: 42000, postedAt: new Date(Date.now() - 3600e3).toISOString(), targets: [{ platform: 'tiktok' }] }
+  ],
+  tracks: [{ id: 't1', name: 'Nasheed — Tala al Badru' }, { id: 't2', name: 'Nasheed — Ya Tayba' }],
+  log: [
+    { level: 'info', message: 'Rendered 6 clips from The Night Prayer', at: Date.now() - 300e3 },
+    { level: 'error', message: 'TikTok token expired — reconnect to keep publishing', at: Date.now() - 900e3 },
+    { level: 'info', message: 'Scheduled 2 clips for tomorrow', at: Date.now() - 5400e3 },
+    { level: 'info', message: 'Nasheed library verified on 6 clips', at: Date.now() - 9000e3 }
+  ],
+  social: {
+    youtube: { connected: true, configured: true, accounts: [{ id: 'y1', name: 'DeenClipped' }] },
+    instagram: { connected: false, configured: true, accounts: [] },
+    tiktok: { connected: false, configured: true, accounts: [] }
+  },
+  billing: { current: { plan: 'creator', remaining: 412, unlimited: false, status: 'active' } }
+};
+
+var root = document.getElementById('studio');
+var studio = StudioRuntime.mount(root);
+function draw() { studio.render(StudioAdapter.bindings(SAMPLE)); }
+StudioAdapter.setRefresh(draw);
+draw();
+
+// Quick screen switcher, so the preview can reach every surface.
+var bar = document.getElementById('preview-bar');
+['home', 'queue', 'library', 'schedule', 'templates', 'music', 'language', 'performance', 'tokens'].forEach(function (s) {
+  var b = document.createElement('button');
+  b.textContent = s;
+  b.onclick = function () { StudioAdapter.ui.screen = s; draw(); };
+  bar.appendChild(b);
+});
+var rail = document.createElement('button');
+rail.textContent = '⇔ rail';
+rail.onclick = function () { StudioAdapter.ui.railOpen = !StudioAdapter.ui.railOpen; draw(); };
+bar.appendChild(rail);
+</script>
+</body>
+</html>

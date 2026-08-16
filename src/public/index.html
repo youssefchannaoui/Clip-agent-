@@ -11,6 +11,19 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+<!-- Studio dashboard, generated from the Claude Design project. See design/README.md. -->
+<link rel="stylesheet" href="/studio-styles.generated.css">
+<style>
+/* The Studio shell owns the viewport; the legacy dashboard keeps page scrolling.
+   The mount point stays a plain block on purpose: the design's own root element is
+   already a `height:100vh` grid with an `auto minmax(0,1fr)` column pair. Making
+   this a flex container turns that grid into a flex item that does not grow, and
+   the 1fr column collapses to content width. */
+body.studio-active { overflow: hidden; }
+body.studio-active #app { display: none; }
+#studio { display: none; }
+body.studio-active #studio { display: block; }
+</style>
 <style>
 :root{
   --bg:#09090A;
@@ -1010,6 +1023,9 @@ select:focus{outline:none;border-color:var(--blue)}
   </div>
 </section>
 
+<!-- ============ studio dashboard (generated design) ============ -->
+<div id="studio"></div>
+
 <!-- ============ app ============ -->
 <main id="app" class="hide">
   <div class="wrap">
@@ -1549,6 +1565,12 @@ select:focus{outline:none;border-color:var(--blue)}
 
 <div class="toasts" id="toasts"></div>
 
+<!-- Studio dashboard: generated template + hand-written runtime and adapter.
+     Rebuild the generated file with `npm run design:import`. -->
+<script src="/studio-template.generated.js"></script>
+<script src="/studio-runtime.js"></script>
+<script src="/studio-adapter.js"></script>
+
 <script>
 'use strict';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
@@ -1626,7 +1648,34 @@ function handleOAuthResult(){const q=new URLSearchParams(location.search);if(!q.
 
 function showView(name,direction=1){const previous=$('.panel:not(.hide)');ACTIVE_VIEW=name;$$('.tab').forEach(b=>b.classList.toggle('on',b.dataset.view===name));$$('.panel').forEach(p=>p.classList.toggle('hide',p.id!==`view-${name}`));const next=$(`#view-${CSS.escape(name)}`);if(next&&next!==previous){next.classList.remove('slide-fwd','slide-back');void next.offsetWidth;next.classList.add(direction>=0?'slide-fwd':'slide-back');setTimeout(()=>next.classList.remove('slide-fwd','slide-back'),380)}if(name==='templates')loadTemplateEditor(DATA?.selectedTemplate?.id);if(name==='publishing')renderPublishing();if(name==='automation')renderAutomation()}
 
-function renderAll(){renderHeader();decorateStaticIcons();renderQueue();renderSchedule();renderAnalytics();renderMusic();renderLibrary();renderTemplateSelect();renderPublishing();renderAutomation();renderSide();decorateStaticIcons();updateClock();if(LIBRARY_PROJECT_ID&&!$('#libraryBrowser')?.classList.contains('hide'))renderProjectClips()}
+/* ---- Studio dashboard (generated from Claude Design; see design/README.md) ----
+   Open /app?studio=1 to load it.
+
+   This is opt-in through the URL rather than a stored preference because the
+   switch is only half client-side: the Studio dashboard replaces the shell that
+   activity-fix.js builds (#dcSidebar/#dcTopbar/#dcWork), so the server has to
+   omit that script for the same request. serveAppShell() keys off the same
+   ?studio=1. A remembered preference would send the two out of step and leave
+   both shells overwriting each other.
+
+   STAGED: the rail, header and Home read live data. The other screens render
+   their frame but have no bindings yet, so the existing dashboard is still the
+   complete one. */
+function studioWanted(){return window.STUDIO_SHELL===true}
+let STUDIO=null;
+function renderStudio(){
+  if(!studioWanted()||!DATA||!window.StudioRuntime||!window.StudioAdapter)return false;
+  if(!STUDIO){
+    STUDIO=StudioRuntime.mount($('#studio'));
+    StudioAdapter.setRefresh(()=>{if(DATA)STUDIO.render(StudioAdapter.bindings(DATA))});
+    /* The adapter never calls the API itself; approving routes back through the
+       existing endpoint so both dashboards stay consistent. */
+    StudioAdapter.onApprove=async id=>{try{await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'approved'})});await refresh()}catch(e){toast(e.message,'bad')}};
+    document.body.classList.add('studio-active');
+  }
+  STUDIO.render(StudioAdapter.bindings(DATA));
+  return true}
+function renderAll(){if(renderStudio())return;renderHeader();decorateStaticIcons();renderQueue();renderSchedule();renderAnalytics();renderMusic();renderLibrary();renderTemplateSelect();renderPublishing();renderAutomation();renderSide();decorateStaticIcons();updateClock();if(LIBRARY_PROJECT_ID&&!$('#libraryBrowser')?.classList.contains('hide'))renderProjectClips()}
 function renderHeader(){if(!DATA)return;const ready=Boolean(DATA.readiness?.ready);$('#liveDot')?.classList.toggle('off',!ready);if($('#liveText'))$('#liveText').textContent=ready?'Self-hosted AI ready':'Setup required';if($('#tzLabel'))$('#tzLabel').textContent=DATA.timezone||'Australia/Perth';const q=(DATA.clips||[]).filter(c=>c.status==='waiting').length;const s=(DATA.clips||[]).filter(c=>['approved','scheduled','publishing','publish_failed'].includes(c.status)).length;if($('#cQueue')){$('#cQueue').textContent=q;$('#cQueue').classList.toggle('urgent',q>0)}if($('#cSched'))$('#cSched').textContent=s;const next=nextScheduledClip();if($('#cdNum'))$('#cdNum').textContent=next?countdown(next.scheduledAt):'—'}
 function nextScheduledClip(){return (DATA?.clips||[]).filter(c=>c.scheduledAt>Date.now()&&!['posted','ready'].includes(c.status)).sort((a,b)=>a.scheduledAt-b.scheduledAt)[0]}
 function countdown(at){const d=Math.max(0,Number(at)-Date.now());const h=Math.floor(d/3600000),m=Math.floor((d%3600000)/60000);return h?`${h}h ${m}m`:`${m}m`}
