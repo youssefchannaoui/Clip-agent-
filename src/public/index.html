@@ -11,6 +11,19 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+<!-- Studio dashboard, generated from the Claude Design project. See design/README.md. -->
+<link rel="stylesheet" href="/studio-styles.generated.css">
+<style>
+/* The Studio shell owns the viewport; the legacy dashboard keeps page scrolling.
+   The mount point stays a plain block on purpose: the design's own root element is
+   already a `height:100vh` grid with an `auto minmax(0,1fr)` column pair. Making
+   this a flex container turns that grid into a flex item that does not grow, and
+   the 1fr column collapses to content width. */
+body.studio-active { overflow: hidden; }
+body.studio-active #app { display: none; }
+#studio { display: none; }
+body.studio-active #studio { display: block; }
+</style>
 <style>
 :root{
   --bg:#09090A;
@@ -1010,6 +1023,9 @@ select:focus{outline:none;border-color:var(--blue)}
   </div>
 </section>
 
+<!-- ============ studio dashboard (generated design) ============ -->
+<div id="studio"></div>
+
 <!-- ============ app ============ -->
 <main id="app" class="hide">
   <div class="wrap">
@@ -1549,6 +1565,12 @@ select:focus{outline:none;border-color:var(--blue)}
 
 <div class="toasts" id="toasts"></div>
 
+<!-- Studio dashboard: generated template + hand-written runtime and adapter.
+     Rebuild the generated file with `npm run design:import`. -->
+<script src="/studio-template.generated.js"></script>
+<script src="/studio-runtime.js"></script>
+<script src="/studio-adapter.js"></script>
+
 <script>
 'use strict';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
@@ -1626,7 +1648,96 @@ function handleOAuthResult(){const q=new URLSearchParams(location.search);if(!q.
 
 function showView(name,direction=1){const previous=$('.panel:not(.hide)');ACTIVE_VIEW=name;$$('.tab').forEach(b=>b.classList.toggle('on',b.dataset.view===name));$$('.panel').forEach(p=>p.classList.toggle('hide',p.id!==`view-${name}`));const next=$(`#view-${CSS.escape(name)}`);if(next&&next!==previous){next.classList.remove('slide-fwd','slide-back');void next.offsetWidth;next.classList.add(direction>=0?'slide-fwd':'slide-back');setTimeout(()=>next.classList.remove('slide-fwd','slide-back'),380)}if(name==='templates')loadTemplateEditor(DATA?.selectedTemplate?.id);if(name==='publishing')renderPublishing();if(name==='automation')renderAutomation()}
 
-function renderAll(){renderHeader();decorateStaticIcons();renderQueue();renderSchedule();renderAnalytics();renderMusic();renderLibrary();renderTemplateSelect();renderPublishing();renderAutomation();renderSide();decorateStaticIcons();updateClock();if(LIBRARY_PROJECT_ID&&!$('#libraryBrowser')?.classList.contains('hide'))renderProjectClips()}
+/* ---- Studio dashboard (generated from Claude Design; see design/README.md) ----
+   Open /app?studio=1 to load it.
+
+   This is opt-in through the URL rather than a stored preference because the
+   switch is only half client-side: the Studio dashboard replaces the shell that
+   activity-fix.js builds (#dcSidebar/#dcTopbar/#dcWork), so the server has to
+   omit that script for the same request. serveAppShell() keys off the same
+   ?studio=1. A remembered preference would send the two out of step and leave
+   both shells overwriting each other.
+
+   STAGED: the rail, header and Home read live data. The other screens render
+   their frame but have no bindings yet, so the existing dashboard is still the
+   complete one. */
+function studioWanted(){return window.STUDIO_SHELL===true}
+let STUDIO=null;
+function renderStudio(){
+  if(!studioWanted()||!DATA||!window.StudioRuntime||!window.StudioAdapter)return false;
+  if(!STUDIO){
+    STUDIO=StudioRuntime.mount($('#studio'));
+    StudioAdapter.setRefresh(()=>{if(DATA)STUDIO.render(StudioAdapter.bindings(DATA))});
+    /* The adapter never calls the API itself; approving routes back through the
+       existing endpoint so both dashboards stay consistent. */
+    /* Every hook routes through the same endpoints the legacy dashboard uses, so
+       the two views never disagree about what the server was told. The adapter
+       itself never touches the network. */
+    const studioDo=async(fn,ok)=>{try{await fn();await refresh();StudioAdapter.settled();if(ok)toast(ok,'good')}catch(e){toast(e.message,'bad');StudioAdapter.settled();renderAll()}};
+    /* Toasts surface in the design's own dock while the Studio shell is visible. */
+    StudioAdapter.onToast=m=>StudioAdapter.showToast(m);
+    /* /api/clip-settings validates all three fields together, so a partial patch
+       has to be merged onto what the account already has or it 400s. */
+    StudioAdapter.onClipSettings=patch=>studioDo(()=>api('/api/clip-settings',{method:'POST',body:JSON.stringify({...(DATA?.clipSettings||{}),...patch})}));
+    StudioAdapter.onSelectTemplate=id=>studioDo(()=>api('/api/template',{method:'POST',body:JSON.stringify({id})}),'Template selected');
+    StudioAdapter.onTemplateField=(id,patch)=>{if(!id)return;studioDo(async()=>{
+      const current=(DATA?.templates||[]).find(t=>t.id===id)||{};
+      await api(`/api/templates/${encodeURIComponent(id)}`,{method:'PUT',body:JSON.stringify({template:{...current,...patch}})})})};
+    StudioAdapter.onSaveTemplate=()=>StudioAdapter.showToast('Template changes save as you make them.');
+    StudioAdapter.onResetTemplate=()=>refresh();
+    StudioAdapter.onDuplicateTemplate=id=>{if(!id)return;studioDo(async()=>{
+      const current=(DATA?.templates||[]).find(t=>t.id===id)||{};
+      const {id:_drop,version:_v,updatedAt:_u,...rest}=current;
+      await api('/api/templates',{method:'POST',body:JSON.stringify({template:{...rest,name:`${current.name||'Template'} copy`},select:false})})},'Template duplicated')};
+    StudioAdapter.onSignOut=()=>studioDo(async()=>{await api('/auth/logout',{method:'POST'});location.href='/'});
+    /* Caption text is the clip's transcript and is the one visual thing the
+       server keeps per clip; everything else in the editor lives on the template
+       and is saved as it changes. */
+    StudioAdapter.onSaveClip=(id,fields)=>studioDo(async()=>{
+      await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(fields)});
+      StudioAdapter.clipSaved()},'Clip saved');
+    StudioAdapter.onConnect=name=>studioDo(async()=>{
+      const r=await api(`/api/social/${encodeURIComponent(name)}/connect`,{method:'POST'});
+      if(r&&r.url)location.href=r.url});
+    StudioAdapter.onDisconnect=oauth=>{if(!confirm('Disconnect this account and disable future uploads?'))return;
+      studioDo(()=>api(`/api/social/${encodeURIComponent(oauth)}/disconnect`,{method:'POST'}),'Account disconnected')};
+    StudioAdapter.onTestConnection=name=>studioDo(()=>api(`/api/social/${encodeURIComponent(name)}/test`,{method:'POST',body:JSON.stringify({})}),'Connection looks healthy');
+    /* Resolve the pasted link first, so the range picker and the token estimate
+       are based on the real source duration rather than a guess. */
+    StudioAdapter.onProbeSource=async url=>{try{
+      const r=await api('/api/source-info',{method:'POST',body:JSON.stringify({urls:url})});
+      const src=(r.sources||[])[0];
+      if(!src||src.error)throw new Error(src?.error||'That link could not be read.');
+      StudioAdapter.openJob({url,title:src.title||url,durationSec:src.durationSec})}catch(e){toast(e.message,'bad')}};
+    StudioAdapter.onGenerate=(url,range)=>studioDo(async()=>{
+      await api('/api/videos',{method:'POST',body:JSON.stringify({urls:url,sourceStartSeconds:range.startSec,sourceEndSeconds:range.endSec})});
+      StudioAdapter.jobDone()},'Lecture queued');
+    StudioAdapter.onApprove=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'approved'})}));
+    StudioAdapter.onClipSettings=patch=>studioDo(()=>api('/api/clip-settings',{method:'POST',body:JSON.stringify(patch)}));
+    StudioAdapter.onMusicSettings=patch=>studioDo(()=>api('/api/music-settings',{method:'POST',body:JSON.stringify(patch)}));
+    StudioAdapter.onRemoveTrack=id=>{if(!confirm('Delete this nasheed?'))return;studioDo(()=>api(`/api/music/${encodeURIComponent(id)}`,{method:'DELETE'}),'Nasheed deleted')};
+    StudioAdapter.onPlayTrack=id=>{
+      /* One <audio> reused for the whole screen, so starting a track stops the last. */
+      if(!window.__studioAudio)window.__studioAudio=new Audio();
+      const a=window.__studioAudio,src=withPw(`/api/music/${encodeURIComponent(id)}/audio`);
+      if(!a.paused&&a.dataset.trackId===id){a.pause();return}
+      a.src=src;a.dataset.trackId=id;a.play().catch(e=>toast(e.message,'bad'))};
+    StudioAdapter.onChoosePlan=plan=>studioDo(async()=>{
+      const r=await api('/api/billing/checkout',{method:'POST',body:JSON.stringify({plan})});
+      if(r&&r.url)location.href=r.url});
+    StudioAdapter.onBillingPortal=()=>studioDo(async()=>{
+      const r=await api('/api/billing/portal',{method:'POST',body:JSON.stringify({})});
+      if(r&&r.url)location.href=r.url});
+    StudioAdapter.onUploadFile=file=>studioDo(async()=>{
+      const presign=await api('/api/uploads/presign',{method:'POST',body:JSON.stringify({fileName:file.name,contentType:file.type||'video/mp4'})});
+      const put=await fetch(presign.uploadUrl,{method:'PUT',headers:presign.headers||{'Content-Type':file.type||'video/mp4'},body:file});
+      if(!put.ok)throw new Error('Upload failed — the storage service rejected the file.');
+      await api('/api/videos',{method:'POST',body:JSON.stringify({objectKey:presign.objectKey,fileName:file.name,title:file.name})})},'Upload queued');
+    document.body.classList.add('studio-active');
+  }
+  STUDIO.render(StudioAdapter.bindings(DATA));
+  return true}
+function renderAll(){if(renderStudio())return;renderHeader();decorateStaticIcons();renderQueue();renderSchedule();renderAnalytics();renderMusic();renderLibrary();renderTemplateSelect();renderPublishing();renderAutomation();renderSide();decorateStaticIcons();updateClock();if(LIBRARY_PROJECT_ID&&!$('#libraryBrowser')?.classList.contains('hide'))renderProjectClips()}
 function renderHeader(){if(!DATA)return;const ready=Boolean(DATA.readiness?.ready);$('#liveDot')?.classList.toggle('off',!ready);if($('#liveText'))$('#liveText').textContent=ready?'Self-hosted AI ready':'Setup required';if($('#tzLabel'))$('#tzLabel').textContent=DATA.timezone||'Australia/Perth';const q=(DATA.clips||[]).filter(c=>c.status==='waiting').length;const s=(DATA.clips||[]).filter(c=>['approved','scheduled','publishing','publish_failed'].includes(c.status)).length;if($('#cQueue')){$('#cQueue').textContent=q;$('#cQueue').classList.toggle('urgent',q>0)}if($('#cSched'))$('#cSched').textContent=s;const next=nextScheduledClip();if($('#cdNum'))$('#cdNum').textContent=next?countdown(next.scheduledAt):'—'}
 function nextScheduledClip(){return (DATA?.clips||[]).filter(c=>c.scheduledAt>Date.now()&&!['posted','ready'].includes(c.status)).sort((a,b)=>a.scheduledAt-b.scheduledAt)[0]}
 function countdown(at){const d=Math.max(0,Number(at)-Date.now());const h=Math.floor(d/3600000),m=Math.floor((d%3600000)/60000);return h?`${h}h ${m}m`:`${m}m`}

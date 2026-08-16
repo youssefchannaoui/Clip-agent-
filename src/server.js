@@ -29,6 +29,14 @@ const page = path.join(config.root, 'src', 'public', 'index.html');
 const activityFixPage = path.join(config.root, 'src', 'public', 'activity-fix.js');
 const premiumDashboardPage = path.join(config.root, 'src', 'public', 'premium-dashboard.js');
 const marketingCssPage = path.join(config.root, 'src', 'public', 'marketing.css');
+const studioAsset = name => path.join(config.root, 'src', 'public', name);
+const JS_TYPE = 'text/javascript; charset=utf-8';
+const STUDIO_ASSETS = {
+  '/studio-template.generated.js': { file: studioAsset('studio-template.generated.js'), type: JS_TYPE },
+  '/studio-runtime.js': { file: studioAsset('studio-runtime.js'), type: JS_TYPE },
+  '/studio-adapter.js': { file: studioAsset('studio-adapter.js'), type: JS_TYPE },
+  '/studio-styles.generated.css': { file: studioAsset('studio-styles.generated.css'), type: 'text/css; charset=utf-8' },
+};
 const marketingJsPage = path.join(config.root, 'src', 'public', 'marketing.js');
 // Marketing images are looked for in a dedicated subfolder first, then in
 // src/public itself. They are currently committed directly to src/public, so
@@ -78,8 +86,23 @@ function serveAppShell(req, res, url, currentUser) {
   if (auth.enabled() && !currentUser) return redirect(res, `/login?returnTo=${encodeURIComponent('/app' + (url.search || ''))}`);
   if (auth.enabled() && currentUser && billing.needsPlanChoice(currentUser)) return redirect(res, `/plans?returnTo=${encodeURIComponent('/app' + (url.search || ''))}`);
   let html = fs.readFileSync(page, 'utf8');
-  if (!html.includes('/activity-fix.js')) html = html.replace('</body>', '<script src="/activity-fix.js"></script>\n</body>');
-  if (!html.includes('/premium-dashboard.js')) html = html.replace('</body>', '<script src="/premium-dashboard.js"></script>\n</body>');
+  // activity-fix.js builds the current dashboard shell (#dcSidebar/#dcTopbar/#dcWork)
+  // by appending to document.body, and premium-dashboard.js layers onto it. The
+  // Studio dashboard is a full replacement for that shell, so the two cannot both
+  // run — loading them together leaves each overwriting the other's markup.
+  // `?studio=1` serves the page without them.
+  const studioShell = url.searchParams.get('studio') === '1';
+  if (studioShell) {
+    // Into <head>, not before </body>: the page's inline script calls boot() during
+    // parse, so a flag set at the end of the body would arrive after the decision.
+    // The page reads this rather than sniffing for the scripts, so that merely
+    // mentioning a script path in index.html cannot change what gets injected.
+    html = html.replace('</head>', '<script>window.STUDIO_SHELL=true;</script>\n</head>');
+  } else {
+    const has = tag => html.includes(`src="${tag}"`);
+    if (!has('/activity-fix.js')) html = html.replace('</body>', '<script src="/activity-fix.js"></script>\n</body>');
+    if (!has('/premium-dashboard.js')) html = html.replace('</body>', '<script src="/premium-dashboard.js"></script>\n</body>');
+  }
   const body = Buffer.from(html);
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
   return res.end(body);
@@ -406,6 +429,15 @@ async function route(req, res, url) {
     if (!fs.existsSync(premiumDashboardPage)) return json(res, 404, { error: 'Premium dashboard script not found.' });
     const body = fs.readFileSync(premiumDashboardPage);
     res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
+    return res.end(body);
+  }
+  // Studio dashboard assets. Static files are served by explicit route here, so a
+  // new generated file is invisible until it is listed. See design/README.md.
+  if (method === 'GET' && STUDIO_ASSETS[pathname]) {
+    const asset = STUDIO_ASSETS[pathname];
+    if (!fs.existsSync(asset.file)) return json(res, 404, { error: 'Studio asset not found. Run `npm run design:import`.' });
+    const body = fs.readFileSync(asset.file);
+    res.writeHead(200, { 'Content-Type': asset.type, 'Content-Length': body.length, 'Cache-Control': 'no-store' });
     return res.end(body);
   }
   const oauthCallback = pathname.match(/^\/auth\/(youtube|meta|tiktok)\/callback$/);

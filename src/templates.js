@@ -25,6 +25,12 @@ const DEFAULTS = Object.freeze({
   gamma: 1,
   sharpen: 0.45,
   vignette: 0,
+  // Grain, warmth and crop zoom. The editor has always drawn these three
+  // controls; until now nothing held them, so sanitiseTemplate() dropped the
+  // values and the sliders did nothing.
+  grain: 0,
+  warm: 0,
+  smartFramingZoom: 1,
   captionMode: 'dynamic-stack',
   captionFont: 'DejaVu Sans',
   captionFontSize: 96,
@@ -77,6 +83,9 @@ const ENUMS = {
 const NUMBER_RANGES = {
   width: [360, 2160], height: [360, 3840], blurStrength: [0, 60],
   brightness: [-1, 1], contrast: [0.5, 2], saturation: [0, 3], gamma: [0.5, 2], sharpen: [0, 2], vignette: [0, 1],
+  // grain is a percentage; warm runs cool-to-warm through neutral; zoom is a
+  // crop multiplier, so 1 is the untouched framing.
+  grain: [0, 100], warm: [-100, 100], smartFramingZoom: [0.75, 2.5],
   captionFontSize: [24, 140], captionOutlineWidth: [0, 14], captionShadow: [0, 8], captionBackgroundOpacity: [0, 100],
   captionMarginV: [20, 800], captionMarginH: [20, 700], captionMaxWords: [1, 12],
   captionStackMaxWords: [1, 6], captionStackProbability: [0, 1], captionClearPause: [0.15, 2], captionLineHeight: [0.65, 1.4],
