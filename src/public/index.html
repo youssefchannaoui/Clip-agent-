@@ -28,6 +28,10 @@ body.studio-active #studio { display: block; }
    mousedown and mouseup land on the same element — so hovering made the whole
    dashboard unclickable. The active item overrides this with inline !important. */
 #studio nav a:hover { background: #17171A !important; color: #F2F2F4 !important; }
+/* The unread dot is a bare <span> in the design with no binding, so it can only
+   be controlled from here. Targeted through the Phosphor icon class rather than
+   the generated one, which changes on re-import. */
+body.studio-read #studio button:has(> i.ph-bell) > span { display: none; }
 </style>
 <style>
 :root{
@@ -1776,7 +1780,10 @@ function renderStudio(){
       await api('/api/videos',{method:'POST',body:JSON.stringify({objectKey:presign.objectKey,fileName:file.name,title:file.name})})},'Upload queued');
     document.body.classList.add('studio-active');
   }
-  STUDIO.render(StudioAdapter.bindings(DATA));
+  const vals=StudioAdapter.bindings(DATA);
+  STUDIO.render(vals);
+  /* No unread activity -> hide the dot the design hardcoded on. */
+  document.body.classList.toggle('studio-read',!vals.activityUnread);
   return true}
 function renderAll(){if(renderStudio())return;renderHeader();decorateStaticIcons();renderQueue();renderSchedule();renderAnalytics();renderMusic();renderLibrary();renderTemplateSelect();renderPublishing();renderAutomation();renderSide();decorateStaticIcons();updateClock();if(LIBRARY_PROJECT_ID&&!$('#libraryBrowser')?.classList.contains('hide'))renderProjectClips()}
 function renderHeader(){if(!DATA)return;const ready=Boolean(DATA.readiness?.ready);$('#liveDot')?.classList.toggle('off',!ready);if($('#liveText'))$('#liveText').textContent=ready?'Self-hosted AI ready':'Setup required';if($('#tzLabel'))$('#tzLabel').textContent=DATA.timezone||'Australia/Perth';const q=(DATA.clips||[]).filter(c=>c.status==='waiting').length;const s=(DATA.clips||[]).filter(c=>['approved','scheduled','publishing','publish_failed'].includes(c.status)).length;if($('#cQueue')){$('#cQueue').textContent=q;$('#cQueue').classList.toggle('urgent',q>0)}if($('#cSched'))$('#cSched').textContent=s;const next=nextScheduledClip();if($('#cdNum'))$('#cdNum').textContent=next?countdown(next.scheduledAt):'—'}
@@ -2124,7 +2131,23 @@ $('#scheduleSelectedLibraryClips').onclick=async()=>{
 $('#postSelectedLibraryClips').onclick=async()=>{const ids=[...LIBRARY_SELECTED].filter(id=>libraryClipAvailable(clipById(id)||{}));if(!ids.length)return toast('Select at least one unposted clip','bad');if(!confirm(`Post ${ids.length} selected clip${ids.length===1?'':'s'} now?`))return;setBusy($('#postSelectedLibraryClips'),true,'Starting…');let ok=0;for(const id of ids)try{await api(`/api/clips/${encodeURIComponent(id)}/publish`,{method:'POST'});ok++}catch(e){toast(e.message,'bad')}toast(`${ok} publishing transfer${ok===1?'':'s'} created`,'good');LIBRARY_SELECTED.clear();await refresh();setBusy($('#postSelectedLibraryClips'),false)};
 
 setInterval(updateClock,1000);const splashMinTime=new Promise(r=>setTimeout(r,1400));const splashTimeout=new Promise(r=>setTimeout(()=>r('timeout'),12000));/* Always ask the server who we are. Gating this on a locally cached app password meant anyone who signed in with email, Google or Apple -- who has a valid session but no deenPw -- was shown the password wall instead of their dashboard, with no way through but the admin password. boot() reveals #gate itself if /api/state actually refuses. */
-const realCheck=boot();Promise.race([Promise.all([splashMinTime,realCheck]),splashTimeout]).then(result=>{if(result==='timeout'&&$('#gate')?.classList.contains('hide')&&$('#connect')?.classList.contains('hide')&&$('#app')?.classList.contains('hide')){$('#gate')?.classList.remove('hide');if($('#gateErr'))$('#gateErr').textContent='Taking longer than expected to reach the server. Check your connection and try again.'}$('#splash')?.classList.add('out');setTimeout(()=>$('#splash')?.remove(),500)});setInterval(()=>{if(DATA&&(DATA.activeJobs||DATA.projects.some(p=>['queued','processing'].includes(p.status)||['queued','processing'].includes(p.moreJob?.status))||DATA.rerenderJobs?.some(j=>['queued','processing'].includes(j.status))||DATA.clips.some(c=>['scheduled','publishing'].includes(c.status)||c.targets?.some(t=>['scheduled','retrying','publishing','processing'].includes(t.status)))))refresh()},2000);
+const realCheck=boot();Promise.race([Promise.all([splashMinTime,realCheck]),splashTimeout]).then(result=>{if(result==='timeout'&&$('#gate')?.classList.contains('hide')&&$('#connect')?.classList.contains('hide')&&$('#app')?.classList.contains('hide')){$('#gate')?.classList.remove('hide');if($('#gateErr'))$('#gateErr').textContent='Taking longer than expected to reach the server. Check your connection and try again.'}$('#splash')?.classList.add('out');setTimeout(()=>$('#splash')?.remove(),500)});/* Two cadences. Fast while work is in flight, so progress moves; slow otherwise,
+   so the notification bell can actually notice a scheduler failure, an
+   automation warning or a billing charge. Polling only while a job was already
+   running meant nothing new ever appeared until the page was reloaded — for a
+   notification system that is the defining behaviour, and it was off. */
+const workInFlight=()=>Boolean(DATA&&(DATA.activeJobs
+  ||DATA.projects.some(p=>['queued','processing'].includes(p.status)||['queued','processing'].includes(p.moreJob?.status))
+  ||DATA.rerenderJobs?.some(j=>['queued','processing'].includes(j.status))
+  ||DATA.clips.some(c=>['scheduled','publishing'].includes(c.status)||c.targets?.some(t=>['scheduled','retrying','publishing','processing'].includes(t.status)))));
+let idleTicks=0;
+setInterval(()=>{
+  if(!DATA)return;
+  if(workInFlight()){idleTicks=0;refresh();return}
+  /* Every 30s when idle, and never while the tab is hidden. */
+  idleTicks++;
+  if(idleTicks>=15&&document.visibilityState!=='hidden'){idleTicks=0;refresh()}
+},2000);
 
 </script>
 </body>

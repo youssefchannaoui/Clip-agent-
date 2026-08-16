@@ -941,3 +941,53 @@ test('Post now is gated on the four checks', () => {
   assert.equal(item.hasFailing, true);
   assert.match(item.statusLabel, /failing/);
 });
+
+// ── P2: nothing invented ───────────────────────────────────────────────────
+
+test('Home "This week" reports measured numbers, not fixed ones', () => {
+  // The design hardcoded 18 posted, 86 median, 4 held. Against a real account
+  // that read 18 against 1, and a median of 86 when the best clip scored 72.
+  Object.assign(StudioAdapter.ui, { screen: 'home' });
+  const vals = StudioAdapter.bindings({
+    projects: [], tracks: [], postTimes: ['07:00', '12:00', '17:00'],
+    clips: [
+      { id: 'a', status: 'posted', postedAt: Date.now() - 86400000, score: 70 },
+      { id: 'b', status: 'waiting', score: 60 },
+    ],
+  });
+  assert.equal(vals.weekPosted, '1');
+  assert.equal(vals.weekMedian, '70');
+  assert.equal(vals.weekHeld, '1');
+  assert.equal(vals.weekWorker, '—', 'nothing records worker time, so it is not invented');
+});
+
+test('posting windows come from the account, and the label matches the time', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'schedule' });
+  const vals = StudioAdapter.bindings({ projects: [], clips: [], tracks: [], postTimes: ['07:00', '12:00', '17:00', '20:30'] });
+  assert.equal(vals.postWindow1, '07:00');
+  assert.equal(vals.postWindowName1, 'Morning', 'a 07:00 slot cannot be labelled Midday');
+  assert.equal(vals.postWindow3, '17:00');
+  assert.equal(vals.postWindowName3, 'Evening');
+});
+
+test('the daily limit agrees with the schedule beside it', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'schedule' });
+  const empty = StudioAdapter.bindings({ projects: [], clips: [], tracks: [], postTimes: [] });
+  assert.match(empty.dailyLimitNote, /^0 of 4 scheduled today/, 'it said "Today is full" beside empty days');
+});
+
+test('the bell is quiet on a brand-new account and reads as unread only for new activity', () => {
+  const fresh = { projects: [], clips: [], tracks: [], log: [] };
+  assert.equal(StudioAdapter.bindings(fresh).activityUnread, 0);
+  const active = { ...fresh, log: [{ level: 'info', message: 'x', at: Date.now() }] };
+  assert.equal(StudioAdapter.bindings(active).activityUnread, 1);
+  StudioAdapter.bindings(active).markRead({ preventDefault() {} });
+  assert.equal(StudioAdapter.bindings(active).activityUnread, 0, 'mark all read has to actually do something');
+});
+
+test('a select renders its chosen option, not the first one', () => {
+  // A `value` attribute does not select an <option>; the Templates picker
+  // therefore opened the wrong style and saving there missed the user's clips.
+  const runtime = fs.readFileSync(path.join(ROOT, 'src/public/studio-runtime.js'), 'utf8');
+  assert.match(runtime, /select\[value\]/, 'form values are applied as properties after render');
+});

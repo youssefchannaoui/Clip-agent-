@@ -10,24 +10,38 @@
     "`npm run design:import` reports it as unused so the entry can be deleted.",
     "",
     "Matching is exact on the trimmed string. An override that matches nothing is",
-    "reported, never silently ignored."
+    "reported, never silently ignored.",
+    "",
+    "Note: the onboarding step numbers 1/2/3 are NOT data and must never be listed here."
   ],
-
   "overrides": {
     "Youssef Channaoui": "accountName",
-    "Studio · Salām, Youssef": "greeting",
-    "3 connected · TikTok needs reconnecting": "connSummary",
-    "Visa ending 4242 · expires 04/29": "cardLabel",
-    "860 spent this month · resets nothing — tokens never expire": "spendSummary",
+    "Studio \u00b7 Sal\u0101m, Youssef": "greeting",
+    "3 connected \u00b7 TikTok needs reconnecting": "connSummary",
+    "Visa ending 4242 \u00b7 expires 04/29": "cardLabel",
+    "860 spent this month \u00b7 resets nothing \u2014 tokens never expire": "spendSummary",
     "148 of 250 GB": "storageSummary",
     "112 GB": "storageSources",
     "34 GB": "storageClips",
     "2 GB": "storageTranscripts",
-    "Patience in Hardship — Part 2": "jobTitle",
-    "42:11 source · 6 clips requested": "jobMeta",
+    "Patience in Hardship \u2014 Part 2": "jobTitle",
+    "42:11 source \u00b7 6 clips requested": "jobMeta",
     "2 need you": "activityNeedsYou",
     "12 in total": "activityTotal",
     "From one 38-min talk": "emptySampleNote",
-    "This is what one 38-minute lecture produces": "emptySampleCaption"
+    "This is what one 38-minute lecture produces": "emptySampleCaption",
+    "18": "weekPosted",
+    "86": "weekMedian",
+    "4": "weekHeld",
+    "2h": "weekWorker",
+    "13:00\u201315:00": "postWindow1",
+    "18:00\u201319:30": "postWindow2",
+    "21:00\u201323:00": "postWindow3",
+    "Midday": "postWindowName1",
+    "Evening": "postWindowName2",
+    "Late": "postWindowName3",
+    "Today is full \u2014 4 of 4. Nothing posts unless its four checks pass.": "dailyLimitNote",
+    "42:11 \u00b7 source lecture": "edSourceLabel",
+    "09:14 / 42:11": "edTimeReadout"
   }
 }

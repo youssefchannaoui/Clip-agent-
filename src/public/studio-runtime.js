@@ -234,6 +234,20 @@
     } catch (err) { /* element is no longer focusable */ }
   }
 
+  // A `value` attribute does not select an <option>; HTML needs `selected` on the
+  // option itself, so a <select> rendered from markup always fell to index 0. The
+  // Templates picker therefore opened the wrong style, and anything saved there
+  // never reached the user's clips. Applying value as a property after the swap
+  // fixes every dropdown at once.
+  function applyFormValues(root) {
+    var fields = root.querySelectorAll('select[value], input[value], textarea[value]');
+    for (var i = 0; i < fields.length; i++) {
+      var el = fields[i];
+      var wanted = el.getAttribute('value');
+      if (el.value !== wanted) el.value = wanted;
+    }
+  }
+
   Studio.prototype.render = function (vals) {
     var r = new Renderer();
     var out = [];
@@ -241,6 +255,7 @@
     var snap = captureFocus(this.root);
     this.handlers = r.handlers;
     this.root.innerHTML = out.join('');
+    applyFormValues(this.root);
     restoreFocus(this.root, snap);
     this.bind();
   };

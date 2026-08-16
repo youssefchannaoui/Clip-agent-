@@ -203,6 +203,36 @@
 
   function toast(message) { global.StudioAdapter.onToast(message); }
 
+  // There is no read/seen state on the server -- no field, no route -- so the
+  // bell remembers per browser. Better than the alternative it replaces: a dot
+  // hardcoded into the design that never turned off, on a brand-new account with
+  // no activity at all, which teaches people to ignore the bell entirely.
+  var SEEN_KEY = 'deenStudioActivitySeen';
+  // Falls back to memory when localStorage is unavailable — private browsing
+  // throws on access, and without this the bell could never be marked read there.
+  var seenMemory = 0;
+  function lastSeen() {
+    try {
+      var stored = Number(global.localStorage.getItem(SEEN_KEY)) || 0;
+      return Math.max(stored, seenMemory);
+    } catch (err) { return seenMemory; }
+  }
+  function markSeen() {
+    seenMemory = Date.now();
+    try { global.localStorage.setItem(SEEN_KEY, String(seenMemory)); } catch (err) { /* private mode */ }
+  }
+
+  // Names a configured post time by the hour it falls in, so the label cannot
+  // contradict the time printed beside it.
+  function windowName(hhmm) {
+    if (!hhmm) return '—';
+    var hour = Number(String(hhmm).split(':')[0]);
+    if (hour < 11) return 'Morning';
+    if (hour < 15) return 'Midday';
+    if (hour < 19) return 'Evening';
+    return 'Late';
+  }
+
   // Worker errors carry URLs and stack noise; the feed needs one readable line.
   function shortError(text) {
     var t = String(text || 'Processing failed.').replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim();
@@ -768,7 +798,31 @@
       };
     }
 
+    var seenAt = lastSeen();
+    var unreadCount = failures.length + log.filter(function (e) {
+      return Number(e.at || e.createdAt || 0) > seenAt;
+    }).length;
+
+    var weekAgo = Date.now() - 7 * DAY_MS;
+    var postedThisWeek = clips.filter(function (c) { return c.postedAt && new Date(c.postedAt).getTime() >= weekAgo; });
+    var allScores = clips.map(function (c) { return Number(c.score || 0); }).filter(Boolean).sort(function (a, b) { return a - b; });
+    var medianScore = allScores.length ? allScores[Math.floor(allScores.length / 2)] : 0;
+    var postTimes = DATA.postTimes || [];
+    var todayCount = scheduled.filter(function (c) { return startOfDay(c.scheduledAt) === today; }).length;
+
     // Blockers name a real gap and send you to the screen that fixes it.
+    var seenAt = lastSeen();
+    var unreadCount = failures.length + log.filter(function (e) {
+      return Number(e.at || e.createdAt || 0) > seenAt;
+    }).length;
+
+    var weekAgo = Date.now() - 7 * DAY_MS;
+    var postedThisWeek = clips.filter(function (c) { return c.postedAt && new Date(c.postedAt).getTime() >= weekAgo; });
+    var allScores = clips.map(function (c) { return Number(c.score || 0); }).filter(Boolean).sort(function (a, b) { return a - b; });
+    var medianScore = allScores.length ? allScores[Math.floor(allScores.length / 2)] : 0;
+    var postTimes = DATA.postTimes || [];
+    var todayCount = scheduled.filter(function (c) { return startOfDay(c.scheduledAt) === today; }).length;
+
     // Blockers name a real gap and send you to the screen that fixes it.
     var blocker = '', blockerScreen = 'music';
     if (tracks.length === 0) { blocker = 'No nasheed uploaded — every clip mixes one in, so processing cannot finish without at least one.'; blockerScreen = 'music'; }
@@ -820,7 +874,9 @@
 
       bellOpen: UI.bellOpen,
       toggleBell: function (e) { stop(e); setUI({ bellOpen: !UI.bellOpen, menuOpen: false }); },
-      markRead: function (e) { stop(e); setUI({ bellOpen: false }); },
+      markRead: function (e) { stop(e); markSeen(); setUI({ bellOpen: false }); },
+      // Drives the unread dot. Anything that failed always counts as unread.
+      activityUnread: unreadCount,
       moreActivity: function (e) { stop(e); setUI({ activityAll: !UI.activityAll }); },
       activity: failures.map(function (f) {
         return {
@@ -1273,6 +1329,33 @@
       activityTotal: (failures.length + log.length) + ' in total',
       emptySampleNote: 'Sample of what a lecture produces',
       emptySampleCaption: 'This is what one lecture produces',
+
+      // ── Home "This week" ──
+      // Every one of these was a fixed number in the design. Measured against a
+      // real account they read 18 clips posted against 1, and a median score of
+      // 86 when the highest-scoring clip was 72.
+      weekPosted: String(postedThisWeek.length),
+      weekMedian: medianScore ? String(medianScore) : '—',
+      weekHeld: String(needsCount),
+      // Nothing records worker time, so it is not invented.
+      weekWorker: '—',
+
+      // ── Posting windows ──
+      // The design hardcoded three windows that matched nothing. These are the
+      // account's own configured post times.
+      postWindowName1: windowName(postTimes[0]),
+      postWindowName2: windowName(postTimes[1]),
+      postWindowName3: windowName(postTimes[2]),
+      postWindow1: postTimes[0] || '—',
+      postWindow2: postTimes[1] || '—',
+      postWindow3: postTimes[2] || '—',
+      dailyLimitNote: todayCount >= 4
+        ? 'Today is full — 4 of 4. Nothing posts unless its four checks pass.'
+        : todayCount + ' of 4 scheduled today. Nothing posts unless its four checks pass.',
+
+      // ── Editor readouts ──
+      edSourceLabel: edClip ? secsToClock((edClip.durationMs || 0) / 1000) + ' · clip' : '',
+      edTimeReadout: edClip ? '0:00 / ' + secsToClock((edClip.durationMs || 0) / 1000) : '',
 
       // ── Chrome: option sheet, toast, player, tour, boot ──
       // The sheet is how every picker on the Templates screen asks its question,
