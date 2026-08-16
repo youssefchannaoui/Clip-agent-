@@ -1679,8 +1679,11 @@ function renderStudio(){
     /* Every hook routes through the same endpoints the legacy dashboard uses, so
        the two views never disagree about what the server was told. The adapter
        itself never touches the network. */
-    const studioDo=async(fn,ok)=>{try{await fn();await refresh();StudioAdapter.settled();if(ok)toast(ok,'good')}
-      catch(e){toast(e.message,'bad');StudioAdapter.settled();StudioAdapter.jobFailed(e.message);renderAll()}};
+    /* onFail is opt-in. Routing every failure into the job panel meant an
+       unrelated template PUT 400 printed under the "Generate clips" button as
+       though the lecture itself had been refused. */
+    const studioDo=async(fn,ok,onFail)=>{try{await fn();await refresh();StudioAdapter.settled();if(ok)toast(ok,'good')}
+      catch(e){toast(e.message,'bad');StudioAdapter.settled();if(onFail)onFail(e.message);renderAll()}};
     /* Toasts surface in the design's own dock while the Studio shell is visible. */
     StudioAdapter.onToast=m=>StudioAdapter.showToast(m);
     /* /api/clip-settings validates all three fields together, so a partial patch
@@ -1750,7 +1753,7 @@ function renderStudio(){
          first") looked like success: the panel closed and nothing was queued. */
       const failed=(r&&r.results||[]).filter(x=>x&&x.error);
       if(failed.length)throw new Error(failed[0].error);
-      StudioAdapter.jobDone()},'Lecture queued');
+      StudioAdapter.jobDone()},'Lecture queued',m=>StudioAdapter.jobFailed(m));
     StudioAdapter.onApprove=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'approved'})}));    StudioAdapter.onMusicSettings=patch=>studioDo(()=>api('/api/music-settings',{method:'POST',body:JSON.stringify(patch)}));
     StudioAdapter.onRemoveTrack=id=>{if(!confirm('Delete this nasheed?'))return;studioDo(()=>api(`/api/music/${encodeURIComponent(id)}`,{method:'DELETE'}),'Nasheed deleted')};
     StudioAdapter.onPlayTrack=id=>{

@@ -88,7 +88,12 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently 324 JS + 120 Python.
+- `npm test` and `npm run check` must pass. Currently **156 JS + 44 Python**
+  (7 Python skipped). Update these numbers when they change — they were wrong by
+  more than a factor of two, which makes them useless as a tripwire.
+- **The 7 skips are `SpeakerTrackingTests`**, which need a test video that is not
+  in the repo. So the framing code is unexercised in CI *and*, per the open items
+  below, has never been checked visually either. Treat it as untested.
 - **Test executed output, not source strings.** Several tests have failed only
   because code moved into a function, while real behaviour changes passed.
 - **A green suite is not verification for anything visual.** Every layout bug

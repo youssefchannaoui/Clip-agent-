@@ -138,3 +138,24 @@ Hetzner box is redeployed:
 - **`rotCount` pluralisation.** The template writes `{{ rotCount }} nasheeds in
   rotation`, so a single track reads "1 nasheeds". The noun needs to move into
   the binding.
+
+
+## 5. Still open after the 16–17 Aug QA pass
+
+Fixed elsewhere; these need a decision or a backend and are deliberately not
+faked in the meantime.
+
+- **`tokensReserved` is always 0.** It is zeroed but never incremented
+  (`billing.js`), while the Tokens screen surfaces it as "Reserved for running
+  jobs". So remaining-token figures ignore work in flight and an account can
+  overdraw. Fixing it means reserving at job start and releasing on completion or
+  failure — real money, so it is not a change to make casually.
+- **No stall watchdog.** `clip_worker.py` emits heartbeats every 10s and both
+  consumers parse and discard them. If ffmpeg or faster-whisper hangs, the job
+  timeout eventually fires (and now cancels the worker-side job), but nothing
+  notices the stall in between and the UI shows a frozen percentage.
+- **Template options are keyed by name, not id.** The design renders
+  `<option value="{{ opt }}">` over a list of strings, so renaming a template
+  breaks selection. Fixing it properly needs the design to emit `{id, name}`.
+- **Performance and Arabic & terms still have no backend.** Unchanged from
+  section 3.

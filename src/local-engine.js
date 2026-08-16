@@ -28,6 +28,10 @@ function id(prefix) {
 function projectById(projectId) { return state.projects.find(project => project.id === projectId) || null; }
 function clipById(clipId) { return state.clips.find(clip => clip.id === clipId) || null; }
 function jobFile(projectId) { return path.join(jobsDir, projectId, 'job.json'); }
+
+// Roughly five minutes of 30s retries before a lecture is failed with a message
+// rather than looping in silence.
+const MAX_WORKER_RETRIES = 10;
 function resultFile(projectId) { return path.join(jobsDir, projectId, 'result.json'); }
 function removeDataFile(file) {
   if (!file) return;
@@ -505,6 +509,7 @@ async function runRemoteProject(project) {
   project.status = 'processing'; project.stage = 'Connecting to processing worker'; project.progress = Math.max(1, project.progress || 0); project.error = null; save();
   running.set(project.id, { remote: true });
   const started = Date.now();
+  project.workerRetries = project.workerRetries || 0;
   try {
     await workerClient.createJob(payload);
     while (Date.now() - started < config.workerJobTimeoutMs) {
@@ -513,15 +518,32 @@ async function runRemoteProject(project) {
       if (['completed', 'failed', 'cancelled'].includes(update.status)) return;
       await new Promise(resolve => setTimeout(resolve, config.workerPollIntervalMs));
     }
+    // Tell the worker to stop before giving up locally. Without this the run
+    // kept going on a MAX_CONCURRENT_JOBS=1 worker, so one timed-out job blocked
+    // every other customer indefinitely.
+    await workerClient.cancelJob(workerJobId).catch(() => {});
     throw new Error('The processing worker exceeded the job timeout. The job can be retried safely.');
   } catch (error) {
     if (project.status !== 'done') {
-      project.status = error.code === 'worker_unavailable' ? 'queued' : 'failed';
-      project.stage = error.code === 'worker_unavailable' ? 'Worker unavailable — retrying after recovery' : 'failed';
-      project.error = error.message; project.errorCode = error.code || 'processing_failed';
-      if (error.code === 'worker_unavailable') project.nextRetryAt = Date.now() + 30_000;
+      // An unreachable worker used to re-queue every 30s forever, with the retry
+      // window reset each cycle, so a VPS outage looped silently and the client
+      // polled /api/state the whole time. Give up after a bounded number of
+      // attempts and say so.
+      const unavailable = error.code === 'worker_unavailable';
+      const attempts = Number(project.workerRetries || 0) + (unavailable ? 1 : 0);
+      const exhausted = unavailable && attempts > MAX_WORKER_RETRIES;
+      project.workerRetries = unavailable ? attempts : 0;
+      project.status = unavailable && !exhausted ? 'queued' : 'failed';
+      project.stage = unavailable && !exhausted
+        ? `Worker unavailable — retrying (${attempts}/${MAX_WORKER_RETRIES})`
+        : 'failed';
+      project.error = exhausted
+        ? 'The processing worker has been unreachable for several minutes. Retry once it is back.'
+        : error.message;
+      project.errorCode = exhausted ? 'worker_unavailable_exhausted' : (error.code || 'processing_failed');
+      if (unavailable && !exhausted) project.nextRetryAt = Date.now() + 30_000;
       save();
-      if (error.code === 'worker_unavailable') setTimeout(() => pump().catch(() => {}), 30_000);
+      if (unavailable && !exhausted) setTimeout(() => pump().catch(() => {}), 30_000);
     }
   } finally {
     running.delete(project.id);
@@ -993,8 +1015,11 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
   if (!clip) throw new Error('That clip does not exist.');
   if (clip.status === 'posted' && !asVariant) throw new Error('A posted video cannot be changed. Create a re-post variant instead.');
   const project = projectById(clip.projectId);
-  const sourceFile = clip.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project?.sourceFile;
-  if ((!sourceFile || !fs.existsSync(sourceFile)) && !(project?.engine === 'remote' && project.sourceObjectKey)) throw new Error('The original source file is unavailable. Keep source files enabled to re-render clips.');
+  // Guarded because the lines below dereference it directly. A clip whose
+  // lecture was deleted otherwise threw a raw TypeError at the user.
+  if (!project) throw new Error('The lecture this clip came from no longer exists, so it cannot be re-rendered.');
+  const sourceFile = clip.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project.sourceFile;
+  if ((!sourceFile || !fs.existsSync(sourceFile)) && !(project.engine === 'remote' && project.sourceObjectKey)) throw new Error('The original source file is unavailable. Keep source files enabled to re-render clips.');
   const owner = ownerOfRecord(clip);
   const template = templateById(templateId, owner) || selectedTemplate(owner);
   if (!template?.id) throw new Error('Choose a valid saved template.');
