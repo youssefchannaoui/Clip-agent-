@@ -877,3 +877,67 @@ test('a record with no phase starts the rail rather than guessing from words', (
   });
   assert.equal(vals.stages.findIndex(s => /circle-notch/.test(s.icon)), 0);
 });
+
+test('a slider drag produces one write, not one per step', async () => {
+  // Each write used to queue a re-render for every unposted clip, and each of
+  // those re-downloads the whole source on a single-slot worker.
+  let writes = 0;
+  StudioAdapter.onTemplateField = () => { writes += 1; };
+  Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'c1', edTab: 'captions', tplDraft: null, tplTimer: null });
+  const state = { ...SAMPLE_STATE, templates: [{ id: 'x', name: 'X', captionFontSize: 96 }], selectedTemplate: { id: 'x', name: 'X', captionFontSize: 96 } };
+  for (let i = 0; i < 25; i += 1) StudioAdapter.bindings(state).setSize({ target: { value: String(60 + i) } });
+  assert.equal(writes, 0, 'nothing is sent while the pointer is still moving');
+  await new Promise(r => setTimeout(r, 700));
+  assert.equal(writes, 1, 'one write once it settles');
+});
+
+test('a slider shows its new value immediately, before the write lands', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'c1', tplDraft: null, tplTimer: null });
+  StudioAdapter.onTemplateField = () => {};
+  const state = { ...SAMPLE_STATE, templates: [{ id: 'x', name: 'X', captionFontSize: 96 }], selectedTemplate: { id: 'x', name: 'X', captionFontSize: 96 } };
+  StudioAdapter.bindings(state).setSize({ target: { value: '42' } });
+  assert.equal(StudioAdapter.bindings(state).edSizeLabel, '42 px');
+});
+
+test('rejecting a clip is sent to the server, not just remembered locally', () => {
+  let sent = null;
+  StudioAdapter.onReject = id => { sent = id; };
+  Object.assign(StudioAdapter.ui, { screen: 'queue', filter: 'review', pending: {} });
+  const vals = StudioAdapter.bindings(SAMPLE_STATE);
+  vals.queueClips[0].reject({ preventDefault() {} });
+  assert.ok(sent, 'a reviewed batch has to survive a reload');
+});
+
+test('a clip the server marks rejected stays rejected', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'queue', filter: 'all', pending: {} });
+  const vals = StudioAdapter.bindings({
+    ...SAMPLE_STATE,
+    clips: [{ id: 'r1', projectId: 'p1', title: 'Rejected one', status: 'rejected', score: 50, durationMs: 1000, targets: [] }],
+  });
+  assert.equal(vals.queueClips[0].stateChip, 'Rejected');
+});
+
+test('a clip scheduled in the past gets its own row instead of vanishing', () => {
+  // The rail badge counted it, the grid rendered only forward from today, and
+  // Home showed its time as if it were going out today.
+  Object.assign(StudioAdapter.ui, { screen: 'schedule' });
+  const vals = StudioAdapter.bindings({
+    projects: [], tracks: [],
+    clips: [{ id: 'a', title: 'Stranded', status: 'ready', scheduledAt: Date.now() - 3 * 86400000, targets: [{ provider: 'youtube', status: 'scheduled' }], musicVerified: true, renderVerified: true, templateId: 't', transcript: 'x' }],
+  });
+  assert.equal(vals.scheduleDays[0].day, 'Overdue');
+  assert.match(vals.scheduleDays[0].countLabel, /missed its slot/);
+  assert.equal(vals.scheduleDays[0].items[0].caption, 'Stranded');
+});
+
+test('Post now is gated on the four checks', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'schedule' });
+  const unverified = StudioAdapter.bindings({
+    projects: [], tracks: [],
+    clips: [{ id: 'a', title: 'Not ready', status: 'scheduled', scheduledAt: Date.now() + 3600e3, targets: [{ provider: 'youtube' }], musicVerified: false, renderVerified: true, templateId: 't', transcript: 'x' }],
+  });
+  const item = unverified.scheduleDays.flatMap(d => d.items)[0];
+  assert.equal(item.postLabel, 'Fix first');
+  assert.equal(item.hasFailing, true);
+  assert.match(item.statusLabel, /failing/);
+});

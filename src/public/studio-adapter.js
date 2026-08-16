@@ -40,6 +40,8 @@
     blockerDismissed: false,
     tplLayer: 'caption',
     tplDirty: false,
+    tplDraft: null,
+    tplTimer: null,
     sheet: null,
     toast: null,
     playerClip: null,
@@ -131,6 +133,7 @@
   var SETTLED = { approved: 1, scheduled: 1, publishing: 1, retrying: 1, posted: 1, ready: 1 };
   function decision(c) {
     if (UI.pending[c.id]) return UI.pending[c.id];
+    if (c.status === 'rejected') return 'rejected';
     if (SETTLED[c.status]) return 'approved';
     if (c.status === 'waiting') return null;
     return 'other';   // still processing, or failed — not part of the review queue
@@ -416,15 +419,13 @@
       refresh();
       global.StudioAdapter.onApprove(id);
     }
-    // Reject is deliberately local and session-scoped. The server has no rejected
-    // state: approve/pullBack only move a clip between `waiting` and `approved`,
-    // and the only way to make a clip go away for good is DELETE. Wiring a
-    // one-tap deck button to a permanent delete is not a trade worth making, so
-    // rejecting hides the clip for this session and nothing is destroyed.
-    // Persisting it needs a real field on the clip record.
+    // Rejecting persists now: the clip record has a `rejected` status, so a
+    // reviewed batch survives a reload. Nothing is destroyed -- the render stays
+    // and the decision can be undone.
     function reject(id) {
       UI.pending[id] = 'rejected';
       refresh();
+      global.StudioAdapter.onReject(id);
     }
 
     var q = (UI.query || '').trim().toLowerCase();
@@ -505,13 +506,7 @@
     var DAY_MS = 86400000;
     var startOfDay = function (t) { var d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
     var today = startOfDay(Date.now());
-    var scheduleDays = [];
-    for (var dnum = 0; dnum < 7; dnum++) {
-      (function (dayStart) {
-        var label = dnum === 0 ? 'Today' : dnum === 1 ? 'Tomorrow'
-          : new Date(dayStart).toLocaleDateString(undefined, { weekday: 'long' });
-        var items = scheduled.filter(function (c) { return startOfDay(c.scheduledAt) === dayStart; })
-          .map(function (c) {
+    function scheduleItem(c) {
             var target = (c.targets && c.targets[0]) || {};
             var platform = target.platform || target.provider || '';
             // The four checks the design requires before anything may go out.
@@ -556,7 +551,21 @@
               },
               sendBack: function (e) { stop(e); global.StudioAdapter.onSendBack(c.id); },
             };
-          });
+    }
+
+    // A clip scheduled in the past is counted by the rail badge but rendered by
+    // no day row, while Home shows its time as though it were going out today.
+    // Three screens, three accounts of one clip. It gets its own row.
+    var overdue = scheduled.filter(function (c) {
+      return startOfDay(c.scheduledAt) < today && !c.postedAt;
+    });
+
+    var scheduleDays = [];
+    for (var dnum = 0; dnum < 7; dnum++) {
+      (function (dayStart) {
+        var label = dnum === 0 ? 'Today' : dnum === 1 ? 'Tomorrow'
+          : new Date(dayStart).toLocaleDateString(undefined, { weekday: 'long' });
+        var items = scheduled.filter(function (c) { return startOfDay(c.scheduledAt) === dayStart; }).map(scheduleItem);
         scheduleDays.push({
           day: label,
           countLabel: items.length + ' of 4 scheduled',
@@ -602,11 +611,23 @@
       watermark: 'DEENCLIPPED', watermarkOpacity: 100,
       vignette: 0, grain: 0, warm: 0, smartFramingZoom: 1, smartFramingEnabled: false,
       voiceEnhance: true,
-    }, activeTemplate || {});
+    }, activeTemplate || {}, UI.tplDraft || {});
 
+    // Slider writes land on every `input` event. Sending each one meant a PUT
+    // per pixel of travel, and each PUT used to queue a re-render for every
+    // unposted clip. The value is applied locally at once so the control feels
+    // live, and the write is trailing-debounced.
     function saveTemplate(patch) {
       UI.tplDirty = true;
-      global.StudioAdapter.onTemplateField(activeTemplate && activeTemplate.id, patch);
+      UI.tplDraft = Object.assign({}, UI.tplDraft, patch);
+      refresh();
+      if (UI.tplTimer) global.clearTimeout(UI.tplTimer);
+      UI.tplTimer = global.setTimeout(function () {
+        UI.tplTimer = null;
+        var pending = UI.tplDraft;
+        UI.tplDraft = null;
+        global.StudioAdapter.onTemplateField(activeTemplate && activeTemplate.id, pending);
+      }, 450);
     }
 
     // Builds a settings row whose options come from the schema's enum, so a
@@ -736,6 +757,16 @@
       failures.push({ text: 'Publish failed · ' + (c.title || 'Clip'), meta: shortError((bad[0] && (bad[0].error || bad[0].stage)) || c.error), at: (bad[0] && bad[0].updatedAt) || c.postedAt, screen: 'schedule' });
     });
     failures.sort(function (a, b) { return Number(b.at || 0) - Number(a.at || 0); });
+
+    var overdueRow = null;
+    if (overdue.length) {
+      overdueRow = {
+        day: 'Overdue',
+        countLabel: plural(overdue.length, 'post') + ' missed its slot',
+        canAdd: false,
+        items: overdue.map(scheduleItem),
+      };
+    }
 
     // Blockers name a real gap and send you to the screen that fixes it.
     // Blockers name a real gap and send you to the screen that fixes it.
@@ -1014,7 +1045,9 @@
       },
 
       // ── Schedule ──
-      scheduleDays: scheduleDays,
+      // Overdue first, so a stranded post is the first thing seen rather than
+      // something no screen renders at all.
+      scheduleDays: (overdueRow ? [overdueRow] : []).concat(scheduleDays),
 
       // ── Clip editor ──
       // Split by what the server can actually keep. Caption text, title,
@@ -1380,7 +1413,13 @@
       }),
       tplDirtyLabel: UI.tplDirty ? 'Unsaved changes' : 'All changes saved',
       tplDirtyDotStyle: 'width: 7px; height: 7px; border-radius: 50%; background: ' + (UI.tplDirty ? '#E6B770' : '#7FD1A6') + ';',
-      saveTpl: function (e) { stop(e); global.StudioAdapter.onSaveTemplate(); },
+      saveTpl: function (e) {
+        stop(e);
+        // Flush anything still debounced, then ask for propagation explicitly.
+        if (UI.tplTimer) { global.clearTimeout(UI.tplTimer); UI.tplTimer = null; }
+        var pending = UI.tplDraft; UI.tplDraft = null;
+        global.StudioAdapter.onSaveTemplate(activeTemplate && activeTemplate.id, pending);
+      },
       resetTpl: function (e) { stop(e); setUI({ tplDirty: false }); global.StudioAdapter.onResetTemplate(); },
       duplicateTpl: function (e) { stop(e); global.StudioAdapter.onDuplicateTemplate(activeTemplate && activeTemplate.id); },
       previewClip: function (e) { stop(e); toast('Preview renders from the next clip this template produces.'); },
@@ -1615,6 +1654,7 @@
     setRefresh: function (fn) { refresh = fn || function () {}; },
     // Overridden by the host page so the adapter never talks to the API directly.
     onApprove: function () {},
+    onReject: function () {},
     onStartJob: function () {},
     onUploadFile: function () {},
     onUploadNasheeds: function () {},
@@ -1679,12 +1719,8 @@
     onBillingPortal: function () {},
     onToast: function () {},
     // The host clears optimistic decisions once fresh state has landed.
-    settled: function () {
-      // Approvals are confirmed by the refreshed state; local rejects have
-      // nowhere to persist to, so they survive until the page is reloaded.
-      var keep = {};
-      for (var id in UI.pending) if (UI.pending[id] === 'rejected') keep[id] = 'rejected';
-      UI.pending = keep;
-    },
+    // Both decisions are persisted now, so the refreshed state is the truth and
+    // nothing needs to be held over it.
+    settled: function () { UI.pending = {}; },
   };
 })(typeof window !== 'undefined' ? window : globalThis);

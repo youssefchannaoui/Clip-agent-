@@ -35,6 +35,37 @@ export function approveClip(id) {
   save(); tick().catch(() => {}); return clip;
 }
 
+// Rejecting is a real, persisted decision. It used to live only in the browser,
+// so reviewing a large batch and rejecting half of it survived nothing: a reload
+// put every rejected clip back in the queue. Deleting is not the answer either --
+// a one-tap deck button should not destroy a render.
+export function rejectClip(id) {
+  const clip = clipById(id);
+  if (!clip) throw new Error('That clip no longer exists.');
+  if (clip.status === 'posted' || (clip.targets || []).some(target => target.status === 'posted')) {
+    throw new Error('A clip that has already posted cannot be rejected.');
+  }
+  clip.status = 'rejected';
+  clip.rejectedAt = Date.now();
+  clip.scheduledAt = null;
+  clip.approvedBy = null;
+  clip.approvedAt = null;
+  clip.targets = [];
+  save();
+  return clip;
+}
+
+// Undoing a rejection returns the clip to the queue it came from.
+export function unrejectClip(id) {
+  const clip = clipById(id);
+  if (!clip) throw new Error('That clip no longer exists.');
+  if (clip.status !== 'rejected') return clip;
+  clip.status = 'waiting';
+  clip.rejectedAt = null;
+  save();
+  return clip;
+}
+
 export function scheduleSelected(ids = []) {
   const uniqueIds = [...new Set((Array.isArray(ids) ? ids : []).map(value => String(value || '').trim()).filter(Boolean))];
   if (!uniqueIds.length) throw new Error('Select at least one clip to schedule.');

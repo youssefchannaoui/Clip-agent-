@@ -1686,12 +1686,20 @@ function renderStudio(){
     StudioAdapter.onTemplateField=(id,patch)=>{if(!id)return;studioDo(async()=>{
       const current=(DATA?.templates||[]).find(t=>t.id===id)||{};
       await api(`/api/templates/${encodeURIComponent(id)}`,{method:'PUT',body:JSON.stringify({template:{...current,...patch}})})})};
-    StudioAdapter.onSaveTemplate=()=>StudioAdapter.showToast('Template changes save as you make them.');
+    /* Saving is the one action that re-renders every unposted clip, so it asks
+       for that explicitly. Field writes do not. */
+    StudioAdapter.onSaveTemplate=(id,pending)=>{if(!id)return;studioDo(async()=>{
+      const current=(DATA?.templates||[]).find(t=>t.id===id)||{};
+      const r=await api(`/api/templates/${encodeURIComponent(id)}`,{method:'PUT',
+        body:JSON.stringify({template:{...current,...(pending||{})},propagate:true})});
+      const n=Number(r?.propagation?.queued||0);
+      StudioAdapter.showToast(n?`Saved — re-rendering ${n} clip${n===1?'':'s'}`:'Template saved')})};
     StudioAdapter.onResetTemplate=()=>refresh();
     StudioAdapter.onDuplicateTemplate=id=>{if(!id)return;studioDo(async()=>{
       const current=(DATA?.templates||[]).find(t=>t.id===id)||{};
       const {id:_drop,version:_v,updatedAt:_u,...rest}=current;
       await api('/api/templates',{method:'POST',body:JSON.stringify({template:{...rest,name:`${current.name||'Template'} copy`},select:false})})},'Template duplicated')};
+    StudioAdapter.onReject=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'rejected'})}));
     StudioAdapter.onPostNow=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}/publish`,{method:'POST'}),'Publishing started');
     StudioAdapter.onSendBack=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'waiting'})}),'Back in the review queue');
     StudioAdapter.onScheduleClip=id=>studioDo(()=>api('/api/clips/schedule-selected',{method:'POST',body:JSON.stringify({ids:[id]})}),'Scheduled');

@@ -714,7 +714,11 @@ async function route(req, res, url) {
     try {
       const template = templates.updateTemplate(currentUser, decodeURIComponent(templateMatch[1]), body.template || body);
       const selected = templates.selectedTemplate(currentUser);
-      const propagation = selected?.id === template.id
+      // Re-rendering every unposted clip is explicit now. It used to fire on any
+      // field write, and the editor's sliders write on every `input` event, so
+      // dragging one slider queued a re-render per clip per pixel -- each of
+      // which re-downloads the whole source on a single-slot worker.
+      const propagation = body.propagate === true && selected?.id === template.id
         ? queueTemplateForEveryUnpostedClip(template, currentUser, 'saving the active template')
         : { queued: 0, skipped: 0, errors: [] };
       log(`Saved template "${template.name}" version ${template.version}. New renders use it automatically.`, 'info', currentUser.id);
@@ -1005,7 +1009,7 @@ async function route(req, res, url) {
     try {
       assertCanAccessClip(currentUser, id);
       agent.updateClip(id, body); let clip;
-      if (body.status === 'approved') clip = agent.approveClip(id); else if (body.status === 'waiting') clip = agent.pullBack(id); else clip = state.clips.find(item => item.id === id);
+      if (body.status === 'approved') clip = agent.approveClip(id); else if (body.status === 'rejected') clip = agent.rejectClip(id); else if (body.status === 'waiting') clip = state.clips.find(item => item.id === id)?.status === 'rejected' ? agent.unrejectClip(id) : agent.pullBack(id); else clip = state.clips.find(item => item.id === id);
       return json(res, 200, { ok: true, clip: publicClip(clip) });
     } catch (error) { return json(res, 400, { error: error.message }); }
   }

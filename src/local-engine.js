@@ -498,13 +498,17 @@ async function runRemoteProject(project) {
     project.status = 'failed'; project.stage = 'failed'; project.error = 'The remote job metadata is missing. Submit the video again.'; save(); return;
   }
   const payload = JSON.parse(fs.readFileSync(file, 'utf8'));
+  // A retried project carries a fresh worker job id so the worker treats it as a
+  // new run. Everything server-side still keys off project.id.
+  const workerJobId = project.workerJobId || project.id;
+  payload.id = workerJobId;
   project.status = 'processing'; project.stage = 'Connecting to processing worker'; project.progress = Math.max(1, project.progress || 0); project.error = null; save();
   running.set(project.id, { remote: true });
   const started = Date.now();
   try {
     await workerClient.createJob(payload);
     while (Date.now() - started < config.workerJobTimeoutMs) {
-      const update = await workerClient.getJob(project.id);
+      const update = await workerClient.getJob(workerJobId);
       acceptRemoteUpdate(project.id, update);
       if (['completed', 'failed', 'cancelled'].includes(update.status)) return;
       await new Promise(resolve => setTimeout(resolve, config.workerPollIntervalMs));
@@ -1178,8 +1182,13 @@ export function retryProject(projectId) {
   if (!project) throw new Error('That project does not exist.');
   if (running.has(projectId)) throw new Error('That project is already processing.');
   if (project.engine === 'remote') {
+    // The worker keys jobs by id and returns the existing record rather than
+    // starting a new run, so retrying under the same id re-read the old failure
+    // and never resubmitted. A retry gets a fresh worker job id; the project id
+    // is unchanged, so nothing else has to know.
+    project.workerJobId = `${project.id}-retry-${Date.now().toString(36)}`;
     Object.assign(project, { status: 'queued', stage: 'queued', progress: Math.min(5, project.progress || 0), error: null, errorCode: null });
-    save(); pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
+    save(); pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error', ownerOf(project)));
     return project;
   }
   if (project.engine === 'vizard') {
