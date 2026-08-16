@@ -18,11 +18,26 @@ The design project is linked to this repo (`youssefchannaoui/Clip-agent-`, branc
 
 ## Re-importing
 
-1. Export `Studio Dashboard.dc.html` from Claude Design into `design/`.
-2. Run the importer:
+Export `Studio Dashboard.dc.html` from Claude Design (any download location is
+fine), then:
 
 ```sh
-node scripts/import-design.mjs
+npm run design:pull
+```
+
+That takes the newest `.dc.html` from `~/Downloads`, strips the preview preamble
+the design app injects, vendors it into `design/`, and recompiles. Pass a path to
+use a specific file: `npm run design:pull -- path/to/export.dc.html`.
+
+It refuses an incomplete export **before** writing anything, and puts the previous
+one back if the importer rejects it — a truncated file still parses far enough to
+look plausible, and would otherwise replace a known-good source on its way to
+failing.
+
+To recompile without pulling a new export:
+
+```sh
+npm run design:import
 ```
 
 That regenerates two files, both of which are build output and should never be

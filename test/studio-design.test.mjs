@@ -452,3 +452,55 @@ test('editor sliders read the template and write back in schema units', () => {
   assert.equal(vals.edZoom, 150, 'zoom is shown as a percentage');
   assert.equal(vals.edVignette, 50, 'vignette 0-1 is shown as a percentage');
 });
+
+// ── design-pull ────────────────────────────────────────────────────────────
+// The vendored export is the input to everything else, so the pull step must
+// never leave a broken one in its place.
+
+function runPull(source) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deenclipped-pull-'));
+  const src = path.join(dir, 'export.dc.html');
+  fs.writeFileSync(src, source);
+  let stdout = '', stderr = '', status = 0;
+  try {
+    stdout = execFileSync(process.execPath, [path.join(ROOT, 'scripts/design-pull.mjs'), src],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (err) {
+    stdout = err.stdout || '';
+    stderr = err.stderr || '';
+    status = err.status;
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+  return { stdout, stderr, status };
+}
+
+const VENDORED = path.join(ROOT, 'design/studio-dashboard.dc.html');
+
+test('an export cut before the script tag is refused without touching the vendored copy', () => {
+  const good = fs.readFileSync(VENDORED, 'utf8');
+  const { status, stderr } = runPull(good.slice(0, 40000));
+  assert.equal(status, 1);
+  assert.match(stderr, /never closes/);
+  assert.equal(fs.readFileSync(VENDORED, 'utf8'), good, 'the good export survives');
+});
+
+test('an export cut mid-script is refused without touching the vendored copy', () => {
+  const good = fs.readFileSync(VENDORED, 'utf8');
+  const cut = good.indexOf('data-dc-script') + 3000;
+  const { status, stderr } = runPull(good.slice(0, cut));
+  assert.equal(status, 1);
+  assert.match(stderr, /behaviour script never closes/);
+  assert.equal(fs.readFileSync(VENDORED, 'utf8'), good);
+});
+
+test('a file that is not a design export is rejected outright', () => {
+  const { status, stderr } = runPull('<html><body>nope</body></html>');
+  assert.equal(status, 2);
+  assert.match(stderr, /no <x-dc> block/i);
+});
+
+test('re-pulling the current export is a no-op', () => {
+  const { status, stdout } = runPull(fs.readFileSync(VENDORED, 'utf8'));
+  assert.equal(status, 0);
+  assert.match(stdout, /nothing to do/);
+});
