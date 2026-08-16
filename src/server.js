@@ -329,6 +329,11 @@ async function route(req, res, url) {
   }
   if (method === 'GET' && pathname === '/plans') {
     if (auth.enabled() && !currentUser) return redirect(res, `/login?returnTo=${encodeURIComponent(pathname + url.search)}`);
+    // Seeing the page is what "plans seen" means. Marking it only in the
+    // continue-free POST left the page's own "Dashboard" link -- a plain GET
+    // /app -- bouncing straight back here forever, with the form button as the
+    // only way out.
+    if (currentUser) billing.markPlansSeen(currentUser);
     return html(res, 200, billing.plansPage(currentUser, { error: url.searchParams.get('error') || '', info: url.searchParams.get('info') || '', returnTo: url.searchParams.get('returnTo') || '/app' }));
   }
   if (method === 'POST' && pathname === '/billing/continue-free') {

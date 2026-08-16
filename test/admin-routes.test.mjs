@@ -111,3 +111,22 @@ test('billing API reports separated balances and rejects unknown top-up packs', 
   assert.equal(invalid.status, 400);
   assert.match((await invalid.json()).error, /valid token pack/i);
 });
+
+test('the plans page does not trap a signed-in account in a redirect loop', async () => {
+  // /app redirects to /plans while needsPlanChoice() is true, and the plans page
+  // links back to /app as a plain GET. Marking plans seen only in the
+  // continue-free POST made that link bounce forever.
+  const fresh = { id: 'route-loop', email: 'loop@deenclipped.test', name: 'Loop', role: 'creator', providers: {}, createdAt: Date.now(), billing: { plan: 'free', status: 'free' } };
+  state.authUsers.push(fresh);
+  const cookie = cookieFor(fresh);
+
+  const first = await fetch(`${base}/app`, { headers: { Cookie: cookie }, redirect: 'manual' });
+  assert.equal(first.status, 302, 'a new account is sent to choose a plan');
+  assert.match(first.headers.get('location'), /^\/plans/);
+
+  const plans = await fetch(`${base}/plans`, { headers: { Cookie: cookie }, redirect: 'manual' });
+  assert.equal(plans.status, 200);
+
+  const second = await fetch(`${base}/app`, { headers: { Cookie: cookie }, redirect: 'manual' });
+  assert.equal(second.status, 200, 'after seeing the page, /app is reachable');
+});

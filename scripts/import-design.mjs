@@ -197,7 +197,13 @@ class StyleTable {
   css() { return this.rules.join('\n'); }
 }
 
-const tidy = decls => decls.replace(/\s+/g, ' ').trim().replace(/;$/, '');
+// Asset paths in the design are repo-relative ("src/public/x.webp"). The
+// stylesheet is served from the site root, so they resolve to /src/public/... and
+// 404. Rewrite them to the path they are actually served at.
+function fixAssetPaths(decls) {
+  return decls.replace(/url\((['"]?)src\/public\//g, 'url($1/');
+}
+const tidy = decls => fixAssetPaths(decls).replace(/\s+/g, ' ').trim().replace(/;$/, '');
 
 function addImportant(decls) {
   return decls.split(';').map(d => {
@@ -346,7 +352,9 @@ function extractHeadCss(src) {
 
 function extractFontLinks(src) {
   const links = [];
-  const re = /<link\s+[^>]*href="(https:\/\/fonts\.googleapis\.com[^"]*|https:\/\/unpkg\.com[^"]*)"[^>]*>/gi;
+  // A bare origin with no path is a preconnect hint, not a stylesheet; emitting
+  // it as @import produces a request that can only fail.
+  const re = /<link\s+[^>]*href="(https:\/\/fonts\.googleapis\.com\/[^"]*|https:\/\/unpkg\.com\/[^"]*)"[^>]*>/gi;
   let m;
   while ((m = re.exec(src))) links.push(m[1]);
   return [...new Set(links)];

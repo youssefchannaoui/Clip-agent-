@@ -1692,6 +1692,10 @@ function renderStudio(){
       const current=(DATA?.templates||[]).find(t=>t.id===id)||{};
       const {id:_drop,version:_v,updatedAt:_u,...rest}=current;
       await api('/api/templates',{method:'POST',body:JSON.stringify({template:{...rest,name:`${current.name||'Template'} copy`},select:false})})},'Template duplicated')};
+    StudioAdapter.onPostNow=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}/publish`,{method:'POST'}),'Publishing started');
+    StudioAdapter.onSendBack=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'waiting'})}),'Back in the review queue');
+    StudioAdapter.onScheduleClip=id=>studioDo(()=>api('/api/clips/schedule-selected',{method:'POST',body:JSON.stringify({ids:[id]})}),'Scheduled');
+    StudioAdapter.onMoreClips=(projectId,count)=>studioDo(()=>api(`/api/projects/${encodeURIComponent(projectId)}/more-clips`,{method:'POST',body:JSON.stringify({count})}),'Cutting more clips');
     StudioAdapter.onSignOut=()=>studioDo(async()=>{await api('/auth/logout',{method:'POST'});location.href='/'});
     /* Caption text is the clip's transcript and is the one visual thing the
        server keeps per clip; everything else in the editor lives on the template
@@ -1735,9 +1739,7 @@ function renderStudio(){
       const failed=(r&&r.results||[]).filter(x=>x&&x.error);
       if(failed.length)throw new Error(failed[0].error);
       StudioAdapter.jobDone()},'Lecture queued');
-    StudioAdapter.onApprove=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'approved'})}));
-    StudioAdapter.onClipSettings=patch=>studioDo(()=>api('/api/clip-settings',{method:'POST',body:JSON.stringify(patch)}));
-    StudioAdapter.onMusicSettings=patch=>studioDo(()=>api('/api/music-settings',{method:'POST',body:JSON.stringify(patch)}));
+    StudioAdapter.onApprove=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'approved'})}));    StudioAdapter.onMusicSettings=patch=>studioDo(()=>api('/api/music-settings',{method:'POST',body:JSON.stringify(patch)}));
     StudioAdapter.onRemoveTrack=id=>{if(!confirm('Delete this nasheed?'))return;studioDo(()=>api(`/api/music/${encodeURIComponent(id)}`,{method:'DELETE'}),'Nasheed deleted')};
     StudioAdapter.onPlayTrack=id=>{
       /* One <audio> reused for the whole screen, so starting a track stops the last. */
@@ -1751,6 +1753,14 @@ function renderStudio(){
     StudioAdapter.onBillingPortal=()=>studioDo(async()=>{
       const r=await api('/api/billing/portal',{method:'POST',body:JSON.stringify({})});
       if(r&&r.url)location.href=r.url});
+    /* Nasheeds go to /api/music as base64, not through the video presign path.
+       Uploading them as videos is what made a fresh account unusable. */
+    StudioAdapter.onUploadNasheeds=files=>studioDo(async()=>{
+      for(const file of files){
+        const data=await new Promise((resolve,reject)=>{const r=new FileReader();
+          r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=reject;r.readAsDataURL(file)});
+        await api('/api/music',{method:'POST',body:JSON.stringify({name:file.name,data,mimeType:file.type||'audio/mpeg'})});
+      }},'Nasheed uploaded');
     StudioAdapter.onUploadFile=file=>studioDo(async()=>{
       const presign=await api('/api/uploads/presign',{method:'POST',body:JSON.stringify({fileName:file.name,contentType:file.type||'video/mp4'})});
       const put=await fetch(presign.uploadUrl,{method:'PUT',headers:presign.headers||{'Content-Type':file.type||'video/mp4'},body:file});
@@ -2105,7 +2115,8 @@ $('#scheduleSelectedLibraryClips').onclick=async()=>{
 };
 $('#postSelectedLibraryClips').onclick=async()=>{const ids=[...LIBRARY_SELECTED].filter(id=>libraryClipAvailable(clipById(id)||{}));if(!ids.length)return toast('Select at least one unposted clip','bad');if(!confirm(`Post ${ids.length} selected clip${ids.length===1?'':'s'} now?`))return;setBusy($('#postSelectedLibraryClips'),true,'Starting…');let ok=0;for(const id of ids)try{await api(`/api/clips/${encodeURIComponent(id)}/publish`,{method:'POST'});ok++}catch(e){toast(e.message,'bad')}toast(`${ok} publishing transfer${ok===1?'':'s'} created`,'good');LIBRARY_SELECTED.clear();await refresh();setBusy($('#postSelectedLibraryClips'),false)};
 
-setInterval(updateClock,1000);const splashMinTime=new Promise(r=>setTimeout(r,1400));const splashTimeout=new Promise(r=>setTimeout(()=>r('timeout'),12000));const realCheck=PW?boot():Promise.resolve();if(!PW)$('#gate').classList.remove('hide');Promise.race([Promise.all([splashMinTime,realCheck]),splashTimeout]).then(result=>{if(result==='timeout'&&$('#gate')?.classList.contains('hide')&&$('#connect')?.classList.contains('hide')&&$('#app')?.classList.contains('hide')){$('#gate')?.classList.remove('hide');if($('#gateErr'))$('#gateErr').textContent='Taking longer than expected to reach the server. Check your connection and try again.'}$('#splash')?.classList.add('out');setTimeout(()=>$('#splash')?.remove(),500)});setInterval(()=>{if(DATA&&(DATA.activeJobs||DATA.projects.some(p=>['queued','processing'].includes(p.status)||['queued','processing'].includes(p.moreJob?.status))||DATA.rerenderJobs?.some(j=>['queued','processing'].includes(j.status))||DATA.clips.some(c=>['scheduled','publishing'].includes(c.status)||c.targets?.some(t=>['scheduled','retrying','publishing','processing'].includes(t.status)))))refresh()},2000);
+setInterval(updateClock,1000);const splashMinTime=new Promise(r=>setTimeout(r,1400));const splashTimeout=new Promise(r=>setTimeout(()=>r('timeout'),12000));/* Always ask the server who we are. Gating this on a locally cached app password meant anyone who signed in with email, Google or Apple -- who has a valid session but no deenPw -- was shown the password wall instead of their dashboard, with no way through but the admin password. boot() reveals #gate itself if /api/state actually refuses. */
+const realCheck=boot();Promise.race([Promise.all([splashMinTime,realCheck]),splashTimeout]).then(result=>{if(result==='timeout'&&$('#gate')?.classList.contains('hide')&&$('#connect')?.classList.contains('hide')&&$('#app')?.classList.contains('hide')){$('#gate')?.classList.remove('hide');if($('#gateErr'))$('#gateErr').textContent='Taking longer than expected to reach the server. Check your connection and try again.'}$('#splash')?.classList.add('out');setTimeout(()=>$('#splash')?.remove(),500)});setInterval(()=>{if(DATA&&(DATA.activeJobs||DATA.projects.some(p=>['queued','processing'].includes(p.status)||['queued','processing'].includes(p.moreJob?.status))||DATA.rerenderJobs?.some(j=>['queued','processing'].includes(j.status))||DATA.clips.some(c=>['scheduled','publishing'].includes(c.status)||c.targets?.some(t=>['scheduled','retrying','publishing','processing'].includes(t.status)))))refresh()},2000);
 
 </script>
 </body>

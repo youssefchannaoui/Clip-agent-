@@ -392,6 +392,9 @@
         approve: function (e) { stop(e); approve(c.id); },
         primary: function (e) { stop(e); approve(c.id); },
         reject: function (e) { stop(e); reject(c.id); },
+        // Approve / edit / reject is the card's action row; `third` is reject.
+        third: function (e) { stop(e); reject(c.id); },
+        thirdIcon: 'ph ph-x',
         edit: function (e) { stop(e); setUI({ screen: 'editor', edClipId: c.id }); },
         openLecture: function (e) { stop(e); setUI({ screen: 'detail', openProject: c.projectId }); },
       };
@@ -469,6 +472,14 @@
         barStyle: 'position: absolute; left: 0; bottom: 0; height: 3px; width: ' + Math.round(p.progress || 0) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6); transition: width .5s ease;',
         metric: state === 'processing' ? (p.stage || 'working…') : median ? 'median score ' + median : 'no clips yet',
         openClips: function (e) { stop(e); setUI({ screen: 'detail', openProject: p.id }); },
+        more: function (e) {
+          stop(e);
+          global.StudioAdapter.onPickOption('More clips from this lecture',
+            ['Cut 4 more clips', 'Cut 8 more clips', 'Cancel'], function (choice) {
+              var n = choice === 'Cut 4 more clips' ? 4 : choice === 'Cut 8 more clips' ? 8 : 0;
+              if (n) global.StudioAdapter.onMoreClips(p.id, n);
+            });
+        },
       };
     });
 
@@ -487,11 +498,17 @@
         var items = scheduled.filter(function (c) { return startOfDay(c.scheduledAt) === dayStart; })
           .map(function (c) {
             var target = (c.targets && c.targets[0]) || {};
-            var platform = target.platform || '';
-            var failing = [];
-            if (!c.musicVerified) failing.push('nasheed');
-            if (!c.renderVerified) failing.push('render');
-            if (!c.templateId) failing.push('template');
+            var platform = target.platform || target.provider || '';
+            // The four checks the design requires before anything may go out.
+            // Post now stays disabled until all four pass.
+            var checks = [
+              { label: 'Nasheed mixed in', ok: Boolean(c.musicVerified) },
+              { label: 'Captions rendered', ok: Boolean(c.transcript) },
+              { label: 'Clip Style applied', ok: Boolean(c.templateId) },
+              { label: 'Render verified', ok: Boolean(c.renderVerified) },
+            ];
+            var failing = checks.filter(function (k) { return !k.ok; });
+            var ready = failing.length === 0;
             return {
               time: timeOf(c.scheduledAt),
               dest: PLATFORM_NAMES[platform] || 'No account',
@@ -500,12 +517,29 @@
               score: c.score || '',
               duration: secsToClock((c.durationMs || 0) / 1000),
               thumbStyle: 'width: 30px; height: 42px; flex: none; border-radius: 6px; border: 1px solid #26262A; background: ' + thumb(c.thumbUrl) + ';',
-              hasFailing: failing.length > 0,
-              statusLabel: c.postedAt ? 'Posted' : failing.length ? failing.length + ' check failing' : 'Ready',
+              checks: checks.map(function (k) {
+                return {
+                  label: k.label,
+                  icon: k.ok ? 'ph-fill ph-check-circle' : 'ph-fill ph-warning-circle',
+                  style: 'font-size: 12px; color: ' + (k.ok ? '#7FD1A6' : '#E6B770'),
+                };
+              }),
+              hasFailing: !ready,
+              statusLabel: c.postedAt ? 'Posted' : ready ? '4/4 checks' : failing.length + ' failing',
               statusStyle: 'padding: 2px 8px; border-radius: 20px; font-size: 9.5px; font-weight: 700; border: 1px solid ' +
-                (failing.length ? '#3A2A2A; background: rgba(10,10,12,.85); color: #E3928C;' : 'rgba(127,209,166,.35); background: rgba(10,10,12,.85); color: #7FD1A6;'),
+                (ready ? 'rgba(127,209,166,.35); background: rgba(10,10,12,.85); color: #7FD1A6;' : '#3A2A2A; background: rgba(10,10,12,.85); color: #E6B770;'),
               cardStyle: 'display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid ' +
-                (failing.length ? '#2A2024' : '#1E1E22') + '; border-radius: 10px; background: #121214;',
+                (ready ? '#1E1E22' : '#2A2024') + '; border-radius: 10px; background: #121214;',
+              // Nothing posts unchecked: the button says why instead of failing.
+              postLabel: c.postedAt ? 'Posted' : ready ? 'Post now' : 'Fix first',
+              postStyle: 'display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: ' + (ready && !c.postedAt ? 'pointer' : 'not-allowed') + '; border: 1px solid ' +
+                (ready && !c.postedAt ? 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;' : '#26262A; background: #17171A; color: #6E6E76;'),
+              postNow: function (e) {
+                stop(e);
+                if (!ready || c.postedAt) { toast(failing[0] ? failing[0].label + ' has not passed yet.' : 'Already posted.'); return; }
+                global.StudioAdapter.onPostNow(c.id);
+              },
+              sendBack: function (e) { stop(e); global.StudioAdapter.onSendBack(c.id); },
             };
           });
         scheduleDays.push({
@@ -513,6 +547,17 @@
           countLabel: items.length + ' of 4 scheduled',
           canAdd: items.length < 4,
           items: items,
+          // Only approved clips with no slot yet can be scheduled.
+          addClip: function (e) {
+            stop(e);
+            var free = clips.filter(function (c) { return decision(c) === 'approved' && !c.scheduledAt && !c.postedAt; });
+            if (!free.length) { toast('Approve a clip in the review queue first.'); return; }
+            var labels = free.slice(0, 6).map(function (c) { return (c.title || 'Clip').slice(0, 46); });
+            global.StudioAdapter.onPickOption('Schedule into ' + label, labels.concat(['Cancel']), function (choice) {
+              var picked = free.filter(function (c) { return (c.title || 'Clip').slice(0, 46) === choice; })[0];
+              if (picked) global.StudioAdapter.onScheduleClip(picked.id);
+            });
+          },
         });
       })(today + dnum * DAY_MS);
     }
@@ -1191,7 +1236,10 @@
         return {
           label: label,
           rowStyle: 'display: flex; align-items: center; gap: 9px; padding: 11px 13px; border-bottom: 1px solid #1A1A1E; cursor: pointer; color: #E9E9ED;',
-          select: function (e) {
+          // The template binds `pick`. Supplying `select` here left every option
+          // row listener-less: the sheet opened and clicking did nothing, which
+          // silently gated seven template fields, six with no other UI path.
+          pick: function (e) {
             stop(e);
             var cb = UI.sheet && UI.sheet.cb;
             UI.sheet = null;
@@ -1360,9 +1408,16 @@
         if (!url) return;
         global.StudioAdapter.onProbeSource(url);
       },
+      // The same `onFile` binding serves the lecture uploader and the nasheed
+      // uploader, so it has to route by screen. Sending an audio file to
+      // /api/videos made a new account unusable: the upload was rejected with
+      // "upload at least one nasheed first", which is what the user was trying
+      // to do. Every selected file is taken, not just the first.
       onFile: function (e) {
-        var file = e.target && e.target.files && e.target.files[0];
-        if (file) global.StudioAdapter.onUploadFile(file);
+        var files = (e.target && e.target.files) ? Array.prototype.slice.call(e.target.files) : [];
+        if (!files.length) return;
+        if (UI.screen === 'music') global.StudioAdapter.onUploadNasheeds(files);
+        else global.StudioAdapter.onUploadFile(files[0]);
       },
 
       selectWrapStyle: 'position: relative; display: flex; align-items: center;',
@@ -1462,7 +1517,8 @@
           duration: secsToClock((c.durationMs || 0) / 1000),
           thumbStyle: 'width: 30px; height: 42px; flex: none; border-radius: 6px; border: 1px solid #26262A; background: ' + thumb(c.thumbUrl) + ';',
           barStyle: 'height: 4px; border-radius: 4px; width: ' + Math.max(4, Math.min(100, Number(c.score || 0))) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
-          views: '—', saves: '—', watch: '—', more: '',
+          views: '—', saves: '—', watch: '—',
+          more: function (e) { stop(e); global.StudioAdapter.onMoreClips(c.projectId, 4); },
         };
       }),
       perfPatterns: [],
@@ -1546,6 +1602,7 @@
     onApprove: function () {},
     onStartJob: function () {},
     onUploadFile: function () {},
+    onUploadNasheeds: function () {},
     onClipSettings: function () {},
     onMusicSettings: function () {},
     onPlayTrack: function () {},
@@ -1593,6 +1650,10 @@
     onDisconnect: function () {},
     onTestConnection: function () {},
     onPublishingToggle: function () {},
+    onPostNow: function () {},
+    onSendBack: function () {},
+    onScheduleClip: function () {},
+    onMoreClips: function () {},
     // Shows the design's own toast rather than the legacy one when the Studio
     // dashboard is the visible surface.
     showToast: function (message) {

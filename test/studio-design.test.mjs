@@ -750,3 +750,91 @@ test('the page checks results[] rather than trusting the status code', () => {
   assert.match(call, /results/, 'per-URL errors are inspected');
   assert.match(call, /throw new Error/, 'and surfaced');
 });
+
+// ── no dead controls ───────────────────────────────────────────────────────
+// studio-runtime.js drops a handler that is not a function, silently: the element
+// still renders, styled and cursor:pointer, with no listener. Nothing else
+// catches that — design:check only validates top-level bindings, and these are
+// loop-scoped item properties. So walk the rendered AST and assert every handler
+// actually resolves.
+
+const RICH_STATE = {
+  user: { name: 'Y', email: 'y@x.com' },
+  projects: [{ id: 'p1', title: 'L', status: 'done', clipCount: 2, durationSec: 2400, submittedAt: Date.now(), progress: 100 }],
+  clips: [
+    { id: 'c1', projectId: 'p1', title: 'C', status: 'waiting', score: 70, durationMs: 30000, transcript: 'a. b.', targets: [] },
+    { id: 'c2', projectId: 'p1', title: 'D', status: 'scheduled', score: 60, durationMs: 30000, scheduledAt: Date.now() + 3600e3, targets: [{ provider: 'youtube', status: 'scheduled' }] },
+  ],
+  tracks: [{ id: 't1', name: 'N', durationSec: 120 }],
+  templates: [{ id: 'x', name: 'X' }], selectedTemplate: { id: 'x', name: 'X' },
+  clipSettings: { clipsPerVideo: 6, clipMinSeconds: 30, clipMaxSeconds: 45 },
+  musicSettings: { volumePercent: 13 }, automationSettings: { skipQuotes: true },
+  log: [{ level: 'info', message: 'm', at: Date.now() }],
+  social: { providers: { youtube: { configured: true, connected: true, accounts: [{ id: 'a', name: 'A' }] } } },
+  publishingSettings: { youtube: { enabled: true } },
+  billing: { current: { plan: 'free' }, plans: [{ id: 'free', name: 'Free' }], tokenRatePerMinute: 1 },
+  rerenderJobs: [],
+};
+
+// Nav hover is deliberately null: driving it from JS re-rendered the dashboard on
+// mouseover and made every tab unclickable. Documented, tested, intentional.
+const ALLOWED_NULL = new Set(['item.enter', 'item.leave']);
+
+function deadControls() {
+  const { evalValue } = globalThis.StudioRuntime._internals;
+  const dead = new Set();
+  for (const screen of ['home', 'queue', 'library', 'detail', 'schedule', 'templates', 'music', 'language', 'performance', 'tokens', 'editor']) {
+    Object.assign(StudioAdapter.ui, {
+      screen, edClipId: 'c1', connProvider: 'youtube', bellOpen: true, menuOpen: true, countsOpen: true, edTab: 'captions',
+      sheet: { title: 't', subtitle: 's', options: ['A', 'B'], cb() {} },
+      job: { url: 'u', title: 't', durationSec: 0, durationKnown: false, start: 0, end: 0 },
+      playerClip: { title: 'p' },
+    });
+    const vals = StudioAdapter.bindings(RICH_STATE);
+    (function walk(nodes, scope) {
+      for (const n of nodes || []) {
+        if (!n || typeof n === 'string') continue;
+        let inner = scope;
+        if (n.t === 'for') {
+          const list = evalValue(n.l, scope);
+          const arr = Array.isArray(list) ? list : [];
+          // An empty list renders no rows, so its controls cannot be dead.
+          // Walking into the body with the outer scope invents failures.
+          if (!arr.length) continue;
+          inner = Object.create(scope); inner[n.as] = arr[0];
+        }
+        if (n.on) {
+          for (const [evt, expr] of Object.entries(n.on)) {
+            const path = expr.p || JSON.stringify(expr);
+            if (ALLOWED_NULL.has(path)) continue;
+            if (typeof evalValue(expr, inner) !== 'function') dead.add(`${path} (${evt} on <${n.tag}>)`);
+          }
+        }
+        walk(n.ch, inner);
+      }
+    })(STUDIO_TEMPLATE, vals);
+  }
+  return [...dead].sort();
+}
+
+test('every control in the template has a handler that resolves to a function', () => {
+  assert.deepEqual(deadControls(), [], 'these render as normal buttons and do nothing');
+});
+
+test('no StudioAdapter hook is assigned twice', () => {
+  // Two assignments meant last-write-wins, and the loser was the correct one:
+  // onClipSettings shipped unmerged, so every clip-length change 400d with
+  // "Clips per video must be between 1 and 30."
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const counts = {};
+  for (const m of html.matchAll(/StudioAdapter\.(on[A-Za-z]+)\s*=/g)) counts[m[1]] = (counts[m[1]] || 0) + 1;
+  const dupes = Object.entries(counts).filter(([, n]) => n > 1).map(([k]) => k);
+  assert.deepEqual(dupes, [], 'a second assignment silently replaces the first');
+});
+
+test('generated CSS asset paths resolve from the site root', () => {
+  // The design writes repo-relative paths; served from /, they 404.
+  const css = fs.readFileSync(path.join(ROOT, 'src/public/studio-styles.generated.css'), 'utf8');
+  assert.doesNotMatch(css, /url\(['"]?src\/public\//, 'repo-relative asset path would 404');
+  assert.doesNotMatch(css, /@import url\("https:\/\/[^/"]+"\)/, 'a bare origin is a preconnect hint, not a stylesheet');
+});
