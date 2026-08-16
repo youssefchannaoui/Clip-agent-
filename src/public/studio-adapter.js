@@ -38,6 +38,14 @@
     termA: '',
     termB: '',
     blockerDismissed: false,
+    tplLayer: 'caption',
+    tplDirty: false,
+    sheet: null,
+    toast: null,
+    playerClip: null,
+    connProvider: null,
+    job: null,
+    generating: false,
     deckMode: false,
     deckIdx: 0,
     // Approving is a round trip. Until /api/state comes back the card would snap
@@ -170,6 +178,36 @@
   ];
 
   function toast(message) { global.StudioAdapter.onToast(message); }
+
+  // Mirrors ENUMS in src/templates.js. Kept here so the picker can only ever
+  // offer a value sanitiseTemplate() will accept.
+  var ENUMS = {
+    fitMode: ['contain', 'blur', 'crop'],
+    smartFramingBias: ['auto', 'left', 'center', 'right'],
+    filterPreset: ['natural', 'crisp', 'warm', 'cinematic', 'monochrome'],
+    captionMode: ['phrase', 'word', 'dynamic-stack'],
+    captionPosition: ['top', 'middle', 'bottom'],
+    captionHorizontal: ['left', 'center', 'right'],
+    watermarkPosition: ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'],
+  };
+  function titleCase(v) {
+    return String(v || '').replace(/-/g, ' ').replace(/^./, function (c) { return c.toUpperCase(); });
+  }
+  function handleStyle(on) {
+    return on
+      ? 'position: absolute; inset: -6px; border: 1px dashed rgba(217,180,120,.7); border-radius: 6px; pointer-events: none;'
+      : 'display: none;';
+  }
+  // Places a preview overlay from the template's own position fields.
+  function overlayStyle(vertical, horizontal, colour, size) {
+    var v = vertical === 'top' ? 'top: 8%;' : vertical === 'bottom' ? 'bottom: 8%;' : 'top: 50%; translate: 0 -50%;';
+    var h = horizontal === 'left' ? 'left: 8%; text-align: left;'
+      : horizontal === 'right' ? 'right: 8%; text-align: right;'
+      : 'left: 50%; transform: translateX(-50%); text-align: center;';
+    return 'position: absolute; ' + v + ' ' + h + ' max-width: 84%; color: ' + (colour || '#FFFFFF') +
+      '; font-size: ' + Math.max(9, Math.round(Number(size || 40) / 6)) + 'px; font-weight: 700; line-height: 1.15; text-shadow: 0 2px 6px rgba(0,0,0,.7);';
+  }
+
 
   // Collage geometry for Home's floating clip previews — reproduced from the
   // design so the drift and overlap match what was drawn.
@@ -426,6 +464,42 @@
 
     var musicVolume = Number((DATA.musicSettings || {}).volumePercent || 0);
 
+    // The template being edited, with the schema's own defaults behind it so a
+    // partially-populated record cannot render blanks.
+    var tpl = Object.assign({
+      fitMode: 'crop', smartFramingBias: 'auto', captionMode: 'dynamic-stack',
+      filterPreset: 'natural', captionPosition: 'middle', captionHorizontal: 'right',
+      captionPrimary: '#FFFFFF', captionFontSize: 96,
+      watermarkPosition: 'top-center', watermarkColor: '#D9B478', watermarkFontSize: 28,
+      voiceEnhance: true,
+    }, activeTemplate || {});
+
+    function saveTemplate(patch) {
+      UI.tplDirty = true;
+      global.StudioAdapter.onTemplateField(activeTemplate && activeTemplate.id, patch);
+    }
+
+    // Builds a settings row whose options come from the schema's enum, so a
+    // picker can only ever offer a value sanitiseTemplate() accepts.
+    function tplRow(defs) {
+      return defs.map(function (d) {
+        var current = tpl[d.field];
+        var label = (d.labels && d.labels[current]) || titleCase(current);
+        return {
+          icon: d.icon, label: d.label, value: label,
+          open: function (e) {
+            stop(e);
+            var options = d.opts.map(function (o) { return (d.labels && d.labels[o]) || titleCase(o); });
+            global.StudioAdapter.onPickOption(d.label, options, function (chosen) {
+              var idx = options.indexOf(chosen);
+              if (idx > -1) saveTemplate(defObj(d.field, d.opts[idx]));
+            });
+          },
+        };
+      });
+    }
+    function defObj(k, v) { var o = {}; o[k] = v; return o; }
+
     // Plans come from billing.publicBilling(); shape varies, so read defensively.
     var planList = (DATA.billing && (DATA.billing.plans || DATA.billing.availablePlans)) || [];
     if (!Array.isArray(planList)) {
@@ -433,6 +507,42 @@
         var v = planList[k]; return typeof v === 'object' ? Object.assign({ id: k }, v) : { id: k, name: k };
       });
     }
+
+    var job = UI.job;
+    var tokenRate = Number((DATA.billing && DATA.billing.tokenRatePerMinute) || 1);
+
+    // The connection the modal is showing, if any.
+    var PROVIDERS = {
+      youtube: { title: 'YouTube', icon: 'ph ph-youtube-logo', oauth: 'youtube' },
+      instagram: { title: 'Instagram', icon: 'ph ph-instagram-logo', oauth: 'meta' },
+      tiktok: { title: 'TikTok', icon: 'ph ph-tiktok-logo', oauth: 'tiktok' },
+    };
+    var conn = null;
+    if (UI.connProvider && PROVIDERS[UI.connProvider]) {
+      var p = social[UI.connProvider] || {};
+      conn = {
+        key: UI.connProvider,
+        title: PROVIDERS[UI.connProvider].title,
+        icon: PROVIDERS[UI.connProvider].icon,
+        oauth: PROVIDERS[UI.connProvider].oauth,
+        connected: Boolean(p.connected),
+        configured: Boolean(p.configured),
+        handle: (p.accounts && p.accounts[0] && p.accounts[0].name) || 'No account linked',
+      };
+    }
+
+    // The live dock mirrors work actually in flight.
+    var liveItems = projects.filter(function (pr) {
+      return pr.status !== 'ready' && pr.status !== 'failed' && pr.status !== 'cancelled';
+    }).slice(0, 3).map(function (pr) {
+      return {
+        label: projectTitle[pr.id],
+        meta: pr.stage || 'queued',
+        barStyle: 'height: 3px; border-radius: 3px; width: ' + Math.round(pr.progress || 0) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
+        iconStyle: 'font-size: 14px; color: #F0D6A6; animation: dcSpin 1.1s linear infinite;',
+        icon: 'ph ph-circle-notch',
+      };
+    });
 
     // Blockers name a real gap and send you to the screen that fixes it.
     var blocker = '', blockerScreen = 'music';
@@ -700,6 +810,193 @@
       // ── Schedule ──
       scheduleDays: scheduleDays,
 
+      // ── Source range panel ──
+      // Opens after /api/source-info resolves a pasted link, so the range and the
+      // token estimate are based on the real source rather than a guess. The
+      // chosen range becomes sourceStartSeconds/sourceEndSeconds on /api/videos.
+      jobOpen: Boolean(job),
+      jobSourceLabel: job ? job.title : '',
+      jobStart: job ? job.start : 0,
+      jobEnd: job ? job.end : 0,
+      setJobStart: function (e) {
+        var v = Math.max(0, Math.min(Number(e.target.value), (UI.job.end || 0) - 30));
+        UI.job.start = v; refresh();
+      },
+      setJobEnd: function (e) {
+        var v = Math.min(UI.job.durationSec || Number(e.target.value), Math.max(Number(e.target.value), (UI.job.start || 0) + 30));
+        UI.job.end = v; refresh();
+      },
+      jobBandStyle: job && job.durationSec
+        ? 'position: absolute; top: 0; bottom: 0; left: ' + (job.start / job.durationSec * 100) + '%; width: ' +
+          Math.max(1, (job.end - job.start) / job.durationSec * 100) + '%; border-radius: 4px; background: rgba(217,180,120,.28); border: 1px solid rgba(217,180,120,.5);'
+        : 'display: none;',
+      jobRangeLabel: job ? secsToClock(job.start) + ' – ' + secsToClock(job.end) : '',
+      jobLenLabel: job ? humanDuration(job.end - job.start) + ' selected' : '',
+      // Charging is per source minute, so the estimate follows the range.
+      jobTokenLabel: job ? '≈ ' + plural(Math.max(1, Math.ceil((job.end - job.start) / 60 * tokenRate)), 'token') : '',
+      jobNasheeds: plural(tracks.length, 'nasheed') + ' in rotation',
+      closeJob: function (e) { stop(e); setUI({ job: null }); },
+      runGenerate: function (e) {
+        stop(e);
+        if (!job || UI.generating) return;
+        setUI({ generating: true });
+        global.StudioAdapter.onGenerate(job.url, { startSec: Math.round(job.start), endSec: Math.round(job.end) });
+      },
+      genBusy: UI.generating,
+      genLabel: UI.generating ? 'Starting…' : 'Generate clips',
+      genIcon: UI.generating ? 'ph ph-circle-notch' : 'ph-fill ph-sparkle',
+      genIconStyle: 'font-size: 15px;' + (UI.generating ? ' animation: dcSpin 1.1s linear infinite;' : ''),
+      genBarStyle: UI.generating
+        ? 'position: absolute; left: 0; bottom: 0; height: 2px; width: 40%; background: linear-gradient(90deg, #D9B478, #F0D6A6); animation: dcSweep 1.1s ease-in-out infinite;'
+        : 'display: none;',
+      genProgressLabel: UI.generating ? 'Queuing the lecture…' : '',
+
+      // ── Chrome: option sheet, toast, player, tour, boot ──
+      // The sheet is how every picker on the Templates screen asks its question,
+      // so it is load-bearing rather than decoration.
+      sheetOpen: Boolean(UI.sheet),
+      sheetTitle: UI.sheet ? UI.sheet.title : '',
+      sheetSubtitle: UI.sheet ? UI.sheet.subtitle : '',
+      sheetOptions: UI.sheet ? UI.sheet.options.map(function (label) {
+        return {
+          label: label,
+          rowStyle: 'display: flex; align-items: center; gap: 9px; padding: 11px 13px; border-bottom: 1px solid #1A1A1E; cursor: pointer; color: #E9E9ED;',
+          select: function (e) {
+            stop(e);
+            var cb = UI.sheet && UI.sheet.cb;
+            UI.sheet = null;
+            if (cb) cb(label);
+            refresh();
+          },
+        };
+      }) : [],
+      closeSheet: function (e) { stop(e); setUI({ sheet: null }); },
+
+      toastOn: Boolean(UI.toast),
+      toastMsg: UI.toast || '',
+
+      playerOpen: Boolean(UI.playerClip),
+      playerTitle: UI.playerClip ? UI.playerClip.title : '',
+      playerThumb: 'width: 100%; aspect-ratio: 9 / 16; border-radius: 10px; background: ' + thumb(UI.playerClip && UI.playerClip.thumbUrl) + ';',
+      closePlayer: function (e) { stop(e); setUI({ playerClip: null }); },
+      seek: function () {},
+
+      // No boot animation: the host page has already run its own splash by the
+      // time the dashboard mounts, and a second one just delays the first paint.
+      booting: false,
+      navLoading: false,
+      // The tour belongs to the legacy dashboard, which owns onboarding.
+      tourOn: false,
+      tourNotFirst: false,
+      tourTitle: '', tourBody: '', tourCount: '', tourNextLabel: '', tourDots: [],
+      tourCardStyle: 'display: none;', tourVeilStyle: 'display: none;', tourSpotStyle: 'display: none;',
+      tourNext: function () {}, tourBack: function () {}, tourSkip: function () {},
+
+      liveDock: liveItems.length > 0,
+      liveItems: liveItems,
+      showAllActivity: function (e) { stop(e); setUI({ activityAll: true, bellOpen: true }); },
+
+      // ── Account menu ──
+      accountSettings: function (e) { stop(e); setUI({ screen: 'tokens', menuOpen: false }); },
+      helpGuides: function (e) { stop(e); global.open('https://deenclipped.online/features', '_blank', 'noopener'); },
+      signOut: function (e) { stop(e); global.StudioAdapter.onSignOut(); },
+
+      // ── Connections modal ──
+      connOpen: UI.connProvider !== null,
+      connName: conn ? conn.title : '',
+      connHandle: conn ? conn.handle : '',
+      connIcon: conn ? conn.icon : '',
+      connStatus: conn ? (conn.connected ? 'Connected' : 'Not connected') : '',
+      connStatusStyle: 'padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; border: 1px solid ' +
+        (conn && conn.connected ? 'rgba(127,209,166,.35); background: rgba(10,10,12,.85); color: #7FD1A6;' : '#3A2A2A; background: rgba(10,10,12,.85); color: #E3928C;'),
+      connDotStyle: 'width: 8px; height: 8px; border-radius: 50%; background: ' + (conn && conn.connected ? '#7FD1A6' : '#E6B770') + ';',
+      connNote: conn
+        ? (conn.connected
+          ? 'Reconnecting refreshes the publishing token — scheduled posts keep their slots.'
+          : conn.configured ? 'Connect to publish approved clips automatically.' : 'This platform is not configured on the server yet.')
+        : '',
+      connBtnLabel: conn && conn.connected ? 'Reconnect' : 'Connect',
+      connBtnIcon: conn && conn.connected ? 'ph ph-arrows-clockwise' : 'ph ph-plugs-connected',
+      connBtnIconStyle: 'font-size: 15px;',
+      reconnect: function (e) { stop(e); if (conn) global.StudioAdapter.onConnect(conn.key); },
+      disconnect: function (e) { stop(e); if (conn) global.StudioAdapter.onDisconnect(conn.oauth); },
+      testPost: function (e) { stop(e); if (conn) global.StudioAdapter.onTestConnection(conn.key); },
+      closeConn: function (e) { stop(e); setUI({ connProvider: null }); },
+
+      // ── Templates ──
+      // Rows are built from the template schema in src/templates.js, and only
+      // fields that actually reach an export appear.
+      //
+      // Deliberately absent, because CLAUDE.md forbids showing a control that
+      // cannot reach an export: the design's "Auto headline" and "Intro / outro"
+      // rows both drive hookEnabled, which sanitiseTemplate() hard-disables, and
+      // its AI rows (filler words, long pauses, keyword highlighter, caption
+      // emojis, stock B-roll) have no field at all -- the render pipeline has no
+      // concat/trim/atrim/select, so none of them can be produced.
+      tplList: templates.map(function (t) { return t.name; }),
+      activeTpl: activeTemplate ? activeTemplate.name : '',
+      setActiveTpl: function (e) {
+        var picked = templates.filter(function (t) { return t.name === e.target.value; })[0];
+        if (picked) global.StudioAdapter.onSelectTemplate(picked.id);
+      },
+      tplStyleRows: tplRow([
+        { icon: 'ph ph-layout', label: 'Clip layout', field: 'fitMode', opts: ENUMS.fitMode, labels: { contain: 'Fit with blurred bars', blur: 'Blurred background', crop: 'Fill, face-tracked' } },
+        { icon: 'ph ph-crosshair', label: 'Framing bias', field: 'smartFramingBias', opts: ENUMS.smartFramingBias },
+        { icon: 'ph ph-closed-captioning', label: 'Caption', field: 'captionMode', opts: ENUMS.captionMode, labels: { phrase: 'One phrase', word: 'Word by word', 'dynamic-stack': 'Stacked lines' } },
+        { icon: 'ph ph-palette', label: 'Look', field: 'filterPreset', opts: ENUMS.filterPreset },
+      ]),
+      tplBrandRows: tplRow([
+        { icon: 'ph ph-image-square', label: 'Watermark position', field: 'watermarkPosition', opts: ENUMS.watermarkPosition },
+        { icon: 'ph ph-text-aa', label: 'Caption position', field: 'captionPosition', opts: ENUMS.captionPosition },
+        { icon: 'ph ph-align-center-horizontal', label: 'Caption alignment', field: 'captionHorizontal', opts: ENUMS.captionHorizontal },
+      ]),
+      // Voice enhancement is the one processing toggle the worker really applies.
+      tplAIRows: [{ key: 'voiceEnhance', icon: 'ph ph-waveform', label: 'Voice enhancement', note: 'levels and clarity on speech' }].map(function (r) {
+        var on = Boolean(tpl[r.key]);
+        return {
+          icon: r.icon, label: r.label, note: r.note,
+          trackStyle: 'position: relative; margin-left: auto; width: 34px; height: 19px; flex: none; border-radius: 20px; cursor: pointer; transition: background .16s ease, border-color .16s ease; border: 1px solid ' +
+            (on ? 'rgba(217,180,120,.5); background: rgba(217,180,120,.22);' : '#33333A; background: #17171A;'),
+          knobStyle: 'position: absolute; top: 2px; left: ' + (on ? '17px' : '2px') + '; width: 13px; height: 13px; border-radius: 50%; background: ' + (on ? '#F0D6A6' : '#6E6E76') + '; transition: left .16s ease, background .16s ease;',
+          toggle: function (e) { stop(e); saveTemplate({ voiceEnhance: !on }); },
+        };
+      }),
+      tplDirtyLabel: UI.tplDirty ? 'Unsaved changes' : 'All changes saved',
+      tplDirtyDotStyle: 'width: 7px; height: 7px; border-radius: 50%; background: ' + (UI.tplDirty ? '#E6B770' : '#7FD1A6') + ';',
+      saveTpl: function (e) { stop(e); global.StudioAdapter.onSaveTemplate(); },
+      resetTpl: function (e) { stop(e); setUI({ tplDirty: false }); global.StudioAdapter.onResetTemplate(); },
+      duplicateTpl: function (e) { stop(e); global.StudioAdapter.onDuplicateTemplate(activeTemplate && activeTemplate.id); },
+      previewClip: function (e) { stop(e); toast('Preview renders from the next clip this template produces.'); },
+      layerBtns: [
+        { key: 'caption', label: 'Caption', icon: 'ph ph-closed-captioning' },
+        { key: 'mark', label: 'Logo', icon: 'ph ph-copyright' },
+      ].map(function (l) {
+        var on = UI.tplLayer === l.key;
+        return {
+          label: l.label, icon: l.icon,
+          style: 'display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 8px; font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; transition: background .14s ease, border-color .14s ease, color .14s ease; border: 1px solid ' +
+            (on ? 'rgba(217,180,120,.5); background: rgba(217,180,120,.13); color: #F0D6A6;' : '#26262A; background: #121214; color: #A2A2AA;'),
+          select: function (e) { stop(e); setUI({ tplLayer: l.key }); },
+        };
+      }),
+      // Live preview overlays, positioned from the template's own margins.
+      capStyle: overlayStyle(tpl.captionPosition, tpl.captionHorizontal, tpl.captionPrimary, tpl.captionFontSize),
+      capHandle: handleStyle(UI.tplLayer === 'caption'),
+      headStyle: 'display: none;',
+      headHandle: 'display: none;',
+      markStyle: overlayStyle(tpl.watermarkPosition.indexOf('top') === 0 ? 'top' : 'bottom',
+        tpl.watermarkPosition.indexOf('left') > -1 ? 'left' : tpl.watermarkPosition.indexOf('right') > -1 ? 'right' : 'center',
+        tpl.watermarkColor, tpl.watermarkFontSize),
+      markHandle: handleStyle(UI.tplLayer === 'mark'),
+      guideVStyle: 'position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(217,180,120,.18);',
+      guideHStyle: 'position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: rgba(217,180,120,.18);',
+      edSafe: true,
+      safePresetLabel: 'Shorts + Reels',
+      cyclePreset: function (e) { stop(e); toast('Safe-zone presets are fixed for vertical output.'); },
+      dragCaption: function () {}, dragHeadline: function () {}, dragMark: function () {},
+      undoEdit: function (e) { stop(e); global.StudioAdapter.onResetTemplate(); },
+      redoEdit: function (e) { stop(e); },
+
       // ── Start-a-job form (shared by Home and the library) ──
       jobUrlVal: UI.jobUrl,
       setJobUrl: function (e) { UI.jobUrl = e.target.value; refresh(); },
@@ -707,9 +1004,7 @@
         stop(e);
         var url = (UI.jobUrl || '').trim();
         if (!url) return;
-        global.StudioAdapter.onStartJob(url, { templateId: UI.jobTplId || '' });
-        UI.jobUrl = '';
-        refresh();
+        global.StudioAdapter.onProbeSource(url);
       },
       onFile: function (e) {
         var file = e.target && e.target.files && e.target.files[0];
@@ -877,7 +1172,7 @@
           handle: (provider.accounts && provider.accounts[0] && provider.accounts[0].name) || 'Not connected',
           note: ok ? 'Connected' : 'Connect to publish',
           icon: name === 'youtube' ? 'ph ph-youtube-logo' : name === 'instagram' ? 'ph ph-instagram-logo' : 'ph ph-tiktok-logo',
-          open: function (e) { stop(e); setUI({ screen: 'templates' }); },
+          open: function (e) { stop(e); setUI({ connProvider: name }); },
           dotStyle: 'position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid #0C0C0E; background: ' + (ok ? '#7FD1A6' : '#E6B770') + ';',
         };
       }),
@@ -899,6 +1194,38 @@
     onPlayTrack: function () {},
     onRemoveTrack: function () {},
     onChoosePlan: function () {},
+    onSelectTemplate: function () {},
+    onSaveTemplate: function () {},
+    onResetTemplate: function () {},
+    onDuplicateTemplate: function () {},
+    onTemplateField: function () {},
+    onPickOption: function (title, options, cb) {
+      UI.sheet = { title: title, subtitle: 'Applies to every clip on this template', options: options, cb: cb };
+      refresh();
+    },
+    onSignOut: function () {},
+    onProbeSource: function () {},
+    onGenerate: function () {},
+    // Called by the host once /api/source-info resolves, so the range picker can
+    // open against the real duration.
+    openJob: function (source) {
+      var dur = Number(source && source.durationSec) || 0;
+      UI.job = { url: source.url, title: source.title || source.url, durationSec: dur, start: 0, end: dur };
+      UI.generating = false;
+      UI.jobUrl = '';
+      refresh();
+    },
+    jobDone: function () { UI.job = null; UI.generating = false; refresh(); },
+    onConnect: function () {},
+    onDisconnect: function () {},
+    onTestConnection: function () {},
+    // Shows the design's own toast rather than the legacy one when the Studio
+    // dashboard is the visible surface.
+    showToast: function (message) {
+      UI.toast = message;
+      refresh();
+      global.setTimeout(function () { UI.toast = null; refresh(); }, 2600);
+    },
     onBillingPortal: function () {},
     onToast: function () {},
     // The host clears optimistic decisions once fresh state has landed.
