@@ -158,7 +158,12 @@ function valueNode(text) {
 // cacheable. Every *literal* style (and every style-hover / style-active, which
 // cannot be inline at all) is hoisted into a generated class, deduped by content.
 
-const EVENTS = { onclick: 'click', onchange: 'change', oninput: 'input', onmousedown: 'mousedown', onmouseenter: 'mouseenter', onmouseleave: 'mouseleave', onsubmit: 'submit', onkeydown: 'keydown', onfocus: 'focus', onblur: 'blur' };
+// onChange maps to the DOM `input` event, not `change`. The design is React,
+// where onChange fires on every keystroke and every slider movement; the DOM's
+// `change` only fires on blur (and on release for a range input). Mapping it
+// literally left the search box, the caption editor and every slider reading
+// their value only after focus moved away — which looks like nothing working.
+const EVENTS = { onclick: 'click', onchange: 'input', oninput: 'input', onmousedown: 'mousedown', onmouseenter: 'mouseenter', onmouseleave: 'mouseleave', onsubmit: 'submit', onkeydown: 'keydown', onfocus: 'focus', onblur: 'blur' };
 const DROP_ATTRS = new Set(['hint-placeholder-count', 'hint-placeholder-val', 'ref']);
 
 class StyleTable {

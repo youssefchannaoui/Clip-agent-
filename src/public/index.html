@@ -23,6 +23,11 @@ body.studio-active { overflow: hidden; }
 body.studio-active #app { display: none; }
 #studio { display: none; }
 body.studio-active #studio { display: block; }
+/* Nav hover lives here rather than in adapter state. Re-rendering on mouseover
+   replaced the element under the pointer, and a browser only fires `click` when
+   mousedown and mouseup land on the same element — so hovering made the whole
+   dashboard unclickable. The active item overrides this with inline !important. */
+#studio nav a:hover { background: #17171A !important; color: #F2F2F4 !important; }
 </style>
 <style>
 :root{

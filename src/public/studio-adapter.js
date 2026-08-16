@@ -20,7 +20,6 @@
     screen: 'home',
     lastScreen: 'home',
     railOpen: true,
-    hoverNav: null,
     menuOpen: false,
     bellOpen: false,
     query: '',
@@ -240,18 +239,23 @@
 
   function navItem(key, label, icon, count) {
     var on = UI.screen === key;
-    var isHover = UI.hoverNav === key;
     var open = UI.railOpen;
     return {
       label: label,
       icon: icon,
       count: count || '',
       click: function (e) { stop(e); setUI({ screen: key, menuOpen: false, bellOpen: false }); },
-      enter: function () { setUI({ hoverNav: key }); },
-      leave: function () { setUI({ hoverNav: null }); },
+      // Hover is CSS, not state. Driving it from JS meant every mouseover
+      // re-rendered the whole dashboard through innerHTML, which replaced the
+      // element under the pointer — and a browser only fires `click` when
+      // mousedown and mouseup land on the same element, so nothing was
+      // clickable. The active item marks its colours !important because an
+      // inline !important is the one thing a stylesheet :hover cannot override.
+      enter: null,
+      leave: null,
       style: 'position: relative; display: flex; align-items: center; gap: 10px; padding: ' + (open ? '8px 10px' : '9px 0') + '; ' + (open ? '' : 'justify-content: center; ') +
         'border-radius: 8px; font-weight: ' + (on ? '500' : '400') + '; cursor: pointer; white-space: nowrap; transition: background .14s ease, color .14s ease; border-left: 2px solid ' +
-        (on ? '#D9B478; background: rgba(217,180,120,.09); color: #F0D6A6;' : 'transparent; ' + (isHover ? 'background: #17171A; color: #F2F2F4;' : 'color: #A2A2AA;')),
+        (on ? '#D9B478; background: rgba(217,180,120,.09) !important; color: #F0D6A6 !important;' : 'transparent; color: #A2A2AA;'),
       labelStyle: open ? 'overflow: hidden; text-overflow: ellipsis;' : 'display: none;',
       countStyle: (open && count) ? 'margin-left: auto; padding: 1px 6px; border-radius: 20px; background: ' + (on ? 'rgba(217,180,120,.16)' : '#1D1D21') + '; font-size: 10.5px; font-weight: 600; color: ' + (on ? '#F0D6A6' : '#8B8B93') + ';' : 'display: none;',
       tipStyle: open

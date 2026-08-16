@@ -504,3 +504,53 @@ test('re-pulling the current export is a no-op', () => {
   assert.equal(status, 0);
   assert.match(stdout, /nothing to do/);
 });
+
+// ── two bugs that made the dashboard unusable ─────────────────────────────
+
+test('onChange compiles to the input event, not change', () => {
+  // The design is React, where onChange fires per keystroke. The DOM's `change`
+  // only fires on blur, so mapping it literally left the search box, the caption
+  // editor and every slider reading their value only after focus moved away.
+  const src = FIXTURE.replace('onClick="{{ row.click }}"', 'onChange="{{ row.type }}"');
+  const { ast } = astOf(runImporter(src).js);
+  const found = [];
+  (function walk(nodes) {
+    for (const n of nodes || []) {
+      if (n && n.on) found.push(...Object.keys(n.on));
+      if (n && n.ch) walk(n.ch);
+    }
+  })(ast);
+  assert.ok(found.includes('input'), 'onChange became an input handler');
+  assert.ok(!found.includes('change'), 'nothing is left listening for change');
+});
+
+test('the live template wires no change handlers at all', () => {
+  const js = fs.readFileSync(path.join(ROOT, 'src/public/studio-template.generated.js'), 'utf8');
+  assert.ok(!js.includes('"change"'), 'a change handler would only fire on blur');
+});
+
+test('nav items do not drive hover through adapter state', () => {
+  // Hover through setUI re-rendered the whole dashboard via innerHTML, replacing
+  // the element under the pointer. A browser only fires `click` when mousedown
+  // and mouseup land on the same element, so hovering made nav unclickable.
+  const vals = StudioAdapter.bindings(SAMPLE_STATE);
+  for (const item of [...vals.navHome, ...vals.navProduce, ...vals.navSetup]) {
+    assert.notEqual(typeof item.enter, 'function', `${item.label} must not re-render on hover`);
+    assert.notEqual(typeof item.leave, 'function', `${item.label} must not re-render on hover`);
+  }
+});
+
+test('the active nav item wins over the stylesheet hover rule', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'queue' });
+  const vals = StudioAdapter.bindings(SAMPLE_STATE);
+  const active = vals.navProduce.find(n => n.label === 'Review queue');
+  const idle = vals.navProduce.find(n => n.label === 'Schedule');
+  // Inline !important is the one declaration a stylesheet :hover cannot override.
+  assert.match(active.style, /background:[^;]*!important/);
+  assert.doesNotMatch(idle.style, /!important/);
+});
+
+test('the page carries the CSS hover rule that replaced the JS one', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  assert.match(html, /#studio nav a:hover\s*\{[^}]*!important/);
+});
