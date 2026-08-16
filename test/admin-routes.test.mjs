@@ -61,10 +61,23 @@ test('public routes, pricing and dashboard assets remain available', async () =>
   assert.match(terms, /YouTube Terms of Service/i);
   assert.match(terms, /Google Privacy Policy/i);
 
+  // /app now serves the Studio dashboard, which replaces the shell
+  // activity-fix.js and premium-dashboard.js build. Both still ship, because
+  // ?classic=1 is the escape hatch if the new one misbehaves in production.
   const app = await fetch(`${base}/app`, { headers: { Cookie: creatorCookie }, redirect: 'manual' });
   assert.equal(app.status, 200);
-  assert.match(await app.text(), /premium-dashboard\.js/);
+  const studioHtml = await app.text();
+  assert.match(studioHtml, /STUDIO_SHELL=true/, 'the Studio dashboard is the default');
+  assert.doesNotMatch(studioHtml, /src="\/premium-dashboard\.js"/, 'the old shell is not loaded alongside it');
+
+  const classic = await fetch(`${base}/app?classic=1`, { headers: { Cookie: creatorCookie }, redirect: 'manual' });
+  assert.equal(classic.status, 200);
+  const classicHtml = await classic.text();
+  assert.match(classicHtml, /src="\/premium-dashboard\.js"/, 'the previous dashboard is still reachable');
+  assert.doesNotMatch(classicHtml, /STUDIO_SHELL=true/);
+
   assert.equal((await fetch(`${base}/premium-dashboard.js`)).status, 200);
+  assert.equal((await fetch(`${base}/studio-adapter.js`)).status, 200);
 });
 
 test('admin analytics accepts owner and admin but rejects creators', async () => {

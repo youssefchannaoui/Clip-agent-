@@ -204,6 +204,20 @@ function addImportant(decls) {
 
 // ── template -> AST ─────────────────────────────────────────────────────────
 
+// Literal text the design bakes in that is really data. See
+// design/text-overrides.json.
+const OVERRIDES_FILE = path.resolve(ROOT, 'design/text-overrides.json');
+let TEXT_OVERRIDES = {};
+if (fs.existsSync(OVERRIDES_FILE)) {
+  try {
+    TEXT_OVERRIDES = JSON.parse(fs.readFileSync(OVERRIDES_FILE, 'utf8')).overrides || {};
+  } catch (err) {
+    console.error(`import-design: could not read ${path.relative(ROOT, OVERRIDES_FILE)}: ${err.message}`);
+    process.exit(2);
+  }
+}
+const overridesHit = new Set();
+
 const styles = new StyleTable();
 const bindingsUsed = new Set();
 const loopVars = [];
@@ -219,7 +233,16 @@ function compileNode(node) {
     const v = valueNode(node.text);
     if (typeof v === 'string') {
       const collapsed = v.replace(/\s+/g, ' ');
-      return collapsed.trim() ? collapsed : null;
+      if (!collapsed.trim()) return null;
+      // Literal text that is really data becomes a binding, so the adapter can
+      // supply the account's own value instead of the designer's placeholder.
+      const binding = TEXT_OVERRIDES[collapsed.trim()];
+      if (binding) {
+        overridesHit.add(collapsed.trim());
+        bindingsUsed.add(binding);
+        return { t: 'txt', v: { p: binding } };
+      }
+      return collapsed;
     }
     noteBindings(v);
     return { t: 'txt', v };
@@ -402,7 +425,13 @@ function main() {
   const cssPath = path.join(OUT, 'studio-styles.generated.css');
   const jsPath = path.join(OUT, 'studio-template.generated.js');
 
+  // An override that matches nothing means either a typo, or the design was
+  // fixed and the entry can go. Never fail silently either way.
+  const staleOverrides = Object.keys(TEXT_OVERRIDES).filter(k => !overridesHit.has(k));
+
   const summary = {
+    overrides: overridesHit.size,
+    staleOverrides,
     nodes: countNodes(ast),
     bindings: needed.length,
     hoistedClasses: styles.byKey.size,
@@ -434,11 +463,17 @@ function countNodes(nodes) {
 function report(s, cssPath, jsPath, dry) {
   const kb = b => `${(b / 1024).toFixed(1)}kB`;
   console.log(`import-design: ${s.nodes} nodes, ${s.bindings} bindings, ${s.hoistedClasses} hoisted classes`);
+  if (s.overrides) console.log(`  ${s.overrides} hardcoded string(s) replaced with bindings (design/text-overrides.json)`);
   console.log(`  ${dry ? 'would write' : 'wrote'} ${path.relative(ROOT, jsPath)}  ${kb(s.jsBytes)}`);
   console.log(`  ${dry ? 'would write' : 'wrote'} ${path.relative(ROOT, cssPath)} ${kb(s.cssBytes)}`);
   if (s.truncated) {
     console.log('\n  WARNING: the source file is truncated — its <script data-dc-script> block');
     console.log('  never closes. The markup compiled fine, but bindings below are unverified.');
+  }
+  if (s.staleOverrides.length) {
+    console.log(`\n  ${s.staleOverrides.length} text override(s) matched nothing in this export:`);
+    for (const k of s.staleOverrides) console.log(`    - ${JSON.stringify(k)}`);
+    console.log('  Either the design was fixed (delete the entry) or the string changed.');
   }
   if (s.unsupplied.length) {
     console.log(`\n  ${s.unsupplied.length} binding(s) used by the template with no supplier in the design script:`);

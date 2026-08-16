@@ -1,0 +1,33 @@
+{
+  "_readme": [
+    "Literal text in the design that is really data, mapped to a binding name.",
+    "The importer replaces each exact (trimmed) text node with that binding, so",
+    "studio-adapter.js can supply the real value.",
+    "",
+    "This is a patch over a design problem, not the fix. The proper fix is to make",
+    "these bindings in the Claude Design project -- see DESIGN-GAPS.md. When that",
+    "happens the literal stops appearing, the override stops matching, and",
+    "`npm run design:import` reports it as unused so the entry can be deleted.",
+    "",
+    "Matching is exact on the trimmed string. An override that matches nothing is",
+    "reported, never silently ignored."
+  ],
+
+  "overrides": {
+    "Youssef Channaoui": "accountName",
+    "Studio · Salām, Youssef": "greeting",
+    "3 connected · TikTok needs reconnecting": "connSummary",
+    "Visa ending 4242 · expires 04/29": "cardLabel",
+    "860 spent this month · resets nothing — tokens never expire": "spendSummary",
+    "148 of 250 GB": "storageSummary",
+    "112 GB": "storageSources",
+    "34 GB": "storageClips",
+    "2 GB": "storageTranscripts",
+    "Patience in Hardship — Part 2": "jobTitle",
+    "42:11 source · 6 clips requested": "jobMeta",
+    "2 need you": "activityNeedsYou",
+    "12 in total": "activityTotal",
+    "From one 38-min talk": "emptySampleNote",
+    "This is what one 38-minute lecture produces": "emptySampleCaption"
+  }
+}

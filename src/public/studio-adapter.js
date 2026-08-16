@@ -224,6 +224,9 @@
   }
 
 
+  // Platforms spell themselves; naive capitalisation gives "Tiktok".
+  var PLATFORM_NAMES = { youtube: 'YouTube', instagram: 'Instagram', tiktok: 'TikTok', facebook: 'Facebook' };
+
   // Collage geometry for Home's floating clip previews — reproduced from the
   // design so the drift and overlap match what was drawn.
   var FLOAT_POS = [
@@ -442,7 +445,7 @@
             if (!c.templateId) failing.push('template');
             return {
               time: timeOf(c.scheduledAt),
-              dest: platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : 'No account',
+              dest: PLATFORM_NAMES[platform] || 'No account',
               icon: platform === 'youtube' ? 'ph ph-youtube-logo' : platform === 'instagram' ? 'ph ph-instagram-logo' : platform === 'tiktok' ? 'ph ph-tiktok-logo' : 'ph ph-share-network',
               caption: c.title || '',
               score: c.score || '',
@@ -547,6 +550,12 @@
     }) : [];
 
     // Where the caption sits in the preview, as a percentage of frame height.
+    var firstName = String((DATA.user && DATA.user.name) || '').trim().split(/\s+/)[0] || '';
+    var needsReconnect = ['youtube', 'instagram', 'tiktok'].filter(function (n) {
+      var p = social[n] || {};
+      return p.configured && !p.connected;
+    }).map(function (n) { return PLATFORM_NAMES[n] || n; });
+
     var capTop = tpl.captionPosition === 'top' ? 22 : tpl.captionPosition === 'bottom' ? 80 : 50;
 
     var job = UI.job;
@@ -711,7 +720,7 @@
         return {
           time: timeOf(c.scheduledAt),
           title: c.title || '',
-          dest: platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : 'Not connected',
+          dest: PLATFORM_NAMES[platform] || 'Not connected',
           icon: platform === 'youtube' ? 'ph ph-youtube-logo' : platform === 'instagram' ? 'ph ph-instagram-logo' : platform === 'tiktok' ? 'ph ph-tiktok-logo' : 'ph ph-share-network',
           next: i === 0,
           thumbStyle: 'width: 24px; height: 34px; flex: none; border-radius: 5px; border: 1px solid #26262A; background: ' + thumb(c.thumbUrl) + ';',
@@ -1022,6 +1031,32 @@
         ? 'position: absolute; left: 0; bottom: 0; height: 2px; width: 40%; background: linear-gradient(90deg, #D9B478, #F0D6A6); animation: dcSweep 1.1s ease-in-out infinite;'
         : 'display: none;',
       genProgressLabel: UI.generating ? 'Queuing the lecture…' : '',
+
+      // ── Values the design hardcoded ──
+      // These were literal text in the .dc.html. design/text-overrides.json turns
+      // them into bindings at import time so they can carry the account's own
+      // data; without that a customer sees the designer's placeholders, including
+      // a payment card and a connection status that were never real.
+      accountName: (DATA.user && (DATA.user.name || DATA.user.email)) || '',
+      greeting: 'Studio' + (firstName ? ' · Salām, ' + firstName : ''),
+      connSummary: connectedCount
+        ? plural(connectedCount, 'account') + ' connected' + (needsReconnect.length ? ' · ' + needsReconnect.join(', ') + ' needs reconnecting' : '')
+        : 'No accounts connected',
+      cardLabel: current.stripeCustomerId ? 'Card on file · manage in billing' : 'No card on file',
+      spendSummary: (current.used || 0) + ' spent this period · top-up tokens never expire',
+      // The product does not measure storage, so these report what it does know.
+      storageSummary: plural(projects.length, 'lecture') + ' · ' + plural(clips.length, 'clip'),
+      storageSources: String(projects.length),
+      storageClips: String(clips.length),
+      storageTranscripts: String(projects.filter(function (p) { return p.status === 'ready'; }).length),
+      jobTitle: active ? projectTitle[active.id] : 'Nothing processing',
+      jobMeta: active
+        ? humanDuration(active.durationSec || active.sourceDurationSec) + ' source · ' + plural(active.clipCount || 0, 'clip') + ' requested'
+        : 'Paste a lecture to start',
+      activityNeedsYou: needsCount + ' need you',
+      activityTotal: log.length + ' in total',
+      emptySampleNote: 'Sample of what a lecture produces',
+      emptySampleCaption: 'This is what one lecture produces',
 
       // ── Chrome: option sheet, toast, player, tour, boot ──
       // The sheet is how every picker on the Templates screen asks its question,
@@ -1340,7 +1375,7 @@
         var provider = social[name] || {};
         var ok = Boolean(provider.connected);
         return {
-          name: name.charAt(0).toUpperCase() + name.slice(1),
+          name: PLATFORM_NAMES[name] || name,
           handle: (provider.accounts && provider.accounts[0] && provider.accounts[0].name) || 'Not connected',
           note: ok ? 'Connected' : 'Connect to publish',
           icon: name === 'youtube' ? 'ph ph-youtube-logo' : name === 'instagram' ? 'ph ph-instagram-logo' : 'ph ph-tiktok-logo',
