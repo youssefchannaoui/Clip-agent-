@@ -220,3 +220,109 @@ test('a source without an <x-dc> block is rejected with a usable message', () =>
   assert.equal(js, null, 'nothing is written for an unusable source');
   assert.match(stderr, /no <x-dc> block/i);
 });
+
+// ── adapter integration ────────────────────────────────────────────────────
+// Renders the real generated template through the real adapter, so a design
+// re-import that changes a binding name fails here rather than in the browser.
+
+await import('../src/public/studio-template.generated.js');
+await import('../src/public/studio-adapter.js');
+const { StudioAdapter, STUDIO_TEMPLATE, STUDIO_BINDINGS } = globalThis;
+
+const SAMPLE_STATE = {
+  user: { email: 'youssef@deenclipped.online' },
+  projects: [
+    { id: 'p1', title: 'The Night Prayer', status: 'ready', clipCount: 6, durationSec: 3720, submittedAt: Date.now() - 7200e3, sourceThumbUrl: '/api/p/p1/thumb' },
+    { id: 'p2', title: 'Patience in Hardship', status: 'processing', clipCount: 0, durationSec: 2400, submittedAt: Date.now() - 600e3, sourceThumbUrl: null },
+  ],
+  clips: [
+    { id: 'c1', title: 'Whoever wakes safe', status: 'ready', score: 92, durationMs: 38000, thumbUrl: '/api/clips/c1/thumb', reviewRequired: true, targets: [] },
+    { id: 'c2', title: 'Three duaa never turned back', status: 'ready', score: 88, durationMs: 44000, thumbUrl: '/api/clips/c2/thumb', targets: [] },
+    { id: 'c3', title: 'He did not say the reciter', status: 'scheduled', score: 81, durationMs: 41000, scheduledAt: new Date(Date.now() + 3600e3).toISOString(), targets: [{ platform: 'youtube' }] },
+  ],
+  tracks: [{ id: 't1', name: 'Nasheed A' }],
+  log: [{ level: 'error', message: 'TikTok token expired', at: Date.now() - 900e3 }],
+  social: { youtube: { connected: true, accounts: [{ name: 'DeenClipped' }] }, instagram: { connected: false }, tiktok: { connected: false } },
+  billing: { current: { plan: 'creator', remaining: 412, unlimited: false } },
+};
+
+const renderScreen = (screen, patch = {}) => {
+  Object.assign(StudioAdapter.ui, { screen, bellOpen: false, menuOpen: false, railOpen: true }, patch);
+  const vals = StudioAdapter.bindings(SAMPLE_STATE);
+  return { ...render(STUDIO_TEMPLATE, vals), vals };
+};
+
+test('the dashboard renders real state with nothing left unresolved', () => {
+  const { html } = renderScreen('home');
+  assert.ok(!html.includes('{{'), 'no unresolved bindings');
+  assert.ok(!html.includes('undefined'), 'no undefined leaked into markup');
+  assert.ok(!html.includes('[object'), 'no object stringified into markup');
+  assert.ok(!html.includes('<sc-'), 'no template directives survived');
+});
+
+test('Home shows real lectures, clips and account details', () => {
+  const { html } = renderScreen('home');
+  assert.match(html, /The Night Prayer/);
+  assert.match(html, /Whoever wakes safe/);
+  assert.match(html, /youssef@deenclipped\.online/);
+  assert.match(html, /412/, 'token balance');
+});
+
+test('nav counts derive from clip state, not mock data', () => {
+  const { vals } = renderScreen('home');
+  const counts = Object.fromEntries(vals.navProduce.map(n => [n.label, n.count]));
+  assert.equal(counts['Review queue'], 2, 'two clips await a decision');
+  assert.equal(counts['Schedule'], 1, 'one clip is scheduled');
+});
+
+test('every screen renders and titles itself', () => {
+  for (const [screen, title] of Object.entries({
+    home: 'Home', queue: 'Review queue', library: 'Lecture library',
+    schedule: 'Schedule', templates: 'Templates', music: 'Nasheed library',
+    language: 'Arabic & terms', performance: 'Performance', tokens: 'Tokens & billing',
+  })) {
+    const { html, vals } = renderScreen(screen);
+    assert.equal(vals.pageTitle, title, `${screen} title`);
+    assert.ok(html.length > 1000, `${screen} rendered something`);
+  }
+});
+
+test('an empty account renders the onboarding copy rather than breaking', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'home' });
+  const vals = StudioAdapter.bindings({});
+  const { html } = render(STUDIO_TEMPLATE, vals);
+  assert.equal(vals.isEmptyStudio, true);
+  assert.match(vals.subline, /Paste a lecture link/);
+  assert.ok(!html.includes('undefined'));
+});
+
+test('a thumbnail URL cannot break out of the CSS url() it lands in', () => {
+  const vals = StudioAdapter.bindings({
+    ...SAMPLE_STATE,
+    projects: [{ id: 'p', title: 'x', status: 'ready', sourceThumbUrl: 'a") ; background: red; x:url("b' }],
+  });
+  const style = vals.lectures[0].thumbStyle;
+  // The payload's text may survive, but only inertly: the quote and paren that
+  // would close url() early must be encoded, so the declaration cannot break out.
+  const inside = style.slice(style.indexOf('url("') + 5, style.lastIndexOf('")'));
+  assert.ok(!inside.includes('"'), 'no raw quote can terminate the url');
+  assert.ok(!inside.includes(')'), 'no raw paren can terminate the url');
+  assert.match(inside, /%22%29/, 'breakout characters were percent-encoded');
+});
+
+test('collapsing the rail changes its width and hides labels', () => {
+  const wide = renderScreen('home', { railOpen: true }).vals;
+  const narrow = renderScreen('home', { railOpen: false }).vals;
+  assert.match(wide.railStyle, /width: 228px/);
+  assert.match(narrow.railStyle, /width: 68px/);
+  assert.match(narrow.navHome[0].labelStyle, /display: none/);
+});
+
+test('the adapter supplies every binding the template actually reads', () => {
+  const vals = StudioAdapter.bindings(SAMPLE_STATE);
+  const missing = STUDIO_BINDINGS.filter(b => !(b in vals));
+  // Staged rollout: shell + Home are wired, later screens are not yet.
+  assert.ok(!missing.includes('navHome'), 'shell bindings are supplied');
+  assert.ok(!missing.includes('pageTitle'));
+  assert.ok(!missing.includes('lectures'), 'Home bindings are supplied');
+});
