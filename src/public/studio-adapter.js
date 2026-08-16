@@ -194,6 +194,12 @@
 
   function toast(message) { global.StudioAdapter.onToast(message); }
 
+  // Worker errors carry URLs and stack noise; the feed needs one readable line.
+  function shortError(text) {
+    var t = String(text || 'Processing failed.').replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim();
+    return t.length > 150 ? t.slice(0, 147) + '…' : (t || 'Processing failed.');
+  }
+
   // Mirrors ENUMS in src/templates.js. Kept here so the picker can only ever
   // offer a value sanitiseTemplate() will accept.
   var ENUMS = {
@@ -226,6 +232,39 @@
 
   // Platforms spell themselves; naive capitalisation gives "Tiktok".
   var PLATFORM_NAMES = { youtube: 'YouTube', instagram: 'Instagram', tiktok: 'TikTok', facebook: 'Facebook' };
+  // The names the existing dashboard shows, which say which surface is posted to.
+  var PLATFORM_TITLES = { youtube: 'YouTube Shorts', instagram: 'Instagram Reels', tiktok: 'TikTok', facebook: 'Facebook Reels' };
+  // Instagram and Facebook are one Meta connection: connecting, testing or
+  // disconnecting either affects both.
+  var OAUTH_OF = { youtube: 'youtube', instagram: 'meta', facebook: 'meta', tiktok: 'tiktok' };
+  var PLATFORMS = ['youtube', 'tiktok', 'instagram', 'facebook'];
+
+  // Connection state lives at DATA.social.providers.<key>, and whether a platform
+  // is switched on lives at DATA.publishingSettings.<key>.enabled -- a different
+  // object. Reading DATA.social.<key> returns undefined, which renders every
+  // platform as disconnected no matter what is actually linked.
+  function providerInfo(DATA, key) {
+    var status = ((DATA.social || {}).providers || {})[key] || {};
+    var setting = (DATA.publishingSettings || {})[key] || {};
+    var accounts = status.accounts || [];
+    var account = null;
+    for (var i = 0; i < accounts.length; i++) if (accounts[i].id === setting.accountId) account = accounts[i];
+    if (!account) account = accounts[0] || null;
+    return {
+      key: key,
+      title: PLATFORM_TITLES[key] || key,
+      oauth: OAUTH_OF[key] || key,
+      icon: key === 'youtube' ? 'ph ph-youtube-logo' : key === 'instagram' ? 'ph ph-instagram-logo'
+        : key === 'tiktok' ? 'ph ph-tiktok-logo' : 'ph ph-facebook-logo',
+      status: status,
+      accounts: accounts,
+      account: account,
+      connected: Boolean(status.connected),
+      // An absent provider counts as configured, matching the server's shape.
+      configured: status.configured !== false,
+      enabled: Boolean(setting.enabled),
+    };
+  }
 
   // Collage geometry for Home's floating clip previews — reproduced from the
   // design so the drift and overlap match what was drawn.
@@ -312,10 +351,14 @@
       : (current.plan ? current.plan.charAt(0).toUpperCase() + current.plan.slice(1) : 'Free');
     var ctx = { projects: projects, clips: clips, tracks: tracks, needsCount: needsCount, planLabel: planLabel };
 
+    var providers = PLATFORMS.map(function (k) { return providerInfo(DATA, k); });
+    var byKey = {};
+    providers.forEach(function (p) { byKey[p.key] = p; });
+
     // The quote-review gate is a real automation setting, not a demo prop.
     var gate = !(DATA.automationSettings && DATA.automationSettings.skipQuotes === false);
-    var connectedCount = ['youtube', 'instagram', 'tiktok']
-      .filter(function (n) { return social[n] && social[n].connected; }).length;
+    var connectedCount = providers.filter(function (p) { return p.connected; }).length;
+    var activeCount = providers.filter(function (p) { return p.enabled; }).length;
 
     var projectTitle = {};
     projects.forEach(function (p) { projectTitle[p.id] = p.title || p.sourceTitle || 'Untitled lecture'; });
@@ -556,10 +599,9 @@
 
     // Where the caption sits in the preview, as a percentage of frame height.
     var firstName = String((DATA.user && DATA.user.name) || '').trim().split(/\s+/)[0] || '';
-    var needsReconnect = ['youtube', 'instagram', 'tiktok'].filter(function (n) {
-      var p = social[n] || {};
+    var needsReconnect = providers.filter(function (p) {
       return p.configured && !p.connected;
-    }).map(function (n) { return PLATFORM_NAMES[n] || n; });
+    }).map(function (p) { return PLATFORM_NAMES[p.key] || p.key; });
 
     var capTop = tpl.captionPosition === 'top' ? 22 : tpl.captionPosition === 'bottom' ? 80 : 50;
 
@@ -567,38 +609,74 @@
     var tokenRate = Number((DATA.billing && DATA.billing.tokenRatePerMinute) || 1);
 
     // The connection the modal is showing, if any.
-    var PROVIDERS = {
-      youtube: { title: 'YouTube', icon: 'ph ph-youtube-logo', oauth: 'youtube' },
-      instagram: { title: 'Instagram', icon: 'ph ph-instagram-logo', oauth: 'meta' },
-      tiktok: { title: 'TikTok', icon: 'ph ph-tiktok-logo', oauth: 'tiktok' },
-    };
-    var conn = null;
-    if (UI.connProvider && PROVIDERS[UI.connProvider]) {
-      var p = social[UI.connProvider] || {};
-      conn = {
-        key: UI.connProvider,
-        title: PROVIDERS[UI.connProvider].title,
-        icon: PROVIDERS[UI.connProvider].icon,
-        oauth: PROVIDERS[UI.connProvider].oauth,
-        connected: Boolean(p.connected),
-        configured: Boolean(p.configured),
-        handle: (p.accounts && p.accounts[0] && p.accounts[0].name) || 'No account linked',
-      };
-    }
+    var conn = UI.connProvider ? byKey[UI.connProvider] : null;
 
-    // The live dock mirrors work actually in flight.
-    var liveItems = projects.filter(function (pr) {
-      return pr.status !== 'ready' && pr.status !== 'failed' && pr.status !== 'cancelled';
-    }).slice(0, 3).map(function (pr) {
+    // Everything actually in flight: lectures, extra-clip runs, re-renders and
+    // uploads to a platform. Watching projects alone missed most of it.
+    var jobsLive = [];
+    projects.forEach(function (pr) {
+      if (['queued', 'processing'].indexOf(pr.status) > -1) {
+        jobsLive.push({ kind: 'project', title: projectTitle[pr.id], stage: pr.stage || pr.status, progress: Number(pr.progress || 0), at: pr.startedAt || pr.submittedAt });
+      }
+      if (pr.moreJob && ['queued', 'processing'].indexOf(pr.moreJob.status) > -1) {
+        jobsLive.push({ kind: 'project', title: 'More clips · ' + projectTitle[pr.id], stage: pr.moreJob.stage || pr.moreJob.status, progress: Number(pr.moreJob.progress || 0), at: pr.moreJob.startedAt || pr.moreJob.createdAt });
+      }
+    });
+    (DATA.rerenderJobs || []).forEach(function (j) {
+      if (['queued', 'processing'].indexOf(j.status) > -1) {
+        var c = clips.filter(function (x) { return x.id === j.clipId; })[0];
+        jobsLive.push({ kind: 'render', title: 'Editing ' + ((c && c.title) || 'clip'), stage: j.stage || j.status, progress: Number(j.progress || 0), at: j.startedAt || j.createdAt });
+      }
+    });
+    clips.forEach(function (c) {
+      (c.targets || []).forEach(function (t) {
+        if (['retrying', 'publishing', 'processing'].indexOf(t.status) > -1) {
+          jobsLive.push({
+            kind: 'publish', title: (c.title || 'Clip') + ' → ' + (PLATFORM_NAMES[t.provider] || t.provider),
+            stage: t.stage || t.platformStatus || t.status,
+            progress: isFinite(Number(t.progressPercent)) ? Number(t.progressPercent) : null,
+            at: t.updatedAt,
+          });
+        }
+      });
+    });
+    jobsLive.sort(function (a, b) { return Number(b.at || 0) - Number(a.at || 0); });
+
+    var liveItems = jobsLive.slice(0, 4).map(function (j) {
       return {
-        label: projectTitle[pr.id],
-        meta: pr.stage || 'queued',
-        barStyle: 'height: 3px; border-radius: 3px; width: ' + Math.round(pr.progress || 0) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
-        iconStyle: 'font-size: 14px; color: #F0D6A6; animation: dcSpin 1.1s linear infinite;',
-        icon: 'ph ph-circle-notch',
+        label: j.title,
+        meta: j.stage + (j.progress !== null && isFinite(j.progress) ? ' · ' + Math.round(j.progress) + '%' : ''),
+        barStyle: 'height: 3px; border-radius: 3px; width: ' + (j.progress === null || !isFinite(j.progress) ? 100 : Math.max(0, Math.min(100, Math.round(j.progress)))) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
+        icon: j.kind === 'publish' ? 'ph ph-paper-plane-tilt' : j.kind === 'render' ? 'ph ph-film-strip' : 'ph ph-circle-notch',
+        iconStyle: 'font-size: 14px; color: #F0D6A6;' + (j.kind === 'project' ? ' animation: dcSpin 1.1s linear infinite;' : ''),
       };
     });
 
+    // Anything that failed and needs a person. Nothing in the design surfaces
+    // these on their own, so they lead the activity feed — a failed lecture or a
+    // rejected upload going unmentioned is worse than any styling problem.
+    var failures = [];
+    projects.forEach(function (pr) {
+      if (pr.status === 'failed' || pr.error) {
+        failures.push({ text: projectTitle[pr.id] + ' needs attention', meta: shortError(pr.error || pr.stage), at: pr.completedAt || pr.submittedAt, screen: 'library' });
+      }
+      if (pr.moreJob && pr.moreJob.status === 'failed') {
+        failures.push({ text: 'More clips failed · ' + projectTitle[pr.id], meta: shortError(pr.moreJob.error || pr.moreJob.stage), at: pr.moreJob.completedAt || pr.moreJob.createdAt, screen: 'library' });
+      }
+    });
+    (DATA.rerenderJobs || []).forEach(function (j) {
+      if (j.status !== 'failed') return;
+      var c = clips.filter(function (x) { return x.id === j.clipId; })[0];
+      failures.push({ text: 'Edit failed · ' + ((c && c.title) || 'Clip'), meta: shortError(j.error || j.stage), at: j.completedAt || j.createdAt, screen: 'queue' });
+    });
+    clips.forEach(function (c) {
+      var bad = (c.targets || []).filter(function (t) { return t.status === 'failed'; });
+      if (c.status !== 'publish_failed' && !bad.length) return;
+      failures.push({ text: 'Publish failed · ' + (c.title || 'Clip'), meta: shortError((bad[0] && (bad[0].error || bad[0].stage)) || c.error), at: (bad[0] && bad[0].updatedAt) || c.postedAt, screen: 'schedule' });
+    });
+    failures.sort(function (a, b) { return Number(b.at || 0) - Number(a.at || 0); });
+
+    // Blockers name a real gap and send you to the screen that fixes it.
     // Blockers name a real gap and send you to the screen that fixes it.
     var blocker = '', blockerScreen = 'music';
     if (tracks.length === 0) { blocker = 'No nasheed uploaded — every clip mixes one in, so processing cannot finish without at least one.'; blockerScreen = 'music'; }
@@ -652,7 +730,18 @@
       toggleBell: function (e) { stop(e); setUI({ bellOpen: !UI.bellOpen, menuOpen: false }); },
       markRead: function (e) { stop(e); setUI({ bellOpen: false }); },
       moreActivity: function (e) { stop(e); setUI({ activityAll: !UI.activityAll }); },
-      activity: (UI.activityAll ? log : log.slice(0, 5)).map(function (entry) {
+      activity: failures.map(function (f) {
+        return {
+          text: f.text,
+          meta: f.meta + (f.at ? ' · ' + since(f.at) : ''),
+          tag: 'Failed',
+          icon: 'ph-fill ph-warning-circle',
+          rowStyle: 'display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px; border-bottom: 1px solid #1A1A1E; cursor: pointer; background: rgba(227,146,140,.07);',
+          iconStyle: 'font-size: 15px; flex: none; margin-top: 1px; color: #E3928C',
+          tagStyle: 'margin-left: auto; flex: none; padding: 2px 7px; border-radius: 20px; font-size: 9.5px; font-weight: 700; background: rgba(227,146,140,.16); color: #E3928C;',
+          open: function (e) { stop(e); setUI({ screen: f.screen, bellOpen: false }); },
+        };
+      }).concat((UI.activityAll ? log : log.slice(0, 6)).map(function (entry) {
         var urgent = entry.level === 'error' || entry.level === 'warn';
         var color = entry.level === 'error' ? '#E3928C' : entry.level === 'warn' ? '#E6B770' : '#7FD1A6';
         return {
@@ -663,8 +752,9 @@
           rowStyle: 'display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px; border-bottom: 1px solid #1A1A1E; transition: background .14s ease; background: ' + (urgent ? 'rgba(217,180,120,.045)' : 'transparent'),
           iconStyle: 'font-size: 15px; flex: none; margin-top: 1px; color: ' + color,
           tagStyle: 'margin-left: auto; flex: none; padding: 2px 7px; border-radius: 20px; font-size: 9.5px; font-weight: 600; letter-spacing: .02em; background: #1D1D21; color: #8B8B93;',
+          open: function () {},
         };
-      }),
+      })),
 
       menuOpen: UI.menuOpen,
       caretIcon: UI.menuOpen ? 'ph ph-caret-up' : 'ph ph-caret-down',
@@ -805,7 +895,7 @@
       checks: [
         { label: 'Nasheeds for rotation', value: tracks.length + ' uploaded', ok: tracks.length >= 2 },
         { label: 'Active Clip Style', value: (DATA.selectedTemplate && DATA.selectedTemplate.name) || 'None selected', ok: Boolean(DATA.selectedTemplate) },
-        { label: 'Publishing tokens', value: connectedCount + ' valid', ok: connectedCount > 0 },
+        { label: 'Publishing destinations', value: activeCount + ' of ' + connectedCount + ' connected are on', ok: activeCount > 0 },
         { label: 'Quote review gate', value: gate ? 'On' : 'Off', ok: gate },
       ].map(function (c) {
         return {
@@ -1082,8 +1172,10 @@
       jobMeta: active
         ? humanDuration(active.durationSec || active.sourceDurationSec) + ' source · ' + plural(active.clipCount || 0, 'clip') + ' requested'
         : 'Paste a lecture to start',
-      activityNeedsYou: needsCount + ' need you',
-      activityTotal: log.length + ' in total',
+      // Failures need a person more urgently than unreviewed clips do, so the
+      // badge counts both rather than quietly ignoring the failures.
+      activityNeedsYou: (failures.length + needsCount) + ' need you',
+      activityTotal: (failures.length + log.length) + ' in total',
       emptySampleNote: 'Sample of what a lecture produces',
       emptySampleCaption: 'This is what one lecture produces',
 
@@ -1138,25 +1230,49 @@
       signOut: function (e) { stop(e); global.StudioAdapter.onSignOut(); },
 
       // ── Connections modal ──
-      connOpen: UI.connProvider !== null,
+      connOpen: Boolean(conn),
       connName: conn ? conn.title : '',
-      connHandle: conn ? conn.handle : '',
+      connHandle: conn ? (conn.account ? conn.account.name : conn.configured ? 'No account linked' : 'Not configured') : '',
       connIcon: conn ? conn.icon : '',
-      connStatus: conn ? (conn.connected ? 'Connected' : 'Not connected') : '',
+      connStatus: !conn ? ''
+        : !conn.configured ? 'Setup needed'
+        : conn.enabled ? 'Active'
+        : conn.connected ? 'Connected'
+        : 'Not connected',
       connStatusStyle: 'padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; border: 1px solid ' +
-        (conn && conn.connected ? 'rgba(127,209,166,.35); background: rgba(10,10,12,.85); color: #7FD1A6;' : '#3A2A2A; background: rgba(10,10,12,.85); color: #E3928C;'),
-      connDotStyle: 'width: 8px; height: 8px; border-radius: 50%; background: ' + (conn && conn.connected ? '#7FD1A6' : '#E6B770') + ';',
-      connNote: conn
-        ? (conn.connected
-          ? 'Reconnecting refreshes the publishing token — scheduled posts keep their slots.'
-          : conn.configured ? 'Connect to publish approved clips automatically.' : 'This platform is not configured on the server yet.')
-        : '',
+        (!conn ? '#26262A;'
+          : !conn.configured ? '#3A2A2A; background: rgba(10,10,12,.85); color: #E3928C;'
+          : conn.enabled ? 'rgba(127,209,166,.35); background: rgba(10,10,12,.85); color: #7FD1A6;'
+          : conn.connected ? 'rgba(217,180,120,.4); background: rgba(10,10,12,.85); color: #F0D6A6;'
+          : '#33333A; background: rgba(10,10,12,.85); color: #A2A2AA;'),
+      connDotStyle: 'width: 8px; height: 8px; border-radius: 50%; background: ' +
+        (!conn ? '#6E6E76' : !conn.configured ? '#E3928C' : conn.enabled ? '#7FD1A6' : conn.connected ? '#E6B770' : '#6E6E76') + ';',
+      // A failed test sets lastTestAt as well as lastTestError, so reporting the
+      // timestamp first hides the error behind "Checked 2m ago" -- which is what
+      // the existing dashboard does. The error wins here.
+      connNote: !conn ? ''
+        : !conn.configured ? 'This platform has no API keys set on the server yet.'
+        : conn.status.lastTestError ? 'Last check failed: ' + String(conn.status.lastTestError).slice(0, 160)
+        : conn.status.lastTestAt ? 'Checked ' + since(conn.status.lastTestAt)
+        : conn.connected ? 'Reconnecting refreshes the publishing token — scheduled posts keep their slots.'
+        : 'Connect to publish approved clips automatically.',
       connBtnLabel: conn && conn.connected ? 'Reconnect' : 'Connect',
       connBtnIcon: conn && conn.connected ? 'ph ph-arrows-clockwise' : 'ph ph-plugs-connected',
-      connBtnIconStyle: 'font-size: 15px;',
-      reconnect: function (e) { stop(e); if (conn) global.StudioAdapter.onConnect(conn.key); },
-      disconnect: function (e) { stop(e); if (conn) global.StudioAdapter.onDisconnect(conn.oauth); },
-      testPost: function (e) { stop(e); if (conn) global.StudioAdapter.onTestConnection(conn.key); },
+      connBtnIconStyle: 'font-size: 15px;' + (conn && !conn.configured ? ' opacity: .45;' : ''),
+      // Instagram and Facebook share one Meta connection, so say so before
+      // someone disconnects both by accident.
+      connShared: Boolean(conn) && conn.oauth === 'meta',
+      connEnabled: Boolean(conn) && conn.enabled,
+      connToggleTrack: switchTrack(Boolean(conn) && conn.enabled),
+      connToggleKnob: switchKnob(Boolean(conn) && conn.enabled),
+      toggleConnEnabled: function (e) {
+        stop(e);
+        if (!conn || !conn.connected) return;
+        global.StudioAdapter.onPublishingToggle(conn.key, !conn.enabled);
+      },
+      reconnect: function (e) { stop(e); if (conn && conn.configured) global.StudioAdapter.onConnect(conn.oauth); },
+      disconnect: function (e) { stop(e); if (conn) global.StudioAdapter.onDisconnect(conn.oauth, conn.oauth === 'meta'); },
+      testPost: function (e) { stop(e); if (conn && conn.connected) global.StudioAdapter.onTestConnection(conn.oauth); },
       closeConn: function (e) { stop(e); setUI({ connProvider: null }); },
 
       // ── Templates ──
@@ -1400,16 +1516,19 @@
       addTermB: function (e) { UI.termB = e.target.value; refresh(); },
       addTerm: function (e) { stop(e); toast('Saving a term needs a glossary field on the account first.'); },
 
-      connections: ['youtube', 'instagram', 'tiktok'].map(function (name) {
-        var provider = social[name] || {};
-        var ok = Boolean(provider.connected);
+      connections: providers.map(function (p) {
         return {
-          name: PLATFORM_NAMES[name] || name,
-          handle: (provider.accounts && provider.accounts[0] && provider.accounts[0].name) || 'Not connected',
-          note: ok ? 'Connected' : 'Connect to publish',
-          icon: name === 'youtube' ? 'ph ph-youtube-logo' : name === 'instagram' ? 'ph ph-instagram-logo' : 'ph ph-tiktok-logo',
-          open: function (e) { stop(e); setUI({ connProvider: name }); },
-          dotStyle: 'position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid #0C0C0E; background: ' + (ok ? '#7FD1A6' : '#E6B770') + ';',
+          name: PLATFORM_NAMES[p.key],
+          handle: p.account ? p.account.name : (p.configured ? 'No account linked' : 'Needs API keys'),
+          note: !p.configured ? 'Not configured on the server'
+            : !p.connected ? 'Connect to publish'
+            : !p.enabled ? 'Connected — not switched on'
+            : 'Active',
+          icon: p.icon,
+          open: function (e) { stop(e); setUI({ connProvider: p.key }); },
+          // Green only when it will actually post: connected AND enabled.
+          dotStyle: 'position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid #0C0C0E; background: ' +
+            (!p.configured ? '#E3928C' : p.enabled ? '#7FD1A6' : p.connected ? '#E6B770' : '#6E6E76') + ';',
         };
       }),
     };
@@ -1464,6 +1583,7 @@
     onConnect: function () {},
     onDisconnect: function () {},
     onTestConnection: function () {},
+    onPublishingToggle: function () {},
     // Shows the design's own toast rather than the legacy one when the Studio
     // dashboard is the visible surface.
     showToast: function (message) {

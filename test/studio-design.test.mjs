@@ -606,3 +606,128 @@ test('generate sends no range when the length is unknown', () => {
   StudioAdapter.bindings(SAMPLE_STATE).runGenerate({ preventDefault() {} });
   assert.equal(sent, null, 'a 0-0 range would be a lie the server must interpret');
 });
+
+// ── connections read the right part of DATA ───────────────────────────────
+
+const SOCIAL_STATE = {
+  social: {
+    providers: {
+      youtube: { configured: true, connected: true, accounts: [{ id: 'y1', name: 'DeenClipped' }], lastTestAt: Date.now() - 120000 },
+      instagram: { configured: true, connected: true, accounts: [{ id: 'i1', name: '@deenclipped' }], lastTestError: 'Token expired' },
+      facebook: { configured: true, connected: false, accounts: [] },
+      tiktok: { configured: false, connected: false, accounts: [] },
+    },
+  },
+  publishingSettings: { youtube: { enabled: true }, instagram: { enabled: false } },
+  clips: [], projects: [], tracks: [], log: [], billing: { current: {} },
+};
+
+test('connections read DATA.social.providers, not DATA.social', () => {
+  // Reading DATA.social.youtube returns undefined, which rendered every platform
+  // as disconnected no matter what was actually linked.
+  const vals = StudioAdapter.bindings(SOCIAL_STATE);
+  const yt = vals.connections.find(c => c.name === 'YouTube');
+  assert.equal(yt.handle, 'DeenClipped', 'the linked account name is shown');
+  assert.equal(yt.note, 'Active');
+});
+
+test('all four platforms appear, including Facebook', () => {
+  const names = StudioAdapter.bindings(SOCIAL_STATE).connections.map(c => c.name);
+  assert.deepEqual(names.sort(), ['Facebook', 'Instagram', 'TikTok', 'YouTube']);
+});
+
+test('connected is not the same as switched on', () => {
+  const vals = StudioAdapter.bindings(SOCIAL_STATE);
+  const ig = vals.connections.find(c => c.name === 'Instagram');
+  // Connected, but publishingSettings.instagram.enabled is false.
+  assert.equal(ig.note, 'Connected — not switched on');
+  assert.match(ig.dotStyle, /#E6B770/, 'amber, not green — it will not post');
+});
+
+test('an unconfigured platform says so rather than offering to connect', () => {
+  const vals = StudioAdapter.bindings(SOCIAL_STATE);
+  const tt = vals.connections.find(c => c.name === 'TikTok');
+  assert.equal(tt.note, 'Not configured on the server');
+  assert.equal(tt.handle, 'Needs API keys');
+});
+
+test('a failed connection test is not hidden behind its timestamp', () => {
+  // The server sets lastTestAt on failure too, so checking the timestamp first
+  // reports "Checked 2m ago" and never shows the error.
+  Object.assign(StudioAdapter.ui, { connProvider: 'instagram' });
+  const vals = StudioAdapter.bindings(SOCIAL_STATE);
+  assert.match(vals.connNote, /Last check failed: Token expired/);
+});
+
+test('the modal warns that Instagram and Facebook share one connection', () => {
+  Object.assign(StudioAdapter.ui, { connProvider: 'instagram' });
+  assert.equal(StudioAdapter.bindings(SOCIAL_STATE).connShared, true);
+  Object.assign(StudioAdapter.ui, { connProvider: 'youtube' });
+  assert.equal(StudioAdapter.bindings(SOCIAL_STATE).connShared, false);
+});
+
+test('disconnecting Meta is flagged as affecting both platforms', () => {
+  Object.assign(StudioAdapter.ui, { connProvider: 'facebook' });
+  let args = null;
+  StudioAdapter.onDisconnect = (oauth, shared) => { args = { oauth, shared }; };
+  StudioAdapter.bindings(SOCIAL_STATE).disconnect({ preventDefault() {} });
+  assert.deepEqual(args, { oauth: 'meta', shared: true });
+});
+
+// ── failures and in-flight work ───────────────────────────────────────────
+
+const BROKEN_STATE = {
+  projects: [
+    { id: 'p1', title: 'Failed lecture', status: 'failed', error: 'yt-dlp failed: https://x.y/z blocked', submittedAt: Date.now() - 60000 },
+    { id: 'p2', title: 'Running lecture', status: 'processing', stage: 'Transcribing audio', progress: 40, startedAt: Date.now() - 30000 },
+  ],
+  clips: [
+    { id: 'c1', projectId: 'p2', title: 'Bad upload', status: 'publish_failed', targets: [{ provider: 'tiktok', status: 'failed', error: 'Token expired', updatedAt: Date.now() }] },
+    { id: 'c2', projectId: 'p2', title: 'Uploading', status: 'scheduled', scheduledAt: Date.now() + 1000, targets: [{ provider: 'youtube', status: 'publishing', progressPercent: 60, updatedAt: Date.now() }] },
+  ],
+  rerenderJobs: [{ id: 'r1', clipId: 'c1', status: 'failed', error: 'render crashed', createdAt: Date.now() - 5000 }],
+  tracks: [], log: [{ level: 'info', message: 'Something happened', at: Date.now() }],
+  social: { providers: {} }, billing: { current: {} },
+};
+
+test('failed work reaches the activity feed instead of vanishing', () => {
+  Object.assign(StudioAdapter.ui, { activityAll: false });
+  const vals = StudioAdapter.bindings(BROKEN_STATE);
+  const text = vals.activity.map(a => a.text).join(' | ');
+  assert.match(text, /Failed lecture needs attention/);
+  assert.match(text, /Publish failed · Bad upload/);
+  assert.match(text, /Edit failed · Bad upload/);
+});
+
+test('failures lead the feed and are tagged', () => {
+  const vals = StudioAdapter.bindings(BROKEN_STATE);
+  assert.equal(vals.activity[0].tag, 'Failed', 'a failure outranks an info log line');
+  assert.match(vals.activity[0].iconStyle, /#E3928C/);
+});
+
+test('error text is stripped of URLs and kept to one line', () => {
+  const vals = StudioAdapter.bindings(BROKEN_STATE);
+  const lecture = vals.activity.find(a => /Failed lecture/.test(a.text));
+  assert.doesNotMatch(lecture.meta, /https?:/);
+  assert.match(lecture.meta, /yt-dlp failed/);
+});
+
+test('the badge counts failures as well as clips awaiting review', () => {
+  const vals = StudioAdapter.bindings(BROKEN_STATE);
+  // 3 failures, 0 clips waiting in this fixture.
+  assert.equal(vals.activityNeedsYou, '3 need you');
+});
+
+test('the live dock tracks renders and uploads, not only lectures', () => {
+  const vals = StudioAdapter.bindings(BROKEN_STATE);
+  const labels = vals.liveItems.map(i => i.label).join(' | ');
+  assert.match(labels, /Running lecture/, 'a processing lecture');
+  assert.match(labels, /Uploading → YouTube/, 'an upload in flight');
+  assert.equal(vals.liveDock, true);
+});
+
+test('the live dock hides when nothing is running', () => {
+  const vals = StudioAdapter.bindings({ projects: [], clips: [], tracks: [] });
+  assert.equal(vals.liveDock, false);
+  assert.deepEqual(vals.liveItems, []);
+});

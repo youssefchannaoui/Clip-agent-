@@ -1701,8 +1701,19 @@ function renderStudio(){
     StudioAdapter.onConnect=name=>studioDo(async()=>{
       const r=await api(`/api/social/${encodeURIComponent(name)}/connect`,{method:'POST'});
       if(r&&r.url)location.href=r.url});
-    StudioAdapter.onDisconnect=oauth=>{if(!confirm('Disconnect this account and disable future uploads?'))return;
+    StudioAdapter.onDisconnect=(oauth,shared)=>{
+      /* Instagram and Facebook are one Meta connection — disconnecting either
+         takes down both, so say so rather than letting it surprise someone. */
+      const warn=shared?'Disconnect Meta? This removes BOTH Instagram and Facebook publishing.':'Disconnect this account and disable future uploads?';
+      if(!confirm(warn))return;
       studioDo(()=>api(`/api/social/${encodeURIComponent(oauth)}/disconnect`,{method:'POST'}),'Account disconnected')};
+    /* Publishing settings post as a whole object; send the current one with the
+       single field changed so unshown values (privacy, accountId) survive. */
+    StudioAdapter.onPublishingToggle=(key,on)=>studioDo(()=>{
+      const cur=DATA?.publishingSettings||{};
+      const next={...cur,[key]:{...(cur[key]||{}),enabled:on}};
+      next.enabled=['youtube','instagram','facebook','tiktok'].some(p=>next[p]&&next[p].enabled);
+      return api('/api/publishing-settings',{method:'POST',body:JSON.stringify(next)})},'Publishing updated');
     StudioAdapter.onTestConnection=name=>studioDo(()=>api(`/api/social/${encodeURIComponent(name)}/test`,{method:'POST',body:JSON.stringify({})}),'Connection looks healthy');
     /* Resolve the pasted link first, so the range picker and the token estimate
        are based on the real source duration rather than a guess. */
