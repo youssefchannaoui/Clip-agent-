@@ -81,13 +81,41 @@ _progress_lock = threading.Lock()
 _heartbeat_stop = threading.Event()
 
 
+# The one place prose becomes a stable identifier. Callers keep passing readable
+# text; consumers match on `phase` and never on the wording. Previously the UI
+# matched substrings of this prose, and service.py rewrote the prose before it
+# got there, so three of five pipeline steps never lit and the rail ran
+# backwards.
+# Checked in this order because later phases' wording contains earlier phases'
+# keywords -- "Verifying rendered clips" holds both "verif" and "render".
+PHASES = (
+    ("done", ("complete", "are ready")),
+    ("verify", ("verif",)),
+    ("render", ("render",)),
+    ("score", ("analys", "scoring", "finding", "candidate", "moments already used")),
+    # import sits above transcribe: "Loading saved lecture and transcript"
+    # contains "transcri" inside the word "transcript".
+    ("import", ("download", "loading saved", "preparing selected", "import")),
+    ("transcribe", ("transcri", "speech audio")),
+)
+
+
+def phase_for(stage: str) -> str:
+    """Classify a progress line into one of the pipeline's fixed phases."""
+    text = str(stage or "").lower()
+    for name, needles in PHASES:
+        if any(needle in text for needle in needles):
+            return name
+    return "import"
+
+
 def progress(stage: str, percent: int, **details: Any) -> None:
     now = time.time()
     bounded = max(0, min(100, int(percent)))
     with _progress_lock:
         if stage != _progress_state.get("stage"):
             _progress_state["stageStartedAt"] = now
-        _progress_state.update({"stage": stage, "progress": bounded, **details})
+        _progress_state.update({"stage": stage, "phase": phase_for(stage), "progress": bounded, **details})
         payload = dict(_progress_state)
     payload["elapsedSec"] = round(now - float(payload.get("startedAt", now)), 1)
     payload["updatedAt"] = int(now * 1000)

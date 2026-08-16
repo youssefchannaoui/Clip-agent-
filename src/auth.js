@@ -201,7 +201,7 @@ export function emailLogin(email, password, name = '') {
   user.providers = { ...(user.providers || {}), email: { email: clean, linkedAt: user.providers?.email?.linkedAt || now(), providerKey: `email:${clean}` } };
   user.updatedAt = now();
   save();
-  log(`Signed in ${user.email || user.id} with email.`);
+  log(`Signed in ${user.email || user.id} with email.`, 'info', user.id);
   return user;
 }
 
@@ -346,7 +346,7 @@ export async function completeGoogle(req, code, stateId) {
   });
   const claims = await verifyIdentityToken('google', tokens.id_token, { audience: config.googleSigninClientId, nonce: record.nonce });
   const user = upsertUser('google', claims);
-  log(`Signed in ${user.email || user.name} with Google.`);
+  log(`Signed in ${user.email || user.name} with Google.`, 'info', user.id);
   return { user, returnTo: record.returnTo };
 }
 
@@ -361,7 +361,7 @@ export async function completeApple(req, body) {
   let rawUser = null;
   try { rawUser = body.user ? JSON.parse(body.user) : null; } catch { rawUser = null; }
   const user = upsertUser('apple', claims, rawUser);
-  log(`Signed in ${user.email || user.name} with Apple.`);
+  log(`Signed in ${user.email || user.name} with Apple.`, 'info', user.id);
   return { user, returnTo: record.returnTo };
 }
 

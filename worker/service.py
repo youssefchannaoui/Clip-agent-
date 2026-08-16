@@ -226,9 +226,19 @@ class Processor:
             if event.get("type") == "error":
                 reported_error = str(event.get("error") or "").strip()
             if event.get("type") == "progress":
-                raw = str(event.get("stage") or "processing").lower()
-                stage = "extracting audio" if "audio" in raw else "transcribing" if "transcri" in raw else "analysing" if "analys" in raw or "candidate" in raw else "rendering" if "render" in raw or "verif" in raw else "creating clips"
-                self.store.update(job_id, status=stage, stage=stage, progress=int(event.get("progress") or 0))
+                # Pass the worker's own words and its phase through untouched.
+                # Rewriting the prose here destroyed the distinction between
+                # analysing and rendering, and between rendering and verifying,
+                # so three of the five pipeline steps never lit in the UI and the
+                # rail appeared to run backwards.
+                stage = str(event.get("stage") or "processing")
+                self.store.update(
+                    job_id,
+                    status=stage,
+                    stage=stage,
+                    phase=str(event.get("phase") or ""),
+                    progress=int(event.get("progress") or 0),
+                )
         code = child.wait()
         with self.lock:
             self.running.pop(job_id, None)

@@ -304,3 +304,59 @@ class VideoFilterTests(unittest.TestCase):
         plan = {"w": 20, "h": 20, "x": 0, "y": 0}
         graph = self._graph({"fitMode": "crop", "smartFramingZoom": 99}, plan)
         self.assertIn("crop=16:16", graph)
+
+
+class PhaseClassificationTests(unittest.TestCase):
+    """The UI keys its pipeline rail off `phase`. service.py used to rewrite the
+    worker's prose in transit, which collapsed analysing into importing and
+    verifying into rendering, so three of five steps never lit."""
+
+    ORDER = ["import", "transcribe", "score", "render", "verify", "done"]
+
+    def test_every_real_progress_line_classifies_correctly(self):
+        cases = {
+            "Downloading source video": "import",
+            "Loading saved lecture and transcript": "import",
+            "Preparing selected source range": "import",
+            "Preparing transcription": "transcribe",
+            "Extracting speech audio": "transcribe",
+            "Analysing transcript": "score",
+            "Finding and scoring clips": "score",
+            "Scoring unused moments": "score",
+            "Removing moments already used": "score",
+            "Re-rendering clip with the saved template": "render",
+            "Verifying rendered clips": "verify",
+            "Verifying new clips": "verify",
+            "Verifying template, captions, video and music": "verify",
+            "Complete": "done",
+            "More clips are ready": "done",
+        }
+        for text, expected in cases.items():
+            self.assertEqual(worker.phase_for(text), expected, text)
+
+    def test_transcript_in_a_loading_line_does_not_read_as_transcribing(self):
+        # "Loading saved lecture and transcript" contains "transcri".
+        self.assertEqual(worker.phase_for("Loading saved lecture and transcript"), "import")
+
+    def test_verifying_outranks_the_render_keyword_it_contains(self):
+        self.assertEqual(worker.phase_for("Verifying rendered clips"), "verify")
+
+    def test_the_pipeline_never_runs_backwards(self):
+        sequence = [
+            "Downloading source video", "Preparing transcription", "Extracting speech audio",
+            "Analysing transcript", "Finding and scoring clips",
+            "Re-rendering clip with the saved template", "Verifying rendered clips", "Complete",
+        ]
+        seen = [self.ORDER.index(worker.phase_for(s)) for s in sequence]
+        self.assertEqual(seen, sorted(seen))
+
+    def test_an_unknown_line_starts_the_rail_rather_than_guessing(self):
+        self.assertEqual(worker.phase_for("something nobody anticipated"), "import")
+
+    def test_progress_emits_the_phase_alongside_the_prose(self):
+        # Consumers read `phase`; the prose stays as the human-facing detail.
+        worker.progress("Verifying rendered clips", 90)
+        with worker._progress_lock:
+            state = dict(worker._progress_state)
+        self.assertEqual(state.get("phase"), "verify")
+        self.assertEqual(state.get("stage"), "Verifying rendered clips")

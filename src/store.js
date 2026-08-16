@@ -133,7 +133,16 @@ export function log(message, level = 'info', userId = null) {
 export function logFor(user, limit = 60) {
   const entries = Array.isArray(state.log) ? state.log : [];
   if (!user?.id) return [];
-  if (user.role === 'owner') return entries.slice(0, limit);
+  // Every account sees only its own entries, the owner included. The owner is
+  // not a separate admin console -- it is the first registered account using the
+  // same dashboard -- so an unfiltered branch here put other customers' sign-in
+  // emails, token charges and lecture titles straight into its notification
+  // bell. tenancy.js says routes use strict ownership "so the operator does not
+  // see paying customers' clips in their own dashboard by accident"; this is
+  // that rule applied to the log.
+  //
+  // Entries with no userId are system-level (startup, migrations, orphan
+  // records). They belong in the server console, not in anyone's feed.
   return entries.filter(entry => entry?.userId === user.id).slice(0, limit);
 }
 

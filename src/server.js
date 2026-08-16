@@ -255,7 +255,7 @@ function appState(user = null) {
     tracks: audio.listNasheeds(user),
     projects: projectsForUser.map(project => ({
       id: project.id, title: project.title, url: project.url, engine: project.engine, status: project.status,
-      stage: project.stage, progress: project.progress || 0, error: project.error || null, errorCode: project.errorCode || null,
+      stage: project.stage, phase: project.phase || '', progress: project.progress || 0, error: project.error || null, errorCode: project.errorCode || null,
       submittedAt: project.submittedAt, completedAt: project.completedAt || null, clipCount: project.clipCount || 0,
       durationSec: project.durationSec || project.sourceDurationSec || null, sourceDurationSec: project.sourceDurationSec || null, sourceThumbUrl: project.sourceThumbUrl || null, sourceTitle: project.sourceTitle || null, templateIdUsed: project.templateIdUsed,
       templateNameUsed: project.templateNameUsed, templateVersionUsed: project.templateVersionUsed || 1, musicRequired: true,

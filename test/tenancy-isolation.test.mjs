@@ -129,3 +129,29 @@ test('a signed-in account can fully manage its own clip', async () => {
   const del = await fetch(`${base}/api/clips/clip-carol`, { method: 'DELETE', headers: { Cookie: carol.cookie } });
   assert.equal(del.status, 200);
 });
+
+test('the activity log reaches only the account that owns each entry', async () => {
+  // logFor() had an unfiltered `owner` branch. The owner is not a separate admin
+  // console — it is the first registered account using the same dashboard — so
+  // that put other customers' sign-in emails, token charges and lecture titles
+  // into its notification bell, contradicting the policy in tenancy.js.
+  const owner = auth.ownerUser();
+  const ownerCookie = (() => {
+    const token = auth.createSession(owner, { provider: 'test' });
+    return auth.cookieHeaders(token)[0].split(';');
+  })()[0];
+
+  store.log('Signed in someone-else@example.com with Google.', 'info', 'someone-else');
+  store.log('Charged 12 tokens to someone-else@example.com for a lecture.', 'info', 'someone-else');
+  store.log('A system line with no owner at all', 'info', null);
+
+  const ownerState = await (await fetch(`${base}/api/state`, { headers: { Cookie: ownerCookie } })).json();
+  const messages = (ownerState.log || []).map(e => e.message).join(' | ');
+
+  assert.ok(!messages.includes('someone-else@example.com'),
+    'the owner must not see another account\'s sign-ins or charges');
+  assert.ok(!messages.includes('A system line with no owner'),
+    'unowned system lines belong in the server console, not a customer feed');
+  assert.ok((ownerState.log || []).every(e => e.userId === owner.id),
+    'every entry delivered belongs to the account asking');
+});

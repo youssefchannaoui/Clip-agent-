@@ -151,20 +151,25 @@
       (on ? 'rgba(217,180,120,.45); background: rgba(217,180,120,.12); color: #F0D6A6;' : '#26262A; background: #121214; color: #8B8B93;');
   }
 
-  // The worker reports free-text progress ("Downloading source video") rather than
-  // a stage key, so the rail's five steps are matched by what that text starts
-  // with. Anything unrecognised leaves the rail at the last step it did match.
+  // The worker emits a stable phase identifier alongside its readable stage text
+  // (clip_worker.py phase_for). Matching words instead meant three of these five
+  // never lit in production, because service.py rewrote the prose in transit.
+  // The prose is still shown as the step's detail; only the position is keyed off
+  // the enum.
   var STAGES = [
-    { label: 'Source imported', match: /download|loading saved|preparing selected/i },
-    { label: 'Transcribing audio', match: /transcri|speech audio/i },
-    { label: 'Moments scored', match: /scor|analysing transcript|finding/i },
-    { label: 'Rendering with your template', match: /render/i },
-    { label: 'FFprobe verification', match: /verif|complete/i },
+    { key: 'import', label: 'Source imported' },
+    { key: 'transcribe', label: 'Transcribing audio' },
+    { key: 'score', label: 'Moments scored' },
+    { key: 'render', label: 'Rendering with your template' },
+    { key: 'verify', label: 'FFprobe verification' },
   ];
-  function stageIndex(text) {
-    var found = 0;
-    for (var i = 0; i < STAGES.length; i++) if (STAGES[i].match.test(text || '')) found = i;
-    return found;
+  function stageIndex(project) {
+    var phase = project && project.phase;
+    if (phase === 'done') return STAGES.length - 1;
+    for (var i = 0; i < STAGES.length; i++) if (STAGES[i].key === phase) return i;
+    // A record from before the worker emitted a phase, or a queued job that has
+    // not reported yet: show it at the start rather than guessing from words.
+    return 0;
   }
 
   function switchTrack(on) {
@@ -239,6 +244,12 @@
   // disconnecting either affects both.
   var OAUTH_OF = { youtube: 'youtube', instagram: 'meta', facebook: 'meta', tiktok: 'tiktok' };
   var PLATFORMS = ['youtube', 'tiktok', 'instagram', 'facebook'];
+
+  // The engine finishes a project as `done` (local-engine.js:455, :739), never
+  // `ready` -- that is a clip status. Module scope, because lecState() is called
+  // from several points inside bindings() and a `var` inside the function is
+  // hoisted without its value.
+  var FINISHED_PROJECT = { done: 1, completed: 1, ready: 1 };
 
   // Connection state lives at DATA.social.providers.<key>, and whether a platform
   // is switched on lives at DATA.publishingSettings.<key>.enabled -- a different
@@ -429,14 +440,18 @@
     var deckClip = queueClips[Math.min(UI.deckIdx, Math.max(0, queueClips.length - 1))] || null;
 
     // The lecture currently being processed drives the pipeline rail.
-    var active = projects.filter(function (p) {
-      return p.status !== 'ready' && p.status !== 'failed' && p.status !== 'cancelled';
-    })[0] || null;
-    var activeStage = active ? stageIndex(active.stage) : 0;
+    var active = projects.filter(function (p) { return lecState(p) === 'processing'; })[0] || null;
+    var activeStage = active ? stageIndex(active) : 0;
 
     // A lecture's shelf state, from the record's own status.
+    //
+    // The engine finishes a project as `done` (local-engine.js:455, :739), never
+    // `ready` -- `ready` is a clip status. Recognising only `ready` here meant
+    // every finished lecture showed PROCESSING forever, the "Ready" filter was
+    // always empty, and the newest finished lecture stayed pinned at 100% in
+    // "Processing now".
     function lecState(p) {
-      if (p.status === 'ready') return 'ready';
+      if (FINISHED_PROJECT[p.status]) return 'ready';
       if (p.status === 'cancelled' || p.status === 'failed') return 'archived';
       return 'processing';
     }
@@ -1214,7 +1229,7 @@
       storageSummary: plural(projects.length, 'lecture') + ' · ' + plural(clips.length, 'clip'),
       storageSources: String(projects.length),
       storageClips: String(clips.length),
-      storageTranscripts: String(projects.filter(function (p) { return p.status === 'ready'; }).length),
+      storageTranscripts: String(projects.filter(function (p) { return lecState(p) === 'ready'; }).length),
       jobTitle: active ? projectTitle[active.id] : 'Nothing processing',
       jobMeta: active
         ? humanDuration(active.durationSec || active.sourceDurationSec) + ' source · ' + plural(active.clipCount || 0, 'clip') + ' requested'

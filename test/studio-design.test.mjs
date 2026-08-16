@@ -838,3 +838,42 @@ test('generated CSS asset paths resolve from the site root', () => {
   assert.doesNotMatch(css, /url\(['"]?src\/public\//, 'repo-relative asset path would 404');
   assert.doesNotMatch(css, /@import url\("https:\/\/[^/"]+"\)/, 'a bare origin is a preconnect hint, not a stylesheet');
 });
+
+test('a finished lecture reads as ready, not stuck processing', () => {
+  // The engine finishes a project as `done`; `ready` is a clip status. Matching
+  // only `ready` left every completed lecture showing PROCESSING forever.
+  Object.assign(StudioAdapter.ui, { screen: 'library', libFilter: 'all' });
+  const vals = StudioAdapter.bindings({
+    projects: [{ id: 'p', title: 'L', status: 'done', clipCount: 4, progress: 100, submittedAt: Date.now() }],
+    clips: [], tracks: [],
+  });
+  assert.equal(vals.libraryItems[0].stateChip, 'Ready');
+  assert.equal(vals.libTabs.find(t => t.label === 'Ready').count, 1);
+  assert.equal(vals.libTabs.find(t => t.label === 'Processing').count, 0);
+  assert.equal(vals.liveDock, false, 'a finished lecture must not stay pinned in the live dock');
+});
+
+test('the pipeline rail follows the worker phase, in order', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'queue' });
+  const at = phase => {
+    const vals = StudioAdapter.bindings({
+      projects: [{ id: 'p', title: 'L', status: 'processing', phase, stage: 'Working', progress: 50 }],
+      clips: [], tracks: [],
+    });
+    return vals.stages.findIndex(s => /circle-notch/.test(s.icon));
+  };
+  assert.deepEqual(
+    ['import', 'transcribe', 'score', 'render', 'verify'].map(at),
+    [0, 1, 2, 3, 4],
+    'every phase lights its own step',
+  );
+});
+
+test('a record with no phase starts the rail rather than guessing from words', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'queue' });
+  const vals = StudioAdapter.bindings({
+    projects: [{ id: 'p', title: 'L', status: 'processing', stage: 'Verifying rendered clips', progress: 50 }],
+    clips: [], tracks: [],
+  });
+  assert.equal(vals.stages.findIndex(s => /circle-notch/.test(s.icon)), 0);
+});

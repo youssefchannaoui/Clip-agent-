@@ -299,7 +299,7 @@ export function chargeTokens(userId, tokens, reason = 'usage', meta = {}) {
   state.billingEvents.unshift(event);
   state.billingEvents = state.billingEvents.slice(0, 500);
   save();
-  log(`Charged ${amount} token${amount === 1 ? '' : 's'} to ${user.email || user.id} for ${reason}.`);
+  log(`Charged ${amount} token${amount === 1 ? '' : 's'} to ${user.email || user.id} for ${reason}.`, 'info', user.id);
   return { charged: amount, unlimited: false, event };
 }
 
@@ -434,7 +434,7 @@ export function grantTopup(user, packageId, references = {}) {
   state.billingEvents = state.billingEvents.slice(0, 500);
   user.updatedAt = now();
   save();
-  log(`Added ${pack.tokens} top-up tokens to ${user.email || user.id}.`);
+  log(`Added ${pack.tokens} top-up tokens to ${user.email || user.id}.`, 'info', user.id);
   return { granted: pack.tokens, balance: billing.bonusTokens, event };
 }
 
@@ -508,7 +508,7 @@ function updateFromSubscription(subscription = {}) {
   }
   user.updatedAt = now();
   save();
-  log(`Billing updated for ${user.email || user.id}: ${plan} is ${billing.status}.`);
+  log(`Billing updated for ${user.email || user.id}: ${plan} is ${billing.status}.`, 'info', user.id);
   return user;
 }
 
@@ -525,7 +525,7 @@ function clearSubscription(subscription = {}) {
   billing.tokensUsed = 0;
   billing.tokensReserved = 0;
   save();
-  log(`Billing cancelled for ${user.email || user.id}; reverted to free tokens.`);
+  log(`Billing cancelled for ${user.email || user.id}; reverted to free tokens.`, 'info', user.id);
   return user;
 }
 

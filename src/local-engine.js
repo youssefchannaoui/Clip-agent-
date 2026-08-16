@@ -406,6 +406,9 @@ function parseWorkerLine(record, line) {
   try { payload = JSON.parse(line); } catch { return; }
   if (payload.type === 'progress') {
     record.stage = String(payload.stage || 'Processing');
+    // A stable identifier from the worker, so the UI never has to guess which
+    // step it is on by matching words.
+    if (payload.phase) record.phase = String(payload.phase);
     record.progress = Math.max(0, Math.min(100, Number(payload.progress) || 0));
     record.status = 'processing';
     record.updatedAt = Date.now();
@@ -593,10 +596,10 @@ function runProject(project) {
       if (stdoutBuffer.trim()) parseWorkerLine(project, stdoutBuffer.trim());
       try {
         if (code === 0 && fs.existsSync(resultFile(project.id))) importResult(project, resultFile(project.id));
-        else { finishFailed(project, stderr, code, 'Processing'); log(`Could not process "${project.title}": ${project.error}`, 'error'); }
+        else { finishFailed(project, stderr, code, 'Processing'); log(`Could not process "${project.title}": ${project.error}`, 'error', ownerOf(project)); }
       } catch (error) {
         project.status = 'failed'; project.stage = 'Could not import rendered clips'; project.error = error.message; save();
-        log(`Could not import "${project.title}": ${error.message}`, 'error');
+        log(`Could not import "${project.title}": ${error.message}`, 'error', ownerOf(project));
       }
       resolve(); pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
     });
@@ -827,10 +830,10 @@ function runMoreClips(project, jobRecord) {
       if (stdoutBuffer.trim()) parseWorkerLine(jobRecord, stdoutBuffer.trim());
       try {
         if (code === 0 && fs.existsSync(jobRecord.resultPath)) importMoreResult(project, jobRecord, jobRecord.resultPath);
-        else { finishFailed(jobRecord, stderr, code, 'Generate more clips'); log(`Could not generate more clips for "${project.title}": ${jobRecord.error}`, 'error'); }
+        else { finishFailed(jobRecord, stderr, code, 'Generate more clips'); log(`Could not generate more clips for "${project.title}": ${jobRecord.error}`, 'error', ownerOf(project)); }
       } catch (error) {
         jobRecord.status = 'failed'; jobRecord.stage = 'Could not import the new clips'; jobRecord.error = error.message; save();
-        log(`Could not import more clips for "${project.title}": ${error.message}`, 'error');
+        log(`Could not import more clips for "${project.title}": ${error.message}`, 'error', ownerOf(project));
       }
       resolve(); pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
     });
@@ -862,7 +865,7 @@ function importRerenderResultObject(jobRecord, result) {
     const project = projectById(original.projectId);
     if (project) project.clipCount = state.clips.filter(clip => clip.projectId === project.id).length;
     jobRecord.resultClipId = variant.id;
-    log(`Created a re-post variant of "${original.title}" with template "${rendered.templateName}".`);
+    log(`Created a re-post variant of "${original.title}" with template "${rendered.templateName}".`, 'info', ownerOfRecord(original));
   } else {
     if (original.status === 'posted') throw new Error('Posted videos cannot be replaced. Create a re-post variant instead.');
     const oldFiles = [original.clipFile, original.thumbFile];
@@ -880,7 +883,7 @@ function importRerenderResultObject(jobRecord, result) {
       if (oldFile && ![original.clipFile, original.thumbFile].includes(oldFile)) removeDataFile(oldFile);
     }
     jobRecord.resultClipId = original.id;
-    log(`Re-rendered "${original.title}" with template "${rendered.templateName}" while preserving its queue status.`);
+    log(`Re-rendered "${original.title}" with template "${rendered.templateName}" while preserving its queue status.`, 'info', ownerOfRecord(original));
   }
   jobRecord.status = 'done'; jobRecord.stage = 'Re-render complete'; jobRecord.progress = 100;
   jobRecord.completedAt = Date.now(); jobRecord.error = null;
@@ -1149,7 +1152,7 @@ export async function socialPublishFile(clipId, provider) {
     };
     const jobPath = path.join(dir, 'job.json');
     fs.writeFileSync(jobPath, JSON.stringify(payload, null, 2));
-    log(`Rendering a TikTok-safe copy of "${clip.title}" without the app watermark.`);
+    log(`Rendering a TikTok-safe copy of "${clip.title}" without the app watermark.`, 'info', ownerOfRecord(clip));
     const result = await runWorkerJob(jobPath, resultPath, 'TikTok-safe render');
     const rendered = result.clips?.[0];
     if (!rendered?.renderVerified || !rendered?.musicVerified || !rendered?.clipFile || !fs.existsSync(rendered.clipFile)) {
@@ -1227,7 +1230,7 @@ export function deleteProject(projectId) {
   if (project.sourceFile) removeDataFile(project.sourceFile);
   if (project.uploadedInputFile) removeDataFile(project.uploadedInputFile);
   for (const clip of projectClips) if (clip.sourceFile) removeDataFile(clip.sourceFile);
-  save(); log(`Removed "${project.title}" and its local rendered files.`);
+  save(); log(`Removed "${project.title}" and its local rendered files.`, 'info', ownerOf(project));
 }
 
 export function clipFilePath(clipId, kind = 'video') {
