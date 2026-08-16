@@ -17,7 +17,10 @@
 <link rel="stylesheet" href="../src/public/studio-styles.generated.css">
 <style>
   html, body { margin: 0; height: 100%; background: #09090A; color: #F2F2F4; font-family: Inter, system-ui, sans-serif; }
-  #studio { display: flex; height: 100vh; min-height: 0; }
+  /* Plain block: the design's own root is already a height:100vh grid. Making
+     this flex turns that grid into a non-growing item and its 1fr column
+     collapses to content width. */
+  #studio { display: block; }
   #preview-bar {
     position: fixed; bottom: 12px; left: 50%; translate: -50% 0; z-index: 999;
     display: flex; gap: 6px; align-items: center; padding: 7px 10px;
@@ -52,14 +55,26 @@ var SAMPLE = {
     { id: 'p4', title: 'Sincerity in Worship', status: 'ready', clipCount: 5, durationSec: 3120, submittedAt: Date.now() - 172800e3, sourceThumbUrl: null }
   ],
   clips: [
-    { id: 'c1', title: 'Whoever wakes up safe in his home', status: 'ready', score: 92, durationMs: 38000, reviewRequired: true, targets: [] },
-    { id: 'c2', title: 'Three duʿāʾ that are never turned back', status: 'ready', score: 88, durationMs: 44000, targets: [] },
-    { id: 'c3', title: 'He did not say the reciter was wrong', status: 'ready', score: 84, durationMs: 36000, targets: [] },
-    { id: 'c4', title: 'The dunyā is a prison for the believer', status: 'scheduled', score: 81, durationMs: 41000, scheduledAt: new Date(Date.now() + 3600e3).toISOString(), targets: [{ platform: 'youtube' }] },
-    { id: 'c5', title: 'Beneficial knowledge and accepted deeds', status: 'scheduled', score: 79, durationMs: 39000, scheduledAt: new Date(Date.now() + 7200e3).toISOString(), targets: [{ platform: 'instagram' }] },
-    { id: 'c6', title: 'Halal earnings and barakah', status: 'posted', score: 86, durationMs: 42000, postedAt: new Date(Date.now() - 3600e3).toISOString(), targets: [{ platform: 'tiktok' }] }
+    { id: 'c1', projectId: 'p1', title: 'Whoever wakes up safe in his home', status: 'waiting', score: 92, durationMs: 38000, reviewRequired: true, targets: [] },
+    { id: 'c2', projectId: 'p1', title: 'Three duʿāʾ that are never turned back', status: 'waiting', score: 88, durationMs: 44000, targets: [] },
+    { id: 'c3', projectId: 'p3', title: 'He did not say the reciter was wrong', status: 'waiting', score: 84, durationMs: 36000, targets: [] },
+    { id: 'c4', projectId: 'p1', title: 'The dunyā is a prison for the believer', status: 'scheduled', score: 81, durationMs: 41000, scheduledAt: new Date(Date.now() + 3600e3).toISOString(), targets: [{ platform: 'youtube' }] },
+    { id: 'c5', projectId: 'p3', title: 'Beneficial knowledge and accepted deeds', status: 'scheduled', score: 79, durationMs: 39000, scheduledAt: new Date(Date.now() + 7200e3).toISOString(), targets: [{ platform: 'instagram' }] },
+    { id: 'c6', projectId: 'p4', title: 'Halal earnings and barakah', status: 'posted', score: 86, durationMs: 42000, postedAt: new Date(Date.now() - 3600e3).toISOString(), targets: [{ platform: 'tiktok' }] }
   ],
-  tracks: [{ id: 't1', name: 'Nasheed — Tala al Badru' }, { id: 't2', name: 'Nasheed — Ya Tayba' }],
+  tracks: [
+    { id: 't1', name: 'Nasheed — Tala al Badru', durationSec: 184 },
+    { id: 't2', name: 'Nasheed — Ya Tayba', durationSec: 226, shared: true }
+  ],
+  templates: [
+    { id: 'tpl1', name: 'DeenClipped Gold', version: 3 },
+    { id: 'tpl2', name: 'Modern Minimal', version: 1 },
+    { id: 'tpl3', name: 'Clean White', version: 2 }
+  ],
+  selectedTemplate: { id: 'tpl1', name: 'DeenClipped Gold', version: 3 },
+  clipSettings: { clipsPerVideo: 6, clipMinSeconds: 30, clipMaxSeconds: 45 },
+  musicSettings: { required: true, volumePercent: 13, shuffle: true },
+  automationSettings: { skipQuotes: true },
   log: [
     { level: 'info', message: 'Rendered 6 clips from The Night Prayer', at: Date.now() - 300e3 },
     { level: 'error', message: 'TikTok token expired — reconnect to keep publishing', at: Date.now() - 900e3 },

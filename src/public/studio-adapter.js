@@ -25,6 +25,25 @@
     bellOpen: false,
     query: '',
     activityAll: false,
+    // Review queue
+    filter: 'review',
+    libFilter: 'all',
+    openProject: null,
+    jobUrl: '',
+    jobTplId: '',
+    countsOpen: false,
+    playingTrack: null,
+    perfRange: 'Last 7 days',
+    planPeriod: 'Monthly',
+    termA: '',
+    termB: '',
+    blockerDismissed: false,
+    deckMode: false,
+    deckIdx: 0,
+    // Approving is a round trip. Until /api/state comes back the card would snap
+    // back to "needs review", so the decision is held here and layered over the
+    // server's view until the refresh lands.
+    pending: {},
   };
 
   var refresh = function () {};
@@ -82,10 +101,75 @@
   // A clip is "awaiting a decision" when it is rendered but nobody has approved,
   // scheduled or posted it yet. Matches the queue the existing dashboard shows.
   function awaitingReview(clips) {
-    return clips.filter(function (c) {
-      return c.status === 'ready' && !c.approvedBy && !c.scheduledAt && !c.postedAt;
-    });
+    return clips.filter(function (c) { return decision(c) === null; });
   }
+
+
+  // The one place that decides what state a clip is in, so the queue, the deck,
+  // Home and the library cannot disagree. Optimistic decisions win until the
+  // server catches up.
+  //
+  // The status vocabulary is the server's (src/agent.js): a rendered clip sits at
+  // `waiting` until someone decides on it — approveClip() refuses anything else —
+  // and then moves approved -> scheduled -> publishing -> posted. `ready` is a
+  // terminal "done, ready to download" state, not a review state.
+  var SETTLED = { approved: 1, scheduled: 1, publishing: 1, retrying: 1, posted: 1, ready: 1 };
+  function decision(c) {
+    if (UI.pending[c.id]) return UI.pending[c.id];
+    if (SETTLED[c.status]) return 'approved';
+    if (c.status === 'waiting') return null;
+    return 'other';   // still processing, or failed — not part of the review queue
+  }
+
+  function tabStyle(on) {
+    return 'display: flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 20px; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .14s ease, border-color .14s ease, color .14s ease; border: 1px solid ' +
+      (on ? 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;' : '#26262A; background: #121214; color: #A2A2AA;');
+  }
+
+  function pillStyle(on) {
+    return 'padding: 1px 6px; border-radius: 20px; font-size: 10.5px; background: ' +
+      (on ? 'rgba(217,180,120,.18)' : '#1D1D21') + '; color: inherit;';
+  }
+
+  function toggleBtnStyle(on) {
+    return 'display: grid; place-items: center; width: 30px; height: 28px; border-radius: 7px; cursor: pointer; transition: background .14s ease; border: 1px solid ' +
+      (on ? 'rgba(217,180,120,.45); background: rgba(217,180,120,.12); color: #F0D6A6;' : '#26262A; background: #121214; color: #8B8B93;');
+  }
+
+  // The worker reports free-text progress ("Downloading source video") rather than
+  // a stage key, so the rail's five steps are matched by what that text starts
+  // with. Anything unrecognised leaves the rail at the last step it did match.
+  var STAGES = [
+    { label: 'Source imported', match: /download|loading saved|preparing selected/i },
+    { label: 'Transcribing audio', match: /transcri|speech audio/i },
+    { label: 'Moments scored', match: /scor|analysing transcript|finding/i },
+    { label: 'Rendering with your template', match: /render/i },
+    { label: 'FFprobe verification', match: /verif|complete/i },
+  ];
+  function stageIndex(text) {
+    var found = 0;
+    for (var i = 0; i < STAGES.length; i++) if (STAGES[i].match.test(text || '')) found = i;
+    return found;
+  }
+
+  function sliderTrack() {
+    return 'position: relative; flex: 1; height: 4px; border-radius: 4px; background: #26262A;';
+  }
+  function sliderKnob(on) {
+    return 'position: absolute; top: 50%; translate: 0 -50%; width: 14px; height: 14px; border-radius: 50%; background: ' +
+      (on ? '#D9B478' : '#6E6E76') + '; box-shadow: 0 2px 6px rgba(0,0,0,.5);';
+  }
+
+  // Clip-length presets, expressed in the clipMin/clipMaxSeconds the account
+  // actually stores.
+  var DUR_PRESETS = [
+    { label: 'Up to 30s', min: 10, max: 30 },
+    { label: '30-45s', min: 30, max: 45 },
+    { label: '45-60s', min: 45, max: 60 },
+    { label: 'Up to 90s', min: 45, max: 90 },
+  ];
+
+  function toast(message) { global.StudioAdapter.onToast(message); }
 
   // Collage geometry for Home's floating clip previews — reproduced from the
   // design so the drift and overlap match what was drawn.
@@ -166,6 +250,195 @@
     var planLabel = current.unlimited ? 'Unlimited'
       : (current.plan ? current.plan.charAt(0).toUpperCase() + current.plan.slice(1) : 'Free');
     var ctx = { projects: projects, clips: clips, tracks: tracks, needsCount: needsCount, planLabel: planLabel };
+
+    // The quote-review gate is a real automation setting, not a demo prop.
+    var gate = !(DATA.automationSettings && DATA.automationSettings.skipQuotes === false);
+    var connectedCount = ['youtube', 'instagram', 'tiktok']
+      .filter(function (n) { return social[n] && social[n].connected; }).length;
+
+    var projectTitle = {};
+    projects.forEach(function (p) { projectTitle[p.id] = p.title || p.sourceTitle || 'Untitled lecture'; });
+
+    // One card builder for the queue, the deck and a lecture's clip list, so a
+    // clip looks and behaves the same wherever it appears.
+    function clipCard(c, i) {
+      var st = decision(c);
+      return {
+        caption: c.title || '',
+        duration: secsToClock((c.durationMs || 0) / 1000),
+        style: c.templateName || '',
+        lecTitle: projectTitle[c.projectId] || '',
+        score: c.score || '—',
+        flagged: gate && Boolean(c.reviewRequired),
+        thumbStyle: 'position: relative; aspect-ratio: 9 / 16; overflow: hidden; background: ' + thumb(c.thumbUrl) + ';',
+        cardStyle: 'display: flex; flex-direction: column; border: 1px solid ' +
+          (st === 'approved' ? 'rgba(127,209,166,.34)' : st === 'rejected' ? '#2A2024' : '#1E1E22') +
+          '; border-radius: 11px; overflow: hidden; background: #121214; opacity: ' + (st === 'rejected' ? '.5' : '1') +
+          '; animation: dcRise .26s cubic-bezier(.2,.8,.2,1) ' + Math.min(i * 0.03, 0.4) + 's both; box-shadow: 0 8px 22px rgba(0,0,0,.26);',
+        stateChip: st === 'approved' ? 'Approved' : st === 'rejected' ? 'Rejected' : '',
+        stateChipStyle: st
+          ? 'position: absolute; top: 8px; right: 8px; padding: 2px 8px; border-radius: 20px; font-size: 9.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; border: 1px solid ' +
+            (st === 'rejected' ? '#3A2A2A; background: rgba(10,10,12,.85); color: #E3928C;' : 'rgba(127,209,166,.35); background: rgba(10,10,12,.85); color: #7FD1A6;')
+          : 'display: none;',
+        primaryLabel: st === 'approved' ? 'Approved' : 'Approve',
+        primaryIcon: st === 'approved' ? 'ph-fill ph-check-circle' : 'ph ph-check',
+        primaryStyle: 'display: flex; align-items: center; justify-content: center; gap: 6px; flex: 1; padding: 7px 10px; border-radius: 8px; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid ' +
+          (st === 'approved' ? 'rgba(127,209,166,.4); background: rgba(127,209,166,.1); color: #7FD1A6;' : 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;'),
+        approve: function (e) { stop(e); approve(c.id); },
+        primary: function (e) { stop(e); approve(c.id); },
+        reject: function (e) { stop(e); reject(c.id); },
+        edit: function (e) { stop(e); setUI({ screen: 'editor', edClipId: c.id }); },
+        openLecture: function (e) { stop(e); setUI({ screen: 'detail', openProject: c.projectId }); },
+      };
+    }
+
+    function approve(id) {
+      UI.pending[id] = 'approved';
+      refresh();
+      global.StudioAdapter.onApprove(id);
+    }
+    // Reject is deliberately local and session-scoped. The server has no rejected
+    // state: approve/pullBack only move a clip between `waiting` and `approved`,
+    // and the only way to make a clip go away for good is DELETE. Wiring a
+    // one-tap deck button to a permanent delete is not a trade worth making, so
+    // rejecting hides the clip for this session and nothing is destroyed.
+    // Persisting it needs a real field on the clip record.
+    function reject(id) {
+      UI.pending[id] = 'rejected';
+      refresh();
+    }
+
+    var q = (UI.query || '').trim().toLowerCase();
+    var queueClips = clips.filter(function (c) {
+      if (q && ((c.title || '') + ' ' + (projectTitle[c.projectId] || '')).toLowerCase().indexOf(q) === -1) return false;
+      var st = decision(c);
+      if (UI.filter === 'review') return st === null;
+      if (UI.filter === 'flagged') return gate && c.reviewRequired && st === null;
+      if (UI.filter === 'approved') return st === 'approved';
+      return true;
+    }).sort(function (a, b) { return (b.score || 0) - (a.score || 0); }).map(clipCard);
+
+    var deckClip = queueClips[Math.min(UI.deckIdx, Math.max(0, queueClips.length - 1))] || null;
+
+    // The lecture currently being processed drives the pipeline rail.
+    var active = projects.filter(function (p) {
+      return p.status !== 'ready' && p.status !== 'failed' && p.status !== 'cancelled';
+    })[0] || null;
+    var activeStage = active ? stageIndex(active.stage) : 0;
+
+    // A lecture's shelf state, from the record's own status.
+    function lecState(p) {
+      if (p.status === 'ready') return 'ready';
+      if (p.status === 'cancelled' || p.status === 'failed') return 'archived';
+      return 'processing';
+    }
+    function clipsOf(projectId) {
+      return clips.filter(function (c) { return c.projectId === projectId; });
+    }
+
+    var libraryItems = projects.filter(function (p) {
+      if (q && (projectTitle[p.id] || '').toLowerCase().indexOf(q) === -1) return false;
+      return UI.libFilter === 'all' || lecState(p) === UI.libFilter;
+    }).map(function (p) {
+      var state = lecState(p);
+      var mine = clipsOf(p.id);
+      var scores = mine.map(function (c) { return Number(c.score || 0); }).filter(Boolean).sort(function (a, b) { return a - b; });
+      var median = scores.length ? scores[Math.floor(scores.length / 2)] : 0;
+      return {
+        title: projectTitle[p.id],
+        dur: humanDuration(p.durationSec || p.sourceDurationSec),
+        when: since(p.submittedAt),
+        clips: plural(mine.length, 'clip'),
+        srcIcon: p.url ? 'ph-fill ph-youtube-logo' : 'ph-fill ph-upload-simple',
+        srcLabel: p.url ? 'YouTube import' : 'Uploaded MP4',
+        thumbStyle: 'position: relative; aspect-ratio: 16 / 9; background-color: #17171A;' +
+          (p.sourceThumbUrl ? ' background-image: url("' + cssUrl(p.sourceThumbUrl) + '"); background-size: cover; background-position: center 30%;' : ''),
+        stateChip: state === 'processing' ? 'Processing' : state === 'ready' ? 'Ready' : 'Archived',
+        chipStyle: 'display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; border: 1px solid ' +
+          (state === 'processing' ? 'rgba(217,180,120,.4); background: rgba(10,10,12,.82); color: #F0D6A6;'
+            : state === 'ready' ? 'rgba(127,209,166,.32); background: rgba(10,10,12,.82); color: #7FD1A6;'
+            : '#33333A; background: rgba(10,10,12,.82); color: #A2A2AA;'),
+        chipIcon: state === 'processing' ? 'ph ph-circle-notch' : state === 'ready' ? 'ph-fill ph-check-circle' : 'ph ph-archive',
+        chipIconStyle: 'font-size: 11px;' + (state === 'processing' ? ' animation: dcSpin 1.1s linear infinite;' : ''),
+        isProcessing: state === 'processing',
+        barStyle: 'position: absolute; left: 0; bottom: 0; height: 3px; width: ' + Math.round(p.progress || 0) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6); transition: width .5s ease;',
+        metric: state === 'processing' ? (p.stage || 'working…') : median ? 'median score ' + median : 'no clips yet',
+        openClips: function (e) { stop(e); setUI({ screen: 'detail', openProject: p.id }); },
+      };
+    });
+
+    var detail = projects.filter(function (p) { return p.id === UI.openProject; })[0] || projects[0] || null;
+    var detailClips = detail ? clipsOf(detail.id).sort(function (a, b) { return (b.score || 0) - (a.score || 0); }).map(clipCard) : [];
+
+    // Schedule: the next seven days, filled from clips that already hold a slot.
+    var DAY_MS = 86400000;
+    var startOfDay = function (t) { var d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+    var today = startOfDay(Date.now());
+    var scheduleDays = [];
+    for (var dnum = 0; dnum < 7; dnum++) {
+      (function (dayStart) {
+        var label = dnum === 0 ? 'Today' : dnum === 1 ? 'Tomorrow'
+          : new Date(dayStart).toLocaleDateString(undefined, { weekday: 'long' });
+        var items = scheduled.filter(function (c) { return startOfDay(c.scheduledAt) === dayStart; })
+          .map(function (c) {
+            var target = (c.targets && c.targets[0]) || {};
+            var platform = target.platform || '';
+            var failing = [];
+            if (!c.musicVerified) failing.push('nasheed');
+            if (!c.renderVerified) failing.push('render');
+            if (!c.templateId) failing.push('template');
+            return {
+              time: timeOf(c.scheduledAt),
+              dest: platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : 'No account',
+              icon: platform === 'youtube' ? 'ph ph-youtube-logo' : platform === 'instagram' ? 'ph ph-instagram-logo' : platform === 'tiktok' ? 'ph ph-tiktok-logo' : 'ph ph-share-network',
+              caption: c.title || '',
+              score: c.score || '',
+              duration: secsToClock((c.durationMs || 0) / 1000),
+              thumbStyle: 'width: 30px; height: 42px; flex: none; border-radius: 6px; border: 1px solid #26262A; background: ' + thumb(c.thumbUrl) + ';',
+              hasFailing: failing.length > 0,
+              statusLabel: c.postedAt ? 'Posted' : failing.length ? failing.length + ' check failing' : 'Ready',
+              statusStyle: 'padding: 2px 8px; border-radius: 20px; font-size: 9.5px; font-weight: 700; border: 1px solid ' +
+                (failing.length ? '#3A2A2A; background: rgba(10,10,12,.85); color: #E3928C;' : 'rgba(127,209,166,.35); background: rgba(10,10,12,.85); color: #7FD1A6;'),
+              cardStyle: 'display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid ' +
+                (failing.length ? '#2A2024' : '#1E1E22') + '; border-radius: 10px; background: #121214;',
+            };
+          });
+        scheduleDays.push({
+          day: label,
+          countLabel: items.length + ' of 4 scheduled',
+          canAdd: items.length < 4,
+          items: items,
+        });
+      })(today + dnum * DAY_MS);
+    }
+
+    var templates = DATA.templates || [];
+    var activeTemplate = templates.filter(function (t) { return t.id === (UI.jobTplId || (DATA.selectedTemplate && DATA.selectedTemplate.id)); })[0]
+      || DATA.selectedTemplate || templates[0] || null;
+
+    var clipCfg = DATA.clipSettings || {};
+    var clipsPerVideo = Number(clipCfg.clipsPerVideo || 0);
+    var durLabel = '';
+    for (var di = 0; di < DUR_PRESETS.length; di++) {
+      if (clipCfg.clipMaxSeconds === DUR_PRESETS[di].max) durLabel = DUR_PRESETS[di].label;
+    }
+    if (!durLabel && clipCfg.clipMaxSeconds) durLabel = 'Up to ' + clipCfg.clipMaxSeconds + 's';
+
+    var musicVolume = Number((DATA.musicSettings || {}).volumePercent || 0);
+
+    // Plans come from billing.publicBilling(); shape varies, so read defensively.
+    var planList = (DATA.billing && (DATA.billing.plans || DATA.billing.availablePlans)) || [];
+    if (!Array.isArray(planList)) {
+      planList = Object.keys(planList).map(function (k) {
+        var v = planList[k]; return typeof v === 'object' ? Object.assign({ id: k }, v) : { id: k, name: k };
+      });
+    }
+
+    // Blockers name a real gap and send you to the screen that fixes it.
+    var blocker = '', blockerScreen = 'music';
+    if (tracks.length === 0) { blocker = 'No nasheed uploaded — every clip mixes one in, so processing cannot finish without at least one.'; blockerScreen = 'music'; }
+    else if (tracks.length < 2) { blocker = 'Only one nasheed uploaded — rotation needs two or more before automatic posting can run.'; blockerScreen = 'music'; }
+    else if (connectedCount === 0) { blocker = 'No publishing account connected — approved clips will queue up with nowhere to go.'; blockerScreen = 'templates'; }
 
     var open = UI.railOpen;
 
@@ -313,6 +586,289 @@
         };
       }),
 
+      // ── Review queue ──
+      qTabs: [
+        { key: 'review', label: 'Awaiting decision', n: pending.length },
+        { key: 'flagged', label: 'Quote review', n: gate ? clips.filter(function (c) { return c.reviewRequired && decision(c) === null; }).length : 0 },
+        { key: 'approved', label: 'Approved', n: clips.filter(function (c) { return decision(c) === 'approved'; }).length },
+        { key: 'all', label: 'All clips', n: clips.length },
+      ].map(function (t) {
+        return {
+          label: t.label, count: t.n,
+          style: tabStyle(UI.filter === t.key),
+          countStyle: pillStyle(UI.filter === t.key),
+          select: function (e) { stop(e); setUI({ filter: t.key, deckIdx: 0 }); },
+        };
+      }),
+
+      queueClips: queueClips,
+      queueEmptyStream: queueClips.length === 0,
+
+      deckMode: UI.deckMode,
+      gridMode: !UI.deckMode,
+      gridBtnStyle: toggleBtnStyle(!UI.deckMode),
+      deckBtnStyle: toggleBtnStyle(UI.deckMode),
+      setGrid: function (e) { stop(e); setUI({ deckMode: false }); },
+      setDeck: function (e) { stop(e); setUI({ deckMode: true, deckIdx: 0 }); },
+      deckHas: queueClips.length > 0,
+      deckPos: queueClips.length
+        ? Math.min(UI.deckIdx + 1, queueClips.length) + ' of ' + queueClips.length
+        : '0 of 0',
+      deckClip: deckClip || { caption: '', score: '', duration: '', lecTitle: '', thumbStyle: 'display:none;', flagged: false, style: '' },
+      deckApprove: function (e) { stop(e); if (deckClip) deckClip.approve(e); },
+      deckReject: function (e) { stop(e); if (deckClip) deckClip.reject(e); },
+      deckEdit: function (e) { stop(e); if (deckClip) deckClip.edit(e); },
+      deckSkip: function (e) { stop(e); setUI({ deckIdx: Math.min(UI.deckIdx + 1, Math.max(0, queueClips.length - 1)) }); },
+      deckBack: function (e) { stop(e); setUI({ deckIdx: Math.max(0, UI.deckIdx - 1) }); },
+
+      // Pipeline rail, driven by whichever lecture is actually being worked on.
+      progress: Math.round(active ? active.progress || 0 : 0),
+      stageLabel: (STAGES[activeStage].label.split(' ')[0] || '').toLowerCase(),
+      stages: STAGES.map(function (s, i) {
+        var done = active ? i < activeStage : false;
+        var running = Boolean(active) && i === activeStage;
+        return {
+          label: s.label,
+          meta: running ? (active.stage || 'running') : done ? 'done' : 'queued',
+          icon: done ? 'ph-fill ph-check-circle' : running ? 'ph ph-circle-notch' : 'ph ph-circle-dashed',
+          iconStyle: 'font-size: 14px; color: ' + (done ? '#7FD1A6' : running ? '#F0D6A6' : '#4A4A52') + (running ? '; animation: dcSpin 1.1s linear infinite' : ''),
+          labelStyle: 'color: ' + (done || running ? '#E9E9ED' : '#6E6E76'),
+        };
+      }),
+
+      // Readiness checks, each reading something the account actually has.
+      checks: [
+        { label: 'Nasheeds for rotation', value: tracks.length + ' uploaded', ok: tracks.length >= 2 },
+        { label: 'Active Clip Style', value: (DATA.selectedTemplate && DATA.selectedTemplate.name) || 'None selected', ok: Boolean(DATA.selectedTemplate) },
+        { label: 'Publishing tokens', value: connectedCount + ' valid', ok: connectedCount > 0 },
+        { label: 'Quote review gate', value: gate ? 'On' : 'Off', ok: gate },
+      ].map(function (c) {
+        return {
+          label: c.label, value: c.value,
+          icon: c.ok ? 'ph-fill ph-check-circle' : 'ph-fill ph-warning-circle',
+          iconStyle: 'font-size: 14px; color: ' + (c.ok ? '#7FD1A6' : '#F0D6A6'),
+        };
+      }),
+
+      blockersOn: Boolean(blocker) && !UI.blockerDismissed,
+      blockerText: blocker || '',
+      resolveBlocker: function (e) { stop(e); setUI({ blockerDismissed: true, screen: blockerScreen }); },
+      dismissBlocker: function (e) { stop(e); setUI({ blockerDismissed: true }); },
+
+      // ── Lecture library ──
+      libTabs: [
+        { key: 'all', label: 'All' },
+        { key: 'ready', label: 'Ready' },
+        { key: 'processing', label: 'Processing' },
+        { key: 'archived', label: 'Archived' },
+      ].map(function (t) {
+        return {
+          label: t.label,
+          count: t.key === 'all' ? projects.length : projects.filter(function (p) { return lecState(p) === t.key; }).length,
+          style: tabStyle(UI.libFilter === t.key),
+          countStyle: pillStyle(UI.libFilter === t.key),
+          select: function (e) { stop(e); setUI({ libFilter: t.key }); },
+        };
+      }),
+      libraryItems: libraryItems,
+      libEmpty: libraryItems.length === 0,
+
+      // ── Lecture detail ──
+      detailTitle: detail ? projectTitle[detail.id] : '',
+      detailMeta: detail ? humanDuration(detail.durationSec || detail.sourceDurationSec) + ' source · ' + since(detail.submittedAt) : '',
+      detailThumbStyle: 'width: 168px; flex: none; aspect-ratio: 16 / 9; border-radius: 10px; border: 1px solid #26262A; background: ' + thumb(detail && detail.sourceThumbUrl) + ';',
+      detailCount: plural(detailClips.length, 'clip'),
+      detailClips: detailClips,
+      detailHint: detail && lecState(detail) === 'processing'
+        ? 'Still processing — clips appear here as the worker finishes them.'
+        : 'Every clip cut from this lecture. Approving one queues it for the next open slot.',
+      detailFromLibrary: true,
+      detailBackLabel: 'Lecture library',
+      closeDetail: function (e) { stop(e); setUI({ screen: 'library' }); },
+      openSource: function (e) {
+        stop(e);
+        // Only follow a source URL the record actually carries.
+        if (detail && detail.url) global.open(detail.url, '_blank', 'noopener');
+      },
+      bulkLabel: 'Approve all remaining',
+      bulkIcon: 'ph ph-check',
+      bulkAction: function (e) {
+        stop(e);
+        detailClips.forEach(function (c) { if (c.stateChip === '') c.approve(e); });
+      },
+
+      // ── Schedule ──
+      scheduleDays: scheduleDays,
+
+      // ── Start-a-job form (shared by Home and the library) ──
+      jobUrlVal: UI.jobUrl,
+      setJobUrl: function (e) { UI.jobUrl = e.target.value; refresh(); },
+      startJob: function (e) {
+        stop(e);
+        var url = (UI.jobUrl || '').trim();
+        if (!url) return;
+        global.StudioAdapter.onStartJob(url, { templateId: UI.jobTplId || '' });
+        UI.jobUrl = '';
+        refresh();
+      },
+      onFile: function (e) {
+        var file = e.target && e.target.files && e.target.files[0];
+        if (file) global.StudioAdapter.onUploadFile(file);
+      },
+
+      selectWrapStyle: 'position: relative; display: flex; align-items: center;',
+      selectStyle: 'appearance: none; padding: 7px 26px 7px 10px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #F2F2F4; font-family: inherit; font-size: 12.5px; cursor: pointer;',
+
+      tplNames: templates.map(function (t) { return t.name; }),
+      jobTpl: activeTemplate ? activeTemplate.name : '',
+      setTpl: function (e) {
+        var picked = templates.filter(function (t) { return t.name === e.target.value; })[0];
+        UI.jobTplId = picked ? picked.id : '';
+        refresh();
+      },
+
+      durNames: DUR_PRESETS.map(function (d) { return d.label; }),
+      jobDur: durLabel,
+      setDur: function (e) {
+        var picked = DUR_PRESETS.filter(function (d) { return d.label === e.target.value; })[0];
+        if (picked) global.StudioAdapter.onClipSettings({ clipMinSeconds: picked.min, clipMaxSeconds: picked.max });
+      },
+
+      countsOpen: UI.countsOpen,
+      toggleCounts: function (e) { stop(e); setUI({ countsOpen: !UI.countsOpen }); },
+      countLabel: plural(clipsPerVideo, 'clip') + ' per lecture',
+      countOpts: [3, 6, 9, 12].map(function (n) {
+        var on = clipsPerVideo === n;
+        return {
+          label: plural(n, 'clip'),
+          rowStyle: 'display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 8px; cursor: pointer; color: ' + (on ? '#F0D6A6' : '#BCBCC3') + ';',
+          boxStyle: 'display: grid; place-items: center; width: 15px; height: 15px; flex: none; border-radius: 4px; border: 1px solid ' +
+            (on ? '#D9B478; background: rgba(217,180,120,.18);' : '#33333A; background: #0E0E11;'),
+          toggle: function (e) {
+            stop(e);
+            UI.countsOpen = false;
+            global.StudioAdapter.onClipSettings({ clipsPerVideo: n });
+          },
+        };
+      }),
+
+      archiveSources: function (e) { stop(e); toast('Archiving sources is not available yet.'); },
+      recutClips: function (e) { stop(e); toast('Re-cutting a lecture is not available yet.'); },
+      editWindows: function (e) { stop(e); setUI({ screen: 'templates' }); },
+
+      // ── Nasheed library ──
+      nasheedList: tracks.map(function (t, i) {
+        return {
+          name: t.name || t.fileName || 'Untitled',
+          dur: t.durationSec ? secsToClock(t.durationSec) : '',
+          mood: t.shared ? 'Shared' : 'Yours',
+          rowStyle: 'display: flex; align-items: center; gap: 11px; padding: 10px 12px; border: 1px solid #1E1E22; border-radius: 10px; background: #121214; animation: dcRise .24s cubic-bezier(.2,.8,.2,1) ' + Math.min(i * 0.03, 0.3) + 's both;',
+          playStyle: 'display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 50%; border: 1px solid #26262A; background: #17171A; color: #F0D6A6; cursor: pointer;',
+          playIcon: UI.playingTrack === t.id ? 'ph-fill ph-pause' : 'ph-fill ph-play',
+          play: function (e) { stop(e); setUI({ playingTrack: UI.playingTrack === t.id ? null : t.id }); global.StudioAdapter.onPlayTrack(t.id); },
+          waveStyle: 'flex: 1; height: 22px; border-radius: 4px; background: repeating-linear-gradient(90deg, #26262A 0 2px, transparent 2px 5px);',
+          rotStyle: 'display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px; font-size: 10.5px; font-weight: 600; cursor: pointer; border: 1px solid rgba(127,209,166,.32); background: rgba(10,10,12,.82); color: #7FD1A6;',
+          rotIcon: 'ph-fill ph-check-circle',
+          rotLabel: 'In rotation',
+          toggleRot: function (e) { stop(e); toast('Every uploaded nasheed is in rotation.'); },
+          remove: function (e) { stop(e); global.StudioAdapter.onRemoveTrack(t.id); },
+        };
+      }),
+      // The template already writes " nasheeds in rotation." after this, so it
+      // takes the bare count.
+      rotCount: String(tracks.length),
+      nasheedVol: musicVolume,
+      nasheedVolLabel: musicVolume + '%',
+      nasheedDb: (musicVolume ? Math.round(20 * Math.log10(musicVolume / 100)) : -60) + ' dB under speech',
+      setVol: function (e) { global.StudioAdapter.onMusicSettings({ volumePercent: Number(e.target.value) }); },
+      duckTrackStyle: sliderTrack(true),
+      duckKnobStyle: sliderKnob(true),
+      toggleDuck: function (e) { stop(e); toast('Ducking is always on — the nasheed drops under speech.'); },
+
+      // ── Performance ──
+      // The product does not collect view, save or watch-time data: a published
+      // clip's record carries delivery status only. Rather than invent numbers,
+      // the tiles report what is genuinely known and the leaderboard ranks by the
+      // score the worker assigned.
+      perfRanges: ['Last 7 days', 'Last 30 days', 'All time'].map(function (label) {
+        return {
+          label: label,
+          style: tabStyle(UI.perfRange === label),
+          select: function (e) { stop(e); setUI({ perfRange: label }); },
+        };
+      }),
+      perfTiles: [
+        { icon: 'ph-fill ph-stack', label: 'Clips generated', value: String(clips.length) },
+        { icon: 'ph-fill ph-check-circle', label: 'Approved', value: String(clips.filter(function (c) { return decision(c) === 'approved'; }).length) },
+        { icon: 'ph-fill ph-paper-plane-tilt', label: 'Posted', value: String(clips.filter(function (c) { return c.postedAt; }).length) },
+        { icon: 'ph-fill ph-film-script', label: 'Lectures', value: String(projects.length) },
+      ].map(function (t) {
+        return { icon: t.icon, label: t.label, value: t.value, delta: '', deltaIcon: '', deltaStyle: 'display: none;' };
+      }),
+      perfBoard: clips.slice().sort(function (a, b) { return (b.score || 0) - (a.score || 0); }).slice(0, 5).map(function (c, i) {
+        return {
+          rank: String(i + 1),
+          caption: c.title || '',
+          lecTitle: projectTitle[c.projectId] || '',
+          duration: secsToClock((c.durationMs || 0) / 1000),
+          thumbStyle: 'width: 30px; height: 42px; flex: none; border-radius: 6px; border: 1px solid #26262A; background: ' + thumb(c.thumbUrl) + ';',
+          barStyle: 'height: 4px; border-radius: 4px; width: ' + Math.max(4, Math.min(100, Number(c.score || 0))) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
+          views: '—', saves: '—', watch: '—', more: '',
+        };
+      }),
+      perfPatterns: [],
+
+      // ── Tokens & billing ──
+      planPeriods: ['Weekly', 'Monthly', 'Yearly'].map(function (label) {
+        return {
+          label: label,
+          style: tabStyle(UI.planPeriod === label),
+          select: function (e) { stop(e); setUI({ planPeriod: label }); },
+        };
+      }),
+      planCards: planList.map(function (p) {
+        var isCurrent = String(p.id || p.key || '').toLowerCase() === String(current.plan || '').toLowerCase();
+        return {
+          name: p.name || p.id || '',
+          price: p.priceLabel || (p.price != null ? '£' + p.price : ''),
+          per: p.interval || '',
+          tokens: p.tokens != null ? plural(p.tokens, 'token') : '',
+          lines: (p.features || []).map(function (f) { return { text: f }; }),
+          hasTag: isCurrent,
+          tag: 'Current plan',
+          tagStyle: 'padding: 2px 8px; border-radius: 20px; font-size: 9.5px; font-weight: 700; background: rgba(217,180,120,.16); color: #F0D6A6;',
+          cardStyle: 'display: flex; flex-direction: column; gap: 9px; padding: 14px; border-radius: 12px; border: 1px solid ' +
+            (isCurrent ? 'rgba(217,180,120,.45); background: rgba(217,180,120,.05);' : '#1E1E22; background: #121214;'),
+          cta: isCurrent ? 'Current' : 'Choose',
+          btnStyle: 'padding: 8px 12px; border-radius: 8px; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: ' + (isCurrent ? 'default' : 'pointer') + '; border: 1px solid ' +
+            (isCurrent ? '#26262A; background: #17171A; color: #6E6E76;' : 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;'),
+          choose: function (e) { stop(e); if (!isCurrent) global.StudioAdapter.onChoosePlan(p.id || p.key); },
+        };
+      }),
+      packs: [],
+      spendRows: [
+        { icon: 'ph-fill ph-coins', label: 'Used this period', cost: String(current.used || 0) },
+        { icon: 'ph-fill ph-hourglass', label: 'Reserved for running jobs', cost: String(current.reserved || 0) },
+        { icon: 'ph-fill ph-gift', label: 'Top-up tokens', cost: String(current.bonusTokens || 0) },
+      ],
+      planNote: current.periodEndsInDays != null
+        ? 'Renews in ' + plural(current.periodEndsInDays, 'day')
+        : 'No renewal date on this plan.',
+      changeCard: function (e) { stop(e); global.StudioAdapter.onBillingPortal(); },
+      openInvoices: function (e) { stop(e); global.StudioAdapter.onBillingPortal(); },
+
+      // ── Arabic & terms ──
+      // There is no glossary in the data model — settingDefaults() has only clip,
+      // music, automation, publishing and template settings — so this screen has
+      // nothing to read. Left empty rather than filled with invented corrections.
+      arabicFlags: [],
+      termRows: [],
+      termAVal: UI.termA,
+      termBVal: UI.termB,
+      addTermA: function (e) { UI.termA = e.target.value; refresh(); },
+      addTermB: function (e) { UI.termB = e.target.value; refresh(); },
+      addTerm: function (e) { stop(e); toast('Saving a term needs a glossary field on the account first.'); },
+
       connections: ['youtube', 'instagram', 'tiktok'].map(function (name) {
         var provider = social[name] || {};
         var ok = Boolean(provider.connected);
@@ -336,5 +892,22 @@
     setRefresh: function (fn) { refresh = fn || function () {}; },
     // Overridden by the host page so the adapter never talks to the API directly.
     onApprove: function () {},
+    onStartJob: function () {},
+    onUploadFile: function () {},
+    onClipSettings: function () {},
+    onMusicSettings: function () {},
+    onPlayTrack: function () {},
+    onRemoveTrack: function () {},
+    onChoosePlan: function () {},
+    onBillingPortal: function () {},
+    onToast: function () {},
+    // The host clears optimistic decisions once fresh state has landed.
+    settled: function () {
+      // Approvals are confirmed by the refreshed state; local rejects have
+      // nowhere to persist to, so they survive until the page is reloaded.
+      var keep = {};
+      for (var id in UI.pending) if (UI.pending[id] === 'rejected') keep[id] = 'rejected';
+      UI.pending = keep;
+    },
   };
 })(typeof window !== 'undefined' ? window : globalThis);

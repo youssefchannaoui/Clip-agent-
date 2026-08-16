@@ -236,8 +236,8 @@ const SAMPLE_STATE = {
     { id: 'p2', title: 'Patience in Hardship', status: 'processing', clipCount: 0, durationSec: 2400, submittedAt: Date.now() - 600e3, sourceThumbUrl: null },
   ],
   clips: [
-    { id: 'c1', title: 'Whoever wakes safe', status: 'ready', score: 92, durationMs: 38000, thumbUrl: '/api/clips/c1/thumb', reviewRequired: true, targets: [] },
-    { id: 'c2', title: 'Three duaa never turned back', status: 'ready', score: 88, durationMs: 44000, thumbUrl: '/api/clips/c2/thumb', targets: [] },
+    { id: 'c1', title: 'Whoever wakes safe', status: 'waiting', score: 92, durationMs: 38000, thumbUrl: '/api/clips/c1/thumb', reviewRequired: true, targets: [] },
+    { id: 'c2', title: 'Three duaa never turned back', status: 'waiting', score: 88, durationMs: 44000, thumbUrl: '/api/clips/c2/thumb', targets: [] },
     { id: 'c3', title: 'He did not say the reciter', status: 'scheduled', score: 81, durationMs: 41000, scheduledAt: new Date(Date.now() + 3600e3).toISOString(), targets: [{ platform: 'youtube' }] },
   ],
   tracks: [{ id: 't1', name: 'Nasheed A' }],
@@ -351,7 +351,7 @@ test('Home floaters carry the design collage geometry', () => {
 });
 
 test('empty collage slots are marked empty rather than rendering a blank card', () => {
-  const vals = StudioAdapter.bindings({ clips: [{ id: 'c', title: 'only one', status: 'ready' }] });
+  const vals = StudioAdapter.bindings({ clips: [{ id: 'c', title: 'only one', status: 'waiting' }] });
   assert.equal(vals.floaters[0].has, true);
   assert.equal(vals.floaters[3].empty, true);
   assert.match(vals.floaters[3].style, /dashed/);

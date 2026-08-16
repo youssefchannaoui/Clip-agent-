@@ -1670,7 +1670,33 @@ function renderStudio(){
     StudioAdapter.setRefresh(()=>{if(DATA)STUDIO.render(StudioAdapter.bindings(DATA))});
     /* The adapter never calls the API itself; approving routes back through the
        existing endpoint so both dashboards stay consistent. */
-    StudioAdapter.onApprove=async id=>{try{await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'approved'})});await refresh()}catch(e){toast(e.message,'bad')}};
+    /* Every hook routes through the same endpoints the legacy dashboard uses, so
+       the two views never disagree about what the server was told. The adapter
+       itself never touches the network. */
+    const studioDo=async(fn,ok)=>{try{await fn();await refresh();StudioAdapter.settled();if(ok)toast(ok,'good')}catch(e){toast(e.message,'bad');StudioAdapter.settled();renderAll()}};
+    StudioAdapter.onToast=m=>toast(m,'good');
+    StudioAdapter.onApprove=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'approved'})}));
+    StudioAdapter.onStartJob=(url,opts)=>studioDo(()=>api('/api/videos',{method:'POST',body:JSON.stringify({urls:url,templateId:opts&&opts.templateId||''})}),'Lecture queued');
+    StudioAdapter.onClipSettings=patch=>studioDo(()=>api('/api/clip-settings',{method:'POST',body:JSON.stringify(patch)}));
+    StudioAdapter.onMusicSettings=patch=>studioDo(()=>api('/api/music-settings',{method:'POST',body:JSON.stringify(patch)}));
+    StudioAdapter.onRemoveTrack=id=>{if(!confirm('Delete this nasheed?'))return;studioDo(()=>api(`/api/music/${encodeURIComponent(id)}`,{method:'DELETE'}),'Nasheed deleted')};
+    StudioAdapter.onPlayTrack=id=>{
+      /* One <audio> reused for the whole screen, so starting a track stops the last. */
+      if(!window.__studioAudio)window.__studioAudio=new Audio();
+      const a=window.__studioAudio,src=withPw(`/api/music/${encodeURIComponent(id)}/audio`);
+      if(!a.paused&&a.dataset.trackId===id){a.pause();return}
+      a.src=src;a.dataset.trackId=id;a.play().catch(e=>toast(e.message,'bad'))};
+    StudioAdapter.onChoosePlan=plan=>studioDo(async()=>{
+      const r=await api('/api/billing/checkout',{method:'POST',body:JSON.stringify({plan})});
+      if(r&&r.url)location.href=r.url});
+    StudioAdapter.onBillingPortal=()=>studioDo(async()=>{
+      const r=await api('/api/billing/portal',{method:'POST',body:JSON.stringify({})});
+      if(r&&r.url)location.href=r.url});
+    StudioAdapter.onUploadFile=file=>studioDo(async()=>{
+      const presign=await api('/api/uploads/presign',{method:'POST',body:JSON.stringify({fileName:file.name,contentType:file.type||'video/mp4'})});
+      const put=await fetch(presign.uploadUrl,{method:'PUT',headers:presign.headers||{'Content-Type':file.type||'video/mp4'},body:file});
+      if(!put.ok)throw new Error('Upload failed — the storage service rejected the file.');
+      await api('/api/videos',{method:'POST',body:JSON.stringify({objectKey:presign.objectKey,fileName:file.name,title:file.name})})},'Upload queued');
     document.body.classList.add('studio-active');
   }
   STUDIO.render(StudioAdapter.bindings(DATA));
