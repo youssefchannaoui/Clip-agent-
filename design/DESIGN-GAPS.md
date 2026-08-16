@@ -106,7 +106,26 @@ and stored on the clip record.
 `publishingSettings` and `selectedTemplateId`. The screen needs a terms field on
 the account and an endpoint before it can do anything.
 
-## 4. Smaller fixes
+## 4. Fixed since this was written
+
+**Grain, warmth and crop zoom now work.** They were dead in *both* editors, not
+just the new one: `sanitiseTemplate()` builds its output from a whitelist, and no
+field held `grain`, `warm`, `smartFramingZoom`, `cropPositionX/Y`,
+`smartFramingPadding`, `smartFramingSmoothing` or `captionTimingOffsetMs`. Every
+one of those values was discarded on save, so moving the sliders in the legacy
+editor changed nothing.
+
+`grain`, `warm` and `smartFramingZoom` now have schema fields and worker filters
+(`colorbalance`, `noise`, and a zoom applied to the crop). The rest are still
+dropped — `cropPositionX/Y` and the tracking controls would need the worker's
+framing plan to accept them, and `captionTimingOffsetMs` needs the caption
+renderer to shift.
+
+**The worker deploy is manual.** These filters do nothing in production until the
+Hetzner box is redeployed:
+`cd /opt/deenclipped && git pull && docker compose -f worker/docker-compose.yml up -d --build`
+
+## 5. Smaller fixes
 
 - **Reject has no home.** The server moves a clip between `waiting` and
   `approved` and nothing else; the only way to remove one is `DELETE`. The deck's

@@ -46,6 +46,12 @@
     connProvider: null,
     job: null,
     generating: false,
+    edClipId: null,
+    edTab: 'captions',
+    edCaption: null,
+    edDirty: false,
+    edSaving: false,
+    edSafe: true,
     deckMode: false,
     deckIdx: 0,
     // Approving is a round trip. Until /api/state comes back the card would snap
@@ -158,6 +164,15 @@
     var found = 0;
     for (var i = 0; i < STAGES.length; i++) if (STAGES[i].match.test(text || '')) found = i;
     return found;
+  }
+
+  function switchTrack(on) {
+    return 'position: relative; margin-left: auto; width: 34px; height: 19px; flex: none; border-radius: 20px; cursor: pointer; transition: background .16s ease, border-color .16s ease; border: 1px solid ' +
+      (on ? 'rgba(217,180,120,.5); background: rgba(217,180,120,.22);' : '#33333A; background: #17171A;');
+  }
+  function switchKnob(on) {
+    return 'position: absolute; top: 2px; left: ' + (on ? '17px' : '2px') + '; width: 13px; height: 13px; border-radius: 50%; background: ' +
+      (on ? '#F0D6A6' : '#6E6E76') + '; transition: left .16s ease, background .16s ease;';
   }
 
   function sliderTrack() {
@@ -469,8 +484,11 @@
     var tpl = Object.assign({
       fitMode: 'crop', smartFramingBias: 'auto', captionMode: 'dynamic-stack',
       filterPreset: 'natural', captionPosition: 'middle', captionHorizontal: 'right',
-      captionPrimary: '#FFFFFF', captionFontSize: 96,
+      captionPrimary: '#FFFFFF', captionFontSize: 96, captionMarginV: 180,
+      captionFont: 'DejaVu Sans', captionUppercase: false,
       watermarkPosition: 'top-center', watermarkColor: '#D9B478', watermarkFontSize: 28,
+      watermark: 'DEENCLIPPED', watermarkOpacity: 100,
+      vignette: 0, grain: 0, warm: 0, smartFramingZoom: 1, smartFramingEnabled: false,
       voiceEnhance: true,
     }, activeTemplate || {});
 
@@ -507,6 +525,29 @@
         var v = planList[k]; return typeof v === 'object' ? Object.assign({ id: k }, v) : { id: k, name: k };
       });
     }
+
+    // The clip open in the editor, and the caption split into readable blocks.
+    var edClip = clips.filter(function (c) { return c.id === UI.edClipId; })[0] || null;
+    var edCaptionText = UI.edCaption !== null ? UI.edCaption : (edClip && edClip.transcript) || '';
+    var edCaptionBlocks = String(edCaptionText).split(/(?<=[.!?\u061F])\s+/).filter(Boolean).map(function (line, i) {
+      return {
+        text: line,
+        style: 'padding: 8px 10px; border-radius: 8px; border: 1px solid ' + (i === 0 ? 'rgba(217,180,120,.3)' : '#1E1E22') + '; background: #121214; font-size: 12.5px; line-height: 1.45;',
+        select: function () {},
+      };
+    });
+    // Other clips cut from the same lecture, for the editor's filmstrip.
+    var edSiblings = edClip ? clips.filter(function (c) { return c.projectId === edClip.projectId; }).slice(0, 8).map(function (c) {
+      var on = c.id === edClip.id;
+      return {
+        style: 'width: 46px; flex: none; aspect-ratio: 9 / 16; border-radius: 7px; cursor: pointer; background: ' + thumb(c.thumbUrl) +
+          '; border: 1px solid ' + (on ? '#D9B478' : '#26262A') + ';',
+        select: function (e) { stop(e); setUI({ edClipId: c.id, edCaption: null, edDirty: false }); },
+      };
+    }) : [];
+
+    // Where the caption sits in the preview, as a percentage of frame height.
+    var capTop = tpl.captionPosition === 'top' ? 22 : tpl.captionPosition === 'bottom' ? 80 : 50;
 
     var job = UI.job;
     var tokenRate = Number((DATA.billing && DATA.billing.tokenRatePerMinute) || 1);
@@ -809,6 +850,137 @@
 
       // ── Schedule ──
       scheduleDays: scheduleDays,
+
+      // ── Clip editor ──
+      // Split by what the server can actually keep. Caption text, title,
+      // description, hashtags and trim are per-clip (agent.updateClip accepts
+      // exactly those). Everything visual lives on the selected template and
+      // propagates to every unposted clip on save, which the screen says out loud
+      // rather than pretending the change is local to one clip.
+      //
+      // Grain, warmth and crop zoom used to be dead here and in the legacy
+      // editor: sanitiseTemplate() builds its output from a whitelist and no
+      // field held them, so every value was discarded on save. They now have
+      // schema fields and worker filters, so the sliders do something.
+      isCaptions: UI.edTab === 'captions',
+      isFraming: UI.edTab === 'framing',
+      isAudio: UI.edTab === 'audio',
+      isLook: UI.edTab === 'look',
+      isExport: UI.edTab === 'export',
+      edTools: [
+        { key: 'captions', label: 'Captions', icon: 'ph ph-closed-captioning' },
+        { key: 'framing', label: 'Framing', icon: 'ph ph-crop' },
+        { key: 'audio', label: 'Audio', icon: 'ph ph-waveform' },
+        { key: 'look', label: 'Look', icon: 'ph ph-sun-dim' },
+        { key: 'export', label: 'Export', icon: 'ph ph-export' },
+      ].map(function (t) {
+        var on = UI.edTab === t.key;
+        // Icon stacked over label, each tab flexing to a fifth of the panel —
+        // five of them do not fit side by side any other way.
+        return {
+          label: t.label, icon: t.icon,
+          style: 'display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border-radius: 8px; font-family: inherit; font-size: 10px; font-weight: 600; cursor: pointer; flex: 1; transition: background .14s ease, color .14s ease; border: 1px solid ' +
+            (on ? 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;' : 'transparent; background: #17171A; color: #8B8B93;'),
+          select: function (e) { stop(e); setUI({ edTab: t.key }); },
+        };
+      }),
+
+      edTitle: edClip ? edClip.title || 'Untitled clip' : '',
+      edLecture: edClip ? projectTitle[edClip.projectId] || '' : '',
+      edTimeLabel: edClip ? secsToClock((edClip.durationMs || 0) / 1000) : '',
+      // This element IS the preview frame and establishes the containing block
+      // for every overlay below it. Making it `position: absolute; inset: 0`
+      // instead lets the overlays resolve against <main> and cover the tool rail.
+      edThumbStyle: 'position: relative; width: 100%; max-width: 268px; aspect-ratio: 9 / 16; border-radius: 13px; overflow: hidden; border: 1px solid #26262A; background: ' +
+        thumb(edClip && edClip.thumbUrl) + '; box-shadow: 0 26px 60px rgba(0,0,0,.5);',
+      closeEditor: function (e) { stop(e); setUI({ screen: 'queue', edClipId: null }); },
+
+      // Caption text is genuinely per-clip: it is the clip's transcript.
+      edCapText: UI.edCaption !== null ? UI.edCaption : (edClip && edClip.transcript) || '',
+      setCapText: function (e) { UI.edCaption = e.target.value; UI.edDirty = true; refresh(); },
+      edSelText: '', edSelRange: '',
+      edCapBlocks: edCaptionBlocks,
+      // Overlays sit inside the preview frame, positioned as fractions of it.
+      edCapOverlayStyle: 'position: absolute; z-index: 8; width: 80%; left: 50%; top: ' + capTop + '%; translate: -50% -50%; text-align: center; padding: 7px 9px; border-radius: 6px; background: rgba(10,10,12,.5); color: ' +
+        (tpl.captionPrimary || '#F0D6A6') + '; font-family: Outfit, Inter, sans-serif; font-weight: 600; line-height: 1.2; font-size: ' +
+        Math.max(8, Math.round(Number(tpl.captionFontSize || 96) / 8)) + 'px;' + (tpl.captionUppercase ? ' text-transform: uppercase;' : ''),
+      edCapHandle: 'position: absolute; inset: -5px; border: 1px dashed rgba(240,214,166,.7); border-radius: 8px; pointer-events: none;',
+      dragEdCap: function () {},
+
+      // captionFontSize, range 24-140 in the schema.
+      edSize: Number(tpl.captionFontSize) || 96,
+      edSizeLabel: (Number(tpl.captionFontSize) || 96) + ' px',
+      setSize: function (e) { saveTemplate({ captionFontSize: Number(e.target.value) }); },
+      // captionMarginV, range 20-800.
+      edCapPosY: Number(tpl.captionMarginV) || 180,
+      setPosY: function (e) { saveTemplate({ captionMarginV: Number(e.target.value) }); },
+      edPosLabelLive: (Number(tpl.captionMarginV) || 180) + ' px',
+      edUpperTrack: switchTrack(Boolean(tpl.captionUppercase)),
+      edUpperKnob: switchKnob(Boolean(tpl.captionUppercase)),
+      toggleUpper: function (e) { stop(e); saveTemplate({ captionUppercase: !tpl.captionUppercase }); },
+      edFonts: ['DejaVu Sans', 'Inter', 'Amiri'].map(function (f) {
+        return { label: f, style: tabStyle(tpl.captionFont === f), select: function (e) { stop(e); saveTemplate({ captionFont: f }); } };
+      }),
+
+      // fitMode, and the one framing toggle the schema keeps.
+      edCrops: ENUMS.fitMode.map(function (m) {
+        var labels = { contain: 'Fit', blur: 'Blur', crop: 'Fill' };
+        return { label: labels[m], style: tabStyle(tpl.fitMode === m), select: function (e) { stop(e); saveTemplate({ fitMode: m }); } };
+      }),
+      edFaceTrack: switchTrack(Boolean(tpl.smartFramingEnabled)),
+      edFaceKnob: switchKnob(Boolean(tpl.smartFramingEnabled)),
+      toggleFace: function (e) { stop(e); saveTemplate({ smartFramingEnabled: !tpl.smartFramingEnabled }); },
+
+      // vignette, range 0-1 in the schema, shown as a percentage.
+      edVignette: Math.round((Number(tpl.vignette) || 0) * 100),
+      edVignetteLabel: Math.round((Number(tpl.vignette) || 0) * 100) + '%',
+      setVignette: function (e) { saveTemplate({ vignette: Number(e.target.value) / 100 }); },
+      // grain 0-100, warm -100..100, zoom 0.75-2.5 in the schema.
+      edGrain: Number(tpl.grain) || 0,
+      edGrainLabel: (Number(tpl.grain) || 0) + '%',
+      setGrain: function (e) { saveTemplate({ grain: Number(e.target.value) }); },
+      edWarm: Number(tpl.warm) || 0,
+      edWarmLabel: (Number(tpl.warm) > 0 ? '+' : '') + (Number(tpl.warm) || 0),
+      setWarm: function (e) { saveTemplate({ warm: Number(e.target.value) }); },
+      edZoom: Math.round((Number(tpl.smartFramingZoom) || 1) * 100),
+      edZoomLabel: Math.round((Number(tpl.smartFramingZoom) || 1) * 100) + '%',
+      setZoom: function (e) { saveTemplate({ smartFramingZoom: Number(e.target.value) / 100 }); },
+
+      edWmTrack: sliderTrack(),
+      edWmKnob: sliderKnob(Number(tpl.watermarkOpacity) > 0),
+      edWmNote: tpl.watermark ? tpl.watermark + ' at ' + (Number(tpl.watermarkOpacity) || 0) + '%' : 'No watermark',
+      toggleWatermark: function (e) { stop(e); saveTemplate({ watermarkOpacity: Number(tpl.watermarkOpacity) > 0 ? 0 : 100 }); },
+      notPro: false,
+
+      // Alignment guides only appear while dragging, as in the design.
+      edGuideV: 'position: absolute; top: 0; bottom: 0; width: 1px; z-index: 6; pointer-events: none; left: 50%; display: none; background: rgba(240,214,166,.6);',
+      edGuideH: 'position: absolute; left: 0; right: 0; height: 1px; z-index: 6; pointer-events: none; top: ' + capTop + '%; display: none; background: rgba(240,214,166,.6);',
+      edSafeBtnStyle: toggleBtnStyle(UI.edSafe),
+      toggleSafe: function (e) { stop(e); setUI({ edSafe: !UI.edSafe }); },
+      edMarkStyle: 'position: absolute; z-index: 8; right: 11px; ' +
+        (String(tpl.watermarkPosition).indexOf('top') === 0 ? 'top: 11px;' : 'bottom: 42px;') +
+        ' font-family: Outfit, Inter, sans-serif; font-size: 8.5px; font-weight: 700; letter-spacing: .12em; color: ' +
+        (tpl.watermarkColor || '#F0D6A6') + '; display: ' + (Number(tpl.watermarkOpacity) > 0 ? 'block' : 'none') + ';',
+      edPlayStyle: 'display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid #26262A; background: #17171A; color: #F0D6A6; cursor: pointer;',
+      edPlayHeadStyle: 'position: absolute; top: 0; bottom: 0; left: 0; width: 2px; background: #F0D6A6;',
+      edProgressStyle: 'height: 3px; border-radius: 3px; width: 0%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
+      edProgressLabel: '0:00',
+      edSiblings: edSiblings,
+
+      edDirtyLabel: UI.edDirty ? 'Unsaved changes' : 'All changes saved',
+      edDirtyDot: 'width: 7px; height: 7px; border-radius: 50%; background: ' + (UI.edDirty ? '#E6B770' : '#7FD1A6') + ';',
+      edSaving: UI.edSaving,
+      edSaveLabel: UI.edSaving ? 'Saving…' : 'Save clip',
+      edSaveIcon: UI.edSaving ? 'ph ph-circle-notch' : 'ph ph-floppy-disk',
+      edSaveIconStyle: 'font-size: 15px;' + (UI.edSaving ? ' animation: dcSpin 1.1s linear infinite;' : ''),
+      saveEdit: function (e) {
+        stop(e);
+        if (!edClip || UI.edSaving) return;
+        setUI({ edSaving: true });
+        global.StudioAdapter.onSaveClip(edClip.id, {
+          transcript: UI.edCaption !== null ? UI.edCaption : edClip.transcript,
+        });
+      },
 
       // ── Source range panel ──
       // Opens after /api/source-info resolves a pasted link, so the range and the
@@ -1206,6 +1378,8 @@
     onSignOut: function () {},
     onProbeSource: function () {},
     onGenerate: function () {},
+    onSaveClip: function () {},
+    clipSaved: function () { UI.edSaving = false; UI.edDirty = false; UI.edCaption = null; refresh(); },
     // Called by the host once /api/source-info resolves, so the range picker can
     // open against the real duration.
     openJob: function (source) {

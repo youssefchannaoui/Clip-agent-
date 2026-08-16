@@ -407,3 +407,48 @@ test('the generated root still relies on being a full-height grid', () => {
   assert.match(root[1], /display: grid/);
   assert.match(root[1], /height: 100vh/);
 });
+
+// ── editor fields that used to be discarded ───────────────────────────────
+
+test('grain, warmth and crop zoom survive template sanitisation', async () => {
+  const templates = await import('../src/templates.js');
+  const out = templates.sanitiseTemplate({ name: 'T', grain: 40, warm: -25, smartFramingZoom: 1.6 }, { id: 't' });
+  assert.equal(out.grain, 40, 'grain is kept');
+  assert.equal(out.warm, -25, 'warmth is kept');
+  assert.equal(out.smartFramingZoom, 1.6, 'zoom is kept');
+});
+
+test('the new editor fields are clamped to their documented ranges', async () => {
+  const templates = await import('../src/templates.js');
+  const out = templates.sanitiseTemplate({ name: 'T', grain: 999, warm: -999, smartFramingZoom: 99 }, { id: 't' });
+  assert.equal(out.grain, 100);
+  assert.equal(out.warm, -100);
+  assert.equal(out.smartFramingZoom, 2.5);
+});
+
+test('a template with none of the new fields renders unchanged', async () => {
+  const templates = await import('../src/templates.js');
+  const out = templates.sanitiseTemplate({ name: 'T' }, { id: 't' });
+  assert.equal(out.grain, 0, 'no grain by default');
+  assert.equal(out.warm, 0, 'neutral by default');
+  assert.equal(out.smartFramingZoom, 1, 'untouched framing by default');
+});
+
+test('the editor supplies every binding the design asks for', () => {
+  const vals = StudioAdapter.bindings(SAMPLE_STATE);
+  const missing = STUDIO_BINDINGS.filter(b => !(b in vals));
+  assert.deepEqual(missing, [], 'no binding is left without a supplier');
+});
+
+test('editor sliders read the template and write back in schema units', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'c1', edTab: 'look' });
+  const vals = StudioAdapter.bindings({
+    ...SAMPLE_STATE,
+    selectedTemplate: { id: 'tpl', name: 'T', grain: 25, warm: 40, smartFramingZoom: 1.5, vignette: 0.5 },
+    templates: [{ id: 'tpl', name: 'T', grain: 25, warm: 40, smartFramingZoom: 1.5, vignette: 0.5 }],
+  });
+  assert.equal(vals.edGrain, 25);
+  assert.equal(vals.edWarmLabel, '+40', 'warmth shows its sign');
+  assert.equal(vals.edZoom, 150, 'zoom is shown as a percentage');
+  assert.equal(vals.edVignette, 50, 'vignette 0-1 is shown as a percentage');
+});

@@ -252,3 +252,55 @@ class CropFramingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class VideoFilterTests(unittest.TestCase):
+    """The grain, warmth and zoom controls were drawn in the editor long before
+    anything held their values. These cover the filters that now back them."""
+
+    def _graph(self, template, crop_plan=None):
+        return worker.build_video_filter(template, pathlib.Path("/tmp/x.ass"), crop_plan)
+
+    def test_defaults_add_no_colour_or_grain_stage(self):
+        graph = self._graph({"fitMode": "contain"})
+        self.assertNotIn("colorbalance", graph)
+        self.assertNotIn("noise=", graph)
+
+    def test_warmth_pushes_red_up_and_blue_down(self):
+        graph = self._graph({"fitMode": "contain", "warm": 100})
+        self.assertIn("colorbalance=rs=0.300", graph)
+        self.assertIn("bs=-0.300", graph)
+
+    def test_cool_warmth_reverses_the_balance(self):
+        graph = self._graph({"fitMode": "contain", "warm": -100})
+        self.assertIn("rs=-0.300", graph)
+        self.assertIn("bs=0.300", graph)
+
+    def test_grain_adds_a_temporal_noise_stage(self):
+        graph = self._graph({"fitMode": "contain", "grain": 50})
+        self.assertIn("noise=alls=20:allf=t+u", graph)
+
+    def test_grain_is_applied_after_sharpening(self):
+        graph = self._graph({"fitMode": "contain", "grain": 50, "sharpen": 1})
+        self.assertLess(graph.index("unsharp"), graph.index("noise="))
+
+    def test_zoom_of_one_leaves_the_crop_untouched(self):
+        plain = self._graph({"fitMode": "crop"})
+        zoomed = self._graph({"fitMode": "crop", "smartFramingZoom": 1})
+        self.assertEqual(plain, zoomed)
+
+    def test_zoom_enlarges_the_scale_before_cropping(self):
+        graph = self._graph({"fitMode": "crop", "smartFramingZoom": 2, "width": 1080, "height": 1920})
+        self.assertIn("scale=2160:3840", graph)
+        self.assertIn("crop=1080:1920", graph)
+
+    def test_zoom_tightens_a_tracked_crop_around_its_centre(self):
+        plan = {"w": 800, "h": 800, "x": 100, "y": 100}
+        graph = self._graph({"fitMode": "crop", "smartFramingZoom": 2}, plan)
+        # Half the box, recentred: 800 -> 400, origin moves in by 200.
+        self.assertIn("crop=400:400:300:300", graph)
+
+    def test_out_of_range_zoom_cannot_produce_a_degenerate_crop(self):
+        plan = {"w": 20, "h": 20, "x": 0, "y": 0}
+        graph = self._graph({"fitMode": "crop", "smartFramingZoom": 99}, plan)
+        self.assertIn("crop=16:16", graph)

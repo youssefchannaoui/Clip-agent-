@@ -1690,6 +1690,12 @@ function renderStudio(){
       const {id:_drop,version:_v,updatedAt:_u,...rest}=current;
       await api('/api/templates',{method:'POST',body:JSON.stringify({template:{...rest,name:`${current.name||'Template'} copy`},select:false})})},'Template duplicated')};
     StudioAdapter.onSignOut=()=>studioDo(async()=>{await api('/auth/logout',{method:'POST'});location.href='/'});
+    /* Caption text is the clip's transcript and is the one visual thing the
+       server keeps per clip; everything else in the editor lives on the template
+       and is saved as it changes. */
+    StudioAdapter.onSaveClip=(id,fields)=>studioDo(async()=>{
+      await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(fields)});
+      StudioAdapter.clipSaved()},'Clip saved');
     StudioAdapter.onConnect=name=>studioDo(async()=>{
       const r=await api(`/api/social/${encodeURIComponent(name)}/connect`,{method:'POST'});
       if(r&&r.url)location.href=r.url});

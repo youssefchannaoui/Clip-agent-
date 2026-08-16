@@ -1082,19 +1082,32 @@ def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict
     height = int(template.get("height", 1920))
     subtitle = escape_filter_path(ass_file)
     fit_mode = str(template.get("fitMode") or "contain")
+    # Crop zoom. 1.0 is the framing the worker already produced, so a template
+    # without the field renders exactly as before.
+    zoom = max(0.75, min(2.5, float(template.get("smartFramingZoom", 1) or 1)))
     if fit_mode == "crop":
         if crop_plan:
             crop_w = int(crop_plan.get("w") or width)
             crop_h = int(crop_plan.get("h") or height)
             crop_x = int(crop_plan.get("x") or 0)
             crop_y = int(crop_plan.get("y") or 0)
+            if abs(zoom - 1.0) > 0.001:
+                # Shrink the tracked box around its own centre so the subject
+                # stays framed while the crop tightens.
+                zoom_w = max(16, int(crop_w / zoom))
+                zoom_h = max(16, int(crop_h / zoom))
+                crop_x += (crop_w - zoom_w) // 2
+                crop_y += (crop_h - zoom_h) // 2
+                crop_w, crop_h = zoom_w, zoom_h
             graph = (
                 f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:{crop_y},"
                 f"scale={width}:{height},setsar=1[base]"
             )
         else:
+            scale_w = int(width * zoom)
+            scale_h = int(height * zoom)
             graph = (
-                f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
+                f"[0:v]scale={scale_w}:{scale_h}:force_original_aspect_ratio=increase,"
                 f"crop={width}:{height},setsar=1[base]"
             )
     elif fit_mode == "contain":
@@ -1121,6 +1134,18 @@ def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict
     vignette = float(template.get("vignette", 0))
     if vignette > 0:
         filters.append(f"vignette=PI/{max(3.0, 8.0 - vignette * 4.5):.3f}")
+    # Warmth pushes red up and blue down through a neutral midpoint, so 0 leaves
+    # the frame untouched. colorbalance is used rather than colortemperature
+    # because it is present in every ffmpeg build this worker runs against.
+    warm = max(-100.0, min(100.0, float(template.get("warm", 0)))) / 100.0
+    if abs(warm) > 0.001:
+        filters.append(
+            f"colorbalance=rs={warm * 0.30:.3f}:gs={warm * 0.05:.3f}:bs={-warm * 0.30:.3f}"
+        )
+    # Grain last of the colour stages, so it is not smeared by sharpening.
+    grain = max(0.0, min(100.0, float(template.get("grain", 0))))
+    if grain > 0:
+        filters.append(f"noise=alls={max(1, int(round(grain * 0.4)))}:allf=t+u")
     filters.append(f"subtitles='{subtitle}'")
     if bool(template.get("brandLineEnabled", False)):
         color = str(template.get("brandLineColor", "#D9B478")).replace("#", "0x")
