@@ -61,20 +61,19 @@ test('public routes, pricing and dashboard assets remain available', async () =>
   assert.match(terms, /YouTube Terms of Service/i);
   assert.match(terms, /Google Privacy Policy/i);
 
-  // /app serves the established dashboard. The Studio one is opt-in at ?studio=1
-  // until it reaches parity; the two shells cannot both run, so each request
-  // gets exactly one.
+  // /app serves the Studio dashboard; ?classic=1 is the escape hatch back to the
+  // previous shell. The two cannot both run, so each request gets exactly one.
   const app = await fetch(`${base}/app`, { headers: { Cookie: creatorCookie }, redirect: 'manual' });
   assert.equal(app.status, 200);
   const defaultHtml = await app.text();
-  assert.match(defaultHtml, /src="\/premium-dashboard\.js"/, 'the established dashboard is the default');
-  assert.doesNotMatch(defaultHtml, /STUDIO_SHELL=true/, 'the Studio shell is not loaded alongside it');
+  assert.match(defaultHtml, /STUDIO_SHELL=true/, 'the Studio dashboard is the default');
+  assert.doesNotMatch(defaultHtml, /src="\/premium-dashboard\.js"/, 'the old shell is not loaded alongside it');
 
-  const studio = await fetch(`${base}/app?studio=1`, { headers: { Cookie: creatorCookie }, redirect: 'manual' });
-  assert.equal(studio.status, 200);
-  const studioHtml = await studio.text();
-  assert.match(studioHtml, /STUDIO_SHELL=true/, 'the Studio dashboard is reachable');
-  assert.doesNotMatch(studioHtml, /src="\/premium-dashboard\.js"/);
+  const classic = await fetch(`${base}/app?classic=1`, { headers: { Cookie: creatorCookie }, redirect: 'manual' });
+  assert.equal(classic.status, 200);
+  const classicHtml = await classic.text();
+  assert.match(classicHtml, /src="\/premium-dashboard\.js"/, 'the previous dashboard stays reachable');
+  assert.doesNotMatch(classicHtml, /STUDIO_SHELL=true/);
 
   assert.equal((await fetch(`${base}/premium-dashboard.js`)).status, 200);
   assert.equal((await fetch(`${base}/studio-adapter.js`)).status, 200);

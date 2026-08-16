@@ -1675,7 +1675,8 @@ function renderStudio(){
     /* Every hook routes through the same endpoints the legacy dashboard uses, so
        the two views never disagree about what the server was told. The adapter
        itself never touches the network. */
-    const studioDo=async(fn,ok)=>{try{await fn();await refresh();StudioAdapter.settled();if(ok)toast(ok,'good')}catch(e){toast(e.message,'bad');StudioAdapter.settled();renderAll()}};
+    const studioDo=async(fn,ok)=>{try{await fn();await refresh();StudioAdapter.settled();if(ok)toast(ok,'good')}
+      catch(e){toast(e.message,'bad');StudioAdapter.settled();StudioAdapter.jobFailed(e.message);renderAll()}};
     /* Toasts surface in the design's own dock while the Studio shell is visible. */
     StudioAdapter.onToast=m=>StudioAdapter.showToast(m);
     /* /api/clip-settings validates all three fields together, so a partial patch
@@ -1727,7 +1728,12 @@ function renderStudio(){
        would have to interpret. */
     StudioAdapter.onGenerate=(url,range)=>studioDo(async()=>{
       const body=range?{urls:url,sourceStartSeconds:range.startSec,sourceEndSeconds:range.endSec}:{urls:url};
-      await api('/api/videos',{method:'POST',body:JSON.stringify(body)});
+      const r=await api('/api/videos',{method:'POST',body:JSON.stringify(body)});
+      /* /api/videos answers 200 even when it refused the source — the reason is
+         per-URL inside results[]. Without this a rejection ("upload a nasheed
+         first") looked like success: the panel closed and nothing was queued. */
+      const failed=(r&&r.results||[]).filter(x=>x&&x.error);
+      if(failed.length)throw new Error(failed[0].error);
       StudioAdapter.jobDone()},'Lecture queued');
     StudioAdapter.onApprove=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'approved'})}));
     StudioAdapter.onClipSettings=patch=>studioDo(()=>api('/api/clip-settings',{method:'POST',body:JSON.stringify(patch)}));

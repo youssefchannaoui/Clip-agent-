@@ -46,6 +46,7 @@
     connProvider: null,
     job: null,
     generating: false,
+    jobError: null,
     edClipId: null,
     edTab: 'captions',
     edCaption: null,
@@ -1137,6 +1138,7 @@
       runGenerate: function (e) {
         stop(e);
         if (!job || UI.generating) return;
+        UI.jobError = null;
         setUI({ generating: true });
         global.StudioAdapter.onGenerate(job.url, job.durationKnown
           ? { startSec: Math.round(job.start), endSec: Math.round(job.end) }
@@ -1149,7 +1151,7 @@
       genBarStyle: UI.generating
         ? 'position: absolute; left: 0; bottom: 0; height: 2px; width: 40%; background: linear-gradient(90deg, #D9B478, #F0D6A6); animation: dcSweep 1.1s ease-in-out infinite;'
         : 'display: none;',
-      genProgressLabel: UI.generating ? 'Queuing the lecture…' : '',
+      genProgressLabel: UI.generating ? 'Queuing the lecture…' : (UI.jobError || ''),
 
       // ── Values the design hardcoded ──
       // These were literal text in the .dc.html. design/text-overrides.json turns
@@ -1580,6 +1582,13 @@
       refresh();
     },
     jobDone: function () { UI.job = null; UI.generating = false; refresh(); },
+    // Called when the server refused the source. The panel stays open so the
+    // reason sits next to the button that caused it.
+    jobFailed: function (message) {
+      UI.generating = false;
+      UI.jobError = String(message || 'That source was refused.');
+      refresh();
+    },
     onConnect: function () {},
     onDisconnect: function () {},
     onTestConnection: function () {},

@@ -731,3 +731,22 @@ test('the live dock hides when nothing is running', () => {
   assert.equal(vals.liveDock, false);
   assert.deepEqual(vals.liveItems, []);
 });
+
+test('a source the server refuses is reported, not silently swallowed', () => {
+  // POST /api/videos answers 200 even when it refused the source; the reason is
+  // per-URL inside results[]. Treating 200 as success closed the panel and
+  // queued nothing, with no explanation.
+  StudioAdapter.openJob({ url: 'https://youtu.be/x', title: 'Talk', durationSec: null });
+  StudioAdapter.jobFailed('Music is required on every clip. Upload at least one nasheed first.');
+  const vals = StudioAdapter.bindings(SAMPLE_STATE);
+  assert.ok(StudioAdapter.ui.job, 'the panel stays open so the reason is visible');
+  assert.equal(vals.genBusy, false, 'the button is usable again');
+  assert.match(vals.genProgressLabel, /Upload at least one nasheed/);
+});
+
+test('the page checks results[] rather than trusting the status code', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const call = /StudioAdapter\.onGenerate\s*=[\s\S]*?'Lecture queued'/.exec(html)[0];
+  assert.match(call, /results/, 'per-URL errors are inspected');
+  assert.match(call, /throw new Error/, 'and surfaced');
+});
