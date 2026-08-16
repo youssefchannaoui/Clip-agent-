@@ -14,7 +14,10 @@ wiring that connects the dashboard to the app's real data.
 | Design system | `nocturne-627c1d31-d4ff-422f-831d-1ab0d0351779` (**not used** — see below) |
 
 The design project is linked to this repo (`youssefchannaoui/Clip-agent-`, branch
-`deenclipped-v2-2`) through its own GitHub integration.
+`deenclipped-v2-2`), but that integration is **read-only**: Claude Design reads
+the repo for orientation and never writes to it. It cannot push an export here,
+so nothing on the design side can trigger a build. Bringing a new design in is
+always the local `npm run design:pull` step below.
 
 ## Re-importing
 

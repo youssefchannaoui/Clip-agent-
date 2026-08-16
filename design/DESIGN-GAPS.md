@@ -7,6 +7,10 @@ Claude Design project, then a re-import.
 
 Written 17 Aug 2026 against `Studio Dashboard.dc.html`, 303 bindings.
 
+Fixing any of this means editing the Claude Design project, then running
+`npm run design:pull` here. Claude Design's GitHub access is read-only, so a fix
+on that side never reaches this repo on its own.
+
 ## 1. Hardcoded data that must become bindings
 
 These render as fixed text today. On a real account they are wrong, and a few are

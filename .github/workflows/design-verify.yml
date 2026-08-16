@@ -1,0 +1,79 @@
+# Checks that the committed dashboard was actually built from the committed design.
+#
+# This does NOT pull anything from Claude Design. Its GitHub integration is
+# read-only — it reads this repo for orientation and never writes to it — so
+# nothing on the design side can ever push a .dc.html here or trigger a job.
+# Bringing a new export in is a local step: `npm run design:pull`.
+#
+# What this catches is the mistake that step invites: updating
+# design/studio-dashboard.dc.html and committing it without regenerating, or
+# committing a stale generated file. The dashboard would then be built from a
+# design nobody can see in the diff.
+
+name: Verify design build
+
+on:
+  push:
+    paths:
+      - 'design/**.dc.html'
+      - 'src/public/studio-template.generated.js'
+      - 'src/public/studio-styles.generated.css'
+      - 'scripts/import-design.mjs'
+      - 'design/text-overrides.json'
+  pull_request:
+    paths:
+      - 'design/**.dc.html'
+      - 'src/public/studio-template.generated.js'
+      - 'src/public/studio-styles.generated.css'
+      - 'scripts/import-design.mjs'
+      - 'design/text-overrides.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: design-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Recompile the design
+        run: |
+          set -o pipefail
+          # Exits non-zero on a truncated export: a partial template compiles
+          # fine and silently produces a dashboard missing most of its bindings.
+          node scripts/import-design.mjs 2>&1 | tee import.log
+
+      - name: The generated files must match what was committed
+        run: |
+          if git diff --quiet -- src/public/studio-template.generated.js src/public/studio-styles.generated.css; then
+            echo "Generated output matches the committed design." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "::error::The committed dashboard was not built from the committed design."
+          echo "Run 'npm run design:import' and commit the result."
+          git diff --stat -- src/public/ | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+      - name: Report bindings with no supplier
+        if: always()
+        run: |
+          # Not a failure: a design can legitimately land ahead of its wiring.
+          # It does need to be visible, because those screens render blank.
+          if grep -q 'binding(s) used by the template' import.log; then
+            sed -n '/binding(s) used by the template/,$p' import.log >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Check and test
+        run: |
+          npm run check
+          node --test
