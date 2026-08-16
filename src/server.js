@@ -91,9 +91,12 @@ function serveAppShell(req, res, url, currentUser) {
   // Studio dashboard is a full replacement for that shell, so the two cannot both
   // run — loading them together leaves each overwriting the other's markup.
   // `?studio=1` serves the page without them.
-  // The Studio dashboard is the default. `?classic=1` serves the previous shell,
-  // which is the escape hatch if something is wrong with it in production.
-  const studioShell = url.searchParams.get('classic') !== '1';
+  // The previous dashboard is the default again. The Studio dashboard reached
+  // every screen but not parity with it -- connection status, the activity feed
+  // and the live dock are all thinner than what activity-fix.js does -- and this
+  // is a live product, so the complete one wins until that gap is closed.
+  // `?studio=1` opts in.
+  const studioShell = url.searchParams.get('studio') === '1';
   if (studioShell) {
     // Into <head>, not before </body>: the page's inline script calls boot() during
     // parse, so a flag set at the end of the body would arrive after the decision.
