@@ -30,6 +30,7 @@
     openProject: null,
     jobUrl: '',
     jobTplId: '',
+    jobTrackId: null,
     countsOpen: false,
     playingTrack: null,
     perfRange: 'Last 7 days',
@@ -1004,28 +1005,52 @@
       jobStart: job ? job.start : 0,
       jobEnd: job ? job.end : 0,
       setJobStart: function (e) {
-        var v = Math.max(0, Math.min(Number(e.target.value), (UI.job.end || 0) - 30));
-        UI.job.start = v; refresh();
+        if (!UI.job || !UI.job.durationKnown) return;
+        UI.job.start = Math.max(0, Math.min(Number(e.target.value), (UI.job.end || 0) - 30));
+        refresh();
       },
       setJobEnd: function (e) {
-        var v = Math.min(UI.job.durationSec || Number(e.target.value), Math.max(Number(e.target.value), (UI.job.start || 0) + 30));
-        UI.job.end = v; refresh();
+        if (!UI.job || !UI.job.durationKnown) return;
+        UI.job.end = Math.min(UI.job.durationSec, Math.max(Number(e.target.value), (UI.job.start || 0) + 30));
+        refresh();
       },
-      jobBandStyle: job && job.durationSec
+      // In remote processing mode sourceInfo() never probes the video -- it
+      // returns durationSec: null -- so the length is not known until the worker
+      // downloads it. Showing a 0:00-0:00 range picker there is worse than
+      // showing none: it reads as "nothing selected" when the truth is "all of
+      // it". The band fills, the labels say so, and no range is sent.
+      jobBandStyle: job && job.durationKnown
         ? 'position: absolute; top: 0; bottom: 0; left: ' + (job.start / job.durationSec * 100) + '%; width: ' +
           Math.max(1, (job.end - job.start) / job.durationSec * 100) + '%; border-radius: 4px; background: rgba(217,180,120,.28); border: 1px solid rgba(217,180,120,.5);'
-        : 'display: none;',
-      jobRangeLabel: job ? secsToClock(job.start) + ' – ' + secsToClock(job.end) : '',
-      jobLenLabel: job ? humanDuration(job.end - job.start) + ' selected' : '',
-      // Charging is per source minute, so the estimate follows the range.
-      jobTokenLabel: job ? '≈ ' + plural(Math.max(1, Math.ceil((job.end - job.start) / 60 * tokenRate)), 'token') : '',
-      jobNasheeds: plural(tracks.length, 'nasheed') + ' in rotation',
+        : 'position: absolute; inset: 0; border-radius: 4px; background: rgba(217,180,120,.18); border: 1px solid rgba(217,180,120,.35);',
+      jobRangeLabel: !job ? '' : job.durationKnown ? secsToClock(job.start) + ' – ' + secsToClock(job.end) : 'Whole lecture',
+      jobLenLabel: !job ? '' : job.durationKnown
+        ? humanDuration(job.end - job.start) + ' selected'
+        : 'Length is confirmed once the worker downloads the source.',
+      // Charging is per source minute, so an estimate is only honest once the
+      // length is known. The server confirms the real cost before processing.
+      jobTokenLabel: !job ? '' : job.durationKnown
+        ? '≈ ' + plural(Math.max(1, Math.ceil((job.end - job.start) / 60 * tokenRate)), 'token')
+        : 'Cost confirmed before processing',
+      // A picker, not a label: the template renders one button per entry, so a
+      // string here renders one button per character.
+      jobNasheeds: tracks.map(function (t) {
+        var on = UI.jobTrackId === t.id || (!UI.jobTrackId && tracks.length > 0);
+        return {
+          label: t.name || t.fileName || 'Untitled',
+          style: 'display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 20px; font-family: inherit; font-size: 11.5px; cursor: pointer; border: 1px solid ' +
+            (on ? 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;' : '#26262A; background: #121214; color: #A2A2AA;'),
+          select: function (e) { stop(e); setUI({ jobTrackId: t.id }); },
+        };
+      }),
       closeJob: function (e) { stop(e); setUI({ job: null }); },
       runGenerate: function (e) {
         stop(e);
         if (!job || UI.generating) return;
         setUI({ generating: true });
-        global.StudioAdapter.onGenerate(job.url, { startSec: Math.round(job.start), endSec: Math.round(job.end) });
+        global.StudioAdapter.onGenerate(job.url, job.durationKnown
+          ? { startSec: Math.round(job.start), endSec: Math.round(job.end) }
+          : null);
       },
       genBusy: UI.generating,
       genLabel: UI.generating ? 'Starting…' : 'Generate clips',
@@ -1423,7 +1448,14 @@
     // open against the real duration.
     openJob: function (source) {
       var dur = Number(source && source.durationSec) || 0;
-      UI.job = { url: source.url, title: source.title || source.url, durationSec: dur, start: 0, end: dur };
+      UI.job = {
+        url: source.url,
+        title: source.title || source.url,
+        durationSec: dur,
+        durationKnown: dur > 0,
+        start: 0,
+        end: dur,
+      };
       UI.generating = false;
       UI.jobUrl = '';
       refresh();

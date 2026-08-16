@@ -1711,8 +1711,12 @@ function renderStudio(){
       const src=(r.sources||[])[0];
       if(!src||src.error)throw new Error(src?.error||'That link could not be read.');
       StudioAdapter.openJob({url,title:src.title||url,durationSec:src.durationSec})}catch(e){toast(e.message,'bad')}};
+    /* No range means the whole lecture. In remote mode the duration is unknown
+       until the worker downloads it, so sending 0/0 would be a lie the server
+       would have to interpret. */
     StudioAdapter.onGenerate=(url,range)=>studioDo(async()=>{
-      await api('/api/videos',{method:'POST',body:JSON.stringify({urls:url,sourceStartSeconds:range.startSec,sourceEndSeconds:range.endSec})});
+      const body=range?{urls:url,sourceStartSeconds:range.startSec,sourceEndSeconds:range.endSec}:{urls:url};
+      await api('/api/videos',{method:'POST',body:JSON.stringify(body)});
       StudioAdapter.jobDone()},'Lecture queued');
     StudioAdapter.onApprove=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'approved'})}));
     StudioAdapter.onClipSettings=patch=>studioDo(()=>api('/api/clip-settings',{method:'POST',body:JSON.stringify(patch)}));

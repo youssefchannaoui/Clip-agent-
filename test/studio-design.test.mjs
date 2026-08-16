@@ -554,3 +554,55 @@ test('the page carries the CSS hover rule that replaced the JS one', () => {
   const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
   assert.match(html, /#studio nav a:hover\s*\{[^}]*!important/);
 });
+
+// ── binding shapes ─────────────────────────────────────────────────────────
+
+test('every sc-for list binding is supplied as an array', () => {
+  // A string here is not a type error, it is a rendering disaster: the runtime
+  // iterates it and renders one row per character. `jobNasheeds` shipped like
+  // that and drew ~20 blank buttons.
+  const lists = new Set();
+  (function walk(nodes, scope) {
+    for (const n of nodes || []) {
+      if (!n || typeof n === 'string') continue;
+      let inner = scope;
+      if (n.t === 'for') {
+        const p = n.l && n.l.p;
+        if (p && !p.includes('.') && !scope.has(p)) lists.add(p);
+        inner = new Set(scope); inner.add(n.as);
+      }
+      walk(n.ch, inner);
+    }
+  })(STUDIO_TEMPLATE, new Set());
+
+  const vals = StudioAdapter.bindings(SAMPLE_STATE);
+  const wrong = [...lists].filter(name => vals[name] !== undefined && !Array.isArray(vals[name]));
+  assert.deepEqual(wrong, [], 'these render one row per character');
+});
+
+test('an unknown source duration shows the whole lecture, not an empty range', () => {
+  // sourceInfo() returns durationSec: null in remote processing mode, which is
+  // what production runs, so this is the normal path and not an edge case.
+  StudioAdapter.openJob({ url: 'https://youtu.be/x', title: 'Talk', durationSec: null });
+  const vals = StudioAdapter.bindings(SAMPLE_STATE);
+  assert.equal(vals.jobRangeLabel, 'Whole lecture');
+  assert.match(vals.jobLenLabel, /confirmed once the worker/i);
+  assert.match(vals.jobTokenLabel, /confirmed before processing/i);
+  assert.doesNotMatch(vals.jobBandStyle, /display: none/, 'the band fills rather than vanishing');
+});
+
+test('a known duration still gives a real range and a token estimate', () => {
+  StudioAdapter.openJob({ url: 'https://youtu.be/x', title: 'Talk', durationSec: 2531 });
+  const vals = StudioAdapter.bindings(SAMPLE_STATE);
+  assert.equal(vals.jobRangeLabel, '0:00 – 42:11');
+  assert.match(vals.jobLenLabel, /^42m selected/);
+  assert.match(vals.jobTokenLabel, /^≈ 43 tokens/);
+});
+
+test('generate sends no range when the length is unknown', () => {
+  StudioAdapter.openJob({ url: 'https://youtu.be/x', title: 'Talk', durationSec: null });
+  let sent = 'not called';
+  StudioAdapter.onGenerate = (url, range) => { sent = range; };
+  StudioAdapter.bindings(SAMPLE_STATE).runGenerate({ preventDefault() {} });
+  assert.equal(sent, null, 'a 0-0 range would be a lie the server must interpret');
+});
