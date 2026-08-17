@@ -190,15 +190,26 @@ class Processor:
         otherwise rewrite it hundreds of times a second.
         """
         last = 0.0
+        started = time.monotonic()
 
-        def pulse() -> bool:
+        def pulse(done_bytes: int = 0, total_bytes: int = 0) -> bool:
             nonlocal last
             now = time.monotonic()
             if now - last >= IMPORT_HEARTBEAT_SECONDS:
                 last = now
+                # Turn bytes into something the customer can read. The import
+                # occupies 3-8% of the job, so the download maps onto that band
+                # rather than pretending to be the whole thing.
+                fields: dict[str, Any] = {"heartbeatAt": now_ms()}
+                if total_bytes and done_bytes:
+                    fraction = max(0.0, min(1.0, done_bytes / total_bytes))
+                    fields["progress"] = int(round(3 + fraction * 5))
+                    elapsed = now - started
+                    if fraction > 0.02 and elapsed > 2:
+                        fields["etaSec"] = round((elapsed / fraction) - elapsed, 1)
                 # A vanished job must still cancel cleanly rather than raise.
                 try:
-                    self.store.update(job_id, heartbeatAt=now_ms())
+                    self.store.update(job_id, **fields)
                 except KeyError:
                     return True
             return self.cancelled(job_id)

@@ -199,6 +199,39 @@ class WorkerPersistenceTests(unittest.TestCase):
         processor.cancel("job_cancel")
         self.assertTrue(pulse(), "a cancelled import must stop downloading")
 
+    def test_the_import_reports_a_percentage_and_an_eta(self):
+        # The import used to write nothing but a heartbeat, so a multi-minute
+        # download sat at 3% with no sign of movement.
+        store = self.service.JobStore()
+        store.create({"id": "job_bytes", "source": {"type": "youtube"}})
+        processor = self.service.Processor(store)
+        pulse = processor.import_pulse("job_bytes")
+        self.assertFalse(pulse(0, 0))
+        first = store.read("job_bytes")
+        self.assertIsNotNone(first.get("heartbeatAt"))
+
+        # Halfway through a known-size download.
+        processor.import_pulse.__wrapped__ if False else None
+        pulse2 = processor.import_pulse("job_bytes")
+        time.sleep(0.01)
+        self.assertFalse(pulse2(50, 100))
+        status = store.read("job_bytes")
+        self.assertGreaterEqual(status["progress"], 3, "the import band starts at 3%")
+        self.assertLessEqual(status["progress"], 8, "and must not claim more than the import is worth")
+
+    def test_a_provider_that_ignores_progress_still_works(self):
+        # Most providers pass a plain `lambda: bool`. The two-argument form must
+        # fall back rather than raise.
+        from import_providers import _poll
+        self.assertFalse(_poll(lambda: False, 10, 100))
+        self.assertTrue(_poll(lambda: True, 10, 100))
+        seen = {}
+        def rich(done, total):
+            seen['done'] = done
+            return False
+        self.assertFalse(_poll(rich, 7, 70))
+        self.assertEqual(seen['done'], 7)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -168,6 +168,11 @@ body{
 #studio input[type=range]::-moz-range-thumb{pointer-events:auto;width:15px;height:15px;border-radius:50%;background:#F0D6A6;border:2px solid #121214;box-shadow:0 1px 4px rgba(0,0,0,.55);cursor:grab}
 #studio input[type=range]:active::-webkit-slider-thumb{cursor:grabbing}
 #studio input[type=range]:active::-moz-range-thumb{cursor:grabbing}
+/* A notched circle is a spinner, so it should always be turning. The design's
+   live rows bind the icon's class but the animation only ever arrived through a
+   style binding, so any row that missed it rendered a static notch that looked
+   like a stalled job. */
+#studio .ph-circle-notch{animation:dcSpin 1.1s linear infinite;display:inline-block}
 
 button,input,textarea{font-family:inherit;font-size:inherit;color:inherit}
 button{cursor:pointer;border:0;background:none}

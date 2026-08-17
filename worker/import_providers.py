@@ -58,6 +58,20 @@ def assert_public_https_url(value: str, allowed_hosts: set[str] | None = None) -
     return value
 
 
+def _poll(cancelled, done_bytes, total_bytes):
+    """Call the cancellation callback, handing it download progress if it wants it.
+
+    Callers pass a plain `lambda: bool` in most places, so the two-argument form
+    is attempted first and a TypeError falls back. That keeps every existing
+    provider working unchanged while the service's own pulse can report a real
+    percentage.
+    """
+    try:
+        return bool(cancelled(done_bytes, total_bytes))
+    except TypeError:
+        return bool(cancelled())
+
+
 def download_https(
     url: str, destination: Path, max_bytes: int, timeout_seconds: int,
     cancelled: Callable[[], bool] = lambda: False,
@@ -70,7 +84,12 @@ def download_https(
                 raise ImportProviderError("The imported video exceeds the configured download limit.")
             total = 0
             while True:
-                if cancelled():
+                # The callback doubles as the liveness/progress report. Passing the
+                # byte counts lets the worker turn a download into a real
+                # percentage and ETA instead of a job that sits at 3% for minutes
+                # with no sign of movement. Providers that only want the
+                # cancellation answer ignore the arguments.
+                if _poll(cancelled, total, length):
                     raise ImportProviderError("Job cancelled.")
                 chunk = response.read(1024 * 1024)
                 if not chunk:
