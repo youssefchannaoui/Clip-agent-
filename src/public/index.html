@@ -81,6 +81,10 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 #studioLiveHome.slh-idle .slb-dot { background: #4A4A52; animation: none; }
 .slh-empty { padding: 13px; font-size: 11.5px; color: #6E6E76; }
 
+/* Preview picture layers. z-index 0-2, under the design's own overlays. */
+#studioPreviewPic { position: absolute; inset: 0; z-index: 0; overflow: hidden; border-radius: inherit; }
+#studioPreviewPic.hide { display: none; }
+
 /* Second save button in the clip editor. Matches the design's secondary buttons
    (Preview sits beside it) rather than inventing a look. */
 #studioApplyLecture {
@@ -1206,6 +1210,13 @@ select:focus{outline:none;border-color:var(--blue)}
      right and then wanting the rest of the same video to match is the common next
      step and there was no way to ask for it. Docked beside Save clip. -->
 <button id="studioApplyLecture" class="hide" type="button" data-host-owned></button>
+<!-- The preview picture. The design bakes a finished vertical reel into the
+     frame's class, so the two things the preview exists to answer -- what the
+     clip layout does and what the Look does -- could not be shown. These layers
+     are docked inside the frame, beneath the caption and watermark. -->
+<div id="studioPreviewPic" class="hide" data-host-owned aria-hidden="true">
+  <div class="pv-back"></div><div class="pv-img"></div><div class="pv-fx"></div>
+</div>
 <div id="studioLiveBar" class="hide" role="status" aria-live="polite"></div>
 
 <!-- Connections overlay. Hand-written rather than generated: the design's own
@@ -2005,6 +2016,24 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       applyEl.onclick=()=>StudioAdapter.onApplyToLecture(StudioAdapter.ui.edClipId);
     }
 
+    /* Docks the preview picture inside whichever 9:16 frame is on screen, as its
+       first child so it sits under the caption, watermark and guides. Both the
+       Templates and editor previews use one, and only one is ever rendered. */
+    const pvEl=$('#studioPreviewPic');
+    function paintPreviewPic(vals){
+      const wanted=StudioAdapter.ui.screen==='templates'||StudioAdapter.ui.screen==='editor';
+      if(!wanted){pvEl.classList.add('hide');return}
+      const frame=[...document.querySelectorAll('#studio div,#studio section')]
+        .find(n=>n!==pvEl&&!pvEl.contains(n)&&getComputedStyle(n).aspectRatio==='9 / 16');
+      pvEl.classList.toggle('hide',!frame);
+      if(!frame)return;
+      if(frame.firstElementChild!==pvEl)frame.insertBefore(pvEl,frame.firstElementChild);
+      const set=(sel,style)=>{const n=pvEl.querySelector(sel);if(n&&n.getAttribute('style')!==style)n.setAttribute('style',style)};
+      set('.pv-back',vals.pvBackStyle);
+      set('.pv-img',vals.pvImgStyle);
+      set('.pv-fx',vals.pvFxStyle);
+    }
+
     function paintLiveWork(vals){
       const onHome=StudioAdapter.ui.screen==='home';
       const any=vals.liveCount>0;
@@ -2070,7 +2099,7 @@ function renderStudio(){
   if(!studioWanted()||!DATA||!window.StudioRuntime||!window.StudioAdapter)return false;
   if(!STUDIO){
     STUDIO=StudioRuntime.mount($('#studio'));
-    StudioAdapter.setRefresh(()=>{if(DATA)STUDIO.render(StudioAdapter.bindings(DATA))});
+    StudioAdapter.setRefresh(()=>paintStudio());
     /* The adapter never calls the API itself; approving routes back through the
        existing endpoint so both dashboards stay consistent. */
     /* Every hook routes through the same endpoints the legacy dashboard uses, so
@@ -2297,13 +2326,23 @@ function renderStudio(){
       await api('/api/videos',{method:'POST',body:JSON.stringify({objectKey:presign.objectKey,fileName:file.name,title:file.name})})},'Upload queued');
     document.body.classList.add('studio-active');
   }
+  paintStudio();
+  return true}
+/* One paint, used by both the full render and the adapter's own refresh.
+   setRefresh used to re-render only the design's template, so every host-owned
+   layer -- the live-work section, the second save button, the preview picture --
+   went stale the moment a control changed anything, which is the one time they
+   most need repainting. */
+function paintStudio(){
+  if(!DATA||!STUDIO)return;
   const vals=StudioAdapter.bindings(DATA);
   STUDIO.render(vals);
   paintLiveWork(vals);
   paintApplyLecture(vals);
+  paintPreviewPic(vals);
   /* No unread activity -> hide the dot the design hardcoded on. */
   document.body.classList.toggle('studio-read',!vals.activityUnread);
-  return true}
+}
 function renderAll(){if(renderStudio())return;renderHeader();decorateStaticIcons();renderQueue();renderSchedule();renderAnalytics();renderMusic();renderLibrary();renderTemplateSelect();renderPublishing();renderAutomation();renderSide();decorateStaticIcons();updateClock();if(LIBRARY_PROJECT_ID&&!$('#libraryBrowser')?.classList.contains('hide'))renderProjectClips()}
 function renderHeader(){if(!DATA)return;const ready=Boolean(DATA.readiness?.ready);$('#liveDot')?.classList.toggle('off',!ready);if($('#liveText'))$('#liveText').textContent=ready?'Self-hosted AI ready':'Setup required';if($('#tzLabel'))$('#tzLabel').textContent=DATA.timezone||'Australia/Perth';const q=(DATA.clips||[]).filter(c=>c.status==='waiting').length;const s=(DATA.clips||[]).filter(c=>['approved','scheduled','publishing','publish_failed'].includes(c.status)).length;if($('#cQueue')){$('#cQueue').textContent=q;$('#cQueue').classList.toggle('urgent',q>0)}if($('#cSched'))$('#cSched').textContent=s;const next=nextScheduledClip();if($('#cdNum'))$('#cdNum').textContent=next?countdown(next.scheduledAt):'—'}
 function nextScheduledClip(){return (DATA?.clips||[]).filter(c=>c.scheduledAt>Date.now()&&!['posted','ready'].includes(c.status)).sort((a,b)=>a.scheduledAt-b.scheduledAt)[0]}

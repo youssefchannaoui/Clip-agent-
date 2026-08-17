@@ -342,6 +342,53 @@
     return ' cursor: ' + (active ? 'grabbing' : 'grab') + '; user-select: none; -webkit-user-select: none;';
   }
 
+  // The preview's own picture, laid out and graded the way the renderer will.
+  //
+  // The design bakes a finished vertical reel into the frame's class, so the
+  // preview could not answer the two questions it exists to answer: what does
+  // this clip layout do, and what does this Look do. A finished 9:16 still also
+  // makes Fit, Blur and Fill identical -- the three only differ when the source
+  // is wider than the output, which every lecture is.
+
+  // Matches filter_values() in clip_worker.py: (brightness, contrast,
+  // saturation). ffmpeg's brightness is an additive offset, CSS's is a
+  // multiplier, so it is applied as 1 + b. Gamma has no CSS equivalent and is
+  // left out rather than faked.
+  var LOOK_FILTERS = {
+    natural: [0.0, 1.0, 1.0],
+    crisp: [0.015, 1.09, 1.08],
+    warm: [0.025, 1.04, 1.12],
+    cinematic: [-0.015, 1.13, 0.88],
+    monochrome: [0.0, 1.08, 0.0],
+  };
+
+  function lookFilter(t) {
+    var preset = LOOK_FILTERS[t.filterPreset] || LOOK_FILTERS.natural;
+    var b = preset[0], c = preset[1], sat = preset[2];
+    // The three graded sliders sit on top of the preset, as they do in the
+    // render: warmth pushes saturation and a tint, grain is drawn separately.
+    var warm = Math.max(-100, Math.min(100, Number(t.warm) || 0)) / 100;
+    return 'filter: brightness(' + (1 + b).toFixed(3) + ') contrast(' + c.toFixed(3) + ')'
+      + ' saturate(' + Math.max(0, sat + warm * 0.25).toFixed(3) + ')'
+      + (warm ? ' sepia(' + Math.max(0, warm * 0.35).toFixed(3) + ')' : '') + ';';
+  }
+
+  // A 16:9 stand-in for the source, so Fit and Blur have letterboxing to show.
+  // Deliberately an illustration rather than a photograph: it is a placeholder,
+  // and dressing it up as a real frame from the customer's lecture would be a
+  // lie about what is being previewed.
+  var PREVIEW_FALLBACK = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540">'
+    + '<defs><linearGradient id="b" x1="0" y1="0" x2="0" y2="1">'
+    + '<stop offset="0" stop-color="#26242A"/><stop offset="1" stop-color="#141317"/></linearGradient></defs>'
+    + '<rect width="960" height="540" fill="url(#b)"/>'
+    + '<circle cx="480" cy="214" r="66" fill="#3A3740"/>'
+    + '<path d="M366 540c0-74 51-124 114-124s114 50 114 124z" fill="#3A3740"/>'
+    + '<rect x="470" y="300" width="20" height="150" rx="10" fill="#4A4650"/>'
+    + '<circle cx="480" cy="300" r="26" fill="#565060"/>'
+    + '<text x="480" y="512" fill="#6E6A78" font-family="Inter,sans-serif" font-size="26"'
+    + ' text-anchor="middle">Sample 16:9 source</text></svg>');
+
   function handleStyle(on) {
     return on
       ? 'position: absolute; inset: -6px; border: 1px dashed rgba(217,180,120,.7); border-radius: 6px; pointer-events: none;'
@@ -1071,6 +1118,15 @@
     var needsReconnect = providers.filter(function (p) {
       return p.configured && !p.connected;
     }).map(function (p) { return PLATFORM_NAMES[p.key] || p.key; });
+
+    // The newest lecture's own thumbnail is a real 16:9 frame from the
+    // customer's footage, which is exactly the shape the layout modes act on.
+    var previewSource = (function () {
+      for (var i = 0; i < projects.length; i++) {
+        if (projects[i].sourceThumbUrl) return projects[i].sourceThumbUrl;
+      }
+      return PREVIEW_FALLBACK;
+    }());
 
     var capTop = tpl.captionPosition === 'top' ? 22 : tpl.captionPosition === 'bottom' ? 80 : 50;
     // The editor's caption overlay, placed the way the renderer places it:
@@ -2134,6 +2190,40 @@
       // Live preview overlays, positioned from the template's own margins.
       // captionMarginV is pixels from the bottom of a `height`-tall frame, which
       // is exactly what the renderer uses, so the preview and the export agree.
+      // ── Preview picture ──
+      // A real lecture's own 16:9 thumbnail when the account has one, so what is
+      // previewed is the customer's own footage; the illustration otherwise.
+      pvSrc: previewSource,
+      // Fill crops to the frame. Fit letterboxes onto the template's frame
+      // colour. Blur letterboxes the same way over a blown-up blurred copy,
+      // which is what the renderer's overlay does.
+      pvBackStyle: tpl.fitMode === 'blur'
+        ? 'position: absolute; inset: 0; z-index: 0; background-image: url("' + cssUrl(previewSource) + '");'
+          + ' background-size: cover; background-position: center; filter: blur(18px) saturate(1.2); transform: scale(1.15);'
+        : 'display: none;',
+      pvImgStyle: 'position: absolute; inset: 0; z-index: 1; background-repeat: no-repeat; background-position: center;'
+        + ' background-image: url("' + cssUrl(previewSource) + '");'
+        + ' background-size: ' + (tpl.fitMode === 'crop' ? 'cover' : 'contain') + ';'
+        + (tpl.fitMode === 'contain' ? ' background-color: ' + (tpl.frameBackground || '#000000') + ';' : '')
+        + ' ' + lookFilter(tpl),
+      // Vignette and grain sit above the picture, as separate passes do in the
+      // render, so they darken and texture the letterboxing too.
+      pvFxStyle: (function () {
+        var vignette = Math.max(0, Math.min(1, Number(tpl.vignette) || 0));
+        var grain = Math.max(0, Math.min(100, Number(tpl.grain) || 0)) / 100;
+        if (!vignette && !grain) return 'display: none;';
+        var layers = [];
+        if (vignette) layers.push('radial-gradient(ellipse at center, rgba(0,0,0,0) 42%, rgba(0,0,0,' + (vignette * 0.85).toFixed(3) + ') 100%)');
+        if (grain) {
+          // A fine two-tone check reads as grain at this scale without needing
+          // an image, and scales with the slider.
+          layers.push('repeating-conic-gradient(rgba(255,255,255,' + (grain * 0.16).toFixed(3) + ') 0% 25%, rgba(0,0,0,' + (grain * 0.16).toFixed(3) + ') 0% 50%)');
+        }
+        return 'position: absolute; inset: 0; z-index: 2; pointer-events: none;'
+          + ' background-image: ' + layers.join(', ') + ';'
+          + (grain ? ' background-size: auto, 3px 3px;' : '');
+      }()),
+
       capStyle: overlayStyle(tpl.captionPosition, tpl.captionHorizontal, tpl.captionPrimary, tpl.captionFontSize,
         Number(tpl.captionMarginV || 0) / Math.max(1, Number(tpl.height || 1920)))
         + grabStyle(UI.dragKind === 'caption')

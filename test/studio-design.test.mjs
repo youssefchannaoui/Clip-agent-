@@ -1536,6 +1536,63 @@ test('the range correction is driven by the schema, so a re-import keeps it', ()
   assert.match(importer, /attrOut\.min = String\(lo\)/);
 });
 
+test('the preview shows what each clip layout actually does', () => {
+  // The design bakes a finished vertical reel into the frame's class, so the
+  // preview could not answer the question it exists for. A 9:16 still also makes
+  // Fit, Blur and Fill identical: they only differ when the source is wider than
+  // the output, which every lecture is.
+  const style = fitMode => {
+    Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null, edClipId: null });
+    const t = { id: 'x', name: 'X', height: 1920, fitMode, frameBackground: '#101014' };
+    return StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates: [t], selectedTemplate: t });
+  };
+  assert.match(style('crop').pvImgStyle, /background-size: cover/, 'Fill crops to the frame');
+  assert.match(style('contain').pvImgStyle, /background-size: contain/, 'Fit letterboxes');
+  assert.match(style('contain').pvImgStyle, /background-color: #101014/, 'onto the frame colour');
+  assert.match(style('blur').pvImgStyle, /background-size: contain/);
+  assert.match(style('blur').pvBackStyle, /filter: blur/, 'over a blurred copy');
+  assert.equal(style('crop').pvBackStyle, 'display: none;', 'and only for Blur');
+});
+
+test('the preview grades itself with the numbers the renderer uses', () => {
+  // filter_values() in clip_worker.py. Approximated, not invented: ffmpeg's
+  // brightness is an additive offset where CSS's is a multiplier, so it is
+  // applied as 1 + b.
+  const look = filterPreset => {
+    Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null, edClipId: null });
+    const t = { id: 'x', name: 'X', height: 1920, filterPreset };
+    return StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates: [t], selectedTemplate: t }).pvImgStyle;
+  };
+  assert.match(look('natural'), /brightness\(1\.000\) contrast\(1\.000\) saturate\(1\.000\)/);
+  assert.match(look('monochrome'), /saturate\(0\.000\)/, 'monochrome is genuinely grey');
+  assert.match(look('cinematic'), /brightness\(0\.985\) contrast\(1\.130\) saturate\(0\.880\)/);
+  assert.match(look('crisp'), /contrast\(1\.090\)/);
+});
+
+test('the preview uses the account\'s own footage when there is any', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null, edClipId: null });
+  const t = { id: 'x', name: 'X', height: 1920 };
+  const withLecture = StudioAdapter.bindings({
+    projects: [{ id: 'p', sourceThumbUrl: 'https://i.ytimg.com/vi/abc/hqdefault.jpg' }],
+    clips: [], tracks: [], templates: [t], selectedTemplate: t,
+  });
+  assert.match(withLecture.pvSrc, /i\.ytimg\.com/, 'a real 16:9 frame from their own lecture');
+  const empty = StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates: [t], selectedTemplate: t });
+  assert.match(empty.pvSrc, /^data:image\/svg\+xml/, 'an illustration, not a stock photo passed off as theirs');
+});
+
+test('the adapter\'s own refresh repaints the host layers too', () => {
+  // setRefresh re-rendered only the design's template, so every host-owned layer
+  // -- live work, the second save button, the preview picture -- went stale the
+  // moment a control changed something, which is exactly when they matter.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  assert.match(html, /StudioAdapter\.setRefresh\(\(\)=>paintStudio\(\)\)/);
+  const paint = /function paintStudio\(\)\{[\s\S]*?\n\}/.exec(html)[0];
+  for (const fn of ['paintLiveWork', 'paintApplyLecture', 'paintPreviewPic']) {
+    assert.match(paint, new RegExp(`${fn}\\(vals\\)`), `${fn} runs on every paint`);
+  }
+});
+
 test('a delegated handler is told which element it was bound to', () => {
   // Events are delegated from the mount, so e.currentTarget is #studio and not
   // the element the binding was written against. Every drag measures the
