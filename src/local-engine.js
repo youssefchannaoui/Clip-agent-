@@ -377,6 +377,17 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
   // resulting clips are invisible to their creator and can surface elsewhere.
   if (!userId) throw new Error('Sign in before submitting a lecture.');
   const user = state.authUsers?.find(item => item.id === String(userId)) || { id: String(userId), role: 'creator' };
+
+  // A submission that times out or 502s server-side may still have created the
+  // project. Without this the client cannot tell, resubmits, and the account is
+  // charged for the same lecture twice. The key is supplied by the client and is
+  // stable across its own retries.
+  const idempotencyKey = String(options?.idempotencyKey || '').trim().slice(0, 120);
+  if (idempotencyKey) {
+    const existing = state.projects.find(item => item.idempotencyKey === idempotencyKey && ownerOf(item) === user.id);
+    if (existing) return existing.id;
+  }
+
   const { value, template, tracks } = validateSubmission(url, user, options);
   billing.assertCanStartProject(user);
   const sourceRange = cleanSourceRange(options);
@@ -394,7 +405,7 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     throw new Error('YouTube URL import currently processes the full video. Reset the source window to Full video, or upload the original file to clip only a selected range.');
   }
   const project = withOwner({
-    id: projectId, url: String(options.displayUrl || value), title: String(title || '').trim() || value,
+    id: projectId, idempotencyKey, url: String(options.displayUrl || value), title: String(title || '').trim() || value,
     engine: useRemote ? 'remote' : useVizard ? 'vizard' : 'self-hosted', status: 'queued',
     stage: useRemote ? 'queued' : useVizard ? 'Waiting for secure YouTube import' : 'Waiting for the local AI worker', progress: 0,
     submittedAt: Date.now(), clipCount: 0, templateIdUsed: template.id, templateNameUsed: template.name,
@@ -507,6 +518,8 @@ function importResultObject(project, result, engine = 'self-hosted') {
   project.transcriptObjectKey = result.project?.transcriptObjectKey || null;
   project.transcriptUrl = result.project?.transcriptUrl || null;
   project.clipCount = imported.length;
+  // Kept so the UI can explain a shortfall rather than leaving it unexplained.
+  project.clipsRequested = Number(result.project?.clipsRequested || project.clipsRequested || 0);
   project.status = 'done'; project.stage = 'Clips are ready for review'; project.progress = 100;
   project.completedAt = Date.now(); project.error = null;
   try {

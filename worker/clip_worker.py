@@ -1646,6 +1646,10 @@ def process(job_file: Path) -> None:
             "templateName": job["template"]["name"],
             "musicRequired": True,
             "clipCount": len(rendered),
+            # Asking for 8 and getting 5 is normal -- overlapping windows are
+            # dropped and a short lecture simply has fewer distinct moments --
+            # but it needs saying, or it reads as clips going missing.
+            "clipsRequested": int(settings.get("clipsPerVideo", 8)),
             "sourceFile": str(source_file),
             "transcriptFile": str(transcript_file),
         },

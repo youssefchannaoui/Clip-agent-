@@ -412,6 +412,9 @@
 
     // The quote-review gate is a real automation setting, not a demo prop.
     var gate = !(DATA.automationSettings && DATA.automationSettings.skipQuotes === false);
+    // Whether anything can actually go out: the server-wide switch, plus at
+    // least one platform both connected and enabled.
+    var publishingOn = DATA.directPublishingEnabled !== false;
     var connectedCount = providers.filter(function (p) { return p.connected; }).length;
     var activeCount = providers.filter(function (p) { return p.enabled; }).length;
 
@@ -526,7 +529,13 @@
         chipIconStyle: 'font-size: 11px;' + (state === 'processing' ? ' animation: dcSpin 1.1s linear infinite;' : ''),
         isProcessing: state === 'processing',
         barStyle: 'position: absolute; left: 0; bottom: 0; height: 3px; width: ' + Math.round(p.progress || 0) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6); transition: width .5s ease;',
-        metric: state === 'processing' ? (p.stage || 'working…') : median ? 'median score ' + median : 'no clips yet',
+        // A shortfall is normal -- overlapping windows are dropped, and a short
+        // lecture has fewer distinct moments -- but saying nothing reads as
+        // clips having gone missing.
+        metric: state === 'processing' ? (p.stage || 'working…')
+          : (p.clipsRequested && mine.length && mine.length < p.clipsRequested)
+            ? mine.length + ' of ' + p.clipsRequested + ' asked for · the rest overlapped'
+            : median ? 'median score ' + median : 'no clips yet',
         openClips: function (e) { stop(e); setUI({ screen: 'detail', openProject: p.id }); },
         more: function (e) {
           stop(e);
@@ -581,12 +590,29 @@
               cardStyle: 'display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid ' +
                 (ready ? '#1E1E22' : '#2A2024') + '; border-radius: 10px; background: #121214;',
               // Nothing posts unchecked: the button says why instead of failing.
-              postLabel: c.postedAt ? 'Posted' : ready ? 'Post now' : 'Fix first',
+              postLabel: c.postedAt ? 'Posted'
+                : !ready ? 'Fix first'
+                : !publishingOn ? 'Publishing off'
+                : !activeCount ? 'No channel on'
+                : 'Post now',
               postStyle: 'display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: ' + (ready && !c.postedAt ? 'pointer' : 'not-allowed') + '; border: 1px solid ' +
-                (ready && !c.postedAt ? 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;' : '#26262A; background: #17171A; color: #6E6E76;'),
+                (ready && !c.postedAt && publishingOn && activeCount
+                  ? 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;'
+                  : '#26262A; background: #17171A; color: #6E6E76;'),
               postNow: function (e) {
                 stop(e);
-                if (!ready || c.postedAt) { toast(failing[0] ? failing[0].label + ' has not passed yet.' : 'Already posted.'); return; }
+                if (c.postedAt) { toast('This clip has already posted.'); return; }
+                if (!ready) { toast(failing[0].label + ' has not passed yet.'); return; }
+                // Posting with publishing off cycled the clip ready -> scheduled
+                // -> ready and put nothing anywhere, with no explanation.
+                if (!publishingOn) {
+                  toast('Publishing is switched off, so nothing was sent. The clip is ready to download.');
+                  return;
+                }
+                if (!activeCount) {
+                  toast('No channel is switched on yet — turn one on under Channels first.');
+                  return;
+                }
                 global.StudioAdapter.onPostNow(c.id);
               },
               sendBack: function (e) { stop(e); global.StudioAdapter.onSendBack(c.id); },
@@ -1394,6 +1420,12 @@
         : todayCount + ' of 4 scheduled today. Nothing posts unless its four checks pass.',
 
       // ── Editor readouts ──
+      // The timeline named a nasheed the account has never uploaded. It names
+      // the clip's actual track, or says none is mixed in.
+      edTrackName: edClip && edClip.musicName ? 'Nasheed · ' + edClip.musicName : 'No nasheed mixed in',
+      edTrackNote: edClip && edClip.musicName
+        ? (edClip.musicVerified ? 'Mixed and verified' : 'Not yet verified')
+        : 'Upload one under Nasheed library',
       edSourceLabel: edClip ? secsToClock((edClip.durationMs || 0) / 1000) + ' · clip' : '',
       edTimeReadout: edClip ? '0:00 / ' + secsToClock((edClip.durationMs || 0) / 1000) : '',
 

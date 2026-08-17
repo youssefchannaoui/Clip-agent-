@@ -1828,15 +1828,25 @@ function renderStudio(){
     /* No range means the whole lecture. In remote mode the duration is unknown
        until the worker downloads it, so sending 0/0 would be a lie the server
        would have to interpret. */
+    /* One key per submission intent, held until it succeeds. A 502 can land
+       after the project was created; without this the user retries and pays for
+       the same lecture twice. */
+    let pendingJobKey=null;
     StudioAdapter.onGenerate=(url,range)=>studioDo(async()=>{
+      if(!pendingJobKey)pendingJobKey=`job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
       const body=range?{urls:url,sourceStartSeconds:range.startSec,sourceEndSeconds:range.endSec}:{urls:url};
+      body.idempotencyKey=pendingJobKey;
       const r=await api('/api/videos',{method:'POST',body:JSON.stringify(body)});
       /* /api/videos answers 200 even when it refused the source — the reason is
          per-URL inside results[]. Without this a rejection ("upload a nasheed
          first") looked like success: the panel closed and nothing was queued. */
       const failed=(r&&r.results||[]).filter(x=>x&&x.error);
       if(failed.length)throw new Error(failed[0].error);
-      StudioAdapter.jobDone()},'Lecture queued',m=>StudioAdapter.jobFailed(m));
+      pendingJobKey=null;
+      StudioAdapter.jobDone()},'Lecture queued',m=>StudioAdapter.jobFailed(
+        /(50\d|network|failed to fetch|timeout)/i.test(m)
+          ? `${m} — retry is safe: if the lecture was already queued it will not be charged twice.`
+          : m));
     StudioAdapter.onApprove=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'approved'})}));    StudioAdapter.onMusicSettings=patch=>studioDo(()=>api('/api/music-settings',{method:'POST',body:JSON.stringify(patch)}));
     StudioAdapter.onRemoveTrack=id=>{if(!confirm('Delete this nasheed?'))return;studioDo(()=>api(`/api/music/${encodeURIComponent(id)}`,{method:'DELETE'}),'Nasheed deleted')};
     StudioAdapter.onPlayTrack=id=>{

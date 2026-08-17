@@ -260,6 +260,7 @@ function appState(user = null) {
       id: project.id, title: project.title, url: project.url, engine: project.engine, status: project.status,
       stage: project.stage, phase: project.phase || '', progress: project.progress || 0, error: project.error || null, errorCode: project.errorCode || null,
       submittedAt: project.submittedAt, completedAt: project.completedAt || null, clipCount: project.clipCount || 0,
+      clipsRequested: project.clipsRequested || 0,
       durationSec: project.durationSec || project.sourceDurationSec || null, sourceDurationSec: project.sourceDurationSec || null, sourceThumbUrl: project.sourceThumbUrl || null, sourceTitle: project.sourceTitle || null, templateIdUsed: project.templateIdUsed,
       templateNameUsed: project.templateNameUsed, templateVersionUsed: project.templateVersionUsed || 1, musicRequired: true,
       sourceReusable: Boolean((project.sourceFile && fs.existsSync(project.sourceFile) && project.transcriptFile && fs.existsSync(project.transcriptFile)) || (project.sourceObjectKey && project.transcriptObjectKey)),
@@ -639,7 +640,7 @@ async function route(req, res, url) {
     const sourceMeta = Array.isArray(body.sourceMeta) ? body.sourceMeta : [];
     const results = [];
     for (const source of urls) {
-      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '', currentUser.id, { sourceRange, sourceMeta }) }); }
+      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '', currentUser.id, { sourceRange, sourceMeta, idempotencyKey: body.idempotencyKey }) }); }
       catch (error) { results.push({ url: source, error: error.message }); }
     }
     return json(res, 200, { results, sourceRange });

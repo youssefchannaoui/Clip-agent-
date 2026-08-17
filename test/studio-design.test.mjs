@@ -1168,3 +1168,48 @@ test('a clip with no persisted timings still yields editable blocks', () => {
   assert.equal(vals.edCapBlocks.length, 2);
   assert.equal(vals.edCapBlocks[0].time, '', 'no invented timings for a clip that has none');
 });
+
+// ── B-3, B-7, B-9 ──────────────────────────────────────────────────────────
+
+test('the editor names the clip its own nasheed, not a placeholder', () => {
+  // The timeline read "Nasheed · Tala al-Badru" on an account whose only track
+  // was "Allah Allah (Muffled)" — a design placeholder presented as fact.
+  Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'c' });
+  const build = extra => StudioAdapter.bindings({
+    projects: [{ id: 'p', title: 'L', status: 'done' }], tracks: [],
+    clips: [{ id: 'c', projectId: 'p', title: 'C', status: 'waiting', durationMs: 8000, targets: [], transcript: 'x.', ...extra }],
+  });
+  assert.match(build({ musicName: 'Allah Allah (Muffled)', musicVerified: true }).edTrackName, /Allah Allah/);
+  assert.equal(build({}).edTrackName, 'No nasheed mixed in', 'no invented track when none is mixed');
+});
+
+test('a clip shortfall is explained rather than left as a silent gap', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'library', libFilter: 'all' });
+  const vals = StudioAdapter.bindings({
+    tracks: [],
+    projects: [{ id: 'p', title: 'L', status: 'done', clipsRequested: 4, submittedAt: Date.now() }],
+    clips: [1, 2, 3].map(n => ({ id: `c${n}`, projectId: 'p', title: `C${n}`, status: 'waiting', score: 70, targets: [] })),
+  });
+  assert.match(vals.libraryItems[0].metric, /3 of 4 asked for/);
+});
+
+test('Post now says why it is unavailable instead of doing nothing', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'schedule' });
+  const clip = { id: 'a', title: 'C', status: 'scheduled', scheduledAt: Date.now() + 3600e3, targets: [{ provider: 'youtube' }], musicVerified: true, renderVerified: true, templateId: 't', transcript: 'x' };
+  const base = {
+    projects: [], tracks: [], clips: [clip],
+    social: { providers: { youtube: { configured: true, connected: true, accounts: [{ id: 'a', name: 'A' }] } } },
+    publishingSettings: { youtube: { enabled: true } },
+  };
+  const label = data => StudioAdapter.bindings(data).scheduleDays.flatMap(d => d.items)[0].postLabel;
+  assert.equal(label({ ...base, directPublishingEnabled: true }), 'Post now');
+  assert.equal(label({ ...base, directPublishingEnabled: false }), 'Publishing off');
+  assert.equal(label({ ...base, directPublishingEnabled: true, publishingSettings: {} }), 'No channel on');
+});
+
+test('a submission carries an idempotency key so a 502 cannot charge twice', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const call = /StudioAdapter\.onGenerate\s*=[\s\S]*?'Lecture queued'/.exec(html)[0];
+  assert.match(call, /idempotencyKey/, 'the key is sent with the submission');
+  assert.match(call, /pendingJobKey=null/, 'and only cleared once it succeeds');
+});

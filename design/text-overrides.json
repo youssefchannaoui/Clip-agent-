@@ -42,6 +42,8 @@
     "Late": "postWindowName3",
     "Today is full \u2014 4 of 4. Nothing posts unless its four checks pass.": "dailyLimitNote",
     "42:11 \u00b7 source lecture": "edSourceLabel",
-    "09:14 / 42:11": "edTimeReadout"
+    "09:14 / 42:11": "edTimeReadout",
+    "Nasheed \u00b7 Tala al-Badru": "edTrackName",
+    "Soft choral hum": "edTrackNote"
   }
 }
