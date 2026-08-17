@@ -26,6 +26,9 @@ function json(data, status = 200, headers = {}) {
 }
 
 test('a strong clip is automatically scheduled and then posted to YouTube', async () => {
+  // Automation is off by default, so this has to ask for it: the test is about
+  // what automation does once an account has chosen to turn it on.
+  store.setAutomationSettings({ id: USER }, { enabled: true });
   global.fetch = async (url, options = {}) => {
     const text = String(url);
     if (text === 'https://google.test/token') return json({ access_token: 'access', refresh_token: 'refresh', expires_in: 3600 });

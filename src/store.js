@@ -27,7 +27,14 @@ export function settingDefaults() {
       shuffle: true,
     },
     automationSettings: {
-      enabled: true,
+      // Off by default, deliberately. Shipping this on meant every clip was
+      // auto-approved and scheduled the moment it rendered, so nothing ever
+      // reached the review queue. Once the clip AI was switched on scores
+      // cleared the 80 threshold every time, and a live account had 14 clips
+      // queued to publish to a real YouTube channel that no one had seen.
+      // Reviewing first is the safe default; turning this on is a choice the
+      // account makes once it trusts the scoring.
+      enabled: false,
       minimumScore: 80,
       minimumQuality: 72,
       maxPerProject: 4,
