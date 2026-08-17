@@ -50,6 +50,8 @@
     "of 42:11 — drag the top handle for the start, the bottom for the end.": "jobRangeHint"
   },
   "styleOverrides": {
-    "position: relative; aspect-ratio: 16 / 9; border-radius: 11px; overflow: hidden; border: 1px solid #26262A; background: #17171A url('src/public/marketing-assets/reel-kaaba-a.webp') center/cover no-repeat;": "jobPosterStyle"
+    "position: relative; aspect-ratio: 16 / 9; border-radius: 11px; overflow: hidden; border: 1px solid #26262A; background: #17171A url('src/public/marketing-assets/reel-kaaba-a.webp') center/cover no-repeat;": "jobPosterStyle",
+    "position: absolute; left: 0; right: 0; top: 2px; width: 100%; accent-color: #D9B478; background: transparent; cursor: pointer;": "jobRangeStartStyle",
+    "position: absolute; left: 0; right: 0; bottom: 2px; width: 100%; accent-color: #F0D6A6; background: transparent; cursor: pointer;": "jobRangeEndStyle"
   }
 }

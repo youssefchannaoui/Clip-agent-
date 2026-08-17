@@ -155,6 +155,19 @@ body{
 
 #gate:not(.hide),#connect:not(.hide),#app:not(.hide){animation:screen-in .5s ease-out}
 @keyframes screen-in{from{opacity:0}to{opacity:1}}
+/* Dual-handle range picker (new-job panel).
+   The design drew two <input type=range> stacked vertically, which reads as two
+   separate sliders. studio-adapter.js overlays them on one track and sets
+   pointer-events:none on the inputs, so the upper one cannot swallow a click
+   meant for the lower handle. Only the thumbs take the pointer, and the track
+   is transparent because the filled band behind them is drawn by jobBandStyle.
+   Scoped to #studio so the editor's own sliders keep their native behaviour. */
+#studio input[type=range]::-webkit-slider-runnable-track{background:transparent;border:0;height:18px}
+#studio input[type=range]::-moz-range-track{background:transparent;border:0;height:18px}
+#studio input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;pointer-events:auto;width:15px;height:15px;margin-top:1px;border-radius:50%;background:#F0D6A6;border:2px solid #121214;box-shadow:0 1px 4px rgba(0,0,0,.55);cursor:grab}
+#studio input[type=range]::-moz-range-thumb{pointer-events:auto;width:15px;height:15px;border-radius:50%;background:#F0D6A6;border:2px solid #121214;box-shadow:0 1px 4px rgba(0,0,0,.55);cursor:grab}
+#studio input[type=range]:active::-webkit-slider-thumb{cursor:grabbing}
+#studio input[type=range]:active::-moz-range-thumb{cursor:grabbing}
 
 button,input,textarea{font-family:inherit;font-size:inherit;color:inherit}
 button{cursor:pointer;border:0;background:none}

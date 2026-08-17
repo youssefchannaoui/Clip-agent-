@@ -1670,3 +1670,30 @@ test('a thumbnail URL cannot break out of the style attribute', () => {
   const vals = StudioAdapter.bindings(JOB_STATE);
   assert.doesNotMatch(vals.jobPosterStyle, /background: url\("evil/);
 });
+
+test('a missing maxres thumbnail falls through to one that always exists', () => {
+  // YouTube serves a 404 page for maxresdefault on uploads that never got one,
+  // which painted the poster as an empty black box.
+  Object.assign(StudioAdapter.ui, {
+    screen: 'home',
+    job: { ...LECTURE, url: 'https://www.youtube.com/watch?v=MaXPMQ7vJzo', thumbnail: 'https://i.ytimg.com/vi/MaXPMQ7vJzo/maxresdefault.jpg' },
+  });
+  const vals = StudioAdapter.bindings(JOB_STATE);
+  assert.match(vals.jobPosterStyle, /maxresdefault/);
+  assert.match(vals.jobPosterStyle, /hqdefault/, 'a second layer shows through when the first 404s');
+  assert.ok(vals.jobPosterStyle.indexOf('maxresdefault') < vals.jobPosterStyle.indexOf('hqdefault'),
+    'the sharper image is tried first');
+});
+
+test('both range handles sit on one track', () => {
+  // The design put one at top:2px and the other at bottom:2px, which read as
+  // two separate sliders.
+  Object.assign(StudioAdapter.ui, { screen: 'home', job: { ...LECTURE } });
+  const vals = StudioAdapter.bindings(JOB_STATE);
+  for (const style of [vals.jobRangeStartStyle, vals.jobRangeEndStyle]) {
+    assert.match(style, /top: 50%/, 'both handles share a vertical position');
+    assert.match(style, /pointer-events: none/, 'the input must not swallow clicks meant for the other handle');
+    assert.doesNotMatch(style, /bottom: 2px/);
+  }
+  assert.notEqual(vals.jobRangeStartStyle, vals.jobRangeEndStyle, 'the two handles stay visually distinct');
+});

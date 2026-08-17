@@ -234,6 +234,26 @@
     try { global.localStorage.setItem(SEEN_KEY, String(seenMemory)); } catch (err) { /* private mode */ }
   }
 
+  // Both range handles share one track. Kept out of the bindings so the two
+  // inputs cannot drift apart and re-create the stacked-slider look.
+  var RANGE_INPUT_STYLE = 'position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);'
+    + ' width: 100%; height: 18px; margin: 0; -webkit-appearance: none; appearance: none;'
+    + ' background: transparent; pointer-events: none; cursor: pointer;';
+
+  // YouTube serves a 404 page for maxresdefault on uploads that never got one,
+  // which paints as an empty box. hqdefault always exists, so it goes underneath
+  // as a second layer rather than replacing the sharper image outright.
+  function posterLayers(job) {
+    var safe = function (u) { return 'url("' + String(u).replace(/["\\)]/g, encodeURIComponent) + '")'; };
+    var layers = [safe(job.thumbnail)];
+    var id = String(job.url || '').match(/[?&]v=([\w-]{6,})|youtu\.be\/([\w-]{6,})/);
+    var videoId = id ? (id[1] || id[2]) : '';
+    if (videoId && !/hqdefault/.test(String(job.thumbnail))) {
+      layers.push(safe('https://i.ytimg.com/vi/' + videoId + '/hqdefault.jpg'));
+    }
+    return layers.join(', ');
+  }
+
   // Names a configured post time by the hour it falls in, so the label cannot
   // contradict the time printed beside it.
   function windowName(hhmm) {
@@ -1433,9 +1453,21 @@
       // lecture was previewed with the same picture — and the URL it used was
       // repo-relative, so it 404'd and showed an empty box. sourceInfo already
       // returns the video's own thumbnail; this puts it on screen.
-      jobPosterStyle: 'position: relative; aspect-ratio: 16 / 9; border-radius: 11px; overflow: hidden; border: 1px solid #26262A; background: #17171A'
-        + (job && job.thumbnail ? ' url("' + String(job.thumbnail).replace(/"/g, '%22') + '") center/cover no-repeat' : '')
-        + ';',
+      // Two layers, best first: YouTube only generates maxresdefault for some
+      // uploads and returns a 404 page for the rest, which rendered as an empty
+      // black box. A failed background layer is simply skipped, so hqdefault --
+      // which always exists -- shows through underneath.
+      jobPosterStyle: 'position: relative; aspect-ratio: 16 / 9; border-radius: 11px; overflow: hidden; border: 1px solid #26262A; background-color: #17171A;'
+        + (job && job.thumbnail ? ' background-image: ' + posterLayers(job) + '; background-size: cover; background-position: center; background-repeat: no-repeat;' : ''),
+
+      // ── The range handles ──
+      // The design placed one input at top:2px and the other at bottom:2px, so
+      // it read as two separate sliders rather than one range. Both sit on the
+      // same track now. The input ignores the pointer so the upper one cannot
+      // swallow clicks meant for the lower handle; only the thumbs are grabbable
+      // (see the dc-range rules in index.html).
+      jobRangeStartStyle: RANGE_INPUT_STYLE + ' accent-color: #D9B478;',
+      jobRangeEndStyle: RANGE_INPUT_STYLE + ' accent-color: #F0D6A6;',
       // The design's two inputs are min=0 max=100 -- a percentage of the lecture,
       // not seconds. Feeding them seconds meant the handles could only ever
       // address the first 100 seconds of a source: on an 87-minute talk the
