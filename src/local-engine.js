@@ -6,7 +6,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { config } from './config.js';
 import { state, save, log, clipSettings, musicSettings, ownerOfRecord } from './store.js';
-import { selectedTemplate, templateById } from './templates.js';
+import { selectedTemplate, templateById, templateForClip } from './templates.js';
 import { withOwner, ownerOf } from './tenancy.js';
 import { workerMusicTracks } from './audio.js';
 import * as billing from './billing.js';
@@ -1112,8 +1112,12 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
   const sourceFile = clip.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project.sourceFile;
   if ((!sourceFile || !fs.existsSync(sourceFile)) && !(project.engine === 'remote' && project.sourceObjectKey)) throw new Error('The original source file is unavailable. Keep source files enabled to re-render clips.');
   const owner = ownerOfRecord(clip);
-  const template = templateById(templateId, owner) || selectedTemplate(owner);
-  if (!template?.id) throw new Error('Choose a valid saved template.');
+  const baseTemplate = templateById(templateId, owner) || selectedTemplate(owner);
+  if (!baseTemplate?.id) throw new Error('Choose a valid saved template.');
+  // This clip's own tweaks win over the shared style. Without this, editing one
+  // clip either changed every clip on the template or was silently discarded at
+  // render time.
+  const template = templateForClip(baseTemplate, clip.styleOverrides);
   const tracks = workerMusicTracks(owner);
   if (!tracks.length) throw new Error('Music is mandatory. Upload at least one nasheed first.');
   const transcriptSegments = project.transcriptFile && fs.existsSync(project.transcriptFile)

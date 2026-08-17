@@ -238,6 +238,11 @@ function publicClip(clip) {
     musicName: clip.musicName, musicVerified: Boolean(clip.musicVerified),
     templateId: clip.templateId, templateName: clip.templateName, templateVersion: clip.templateVersion || 1,
     templateOutdated: Boolean(currentTemplate && Number(currentTemplate.version || 1) > Number(clip.templateVersion || 1)),
+    // This clip's own style tweaks, and whether the rendered file still matches
+    // them. The editor reads both so it can show what is unsaved to the video.
+    styleOverrides: clip.styleOverrides ? { ...clip.styleOverrides } : null,
+    styleOverrideCount: clip.styleOverrides ? Object.keys(clip.styleOverrides).length : 0,
+    stylePending: Boolean(clip.stylePending),
     renderVersion: clip.renderVersion || 1, renderVerified: Boolean(clip.renderVerified),
     renderedWidth: clip.renderedWidth || null, renderedHeight: clip.renderedHeight || null,
     variantOf: clip.variantOf || null, addedAt: clip.addedAt,
@@ -1023,6 +1028,31 @@ async function route(req, res, url) {
   if (clipMatch && method === 'DELETE') {
     try { const id = decodeURIComponent(clipMatch[1]); assertCanAccessClip(currentUser, id); agent.deleteClip(id); return json(res, 200, { ok: true }); }
     catch (error) { return json(res, 400, { error: error.message }); }
+  }
+
+  // Promote one clip's tweaks onto its shared style, so every clip using that
+  // style picks them up. This is the old always-on behaviour, now something the
+  // user asks for by name instead of a side effect of dragging a slider.
+  const promoteMatch = pathname.match(/^\/api\/clips\/([^/]+)\/promote-style$/);
+  if (promoteMatch && method === 'POST') {
+    const id = decodeURIComponent(promoteMatch[1]);
+    try {
+      assertCanAccessClip(currentUser, id);
+      const clip = state.clips.find(item => item.id === id);
+      if (!clip) return json(res, 404, { error: 'That clip no longer exists.' });
+      const overrides = clip.styleOverrides && Object.keys(clip.styleOverrides).length ? clip.styleOverrides : null;
+      if (!overrides) return json(res, 400, { error: 'This clip has no changes of its own to apply.' });
+      const base = templates.templateById(clip.templateId, currentUser);
+      if (!base) return json(res, 400, { error: 'The style this clip uses no longer exists.' });
+      if (base.builtIn) return json(res, 400, { error: 'Built-in styles are protected. Duplicate the style first, then apply.' });
+      const updated = templates.updateTemplate(currentUser, base.id, overrides);
+      // The clip's tweaks now live in the style itself, so holding them twice
+      // would make a later style edit look like it had no effect on this clip.
+      delete clip.styleOverrides;
+      clip.stylePending = true;
+      save();
+      return json(res, 200, { ok: true, template: updated, clip: publicClip(clip) });
+    } catch (error) { return json(res, 400, { error: error.message }); }
   }
   return json(res, 404, { error: 'Not found.' });
 }

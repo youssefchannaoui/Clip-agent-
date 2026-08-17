@@ -1905,6 +1905,16 @@ function renderStudio(){
     StudioAdapter.onTemplateField=(id,patch)=>{if(!id)return;studioDo(async()=>{
       const current=(DATA?.templates||[]).find(t=>t.id===id)||{};
       await api(`/api/templates/${encodeURIComponent(id)}`,{method:'PUT',body:JSON.stringify({template:{...current,...patch}})})})};
+    /* A clip's own tweaks belong to that clip. This used to write the shared
+       template, which is why moving one caption moved it on every clip in the
+       lecture. Nothing re-renders here — the clip is marked out of date and the
+       user decides when to spend a token redoing the video. */
+    StudioAdapter.onClipStyle=(id,patch)=>{if(!id||!patch||!Object.keys(patch).length)return;studioDo(async()=>{
+      await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({styleOverrides:patch})})})};
+    /* The old always-on behaviour, kept but made deliberate: push this clip's
+       tweaks onto the style, so every clip using it picks them up. */
+    StudioAdapter.onPromoteClipStyle=(id)=>{if(!id)return;studioDo(async()=>{
+      await api(`/api/clips/${encodeURIComponent(id)}/promote-style`,{method:'POST',body:'{}'})},'Applied to every clip using this style')};
     /* Saving is the one action that re-renders every unposted clip, so it asks
        for that explicitly. Field writes do not. */
     /* projectId scopes the re-render to one lecture, which is what "Save to all

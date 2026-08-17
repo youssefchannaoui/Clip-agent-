@@ -151,6 +151,82 @@ export function sanitiseTemplate(input = {}, { id = '', builtIn = false, userId 
   return output;
 }
 
+/**
+ * The fields one clip may override on top of its template.
+ *
+ * Identity (`id`, `name`, `description`) and frame geometry (`width`, `height`)
+ * are deliberately absent: invariant 3 in CLAUDE.md says applying a style must
+ * never write identity, and changing the output size of a single clip would
+ * desync it from every sibling in the same lecture.
+ */
+export const CLIP_STYLE_FIELDS = Object.freeze([
+  ...Object.keys(ENUMS),
+  ...Object.keys(NUMBER_RANGES).filter(key => key !== 'width' && key !== 'height'),
+  'frameBackground', 'captionPrimary', 'captionHighlight', 'captionOutline', 'captionBackground',
+  'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor',
+  'captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled',
+  'captionFont', 'watermark',
+]);
+
+const CLIP_STYLE_FIELD_SET = new Set(CLIP_STYLE_FIELDS);
+const COLOUR_FIELDS = new Set(['frameBackground', 'captionPrimary', 'captionHighlight', 'captionOutline',
+  'captionBackground', 'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor']);
+const BOOLEAN_FIELDS = new Set(['captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled']);
+
+/**
+ * Validate a partial style patch for a single clip.
+ *
+ * Unlike sanitiseTemplate this does NOT fill in defaults — a key the caller did
+ * not send stays absent, so the clip keeps inheriting it from the template.
+ * Unknown and malformed keys are dropped rather than throwing, so a stale client
+ * cannot wedge a save.
+ */
+export function sanitiseClipStyle(patch = {}) {
+  const output = {};
+  if (!patch || typeof patch !== 'object') return output;
+  for (const [key, value] of Object.entries(patch)) {
+    if (!CLIP_STYLE_FIELD_SET.has(key)) continue;
+    if (value === null || value === undefined) continue;
+    if (ENUMS[key]) {
+      if (ENUMS[key].includes(value)) output[key] = value;
+    } else if (NUMBER_RANGES[key]) {
+      const [minimum, maximum] = NUMBER_RANGES[key];
+      const number = Number(value);
+      if (Number.isFinite(number)) output[key] = Math.min(maximum, Math.max(minimum, number));
+    } else if (COLOUR_FIELDS.has(key)) {
+      const text = String(value).trim().toUpperCase();
+      if (/^#[0-9A-F]{6}$/.test(text)) output[key] = text;
+    } else if (BOOLEAN_FIELDS.has(key)) {
+      output[key] = Boolean(value);
+    } else if (key === 'captionFont') {
+      output[key] = cleanText(value, DEFAULTS.captionFont, 80);
+    } else if (key === 'watermark') {
+      output[key] = cleanText(value, DEFAULTS.watermark, 60);
+    }
+  }
+  return output;
+}
+
+/**
+ * The style a single clip actually renders with: its template, with that clip's
+ * own overrides laid on top. Identity and version are taken from the template so
+ * a clip override can never rename a style or fake its version.
+ */
+export function templateForClip(template, overrides) {
+  if (!template) return template;
+  const patch = sanitiseClipStyle(overrides);
+  if (!Object.keys(patch).length) return template;
+  const merged = sanitiseTemplate(
+    { ...template, ...patch },
+    { id: template.id, builtIn: Boolean(template.builtIn), userId: template.userId || '' },
+  );
+  merged.name = template.name;
+  merged.description = template.description;
+  merged.version = template.version || 1;
+  merged.updatedAt = template.updatedAt || Date.now();
+  return merged;
+}
+
 function readTemplateFile(file, builtIn) {
   try {
     const raw = JSON.parse(fs.readFileSync(file, 'utf8'));

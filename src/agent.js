@@ -3,6 +3,7 @@ import path from 'node:path';
 import { config } from './config.js';
 import { state, save, log, automationSettings, publishingSettings, ownerOfRecord } from './store.js';
 import { ownedBy, ownerOf } from './tenancy.js';
+import { sanitiseClipStyle } from './templates.js';
 import { nextSlot } from './slots.js';
 import * as engine from './local-engine.js';
 import * as social from './social.js';
@@ -129,6 +130,26 @@ export function updateClip(id, fields = {}) {
 
   for (const key of ['title', 'description', 'hashtags']) {
     if (typeof fields[key] === 'string') clip[key] = fields[key].trim();
+  }
+
+  // Style tweaks belong to THIS clip. Writing them to the shared template is how
+  // moving one caption used to move it on every clip in the lecture.
+  if (fields.styleOverrides && typeof fields.styleOverrides === 'object') {
+    const patch = sanitiseClipStyle(fields.styleOverrides);
+    if (Object.keys(patch).length) {
+      clip.styleOverrides = { ...(clip.styleOverrides || {}), ...patch };
+      // The file on disk was rendered with the old values, so it no longer
+      // matches what the editor is showing. Re-rendering is an explicit,
+      // charged action — this only marks that one is owed.
+      clip.stylePending = true;
+      clip.updatedAt = Date.now();
+    }
+  }
+  // An explicit reset drops every override and goes back to the plain template.
+  if (fields.clearStyleOverrides) {
+    delete clip.styleOverrides;
+    clip.stylePending = true;
+    clip.updatedAt = Date.now();
   }
 
   const wantsTrimChange = Object.prototype.hasOwnProperty.call(fields, 'startSec')

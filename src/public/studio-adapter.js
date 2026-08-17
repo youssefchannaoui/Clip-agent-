@@ -677,6 +677,17 @@
 
     var musicVolume = Number((DATA.musicSettings || {}).volumePercent || 0);
 
+    // In the clip editor the preview has to show THIS clip's tweaks on top of the
+    // shared style. Without it the user drags a caption, the value is saved
+    // against the clip, and the preview — still reading the template — does not
+    // move, which reads as a broken control.
+    var edClipRecord = UI.edClipId
+      ? (DATA.clips || []).filter(function (c) { return c.id === UI.edClipId; })[0] || null
+      : null;
+    var clipStyle = (UI.screen === 'editor' && edClipRecord)
+      ? Object.assign({}, edClipRecord.styleOverrides || {}, UI.edStyleDraft || {})
+      : null;
+
     // The template being edited, with the schema's own defaults behind it so a
     // partially-populated record cannot render blanks.
     var tpl = Object.assign({
@@ -688,7 +699,7 @@
       watermark: 'DEENCLIPPED', watermarkOpacity: 100,
       vignette: 0, grain: 0, warm: 0, smartFramingZoom: 1, smartFramingEnabled: false,
       voiceEnhance: true,
-    }, activeTemplate || {}, UI.tplDraft || {});
+    }, activeTemplate || {}, clipStyle || UI.tplDraft || {});
 
     // Slider writes land on every `input` event. Sending each one meant a PUT
     // per pixel of travel, and each PUT used to queue a re-render for every
@@ -707,6 +718,30 @@
       }, 450);
     }
 
+    // The same write, aimed at one clip instead of the shared style. Debounced
+    // identically, but nothing is re-rendered until the user asks: an override
+    // only marks the clip's video as out of date.
+    function saveClipStyle(patch) {
+      UI.edStyleDraft = Object.assign({}, UI.edStyleDraft, patch);
+      UI.edDirty = true;
+      refresh();
+      if (UI.edStyleTimer) global.clearTimeout(UI.edStyleTimer);
+      UI.edStyleTimer = global.setTimeout(function () {
+        UI.edStyleTimer = null;
+        var pending = UI.edStyleDraft;
+        UI.edStyleDraft = null;
+        global.StudioAdapter.onClipStyle(UI.edClipId, pending);
+      }, 450);
+    }
+
+    // One decision, made once: the Templates screen edits the style everything
+    // shares, the clip editor edits a single clip. Every control below calls
+    // this, so no control can be wired to the wrong target by accident.
+    function saveStyle(patch) {
+      if (UI.screen === 'editor' && UI.edClipId) return saveClipStyle(patch);
+      return saveTemplate(patch);
+    }
+
     // Builds a settings row whose options come from the schema's enum, so a
     // picker can only ever offer a value sanitiseTemplate() accepts.
     function tplRow(defs) {
@@ -720,7 +755,7 @@
             var options = d.opts.map(function (o) { return (d.labels && d.labels[o]) || titleCase(o); });
             global.StudioAdapter.onPickOption(d.label, options, function (chosen) {
               var idx = options.indexOf(chosen);
-              if (idx > -1) saveTemplate(defObj(d.field, d.opts[idx]));
+              if (idx > -1) saveStyle(defObj(d.field, d.opts[idx]));
             });
           },
         };
@@ -762,13 +797,13 @@
       var margin = Math.round(Math.max(20, Math.min(800, (1 - y) * height)));
       var align = x < 0.34 ? 'left' : x > 0.66 ? 'right' : 'center';
       var position = y < 0.34 ? 'top' : y > 0.66 ? 'bottom' : 'middle';
-      saveTemplate({ captionMarginV: margin, captionHorizontal: align, captionPosition: position });
+      saveStyle({ captionMarginV: margin, captionHorizontal: align, captionPosition: position });
     });
 
     var dragMarkFrom = makeDrag(function (x, y) {
       var vertical = y < 0.5 ? 'top' : 'bottom';
       var horizontal = x < 0.34 ? 'left' : x > 0.66 ? 'right' : 'center';
-      saveTemplate({ watermarkPosition: vertical + '-' + horizontal });
+      saveStyle({ watermarkPosition: vertical + '-' + horizontal });
     });
 
     // publicBilling() returns plans and topups as objects keyed by id.
@@ -1303,46 +1338,46 @@
       // captionFontSize, range 24-140 in the schema.
       edSize: Number(tpl.captionFontSize) || 96,
       edSizeLabel: (Number(tpl.captionFontSize) || 96) + ' px',
-      setSize: function (e) { saveTemplate({ captionFontSize: Number(e.target.value) }); },
+      setSize: function (e) { saveStyle({ captionFontSize: Number(e.target.value) }); },
       // captionMarginV, range 20-800.
       edCapPosY: Number(tpl.captionMarginV) || 180,
-      setPosY: function (e) { saveTemplate({ captionMarginV: Number(e.target.value) }); },
+      setPosY: function (e) { saveStyle({ captionMarginV: Number(e.target.value) }); },
       edPosLabelLive: (Number(tpl.captionMarginV) || 180) + ' px',
       edUpperTrack: switchTrack(Boolean(tpl.captionUppercase)),
       edUpperKnob: switchKnob(Boolean(tpl.captionUppercase)),
-      toggleUpper: function (e) { stop(e); saveTemplate({ captionUppercase: !tpl.captionUppercase }); },
+      toggleUpper: function (e) { stop(e); saveStyle({ captionUppercase: !tpl.captionUppercase }); },
       edFonts: ['DejaVu Sans', 'Inter', 'Amiri'].map(function (f) {
-        return { label: f, style: tabStyle(tpl.captionFont === f), select: function (e) { stop(e); saveTemplate({ captionFont: f }); } };
+        return { label: f, style: tabStyle(tpl.captionFont === f), select: function (e) { stop(e); saveStyle({ captionFont: f }); } };
       }),
 
       // fitMode, and the one framing toggle the schema keeps.
       edCrops: ENUMS.fitMode.map(function (m) {
         var labels = { contain: 'Fit', blur: 'Blur', crop: 'Fill' };
-        return { label: labels[m], style: tabStyle(tpl.fitMode === m), select: function (e) { stop(e); saveTemplate({ fitMode: m }); } };
+        return { label: labels[m], style: tabStyle(tpl.fitMode === m), select: function (e) { stop(e); saveStyle({ fitMode: m }); } };
       }),
       edFaceTrack: switchTrack(Boolean(tpl.smartFramingEnabled)),
       edFaceKnob: switchKnob(Boolean(tpl.smartFramingEnabled)),
-      toggleFace: function (e) { stop(e); saveTemplate({ smartFramingEnabled: !tpl.smartFramingEnabled }); },
+      toggleFace: function (e) { stop(e); saveStyle({ smartFramingEnabled: !tpl.smartFramingEnabled }); },
 
       // vignette, range 0-1 in the schema, shown as a percentage.
       edVignette: Math.round((Number(tpl.vignette) || 0) * 100),
       edVignetteLabel: Math.round((Number(tpl.vignette) || 0) * 100) + '%',
-      setVignette: function (e) { saveTemplate({ vignette: Number(e.target.value) / 100 }); },
+      setVignette: function (e) { saveStyle({ vignette: Number(e.target.value) / 100 }); },
       // grain 0-100, warm -100..100, zoom 0.75-2.5 in the schema.
       edGrain: Number(tpl.grain) || 0,
       edGrainLabel: (Number(tpl.grain) || 0) + '%',
-      setGrain: function (e) { saveTemplate({ grain: Number(e.target.value) }); },
+      setGrain: function (e) { saveStyle({ grain: Number(e.target.value) }); },
       edWarm: Number(tpl.warm) || 0,
       edWarmLabel: (Number(tpl.warm) > 0 ? '+' : '') + (Number(tpl.warm) || 0),
-      setWarm: function (e) { saveTemplate({ warm: Number(e.target.value) }); },
+      setWarm: function (e) { saveStyle({ warm: Number(e.target.value) }); },
       edZoom: Math.round((Number(tpl.smartFramingZoom) || 1) * 100),
       edZoomLabel: Math.round((Number(tpl.smartFramingZoom) || 1) * 100) + '%',
-      setZoom: function (e) { saveTemplate({ smartFramingZoom: Number(e.target.value) / 100 }); },
+      setZoom: function (e) { saveStyle({ smartFramingZoom: Number(e.target.value) / 100 }); },
 
       edWmTrack: sliderTrack(),
       edWmKnob: sliderKnob(Number(tpl.watermarkOpacity) > 0),
       edWmNote: tpl.watermark ? tpl.watermark + ' at ' + (Number(tpl.watermarkOpacity) || 0) + '%' : 'No watermark',
-      toggleWatermark: function (e) { stop(e); saveTemplate({ watermarkOpacity: Number(tpl.watermarkOpacity) > 0 ? 0 : 100 }); },
+      toggleWatermark: function (e) { stop(e); saveStyle({ watermarkOpacity: Number(tpl.watermarkOpacity) > 0 ? 0 : 100 }); },
       notPro: false,
 
       // Alignment guides only appear while dragging, as in the design.
@@ -1365,17 +1400,21 @@
       edSaving: UI.edSaving,
       edSaveIcon: UI.edSaving ? 'ph ph-circle-notch' : 'ph ph-floppy-disk',
       edSaveIconStyle: 'font-size: 15px;' + (UI.edSaving ? ' animation: dcSpin 1.1s linear infinite;' : ''),
-      edSaveLabel: UI.edSaving ? 'Saving…' : 'Save to all clips',
+      edSaveLabel: UI.edSaving ? 'Saving…' : 'Save clip',
       saveEdit: function (e) {
         stop(e);
         if (!edClip || UI.edSaving) return;
         setUI({ edSaving: true });
-        // Style belongs to the template, so saving here applies it to every clip
-        // of this lecture -- which is what the button says. Framing stays
-        // per-clip and is never touched by a lecture-wide save.
-        if (UI.tplTimer) { global.clearTimeout(UI.tplTimer); UI.tplTimer = null; }
-        var pendingStyle = UI.tplDraft; UI.tplDraft = null;
-        global.StudioAdapter.onSaveTemplate(activeTemplate && activeTemplate.id, pendingStyle, edClip.projectId);
+        // Everything changed here belongs to THIS clip. Saving used to write the
+        // shared style, which is why editing one clip changed every clip in the
+        // lecture. To apply a look everywhere, edit it on the Templates screen.
+        // Flush the debounce first so a change made in the last half-second is
+        // not dropped by the save that was meant to keep it.
+        if (UI.edStyleTimer) { global.clearTimeout(UI.edStyleTimer); UI.edStyleTimer = null; }
+        var pendingStyle = UI.edStyleDraft; UI.edStyleDraft = null;
+        if (pendingStyle && Object.keys(pendingStyle).length) {
+          global.StudioAdapter.onClipStyle(edClip.id, pendingStyle);
+        }
         // Rebuild the transcript from the blocks, with the edited one swapped in.
         var text = edCaptionBlocks.map(function (b, i) {
           return (i === UI.edBlock && UI.edBlockDraft !== null && UI.edBlockDraft !== undefined)
@@ -1684,7 +1723,7 @@
           trackStyle: 'position: relative; margin-left: auto; width: 34px; height: 19px; flex: none; border-radius: 20px; cursor: pointer; transition: background .16s ease, border-color .16s ease; border: 1px solid ' +
             (on ? 'rgba(217,180,120,.5); background: rgba(217,180,120,.22);' : '#33333A; background: #17171A;'),
           knobStyle: 'position: absolute; top: 2px; left: ' + (on ? '17px' : '2px') + '; width: 13px; height: 13px; border-radius: 50%; background: ' + (on ? '#F0D6A6' : '#6E6E76') + '; transition: left .16s ease, background .16s ease;',
-          toggle: function (e) { stop(e); saveTemplate({ voiceEnhance: !on }); },
+          toggle: function (e) { stop(e); saveStyle({ voiceEnhance: !on }); },
         };
       }),
       tplDirtyLabel: UI.tplDirty ? 'Unsaved changes' : 'All changes saved',
@@ -2019,6 +2058,10 @@
     onResetTemplate: function () {},
     onDuplicateTemplate: function () {},
     onTemplateField: function () {},
+    // Per-clip style write, and the explicit promotion of one clip's tweaks onto
+    // the style every clip shares. index.html overrides both at mount.
+    onClipStyle: function () {},
+    onPromoteClipStyle: function () {},
     onPickOption: function (title, options, cb) {
       UI.sheet = { title: title, subtitle: 'Applies to every clip on this template', options: options, cb: cb };
       refresh();

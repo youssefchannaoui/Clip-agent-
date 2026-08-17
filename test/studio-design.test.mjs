@@ -1039,13 +1039,32 @@ test('a slider drag produces one write, not one per step', async () => {
   // Each write used to queue a re-render for every unposted clip, and each of
   // those re-downloads the whole source on a single-slot worker.
   let writes = 0;
-  StudioAdapter.onTemplateField = () => { writes += 1; };
-  Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'c1', edTab: 'captions', tplDraft: null, tplTimer: null });
+  // In the editor a slider writes to the clip, not the shared style.
+  StudioAdapter.onClipStyle = () => { writes += 1; };
+  StudioAdapter.onTemplateField = () => { throw new Error('the editor must not write the shared template'); };
+  Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'c1', edTab: 'captions', edStyleDraft: null, edStyleTimer: null });
   const state = { ...SAMPLE_STATE, templates: [{ id: 'x', name: 'X', captionFontSize: 96 }], selectedTemplate: { id: 'x', name: 'X', captionFontSize: 96 } };
   for (let i = 0; i < 25; i += 1) StudioAdapter.bindings(state).setSize({ target: { value: String(60 + i) } });
   assert.equal(writes, 0, 'nothing is sent while the pointer is still moving');
   await new Promise(r => setTimeout(r, 700));
   assert.equal(writes, 1, 'one write once it settles');
+});
+
+test('a slider on the Templates screen still writes the shared style', async () => {
+  // The router must not send template edits to a clip: the Templates screen is
+  // where a look is meant to change everywhere.
+  let templateWrites = 0;
+  let clipWrites = 0;
+  StudioAdapter.onTemplateField = () => { templateWrites += 1; };
+  StudioAdapter.onClipStyle = () => { clipWrites += 1; };
+  Object.assign(StudioAdapter.ui, { screen: 'templates', edClipId: null, tplDraft: null, tplTimer: null });
+  const state = { ...SAMPLE_STATE, templates: [{ id: 'x', name: 'X', captionFontSize: 96 }], selectedTemplate: { id: 'x', name: 'X', captionFontSize: 96 } };
+  StudioAdapter.bindings(state).setSize({ target: { value: '70' } });
+  await new Promise(r => setTimeout(r, 700));
+  assert.equal(templateWrites, 1);
+  assert.equal(clipWrites, 0, 'the Templates screen must not write a single clip');
+  StudioAdapter.onClipStyle = () => {};
+  StudioAdapter.onTemplateField = () => {};
 });
 
 test('a slider shows its new value immediately, before the write lands', () => {
@@ -1431,18 +1450,44 @@ test('dragging a caption writes fields that reach the render', () => {
   assert.ok(draft.captionMarginV >= 20 && draft.captionMarginV <= 800, 'within the schema range');
 });
 
-test('the editor save applies the style to that lecture, not every lecture', () => {
-  Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'cap1', edBlock: 0, edBlockDraft: null, tplDraft: null, tplTimer: null, edSaving: false });
-  let scope = 'not called';
-  StudioAdapter.onSaveTemplate = (id, pending, projectId) => { scope = projectId; };
-  StudioAdapter.onSaveClip = () => {};
+test('the editor save writes to that clip and never to the shared style', () => {
+  // This is the whole point of per-clip overrides: editing one clip used to
+  // change every clip built on the same style.
+  Object.assign(StudioAdapter.ui, {
+    screen: 'editor', edClipId: 'cap1', edBlock: 0, edBlockDraft: null,
+    edStyleDraft: { captionFontSize: 48 }, edStyleTimer: null, edSaving: false,
+  });
+  let styledClip = null; let stylePatch = null; let savedClip = null;
+  let templateWrites = 0;
+  StudioAdapter.onSaveTemplate = () => { templateWrites += 1; };
+  StudioAdapter.onClipStyle = (id, patch) => { styledClip = id; stylePatch = patch; };
+  StudioAdapter.onSaveClip = (id) => { savedClip = id; };
   StudioAdapter.bindings(CAPTION_STATE).saveEdit({ preventDefault() {} });
-  assert.equal(scope, 'p1', 'scoped to the clip\'s own lecture');
+  assert.equal(styledClip, 'cap1');
+  assert.deepEqual(stylePatch, { captionFontSize: 48 });
+  assert.equal(savedClip, 'cap1');
+  assert.equal(templateWrites, 0, 'the editor must never write the shared style');
+  StudioAdapter.onSaveTemplate = () => {};
+});
+
+test('a pending slider change is flushed by save, not dropped', () => {
+  // The debounce holds the last ~450ms of movement. Saving before it fires used
+  // to lose whatever the user had just adjusted.
+  Object.assign(StudioAdapter.ui, {
+    screen: 'editor', edClipId: 'cap1', edBlock: 0, edBlockDraft: null,
+    edStyleDraft: null, edStyleTimer: null, edSaving: false,
+  });
+  let patch = null;
+  StudioAdapter.onClipStyle = (id, p) => { patch = p; };
+  StudioAdapter.onSaveClip = () => {};
+  StudioAdapter.bindings(CAPTION_STATE).setSize({ target: { value: '55' } });
+  StudioAdapter.bindings(CAPTION_STATE).saveEdit({ preventDefault() {} });
+  assert.deepEqual(patch, { captionFontSize: 55 }, 'the in-flight change reaches the server');
 });
 
 test('the editor save button says what it does', () => {
   Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'cap1', edSaving: false });
-  assert.equal(StudioAdapter.bindings(CAPTION_STATE).edSaveLabel, 'Save to all clips');
+  assert.equal(StudioAdapter.bindings(CAPTION_STATE).edSaveLabel, 'Save clip');
 });
 
 test('the timeline playhead follows where the bar was clicked', () => {
