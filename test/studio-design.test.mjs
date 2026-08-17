@@ -825,6 +825,100 @@ test('every live row carries a percentage, an ETA and a progress bar', () => {
   }
 });
 
+// ── the per-clip breakdown behind "Rendering clip 2 of 4" ──────────────────
+
+const rendering = extra => StudioAdapter.bindings({
+  projects: [{
+    id: 'p', title: 'Lecture', status: 'processing', stage: 'Rendering clip 2 of 4',
+    progress: 80, etaSec: 300, submittedAt: Date.now(), ...extra,
+  }],
+  clips: [], tracks: [],
+}).liveAll[0];
+
+test('a rendering lecture breaks down into one line per clip', () => {
+  const row = rendering({
+    currentClip: 2, totalClips: 4, clipPercent: 37,
+    clipPlan: [{ index: 1, title: 'On patience' }, { index: 2, title: 'The night prayer' },
+      { index: 3, title: 'Sincerity' }, { index: 4, title: 'Gratitude' }],
+  });
+  assert.equal(row.hasClips, true);
+  assert.equal(row.clipCount, 4);
+  assert.equal(row.clipsLabel, '1 of 4 done');
+  assert.deepEqual(row.clips.map(c => [c.title, c.state, c.percent]), [
+    ['On patience', 'Done', '100%'],
+    ['The night prayer', 'Rendering', '37%'],
+    ['Sincerity', 'Queued', ''],
+    ['Gratitude', 'Queued', ''],
+  ]);
+});
+
+test('a clip that has not started shows no percentage rather than a fake one', () => {
+  // Clips render strictly in order, so done/rendering/queued is a fact. Only the
+  // current clip's percentage is a measurement, and only the worker has it.
+  const row = rendering({ currentClip: 2, totalClips: 4, clipPercent: 37 });
+  const queued = row.clips.filter(c => c.state === 'Queued');
+  assert.equal(queued.length, 2);
+  for (const c of queued) {
+    assert.equal(c.percent, '', 'no invented percentage');
+    assert.match(c.barStyle, /width: 0%/, 'and an empty bar, not a full one');
+  }
+  // With no clipPercent at all — an older worker — the running clip says so
+  // without claiming a figure.
+  const noPct = rendering({ currentClip: 2, totalClips: 4 });
+  assert.equal(noPct.clips[1].state, 'Rendering');
+  assert.equal(noPct.clips[1].percent, '');
+  assert.equal(noPct.clips[0].percent, '100%', 'a finished clip is genuinely finished');
+});
+
+test('the breakdown works from the stage text before the worker is rebuilt', () => {
+  // The deployed worker announces "Rendering clip 2 of 4" in its stage but does
+  // not send the fields. Reading the stage means this works without a redeploy.
+  const row = rendering({});
+  assert.equal(row.clipCount, 4);
+  assert.deepEqual(row.clips.map(c => c.state), ['Done', 'Rendering', 'Queued', 'Queued']);
+  assert.equal(row.clips[0].title, 'Clip 1', 'named by number when no plan was sent');
+});
+
+test('a lecture that is not rendering has no breakdown', () => {
+  for (const stage of ['Transcribing audio', 'Importing the lecture', 'Finding and scoring clips']) {
+    const row = rendering({ stage });
+    assert.equal(row.hasClips, false, stage);
+    assert.deepEqual(row.clips, []);
+  }
+});
+
+test('a long clip list scrolls instead of pushing the page around', () => {
+  assert.equal(rendering({ currentClip: 1, totalClips: 6 }).clipsScroll, false);
+  assert.equal(rendering({ currentClip: 1, totalClips: 7 }).clipsScroll, true);
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const rule = /\.slc-list\.scroll \{[^}]*\}/.exec(html)[0];
+  assert.match(rule, /overflow-y: auto/);
+  assert.match(rule, /max-height/);
+});
+
+test('the clip list is remembered per surface, not per lecture', () => {
+  // Home opens by default and the floating bar stays a bar. Keying on the title
+  // alone meant opening it on Home silently opened it in the bar too.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  assert.match(html, /function clipKey\(r,onHome\)\{return \(onHome\?'home':'bar'\)\+'\|'\+r\.title\}/);
+  assert.match(html, /const seen=clipsOpen\[clipKey\(r,onHome\)\]/);
+  assert.match(html, /seen===undefined\?Boolean\(onHome\):seen/, 'Home defaults open, the bar closed');
+  assert.match(html, /data-clips="\$\{esc\(clipKey\(r,onHome\)\)\}"/);
+});
+
+test('opening a clip list does not restart the spinners', () => {
+  // Expansion changes the structure, so it has to be in the key — but the
+  // running clip's percentage must not be, or every update rebuilds the list.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const key = /function liveKey\(rows,onHome\)\{[\s\S]*?\n    \}/.exec(html)[0];
+  assert.match(key, /r\.clipCount\|\|0/);
+  assert.match(key, /clipsAreOpen\(r,onHome\)\?1:0/);
+  assert.doesNotMatch(key, /clipPercent|percent/, 'a moving number must not rebuild the list');
+  // And the open list is updated in place.
+  const paint = /function paintRows\([\s\S]*?\n    \}\n/.exec(html)[0];
+  assert.match(paint, /querySelectorAll\('\.slc-row'\)/);
+});
+
 test('the import reports how much has actually downloaded', () => {
   // A percentage alone gives no sense of whether a slow-looking import is a
   // large file or a broken one.

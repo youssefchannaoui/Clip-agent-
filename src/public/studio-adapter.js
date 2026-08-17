@@ -898,7 +898,7 @@
     var jobsLive = [];
     projects.forEach(function (pr) {
       if (['queued', 'processing'].indexOf(pr.status) > -1) {
-        jobsLive.push({ kind: 'project', title: projectTitle[pr.id], stage: pr.stage || pr.status, progress: Number(pr.progress || 0), etaSec: pr.etaSec, bytesDone: pr.bytesDone, bytesTotal: pr.bytesTotal, at: pr.startedAt || pr.submittedAt });
+        jobsLive.push({ kind: 'project', title: projectTitle[pr.id], stage: pr.stage || pr.status, progress: Number(pr.progress || 0), etaSec: pr.etaSec, bytesDone: pr.bytesDone, bytesTotal: pr.bytesTotal, at: pr.startedAt || pr.submittedAt, project: pr });
       }
       if (pr.moreJob && ['queued', 'processing'].indexOf(pr.moreJob.status) > -1) {
         jobsLive.push({ kind: 'project', title: 'More clips · ' + projectTitle[pr.id], stage: pr.moreJob.stage || pr.moreJob.status, progress: Number(pr.moreJob.progress || 0), at: pr.moreJob.startedAt || pr.moreJob.createdAt });
@@ -952,6 +952,55 @@
       return m ? h + 'h ' + m + 'm left' : h + 'h left';
     }
 
+    // The clips behind "Rendering clip 2 of 4", one line each.
+    //
+    // Nothing here is invented. Clips render strictly in order, so everything
+    // before the current one is finished and everything after it has not
+    // started; only the current clip's percentage is a measurement, and it comes
+    // from ffmpeg. A clip that has not started shows no percentage rather than a
+    // plausible-looking zero-to-something.
+    //
+    // currentClip/totalClips arrive as fields from a current worker, but the
+    // deployed one only says so in its stage text — so that is read as a
+    // fallback and the breakdown works before the box is rebuilt.
+    var STAGE_CLIP = /\bclip\s+(\d+)\s+of\s+(\d+)\b/i;
+    function clipBreakdown(pr, stage) {
+      if (!pr) return [];
+      var current = Number(pr.currentClip) || 0;
+      var total = Number(pr.totalClips) || 0;
+      if (!total) {
+        var m = STAGE_CLIP.exec(String(stage || ''));
+        if (m) { current = Number(m[1]); total = Number(m[2]); }
+      }
+      if (!total || total < 1) return [];
+      var plan = Array.isArray(pr.clipPlan) ? pr.clipPlan : [];
+      var rows = [];
+      for (var i = 1; i <= Math.min(total, 40); i++) {
+        var planned = plan[i - 1] || {};
+        var done = i < current;
+        var running = i === current;
+        // Only the running clip has a measured percentage, and only from a
+        // worker that sends one.
+        var pct = done ? 100 : (running && pr.clipPercent !== null && pr.clipPercent !== undefined)
+          ? Math.max(0, Math.min(100, Math.round(Number(pr.clipPercent)))) : null;
+        rows.push({
+          index: i,
+          title: planned.title || ('Clip ' + i),
+          state: done ? 'Done' : running ? 'Rendering' : 'Queued',
+          percent: pct === null ? '' : pct + '%',
+          // A queued clip's bar is empty, not full: width 0 with no percentage
+          // reads as "not started", which is what it is.
+          barStyle: 'height: 3px; border-radius: 3px; width: ' + (pct === null ? 0 : pct)
+            + '%; background: ' + (done ? '#7FD1A6' : 'linear-gradient(90deg, #D9B478, #F0D6A6)') + ';',
+          icon: done ? 'ph-fill ph-check-circle' : running ? 'ph ph-circle-notch' : 'ph ph-clock',
+          iconStyle: 'font-size: 13px; color: ' + (done ? '#7FD1A6' : running ? '#F0D6A6' : '#4A4A52') + ';',
+          done: done,
+          running: running,
+        });
+      }
+      return rows;
+    }
+
     function liveRow(j) {
       var pct = (j.progress === null || !isFinite(j.progress)) ? null : Math.max(0, Math.min(100, Math.round(j.progress)));
       var eta = etaLabel(j.etaSec);
@@ -961,10 +1010,19 @@
       // Stage, then size, then time remaining: what it is doing, how far in, how
       // much longer.
       var detail = j.stage + (transfer ? ' · ' + transfer : '') + (eta ? ' · ' + eta : '');
+      var clips = clipBreakdown(j.project, j.stage);
       return {
         label: j.title,
         title: j.title,
         stage: j.stage,
+        // One line per clip while a lecture renders, so "clip 2 of 4" can be
+        // opened rather than only read.
+        clips: clips,
+        clipCount: clips.length,
+        hasClips: clips.length > 0,
+        clipsLabel: clips.length ? clips.filter(function (c) { return c.done; }).length + ' of ' + clips.length + ' done' : '',
+        // Above this the list scrolls instead of pushing the page around.
+        clipsScroll: clips.length > 6,
         percent: pct === null ? '' : pct + '%',
         eta: eta,
         transfer: transfer,

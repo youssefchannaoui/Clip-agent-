@@ -29,7 +29,7 @@ import threading
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 try:
     import cv2  # type: ignore
@@ -96,6 +96,15 @@ _progress_state: dict[str, Any] = {
 }
 _progress_lock = threading.Lock()
 _heartbeat_stop = threading.Event()
+
+# ffmpeg reports progress several times a second. Every progress() rewrites the
+# status file and is polled by the app, so per-clip render progress is throttled
+# to a rate a person can actually read.
+RENDER_PROGRESS_SECONDS = 2.0
+
+# Makes ffmpeg report machine-readable progress on stdout. -nostats suppresses
+# the usual human progress spam on stderr, so a failure's detail stays readable.
+PROGRESS_FLAGS = ["-nostats", "-progress", "pipe:1"]
 
 
 # The one place prose becomes a stable identifier. Callers keep passing readable
@@ -165,6 +174,52 @@ def run(command: list[str], timeout: int | None = None) -> subprocess.CompletedP
         detail = (result.stderr or result.stdout)[-1800:]
         raise RuntimeError(f"Command failed ({result.returncode}): {' '.join(command[:4])}\n{detail}")
     return result
+
+
+def run_with_progress(
+    command: list[str],
+    duration: float,
+    on_fraction: Callable[[float], None],
+    timeout: int | None = None,
+) -> None:
+    """Run ffmpeg, reporting how far through the output it is.
+
+    The app shows a percentage per clip while a lecture renders. Without this
+    there is nothing real to show for the clip being worked on -- only which
+    number it is -- so the choice was a measured figure or an invented one.
+
+    Reads `out_time_us=<n>` from stdout; against the clip's known duration that
+    is an honest fraction. The caller adds `-progress pipe:1 -nostats` itself
+    (see PROGRESS_FLAGS) rather than having them spliced in here, so what runs
+    is exactly what the caller wrote.
+    """
+    started = time.monotonic()
+    proc = subprocess.Popen(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    tail: list[str] = []
+    try:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            if timeout is not None and time.monotonic() - started > timeout:
+                proc.kill()
+                raise subprocess.TimeoutExpired(command, timeout)
+            key, _, value = line.strip().partition("=")
+            if key not in {"out_time_us", "out_time_ms"} or not value.isdigit():
+                continue
+            # out_time_ms is misnamed upstream: it is microseconds, same as
+            # out_time_us. Treating it as milliseconds reports 1000x too far.
+            seconds = int(value) / 1_000_000
+            if duration > 0:
+                on_fraction(max(0.0, min(1.0, seconds / duration)))
+    finally:
+        if proc.stdout:
+            proc.stdout.close()
+        stderr = proc.stderr.read() if proc.stderr else ""
+        if proc.stderr:
+            proc.stderr.close()
+        code = proc.wait()
+        tail.append(stderr or "")
+    if code != 0:
+        raise RuntimeError(f"Command failed ({code}): {' '.join(command[:4])}\n{tail[-1][-1800:]}")
 
 
 def safe_slug(value: str, fallback: str = "clip") -> str:
@@ -1328,6 +1383,7 @@ def quality_report(candidate: Candidate, template: dict[str, Any]) -> dict[str, 
 def render_clip(
     job: dict[str, Any], candidate: Candidate, index: int, source: Path,
     track: dict[str, Any], output_dir: Path,
+    on_fraction: Callable[[float], None] | None = None,
 ) -> dict[str, Any]:
     ffmpeg = job["ffmpeg"]
     ffprobe = job["ffprobe"]
@@ -1369,15 +1425,22 @@ def render_clip(
         + "loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
     )
 
-    run([
-        ffmpeg, "-y", "-ss", f"{candidate.start:.3f}", "-t", f"{candidate.duration:.3f}",
+    export = [
+        ffmpeg, "-y", *(PROGRESS_FLAGS if on_fraction is not None else []),
+        "-ss", f"{candidate.start:.3f}", "-t", f"{candidate.duration:.3f}",
         "-i", str(source), "-stream_loop", "-1", "-i", str(track["path"]),
         "-filter_complex", filter_complex,
         "-map", "[vout]", "-map", "[aout]",
         "-c:v", "libx264", "-threads", ffmpeg_threads, "-preset", "veryfast", "-crf", "19",
         "-pix_fmt", "yuv420p", "-r", "30", "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart", "-shortest", str(clip_file),
-    ], timeout=60 * 60)
+    ]
+    # This is the long call of the two; the thumbnail after it is near-instant,
+    # so the export's own progress is the clip's progress.
+    if on_fraction is not None:
+        run_with_progress(export, candidate.duration, on_fraction, timeout=60 * 60)
+    else:
+        run(export, timeout=60 * 60)
 
     info = ffprobe_json(ffprobe, clip_file)
     streams = info.get("streams", [])
@@ -1644,11 +1707,47 @@ def process(job_file: Path) -> None:
 
     rendered: list[dict[str, Any]] = []
     total = len(selected)
+    # The plan is sent once, so the app can list every clip by name while they
+    # render instead of only naming the one in progress.
+    clip_plan = [
+        {"index": i, "title": title_from_text(c.ai_title or c.text), "durationSec": round(c.duration, 1)}
+        for i, c in enumerate(selected, 1)
+    ]
+    clip_seconds: list[float] = []
+
     for index, candidate in enumerate(selected, 1):
-        percent = 75 + int((index - 1) / max(total, 1) * 20)
-        progress(f"Rendering clip {index} of {total}", percent, currentClip=index, totalClips=total, etaSec=None)
+        clip_started = time.time()
+        # ffmpeg reports several times a second and every progress() writes the
+        # status file, so this is throttled to something a person can read.
+        last_emit = [0.0]
+
+        def report(fraction: float, index: int = index, force: bool = False) -> None:
+            now = time.monotonic()
+            if not force and now - last_emit[0] < RENDER_PROGRESS_SECONDS:
+                return
+            last_emit[0] = now
+            # Rendering occupies 75-95% of the job, so a clip's own progress maps
+            # onto its share of that band rather than pretending to be the whole.
+            done = (index - 1 + fraction) / max(total, 1)
+            # Measured throughput, not a guess: time already spent per completed
+            # clip, applied to what is left. Before the first clip finishes there
+            # is nothing to measure, so no ETA is claimed rather than invented.
+            eta = None
+            if clip_seconds:
+                per_clip = sum(clip_seconds) / len(clip_seconds)
+                eta = round(per_clip * ((total - index) + (1 - fraction)), 1)
+            progress(
+                f"Rendering clip {index} of {total}", 75 + int(done * 20),
+                currentClip=index, totalClips=total, clipPlan=clip_plan,
+                clipPercent=int(round(fraction * 100)),
+                clipElapsedSec=round(time.time() - clip_started, 1),
+                etaSec=eta,
+            )
+
+        report(0.0, force=True)
         track = shuffled_tracks[(index - 1) % len(shuffled_tracks)]
-        rendered.append(render_clip(job, candidate, index, source_file, track, output_dir))
+        rendered.append(render_clip(job, candidate, index, source_file, track, output_dir, on_fraction=report))
+        clip_seconds.append(time.time() - clip_started)
 
     audio_file.unlink(missing_ok=True)
     result = {

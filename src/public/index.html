@@ -80,6 +80,34 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
    pulsing "live" dot with nothing live is a lie. */
 #studioLiveHome.slh-idle .slb-dot { background: #4A4A52; animation: none; }
 .slh-empty { padding: 13px; font-size: 11.5px; color: #6E6E76; }
+
+/* Per-clip breakdown behind "Rendering clip 2 of 4". */
+.slh-item { border-bottom: 1px solid #16161A; }
+.slh-item:last-child { border-bottom: 0; }
+.slh-item .slh-row { border-bottom: 0; }
+.slc-toggle {
+  display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 3px 7px;
+  border: 1px solid #26262A; border-radius: 7px; background: #17171A; color: #A2A2AA;
+  font: inherit; font-size: 10.5px; font-weight: 600; cursor: pointer;
+}
+.slc-toggle:hover { color: #F2F2F4; border-color: #34343A; }
+.slc-toggle i { font-size: 11px; transition: rotate .16s ease; }
+.slc-toggle[aria-expanded="true"] i { rotate: 180deg; }
+/* Indented and on a slightly recessed ground, so the clips read as belonging to
+   the lecture above them rather than as more lectures. */
+.slc-list { padding: 2px 0 6px 34px; background: #0E0E11; }
+/* Past roughly six the list scrolls instead of pushing the page around. ~34px a
+   row, so six rows stay visible and the seventh is clearly cut. */
+.slc-list.scroll { max-height: 204px; overflow-y: auto; }
+.slc-row { display: flex; align-items: center; gap: 9px; padding: 5px 13px 5px 0; }
+.slc-row i { flex: none; }
+.slc-row .what { flex: 1; min-width: 0; }
+.slc-row .what b { display: block; font-size: 11.5px; font-weight: 500; color: #BCBCC3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slc-row .state { flex: none; font-size: 10.5px; color: #6E6E76; }
+.slc-row .pct { flex: none; min-width: 34px; text-align: right; font-size: 11px; color: #F0D6A6; font-variant-numeric: tabular-nums; }
+/* An empty percentage still holds its column, so the states below it stay in
+   line instead of sliding right as clips finish. */
+.slc-row .pct:empty::after { content: "—"; color: #4A4A52; }
 /* Both of these live outside #studio, so the sheet's `#studio .ph-circle-notch`
    rule never reached them and the spinner sat perfectly still. */
 #studioLiveHome .ph-circle-notch, #studioLiveBar .ph-circle-notch {
@@ -1824,14 +1852,48 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        design supplies only the bar, and put it on Home too, where it sat on top
        of the toast dock. */
     const liveEls={home:$('#studioLiveHome'),bar:$('#studioLiveBar')};
-    function liveRowHtml(r){
+    /* Which lectures have their per-clip list open. Home defaults to open —
+       there is room for it and it is the page you go to in order to look — while
+       the floating bar defaults to closed so it stays a bar. */
+    const clipsOpen={};
+    /* Keyed per surface, not per lecture: Home wants the clips open and the
+       floating bar wants to stay a bar, and opening one must not silently open
+       the other. */
+    function clipKey(r,onHome){return (onHome?'home':'bar')+'|'+r.title}
+    function clipsAreOpen(r,onHome){
+      const seen=clipsOpen[clipKey(r,onHome)];
+      return seen===undefined?Boolean(onHome):seen;
+    }
+    function bindClipToggles(host){
+      host.querySelectorAll('[data-clips]').forEach(b=>b.onclick=()=>{
+        /* Already the surface-scoped key, so a click here cannot toggle the
+           same lecture on the other surface. */
+        clipsOpen[b.dataset.clips]=b.getAttribute('aria-expanded')!=='true';
+        renderAll();
+      });
+    }
+    function clipLineHtml(c){
+      return `<div class="slc-row"><i class="${esc(c.icon)}" style="${esc(c.iconStyle)}"></i>
+        <span class="what"><b>${esc(c.title)}</b>
+        <span class="slh-track"><i style="${esc(c.barStyle)}"></i></span></span>
+        <span class="state">${esc(c.state)}</span>
+        <span class="pct">${esc(c.percent||'')}</span></div>`;
+    }
+    function liveRowHtml(r,onHome){
       const pct=r.percent||'';
+      const open=r.hasClips&&clipsAreOpen(r,onHome);
       /* r.meta already reads "stage · 142 MB of 380 MB · 7 min left"; rebuilding
          it here is how the download size went missing from the Home section. */
-      return `<div class="slh-row"><i class="${esc(r.icon)}" style="${esc(r.iconStyle||'')}"></i>
+      /* Row and its clip list share a wrapper, so an in-place update can find
+         the pair without walking siblings. */
+      return `<div class="slh-item"><div class="slh-row"><i class="${esc(r.icon)}" style="${esc(r.iconStyle||'')}"></i>
         <span class="what"><b>${esc(r.title)}</b><span>${esc(r.meta)}</span>
         <span class="slh-track"><i style="${esc(r.barStyle)}"></i></span></span>
-        <span class="pct">${esc(pct)}</span></div>`;
+        ${r.hasClips?`<button type="button" class="slc-toggle" data-clips="${esc(clipKey(r,onHome))}"
+          aria-expanded="${open}" title="${open?'Hide the clips':'Show each clip'}"
+          ><span>${esc(r.clipsLabel)}</span><i class="ph ph-caret-down"></i></button>`:''}
+        <span class="pct">${esc(pct)}</span></div>
+        ${open?`<div class="slc-list${r.clipsScroll?' scroll':''}">${r.clips.map(clipLineHtml).join('')}</div>`:''}</div>`;
     }
     /* On Home the section sits at the top of the library column, above "My
        library" — not in the right-hand aside, which is the activity column. It
@@ -1863,19 +1925,42 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        every time — so it never visibly turned. The structure is only rebuilt
        when the set of jobs actually changes; otherwise the numbers are written
        into the existing nodes and the animation keeps running. */
-    function liveKey(rows){return rows.map(r=>r.title+'|'+r.icon).join('~')}
-    function paintRows(host,rows,html){
-      const key=liveKey(rows);
-      if(host.dataset.liveKey!==key){host.dataset.liveKey=key;host.innerHTML=html();return}
-      const nodes=host.querySelectorAll('.slh-row');
+    /* Anything that changes the shape belongs in the key — which jobs, how many
+       clips each has, and whether its list is open. Anything that is only a
+       number is written into the existing nodes instead. */
+    function liveKey(rows,onHome){
+      return rows.map(r=>[r.title,r.icon,r.clipCount||0,r.hasClips&&clipsAreOpen(r,onHome)?1:0].join('|')).join('~');
+    }
+    function paintRows(host,rows,html,onHome){
+      const key=liveKey(rows,onHome);
+      if(host.dataset.liveKey!==key){host.dataset.liveKey=key;host.innerHTML=html();bindClipToggles(host);return}
+      const items=host.querySelectorAll('.slh-item');
       rows.forEach((r,i)=>{
-        const n=nodes[i];if(!n)return;
+        const item=items[i];if(!item)return;
+        const n=item.querySelector('.slh-row');if(!n)return;
         const meta=n.querySelector('.what > span:not(.slh-track)');
         if(meta&&meta.textContent!==r.meta)meta.textContent=r.meta;
         const bar=n.querySelector('.slh-track > i');
         if(bar)bar.setAttribute('style',r.barStyle);
         const pct=n.querySelector('.pct'),want=r.percent||'';
         if(pct&&pct.textContent!==want)pct.textContent=want;
+        const label=n.querySelector('.slc-toggle span');
+        if(label&&label.textContent!==r.clipsLabel)label.textContent=r.clipsLabel;
+        /* The clip being rendered moves while the list is open, so its line is
+           updated too — otherwise the breakdown freezes at whatever it said when
+           it was opened. */
+        const lines=item.querySelectorAll('.slc-row');
+        (r.clips||[]).forEach((c,k)=>{
+          const line=lines[k];if(!line)return;
+          const st=line.querySelector('.state');
+          if(st&&st.textContent!==c.state)st.textContent=c.state;
+          const cp=line.querySelector('.pct'),cw=c.percent||'';
+          if(cp&&cp.textContent!==cw)cp.textContent=cw;
+          const cb=line.querySelector('.slh-track > i');
+          if(cb)cb.setAttribute('style',c.barStyle);
+          const ci=line.querySelector('i');
+          if(ci&&ci.className!==c.icon){ci.className=c.icon;ci.setAttribute('style',c.iconStyle)}
+        });
       });
     }
     function paintLiveWork(vals){
@@ -1898,7 +1983,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         paintRows(liveEls.home,vals.liveAll,()=>`<div class="slb-head"><span class="slb-dot"></span>
           <span class="slb-title">Happening now</span>
           <span class="slb-eta"></span></div>
-          ${any?vals.liveAll.map(liveRowHtml).join(''):`<div class="slh-empty">${esc(vals.liveHeadline)}</div>`}`);
+          ${any?vals.liveAll.map(r=>liveRowHtml(r,true)).join(''):`<div class="slh-empty">${esc(vals.liveHeadline)}</div>`}`,true);
         const n=liveEls.home.querySelector('.slb-eta'),want=any?`${vals.liveCount} running`:'Idle';
         if(n&&n.textContent!==want)n.textContent=want;
         return;
@@ -1917,9 +2002,15 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           ${vals.liveMore?`<button type="button" class="slb-btn" id="slbToggle">${StudioAdapter.ui.liveOpen?'Hide':esc(vals.liveMoreLabel)}</button>`:''}
           <button type="button" class="slb-btn" id="slbHome">Open home</button></div>
           <div class="slb-bar"><i></i></div>
-          ${StudioAdapter.ui.liveOpen?`<div class="slb-list">${vals.liveAll.map(liveRowHtml).join('')}</div>`:''}`;
+          ${StudioAdapter.ui.liveOpen?`<div class="slb-list">${vals.liveAll.map(r=>liveRowHtml(r,false)).join('')}</div>`:''}`;
         const t=$('#slbToggle'); if(t)t.onclick=()=>{StudioAdapter.ui.liveOpen=!StudioAdapter.ui.liveOpen;renderAll()};
         const h=$('#slbHome'); if(h)h.onclick=()=>{StudioAdapter.ui.screen='home';StudioAdapter.ui.liveOpen=false;renderAll()};
+        bindClipToggles(liveEls.bar);
+        /* The queue was rebuilt here, so the key paintRows would compare against
+           is stale. Seeding it keeps the very next paint an in-place update
+           rather than a second rebuild that restarts the spinners. */
+        const seed=liveEls.bar.querySelector('.slb-list');
+        if(seed)seed.dataset.liveKey=liveKey(vals.liveAll,false);
       }
       const set=(sel,text)=>{const n=liveEls.bar.querySelector(sel);if(n&&n.textContent!==text)n.textContent=text};
       set('.slb-pct',first.percent||'');
@@ -1929,7 +2020,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(fill)fill.style.width=(first.percent||'0%').replace('%','')+'%';
       if(StudioAdapter.ui.liveOpen){
         const list=liveEls.bar.querySelector('.slb-list');
-        if(list)paintRows(list,vals.liveAll,()=>vals.liveAll.map(liveRowHtml).join(''));
+        if(list)paintRows(list,vals.liveAll,()=>vals.liveAll.map(r=>liveRowHtml(r,false)).join(''),false);
       }
     }
 let STUDIO=null;

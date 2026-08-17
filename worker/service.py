@@ -332,13 +332,20 @@ class Processor:
                 # rail appeared to run backwards.
                 stage = str(event.get("stage") or "processing")
                 eta = event.get("etaSec")
-                note(
-                    status=stage,
-                    stage=stage,
-                    phase=str(event.get("phase") or ""),
-                    progress=int(event.get("progress") or 0),
-                    etaSec=None if eta is None else int(round(float(eta))),
-                )
+                fields: dict[str, Any] = {
+                    "status": stage,
+                    "stage": stage,
+                    "phase": str(event.get("phase") or ""),
+                    "progress": int(event.get("progress") or 0),
+                    "etaSec": None if eta is None else int(round(float(eta))),
+                }
+                # The per-clip breakdown behind "Rendering clip 2 of 4". Only
+                # forwarded when the worker sends it, so the fields are not
+                # cleared back to nothing on every other phase's events.
+                for key in ("currentClip", "totalClips", "clipPercent", "clipPlan"):
+                    if event.get(key) is not None:
+                        fields[key] = event[key]
+                note(**fields)
         code = child.wait()
         with self.lock:
             self.running.pop(job_id, None)

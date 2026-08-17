@@ -517,11 +517,38 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
   return projectId;
 }
 
+// The per-clip breakdown behind "Rendering clip 2 of 4": which clip is being
+// worked on, how far through it is, and the names of all of them. Shared so the
+// local and remote paths cannot drift -- the remote path is what production
+// runs, and it is the one that gets forgotten.
+export function applyClipBreakdown(record, payload) {
+  const whole = (value, max) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? Math.min(Math.round(n), max) : null;
+  };
+  if (payload.totalClips !== undefined) record.totalClips = whole(payload.totalClips, 999);
+  if (payload.currentClip !== undefined) record.currentClip = whole(payload.currentClip, 999);
+  if (payload.clipPercent !== undefined) {
+    const n = Number(payload.clipPercent);
+    record.clipPercent = Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : null;
+  }
+  if (Array.isArray(payload.clipPlan)) {
+    // Capped and trimmed: this is rendered as a list, and the worker's titles
+    // reach the page.
+    record.clipPlan = payload.clipPlan.slice(0, 40).map((clip, i) => ({
+      index: whole(clip?.index, 999) ?? i + 1,
+      title: String(clip?.title || '').trim().slice(0, 120),
+      durationSec: Number.isFinite(Number(clip?.durationSec)) ? Math.round(Number(clip.durationSec)) : null,
+    }));
+  }
+}
+
 function parseWorkerLine(record, line) {
   let payload;
   try { payload = JSON.parse(line); } catch { return; }
   if (payload.type === 'progress') {
     record.stage = String(payload.stage || 'Processing');
+    applyClipBreakdown(record, payload);
     // The worker computes a real ETA from its own throughput. Nothing carried it,
     // so the UI could only ever show a percentage.
     if (payload.etaSec === null || payload.etaSec === undefined) record.etaSec = null;
@@ -614,6 +641,7 @@ export function acceptRemoteUpdate(projectId, update) {
   // A warning the worker raised about how the clips were made. Logged once, to
   // the owning account, rather than repeated on every poll.
   if (update.etaSec !== undefined) project.etaSec = update.etaSec === null ? null : Math.max(0, Math.round(Number(update.etaSec)));
+  applyClipBreakdown(project, update);
   // Download size, so the import can say how much of the file has landed rather
   // than only a percentage of a band the customer cannot see.
   for (const key of ['bytesDone', 'bytesTotal']) {

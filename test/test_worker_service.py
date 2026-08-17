@@ -242,6 +242,14 @@ class WorkerPersistenceTests(unittest.TestCase):
         self.assertEqual(status["bytesDone"], 149_000_000)
         self.assertIsNone(status.get("bytesTotal"))
 
+    def test_the_clip_breakdown_is_forwarded_only_when_the_worker_sends_it(self):
+        # Forwarding unconditionally would clear currentClip/clipPercent back to
+        # nothing on every transcribe and verify event, so the list would blink
+        # out between renders.
+        source = (WORKER / "service.py").read_text(encoding="utf-8")
+        self.assertIn('for key in ("currentClip", "totalClips", "clipPercent", "clipPlan")', source)
+        self.assertIn("if event.get(key) is not None:", source)
+
     def test_a_provider_that_ignores_progress_still_works(self):
         # Most providers pass a plain `lambda: bool`. The two-argument form must
         # fall back rather than raise.

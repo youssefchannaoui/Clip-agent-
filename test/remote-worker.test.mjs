@@ -69,3 +69,60 @@ test('direct uploads receive a signed S3 PUT without exposing credentials', () =
   assert.ok(url.searchParams.get('X-Amz-Signature'));
   assert.doesNotMatch(result.uploadUrl, /secret-key/);
 });
+
+// ── the per-clip breakdown reaches the browser ─────────────────────────────
+// Three separate fields have now been threaded worker -> service -> engine ->
+// server -> adapter, and each time a layer in the middle quietly dropped them.
+// This asserts the two ends of the chain that a UI test cannot see.
+
+const engine = await import('../src/local-engine.js');
+
+test('the clip breakdown is sanitised on its way in', () => {
+  const record = {};
+  engine.applyClipBreakdown(record, {
+    currentClip: 2, totalClips: 4, clipPercent: 37,
+    clipPlan: [{ index: 1, title: '  On patience  ' }, { index: 2, title: 'x'.repeat(400) }],
+  });
+  assert.equal(record.currentClip, 2);
+  assert.equal(record.totalClips, 4);
+  assert.equal(record.clipPercent, 37);
+  assert.equal(record.clipPlan[0].title, 'On patience', 'trimmed');
+  assert.equal(record.clipPlan[1].title.length, 120, 'and capped — this reaches the page');
+});
+
+test('a percentage outside 0-100 cannot widen the bar past its track', () => {
+  const record = {};
+  engine.applyClipBreakdown(record, { clipPercent: 240 });
+  assert.equal(record.clipPercent, 100);
+  engine.applyClipBreakdown(record, { clipPercent: -5 });
+  assert.equal(record.clipPercent, 0);
+  engine.applyClipBreakdown(record, { clipPercent: 'nonsense' });
+  assert.equal(record.clipPercent, null);
+});
+
+test('absent fields leave what is already known alone', () => {
+  // Every non-render phase sends progress events with none of these. Clearing
+  // them would make the list blink out between clips.
+  const record = { currentClip: 2, totalClips: 4, clipPercent: 37, clipPlan: [{ index: 1, title: 'a' }] };
+  engine.applyClipBreakdown(record, { stage: 'Verifying rendered clips', progress: 90 });
+  assert.equal(record.currentClip, 2);
+  assert.equal(record.totalClips, 4);
+  assert.equal(record.clipPercent, 37);
+  assert.equal(record.clipPlan.length, 1);
+});
+
+test('a clip plan is capped so a runaway worker cannot flood the page', () => {
+  const record = {};
+  engine.applyClipBreakdown(record, {
+    clipPlan: Array.from({ length: 500 }, (_, i) => ({ index: i + 1, title: 'Clip ' + i })),
+  });
+  assert.equal(record.clipPlan.length, 40);
+});
+
+test('the server publishes the breakdown to the browser', () => {
+  // The layer that has silently dropped a field three times running.
+  const server = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+  for (const field of ['currentClip', 'totalClips', 'clipPercent', 'clipPlan']) {
+    assert.match(server, new RegExp(`${field}: project\\.${field}`), `${field} is published`);
+  }
+});

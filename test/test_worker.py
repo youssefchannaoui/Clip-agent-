@@ -173,6 +173,91 @@ class SpeakerTrackingTests(unittest.TestCase):
         self.assertFalse(plan["available"])
 
 
+class RenderProgressTests(unittest.TestCase):
+    """Per-clip render progress, read from ffmpeg rather than guessed.
+
+    The app shows a percentage for the clip being rendered. Without a real
+    measurement the only options were an invented figure or none at all.
+    """
+
+    def _fractions(self, script: str, duration: float) -> list[float]:
+        seen: list[float] = []
+        worker.run_with_progress(
+            [sys.executable, "-c", script], duration, seen.append, timeout=30,
+        )
+        return seen
+
+    def test_out_time_us_becomes_a_fraction_of_the_clip(self):
+        script = (
+            "import sys\n"
+            "for v in (0, 15_000_000, 30_000_000):\n"
+            "    print(f'out_time_us={v}')\n"
+        )
+        self.assertEqual(self._fractions(script, 30.0), [0.0, 0.5, 1.0])
+
+    def test_out_time_ms_is_microseconds_despite_its_name(self):
+        # ffmpeg's out_time_ms is microseconds. Treating it as milliseconds
+        # reports 1000x too far and every clip reads as finished instantly.
+        script = "print('out_time_ms=15000000')\n"
+        self.assertEqual(self._fractions(script, 30.0), [0.5])
+
+    def test_a_fraction_never_escapes_zero_to_one(self):
+        # -shortest and container padding can push the reported time past the
+        # requested duration, which would render a bar wider than its track.
+        script = "print('out_time_us=99000000')\n"
+        self.assertEqual(self._fractions(script, 30.0), [1.0])
+
+    def test_a_failing_command_still_raises_with_its_error(self):
+        script = "import sys; sys.stderr.write('boom detail'); sys.exit(3)\n"
+        with self.assertRaises(RuntimeError) as caught:
+            worker.run_with_progress([sys.executable, "-c", script], 10.0, lambda f: None, timeout=30)
+        self.assertIn("boom detail", str(caught.exception))
+        self.assertIn("(3)", str(caught.exception))
+
+    def test_garbage_on_the_pipe_is_ignored_rather_than_crashing(self):
+        script = (
+            "print('frame=12')\n"
+            "print('out_time_us=notanumber')\n"
+            "print('speed=1.2x')\n"
+            "print('out_time_us=6000000')\n"
+        )
+        self.assertEqual(self._fractions(script, 12.0), [0.5])
+
+    def test_a_zero_length_clip_reports_nothing_rather_than_dividing_by_zero(self):
+        script = "print('out_time_us=1000000')\n"
+        self.assertEqual(self._fractions(script, 0.0), [])
+
+    def test_the_export_asks_ffmpeg_for_progress_only_when_someone_is_listening(self):
+        # The flags are the whole mechanism; without them the pipe stays silent
+        # and every clip sits at 0% forever.
+        source = (ROOT / "worker" / "clip_worker.py").read_text(encoding="utf-8")
+        self.assertIn('"-progress", "pipe:1"', source)
+        self.assertIn("*(PROGRESS_FLAGS if on_fraction is not None else [])", source)
+
+    def test_render_progress_is_throttled_to_a_readable_rate(self):
+        # ffmpeg reports several times a second and each progress() rewrites the
+        # status file the app polls.
+        self.assertGreaterEqual(worker.RENDER_PROGRESS_SECONDS, 1.0)
+        source = (ROOT / "worker" / "clip_worker.py").read_text(encoding="utf-8")
+        self.assertIn("now - last_emit[0] < RENDER_PROGRESS_SECONDS", source)
+        self.assertIn("report(0.0, force=True)", source)
+
+    def test_the_clip_plan_names_every_clip_before_they_render(self):
+        # So the app can list all four by name while only the second is running,
+        # instead of naming just the one in progress.
+        source = (ROOT / "worker" / "clip_worker.py").read_text(encoding="utf-8")
+        self.assertIn("clip_plan = [", source)
+        self.assertIn("clipPlan=clip_plan", source)
+        self.assertIn("clipPercent=", source)
+
+    def test_no_eta_is_claimed_before_a_clip_has_finished(self):
+        # The estimate is measured throughput. With nothing measured yet there is
+        # no honest figure, so none is sent.
+        source = (ROOT / "worker" / "clip_worker.py").read_text(encoding="utf-8")
+        self.assertIn("if clip_seconds:", source)
+        self.assertIn("eta = None", source)
+
+
 class OpenCVVersionGuardTests(unittest.TestCase):
     """OpenCV 5 removed cv2.CascadeClassifier, which speaker framing needs.
 

@@ -269,6 +269,8 @@ function appState(user = null) {
       id: project.id, title: project.title, url: project.url, engine: project.engine, status: project.status,
       stage: project.stage, phase: project.phase || '', progress: project.progress || 0, etaSec: project.etaSec ?? null, error: project.error || null, errorCode: project.errorCode || null,
       bytesDone: project.bytesDone ?? null, bytesTotal: project.bytesTotal ?? null,
+      currentClip: project.currentClip ?? null, totalClips: project.totalClips ?? null,
+      clipPercent: project.clipPercent ?? null, clipPlan: project.clipPlan || null,
       submittedAt: project.submittedAt, completedAt: project.completedAt || null, clipCount: project.clipCount || 0,
       clipsRequested: project.clipsRequested || 0,
       durationSec: project.durationSec || project.sourceDurationSec || null, sourceDurationSec: project.sourceDurationSec || null,       // Derived at read time as well as at submit: lectures queued before the
