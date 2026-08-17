@@ -1142,8 +1142,10 @@ test('posting windows come from the account, and the label matches the time', ()
   const vals = StudioAdapter.bindings({ projects: [], clips: [], tracks: [], postTimes: ['07:00', '12:00', '17:00', '20:30'] });
   assert.equal(vals.postWindow1, '07:00');
   assert.equal(vals.postWindowName1, 'Morning', 'a 07:00 slot cannot be labelled Midday');
-  assert.equal(vals.postWindow3, '17:00');
-  assert.equal(vals.postWindowName3, 'Evening');
+  // Four configured times into three design rows: the last row carries the
+  // remainder rather than dropping 20:30, which clips are genuinely posted at.
+  assert.equal(vals.postWindow3, '17:00 · 20:30');
+  assert.equal(vals.postWindowName3, 'Evening · Late');
 });
 
 test('the daily limit agrees with the schedule beside it', () => {
@@ -1517,4 +1519,24 @@ test('Undo discards unsaved template edits instead of only refetching', () => {
   StudioAdapter.bindings(state).undoEdit({ preventDefault() {} });
   assert.equal(StudioAdapter.ui.tplDraft, null);
   assert.equal(StudioAdapter.ui.tplDirty, false);
+});
+
+test('every configured posting time is shown, even past the design\'s three rows', () => {
+  // The design draws three window rows; the default schedule has four. The
+  // fourth used to disappear from the panel while clips were visibly scheduled
+  // into it.
+  Object.assign(StudioAdapter.ui, { screen: 'schedule' });
+  const vals = StudioAdapter.bindings({ ...SAMPLE_STATE, postTimes: ['07:00', '12:00', '17:00', '20:30'] });
+  const shown = [vals.postWindow1, vals.postWindow2, vals.postWindow3].join(' ');
+  for (const time of ['07:00', '12:00', '17:00', '20:30']) {
+    assert.ok(shown.includes(time), `${time} must appear somewhere in the panel`);
+  }
+  assert.equal(vals.postWindowName3, 'Evening · Late', 'names line up with the times beside them');
+});
+
+test('a three-slot schedule still renders one time per row', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'schedule' });
+  const vals = StudioAdapter.bindings({ ...SAMPLE_STATE, postTimes: ['08:00', '13:00', '19:30'] });
+  assert.equal(vals.postWindow3, '19:30');
+  assert.equal(vals.postWindowName3, 'Late');
 });

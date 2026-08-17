@@ -1530,12 +1530,18 @@
       // ── Posting windows ──
       // The design hardcoded three windows that matched nothing. These are the
       // account's own configured post times.
+      //
+      // The design draws exactly three rows and the default schedule has four
+      // (07:00, 12:00, 17:00, 20:30), so the last one used to vanish from this
+      // panel while clips were visibly scheduled into it. Anything past the
+      // second row is folded into the third rather than dropped -- a panel that
+      // silently omits a posting time is worse than a slightly crowded one.
       postWindowName1: windowName(postTimes[0]),
       postWindowName2: windowName(postTimes[1]),
-      postWindowName3: windowName(postTimes[2]),
+      postWindowName3: postTimes.slice(2).map(windowName).join(' · ') || '—',
       postWindow1: postTimes[0] || '—',
       postWindow2: postTimes[1] || '—',
-      postWindow3: postTimes[2] || '—',
+      postWindow3: postTimes.slice(2).join(' · ') || '—',
       dailyLimitNote: todayCount >= 4
         ? 'Today is full — 4 of 4. Nothing posts unless its four checks pass.'
         : todayCount + ' of 4 scheduled today. Nothing posts unless its four checks pass.',
