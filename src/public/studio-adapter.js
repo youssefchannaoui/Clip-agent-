@@ -1789,7 +1789,10 @@
             : !p.enabled ? 'Connected — not switched on'
             : 'Active',
           icon: p.icon,
-          open: function (e) { stop(e); setUI({ connProvider: p.key }); },
+          key: p.key,
+          // Opens the combined dialog rather than a per-platform one: seeing all
+          // four at once is what makes the publishing picture legible.
+          open: function (e) { stop(e); global.StudioAdapter.onOpenConnections(p.key); },
           // Green only when it will actually post: connected AND enabled.
           // Both names are supplied because the Home row binds heroDotStyle and
           // the modal binds dotStyle; supplying only one left the Home dot with
@@ -1860,6 +1863,7 @@
     onConnect: function () {},
     onDisconnect: function () {},
     onTestConnection: function () {},
+    onOpenConnections: function () {},
     onPublishingToggle: function () {},
     onPostNow: function () {},
     onSendBack: function () {},

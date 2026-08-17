@@ -32,6 +32,34 @@ body.studio-active #studio { display: block; }
    be controlled from here. Targeted through the Phosphor icon class rather than
    the generated one, which changes on re-import. */
 body.studio-read #studio button:has(> i.ph-bell) > span { display: none; }
+/* Connections overlay — centred card over a blurred backdrop. */
+#studioConn { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
+#studioConn.hide { display: none; }
+.studio-conn-backdrop { position: absolute; inset: 0; background: rgba(6,6,8,.66); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); }
+.studio-conn-card {
+  position: relative; width: min(430px, 100%); max-height: 84vh; overflow: auto;
+  display: flex; flex-direction: column; gap: 12px; padding: 18px;
+  border: 1px solid #26262A; border-radius: 15px; background: #121214;
+  box-shadow: 0 28px 70px rgba(0,0,0,.62); animation: dcPop .16s cubic-bezier(.2,.8,.2,1);
+  font-family: Inter, system-ui, sans-serif; color: #F2F2F4;
+}
+.studio-conn-head { display: flex; align-items: flex-start; gap: 10px; }
+.studio-conn-head strong { display: block; font-family: Outfit, Inter, sans-serif; font-size: 15px; font-weight: 600; }
+.studio-conn-head span { display: block; margin-top: 2px; font-size: 11.5px; color: #8B8B93; }
+.studio-conn-x { margin-left: auto; width: 28px; height: 28px; flex: none; border: 1px solid #26262A; border-radius: 8px; background: #17171A; color: #A2A2AA; font-size: 17px; line-height: 1; cursor: pointer; }
+.studio-conn-x:hover { color: #F2F2F4; border-color: #34343A; }
+.studio-conn-row { display: flex; align-items: center; gap: 11px; padding: 11px; border: 1px solid #1E1E22; border-radius: 11px; background: #0E0E11; }
+.studio-conn-row i { font-size: 19px; color: #BCBCC3; }
+.studio-conn-row .who { min-width: 0; flex: 1; }
+.studio-conn-row .who b { display: block; font-size: 12.5px; font-weight: 600; }
+.studio-conn-row .who span { display: block; font-size: 11px; color: #8B8B93; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studio-conn-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; }
+.studio-conn-actions { display: flex; gap: 6px; flex: none; }
+.studio-conn-actions button { padding: 5px 10px; border-radius: 7px; font-family: inherit; font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid #26262A; background: #17171A; color: #A2A2AA; }
+.studio-conn-actions button.primary { border-color: rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6; }
+.studio-conn-actions button.danger:hover { border-color: #3A2A2A; color: #E3928C; }
+.studio-conn-actions button[disabled] { opacity: .45; cursor: not-allowed; }
+.studio-conn-foot { margin: 0; font-size: 11px; color: #6E6E76; line-height: 1.45; }
 </style>
 <style>
 :root{
@@ -1032,6 +1060,25 @@ select:focus{outline:none;border-color:var(--blue)}
   </div>
 </section>
 
+<!-- Connections overlay. Hand-written rather than generated: the design's own
+     dialog carries bindings for a single platform (connName, connHandle, …), so
+     showing all four at once is not expressible in that template. Driven from
+     the adapter's `connections` data, so it stays correct across re-imports. -->
+<div id="studioConn" class="hide" role="dialog" aria-modal="true" aria-label="Publishing connections">
+  <div class="studio-conn-backdrop" data-conn-close></div>
+  <div class="studio-conn-card">
+    <div class="studio-conn-head">
+      <div>
+        <strong>Publishing connections</strong>
+        <span id="studioConnSummary"></span>
+      </div>
+      <button type="button" class="studio-conn-x" data-conn-close aria-label="Close">&times;</button>
+    </div>
+    <div id="studioConnList"></div>
+    <p class="studio-conn-foot">Instagram and Facebook share one Meta connection &mdash; connecting or disconnecting either affects both.</p>
+  </div>
+</div>
+
 <!-- ============ studio dashboard (generated design) ============ -->
 <div id="studio"></div>
 
@@ -1686,6 +1733,42 @@ function renderStudio(){
       catch(e){toast(e.message,'bad');StudioAdapter.settled();if(onFail)onFail(e.message);renderAll()}};
     /* Toasts surface in the design's own dock while the Studio shell is visible. */
     StudioAdapter.onToast=m=>StudioAdapter.showToast(m);
+    /* Clicking any social icon opens one dialog listing all four platforms,
+       rather than a per-platform one, so the whole publishing picture is visible
+       at a glance. Rendered here because the design's dialog only carries
+       bindings for a single platform. */
+    const connEls={root:$('#studioConn'),list:$('#studioConnList'),summary:$('#studioConnSummary')};
+    const closeConn=()=>{connEls.root.classList.add('hide');StudioAdapter.ui.connProvider=null};
+    $$('[data-conn-close]').forEach(el=>el.onclick=closeConn);
+    document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!connEls.root.classList.contains('hide'))closeConn()});
+    function paintConnections(){
+      if(!DATA)return;
+      const rows=StudioAdapter.bindings(DATA).connections;
+      const live=rows.filter(r=>/^Active$/.test(r.note)).length;
+      connEls.summary.textContent=`${live} of ${rows.length} ready to publish`;
+      connEls.list.innerHTML=rows.map((r,i)=>{
+        const colour=(r.heroDotStyle.match(/background: (#[0-9A-Fa-f]{6})/)||[])[1]||'#6E6E76';
+        const off=/Not configured/.test(r.note);
+        const linked=!off&&!/Connect to publish/.test(r.note);
+        /* One line, not two: when a platform has no API keys the handle and the
+           note said the same thing twice and truncated each other. */
+        const detail=off?'Not set up on the server yet':linked?`${r.handle} · ${r.note}`:'No account linked';
+        return `<div class="studio-conn-row">
+          <i class="${esc(r.icon)}"></i>
+          <span class="studio-conn-dot" style="background:${esc(colour)}"></span>
+          <span class="who"><b>${esc(r.name)}</b><span>${esc(detail)}</span></span>
+          <span class="studio-conn-actions">
+            <button type="button" class="primary" data-conn-connect="${i}" ${off?'disabled':''}>${linked?'Reconnect':'Connect'}</button>
+            <button type="button" class="danger" data-conn-disconnect="${i}" ${linked?'':'disabled'}>Disconnect</button>
+          </span></div>`}).join('');
+      $$('[data-conn-connect]').forEach(b=>b.onclick=()=>{
+        const p=rows[Number(b.dataset.connConnect)];StudioAdapter.ui.connProvider=p.key;
+        StudioAdapter.bindings(DATA).reconnect({preventDefault(){}})});
+      $$('[data-conn-disconnect]').forEach(b=>b.onclick=()=>{
+        const p=rows[Number(b.dataset.connDisconnect)];StudioAdapter.ui.connProvider=p.key;
+        StudioAdapter.bindings(DATA).disconnect({preventDefault(){}})});
+    }
+    StudioAdapter.onOpenConnections=()=>{paintConnections();connEls.root.classList.remove('hide')};
     /* /api/clip-settings validates all three fields together, so a partial patch
        has to be merged onto what the account already has or it 400s. */
     StudioAdapter.onClipSettings=patch=>studioDo(()=>api('/api/clip-settings',{method:'POST',body:JSON.stringify({...(DATA?.clipSettings||{}),...patch})}));
