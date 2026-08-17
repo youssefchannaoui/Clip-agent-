@@ -76,6 +76,10 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
   box-shadow: 0 20px 50px rgba(0,0,0,.6); font-family: Inter, system-ui, sans-serif; color: #F2F2F4; overflow: hidden;
 }
 #studioLiveHome .slb-head { border-bottom: 1px solid #1E1E22; }
+/* Idle: present and calm, not alarming. The dot stops pulsing, because a
+   pulsing "live" dot with nothing live is a lie. */
+#studioLiveHome.slh-idle .slb-dot { background: #4A4A52; animation: none; }
+.slh-empty { padding: 13px; font-size: 11.5px; color: #6E6E76; }
 /* Both of these live outside #studio, so the sheet's `#studio .ph-circle-notch`
    rule never reached them and the spinner sat perfectly still. */
 #studioLiveHome .ph-circle-notch, #studioLiveBar .ph-circle-notch {
@@ -1877,19 +1881,29 @@ function studioWanted(){return window.STUDIO_SHELL===true}
     function paintLiveWork(vals){
       const onHome=StudioAdapter.ui.screen==='home';
       const any=vals.liveCount>0;
-      liveEls.home.classList.toggle('hide',!(onHome&&any));
       liveEls.bar.classList.toggle('hide',!(!onHome&&any));
-      if(!any)return;
       if(onHome){
         dockLiveHome(liveEls.home);
+        /* Stable: on Home the section stays put whether or not anything is
+           running, and says so when it is idle. Appearing and vanishing is what
+           made it feel like it was not there at all.
+
+           The exception is when there is no column to sit in — a brand-new
+           account with no library heading to anchor to. Floating "Nothing is
+           processing" over the middle of the page is worse than nothing, so it
+           only floats when it has something to report. */
+        const docked=liveEls.home.classList.contains('slh-docked');
+        liveEls.home.classList.toggle('hide',!any&&!docked);
+        liveEls.home.classList.toggle('slh-idle',!any);
         paintRows(liveEls.home,vals.liveAll,()=>`<div class="slb-head"><span class="slb-dot"></span>
           <span class="slb-title">Happening now</span>
-          <span class="slb-eta">${esc(vals.liveCount)} running</span></div>
-          ${vals.liveAll.map(liveRowHtml).join('')}`);
-        const n=liveEls.home.querySelector('.slb-eta'),want=`${vals.liveCount} running`;
+          <span class="slb-eta"></span></div>
+          ${any?vals.liveAll.map(liveRowHtml).join(''):`<div class="slh-empty">${esc(vals.liveHeadline)}</div>`}`);
+        const n=liveEls.home.querySelector('.slb-eta'),want=any?`${vals.liveCount} running`:'Idle';
         if(n&&n.textContent!==want)n.textContent=want;
         return;
       }
+      if(!any){liveEls.home.classList.add('hide');return}
       const first=vals.liveAll[0];
       /* Keyed on what changes the structure — which jobs, and whether the queue
          is open — so a numbers-only update leaves the nodes, and the spinner

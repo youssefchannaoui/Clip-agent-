@@ -1445,11 +1445,42 @@ test('Home gets the docked section and every other screen gets the bar', () => {
   const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
   const paint = /function paintLiveWork\([\s\S]*?\n    }\n/.exec(html)[0];
   assert.match(paint, /screen==='home'/, 'placement is decided by the screen');
-  // Exactly one of the two is ever visible: the collision the user reported was
-  // both a floating bar and a section on the same page.
-  assert.match(paint, /home\.classList\.toggle\('hide',!\(onHome&&any\)\)/);
-  assert.match(paint, /bar\.classList\.toggle\('hide',!\(!onHome&&any\)\)/);
+  // Never both at once: the collision originally reported was a floating bar and
+  // a section on the same page.
+  assert.match(paint, /bar\.classList\.toggle\('hide',!\(!onHome&&any\)\)/,
+    'the floating bar is for other screens, and only when something is running');
+  assert.match(paint, /if\(!any\)\{liveEls\.home\.classList\.add\('hide'\);return\}/,
+    'the section never shows off Home');
   assert.match(paint, /vals\.liveAll\.map/, 'the section lists everything, not a slice');
+});
+
+test('the Home section stays put when nothing is running', () => {
+  // It is meant to be stable. Hiding it whenever liveCount hit zero made it read
+  // as missing entirely, since idle is the normal state.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const paint = /function paintLiveWork\([\s\S]*?\n    }\n/.exec(html)[0];
+  assert.match(paint, /toggle\('hide',!any&&!docked\)/,
+    'idle still shows, as long as there is a column to sit in');
+  assert.match(paint, /toggle\('slh-idle',!any\)/);
+  assert.match(paint, /slh-empty">\$\{esc\(vals\.liveHeadline\)\}/, 'and it says so');
+  // A pulsing "live" dot with nothing live is a lie.
+  assert.match(html, /#studioLiveHome\.slh-idle \.slb-dot \{[^}]*animation: none/);
+});
+
+test('the idle section does not float over a page with no column to sit in', () => {
+  // A brand-new account has no library heading to anchor to. Floating "Nothing
+  // is processing" over the middle of the page is worse than showing nothing.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const paint = /function paintLiveWork\([\s\S]*?\n    }\n/.exec(html)[0];
+  assert.match(paint, /const docked=liveEls\.home\.classList\.contains\('slh-docked'\)/);
+  assert.match(paint, /dockLiveHome\(liveEls\.home\);[\s\S]*const docked=/,
+    'docking runs first, so the check reflects this render');
+});
+
+test('the idle state reports what the adapter says, not an invented string', () => {
+  const vals = StudioAdapter.bindings({ projects: [], clips: [], tracks: [] });
+  assert.equal(vals.liveCount, 0);
+  assert.equal(vals.liveHeadline, 'Nothing is processing right now');
 });
 
 test('the Home section sits at the top of the library column, not the activity aside', () => {
