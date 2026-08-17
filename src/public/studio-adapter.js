@@ -50,6 +50,8 @@
     tplPast: [],
     tplFuture: [],
     tplReplaying: false,
+    // True while "Save to all clips" is in flight, so the button can say so.
+    edApplying: false,
     sheet: null,
     toast: null,
     playerClip: null,
@@ -995,6 +997,17 @@
     }).map(function (p) { return PLATFORM_NAMES[p.key] || p.key; });
 
     var capTop = tpl.captionPosition === 'top' ? 22 : tpl.captionPosition === 'bottom' ? 80 : 50;
+    // The editor's caption overlay, placed the way the renderer places it:
+    // MarginV measured from whichever edge the alignment anchors to, and ignored
+    // entirely for a middle alignment. The overlay is centred on its own box, so
+    // the translate has to change with the anchor or it drifts by half its
+    // height.
+    var edCapVertical = (function () {
+      var pos = tpl.captionPosition;
+      if (pos !== 'top' && pos !== 'bottom') return 'top: ' + capTop + '%; translate: -50% -50%;';
+      var pct = Math.max(2, Math.min(46, (Number(tpl.captionMarginV) || 0) / Math.max(1, Number(tpl.height || 1920)) * 100));
+      return (pos === 'top' ? 'top: ' : 'bottom: ') + pct.toFixed(2) + '%; translate: -50% 0;';
+    }());
 
     var job = UI.job;
     var tokenRate = Number((DATA.billing && DATA.billing.tokenRatePerMinute) || 1);
@@ -1548,7 +1561,11 @@
       edSelRange: selectedBlock ? selectedBlock.time : '',
       edCapBlocks: edCaptionBlocks,
       // Overlays sit inside the preview frame, positioned as fractions of it.
-      edCapOverlayStyle: 'position: absolute; z-index: 8; width: 80%; left: 50%; top: ' + capTop + '%; translate: -50% -50%; text-align: center; padding: 7px 9px; border-radius: 6px; background: rgba(10,10,12,.5); color: ' +
+      // Positioned from captionMarginV against the anchoring edge, exactly as
+      // the Templates preview and the renderer do. It used to sit on capTop
+      // alone, so the box only ever showed three positions and a drag or the
+      // vertical slider appeared to do nothing between them.
+      edCapOverlayStyle: 'position: absolute; z-index: 8; width: 80%; left: 50%; ' + edCapVertical + ' text-align: center; padding: 7px 9px; border-radius: 6px; background: rgba(10,10,12,.5); color: ' +
         (tpl.captionPrimary || '#F0D6A6') + '; font-family: Outfit, Inter, sans-serif; font-weight: 600; line-height: 1.2; font-size: ' +
         Math.max(8, Math.round(Number(tpl.captionFontSize || 96) / 8)) + 'px;' + (tpl.captionUppercase ? ' text-transform: uppercase;' : ''),
       edCapHandle: 'position: absolute; inset: -5px; border: 1px dashed rgba(240,214,166,.7); border-radius: 8px; pointer-events: none;',
@@ -1613,6 +1630,14 @@
       edProgressStyle: 'height: 3px; border-radius: 3px; width: ' + (UI.edPlayhead * 100).toFixed(2) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
       edProgressLabel: edClip ? secsToClock((edClip.durationMs || 0) / 1000 * UI.edPlayhead) : '0:00',
       edSiblings: edSiblings,
+      // How many other clips from the same lecture this clip's look could be
+      // applied to. Drives the second save button, which the design does not
+      // draw, so the host adds it.
+      edLectureOthers: edClip
+        ? clips.filter(function (c) {
+          return c.projectId === edClip.projectId && c.id !== edClip.id && !c.variantOf && c.status !== 'posted';
+        }).length
+        : 0,
 
       edDirtyLabel: UI.edDirty ? 'Unsaved changes' : 'All changes saved',
       edDirtyDot: 'width: 7px; height: 7px; border-radius: 50%; background: ' + (UI.edDirty ? '#E6B770' : '#7FD1A6') + ';',
@@ -2346,6 +2371,9 @@
     // the style every clip shares. index.html overrides both at mount.
     onClipStyle: function () {},
     onPromoteClipStyle: function () {},
+    // Overridden by the host: saves this clip, then gives every other clip from
+    // the same lecture the same look.
+    onApplyToLecture: function () {},
     onPickOption: function (title, options, cb) {
       UI.sheet = { title: title, subtitle: 'Applies to every clip on this template', options: options, cb: cb };
       refresh();
@@ -2392,6 +2420,19 @@
     onSendBack: function () {},
     onScheduleClip: function () {},
     onMoreClips: function () {},
+    // Sends any pending clip-style edit immediately instead of waiting out the
+    // debounce. "Save to all clips" reads the overrides back off the server to
+    // copy them, so without this the siblings would be given the look from
+    // before the last half-second of edits -- and the clip being edited would
+    // end up the odd one out.
+    flushClipStyle: function () {
+      if (UI.edStyleTimer) { global.clearTimeout(UI.edStyleTimer); UI.edStyleTimer = null; }
+      var pending = UI.edStyleDraft;
+      UI.edStyleDraft = null;
+      if (!pending || !Object.keys(pending).length) return Promise.resolve();
+      return Promise.resolve(global.StudioAdapter.onClipStyle(UI.edClipId, pending));
+    },
+
     // Holds an edit that was not persisted, so it survives the debounce.
     //
     // saveTemplate() hands the draft to the host and clears it, on the

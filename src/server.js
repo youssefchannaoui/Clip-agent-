@@ -1048,6 +1048,61 @@ async function route(req, res, url) {
   // Promote one clip's tweaks onto its shared style, so every clip using that
   // style picks them up. This is the old always-on behaviour, now something the
   // user asks for by name instead of a side effect of dragging a slider.
+  // Spread one clip's own tweaks to its siblings.
+  //
+  // Editing a clip writes only that clip, which is right -- one clip's crop must
+  // not move every clip in the lecture. But the common intent after getting a
+  // clip looking right is "now do that to the rest of this video", and nothing
+  // did it: promote-style writes the shared template, which reaches every other
+  // lecture too, and refuses outright on a built-in.
+  //
+  // scope 'lecture' copies the overrides onto the other clips from the same
+  // source video only. scope 'template' is the old promote-style behaviour, kept
+  // for when the user really does mean everything.
+  const applyStyleMatch = pathname.match(/^\/api\/clips\/([^/]+)\/apply-style$/);
+  if (applyStyleMatch && method === 'POST') {
+    const id = decodeURIComponent(applyStyleMatch[1]);
+    const body = await readBody(req);
+    const scope = String(body.scope || 'lecture');
+    try {
+      assertCanAccessClip(currentUser, id);
+      const clip = state.clips.find(item => item.id === id);
+      if (!clip) return json(res, 404, { error: 'That clip no longer exists.' });
+      const overrides = clip.styleOverrides && Object.keys(clip.styleOverrides).length ? clip.styleOverrides : null;
+      if (!overrides) return json(res, 400, { error: 'This clip has no changes of its own to apply.' });
+      if (scope !== 'lecture') return json(res, 400, { error: 'Unknown scope.' });
+
+      // Siblings from the same lecture, this account only, and never a clip that
+      // has already gone out -- rewriting a posted video is not a style change.
+      const siblings = ownedBy(state.clips, currentUser.id).filter(item => item.projectId === clip.projectId
+        && item.id !== clip.id && !item.variantOf && item.status !== 'posted');
+      // The style is stored either way, and stylePending marks the video as out
+      // of date -- the same contract promote-style uses. Rolling the style back
+      // when a re-render cannot start would mean the whole action silently did
+      // nothing on an account whose source files have been cleaned up, which is
+      // a supported state rather than an error.
+      let applied = 0; let queued = 0; const errors = [];
+      for (const sibling of siblings) {
+        // They are meant to end up looking the same, so this replaces the
+        // sibling's own tweaks rather than merging underneath them.
+        sibling.styleOverrides = { ...overrides };
+        sibling.stylePending = true;
+        applied += 1;
+        try {
+          agent.engine.queueClipRerender(sibling.id, sibling.templateId || clip.templateId, {});
+          queued += 1;
+        } catch (error) {
+          errors.push({ clipId: sibling.id, error: error.message });
+        }
+      }
+      save();
+      const project = state.projects.find(item => item.id === clip.projectId);
+      log(`Applied "${clip.title || 'clip'}" styling to ${applied} other clip${applied === 1 ? '' : 's'} in "${project?.title || 'this lecture'}"; ${queued} re-rendering now.`,
+        'info', currentUser.id);
+      return json(res, 202, { ok: true, scope, applied, queued, pending: applied - queued, errors: errors.slice(0, 20) });
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+
   const promoteMatch = pathname.match(/^\/api\/clips\/([^/]+)\/promote-style$/);
   if (promoteMatch && method === 'POST') {
     const id = decodeURIComponent(promoteMatch[1]);

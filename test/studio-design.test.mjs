@@ -1508,6 +1508,34 @@ test('a submission carries an idempotency key so a 502 cannot charge twice', () 
 
 // ── rendering does not rebuild the page ────────────────────────────────────
 
+test('every slider can reach the whole range its field accepts', () => {
+  // The design draws min/max as literals and they did not match the schema. The
+  // caption's vertical position ran 20-88 against a field accepting 20-800, so
+  // the control could only express the bottom tenth of its own range — and
+  // touching it truncated a value the drag had set. Warmth ran 0-80 on a field
+  // that is -100..100, so it could never be set cool at all.
+  const template = fs.readFileSync(path.join(ROOT, 'src/public/studio-template.generated.js'), 'utf8');
+  const expected = {
+    edSize: [24, 140], edCapPosY: [20, 800], edGrain: [0, 100], edWarm: [-100, 100],
+  };
+  for (const [binding, [lo, hi]] of Object.entries(expected)) {
+    const re = new RegExp(`"type":"range","min":"(-?\\d+)","max":"(-?\\d+)","value":\\{"p":"${binding}"`);
+    const found = re.exec(template);
+    assert.ok(found, `${binding} is a range input`);
+    assert.equal(Number(found[1]), lo, `${binding} min`);
+    assert.equal(Number(found[2]), hi, `${binding} max`);
+  }
+});
+
+test('the range correction is driven by the schema, so a re-import keeps it', () => {
+  // Hand-patching the generated file would be undone by the next design pull.
+  const importer = fs.readFileSync(path.join(ROOT, 'scripts/import-design.mjs'), 'utf8');
+  assert.match(importer, /import \{ NUMBER_RANGES \} from '\.\.\/src\/templates\.js'/);
+  assert.match(importer, /const RANGE_FIELDS = \{/);
+  assert.match(importer, /setPosY: 'captionMarginV'/);
+  assert.match(importer, /attrOut\.min = String\(lo\)/);
+});
+
 test('a delegated handler is told which element it was bound to', () => {
   // Events are delegated from the mount, so e.currentTarget is #studio and not
   // the element the binding was written against. Every drag measures the
@@ -1782,6 +1810,46 @@ test('the preview shows where the caption actually is', () => {
   assert.match(style({ captionMarginV: 192, captionPosition: 'middle' }), /top: 50%/);
   // Clamped, so a stored extreme cannot push the box out of the frame.
   assert.match(style({ captionMarginV: 20, captionPosition: 'bottom' }), /bottom: 2/);
+});
+
+test('the editor offers to spread a look across the lecture, sized to it', () => {
+  const state = {
+    projects: [{ id: 'p1', title: 'Lecture' }], tracks: [], templates: [], selectedTemplate: null,
+    clips: [
+      { id: 'c1', projectId: 'p1', title: 'One', transcript: 'a' },
+      { id: 'c2', projectId: 'p1', title: 'Two' },
+      { id: 'c3', projectId: 'p1', title: 'Three' },
+      { id: 'c4', projectId: 'p1', title: 'Posted', status: 'posted' },
+      { id: 'other', projectId: 'p2', title: 'Different lecture' },
+    ],
+  };
+  Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'c1' });
+  // Two siblings: not itself, not the posted one, and not the other lecture's.
+  assert.equal(StudioAdapter.bindings(state).edLectureOthers, 2);
+  Object.assign(StudioAdapter.ui, { edClipId: 'other' });
+  assert.equal(StudioAdapter.bindings(state).edLectureOthers, 0, 'a lone clip has nothing to spread to');
+});
+
+test('the second save button is only offered when it would do something', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const paint = /function paintApplyLecture\([\s\S]*?\n    \}\n/.exec(html)[0];
+  assert.match(paint, /toggle\('hide',!\(inEditor&&others>0\)\)/);
+  assert.match(paint, /Save to all \$\{others \+ 1\} clips/, 'the label counts this clip too');
+  assert.match(paint, /save\.parentElement\.insertBefore\(applyEl,save\)/, 'docked beside Save clip');
+  assert.match(html, /<button id="studioApplyLecture"[^>]*data-host-owned/, 'the patcher must leave it alone');
+});
+
+test('spreading a look flushes the pending edit first', () => {
+  // The style panel debounces by 450ms and the server is the source the spread
+  // copies from, so without a flush the siblings would be given the look from
+  // before the last half-second — leaving the clip being edited the odd one out.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const fn = /StudioAdapter\.onApplyToLecture=[\s\S]*?renderAll\(\)\}\)\};/.exec(html)[0];
+  assert.match(fn, /await StudioAdapter\.flushClipStyle\(\)/);
+  assert.match(fn, /scope:'lecture'/);
+  const adapter = fs.readFileSync(path.join(ROOT, 'src/public/studio-adapter.js'), 'utf8');
+  assert.match(adapter, /flushClipStyle: function \(\)/);
+  assert.match(adapter, /clearTimeout\(UI\.edStyleTimer\)/, 'the debounce is cancelled, not raced');
 });
 
 test('the editor save writes to that clip and never to the shared style', () => {

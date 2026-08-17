@@ -81,6 +81,18 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 #studioLiveHome.slh-idle .slb-dot { background: #4A4A52; animation: none; }
 .slh-empty { padding: 13px; font-size: 11.5px; color: #6E6E76; }
 
+/* Second save button in the clip editor. Matches the design's secondary buttons
+   (Preview sits beside it) rather than inventing a look. */
+#studioApplyLecture {
+  display: inline-flex; align-items: center; gap: 7px; flex: none;
+  padding: 8px 12px; border: 1px solid #26262A; border-radius: 9px; background: #17171A;
+  color: #A2A2AA; font-family: Inter, system-ui, sans-serif; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+#studioApplyLecture:hover:not([disabled]) { color: #F2F2F4; border-color: #34343A; }
+#studioApplyLecture[disabled] { opacity: .45; cursor: not-allowed; }
+#studioApplyLecture.hide { display: none; }
+#studioApplyLecture i { font-size: 15px; }
+
 /* Per-clip breakdown behind "Rendering clip 2 of 4". */
 .slh-item { border-bottom: 1px solid #16161A; }
 .slh-item:last-child { border-bottom: 0; }
@@ -1190,6 +1202,10 @@ select:focus{outline:none;border-color:var(--blue)}
      the runtime's patcher must leave it alone rather than pairing it by index
      against a generated sibling and replacing it. -->
 <section id="studioLiveHome" class="hide" data-host-owned aria-label="Happening now"></section>
+<!-- The design draws one save button, which saves this clip alone. Getting a clip
+     right and then wanting the rest of the same video to match is the common next
+     step and there was no way to ask for it. Docked beside Save clip. -->
+<button id="studioApplyLecture" class="hide" type="button" data-host-owned></button>
 <div id="studioLiveBar" class="hide" role="status" aria-live="polite"></div>
 
 <!-- Connections overlay. Hand-written rather than generated: the design's own
@@ -1963,6 +1979,32 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         });
       });
     }
+    /* "Save clip" writes this clip alone, which is correct — one clip's crop must
+       not move every clip in the lecture. But wanting the rest of the same video
+       to match is the usual next step, and nothing offered it: the existing
+       promote-style endpoint writes the shared template, so it reaches every
+       other lecture too and refuses on a built-in.
+
+       Docked beside Save clip rather than added to the design, and disabled with
+       a reason when there is nothing to spread. */
+    const applyEl=$('#studioApplyLecture');
+    function paintApplyLecture(vals){
+      const inEditor=StudioAdapter.ui.screen==='editor'&&StudioAdapter.ui.edClipId;
+      const others=Number(vals.edLectureOthers||0);
+      applyEl.classList.toggle('hide',!(inEditor&&others>0));
+      if(!inEditor||!others)return;
+      const save=[...document.querySelectorAll('#studio button')]
+        .find(b=>/^(Save clip|Saving…)$/.test((b.textContent||'').trim()));
+      if(save&&save.parentElement&&save.previousElementSibling!==applyEl)save.parentElement.insertBefore(applyEl,save);
+      const label=`Save to all ${others + 1} clips`;
+      const busy=StudioAdapter.ui.edApplying===true;
+      const want=`<i class="ph ph-stack"></i><span>${busy?'Applying…':esc(label)}</span>`;
+      if(applyEl.dataset.label!==want){applyEl.dataset.label=want;applyEl.innerHTML=want}
+      applyEl.disabled=busy;
+      applyEl.title=`Saves this clip, then gives every other clip from this lecture the same look. Other lectures are untouched.`;
+      applyEl.onclick=()=>StudioAdapter.onApplyToLecture(StudioAdapter.ui.edClipId);
+    }
+
     function paintLiveWork(vals){
       const onHome=StudioAdapter.ui.screen==='home';
       const any=vals.liveCount>0;
@@ -2102,10 +2144,32 @@ function renderStudio(){
        template, which is why moving one caption moved it on every clip in the
        lecture. Nothing re-renders here — the clip is marked out of date and the
        user decides when to spend a token redoing the video. */
-    StudioAdapter.onClipStyle=(id,patch)=>{if(!id||!patch||!Object.keys(patch).length)return;studioDo(async()=>{
-      await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({styleOverrides:patch})})})};
+    /* Returns the promise so a caller that has to know the write landed -- Save
+       to all clips, which reads the overrides back off the server -- can wait. */
+    StudioAdapter.onClipStyle=(id,patch)=>{if(!id||!patch||!Object.keys(patch).length)return Promise.resolve();
+      return studioDo(async()=>{
+        await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({styleOverrides:patch})})})};
     /* The old always-on behaviour, kept but made deliberate: push this clip's
        tweaks onto the style, so every clip using it picks them up. */
+    /* Saves this clip first, then copies its look onto the rest of the lecture.
+       Flushing the pending style write matters: the panel debounces by 450ms, so
+       spreading without it would hand the siblings the previous look and leave
+       the clip you were actually editing different from all of them. */
+    StudioAdapter.onApplyToLecture=id=>{if(!id||StudioAdapter.ui.edApplying)return;
+      StudioAdapter.ui.edApplying=true;renderAll();
+      studioDo(async()=>{
+        await StudioAdapter.flushClipStyle();
+        const r=await api(`/api/clips/${encodeURIComponent(id)}/apply-style`,{method:'POST',body:JSON.stringify({scope:'lecture'})});
+        const applied=Number(r&&r.applied||0), queued=Number(r&&r.queued||0);
+        /* Two numbers, because they differ: the style always lands, but a clip
+           whose source has been cleaned up cannot be rebuilt right now. Saying
+           only "3 updated" would imply three new videos. */
+        StudioAdapter.showToast(!applied
+          ? 'Saved. This lecture has no other clip to update.'
+          : queued===applied
+            ? `Saved — ${applied} other clip${applied===1?'':'s'} in this lecture re-rendering to match`
+            : `Saved to ${applied} other clip${applied===1?'':'s'}; ${queued} re-rendering, ${applied-queued} need the source re-imported`);
+      },null,m=>StudioAdapter.showToast(m)).finally(()=>{StudioAdapter.ui.edApplying=false;renderAll()})};
     StudioAdapter.onPromoteClipStyle=(id)=>{if(!id)return;studioDo(async()=>{
       await api(`/api/clips/${encodeURIComponent(id)}/promote-style`,{method:'POST',body:'{}'})},'Applied to every clip using this style')};
     /* Saving is the one action that re-renders every unposted clip, so it asks
@@ -2236,6 +2300,7 @@ function renderStudio(){
   const vals=StudioAdapter.bindings(DATA);
   STUDIO.render(vals);
   paintLiveWork(vals);
+  paintApplyLecture(vals);
   /* No unread activity -> hide the dot the design hardcoded on. */
   document.body.classList.toggle('studio-read',!vals.activityUnread);
   return true}

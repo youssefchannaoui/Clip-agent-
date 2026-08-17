@@ -20,6 +20,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// The template schema is the authority for what a range input may express.
+import { NUMBER_RANGES } from '../src/templates.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -215,6 +217,23 @@ function addImportant(decls) {
 
 // ── template -> AST ─────────────────────────────────────────────────────────
 
+// Range inputs whose min/max the design drew as literals, mapped from the
+// adapter binding that writes them to the template field they set. The schema in
+// src/templates.js is the authority for the bounds: a slider that cannot reach
+// its field's range silently truncates what the user asks for, and the caption's
+// vertical position ran 20-88 against a field accepting 20-800.
+//
+// Keyed by binding rather than by position, so a re-import that moves the
+// control still corrects it -- and an entry that stops matching is reported.
+const RANGE_FIELDS = {
+  setSize: 'captionFontSize',
+  setPosY: 'captionMarginV',
+  setGrain: 'grain',
+  setWarm: 'warm',
+};
+const rangeFixes = [];
+const rangeFieldsHit = new Set();
+
 // Literal text the design bakes in that is really data. See
 // design/text-overrides.json.
 const OVERRIDES_FILE = path.resolve(ROOT, 'design/text-overrides.json');
@@ -343,6 +362,26 @@ function compileNode(node) {
     const v = valueNode(rawValue);
     noteBindings(v);
     attrOut[rawName] = v;
+  }
+
+  // A range input's min/max were drawn as literals and do not always match the
+  // field the adapter writes. The caption's vertical position slider ran 20-88
+  // while captionMarginV accepts 20-800, so the control could only reach the
+  // bottom tenth of its own range -- and touching it truncated a value the drag
+  // had set. The schema is the authority, so the bounds are corrected from it.
+  if (node.tag === 'input' && attrOut.type === 'range') {
+    const handler = on.input || on.change;
+    const field = handler && handler.p ? RANGE_FIELDS[handler.p] : null;
+    const range = field ? NUMBER_RANGES[field] : null;
+    if (range) {
+      const [lo, hi] = range;
+      if (String(attrOut.min) !== String(lo) || String(attrOut.max) !== String(hi)) {
+        rangeFixes.push(`${handler.p} (${field}): [${attrOut.min}, ${attrOut.max}] -> [${lo}, ${hi}]`);
+      }
+      rangeFieldsHit.add(handler.p);
+      attrOut.min = String(lo);
+      attrOut.max = String(hi);
+    }
   }
 
   const hover = attrs['style-hover'] || '';

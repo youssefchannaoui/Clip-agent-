@@ -80,7 +80,10 @@ const ENUMS = {
   watermarkPosition: ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'],
 };
 
-const NUMBER_RANGES = {
+// Exported so the design importer can correct range inputs whose min/max were
+// drawn as literals. A slider that cannot reach the schema's range is a control
+// that silently truncates what the user asks for.
+export const NUMBER_RANGES = {
   width: [360, 2160], height: [360, 3840], blurStrength: [0, 60],
   brightness: [-1, 1], contrast: [0.5, 2], saturation: [0, 3], gamma: [0.5, 2], sharpen: [0, 2], vignette: [0, 1],
   // grain is a percentage; warm runs cool-to-warm through neutral; zoom is a
