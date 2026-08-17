@@ -825,6 +825,34 @@ test('every live row carries a percentage, an ETA and a progress bar', () => {
   }
 });
 
+test('the import reports how much has actually downloaded', () => {
+  // A percentage alone gives no sense of whether a slow-looking import is a
+  // large file or a broken one.
+  const row = (bytesDone, bytesTotal) => StudioAdapter.bindings({
+    projects: [{ id: 'p', title: 'Talk', status: 'processing', stage: 'Importing', progress: 5, bytesDone, bytesTotal, submittedAt: Date.now() }],
+    clips: [], tracks: [],
+  }).liveAll[0];
+  assert.equal(row(149_000_000, 398_000_000).transfer, '142 MB of 380 MB');
+  assert.match(row(149_000_000, 398_000_000).meta, /Importing · 142 MB of 380 MB/);
+  // A server that sends no Content-Length is common; it must not print "of 0".
+  assert.equal(row(149_000_000, null).transfer, '142 MB');
+  assert.equal(row(149_000_000, 0).transfer, '142 MB');
+  // Absent entirely outside the import, rather than a frozen figure.
+  assert.equal(row(null, null).transfer, '');
+  assert.equal(row(undefined, undefined).meta, 'Importing');
+});
+
+test('download sizes are reported in units that match the file on disk', () => {
+  const row = bytes => StudioAdapter.bindings({
+    projects: [{ id: 'p', title: 'T', status: 'processing', stage: 'Importing', progress: 5, bytesDone: bytes, submittedAt: Date.now() }],
+    clips: [], tracks: [],
+  }).liveAll[0].transfer;
+  assert.equal(row(900), '900 B');
+  assert.equal(row(2048), '2 KB');
+  assert.equal(row(5_242_880), '5 MB');
+  assert.equal(row(3_221_225_472), '3.0 GB', 'a long import is the case this exists for');
+});
+
 test('an ETA is rendered in human units, and absent when unknown', () => {
   const at = Date.now();
   const withEta = sec => StudioAdapter.bindings({
@@ -1362,6 +1390,34 @@ test('a submission carries an idempotency key so a 502 cannot charge twice', () 
 
 // ── rendering does not rebuild the page ────────────────────────────────────
 
+test('the patcher leaves host-injected nodes where the host put them', () => {
+  // The live-work section is docked *inside* a generated column. patch() pairs
+  // children by index, so an unguarded foreign node at index 0 gets compared
+  // against the generated node at index 0, replaced, and every sibling after it
+  // shifts by one — silently corrupting the column the moment its HTML changes.
+  const runtime = fs.readFileSync(path.join(ROOT, 'src/public/studio-runtime.js'), 'utf8');
+  assert.match(runtime, /function hostOwned\(/, 'host-owned nodes are recognised');
+  assert.match(runtime, /hasAttribute\('data-host-owned'\)/);
+  const fn = /function patch\(target, source\) \{[\s\S]*?\n  \}\n/.exec(runtime)[0];
+  assert.match(fn, /if \(!hostOwned\(target\.childNodes\[k\]\)\) oldNodes\.push/,
+    'they are skipped when pairing');
+  assert.doesNotMatch(fn, /var oldNodes = target\.childNodes;/,
+    'pairing against the live child list is what caused this');
+  // And the element must actually carry the attribute, or the guard is inert.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  assert.match(html, /<section id="studioLiveHome"[^>]*data-host-owned/);
+});
+
+test('live work is repainted in place so its spinner keeps turning', () => {
+  // Rewriting innerHTML every render destroyed each row and restarted the CSS
+  // animation from frame zero, so the spinner never visibly turned.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const paint = /function paintRows\([\s\S]*?\n    }\n/.exec(html)[0];
+  assert.match(paint, /dataset\.liveKey!==key/, 'the structure is only rebuilt when the jobs change');
+  assert.match(paint, /textContent!==r\.meta/, 'otherwise the numbers are written into the existing nodes');
+  assert.match(paint, /setAttribute\('style',r\.barStyle\)/);
+});
+
 test('the renderer patches rather than replacing, and skips identical renders', () => {
   // Replacing innerHTML on every render destroyed and rebuilt the whole tree:
   // scroll reset, CSS animations restarted from frame zero, and the screen
@@ -1396,18 +1452,41 @@ test('Home gets the docked section and every other screen gets the bar', () => {
   assert.match(paint, /vals\.liveAll\.map/, 'the section lists everything, not a slice');
 });
 
-test('the Home section docks above the review card rather than covering content', () => {
+test('the Home section sits at the top of the library column, not the activity aside', () => {
   const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
   const dock = /function dockLiveHome\([\s\S]*?\n    }\n/.exec(html)[0];
-  // Anchoring on the parent put this in the main column and shoved My library
-  // sideways; the fix is the *smallest* element containing the text.
-  assert.match(dock, /Needs your review/);
-  assert.match(dock, /sort\(\(a,b\)=>a\.querySelectorAll\('\*'\)\.length-b\.querySelectorAll\('\*'\)\.length\)/,
-    'the smallest matching element wins');
-  assert.match(dock, /insertBefore/);
-  assert.doesNotMatch(dock, /card\.parentElement\.parentElement/);
-  assert.match(dock, /classList\.toggle\('slh-docked',Boolean\(card\)\)/,
-    'falls back to floating rather than vanishing if a re-import moves the card');
+  assert.match(dock, /My library/, 'anchored on the heading, not a generated class name');
+  assert.doesNotMatch(dock, /Needs your review/, 'the right-hand aside is the activity column');
+  // The column's parent is a two-item flex row (library | activity). Inserting a
+  // sibling there would add a third column, so this must go *inside*.
+  assert.match(dock, /col\.insertBefore\(el,col\.firstElementChild\)/);
+  assert.match(dock, /getBoundingClientRect\(\)\.x\)===x/,
+    'the column is found by geometry, which survives a re-import');
+  assert.match(dock, /classList\.toggle\('slh-docked',Boolean\(col\)\)/,
+    'falls back to floating rather than vanishing if the heading moves');
+});
+
+test('the docked section takes the column width and the site card treatment', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const rule = /#studioLiveHome\.slh-docked \{[^}]*\}/.exec(html)[0];
+  assert.match(rule, /position: static/, 'it is in the page flow, not floating over it');
+  assert.match(rule, /width: auto/, 'so it stops where the library column stops');
+  assert.match(rule, /background: #121214/, "the site's own card background");
+  assert.match(rule, /box-shadow: none/);
+});
+
+test('the spinner actually spins outside #studio', () => {
+  // #studioLiveHome and #studioLiveBar are siblings of #studio, so the sheet's
+  // `#studio .ph-circle-notch` rule never reached them and the icon sat still.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const rule = /#studioLiveHome \.ph-circle-notch, #studioLiveBar \.ph-circle-notch \{[^}]*\}/.exec(html);
+  assert.ok(rule, 'the spin rule is scoped to reach both');
+  assert.match(rule[0], /animation: dcSpin/);
+  assert.match(rule[0], /display: inline-block/, 'a rotate on an inline box does nothing');
+  // And the row must carry the inline style too, since it is what the design
+  // uses for the per-kind animation.
+  const row = /function liveRowHtml\([\s\S]*?\n    }\n/.exec(html)[0];
+  assert.match(row, /style="\$\{esc\(r\.iconStyle\|\|''\)\}"/, 'iconStyle was being dropped');
 });
 
 test('the bar opens the queue when more than one thing is running', () => {

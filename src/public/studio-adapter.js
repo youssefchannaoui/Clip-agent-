@@ -898,7 +898,7 @@
     var jobsLive = [];
     projects.forEach(function (pr) {
       if (['queued', 'processing'].indexOf(pr.status) > -1) {
-        jobsLive.push({ kind: 'project', title: projectTitle[pr.id], stage: pr.stage || pr.status, progress: Number(pr.progress || 0), etaSec: pr.etaSec, at: pr.startedAt || pr.submittedAt });
+        jobsLive.push({ kind: 'project', title: projectTitle[pr.id], stage: pr.stage || pr.status, progress: Number(pr.progress || 0), etaSec: pr.etaSec, bytesDone: pr.bytesDone, bytesTotal: pr.bytesTotal, at: pr.startedAt || pr.submittedAt });
       }
       if (pr.moreJob && ['queued', 'processing'].indexOf(pr.moreJob.status) > -1) {
         jobsLive.push({ kind: 'project', title: 'More clips · ' + projectTitle[pr.id], stage: pr.moreJob.stage || pr.moreJob.status, progress: Number(pr.moreJob.progress || 0), at: pr.moreJob.startedAt || pr.moreJob.createdAt });
@@ -924,6 +924,25 @@
     });
     jobsLive.sort(function (a, b) { return Number(b.at || 0) - Number(a.at || 0); });
 
+    // Binary units, matching what a download manager and the OS both report, so
+    // the number does not disagree with the file on disk.
+    function sizeLabel(bytes) {
+      var n = Number(bytes);
+      if (!isFinite(n) || n <= 0) return '';
+      if (n < 1024) return n + ' B';
+      if (n < 1048576) return Math.round(n / 1024) + ' KB';
+      if (n < 1073741824) return Math.round(n / 1048576) + ' MB';
+      return (n / 1073741824).toFixed(1) + ' GB';
+    }
+    // "142 MB of 380 MB" while the total is known, "142 MB" while it is not --
+    // a server that sends no Content-Length is common and must not print "of 0".
+    function transferLabel(done, total) {
+      var a = sizeLabel(done);
+      if (!a) return '';
+      var b = sizeLabel(total);
+      return b ? a + ' of ' + b : a;
+    }
+
     function etaLabel(seconds) {
       if (seconds === null || seconds === undefined || !isFinite(seconds)) return '';
       var s = Math.max(0, Math.round(seconds));
@@ -936,17 +955,24 @@
     function liveRow(j) {
       var pct = (j.progress === null || !isFinite(j.progress)) ? null : Math.max(0, Math.min(100, Math.round(j.progress)));
       var eta = etaLabel(j.etaSec);
+      // Only the import moves bytes, so this is absent for the rest of the
+      // pipeline rather than showing a frozen figure from an earlier phase.
+      var transfer = transferLabel(j.bytesDone, j.bytesTotal);
+      // Stage, then size, then time remaining: what it is doing, how far in, how
+      // much longer.
+      var detail = j.stage + (transfer ? ' · ' + transfer : '') + (eta ? ' · ' + eta : '');
       return {
         label: j.title,
         title: j.title,
         stage: j.stage,
         percent: pct === null ? '' : pct + '%',
         eta: eta,
+        transfer: transfer,
         // The dock binds text/textStyle; supplying only label left every row of
         // the floating bar unstyled and unreadable.
-        text: j.title + ' · ' + j.stage + (pct === null ? '' : ' · ' + pct + '%') + (eta ? ' · ' + eta : ''),
+        text: j.title + ' · ' + detail + (pct === null ? '' : ' · ' + pct + '%'),
         textStyle: 'font-size: 11.5px; color: #BCBCC3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;',
-        meta: j.stage + (eta ? ' · ' + eta : ''),
+        meta: detail,
         barStyle: 'height: 3px; border-radius: 3px; width: ' + (pct === null ? 100 : pct) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
         icon: j.kind === 'publish' ? 'ph ph-paper-plane-tilt' : j.kind === 'render' ? 'ph ph-film-strip' : 'ph ph-circle-notch',
         iconStyle: 'font-size: 14px; color: #F0D6A6;' + (j.kind === 'project' ? ' animation: dcSpin 1.1s linear infinite;' : ''),

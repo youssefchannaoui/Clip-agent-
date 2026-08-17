@@ -614,6 +614,13 @@ export function acceptRemoteUpdate(projectId, update) {
   // A warning the worker raised about how the clips were made. Logged once, to
   // the owning account, rather than repeated on every poll.
   if (update.etaSec !== undefined) project.etaSec = update.etaSec === null ? null : Math.max(0, Math.round(Number(update.etaSec)));
+  // Download size, so the import can say how much of the file has landed rather
+  // than only a percentage of a band the customer cannot see.
+  for (const key of ['bytesDone', 'bytesTotal']) {
+    if (update[key] === undefined) continue;
+    const value = Number(update[key]);
+    project[key] = Number.isFinite(value) && value > 0 ? Math.round(value) : null;
+  }
   if (update.lastWarning && update.lastWarning !== project.lastWarning) {
     project.lastWarning = String(update.lastWarning);
     project.lastWarningCode = String(update.lastWarningCode || '');

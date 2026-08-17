@@ -285,17 +285,30 @@
     }
   }
 
+  // Nodes the host page injected into the design's tree — the live-work section
+  // is docked inside a generated column — are not in the generated HTML.
+  // Pairing children by raw index would compare one against a generated sibling,
+  // replace it, and shift everything after it by one. They are skipped when
+  // pairing and left exactly where the host put them.
+  function hostOwned(node) {
+    return node.nodeType === 1 && node.hasAttribute('data-host-owned');
+  }
+
   function patch(target, source) {
-    var oldNodes = target.childNodes;
+    var oldNodes = [];
+    for (var k = 0; k < target.childNodes.length; k++) {
+      if (!hostOwned(target.childNodes[k])) oldNodes.push(target.childNodes[k]);
+    }
     var newNodes = source.childNodes;
     var count = Math.max(oldNodes.length, newNodes.length);
     for (var i = 0; i < count; i++) {
       var oldNode = oldNodes[i];
       var newNode = newNodes[i];
       if (!newNode) {
-        // Trailing nodes the new render does not have; remove from the end.
-        while (oldNodes.length > newNodes.length) target.removeChild(target.lastChild);
-        break;
+        // A node the new render does not have. oldNodes is a snapshot, so
+        // removing one cannot disturb the rest of this walk.
+        if (oldNode) target.removeChild(oldNode);
+        continue;
       }
       if (!oldNode) { target.appendChild(newNode.cloneNode(true)); continue; }
       if (!sameNode(oldNode, newNode)) { target.replaceChild(newNode.cloneNode(true), oldNode); continue; }

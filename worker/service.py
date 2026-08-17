@@ -206,6 +206,14 @@ class Processor:
                 # occupies 3-8% of the job, so the download maps onto that band
                 # rather than pretending to be the whole thing.
                 fields: dict[str, Any] = {"heartbeatAt": now_ms()}
+                if done_bytes:
+                    # The raw counts travel too, so the app can say "142 MB of
+                    # 380 MB" rather than only a percentage. A percentage alone
+                    # gives no sense of whether a stalled-looking import is a
+                    # large file or a broken one.
+                    fields["bytesDone"] = int(done_bytes)
+                    if total_bytes:
+                        fields["bytesTotal"] = int(total_bytes)
                 if total_bytes and done_bytes:
                     fraction = max(0.0, min(1.0, done_bytes / total_bytes))
                     fields["progress"] = int(round(3 + fraction * 5))

@@ -219,6 +219,29 @@ class WorkerPersistenceTests(unittest.TestCase):
         self.assertGreaterEqual(status["progress"], 3, "the import band starts at 3%")
         self.assertLessEqual(status["progress"], 8, "and must not claim more than the import is worth")
 
+    def test_the_import_reports_the_raw_byte_counts(self):
+        # The app shows "142 MB of 380 MB" beside the percentage. A percentage
+        # alone gives no sense of whether a slow import is a large file or a
+        # broken one, so the counts travel rather than being derived.
+        store = self.service.JobStore()
+        store.create({"id": "job_size", "source": {"type": "youtube"}})
+        processor = self.service.Processor(store)
+        self.assertFalse(processor.import_pulse("job_size")(149_000_000, 398_000_000))
+        status = store.read("job_size")
+        self.assertEqual(status["bytesDone"], 149_000_000)
+        self.assertEqual(status["bytesTotal"], 398_000_000)
+
+    def test_an_import_with_no_content_length_still_reports_what_it_has(self):
+        # A server that sends no Content-Length is common. The done count is
+        # still useful; the total must simply be absent rather than zero.
+        store = self.service.JobStore()
+        store.create({"id": "job_nolen", "source": {"type": "youtube"}})
+        processor = self.service.Processor(store)
+        self.assertFalse(processor.import_pulse("job_nolen")(149_000_000, 0))
+        status = store.read("job_nolen")
+        self.assertEqual(status["bytesDone"], 149_000_000)
+        self.assertIsNone(status.get("bytesTotal"))
+
     def test_a_provider_that_ignores_progress_still_works(self):
         # Most providers pass a plain `lambda: bool`. The two-argument form must
         # fall back rather than raise.
