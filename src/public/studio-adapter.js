@@ -542,8 +542,14 @@
         clips: plural(mine.length, 'clip'),
         srcIcon: p.url ? 'ph-fill ph-youtube-logo' : 'ph-fill ph-upload-simple',
         srcLabel: p.url ? 'YouTube import' : 'Uploaded MP4',
+        // The scrim is not decoration: the clip count and state sit along the
+        // bottom edge with no background of their own, and were unreadable over
+        // a bright thumbnail. It only mattered once posters started appearing.
         thumbStyle: 'position: relative; aspect-ratio: 16 / 9; background-color: #17171A;' +
-          (p.sourceThumbUrl ? ' background-image: url("' + cssUrl(p.sourceThumbUrl) + '"); background-size: cover; background-position: center 30%;' : ''),
+          (p.sourceThumbUrl
+            ? ' background-image: linear-gradient(to bottom, rgba(8,8,10,0) 40%, rgba(8,8,10,.82) 100%), url("' + cssUrl(p.sourceThumbUrl) + '");'
+              + ' background-size: cover, cover; background-position: center, center 30%;'
+            : ''),
         stateChip: state === 'processing' ? 'Processing' : state === 'ready' ? 'Ready' : 'Archived',
         chipStyle: 'display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; border: 1px solid ' +
           (state === 'processing' ? 'rgba(217,180,120,.4); background: rgba(10,10,12,.82); color: #F0D6A6;'

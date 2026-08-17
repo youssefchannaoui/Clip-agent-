@@ -189,13 +189,18 @@ class Processor:
         status file is rewritten on each update and a fast download would
         otherwise rewrite it hundreds of times a second.
         """
-        last = 0.0
+        # None, not 0.0: time.monotonic()'s epoch is platform-defined -- seconds
+        # since boot on Linux, but since process start on macOS. Against 0.0 the
+        # first beat therefore fired only by luck of a large clock, and on a
+        # freshly started worker it was throttled away for the first 15 seconds
+        # of the import -- the one moment liveness most needs proving.
+        last = None
         started = time.monotonic()
 
         def pulse(done_bytes: int = 0, total_bytes: int = 0) -> bool:
             nonlocal last
             now = time.monotonic()
-            if now - last >= IMPORT_HEARTBEAT_SECONDS:
+            if last is None or now - last >= IMPORT_HEARTBEAT_SECONDS:
                 last = now
                 # Turn bytes into something the customer can read. The import
                 # occupies 3-8% of the job, so the download maps onto that band

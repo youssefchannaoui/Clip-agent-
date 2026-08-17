@@ -13,6 +13,7 @@ import * as audio from './audio.js';
 import * as templates from './templates.js';
 import { wordsForClip, silenceSpans } from './captions.js';
 import * as agent from './agent.js';
+import { fallbackThumb } from './local-engine.js';
 import * as social from './social.js';
 import { formatLocal } from './slots.js';
 import { checkFfmpeg } from './ffmpeg.js';
@@ -269,7 +270,10 @@ function appState(user = null) {
       stage: project.stage, phase: project.phase || '', progress: project.progress || 0, etaSec: project.etaSec ?? null, error: project.error || null, errorCode: project.errorCode || null,
       submittedAt: project.submittedAt, completedAt: project.completedAt || null, clipCount: project.clipCount || 0,
       clipsRequested: project.clipsRequested || 0,
-      durationSec: project.durationSec || project.sourceDurationSec || null, sourceDurationSec: project.sourceDurationSec || null, sourceThumbUrl: project.sourceThumbUrl || null, sourceTitle: project.sourceTitle || null, templateIdUsed: project.templateIdUsed,
+      durationSec: project.durationSec || project.sourceDurationSec || null, sourceDurationSec: project.sourceDurationSec || null,       // Derived at read time as well as at submit: lectures queued before the
+      // dashboard sent sourceMeta have null on the record, and back-filling here
+      // gives the existing library its posters without a migration.
+      sourceThumbUrl: project.sourceThumbUrl || fallbackThumb(project.url) || null, sourceTitle: project.sourceTitle || null, templateIdUsed: project.templateIdUsed,
       templateNameUsed: project.templateNameUsed, templateVersionUsed: project.templateVersionUsed || 1, musicRequired: true,
       sourceReusable: Boolean((project.sourceFile && fs.existsSync(project.sourceFile) && project.transcriptFile && fs.existsSync(project.transcriptFile)) || (project.sourceObjectKey && project.transcriptObjectKey)),
       moreJob: project.moreJob ? {

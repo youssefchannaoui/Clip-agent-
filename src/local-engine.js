@@ -191,7 +191,10 @@ function youtubeIdFromUrl(value = '') {
   }
   return '';
 }
-function fallbackThumb(url) {
+// Exported because the read path needs it too: lectures submitted before the
+// client sent sourceMeta have sourceThumbUrl null on the record, and deriving
+// the poster from the URL at read time gives them one without a migration.
+export function fallbackThumb(url) {
   const id = youtubeIdFromUrl(url);
   return id ? `https://i.ytimg.com/vi/${encodeURIComponent(id)}/hqdefault.jpg` : '';
 }
@@ -461,7 +464,10 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     submittedAt: Date.now(), clipCount: 0, templateIdUsed: template.id, templateNameUsed: template.name,
     templateVersionUsed: template.version || 1, templateSnapshot: template, musicRequired: true, error: null,
     sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
-    sourceTitle: sourceMeta?.title || null, sourceDurationSec: sourceMeta?.durationSec || null, sourceThumbUrl: sourceMeta?.thumbnail || null,
+    sourceTitle: sourceMeta?.title || null, sourceDurationSec: sourceMeta?.durationSec || null,
+    // Falls back to the URL's own poster: the dashboard did not send sourceMeta,
+    // so every lecture stored null here and the library showed empty cards.
+    sourceThumbUrl: sourceMeta?.thumbnail || fallbackThumb(value) || null,
     sourceKind: options.sourceKind || 'link', originalFileName: options.originalFileName || null,
     uploadedInputFile: options.uploadedInputFile || null, sourceObjectKey: options.sourceKind === 'object_storage' ? value : null,
   }, user.id);
@@ -484,7 +490,10 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     outputDir: path.join(clipsDir, projectId), resultPath: resultFile(projectId),
     ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath, template, musicTracks: tracks,
     settings: sharedSettings(user), sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
-    sourceTitle: sourceMeta?.title || null, sourceDurationSec: sourceMeta?.durationSec || null, sourceThumbUrl: sourceMeta?.thumbnail || null,
+    sourceTitle: sourceMeta?.title || null, sourceDurationSec: sourceMeta?.durationSec || null,
+    // Falls back to the URL's own poster: the dashboard did not send sourceMeta,
+    // so every lecture stored null here and the library showed empty cards.
+    sourceThumbUrl: sourceMeta?.thumbnail || fallbackThumb(value) || null,
   };
   // Hold an estimate against the account before the job starts. A trimmed range
   // is exact; a known full duration is next best. In remote mode neither is

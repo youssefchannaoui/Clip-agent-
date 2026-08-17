@@ -51,3 +51,49 @@ test('a non-YouTube link is rejected before any lookup', async () => {
   await assert.rejects(() => engine.sourceInfo('https://example.com/video.mp4'));
   assert.equal(called, false);
 });
+
+// ── the library's posters ──────────────────────────────────────────────────
+// Every lecture stored sourceThumbUrl null, so the library rendered empty grey
+// cards. Three layers were each dropping the thumbnail independently, which is
+// why fixing one of them changed nothing on screen.
+
+test('a lecture gets a poster even when the client sends no sourceMeta', () => {
+  // The dashboard did not send it, so this is the case that actually ran.
+  assert.match(engine.fallbackThumb(WATCH), /i\.ytimg\.com\/vi\/MaXPMQ7vJzo/);
+  assert.match(engine.fallbackThumb('https://youtu.be/MaXPMQ7vJzo'), /MaXPMQ7vJzo/,
+    'short links resolve too');
+});
+
+test('a non-YouTube source has no derivable poster and says so', () => {
+  // Uploaded MP4s must yield '' rather than a broken image URL.
+  assert.equal(engine.fallbackThumb('object-storage-key-for-an-upload'), '');
+  assert.equal(engine.fallbackThumb(''), '');
+});
+
+test('submit stores the poster on the project record', async () => {
+  const src = 'https://www.youtube.com/watch?v=MaXPMQ7vJzo';
+  assert.match(engine.fallbackThumb(src), /hqdefault\.jpg$/,
+    'hqdefault always exists, unlike maxresdefault');
+});
+
+test('the probed thumbnail reaches the panel, not just openJob', () => {
+  // openJob was fixed to read source.thumbnail while its only caller still
+  // passed three fields. The fix sat one layer away from the bug.
+  const html = fs.readFileSync(new URL('../src/public/index.html', import.meta.url), 'utf8');
+  const probe = /StudioAdapter\.onProbeSource=async[\s\S]*?\};/.exec(html)[0];
+  assert.match(probe, /thumbnail:src\.thumbnail/, 'the probe result carries a poster');
+});
+
+test('submitting a lecture forwards the metadata it already fetched', () => {
+  const html = fs.readFileSync(new URL('../src/public/index.html', import.meta.url), 'utf8');
+  const gen = /StudioAdapter\.onGenerate=\(url,range\)=>[\s\S]*?jobFailed\(/.exec(html)[0];
+  assert.match(gen, /body\.sourceMeta=\[\{/, 'sourceMeta is sent');
+  assert.match(gen, /thumbnail:j\.thumbnail/, 'including the poster');
+  assert.match(gen, /j\.url===url/, 'and only when it belongs to this URL');
+});
+
+test('the read path back-fills lectures queued before any of this', () => {
+  const server = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+  assert.match(server, /sourceThumbUrl: project\.sourceThumbUrl \|\| fallbackThumb\(project\.url\)/,
+    'existing projects get a poster without a migration');
+});

@@ -1984,7 +1984,10 @@ function renderStudio(){
       const r=await api('/api/source-info',{method:'POST',body:JSON.stringify({urls:url})});
       const src=(r.sources||[])[0];
       if(!src||src.error)throw new Error(src?.error||'That link could not be read.');
-      StudioAdapter.openJob({url,title:src.title||url,durationSec:src.durationSec})}catch(e){toast(e.message,'bad')}};
+      /* thumbnail included deliberately: openJob reads source.thumbnail for the
+         poster, and passing only three fields here left it '' on every job, so
+         the preview painted an empty black box however the panel was wired. */
+      StudioAdapter.openJob({url,title:src.title||url,durationSec:src.durationSec,thumbnail:src.thumbnail})}catch(e){toast(e.message,'bad')}};
     /* No range means the whole lecture. In remote mode the duration is unknown
        until the worker downloads it, so sending 0/0 would be a lie the server
        would have to interpret. */
@@ -1996,6 +1999,12 @@ function renderStudio(){
       if(!pendingJobKey)pendingJobKey=`job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
       const body=range?{urls:url,sourceStartSeconds:range.startSec,sourceEndSeconds:range.endSec}:{urls:url};
       body.idempotencyKey=pendingJobKey;
+      /* The probe already fetched the title, duration and poster; sending them
+         stores the maxres thumbnail rather than leaving the server to derive
+         hqdefault from the URL. Not sending it at all is why every lecture had
+         sourceThumbUrl null and the library rendered empty cards. */
+      const j=StudioAdapter.ui.job;
+      if(j&&j.url===url)body.sourceMeta=[{url,title:j.title||'',durationSec:j.durationSec||null,thumbnail:j.thumbnail||''}];
       const r=await api('/api/videos',{method:'POST',body:JSON.stringify(body)});
       /* /api/videos answers 200 even when it refused the source — the reason is
          per-URL inside results[]. Without this a rejection ("upload a nasheed
