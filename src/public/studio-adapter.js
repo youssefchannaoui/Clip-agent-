@@ -2190,6 +2190,20 @@
       // Live preview overlays, positioned from the template's own margins.
       // captionMarginV is pixels from the bottom of a `height`-tall frame, which
       // is exactly what the renderer uses, so the preview and the export agree.
+      // The sample caption, drawn the way the chosen caption mode will draw it.
+      // The design bakes one phrase in, so picking "Word by word" changed the
+      // row's label and nothing else -- the one control whose whole meaning is
+      // what the caption looks like.
+      capPreviewText: (function () {
+        var sample = 'He has the whole of the dunya given to us';
+        var words = sample.split(' ');
+        if (tpl.captionMode === 'word') return words[3];
+        if (tpl.captionMode === 'phrase') return sample;
+        // dynamic-stack: as many words as the template stacks at once.
+        var n = Math.max(1, Math.min(6, Number(tpl.captionStackMaxWords) || 4));
+        return words.slice(0, n).join(' ');
+      }()),
+
       // ── Preview picture ──
       // A real lecture's own 16:9 thumbnail when the account has one, so what is
       // previewed is the customer's own footage; the illustration otherwise.

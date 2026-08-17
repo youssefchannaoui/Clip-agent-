@@ -1536,6 +1536,24 @@ test('the range correction is driven by the schema, so a re-import keeps it', ()
   assert.match(importer, /attrOut\.min = String\(lo\)/);
 });
 
+test('the sample caption is drawn the way the caption mode will draw it', () => {
+  // The design bakes one phrase in, so picking "Word by word" changed the row's
+  // label and nothing else -- on the one control whose entire meaning is what
+  // the caption ends up looking like.
+  const text = (captionMode, extra = {}) => {
+    Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null, edClipId: null });
+    const t = { id: 'x', name: 'X', height: 1920, captionMode, ...extra };
+    return StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates: [t], selectedTemplate: t }).capPreviewText;
+  };
+  assert.equal(text('word').split(' ').length, 1, 'one word at a time means one word');
+  assert.ok(text('phrase').split(' ').length > 4, 'a phrase is a phrase');
+  assert.equal(text('dynamic-stack', { captionStackMaxWords: 3 }).split(' ').length, 3,
+    'stacked lines show as many words as the template stacks');
+  assert.equal(text('dynamic-stack', { captionStackMaxWords: 6 }).split(' ').length, 6);
+  // The three are genuinely different, which is the whole point.
+  assert.equal(new Set([text('word'), text('phrase'), text('dynamic-stack')]).size, 3);
+});
+
 test('the preview shows what each clip layout actually does', () => {
   // The design bakes a finished vertical reel into the frame's class, so the
   // preview could not answer the question it exists for. A 9:16 still also makes
