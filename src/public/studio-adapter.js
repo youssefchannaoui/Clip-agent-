@@ -418,7 +418,9 @@
     // least one platform both connected and enabled.
     var publishingOn = DATA.directPublishingEnabled !== false;
     var connectedCount = providers.filter(function (p) { return p.connected; }).length;
-    var activeCount = providers.filter(function (p) { return p.enabled; }).length;
+    // Both, not just enabled: a platform left switched on after its account was
+    // disconnected would otherwise light up Post now and then fail at the API.
+    var activeCount = providers.filter(function (p) { return p.enabled && p.connected; }).length;
 
     var projectTitle = {};
     projects.forEach(function (p) { projectTitle[p.id] = p.title || p.sourceTitle || 'Untitled lecture'; });
@@ -611,8 +613,15 @@
                   toast('Publishing is switched off, so nothing was sent. The clip is ready to download.');
                   return;
                 }
+                // Connecting an account does not switch it on. Rather than name
+                // a "Channels" screen that does not exist in the nav, open the
+                // panel that has the switch — the toast alone left people stuck
+                // with YouTube connected and no idea what else to do.
                 if (!activeCount) {
-                  toast('No channel is switched on yet — turn one on under Channels first.');
+                  toast(connectedCount
+                    ? 'Connected, but not switched on yet — use the toggle to turn a channel on.'
+                    : 'Connect a channel first, then switch it on.');
+                  global.StudioAdapter.onOpenConnections(providers[0] && providers[0].key);
                   return;
                 }
                 global.StudioAdapter.onPostNow(c.id);

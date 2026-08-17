@@ -644,6 +644,69 @@ test('connected is not the same as switched on', () => {
   assert.match(ig.dotStyle, /#E6B770/, 'amber, not green — it will not post');
 });
 
+test('Post now unblocks once a connected channel is switched on', () => {
+  // The reported symptom, exactly: YouTube connected, every scheduled row
+  // reading "No channel on".
+  const scheduled = on => ({
+    social: { providers: { youtube: { configured: true, connected: true, accounts: [{ id: 'y1', name: 'DeenClipped' }] } } },
+    publishingSettings: { enabled: on, youtube: { enabled: on } },
+    directPublishingEnabled: true,
+    clips: [{
+      id: 'c1', projectId: 'p1', title: 'Clip', status: 'scheduled', scheduledAt: Date.now() + 3600000,
+      score: 90, musicVerified: true, renderVerified: true, templateId: 't1', transcript: 'x',
+      targets: [{ platform: 'youtube' }],
+    }],
+    projects: [{ id: 'p1', title: 'Lecture', status: 'done' }], tracks: [], log: [], billing: { current: {} },
+  });
+  const labels = vals => {
+    const seen = new Set(), out = [];
+    (function walk(v) {
+      if (!v || typeof v !== 'object' || seen.has(v)) return;
+      seen.add(v);
+      if (typeof v.postLabel === 'string') out.push(v.postLabel);
+      for (const k of Object.keys(v)) walk(v[k]);
+    })(vals);
+    return [...new Set(out)];
+  };
+  assert.deepEqual(labels(StudioAdapter.bindings(scheduled(false))), ['No channel on']);
+  assert.deepEqual(labels(StudioAdapter.bindings(scheduled(true))), ['Post now'],
+    'switching the channel on is all that was missing');
+});
+
+test('the connections modal offers a switch, not only Connect/Disconnect', () => {
+  // The reported bug: YouTube connected, every Post now button reading "No
+  // channel on", and the modal saying "Connected — not switched on" while
+  // offering no control that could switch it on. The binding that does it
+  // (toggleConnEnabled) lived on the design's per-platform panel, which this
+  // modal replaced and made unreachable.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const paint = /function paintConnections\(\)[\s\S]*?\n    }\n/.exec(html)[0];
+  assert.match(paint, /data-conn-toggle/, 'each row carries a switch');
+  assert.match(paint, /role="switch"/);
+  assert.match(paint, /aria-checked="\$\{on\}"/, 'the switch reflects the real state');
+  assert.match(paint, /StudioAdapter\.onPublishingToggle\(p\.key/, 'and it is wired');
+  assert.match(paint, /\$\$\('\[data-conn-toggle\]'\)\.forEach/, 'to every row, not just the first');
+});
+
+test('Post now with a connected but switched-off channel opens the switch', () => {
+  // A toast naming a "Channels" screen was the whole remedy, and no screen by
+  // that name exists in the nav.
+  const adapter = fs.readFileSync(path.join(ROOT, 'src/public/studio-adapter.js'), 'utf8');
+  const guard = /if \(!activeCount\) \{[\s\S]*?\n                \}/.exec(adapter)[0];
+  assert.match(guard, /onOpenConnections/, 'the panel with the switch is opened');
+  assert.doesNotMatch(guard, /under Channels/, 'no screen by that name exists');
+});
+
+test('a channel switched on but disconnected does not count as postable', () => {
+  const vals = StudioAdapter.bindings({
+    ...SOCIAL_STATE,
+    social: { providers: { youtube: { configured: true, connected: false, accounts: [] } } },
+    publishingSettings: { youtube: { enabled: true } },
+  });
+  const yt = vals.connections.find(c => c.name === 'YouTube');
+  assert.equal(yt.note, 'Connect to publish', 'enabled alone is not enough');
+});
+
 test('an unconfigured platform says so rather than offering to connect', () => {
   const vals = StudioAdapter.bindings(SOCIAL_STATE);
   const tt = vals.connections.find(c => c.name === 'TikTok');
