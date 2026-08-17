@@ -1697,3 +1697,20 @@ test('both range handles sit on one track', () => {
   }
   assert.notEqual(vals.jobRangeStartStyle, vals.jobRangeEndStyle, 'the two handles stay visually distinct');
 });
+
+test('opening a job keeps the thumbnail the probe returned', () => {
+  // openJob rebuilt the job object field by field and dropped `thumbnail`, so
+  // the poster had nothing to show however it was wired.
+  StudioAdapter.openJob({
+    url: 'https://www.youtube.com/watch?v=abc123',
+    title: 'A lecture',
+    durationSec: 2400,
+    thumbnail: 'https://i.ytimg.com/vi/abc123/maxresdefault.jpg',
+  });
+  assert.equal(StudioAdapter.ui.job.thumbnail, 'https://i.ytimg.com/vi/abc123/maxresdefault.jpg');
+
+  Object.assign(StudioAdapter.ui, { screen: 'home' });
+  const vals = StudioAdapter.bindings(JOB_STATE);
+  assert.match(vals.jobPosterStyle, /background-image/, 'the poster actually paints something');
+  assert.match(vals.jobPosterStyle, /abc123/);
+});

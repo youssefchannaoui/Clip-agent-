@@ -2140,6 +2140,10 @@
       UI.job = {
         url: source.url,
         title: source.title || source.url,
+        // sourceInfo returns the video's own thumbnail and this dropped it, so
+        // the poster had nothing to show and painted an empty box no matter
+        // what the panel was wired to.
+        thumbnail: source.thumbnail || '',
         durationSec: dur,
         durationKnown: dur > 0,
         start: 0,
