@@ -410,3 +410,45 @@ class OllamaFallbackTests(unittest.TestCase):
         self.assertEqual(out, [candidate], "candidates pass through unchanged")
         self.assertTrue(any(k == "warning" and p.get("code") == "ollama_not_configured" for k, p in emitted),
                         "the user is told their clips were scored without the AI")
+
+
+class CaptionBlockTests(unittest.TestCase):
+    """The renderer knew every word's timing but wrote none of it back, so the
+    editor received a flat transcript and showed the whole clip as one block."""
+
+    def _candidate(self, words, text):
+        seg = {"start": 0.0, "end": 10.0, "words": words}
+        return worker.Candidate(0.0, 10.0, text, [seg], 70, [], False)
+
+    def test_blocks_split_on_sentence_ends(self):
+        words = [
+            {"start": 0.0, "end": 0.4, "word": "Whoever"}, {"start": 0.4, "end": 0.9, "word": "wakes"},
+            {"start": 0.9, "end": 1.4, "word": "safe."},
+            {"start": 1.5, "end": 1.9, "word": "He"}, {"start": 1.9, "end": 2.6, "word": "wins."},
+        ]
+        blocks = worker.caption_blocks(self._candidate(words, "Whoever wakes safe. He wins."))
+        self.assertEqual([b["text"] for b in blocks], ["Whoever wakes safe.", "He wins."])
+
+    def test_a_long_pause_breaks_a_block_without_punctuation(self):
+        words = [
+            {"start": 0.0, "end": 0.4, "word": "one"}, {"start": 0.4, "end": 0.8, "word": "two"},
+            {"start": 3.0, "end": 3.4, "word": "three"},
+        ]
+        blocks = worker.caption_blocks(self._candidate(words, "one two three"))
+        self.assertEqual(len(blocks), 2)
+
+    def test_timings_are_relative_to_the_clip_and_ordered(self):
+        words = [{"start": 0.0, "end": 0.5, "word": "hello."}, {"start": 1.0, "end": 1.5, "word": "there."}]
+        blocks = worker.caption_blocks(self._candidate(words, "hello. there."))
+        self.assertEqual(blocks[0]["start"], 0.0)
+        self.assertLess(blocks[0]["end"], blocks[1]["start"])
+
+    def test_a_very_long_run_is_split_so_a_block_stays_editable(self):
+        words = [{"start": i * 0.3, "end": i * 0.3 + 0.25, "word": f"w{i}"} for i in range(30)]
+        blocks = worker.caption_blocks(self._candidate(words, " ".join(f"w{i}" for i in range(30))))
+        self.assertGreater(len(blocks), 1)
+        for block in blocks:
+            self.assertLessEqual(len(block["text"].split()), 14)
+
+    def test_no_words_yields_no_blocks_rather_than_an_empty_one(self):
+        self.assertEqual(worker.caption_blocks(self._candidate([], "")), [])

@@ -224,6 +224,9 @@ function publicClip(clip) {
   return {
     id: clip.id, projectId: clip.projectId, projectTitle: clip.projectTitle,
     title: clip.title, description: clip.description, hashtags: clip.hashtags, transcript: clip.transcript,
+    // Sentence-level caption timings from the renderer. Without these the editor
+    // has nothing to build a timeline from and can only show one giant block.
+    captionSegments: Array.isArray(clip.captionSegments) ? clip.captionSegments : [],
     score: clip.score, scoreReasons: clip.scoreReasons || [], quality: clip.quality || null,
     reviewRequired: Boolean(clip.reviewRequired), startSec: clip.startSec, endSec: clip.endSec, durationMs: clip.durationMs,
     status: clip.status, approvedBy: clip.approvedBy || null,

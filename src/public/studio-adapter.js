@@ -52,6 +52,8 @@
     edClipId: null,
     edTab: 'captions',
     edCaption: null,
+    edBlock: 0,
+    edBlockDraft: null,
     edDirty: false,
     edSaving: false,
     edSafe: true,
@@ -704,13 +706,28 @@
     // The clip open in the editor, and the caption split into readable blocks.
     var edClip = clips.filter(function (c) { return c.id === UI.edClipId; })[0] || null;
     var edCaptionText = UI.edCaption !== null ? UI.edCaption : (edClip && edClip.transcript) || '';
-    var edCaptionBlocks = String(edCaptionText).split(/(?<=[.!?\u061F])\s+/).filter(Boolean).map(function (line, i) {
+    // Real caption blocks when the renderer supplied them, so each one can be
+    // selected and edited. Falling back to splitting the flat transcript gives
+    // one enormous block, which is what the editor showed before the worker
+    // persisted timings.
+    var rawBlocks = (edClip && Array.isArray(edClip.captionSegments) && edClip.captionSegments.length)
+      ? edClip.captionSegments
+      : String(edCaptionText).split(/(?<=[.!?\u061F])\s+/).filter(Boolean).map(function (line) {
+        return { text: line, start: null, end: null };
+      });
+    var edCaptionBlocks = rawBlocks.map(function (block, i) {
+      var on = UI.edBlock === i;
       return {
-        text: line,
-        style: 'padding: 8px 10px; border-radius: 8px; border: 1px solid ' + (i === 0 ? 'rgba(217,180,120,.3)' : '#1E1E22') + '; background: #121214; font-size: 12.5px; line-height: 1.45;',
-        select: function () {},
+        text: block.text,
+        // A block with real timings can say when it is; a fallback one cannot.
+        time: block.start === null ? '' : secsToClock(block.start) + ' – ' + secsToClock(block.end),
+        style: 'padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 12.5px; line-height: 1.45; background: #121214; border: 1px solid ' +
+          (on ? 'rgba(217,180,120,.55)' : '#1E1E22') + ';',
+        select: function (e) { stop(e); setUI({ edBlock: i, edBlockDraft: null }); },
       };
     });
+    var selectedBlock = edCaptionBlocks[UI.edBlock] || null;
+
     // Other clips cut from the same lecture, for the editor's filmstrip.
     var edSiblings = edClip ? clips.filter(function (c) { return c.projectId === edClip.projectId; }).slice(0, 8).map(function (c) {
       var on = c.id === edClip.id;
@@ -1164,10 +1181,15 @@
         thumb(edClip && edClip.thumbUrl) + '; box-shadow: 0 26px 60px rgba(0,0,0,.5);',
       closeEditor: function (e) { stop(e); setUI({ screen: 'queue', edClipId: null }); },
 
-      // Caption text is genuinely per-clip: it is the clip's transcript.
-      edCapText: UI.edCaption !== null ? UI.edCaption : (edClip && edClip.transcript) || '',
-      setCapText: function (e) { UI.edCaption = e.target.value; UI.edDirty = true; refresh(); },
-      edSelText: '', edSelRange: '',
+      // The SELECTED CAPTION box edits the chosen block, not the whole clip.
+      // It was bound to the entire transcript and stayed empty because nothing
+      // ever selected anything.
+      edCapText: selectedBlock
+        ? (UI.edBlockDraft !== null && UI.edBlockDraft !== undefined ? UI.edBlockDraft : selectedBlock.text)
+        : '',
+      setCapText: function (e) { UI.edBlockDraft = e.target.value; UI.edDirty = true; refresh(); },
+      edSelText: selectedBlock ? selectedBlock.text : '',
+      edSelRange: selectedBlock ? selectedBlock.time : '',
       edCapBlocks: edCaptionBlocks,
       // Overlays sit inside the preview frame, positioned as fractions of it.
       edCapOverlayStyle: 'position: absolute; z-index: 8; width: 80%; left: 50%; top: ' + capTop + '%; translate: -50% -50%; text-align: center; padding: 7px 9px; border-radius: 6px; background: rgba(10,10,12,.5); color: ' +
@@ -1246,9 +1268,12 @@
         stop(e);
         if (!edClip || UI.edSaving) return;
         setUI({ edSaving: true });
-        global.StudioAdapter.onSaveClip(edClip.id, {
-          transcript: UI.edCaption !== null ? UI.edCaption : edClip.transcript,
-        });
+        // Rebuild the transcript from the blocks, with the edited one swapped in.
+        var text = edCaptionBlocks.map(function (b, i) {
+          return (i === UI.edBlock && UI.edBlockDraft !== null && UI.edBlockDraft !== undefined)
+            ? UI.edBlockDraft : b.text;
+        }).join(' ').trim();
+        global.StudioAdapter.onSaveClip(edClip.id, { transcript: text || edClip.transcript });
       },
 
       // ── Source range panel ──
@@ -1835,7 +1860,7 @@
     onProbeSource: function () {},
     onGenerate: function () {},
     onSaveClip: function () {},
-    clipSaved: function () { UI.edSaving = false; UI.edDirty = false; UI.edCaption = null; refresh(); },
+    clipSaved: function () { UI.edSaving = false; UI.edDirty = false; UI.edCaption = null; UI.edBlockDraft = null; refresh(); },
     // Called by the host once /api/source-info resolves, so the range picker can
     // open against the real duration.
     openJob: function (source) {

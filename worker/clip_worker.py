@@ -717,6 +717,48 @@ def _stable_fraction(value: str) -> float:
     return int(hashlib.sha256(value.encode("utf-8")).hexdigest()[:8], 16) / 0xFFFFFFFF
 
 
+def caption_blocks(candidate: Candidate) -> list[dict[str, Any]]:
+    """Sentence-level caption blocks with timings, relative to the clip start.
+
+    The renderer already knows every word's timing, but nothing was ever written
+    back to the clip record -- only a flat transcript string. So the editor had
+    one block containing the whole transcript, and "click a caption block to edit
+    its words" could not work. These are what the timeline is built from.
+    """
+    words = candidate_words(candidate)
+    if not words:
+        return []
+    blocks: list[dict[str, Any]] = []
+    current: list[dict[str, Any]] = []
+
+    def flush() -> None:
+        if not current:
+            return
+        text = " ".join(str(w["word"]).strip() for w in current).strip()
+        if text:
+            blocks.append({
+                "start": round(float(current[0]["start"]), 3),
+                "end": round(float(current[-1]["end"]), 3),
+                "text": text,
+            })
+        current.clear()
+
+    for index, word in enumerate(words):
+        current.append(word)
+        text = str(word.get("word") or "").strip()
+        ends_sentence = bool(re.search(r"[.!?…][\"\']?$", text))
+        # A long pause reads as a break even without punctuation, and a very long
+        # run has to be split so a block stays editable.
+        next_gap = 0.0
+        if index + 1 < len(words):
+            next_gap = float(words[index + 1]["start"]) - float(word["end"])
+        too_long = len(current) >= 14 or (current[-1]["end"] - current[0]["start"]) >= 6.0
+        if ends_sentence or next_gap >= 0.6 or too_long:
+            flush()
+    flush()
+    return blocks
+
+
 def dynamic_caption_frames(candidate: Candidate, template: dict[str, Any]) -> list[dict[str, Any]]:
     """Build TikTok-style caption states: mostly one word, sometimes a growing stack."""
     words = candidate_words(candidate)
@@ -1351,6 +1393,7 @@ def render_clip(
         "description": description_from_text(candidate.text),
         "hashtags": "#IslamicReminder #DeenClipped",
         "transcript": candidate.text,
+        "captionSegments": caption_blocks(candidate),
         "startSec": round(candidate.start, 3),
         "endSec": round(candidate.end, 3),
         "durationMs": int(round(candidate.duration * 1000)),

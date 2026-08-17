@@ -1117,3 +1117,54 @@ test('the connection dot is supplied under the name the Home row binds', () => {
   assert.ok(yt.heroDotStyle, 'Home binds heroDotStyle; supplying only dotStyle left it invisible');
   assert.match(yt.heroDotStyle, /#7FD1A6/, 'connected and enabled reads green');
 });
+
+// ── the clip editor's captions ─────────────────────────────────────────────
+
+const CAPTION_CLIP = {
+  id: 'cap1', projectId: 'p1', title: 'C', status: 'waiting', durationMs: 8000, targets: [],
+  transcript: 'Whoever wakes up safe. He has everything.',
+  captionSegments: [
+    { start: 0, end: 1.9, text: 'Whoever wakes up safe.' },
+    { start: 2.8, end: 4.6, text: 'He has everything.' },
+  ],
+};
+const CAPTION_STATE = { projects: [{ id: 'p1', title: 'L', status: 'done' }], clips: [CAPTION_CLIP], tracks: [] };
+
+test('the timeline is chunked from real caption timings, not one giant block', () => {
+  // The clip record carried only a flat transcript, so the whole clip was one
+  // block and "click a caption block to edit its words" could not work.
+  Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'cap1', edTab: 'captions', edBlock: 0, edBlockDraft: null });
+  const vals = StudioAdapter.bindings(CAPTION_STATE);
+  assert.equal(vals.edCapBlocks.length, 2);
+  assert.equal(vals.edCapBlocks[0].text, 'Whoever wakes up safe.');
+  assert.match(vals.edCapBlocks[0].time, /0:00 – 0:0\d/);
+});
+
+test('clicking a caption block loads its words into the editor', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'cap1', edBlock: 0, edBlockDraft: null });
+  StudioAdapter.bindings(CAPTION_STATE).edCapBlocks[1].select({ preventDefault() {} });
+  const vals = StudioAdapter.bindings(CAPTION_STATE);
+  assert.equal(vals.edCapText, 'He has everything.', 'the box stayed empty before');
+  assert.match(vals.edSelRange, /0:0\d – 0:0\d/);
+});
+
+test('editing one block rebuilds the whole transcript around it', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'cap1', edBlock: 1, edBlockDraft: null });
+  let saved = null;
+  StudioAdapter.onSaveClip = (id, fields) => { saved = fields; };
+  const vals = StudioAdapter.bindings(CAPTION_STATE);
+  vals.setCapText({ target: { value: 'He has been given the world.' } });
+  StudioAdapter.bindings(CAPTION_STATE).saveEdit({ preventDefault() {} });
+  assert.equal(saved.transcript, 'Whoever wakes up safe. He has been given the world.');
+});
+
+test('a clip with no persisted timings still yields editable blocks', () => {
+  // Clips rendered before the worker persisted segments must not lose the editor.
+  Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'old', edBlock: 0, edBlockDraft: null });
+  const vals = StudioAdapter.bindings({
+    projects: [{ id: 'p1', title: 'L', status: 'done' }], tracks: [],
+    clips: [{ id: 'old', projectId: 'p1', title: 'C', status: 'waiting', durationMs: 8000, targets: [], transcript: 'One. Two.' }],
+  });
+  assert.equal(vals.edCapBlocks.length, 2);
+  assert.equal(vals.edCapBlocks[0].time, '', 'no invented timings for a clip that has none');
+});
