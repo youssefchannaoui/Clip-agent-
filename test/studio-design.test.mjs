@@ -1536,6 +1536,56 @@ test('the range correction is driven by the schema, so a re-import keeps it', ()
   assert.match(importer, /attrOut\.min = String\(lo\)/);
 });
 
+test('the preview caption is drawn in the font and case it will render in', () => {
+  // "Preview" that ignores the font, the case and the colour is not previewing
+  // the caption, only its position.
+  const style = extra => {
+    Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null, edClipId: null });
+    const t = { id: 'x', name: 'X', height: 1920, ...extra };
+    return StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates: [t], selectedTemplate: t }).capStyle;
+  };
+  assert.match(style({ captionFont: 'Amiri' }), /font-family: Amiri/);
+  assert.match(style({ captionFont: 'Open Sans' }), /font-family: "Open Sans"/);
+  assert.match(style({ captionUppercase: true }), /text-transform: uppercase/);
+  assert.doesNotMatch(style({ captionUppercase: false }), /text-transform: uppercase/);
+  assert.match(style({ captionPrimary: '#D9B478' }), /color: #D9B478/);
+});
+
+test('the snap lines are the safe box the design actually draws', () => {
+  // They were 10% and 90%, matching nothing on screen. The safe box is
+  // top 8% / bottom 14% (.s8n), and a caption outside it is covered by the
+  // platform's own chrome.
+  const adapter = fs.readFileSync(path.join(ROOT, 'src/public/studio-adapter.js'), 'utf8');
+  assert.match(adapter, /var SAFE_TOP = 0\.08;/);
+  assert.match(adapter, /var SAFE_BOTTOM = 0\.86;/);
+  const css = fs.readFileSync(path.join(ROOT, 'src/public/studio-styles.generated.css'), 'utf8');
+  const box = /\.s8n\{[^}]*\}/.exec(css)[0];
+  assert.match(box, /top: 8%/);
+  assert.match(box, /bottom: 14%/, 'so SAFE_BOTTOM is 1 - 0.14');
+});
+
+test('the caption cannot be dragged outside the safe box', () => {
+  const height = 533;
+  const at = f => dragOn({ clientX: 150, clientY: f * height });
+  // Dropped below the frame entirely, it stops at the safe edge.
+  const low = at(0.99);
+  assert.equal(low.captionPosition, 'bottom');
+  assert.equal(low.captionMarginV, Math.round(1920 * (1 - 0.86)), 'clamped to the safe bottom');
+  const high = at(0.01);
+  assert.equal(high.captionPosition, 'top');
+  assert.equal(high.captionMarginV, Math.round(1920 * 0.08), 'clamped to the safe top');
+});
+
+test('each snap point has a name the preview can show', () => {
+  const adapter = fs.readFileSync(path.join(ROOT, 'src/public/studio-adapter.js'), 'utf8');
+  const points = /var SNAP_POINTS = \[([\s\S]*?)\];/.exec(adapter)[1];
+  for (const name of ['Safe top', 'Upper third', 'Middle', 'Lower third', 'Safe bottom']) {
+    assert.ok(points.includes(name), `${name} is named`);
+  }
+  // And the label only shows while a caption is actually being dragged.
+  assert.match(adapter, /UI\.dragKind === 'caption' && UI\.dragSnapName/);
+});
+
 test('the sample caption is drawn the way the caption mode will draw it', () => {
   // The design bakes one phrase in, so picking "Word by word" changed the row's
   // label and nothing else -- on the one control whose entire meaning is what
@@ -1839,15 +1889,15 @@ test('the caption snaps to the lines the label promises', () => {
   // The upper third, snapped from just below it, measured down from the top.
   assert.equal(at(0.34).captionPosition, 'top');
   assert.equal(at(0.34).captionMarginV, Math.round(1920 / 3), 'the upper third');
-  // The top safe-zone edge.
-  assert.equal(at(0.11).captionMarginV, Math.round(1920 * 0.1), 'the safe-zone edge');
+  // The safe box's own top edge, which is 8% — not the 10% this once guessed.
+  assert.equal(at(0.095).captionMarginV, Math.round(1920 * 0.08), 'the safe-zone edge');
   // The lower third, measured up from the bottom.
   assert.equal(at(0.65).captionPosition, 'bottom');
   assert.equal(at(0.65).captionMarginV, Math.round(1920 * (1 - 2 / 3)), 'the lower third');
   // Well away from a line it stays where it was put, so it is still free.
-  const free = at(0.8).captionMarginV;
-  assert.equal(at(0.8).captionPosition, 'bottom');
-  assert.ok(Math.abs(free - 1920 * 0.2) < 12, 'lands where it was dropped');
+  const free = at(0.78).captionMarginV;
+  assert.equal(at(0.78).captionPosition, 'bottom');
+  assert.ok(Math.abs(free - 1920 * 0.22) < 12, 'lands where it was dropped');
   assert.notEqual(free, Math.round(1920 * 0.1));
 });
 
@@ -1878,7 +1928,8 @@ test('the caption follows the cursor across the whole frame', () => {
   const height = 533;
   const at = f => dragOn({ clientX: 150, clientY: f * height });
   const seen = [];
-  for (const f of [0.05, 0.15, 0.25, 0.4, 0.45, 0.55, 0.6, 0.75, 0.85, 0.95]) {
+  // Inside the safe box, since the drag is clamped to it.
+  for (const f of [0.12, 0.18, 0.25, 0.4, 0.45, 0.55, 0.6, 0.72, 0.78, 0.83]) {
     const d = at(f);
     seen.push(`${d.captionPosition}:${d.captionMarginV}`);
   }

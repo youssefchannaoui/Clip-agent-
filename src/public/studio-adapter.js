@@ -55,6 +55,7 @@
     dragKind: null,
     dragAt: null,
     dragSnapped: false,
+    dragSnapName: '',
     // True while "Save to all clips" is in flight, so the button can say so.
     edApplying: false,
     sheet: null,
@@ -389,6 +390,29 @@
     + '<text x="480" y="512" fill="#6E6A78" font-family="Inter,sans-serif" font-size="26"'
     + ' text-anchor="middle">Sample 16:9 source</text></svg>');
 
+  // The caption families the worker image actually installs (worker/Dockerfile).
+  // Offering one it does not have means fontconfig quietly substitutes another
+  // and the clip renders in a font nobody chose -- which is what happened with
+  // Inter. `web` is only for the preview: the browser will not have DejaVu or
+  // Amiri either, so each falls back to the closest thing it does have.
+  var CAPTION_FONTS = [
+    { name: 'DejaVu Sans', label: 'DejaVu Sans', web: '"DejaVu Sans", Verdana, sans-serif' },
+    { name: 'Liberation Sans', label: 'Liberation', web: '"Liberation Sans", Arial, Helvetica, sans-serif' },
+    { name: 'Open Sans', label: 'Open Sans', web: '"Open Sans", "Segoe UI", sans-serif' },
+    { name: 'DejaVu Serif', label: 'DejaVu Serif', web: '"DejaVu Serif", Georgia, serif' },
+    { name: 'Amiri', label: 'Amiri', web: 'Amiri, "Scheherazade New", Georgia, serif' },
+    { name: 'Scheherazade New', label: 'Scheherazade', web: '"Scheherazade New", Amiri, Georgia, serif' },
+  ];
+
+  function webFontFor(name) {
+    for (var i = 0; i < CAPTION_FONTS.length; i++) {
+      if (CAPTION_FONTS[i].name === name) return CAPTION_FONTS[i].web;
+    }
+    // An older template may name a font that is no longer offered. Say so in the
+    // only way the preview can: fall back, rather than pretending it is fine.
+    return 'Inter, system-ui, sans-serif';
+  }
+
   function handleStyle(on) {
     return on
       ? 'position: absolute; inset: -6px; border: 1px dashed rgba(217,180,120,.7); border-radius: 6px; pointer-events: none;'
@@ -401,7 +425,7 @@
   // preview and the export agree. Middle alignments ignore MarginV entirely, so
   // they stay centred. Without this the preview snapped between three fixed
   // spots and dragging looked broken even once the drag worked.
-  function overlayStyle(vertical, horizontal, colour, size, fromEdge) {
+  function overlayStyle(vertical, horizontal, colour, size, fromEdge, font, upper) {
     var v;
     if (fromEdge === null || fromEdge === undefined || vertical === 'middle') {
       v = vertical === 'top' ? 'top: 8%;' : vertical === 'bottom' ? 'bottom: 8%;' : 'top: 50%; translate: 0 -50%;';
@@ -413,7 +437,9 @@
       : horizontal === 'right' ? 'right: 8%; text-align: right;'
       : 'left: 50%; transform: translateX(-50%); text-align: center;';
     return 'position: absolute; ' + v + ' ' + h + ' max-width: 84%; color: ' + (colour || '#FFFFFF') +
-      '; font-size: ' + Math.max(9, Math.round(Number(size || 40) / 6)) + 'px; font-weight: 700; line-height: 1.15; text-shadow: 0 2px 6px rgba(0,0,0,.7);';
+      '; font-size: ' + Math.max(9, Math.round(Number(size || 40) / 6)) + 'px; font-weight: 700; line-height: 1.15; text-shadow: 0 2px 6px rgba(0,0,0,.7);'
+      + (font ? ' font-family: ' + font + ';' : '')
+      + (upper ? ' text-transform: uppercase;' : '');
   }
 
 
@@ -994,14 +1020,17 @@
           var x = Math.max(0, Math.min(1, (ev.clientX - box.left) / box.width));
           // Held so the guides can show where it is and whether it has caught a
           // line. apply() refreshes, so nothing extra is needed here.
-          UI.dragAt = y;
-          UI.dragSnapped = snapped(y) !== y;
+          UI.dragAt = kind === 'caption' ? Math.max(SAFE_TOP, Math.min(SAFE_BOTTOM, y)) : y;
+          var hit = snapAt(UI.dragAt);
+          UI.dragSnapped = Boolean(hit);
+          UI.dragSnapName = hit ? hit.name : '';
           apply(x, y);
         }
         function up() {
           UI.dragKind = null;
           UI.dragAt = null;
           UI.dragSnapped = false;
+          UI.dragSnapName = '';
           global.removeEventListener('mousemove', move);
           global.removeEventListener('mouseup', up);
           refresh();
@@ -1015,24 +1044,47 @@
     // The lines the caption snaps to, as fractions from the top: the safe-zone
     // edges, the thirds and the half. The label under the preview promises
     // exactly these, so they are listed once rather than implied by arithmetic.
-    var SNAP_LINES = [0.1, 1 / 3, 0.5, 2 / 3, 0.9];
+    // The safe box the design draws (.s8n: top 8%, bottom 14%). Captions live
+    // inside it because platform chrome covers the strips outside, so the drag
+    // is clamped to it and its edges are snap points rather than arbitrary
+    // percentages. These were 10% and 90%, which matched nothing on screen.
+    var SAFE_TOP = 0.08;
+    var SAFE_BOTTOM = 0.86;
+    var SNAP_POINTS = [
+      { at: SAFE_TOP, name: 'Safe top' },
+      { at: 1 / 3, name: 'Upper third' },
+      { at: 0.5, name: 'Middle' },
+      { at: 2 / 3, name: 'Lower third' },
+      { at: SAFE_BOTTOM, name: 'Safe bottom' },
+    ];
+    var SNAP_LINES = SNAP_POINTS.map(function (p) { return p.at; });
     var SNAP_WITHIN = 0.035;
+
+    // The snap the given position has caught, if any. Named, so the preview can
+    // say which line it landed on instead of only drawing it.
+    function snapAt(value) {
+      for (var i = 0; i < SNAP_POINTS.length; i++) {
+        if (Math.abs(value - SNAP_POINTS[i].at) <= SNAP_WITHIN) return SNAP_POINTS[i];
+      }
+      return null;
+    }
     // Mirrors NUMBER_RANGES.captionMarginV in src/templates.js. Half a 1920-tall
     // frame, so a caption anchored to either edge can still reach the centre.
     var CAPTION_MARGIN_MAX = 960;
 
     function snapped(value) {
-      for (var i = 0; i < SNAP_LINES.length; i++) {
-        if (Math.abs(value - SNAP_LINES[i]) <= SNAP_WITHIN) return SNAP_LINES[i];
-      }
-      return value;
+      var hit = snapAt(value);
+      return hit ? hit.at : value;
     }
 
     // Vertical position is a real margin in device pixels from the bottom of a
     // 1920-tall frame; horizontal snaps to the alignments the renderer has.
     var dragCaptionFrom = makeDrag('caption', function (x, y) {
       var height = Number(tpl.height || 1920);
-      var snappedY = snapped(y);
+      // Clamped to the safe box: a caption outside it is covered by the
+      // platform's own chrome, so letting it go there only produces clips with
+      // hidden words.
+      var snappedY = snapped(Math.max(SAFE_TOP, Math.min(SAFE_BOTTOM, y)));
       var align = x < 0.34 ? 'left' : x > 0.66 ? 'right' : 'center';
 
       // Anchored to the nearer edge, not to thirds.
@@ -1699,7 +1751,9 @@
       // vertical slider appeared to do nothing between them.
       edCapOverlayStyle: 'position: absolute; z-index: 8; width: 80%; left: 50%; ' + edCapVertical + ' text-align: center; padding: 7px 9px; border-radius: 6px; background: rgba(10,10,12,.5); color: ' +
         (tpl.captionPrimary || '#F0D6A6') + '; font-family: Outfit, Inter, sans-serif; font-weight: 600; line-height: 1.2; font-size: ' +
-        Math.max(8, Math.round(Number(tpl.captionFontSize || 96) / 8)) + 'px;' + (tpl.captionUppercase ? ' text-transform: uppercase;' : ''),
+        Math.max(8, Math.round(Number(tpl.captionFontSize || 96) / 8)) + 'px;'
+        + (tpl.captionUppercase ? ' text-transform: uppercase;' : '')
+        + ' font-family: ' + webFontFor(tpl.captionFont) + ';',
       edCapHandle: 'position: absolute; inset: -5px; border: 1px dashed rgba(240,214,166,.7); border-radius: 8px; pointer-events: none;',
       dragEdCap: dragCaptionFrom,
 
@@ -1714,8 +1768,15 @@
       edUpperTrack: switchTrack(Boolean(tpl.captionUppercase)),
       edUpperKnob: switchKnob(Boolean(tpl.captionUppercase)),
       toggleUpper: function (e) { stop(e); saveStyle({ captionUppercase: !tpl.captionUppercase }); },
-      edFonts: ['DejaVu Sans', 'Inter', 'Amiri'].map(function (f) {
-        return { label: f, style: tabStyle(tpl.captionFont === f), select: function (e) { stop(e); saveStyle({ captionFont: f }); } };
+      // Every family here is installed in the worker image. Inter was offered
+      // and is not, so any clip set to it rendered in whatever fontconfig
+      // substituted instead.
+      edFonts: CAPTION_FONTS.map(function (f) {
+        return {
+          label: f.label,
+          style: tabStyle(tpl.captionFont === f.name) + ' font-family: ' + f.web + ';',
+          select: function (e) { stop(e); saveStyle({ captionFont: f.name }); },
+        };
       }),
 
       // fitMode, and the one framing toggle the schema keeps.
@@ -2204,6 +2265,19 @@
         return words.slice(0, n).join(' ');
       }()),
 
+      // A small name for the line the caption has caught, so the snap is
+      // readable rather than only a highlighted rule.
+      pvSnapName: UI.dragSnapName || '',
+      pvSnapStyle: (UI.dragKind === 'caption' && UI.dragSnapName)
+        // Pinned to the right edge rather than centred on the line: centred, it
+        // sat directly under the caption box it was describing.
+        ? 'position: absolute; z-index: 10; right: 6px; translate: 0 -50%; pointer-events: none;'
+          + ' top: ' + ((UI.dragAt || 0) * 100).toFixed(3) + '%;'
+          + ' padding: 2px 8px; border-radius: 999px; background: #F0D6A6; color: #17140E;'
+          + ' font-family: Inter, system-ui, sans-serif; font-size: 10px; font-weight: 700;'
+          + ' letter-spacing: .02em; white-space: nowrap; box-shadow: 0 2px 10px rgba(0,0,0,.45);'
+        : 'display: none;',
+
       // ── Preview picture ──
       // A real lecture's own 16:9 thumbnail when the account has one, so what is
       // previewed is the customer's own footage; the illustration otherwise.
@@ -2239,7 +2313,8 @@
       }()),
 
       capStyle: overlayStyle(tpl.captionPosition, tpl.captionHorizontal, tpl.captionPrimary, tpl.captionFontSize,
-        Number(tpl.captionMarginV || 0) / Math.max(1, Number(tpl.height || 1920)))
+        Number(tpl.captionMarginV || 0) / Math.max(1, Number(tpl.height || 1920)),
+        webFontFor(tpl.captionFont), tpl.captionUppercase)
         + grabStyle(UI.dragKind === 'caption')
         + (UI.dragKind === 'caption' ? ' outline: 1px dashed rgba(240,214,166,.85); outline-offset: 4px;' : ''),
       capHandle: handleStyle(UI.tplLayer === 'caption'),

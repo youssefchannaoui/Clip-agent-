@@ -1,5 +1,6 @@
 import importlib.util
 import pathlib
+import re
 import sys
 import unittest
 
@@ -256,6 +257,39 @@ class RenderProgressTests(unittest.TestCase):
         source = (ROOT / "worker" / "clip_worker.py").read_text(encoding="utf-8")
         self.assertIn("if clip_seconds:", source)
         self.assertIn("eta = None", source)
+
+
+class CaptionFontTests(unittest.TestCase):
+    """Every font the picker offers has to exist in the worker image.
+
+    Offering one it does not have means fontconfig quietly substitutes another
+    and the clip renders in a font nobody chose. The picker offered Inter for
+    months; the image has never had it.
+    """
+
+    def _picker_fonts(self):
+        adapter = (ROOT / "src" / "public" / "studio-adapter.js").read_text(encoding="utf-8")
+        block = re.search(r"var CAPTION_FONTS = \[(.*?)\n  \];", adapter, re.S)
+        assert block, "CAPTION_FONTS not found"
+        return re.findall(r"name: '([^']+)'", block.group(1))
+
+    def test_every_offered_font_is_installed_in_the_image(self):
+        dockerfile = (ROOT / "worker" / "Dockerfile").read_text(encoding="utf-8")
+        packages = {
+            "DejaVu Sans": "fonts-dejavu-core",
+            "DejaVu Serif": "fonts-dejavu-core",
+            "Liberation Sans": "fonts-liberation",
+            "Open Sans": "fonts-open-sans",
+            "Amiri": "fonts-hosny-amiri",
+            "Scheherazade New": "fonts-sil-scheherazade",
+        }
+        for font in self._picker_fonts():
+            self.assertIn(font, packages, f"{font} is offered but no package is recorded for it")
+            self.assertIn(packages[font], dockerfile, f"{font} needs {packages[font]} installed")
+
+    def test_inter_is_not_offered_because_it_is_not_installed(self):
+        self.assertNotIn("Inter", self._picker_fonts())
+        self.assertNotIn("fonts-inter", (ROOT / "worker" / "Dockerfile").read_text(encoding="utf-8"))
 
 
 class OpenCVVersionGuardTests(unittest.TestCase):

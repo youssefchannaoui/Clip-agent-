@@ -82,7 +82,8 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 .slh-empty { padding: 13px; font-size: 11.5px; color: #6E6E76; }
 
 /* Preview picture layers. z-index 0-2, under the design's own overlays. */
-#studioPreviewPic { position: absolute; inset: 0; z-index: 0; overflow: hidden; border-radius: inherit; }
+#studioPreviewPic { position: absolute; inset: 0; z-index: 0; border-radius: inherit; }
+#studioPreviewPic .pv-back, #studioPreviewPic .pv-img, #studioPreviewPic .pv-fx { border-radius: inherit; overflow: hidden; }
 #studioPreviewPic.hide { display: none; }
 
 /* Second save button in the clip editor. Matches the design's secondary buttons
@@ -1215,7 +1216,7 @@ select:focus{outline:none;border-color:var(--blue)}
      clip layout does and what the Look does -- could not be shown. These layers
      are docked inside the frame, beneath the caption and watermark. -->
 <div id="studioPreviewPic" class="hide" data-host-owned aria-hidden="true">
-  <div class="pv-back"></div><div class="pv-img"></div><div class="pv-fx"></div>
+  <div class="pv-back"></div><div class="pv-img"></div><div class="pv-fx"></div><span class="pv-snap"></span>
 </div>
 <div id="studioLiveBar" class="hide" role="status" aria-live="polite"></div>
 
@@ -2032,6 +2033,11 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       set('.pv-back',vals.pvBackStyle);
       set('.pv-img',vals.pvImgStyle);
       set('.pv-fx',vals.pvFxStyle);
+      /* Sits above the picture but is positioned against the frame, so it has to
+         escape the picture's overflow clipping — hence z-index on the wrapper. */
+      set('.pv-snap',vals.pvSnapStyle);
+      const snap=pvEl.querySelector('.pv-snap');
+      if(snap&&snap.textContent!==vals.pvSnapName)snap.textContent=vals.pvSnapName;
     }
 
     function paintLiveWork(vals){

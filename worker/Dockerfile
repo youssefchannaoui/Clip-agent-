@@ -13,8 +13,19 @@ ENV PYTHONUNBUFFERED=1 \
     FFMPEG_THREADS=4 \
     WORKER_MAX_CONCURRENT_JOBS=1
 
+# Caption fonts. Every family the Templates picker offers has to be installed
+# here, or choosing it silently renders in whatever fontconfig substitutes --
+# the picker offered Inter for months and no clip was ever rendered in it.
+# test/test_worker.py pins the two lists together.
+#
+# dejavu-core   DejaVu Sans / Serif / Sans Mono
+# liberation    Liberation Sans / Serif / Mono (Arial and Times metrics)
+# open-sans     Open Sans
+# hosny-amiri   Amiri, for Arabic
+# scheherazade  Scheherazade New, for Arabic
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg ca-certificates curl fontconfig fonts-dejavu-core \
+    fonts-liberation fonts-open-sans \
     fonts-hosny-amiri fonts-sil-scheherazade \
     && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
