@@ -215,6 +215,20 @@ class Processor:
 
         threading.Thread(target=collect_stderr, daemon=True).start()
         reported_error = ""
+
+        def note(**fields: Any) -> None:
+            """Record progress against the job, tolerating it having gone away.
+
+            store.update raises KeyError when the job's status file no longer
+            exists -- a cancel plus cleanup mid-run does exactly that. These
+            writes happen constantly (a heartbeat every ten seconds), and none of
+            them is worth killing the reader loop over.
+            """
+            try:
+                self.store.update(job_id, **fields)
+            except KeyError:
+                pass
+
         for line in child.stdout:
             if self.cancelled(job_id):
                 child.terminate()
@@ -228,8 +242,7 @@ class Processor:
             if event.get("type") == "warning":
                 # Carried to the caller rather than dropped: a warning about how
                 # the clips were produced belongs in front of the user.
-                self.store.update(
-                    job_id,
+                note(
                     lastWarning=str(event.get("warning") or ""),
                     lastWarningCode=str(event.get("code") or ""),
                 )
@@ -237,7 +250,7 @@ class Processor:
                 # The worker beats every 10s. Recording it is what lets the
                 # caller tell "still working" apart from "hung": without this
                 # both look identical -- a percentage that stops moving.
-                self.store.update(job_id, heartbeatAt=now_ms())
+                note(heartbeatAt=now_ms())
             if event.get("type") == "progress":
                 # Pass the worker's own words and its phase through untouched.
                 # Rewriting the prose here destroyed the distinction between
@@ -245,8 +258,7 @@ class Processor:
                 # so three of the five pipeline steps never lit in the UI and the
                 # rail appeared to run backwards.
                 stage = str(event.get("stage") or "processing")
-                self.store.update(
-                    job_id,
+                note(
                     status=stage,
                     stage=stage,
                     phase=str(event.get("phase") or ""),
