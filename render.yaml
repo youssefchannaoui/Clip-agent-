@@ -16,8 +16,13 @@ services:
       # built-in scoring and titled from the transcript -- a legitimate mode, and
       # the worker now says so in the activity feed rather than failing silently.
       # Point it at an Ollama reachable from the worker to turn the AI on.
+      #
+      # This value is never dialled by the web service -- it is passed through in
+      # the job payload and resolved on the worker box, where `ollama` is the
+      # sibling container in worker/docker-compose.yml. That is why a private
+      # hostname is correct here and a public URL would be wrong.
       - key: OLLAMA_URL
-        sync: false
+        value: http://ollama:11434
       - key: OLLAMA_MODEL
         value: qwen3:4b
       - key: DATA_DIR

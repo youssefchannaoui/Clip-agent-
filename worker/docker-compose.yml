@@ -23,5 +23,29 @@ services:
         limits:
           memory: 10G
 
+  # Local clip ranking and titling. Without this, refine_with_ollama() returns
+  # its candidates untouched and every clip is named from a raw transcript
+  # fragment -- the "AI" in the product was never running.
+  #
+  # It lives on this box on purpose: scoring is a short phase between
+  # transcription and rendering, never concurrent with them, so it borrows CPU
+  # that is otherwise idle and costs nothing extra to host.
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - deenclipped-ollama:/root/.ollama
+    # Never published beyond the compose network -- the model must not be
+    # reachable from the internet.
+    expose:
+      - "11434"
+    deploy:
+      resources:
+        limits:
+          # qwen3:4b at int4 sits near 3G. Capped so a model pull can never
+          # squeeze transcription or ffmpeg off the box.
+          memory: 5G
+
 volumes:
   deenclipped-worker-data:
+  deenclipped-ollama:

@@ -94,6 +94,22 @@ case "$code" in
   *)       bad "service responding" "HTTP $code" ;;
 esac
 
+# ── the clip AI ───────────────────────────────────────────────────────────────
+# Without a reachable Ollama, refine_with_ollama() returns its candidates
+# untouched: clips are picked by the built-in scoring and titled from raw
+# transcript fragments. That is a supported mode, so this reports which mode the
+# box is actually in rather than failing — but it must never be a silent guess.
+ai=$(docker exec "$CONTAINER" sh -c 'curl -s -m 5 http://ollama:11434/api/tags' 2>/dev/null)
+if printf '%s' "$ai" | grep -q '"models"'; then
+  if printf '%s' "$ai" | grep -q "${OLLAMA_MODEL:-qwen3:4b}"; then
+    ok "clip AI: ${OLLAMA_MODEL:-qwen3:4b} loaded"
+  else
+    bad "clip AI: model missing" "Ollama is up but ${OLLAMA_MODEL:-qwen3:4b} is not pulled. Run: docker compose -f worker/docker-compose.yml exec ollama ollama pull ${OLLAMA_MODEL:-qwen3:4b}"
+  fi
+else
+  bad "clip AI: unreachable" "no Ollama on http://ollama:11434 — clips will be scored and titled without the AI"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "All checks passed. The running worker has the current code."

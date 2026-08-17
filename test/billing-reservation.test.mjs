@@ -80,3 +80,54 @@ test('reserving nothing is a no-op, not an error', () => {
   assert.equal(billing.releaseTokens(user.id, 0).released, 0);
   assert.equal(billing.publicBilling(user).current.reserved, 0);
 });
+
+// ── holds must come back when the work stops ───────────────────────────────
+// These leaked. A free account never rolls over (periodEnd is null), so every
+// cancelled or deleted job permanently shrank the balance with no way back.
+
+const engine = await import('../src/local-engine.js');
+const { save } = await import('../src/store.js');
+
+function makeHeldProject(id, userId, tokens) {
+  const project = { id, userId, engine: 'remote', status: 'processing', title: 'L', tokensReserved: tokens };
+  state.projects.push(project);
+  billing.reserveTokens(userId, tokens, { projectId: id });
+  save();
+  return project;
+}
+
+test('cancelling a project gives its hold back', () => {
+  const user = makeUser('reserve-cancel');
+  const start = billing.publicBilling(user).current.remaining;
+  makeHeldProject('project_cancel_hold', user.id, 12);
+  assert.equal(billing.publicBilling(user).current.remaining, start - 12, 'held while running');
+  engine.cancelProject('project_cancel_hold');
+  assert.equal(billing.publicBilling(user).current.reserved, 0);
+  assert.equal(billing.publicBilling(user).current.remaining, start, 'a cancelled job costs nothing');
+});
+
+test('deleting a project gives its hold back', () => {
+  const user = makeUser('reserve-delete');
+  const start = billing.publicBilling(user).current.remaining;
+  makeHeldProject('project_delete_hold', user.id, 7);
+  assert.equal(billing.publicBilling(user).current.remaining, start - 7);
+  engine.deleteProject('project_delete_hold');
+  assert.equal(billing.publicBilling(user).current.remaining, start, 'a deleted job costs nothing');
+});
+
+test('releasing twice cannot refund the same hold twice', () => {
+  const user = makeUser('reserve-double');
+  const start = billing.publicBilling(user).current.remaining;
+  makeHeldProject('project_double_hold', user.id, 9);
+  engine.cancelProject('project_double_hold');
+  engine.cancelProject('project_double_hold');
+  assert.equal(billing.publicBilling(user).current.remaining, start, 'no free tokens from cancelling twice');
+});
+
+test('a source length that costs a given number of tokens round-trips', () => {
+  // Used to hold a floor when the real duration is unknown, which in remote
+  // mode is every link import.
+  for (const tokens of [1, 5, 10, 40]) {
+    assert.equal(billing.tokenCostForSeconds(billing.secondsForTokenCost(tokens)), tokens);
+  }
+});

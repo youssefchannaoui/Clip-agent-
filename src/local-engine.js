@@ -466,7 +466,12 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
   const estimateSeconds = sourceRange.endSec
     ? sourceRange.endSec - (sourceRange.startSec || 0)
     : Number(sourceMeta?.durationSec || 0);
-  reserveProjectHold(project, estimateSeconds);
+  // With no known length, hold the same minimum the account had to prove it
+  // could afford to start. Holding nothing meant a remote link import reserved
+  // nothing at all, the clips were delivered before the charge was attempted,
+  // and a shortfall only ever became a warning on a project nobody reads --
+  // so the work was given away and could be repeated indefinitely.
+  reserveProjectHold(project, estimateSeconds || billing.secondsForTokenCost(config.minimumTokensToStart));
 
   fs.writeFileSync(jobFile(projectId), JSON.stringify(job, null, 2));
   const rangeCopy = sourceRange.endSec ? ` · source window ${Math.round(sourceRange.startSec / 60)}–${Math.round(sourceRange.endSec / 60)} min` : (sourceRange.startSec ? ` · source starts at ${Math.round(sourceRange.startSec / 60)} min` : '');
@@ -584,7 +589,9 @@ export function acceptRemoteUpdate(projectId, update) {
     project.error = customerSafeProjectError(update.error || 'The external worker failed.').message;
     project.errorCode = 'processing_failed'; project.updatedAt = Date.now(); save();
   } else if (update.status === 'cancelled') {
-    project.status = 'cancelled'; project.stage = 'cancelled'; project.updatedAt = Date.now(); save();
+    // Cancelled from the worker's side counts the same as cancelling here: no
+    // clips are produced, so nothing should stay charged against the account.
+    project.status = 'cancelled'; releaseProjectHold(project); project.stage = 'cancelled'; project.updatedAt = Date.now(); save();
   } else if (project.status !== 'done') {
     project.status = update.status === 'queued' ? 'queued' : 'processing';
     project.stage = String(update.stage || update.status || 'processing');
@@ -1367,10 +1374,20 @@ export function retryProject(projectId) {
 export function cancelProject(projectId) {
   const current = running.get(projectId);
   const remoteProject = projectById(projectId);
-  if (remoteProject?.engine === 'remote') workerClient.cancelJob(projectId).catch(() => {});
+  // A retried project runs under a fresh worker job id. Cancelling the project
+  // id named a job the worker no longer has, so it 404'd, the error was
+  // swallowed, and the real run kept the single worker slot — the user cancelled
+  // and then waited behind their own cancelled job.
+  if (remoteProject?.engine === 'remote') {
+    workerClient.cancelJob(remoteProject.workerJobId || projectId).catch(() => {});
+  }
   if (typeof current?.kill === 'function') current.kill('SIGTERM');
   else if (current) current.cancelled = true;
   const project = projectById(projectId);
+  // Cancelling stops the work, so the tokens held against it must go back. This
+  // was missing, and because a free account never rolls over, every cancelled
+  // job shrank the balance permanently with no way to recover it.
+  if (project) { releaseProjectHold(project); save(); }
   if (project?.moreJob?.id) running.get(project.moreJob.id)?.kill('SIGTERM');
 }
 export function deleteProject(projectId) {

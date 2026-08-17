@@ -89,6 +89,16 @@ export function tokenCostForSeconds(seconds = 0) {
   return Math.max(1, Math.ceil((Math.max(0, Number(seconds) || 0) / 60) * tokenRate()));
 }
 
+/**
+ * The source length that would cost this many tokens — the inverse of
+ * tokenCostForSeconds. Used to hold a floor against an account when the real
+ * duration is not knowable yet, which in remote mode is every link import.
+ */
+export function secondsForTokenCost(tokens = 0) {
+  const rate = tokenRate() || 1;
+  return (Math.max(0, Number(tokens) || 0) / rate) * 60;
+}
+
 export function tokenCostForMinutes(minutes = 0) {
   return Math.max(1, Math.ceil(Math.max(0, Number(minutes) || 0) * tokenRate()));
 }
