@@ -32,6 +32,54 @@ body.studio-active #studio { display: block; }
    be controlled from here. Targeted through the Phosphor icon class rather than
    the generated one, which changes on re-import. */
 body.studio-read #studio button:has(> i.ph-bell) > span { display: none; }
+/* Notifications sit bottom-right. Bottom-centre put them under the live bar,
+   which is where the two overlapped. */
+body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: none; align-items: flex-end; }
+
+/* Live work — the compact bar, on every screen but Home. */
+#studioLiveBar {
+  position: fixed; left: 50%; translate: -50% 0; bottom: 18px; z-index: 150;
+  width: min(560px, calc(100vw - 300px));
+  border: 1px solid #26262A; border-radius: 13px; background: rgba(14,14,17,.97);
+  box-shadow: 0 20px 50px rgba(0,0,0,.6); backdrop-filter: blur(9px);
+  font-family: Inter, system-ui, sans-serif; color: #F2F2F4; overflow: hidden;
+}
+#studioLiveBar.hide, #studioLiveHome.hide { display: none; }
+.slb-head { display: flex; align-items: center; gap: 10px; padding: 10px 13px; }
+.slb-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: #7FD1A6; animation: dcPulse 1.8s ease-in-out infinite; }
+.slb-title { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slb-pct { flex: none; font-size: 11.5px; color: #F0D6A6; font-variant-numeric: tabular-nums; }
+.slb-eta { flex: none; font-size: 11px; color: #8B8B93; }
+.slb-btn { flex: none; padding: 4px 9px; border: 1px solid #26262A; border-radius: 7px; background: #17171A; color: #A2A2AA; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
+.slb-btn:hover { color: #F2F2F4; border-color: #34343A; }
+.slb-bar { height: 2px; background: #1E1E22; }
+.slb-bar i { display: block; height: 100%; background: linear-gradient(90deg, #D9B478, #F0D6A6); transition: width .4s ease; }
+.slb-list { border-top: 1px solid #1E1E22; max-height: 210px; overflow: auto; }
+
+/* Live work — the stable Home section. Docked into the right-hand column when
+   one is found, so it occupies space instead of covering content. */
+#studioLiveHome.slh-docked { position: static; translate: none; width: auto; margin-bottom: 14px; box-shadow: none; }
+/* Live work — the stable Home section. */
+#studioLiveHome {
+  position: fixed; left: 50%; translate: -50% 0; bottom: 18px; z-index: 150;
+  width: min(560px, calc(100vw - 300px));
+  border: 1px solid rgba(217,180,120,.28); border-radius: 13px; background: rgba(14,14,17,.97);
+  box-shadow: 0 20px 50px rgba(0,0,0,.6); font-family: Inter, system-ui, sans-serif; color: #F2F2F4; overflow: hidden;
+}
+#studioLiveHome .slb-head { border-bottom: 1px solid #1E1E22; }
+.slh-row { display: flex; align-items: center; gap: 10px; padding: 9px 13px; border-bottom: 1px solid #16161A; }
+.slh-row:last-child { border-bottom: 0; }
+.slh-row i { font-size: 14px; color: #F0D6A6; flex: none; }
+.slh-row .what { flex: 1; min-width: 0; }
+.slh-row .what b { display: block; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* One line. A long stage plus an ETA wrapped to two and pushed the percentage
+   out of line with the title. Scoped past .slh-track, which is also a span. */
+.slh-row .what > span:not(.slh-track) { display: block; font-size: 11px; color: #8B8B93; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slh-row .pct { flex: none; font-size: 11.5px; color: #F0D6A6; font-variant-numeric: tabular-nums; }
+/* display:block matters — this is a <span>, and height does not apply inline. */
+.slh-track { display: block; height: 3px; margin-top: 5px; border-radius: 3px; background: #1E1E22; overflow: hidden; }
+.slh-track i { display: block; height: 100%; }
+
 /* Connections overlay — centred card over a blurred backdrop. */
 #studioConn { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
 #studioConn.hide { display: none; }
@@ -1060,6 +1108,13 @@ select:focus{outline:none;border-color:var(--blue)}
   </div>
 </section>
 
+<!-- Live work. Hand-written because the design has only a floating bar, and it
+     sits on every screen including Home, where it collided with the toast dock.
+     Home gets a stable section listing everything in flight; every other screen
+     gets a compact bar that expands when more than one job is running. -->
+<section id="studioLiveHome" class="hide" aria-label="Happening now"></section>
+<div id="studioLiveBar" class="hide" role="status" aria-live="polite"></div>
+
 <!-- Connections overlay. Hand-written rather than generated: the design's own
      dialog carries bindings for a single platform (connName, connHandle, …), so
      showing all four at once is not expressible in that template. Driven from
@@ -1715,6 +1770,62 @@ function showView(name,direction=1){const previous=$('.panel:not(.hide)');ACTIVE
    A remembered preference would send the two out of step and leave both shells
    overwriting each other. */
 function studioWanted(){return window.STUDIO_SHELL===true}
+    /* Home shows a stable section listing everything in flight; every other
+       screen shows a compact bar that expands when more than one job runs. The
+       design supplies only the bar, and put it on Home too, where it sat on top
+       of the toast dock. */
+    const liveEls={home:$('#studioLiveHome'),bar:$('#studioLiveBar')};
+    function liveRowHtml(r){
+      const pct=r.percent||'';
+      return `<div class="slh-row"><i class="${esc(r.icon)}"></i>
+        <span class="what"><b>${esc(r.title)}</b><span>${esc(r.stage)}${r.eta?' · '+esc(r.eta):''}</span>
+        <span class="slh-track"><i style="${esc(r.barStyle)}"></i></span></span>
+        <span class="pct">${esc(pct)}</span></div>`;
+    }
+    /* On Home the section is docked into the right-hand column so it sits in the
+       page rather than floating over it. The column is found by the card that is
+       always there; if a re-import moves things, it falls back to the fixed
+       position rather than disappearing. */
+    function dockLiveHome(el){
+      /* Find the "Needs your review" card itself — the *smallest* element still
+         containing that text — then sit directly above it, inside its own
+         column. Using its parent instead landed this in the main content column
+         and shoved My library sideways. */
+      const cards=[...document.querySelectorAll('#studio div, #studio section, #studio aside')]
+        .filter(n=>n!==el&&!el.contains(n)&&/Needs your review/.test(n.textContent||''));
+      const card=cards.sort((a,b)=>a.querySelectorAll('*').length-b.querySelectorAll('*').length)
+        .find(n=>n.querySelectorAll('*').length>0);
+      if(card&&card.parentElement&&el.nextElementSibling!==card){
+        card.parentElement.insertBefore(el,card);
+      }
+      el.classList.toggle('slh-docked',Boolean(card));
+    }
+    function paintLiveWork(vals){
+      const onHome=StudioAdapter.ui.screen==='home';
+      const any=vals.liveCount>0;
+      liveEls.home.classList.toggle('hide',!(onHome&&any));
+      liveEls.bar.classList.toggle('hide',!(!onHome&&any));
+      if(!any)return;
+      if(onHome){
+        dockLiveHome(liveEls.home);
+        liveEls.home.innerHTML=`<div class="slb-head"><span class="slb-dot"></span>
+          <span class="slb-title">Happening now</span>
+          <span class="slb-eta">${esc(vals.liveCount)} running</span></div>
+          ${vals.liveAll.map(liveRowHtml).join('')}`;
+        return;
+      }
+      const first=vals.liveAll[0];
+      liveEls.bar.innerHTML=`<div class="slb-head"><span class="slb-dot"></span>
+        <span class="slb-title">${esc(first.title)} · ${esc(first.stage)}</span>
+        ${first.percent?`<span class="slb-pct">${esc(first.percent)}</span>`:''}
+        ${first.eta?`<span class="slb-eta">${esc(first.eta)}</span>`:''}
+        ${vals.liveMore?`<button type="button" class="slb-btn" id="slbToggle">${StudioAdapter.ui.liveOpen?'Hide':esc(vals.liveMoreLabel)}</button>`:''}
+        <button type="button" class="slb-btn" id="slbHome">Open home</button></div>
+        <div class="slb-bar"><i style="width:${esc((first.percent||'0%').replace('%',''))}%"></i></div>
+        ${StudioAdapter.ui.liveOpen?`<div class="slb-list">${vals.liveAll.map(liveRowHtml).join('')}</div>`:''}`;
+      const t=$('#slbToggle'); if(t)t.onclick=()=>{StudioAdapter.ui.liveOpen=!StudioAdapter.ui.liveOpen;renderAll()};
+      const h=$('#slbHome'); if(h)h.onclick=()=>{StudioAdapter.ui.screen='home';StudioAdapter.ui.liveOpen=false;renderAll()};
+    }
 let STUDIO=null;
 function renderStudio(){
   if(!studioWanted()||!DATA||!window.StudioRuntime||!window.StudioAdapter)return false;
@@ -1884,6 +1995,7 @@ function renderStudio(){
   }
   const vals=StudioAdapter.bindings(DATA);
   STUDIO.render(vals);
+  paintLiveWork(vals);
   /* No unread activity -> hide the dot the design hardcoded on. */
   document.body.classList.toggle('studio-read',!vals.activityUnread);
   return true}

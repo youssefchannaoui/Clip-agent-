@@ -258,11 +258,13 @@ class Processor:
                 # so three of the five pipeline steps never lit in the UI and the
                 # rail appeared to run backwards.
                 stage = str(event.get("stage") or "processing")
+                eta = event.get("etaSec")
                 note(
                     status=stage,
                     stage=stage,
                     phase=str(event.get("phase") or ""),
                     progress=int(event.get("progress") or 0),
+                    etaSec=None if eta is None else int(round(float(eta))),
                 )
         code = child.wait()
         with self.lock:

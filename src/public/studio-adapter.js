@@ -33,6 +33,7 @@
     jobTrackId: null,
     countsOpen: false,
     playingTrack: null,
+    liveOpen: false,
     perfRange: 'Last 7 days',
     planPeriod: 'month',
     termA: '',
@@ -827,7 +828,7 @@
     var jobsLive = [];
     projects.forEach(function (pr) {
       if (['queued', 'processing'].indexOf(pr.status) > -1) {
-        jobsLive.push({ kind: 'project', title: projectTitle[pr.id], stage: pr.stage || pr.status, progress: Number(pr.progress || 0), at: pr.startedAt || pr.submittedAt });
+        jobsLive.push({ kind: 'project', title: projectTitle[pr.id], stage: pr.stage || pr.status, progress: Number(pr.progress || 0), etaSec: pr.etaSec, at: pr.startedAt || pr.submittedAt });
       }
       if (pr.moreJob && ['queued', 'processing'].indexOf(pr.moreJob.status) > -1) {
         jobsLive.push({ kind: 'project', title: 'More clips · ' + projectTitle[pr.id], stage: pr.moreJob.stage || pr.moreJob.status, progress: Number(pr.moreJob.progress || 0), at: pr.moreJob.startedAt || pr.moreJob.createdAt });
@@ -853,15 +854,37 @@
     });
     jobsLive.sort(function (a, b) { return Number(b.at || 0) - Number(a.at || 0); });
 
-    var liveItems = jobsLive.slice(0, 4).map(function (j) {
+    function etaLabel(seconds) {
+      if (seconds === null || seconds === undefined || !isFinite(seconds)) return '';
+      var s = Math.max(0, Math.round(seconds));
+      if (s < 45) return 'about a minute left';
+      if (s < 3600) return Math.round(s / 60) + ' min left';
+      var h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
+      return m ? h + 'h ' + m + 'm left' : h + 'h left';
+    }
+
+    function liveRow(j) {
+      var pct = (j.progress === null || !isFinite(j.progress)) ? null : Math.max(0, Math.min(100, Math.round(j.progress)));
+      var eta = etaLabel(j.etaSec);
       return {
         label: j.title,
-        meta: j.stage + (j.progress !== null && isFinite(j.progress) ? ' · ' + Math.round(j.progress) + '%' : ''),
-        barStyle: 'height: 3px; border-radius: 3px; width: ' + (j.progress === null || !isFinite(j.progress) ? 100 : Math.max(0, Math.min(100, Math.round(j.progress)))) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
+        title: j.title,
+        stage: j.stage,
+        percent: pct === null ? '' : pct + '%',
+        eta: eta,
+        // The dock binds text/textStyle; supplying only label left every row of
+        // the floating bar unstyled and unreadable.
+        text: j.title + ' · ' + j.stage + (pct === null ? '' : ' · ' + pct + '%') + (eta ? ' · ' + eta : ''),
+        textStyle: 'font-size: 11.5px; color: #BCBCC3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;',
+        meta: j.stage + (eta ? ' · ' + eta : ''),
+        barStyle: 'height: 3px; border-radius: 3px; width: ' + (pct === null ? 100 : pct) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
         icon: j.kind === 'publish' ? 'ph ph-paper-plane-tilt' : j.kind === 'render' ? 'ph ph-film-strip' : 'ph ph-circle-notch',
         iconStyle: 'font-size: 14px; color: #F0D6A6;' + (j.kind === 'project' ? ' animation: dcSpin 1.1s linear infinite;' : ''),
       };
-    });
+    }
+
+    var liveItems = jobsLive.slice(0, 4).map(liveRow);
+    var liveAll = jobsLive.map(liveRow);
 
     // Anything that failed and needs a person. Nothing in the design surfaces
     // these on their own, so they lead the activity feed — a failed lecture or a
@@ -1533,8 +1556,22 @@
       tourCardStyle: 'display: none;', tourVeilStyle: 'display: none;', tourSpotStyle: 'display: none;',
       tourNext: function () {}, tourBack: function () {}, tourSkip: function () {},
 
-      liveDock: liveItems.length > 0,
+      // The design's own dock is off on every screen. Live work is rendered by
+      // the host instead: a stable docked section on Home (#studioLiveHome) and
+      // a compact expandable bar everywhere else (#studioLiveBar). Leaving this
+      // true rendered a second, unstyled bar underneath the real one.
+      liveDock: false,
       liveItems: liveItems,
+      // Everything in flight, for the Home section and the expandable queue.
+      liveAll: liveAll,
+      liveCount: jobsLive.length,
+      liveMore: jobsLive.length > 1,
+      liveMoreLabel: jobsLive.length > 1 ? '+' + (jobsLive.length - 1) + ' more' : '',
+      liveOpen: UI.liveOpen,
+      toggleLive: function (e) { stop(e); setUI({ liveOpen: !UI.liveOpen }); },
+      liveHeadline: jobsLive.length === 0 ? 'Nothing is processing right now'
+        : jobsLive.length === 1 ? jobsLive[0].title
+        : jobsLive.length + ' jobs running',
       showAllActivity: function (e) { stop(e); setUI({ activityAll: true, bellOpen: true }); },
 
       // ── Account menu ──

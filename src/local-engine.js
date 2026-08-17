@@ -458,6 +458,10 @@ function parseWorkerLine(record, line) {
   try { payload = JSON.parse(line); } catch { return; }
   if (payload.type === 'progress') {
     record.stage = String(payload.stage || 'Processing');
+    // The worker computes a real ETA from its own throughput. Nothing carried it,
+    // so the UI could only ever show a percentage.
+    if (payload.etaSec === null || payload.etaSec === undefined) record.etaSec = null;
+    else record.etaSec = Math.max(0, Math.round(Number(payload.etaSec)));
     // A stable identifier from the worker, so the UI never has to guess which
     // step it is on by matching words.
     if (payload.phase) record.phase = String(payload.phase);
@@ -545,6 +549,7 @@ export function acceptRemoteUpdate(projectId, update) {
   if (!project || project.engine !== 'remote') return null;
   // A warning the worker raised about how the clips were made. Logged once, to
   // the owning account, rather than repeated on every poll.
+  if (update.etaSec !== undefined) project.etaSec = update.etaSec === null ? null : Math.max(0, Math.round(Number(update.etaSec)));
   if (update.lastWarning && update.lastWarning !== project.lastWarning) {
     project.lastWarning = String(update.lastWarning);
     project.lastWarningCode = String(update.lastWarningCode || '');

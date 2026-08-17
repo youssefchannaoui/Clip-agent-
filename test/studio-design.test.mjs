@@ -718,18 +718,71 @@ test('the badge counts failures as well as clips awaiting review', () => {
   assert.equal(vals.activityNeedsYou, '3 need you');
 });
 
-test('the live dock tracks renders and uploads, not only lectures', () => {
+test('live work tracks renders and uploads, not only lectures', () => {
   const vals = StudioAdapter.bindings(BROKEN_STATE);
-  const labels = vals.liveItems.map(i => i.label).join(' | ');
+  const labels = vals.liveAll.map(i => i.label).join(' | ');
   assert.match(labels, /Running lecture/, 'a processing lecture');
   assert.match(labels, /Uploading → YouTube/, 'an upload in flight');
-  assert.equal(vals.liveDock, true);
+  assert.ok(vals.liveCount > 0);
 });
 
-test('the live dock hides when nothing is running', () => {
+test('live work is empty when nothing is running', () => {
   const vals = StudioAdapter.bindings({ projects: [], clips: [], tracks: [] });
-  assert.equal(vals.liveDock, false);
+  assert.equal(vals.liveCount, 0);
+  assert.deepEqual(vals.liveAll, []);
   assert.deepEqual(vals.liveItems, []);
+});
+
+test("the design's own floating dock stays off on every screen", () => {
+  // Live work is drawn by the host instead — a stable docked section on Home
+  // and one compact bar everywhere else. Leaving this binding true rendered a
+  // second, unstyled bar underneath the real one.
+  for (const screen of ['home', 'schedule', 'queue', 'library', 'templates']) {
+    StudioAdapter.ui.screen = screen;
+    assert.equal(StudioAdapter.bindings(BROKEN_STATE).liveDock, false, screen);
+  }
+  StudioAdapter.ui.screen = 'home';
+});
+
+test('every live row carries a percentage, an ETA and a progress bar', () => {
+  // The floating bar and the Home section both read these. `text`/`textStyle`
+  // were missing once and every row of the bar rendered unstyled.
+  const vals = StudioAdapter.bindings(BROKEN_STATE);
+  assert.ok(vals.liveAll.length, 'fixture has work in flight');
+  for (const row of vals.liveAll) {
+    for (const key of ['label', 'title', 'stage', 'percent', 'eta', 'text', 'textStyle', 'meta', 'barStyle', 'icon', 'iconStyle']) {
+      assert.ok(key in row, `live row is missing ${key}`);
+      assert.equal(typeof row[key], 'string', `${key} must be a string`);
+    }
+    assert.match(row.barStyle, /width: \d+%/, 'the bar needs a width to draw');
+    if (row.percent) assert.match(row.percent, /^\d{1,3}%$/);
+  }
+});
+
+test('an ETA is rendered in human units, and absent when unknown', () => {
+  const at = Date.now();
+  const withEta = sec => StudioAdapter.bindings({
+    projects: [{ id: 'p', title: 'Talk', status: 'processing', stage: 'Transcribing', progress: 40, etaSec: sec, submittedAt: at }],
+    clips: [], tracks: [],
+  }).liveAll[0].eta;
+  assert.equal(withEta(20), 'about a minute left');
+  assert.equal(withEta(420), '7 min left');
+  assert.equal(withEta(5400), '1h 30m left');
+  assert.equal(withEta(null), '', 'an unknown ETA shows nothing rather than "NaN"');
+  assert.equal(withEta(undefined), '');
+});
+
+test('the queue expander appears only when more than one thing is running', () => {
+  const one = StudioAdapter.bindings({
+    projects: [{ id: 'p', title: 'Talk', status: 'processing', stage: 'Transcribing', progress: 10, submittedAt: Date.now() }],
+    clips: [], tracks: [],
+  });
+  assert.equal(one.liveMore, false, 'one job needs no queue button');
+  const many = StudioAdapter.bindings(BROKEN_STATE);
+  if (many.liveCount > 1) {
+    assert.equal(many.liveMore, true);
+    assert.match(many.liveMoreLabel, /^\+\d+ more$/);
+  }
 });
 
 test('a source the server refuses is reported, not silently swallowed', () => {
@@ -760,11 +813,18 @@ test('the page checks results[] rather than trusting the status code', () => {
 
 const RICH_STATE = {
   user: { name: 'Y', email: 'y@x.com' },
-  projects: [{ id: 'p1', title: 'L', status: 'done', clipCount: 2, durationSec: 2400, submittedAt: Date.now(), progress: 100 }],
+  projects: [
+    { id: 'p1', title: 'L', status: 'done', clipCount: 2, durationSec: 2400, submittedAt: Date.now(), progress: 100 },
+    // In-flight work, so the live dock and its rows are actually exercised.
+    // Without this the guard skipped them entirely and missed missing bindings.
+    { id: 'p2', title: 'Running', status: 'processing', phase: 'render', stage: 'Rendering', progress: 40, startedAt: Date.now() },
+  ],
   clips: [
     { id: 'c1', projectId: 'p1', title: 'C', status: 'waiting', score: 70, durationMs: 30000, transcript: 'a. b.', targets: [] },
     { id: 'c2', projectId: 'p1', title: 'D', status: 'scheduled', score: 60, durationMs: 30000, scheduledAt: Date.now() + 3600e3, targets: [{ provider: 'youtube', status: 'scheduled' }] },
+    { id: 'c3', projectId: 'p1', title: 'Uploading', status: 'scheduled', score: 55, durationMs: 30000, scheduledAt: Date.now() + 7200e3, targets: [{ provider: 'youtube', status: 'publishing', progressPercent: 60, updatedAt: Date.now() }] },
   ],
+  rerenderJobs: [{ id: 'r1', clipId: 'c1', status: 'processing', stage: 'Re-rendering', progress: 25, startedAt: Date.now() }],
   tracks: [{ id: 't1', name: 'N', durationSec: 120 }],
   templates: [{ id: 'x', name: 'X' }], selectedTemplate: { id: 'x', name: 'X' },
   clipSettings: { clipsPerVideo: 6, clipMinSeconds: 30, clipMaxSeconds: 45 },
@@ -773,7 +833,6 @@ const RICH_STATE = {
   social: { providers: { youtube: { configured: true, connected: true, accounts: [{ id: 'a', name: 'A' }] } } },
   publishingSettings: { youtube: { enabled: true } },
   billing: { current: { plan: 'free' }, plans: [{ id: 'free', name: 'Free' }], tokenRatePerMinute: 1 },
-  rerenderJobs: [],
 };
 
 // Nav hover is deliberately null: driving it from JS re-rendered the dashboard on
@@ -1235,6 +1294,54 @@ test('a re-render never overwrites the field being typed in', () => {
   const runtime = fs.readFileSync(path.join(ROOT, 'src/public/studio-runtime.js'), 'utf8');
   const guards = runtime.match(/document\.activeElement/g) || [];
   assert.ok(guards.length >= 2, 'both the attribute sync and the value pass skip the focused field');
+});
+
+// ── where live work and toasts sit on screen ──────────────────────────────
+
+test('Home gets the docked section and every other screen gets the bar', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const paint = /function paintLiveWork\([\s\S]*?\n    }\n/.exec(html)[0];
+  assert.match(paint, /screen==='home'/, 'placement is decided by the screen');
+  // Exactly one of the two is ever visible: the collision the user reported was
+  // both a floating bar and a section on the same page.
+  assert.match(paint, /home\.classList\.toggle\('hide',!\(onHome&&any\)\)/);
+  assert.match(paint, /bar\.classList\.toggle\('hide',!\(!onHome&&any\)\)/);
+  assert.match(paint, /vals\.liveAll\.map/, 'the section lists everything, not a slice');
+});
+
+test('the Home section docks above the review card rather than covering content', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const dock = /function dockLiveHome\([\s\S]*?\n    }\n/.exec(html)[0];
+  // Anchoring on the parent put this in the main column and shoved My library
+  // sideways; the fix is the *smallest* element containing the text.
+  assert.match(dock, /Needs your review/);
+  assert.match(dock, /sort\(\(a,b\)=>a\.querySelectorAll\('\*'\)\.length-b\.querySelectorAll\('\*'\)\.length\)/,
+    'the smallest matching element wins');
+  assert.match(dock, /insertBefore/);
+  assert.doesNotMatch(dock, /card\.parentElement\.parentElement/);
+  assert.match(dock, /classList\.toggle\('slh-docked',Boolean\(card\)\)/,
+    'falls back to floating rather than vanishing if a re-import moves the card');
+});
+
+test('the bar opens the queue when more than one thing is running', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const paint = /function paintLiveWork\([\s\S]*?\n    }\n/.exec(html)[0];
+  assert.match(paint, /vals\.liveMore\?/, 'the expander is conditional on there being more');
+  assert.match(paint, /id="slbToggle"/);
+  assert.match(paint, /liveOpen\?`<div class="slb-list">/, 'expanding lists the whole queue');
+  assert.match(paint, /id="slbHome"/, 'and there is a way back to the full view');
+  // Both buttons must be wired; an unwired button is the dead-control bug again.
+  assert.match(paint, /\$\('#slbToggle'\); if\(t\)t\.onclick=/);
+  assert.match(paint, /\$\('#slbHome'\); if\(h\)h\.onclick=/);
+});
+
+test('toasts sit bottom-right, clear of the live bar', () => {
+  // They were centred at the bottom, directly on top of the floating bar.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const rule = /body\.studio-active \.toasts \{[^}]*\}/.exec(html)[0];
+  assert.match(rule, /right: 18px/);
+  assert.match(rule, /left: auto/);
+  assert.match(rule, /transform: none/, 'the design centres them with a transform');
 });
 
 // ── the editor's remaining verbs ───────────────────────────────────────────

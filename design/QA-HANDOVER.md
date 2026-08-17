@@ -96,7 +96,7 @@ All recorded in `design/DESIGN-GAPS.md` with reasoning.
 ## Reproducing the environment
 
 ```sh
-npm run check && npm test          # 165 JS + 44 Python (7 skipped)
+npm run check && npm test          # 196 JS + 57 Python (7 skipped)
 npm start                          # then /app, or /app?classic=1 for the previous shell
 open design/preview.html           # every screen, sample data, no server
 ```
