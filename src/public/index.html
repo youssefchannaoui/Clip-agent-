@@ -81,6 +81,31 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 #studioLiveHome.slh-idle .slb-dot { background: #4A4A52; animation: none; }
 .slh-empty { padding: 13px; font-size: 11.5px; color: #6E6E76; }
 
+/* Highlighted-word controls, matching the Captions panel they sit in. */
+#studioHighlight { display: flex; flex-direction: column; gap: 9px; margin-top: 16px; }
+#studioHighlight.hide { display: none; }
+#studioHighlight .hl-label { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #6E6E76; }
+#studioHighlight .hl-row { display: flex; align-items: center; gap: 8px; }
+#studioHighlight .hl-row > span:first-child { flex: 1; font-size: 12px; color: #A2A2AA; }
+#studioHighlight .hl-fonts { display: flex; flex-wrap: wrap; gap: 6px; }
+#studioHighlight .hl-font {
+  padding: 5px 9px; border: 1px solid #26262A; border-radius: 8px; background: #17171A;
+  color: #A2A2AA; font-size: 11.5px; cursor: pointer;
+}
+#studioHighlight .hl-font[aria-pressed="true"] { border-color: rgba(217,180,120,.5); background: rgba(217,180,120,.12); color: #F0D6A6; }
+#studioHighlight .hl-font:hover:not([aria-pressed="true"]) { color: #F2F2F4; border-color: #34343A; }
+#studioHighlight input[type="color"] {
+  width: 34px; height: 26px; padding: 0; border: 1px solid #26262A; border-radius: 7px;
+  background: #17171A; cursor: pointer;
+}
+#studioHighlight .hl-hex { font-size: 11px; color: #8B8B93; font-variant-numeric: tabular-nums; }
+#studioHighlight input[type="range"] { flex: 1; accent-color: #D9B478; }
+#studioHighlight .hl-switch { width: 34px; height: 19px; flex: none; padding: 0; border: 1px solid #26262A; border-radius: 999px; background: #17171A; cursor: pointer; position: relative; }
+#studioHighlight .hl-switch i { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #6E6E76; transition: left .16s ease, background .16s ease; }
+#studioHighlight .hl-switch[aria-checked="true"] { border-color: rgba(217,180,120,.5); background: rgba(217,180,120,.16); }
+#studioHighlight .hl-switch[aria-checked="true"] i { left: 17px; background: #F0D6A6; }
+#studioHighlight .hl-sample { padding: 9px 11px; border: 1px solid #1E1E22; border-radius: 9px; background: #0E0E11; font-size: 13px; color: #BCBCC3; }
+
 /* Preview picture layers. z-index 0-2, under the design's own overlays. */
 #studioPreviewPic { position: absolute; inset: 0; z-index: 0; border-radius: inherit; }
 #studioPreviewPic .pv-back, #studioPreviewPic .pv-img, #studioPreviewPic .pv-fx { border-radius: inherit; overflow: hidden; }
@@ -1215,6 +1240,10 @@ select:focus{outline:none;border-color:var(--blue)}
      frame's class, so the two things the preview exists to answer -- what the
      clip layout does and what the Look does -- could not be shown. These layers
      are docked inside the frame, beneath the caption and watermark. -->
+<!-- Highlighted-word controls. The renderer has always drawn the live word in
+     its own colour, face, slant and glow; the design draws no rows for any of
+     it, so this is docked into the Captions panel. -->
+<div id="studioHighlight" class="hide" data-host-owned></div>
 <div id="studioPreviewPic" class="hide" data-host-owned aria-hidden="true">
   <div class="pv-back"></div><div class="pv-img"></div><div class="pv-fx"></div><span class="pv-snap"></span>
 </div>
@@ -2106,6 +2135,66 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       },140);
     }
 
+    /* Docked into the Captions panel, after the caption's own font row. Appended
+       rather than inserted: the patcher skips host-owned nodes when pairing, so
+       one at the front shifts every generated sibling by one.
+
+       Rebuilt only when its shape changes; the colour, glow and switch states
+       are written into the existing nodes so dragging the glow slider does not
+       tear the block down under the cursor. */
+    const hlEl=$('#studioHighlight');
+    function paintHighlight(vals){
+      const onCaptions=StudioAdapter.ui.screen==='editor'&&StudioAdapter.ui.edTab==='captions'&&StudioAdapter.ui.edClipId;
+      hlEl.classList.toggle('hide',!onCaptions);
+      if(!onCaptions)return;
+      const fontBtn=[...document.querySelectorAll('#studio button')]
+        .find(b=>vals.edFonts.some(f=>f.label===(b.textContent||'').trim()));
+      const panel=fontBtn&&fontBtn.parentElement&&fontBtn.parentElement.parentElement;
+      if(!panel)return;
+      if(hlEl.parentElement!==panel)panel.appendChild(hlEl);
+      const key=vals.hlFonts.map(f=>f.name).join('|');
+      if(hlEl.dataset.key!==key){
+        hlEl.dataset.key=key;
+        hlEl.innerHTML=`<span class="hl-label">Highlighted word</span>
+          <div class="hl-sample">the <b id="hlSample">whole</b> of the dunya</div>
+          <div class="hl-row"><span>Colour</span>
+            <span class="hl-hex" id="hlHex"></span>
+            <input type="color" id="hlColour" aria-label="Highlight colour"></div>
+          <div class="hl-fonts">${vals.hlFonts.map((f,i)=>
+            `<button type="button" class="hl-font" data-hl-font="${i}" style="font-family:${esc(f.web)}">${esc(f.label)}</button>`).join('')}</div>
+          <div class="hl-row"><span>Italic</span>
+            <button type="button" class="hl-switch" role="switch" id="hlItalic" aria-label="Highlight italic"><i></i></button></div>
+          <div class="hl-row"><span>Glow</span>
+            <input type="range" min="0" max="30" id="hlGlow" aria-label="Highlight glow">
+            <span class="hl-hex" id="hlGlowVal"></span></div>`;
+        $('#hlColour').oninput=e=>StudioAdapter.bindings(DATA).setHlColour(e);
+        $('#hlItalic').onclick=e=>StudioAdapter.bindings(DATA).toggleHlItalic(e);
+        $('#hlGlow').oninput=e=>StudioAdapter.bindings(DATA).setHlGlow(e);
+        hlEl.querySelectorAll('[data-hl-font]').forEach(b=>b.onclick=e=>
+          StudioAdapter.bindings(DATA).hlFonts[Number(b.dataset.hlFont)].select(e));
+      }
+      const colour=$('#hlColour');
+      if(colour&&document.activeElement!==colour&&colour.value.toUpperCase()!==vals.hlColour.toUpperCase())colour.value=vals.hlColour;
+      const hex=$('#hlHex'); if(hex&&hex.textContent!==vals.hlColourLabel)hex.textContent=vals.hlColourLabel;
+      const it=$('#hlItalic'); if(it)it.setAttribute('aria-checked',String(vals.hlItalic));
+      const glow=$('#hlGlow');
+      if(glow&&document.activeElement!==glow&&Number(glow.value)!==vals.hlGlow)glow.value=String(vals.hlGlow);
+      const gv=$('#hlGlowVal'), want=vals.hlGlow?String(vals.hlGlow):'None';
+      if(gv&&gv.textContent!==want)gv.textContent=want;
+      hlEl.querySelectorAll('[data-hl-font]').forEach(b=>
+        b.setAttribute('aria-pressed',String(vals.hlFonts[Number(b.dataset.hlFont)].on)));
+      /* The sample shows the actual result, so the effect of a change is visible
+         without hunting for the word in the preview. */
+      const sample=$('#hlSample');
+      if(sample){
+        /* setAttribute takes literal text, not HTML — esc() here turned the
+           font stack's quotes into &quot; and the family never applied. */
+        sample.style.cssText=`color:${vals.hlColour};font-family:${vals.hlFonts.find(f=>f.on)?.web||'inherit'};`
+          +(vals.hlItalic?'font-style:italic;':'')
+          +(vals.hlGlow?`text-shadow:0 0 ${Math.round(vals.hlGlow/2)}px ${vals.hlColour};`:'');
+      }
+    }
+
     function paintLiveWork(vals){
       const onHome=StudioAdapter.ui.screen==='home';
       const any=vals.liveCount>0;
@@ -2414,6 +2503,7 @@ function paintStudio(){
   paintPreviewPic(vals);
   paintCaptionWords(vals);
   paintPreviewPlayer(vals);
+  paintHighlight(vals);
   /* No unread activity -> hide the dot the design hardcoded on. */
   document.body.classList.toggle('studio-read',!vals.activityUnread);
 }

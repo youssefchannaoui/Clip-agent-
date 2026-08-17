@@ -1242,14 +1242,13 @@
     var selectedBlock = edCaptionBlocks[UI.edBlock] || null;
 
     // Other clips cut from the same lecture, for the editor's filmstrip.
-    var edSiblings = edClip ? clips.filter(function (c) { return c.projectId === edClip.projectId; }).slice(0, 8).map(function (c) {
-      var on = c.id === edClip.id;
-      return {
-        style: 'width: 46px; flex: none; aspect-ratio: 9 / 16; border-radius: 7px; cursor: pointer; background: ' + thumb(c.thumbUrl) +
-          '; border: 1px solid ' + (on ? '#D9B478' : '#26262A') + ';',
-        select: function (e) { stop(e); setUI({ edClipId: c.id, edCaption: null, edDirty: false }); },
-      };
-    }) : [];
+    // The design renders this as a line of text, not as a strip of thumbnails --
+    // there is no sc-for over it anywhere. Supplying the list of clips put
+    // "[object Object],[object Object]" under the preview on every visit to the
+    // editor.
+    var edSiblingCount = edClip
+      ? clips.filter(function (c) { return c.projectId === edClip.projectId && c.id !== edClip.id; }).length
+      : 0;
 
     // Where the caption sits in the preview, as a percentage of frame height.
     var firstName = String((DATA.user && DATA.user.name) || '').trim().split(/\s+/)[0] || '';
@@ -1861,6 +1860,34 @@
       // Every family here is installed in the worker image. Inter was offered
       // and is not, so any clip set to it rendered in whatever fontconfig
       // substituted instead.
+      // ── Highlighted word ──
+      // The renderer has always drawn the live word in its own colour, face,
+      // slant and glow. Nothing in the new dashboard could set any of it, and
+      // until the schema was fixed nothing could even store it, so every clip
+      // used the worker's built-in default. The design draws no rows for these,
+      // so the host adds them.
+      hlColour: tpl.captionHighlight || '#D9B478',
+      hlColourLabel: String(tpl.captionHighlight || '#D9B478').toUpperCase(),
+      setHlColour: function (e) { saveStyle({ captionHighlight: String(e.target.value || '').toUpperCase() }); },
+      hlFonts: CAPTION_FONTS.map(function (f) {
+        return {
+          label: f.label,
+          name: f.name,
+          on: tpl.captionHighlightFont === f.name,
+          web: f.web,
+          select: function (e) { stop(e); saveStyle({ captionHighlightFont: f.name }); },
+        };
+      }),
+      hlItalic: Boolean(tpl.captionHighlightItalic),
+      toggleHlItalic: function (e) { stop(e); saveStyle({ captionHighlightItalic: !tpl.captionHighlightItalic }); },
+      hlGlow: Math.max(0, Math.min(30, Number(tpl.captionHighlightGlow) || 0)),
+      hlGlowLabel: (Math.max(0, Math.min(30, Number(tpl.captionHighlightGlow) || 0)) || 'None') + (Number(tpl.captionHighlightGlow) ? '' : ''),
+      setHlGlow: function (e) { saveStyle({ captionHighlightGlow: Number(e.target.value) }); },
+      // Matching the caption's own font is a legitimate choice, so it is offered
+      // rather than being something to achieve by picking the same name twice.
+      hlSameAsCaption: tpl.captionHighlightFont === tpl.captionFont,
+      matchHlFont: function (e) { stop(e); saveStyle({ captionHighlightFont: tpl.captionFont }); },
+
       edFonts: CAPTION_FONTS.map(function (f) {
         return {
           label: f.label,
@@ -1912,7 +1939,9 @@
       edPlayHeadStyle: 'position: absolute; top: 0; bottom: 0; left: ' + (UI.edPlayhead * 100).toFixed(2) + '%; width: 2px; background: #F0D6A6;',
       edProgressStyle: 'height: 3px; border-radius: 3px; width: ' + (UI.edPlayhead * 100).toFixed(2) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
       edProgressLabel: edClip ? secsToClock((edClip.durationMs || 0) / 1000 * UI.edPlayhead) : '0:00',
-      edSiblings: edSiblings,
+      edSiblings: edSiblingCount
+        ? edSiblingCount + ' other clip' + (edSiblingCount === 1 ? '' : 's') + ' from this lecture'
+        : 'The only clip from this lecture',
       // How many other clips from the same lecture this clip's look could be
       // applied to. Drives the second save button, which the design does not
       // draw, so the host adds it.

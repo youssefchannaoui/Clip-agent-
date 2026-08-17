@@ -188,7 +188,7 @@ export const CLIP_STYLE_FIELDS = Object.freeze([
 const CLIP_STYLE_FIELD_SET = new Set(CLIP_STYLE_FIELDS);
 const COLOUR_FIELDS = new Set(['frameBackground', 'captionPrimary', 'captionHighlight', 'captionOutline',
   'captionBackground', 'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor']);
-const BOOLEAN_FIELDS = new Set(['captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled']);
+const BOOLEAN_FIELDS = new Set(['captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic']);
 
 /**
  * Validate a partial style patch for a single clip.
@@ -215,8 +215,8 @@ export function sanitiseClipStyle(patch = {}) {
       if (/^#[0-9A-F]{6}$/.test(text)) output[key] = text;
     } else if (BOOLEAN_FIELDS.has(key)) {
       output[key] = Boolean(value);
-    } else if (key === 'captionFont') {
-      output[key] = cleanText(value, DEFAULTS.captionFont, 80);
+    } else if (key === 'captionFont' || key === 'captionHighlightFont') {
+      output[key] = cleanText(value, DEFAULTS[key], 80);
     } else if (key === 'watermark') {
       output[key] = cleanText(value, DEFAULTS.watermark, 60);
     }

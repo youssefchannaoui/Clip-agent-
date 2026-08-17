@@ -1586,6 +1586,38 @@ test('each snap point has a name the preview can show', () => {
   assert.match(adapter, /UI\.dragKind === 'caption' && UI\.dragSnapName/);
 });
 
+test('every text binding is given text, not an object', () => {
+  // edSiblings was supplied as a list of clips and rendered as a text node, so
+  // "[object Object],[object Object],[object Object]" sat under the preview on
+  // every visit to the editor. The same mistake anywhere else would look the
+  // same and be just as invisible to a suite that never reads the output.
+  const template = fs.readFileSync(path.join(ROOT, 'src/public/studio-template.generated.js'), 'utf8');
+  const names = [...new Set([...template.matchAll(/"t":"txt","v":\{"p":"([^"]+)"\}/g)].map(m => m[1]))];
+  Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'c1', tplDraft: null });
+  const vals = StudioAdapter.bindings({
+    projects: [{ id: 'p1', title: 'Lecture' }],
+    clips: [{ id: 'c1', projectId: 'p1', title: 'One', transcript: 'a b c' }, { id: 'c2', projectId: 'p1', title: 'Two' }],
+    tracks: [], templates: [{ id: 'x', name: 'X' }], selectedTemplate: { id: 'x', name: 'X' },
+  });
+  const objects = names.filter(n => vals[n] !== undefined && typeof vals[n] === 'object' && vals[n] !== null);
+  assert.deepEqual(objects, [], `these render as [object Object]: ${objects.join(', ')}`);
+});
+
+test('the editor says how many other clips the lecture has', () => {
+  const withSiblings = n => {
+    Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'c1', tplDraft: null });
+    const clips = [{ id: 'c1', projectId: 'p1', title: 'One', transcript: 'a' }];
+    for (let i = 0; i < n; i += 1) clips.push({ id: `s${i}`, projectId: 'p1', title: `S${i}` });
+    return StudioAdapter.bindings({
+      projects: [{ id: 'p1', title: 'Lecture' }], clips, tracks: [],
+      templates: [{ id: 'x', name: 'X' }], selectedTemplate: { id: 'x', name: 'X' },
+    }).edSiblings;
+  };
+  assert.equal(withSiblings(0), 'The only clip from this lecture');
+  assert.equal(withSiblings(1), '1 other clip from this lecture');
+  assert.equal(withSiblings(4), '4 other clips from this lecture');
+});
+
 // ── the sample plays ───────────────────────────────────────────────────────
 
 function previewAt(seconds, extra = {}) {
