@@ -1598,3 +1598,44 @@ test('a loop-scoped item binding is caught too, not just top-level names', () =>
   assert.equal(missing.length, 2, 'one per rendered row');
   assert.equal(missing[0].binding, 'row.choose');
 });
+
+// ── the new-job range picker ───────────────────────────────────────────────
+const JOB_STATE = { ...SAMPLE_STATE, tracks: [{ id: 't1', name: 'N' }] };
+const LECTURE = { url: 'https://youtu.be/x', title: 'E68', durationSec: 5242, durationKnown: true, start: 0, end: 5242 };
+
+test('the range handles address the whole lecture, not its first 100 seconds', () => {
+  // The design's inputs are min=0 max=100 -- a percentage. They were fed and
+  // read as seconds, so on an 87-minute talk the entire slider covered under
+  // two minutes.
+  Object.assign(StudioAdapter.ui, { screen: 'home', job: { ...LECTURE } });
+  const vals = StudioAdapter.bindings(JOB_STATE);
+  assert.equal(vals.jobStart, 0);
+  assert.equal(vals.jobEnd, 100, 'a full selection puts the end handle at the far end');
+
+  // Dragging the end handle to the middle must select half the lecture.
+  vals.setJobEnd({ target: { value: '50' } });
+  assert.equal(Math.round(StudioAdapter.ui.job.end), 2621, 'half of 5242 seconds');
+});
+
+test('the handles cannot cross or select less than the server allows', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'home', job: { ...LECTURE, start: 0, end: 5242 } });
+  const vals = StudioAdapter.bindings(JOB_STATE);
+  vals.setJobStart({ target: { value: '100' } });
+  const gap = StudioAdapter.ui.job.end - StudioAdapter.ui.job.start;
+  assert.ok(gap >= 30, `the 30s minimum is kept, got ${gap}`);
+});
+
+test('the panel states the real length instead of the design placeholder', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'home', job: { ...LECTURE } });
+  const vals = StudioAdapter.bindings(JOB_STATE);
+  assert.match(vals.jobRangeHint, /87:22/, 'every lecture used to claim to be 42:11 long');
+  assert.doesNotMatch(vals.jobRangeHint, /42:11/);
+});
+
+test('an unknown length offers no range rather than a fake one', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'home', job: { ...LECTURE, durationKnown: false, durationSec: null } });
+  const vals = StudioAdapter.bindings(JOB_STATE);
+  assert.equal(vals.jobRangeHint, '');
+  assert.equal(vals.jobStart, 0);
+  assert.equal(vals.jobEnd, 100);
+});

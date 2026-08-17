@@ -1429,16 +1429,24 @@
       // chosen range becomes sourceStartSeconds/sourceEndSeconds on /api/videos.
       jobOpen: Boolean(job),
       jobSourceLabel: job ? job.title : '',
-      jobStart: job ? job.start : 0,
-      jobEnd: job ? job.end : 0,
+      // The design's two inputs are min=0 max=100 -- a percentage of the lecture,
+      // not seconds. Feeding them seconds meant the handles could only ever
+      // address the first 100 seconds of a source: on an 87-minute talk the
+      // whole slider covered under two minutes, which is what "the slider is
+      // broken" looked like. Both directions convert.
+      jobStart: job && job.durationKnown ? (job.start / job.durationSec) * 100 : 0,
+      jobEnd: job && job.durationKnown ? (job.end / job.durationSec) * 100 : 100,
       setJobStart: function (e) {
         if (!UI.job || !UI.job.durationKnown) return;
-        UI.job.start = Math.max(0, Math.min(Number(e.target.value), (UI.job.end || 0) - 30));
+        var seconds = (Number(e.target.value) / 100) * UI.job.durationSec;
+        // Keep at least the 30s the server demands between the two handles.
+        UI.job.start = Math.max(0, Math.min(seconds, (UI.job.end || 0) - 30));
         refresh();
       },
       setJobEnd: function (e) {
         if (!UI.job || !UI.job.durationKnown) return;
-        UI.job.end = Math.min(UI.job.durationSec, Math.max(Number(e.target.value), (UI.job.start || 0) + 30));
+        var seconds = (Number(e.target.value) / 100) * UI.job.durationSec;
+        UI.job.end = Math.min(UI.job.durationSec, Math.max(seconds, (UI.job.start || 0) + 30));
         refresh();
       },
       // In remote processing mode sourceInfo() never probes the video -- it
@@ -1454,6 +1462,15 @@
       jobLenLabel: !job ? '' : job.durationKnown
         ? humanDuration(job.end - job.start) + ' selected'
         : 'Length is confirmed once the worker downloads the source.',
+      // The design followed that label with the literal "of 42:11 — drag the top
+      // handle...", so every lecture claimed to be 42 minutes 11 seconds long no
+      // matter its real length. text-overrides.json turns it into this binding.
+      // "top handle / bottom handle" described the design's stacked layout. The
+      // handles address a percentage of the lecture, so the wording no longer
+      // needs to explain which is which.
+      jobRangeHint: !job ? '' : job.durationKnown
+        ? ' of ' + secsToClock(job.durationSec) + ' — drag either handle to trim'
+        : '',
       // Charging is per source minute, so an estimate is only honest once the
       // length is known. The server confirms the real cost before processing.
       jobTokenLabel: !job ? '' : job.durationKnown

@@ -256,6 +256,27 @@ function compileNode(node) {
       return collapsed;
     }
     noteBindings(v);
+    // A text node can mix a binding with literal text -- "{{ jobLenLabel }} of
+    // 42:11 — drag the top handle..." is one node, not two. That is not a plain
+    // string, so the override above never saw it, and a hardcoded value sitting
+    // beside a binding could never be replaced however it was spelled. Each
+    // literal segment inside the concatenation gets the same treatment.
+    if (v && Array.isArray(v.cat)) {
+      return {
+        t: 'txt',
+        v: {
+          cat: v.cat.map(part => {
+            if (typeof part !== 'string') return part;
+            const collapsed = part.replace(/\s+/g, ' ');
+            const binding = TEXT_OVERRIDES[collapsed.trim()];
+            if (!binding) return collapsed;
+            overridesHit.add(collapsed.trim());
+            bindingsUsed.add(binding);
+            return { p: binding };
+          }),
+        },
+      };
+    }
     return { t: 'txt', v };
   }
 
