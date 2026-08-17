@@ -821,6 +821,41 @@ test('every control in the template has a handler that resolves to a function', 
   assert.deepEqual(deadControls(), [], 'these render as normal buttons and do nothing');
 });
 
+test('every bound style resolves to something', () => {
+  // The same silent-drop class as dead handlers, but for appearance: the Home
+  // connection dots bound `heroDotStyle` while the adapter supplied `dotStyle`,
+  // so the dot rendered with no style at all and never appeared once connected.
+  const { evalValue } = globalThis.StudioRuntime._internals;
+  const unstyled = new Set();
+  for (const screen of ['home', 'queue', 'library', 'detail', 'schedule', 'templates', 'music', 'language', 'performance', 'tokens', 'editor']) {
+    Object.assign(StudioAdapter.ui, {
+      screen, edClipId: 'c1', connProvider: 'youtube', bellOpen: true, menuOpen: true, countsOpen: true, edTab: 'captions',
+      sheet: { title: 't', subtitle: 's', options: ['A'], cb() {} },
+      job: { url: 'u', title: 't', durationSec: 0, durationKnown: false, start: 0, end: 0 },
+      playerClip: { title: 'p' },
+    });
+    const vals = StudioAdapter.bindings(RICH_STATE);
+    (function walk(nodes, scope) {
+      for (const n of nodes || []) {
+        if (!n || typeof n === 'string') continue;
+        let inner = scope;
+        if (n.t === 'for') {
+          const list = evalValue(n.l, scope);
+          const arr = Array.isArray(list) ? list : [];
+          if (!arr.length) continue;
+          inner = Object.create(scope); inner[n.as] = arr[0];
+        }
+        if (n.st) {
+          const value = evalValue(n.st, inner);
+          if (value === undefined || value === null || value === '') unstyled.add(`${n.st.p || '?'} (style on <${n.tag}>)`);
+        }
+        walk(n.ch, inner);
+      }
+    })(STUDIO_TEMPLATE, vals);
+  }
+  assert.deepEqual([...unstyled].sort(), [], 'these render unstyled and are usually invisible');
+});
+
 test('no StudioAdapter hook is assigned twice', () => {
   // Two assignments meant last-write-wins, and the loser was the correct one:
   // onClipSettings shipped unmerged, so every clip-length change 400d with
@@ -1013,4 +1048,72 @@ test('a single template keeps its plain name', () => {
   const vals = StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates, selectedTemplate: templates[0] });
   assert.deepEqual(vals.tplList, ['Gold', 'Clean']);
   assert.equal(vals.activeTpl, 'Gold');
+});
+
+// ── tokens shop ────────────────────────────────────────────────────────────
+
+const BILLING_STATE = {
+  projects: [], clips: [], tracks: [],
+  billing: {
+    current: { plan: 'free' }, tokenRatePerMinute: 1,
+    plans: {
+      free: { id: 'free', name: 'Free', interval: 'one-time', tokens: 40 },
+      weekly: { id: 'weekly', name: 'Weekly', interval: 'week', tokens: 150, priceLabel: '£4', enabled: true },
+      monthly: { id: 'monthly', name: 'Monthly', interval: 'month', tokens: 600, priceLabel: '£14', enabled: true },
+      yearly: { id: 'yearly', name: 'Annual', interval: 'year', tokens: 8000, priceLabel: '£140', enabled: true },
+    },
+    topups: {
+      boost100: { id: 'boost100', name: 'Quick boost', tokens: 100, priceLabel: '£5', enabled: true },
+      boost300: { id: 'boost300', name: 'Creator boost', tokens: 300, priceLabel: '£12', enabled: true, badge: 'Most popular' },
+    },
+  },
+};
+
+test('the billing period tabs change the prices, not just the highlight', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'tokens' });
+  const at = period => {
+    StudioAdapter.ui.planPeriod = period;
+    return StudioAdapter.bindings(BILLING_STATE).planCards.map(c => `${c.name} ${c.price} ${c.tokens}`);
+  };
+  assert.ok(at('week').some(c => c.includes('Weekly £4 150 tokens')));
+  assert.ok(at('month').some(c => c.includes('Monthly £14 600 tokens')));
+  assert.ok(at('year').some(c => c.includes('Annual £140 8000 tokens')));
+  assert.ok(!at('week').some(c => c.includes('Monthly')), 'a period shows only its own plans');
+});
+
+test('the free plan stays visible on every period', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'tokens' });
+  for (const period of ['week', 'month', 'year']) {
+    StudioAdapter.ui.planPeriod = period;
+    assert.ok(StudioAdapter.bindings(BILLING_STATE).planCards.some(c => c.name === 'Free'), period);
+  }
+});
+
+test('token packs render and can be bought on their own', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'tokens' });
+  const vals = StudioAdapter.bindings(BILLING_STATE);
+  assert.equal(vals.packs.length, 2, 'the screen used to render no packs at all');
+  assert.equal(vals.packs[0].price, '£5');
+  let bought = null;
+  StudioAdapter.onBuyTokens = id => { bought = id; };
+  vals.packs[0].buy({ preventDefault() {} });
+  assert.equal(bought, 'boost100');
+});
+
+test('a plan with no Stripe price says so rather than failing at checkout', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'tokens', planPeriod: 'month' });
+  const vals = StudioAdapter.bindings({
+    ...BILLING_STATE,
+    billing: { ...BILLING_STATE.billing, plans: { monthly: { id: 'monthly', name: 'Monthly', interval: 'month', tokens: 600, enabled: false } } },
+  });
+  const card = vals.planCards.find(c => c.name === 'Monthly');
+  assert.equal(card.cta, 'Not available');
+});
+
+test('the connection dot is supplied under the name the Home row binds', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'home' });
+  const vals = StudioAdapter.bindings(SOCIAL_STATE);
+  const yt = vals.connections.find(c => c.name === 'YouTube');
+  assert.ok(yt.heroDotStyle, 'Home binds heroDotStyle; supplying only dotStyle left it invisible');
+  assert.match(yt.heroDotStyle, /#7FD1A6/, 'connected and enabled reads green');
 });

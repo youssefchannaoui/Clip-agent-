@@ -90,13 +90,16 @@ _heartbeat_stop = threading.Event()
 # keywords -- "Verifying rendered clips" holds both "verif" and "render".
 PHASES = (
     ("done", ("complete", "are ready")),
-    ("verify", ("verif",)),
-    ("render", ("render",)),
+    # "uploading" is service.py's own late-stage token (it fires at 97%, after
+    # rendering, while the result is sent back); it must not fall through to the
+    # import bucket and drag the rail backwards.
+    ("verify", ("verif", "upload")),
+    ("render", ("render", "creating clips")),
     ("score", ("analys", "scoring", "finding", "candidate", "moments already used")),
     # import sits above transcribe: "Loading saved lecture and transcript"
     # contains "transcri" inside the word "transcript".
     ("import", ("download", "loading saved", "preparing selected", "import")),
-    ("transcribe", ("transcri", "speech audio")),
+    ("transcribe", ("transcri", "speech audio", "extracting audio")),
 )
 
 

@@ -1765,6 +1765,9 @@ function renderStudio(){
     StudioAdapter.onChoosePlan=plan=>studioDo(async()=>{
       const r=await api('/api/billing/checkout',{method:'POST',body:JSON.stringify({plan})});
       if(r&&r.url)location.href=r.url});
+    StudioAdapter.onBuyTokens=pack=>studioDo(async()=>{
+      const r=await api('/api/billing/topup-checkout',{method:'POST',body:JSON.stringify({package:pack})});
+      if(r&&r.url)location.href=r.url});
     StudioAdapter.onBillingPortal=()=>studioDo(async()=>{
       const r=await api('/api/billing/portal',{method:'POST',body:JSON.stringify({})});
       if(r&&r.url)location.href=r.url});

@@ -34,7 +34,7 @@
     countsOpen: false,
     playingTrack: null,
     perfRange: 'Last 7 days',
-    planPeriod: 'Monthly',
+    planPeriod: 'month',
     termA: '',
     termB: '',
     blockerDismissed: false,
@@ -202,6 +202,14 @@
   ];
 
   function toast(message) { global.StudioAdapter.onToast(message); }
+
+  // Keys match the `interval` each plan reports, so the tabs filter real data
+  // rather than being decorative.
+  var PERIODS = [
+    { key: 'week', label: 'Weekly' },
+    { key: 'month', label: 'Monthly' },
+    { key: 'year', label: 'Annual' },
+  ];
 
   // There is no read/seen state on the server -- no field, no route -- so the
   // bell remembers per browser. Better than the alternative it replaces: a dot
@@ -681,13 +689,17 @@
     }
     function defObj(k, v) { var o = {}; o[k] = v; return o; }
 
-    // Plans come from billing.publicBilling(); shape varies, so read defensively.
-    var planList = (DATA.billing && (DATA.billing.plans || DATA.billing.availablePlans)) || [];
-    if (!Array.isArray(planList)) {
-      planList = Object.keys(planList).map(function (k) {
-        var v = planList[k]; return typeof v === 'object' ? Object.assign({ id: k }, v) : { id: k, name: k };
+    // publicBilling() returns plans and topups as objects keyed by id.
+    function asList(source) {
+      if (!source) return [];
+      if (Array.isArray(source)) return source;
+      return Object.keys(source).map(function (k) {
+        var v = source[k];
+        return typeof v === 'object' ? Object.assign({ id: k }, v) : { id: k, name: k };
       });
     }
+    var planList = asList(DATA.billing && (DATA.billing.plans || DATA.billing.availablePlans));
+    var topupList = asList(DATA.billing && DATA.billing.topups);
 
     // The clip open in the editor, and the caption split into readable blocks.
     var edClip = clips.filter(function (c) { return c.id === UI.edClipId; })[0] || null;
@@ -933,7 +945,10 @@
       librarySummary: plural(projects.length, 'lecture') + ' · ' + plural(clips.length, 'clip'),
 
       lectures: projects.slice(0, 4).map(function (p) {
-        var processing = p.status !== 'ready' && p.status !== 'failed';
+        // Through lecState, not a second opinion. Home and the Lecture library
+        // read the same records; when this had its own test they disagreed --
+        // PROCESSING here, Ready there, on one page load.
+        var processing = lecState(p) === 'processing';
         return {
           title: p.title || p.sourceTitle || 'Untitled lecture',
           meta: humanDuration(p.durationSec || p.sourceDurationSec) + ' · ' + since(p.submittedAt),
@@ -1676,33 +1691,70 @@
       perfPatterns: [],
 
       // ── Tokens & billing ──
-      planPeriods: ['Weekly', 'Monthly', 'Yearly'].map(function (label) {
+      // The period tabs filter the real plan list by its own `interval`, so the
+      // prices and token counts change with the period instead of the tabs
+      // merely highlighting.
+      planPeriods: PERIODS.map(function (p) {
         return {
-          label: label,
-          style: tabStyle(UI.planPeriod === label),
-          select: function (e) { stop(e); setUI({ planPeriod: label }); },
+          label: p.label,
+          style: tabStyle(UI.planPeriod === p.key),
+          select: function (e) { stop(e); setUI({ planPeriod: p.key }); },
         };
       }),
-      planCards: planList.map(function (p) {
-        var isCurrent = String(p.id || p.key || '').toLowerCase() === String(current.plan || '').toLowerCase();
+      planCards: planList.filter(function (p) {
+        return p.interval === UI.planPeriod || p.id === 'free';
+      }).map(function (p) {
+        var isCurrent = String(p.id || '').toLowerCase() === String(current.plan || '').toLowerCase();
+        var unavailable = p.enabled === false;
         return {
           name: p.name || p.id || '',
-          price: p.priceLabel || (p.price != null ? '£' + p.price : ''),
-          per: p.interval || '',
+          price: p.priceLabel || (p.id === 'free' ? 'Free' : 'Price not set'),
+          per: p.interval && p.interval !== 'one-time' ? 'per ' + p.interval : '',
           tokens: p.tokens != null ? plural(p.tokens, 'token') : '',
-          lines: (p.features || []).map(function (f) { return { text: f }; }),
-          hasTag: isCurrent,
-          tag: 'Current plan',
-          tagStyle: 'padding: 2px 8px; border-radius: 20px; font-size: 9.5px; font-weight: 700; background: rgba(217,180,120,.16); color: #F0D6A6;',
+          lines: [{ text: p.description || '' }].filter(function (l) { return l.text; }),
+          hasTag: Boolean(isCurrent || p.badge),
+          tag: isCurrent ? 'Current plan' : (p.badge || ''),
+          tagStyle: 'padding: 2px 8px; border-radius: 20px; font-size: 9.5px; font-weight: 700; background: ' +
+            (isCurrent ? 'rgba(217,180,120,.16); color: #F0D6A6;' : 'rgba(127,209,166,.14); color: #7FD1A6;'),
           cardStyle: 'display: flex; flex-direction: column; gap: 9px; padding: 14px; border-radius: 12px; border: 1px solid ' +
             (isCurrent ? 'rgba(217,180,120,.45); background: rgba(217,180,120,.05);' : '#1E1E22; background: #121214;'),
-          cta: isCurrent ? 'Current' : 'Choose',
-          btnStyle: 'padding: 8px 12px; border-radius: 8px; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: ' + (isCurrent ? 'default' : 'pointer') + '; border: 1px solid ' +
-            (isCurrent ? '#26262A; background: #17171A; color: #6E6E76;' : 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;'),
-          choose: function (e) { stop(e); if (!isCurrent) global.StudioAdapter.onChoosePlan(p.id || p.key); },
+          cta: isCurrent ? 'Current' : unavailable ? 'Not available' : 'Choose',
+          btnStyle: 'padding: 8px 12px; border-radius: 8px; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: ' +
+            (isCurrent || unavailable ? 'default' : 'pointer') + '; border: 1px solid ' +
+            (isCurrent || unavailable ? '#26262A; background: #17171A; color: #6E6E76;' : 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;'),
+          choose: function (e) {
+            stop(e);
+            if (isCurrent) return;
+            if (unavailable) { toast(p.name + ' is not configured for checkout yet.'); return; }
+            global.StudioAdapter.onChoosePlan(p.id);
+          },
         };
       }),
-      packs: [],
+      // Buying tokens on their own. The endpoint has always existed; the screen
+      // simply rendered an empty list.
+      packs: topupList.map(function (pk) {
+        var unavailable = pk.enabled === false;
+        return {
+          name: pk.name || pk.id,
+          tokens: plural(pk.tokens || 0, 'token'),
+          price: pk.priceLabel || 'Price not set',
+          per: 'one-off',
+          rate: pk.tokens ? 'about ' + Math.round(pk.tokens / Math.max(1, tokenRate)) + ' source minutes' : '',
+          equiv: pk.description || '',
+          popular: pk.badge === 'Most popular',
+          cardStyle: 'display: flex; flex-direction: column; gap: 8px; padding: 13px; border-radius: 12px; border: 1px solid ' +
+            (pk.badge === 'Most popular' ? 'rgba(217,180,120,.45); background: rgba(217,180,120,.05);' : '#1E1E22; background: #121214;'),
+          cta: unavailable ? 'Not available' : 'Buy tokens',
+          btnStyle: 'padding: 8px 12px; border-radius: 8px; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: ' +
+            (unavailable ? 'default' : 'pointer') + '; border: 1px solid ' +
+            (unavailable ? '#26262A; background: #17171A; color: #6E6E76;' : 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;'),
+          buy: function (e) {
+            stop(e);
+            if (unavailable) { toast(pk.name + ' is not configured for checkout yet.'); return; }
+            global.StudioAdapter.onBuyTokens(pk.id);
+          },
+        };
+      }),
       spendRows: [
         { icon: 'ph-fill ph-coins', label: 'Used this period', cost: String(current.used || 0) },
         { icon: 'ph-fill ph-hourglass', label: 'Reserved for running jobs', cost: String(current.reserved || 0) },
@@ -1727,6 +1779,8 @@
       addTerm: function (e) { stop(e); toast('Saving a term needs a glossary field on the account first.'); },
 
       connections: providers.map(function (p) {
+        var dot = 'position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid #0C0C0E; background: ' +
+          (!p.configured ? '#E3928C' : p.enabled ? '#7FD1A6' : p.connected ? '#E6B770' : '#6E6E76') + ';';
         return {
           name: PLATFORM_NAMES[p.key],
           handle: p.account ? p.account.name : (p.configured ? 'No account linked' : 'Needs API keys'),
@@ -1737,8 +1791,11 @@
           icon: p.icon,
           open: function (e) { stop(e); setUI({ connProvider: p.key }); },
           // Green only when it will actually post: connected AND enabled.
-          dotStyle: 'position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid #0C0C0E; background: ' +
-            (!p.configured ? '#E3928C' : p.enabled ? '#7FD1A6' : p.connected ? '#E6B770' : '#6E6E76') + ';',
+          // Both names are supplied because the Home row binds heroDotStyle and
+          // the modal binds dotStyle; supplying only one left the Home dot with
+          // no style at all, so it never appeared even when connected.
+          dotStyle: dot,
+          heroDotStyle: dot,
         };
       }),
     };
@@ -1761,6 +1818,7 @@
     onPlayTrack: function () {},
     onRemoveTrack: function () {},
     onChoosePlan: function () {},
+    onBuyTokens: function () {},
     onSelectTemplate: function () {},
     onSaveTemplate: function () {},
     onResetTemplate: function () {},
