@@ -50,6 +50,11 @@
     tplPast: [],
     tplFuture: [],
     tplReplaying: false,
+    // What is being dragged in a preview, where it is, and whether it has caught
+    // a snap line. Drives the cursor, the outline and the guides.
+    dragKind: null,
+    dragAt: null,
+    dragSnapped: false,
     // True while "Save to all clips" is in flight, so the button can say so.
     edApplying: false,
     sheet: null,
@@ -294,6 +299,49 @@
   function titleCase(v) {
     return String(v || '').replace(/-/g, ' ').replace(/^./, function (c) { return c.toUpperCase(); });
   }
+  // The lines a dragged overlay snaps to, drawn as dashes across the frame.
+  // One element carrying five background layers, because the lines are not
+  // evenly spaced and a repeating gradient cannot place them.
+  //
+  // Only visible during a drag: standing guides would be clutter, but dragging
+  // something with no indication of where it will land is what made this feel
+  // like text sliding around rather than an editor.
+  // One overlay carrying every snap line plus the line the cursor is on. The
+  // design draws a single 1px rule here, and a style binding replaces the whole
+  // style, so this can become a full-frame overlay without touching the markup
+  // -- which matters, since the design is regenerated on every import.
+  //
+  // Layers rather than a repeating gradient because the lines are not evenly
+  // spaced: the safe-zone edges, the thirds and the half.
+  function guideOverlayStyle(dragging, at, snappedOn, lines) {
+    if (!dragging) return 'display: none;';
+    var faint = 'repeating-linear-gradient(to right, rgba(240,214,166,.45) 0 6px, transparent 6px 12px)';
+    var layers = [], sizes = [], positions = [];
+    // The live line first, so it paints over a snap line it is sitting on.
+    if (at !== null && at !== undefined) {
+      layers.push(snappedOn
+        ? 'linear-gradient(to right, #F0D6A6, #F0D6A6)'
+        : 'repeating-linear-gradient(to right, rgba(240,214,166,.95) 0 4px, transparent 4px 9px)');
+      sizes.push('100% ' + (snappedOn ? 2 : 1) + 'px');
+      positions.push('0 ' + (at * 100).toFixed(3) + '%');
+    }
+    for (var i = 0; i < lines.length; i++) {
+      layers.push(faint);
+      sizes.push('100% 1px');
+      positions.push('0 ' + (lines[i] * 100).toFixed(4) + '%');
+    }
+    return 'position: absolute; inset: 0; z-index: 7; pointer-events: none;'
+      + ' background-image: ' + layers.join(', ') + ';'
+      + ' background-size: ' + sizes.join(', ') + ';'
+      + ' background-position: ' + positions.join(', ') + ';'
+      + ' background-repeat: no-repeat;';
+  }
+
+  // Grab, then grabbing. Without it the overlay gives no sign it can be moved.
+  function grabStyle(active) {
+    return ' cursor: ' + (active ? 'grabbing' : 'grab') + '; user-select: none; -webkit-user-select: none;';
+  }
+
   function handleStyle(on) {
     return on
       ? 'position: absolute; inset: -6px; border: 1px dashed rgba(217,180,120,.7); border-radius: 6px; pointer-events: none;'
@@ -311,7 +359,7 @@
     if (fromEdge === null || fromEdge === undefined || vertical === 'middle') {
       v = vertical === 'top' ? 'top: 8%;' : vertical === 'bottom' ? 'bottom: 8%;' : 'top: 50%; translate: 0 -50%;';
     } else {
-      var pct = Math.max(2, Math.min(46, fromEdge * 100)).toFixed(2);
+      var pct = Math.max(2, Math.min(50, fromEdge * 100)).toFixed(2);
       v = (vertical === 'top' ? 'top: ' : 'bottom: ') + pct + '%;';
     }
     var h = horizontal === 'left' ? 'left: 8%; text-align: left;'
@@ -875,7 +923,11 @@
       return node && node.closest ? node.closest('[style*="aspect-ratio"]') : null;
     }
 
-    function makeDrag(apply) {
+    // `kind` is what is being dragged ('caption' or 'mark'). It drives the drag
+    // affordances -- the grabbing cursor, the dashed outline and the snap
+    // guides -- which is the difference between this reading as a draggable
+    // object and as text that happens to move.
+    function makeDrag(kind, apply) {
       return function (e) {
         // dcTarget is the element the binding sits on. currentTarget is the
         // mount, because the runtime delegates -- measuring from it found the
@@ -889,14 +941,23 @@
         var box = frame.getBoundingClientRect();
         if (!box.height || !box.width) return;
 
+        UI.dragKind = kind;
         function move(ev) {
           var y = Math.max(0, Math.min(1, (ev.clientY - box.top) / box.height));
           var x = Math.max(0, Math.min(1, (ev.clientX - box.left) / box.width));
+          // Held so the guides can show where it is and whether it has caught a
+          // line. apply() refreshes, so nothing extra is needed here.
+          UI.dragAt = y;
+          UI.dragSnapped = snapped(y) !== y;
           apply(x, y);
         }
         function up() {
+          UI.dragKind = null;
+          UI.dragAt = null;
+          UI.dragSnapped = false;
           global.removeEventListener('mousemove', move);
           global.removeEventListener('mouseup', up);
+          refresh();
         }
         global.addEventListener('mousemove', move);
         global.addEventListener('mouseup', up);
@@ -909,6 +970,9 @@
     // exactly these, so they are listed once rather than implied by arithmetic.
     var SNAP_LINES = [0.1, 1 / 3, 0.5, 2 / 3, 0.9];
     var SNAP_WITHIN = 0.035;
+    // Mirrors NUMBER_RANGES.captionMarginV in src/templates.js. Half a 1920-tall
+    // frame, so a caption anchored to either edge can still reach the centre.
+    var CAPTION_MARGIN_MAX = 960;
 
     function snapped(value) {
       for (var i = 0; i < SNAP_LINES.length; i++) {
@@ -919,25 +983,37 @@
 
     // Vertical position is a real margin in device pixels from the bottom of a
     // 1920-tall frame; horizontal snaps to the alignments the renderer has.
-    var dragCaptionFrom = makeDrag(function (x, y) {
+    var dragCaptionFrom = makeDrag('caption', function (x, y) {
       var height = Number(tpl.height || 1920);
       var snappedY = snapped(y);
       var align = x < 0.34 ? 'left' : x > 0.66 ? 'right' : 'center';
-      var position = snappedY < 0.34 ? 'top' : snappedY > 0.66 ? 'bottom' : 'middle';
-      var patch = { captionHorizontal: align, captionPosition: position };
-      // MarginV is the distance from the edge the caption is anchored to, so a
-      // top caption measures down and a bottom one measures up. Measuring
-      // always from the bottom put a top-aligned caption at the wrong height in
-      // the export. Middle ignores MarginV, so nothing is written for it rather
-      // than storing a number the renderer will discard.
-      if (position !== 'middle') {
-        var fromEdge = position === 'top' ? snappedY : 1 - snappedY;
-        patch.captionMarginV = Math.round(Math.max(20, Math.min(800, fromEdge * height)));
+
+      // Anchored to the nearer edge, not to thirds.
+      //
+      // Thirds read sensibly but left the middle third dead: a middle alignment
+      // ignores MarginV (rows 4-6 of alignment_for), so everything from 34% to
+      // 66% collapsed onto one fixed spot and the caption stopped following the
+      // cursor across a third of the frame.
+      //
+      // Anchoring to the nearer edge means MarginV always carries the position,
+      // so every height in the frame is reachable. Middle is kept as an explicit
+      // snap for dead centre, which is the one place it is exactly right.
+      if (Math.abs(snappedY - 0.5) < 1e-6) {
+        saveStyle({ captionHorizontal: align, captionPosition: 'middle' });
+        return;
       }
-      saveStyle(patch);
+      var top = snappedY < 0.5;
+      var fromEdge = top ? snappedY : 1 - snappedY;
+      saveStyle({
+        captionHorizontal: align,
+        captionPosition: top ? 'top' : 'bottom',
+        // MarginV measures from the edge the caption is anchored to, so a top
+        // caption measures down and a bottom one measures up.
+        captionMarginV: Math.round(Math.max(20, Math.min(CAPTION_MARGIN_MAX, fromEdge * height))),
+      });
     });
 
-    var dragMarkFrom = makeDrag(function (x, y) {
+    var dragMarkFrom = makeDrag('mark', function (x, y) {
       var vertical = y < 0.5 ? 'top' : 'bottom';
       var horizontal = x < 0.34 ? 'left' : x > 0.66 ? 'right' : 'center';
       saveStyle({ watermarkPosition: vertical + '-' + horizontal });
@@ -1005,7 +1081,7 @@
     var edCapVertical = (function () {
       var pos = tpl.captionPosition;
       if (pos !== 'top' && pos !== 'bottom') return 'top: ' + capTop + '%; translate: -50% -50%;';
-      var pct = Math.max(2, Math.min(46, (Number(tpl.captionMarginV) || 0) / Math.max(1, Number(tpl.height || 1920)) * 100));
+      var pct = Math.max(2, Math.min(50, (Number(tpl.captionMarginV) || 0) / Math.max(1, Number(tpl.height || 1920)) * 100));
       return (pos === 'top' ? 'top: ' : 'bottom: ') + pct.toFixed(2) + '%; translate: -50% 0;';
     }());
 
@@ -2059,16 +2135,23 @@
       // captionMarginV is pixels from the bottom of a `height`-tall frame, which
       // is exactly what the renderer uses, so the preview and the export agree.
       capStyle: overlayStyle(tpl.captionPosition, tpl.captionHorizontal, tpl.captionPrimary, tpl.captionFontSize,
-        Number(tpl.captionMarginV || 0) / Math.max(1, Number(tpl.height || 1920))),
+        Number(tpl.captionMarginV || 0) / Math.max(1, Number(tpl.height || 1920)))
+        + grabStyle(UI.dragKind === 'caption')
+        + (UI.dragKind === 'caption' ? ' outline: 1px dashed rgba(240,214,166,.85); outline-offset: 4px;' : ''),
       capHandle: handleStyle(UI.tplLayer === 'caption'),
       headStyle: 'display: none;',
       headHandle: 'display: none;',
       markStyle: overlayStyle(tpl.watermarkPosition.indexOf('top') === 0 ? 'top' : 'bottom',
         tpl.watermarkPosition.indexOf('left') > -1 ? 'left' : tpl.watermarkPosition.indexOf('right') > -1 ? 'right' : 'center',
-        tpl.watermarkColor, tpl.watermarkFontSize),
+        tpl.watermarkColor, tpl.watermarkFontSize)
+        + grabStyle(UI.dragKind === 'mark')
+        + (UI.dragKind === 'mark' ? ' outline: 1px dashed rgba(240,214,166,.85); outline-offset: 4px;' : ''),
       markHandle: handleStyle(UI.tplLayer === 'mark'),
-      guideVStyle: 'position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(217,180,120,.18);',
-      guideHStyle: 'position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: rgba(217,180,120,.18);',
+      // The vertical centre line stays faint and constant; the horizontal one
+      // becomes the live drag line, so the two together read as a grid.
+      guideVStyle: 'position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; pointer-events: none; background: '
+        + (UI.dragKind ? 'repeating-linear-gradient(to bottom, rgba(240,214,166,.5) 0 6px, transparent 6px 12px)' : 'rgba(217,180,120,.18)') + ';',
+      guideHStyle: guideOverlayStyle(Boolean(UI.dragKind), UI.dragAt, UI.dragSnapped, SNAP_LINES),
       edSafe: true,
       safePresetLabel: 'Shorts + Reels',
       cyclePreset: function (e) { stop(e); toast('Safe-zone presets are fixed for vertical output.'); },

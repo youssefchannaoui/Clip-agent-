@@ -90,7 +90,11 @@ export const NUMBER_RANGES = {
   // crop multiplier, so 1 is the untouched framing.
   grain: [0, 100], warm: [-100, 100], smartFramingZoom: [0.75, 2.5],
   captionFontSize: [24, 140], captionOutlineWidth: [0, 14], captionShadow: [0, 8], captionBackgroundOpacity: [0, 100],
-  captionMarginV: [20, 800], captionMarginH: [20, 700], captionMaxWords: [1, 12],
+  // 960 is half of a 1920-tall frame. The caption anchors to whichever edge it
+  // is nearer, so the cap is what decides how far toward the centre it can
+  // travel -- at 800 there was a band around the middle it could not reach from
+  // either side, and the drag stalled there.
+  captionMarginV: [20, 960], captionMarginH: [20, 700], captionMaxWords: [1, 12],
   captionStackMaxWords: [1, 6], captionStackProbability: [0, 1], captionClearPause: [0.15, 2], captionLineHeight: [0.65, 1.4],
   hookDuration: [0.5, 8], hookFontSize: [24, 120], hookBackgroundOpacity: [0, 100],
   watermarkFontSize: [12, 90], watermarkOpacity: [0, 100], watermarkMarginV: [10, 500], watermarkMarginH: [10, 500],

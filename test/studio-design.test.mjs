@@ -1516,7 +1516,7 @@ test('every slider can reach the whole range its field accepts', () => {
   // that is -100..100, so it could never be set cool at all.
   const template = fs.readFileSync(path.join(ROOT, 'src/public/studio-template.generated.js'), 'utf8');
   const expected = {
-    edSize: [24, 140], edCapPosY: [20, 800], edGrain: [0, 100], edWarm: [-100, 100],
+    edSize: [24, 140], edCapPosY: [20, 960], edGrain: [0, 100], edWarm: [-100, 100],
   };
   for (const [binding, [lo, hi]] of Object.entries(expected)) {
     const re = new RegExp(`"type":"range","min":"(-?\\d+)","max":"(-?\\d+)","value":\\{"p":"${binding}"`);
@@ -1789,10 +1789,31 @@ test('the caption margin is measured from the edge it is anchored to', () => {
   assert.ok(Math.abs(bottom.captionMarginV - 1920 * 0.15) < 30, 'measured up from the bottom');
 });
 
-test('a middle caption stores no margin the renderer would discard', () => {
+test('dead centre snaps to middle, which is the one place it belongs', () => {
   const mid = dragOn({ clientX: 150, clientY: 0.5 * 533 });
   assert.equal(mid.captionPosition, 'middle');
   assert.equal(mid.captionMarginV, undefined, 'MarginV is ignored for middle alignments');
+});
+
+test('the caption follows the cursor across the whole frame', () => {
+  // Anchoring to thirds left the middle third dead: a middle alignment ignores
+  // MarginV, so everything from 34% to 66% collapsed onto one fixed spot and
+  // the caption stopped moving across a third of the preview. Anchoring to the
+  // nearer edge instead makes every height reachable.
+  const height = 533;
+  const at = f => dragOn({ clientX: 150, clientY: f * height });
+  const seen = [];
+  for (const f of [0.05, 0.15, 0.25, 0.4, 0.45, 0.55, 0.6, 0.75, 0.85, 0.95]) {
+    const d = at(f);
+    seen.push(`${d.captionPosition}:${d.captionMarginV}`);
+  }
+  assert.equal(new Set(seen).size, seen.length, `every drop is distinct: ${seen.join(' ')}`);
+  // Either side of the middle anchors to its nearer edge.
+  assert.equal(at(0.45).captionPosition, 'top');
+  assert.equal(at(0.55).captionPosition, 'bottom');
+  // And near-centre is reachable, which needs the 960 cap: 800 left a band
+  // around the middle that could not be reached from either side.
+  assert.ok(at(0.45).captionMarginV > 800, 'the old cap would have clamped this');
 });
 
 test('the preview shows where the caption actually is', () => {
