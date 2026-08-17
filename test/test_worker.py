@@ -173,6 +173,54 @@ class SpeakerTrackingTests(unittest.TestCase):
         self.assertFalse(plan["available"])
 
 
+class OpenCVVersionGuardTests(unittest.TestCase):
+    """OpenCV 5 removed cv2.CascadeClassifier, which speaker framing needs.
+
+    requirements.txt had no upper bound, so pip resolved 5.0.0.93 and framing
+    reported "no face detector available" on every job. The guard did catch it,
+    but told the operator to reinstall or clear the build cache -- advice that
+    cost two full --no-cache rebuilds and could never have worked, because the
+    cache was not the problem.
+    """
+
+    class FakeCV2:
+        def __init__(self, version, attributes):
+            self.__version__ = version
+            for name in attributes:
+                setattr(self, name, lambda *a, **k: None)
+
+    def _problem(self, version, attributes):
+        original = worker.cv2
+        worker.cv2 = self.FakeCV2(version, attributes)
+        try:
+            return worker.cv2_problem()
+        finally:
+            worker.cv2 = original
+
+    def test_opencv_5_is_named_as_a_version_problem(self):
+        problem = self._problem("5.0.0", ("VideoCapture", "cvtColor"))
+        self.assertIn("5.0.0", problem)
+        self.assertIn("<5.0.0", problem, "the operator is told the actual fix")
+        self.assertNotIn("build cache", problem, "the advice that wasted two rebuilds")
+
+    def test_a_genuinely_broken_install_still_says_reinstall(self):
+        problem = self._problem("4.10.0", ("CascadeClassifier", "cvtColor"))
+        self.assertIn("VideoCapture", problem)
+        self.assertIn("4.10.0", problem, "the version is reported either way")
+        self.assertIn("Reinstall", problem)
+
+    def test_requirements_cap_opencv_below_5(self):
+        text = (ROOT / "worker" / "requirements.txt").read_text(encoding="utf-8")
+        line = next(l for l in text.splitlines() if l.startswith("opencv-python-headless"))
+        self.assertIn("<5.0.0", line, "an unbounded pin silently reintroduces this")
+
+    def test_major_parses_junk_without_raising(self):
+        self.assertEqual(worker._major("5.0.0.93"), 5)
+        self.assertEqual(worker._major("4.10.0.84"), 4)
+        self.assertEqual(worker._major("unknown"), 0)
+        self.assertEqual(worker._major(""), 0)
+
+
 class CropFramingTests(unittest.TestCase):
     """Covers the actual reported bug: a subject's head getting cut off
     because the vertical crop position ignored where the face detector

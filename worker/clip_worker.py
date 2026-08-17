@@ -37,6 +37,12 @@ except Exception:  # pragma: no cover
     cv2 = None
 
 
+def _major(version: str) -> int:
+    """Leading integer of a version string, or 0 if it has none."""
+    head = str(version).split(".", 1)[0]
+    return int(head) if head.isdigit() else 0
+
+
 def cv2_problem() -> str | None:
     """Return a readable reason if OpenCV cannot actually be used, else None.
 
@@ -52,10 +58,21 @@ def cv2_problem() -> str | None:
     """
     if cv2 is None:
         return "OpenCV is not installed on this server."
+    version = str(getattr(cv2, "__version__", "") or "unknown")
     for attribute in ("CascadeClassifier", "VideoCapture", "cvtColor"):
         if not hasattr(cv2, attribute):
+            # OpenCV 5 removed the Haar cascade API outright. That is a version
+            # problem, not a damaged install, and the generic "reinstall it"
+            # advice below sends people through repeated --no-cache rebuilds
+            # that cannot possibly help. Name the real cause.
+            if attribute == "CascadeClassifier" and _major(version) >= 5:
+                return (
+                    f"OpenCV {version} removed the face-detection API this uses "
+                    "(CascadeClassifier). Pin opencv-python-headless<5.0.0 in "
+                    "worker/requirements.txt and rebuild."
+                )
             return (
-                f"The installed OpenCV is incomplete (missing {attribute}). "
+                f"The installed OpenCV is incomplete (missing {attribute}, version {version}). "
                 "Reinstall opencv-python-headless, or rebuild with the build cache cleared."
             )
     haarcascades = getattr(getattr(cv2, "data", None), "haarcascades", None)

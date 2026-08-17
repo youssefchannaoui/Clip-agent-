@@ -88,7 +88,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **196 JS + 57 Python**
+- `npm test` and `npm run check` must pass. Currently **196 JS + 61 Python**
   (7 Python skipped). Update these numbers when they change — they were wrong by
   more than a factor of two, which makes them useless as a tripwire.
 - **The 7 skips are `SpeakerTrackingTests`**, which need a test video that is not
@@ -122,3 +122,9 @@ These were each a real bug and each has a test named after it.
   dependency, not several separate gaps.
 - **Worker P2 (framing) and P3 (Arabic)** are written and unit-tested but no
   one has ever looked at a rendered frame. See `WORKER-HANDOVER.md`.
+- **Speaker framing was inert in production until 17 Aug**, not merely
+  unverified. `opencv-python-headless` had no upper bound, pip resolved 5.0.0,
+  and OpenCV 5 removed `cv2.CascadeClassifier` — so every job fell back to a
+  centre crop. It is pinned `<5.0.0` now and `verify-deploy.sh` fails on it.
+  Nothing has yet confirmed framing works *with* a 4.x image; that still needs
+  a real job and a look at the frame.

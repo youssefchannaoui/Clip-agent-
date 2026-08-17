@@ -72,6 +72,14 @@ else
       ok "dependency: $dep"
     fi
   done
+  # Speaker framing was broken for weeks while this script exited 0, because the
+  # doctor line was printed and never checked. If OpenCV cannot detect faces,
+  # framing silently falls back to a centre crop on every job -- say so.
+  if printf '%s' "$doctor" | grep -q '"opencv": ".*framing available'; then
+    ok "opencv: face detection"
+  else
+    bad "opencv: face detection" "$(printf '%s' "$doctor" | sed -n 's/.*"opencv": "\([^"]*\)".*/\1/p')"
+  fi
 fi
 
 echo

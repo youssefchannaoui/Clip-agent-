@@ -1,5 +1,11 @@
 faster-whisper>=1.2.0,<2.0.0
 yt-dlp[default]>=2026.7.4
 yt-dlp-ejs>=0.8.0
-opencv-python-headless>=4.10.0.84
+# Capped below 5.0 deliberately. OpenCV 5 removed the Haar cascade API
+# (cv2.CascadeClassifier), which is what speaker framing detects faces with.
+# Unbounded, pip resolved 5.0.0.93 and framing silently degraded to "no face
+# detector available" on every job — through two --no-cache rebuilds, because
+# the cache was never the problem. Do not raise this without porting
+# detect_main_face_crop and speaker_track to the DNN detector first.
+opencv-python-headless>=4.10.0.84,<5.0.0
 boto3>=1.35.0,<2.0.0
