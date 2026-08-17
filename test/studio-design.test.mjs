@@ -16,7 +16,10 @@ const render = (ast, vals) => {
   const r = new Renderer();
   const out = [];
   r.render(ast, vals, out);
-  return { html: out.join(''), handlers: r.handlers };
+  // `missing` is every event binding the template asked for that resolved to
+  // something other than a function. The runtime skips those silently, so this
+  // is the only way to see a dead control without clicking it.
+  return { html: out.join(''), handlers: r.handlers, missing: r.missing };
 };
 
 // ── runtime ────────────────────────────────────────────────────────────────
@@ -1539,4 +1542,59 @@ test('a three-slot schedule still renders one time per row', () => {
   const vals = StudioAdapter.bindings({ ...SAMPLE_STATE, postTimes: ['08:00', '13:00', '19:30'] });
   assert.equal(vals.postWindow3, '19:30');
   assert.equal(vals.postWindowName3, 'Late');
+});
+
+// ── dead-control guard ─────────────────────────────────────────────────────
+// studio-runtime.js skips any `on` binding that does not resolve to a function.
+// The element still renders -- styled, cursor:pointer, indistinguishable from a
+// live control -- with no listener. Every dead control in this dashboard shipped
+// that way, and `npm run design:check` cannot catch it because it only validates
+// top-level binding names, not loop-scoped item properties like `opt.pick`.
+//
+// This asserts the whole dashboard wires up. If it fails, the named binding is
+// in the template and missing from studio-adapter.js.
+
+const EVERY_SCREEN = ['home', 'queue', 'library', 'detail', 'schedule', 'templates',
+  'music', 'language', 'performance', 'editor', 'tokens'];
+
+// The nav rail's hover handlers are deliberately null. Driving hover from JS
+// re-rendered the whole dashboard through innerHTML, which replaced the element
+// under the pointer -- and a browser only fires `click` when mousedown and
+// mouseup land on the same element, so nothing was clickable. Hover is CSS now.
+const INTENTIONALLY_UNWIRED = new Set(['mouseenter', 'mouseleave']);
+
+test('no screen renders a control the adapter never wired', () => {
+  const dead = [];
+  for (const screen of EVERY_SCREEN) {
+    const { missing } = renderScreen(screen, { edClipId: 'c1', openProject: 'p1' });
+    for (const m of missing) {
+      if (INTENTIONALLY_UNWIRED.has(m.event)) continue;
+      const entry = `${screen}: <${m.tag} ${m.event}> -> ${m.binding}`;
+      if (!dead.includes(entry)) dead.push(entry);
+    }
+  }
+  assert.deepEqual(dead, [], 'these controls render but do nothing when clicked');
+});
+
+test('the guard actually detects a dead control', () => {
+  // Without this, a change that silently stopped populating `missing` would make
+  // the test above pass forever while dead controls shipped again.
+  const ast = [{ t: 'el', tag: 'button', on: { click: { p: 'notSupplied' } }, ch: ['x'] }];
+  const { missing, handlers } = render(ast, { somethingElse: () => {} });
+  assert.equal(handlers.length, 0, 'nothing was wired');
+  assert.equal(missing.length, 1);
+  assert.equal(missing[0].binding, 'notSupplied');
+  assert.equal(missing[0].event, 'click');
+});
+
+test('a loop-scoped item binding is caught too, not just top-level names', () => {
+  // `opt.pick` was exactly this shape: design:check saw `sheetOptions` supplied
+  // and passed, while every option row inside the loop had no listener.
+  const ast = [{
+    t: 'for', l: { p: 'rows' }, as: 'row',
+    ch: [{ t: 'el', tag: 'a', on: { click: { p: 'row.choose' } }, ch: ['r'] }],
+  }];
+  const { missing } = render(ast, { rows: [{ label: 'a' }, { label: 'b' }] });
+  assert.equal(missing.length, 2, 'one per rendered row');
+  assert.equal(missing[0].binding, 'row.choose');
 });

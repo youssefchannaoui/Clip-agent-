@@ -36,6 +36,15 @@
     return cur;
   }
 
+  // The readable name of a value spec, for reporting a binding that resolved to
+  // nothing. Loop-scoped item properties ("opt.pick") are the ones that hide:
+  // design:check only validates top-level names, so those slip through.
+  function bindingName(node) {
+    if (!node || typeof node !== 'object') return String(node);
+    if (node.p !== undefined) return String(node.p);
+    return JSON.stringify(node).slice(0, 60);
+  }
+
   function evalValue(node, scope) {
     if (node === null || node === undefined) return '';
     if (typeof node === 'string') return node;
@@ -54,6 +63,11 @@
 
   function Renderer() {
     this.handlers = [];
+    // Bindings the template asked for and the adapter did not supply. The
+    // element still renders -- styled, cursor:pointer, looking live -- with no
+    // listener, which is how every dead control here shipped unnoticed. Nothing
+    // reads this at runtime; it exists so a test can assert it is empty.
+    this.missing = [];
   }
 
   Renderer.prototype.render = function (nodes, scope, out) {
@@ -112,7 +126,10 @@
       for (var evt in n.on) {
         if (!Object.prototype.hasOwnProperty.call(n.on, evt)) continue;
         var fn = evalValue(n.on[evt], scope);
-        if (typeof fn !== 'function') continue;
+        if (typeof fn !== 'function') {
+          this.missing.push({ tag: n.tag, event: evt, binding: bindingName(n.on[evt]) });
+          continue;
+        }
         spec.push(evt + '=' + (this.handlers.push(fn) - 1));
       }
       if (spec.length) out.push(' data-dc-h="', spec.join(';'), '"');
