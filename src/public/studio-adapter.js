@@ -43,6 +43,13 @@
     tplDirty: false,
     tplDraft: null,
     tplTimer: null,
+    // Real edit history for the Templates screen. Each entry is
+    // { undo: {field: previousValue}, redo: {field: newValue} } so a step can be
+    // replayed in either direction. Redo used to be a button that only ever
+    // explained why it did nothing.
+    tplPast: [],
+    tplFuture: [],
+    tplReplaying: false,
     sheet: null,
     toast: null,
     playerClip: null,
@@ -756,6 +763,24 @@
     // unposted clip. The value is applied locally at once so the control feels
     // live, and the write is trailing-debounced.
     function saveTemplate(patch) {
+      // Record the step before applying it, so Undo has something to go back
+      // to. Skipped while replaying, or undoing would push its own inverse and
+      // the two buttons would fight each other.
+      if (!UI.tplReplaying) {
+        var before = {};
+        var moved = false;
+        for (var key in patch) {
+          if (!Object.prototype.hasOwnProperty.call(patch, key)) continue;
+          if (tpl[key] === patch[key]) continue;
+          before[key] = tpl[key];
+          moved = true;
+        }
+        if (moved) {
+          UI.tplPast = UI.tplPast.concat([{ undo: before, redo: Object.assign({}, patch) }]).slice(-50);
+          // A fresh edit invalidates anything that was undone past.
+          UI.tplFuture = [];
+        }
+      }
       UI.tplDirty = true;
       UI.tplDraft = Object.assign({}, UI.tplDraft, patch);
       refresh();
@@ -813,6 +838,18 @@
     }
     function defObj(k, v) { var o = {}; o[k] = v; return o; }
 
+    // Moves one step from one history stack to the other and applies it. Undo
+    // and redo are the same operation with the stacks swapped, so `which` picks
+    // the side of the step to replay.
+    function replayStyle(from, to, which) {
+      var step = from[from.length - 1];
+      if (!step) return;
+      from.length -= 1;
+      to.push(step);
+      UI.tplReplaying = true;
+      try { saveStyle(Object.assign({}, step[which])); } finally { UI.tplReplaying = false; }
+    }
+
     // Drags an overlay inside the preview frame it lives in. Pointer events are
     // captured so the drag survives leaving the element, and the value is
     // committed through saveTemplate, which is debounced -- so a drag produces
@@ -838,7 +875,13 @@
 
     function makeDrag(apply) {
       return function (e) {
-        var frame = dragFrame(e.currentTarget);
+        // dcTarget is the element the binding sits on. currentTarget is the
+        // mount, because the runtime delegates -- measuring from it found the
+        // whole dashboard rather than the phone frame, so the drag did nothing.
+        // `this` is only trusted when it is genuinely an element: a plain call
+        // in sloppy mode makes it the window, which is truthy and would win.
+        var from = e.dcTarget || (this && this.nodeType === 1 ? this : null) || e.currentTarget;
+        var frame = dragFrame(from);
         if (!frame || !frame.getBoundingClientRect) return;
         if (e.preventDefault) e.preventDefault();
         var box = frame.getBoundingClientRect();
@@ -1961,7 +2004,20 @@
         global.StudioAdapter.onResetTemplate();
       },
       duplicateTpl: function (e) { stop(e); global.StudioAdapter.onDuplicateTemplate(activeTemplate && activeTemplate.id); },
-      previewClip: function (e) { stop(e); toast('Preview renders from the next clip this template produces.'); },
+      // Opens the newest clip actually built on this template, rather than only
+      // explaining that a preview would come from one. It stayed a message even
+      // when the account had clips built on the very template being edited.
+      previewClip: function (e) {
+        stop(e);
+        var id = activeTemplate && activeTemplate.id;
+        var built = clips.filter(function (c) { return c.templateId === id && c.thumbUrl; })
+          .sort(function (a, b) { return Number(b.readyAt || b.createdAt || 0) - Number(a.readyAt || a.createdAt || 0); });
+        if (!built.length) {
+          toast('No clip has been rendered with this template yet — the next one will use it.');
+          return;
+        }
+        setUI({ playerClip: built[0] });
+      },
       layerBtns: [
         { key: 'caption', label: 'Caption', icon: 'ph ph-closed-captioning' },
         { key: 'mark', label: 'Logo', icon: 'ph ph-copyright' },
@@ -1999,16 +2055,23 @@
       // The design has a headline layer; hookEnabled is hard-disabled in
       // sanitiseTemplate, so there is nothing for a drag to move.
       dragHeadline: function () {},
-      // Discards unsaved edits and refetches. Named for what it does: there is
-      // no edit history to step through, so "undo" and "redo" would be lies.
+      // Steps back through the edits made on this screen. With nothing recorded
+      // it falls back to discarding unsaved changes, which is what it used to do
+      // in every case.
       undoEdit: function (e) {
         stop(e);
+        if (UI.tplPast.length) return replayStyle(UI.tplPast, UI.tplFuture, 'undo');
         if (UI.tplTimer) { global.clearTimeout(UI.tplTimer); UI.tplTimer = null; }
         UI.tplDraft = null;
         setUI({ tplDirty: false });
         global.StudioAdapter.onResetTemplate();
       },
-      redoEdit: function (e) { stop(e); toast('There is no edit history yet — Undo discards unsaved changes.'); },
+      // Was a button that existed only to explain why it did nothing.
+      redoEdit: function (e) {
+        stop(e);
+        if (!UI.tplFuture.length) { toast('Nothing to redo.'); return; }
+        replayStyle(UI.tplFuture, UI.tplPast, 'redo');
+      },
 
       // ── Start-a-job form (shared by Home and the library) ──
       jobUrlVal: UI.jobUrl,

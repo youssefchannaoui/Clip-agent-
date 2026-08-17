@@ -306,7 +306,11 @@ export function createTemplate(user, input = {}) {
   const takenIds = new Set(allTemplateIds());
   let id = safeId(input.id || input.name || 'custom-template');
   if (takenIds.has(id)) id = `${id}-${crypto.randomBytes(3).toString('hex')}`;
-  const template = sanitiseTemplate({ ...DEFAULTS, ...input, id, version: 1, updatedAt: Date.now() }, { id, builtIn: false, userId: ownerId });
+  // Names have to be unique too, not just ids. The template picker selects by
+  // name, so duplicating twice produced two rows reading "X copy" and the second
+  // one could never be chosen -- picking it always resolved to the first.
+  const name = uniqueName(user, input.name || 'Custom template');
+  const template = sanitiseTemplate({ ...DEFAULTS, ...input, id, name, version: 1, updatedAt: Date.now() }, { id, builtIn: false, userId: ownerId });
   writeCustom(template);
   return template;
 }
@@ -355,14 +359,20 @@ export function saveTemplate(user, id, input = {}, { allowFork = false } = {}) {
 // "Modern Minimal (my copy)", then "(my copy 2)" and so on. Numbering only from
 // the second, because "(my copy 1)" reads like there are others.
 function copyName(user, base) {
+  return uniqueName(user, `${base} (my copy)`, n => `${base} (my copy ${n})`);
+}
+
+// A name no other template of this user already has. `numbered` builds the
+// fallbacks; by default it appends " 2", " 3" and so on.
+function uniqueName(user, wanted, numbered = n => `${wanted} ${n}`) {
+  const clean = cleanText(wanted, 'Custom template', 70);
   const taken = new Set(listTemplates(user).map(template => template.name));
-  const first = `${base} (my copy)`;
-  if (!taken.has(first)) return first;
+  if (!taken.has(clean)) return clean;
   for (let n = 2; n < 200; n += 1) {
-    const candidate = `${base} (my copy ${n})`;
+    const candidate = cleanText(numbered(n), 'Custom template', 70);
     if (!taken.has(candidate)) return candidate;
   }
-  return `${base} (my copy ${Date.now()})`;
+  return cleanText(`${clean} ${Date.now()}`, 'Custom template', 70);
 }
 
 export function duplicateTemplate(user, id, name = '') {

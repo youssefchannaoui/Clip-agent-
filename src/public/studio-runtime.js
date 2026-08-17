@@ -212,7 +212,13 @@
       if (evt === 'click' && el.tagName === 'A' && (el.getAttribute('href') || '') === '#') {
         e.preventDefault();
       }
-      fn(e);
+      // Events are delegated from the mount, so e.currentTarget is the root and
+      // not the element the handler was written against. A handler that needs
+      // its own element -- the caption drag measures the preview frame it sits
+      // inside -- got the whole dashboard instead and silently did nothing.
+      // dcTarget is the element the binding is actually on.
+      try { e.dcTarget = el; } catch (err) { /* frozen event: `this` still works */ }
+      fn.call(el, e);
       return true;
     }
     return false;

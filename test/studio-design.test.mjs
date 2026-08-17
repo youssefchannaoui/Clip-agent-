@@ -1508,6 +1508,20 @@ test('a submission carries an idempotency key so a 502 cannot charge twice', () 
 
 // ── rendering does not rebuild the page ────────────────────────────────────
 
+test('a delegated handler is told which element it was bound to', () => {
+  // Events are delegated from the mount, so e.currentTarget is #studio and not
+  // the element the binding was written against. Every drag measures the
+  // preview frame it sits inside; handed the whole dashboard, all three of them
+  // (template caption, watermark, editor caption) silently did nothing.
+  const runtime = fs.readFileSync(path.join(ROOT, 'src/public/studio-runtime.js'), 'utf8');
+  const invoke = /Studio\.prototype\.invoke = function[\s\S]*?\n  \};/.exec(runtime)[0];
+  assert.match(invoke, /e\.dcTarget = el/, 'the bound element travels with the event');
+  assert.match(invoke, /fn\.call\(el, e\)/, 'and is the handler\'s `this`');
+  // The adapter must prefer it, and must not be fooled by sloppy-mode `this`.
+  const adapter = fs.readFileSync(path.join(ROOT, 'src/public/studio-adapter.js'), 'utf8');
+  assert.match(adapter, /e\.dcTarget \|\| \(this && this\.nodeType === 1 \? this : null\) \|\| e\.currentTarget/);
+});
+
 test('the patcher leaves host-injected nodes where the host put them', () => {
   // The live-work section is docked *inside* a generated column. patch() pairs
   // children by index, so an unguarded foreign node at index 0 gets compared
@@ -1830,13 +1844,106 @@ test('Recut clips uses the endpoint that exists rather than claiming to be unava
   assert.deepEqual(requested, { projectId: 'p1', n: 4 });
 });
 
-test('Undo discards unsaved template edits instead of only refetching', () => {
-  Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: { captionFontSize: 42 }, tplDirty: true, tplTimer: null });
+const TPL_STATE = {
+  projects: [], clips: [], tracks: [],
+  templates: [{ id: 'x', name: 'X', height: 1920, captionFontSize: 96, filterPreset: 'natural' }],
+  selectedTemplate: { id: 'x', name: 'X', height: 1920, captionFontSize: 96, filterPreset: 'natural' },
+};
+
+function templatesScreen(extra = {}) {
+  Object.assign(StudioAdapter.ui, {
+    screen: 'templates', tplDraft: null, tplDirty: false, tplTimer: null,
+    tplPast: [], tplFuture: [], tplReplaying: false, ...extra,
+  });
+  StudioAdapter.onTemplateField = () => {};
   StudioAdapter.onResetTemplate = () => {};
-  const state = { projects: [], clips: [], tracks: [], templates: [{ id: 'x', name: 'X' }], selectedTemplate: { id: 'x', name: 'X' } };
-  StudioAdapter.bindings(state).undoEdit({ preventDefault() {} });
+  return StudioAdapter.bindings(TPL_STATE);
+}
+
+test('Undo discards unsaved template edits when there is no history', () => {
+  templatesScreen({ tplDraft: { captionFontSize: 42 }, tplDirty: true });
+  StudioAdapter.bindings(TPL_STATE).undoEdit({ preventDefault() {} });
   assert.equal(StudioAdapter.ui.tplDraft, null);
   assert.equal(StudioAdapter.ui.tplDirty, false);
+});
+
+test('Undo steps back through edits, and Redo puts them back', () => {
+  // Redo was a button whose entire behaviour was explaining that it did nothing.
+  templatesScreen();
+  // Two real edits through the same path every control uses.
+  StudioAdapter.bindings(TPL_STATE).setSize({ target: { value: '120' } });
+  assert.equal(StudioAdapter.ui.tplDraft.captionFontSize, 120);
+  assert.equal(StudioAdapter.ui.tplPast.length, 1, 'the step was recorded');
+
+  StudioAdapter.bindings(TPL_STATE).undoEdit({ preventDefault() {} });
+  assert.equal(StudioAdapter.ui.tplDraft.captionFontSize, 96, 'back to where it started');
+  assert.equal(StudioAdapter.ui.tplPast.length, 0);
+  assert.equal(StudioAdapter.ui.tplFuture.length, 1);
+
+  StudioAdapter.bindings(TPL_STATE).redoEdit({ preventDefault() {} });
+  assert.equal(StudioAdapter.ui.tplDraft.captionFontSize, 120, 'and forward again');
+  assert.equal(StudioAdapter.ui.tplFuture.length, 0);
+  assert.equal(StudioAdapter.ui.tplPast.length, 1);
+});
+
+test('replaying a step does not record its own inverse', () => {
+  // Without the guard, undo pushes the reverse onto the past and the two buttons
+  // fight each other -- Undo then Undo lands back where it started.
+  templatesScreen();
+  StudioAdapter.bindings(TPL_STATE).setSize({ target: { value: '120' } });
+  StudioAdapter.bindings(TPL_STATE).undoEdit({ preventDefault() {} });
+  assert.equal(StudioAdapter.ui.tplPast.length, 0, 'the undo did not become a new step');
+});
+
+test('a fresh edit drops anything that was undone past', () => {
+  templatesScreen();
+  StudioAdapter.bindings(TPL_STATE).setSize({ target: { value: '120' } });
+  StudioAdapter.bindings(TPL_STATE).undoEdit({ preventDefault() {} });
+  assert.equal(StudioAdapter.ui.tplFuture.length, 1);
+  StudioAdapter.bindings(TPL_STATE).setSize({ target: { value: '64' } });
+  assert.equal(StudioAdapter.ui.tplFuture.length, 0, 'the abandoned branch is gone');
+});
+
+test('a change that changes nothing is not recorded', () => {
+  // Every control writes on each input event, so re-selecting the current value
+  // would otherwise fill the history with steps that do nothing.
+  templatesScreen();
+  StudioAdapter.bindings(TPL_STATE).setSize({ target: { value: '96' } });
+  assert.equal(StudioAdapter.ui.tplPast.length, 0);
+});
+
+test('Preview on a real clip opens one, when the template has produced any', () => {
+  // It was a message even when the account had clips built on the very template
+  // being edited.
+  const withClip = {
+    ...TPL_STATE,
+    clips: [
+      { id: 'old', templateId: 'x', title: 'Older', thumbUrl: '/t/old.jpg', readyAt: 1000 },
+      { id: 'new', templateId: 'x', title: 'Newest', thumbUrl: '/t/new.jpg', readyAt: 9000 },
+      { id: 'other', templateId: 'y', title: 'Different template', thumbUrl: '/t/o.jpg', readyAt: 9999 },
+    ],
+  };
+  Object.assign(StudioAdapter.ui, { screen: 'templates', playerClip: null, tplDraft: null, tplPast: [], tplFuture: [] });
+  StudioAdapter.bindings(withClip).previewClip({ preventDefault() {} });
+  assert.ok(StudioAdapter.ui.playerClip, 'the player opens');
+  assert.equal(StudioAdapter.ui.playerClip.id, 'new', 'the newest clip on this template');
+});
+
+test('Preview says nothing has been rendered yet rather than opening nothing', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'templates', playerClip: null });
+  const said = [];
+  StudioAdapter.onToast = m => said.push(m);
+  StudioAdapter.bindings(TPL_STATE).previewClip({ preventDefault() {} });
+  assert.equal(StudioAdapter.ui.playerClip, null);
+  assert.match(said[0], /No clip has been rendered with this template yet/);
+});
+
+test('Redo says so when there is nothing to redo', () => {
+  templatesScreen();
+  const said = [];
+  StudioAdapter.onToast = m => said.push(m);
+  StudioAdapter.bindings(TPL_STATE).redoEdit({ preventDefault() {} });
+  assert.deepEqual(said, ['Nothing to redo.']);
 });
 
 test('every configured posting time is shown, even past the design\'s three rows', () => {
