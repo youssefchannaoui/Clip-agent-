@@ -2089,9 +2089,15 @@ function renderStudio(){
        has to be merged onto what the account already has or it 400s. */
     StudioAdapter.onClipSettings=patch=>studioDo(()=>api('/api/clip-settings',{method:'POST',body:JSON.stringify({...(DATA?.clipSettings||{}),...patch})}));
     StudioAdapter.onSelectTemplate=id=>studioDo(()=>api('/api/template',{method:'POST',body:JSON.stringify({id})}),'Template selected');
-    StudioAdapter.onTemplateField=(id,patch)=>{if(!id)return;studioDo(async()=>{
+    /* A built-in cannot be written to, and this fires on every control change —
+       so persisting here threw "Built-in templates are protected" at the user
+       for each slider drag. The edit stays a local draft instead, the page shows
+       "Unsaved changes", and Save forks it onto their own copy. */
+    StudioAdapter.onTemplateField=(id,patch)=>{if(!id)return;
       const current=(DATA?.templates||[]).find(t=>t.id===id)||{};
-      await api(`/api/templates/${encodeURIComponent(id)}`,{method:'PUT',body:JSON.stringify({template:{...current,...patch}})})})};
+      if(current.builtIn){StudioAdapter.keepDraft(patch);return}
+      studioDo(async()=>{
+        await api(`/api/templates/${encodeURIComponent(id)}`,{method:'PUT',body:JSON.stringify({template:{...current,...patch}})})})};
     /* A clip's own tweaks belong to that clip. This used to write the shared
        template, which is why moving one caption moved it on every clip in the
        lecture. Nothing re-renders here — the clip is marked out of date and the
@@ -2110,8 +2116,18 @@ function renderStudio(){
     StudioAdapter.onSaveTemplate=(id,pending,projectId)=>{if(!id)return;studioDo(async()=>{
       const current=(DATA?.templates||[]).find(t=>t.id===id)||{};
       const r=await api(`/api/templates/${encodeURIComponent(id)}`,{method:'PUT',
-        body:JSON.stringify({template:{...current,...(pending||{})},propagate:true,propagateProjectId:projectId||''})});
+        body:JSON.stringify({template:{...current,...(pending||{})},propagate:true,propagateProjectId:projectId||'',allowFork:true})});
       const n=Number(r?.propagation?.queued||0);
+      /* A built-in cannot be written to, so the server forks the edit onto a
+         copy. Point the editor at that copy, or the next save writes to the
+         built-in again and the user edits a template they are no longer on. */
+      if(r&&r.forked&&r.template&&r.template.id){
+        StudioAdapter.ui.jobTplId=r.template.id;
+        StudioAdapter.ui.tplDraft=null;
+        StudioAdapter.ui.tplDirty=false;
+        StudioAdapter.showToast(`"${r.forkedFrom}" is built in — saved as "${r.template.name}" and switched you to it`);
+        return;
+      }
       StudioAdapter.showToast(n?`Saved — re-rendering ${n} clip${n===1?'':'s'}`:'Template saved')})};
     StudioAdapter.onResetTemplate=()=>refresh();
     StudioAdapter.onDuplicateTemplate=id=>{if(!id)return;studioDo(async()=>{

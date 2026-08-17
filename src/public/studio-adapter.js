@@ -291,8 +291,20 @@
       : 'display: none;';
   }
   // Places a preview overlay from the template's own position fields.
-  function overlayStyle(vertical, horizontal, colour, size) {
-    var v = vertical === 'top' ? 'top: 8%;' : vertical === 'bottom' ? 'bottom: 8%;' : 'top: 50%; translate: 0 -50%;';
+  // `fromEdge` is a fraction of the frame height measured from whichever edge
+  // the alignment anchors to -- top for a top caption, bottom for a bottom one.
+  // That is what ASS MarginV means (see alignment_for in clip_worker.py), so the
+  // preview and the export agree. Middle alignments ignore MarginV entirely, so
+  // they stay centred. Without this the preview snapped between three fixed
+  // spots and dragging looked broken even once the drag worked.
+  function overlayStyle(vertical, horizontal, colour, size, fromEdge) {
+    var v;
+    if (fromEdge === null || fromEdge === undefined || vertical === 'middle') {
+      v = vertical === 'top' ? 'top: 8%;' : vertical === 'bottom' ? 'bottom: 8%;' : 'top: 50%; translate: 0 -50%;';
+    } else {
+      var pct = Math.max(2, Math.min(46, fromEdge * 100)).toFixed(2);
+      v = (vertical === 'top' ? 'top: ' : 'bottom: ') + pct + '%;';
+    }
     var h = horizontal === 'left' ? 'left: 8%; text-align: left;'
       : horizontal === 'right' ? 'right: 8%; text-align: right;'
       : 'left: 50%; transform: translateX(-50%); text-align: center;';
@@ -805,9 +817,28 @@
     // captured so the drag survives leaving the element, and the value is
     // committed through saveTemplate, which is debounced -- so a drag produces
     // one write, not one per pixel.
+    // The phone frame the drag is measured against.
+    //
+    // This used to be closest('[style*="aspect-ratio"]'), which only ever worked
+    // by accident: the importer hoists static styles into classes, so the
+    // frame's aspect-ratio lives in a class and the selector matched nothing.
+    // makeDrag then returned silently and every caption drag did nothing.
+    // Computed style is what actually decides the box, so ask for that.
+    function dragFrame(node) {
+      if (global.getComputedStyle) {
+        for (var el = node; el && el.nodeType === 1; el = el.parentElement) {
+          var ratio = global.getComputedStyle(el).aspectRatio;
+          if (ratio && ratio !== 'auto') return el;
+        }
+      }
+      // Falls back to the inline-style match for anywhere the frame does carry
+      // one, and for environments with no computed style at all.
+      return node && node.closest ? node.closest('[style*="aspect-ratio"]') : null;
+    }
+
     function makeDrag(apply) {
       return function (e) {
-        var frame = e.currentTarget && e.currentTarget.closest ? e.currentTarget.closest('[style*="aspect-ratio"]') : null;
+        var frame = dragFrame(e.currentTarget);
         if (!frame || !frame.getBoundingClientRect) return;
         if (e.preventDefault) e.preventDefault();
         var box = frame.getBoundingClientRect();
@@ -828,14 +859,37 @@
       };
     }
 
+    // The lines the caption snaps to, as fractions from the top: the safe-zone
+    // edges, the thirds and the half. The label under the preview promises
+    // exactly these, so they are listed once rather than implied by arithmetic.
+    var SNAP_LINES = [0.1, 1 / 3, 0.5, 2 / 3, 0.9];
+    var SNAP_WITHIN = 0.035;
+
+    function snapped(value) {
+      for (var i = 0; i < SNAP_LINES.length; i++) {
+        if (Math.abs(value - SNAP_LINES[i]) <= SNAP_WITHIN) return SNAP_LINES[i];
+      }
+      return value;
+    }
+
     // Vertical position is a real margin in device pixels from the bottom of a
     // 1920-tall frame; horizontal snaps to the alignments the renderer has.
     var dragCaptionFrom = makeDrag(function (x, y) {
       var height = Number(tpl.height || 1920);
-      var margin = Math.round(Math.max(20, Math.min(800, (1 - y) * height)));
+      var snappedY = snapped(y);
       var align = x < 0.34 ? 'left' : x > 0.66 ? 'right' : 'center';
-      var position = y < 0.34 ? 'top' : y > 0.66 ? 'bottom' : 'middle';
-      saveStyle({ captionMarginV: margin, captionHorizontal: align, captionPosition: position });
+      var position = snappedY < 0.34 ? 'top' : snappedY > 0.66 ? 'bottom' : 'middle';
+      var patch = { captionHorizontal: align, captionPosition: position };
+      // MarginV is the distance from the edge the caption is anchored to, so a
+      // top caption measures down and a bottom one measures up. Measuring
+      // always from the bottom put a top-aligned caption at the wrong height in
+      // the export. Middle ignores MarginV, so nothing is written for it rather
+      // than storing a number the renderer will discard.
+      if (position !== 'middle') {
+        var fromEdge = position === 'top' ? snappedY : 1 - snappedY;
+        patch.captionMarginV = Math.round(Math.max(20, Math.min(800, fromEdge * height)));
+      }
+      saveStyle(patch);
     });
 
     var dragMarkFrom = makeDrag(function (x, y) {
@@ -1921,7 +1975,10 @@
         };
       }),
       // Live preview overlays, positioned from the template's own margins.
-      capStyle: overlayStyle(tpl.captionPosition, tpl.captionHorizontal, tpl.captionPrimary, tpl.captionFontSize),
+      // captionMarginV is pixels from the bottom of a `height`-tall frame, which
+      // is exactly what the renderer uses, so the preview and the export agree.
+      capStyle: overlayStyle(tpl.captionPosition, tpl.captionHorizontal, tpl.captionPrimary, tpl.captionFontSize,
+        Number(tpl.captionMarginV || 0) / Math.max(1, Number(tpl.height || 1920))),
       capHandle: handleStyle(UI.tplLayer === 'caption'),
       headStyle: 'display: none;',
       headHandle: 'display: none;',
@@ -2272,6 +2329,18 @@
     onSendBack: function () {},
     onScheduleClip: function () {},
     onMoreClips: function () {},
+    // Holds an edit that was not persisted, so it survives the debounce.
+    //
+    // saveTemplate() hands the draft to the host and clears it, on the
+    // assumption the host writes it to the server. A built-in cannot be written
+    // to, so the host hands it back here instead — without this the control
+    // snapped back to its old value 450ms after every change.
+    keepDraft: function (patch) {
+      UI.tplDraft = Object.assign({}, UI.tplDraft, patch || {});
+      UI.tplDirty = true;
+      refresh();
+    },
+
     // Shows the design's own toast rather than the legacy one when the Studio
     // dashboard is the visible surface.
     showToast: function (message) {

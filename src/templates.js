@@ -323,6 +323,48 @@ export function updateTemplate(user, id, input = {}) {
   return template;
 }
 
+// Save always means save.
+//
+// Editing a built-in and pressing Save used to fail with "Built-in templates are
+// protected. Duplicate it first, then edit your copy." -- an instruction to go
+// and do by hand the one thing the button was for. The built-ins do still have
+// to stay pristine, since every account shares them, so the edit is forked onto
+// a copy of the user's own and they are switched to it.
+//
+// Returns { template, forked, from } so the caller can say what happened.
+// Silently editing something other than what the user had open would be worse
+// than the error was.
+export function saveTemplate(user, id, input = {}, { allowFork = false } = {}) {
+  const existing = templateById(id, user);
+  if (!existing) throw new Error('That template does not exist.');
+  if (!existing.builtIn) {
+    return { template: updateTemplate(user, id, input), forked: false, from: '' };
+  }
+  // Forking is deliberate, not implicit. Every control on the Templates screen
+  // writes through the same endpoint on a debounce, so an unguarded fork would
+  // mint a fresh copy on each slider drag. Only the explicit Save asks for it;
+  // anything else still gets the old refusal.
+  if (!allowFork) throw new Error('Built-in templates are protected. Duplicate it first, then edit your copy.');
+  const template = createTemplate(user, {
+    ...existing, ...input, id: '', name: copyName(user, existing.name), builtIn: false,
+  });
+  setSelectedTemplate(user, template.id);
+  return { template, forked: true, from: existing.name };
+}
+
+// "Modern Minimal (my copy)", then "(my copy 2)" and so on. Numbering only from
+// the second, because "(my copy 1)" reads like there are others.
+function copyName(user, base) {
+  const taken = new Set(listTemplates(user).map(template => template.name));
+  const first = `${base} (my copy)`;
+  if (!taken.has(first)) return first;
+  for (let n = 2; n < 200; n += 1) {
+    const candidate = `${base} (my copy ${n})`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `${base} (my copy ${Date.now()})`;
+}
+
 export function duplicateTemplate(user, id, name = '') {
   const source = templateById(id, user);
   if (!source) throw new Error('That template does not exist.');

@@ -1661,26 +1661,113 @@ test('toasts sit bottom-right, clear of the live bar', () => {
 
 // ── the editor's remaining verbs ───────────────────────────────────────────
 
-test('dragging a caption writes fields that reach the render', () => {
-  // These were no-ops. Vertical is continuous (captionMarginV, 20-800 in the
-  // schema); horizontal snaps to the three alignments the renderer supports,
-  // because there is no free-form X to write to.
+// The frame is found by computed aspect-ratio, so a drag can be exercised
+// headlessly by standing up the two DOM calls it makes.
+function dragOn({ clientX, clientY, inlineFrameOnly = false } = {}) {
   Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null, tplTimer: null });
   StudioAdapter.onTemplateField = () => {};
-  const state = { projects: [], clips: [], tracks: [], templates: [{ id: 'x', name: 'X', height: 1920 }], selectedTemplate: { id: 'x', name: 'X', height: 1920 } };
-  const frame = { getBoundingClientRect: () => ({ top: 0, left: 0, width: 300, height: 533 }) };
-  const evt = { currentTarget: { closest: () => frame }, preventDefault() {}, clientX: 260, clientY: 460 };
-  const original = { add: globalThis.addEventListener, remove: globalThis.removeEventListener };
-  globalThis.addEventListener = () => {}; globalThis.removeEventListener = () => {};
+  const state = {
+    projects: [], clips: [], tracks: [],
+    templates: [{ id: 'x', name: 'X', height: 1920 }],
+    selectedTemplate: { id: 'x', name: 'X', height: 1920 },
+  };
+  const frame = { nodeType: 1, parentElement: null, getBoundingClientRect: () => ({ top: 0, left: 0, width: 300, height: 533 }) };
+  const target = { nodeType: 1, parentElement: frame, closest: sel => (/aspect-ratio/.test(sel) ? frame : null) };
+  const saved = {
+    add: globalThis.addEventListener, remove: globalThis.removeEventListener, computed: globalThis.getComputedStyle,
+  };
+  globalThis.addEventListener = () => {};
+  globalThis.removeEventListener = () => {};
+  // The real page hoists the frame's aspect-ratio into a class, so it is only
+  // ever visible through computed style. inlineFrameOnly drops that to prove the
+  // fallback still finds it.
+  globalThis.getComputedStyle = inlineFrameOnly ? undefined : node => ({ aspectRatio: node === frame ? '9 / 16' : 'auto' });
   try {
-    StudioAdapter.bindings(state).dragCaption(evt);
+    StudioAdapter.bindings(state).dragCaption({ currentTarget: target, preventDefault() {}, clientX, clientY });
   } finally {
-    globalThis.addEventListener = original.add; globalThis.removeEventListener = original.remove;
+    globalThis.addEventListener = saved.add;
+    globalThis.removeEventListener = saved.remove;
+    globalThis.getComputedStyle = saved.computed;
   }
-  const draft = StudioAdapter.ui.tplDraft;
+  return StudioAdapter.ui.tplDraft;
+}
+
+test('dragging a caption writes fields that reach the render', () => {
+  // Vertical is a real margin (captionMarginV, 20-800 in the schema); horizontal
+  // snaps to the three alignments the renderer supports, because there is no
+  // free-form X to write to.
+  const draft = dragOn({ clientX: 260, clientY: 460 });
   assert.equal(draft.captionHorizontal, 'right');
   assert.equal(draft.captionPosition, 'bottom');
   assert.ok(draft.captionMarginV >= 20 && draft.captionMarginV <= 800, 'within the schema range');
+});
+
+test('the drag finds the frame through a class, not only an inline style', () => {
+  // The whole reason dragging did nothing: the lookup was
+  // closest('[style*="aspect-ratio"]'), and the importer hoists static styles
+  // into classes, so it matched nothing and makeDrag returned silently.
+  const viaClass = dragOn({ clientX: 150, clientY: 100 });
+  assert.ok(viaClass, 'a class-styled frame is found');
+  assert.equal(viaClass.captionPosition, 'top');
+  // And the inline case still works, for anywhere the frame does carry one.
+  const viaInline = dragOn({ clientX: 150, clientY: 100, inlineFrameOnly: true });
+  assert.ok(viaInline, 'the inline fallback still resolves');
+  assert.equal(viaInline.captionPosition, 'top');
+});
+
+test('the caption snaps to the lines the label promises', () => {
+  // "Drag freely — it snaps to thirds, halves and the safe-zone edges."
+  const height = 533;
+  const at = fraction => dragOn({ clientX: 150, clientY: fraction * height });
+  // The upper third, snapped from just below it, measured down from the top.
+  assert.equal(at(0.34).captionPosition, 'top');
+  assert.equal(at(0.34).captionMarginV, Math.round(1920 / 3), 'the upper third');
+  // The top safe-zone edge.
+  assert.equal(at(0.11).captionMarginV, Math.round(1920 * 0.1), 'the safe-zone edge');
+  // The lower third, measured up from the bottom.
+  assert.equal(at(0.65).captionPosition, 'bottom');
+  assert.equal(at(0.65).captionMarginV, Math.round(1920 * (1 - 2 / 3)), 'the lower third');
+  // Well away from a line it stays where it was put, so it is still free.
+  const free = at(0.8).captionMarginV;
+  assert.equal(at(0.8).captionPosition, 'bottom');
+  assert.ok(Math.abs(free - 1920 * 0.2) < 12, 'lands where it was dropped');
+  assert.notEqual(free, Math.round(1920 * 0.1));
+});
+
+test('the caption margin is measured from the edge it is anchored to', () => {
+  // ASS MarginV is relative to the alignment's own edge (alignment_for in
+  // clip_worker.py). Measuring always from the bottom put a top-aligned caption
+  // at the wrong height in the export while looking right in the preview.
+  const height = 533;
+  const top = dragOn({ clientX: 150, clientY: 0.15 * height });
+  assert.equal(top.captionPosition, 'top');
+  assert.ok(Math.abs(top.captionMarginV - 1920 * 0.15) < 30, 'measured down from the top');
+  const bottom = dragOn({ clientX: 150, clientY: 0.85 * height });
+  assert.equal(bottom.captionPosition, 'bottom');
+  assert.ok(Math.abs(bottom.captionMarginV - 1920 * 0.15) < 30, 'measured up from the bottom');
+});
+
+test('a middle caption stores no margin the renderer would discard', () => {
+  const mid = dragOn({ clientX: 150, clientY: 0.5 * 533 });
+  assert.equal(mid.captionPosition, 'middle');
+  assert.equal(mid.captionMarginV, undefined, 'MarginV is ignored for middle alignments');
+});
+
+test('the preview shows where the caption actually is', () => {
+  // capStyle ignored captionMarginV, so the box only ever jumped between three
+  // fixed spots — dragging looked broken even once the drag worked, because the
+  // preview could not show the result.
+  const style = extra => {
+    Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null });
+    const t = { id: 'x', name: 'X', height: 1920, ...extra };
+    return StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates: [t], selectedTemplate: t }).capStyle;
+  };
+  assert.match(style({ captionMarginV: 192, captionPosition: 'bottom' }), /bottom: 10\.00%/);
+  assert.match(style({ captionMarginV: 192, captionPosition: 'top' }), /top: 10\.00%/, 'anchored to its own edge');
+  // Middle ignores the margin and stays centred, as the renderer does.
+  assert.match(style({ captionMarginV: 192, captionPosition: 'middle' }), /top: 50%/);
+  // Clamped, so a stored extreme cannot push the box out of the frame.
+  assert.match(style({ captionMarginV: 20, captionPosition: 'bottom' }), /bottom: 2/);
 });
 
 test('the editor save writes to that clip and never to the shared style', () => {

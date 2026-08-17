@@ -731,7 +731,12 @@ async function route(req, res, url) {
   if (method === 'PUT' && templateMatch) {
     const body = await readBody(req);
     try {
-      const template = templates.updateTemplate(currentUser, decodeURIComponent(templateMatch[1]), body.template || body);
+      // Editing a built-in forks it onto the user's own copy rather than
+      // refusing, so Save always means save. `forked` travels back so the page
+      // can say which template it actually saved.
+      const saved = templates.saveTemplate(currentUser, decodeURIComponent(templateMatch[1]), body.template || body,
+        { allowFork: body.allowFork === true });
+      const template = saved.template;
       const selected = templates.selectedTemplate(currentUser);
       // Re-rendering every unposted clip is explicit now. It used to fire on any
       // field write, and the editor's sliders write on every `input` event, so
@@ -740,8 +745,11 @@ async function route(req, res, url) {
       const propagation = body.propagate === true && selected?.id === template.id
         ? queueTemplateForEveryUnpostedClip(template, currentUser, 'saving the active template', String(body.propagateProjectId || ''))
         : { queued: 0, skipped: 0, errors: [] };
-      log(`Saved template "${template.name}" version ${template.version}. New renders use it automatically.`, 'info', currentUser.id);
-      return json(res, 200, { ok: true, template, propagation });
+      log(saved.forked
+        ? `"${saved.from}" is built in, so your changes were saved to "${template.name}" and it is now selected.`
+        : `Saved template "${template.name}" version ${template.version}. New renders use it automatically.`,
+      'info', currentUser.id);
+      return json(res, 200, { ok: true, template, propagation, forked: saved.forked, forkedFrom: saved.from });
     } catch (error) { return json(res, 400, { error: error.message }); }
   }
   if (method === 'DELETE' && templateMatch) {
