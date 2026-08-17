@@ -327,7 +327,35 @@ export async function sourceInfo(url) {
   if (!value) throw new Error('No source URL supplied.');
   if (remoteProcessing()) {
     const parsed = parseYouTubeUrl(value);
-    return { url: parsed.canonicalUrl, title: parsed.canonicalUrl, durationSec: null, durationKnown: false, thumbnail: fallbackThumb(parsed.canonicalUrl), extractor: 'validated-only' };
+    // Downloading needs the worker; reading the video's metadata does not. Both
+    // lookups below are plain HTTP from this process, so there was never a
+    // reason to skip them here -- and skipping them is why the job panel could
+    // not offer a range picker, showed the design's placeholder length, called
+    // the lecture by its URL, and could only say "cost confirmed before
+    // processing" instead of a real token estimate.
+    //
+    // yt-dlp and ffprobe are deliberately not attempted: neither is installed on
+    // the web service, and this runs while the user waits on a paste.
+    const remoteWarnings = [];
+    try {
+      const apiInfo = await sourceInfoViaYouTubeDataApi(value);
+      if (apiInfo?.durationSec) return { ...apiInfo, durationKnown: true };
+    } catch (error) { remoteWarnings.push(`YouTube Data API failed: ${error.message}`); }
+
+    try {
+      const htmlInfo = await sourceInfoViaYouTubeHtml(value);
+      if (htmlInfo?.durationSec) {
+        return { ...htmlInfo, durationKnown: true, warning: remoteWarnings.join(' | ') || undefined };
+      }
+    } catch (error) { remoteWarnings.push(`YouTube HTML lookup failed: ${error.message}`); }
+
+    // Still a supported outcome: the worker confirms the real length after it
+    // downloads, and the panel says so rather than inventing a number.
+    return {
+      url: parsed.canonicalUrl, title: parsed.canonicalUrl, durationSec: null, durationKnown: false,
+      thumbnail: fallbackThumb(parsed.canonicalUrl), extractor: 'validated-only',
+      warning: remoteWarnings.join(' | ') || undefined,
+    };
   }
   const warnings = [];
 
