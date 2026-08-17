@@ -8,6 +8,7 @@ import sys
 import tempfile
 import time
 import socket
+import threading
 import unittest
 from unittest import mock
 
@@ -112,6 +113,91 @@ class WorkerPersistenceTests(unittest.TestCase):
         os.utime(abandoned, (old, old))
         self.service.Processor(self.service.JobStore()).cleanup_abandoned()
         self.assertFalse(abandoned.exists())
+
+    def test_restart_recovery_requeues_real_worker_stages_not_just_the_old_tokens(self):
+        # The allowlist was written against the five collapsed tokens this
+        # service used to emit. clip_worker's own prose passes straight through
+        # now, so stages like "Rendering clip 1 of 8" matched nothing and a
+        # restart left those jobs frozen forever.
+        store = self.service.JobStore()
+        for index, stage in enumerate([
+            "Extracting speech audio", "Transcribing speech", "Analysing transcript",
+            "Finding and scoring clips", "Rendering clip 1 of 8", "Verifying rendered clips",
+        ]):
+            job = f"job_stage_{index}"
+            store.create({"id": job, "source": {"type": "youtube"}})
+            store.update(job, status=stage, stage=stage, progress=40)
+        recovered = set(store.recover())
+        self.assertEqual(len(recovered), 6, "every unfinished stage must be re-queued")
+
+    def test_finished_jobs_are_never_requeued(self):
+        store = self.service.JobStore()
+        for index, final in enumerate(["completed", "failed", "cancelled"]):
+            job = f"job_final_{index}"
+            store.create({"id": job, "source": {"type": "youtube"}})
+            store.update(job, status=final, stage=final, progress=100)
+        self.assertEqual(store.recover(), [])
+
+    def test_a_vanished_job_reads_as_cancelled_rather_than_crashing(self):
+        # cancelled() dereferenced a None status. That AttributeError escaped
+        # process() into loop(), which has no try, killing the only consumer
+        # thread -- after which the worker accepted jobs forever and ran none.
+        store = self.service.JobStore()
+        store.create({"id": "job_gone", "source": {"type": "youtube"}})
+        processor = self.service.Processor(store)
+        self.assertFalse(processor.cancelled("job_gone"))
+        store.status_path("job_gone").unlink()
+        self.assertTrue(processor.cancelled("job_gone"), "a job with no status file must unwind, not raise")
+
+    def test_the_job_loop_survives_a_job_that_throws(self):
+        store = self.service.JobStore()
+        store.create({"id": "job_boom", "source": {"type": "youtube"}})
+        store.create({"id": "job_after", "source": {"type": "youtube"}})
+        processor = self.service.Processor(store)
+        calls = []
+
+        def explode(job_id):
+            calls.append(job_id)
+            if job_id == "job_boom":
+                raise RuntimeError("worker exploded")
+
+        processor.process = explode
+        processor.submit("job_boom")
+        processor.submit("job_after")
+        thread = threading.Thread(target=processor.loop, daemon=True)
+        thread.start()
+        deadline = time.time() + 5
+        while "job_after" not in calls and time.time() < deadline:
+            time.sleep(0.05)
+        processor.stop.set()
+        thread.join(timeout=5)
+        self.assertIn("job_after", calls, "a later job must still be picked up after one throws")
+        self.assertEqual(store.read("job_boom")["status"], "failed")
+
+    def test_the_import_heartbeat_moves_the_signature_and_is_throttled(self):
+        # The app cancels a job whose stage|progress|heartbeatAt has not changed
+        # for five minutes. The import wrote nothing at all, so every download
+        # longer than that was killed as hung.
+        store = self.service.JobStore()
+        store.create({"id": "job_pulse", "source": {"type": "youtube"}})
+        processor = self.service.Processor(store)
+        pulse = processor.import_pulse("job_pulse")
+        self.assertFalse(pulse())
+        first = store.read("job_pulse").get("heartbeatAt")
+        self.assertIsNotNone(first, "the first poll must prove liveness immediately")
+        self.assertFalse(pulse())
+        self.assertEqual(store.read("job_pulse").get("heartbeatAt"), first, "throttled between beats")
+        self.assertLess(self.service.IMPORT_HEARTBEAT_SECONDS, 300,
+                        "the beat has to land well inside the app's five-minute stall budget")
+
+    def test_the_import_pulse_reports_cancellation(self):
+        store = self.service.JobStore()
+        store.create({"id": "job_cancel", "source": {"type": "youtube"}})
+        processor = self.service.Processor(store)
+        pulse = processor.import_pulse("job_cancel")
+        self.assertFalse(pulse())
+        processor.cancel("job_cancel")
+        self.assertTrue(pulse(), "a cancelled import must stop downloading")
 
 
 if __name__ == "__main__":

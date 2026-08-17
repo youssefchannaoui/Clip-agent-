@@ -15,7 +15,7 @@ import time
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from import_providers import ImportProviderError, download_https, provider_for
 from object_storage import ObjectStorage
@@ -28,6 +28,9 @@ PORT = int(os.getenv("WORKER_PORT", "8080"))
 MAX_CONCURRENT = max(1, int(os.getenv("WORKER_MAX_CONCURRENT_JOBS", "1")))
 MAX_DOWNLOAD_BYTES = max(50, int(os.getenv("WORKER_MAX_DOWNLOAD_MB", "4096"))) * 1024 * 1024
 MIN_FREE_BYTES = max(1, int(os.getenv("WORKER_MIN_FREE_GB", "10"))) * 1024**3
+# The app treats five minutes of an unchanged status signature as a hung job, so
+# the import has to prove liveness well inside that window.
+IMPORT_HEARTBEAT_SECONDS = 15
 JOB_TTL_SECONDS = max(3600, int(os.getenv("WORKER_TEMP_TTL_HOURS", "24")) * 3600)
 SHARED_SECRET = os.getenv("WORKER_SHARED_SECRET", "")
 
@@ -112,7 +115,12 @@ class JobStore:
                 status = json.loads(status_path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 continue
-            if status.get("status") in {"queued", "importing", "downloading", "extracting audio", "transcribing", "analysing", "creating clips", "rendering", "uploading", "processing"}:
+            # Recover on "not finished" rather than an allowlist of stage names.
+            # The allowlist was written against the five collapsed tokens this
+            # service used to emit; clip_worker's own prose now passes straight
+            # through, so real stages like "Rendering clip 1 of 8" matched
+            # nothing and a worker restart left those jobs frozen forever.
+            if status.get("status") not in {"completed", "failed", "cancelled"}:
                 status.update(status="queued", stage="queued", progress=min(5, int(status.get("progress") or 0)), error=None)
                 self.write(str(status["id"]), status)
                 recovered.append(str(status["id"]))
@@ -140,7 +148,17 @@ class Processor:
         self.queue.put(job_id)
 
     def cancelled(self, job_id: str) -> bool:
-        return bool(self.store.read(job_id).get("cancelRequested"))
+        # read() returns None for a job whose status file has gone or been
+        # truncated. Dereferencing that raised an AttributeError out of
+        # progress(), past the exception handler in process() -- which calls this
+        # too -- and into loop(), which has no try. With MAX_CONCURRENT=1 that
+        # killed the only consumer thread, and the worker then went on accepting
+        # jobs and processing none, while /readiness still reported ready.
+        # A job that has vanished is treated as cancelled so it unwinds cleanly.
+        status = self.store.read(job_id)
+        if status is None:
+            return True
+        return bool(status.get("cancelRequested"))
 
     def cancel(self, job_id: str) -> dict[str, Any]:
         status = self.store.read(job_id)
@@ -155,6 +173,37 @@ class Processor:
         if child and child.poll() is None:
             child.terminate()
         return status
+
+    def import_pulse(self, job_id: str) -> Callable[[], bool]:
+        """Cancellation check that also proves the worker is alive.
+
+        The import is the longest phase of a job and used to write nothing at all
+        between "importing" and clip_worker.py starting -- heartbeats only begin
+        once that process launches. The app watches stage|progress|heartbeatAt and
+        cancels a job whose signature has not moved for five minutes, so every
+        download longer than that was killed as hung while it was downloading
+        perfectly well. A three-hour lecture could never survive its own import.
+
+        Every provider already polls the cancellation callback once per megabyte,
+        so the heartbeat rides along with it for free. Throttled, because the
+        status file is rewritten on each update and a fast download would
+        otherwise rewrite it hundreds of times a second.
+        """
+        last = 0.0
+
+        def pulse() -> bool:
+            nonlocal last
+            now = time.monotonic()
+            if now - last >= IMPORT_HEARTBEAT_SECONDS:
+                last = now
+                # A vanished job must still cancel cleanly rather than raise.
+                try:
+                    self.store.update(job_id, heartbeatAt=now_ms())
+                except KeyError:
+                    return True
+            return self.cancelled(job_id)
+
+        return pulse
 
     def progress(self, job_id: str, stage: str, progress: int) -> None:
         if self.cancelled(job_id):
@@ -321,7 +370,7 @@ class Processor:
             self.progress(job_id, "importing", 3)
             source = work / "source.mp4"
             imported = provider_for(payload.get("source") or {}, self.storage).import_video(
-                payload.get("source") or {}, source, lambda: self.cancelled(job_id)
+                payload.get("source") or {}, source, self.import_pulse(job_id)
             )
             if source.stat().st_size > MAX_DOWNLOAD_BYTES:
                 raise RuntimeError("The source exceeds the worker download limit.")
@@ -385,9 +434,21 @@ class Processor:
             except queue.Empty:
                 continue
             status = self.store.read(job_id)
-            if status and status.get("status") == "queued" and not status.get("cancelRequested"):
-                self.process(job_id)
-            self.queue.task_done()
+            # This is the only consumer thread at MAX_CONCURRENT=1. Anything that
+            # escapes process() would end it permanently, leaving a worker that
+            # accepts jobs forever and runs none -- so one bad job must never be
+            # able to take the loop down with it.
+            try:
+                if status and status.get("status") == "queued" and not status.get("cancelRequested"):
+                    self.process(job_id)
+            except Exception as exc:  # noqa: BLE001 - the loop must outlive any job
+                try:
+                    self.store.update(job_id, status="failed", stage="failed", error=clean_error(exc))
+                except KeyError:
+                    pass
+                print(f"[worker] job {job_id} crashed the processor: {clean_error(exc)}", file=sys.stderr, flush=True)
+            finally:
+                self.queue.task_done()
 
     def cleanup_abandoned(self) -> None:
         cutoff = time.time() - JOB_TTL_SECONDS

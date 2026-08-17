@@ -37,6 +37,28 @@ const MAX_WORKER_RETRIES = 10;
 // hung rather than busy. Generous, because a slow transcription is not a stall.
 const STALL_TIMEOUT_MS = 5 * 60_000;
 
+// Stages that run before clip_worker.py starts, and therefore before anything
+// heartbeats. The import is one long download, so it gets the import timeout
+// plus headroom rather than the stall budget.
+const PRE_WORKER_STAGES = new Set(['queued', 'importing', 'downloading']);
+const IMPORT_STALL_TIMEOUT_MS = config.videoImportTimeoutMs + 5 * 60_000;
+
+/**
+ * How long a stage may sit with an unchanged status signature before the job is
+ * treated as hung.
+ *
+ * Everything after the import beats every 10s, so silence there really is a
+ * stall. The import beats only on workers carrying Processor.import_pulse, and
+ * it is a single download that can legitimately run for half an hour — judging
+ * it by the stall budget cancelled healthy jobs, which meant a long lecture
+ * could never survive its own download.
+ */
+export function stallBudgetFor(stage) {
+  return PRE_WORKER_STAGES.has(String(stage || '').toLowerCase())
+    ? IMPORT_STALL_TIMEOUT_MS
+    : STALL_TIMEOUT_MS;
+}
+
 // Tokens are charged per source minute once the real duration is known. Until
 // then a job holds an estimate, so a second job cannot be started against tokens
 // the first one is about to spend.
@@ -600,8 +622,15 @@ async function runRemoteProject(project) {
       // not slow, and there is no reason to hold the single worker slot for it
       // until the full job timeout expires.
       const signature = `${update.stage || ''}|${update.progress || 0}|${update.heartbeatAt || 0}`;
+      // Before clip_worker.py launches there is nothing beating: the import is a
+      // single uninterrupted download that legitimately runs for as long as
+      // VIDEO_IMPORT_TIMEOUT_MS allows. Judging it by the five-minute stall
+      // budget cancelled healthy jobs -- a long lecture could never survive its
+      // own download. Workers that heartbeat through the import (see
+      // Processor.import_pulse) move the signature and never reach either
+      // branch; this budget is what protects the ones not yet redeployed.
       if (signature !== lastSignature) { lastSignature = signature; lastMovementAt = Date.now(); }
-      else if (Date.now() - lastMovementAt > STALL_TIMEOUT_MS) {
+      else if (Date.now() - lastMovementAt > stallBudgetFor(update.stage)) {
         await workerClient.cancelJob(workerJobId).catch(() => {});
         throw new Error('The processing worker stopped responding partway through. The job can be retried safely.');
       }
