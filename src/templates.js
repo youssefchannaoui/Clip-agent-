@@ -36,6 +36,13 @@ const DEFAULTS = Object.freeze({
   captionFontSize: 96,
   captionPrimary: '#FFFFFF',
   captionHighlight: '#D9B478',
+  // The highlighted word can differ from the rest of the caption in face, slant
+  // and glow, which is what makes the stacked style read. clip_worker.py has
+  // always rendered these; nothing here stored them, so sanitiseTemplate()
+  // dropped every value and the worker silently used its own defaults.
+  captionHighlightFont: 'DejaVu Serif',
+  captionHighlightItalic: true,
+  captionHighlightGlow: 0,
   captionOutline: '#09090A',
   captionOutlineWidth: 5,
   captionShadow: 1,
@@ -90,6 +97,8 @@ export const NUMBER_RANGES = {
   // crop multiplier, so 1 is the untouched framing.
   grain: [0, 100], warm: [-100, 100], smartFramingZoom: [0.75, 2.5],
   captionFontSize: [24, 140], captionOutlineWidth: [0, 14], captionShadow: [0, 8], captionBackgroundOpacity: [0, 100],
+  // Clamped to what clip_worker.py accepts for the highlight's glow.
+  captionHighlightGlow: [0, 30],
   // 960 is half of a 1920-tall frame. The caption anchors to whichever edge it
   // is nearer, so the cap is what decides how far toward the centre it can
   // travel -- at 800 there was a band around the middle it could not reach from
@@ -138,7 +147,7 @@ export function sanitiseTemplate(input = {}, { id = '', builtIn = false, userId 
   for (const key of ['frameBackground', 'captionPrimary', 'captionHighlight', 'captionOutline', 'captionBackground', 'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor']) {
     output[key] = cleanColor(source[key], DEFAULTS[key]);
   }
-  for (const key of ['captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled']) {
+  for (const key of ['captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic']) {
     output[key] = Boolean(source[key]);
   }
   // Opening title cards are intentionally disabled. Clips begin immediately with spoken captions.
@@ -148,6 +157,7 @@ export function sanitiseTemplate(input = {}, { id = '', builtIn = false, userId 
     output.captionMode = 'dynamic-stack';
   }
   output.captionFont = cleanText(source.captionFont, DEFAULTS.captionFont, 80);
+  output.captionHighlightFont = cleanText(source.captionHighlightFont, DEFAULTS.captionHighlightFont, 80);
   output.watermark = cleanText(source.watermark, DEFAULTS.watermark, 60);
   output.version = Math.max(1, Math.round(Number(source.version) || 1));
   output.updatedAt = Number(source.updatedAt) || Date.now();
@@ -171,8 +181,8 @@ export const CLIP_STYLE_FIELDS = Object.freeze([
   ...Object.keys(NUMBER_RANGES).filter(key => key !== 'width' && key !== 'height'),
   'frameBackground', 'captionPrimary', 'captionHighlight', 'captionOutline', 'captionBackground',
   'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor',
-  'captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled',
-  'captionFont', 'watermark',
+  'captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic',
+  'captionFont', 'captionHighlightFont', 'watermark',
 ]);
 
 const CLIP_STYLE_FIELD_SET = new Set(CLIP_STYLE_FIELDS);

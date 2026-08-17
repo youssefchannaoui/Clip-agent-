@@ -2040,6 +2040,72 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(snap&&snap.textContent!==vals.pvSnapName)snap.textContent=vals.pvSnapName;
     }
 
+    /* The sample caption, drawn word by word so the live word can carry its own
+       colour, face, slant and glow -- which the renderer has always done and
+       nothing could configure.
+
+       The design's caption node holds a plain text child, so the words are
+       appended as a host-owned span and the generated text is blanked. Appended
+       rather than inserted: the patcher skips host-owned nodes when pairing, so
+       one at the front would shift every generated sibling by one and eat the
+       drag handles.
+
+       The node is found through the runtime's own handler table rather than by
+       matching text, since the text is exactly what changes. */
+    function captionBox(vals){
+      if(!STUDIO||!STUDIO.handlers)return null;
+      const i=STUDIO.handlers.indexOf(vals.dragCaption);
+      return i<0?null:document.querySelector(`#studio [data-dc-h*="mousedown=${i}"]`);
+    }
+    function paintCaptionWords(vals){
+      const box=captionBox(vals);
+      if(!box)return;
+      for(const node of box.childNodes){
+        if(node.nodeType===3&&node.nodeValue.trim())node.nodeValue='';
+      }
+      let span=box.querySelector(':scope > [data-host-owned]');
+      if(!span){
+        span=document.createElement('span');
+        span.setAttribute('data-host-owned','');
+        box.appendChild(span);
+      }
+      const want=(vals.capWords||[]).map(w=>w.style
+        ? `<span style="${esc(w.style)}">${esc(w.text)}</span>`
+        : esc(w.text)).join(' ');
+      if(span.dataset.words!==want){span.dataset.words=want;span.innerHTML=want}
+    }
+
+    /* The design's play control is decorative: an icon, a bar and a hardcoded
+       0:14, with no handler. Wired here, and the clock is scheduled to the next
+       word boundary rather than a fixed framerate -- nothing changes between
+       words, so there is nothing to redraw. */
+    let pvTimer=null;
+    function paintPreviewPlayer(vals){
+      const box=captionBox(vals);
+      const bar=box&&box.parentElement&&box.parentElement.querySelector('.s8o');
+      if(bar&&!bar.dataset.wired){
+        bar.dataset.wired='1';
+        bar.style.cursor='pointer';
+        bar.onclick=e=>{e.preventDefault();StudioAdapter.bindings(DATA).togglePreviewPlay(e)};
+      }
+      if(bar){
+        const icon=bar.querySelector('i');
+        if(icon&&icon.className.indexOf(vals.pvPlayIcon)!==0)icon.className=vals.pvPlayIcon+' '+(icon.className.split(' ').pop()||'');
+        const fill=bar.querySelector('.s8r');
+        if(fill)fill.style.width=(vals.pvProgress*100).toFixed(1)+'%';
+        const label=bar.querySelector('.s8s');
+        if(label&&label.textContent!==vals.pvTimeLabel)label.textContent=vals.pvTimeLabel;
+      }
+      if(pvTimer){clearTimeout(pvTimer);pvTimer=null}
+      if(!vals.pvPlaying)return;
+      const started=Date.now(), from=StudioAdapter.ui.pvTime;
+      pvTimer=setTimeout(()=>{
+        pvTimer=null;
+        if(!StudioAdapter.ui.pvPlaying)return;
+        StudioAdapter.bindings(DATA).setPreviewTime(from+(Date.now()-started)/1000);
+      },140);
+    }
+
     function paintLiveWork(vals){
       const onHome=StudioAdapter.ui.screen==='home';
       const any=vals.liveCount>0;
@@ -2346,6 +2412,8 @@ function paintStudio(){
   paintLiveWork(vals);
   paintApplyLecture(vals);
   paintPreviewPic(vals);
+  paintCaptionWords(vals);
+  paintPreviewPlayer(vals);
   /* No unread activity -> hide the dot the design hardcoded on. */
   document.body.classList.toggle('studio-read',!vals.activityUnread);
 }

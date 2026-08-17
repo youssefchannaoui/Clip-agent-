@@ -56,6 +56,9 @@
     dragAt: null,
     dragSnapped: false,
     dragSnapName: '',
+    // Sample-caption playback in the preview.
+    pvPlaying: false,
+    pvTime: 0,
     // True while "Save to all clips" is in flight, so the button can say so.
     edApplying: false,
     sheet: null,
@@ -411,6 +414,89 @@
     // An older template may name a font that is no longer offered. Say so in the
     // only way the preview can: fall back, rather than pretending it is fine.
     return 'Inter, system-ui, sans-serif';
+  }
+
+  // A short sample script so the preview can play, which is the only way to show
+  // what a caption mode actually does: "word by word" and "stacked lines" are
+  // indistinguishable from a still. Three lines, roughly the length and cadence
+  // of a real clip's captions.
+  var SAMPLE_LINES = [
+    'He has the whole of the dunya given to us',
+    'and we still complain about the small things',
+    'that happen to us each and every day',
+  ];
+  var SAMPLE_WORD_SECONDS = 0.42;
+  var SAMPLE_LINE_GAP = 0.5;
+
+  // Flattened to words with timings once, at module load.
+  var SAMPLE_WORDS = (function () {
+    var out = [];
+    var at = 0;
+    for (var line = 0; line < SAMPLE_LINES.length; line++) {
+      var words = SAMPLE_LINES[line].split(' ');
+      for (var i = 0; i < words.length; i++) {
+        out.push({ text: words[i], line: line, index: i, start: at, end: at + SAMPLE_WORD_SECONDS });
+        at += SAMPLE_WORD_SECONDS;
+      }
+      at += SAMPLE_LINE_GAP;
+    }
+    return out;
+  }());
+  var SAMPLE_TOTAL = SAMPLE_WORDS.length
+    ? SAMPLE_WORDS[SAMPLE_WORDS.length - 1].end + SAMPLE_LINE_GAP
+    : 0;
+
+  // What is on screen at a given moment, for a given caption mode. Mirrors what
+  // the renderer does: a phrase holds the line, word-by-word shows one, and
+  // dynamic-stack shows the group of words it is currently stacking.
+  // As above, but split into the words on screen and which one is live, so the
+  // preview can highlight it the way the render does.
+  function sampleCaptionParts(seconds, mode, stackMax) {
+    if (!SAMPLE_WORDS.length) return { words: [], liveIndex: -1 };
+    var now = SAMPLE_WORDS.filter(function (w) { return seconds >= w.start && seconds < w.end; })[0];
+    var live = Boolean(now);
+    if (!now) {
+      var past = SAMPLE_WORDS.filter(function (w) { return w.end <= seconds; });
+      now = past.length ? past[past.length - 1] : SAMPLE_WORDS[0];
+    }
+    var line = SAMPLE_WORDS.filter(function (w) { return w.line === now.line; });
+    var shown;
+    if (mode === 'word') shown = [now];
+    else if (mode === 'phrase') shown = line;
+    else {
+      var n = Math.max(1, Math.min(6, Number(stackMax) || 4));
+      var chunk = Math.floor(now.index / n);
+      shown = line.slice(chunk * n, chunk * n + n);
+    }
+    var at = -1;
+    for (var i = 0; i < shown.length; i++) if (shown[i] === now) at = i;
+    return {
+      words: shown.map(function (w) { return w.text; }),
+      // Between lines nothing is being spoken, so nothing is highlighted.
+      liveIndex: live ? at : -1,
+    };
+  }
+
+  function sampleCaptionAt(seconds, mode, stackMax) {
+    if (!SAMPLE_WORDS.length) return '';
+    var now = SAMPLE_WORDS.filter(function (w) { return seconds >= w.start && seconds < w.end; })[0];
+    // In a gap between lines, hold the last thing shown rather than blanking:
+    // a caption that disappears between lines reads as a bug.
+    if (!now) {
+      var past = SAMPLE_WORDS.filter(function (w) { return w.end <= seconds; });
+      now = past.length ? past[past.length - 1] : SAMPLE_WORDS[0];
+    }
+    var line = SAMPLE_WORDS.filter(function (w) { return w.line === now.line; });
+    if (mode === 'word') return now.text;
+    if (mode === 'phrase') return line.map(function (w) { return w.text; }).join(' ');
+    var n = Math.max(1, Math.min(6, Number(stackMax) || 4));
+    var chunk = Math.floor(now.index / n);
+    return line.slice(chunk * n, chunk * n + n).map(function (w) { return w.text; }).join(' ');
+  }
+
+  function clockLabel(seconds) {
+    var whole = Math.max(0, Math.round(seconds));
+    return Math.floor(whole / 60) + ':' + String(whole % 60).padStart(2, '0');
   }
 
   function handleStyle(on) {
@@ -1179,6 +1265,10 @@
       }
       return PREVIEW_FALLBACK;
     }());
+
+    // Where the sample caption is up to. Parked at 1.2s when idle, which lands
+    // mid-first-line so the preview shows a caption rather than an empty frame.
+    var previewAt = (UI.pvPlaying || UI.pvTime) ? UI.pvTime : 1.2;
 
     var capTop = tpl.captionPosition === 'top' ? 22 : tpl.captionPosition === 'bottom' ? 80 : 50;
     // The editor's caption overlay, placed the way the renderer places it:
@@ -2255,15 +2345,51 @@
       // The design bakes one phrase in, so picking "Word by word" changed the
       // row's label and nothing else -- the one control whose whole meaning is
       // what the caption looks like.
-      capPreviewText: (function () {
-        var sample = 'He has the whole of the dunya given to us';
-        var words = sample.split(' ');
-        if (tpl.captionMode === 'word') return words[3];
-        if (tpl.captionMode === 'phrase') return sample;
-        // dynamic-stack: as many words as the template stacks at once.
-        var n = Math.max(1, Math.min(6, Number(tpl.captionStackMaxWords) || 4));
-        return words.slice(0, n).join(' ');
+      capPreviewText: sampleCaptionAt(previewAt, tpl.captionMode, tpl.captionStackMaxWords),
+
+      // The words on screen, with the live one marked, so the preview can show
+      // the highlight in its own face, slant, colour and glow -- the thing that
+      // makes the stacked style read, and which the renderer has always done
+      // even though nothing could configure it.
+      capWords: (function () {
+        var parts = sampleCaptionParts(previewAt, tpl.captionMode, tpl.captionStackMaxWords);
+        var glow = Math.max(0, Math.min(30, Number(tpl.captionHighlightGlow) || 0));
+        return parts.words.map(function (text, i) {
+          var on = i === parts.liveIndex;
+          return {
+            text: text,
+            style: on
+              ? 'color: ' + (tpl.captionHighlight || '#D9B478') + ';'
+                + ' font-family: ' + webFontFor(tpl.captionHighlightFont) + ';'
+                + (tpl.captionHighlightItalic ? ' font-style: italic;' : '')
+                + (glow ? ' text-shadow: 0 0 ' + Math.round(glow / 2) + 'px ' + (tpl.captionHighlight || '#D9B478') + ';' : '')
+              : '',
+          };
+        });
       }()),
+
+      // ── Sample playback ──
+      // The design draws a play control with no handler at all: an icon, a bar
+      // and a hardcoded 0:14. Playing the sample is the only way to show what a
+      // caption mode does, since word-by-word and stacked lines look identical
+      // in a still.
+      pvPlaying: UI.pvPlaying,
+      pvPlayIcon: UI.pvPlaying ? 'ph-fill ph-pause' : 'ph-fill ph-play',
+      pvTimeLabel: clockLabel(UI.pvTime) + ' / ' + clockLabel(SAMPLE_TOTAL),
+      pvProgress: SAMPLE_TOTAL ? Math.max(0, Math.min(1, UI.pvTime / SAMPLE_TOTAL)) : 0,
+      pvTotalSeconds: SAMPLE_TOTAL,
+      togglePreviewPlay: function (e) {
+        stop(e);
+        // Restart rather than resume from the end, so a second press always
+        // plays something.
+        var restart = UI.pvTime >= SAMPLE_TOTAL - 0.05;
+        setUI({ pvPlaying: !UI.pvPlaying, pvTime: restart ? 0 : UI.pvTime });
+      },
+      setPreviewTime: function (seconds) {
+        UI.pvTime = Math.max(0, Math.min(SAMPLE_TOTAL, Number(seconds) || 0));
+        if (UI.pvTime >= SAMPLE_TOTAL) UI.pvPlaying = false;
+        refresh();
+      },
 
       // A small name for the line the caption has caught, so the snap is
       // readable rather than only a highlighted rule.

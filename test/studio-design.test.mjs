@@ -1586,12 +1586,91 @@ test('each snap point has a name the preview can show', () => {
   assert.match(adapter, /UI\.dragKind === 'caption' && UI\.dragSnapName/);
 });
 
+// ── the sample plays ───────────────────────────────────────────────────────
+
+function previewAt(seconds, extra = {}) {
+  Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null, edClipId: null, pvPlaying: true, pvTime: seconds });
+  const t = { id: 'x', name: 'X', height: 1920, ...extra };
+  return StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates: [t], selectedTemplate: t });
+}
+
+test('the sample caption advances as the preview plays', () => {
+  // A still cannot show what a caption mode does: word-by-word and stacked
+  // lines look identical until something moves.
+  const seen = [0, 1, 2, 4, 6].map(t => previewAt(t, { captionMode: 'word' }).capPreviewText);
+  assert.equal(new Set(seen).size, seen.length, `each moment shows a different word: ${seen.join(' ')}`);
+  for (const word of seen) assert.equal(word.split(' ').length, 1);
+});
+
+test('each caption mode plays the way it renders', () => {
+  const at = 1.0;
+  assert.equal(previewAt(at, { captionMode: 'word' }).capWords.length, 1);
+  assert.ok(previewAt(at, { captionMode: 'phrase' }).capWords.length > 4, 'a phrase holds the line');
+  assert.equal(previewAt(at, { captionMode: 'dynamic-stack', captionStackMaxWords: 3 }).capWords.length, 3);
+});
+
+test('the live word carries the highlight, and only the live word', () => {
+  const vals = previewAt(1.0, {
+    captionMode: 'dynamic-stack', captionHighlight: '#D9B478',
+    captionHighlightFont: 'Amiri', captionHighlightItalic: true, captionHighlightGlow: 14,
+  });
+  const lit = vals.capWords.filter(w => w.style);
+  assert.equal(lit.length, 1, 'exactly one word is live');
+  assert.match(lit[0].style, /color: #D9B478/);
+  assert.match(lit[0].style, /font-family: Amiri/, 'its own face, not the caption\'s');
+  assert.match(lit[0].style, /font-style: italic/);
+  assert.match(lit[0].style, /text-shadow/, 'glow');
+  assert.ok(vals.capWords.some(w => !w.style), 'the rest are left alone');
+});
+
+test('nothing is highlighted in the gap between lines', () => {
+  // Between lines no word is being spoken, so highlighting one would be a lie
+  // about what the render does.
+  // The first line ends at 4.20s and the next starts at 4.70s.
+  const gap = previewAt(4.4, { captionMode: 'phrase' });
+  assert.ok(gap.capWords.length, 'the line is still held rather than blanking');
+  assert.equal(gap.capWords.filter(w => w.style).length, 0);
+});
+
+test('the play control reports real time and stops at the end', () => {
+  const mid = previewAt(3, {});
+  assert.match(mid.pvTimeLabel, /^0:03 \/ 0:\d\d$/);
+  assert.ok(mid.pvProgress > 0 && mid.pvProgress < 1);
+  Object.assign(StudioAdapter.ui, { screen: 'templates', pvPlaying: true, pvTime: 0 });
+  const vals = StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates: [{ id: 'x', name: 'X' }], selectedTemplate: { id: 'x', name: 'X' } });
+  vals.setPreviewTime(9999);
+  assert.equal(StudioAdapter.ui.pvPlaying, false, 'it stops rather than running past the end');
+});
+
+test('the play control is wired, since the design leaves it decorative', () => {
+  // An icon, a bar and a hardcoded 0:14, with no handler on any of it.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const fn = /function paintPreviewPlayer\([\s\S]*?\n    \}\n/.exec(html)[0];
+  assert.match(fn, /togglePreviewPlay/);
+  assert.match(fn, /setPreviewTime/);
+  assert.doesNotMatch(fn, /setInterval/, 'scheduled to the next word, not a fixed framerate');
+});
+
+test('the words are appended so the patcher cannot eat the drag handles', () => {
+  // patch() skips host-owned nodes when pairing, so one at the front would shift
+  // every generated sibling by one -- and this node has four handle spans.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const fn = /function paintCaptionWords\([\s\S]*?\n    \}\n/.exec(html)[0];
+  assert.match(fn, /box\.appendChild\(span\)/);
+  assert.doesNotMatch(fn, /insertBefore/);
+  // And it is found through the handler table, not by matching the text that is
+  // the very thing changing.
+  assert.match(html, /STUDIO\.handlers\.indexOf\(vals\.dragCaption\)/);
+});
+
 test('the sample caption is drawn the way the caption mode will draw it', () => {
   // The design bakes one phrase in, so picking "Word by word" changed the row's
   // label and nothing else -- on the one control whose entire meaning is what
   // the caption ends up looking like.
   const text = (captionMode, extra = {}) => {
-    Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null, edClipId: null });
+    // pvTime is shared UI state; left where an earlier test parked it, this
+    // reads a different moment of the script than it means to.
+    Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null, edClipId: null, pvPlaying: false, pvTime: 0 });
     const t = { id: 'x', name: 'X', height: 1920, captionMode, ...extra };
     return StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates: [t], selectedTemplate: t }).capPreviewText;
   };
