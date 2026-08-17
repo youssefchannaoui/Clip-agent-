@@ -12,7 +12,9 @@
     "Matching is exact on the trimmed string. An override that matches nothing is",
     "reported, never silently ignored.",
     "",
-    "Note: the onboarding step numbers 1/2/3 are NOT data and must never be listed here."
+    "Note: the onboarding step numbers 1/2/3 are NOT data and must never be listed here.",
+    "",
+    "styleOverrides does the same for a literal `style` attribute that hardcodes data rather than appearance -- the new-job poster baked in a marketing image, so every lecture previewed with the same picture instead of its own thumbnail."
   ],
   "overrides": {
     "Youssef Channaoui": "accountName",
@@ -46,5 +48,8 @@
     "Nasheed · Tala al-Badru": "edTrackName",
     "Soft choral hum": "edTrackNote",
     "of 42:11 — drag the top handle for the start, the bottom for the end.": "jobRangeHint"
+  },
+  "styleOverrides": {
+    "position: relative; aspect-ratio: 16 / 9; border-radius: 11px; overflow: hidden; border: 1px solid #26262A; background: #17171A url('src/public/marketing-assets/reel-kaaba-a.webp') center/cover no-repeat;": "jobPosterStyle"
   }
 }

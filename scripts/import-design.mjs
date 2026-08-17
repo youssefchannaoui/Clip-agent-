@@ -219,15 +219,21 @@ function addImportant(decls) {
 // design/text-overrides.json.
 const OVERRIDES_FILE = path.resolve(ROOT, 'design/text-overrides.json');
 let TEXT_OVERRIDES = {};
+// Literal `style` attributes that hardcode data rather than appearance, keyed by
+// the exact whitespace-collapsed style string.
+let STYLE_OVERRIDES = {};
 if (fs.existsSync(OVERRIDES_FILE)) {
   try {
-    TEXT_OVERRIDES = JSON.parse(fs.readFileSync(OVERRIDES_FILE, 'utf8')).overrides || {};
+    const parsed = JSON.parse(fs.readFileSync(OVERRIDES_FILE, 'utf8'));
+    TEXT_OVERRIDES = parsed.overrides || {};
+    STYLE_OVERRIDES = parsed.styleOverrides || {};
   } catch (err) {
     console.error(`import-design: could not read ${path.relative(ROOT, OVERRIDES_FILE)}: ${err.message}`);
     process.exit(2);
   }
 }
 const overridesHit = new Set();
+const styleOverridesHit = new Set();
 
 const styles = new StyleTable();
 const bindingsUsed = new Set();
@@ -312,7 +318,18 @@ function compileNode(node) {
 
     if (name === 'style') {
       if (rawValue.includes('{{')) { boundStyle = valueNode(rawValue); noteBindings(boundStyle); }
-      else baseStyle = rawValue;
+      else {
+        // A literal style can hardcode data too -- the new-job poster baked in a
+        // marketing image, so every lecture was previewed with the same picture
+        // instead of its own thumbnail. Same idea as a text override: name the
+        // exact style, get a binding the adapter can fill.
+        const binding = STYLE_OVERRIDES[rawValue.replace(/\s+/g, ' ').trim()];
+        if (binding) {
+          styleOverridesHit.add(rawValue.replace(/\s+/g, ' ').trim());
+          bindingsUsed.add(binding);
+          boundStyle = { p: binding };
+        } else baseStyle = rawValue;
+      }
       continue;
     }
     if (name === 'style-hover' || name === 'style-active') continue; // folded in below
@@ -462,10 +479,15 @@ function main() {
   // An override that matches nothing means either a typo, or the design was
   // fixed and the entry can go. Never fail silently either way.
   const staleOverrides = Object.keys(TEXT_OVERRIDES).filter(k => !overridesHit.has(k));
+  // Reported the same way as text overrides: an entry that matches nothing is a
+  // signal the design changed, never something to pass over in silence.
+  const staleStyleOverrides = Object.keys(STYLE_OVERRIDES).filter(k => !styleOverridesHit.has(k));
 
   const summary = {
     overrides: overridesHit.size,
     staleOverrides,
+    styleOverrides: styleOverridesHit.size,
+    staleStyleOverrides,
     nodes: countNodes(ast),
     bindings: needed.length,
     hoistedClasses: styles.byKey.size,

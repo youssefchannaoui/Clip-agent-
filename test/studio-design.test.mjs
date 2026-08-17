@@ -1639,3 +1639,34 @@ test('an unknown length offers no range rather than a fake one', () => {
   assert.equal(vals.jobStart, 0);
   assert.equal(vals.jobEnd, 100);
 });
+
+test('the job poster shows the video, not a baked-in marketing image', () => {
+  // The design hardcoded reel-kaaba-a.webp into this element's style, and the
+  // URL was repo-relative so it 404'd as well — every lecture previewed with
+  // the same empty box.
+  Object.assign(StudioAdapter.ui, {
+    screen: 'home',
+    job: { ...LECTURE, thumbnail: 'https://i.ytimg.com/vi/abc123/maxresdefault.jpg' },
+  });
+  const vals = StudioAdapter.bindings(JOB_STATE);
+  assert.match(vals.jobPosterStyle, /i\.ytimg\.com\/vi\/abc123/);
+  assert.doesNotMatch(vals.jobPosterStyle, /reel-kaaba/);
+  assert.doesNotMatch(vals.jobPosterStyle, /src\/public/, 'no repo-relative URL can reach the browser');
+  assert.match(vals.jobPosterStyle, /aspect-ratio: 16 \/ 9/, 'the design\'s framing is preserved');
+});
+
+test('a source with no thumbnail degrades to the plain frame', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'home', job: { ...LECTURE, thumbnail: '' } });
+  const vals = StudioAdapter.bindings(JOB_STATE);
+  assert.doesNotMatch(vals.jobPosterStyle, /url\(/, 'no broken image request');
+  assert.match(vals.jobPosterStyle, /aspect-ratio/);
+});
+
+test('a thumbnail URL cannot break out of the style attribute', () => {
+  Object.assign(StudioAdapter.ui, {
+    screen: 'home',
+    job: { ...LECTURE, thumbnail: 'https://x/y.jpg") ; background: url("evil' },
+  });
+  const vals = StudioAdapter.bindings(JOB_STATE);
+  assert.doesNotMatch(vals.jobPosterStyle, /background: url\("evil/);
+});

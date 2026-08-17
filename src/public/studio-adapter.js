@@ -1429,6 +1429,13 @@
       // chosen range becomes sourceStartSeconds/sourceEndSeconds on /api/videos.
       jobOpen: Boolean(job),
       jobSourceLabel: job ? job.title : '',
+      // The design baked a marketing image into this element's style, so every
+      // lecture was previewed with the same picture — and the URL it used was
+      // repo-relative, so it 404'd and showed an empty box. sourceInfo already
+      // returns the video's own thumbnail; this puts it on screen.
+      jobPosterStyle: 'position: relative; aspect-ratio: 16 / 9; border-radius: 11px; overflow: hidden; border: 1px solid #26262A; background: #17171A'
+        + (job && job.thumbnail ? ' url("' + String(job.thumbnail).replace(/"/g, '%22') + '") center/cover no-repeat' : '')
+        + ';',
       // The design's two inputs are min=0 max=100 -- a percentage of the lecture,
       // not seconds. Feeding them seconds meant the handles could only ever
       // address the first 100 seconds of a source: on an 87-minute talk the
