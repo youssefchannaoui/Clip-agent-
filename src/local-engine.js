@@ -586,8 +586,13 @@ export function acceptRemoteUpdate(projectId, update) {
     importResultObject(project, update.result, 'remote-worker');
   } else if (update.status === 'failed') {
     project.status = 'failed'; releaseProjectHold(project); project.stage = 'failed'; project.progress = Number(update.progress || project.progress || 0);
-    project.error = customerSafeProjectError(update.error || 'The external worker failed.').message;
-    project.errorCode = 'processing_failed'; project.updatedAt = Date.now(); save();
+    // Keep the classified code, not a hardcoded one. Overwriting it with
+    // 'processing_failed' threw away `youtube_import_blocked`, which is the one
+    // failure with a specific fix the customer can act on — upload the MP4 —
+    // so the UI could only ever offer a generic retry for it.
+    const classified = customerSafeProjectError(update.error || 'The external worker failed.');
+    project.error = classified.message;
+    project.errorCode = classified.code; project.updatedAt = Date.now(); save();
   } else if (update.status === 'cancelled') {
     // Cancelled from the worker's side counts the same as cancelling here: no
     // clips are produced, so nothing should stay charged against the account.

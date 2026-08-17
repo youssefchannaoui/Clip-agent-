@@ -46,3 +46,20 @@ test('the import budget clears the configured import timeout with headroom', () 
     'a download that runs to its own timeout must fail as a timeout, not as a stall',
   );
 });
+
+// ── failure classification survives the remote path ────────────────────────
+const { customerSafeProjectError } = await import('../src/local-engine.js');
+
+test('a YouTube block keeps its own code, not a generic one', () => {
+  // The remote path overwrote this with 'processing_failed', discarding the one
+  // failure a customer can actually act on — upload the MP4 instead.
+  const blocked = customerSafeProjectError('ERROR: Sign in to confirm you are not a bot. Use --cookies-from-browser');
+  assert.equal(blocked.code, 'youtube_import_blocked');
+  assert.match(blocked.message, /Upload the original MP4/i);
+  assert.doesNotMatch(blocked.message, /cookies-from-browser/, 'the raw yt-dlp advice must not reach a customer');
+});
+
+test('an unclassified failure still falls back to the generic code', () => {
+  const other = customerSafeProjectError('ffmpeg exited with status 1');
+  assert.equal(other.code, 'processing_failed');
+});
