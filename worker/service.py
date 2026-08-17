@@ -225,6 +225,14 @@ class Processor:
                 continue
             if event.get("type") == "error":
                 reported_error = str(event.get("error") or "").strip()
+            if event.get("type") == "warning":
+                # Carried to the caller rather than dropped: a warning about how
+                # the clips were produced belongs in front of the user.
+                self.store.update(
+                    job_id,
+                    lastWarning=str(event.get("warning") or ""),
+                    lastWarningCode=str(event.get("code") or ""),
+                )
             if event.get("type") == "heartbeat":
                 # The worker beats every 10s. Recording it is what lets the
                 # caller tell "still working" apart from "hung": without this

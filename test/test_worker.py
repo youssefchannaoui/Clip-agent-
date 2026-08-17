@@ -360,3 +360,53 @@ class PhaseClassificationTests(unittest.TestCase):
             state = dict(worker._progress_state)
         self.assertEqual(state.get("phase"), "verify")
         self.assertEqual(state.get("stage"), "Verifying rendered clips")
+
+
+class FallbackTitleTests(unittest.TestCase):
+    """With no OLLAMA_URL there is no AI titling, so this is the only titler and
+    its output is what the customer sees on every clip."""
+
+    def test_filler_openers_are_dropped(self):
+        title = worker.title_from_text("Alright guys, 2013 Mercedes Benz C250, really beautiful car.", 1)
+        self.assertFalse(title.lower().startswith("alright"))
+        self.assertTrue(title.startswith("2013 Mercedes"))
+
+    def test_stacked_openers_are_all_dropped(self):
+        title = worker.title_from_text("So, um, whoever wakes up safe in his home is given the world.", 1)
+        self.assertTrue(title.startswith("Whoever wakes"), title)
+
+    def test_a_trailing_comma_is_never_kept(self):
+        # It was only stripped when the sentence was long enough to truncate.
+        title = worker.title_from_text("Really beautiful car, and it drives well,", 1)
+        self.assertFalse(title.endswith(","), title)
+
+    def test_a_long_sentence_is_truncated_with_an_ellipsis(self):
+        title = worker.title_from_text(
+            "The Prophet peace be upon him said that patience is a light for the believer in every trial.", 1)
+        self.assertTrue(title.endswith("…"), title)
+        self.assertLessEqual(len(title.split()), 12)
+
+    def test_the_title_is_capitalised(self):
+        self.assertTrue(worker.title_from_text("whoever wakes up safe in his home today.", 1)[0].isupper())
+
+    def test_an_unusable_transcript_falls_back_to_a_numbered_title(self):
+        self.assertEqual(worker.title_from_text("Short.", 4), "Important reminder 4")
+
+    def test_an_all_filler_opening_sentence_is_skipped_for_the_next_one(self):
+        title = worker.title_from_text("So anyway. Patience is a light for the believer in trial.", 1)
+        self.assertTrue(title.startswith("Patience"), title)
+
+
+class OllamaFallbackTests(unittest.TestCase):
+    def test_an_unconfigured_ollama_warns_instead_of_failing_silently(self):
+        emitted = []
+        original = worker.emit
+        worker.emit = lambda kind, **payload: emitted.append((kind, payload))
+        try:
+            candidate = worker.Candidate(0.0, 40.0, "text " * 40, [], 70, [], False)
+            out = worker.refine_with_ollama([candidate], {"ollamaUrl": ""})
+        finally:
+            worker.emit = original
+        self.assertEqual(out, [candidate], "candidates pass through unchanged")
+        self.assertTrue(any(k == "warning" and p.get("code") == "ollama_not_configured" for k, p in emitted),
+                        "the user is told their clips were scored without the AI")

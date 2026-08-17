@@ -12,6 +12,14 @@ services:
     envVars:
       - key: APP_PASSWORD
         sync: false
+      # AI clip scoring and titling. Unset means clips are chosen by the
+      # built-in scoring and titled from the transcript -- a legitimate mode, and
+      # the worker now says so in the activity feed rather than failing silently.
+      # Point it at an Ollama reachable from the worker to turn the AI on.
+      - key: OLLAMA_URL
+        sync: false
+      - key: OLLAMA_MODEL
+        value: qwen3:4b
       - key: DATA_DIR
         value: /var/data
       - key: AUTH_REQUIRED

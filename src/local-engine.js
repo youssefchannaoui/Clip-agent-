@@ -461,7 +461,12 @@ function parseWorkerLine(record, line) {
     record.heartbeatAt = Date.now();
     record.updatedAt = Date.now();
   } else if (payload.type === 'warning') {
-    log(String(payload.warning || 'The worker reported a warning.'), 'warn');
+    // Attributed, or the customer never sees it. A worker warning is exactly the
+    // kind of thing they need — "your clips were scored without the AI" is not
+    // an operator detail.
+    log(String(payload.warning || 'The worker reported a warning.'), 'warn', ownerOfRecord(record));
+    record.lastWarning = String(payload.warning || '');
+    record.lastWarningCode = String(payload.code || '');
   } else if (payload.type === 'error') {
     const safe = customerSafeProjectError(payload.error || 'The worker failed.');
     record.error = safe.message;
@@ -525,6 +530,13 @@ function importResult(project, file) {
 export function acceptRemoteUpdate(projectId, update) {
   const project = projectById(projectId);
   if (!project || project.engine !== 'remote') return null;
+  // A warning the worker raised about how the clips were made. Logged once, to
+  // the owning account, rather than repeated on every poll.
+  if (update.lastWarning && update.lastWarning !== project.lastWarning) {
+    project.lastWarning = String(update.lastWarning);
+    project.lastWarningCode = String(update.lastWarningCode || '');
+    log(project.lastWarning, 'warn', ownerOf(project));
+  }
   if (update.status === 'completed' && update.result && project.status !== 'done') {
     importResultObject(project, update.result, 'remote-worker');
   } else if (update.status === 'failed') {

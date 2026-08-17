@@ -536,7 +536,18 @@ def select_candidates(candidates: list[Candidate], limit: int) -> list[Candidate
 def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any]) -> list[Candidate]:
     base_url = str(settings.get("ollamaUrl") or "").rstrip("/")
     model = str(settings.get("ollamaModel") or "qwen3:4b")
-    if not base_url or not candidates:
+    if not candidates:
+        return candidates
+    if not base_url:
+        # Silent before. With no OLLAMA_URL there is no AI re-ranking and no AI
+        # titling at all -- clip selection runs on the built-in heuristics and
+        # titles come from the transcript. That is a legitimate mode, but the
+        # user should know which one produced their clips.
+        emit(
+            "warning",
+            warning="AI clip scoring is not configured, so clips were chosen by the built-in scoring and titled from the transcript.",
+            code="ollama_not_configured",
+        )
         return candidates
 
     shortlist = sorted(candidates, key=lambda item: -item.score)[:24]
@@ -853,15 +864,59 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     ass_file.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
 
 
+# Openers that carry no meaning and read badly as a title.
+TITLE_OPENERS = (
+    "alright guys", "alright everyone", "alright", "okay so", "ok so", "okay", "so basically",
+    "so", "now", "um", "uh", "you know", "i mean", "like i said", "and so", "and", "but",
+    "well", "right", "anyway", "basically", "obviously", "look",
+)
+
+
 def title_from_text(text: str, number: int) -> str:
+    """Best-effort title when no AI titling is available.
+
+    Without Ollama configured this is the *only* titler, so it has to produce
+    something readable rather than the raw head of the transcript. Titles like
+    "Alright guys, 2013 Mercedes Benz C250, really beautiful car," came from
+    taking the first sentence verbatim and only stripping trailing punctuation
+    when the sentence happened to be long enough to truncate.
+    """
     cleaned = re.sub(r"\s+", " ", text).strip()
-    first = re.split(r"(?<=[.!?])\s+", cleaned)[0]
-    words = first.split()
-    if len(words) > 11:
-        first = " ".join(words[:11]).rstrip(",;:") + "…"
-    if len(first) < 8:
-        first = f"Important reminder {number}"
-    return first[:90]
+    sentences = [s for s in re.split(r"(?<=[.!?])\s+", cleaned) if s.strip()]
+
+    def tidy(sentence: str) -> str:
+        candidate = sentence.strip()
+        # Peel leading filler, repeatedly: "So, alright guys, ..." has two.
+        changed = True
+        while changed:
+            changed = False
+            lowered = candidate.lower()
+            for opener in TITLE_OPENERS:
+                if lowered.startswith(opener + " ") or lowered.startswith(opener + ","):
+                    candidate = candidate[len(opener):].lstrip(" ,").strip()
+                    changed = True
+                    break
+        words = candidate.split()
+        truncated = len(words) > 11
+        if truncated:
+            candidate = " ".join(words[:11])
+        # Always, not only when truncating.
+        candidate = candidate.rstrip(" ,;:.-–—")
+        if truncated:
+            candidate += "…"
+        if candidate:
+            candidate = candidate[0].upper() + candidate[1:]
+        return candidate
+
+    for sentence in sentences:
+        candidate = tidy(sentence)
+        if len(candidate) >= 12:
+            return candidate[:90]
+
+    fallback = tidy(cleaned)
+    if len(fallback) >= 12:
+        return fallback[:90]
+    return f"Important reminder {number}"
 
 
 def description_from_text(text: str) -> str:
