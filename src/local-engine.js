@@ -458,7 +458,12 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     throw new Error('YouTube URL import currently processes the full video. Reset the source window to Full video, or upload the original file to clip only a selected range.');
   }
   const project = withOwner({
-    id: projectId, idempotencyKey, url: String(options.displayUrl || value), title: String(title || '').trim() || value,
+    // Falling back to the URL here put "https://www.youtube.com/watch?v=..." in
+    // every heading until the worker finished and sent the real title back --
+    // which is exactly the window Happening now covers. sourceMeta carries the
+    // title the preflight already fetched; an empty string lets the read path
+    // decide, rather than baking a URL into the record.
+    id: projectId, idempotencyKey, url: String(options.displayUrl || value), title: String(title || '').trim() || sourceMeta?.title || '',
     engine: useRemote ? 'remote' : useVizard ? 'vizard' : 'self-hosted', status: 'queued',
     stage: useRemote ? 'queued' : useVizard ? 'Waiting for secure YouTube import' : 'Waiting for the local AI worker', progress: 0,
     submittedAt: Date.now(), clipCount: 0, templateIdUsed: template.id, templateNameUsed: template.name,

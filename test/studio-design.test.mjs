@@ -825,6 +825,30 @@ test('every live row carries a percentage, an ETA and a progress bar', () => {
   }
 });
 
+test('a lecture is never headed by its own URL', () => {
+  // submitVideo used to store the URL as the title, and the worker only replaces
+  // it when the job finishes — so a running lecture was headed
+  // "https://www.youtube.com/watch?v=..." for its entire run, which is exactly
+  // the window Happening now covers.
+  const titleOf = p => StudioAdapter.bindings({
+    projects: [{ id: 'p', status: 'processing', stage: 'Transcribing', progress: 40, submittedAt: Date.now(), ...p }],
+    clips: [], tracks: [],
+  }).liveAll[0].title;
+  assert.equal(titleOf({ title: 'https://www.youtube.com/watch?v=abc' }), 'Untitled lecture');
+  assert.equal(titleOf({ title: 'https://youtu.be/abc', sourceTitle: 'E68: The Matrix' }), 'E68: The Matrix',
+    'the fetched title is preferred over the link');
+  assert.equal(titleOf({ title: 'The Night Prayer' }), 'The Night Prayer');
+  assert.equal(titleOf({}), 'Untitled lecture');
+  // Only a leading scheme counts, or a legitimate title would be thrown away.
+  assert.equal(titleOf({ title: 'Why http matters' }), 'Why http matters');
+});
+
+test('submitting a lecture does not bake the URL into the record', () => {
+  const engine = fs.readFileSync(path.join(ROOT, 'src/local-engine.js'), 'utf8');
+  assert.match(engine, /title: String\(title \|\| ''\)\.trim\(\) \|\| sourceMeta\?\.title \|\| ''/,
+    'the preflight title is used, and an empty string left for the read path to resolve');
+});
+
 // ── the per-clip breakdown behind "Rendering clip 2 of 4" ──────────────────
 
 const rendering = extra => StudioAdapter.bindings({

@@ -442,8 +442,20 @@
     // disconnected would otherwise light up Post now and then fail at the API.
     var activeCount = providers.filter(function (p) { return p.enabled && p.connected; }).length;
 
+    // A raw link is not a title. Lectures submitted before the title was stored
+    // properly still carry a URL in that field, and the worker only replaces it
+    // when the job finishes -- so without this they read as
+    // "https://www.youtube.com/watch?v=..." for their whole run.
+    function looksLikeUrl(value) { return /^https?:\/\//i.test(String(value || '').trim()); }
+    function bestTitle(p) {
+      var own = String(p.title || '').trim();
+      if (own && !looksLikeUrl(own)) return own;
+      var source = String(p.sourceTitle || '').trim();
+      if (source && !looksLikeUrl(source)) return source;
+      return 'Untitled lecture';
+    }
     var projectTitle = {};
-    projects.forEach(function (p) { projectTitle[p.id] = p.title || p.sourceTitle || 'Untitled lecture'; });
+    projects.forEach(function (p) { projectTitle[p.id] = bestTitle(p); });
 
     // One card builder for the queue, the deck and a lecture's clip list, so a
     // clip looks and behaves the same wherever it appears.
