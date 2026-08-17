@@ -1778,10 +1778,13 @@ function renderStudio(){
       await api(`/api/templates/${encodeURIComponent(id)}`,{method:'PUT',body:JSON.stringify({template:{...current,...patch}})})})};
     /* Saving is the one action that re-renders every unposted clip, so it asks
        for that explicitly. Field writes do not. */
-    StudioAdapter.onSaveTemplate=(id,pending)=>{if(!id)return;studioDo(async()=>{
+    /* projectId scopes the re-render to one lecture, which is what "Save to all
+       clips" means in the editor. The Templates screen passes nothing and so
+       applies to everything unposted. */
+    StudioAdapter.onSaveTemplate=(id,pending,projectId)=>{if(!id)return;studioDo(async()=>{
       const current=(DATA?.templates||[]).find(t=>t.id===id)||{};
       const r=await api(`/api/templates/${encodeURIComponent(id)}`,{method:'PUT',
-        body:JSON.stringify({template:{...current,...(pending||{})},propagate:true})});
+        body:JSON.stringify({template:{...current,...(pending||{})},propagate:true,propagateProjectId:projectId||''})});
       const n=Number(r?.propagation?.queued||0);
       StudioAdapter.showToast(n?`Saved — re-rendering ${n} clip${n===1?'':'s'}`:'Template saved')})};
     StudioAdapter.onResetTemplate=()=>refresh();

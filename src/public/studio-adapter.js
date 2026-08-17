@@ -53,6 +53,7 @@
     edTab: 'captions',
     edCaption: null,
     edBlock: 0,
+    edPlayhead: 0,
     edBlockDraft: null,
     edDirty: false,
     edSaving: false,
@@ -717,6 +718,49 @@
     }
     function defObj(k, v) { var o = {}; o[k] = v; return o; }
 
+    // Drags an overlay inside the preview frame it lives in. Pointer events are
+    // captured so the drag survives leaving the element, and the value is
+    // committed through saveTemplate, which is debounced -- so a drag produces
+    // one write, not one per pixel.
+    function makeDrag(apply) {
+      return function (e) {
+        var frame = e.currentTarget && e.currentTarget.closest ? e.currentTarget.closest('[style*="aspect-ratio"]') : null;
+        if (!frame || !frame.getBoundingClientRect) return;
+        if (e.preventDefault) e.preventDefault();
+        var box = frame.getBoundingClientRect();
+        if (!box.height || !box.width) return;
+
+        function move(ev) {
+          var y = Math.max(0, Math.min(1, (ev.clientY - box.top) / box.height));
+          var x = Math.max(0, Math.min(1, (ev.clientX - box.left) / box.width));
+          apply(x, y);
+        }
+        function up() {
+          global.removeEventListener('mousemove', move);
+          global.removeEventListener('mouseup', up);
+        }
+        global.addEventListener('mousemove', move);
+        global.addEventListener('mouseup', up);
+        move(e);
+      };
+    }
+
+    // Vertical position is a real margin in device pixels from the bottom of a
+    // 1920-tall frame; horizontal snaps to the alignments the renderer has.
+    var dragCaptionFrom = makeDrag(function (x, y) {
+      var height = Number(tpl.height || 1920);
+      var margin = Math.round(Math.max(20, Math.min(800, (1 - y) * height)));
+      var align = x < 0.34 ? 'left' : x > 0.66 ? 'right' : 'center';
+      var position = y < 0.34 ? 'top' : y > 0.66 ? 'bottom' : 'middle';
+      saveTemplate({ captionMarginV: margin, captionHorizontal: align, captionPosition: position });
+    });
+
+    var dragMarkFrom = makeDrag(function (x, y) {
+      var vertical = y < 0.5 ? 'top' : 'bottom';
+      var horizontal = x < 0.34 ? 'left' : x > 0.66 ? 'right' : 'center';
+      saveTemplate({ watermarkPosition: vertical + '-' + horizontal });
+    });
+
     // publicBilling() returns plans and topups as objects keyed by id.
     function asList(source) {
       if (!source) return [];
@@ -1222,7 +1266,7 @@
         (tpl.captionPrimary || '#F0D6A6') + '; font-family: Outfit, Inter, sans-serif; font-weight: 600; line-height: 1.2; font-size: ' +
         Math.max(8, Math.round(Number(tpl.captionFontSize || 96) / 8)) + 'px;' + (tpl.captionUppercase ? ' text-transform: uppercase;' : ''),
       edCapHandle: 'position: absolute; inset: -5px; border: 1px dashed rgba(240,214,166,.7); border-radius: 8px; pointer-events: none;',
-      dragEdCap: function () {},
+      dragEdCap: dragCaptionFrom,
 
       // captionFontSize, range 24-140 in the schema.
       edSize: Number(tpl.captionFontSize) || 96,
@@ -1279,21 +1323,27 @@
         ' font-family: Outfit, Inter, sans-serif; font-size: 8.5px; font-weight: 700; letter-spacing: .12em; color: ' +
         (tpl.watermarkColor || '#F0D6A6') + '; display: ' + (Number(tpl.watermarkOpacity) > 0 ? 'block' : 'none') + ';',
       edPlayStyle: 'display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid #26262A; background: #17171A; color: #F0D6A6; cursor: pointer;',
-      edPlayHeadStyle: 'position: absolute; top: 0; bottom: 0; left: 0; width: 2px; background: #F0D6A6;',
-      edProgressStyle: 'height: 3px; border-radius: 3px; width: 0%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
-      edProgressLabel: '0:00',
+      edPlayHeadStyle: 'position: absolute; top: 0; bottom: 0; left: ' + (UI.edPlayhead * 100).toFixed(2) + '%; width: 2px; background: #F0D6A6;',
+      edProgressStyle: 'height: 3px; border-radius: 3px; width: ' + (UI.edPlayhead * 100).toFixed(2) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
+      edProgressLabel: edClip ? secsToClock((edClip.durationMs || 0) / 1000 * UI.edPlayhead) : '0:00',
       edSiblings: edSiblings,
 
       edDirtyLabel: UI.edDirty ? 'Unsaved changes' : 'All changes saved',
       edDirtyDot: 'width: 7px; height: 7px; border-radius: 50%; background: ' + (UI.edDirty ? '#E6B770' : '#7FD1A6') + ';',
       edSaving: UI.edSaving,
-      edSaveLabel: UI.edSaving ? 'Saving…' : 'Save clip',
       edSaveIcon: UI.edSaving ? 'ph ph-circle-notch' : 'ph ph-floppy-disk',
       edSaveIconStyle: 'font-size: 15px;' + (UI.edSaving ? ' animation: dcSpin 1.1s linear infinite;' : ''),
+      edSaveLabel: UI.edSaving ? 'Saving…' : 'Save to all clips',
       saveEdit: function (e) {
         stop(e);
         if (!edClip || UI.edSaving) return;
         setUI({ edSaving: true });
+        // Style belongs to the template, so saving here applies it to every clip
+        // of this lecture -- which is what the button says. Framing stays
+        // per-clip and is never touched by a lecture-wide save.
+        if (UI.tplTimer) { global.clearTimeout(UI.tplTimer); UI.tplTimer = null; }
+        var pendingStyle = UI.tplDraft; UI.tplDraft = null;
+        global.StudioAdapter.onSaveTemplate(activeTemplate && activeTemplate.id, pendingStyle, edClip.projectId);
         // Rebuild the transcript from the blocks, with the edited one swapped in.
         var text = edCaptionBlocks.map(function (b, i) {
           return (i === UI.edBlock && UI.edBlockDraft !== null && UI.edBlockDraft !== undefined)
@@ -1460,7 +1510,17 @@
       playerTitle: UI.playerClip ? UI.playerClip.title : '',
       playerThumb: 'width: 100%; aspect-ratio: 9 / 16; border-radius: 10px; background: ' + thumb(UI.playerClip && UI.playerClip.thumbUrl) + ';',
       closePlayer: function (e) { stop(e); setUI({ playerClip: null }); },
-      seek: function () {},
+      // Moves the playhead by where the bar was clicked. There is no <video>
+      // wired into the preview yet, so this positions the head and the readout
+      // rather than scrubbing playback.
+      seek: function (e) {
+        var bar = e && e.currentTarget;
+        if (!bar || !bar.getBoundingClientRect) return;
+        var box = bar.getBoundingClientRect();
+        if (!box.width) return;
+        var ratio = Math.max(0, Math.min(1, (e.clientX - box.left) / box.width));
+        setUI({ edPlayhead: ratio });
+      },
 
       // No boot animation: the host page has already run its own splash by the
       // time the dashboard mounts, and a second one just delays the first paint.
@@ -1590,7 +1650,13 @@
         var pending = UI.tplDraft; UI.tplDraft = null;
         global.StudioAdapter.onSaveTemplate(activeTemplate && activeTemplate.id, pending);
       },
-      resetTpl: function (e) { stop(e); setUI({ tplDirty: false }); global.StudioAdapter.onResetTemplate(); },
+      resetTpl: function (e) {
+        stop(e);
+        if (UI.tplTimer) { global.clearTimeout(UI.tplTimer); UI.tplTimer = null; }
+        UI.tplDraft = null;
+        setUI({ tplDirty: false });
+        global.StudioAdapter.onResetTemplate();
+      },
       duplicateTpl: function (e) { stop(e); global.StudioAdapter.onDuplicateTemplate(activeTemplate && activeTemplate.id); },
       previewClip: function (e) { stop(e); toast('Preview renders from the next clip this template produces.'); },
       layerBtns: [
@@ -1619,9 +1685,24 @@
       edSafe: true,
       safePresetLabel: 'Shorts + Reels',
       cyclePreset: function (e) { stop(e); toast('Safe-zone presets are fixed for vertical output.'); },
-      dragCaption: function () {}, dragHeadline: function () {}, dragMark: function () {},
-      undoEdit: function (e) { stop(e); global.StudioAdapter.onResetTemplate(); },
-      redoEdit: function (e) { stop(e); },
+      // Real dragging, onto fields that reach the render. Vertical is continuous
+      // (captionMarginV, 20-800 in the schema); horizontal snaps to the three
+      // alignments the renderer supports, because there is no free-form X.
+      dragCaption: dragCaptionFrom,
+      dragMark: dragMarkFrom,
+      // The design has a headline layer; hookEnabled is hard-disabled in
+      // sanitiseTemplate, so there is nothing for a drag to move.
+      dragHeadline: function () {},
+      // Discards unsaved edits and refetches. Named for what it does: there is
+      // no edit history to step through, so "undo" and "redo" would be lies.
+      undoEdit: function (e) {
+        stop(e);
+        if (UI.tplTimer) { global.clearTimeout(UI.tplTimer); UI.tplTimer = null; }
+        UI.tplDraft = null;
+        setUI({ tplDirty: false });
+        global.StudioAdapter.onResetTemplate();
+      },
+      redoEdit: function (e) { stop(e); toast('There is no edit history yet — Undo discards unsaved changes.'); },
 
       // ── Start-a-job form (shared by Home and the library) ──
       jobUrlVal: UI.jobUrl,
@@ -1681,7 +1762,16 @@
       }),
 
       archiveSources: function (e) { stop(e); toast('Archiving sources is not available yet.'); },
-      recutClips: function (e) { stop(e); toast('Re-cutting a lecture is not available yet.'); },
+      // /more-clips does exactly this; it was reporting itself unavailable.
+      recutClips: function (e) {
+        stop(e);
+        if (!detail) return;
+        global.StudioAdapter.onPickOption('More clips from this lecture',
+          ['Cut 4 more clips', 'Cut 8 more clips', 'Cancel'], function (choice) {
+            var n = choice === 'Cut 4 more clips' ? 4 : choice === 'Cut 8 more clips' ? 8 : 0;
+            if (n) global.StudioAdapter.onMoreClips(detail.id, n);
+          });
+      },
       editWindows: function (e) { stop(e); setUI({ screen: 'templates' }); },
 
       // ── Nasheed library ──
@@ -1870,7 +1960,6 @@
     // Overridden by the host page so the adapter never talks to the API directly.
     onApprove: function () {},
     onReject: function () {},
-    onStartJob: function () {},
     onUploadFile: function () {},
     onUploadNasheeds: function () {},
     onClipSettings: function () {},

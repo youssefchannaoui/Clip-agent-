@@ -1236,3 +1236,70 @@ test('a re-render never overwrites the field being typed in', () => {
   const guards = runtime.match(/document\.activeElement/g) || [];
   assert.ok(guards.length >= 2, 'both the attribute sync and the value pass skip the focused field');
 });
+
+// ── the editor's remaining verbs ───────────────────────────────────────────
+
+test('dragging a caption writes fields that reach the render', () => {
+  // These were no-ops. Vertical is continuous (captionMarginV, 20-800 in the
+  // schema); horizontal snaps to the three alignments the renderer supports,
+  // because there is no free-form X to write to.
+  Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null, tplTimer: null });
+  StudioAdapter.onTemplateField = () => {};
+  const state = { projects: [], clips: [], tracks: [], templates: [{ id: 'x', name: 'X', height: 1920 }], selectedTemplate: { id: 'x', name: 'X', height: 1920 } };
+  const frame = { getBoundingClientRect: () => ({ top: 0, left: 0, width: 300, height: 533 }) };
+  const evt = { currentTarget: { closest: () => frame }, preventDefault() {}, clientX: 260, clientY: 460 };
+  const original = { add: globalThis.addEventListener, remove: globalThis.removeEventListener };
+  globalThis.addEventListener = () => {}; globalThis.removeEventListener = () => {};
+  try {
+    StudioAdapter.bindings(state).dragCaption(evt);
+  } finally {
+    globalThis.addEventListener = original.add; globalThis.removeEventListener = original.remove;
+  }
+  const draft = StudioAdapter.ui.tplDraft;
+  assert.equal(draft.captionHorizontal, 'right');
+  assert.equal(draft.captionPosition, 'bottom');
+  assert.ok(draft.captionMarginV >= 20 && draft.captionMarginV <= 800, 'within the schema range');
+});
+
+test('the editor save applies the style to that lecture, not every lecture', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'cap1', edBlock: 0, edBlockDraft: null, tplDraft: null, tplTimer: null, edSaving: false });
+  let scope = 'not called';
+  StudioAdapter.onSaveTemplate = (id, pending, projectId) => { scope = projectId; };
+  StudioAdapter.onSaveClip = () => {};
+  StudioAdapter.bindings(CAPTION_STATE).saveEdit({ preventDefault() {} });
+  assert.equal(scope, 'p1', 'scoped to the clip\'s own lecture');
+});
+
+test('the editor save button says what it does', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'cap1', edSaving: false });
+  assert.equal(StudioAdapter.bindings(CAPTION_STATE).edSaveLabel, 'Save to all clips');
+});
+
+test('the timeline playhead follows where the bar was clicked', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'cap1', edPlayhead: 0 });
+  const bar = { getBoundingClientRect: () => ({ left: 0, width: 400 }) };
+  StudioAdapter.bindings(CAPTION_STATE).seek({ currentTarget: bar, clientX: 200 });
+  const vals = StudioAdapter.bindings(CAPTION_STATE);
+  assert.match(vals.edPlayHeadStyle, /left: 50\.00%/);
+  assert.equal(vals.edProgressLabel, '0:04', 'the readout follows the head on an 8s clip');
+});
+
+test('Recut clips uses the endpoint that exists rather than claiming to be unavailable', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'detail', openProject: 'p1' });
+  let asked = null;
+  StudioAdapter.onPickOption = (title, options, cb) => { asked = options; cb('Cut 4 more clips'); };
+  let requested = null;
+  StudioAdapter.onMoreClips = (projectId, n) => { requested = { projectId, n }; };
+  StudioAdapter.bindings(CAPTION_STATE).recutClips({ preventDefault() {} });
+  assert.ok(asked, 'it offers a choice');
+  assert.deepEqual(requested, { projectId: 'p1', n: 4 });
+});
+
+test('Undo discards unsaved template edits instead of only refetching', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: { captionFontSize: 42 }, tplDirty: true, tplTimer: null });
+  StudioAdapter.onResetTemplate = () => {};
+  const state = { projects: [], clips: [], tracks: [], templates: [{ id: 'x', name: 'X' }], selectedTemplate: { id: 'x', name: 'X' } };
+  StudioAdapter.bindings(state).undoEdit({ preventDefault() {} });
+  assert.equal(StudioAdapter.ui.tplDraft, null);
+  assert.equal(StudioAdapter.ui.tplDirty, false);
+});

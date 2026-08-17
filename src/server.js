@@ -143,7 +143,7 @@ function requireOperator(user) {
   return user;
 }
 
-function queueTemplateForEveryUnpostedClip(template, user, reason = 'template update') {
+function queueTemplateForEveryUnpostedClip(template, user, reason = 'template update', projectId = '') {
   let queued = 0;
   let skipped = 0;
   const errors = [];
@@ -152,6 +152,9 @@ function queueTemplateForEveryUnpostedClip(template, user, reason = 'template up
   // work onto their own template.
   for (const clip of ownedBy(state.clips, user?.id)) {
     if (clip.status === 'posted' || clip.variantOf) { skipped += 1; continue; }
+    // Saving from the clip editor applies to that lecture, per the design; the
+    // Templates screen still applies to everything unposted.
+    if (projectId && clip.projectId !== projectId) { skipped += 1; continue; }
     try {
       agent.engine.queueClipRerender(clip.id, template.id, { asVariant: false });
       queued += 1;
@@ -723,7 +726,7 @@ async function route(req, res, url) {
       // dragging one slider queued a re-render per clip per pixel -- each of
       // which re-downloads the whole source on a single-slot worker.
       const propagation = body.propagate === true && selected?.id === template.id
-        ? queueTemplateForEveryUnpostedClip(template, currentUser, 'saving the active template')
+        ? queueTemplateForEveryUnpostedClip(template, currentUser, 'saving the active template', String(body.propagateProjectId || ''))
         : { queued: 0, skipped: 0, errors: [] };
       log(`Saved template "${template.name}" version ${template.version}. New renders use it automatically.`, 'info', currentUser.id);
       return json(res, 200, { ok: true, template, propagation });
