@@ -1213,3 +1213,26 @@ test('a submission carries an idempotency key so a 502 cannot charge twice', () 
   assert.match(call, /idempotencyKey/, 'the key is sent with the submission');
   assert.match(call, /pendingJobKey=null/, 'and only cleared once it succeeds');
 });
+
+// ── rendering does not rebuild the page ────────────────────────────────────
+
+test('the renderer patches rather than replacing, and skips identical renders', () => {
+  // Replacing innerHTML on every render destroyed and rebuilt the whole tree:
+  // scroll reset, CSS animations restarted from frame zero, and the screen
+  // visibly flashed — every two seconds while a job runs, changed or not.
+  const runtime = fs.readFileSync(path.join(ROOT, 'src/public/studio-runtime.js'), 'utf8');
+  assert.match(runtime, /function patch\(/, 'a DOM patcher exists');
+  assert.match(runtime, /html === this\.lastHtml/, 'an identical render touches nothing');
+  // The only innerHTML write left is the first paint, where there is nothing
+  // to patch against.
+  const writes = runtime.match(/\.innerHTML = /g) || [];
+  assert.equal(writes.length, 2, 'first paint and the detached staging node only');
+});
+
+test('a re-render never overwrites the field being typed in', () => {
+  // Patching runs on a timer; without this guard a poll mid-keystroke would
+  // reset the caret or the value under the user.
+  const runtime = fs.readFileSync(path.join(ROOT, 'src/public/studio-runtime.js'), 'utf8');
+  const guards = runtime.match(/document\.activeElement/g) || [];
+  assert.ok(guards.length >= 2, 'both the attribute sync and the value pass skip the focused field');
+});

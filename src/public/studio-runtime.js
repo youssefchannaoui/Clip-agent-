@@ -234,6 +234,63 @@
     } catch (err) { /* element is no longer focusable */ }
   }
 
+  // ── DOM patching ──────────────────────────────────────────────────────────
+  // Replacing innerHTML on every render destroys and rebuilds the whole tree.
+  // Scroll position resets, CSS animations restart from frame zero, hover is
+  // lost and the screen visibly flashes — every two seconds while a job runs,
+  // whether or not anything changed. Patching touches only what actually
+  // differs, so untouched nodes keep their scroll, focus and animation state.
+
+  function sameNode(a, b) {
+    if (a.nodeType !== b.nodeType) return false;
+    if (a.nodeType === 3) return true;                       // both text
+    return a.nodeName === b.nodeName;
+  }
+
+  function syncAttributes(target, source) {
+    var next = source.attributes;
+    for (var i = 0; i < next.length; i++) {
+      var attr = next[i];
+      if (target.getAttribute(attr.name) !== attr.value) target.setAttribute(attr.name, attr.value);
+    }
+    // Remove anything the new render dropped, walking backwards because the
+    // collection is live.
+    var current = target.attributes;
+    for (var j = current.length - 1; j >= 0; j--) {
+      var name = current[j].name;
+      if (!source.hasAttribute(name)) target.removeAttribute(name);
+    }
+    // Form state lives on the property, not the attribute. Skip the field the
+    // user is currently typing in so a re-render cannot fight their keystrokes.
+    if ('value' in target && source.hasAttribute('value') && target !== document.activeElement) {
+      var wanted = source.getAttribute('value');
+      if (target.value !== wanted) target.value = wanted;
+    }
+  }
+
+  function patch(target, source) {
+    var oldNodes = target.childNodes;
+    var newNodes = source.childNodes;
+    var count = Math.max(oldNodes.length, newNodes.length);
+    for (var i = 0; i < count; i++) {
+      var oldNode = oldNodes[i];
+      var newNode = newNodes[i];
+      if (!newNode) {
+        // Trailing nodes the new render does not have; remove from the end.
+        while (oldNodes.length > newNodes.length) target.removeChild(target.lastChild);
+        break;
+      }
+      if (!oldNode) { target.appendChild(newNode.cloneNode(true)); continue; }
+      if (!sameNode(oldNode, newNode)) { target.replaceChild(newNode.cloneNode(true), oldNode); continue; }
+      if (oldNode.nodeType === 3) {
+        if (oldNode.nodeValue !== newNode.nodeValue) oldNode.nodeValue = newNode.nodeValue;
+        continue;
+      }
+      syncAttributes(oldNode, newNode);
+      patch(oldNode, newNode);
+    }
+  }
+
   // A `value` attribute does not select an <option>; HTML needs `selected` on the
   // option itself, so a <select> rendered from markup always fell to index 0. The
   // Templates picker therefore opened the wrong style, and anything saved there
@@ -243,6 +300,7 @@
     var fields = root.querySelectorAll('select[value], input[value], textarea[value]');
     for (var i = 0; i < fields.length; i++) {
       var el = fields[i];
+      if (el === document.activeElement) continue;   // never overwrite what is being typed
       var wanted = el.getAttribute('value');
       if (el.value !== wanted) el.value = wanted;
     }
@@ -252,9 +310,28 @@
     var r = new Renderer();
     var out = [];
     r.render(this.template, vals, out);
-    var snap = captureFocus(this.root);
+    var html = out.join('');
+
+    // Handlers are re-indexed every render, so they are always taken -- but if
+    // the markup is byte-identical there is nothing to do to the DOM. This is
+    // the common case while polling: a job advances, the payload changes, the
+    // rendered screen does not.
     this.handlers = r.handlers;
-    this.root.innerHTML = out.join('');
+    if (html === this.lastHtml) { this.bind(); return; }
+    this.lastHtml = html;
+
+    if (!this.root.firstChild) {
+      // First paint: nothing to patch against.
+      this.root.innerHTML = html;
+      applyFormValues(this.root);
+      this.bind();
+      return;
+    }
+
+    var next = document.createElement('div');
+    next.innerHTML = html;
+    var snap = captureFocus(this.root);
+    patch(this.root, next);
     applyFormValues(this.root);
     restoreFocus(this.root, snap);
     this.bind();
