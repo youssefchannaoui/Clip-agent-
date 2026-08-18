@@ -2206,8 +2206,14 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       }
       if(edVideoNode.dataset.src!==vals.edVideoUrl){
         edVideoNode.dataset.src=vals.edVideoUrl;
-        edVideoNode.src=withPw(vals.edVideoUrl);
-        if(vals.edPoster)edVideoNode.poster=withPw(vals.edPoster);
+        /* The password only means anything to this server. A rendered clip
+           usually lives on object storage, and hanging ?pw= off a presigned or
+           public bucket URL alters the query the bucket signs against -- so the
+           app's own paths get it and absolute URLs are used verbatim. */
+        const sameOrigin=u=>!/^https?:\/\//i.test(u);
+        edVideoNode.src=sameOrigin(vals.edVideoUrl)?withPw(vals.edVideoUrl):vals.edVideoUrl;
+        if(vals.edPoster)edVideoNode.poster=sameOrigin(vals.edPoster)?withPw(vals.edPoster):vals.edPoster;
+        edVideoNode.load();
       }
       /* Framing, matching what the renderer will do: contain for fit, cover
          for crop and blur, with the crop zoom applied on top. */
