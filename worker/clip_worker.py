@@ -1707,7 +1707,10 @@ def capabilities() -> dict[str, Any]:
             name for name, configured in (
                 (os.getenv("VIDEO_IMPORT_PROVIDER", "ffmpegapi").lower(), True),
                 ("cobalt", bool(os.getenv("COBALT_API_URL", "").strip())),
-                ("socialkit", bool(os.getenv("VIDEO_IMPORT_API_KEY", "").strip())),
+                # Own credentials only: the configured provider's key belongs to
+                # that vendor and is never lent to another.
+                ("socialkit", bool(os.getenv("SOCIALKIT_API_KEY", "").strip())),
+                ("ffmpegapi", bool(os.getenv("FFMPEGAPI_API_KEY", "").strip())),
                 ("ytdlp", os.getenv("VIDEO_IMPORT_FALLBACK", "ytdlp").lower() != "off"),
             ) if configured
         ],

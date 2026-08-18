@@ -30,6 +30,9 @@ class FakeResponse(io.BytesIO):
 
 
 class ManagedImportProviderTests(unittest.TestCase):
+    # primary=True because these exercise the provider as the *configured* one,
+    # which is the only role that reads the shared VIDEO_IMPORT_API_* settings.
+    # A provider joining the chain behind another must bring its own key.
     def setUp(self):
         os.environ["VIDEO_IMPORT_API_URL"] = "https://ffmpegapi.net"
         os.environ["VIDEO_IMPORT_API_KEY"] = "provider-key"
@@ -46,7 +49,7 @@ class ManagedImportProviderTests(unittest.TestCase):
             FakeResponse(b"video-bytes", {"Content-Length": "11"}),
         ]
         with mock.patch("urllib.request.urlopen", side_effect=responses), mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("8.8.8.8", 443))]):
-            result = self.module.FfmpegApiImportProvider().import_video(
+            result = self.module.FfmpegApiImportProvider(primary=True).import_video(
                 {"url": "https://youtu.be/Abc_123-xyZ"}, self.temp / "video.mp4", lambda: False
             )
         self.assertEqual(result.title, "Lecture")
@@ -56,21 +59,21 @@ class ManagedImportProviderTests(unittest.TestCase):
         response = FakeResponse(json.dumps({"success": False, "error": "Video is unavailable"}).encode())
         with mock.patch("urllib.request.urlopen", return_value=response):
             with self.assertRaisesRegex(self.module.ImportProviderError, "unavailable"):
-                self.module.FfmpegApiImportProvider().import_video(
+                self.module.FfmpegApiImportProvider(primary=True).import_video(
                     {"url": "https://youtube.com/watch?v=Abc_123-xyZ"}, self.temp / "video.mp4", lambda: False
                 )
 
     def test_invalid_provider_response_is_rejected(self):
         with mock.patch("urllib.request.urlopen", return_value=FakeResponse(b"not-json")):
             with self.assertRaisesRegex(self.module.ImportProviderError, "invalid JSON"):
-                self.module.FfmpegApiImportProvider().import_video(
+                self.module.FfmpegApiImportProvider(primary=True).import_video(
                     {"url": "https://youtube.com/watch?v=Abc_123-xyZ"}, self.temp / "video.mp4", lambda: False
                 )
 
     def test_provider_timeout_recommends_upload_fallback(self):
         with mock.patch("urllib.request.urlopen", side_effect=socket.timeout("timed out")):
             with self.assertRaisesRegex(self.module.ImportProviderError, "Upload the original MP4"):
-                self.module.FfmpegApiImportProvider().import_video(
+                self.module.FfmpegApiImportProvider(primary=True).import_video(
                     {"url": "https://youtube.com/watch?v=Abc_123-xyZ"}, self.temp / "video.mp4", lambda: False
                 )
 
@@ -165,7 +168,8 @@ class ProviderChainTests(unittest.TestCase):
     """
 
     KEYS = ("VIDEO_IMPORT_PROVIDER", "VIDEO_IMPORT_API_KEY", "VIDEO_IMPORT_FALLBACK",
-            "COBALT_API_URL", "VIDEO_IMPORT_API_URL")
+            "COBALT_API_URL", "VIDEO_IMPORT_API_URL", "SOCIALKIT_API_KEY", "FFMPEGAPI_API_KEY",
+            "SOCIALKIT_API_URL", "FFMPEGAPI_API_URL")
 
     def setUp(self):
         for key in self.KEYS:
@@ -188,6 +192,34 @@ class ProviderChainTests(unittest.TestCase):
         self.assertEqual(chain[0], "socialkit")
         self.assertEqual(chain[-1], "ytdlp", "the local downloader is the last resort")
 
+    def test_one_vendors_key_is_never_handed_to_another(self):
+        # ffmpegapi and socialkit both read VIDEO_IMPORT_API_URL/KEY, which are
+        # the *configured* provider's settings. Adding the other to the chain
+        # sent one vendor's credential to the other's endpoint -- and with the
+        # URL left at its default, to an unrelated company altogether.
+        os.environ.update(VIDEO_IMPORT_PROVIDER="socialkit", VIDEO_IMPORT_API_KEY="socialkit-secret")
+        ip = importlib.reload(importlib.import_module("import_providers"))
+        self.assertEqual(ip.FfmpegApiImportProvider().api_key, "", "not the primary, so no key")
+        self.assertEqual(ip.SocialKitImportProvider(primary=True).api_key, "socialkit-secret")
+        self.assertNotIn("ffmpegapi", [p.name for p in ip.provider_chain({"type": "youtube"}, None)])
+
+    def test_a_second_service_joins_only_with_its_own_credentials(self):
+        os.environ.update(VIDEO_IMPORT_PROVIDER="socialkit", VIDEO_IMPORT_API_KEY="socialkit-secret",
+                          FFMPEGAPI_API_KEY="its-own-key")
+        ip = importlib.reload(importlib.import_module("import_providers"))
+        chain = [p.name for p in ip.provider_chain({"type": "youtube"}, None)]
+        self.assertEqual(chain, ["socialkit", "ffmpegapi", "ytdlp"])
+
+    def test_the_configured_provider_still_reads_the_shared_settings(self):
+        # Existing installs set VIDEO_IMPORT_API_KEY and nothing else; that has
+        # to keep working exactly as before.
+        os.environ.update(VIDEO_IMPORT_PROVIDER="ffmpegapi", VIDEO_IMPORT_API_KEY="shared",
+                          VIDEO_IMPORT_API_URL="https://ffmpegapi.net")
+        ip = importlib.reload(importlib.import_module("import_providers"))
+        chain = ip.provider_chain({"type": "youtube"}, None)
+        self.assertEqual(chain[0].name, "ffmpegapi")
+        self.assertEqual(chain[0].api_key, "shared")
+
     def test_a_configured_cobalt_instance_joins_the_chain(self):
         chain = self._chain(VIDEO_IMPORT_PROVIDER="socialkit", VIDEO_IMPORT_API_KEY="k",
                             COBALT_API_URL="https://cobalt.example")
@@ -199,7 +231,8 @@ class ProviderChainTests(unittest.TestCase):
         self.assertNotIn("socialkit", self._chain(VIDEO_IMPORT_PROVIDER="ytdlp"))
 
     def test_nothing_is_tried_twice(self):
-        chain = self._chain(VIDEO_IMPORT_PROVIDER="ffmpegapi", VIDEO_IMPORT_API_KEY="k")
+        chain = self._chain(VIDEO_IMPORT_PROVIDER="ffmpegapi", VIDEO_IMPORT_API_KEY="k",
+                            FFMPEGAPI_API_KEY="k")
         self.assertEqual(len(chain), len(set(chain)), chain)
         self.assertEqual(chain[0], "ffmpegapi")
 

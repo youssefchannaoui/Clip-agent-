@@ -124,10 +124,18 @@ class FfmpegApiImportProvider(ManagedImportProvider):
 
     name = "ffmpegapi"
 
-    def __init__(self) -> None:
-        base = os.getenv("VIDEO_IMPORT_API_URL", "https://ffmpegapi.net").rstrip("/")
+    def __init__(self, primary: bool = False) -> None:
+        # VIDEO_IMPORT_API_URL/KEY are the *configured* provider's settings, and
+        # ffmpegapi and socialkit both used to read them. A chain that adds the
+        # other one would then send one vendor's key to the other's endpoint --
+        # or, with the URL left at its default, to an unrelated company
+        # altogether. `primary` is what keeps a credential with its owner.
+        base = (os.getenv("FFMPEGAPI_API_URL", "").strip()
+                or (os.getenv("VIDEO_IMPORT_API_URL", "").strip() if primary else "")
+                or "https://ffmpegapi.net").rstrip("/")
         self.endpoint = base if base.endswith("/api/youtube_to_mp4") else f"{base}/api/youtube_to_mp4"
-        self.api_key = os.getenv("VIDEO_IMPORT_API_KEY", "")
+        self.api_key = (os.getenv("FFMPEGAPI_API_KEY", "").strip()
+                        or (os.getenv("VIDEO_IMPORT_API_KEY", "").strip() if primary else ""))
         self.timeout = max(60, int(os.getenv("VIDEO_IMPORT_TIMEOUT_MS", "1800000")) // 1000)
         self.max_bytes = max(50, int(os.getenv("WORKER_MAX_DOWNLOAD_MB", "4096"))) * 1024 * 1024
         provider_host = (urllib.parse.urlparse(base).hostname or "").lower()
@@ -319,9 +327,12 @@ class SocialKitImportProvider(ManagedImportProvider):
 
     name = "socialkit"
 
-    def __init__(self) -> None:
-        self.base = os.getenv("VIDEO_IMPORT_API_URL", "https://api.socialkit.dev").rstrip("/")
-        self.api_key = os.getenv("VIDEO_IMPORT_API_KEY", "")
+    def __init__(self, primary: bool = False) -> None:
+        self.base = (os.getenv("SOCIALKIT_API_URL", "").strip()
+                     or (os.getenv("VIDEO_IMPORT_API_URL", "").strip() if primary else "")
+                     or "https://api.socialkit.dev").rstrip("/")
+        self.api_key = (os.getenv("SOCIALKIT_API_KEY", "").strip()
+                        or (os.getenv("VIDEO_IMPORT_API_KEY", "").strip() if primary else ""))
         self.quality = os.getenv("SOCIALKIT_QUALITY", "720p")
         self.timeout = max(60, int(os.getenv("VIDEO_IMPORT_TIMEOUT_MS", "1800000")) // 1000)
         self.max_bytes = max(50, int(os.getenv("WORKER_MAX_DOWNLOAD_MB", "4096"))) * 1024 * 1024
@@ -488,13 +499,13 @@ class CobaltImportProvider(ManagedImportProvider):
         raise ImportProviderError(str(reason or "cobalt could not download this video.")[:300])
 
 
-def _named_provider(name: str, storage) -> ManagedImportProvider:
+def _named_provider(name: str, storage, primary: bool = False) -> ManagedImportProvider:
     if name == "ffmpegapi":
-        return FfmpegApiImportProvider()
+        return FfmpegApiImportProvider(primary=primary)
     if name == "ytdlp":
         return YtDlpImportProvider()
     if name == "socialkit":
-        return SocialKitImportProvider()
+        return SocialKitImportProvider(primary=primary)
     if name == "cobalt":
         return CobaltImportProvider()
     raise ImportProviderError(f"Unsupported VIDEO_IMPORT_PROVIDER: {name}")
@@ -503,7 +514,7 @@ def _named_provider(name: str, storage) -> ManagedImportProvider:
 def provider_for(source: dict, storage) -> ManagedImportProvider:
     if source.get("type") == "object_storage":
         return DirectUploadProvider(storage)
-    return _named_provider(os.getenv("VIDEO_IMPORT_PROVIDER", "ffmpegapi").lower(), storage)
+    return _named_provider(os.getenv("VIDEO_IMPORT_PROVIDER", "ffmpegapi").lower(), storage, primary=True)
 
 
 def provider_chain(source: dict, storage) -> list[ManagedImportProvider]:
@@ -527,10 +538,15 @@ def provider_chain(source: dict, storage) -> list[ManagedImportProvider]:
         # downloader. When YouTube refuses one address, another service on a
         # different address is the thing most likely to work -- and adding one
         # should be a key in .env, not a code change.
+        # Only a service with credentials of its *own* joins the chain. Reusing
+        # the configured provider's key would hand one vendor's credential to
+        # another, and could not have worked anyway: the request formats differ.
         if os.getenv("COBALT_API_URL", "").strip():
             order.append("cobalt")
-        if os.getenv("VIDEO_IMPORT_API_KEY", "").strip():
-            order.extend(["socialkit", "ffmpegapi"])
+        if os.getenv("SOCIALKIT_API_KEY", "").strip():
+            order.append("socialkit")
+        if os.getenv("FFMPEGAPI_API_KEY", "").strip():
+            order.append("ffmpegapi")
         order.append("ytdlp")
     # First occurrence wins, so the configured provider keeps its place.
     seen, deduped = set(), []
@@ -541,9 +557,9 @@ def provider_chain(source: dict, storage) -> list[ManagedImportProvider]:
         deduped.append(name)
     order = deduped
     providers = []
-    for name in order:
+    for index, name in enumerate(order):
         try:
-            providers.append(_named_provider(name, storage))
+            providers.append(_named_provider(name, storage, primary=index == 0))
         except ImportProviderError:
             # A provider that cannot be built -- no API key, unknown name -- is
             # skipped rather than taking the whole chain down with it.
