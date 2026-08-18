@@ -58,6 +58,8 @@
     dragAt: null,
     dragSnapped: false,
     dragSnapName: '',
+    // Where a caption is being dragged to right now, before anything is saved.
+    dragPreview: null,
     // Sample-caption playback in the preview.
     pvPlaying: false,
     pvTime: 0,
@@ -1208,25 +1210,36 @@
         if (!box.height || !box.width) return;
 
         UI.dragKind = kind;
+        var lastX = null; var lastY = null;
         function move(ev) {
           var y = Math.max(0, Math.min(1, (ev.clientY - box.top) / box.height));
           var x = Math.max(0, Math.min(1, (ev.clientX - box.left) / box.width));
+          lastX = x; lastY = y;
           // Held so the guides can show where it is and whether it has caught a
-          // line. apply() refreshes, so nothing extra is needed here.
+          // line.
           UI.dragAt = kind === 'caption' ? Math.max(SAFE_TOP, Math.min(SAFE_BOTTOM, y)) : y;
           var hit = snapAt(UI.dragAt);
           UI.dragSnapped = Boolean(hit);
           UI.dragSnapName = hit ? hit.name : '';
-          apply(x, y);
+          // Preview only. Writing the style on every move meant a debounced
+          // PATCH landing mid-drag, and the /api/state that came back replaced
+          // the position under the cursor -- the caption visibly snapping back
+          // to where the server last knew it. The style is written once, on
+          // release, and until then the overlay follows this.
+          UI.dragPreview = { kind: kind, x: x, y: UI.dragAt };
+          refresh();
         }
         function up() {
+          var x = lastX; var y = lastY;
           UI.dragKind = null;
           UI.dragAt = null;
           UI.dragSnapped = false;
           UI.dragSnapName = '';
+          UI.dragPreview = null;
           global.removeEventListener('mousemove', move);
           global.removeEventListener('mouseup', up);
-          refresh();
+          // One write, with the position the pointer actually finished on.
+          if (x !== null && y !== null) apply(x, y); else refresh();
         }
         global.addEventListener('mousemove', move);
         global.addEventListener('mouseup', up);
@@ -1424,6 +1437,12 @@
     // the translate has to change with the anchor or it drifts by half its
     // height.
     var edCapVertical = (function () {
+      // Mid-drag the caption follows the pointer, not the saved style: the
+      // style is only written on release, so without this the overlay would sit
+      // still while being dragged.
+      if (UI.dragPreview && UI.dragPreview.kind === 'caption') {
+        return 'top: ' + (UI.dragPreview.y * 100).toFixed(2) + '%; translate: -50% -50%;';
+      }
       var pos = tpl.captionPosition;
       if (pos !== 'top' && pos !== 'bottom') return 'top: ' + capTop + '%; translate: -50% -50%;';
       var pct = Math.max(2, Math.min(50, (Number(tpl.captionMarginV) || 0) / Math.max(1, Number(tpl.height || 1920)) * 100));

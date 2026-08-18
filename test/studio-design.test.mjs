@@ -2000,7 +2000,13 @@ test('the adapter\'s own refresh repaints the host layers too', () => {
   // -- live work, the second save button, the preview picture -- went stale the
   // moment a control changed something, which is exactly when they matter.
   const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
-  assert.match(html, /StudioAdapter\.setRefresh\(\(\)=>paintStudio\(\)\)/);
+  // Coalesced to one paint per animation frame, but still a full paintStudio:
+  // the adapter refreshes from pointer handlers, which fire faster than the
+  // screen updates, and a render per mousemove forced a reflow each time.
+  const refresh = /StudioAdapter\.setRefresh\(\(\)=>\{[\s\S]*?\n    \}\);/.exec(html)[0];
+  assert.match(refresh, /requestAnimationFrame/);
+  assert.match(refresh, /paintStudio\(\)/);
+  assert.match(refresh, /if\(paintQueued\)return/, 'a queued paint is not queued twice');
   const paint = /function paintStudio\(\)\{[\s\S]*?\n\}/.exec(html)[0];
   for (const fn of ['paintLiveWork', 'paintApplyLecture', 'paintPreviewPic']) {
     assert.match(paint, new RegExp(`${fn}\\(vals\\)`), `${fn} runs on every paint`);
@@ -2189,7 +2195,13 @@ function dragOn({ clientX, clientY, inlineFrameOnly = false } = {}) {
   const saved = {
     add: globalThis.addEventListener, remove: globalThis.removeEventListener, computed: globalThis.getComputedStyle,
   };
-  globalThis.addEventListener = () => {};
+  // The drag's own listeners, captured so the release can be fired. The style
+  // is written once, on mouseup -- writing it on every move meant a debounced
+  // PATCH landing mid-drag and the reply snapping the caption back under the
+  // cursor -- so a drag that is never released now writes nothing, exactly
+  // like the real one.
+  const dragListeners = {};
+  globalThis.addEventListener = (name, fn) => { dragListeners[name] = fn; };
   globalThis.removeEventListener = () => {};
   // The real page hoists the frame's aspect-ratio into a class, so it is only
   // ever visible through computed style. inlineFrameOnly drops that to prove the
@@ -2197,6 +2209,7 @@ function dragOn({ clientX, clientY, inlineFrameOnly = false } = {}) {
   globalThis.getComputedStyle = inlineFrameOnly ? undefined : node => ({ aspectRatio: node === frame ? '9 / 16' : 'auto' });
   try {
     StudioAdapter.bindings(state).dragCaption({ currentTarget: target, preventDefault() {}, clientX, clientY });
+    if (dragListeners.mouseup) dragListeners.mouseup();
   } finally {
     globalThis.addEventListener = saved.add;
     globalThis.removeEventListener = saved.remove;

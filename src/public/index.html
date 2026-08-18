@@ -2621,10 +2621,21 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       }
       edLayout=null;
     }
+    let edLayoutSig='';
     function paintEditorLayout(vals){
-      if(StudioAdapter.ui.screen!=='editor'||!StudioAdapter.ui.edClipId){clearEditorLayout();return}
+      if(StudioAdapter.ui.screen!=='editor'||!StudioAdapter.ui.edClipId){edLayoutSig='';clearEditorLayout();return}
       const frame=edVideoNode&&edVideoNode.parentElement;
-      if(!frame){clearEditorLayout();return}
+      if(!frame){edLayoutSig='';clearEditorLayout();return}
+      /* This measures the page and then writes styles back onto it, which
+         forces a synchronous reflow. Running it on every paint meant one reflow
+         per mousemove during a drag -- and re-deriving the row height mid-drag
+         resized the preview under the cursor, which is what made a dragged
+         caption jump back. It only re-runs when something it depends on has
+         actually changed. */
+      const sig=[StudioAdapter.ui.edClipId,window.innerWidth,window.innerHeight,
+        vals.edRuler&&vals.edRuler.length].join('|');
+      if(sig===edLayoutSig&&edLayout&&edLayout.every(([node])=>node.isConnected))return;
+      edLayoutSig=sig;
       /* Anchored on the tool rail rather than on "a parent with two children":
          the frame's own parent already has siblings, so that test matched
          immediately and made previewCol the frame itself -- both sets of styles
@@ -2865,7 +2876,17 @@ function renderStudio(){
   if(!studioWanted()||!DATA||!window.StudioRuntime||!window.StudioAdapter)return false;
   if(!STUDIO){
     STUDIO=StudioRuntime.mount($('#studio'));
-    StudioAdapter.setRefresh(()=>paintStudio());
+    /* Coalesced to one paint per frame. The adapter calls refresh() from
+       pointer handlers, which fire faster than the screen updates -- a caption
+       drag was running a full render per mousemove, and each render measured
+       and rewrote layout, so the browser was forced into a synchronous reflow
+       over a hundred times a second. That is what "laggy" was. */
+    let paintQueued=false;
+    StudioAdapter.setRefresh(()=>{
+      if(paintQueued)return;
+      paintQueued=true;
+      requestAnimationFrame(()=>{paintQueued=false;paintStudio()});
+    });
     /* The adapter never calls the API itself; approving routes back through the
        existing endpoint so both dashboards stay consistent. */
     /* Every hook routes through the same endpoints the legacy dashboard uses, so
