@@ -142,12 +142,33 @@ export const config = {
   stripePriceTopup100: process.env.STRIPE_PRICE_TOPUP_100 || '',
   stripePriceTopup300: process.env.STRIPE_PRICE_TOPUP_300 || '',
   stripePriceTopup750: process.env.STRIPE_PRICE_TOPUP_750 || '',
-  planPriceWeeklyLabel: process.env.PLAN_PRICE_WEEKLY_LABEL || 'Price set in Stripe',
-  planPriceMonthlyLabel: process.env.PLAN_PRICE_MONTHLY_LABEL || 'Price set in Stripe',
-  planPriceYearlyLabel: process.env.PLAN_PRICE_YEARLY_LABEL || 'Price set in Stripe',
-  topupPrice100Label: process.env.TOPUP_PRICE_100_LABEL || 'A$4.99',
-  topupPrice300Label: process.env.TOPUP_PRICE_300_LABEL || 'A$11.99',
-  topupPrice750Label: process.env.TOPUP_PRICE_750_LABEL || 'A$24.99',
+  // Prices, in AUD. These are labels only -- Stripe holds the real amounts, and
+  // these must be kept equal to them or the dashboard advertises one price and
+  // charges another.
+  //
+  // A token is one minute of source video, the same unit Opus Clip and Vizard
+  // bill in, so the comparison below is like for like. Opus charges about
+  // A$0.15/minute on both its paid tiers; these sit at a third of that, which
+  // the self-hosted Whisper and Ollama make affordable -- a competitor paying
+  // per minute for someone else's API cannot follow the price down.
+  //
+  //   weekly    A$9   / 120   = A$0.075 per token
+  //   monthly   A$29  / 650   = A$0.045 per token
+  //   yearly    A$290 / 9000  = A$0.032 per token   (two months free)
+  planPriceWeeklyLabel: process.env.PLAN_PRICE_WEEKLY_LABEL || 'A$9',
+  planPriceMonthlyLabel: process.env.PLAN_PRICE_MONTHLY_LABEL || 'A$29',
+  planPriceYearlyLabel: process.env.PLAN_PRICE_YEARLY_LABEL || 'A$290',
+  // Top-ups are for running out mid-month, so every pack costs MORE per token
+  // than the monthly plan. They used to cost less -- the 750 pack worked out at
+  // A$0.033 against the plan's A$0.045 -- which rewarded cancelling the
+  // subscription and buying packs instead.
+  //
+  //   100  A$6.99  = A$0.070 per token
+  //   300  A$17.99 = A$0.060 per token
+  //   750  A$39.99 = A$0.053 per token
+  topupPrice100Label: process.env.TOPUP_PRICE_100_LABEL || 'A$6.99',
+  topupPrice300Label: process.env.TOPUP_PRICE_300_LABEL || 'A$17.99',
+  topupPrice750Label: process.env.TOPUP_PRICE_750_LABEL || 'A$39.99',
   stripeTrialDays: Math.max(0, Math.round(number(process.env.STRIPE_TRIAL_DAYS, 7))),
   tokensFree: Math.max(0, Math.round(number(process.env.TOKENS_FREE, 40))),
   tokensWeekly: Math.max(1, Math.round(number(process.env.TOKENS_WEEKLY, 120))),
