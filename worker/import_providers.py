@@ -376,14 +376,77 @@ class DirectUploadProvider(ManagedImportProvider):
         return ImportedSource(destination, str(source.get("title") or ""))
 
 
+def _named_provider(name: str, storage) -> ManagedImportProvider:
+    if name == "ffmpegapi":
+        return FfmpegApiImportProvider()
+    if name == "ytdlp":
+        return YtDlpImportProvider()
+    if name == "socialkit":
+        return SocialKitImportProvider()
+    raise ImportProviderError(f"Unsupported VIDEO_IMPORT_PROVIDER: {name}")
+
+
 def provider_for(source: dict, storage) -> ManagedImportProvider:
     if source.get("type") == "object_storage":
         return DirectUploadProvider(storage)
-    selected = os.getenv("VIDEO_IMPORT_PROVIDER", "ffmpegapi").lower()
-    if selected == "ffmpegapi":
-        return FfmpegApiImportProvider()
-    if selected == "ytdlp":
-        return YtDlpImportProvider()
-    if selected == "socialkit":
-        return SocialKitImportProvider()
-    raise ImportProviderError(f"Unsupported VIDEO_IMPORT_PROVIDER: {selected}")
+    return _named_provider(os.getenv("VIDEO_IMPORT_PROVIDER", "ffmpegapi").lower(), storage)
+
+
+def provider_chain(source: dict, storage) -> list[ManagedImportProvider]:
+    """The providers to try, in order.
+
+    A managed provider downloads on someone else's infrastructure, so when
+    YouTube blocks it there is nothing on this box that can help -- and its error
+    arrives as a quoted string from a service the operator cannot see, which
+    reads as though the worker itself failed. Falling back to the local
+    downloader turns that into something this box can actually retry, from a
+    different IP and with client rotation.
+
+    An upload has nothing to fall back to and does not want one.
+    """
+    if source.get("type") == "object_storage":
+        return [DirectUploadProvider(storage)]
+    configured = os.getenv("VIDEO_IMPORT_PROVIDER", "ffmpegapi").lower()
+    order = [configured]
+    # ytdlp last-resort, unless it is already the choice. Not the reverse: a
+    # managed provider is configured because someone decided this box should not
+    # be the one talking to YouTube, and that decision still holds first.
+    if configured != "ytdlp" and os.getenv("VIDEO_IMPORT_FALLBACK", "ytdlp").lower() != "off":
+        order.append("ytdlp")
+    providers = []
+    for name in order:
+        try:
+            providers.append(_named_provider(name, storage))
+        except ImportProviderError:
+            # A provider that cannot be built -- no API key, unknown name -- is
+            # skipped rather than taking the whole chain down with it.
+            continue
+    if not providers:
+        raise ImportProviderError(f"No usable import provider: VIDEO_IMPORT_PROVIDER={configured}")
+    return providers
+
+
+def import_with_fallback(source: dict, destination: Path, cancelled: Callable[[], bool], storage) -> ImportedSource:
+    """Import through the first provider that manages it.
+
+    Every attempt is named in the failure. "Download failed (yt-dlp): HTTP Error
+    403" was a quoted upstream string that gave no clue which machine had failed
+    or what to change; naming the provider is the difference between a dead end
+    and a decision.
+    """
+    providers = provider_chain(source, storage)
+    failures: list[str] = []
+    for index, provider in enumerate(providers):
+        try:
+            return provider.import_video(source, destination, cancelled)
+        except ImportProviderError as exc:
+            message = str(exc)
+            if "cancelled" in message.lower():
+                raise
+            failures.append(f"{provider.name}: {message[:220]}")
+            last = index == len(providers) - 1
+            # A video that is private, deleted or age-gated fails the same way
+            # everywhere; only a block is worth another provider's turn.
+            if last or not _looks_blocked(message):
+                raise ImportProviderError(" | ".join(failures)[:900]) from exc
+    raise ImportProviderError("No import provider was available.")

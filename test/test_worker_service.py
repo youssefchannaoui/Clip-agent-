@@ -75,6 +75,87 @@ class ManagedImportProviderTests(unittest.TestCase):
                 )
 
 
+class ImportFallbackTests(unittest.TestCase):
+    """A managed provider being blocked is not the end of the attempt.
+
+    "Download failed (yt-dlp): HTTP Error 403" arrived as a quoted string from a
+    service the operator cannot see or retry, and read as though the worker had
+    failed when nothing on it was ever involved.
+    """
+
+    def setUp(self):
+        os.environ.pop("VIDEO_IMPORT_PROVIDER", None)
+        os.environ.pop("VIDEO_IMPORT_FALLBACK", None)
+        self.ip = importlib.reload(importlib.import_module("import_providers"))
+        self.temp = pathlib.Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.temp, ignore_errors=True)
+
+    def _provider(self, name, fail=None):
+        ip = self.ip
+
+        class Stub(ip.ManagedImportProvider):
+            def __init__(self): self.name = name
+            def import_video(self, source, destination, cancelled):
+                if fail:
+                    raise ip.ImportProviderError(fail)
+                destination.write_bytes(b"x")
+                return ip.ImportedSource(destination, "Lecture")
+
+        return Stub()
+
+    def _run(self, providers):
+        self.ip.provider_chain = lambda source, storage: providers
+        return self.ip.import_with_fallback(
+            {"type": "youtube", "url": "u"}, self.temp / "s.mp4", lambda: False, None,
+        )
+
+    BLOCKED = "Download failed (yt-dlp): ERROR: unable to download video data: HTTP Error 403: Forbidden"
+
+    def test_a_block_falls_through_to_the_next_provider(self):
+        result = self._run([self._provider("ffmpegapi", self.BLOCKED), self._provider("ytdlp")])
+        self.assertEqual(result.title, "Lecture")
+
+    def test_a_video_that_is_simply_gone_stops_at_the_first(self):
+        # Private, deleted and age-gated fail identically everywhere; trying
+        # again just makes the user wait longer for the same answer.
+        with self.assertRaises(self.ip.ImportProviderError) as caught:
+            self._run([self._provider("ffmpegapi", "This video is private."), self._provider("ytdlp")])
+        self.assertNotIn("ytdlp", str(caught.exception))
+
+    def test_the_failure_names_every_provider_tried(self):
+        with self.assertRaises(self.ip.ImportProviderError) as caught:
+            self._run([self._provider("ffmpegapi", self.BLOCKED), self._provider("ytdlp", self.BLOCKED)])
+        message = str(caught.exception)
+        self.assertIn("ffmpegapi:", message)
+        self.assertIn("ytdlp:", message)
+
+    def test_cancelling_is_never_retried(self):
+        with self.assertRaises(self.ip.ImportProviderError) as caught:
+            self._run([self._provider("ffmpegapi", "Job cancelled."), self._provider("ytdlp")])
+        self.assertIn("cancelled", str(caught.exception).lower())
+
+    def test_an_upload_has_nothing_to_fall_back_to(self):
+        chain = self.ip.provider_chain({"type": "object_storage", "objectKey": "uploads/u/x.mp4"}, None)
+        self.assertEqual([p.name for p in chain], ["direct_upload"])
+
+    def test_the_configured_provider_still_goes_first(self):
+        # A managed provider is configured because someone decided this box
+        # should not be the one talking to YouTube. That decision holds first.
+        os.environ["VIDEO_IMPORT_PROVIDER"] = "ffmpegapi"
+        os.environ["VIDEO_IMPORT_API_URL"] = "https://ffmpegapi.net"
+        os.environ["VIDEO_IMPORT_API_KEY"] = "k"
+        names = [p.name for p in self.ip.provider_chain({"type": "youtube"}, None)]
+        self.assertEqual(names[0], "ffmpegapi")
+        self.assertIn("ytdlp", names)
+
+    def test_the_fallback_can_be_switched_off(self):
+        os.environ["VIDEO_IMPORT_FALLBACK"] = "off"
+        names = [p.name for p in self.ip.provider_chain({"type": "youtube"}, None)]
+        self.assertEqual(names, ["ffmpegapi"])
+
+
 class WorkerPersistenceTests(unittest.TestCase):
     def setUp(self):
         self.temp = pathlib.Path(tempfile.mkdtemp())

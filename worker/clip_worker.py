@@ -1681,6 +1681,12 @@ def capabilities() -> dict[str, Any]:
         # Does a render report which clip it is on, so the app can show the
         # per-clip breakdown rather than only "rendering"?
         "clipBreakdown": _source_has("clipPlan=clip_plan"),
+        # Which machine actually talks to YouTube. A managed provider's failures
+        # arrive as quoted strings from a service the operator cannot see, so
+        # "Download failed (yt-dlp): 403" looked like this box failing when it
+        # was never involved.
+        "importProvider": os.getenv("VIDEO_IMPORT_PROVIDER", "ffmpegapi").lower(),
+        "importFallback": os.getenv("VIDEO_IMPORT_FALLBACK", "ytdlp").lower(),
         "python": sys.version.split()[0],
     }
     return _CAPABILITIES

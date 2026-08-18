@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
 
-from import_providers import ImportProviderError, download_https, provider_for
+from import_providers import ImportProviderError, download_https, import_with_fallback, provider_for
 from object_storage import ObjectStorage
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -422,8 +422,12 @@ class Processor:
                 raise RuntimeError("The worker does not have enough free temporary disk space.")
             self.progress(job_id, "importing", 3)
             source = work / "source.mp4"
-            imported = provider_for(payload.get("source") or {}, self.storage).import_video(
-                payload.get("source") or {}, source, self.import_pulse(job_id)
+            # Falls through to the local downloader when a managed provider is
+            # blocked: its error arrives as a quoted string from a service the
+            # operator cannot see or retry, which reads as though this box had
+            # failed when nothing here was ever involved.
+            imported = import_with_fallback(
+                payload.get("source") or {}, source, self.import_pulse(job_id), self.storage
             )
             if source.stat().st_size > MAX_DOWNLOAD_BYTES:
                 raise RuntimeError("The source exceeds the worker download limit.")

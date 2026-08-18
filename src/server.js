@@ -1154,9 +1154,16 @@ function summariseWorkerBuild(capabilities) {
   if (!capabilities.faceDetection) missing.push(`face detection (${capabilities.faceDetectionNote || 'unavailable'})`);
   if (!capabilities.quranCaptions) missing.push('the Quran corpus, so the recitation template falls back to plain captions');
   if ((capabilities.missingFonts || []).length) missing.push(`fonts: ${capabilities.missingFonts.join(', ')}`);
+  // Not a missing feature, but the single most useful fact when an import
+  // fails: whether the download happened on the worker or on a service the
+  // operator cannot see.
+  const via = capabilities.importProvider === 'ytdlp'
+    ? 'Imports download on the worker itself.'
+    : `Imports download via ${capabilities.importProvider || 'a managed provider'}`
+      + (capabilities.importFallback === 'off' ? ', with no fallback.' : ', falling back to the worker if it is blocked.');
   return missing.length
-    ? `Rebuild needed — the running worker is missing ${missing.join('; ')}.`
-    : 'Up to date — the running worker has every current feature.';
+    ? `Rebuild needed — the running worker is missing ${missing.join('; ')}. ${via}`
+    : `Up to date — the running worker has every current feature. ${via}`;
 }
 
 export const server = http.createServer((req, res) => {
