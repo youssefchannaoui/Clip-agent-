@@ -521,6 +521,32 @@ class POTokenProviderTests(unittest.TestCase):
         self.assertIn("potProvider", script)
 
 
+class CookieInstallScriptTests(unittest.TestCase):
+    """The cookies route is the last lever behind YouTube's bot wall.
+
+    Probed 18 Aug 2026 with the PO-token provider live: every client in the
+    production rotation got LOGIN_REQUIRED. The install script is the only
+    console-typable way onto the box, so its wiring is pinned here.
+    """
+
+    def _script(self):
+        return (ROOT / "worker" / "install-cookies.sh").read_text(encoding="utf-8")
+
+    def test_the_script_sets_the_variable_the_downloader_reads(self):
+        # youtube_network_options() reads VIDEO_IMPORT_COOKIES; a renamed env
+        # var here would install cookies nothing ever loads.
+        self.assertIn("VIDEO_IMPORT_COOKIES=", self._script())
+        source = (ROOT / "worker" / "import_providers.py").read_text(encoding="utf-8")
+        self.assertIn('os.getenv("VIDEO_IMPORT_COOKIES"', source)
+
+    def test_cookies_land_in_the_data_volume(self):
+        # Anywhere else and the next rebuild silently deletes the session.
+        self.assertIn("/var/lib/deenclipped/cookies.txt", self._script())
+
+    def test_the_script_warns_against_the_channel_account(self):
+        self.assertIn("THROWAWAY", self._script())
+
+
 class OpenCVVersionGuardTests(unittest.TestCase):
     """OpenCV 5 removed cv2.CascadeClassifier, which speaker framing needs.
 
