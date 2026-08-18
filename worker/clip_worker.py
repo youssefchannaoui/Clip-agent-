@@ -109,6 +109,15 @@ _heartbeat_stop = threading.Event()
 # to a rate a person can actually read.
 RENDER_PROGRESS_SECONDS = 2.0
 
+# Clients to try when YouTube refuses the media URL. None is yt-dlp's own
+# default and usually works; the rest are the ones that historically keep
+# working when it does not. Mirrors YOUTUBE_CLIENTS in import_providers.py.
+YOUTUBE_CLIENTS = [None, "android_vr", "ios", "web_safari", "tv"]
+YOUTUBE_BLOCK_SIGNS = (
+    "http error 403", "forbidden", "sign in to confirm", "not a bot",
+    "unable to download video data", "please sign in", "http error 429",
+)
+
 # The caption families worker/Dockerfile installs and the Templates picker
 # offers. Reported by capabilities() so a missing package is visible from the
 # app rather than only when a clip renders in the wrong face.
@@ -301,10 +310,31 @@ def copy_or_download(job: dict[str, Any], destination: Path) -> tuple[Path, str]
         "overwrites": True,
         "js_runtimes": {"node": {"path": None}},
     }
-    with YoutubeDL(options) as ydl:
-        info = ydl.extract_info(source, download=True)
-        detected_title = str(info.get("title") or "").strip()
-        prepared = Path(ydl.prepare_filename(info))
+    # Same retry as the import provider: a 403 on the video data means "not from
+    # that client", not "no video". Walking the clients is what gets past it.
+    detected_title, prepared, failures = "", None, []
+    for attempt, client in enumerate(YOUTUBE_CLIENTS):
+        current = dict(options)
+        if client:
+            current["extractor_args"] = {"youtube": {"player_client": [client]}}
+        try:
+            with YoutubeDL(current) as ydl:
+                info = ydl.extract_info(source, download=True)
+                detected_title = str(info.get("title") or "").strip()
+                prepared = Path(ydl.prepare_filename(info))
+            break
+        except Exception as exc:  # yt_dlp raises its own DownloadError subclass
+            message = str(exc)
+            failures.append(f"{client or 'default'}: {message[:200]}")
+            blocked = any(sign in message.lower() for sign in YOUTUBE_BLOCK_SIGNS)
+            if not blocked or attempt == len(YOUTUBE_CLIENTS) - 1:
+                raise RuntimeError(
+                    "YouTube refused this download from every client tried. This is usually an "
+                    "out-of-date yt-dlp: rebuild the worker to pick up the current release. "
+                    f"Attempts: {'; '.join(failures)}"[:800]
+                ) from exc
+    if prepared is None:
+        raise RuntimeError("The downloader produced no result.")
 
     candidates = [destination, prepared, prepared.with_suffix(".mp4")]
     candidates.extend(sorted(destination.parent.glob(output_stem.name + ".*")))

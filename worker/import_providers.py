@@ -164,6 +164,43 @@ class FfmpegApiImportProvider(ManagedImportProvider):
         return ImportedSource(destination, str(payload.get("title") or ""))
 
 
+# YouTube rejects the media URLs some clients hand out, so a 403 on the video
+# data is not a dead end -- it means "not from that client". Each entry is tried
+# in turn until one downloads.
+#
+# None first: yt-dlp's own default is the best-maintained path and usually
+# works. The rest are the clients that historically keep working when it does
+# not, cheapest first.
+YOUTUBE_CLIENTS = [None, "android_vr", "ios", "web_safari", "tv"]
+
+# What a block looks like, as opposed to a video that is simply gone.
+_BLOCK_SIGNS = (
+    "http error 403", "forbidden", "sign in to confirm", "not a bot",
+    "unable to download video data", "please sign in", "http error 429",
+)
+
+
+def _looks_blocked(message: str) -> bool:
+    lowered = str(message).lower()
+    return any(sign in lowered for sign in _BLOCK_SIGNS)
+
+
+def _download_failure(failures: list[str]) -> str:
+    """One message naming every client that was tried.
+
+    "HTTP Error 403" on its own reads as a broken product. Saying which clients
+    were attempted, and that a rebuild picks up a newer yt-dlp, is the
+    difference between an actionable report and a dead end -- YouTube changes
+    break older versions regularly and that is usually the fix.
+    """
+    tried = "; ".join(failures[-len(YOUTUBE_CLIENTS):])
+    return (
+        "YouTube refused this download from every client tried. This is usually "
+        "an out-of-date yt-dlp: rebuild the worker to pick up the current "
+        f"release. Attempts: {tried}"[:800]
+    )
+
+
 class YtDlpImportProvider(ManagedImportProvider):
     """Self-hosted YouTube download using yt-dlp. Runs on this worker box directly,
     with no third-party download API or subscription required."""
@@ -203,20 +240,35 @@ class YtDlpImportProvider(ManagedImportProvider):
             "retries": 3,
         }
 
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(youtube_url, download=True)
-                info_holder["title"] = info.get("title", "") if isinstance(info, dict) else ""
-                produced = Path(ydl.prepare_filename(info))
-                if produced.suffix != ".mp4":
-                    produced = produced.with_suffix(".mp4")
-        except yt_dlp.utils.DownloadError as exc:
-            message = str(exc)
-            if "cancelled" in message.lower():
-                raise ImportProviderError("Job cancelled.") from exc
-            raise ImportProviderError(f"yt-dlp download failed: {message[:500]}") from exc
+        produced = None
+        failures: list[str] = []
+        for attempt, client in enumerate(YOUTUBE_CLIENTS):
+            if cancelled():
+                raise ImportProviderError("Job cancelled.")
+            options = dict(ydl_opts)
+            if client:
+                options["extractor_args"] = {"youtube": {"player_client": [client]}}
+            try:
+                with yt_dlp.YoutubeDL(options) as ydl:
+                    info = ydl.extract_info(youtube_url, download=True)
+                    info_holder["title"] = info.get("title", "") if isinstance(info, dict) else ""
+                    produced = Path(ydl.prepare_filename(info))
+                    if produced.suffix != ".mp4":
+                        produced = produced.with_suffix(".mp4")
+                break
+            except yt_dlp.utils.DownloadError as exc:
+                message = str(exc)
+                if "cancelled" in message.lower():
+                    raise ImportProviderError("Job cancelled.") from exc
+                failures.append(f"{client or 'default'}: {message[:200]}")
+                # Only a block is worth trying another client for. A private or
+                # deleted video fails the same way on every one of them, and
+                # walking the whole list just makes the user wait longer for the
+                # same answer.
+                if not _looks_blocked(message) or attempt == len(YOUTUBE_CLIENTS) - 1:
+                    raise ImportProviderError(_download_failure(failures)) from exc
 
-        if not produced.is_file():
+        if produced is None or not produced.is_file():
             raise ImportProviderError("yt-dlp did not produce an output file.")
         if produced.stat().st_size > self.max_bytes:
             produced.unlink(missing_ok=True)

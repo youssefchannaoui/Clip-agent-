@@ -1179,7 +1179,10 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   if (project.moreJob && ['queued', 'processing'].includes(project.moreJob.status)) {
     throw new Error('This lecture is already generating more clips.');
   }
-  if ((!project.sourceFile || !fs.existsSync(project.sourceFile)) && !(project.engine === 'remote' && project.sourceObjectKey)) {
+  // A remote lecture with a link can be fetched again; only one with neither an
+  // upload nor a link is genuinely stuck.
+  if ((!project.sourceFile || !fs.existsSync(project.sourceFile))
+    && !(project.engine === 'remote' && (project.sourceObjectKey || project.url))) {
     throw new Error('The saved source video is unavailable. Generate more cannot safely re-download it because that would create a duplicate Library lecture.');
   }
   if ((!project.transcriptFile || !fs.existsSync(project.transcriptFile)) && !(project.engine === 'remote' && project.transcriptObjectKey)) {
@@ -1205,7 +1208,7 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   const outputDir = path.join(clipsDir, project.id, 'more', moreId);
   const payload = project.engine === 'remote' ? {
     mode: 'more_clips', id: moreId, projectId: project.id, projectTitle: project.title, requestedCount: count,
-    source: { type: 'object_storage', objectKey: project.sourceObjectKey, title: project.title },
+    source: remoteSourceFor(project),
     transcript: { objectKey: project.transcriptObjectKey }, existingRanges,
     template, musicTracks: remoteMusicTracks(tracks, owner.id), settings: { ...sharedSettings(owner), clipsPerVideo: count },
     callbackUrl: '',
@@ -1230,6 +1233,26 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   return record;
 }
 
+// Where a remote job should fetch a finished lecture's source from again.
+//
+// Both the re-render and the more-clips paths hardcoded an object_storage
+// source, and sourceObjectKey is only ever set for uploads. Every lecture
+// imported from a link therefore sent `objectKey: null` and came back with "The
+// uploaded video reference is invalid" -- a message about uploads, on a job that
+// never involved one.
+//
+// An upload is preferred when there is one: it is the exact bytes the clips were
+// cut from, where a re-download can differ if the video was re-encoded or
+// replaced.
+function remoteSourceFor(project) {
+  if (project?.sourceObjectKey) {
+    return { type: 'object_storage', objectKey: project.sourceObjectKey, title: project.title || '' };
+  }
+  const url = String(project?.url || '').trim();
+  if (url) return { type: 'youtube', url, title: project.title || '' };
+  throw new Error('This lecture has no source left to work from: the upload is gone and it has no link to re-import.');
+}
+
 export function queueClipRerender(clipId, templateId, { asVariant = false } = {}) {
   const clip = clipById(clipId);
   if (!clip) throw new Error('That clip does not exist.');
@@ -1239,7 +1262,10 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
   // lecture was deleted otherwise threw a raw TypeError at the user.
   if (!project) throw new Error('The lecture this clip came from no longer exists, so it cannot be re-rendered.');
   const sourceFile = clip.sourceFile && fs.existsSync(clip.sourceFile) ? clip.sourceFile : project.sourceFile;
-  if ((!sourceFile || !fs.existsSync(sourceFile)) && !(project.engine === 'remote' && project.sourceObjectKey)) throw new Error('The original source file is unavailable. Keep source files enabled to re-render clips.');
+  if ((!sourceFile || !fs.existsSync(sourceFile))
+    && !(project.engine === 'remote' && (project.sourceObjectKey || project.url))) {
+    throw new Error('The original source file is unavailable. Keep source files enabled to re-render clips.');
+  }
   const owner = ownerOfRecord(clip);
   const baseTemplate = templateById(templateId, owner) || selectedTemplate(owner);
   if (!baseTemplate?.id) throw new Error('Choose a valid saved template.');
@@ -1259,7 +1285,7 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
   const outputClipId = asVariant ? `${clip.id}-variant-${Date.now().toString(36)}` : `${clip.id}-render-${Date.now().toString(36)}`;
   const payload = project.engine === 'remote' ? {
     mode: 'rerender', id: rerenderId, projectId: project.id, clipIdOverride: outputClipId,
-    source: { type: 'object_storage', objectKey: project.sourceObjectKey, title: project.title },
+    source: remoteSourceFor(project),
     transcript: { objectKey: project.transcriptObjectKey || '' }, template,
     musicTracks: remoteMusicTracks(tracks, owner.id), settings: sharedSettings(owner),
     clip: {
