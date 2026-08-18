@@ -2620,6 +2620,79 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         edLayout=(edLayout||[]).concat([[node,Object.keys(props)]]);
       };
       set(row,{'height':avail+'px','min-height':'0','align-items':'stretch','overflow':'hidden'});
+
+      /* One bar, not two. The header is a wrapping flex row, so the buttons
+         dropped onto a second line and the editor lost 50px of picture to a
+         doubled-up toolbar. Nowrap plus a title that is allowed to shrink and
+         ellipsise keeps it to a single line at any width. */
+      const backLink=[...document.querySelectorAll('#studio a,#studio button,#studio span')]
+        .filter(n=>/^Queue$/.test((n.textContent||'').trim())).pop();
+      const saveBtn=[...document.querySelectorAll('#studio button')]
+        .find(b=>/^(Save clip|Saving…)$/.test((b.textContent||'').trim()));
+      if(backLink&&saveBtn){
+        let bar=saveBtn.parentElement;
+        while(bar&&bar.id!=='studio'&&!bar.contains(backLink))bar=bar.parentElement;
+        if(bar&&bar.id!=='studio'){
+          set(bar,{'flex-wrap':'nowrap','align-items':'center'});
+          for(const child of bar.children){
+            /* The title is the one child that can afford to lose width; the
+               controls must keep theirs or they start clipping. */
+            const holdsTitle=child.contains(backLink)?false:/[a-z]{4}/.test((child.textContent||''))&&!child.querySelector('button');
+            set(child,holdsTitle
+              ?{'min-width':'0','overflow':'hidden','text-overflow':'ellipsis','white-space':'nowrap'}
+              :{'flex':'0 0 auto'});
+          }
+        }
+      }
+
+      /* Three lanes, in the order they are read: captions, then the video, then
+         the nasheed. The design stacks them captions / nasheed / video. Done
+         with flex `order` rather than by moving nodes, because the patcher
+         pairs generated children by position -- reordering the DOM would have
+         it undo or scramble them on the next paint. */
+      const waveform=[...document.querySelectorAll('#studio span,#studio div')]
+        .filter(n=>/^Video · speech waveform$/.test((n.textContent||'').trim())).pop();
+      const videoLane=waveform&&waveform.parentElement;
+      const lanes=videoLane&&videoLane.parentElement;
+      if(lanes&&getComputedStyle(lanes).flexDirection==='column'){
+        const kids=[...lanes.children];
+        const capLane=kids.find(n=>n!==videoLane&&n.children.length>2&&!n.contains(waveform)
+          &&/[a-z]{4}/.test(n.textContent||'')&&!/Nasheed/.test(n.textContent||''));
+        const nasheedLane=kids.find(n=>/Nasheed/.test(n.textContent||''));
+        const ruler=kids[0];
+        if(ruler)set(ruler,{'order':'0'});
+        if(capLane)set(capLane,{'order':'1','position':'relative','min-height':'34px','overflow':'hidden'});
+        set(videoLane,{'order':'2'});
+        if(nasheedLane)set(nasheedLane,{'order':'3'});
+
+        /* Drag the timeline to move through the clip. Click already seeks;
+           holding and moving is what makes it feel like a timeline. Started
+           only outside the caption lane, so clicking a caption still means
+           "select this block" rather than "seek to exactly here". */
+        if(!lanes.dataset.wiredScrub){
+          lanes.dataset.wiredScrub='1';
+          const scrubTo=e=>{
+            const box=lanes.getBoundingClientRect();
+            if(!box.width)return;
+            const ratio=Math.max(0,Math.min(1,(e.clientX-box.left)/box.width));
+            const seconds=ratio*Number(StudioAdapter.bindings(DATA).edDurationSec||1);
+            StudioAdapter.ui.edTime=seconds;
+            StudioAdapter.ui.edPlayhead=ratio;
+            StudioAdapter.seekEditor(seconds);
+            paintStudio();
+          };
+          lanes.addEventListener('pointerdown',e=>{
+            if(capLane&&capLane.contains(e.target))return;
+            e.preventDefault();
+            scrubTo(e);
+            const move=m=>{if(m.buttons)scrubTo(m)};
+            const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up)};
+            window.addEventListener('pointermove',move);
+            window.addEventListener('pointerup',up);
+          });
+          lanes.style.cursor='ew-resize';
+        }
+      }
       /* Only the tool panel scrolls. The preview column is capped to the row so
          the frame sizes against a real height instead of running off the page. */
       set(panel,{'max-height':'100%','overflow-y':'auto','min-height':'0'});

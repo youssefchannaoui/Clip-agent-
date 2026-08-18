@@ -1347,12 +1347,21 @@
         text: block.text,
         // A block with real timings can say when it is; a fallback one cannot.
         time: timed ? secsToClock(block.start) + ' – ' + secsToClock(block.end) : '',
-        // Width proportional to the block's real duration, and positioned by its
-        // start, so the track reads as a timeline rather than as a list. Untimed
-        // blocks fall back to equal shares.
-        style: 'padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 12.5px; line-height: 1.45; background: '
-          + (live ? 'rgba(217,180,120,.16)' : '#121214') + '; border: 1px solid '
-          + (live ? 'rgba(240,214,166,.85)' : on ? 'rgba(217,180,120,.55)' : '#1E1E22') + ';',
+        // Placed by its own start and duration, so the lane reads as a timeline
+        // rather than as a stack of paragraphs. They were laid out in flow, so
+        // seventeen blocks wrapped into rows that spilled past the timeline and
+        // out the bottom of the editor. Untimed blocks (the flat-transcript
+        // fallback) get equal slices, which is the best a list of untimed
+        // sentences can honestly claim.
+        style: 'position: absolute; top: 0; bottom: 0; box-sizing: border-box; '
+          + 'left: ' + (timed ? (block.start / edDuration) * 100 : (i / rawBlocks.length) * 100).toFixed(3) + '%; '
+          + 'width: ' + (timed
+            ? Math.max(0.6, ((block.end - block.start) / edDuration) * 100)
+            : 100 / rawBlocks.length).toFixed(3) + '%; '
+          + 'display: flex; align-items: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; '
+          + 'padding: 0 8px; border-radius: 7px; cursor: pointer; font-size: 12px; '
+          + 'background: ' + (live ? 'rgba(217,180,120,.22)' : '#121214') + '; border: 1px solid '
+          + (live ? 'rgba(240,214,166,.9)' : on ? 'rgba(217,180,120,.55)' : '#1E1E22') + ';',
         // Selecting a block also moves the playhead to it: on a timeline,
         // clicking a caption means "take me there", and editing the text of a
         // moment you cannot see is the thing that made this editor feel dead.
