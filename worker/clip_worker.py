@@ -16,9 +16,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import html
+import inspect
 import json
 import math
 import os
+import pathlib
 import random
 import re
 import shutil
@@ -101,6 +103,13 @@ _heartbeat_stop = threading.Event()
 # status file and is polled by the app, so per-clip render progress is throttled
 # to a rate a person can actually read.
 RENDER_PROGRESS_SECONDS = 2.0
+
+# The caption families worker/Dockerfile installs and the Templates picker
+# offers. Reported by capabilities() so a missing package is visible from the
+# app rather than only when a clip renders in the wrong face.
+CAPTION_FAMILIES = (
+    "DejaVu Sans", "DejaVu Serif", "Liberation Sans", "Open Sans", "Amiri", "Scheherazade",
+)
 
 # Makes ffmpeg report machine-readable progress on stdout. -nostats suppresses
 # the usual human progress spam on stderr, so a failure's detail stays readable.
@@ -1510,6 +1519,68 @@ def render_clip(
         "renderedHeight": expected_height,
         "createdAt": int(time.time() * 1000),
     }
+
+# What the running image can actually do, computed rather than declared.
+#
+# "Did the worker get rebuilt?" has come up after every change here, and nothing
+# could answer it without SSHing to the box: /health said only that the process
+# was up. A version string would need bumping by hand and would lie the first
+# time someone forgot, so each of these is derived from the code and the image
+# that are actually loaded.
+_CAPABILITIES: dict[str, Any] | None = None
+
+
+def _source_has(marker: str) -> bool:
+    """True when the running module's own source contains the marker.
+
+    Reading the loaded file is the only honest answer to "is the new build
+    running". A declared version string has to be remembered on every change and
+    will eventually lie; bytecode introspection misses anything inside a nested
+    function, which is where most of these actually live.
+    """
+    try:
+        return marker in pathlib.Path(__file__).read_text(encoding="utf-8")
+    except OSError:  # pragma: no cover - unreadable install
+        return False
+
+
+def capabilities() -> dict[str, Any]:
+    global _CAPABILITIES
+    if _CAPABILITIES is not None:
+        return _CAPABILITIES
+
+    # Does the caption renderer take the animation settings, or is it the older
+    # build with the pop hardcoded?
+    try:
+        params = inspect.signature(caption_word_override).parameters
+        caption_animation = "pop_scale" in params and "pop_ms" in params
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        caption_animation = _source_has("pop_scale: int = 108")
+
+    fonts: list[str] = []
+    try:
+        listed = run(["fc-list", ":", "family"], timeout=15).stdout
+        for family in CAPTION_FAMILIES:
+            if family.lower() in listed.lower():
+                fonts.append(family)
+    except Exception:  # pragma: no cover - fontconfig missing
+        fonts = []
+
+    _CAPABILITIES = {
+        # None when OpenCV can detect faces; the reason when it cannot.
+        "faceDetection": cv2_problem() is None,
+        "faceDetectionNote": cv2_problem() or "",
+        "captionAnimation": caption_animation,
+        "captionFonts": fonts,
+        "missingFonts": [f for f in CAPTION_FAMILIES if f not in fonts],
+        "pipelinePhases": callable(globals().get("phase_for")),
+        # Does a render report which clip it is on, so the app can show the
+        # per-clip breakdown rather than only "rendering"?
+        "clipBreakdown": _source_has("clipPlan=clip_plan"),
+        "python": sys.version.split()[0],
+    }
+    return _CAPABILITIES
+
 
 def doctor() -> int:
     checks: dict[str, Any] = {"python": sys.version.split()[0]}

@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import os
+import pathlib
 import queue
 import shutil
 import signal
@@ -31,9 +32,30 @@ MIN_FREE_BYTES = max(1, int(os.getenv("WORKER_MIN_FREE_GB", "10"))) * 1024**3
 # The app treats five minutes of an unchanged status signature as a hung job, so
 # the import has to prove liveness well inside that window.
 IMPORT_HEARTBEAT_SECONDS = 15
+
 JOB_TTL_SECONDS = max(3600, int(os.getenv("WORKER_TEMP_TTL_HOURS", "24")) * 3600)
 SHARED_SECRET = os.getenv("WORKER_SHARED_SECRET", "")
 
+
+def worker_capabilities() -> dict[str, Any]:
+    """What the running clip_worker can do, or why it could not be asked.
+
+    Imported lazily and never allowed to raise: a missing dependency must still
+    leave /health answerable, or the one endpoint that would explain the problem
+    goes down with it.
+    """
+    try:
+        import clip_worker
+        return {**clip_worker.capabilities(), "downloadProgress": "bytesDone" in _service_source()}
+    except Exception as exc:  # pragma: no cover - diagnostic path
+        return {"error": clean_error(exc)}
+
+
+def _service_source() -> str:
+    try:
+        return pathlib.Path(__file__).read_text(encoding="utf-8")
+    except OSError:  # pragma: no cover
+        return ""
 
 def now_ms() -> int:
     return int(time.time() * 1000)
@@ -537,11 +559,23 @@ class Handler(BaseHTTPRequestHandler):
         if not authenticated(timestamp, self.command, path, body, signature):
             return self.send_json(401, {"error": "Authentication required.", "code": "unauthorized"})
         if self.command == "GET" and path == "/health":
-            return self.send_json(200, {"ok": True, "service": "deenclipped-worker"})
+            # capabilities() answers "did this box get rebuilt", which nothing
+            # could answer before without SSHing to it -- /health said only that
+            # the process was up, so a stale image looked identical to a fresh
+            # one right up until a clip rendered wrong.
+            return self.send_json(200, {
+                "ok": True,
+                "service": "deenclipped-worker",
+                "capabilities": worker_capabilities(),
+            })
         if self.command == "GET" and path == "/readiness":
             free = shutil.disk_usage(TEMP_DIR).free
             ready = bool(ObjectStorage().configured and free >= MIN_FREE_BYTES)
-            return self.send_json(200 if ready else 503, {"ready": ready, "freeBytes": free, "queueDepth": PROCESSOR.queue.qsize(), "running": len(PROCESSOR.running)})
+            return self.send_json(200 if ready else 503, {
+                "ready": ready, "freeBytes": free,
+                "queueDepth": PROCESSOR.queue.qsize(), "running": len(PROCESSOR.running),
+                "capabilities": worker_capabilities(),
+            })
         if self.command == "POST" and path == "/jobs":
             try:
                 payload = json.loads(body or b"{}")

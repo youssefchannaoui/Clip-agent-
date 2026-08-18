@@ -250,6 +250,29 @@ class WorkerPersistenceTests(unittest.TestCase):
         self.assertIn('for key in ("currentClip", "totalClips", "clipPercent", "clipPlan")', source)
         self.assertIn("if event.get(key) is not None:", source)
 
+    def test_health_reports_what_the_running_build_can_do(self):
+        # "Did the worker get rebuilt?" had no answer without SSHing to the box:
+        # /health said only that the process was up, so a stale image looked
+        # identical to a fresh one until a clip rendered wrong.
+        caps = self.service.worker_capabilities()
+        self.assertNotIn("error", caps, caps.get("error", ""))
+        for key in ("captionAnimation", "clipBreakdown", "faceDetection", "captionFonts", "downloadProgress"):
+            self.assertIn(key, caps, f"{key} is reported")
+
+    def test_capabilities_are_read_from_the_running_code_not_declared(self):
+        # A version string has to be remembered on every change and will
+        # eventually lie about what is actually deployed.
+        source = (WORKER / "clip_worker.py").read_text(encoding="utf-8")
+        self.assertIn("def _source_has(", source)
+        self.assertNotIn('VERSION = "', source)
+
+    def test_health_still_answers_when_capabilities_cannot_be_read(self):
+        # The one endpoint that would explain a broken dependency must not go
+        # down with it.
+        with mock.patch.object(self.service, "_service_source", side_effect=OSError("boom")):
+            caps = self.service.worker_capabilities()
+        self.assertIsInstance(caps, dict)
+
     def test_a_provider_that_ignores_progress_still_works(self):
         # Most providers pass a plain `lambda: bool`. The two-argument form must
         # fall back rather than raise.

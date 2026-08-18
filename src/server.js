@@ -833,8 +833,23 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/api/diagnostics') {
     if (config.processingMode === 'remote') {
       try {
-        const worker = await workerClient.readiness();
-        return json(res, 200, { ok: Boolean(worker.ready), worker, readiness: agent.engine.readiness(currentUser), model: config.aiModel, note: 'Heavy processing runs on the external worker.' });
+        // health carries the capability report; readiness carries queue depth.
+        // Both, because "is the box up" and "does the box have the current
+        // code" are different questions and only the second one has been
+        // catching us out.
+        const [worker, health] = await Promise.all([
+          workerClient.readiness(),
+          workerClient.health().catch(error => ({ error: error.message })),
+        ]);
+        const capabilities = health?.capabilities || worker?.capabilities || null;
+        return json(res, 200, {
+          ok: Boolean(worker.ready), worker, health, capabilities,
+          // Named so the answer to "did the rebuild take" is readable without
+          // knowing which flag means what.
+          workerBuild: capabilities ? summariseWorkerBuild(capabilities) : 'The worker did not report its capabilities — it is running a build from before they existed.',
+          readiness: agent.engine.readiness(currentUser), model: config.aiModel,
+          note: 'Heavy processing runs on the external worker.',
+        });
       } catch (error) {
         return json(res, 503, { ok: false, error: error.message, readiness: agent.engine.readiness(currentUser) });
       }
@@ -1125,6 +1140,20 @@ async function route(req, res, url) {
     } catch (error) { return json(res, 400, { error: error.message }); }
   }
   return json(res, 404, { error: 'Not found.' });
+}
+
+// Turns the worker's capability report into one readable line. Every item here
+// has been shipped and then silently not deployed at least once.
+function summariseWorkerBuild(capabilities) {
+  const missing = [];
+  if (!capabilities.captionAnimation) missing.push('caption animation');
+  if (!capabilities.clipBreakdown) missing.push('per-clip progress');
+  if (!capabilities.downloadProgress) missing.push('download size');
+  if (!capabilities.faceDetection) missing.push(`face detection (${capabilities.faceDetectionNote || 'unavailable'})`);
+  if ((capabilities.missingFonts || []).length) missing.push(`fonts: ${capabilities.missingFonts.join(', ')}`);
+  return missing.length
+    ? `Rebuild needed — the running worker is missing ${missing.join('; ')}.`
+    : 'Up to date — the running worker has every current feature.';
 }
 
 export const server = http.createServer((req, res) => {

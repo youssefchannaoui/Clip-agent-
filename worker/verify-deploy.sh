@@ -110,6 +110,25 @@ else
   bad "clip AI: unreachable" "no Ollama on http://ollama:11434 — clips will be scored and titled without the AI"
 fi
 
+# ── what the running build reports about itself ───────────────────────────────
+# The same report /health now serves, so this and the app agree on the answer to
+# "did the rebuild take".
+caps=$(docker exec "$CONTAINER" python -c 'import sys; sys.path.insert(0,"/app/worker"); import json, clip_worker; print(json.dumps(clip_worker.capabilities()))' 2>/dev/null)
+if [ -n "$caps" ]; then
+  echo "capabilities: $caps"
+  for feature in captionAnimation clipBreakdown; do
+    if printf '%s' "$caps" | grep -q "\"$feature\": true"; then
+      ok "capability: $feature"
+    else
+      bad "capability: $feature" "this image predates it — rebuild"
+    fi
+  done
+  missing=$(printf '%s' "$caps" | sed -n 's/.*"missingFonts": \[\([^]]*\)\].*/\1/p')
+  if [ -z "$missing" ]; then ok "capability: caption fonts"; else bad "capability: caption fonts" "missing $missing"; fi
+else
+  bad "capability report" "the worker could not describe its own build"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "All checks passed. The running worker has the current code."
