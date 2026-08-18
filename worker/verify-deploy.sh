@@ -43,6 +43,12 @@ check_code "readable fallback titles"   "TITLE_OPENERS"      /app/worker/clip_wo
 check_code "requested-clip count"       "clipsRequested"     /app/worker/clip_worker.py
 check_code "grain / warmth filters"     "colorbalance"       /app/worker/clip_worker.py
 check_code "heartbeat recorded"         "heartbeatAt"        /app/worker/service.py
+# Scripture is captioned from the Quran on every template, not only the Quran
+# one, and a line mixing Arabic with English gets a face per word. Both are
+# invisible in a build log and show up only in a finished clip -- which is the
+# failure this script exists to catch.
+check_code "ayah detection on every style" "auto_ayahs"        /app/worker/clip_worker.py
+check_code "mixed Arabic/English captions" "mixed_script_line" /app/worker/clip_worker.py
 
 echo
 
