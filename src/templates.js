@@ -106,7 +106,9 @@ export const NUMBER_RANGES = {
   // Clamped to what clip_worker.py accepts for the highlight's glow.
   captionHighlightGlow: [0, 30],
   // 100 = no pop. 0ms on either timing switches that animation off.
-  captionPopScale: [100, 140], captionPopMs: [0, 400], captionFadeMs: [0, 600],
+  // Below 100 starts the word small and grows it in; above, it overshoots and
+  // settles. 100 is no pop either way.
+  captionPopScale: [60, 140], captionPopMs: [0, 400], captionFadeMs: [0, 600],
   // 960 is half of a 1920-tall frame. The caption anchors to whichever edge it
   // is nearer, so the cap is what decides how far toward the centre it can
   // travel -- at 800 there was a band around the middle it could not reach from

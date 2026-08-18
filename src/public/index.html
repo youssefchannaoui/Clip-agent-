@@ -81,6 +81,12 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 #studioLiveHome.slh-idle .slb-dot { background: #4A4A52; animation: none; }
 .slh-empty { padding: 13px; font-size: 11.5px; color: #6E6E76; }
 
+/* Caption animation in the preview, mirroring what the renderer emits: the live
+   word starts at the configured scale and settles, and the caption event fades
+   in. --dc-pop is set per word so one keyframe serves every setting. */
+@keyframes dcCapPop { from { transform: scale(var(--dc-pop, 1.08)); } to { transform: scale(1); } }
+@keyframes dcCapFade { from { opacity: 0; } to { opacity: 1; } }
+
 /* Highlighted-word controls, matching the Captions panel they sit in. */
 #studioHighlight { display: flex; flex-direction: column; gap: 9px; margin-top: 16px; }
 #studioHighlight.hide { display: none; }
@@ -2209,6 +2215,29 @@ function studioWanted(){return window.STUDIO_SHELL===true}
             <span class="hl-hex" id="capSizeVal"></span></div>
           <div class="hl-row"><span>Uppercase</span>
             <button type="button" class="hl-switch" role="switch" id="capUpper" aria-label="Uppercase captions"><i></i></button></div>
+          <div class="hl-row"><span>Words per line</span>
+            <input type="range" min="1" max="12" id="capMaxWords" aria-label="Words per line">
+            <span class="hl-hex" id="capMaxWordsVal"></span></div>
+          <div class="hl-row"><span>Line spacing</span>
+            <input type="range" min="65" max="140" id="capLineHeight" aria-label="Line spacing">
+            <span class="hl-hex" id="capLineHeightVal"></span></div>
+
+          <span class="hl-label">Outline &amp; shadow</span>
+          <div class="hl-row"><span>Outline</span>
+            <span class="hl-hex" id="capOutlineHex"></span>
+            <input type="color" id="capOutline" aria-label="Outline colour"></div>
+          <div class="hl-row"><span>Thickness</span>
+            <input type="range" min="0" max="14" id="capOutlineWidth" aria-label="Outline thickness">
+            <span class="hl-hex" id="capOutlineWidthVal"></span></div>
+          <div class="hl-row"><span>Drop shadow</span>
+            <input type="range" min="0" max="8" id="capShadow" aria-label="Drop shadow">
+            <span class="hl-hex" id="capShadowVal"></span></div>
+          <div class="hl-row"><span>Behind text</span>
+            <span class="hl-hex" id="capBgHex"></span>
+            <input type="color" id="capBg" aria-label="Caption background colour"></div>
+          <div class="hl-row"><span>Box opacity</span>
+            <input type="range" min="0" max="100" id="capBgOpacity" aria-label="Caption background opacity">
+            <span class="hl-hex" id="capBgOpacityVal"></span></div>
 
           <span class="hl-label">Highlighted word</span>
           <div class="hl-sample">the <b id="hlSample">whole</b> of the dunya</div>
@@ -2224,7 +2253,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
 
           <span class="hl-label">Animation</span>
           <div class="hl-row"><span>Word pop</span>
-            <input type="range" min="100" max="140" id="animPop" aria-label="Word pop size">
+            <input type="range" min="60" max="140" id="animPop" aria-label="Word pop size">
             <span class="hl-hex" id="animPopVal"></span></div>
           <div class="hl-row"><span>Pop speed</span>
             <input type="range" min="0" max="400" step="10" id="animPopMs" aria-label="Word pop speed">
@@ -2235,6 +2264,9 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         const bind=(id,fn)=>{const n=$('#'+id);if(n)n.oninput=e=>StudioAdapter.bindings(DATA)[fn](e)};
         bind('capSize','setCapSize'); bind('hlColour','setHlColour'); bind('hlGlow','setHlGlow');
         bind('animPop','setAnimPop'); bind('animPopMs','setAnimPopMs'); bind('animFade','setAnimFade');
+        bind('capMaxWords','setCapMaxWords'); bind('capLineHeight','setCapLineHeight');
+        bind('capOutline','setCapOutline'); bind('capOutlineWidth','setCapOutlineWidth');
+        bind('capShadow','setCapShadow'); bind('capBg','setCapBg'); bind('capBgOpacity','setCapBgOpacity');
         $('#capUpper').onclick=e=>StudioAdapter.bindings(DATA).toggleCapUpper(e);
         $('#hlItalic').onclick=e=>StudioAdapter.bindings(DATA).toggleHlItalic(e);
         hlEl.querySelectorAll('[data-cap-font]').forEach(b=>b.onclick=e=>
@@ -2252,6 +2284,16 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       slider('animPop',vals.animPop); text('animPopVal',vals.animPopLabel);
       slider('animPopMs',vals.animPopMs); text('animPopMsVal',vals.animPopMsLabel);
       slider('animFade',vals.animFade); text('animFadeVal',vals.animFadeLabel);
+      slider('capMaxWords',vals.capMaxWords); text('capMaxWordsVal',vals.capMaxWordsLabel);
+      slider('capLineHeight',vals.capLineHeight); text('capLineHeightVal',vals.capLineHeightLabel);
+      slider('capOutlineWidth',vals.capOutlineWidth); text('capOutlineWidthVal',vals.capOutlineWidthLabel);
+      slider('capShadow',vals.capShadow); text('capShadowVal',vals.capShadowLabel);
+      slider('capBgOpacity',vals.capBgOpacity); text('capBgOpacityVal',vals.capBgOpacityLabel);
+      text('capOutlineHex',vals.capOutlineLabel); text('capBgHex',vals.capBgLabel);
+      for(const [id,value] of [['capOutline',vals.capOutline],['capBg',vals.capBg]]){
+        const n=$('#'+id);
+        if(n&&document.activeElement!==n&&n.value.toUpperCase()!==value.toUpperCase())n.value=value;
+      }
       text('hlHex',vals.hlColourLabel);
       const colour=$('#hlColour');
       if(colour&&document.activeElement!==colour&&colour.value.toUpperCase()!==vals.hlColour.toUpperCase())colour.value=vals.hlColour;

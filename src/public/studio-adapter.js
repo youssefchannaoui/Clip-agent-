@@ -518,6 +518,56 @@
     return (Number(width) || 1080) + '×' + (Number(height) || 1920);
   }
 
+  // The renderer fades the whole caption event, not each word, so the preview
+  // fades the box. Only while the sample is playing: a fade that replays on
+  // every idle repaint would be a flicker, not a preview.
+  // Outline, shadow, background box and line height, drawn the way the render
+  // will. The outline is a ring of text-shadows because -webkit-text-stroke
+  // draws inside the glyph and thins the letter; ASS draws it outside.
+  function capInkStyle(t) {
+    var out = '';
+    var lineHeight = Math.max(0.65, Math.min(1.4, Number(t.captionLineHeight) || 0.88));
+    out += ' line-height: ' + lineHeight.toFixed(2) + ';';
+
+    var opacity = Math.max(0, Math.min(100, Number(t.captionBackgroundOpacity) || 0));
+    if (opacity) {
+      out += ' background: ' + hexToRgba(t.captionBackground || '#000000', opacity / 100) + ';'
+        + ' padding: 0.12em 0.3em; border-radius: 4px; box-decoration-break: clone;'
+        + ' -webkit-box-decoration-break: clone;';
+    }
+
+    var shadows = [];
+    var width = Math.max(0, Math.min(14, Number(t.captionOutlineWidth) || 0));
+    if (width) {
+      // Scaled to the preview, which is a fraction of the real frame.
+      var px = Math.max(1, Math.round(width / 3));
+      var colour = t.captionOutline || '#09090A';
+      var steps = [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]];
+      for (var i = 0; i < steps.length; i++) {
+        shadows.push((steps[i][0] * px) + 'px ' + (steps[i][1] * px) + 'px 0 ' + colour);
+      }
+    }
+    var drop = Math.max(0, Math.min(8, Number(t.captionShadow) || 0));
+    if (drop) shadows.push(Math.round(drop / 2) + 'px ' + Math.round(drop / 2) + 'px ' + drop + 'px rgba(0,0,0,.75)');
+    if (shadows.length) out += ' text-shadow: ' + shadows.join(', ') + ';';
+    return out;
+  }
+
+  function hexToRgba(hex, alpha) {
+    var value = String(hex || '#000000').replace('#', '');
+    var n = parseInt(value.length === 3
+      ? value.split('').map(function (c) { return c + c; }).join('')
+      : value, 16);
+    if (!isFinite(n)) n = 0;
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + alpha.toFixed(2) + ')';
+  }
+
+  function capFadeStyle(t, playing) {
+    var ms = Math.max(0, Math.min(600, Number(t.captionFadeMs) || 0));
+    if (!ms || !playing) return '';
+    return ' animation: dcCapFade ' + ms + 'ms ease-in 1;';
+  }
+
   function handleStyle(on) {
     return on
       ? 'position: absolute; inset: -6px; border: 1px dashed rgba(217,180,120,.7); border-radius: 6px; pointer-events: none;'
@@ -1907,14 +1957,45 @@
       hlSameAsCaption: tpl.captionHighlightFont === tpl.captionFont,
       matchHlFont: function (e) { stop(e); saveStyle({ captionHighlightFont: tpl.captionFont }); },
 
+      // ── Caption styling the renderer already does ──
+      // Outline, shadow, the background box, line height and words per line are
+      // all read by clip_worker.py and were all unreachable: seven fields the
+      // render honoured with nothing to set them.
+      capOutline: tpl.captionOutline || '#09090A',
+      capOutlineLabel: String(tpl.captionOutline || '#09090A').toUpperCase(),
+      setCapOutline: function (e) { saveStyle({ captionOutline: String(e.target.value || '').toUpperCase() }); },
+      capOutlineWidth: Math.max(0, Math.min(14, Number(tpl.captionOutlineWidth) || 0)),
+      capOutlineWidthLabel: (Number(tpl.captionOutlineWidth) || 0) ? Number(tpl.captionOutlineWidth) + '' : 'None',
+      setCapOutlineWidth: function (e) { saveStyle({ captionOutlineWidth: Number(e.target.value) }); },
+      capShadow: Math.max(0, Math.min(8, Number(tpl.captionShadow) || 0)),
+      capShadowLabel: (Number(tpl.captionShadow) || 0) ? Number(tpl.captionShadow) + '' : 'None',
+      setCapShadow: function (e) { saveStyle({ captionShadow: Number(e.target.value) }); },
+      capBg: tpl.captionBackground || '#000000',
+      capBgLabel: String(tpl.captionBackground || '#000000').toUpperCase(),
+      setCapBg: function (e) { saveStyle({ captionBackground: String(e.target.value || '').toUpperCase() }); },
+      capBgOpacity: Math.max(0, Math.min(100, Number(tpl.captionBackgroundOpacity) || 0)),
+      capBgOpacityLabel: (Number(tpl.captionBackgroundOpacity) || 0) ? Math.round(Number(tpl.captionBackgroundOpacity)) + '%' : 'Off',
+      setCapBgOpacity: function (e) { saveStyle({ captionBackgroundOpacity: Number(e.target.value) }); },
+      capLineHeight: Math.round((Number(tpl.captionLineHeight) || 0.88) * 100),
+      capLineHeightLabel: Math.round((Number(tpl.captionLineHeight) || 0.88) * 100) + '%',
+      setCapLineHeight: function (e) { saveStyle({ captionLineHeight: Number(e.target.value) / 100 }); },
+      capMaxWords: Math.max(1, Math.min(12, Number(tpl.captionMaxWords) || 4)),
+      capMaxWordsLabel: (Number(tpl.captionMaxWords) || 4) + ' per line',
+      setCapMaxWords: function (e) { saveStyle({ captionMaxWords: Number(e.target.value) }); },
+
       // ── Caption animation ──
       // The renderer has always popped the live word by 8% over 120ms with both
       // numbers baked in, so it could be neither tuned nor switched off. A fade
       // is new, and applies per caption event rather than per word so a stacked
       // line does not flicker as the highlight moves along it.
-      animPop: Math.max(100, Math.min(140, Number(tpl.captionPopScale) || 100)),
-      animPopLabel: (Number(tpl.captionPopScale) || 100) <= 100 ? 'Off'
-        : '+' + (Math.round(Number(tpl.captionPopScale)) - 100) + '%',
+      animPop: Math.max(60, Math.min(140, Number(tpl.captionPopScale) || 100)),
+      // Below 100 the word grows in rather than overshooting, which the
+      // renderer already handles -- the scale simply starts on the other side.
+      animPopLabel: (function () {
+        var v = Math.round(Number(tpl.captionPopScale) || 100);
+        if (v === 100) return 'Off';
+        return v > 100 ? '+' + (v - 100) + '% pop' : (100 - v) + '% grow-in';
+      }()),
       setAnimPop: function (e) { saveStyle({ captionPopScale: Number(e.target.value) }); },
       animPopMs: Math.max(0, Math.min(400, Number(tpl.captionPopMs) || 0)),
       animPopMsLabel: (Number(tpl.captionPopMs) || 0) ? Math.round(Number(tpl.captionPopMs)) + ' ms' : 'Off',
@@ -1923,7 +2004,7 @@
       animFadeLabel: (Number(tpl.captionFadeMs) || 0) ? Math.round(Number(tpl.captionFadeMs)) + ' ms' : 'None',
       setAnimFade: function (e) { saveStyle({ captionFadeMs: Number(e.target.value) }); },
       // Off when either number is zeroed, matching what the renderer checks.
-      animPopOn: (Number(tpl.captionPopScale) || 100) > 100 && (Number(tpl.captionPopMs) || 0) > 0,
+      animPopOn: (Number(tpl.captionPopScale) || 100) !== 100 && (Number(tpl.captionPopMs) || 0) > 0,
 
       // The caption's own face and size, so the shared style can be set from the
       // Templates screen instead of only from inside a clip.
@@ -2432,6 +2513,13 @@
       capWords: (function () {
         var parts = sampleCaptionParts(previewAt, tpl.captionMode, tpl.captionStackMaxWords);
         var glow = Math.max(0, Math.min(30, Number(tpl.captionHighlightGlow) || 0));
+        // The pop, drawn the way the renderer draws it: start at the configured
+        // scale and settle to 1 over the configured time. Without this the two
+        // animation sliders moved numbers that the preview never showed, which
+        // is indistinguishable from their not working.
+        var popScale = Math.max(60, Math.min(140, Number(tpl.captionPopScale) || 100));
+        var popMs = Math.max(0, Math.min(400, Number(tpl.captionPopMs) || 0));
+        var popping = popScale !== 100 && popMs > 0;
         return parts.words.map(function (text, i) {
           var on = i === parts.liveIndex;
           return {
@@ -2441,6 +2529,9 @@
                 + ' font-family: ' + webFontFor(tpl.captionHighlightFont) + ';'
                 + (tpl.captionHighlightItalic ? ' font-style: italic;' : '')
                 + (glow ? ' text-shadow: 0 0 ' + Math.round(glow / 2) + 'px ' + (tpl.captionHighlight || '#D9B478') + ';' : '')
+                // display:inline-block, or transform does nothing on an inline box.
+                + (popping ? ' display: inline-block; --dc-pop: ' + (popScale / 100).toFixed(3)
+                  + '; animation: dcCapPop ' + popMs + 'ms ease-out 1;' : '')
               : '',
           };
         });
@@ -2519,6 +2610,8 @@
       capStyle: overlayStyle(tpl.captionPosition, tpl.captionHorizontal, tpl.captionPrimary, tpl.captionFontSize,
         Number(tpl.captionMarginV || 0) / Math.max(1, Number(tpl.height || 1920)),
         webFontFor(tpl.captionFont), tpl.captionUppercase)
+        + capInkStyle(tpl)
+        + capFadeStyle(tpl, UI.pvPlaying)
         + grabStyle(UI.dragKind === 'caption')
         + (UI.dragKind === 'caption' ? ' outline: 1px dashed rgba(240,214,166,.85); outline-offset: 4px;' : ''),
       capHandle: handleStyle(UI.tplLayer === 'caption'),

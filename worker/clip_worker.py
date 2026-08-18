@@ -729,7 +729,7 @@ def caption_word_override(
     # The live word pops, then settles. Both numbers used to be baked in, so the
     # effect could be neither tuned nor turned off; a scale of 100 or a duration
     # of 0 now means no pop at all.
-    if active and pop_scale > 100 and pop_ms > 0:
+    if active and pop_scale != 100 and pop_ms > 0:
         grown = pop_scale / 100
         tags.extend([
             f"\\fscx{pop_scale:g}",
@@ -899,7 +899,7 @@ def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) ->
     arabic_font = str(template.get("captionArabicFont", "Amiri"))
     highlight_italic = bool(template.get("captionHighlightItalic", True))
     highlight_glow = max(0.0, min(30.0, float(template.get("captionHighlightGlow", 0))))
-    pop_scale = int(max(100, min(140, int(template.get("captionPopScale", 108)))))
+    pop_scale = int(max(60, min(140, int(template.get("captionPopScale", 108)))))
     pop_ms = int(max(0, min(400, int(template.get("captionPopMs", 120)))))
     # A fade is applied per caption event rather than per word, so a stacked
     # line does not flicker as the highlight moves along it.

@@ -1640,7 +1640,7 @@ test('the animation settings read back the way they will render', () => {
     return StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates: [t], selectedTemplate: t });
   };
   const on = vals({ captionPopScale: 128, captionPopMs: 240, captionFadeMs: 200 });
-  assert.equal(on.animPopLabel, '+28%');
+  assert.equal(on.animPopLabel, '+28% pop');
   assert.equal(on.animPopMsLabel, '240 ms');
   assert.equal(on.animFadeLabel, '200 ms');
   assert.equal(on.animPopOn, true);
@@ -1759,6 +1759,74 @@ test('a host-owned node survives its screen being torn down', () => {
     const fn = new RegExp(`function ${paint}\\(vals\\)\\{\\s*alive\\(`);
     assert.match(html, fn, `${paint} re-attaches before docking`);
   }
+});
+
+test('the animation sliders actually animate the preview', () => {
+  // They moved numbers the preview never showed, which is indistinguishable
+  // from their not working.
+  const live = extra => {
+    Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null, edClipId: null, pvPlaying: true, pvTime: 1 });
+    const t = { id: 'x', name: 'X', height: 1920, captionMode: 'dynamic-stack', ...extra };
+    return StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates: [t], selectedTemplate: t });
+  };
+  const popped = live({ captionPopScale: 128, captionPopMs: 240 }).capWords.find(w => w.style);
+  assert.match(popped.style, /animation: dcCapPop 240ms/);
+  assert.match(popped.style, /--dc-pop: 1\.280/);
+  // transform does nothing on an inline box.
+  assert.match(popped.style, /display: inline-block/);
+  // Either zero switches it off, matching what the renderer checks.
+  assert.doesNotMatch(live({ captionPopScale: 100, captionPopMs: 240 }).capWords.find(w => w.style).style, /dcCapPop/);
+  assert.doesNotMatch(live({ captionPopScale: 128, captionPopMs: 0 }).capWords.find(w => w.style).style, /dcCapPop/);
+  // The fade is on the caption box, since the renderer fades the whole event.
+  assert.match(live({ captionFadeMs: 200 }).capStyle, /animation: dcCapFade 200ms/);
+  // And only while playing: a fade replaying on every idle repaint is a flicker.
+  Object.assign(StudioAdapter.ui, { pvPlaying: false, pvTime: 0 });
+  const idle = StudioAdapter.bindings({
+    projects: [], clips: [], tracks: [],
+    templates: [{ id: 'x', name: 'X', captionFadeMs: 200 }], selectedTemplate: { id: 'x', name: 'X', captionFadeMs: 200 },
+  });
+  assert.doesNotMatch(idle.capStyle, /dcCapFade/);
+});
+
+test('a pop below 100 grows the word in rather than doing nothing', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null, edClipId: null, pvPlaying: true, pvTime: 1 });
+  const t = { id: 'x', name: 'X', captionPopScale: 75, captionPopMs: 200, captionMode: 'dynamic-stack' };
+  const vals = StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates: [t], selectedTemplate: t });
+  assert.equal(vals.animPopLabel, '25% grow-in');
+  assert.equal(vals.animPopOn, true);
+  assert.match(vals.capWords.find(w => w.style).style, /--dc-pop: 0\.750/);
+});
+
+test('the caption styles the renderer already honours are reachable', () => {
+  // Seven fields read by clip_worker.py with nothing to set them: outline
+  // colour and width, drop shadow, background colour and opacity, line height,
+  // and words per line.
+  Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null, edClipId: null, pvPlaying: false, pvTime: 0 });
+  const t = {
+    id: 'x', name: 'X', captionOutline: '#112233', captionOutlineWidth: 8, captionShadow: 4,
+    captionBackground: '#101014', captionBackgroundOpacity: 60, captionLineHeight: 1.2, captionMaxWords: 3,
+  };
+  const vals = StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates: [t], selectedTemplate: t });
+  for (const [binding, expected] of [
+    ['capOutlineLabel', '#112233'], ['capOutlineWidthLabel', '8'], ['capShadowLabel', '4'],
+    ['capBgLabel', '#101014'], ['capBgOpacityLabel', '60%'], ['capLineHeightLabel', '120%'],
+    ['capMaxWordsLabel', '3 per line'],
+  ]) assert.equal(vals[binding], expected, binding);
+  // And the preview draws them.
+  assert.match(vals.capStyle, /line-height: 1\.20/);
+  assert.match(vals.capStyle, /background: rgba\(16,16,20,0\.60\)/);
+  const shadows = vals.capStyle.match(/#112233/g) || [];
+  assert.equal(shadows.length, 8, 'a ring of shadows, since a text-stroke thins the glyph');
+});
+
+test('an unset style says so rather than showing a bare zero', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null, edClipId: null });
+  const t = { id: 'x', name: 'X', captionOutlineWidth: 0, captionShadow: 0, captionBackgroundOpacity: 0 };
+  const vals = StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates: [t], selectedTemplate: t });
+  assert.equal(vals.capOutlineWidthLabel, 'None');
+  assert.equal(vals.capShadowLabel, 'None');
+  assert.equal(vals.capBgOpacityLabel, 'Off');
+  assert.doesNotMatch(vals.capStyle, /background: rgba/, 'no box when it is off');
 });
 
 // ── the sample plays ───────────────────────────────────────────────────────
