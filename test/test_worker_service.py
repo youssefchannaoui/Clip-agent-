@@ -126,6 +126,36 @@ class ImportFallbackTests(unittest.TestCase):
         finally:
             os.environ.pop("YTDLP_POT_PROVIDER_URL", None)
 
+    def test_job_network_settings_win_over_the_box_env(self):
+        # The dashboard-set proxy must beat .env: the env is what the operator
+        # could not reach (the Hetzner console mangles proxy URLs), so the
+        # payload is always the fresher intent.
+        os.environ["VIDEO_IMPORT_PROXY"] = "http://env-proxy:1"
+        try:
+            ip = importlib.reload(importlib.import_module("import_providers"))
+            source = {"type": "youtube", "network": {"proxy": "http://u:p@dash-proxy:8080"}}
+            options = ip.job_network_options(source, self.temp)
+            self.assertEqual(options["proxy"], "http://u:p@dash-proxy:8080")
+        finally:
+            os.environ.pop("VIDEO_IMPORT_PROXY", None)
+
+    def test_job_cookies_become_a_private_file_in_the_job_scratch(self):
+        ip = self.ip
+        source = {"type": "youtube", "network": {"cookiesText": "# Netscape\n.youtube.com\tTRUE\t/\tx"}}
+        options = ip.job_network_options(source, self.temp)
+        cookie_file = pathlib.Path(options["cookiefile"])
+        self.assertEqual(cookie_file.parent, self.temp, "must die with the job scratch dir")
+        self.assertEqual(cookie_file.stat().st_mode & 0o777, 0o600)
+        self.assertIn("youtube.com", cookie_file.read_text(encoding="utf-8"))
+
+    def test_without_payload_network_the_env_still_applies(self):
+        os.environ["VIDEO_IMPORT_PROXY"] = "http://env-proxy:1"
+        try:
+            ip = importlib.reload(importlib.import_module("import_providers"))
+            self.assertEqual(ip.job_network_options({"type": "youtube"}, self.temp)["proxy"], "http://env-proxy:1")
+        finally:
+            os.environ.pop("VIDEO_IMPORT_PROXY", None)
+
     def test_no_token_server_means_no_extractor_args(self):
         os.environ.pop("YTDLP_POT_PROVIDER_URL", None)
         ip = importlib.reload(importlib.import_module("import_providers"))

@@ -300,5 +300,31 @@ export function musicSatisfied(clip) {
   return Boolean(clip.musicVerified);
 }
 
+/**
+ * Network settings for URL imports: a proxy and/or a cookies export that the
+ * worker's downloader uses to get past YouTube's bot wall on datacenter IPs.
+ *
+ * Instance-level, not per-account: this is infrastructure, set by the operator
+ * from the dashboard because the alternative -- editing .env over the Hetzner
+ * web console -- mangles the very characters a proxy URL is made of.
+ *
+ * The values are credentials (a proxy password, a signed-in session), so they
+ * are stored but never echoed back whole: readers get presence and a masked
+ * preview, and only the worker payload carries the real thing.
+ */
+export function importNetworkSettings() {
+  const stored = state.importNetwork && typeof state.importNetwork === 'object' ? state.importNetwork : {};
+  return { proxy: String(stored.proxy || ''), cookiesText: String(stored.cookiesText || '') };
+}
+export function setImportNetworkSettings(next = {}) {
+  const current = importNetworkSettings();
+  state.importNetwork = {
+    proxy: next.proxy !== undefined ? String(next.proxy || '').trim() : current.proxy,
+    cookiesText: next.cookiesText !== undefined ? String(next.cookiesText || '').trim() : current.cookiesText,
+  };
+  save();
+  return importNetworkSettings();
+}
+
 export function clipsOwnedBy(userId) { return ownedBy(state.clips, userId); }
 export function projectsOwnedBy(userId) { return ownedBy(state.projects, userId); }

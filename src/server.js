@@ -7,6 +7,7 @@ import { config } from './config.js';
 import {
   state, save, log, logFor, clipSettings, setClipSettings, musicSettings, setMusicSettings,
   automationSettings, setAutomationSettings, publishingSettings, setPublishingSettings,
+  importNetworkSettings, setImportNetworkSettings,
 } from './store.js';
 import { ownedBy, findOwned } from './tenancy.js';
 import * as audio from './audio.js';
@@ -66,6 +67,41 @@ function html(res, status, value) {
   const body = Buffer.from(String(value));
   res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
   res.end(body);
+}
+
+function importNetworkPage({ saved = false, error = '' } = {}) {
+  const current = importNetworkSettings();
+  const mask = value => {
+    try { const u = new URL(value); return `${u.protocol}//…@${u.hostname}:${u.port || '80'}`; } catch { return '(set)'; }
+  };
+  const esc = value => String(value).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  // Credentials are never echoed back into the form: a saved proxy shows as a
+  // masked summary and saved cookies as a count, so the page can be screenshared
+  // without leaking either. Submitting empty fields clears them.
+  const cookieLines = current.cookiesText ? current.cookiesText.split('\n').filter(line => line.includes('youtube.com')).length : 0;
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Import network — DeenClipped</title>
+<style>body{font:15px/1.5 system-ui;max-width:640px;margin:40px auto;padding:0 16px;color:#1a1a1a}
+input,textarea{width:100%;padding:8px;margin:4px 0 16px;border:1px solid #bbb;border-radius:6px;font:inherit}
+textarea{height:140px;font-family:ui-monospace,monospace;font-size:12px}
+button{padding:10px 22px;border:0;border-radius:6px;background:#111;color:#fff;font:inherit;cursor:pointer}
+.ok{background:#e8f6ec;border:1px solid #9fd4ad;padding:10px 14px;border-radius:6px}
+.err{background:#fbeaea;border:1px solid #e3a6a6;padding:10px 14px;border-radius:6px}
+small{color:#666}</style>
+<h1>Import network</h1>
+<p>Used by the worker's YouTube downloader to get past the bot wall on its datacenter IP. Saved values are sent to the worker with each import job; they are never shown back here.</p>
+${saved ? '<p class="ok">Saved. The next URL import uses these settings — no rebuild needed.</p>' : ''}
+${error ? `<p class="err">${esc(error)}</p>` : ''}
+<form method="post">
+<label>Residential proxy URL <small>— currently ${current.proxy ? esc(mask(current.proxy)) : 'not set'}</small></label>
+<input name="proxy" placeholder="http://username:password@host:port" autocomplete="off">
+<label>YouTube cookies export <small>— currently ${cookieLines ? `${cookieLines} youtube.com cookie(s) saved` : 'not set'}. Use a throwaway Google account, never the channel's.</small></label>
+<textarea name="cookiesText" placeholder="# Netscape HTTP Cookie File&#10;.youtube.com&#9;TRUE&#9;/&#9;…"></textarea>
+<label><input type="checkbox" name="clearProxy" value="1" style="width:auto"> clear the saved proxy</label>
+<label><input type="checkbox" name="clearCookies" value="1" style="width:auto"> clear the saved cookies</label>
+<p><button>Save</button></p>
+<p><small>An empty field keeps what is already saved; use the checkboxes to clear.</small></p>
+</form>`;
 }
 
 function publicBase(req) {
@@ -564,6 +600,42 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/api/admin/analytics') {
     try { requireOperator(currentUser); return json(res, 200, admin.analytics(currentUser)); }
     catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+  }
+
+  // Import network settings, as a server-rendered page rather than a JSON API.
+  // These get set exactly when URL imports are down and the operator's only
+  // other tool is the Hetzner web console, which mangles the characters a
+  // proxy URL is made of. A plain form in the browser has no such failure mode.
+  if (pathname === '/admin/import-network') {
+    try { requireOperator(currentUser); } catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+    if (method === 'POST') {
+      const raw = await readRawBody(req, 2_000_000);
+      const form = new URLSearchParams(raw);
+      const proxy = String(form.get('proxy') || '').trim();
+      const cookiesText = String(form.get('cookiesText') || '').trim();
+      if (proxy) {
+        let parsed;
+        try { parsed = new URL(proxy); } catch { parsed = null; }
+        if (!parsed || !['http:', 'https:', 'socks5:'].includes(parsed.protocol)) {
+          return html(res, 400, importNetworkPage({ error: 'The proxy must be a full URL like http://user:pass@host:port' }));
+        }
+      }
+      if (cookiesText && !/youtube\.com/.test(cookiesText)) {
+        return html(res, 400, importNetworkPage({ error: 'That does not look like a YouTube cookies export — it has no youtube.com lines.' }));
+      }
+      // Empty means "keep what is saved": values are never echoed back into
+      // the form, so an empty field on submit is almost always an untouched
+      // one, and treating it as "clear" would wipe a credential the operator
+      // could not see was there. Clearing is the explicit checkboxes.
+      const update = {};
+      if (proxy) update.proxy = proxy; else if (form.get('clearProxy')) update.proxy = '';
+      if (cookiesText) update.cookiesText = cookiesText; else if (form.get('clearCookies')) update.cookiesText = '';
+      setImportNetworkSettings(update);
+      const describe = (value, cleared) => (value ? 'set' : cleared ? 'cleared' : 'kept');
+      log(`Import network settings updated by ${currentUser.email || currentUser.id}: proxy ${describe(proxy, form.get('clearProxy'))}, cookies ${describe(cookiesText, form.get('clearCookies'))}.`, 'info');
+      return html(res, 200, importNetworkPage({ saved: true }));
+    }
+    return html(res, 200, importNetworkPage({}));
   }
 
   const socialConnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok)\/connect$/);

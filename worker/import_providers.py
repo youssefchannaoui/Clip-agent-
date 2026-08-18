@@ -228,6 +228,34 @@ def youtube_network_options() -> dict[str, Any]:
     return options
 
 
+def job_network_options(source: dict, scratch: Path) -> dict[str, Any]:
+    """Network options for one job: the payload's settings over the box's.
+
+    The proxy and cookies used to live only in .env on the worker box, which
+    meant changing them required the Hetzner web console -- an interface that
+    mangles the exact characters a proxy URL is made of. They now also arrive
+    inside the job's source, set from the dashboard, and win over the env so
+    the operator's latest choice is always the one used.
+
+    Cookies arrive as text and are written into the job's scratch directory,
+    which the service deletes with the rest of the job -- a session credential
+    must not outlive the work it was lent for.
+    """
+    options = youtube_network_options()
+    network = (source or {}).get("network") or {}
+    proxy = str(network.get("proxy") or "").strip()
+    if proxy:
+        options["proxy"] = proxy
+    cookies_text = str(network.get("cookiesText") or "").strip()
+    if cookies_text:
+        cookie_file = scratch / "job-cookies.txt"
+        cookie_file.write_text(cookies_text + "\n", encoding="utf-8")
+        cookie_file.chmod(0o600)
+        options["cookiefile"] = str(cookie_file)
+        options.pop("cookiesfrombrowser", None)
+    return options
+
+
 def _download_failure(failures: list[str]) -> str:
     """One message naming every client that was tried.
 
@@ -297,7 +325,7 @@ class YtDlpImportProvider(ManagedImportProvider):
             if cancelled():
                 raise ImportProviderError("Job cancelled.")
             options = dict(ydl_opts)
-            options.update(youtube_network_options())
+            options.update(job_network_options(source, destination.parent))
             if client:
                 # Merged, not assigned: youtube_network_options() may already
                 # carry the PO-token server in extractor_args, and replacing

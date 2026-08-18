@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { config } from './config.js';
-import { state, save, log, clipSettings, musicSettings, ownerOfRecord, musicSatisfied } from './store.js';
+import { state, save, log, clipSettings, musicSettings, ownerOfRecord, musicSatisfied, importNetworkSettings } from './store.js';
 import { selectedTemplate, templateById, templateForClip } from './templates.js';
 import { withOwner, ownerOf } from './tenancy.js';
 import { workerMusicTracks } from './audio.js';
@@ -496,7 +496,7 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     id: projectId, projectId, title: String(title || '').trim() || sourceMeta?.title || '',
     source: options.sourceKind === 'object_storage'
       ? { type: 'object_storage', objectKey: assertStorageObjectKey(value), title: options.originalFileName || sourceMeta?.title || '' }
-      : { type: 'youtube', url: parseYouTubeUrl(value).canonicalUrl },
+      : withImportNetwork({ type: 'youtube', url: parseYouTubeUrl(value).canonicalUrl }),
     template, musicTracks: remoteMusicTracks(tracks, user.id), settings: sharedSettings(user, options),
     requestedClipCount: clipSettings(user).clipsPerVideo,
     sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
@@ -1269,8 +1269,21 @@ function remoteSourceFor(project) {
     return { type: 'object_storage', objectKey: project.sourceObjectKey, title: project.title || '' };
   }
   const url = String(project?.url || '').trim();
-  if (url) return { type: 'youtube', url, title: project.title || '' };
+  if (url) return withImportNetwork({ type: 'youtube', url, title: project.title || '' });
   throw new Error('This lecture has no source left to work from: the upload is gone and it has no link to re-import.');
+}
+
+// The operator's proxy / cookies ride inside the source, so every job type that
+// downloads from YouTube gets them without separate plumbing. Only YouTube
+// sources: an upload never talks to YouTube and must not carry credentials it
+// has no use for. Exported for tests.
+export function withImportNetwork(source) {
+  if (source?.type !== 'youtube') return source;
+  const settings = importNetworkSettings();
+  const network = {};
+  if (settings.proxy) network.proxy = settings.proxy;
+  if (settings.cookiesText) network.cookiesText = settings.cookiesText;
+  return Object.keys(network).length ? { ...source, network } : source;
 }
 
 export function queueClipRerender(clipId, templateId, { asVariant = false } = {}) {
