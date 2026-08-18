@@ -302,12 +302,21 @@ class CaptionAnimationTests(unittest.TestCase):
         )
         self.assertNotIn(r"\fscx", quiet)
 
-    def test_every_caption_mode_gets_the_fade(self):
+    def test_every_caption_event_carries_the_fade(self):
         # Applied per event rather than per word: per word, a stacked line would
         # flicker as the highlight moves along it.
+        #
+        # Counted against the Dialogue lines themselves rather than a fixed
+        # number -- the Quran mode added three more and a magic 3 just started
+        # failing without saying anything useful.
         source = (ROOT / "worker" / "clip_worker.py").read_text(encoding="utf-8")
         self.assertIn("fade_tag = ", source)
-        self.assertEqual(source.count("{fade_tag}{"), 3, "all three caption modes fade")
+        caption_events = re.findall(r'f"Dialogue: 2,[^"]*Caption,,[^"]*"', source)
+        ayah_events = re.findall(r'f"Dialogue: 2,[^"]*(?:Ayah|Translation),,[^"]*"', source)
+        self.assertTrue(caption_events, "the caption modes emit events")
+        self.assertTrue(ayah_events, "so does the Quran mode")
+        for event in caption_events + ayah_events:
+            self.assertIn("{fade_tag}", event, event[:90])
 
 
 class QuranCaptionTests(unittest.TestCase):
