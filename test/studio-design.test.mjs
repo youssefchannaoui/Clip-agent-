@@ -1903,7 +1903,31 @@ test('the words are appended so the patcher cannot eat the drag handles', () => 
   assert.doesNotMatch(fn, /insertBefore/);
   // And it is found through the handler table, not by matching the text that is
   // the very thing changing.
-  assert.match(html, /STUDIO\.handlers\.indexOf\(vals\.dragCaption\)/);
+  assert.match(html, /STUDIO\.handlers\.indexOf\(handler\)/);
+  // Sample words are the Templates preview's business. Without this guard they
+  // were also written into the clip editor's caption overlay, so the picture
+  // showed "He has the whole of the dunya" over the clip's own captions.
+  assert.match(fn, /screen!=='templates'\)return/);
+});
+
+test('a handler node is matched on the whole index, not a prefix of it', () => {
+  // data-dc-h is "evt=index" joined by ";", so a substring selector for
+  // mousedown=1 also matches mousedown=12. That is how the Templates sample
+  // caption found the editor's overlay: two different handlers, one selector.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const fn = /function nodeFor\([\s\S]*?\n    \}\n/.exec(html)[0];
+  assert.doesNotMatch(fn, /data-dc-h\*=/, 'substring matching is the bug');
+  assert.match(fn, /Number\(index\)===i/, 'compares the parsed index');
+
+  // The parsing itself, on the runtime's real attribute format.
+  const parse = (attr, evt, i) => attr.split(';').some(pair => {
+    const [name, index] = pair.split('=');
+    return name === evt && Number(index) === i;
+  });
+  assert.equal(parse('mousedown=12', 'mousedown', 1), false, 'a prefix must not match');
+  assert.equal(parse('mousedown=12', 'mousedown', 12), true);
+  assert.equal(parse('click=3;mousedown=1', 'mousedown', 1), true, 'finds it among several');
+  assert.equal(parse('click=1', 'mousedown', 1), false, 'the event has to match too');
 });
 
 test('the sample caption is drawn the way the caption mode will draw it', () => {

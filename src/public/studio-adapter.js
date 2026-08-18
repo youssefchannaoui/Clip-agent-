@@ -82,6 +82,11 @@
     edPlayhead: 0,
     edTime: 0,
     edPlaying: false,
+    // True once the clean source has failed to load and the editor has fallen
+    // back to the captioned export. The overlay caption hides in that state,
+    // because the export already has captions burned into the picture and two
+    // sets on screen is worse than none of your own.
+    edBurned: false,
     edBlockDraft: null,
     edDirty: false,
     edSaving: false,
@@ -113,9 +118,13 @@
   function seekHost(seconds) {
     var v = edVideoEl;
     if (!v) return;
-    // Guarded: seeking before metadata arrives throws in Safari, and the clip
-    // is the whole file here, so a seek past its end silently does nothing.
-    try { v.currentTime = Math.max(0, Number(seconds) || 0); } catch (err) { /* not seekable yet */ }
+    // Clip-local seconds in, media seconds out. A clean plate is the whole
+    // lecture, so the clip's start is added; the export is already cut and its
+    // offset is zero. Mixing the two timebases makes the editor look dead
+    // rather than slightly off, so the offset lives on the element that knows
+    // which source it is showing.
+    var base = Number(v.dataset && v.dataset.offset) || 0;
+    try { v.currentTime = base + Math.max(0, Number(seconds) || 0); } catch (err) { /* not seekable yet */ }
   }
 
   // ── helpers ───────────────────────────────────────────────────────────────
@@ -1993,7 +2002,8 @@
         (tpl.captionPrimary || '#F0D6A6') + '; font-family: Outfit, Inter, sans-serif; font-weight: 600; line-height: 1.2; font-size: ' +
         Math.max(8, Math.round(Number(tpl.captionFontSize || 96) / 8)) + 'px;'
         + (tpl.captionUppercase ? ' text-transform: uppercase;' : '')
-        + ' font-family: ' + webFontFor(tpl.captionFont) + ';',
+        + ' font-family: ' + webFontFor(tpl.captionFont) + ';'
+        + (UI.edBurned ? ' display: none;' : ''),
       edCapHandle: 'position: absolute; inset: -5px; border: 1px dashed rgba(240,214,166,.7); border-radius: 8px; pointer-events: none;',
       dragEdCap: dragCaptionFrom,
 
@@ -2157,7 +2167,20 @@
       edProgressLabel: secsToClock(edTime),
       // The video itself. Empty when no clip is open, which is how the host
       // knows to tear the element down rather than leave the last clip playing.
-      edVideoUrl: edClip ? edClip.videoUrl || '' : '',
+      //
+      // The rendered export has captions burned into the picture, so previewing
+      // it under the editor's own caption overlay shows the same words twice.
+      // The clean source -- the lecture before any captions -- is what the
+      // editor should draw on, with the clip's own range played out of it.
+      // Falling back to the export is supported (an old lecture's source may be
+      // gone); the overlay hides in that case rather than doubling up.
+      edVideoUrl: edClip ? (UI.edBurned ? (edClip.videoUrl || '') : '/api/clips/' + encodeURIComponent(edClip.id) + '/source-preview') : '',
+      edExportUrl: edClip ? edClip.videoUrl || '' : '',
+      edBurned: Boolean(UI.edBurned),
+      // Where this clip sits inside the lecture. A clean plate is the whole
+      // lecture, so every seek is offset by this; the export is already cut and
+      // starts at zero.
+      edStartSec: (edClip && !UI.edBurned) ? Number(edClip.startSec) || 0 : 0,
       edPoster: edClip ? edClip.thumbUrl || '' : '',
       edPlaying: Boolean(UI.edPlaying),
       edPlayIcon: UI.edPlaying ? 'ph ph-pause' : 'ph ph-play',

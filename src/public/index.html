@@ -2138,11 +2138,26 @@ function studioWanted(){return window.STUDIO_SHELL===true}
 
        The node is found through the runtime's own handler table rather than by
        matching text, since the text is exactly what changes. */
-    function captionBox(vals){
+    /* Finds the node bound to a handler.
+
+       Matched exactly, not with a substring selector. data-dc-h is
+       "evt=index" joined by ";", so [data-dc-h*="mousedown=1"] also matches
+       "mousedown=12" -- which is how the Templates screen's sample caption
+       ("He has the whole of the dunya...") ended up written into the clip
+       editor's caption overlay, on top of the clip's own captions. */
+    function nodeFor(handler,evt='mousedown'){
       if(!STUDIO||!STUDIO.handlers)return null;
-      const i=STUDIO.handlers.indexOf(vals.dragCaption);
-      return i<0?null:document.querySelector(`#studio [data-dc-h*="mousedown=${i}"]`);
+      const i=STUDIO.handlers.indexOf(handler);
+      if(i<0)return null;
+      for(const node of document.querySelectorAll('#studio [data-dc-h]')){
+        for(const pair of (node.getAttribute('data-dc-h')||'').split(';')){
+          const [name,index]=pair.split('=');
+          if(name===evt&&Number(index)===i)return node;
+        }
+      }
+      return null;
     }
+    function captionBox(vals){return nodeFor(vals.dragCaption)}
     /* The editor's real video.
 
        The design compiles the editor preview to a still frame with the
@@ -2155,10 +2170,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        reads the element back through StudioAdapter.setEditorVideo. */
     let edVideoNode=null, edVideoTick=null;
     function editorFrame(vals){
-      if(!STUDIO||!STUDIO.handlers)return null;
-      const i=STUDIO.handlers.indexOf(vals.dragEdCap);
-      if(i<0)return null;
-      const overlay=document.querySelector(`#studio [data-dc-h*="mousedown=${i}"]`);
+      const overlay=nodeFor(vals.dragEdCap);
       return overlay?overlay.parentElement:null;
     }
     function paintEditorVideo(vals){
@@ -2198,9 +2210,21 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           edVideoTick=null;
           if(!edVideoNode||!edVideoNode.isConnected)return;
           if(edVideoNode.paused)return;
-          const t=edVideoNode.currentTime;
+          const base=Number(edVideoNode.dataset.offset)||0;
+          const span=Number(edVideoNode.dataset.span)||0;
+          const t=Math.max(0,edVideoNode.currentTime-base);
+          /* The clean plate runs on past the clip, so playback stops where the
+             clip does rather than wandering into the next minute of lecture. */
+          if(span&&t>=span){
+            edVideoNode.pause();
+            try{edVideoNode.currentTime=base}catch{}
+            StudioAdapter.ui.edTime=0;StudioAdapter.ui.edPlayhead=0;
+            StudioAdapter.ui.edPlaying=false;
+            paintStudio();
+            return;
+          }
           StudioAdapter.ui.edTime=t;
-          StudioAdapter.ui.edPlayhead=t/Math.max(1,edVideoNode.duration||1);
+          StudioAdapter.ui.edPlayhead=span?t/span:0;
           const now=Date.now();
           if(now-lastPaint>=100){lastPaint=now;paintStudio()}
           edVideoTick=requestAnimationFrame(follow);
@@ -2210,8 +2234,30 @@ function studioWanted(){return window.STUDIO_SHELL===true}
            after the clip runs out. */
         edVideoNode.onended=()=>{StudioAdapter.ui.edPlaying=false;paintStudio()};
         edVideoNode.onseeked=()=>paintStudio();
+        /* No clean source for this lecture -- it was cleaned up, or predates
+           them being kept. Fall back to the captioned export, which also hides
+           the overlay caption so the picture never shows two sets of words.
+           A one-way latch: the export must not then fail back to the source it
+           just replaced. */
+        edVideoNode.onerror=()=>{
+          if(StudioAdapter.ui.edBurned)return;
+          StudioAdapter.ui.edBurned=true;
+          paintStudio();
+        };
+        /* A clean plate starts at the top of the lecture, so playback begins at
+           the clip's own start rather than at the beginning of the talk. */
+        edVideoNode.onloadedmetadata=()=>{
+          const base=Number(edVideoNode.dataset.offset)||0;
+          if(base>0&&Math.abs(edVideoNode.currentTime-base)>0.2){
+            try{edVideoNode.currentTime=base}catch{}
+          }
+          paintStudio();
+        };
         StudioAdapter.setEditorVideo(edVideoNode);
       }
+      /* The clip's window inside whatever source is playing. */
+      edVideoNode.dataset.offset=String(Number(vals.edStartSec)||0);
+      edVideoNode.dataset.span=String(Number(vals.edDurationSec)||0);
       if(edVideoNode.dataset.src!==vals.edVideoUrl){
         edVideoNode.dataset.src=vals.edVideoUrl;
         /* The password only means anything to this server. A rendered clip
@@ -2289,6 +2335,9 @@ function studioWanted(){return window.STUDIO_SHELL===true}
     }
 
     function paintCaptionWords(vals){
+      /* Templates only. These are sample words for previewing a style; the
+         editor draws the clip's real captions. */
+      if(StudioAdapter.ui.screen!=='templates')return;
       const box=captionBox(vals);
       if(!box)return;
       for(const node of box.childNodes){
