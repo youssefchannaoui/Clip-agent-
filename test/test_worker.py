@@ -485,6 +485,42 @@ class JavaScriptRuntimeTests(unittest.TestCase):
         self.assertIn("deno: JS runtime", script)
 
 
+class POTokenProviderTests(unittest.TestCase):
+    """YouTube's bot wall needs a proof-of-origin token, minted by a sidecar.
+
+    The probe on the box showed the real shape of the "403" outbreak: playability
+    LOGIN_REQUIRED, "Sign in to confirm you're not a bot", and
+    "PO Token Providers: none". The token setup is two halves -- a pip plugin in
+    the worker image and a token server in the compose file -- and either half
+    alone silently mints nothing, so these pin the halves to each other.
+    """
+
+    def _requirements(self):
+        return (ROOT / "worker" / "requirements.txt").read_text(encoding="utf-8")
+
+    def _compose(self):
+        return (ROOT / "worker" / "docker-compose.yml").read_text(encoding="utf-8")
+
+    def test_plugin_and_server_are_the_same_version(self):
+        plugin = re.search(r"bgutil-ytdlp-pot-provider==([\d.]+)", self._requirements())
+        server = re.search(r"brainicism/bgutil-ytdlp-pot-provider:([\d.]+)", self._compose())
+        self.assertIsNotNone(plugin, "the yt-dlp PO-token plugin is not in requirements.txt")
+        self.assertIsNotNone(server, "the PO-token server is not in docker-compose.yml")
+        self.assertEqual(
+            plugin.group(1), server.group(1),
+            "plugin and server must be bumped together -- mismatched halves degrade silently",
+        )
+
+    def test_the_worker_knows_where_the_token_server_is(self):
+        self.assertIn("YTDLP_POT_PROVIDER_URL", self._compose())
+        self.assertIn("http://bgutil-provider:4416", self._compose())
+
+    def test_the_deploy_check_probes_the_token_server(self):
+        script = (ROOT / "worker" / "verify-deploy.sh").read_text(encoding="utf-8")
+        self.assertIn("bgutil-provider:4416/ping", script)
+        self.assertIn("potProvider", script)
+
+
 class OpenCVVersionGuardTests(unittest.TestCase):
     """OpenCV 5 removed cv2.CascadeClassifier, which speaker framing needs.
 

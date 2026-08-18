@@ -114,6 +114,23 @@ class ImportFallbackTests(unittest.TestCase):
             {"type": "youtube", "url": "u"}, self.temp / "s.mp4", lambda: False, None,
         )
 
+    def test_the_po_token_server_reaches_the_downloader_options(self):
+        os.environ["YTDLP_POT_PROVIDER_URL"] = "http://bgutil-provider:4416"
+        try:
+            ip = importlib.reload(importlib.import_module("import_providers"))
+            options = ip.youtube_network_options()
+            self.assertEqual(
+                options["extractor_args"]["youtubepot-bgutilhttp"]["base_url"],
+                ["http://bgutil-provider:4416"],
+            )
+        finally:
+            os.environ.pop("YTDLP_POT_PROVIDER_URL", None)
+
+    def test_no_token_server_means_no_extractor_args(self):
+        os.environ.pop("YTDLP_POT_PROVIDER_URL", None)
+        ip = importlib.reload(importlib.import_module("import_providers"))
+        self.assertNotIn("extractor_args", ip.youtube_network_options())
+
     BLOCKED = "Download failed (yt-dlp): ERROR: unable to download video data: HTTP Error 403: Forbidden"
 
     def test_a_block_falls_through_to_the_next_provider(self):

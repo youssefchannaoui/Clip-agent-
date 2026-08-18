@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import html
+import importlib.util
 import inspect
 import json
 import math
@@ -1701,6 +1702,13 @@ def capabilities() -> dict[str, Any]:
         # themselves -- a proxy URL carries credentials and a cookie file is an
         # account session.
         "importProxy": bool(os.getenv("VIDEO_IMPORT_PROXY", "").strip()),
+        # Whether yt-dlp can mint YouTube proof-of-origin tokens: the plugin in
+        # the image and the token server's URL configured. Both or it is off --
+        # the plugin without the server mints nothing, silently.
+        "potProvider": bool(
+            importlib.util.find_spec("yt_dlp_plugins")
+            and os.getenv("YTDLP_POT_PROVIDER_URL", "").strip()
+        ),
         # Which services the chain can actually reach, so "URLs do not work" is
         # answerable without reading .env over SSH.
         "importChain": [

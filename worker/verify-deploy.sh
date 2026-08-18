@@ -96,6 +96,17 @@ else
   bad "deno: JS runtime" "missing — every YouTube import will fail with HTTP 403. The Dockerfile COPYs it from denoland/deno; rebuild with --no-cache"
 fi
 
+# The PO-token server, which answers YouTube's "Sign in to confirm you're not
+# a bot" wall on this datacenter IP. Probed from inside the worker container
+# because that is the network path the plugin actually uses; a server that is
+# up but unreachable from the worker is still a broken deploy.
+pot=$(docker exec "$CONTAINER" sh -c 'curl -s -m 5 http://bgutil-provider:4416/ping' 2>/dev/null)
+if printf '%s' "$pot" | grep -q "server_uptime\|version"; then
+  ok "po-token server: reachable"
+else
+  bad "po-token server: unreachable" "guarded videos will die on YouTube's bot wall. Is the bgutil-provider service up? docker compose -f worker/docker-compose.yml up -d"
+fi
+
 echo
 
 # ── the service itself ────────────────────────────────────────────────────────
@@ -130,7 +141,7 @@ fi
 caps=$(docker exec "$CONTAINER" python -c 'import sys; sys.path.insert(0,"/app/worker"); import json, clip_worker; print(json.dumps(clip_worker.capabilities()))' 2>/dev/null)
 if [ -n "$caps" ]; then
   echo "capabilities: $caps"
-  for feature in captionAnimation clipBreakdown; do
+  for feature in captionAnimation clipBreakdown potProvider; do
     if printf '%s' "$caps" | grep -q "\"$feature\": true"; then
       ok "capability: $feature"
     else

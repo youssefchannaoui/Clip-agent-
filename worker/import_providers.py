@@ -217,6 +217,14 @@ def youtube_network_options() -> dict[str, Any]:
     browser = os.getenv("VIDEO_IMPORT_COOKIES_FROM_BROWSER", "").strip()
     if browser:
         options["cookiesfrombrowser"] = (browser,)
+    # The PO-token server (bgutil-provider in docker-compose.yml). YouTube's
+    # bot wall on datacenter IPs -- playability LOGIN_REQUIRED, "Sign in to
+    # confirm you're not a bot" -- is answered by a proof-of-origin token, not
+    # by cookies or a different player client. The plugin from requirements.txt
+    # picks this URL up from extractor_args.
+    pot = os.getenv("YTDLP_POT_PROVIDER_URL", "").strip()
+    if pot:
+        options["extractor_args"] = {"youtubepot-bgutilhttp": {"base_url": [pot]}}
     return options
 
 
@@ -291,7 +299,14 @@ class YtDlpImportProvider(ManagedImportProvider):
             options = dict(ydl_opts)
             options.update(youtube_network_options())
             if client:
-                options["extractor_args"] = {"youtube": {"player_client": [client]}}
+                # Merged, not assigned: youtube_network_options() may already
+                # carry the PO-token server in extractor_args, and replacing
+                # the dict wholesale would silently drop it -- the exact
+                # rotation that runs when the box is blocked is the one that
+                # needs the token most.
+                extractor = dict(options.get("extractor_args") or {})
+                extractor["youtube"] = {"player_client": [client]}
+                options["extractor_args"] = extractor
             try:
                 with yt_dlp.YoutubeDL(options) as ydl:
                     info = ydl.extract_info(youtube_url, download=True)

@@ -1,6 +1,14 @@
 faster-whisper>=1.2.0,<2.0.0
 yt-dlp[default]>=2026.7.4
 yt-dlp-ejs>=0.8.0
+# Proof-of-origin tokens for YouTube. Datacenter IPs get "Sign in to confirm
+# you're not a bot" (playability LOGIN_REQUIRED) on videos YouTube considers
+# risky; a PO token is the way to answer without handing over an account.
+# This is the yt-dlp plugin half; the token-minting server is the
+# bgutil-provider service in docker-compose.yml. ==, not >=: the plugin and
+# the server must be the same version, so they are bumped together or not at
+# all. test/test_worker.py pins the two files to each other.
+bgutil-ytdlp-pot-provider==1.3.1
 # Capped below 5.0 deliberately. OpenCV 5 removed the Haar cascade API
 # (cv2.CascadeClassifier), which is what speaker framing detects faces with.
 # Unbounded, pip resolved 5.0.0.93 and framing silently degraded to "no face
