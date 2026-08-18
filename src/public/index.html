@@ -2665,7 +2665,18 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           &&/[a-z]{4}/.test(n.textContent||'')&&!/Nasheed/.test(n.textContent||''));
         const nasheedLane=kids.find(n=>/Nasheed/.test(n.textContent||''));
         const ruler=kids[0];
-        if(ruler)set(ruler,{'order':'0'});
+        if(ruler){
+          set(ruler,{'order':'0'});
+          /* The design's ruler is six hardcoded strings -- 0s 8s 15s 23s 30s
+             38s -- describing whatever clip the mockup used. On a 43s clip the
+             marks lie about where you are. Written from the real duration.
+             Text only, so the patcher restoring it is corrected next paint. */
+          const marks=vals.edRuler||[];
+          [...ruler.children].forEach((span,i)=>{
+            const label=marks[i]&&marks[i].label;
+            if(label&&span.textContent!==label)span.textContent=label;
+          });
+        }
         if(capLane)set(capLane,{'order':'1','position':'relative','min-height':'34px','overflow':'hidden'});
         set(videoLane,{'order':'2'});
         if(nasheedLane)set(nasheedLane,{'order':'3'});
