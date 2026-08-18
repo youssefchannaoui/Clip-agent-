@@ -1974,8 +1974,13 @@ def process(job_file: Path) -> None:
     total = len(selected)
     # The plan is sent once, so the app can list every clip by name while they
     # render instead of only naming the one in progress.
+    # Titled exactly the way the finished clip is titled below: an AI title is
+    # used as-is, and only a missing one falls back to the transcript titler.
+    # This previously ran AI titles *through* the fallback titler and omitted
+    # its required number argument -- a TypeError that killed every render, on
+    # a line two tests covered by grepping the source for it.
     clip_plan = [
-        {"index": i, "title": title_from_text(c.ai_title or c.text), "durationSec": round(c.duration, 1)}
+        {"index": i, "title": c.ai_title or title_from_text(c.text, i), "durationSec": round(c.duration, 1)}
         for i, c in enumerate(selected, 1)
     ]
     clip_seconds: list[float] = []

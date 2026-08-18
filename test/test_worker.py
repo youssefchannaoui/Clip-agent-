@@ -252,6 +252,31 @@ class RenderProgressTests(unittest.TestCase):
         self.assertIn("clipPlan=clip_plan", source)
         self.assertIn("clipPercent=", source)
 
+    def test_building_the_clip_plan_actually_runs(self):
+        # The grep above passed for weeks while this line raised TypeError --
+        # title_from_text() was called without its required number -- and every
+        # render died at "Processing engine failed". A string that exists in the
+        # file proves nothing about whether it runs, so this builds the plan.
+        class FakeCandidate:
+            def __init__(self, text, ai_title, duration):
+                self.text, self.ai_title, self.duration = text, ai_title, duration
+
+        selected = [
+            FakeCandidate("So, alright guys, patience is the key to every hardship we face.", "", 31.4),
+            FakeCandidate("some short bit", "An AI-chosen title", 22.0),
+        ]
+        plan = [
+            {"index": i, "title": c.ai_title or worker.title_from_text(c.text, i), "durationSec": round(c.duration, 1)}
+            for i, c in enumerate(selected, 1)
+        ]
+        self.assertEqual([row["index"] for row in plan], [1, 2])
+        # An AI title is used verbatim, not pushed back through the fallback
+        # titler, or the plan names differ from the finished clips' names.
+        self.assertEqual(plan[1]["title"], "An AI-chosen title")
+        # Without one, the transcript titler runs and strips the filler opener.
+        self.assertTrue(plan[0]["title"].startswith("Patience"), plan[0]["title"])
+        self.assertEqual(plan[0]["durationSec"], 31.4)
+
     def test_no_eta_is_claimed_before_a_clip_has_finished(self):
         # The estimate is measured throughput. With nothing measured yet there is
         # no honest figure, so none is sent.
