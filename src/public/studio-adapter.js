@@ -1888,6 +1888,36 @@
       hlSameAsCaption: tpl.captionHighlightFont === tpl.captionFont,
       matchHlFont: function (e) { stop(e); saveStyle({ captionHighlightFont: tpl.captionFont }); },
 
+      // ── Caption animation ──
+      // The renderer has always popped the live word by 8% over 120ms with both
+      // numbers baked in, so it could be neither tuned nor switched off. A fade
+      // is new, and applies per caption event rather than per word so a stacked
+      // line does not flicker as the highlight moves along it.
+      animPop: Math.max(100, Math.min(140, Number(tpl.captionPopScale) || 100)),
+      animPopLabel: (Number(tpl.captionPopScale) || 100) <= 100 ? 'Off'
+        : '+' + (Math.round(Number(tpl.captionPopScale)) - 100) + '%',
+      setAnimPop: function (e) { saveStyle({ captionPopScale: Number(e.target.value) }); },
+      animPopMs: Math.max(0, Math.min(400, Number(tpl.captionPopMs) || 0)),
+      animPopMsLabel: (Number(tpl.captionPopMs) || 0) ? Math.round(Number(tpl.captionPopMs)) + ' ms' : 'Off',
+      setAnimPopMs: function (e) { saveStyle({ captionPopMs: Number(e.target.value) }); },
+      animFade: Math.max(0, Math.min(600, Number(tpl.captionFadeMs) || 0)),
+      animFadeLabel: (Number(tpl.captionFadeMs) || 0) ? Math.round(Number(tpl.captionFadeMs)) + ' ms' : 'None',
+      setAnimFade: function (e) { saveStyle({ captionFadeMs: Number(e.target.value) }); },
+      // Off when either number is zeroed, matching what the renderer checks.
+      animPopOn: (Number(tpl.captionPopScale) || 100) > 100 && (Number(tpl.captionPopMs) || 0) > 0,
+
+      // The caption's own face and size, so the shared style can be set from the
+      // Templates screen instead of only from inside a clip.
+      capFonts: CAPTION_FONTS.map(function (f) {
+        return { label: f.label, name: f.name, web: f.web, on: tpl.captionFont === f.name,
+          select: function (e) { stop(e); saveStyle({ captionFont: f.name }); } };
+      }),
+      capSize: Math.max(24, Math.min(140, Number(tpl.captionFontSize) || 96)),
+      capSizeLabel: (Number(tpl.captionFontSize) || 96) + ' px',
+      setCapSize: function (e) { saveStyle({ captionFontSize: Number(e.target.value) }); },
+      capUpper: Boolean(tpl.captionUppercase),
+      toggleCapUpper: function (e) { stop(e); saveStyle({ captionUppercase: !tpl.captionUppercase }); },
+
       edFonts: CAPTION_FONTS.map(function (f) {
         return {
           label: f.label,

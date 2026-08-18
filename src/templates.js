@@ -43,6 +43,12 @@ const DEFAULTS = Object.freeze({
   captionHighlightFont: 'DejaVu Serif',
   captionHighlightItalic: true,
   captionHighlightGlow: 0,
+  // Caption animation. The renderer has always popped the live word by 8% over
+  // 120ms; both numbers were hardcoded, so the effect could be neither tuned
+  // nor turned off. A pop of 100 is no pop at all.
+  captionPopScale: 108,
+  captionPopMs: 120,
+  captionFadeMs: 0,
   captionOutline: '#09090A',
   captionOutlineWidth: 5,
   captionShadow: 1,
@@ -99,6 +105,8 @@ export const NUMBER_RANGES = {
   captionFontSize: [24, 140], captionOutlineWidth: [0, 14], captionShadow: [0, 8], captionBackgroundOpacity: [0, 100],
   // Clamped to what clip_worker.py accepts for the highlight's glow.
   captionHighlightGlow: [0, 30],
+  // 100 = no pop. 0ms on either timing switches that animation off.
+  captionPopScale: [100, 140], captionPopMs: [0, 400], captionFadeMs: [0, 600],
   // 960 is half of a 1920-tall frame. The caption anchors to whichever edge it
   // is nearer, so the cap is what decides how far toward the centre it can
   // travel -- at 800 there was a band around the middle it could not reach from

@@ -259,6 +259,56 @@ class RenderProgressTests(unittest.TestCase):
         self.assertIn("eta = None", source)
 
 
+class CaptionAnimationTests(unittest.TestCase):
+    """The live word's pop, and the per-event fade.
+
+    The pop was baked in at 8% over 120ms, so it could be neither tuned nor
+    switched off. The fade is new.
+    """
+
+    def _tags(self, **kw):
+        return worker.caption_word_override(
+            "word", active=True, primary="&H00FFFFFF", highlight="&H0078B4D9",
+            highlight_font="Amiri", arabic_font="Amiri", highlight_italic=True,
+            highlight_glow=0, scale_y=88, **kw,
+        )
+
+    def test_the_pop_uses_the_configured_size_and_speed(self):
+        tags = self._tags(pop_scale=128, pop_ms=240)
+        self.assertIn(r"\fscx128", tags)
+        self.assertIn(r"\t(0,240,", tags)
+        # It must settle back to the caption's own scale, not to 100 flat.
+        self.assertIn(r"\fscy88)", tags)
+
+    def test_a_scale_of_100_means_no_pop(self):
+        self.assertNotIn(r"\fscx", self._tags(pop_scale=100, pop_ms=240))
+
+    def test_a_duration_of_zero_means_no_pop(self):
+        self.assertNotIn(r"\t(", self._tags(pop_scale=128, pop_ms=0))
+
+    def test_the_default_matches_what_was_hardcoded(self):
+        # Existing templates carry no value for these, so the default has to
+        # reproduce exactly what every clip rendered with before.
+        tags = self._tags()
+        self.assertIn(r"\fscx108", tags)
+        self.assertIn(r"\t(0,120,", tags)
+
+    def test_an_inactive_word_never_pops(self):
+        quiet = worker.caption_word_override(
+            "word", active=False, primary="&H00FFFFFF", highlight="&H0078B4D9",
+            highlight_font="Amiri", arabic_font="Amiri", highlight_italic=True,
+            highlight_glow=0, scale_y=88, pop_scale=128, pop_ms=240,
+        )
+        self.assertNotIn(r"\fscx", quiet)
+
+    def test_every_caption_mode_gets_the_fade(self):
+        # Applied per event rather than per word: per word, a stacked line would
+        # flicker as the highlight moves along it.
+        source = (ROOT / "worker" / "clip_worker.py").read_text(encoding="utf-8")
+        self.assertIn("fade_tag = ", source)
+        self.assertEqual(source.count("{fade_tag}{"), 3, "all three caption modes fade")
+
+
 class CaptionFontTests(unittest.TestCase):
     """Every font the picker offers has to exist in the worker image.
 

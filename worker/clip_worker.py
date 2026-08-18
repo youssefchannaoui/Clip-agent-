@@ -713,6 +713,8 @@ def caption_word_override(
     highlight_italic: bool,
     highlight_glow: float,
     scale_y: int,
+    pop_scale: int = 108,
+    pop_ms: int = 120,
 ) -> str:
     color = highlight if active else primary
     tags = [f"\\c{color.replace('&H00', '&H')}&"]
@@ -724,8 +726,16 @@ def caption_word_override(
         tags.append(f"\\i{1 if highlight_italic else 0}")
     if active and highlight_glow > 0:
         tags.append(f"\\blur{highlight_glow:g}")
-    if active:
-        tags.extend(["\\fscx108", f"\\fscy{int(scale_y * 1.08)}", f"\\t(0,120,\\fscx100\\fscy{scale_y})"])
+    # The live word pops, then settles. Both numbers used to be baked in, so the
+    # effect could be neither tuned nor turned off; a scale of 100 or a duration
+    # of 0 now means no pop at all.
+    if active and pop_scale > 100 and pop_ms > 0:
+        grown = pop_scale / 100
+        tags.extend([
+            f"\\fscx{pop_scale:g}",
+            f"\\fscy{int(scale_y * grown)}",
+            f"\\t(0,{int(pop_ms)},\\fscx100\\fscy{scale_y})",
+        ])
     return "{" + "".join(tags) + "}" + ass_escape(text) + "{\\rCaption}"
 
 
@@ -889,6 +899,12 @@ def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) ->
     arabic_font = str(template.get("captionArabicFont", "Amiri"))
     highlight_italic = bool(template.get("captionHighlightItalic", True))
     highlight_glow = max(0.0, min(30.0, float(template.get("captionHighlightGlow", 0))))
+    pop_scale = int(max(100, min(140, int(template.get("captionPopScale", 108)))))
+    pop_ms = int(max(0, min(400, int(template.get("captionPopMs", 120)))))
+    # A fade is applied per caption event rather than per word, so a stacked
+    # line does not flicker as the highlight moves along it.
+    fade_ms = int(max(0, min(600, int(template.get("captionFadeMs", 0)))))
+    fade_tag = f"{{\\fad({fade_ms},{fade_ms})}}" if fade_ms else ""
     font_size = int(template.get("captionFontSize", 62))
     margin_v = int(template.get("captionMarginV", 220))
     outline_width = float(template.get("captionOutlineWidth", 5))
@@ -948,9 +964,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     raw_value, active=is_active, primary=primary, highlight=highlight,
                     highlight_font=highlight_font, arabic_font=arabic_font,
                     highlight_italic=highlight_italic, highlight_glow=highlight_glow, scale_y=scale_y,
+                    pop_scale=pop_scale, pop_ms=pop_ms,
                 ))
             text = "\\N".join(lines)
-            events.append(f"Dialogue: 2,{ass_time(frame['start'])},{ass_time(frame['end'])},Caption,,0,0,0,,{text}")
+            events.append(f"Dialogue: 2,{ass_time(frame['start'])},{ass_time(frame['end'])},Caption,,0,0,0,,{fade_tag}{text}")
     elif mode == "word" and words:
         for group in chunked(words, max_words):
             for active_index, active in enumerate(group):
@@ -961,10 +978,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                         raw_value, active=index == active_index, primary=primary, highlight=highlight,
                         highlight_font=highlight_font, arabic_font=arabic_font,
                         highlight_italic=highlight_italic, highlight_glow=highlight_glow, scale_y=scale_y,
+                        pop_scale=pop_scale, pop_ms=pop_ms,
                     ))
                 start = float(active["start"])
                 end = max(start + 0.08, float(active["end"]))
-                events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{' '.join(text_parts)}")
+                events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}{' '.join(text_parts)}")
     else:
         for segment in candidate.segments:
             start = max(0.0, float(segment["start"]) - candidate.start)
@@ -974,7 +992,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             raw = str(segment["text"])
             raw = raw.upper() if uppercase else raw
             text = wrap_caption(ass_escape(raw), 28)
-            events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{text}")
+            events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}{text}")
     ass_file.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
 
 

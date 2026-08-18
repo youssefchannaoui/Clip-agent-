@@ -1618,6 +1618,51 @@ test('the editor says how many other clips the lecture has', () => {
   assert.equal(withSiblings(4), '4 other clips from this lecture');
 });
 
+test('the caption panel is offered on Templates, not only inside a clip', () => {
+  // The design draws a font row and two sliders inside the editor only, so the
+  // shared style could not be given a font from the screen that exists to set
+  // the shared style.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const anchor = /function hlAnchor\([\s\S]*?\n    \}\n/.exec(html)[0];
+  assert.match(anchor, /screen!=='templates'\)return null/, 'Templates is handled, not fallen through');
+  assert.match(anchor, /screen==='editor'/);
+  assert.match(anchor, /Caption position/, 'anchored on a row the Templates screen always has');
+  // saveStyle already routes per screen, so one block edits the right target.
+  const adapter = fs.readFileSync(path.join(ROOT, 'src/public/studio-adapter.js'), 'utf8');
+  assert.match(adapter, /function saveStyle\(patch\) \{[\s\S]*?screen === 'editor' && UI\.edClipId/);
+});
+
+test('the animation settings read back the way they will render', () => {
+  const vals = extra => {
+    Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null, edClipId: null, pvPlaying: false, pvTime: 0 });
+    const t = { id: 'x', name: 'X', height: 1920, ...extra };
+    return StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates: [t], selectedTemplate: t });
+  };
+  const on = vals({ captionPopScale: 128, captionPopMs: 240, captionFadeMs: 200 });
+  assert.equal(on.animPopLabel, '+28%');
+  assert.equal(on.animPopMsLabel, '240 ms');
+  assert.equal(on.animFadeLabel, '200 ms');
+  assert.equal(on.animPopOn, true);
+  // Off is stated as off, not as a number that happens to mean nothing.
+  assert.equal(vals({ captionPopScale: 100 }).animPopLabel, 'Off');
+  assert.equal(vals({ captionPopMs: 0 }).animPopMsLabel, 'Off');
+  assert.equal(vals({ captionFadeMs: 0 }).animFadeLabel, 'None');
+  // Either zero switches the pop off, matching what the renderer checks.
+  assert.equal(vals({ captionPopScale: 128, captionPopMs: 0 }).animPopOn, false);
+  assert.equal(vals({ captionPopScale: 100, captionPopMs: 240 }).animPopOn, false);
+});
+
+test('the new caption fields survive a per-clip override', async () => {
+  // Three of these were already dropped at four separate layers once.
+  const patch = {
+    captionPopScale: 130, captionPopMs: 90, captionFadeMs: 250,
+    captionHighlightFont: 'Open Sans', captionHighlightItalic: false, captionHighlightGlow: 9,
+  };
+  const templates = await import('../src/templates.js');
+  const kept = templates.sanitiseClipStyle(patch);
+  assert.deepEqual(kept, patch);
+});
+
 // ── the sample plays ───────────────────────────────────────────────────────
 
 function previewAt(seconds, extra = {}) {
