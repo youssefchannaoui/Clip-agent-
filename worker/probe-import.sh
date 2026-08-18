@@ -31,18 +31,23 @@ else
 fi
 
 echo
-echo "== probing $url =="
-# timeout on purpose: being killed mid-download is a PASS -- it means YouTube
-# served the media bytes and the 403 is gone.
-out=$(docker exec "$CONTAINER" sh -c "rm -f /tmp/probe.*; timeout 75 yt-dlp -v -f 'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b' --merge-output-format mp4 -o '/tmp/probe.%(ext)s' '$url' 2>&1; rm -f /tmp/probe.*" 2>&1)
-printf '%s\n' "$out" | tail -n 45
+echo "== probing $url through the production import path =="
+# The app's own downloader: the full client rotation, the PO-token wiring,
+# every option a real job gets. A raw `yt-dlp URL` tests the defaults instead
+# and can disagree with production in both directions.
+#
+# The download is capped small on purpose; hitting the cap means bytes were
+# flowing, which is the entire question.
+out=$(docker exec -e WORKER_MAX_DOWNLOAD_MB=80 "$CONTAINER" \
+  python /app/worker/import_providers.py --probe "$url" 2>&1)
+printf '%s\n' "$out" | tail -n 12
 
 echo
-if printf '%s' "$out" | grep -q "HTTP Error 403"; then
-  echo "VERDICT: still 403 -- the runtime is in, so this video wants more (likely a PO token)."
-  printf '%s' "$out" | grep -i "po.token\|proof.of.origin" | head -n 3 || true
-elif printf '%s' "$out" | grep -qE '\[download\] +[0-9]'; then
-  echo "VERDICT: downloading fine -- the 403 is gone for this video."
+if printf '%s' "$out" | grep -q "PROBE OK\|exceeds the configured download limit"; then
+  echo "VERDICT: downloading fine -- the import route works for this video."
+elif printf '%s' "$out" | grep -qi "sign in to confirm\|login.required"; then
+  echo "VERDICT: YouTube's bot wall, even with PO tokens -- this needs cookies"
+  echo "         (VIDEO_IMPORT_COOKIES) or a residential proxy (VIDEO_IMPORT_PROXY)."
 else
-  echo "VERDICT: failed before the download stage -- read the error above."
+  echo "VERDICT: failed -- read the error above."
 fi

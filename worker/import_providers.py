@@ -622,3 +622,35 @@ def import_with_fallback(source: dict, destination: Path, cancelled: Callable[[]
                     f"{trail} — uploading the video file (MP4 or MOV) will still work."
                 ) from exc
     raise ImportProviderError("No import provider was available.")
+
+
+if __name__ == "__main__":  # pragma: no cover - diagnostic entry point
+    # The production download path, runnable by hand:
+    #
+    #   python /app/worker/import_providers.py --probe <youtube url>
+    #
+    # Exists because a raw `yt-dlp <url>` probe tests yt-dlp's *default*
+    # clients, not this module's rotation -- it said "Sign in to confirm you're
+    # not a bot" while the rotation had three clients it never tried, one of
+    # which is the client PO tokens pair with. A probe that does not run the
+    # real path can pass while production fails, and fail while production
+    # passes; this one cannot.
+    import argparse
+    import tempfile
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--probe", metavar="URL", help="download this URL the way a job would")
+    args = parser.parse_args()
+    if not args.probe:
+        parser.error("--probe URL is required")
+    with tempfile.TemporaryDirectory() as scratch:
+        target = Path(scratch) / "probe.mp4"
+        try:
+            probe_result = YtDlpImportProvider().import_video(
+                {"type": "youtube", "url": args.probe}, target, lambda: False
+            )
+        except Exception as error:  # noqa: BLE001 - the message is the diagnosis
+            print(f"PROBE FAILED: {error}")
+            raise SystemExit(1)
+        size_mb = probe_result.file.stat().st_size / (1024 * 1024)
+        print(f"PROBE OK: {size_mb:.1f} MB downloaded — title: {probe_result.title or '(untitled)'}")
