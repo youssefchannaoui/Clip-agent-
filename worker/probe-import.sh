@@ -38,8 +38,17 @@ echo "== probing $url through the production import path =="
 #
 # The download is capped small on purpose; hitting the cap means bytes were
 # flowing, which is the entire question.
+# The probe code is copied in fresh from the repo checkout each run, so a
+# container built before the latest pull still probes with current code. The
+# first run of this script against an older image produced no output at all --
+# the old module had no __main__ and exited silently -- and a probe that can
+# desync from the repo turns a diagnosis into a mystery.
+docker cp worker/import_providers.py "$CONTAINER":/tmp/probe_import.py >/dev/null
 out=$(docker exec -e WORKER_MAX_DOWNLOAD_MB=80 "$CONTAINER" \
-  python /app/worker/import_providers.py --probe "$url" 2>&1)
+  python /tmp/probe_import.py --probe "$url" 2>&1)
+if [ -z "$out" ]; then
+  out="(no output -- the probe produced nothing, which should now be impossible)"
+fi
 printf '%s\n' "$out" | tail -n 12
 
 echo
