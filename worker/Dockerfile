@@ -30,10 +30,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
 
+# A JavaScript runtime, for yt-dlp.
+#
+# YouTube serves its media URLs behind a signature challenge that is solved by
+# running JavaScript. yt-dlp does that through yt-dlp-ejs (in requirements.txt),
+# which shells out to an *external* runtime -- it does not bundle one. With no
+# runtime on PATH the challenge goes unsolved, YouTube answers 403 on the media
+# URLs, and the failure surfaces as the generic
+#   ERROR: unable to download video data: HTTP Error 403: Forbidden
+# which reads like an IP block and sent us looking at proxies and cookies for
+# days. It was a missing binary.
+#
+# Pinned to an exact version: `bin-2` would change the challenge solver under a
+# rebuild with nothing in the diff to explain it. test/test_worker.py fails if
+# yt-dlp-ejs is required without this line.
+COPY --from=denoland/deno:bin-2.9.5 /deno /usr/local/bin/deno
+
 WORKDIR /app
 COPY worker/requirements.txt /app/worker/requirements.txt
+# --upgrade so a rebuild takes the current yt-dlp rather than a cached wheel.
+# YouTube changes its extractor faster than anything else here, and a months-old
+# yt-dlp fails in exactly the same 403 way a missing runtime does. The version
+# caps in requirements.txt still hold -- this upgrades within them.
 RUN python -m pip install --upgrade pip setuptools wheel \
-    && python -m pip install -r /app/worker/requirements.txt
+    && python -m pip install --upgrade -r /app/worker/requirements.txt
 
 COPY worker /app/worker
 RUN mkdir -p /var/lib/deenclipped/jobs /var/lib/deenclipped/tmp /var/lib/deenclipped/models \

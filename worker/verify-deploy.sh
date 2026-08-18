@@ -82,6 +82,20 @@ else
   fi
 fi
 
+# yt-dlp needs an external JavaScript runtime to solve YouTube's signature
+# challenge. Without one YouTube answers 403 on the media URLs, and the error
+# says only "unable to download video data: HTTP Error 403: Forbidden" -- which
+# reads like a blocked IP and cost days of chasing proxies and cookies.
+#
+# Checked by running the binary rather than by reading the doctor line, and
+# outside the `if doctor` block above: a doctor that fails to run must not make
+# this check disappear. That is the whole point of this script.
+if deno=$(docker exec "$CONTAINER" deno --version 2>/dev/null) && [ -n "$deno" ]; then
+  ok "deno: JS runtime ($(printf '%s' "$deno" | head -n1))"
+else
+  bad "deno: JS runtime" "missing — every YouTube import will fail with HTTP 403. The Dockerfile COPYs it from denoland/deno; rebuild with --no-cache"
+fi
+
 echo
 
 # ── the service itself ────────────────────────────────────────────────────────

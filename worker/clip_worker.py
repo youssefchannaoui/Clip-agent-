@@ -1721,6 +1721,17 @@ def capabilities() -> dict[str, Any]:
     return _CAPABILITIES
 
 
+def _js_runtime() -> str:
+    """The JavaScript runtime yt-dlp needs, or why it is unusable."""
+    try:
+        version = run(["deno", "--version"], timeout=15).stdout.splitlines()[0].strip()
+    except FileNotFoundError:
+        return "not installed -- YouTube downloads will fail with HTTP 403"
+    except Exception as exc:  # pragma: no cover - diagnostic output
+        return str(exc)
+    return f"{version} (YouTube signature challenge solvable)"
+
+
 def doctor() -> int:
     checks: dict[str, Any] = {"python": sys.version.split()[0]}
     for module in ("yt_dlp", "faster_whisper"):
@@ -1740,6 +1751,12 @@ def doctor() -> int:
     # rather than only when someone clicks the button in the editor.
     problem = cv2_problem()
     checks["opencv"] = problem if problem else f"{getattr(cv2, '__version__', 'unknown')} (framing available)"
+    # yt-dlp solves YouTube's signature challenge by running JavaScript, through
+    # an external runtime it does not bundle. Without one, YouTube answers 403 on
+    # the media URLs and the error says only "unable to download video data",
+    # which reads like a blocked IP. `import yt_dlp` succeeds either way, so the
+    # runtime is checked separately or the real cause stays invisible.
+    checks["deno"] = _js_runtime()
     print(json.dumps(checks, ensure_ascii=False))
     return 0 if checks.get("yt_dlp") is True and checks.get("faster_whisper") is True else 1
 

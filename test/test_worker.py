@@ -436,6 +436,55 @@ class CaptionFontTests(unittest.TestCase):
         self.assertNotIn("fonts-inter", (ROOT / "worker" / "Dockerfile").read_text(encoding="utf-8"))
 
 
+class JavaScriptRuntimeTests(unittest.TestCase):
+    """yt-dlp needs an external JS runtime, and nothing said so out loud.
+
+    YouTube hides its media URLs behind a signature challenge solved by running
+    JavaScript. yt-dlp does that through yt-dlp-ejs, which shells out to a
+    runtime it does not bundle. requirements.txt asked for yt-dlp-ejs; the image
+    had no runtime; every YouTube import died with
+
+        ERROR: unable to download video data: HTTP Error 403: Forbidden
+
+    which reads like a blocked IP, so it was chased as one -- proxies, cookies,
+    a second import provider -- for days. `import yt_dlp` succeeds without the
+    runtime, so no import check could ever have caught it.
+    """
+
+    def _dockerfile(self):
+        return (ROOT / "worker" / "Dockerfile").read_text(encoding="utf-8")
+
+    def test_requiring_yt_dlp_ejs_requires_a_runtime_in_the_image(self):
+        requirements = (ROOT / "worker" / "requirements.txt").read_text(encoding="utf-8")
+        if "yt-dlp-ejs" not in requirements:
+            self.skipTest("yt-dlp-ejs is no longer requested")
+        self.assertRegex(
+            self._dockerfile(),
+            r"COPY --from=denoland/deno:\S+ /deno /usr/local/bin/deno",
+            "yt-dlp-ejs without a JS runtime means HTTP 403 on every YouTube import",
+        )
+
+    def test_the_runtime_is_pinned_to_an_exact_version(self):
+        # A floating tag would change the challenge solver under a rebuild with
+        # nothing in the diff to explain the new behaviour.
+        tag = re.search(r"denoland/deno:bin-(\S+)", self._dockerfile())
+        self.assertIsNotNone(tag, "no Deno image tag found")
+        self.assertRegex(tag.group(1), r"^\d+\.\d+\.\d+$", "pin Deno exactly, not to a moving tag")
+
+    def test_the_requirements_install_upgrades(self):
+        # YouTube changes its extractor faster than anything else here, and a
+        # months-old cached yt-dlp wheel fails the same 403 way a missing
+        # runtime does.
+        self.assertIn("pip install --upgrade -r", self._dockerfile())
+
+    def test_the_deploy_check_would_notice_the_runtime_missing(self):
+        # The one lesson from the OpenCV outage: a dependency nothing verifies
+        # stays broken while the build log stays clean.
+        script = (ROOT / "worker" / "verify-deploy.sh").read_text(encoding="utf-8")
+        self.assertIn("deno --version", script)
+        self.assertIn("deno: JS runtime", script)
+
+
 class OpenCVVersionGuardTests(unittest.TestCase):
     """OpenCV 5 removed cv2.CascadeClassifier, which speaker framing needs.
 
