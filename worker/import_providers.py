@@ -407,6 +407,87 @@ class DirectUploadProvider(ManagedImportProvider):
         return ImportedSource(destination, str(source.get("title") or ""))
 
 
+class CobaltImportProvider(ManagedImportProvider):
+    """Import through a cobalt instance.
+
+    cobalt is an open-source media downloader with a small JSON API. It matters
+    here because an instance can be self-hosted anywhere -- including on a
+    connection YouTube does not block -- which is the one lever that actually
+    moves when a datacenter IP is refused. Public instances exist too, but they
+    rate-limit and come and go, so the URL is configuration rather than a
+    default.
+
+    API v10: POST / with {"url": ...}; the reply is either a direct link
+    ("redirect"), a proxied one ("tunnel"), or an error.
+    """
+
+    name = "cobalt"
+
+    def __init__(self) -> None:
+        self.base = os.getenv("COBALT_API_URL", "").rstrip("/")
+        self.api_key = os.getenv("COBALT_API_KEY", "")
+        self.quality = os.getenv("COBALT_QUALITY", "1080")
+        self.timeout = max(60, int(os.getenv("VIDEO_IMPORT_TIMEOUT_MS", "1800000")) // 1000)
+        self.max_bytes = max(50, int(os.getenv("WORKER_MAX_DOWNLOAD_MB", "4096"))) * 1024 * 1024
+        # The instance decides where the bytes come from, so it is exactly the
+        # kind of URL that must not be fetched unchecked: a compromised or
+        # hostile instance could point this at cloud metadata or anything else
+        # on the private network. Its own host and Google's CDN by default.
+        configured = {h.strip().lower() for h in os.getenv("COBALT_ALLOWED_DOWNLOAD_HOSTS", "").split(",") if h.strip()}
+        instance = (urllib.parse.urlparse(self.base).hostname or "").lower()
+        self.allowed_hosts = configured or {h for h in {instance, "googlevideo.com", "youtube.com"} if h}
+
+    def import_video(self, source: dict, destination: Path, cancelled: Callable[[], bool]) -> ImportedSource:
+        if not self.base:
+            raise ImportProviderError("No cobalt instance is configured (COBALT_API_URL).")
+        youtube_url = validate_youtube_url(source.get("url", ""))
+        if cancelled():
+            raise ImportProviderError("Job cancelled.")
+
+        body = json.dumps({
+            "url": youtube_url,
+            "videoQuality": self.quality,
+            "filenameStyle": "basic",
+            "downloadMode": "auto",
+        }).encode()
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "DeenClipped-Worker/1.0",
+        }
+        if self.api_key:
+            headers["Authorization"] = f"Api-Key {self.api_key}"
+        request = urllib.request.Request(self.base or "/", data=body, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "replace")[:300]
+            raise ImportProviderError(f"cobalt request failed with HTTP {exc.code}: {detail}") from exc
+        except (TimeoutError, socket.timeout) as exc:
+            raise ImportProviderError("cobalt request timed out.") from exc
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise ImportProviderError("cobalt returned invalid JSON.") from exc
+
+        status = str(payload.get("status") or "")
+        if status in {"redirect", "tunnel"}:
+            link = str(payload.get("url") or "")
+            if not link:
+                raise ImportProviderError("cobalt returned no download URL.")
+            # assert_public_https_url before fetching, never after: it is what
+            # pins the host and refuses private, loopback and link-local
+            # addresses. download_https does not check any of that itself.
+            assert_public_https_url(link, self.allowed_hosts)
+            download_https(link, destination, self.max_bytes, self.timeout, cancelled)
+            return ImportedSource(destination, str(payload.get("filename") or ""))
+        if status == "picker":
+            raise ImportProviderError("cobalt returned a picker; this link is not a single video.")
+        reason = payload.get("error")
+        if isinstance(reason, dict):
+            reason = reason.get("code") or reason.get("message")
+        raise ImportProviderError(str(reason or "cobalt could not download this video.")[:300])
+
+
 def _named_provider(name: str, storage) -> ManagedImportProvider:
     if name == "ffmpegapi":
         return FfmpegApiImportProvider()
@@ -414,6 +495,8 @@ def _named_provider(name: str, storage) -> ManagedImportProvider:
         return YtDlpImportProvider()
     if name == "socialkit":
         return SocialKitImportProvider()
+    if name == "cobalt":
+        return CobaltImportProvider()
     raise ImportProviderError(f"Unsupported VIDEO_IMPORT_PROVIDER: {name}")
 
 
@@ -439,11 +522,24 @@ def provider_chain(source: dict, storage) -> list[ManagedImportProvider]:
         return [DirectUploadProvider(storage)]
     configured = os.getenv("VIDEO_IMPORT_PROVIDER", "ffmpegapi").lower()
     order = [configured]
-    # ytdlp last-resort, unless it is already the choice. Not the reverse: a
-    # managed provider is configured because someone decided this box should not
-    # be the one talking to YouTube, and that decision still holds first.
-    if configured != "ytdlp" and os.getenv("VIDEO_IMPORT_FALLBACK", "ytdlp").lower() != "off":
+    if os.getenv("VIDEO_IMPORT_FALLBACK", "ytdlp").lower() != "off":
+        # Every other service that has been given credentials, then the local
+        # downloader. When YouTube refuses one address, another service on a
+        # different address is the thing most likely to work -- and adding one
+        # should be a key in .env, not a code change.
+        if os.getenv("COBALT_API_URL", "").strip():
+            order.append("cobalt")
+        if os.getenv("VIDEO_IMPORT_API_KEY", "").strip():
+            order.extend(["socialkit", "ffmpegapi"])
         order.append("ytdlp")
+    # First occurrence wins, so the configured provider keeps its place.
+    seen, deduped = set(), []
+    for name in order:
+        if name in seen:
+            continue
+        seen.add(name)
+        deduped.append(name)
+    order = deduped
     providers = []
     for name in order:
         try:

@@ -156,6 +156,108 @@ class ImportFallbackTests(unittest.TestCase):
         self.assertEqual(names, ["ffmpegapi"])
 
 
+class ProviderChainTests(unittest.TestCase):
+    """Every service that has credentials gets a turn, then the local downloader.
+
+    When YouTube refuses one address, another service on a different address is
+    the thing most likely to work. Adding one should be a key in .env, not a
+    code change.
+    """
+
+    KEYS = ("VIDEO_IMPORT_PROVIDER", "VIDEO_IMPORT_API_KEY", "VIDEO_IMPORT_FALLBACK",
+            "COBALT_API_URL", "VIDEO_IMPORT_API_URL")
+
+    def setUp(self):
+        for key in self.KEYS:
+            os.environ.pop(key, None)
+        self.ip = importlib.reload(importlib.import_module("import_providers"))
+
+    def tearDown(self):
+        for key in self.KEYS:
+            os.environ.pop(key, None)
+
+    def _chain(self, **env):
+        os.environ.update(env)
+        self.ip = importlib.reload(importlib.import_module("import_providers"))
+        return [p.name for p in self.ip.provider_chain({"type": "youtube"}, None)]
+
+    def test_the_configured_provider_is_always_first(self):
+        # It is configured because someone decided this box should not be the
+        # one talking to YouTube. That holds until it fails.
+        chain = self._chain(VIDEO_IMPORT_PROVIDER="socialkit", VIDEO_IMPORT_API_KEY="k")
+        self.assertEqual(chain[0], "socialkit")
+        self.assertEqual(chain[-1], "ytdlp", "the local downloader is the last resort")
+
+    def test_a_configured_cobalt_instance_joins_the_chain(self):
+        chain = self._chain(VIDEO_IMPORT_PROVIDER="socialkit", VIDEO_IMPORT_API_KEY="k",
+                            COBALT_API_URL="https://cobalt.example")
+        self.assertIn("cobalt", chain)
+
+    def test_a_provider_without_credentials_is_not_tried(self):
+        # Otherwise every import wastes a round trip failing on a missing key.
+        self.assertNotIn("cobalt", self._chain(VIDEO_IMPORT_PROVIDER="ytdlp"))
+        self.assertNotIn("socialkit", self._chain(VIDEO_IMPORT_PROVIDER="ytdlp"))
+
+    def test_nothing_is_tried_twice(self):
+        chain = self._chain(VIDEO_IMPORT_PROVIDER="ffmpegapi", VIDEO_IMPORT_API_KEY="k")
+        self.assertEqual(len(chain), len(set(chain)), chain)
+        self.assertEqual(chain[0], "ffmpegapi")
+
+    def test_the_fallback_can_still_be_switched_off_entirely(self):
+        chain = self._chain(VIDEO_IMPORT_PROVIDER="socialkit", VIDEO_IMPORT_API_KEY="k",
+                            VIDEO_IMPORT_FALLBACK="off")
+        self.assertEqual(chain, ["socialkit"])
+
+
+class CobaltProviderTests(unittest.TestCase):
+    """cobalt matters because an instance can be self-hosted anywhere.
+
+    That is the one lever that actually moves when a datacenter IP is refused:
+    the download happens from an address YouTube does not block.
+    """
+
+    def setUp(self):
+        os.environ["COBALT_API_URL"] = "https://cobalt.example"
+        os.environ.pop("COBALT_ALLOWED_DOWNLOAD_HOSTS", None)
+        self.ip = importlib.reload(importlib.import_module("import_providers"))
+        self.temp = pathlib.Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        os.environ.pop("COBALT_API_URL", None)
+        shutil.rmtree(self.temp, ignore_errors=True)
+
+    def test_the_instance_and_googles_cdn_are_trusted_by_default(self):
+        hosts = self.ip.CobaltImportProvider().allowed_hosts
+        self.assertIn("cobalt.example", hosts)
+        self.assertIn("googlevideo.com", hosts)
+
+    def test_a_download_url_is_checked_before_it_is_fetched(self):
+        # The instance decides where the bytes come from, so a compromised one
+        # could point this at cloud metadata or anything else on the private
+        # network. download_https does not check any of that itself.
+        provider = self.ip.CobaltImportProvider()
+        for hostile in ("https://169.254.169.254/latest/meta-data/",
+                        "https://localhost/x.mp4",
+                        "http://cobalt.example/x.mp4"):
+            with self.assertRaises(self.ip.ImportProviderError, msg=hostile):
+                self.ip.assert_public_https_url(hostile, provider.allowed_hosts)
+
+    def test_the_check_happens_before_the_fetch_not_after(self):
+        source = (WORKER / "import_providers.py").read_text(encoding="utf-8")
+        block = source[source.index("class CobaltImportProvider"):]
+        assert_at = block.index("assert_public_https_url(link")
+        fetch_at = block.index("download_https(link")
+        self.assertLess(assert_at, fetch_at)
+
+    def test_an_unconfigured_instance_says_so_rather_than_failing_oddly(self):
+        os.environ.pop("COBALT_API_URL", None)
+        ip = importlib.reload(importlib.import_module("import_providers"))
+        with self.assertRaisesRegex(ip.ImportProviderError, "COBALT_API_URL"):
+            ip.CobaltImportProvider().import_video(
+                {"url": "https://youtu.be/Abc_123-xyZ"}, self.temp / "s.mp4", lambda: False,
+            )
+
+
 class BlockedAddressTests(unittest.TestCase):
     """What is left once YouTube refuses the box's address itself.
 
