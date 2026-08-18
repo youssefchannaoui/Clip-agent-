@@ -86,7 +86,7 @@ test('the probed thumbnail reaches the panel, not just openJob', () => {
 
 test('submitting a lecture forwards the metadata it already fetched', () => {
   const html = fs.readFileSync(new URL('../src/public/index.html', import.meta.url), 'utf8');
-  const gen = /StudioAdapter\.onGenerate=\(url,range\)=>[\s\S]*?jobFailed\(/.exec(html)[0];
+  const gen = /StudioAdapter\.onGenerate=\(url,range,opts\)=>[\s\S]*?jobFailed\(/.exec(html)[0];
   assert.match(gen, /body\.sourceMeta=\[\{/, 'sourceMeta is sent');
   assert.match(gen, /thumbnail:j\.thumbnail/, 'including the poster');
   assert.match(gen, /j\.url===url/, 'and only when it belongs to this URL');

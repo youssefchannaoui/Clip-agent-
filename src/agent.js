@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
-import { state, save, log, automationSettings, publishingSettings, ownerOfRecord } from './store.js';
+import { state, save, log, automationSettings, publishingSettings, ownerOfRecord, musicSatisfied } from './store.js';
 import { ownedBy, ownerOf } from './tenancy.js';
 import { sanitiseClipStyle } from './templates.js';
 import { nextSlot } from './slots.js';
@@ -28,7 +28,7 @@ export async function sourceInfo(url) { return engine.sourceInfo(url); }
 export function approveClip(id) {
   const clip = clipById(id);
   if (!clip) throw new Error('That clip no longer exists.');
-  if (!clip.musicVerified || !clip.renderVerified || !clip.templateId) throw new Error('This clip did not pass mandatory music/template verification.');
+  if (!musicSatisfied(clip) || !clip.renderVerified || !clip.templateId) throw new Error('This clip did not pass mandatory music/template verification.');
   if (clip.status !== 'waiting') throw new Error('Only clips waiting for review can be approved.');
   clip.status = 'approved'; clip.approvedAt = Date.now(); clip.approvedBy = 'manual';
   const publishing = publishingSettings(ownerOfRecord(clip));
@@ -98,7 +98,7 @@ export function scheduleSelected(ids = []) {
 
       if (['ready', 'publish_failed', 'scheduled'].includes(clip.status)) pullBack(clip.id);
       if (clip.status === 'waiting') {
-        if (!clip.musicVerified || !clip.renderVerified || !clip.templateId) {
+        if (!musicSatisfied(clip) || !clip.renderVerified || !clip.templateId) {
           throw new Error('This clip did not pass mandatory music/template verification.');
         }
         clip.status = 'approved';
@@ -217,7 +217,7 @@ export function scheduleApprovedClip(clip) {
 export function readyNow(id) {
   const clip = clipById(id);
   if (!clip) throw new Error('That clip no longer exists.');
-  if (!clip.musicVerified || !clip.renderVerified) throw new Error('The clip has not passed render verification.');
+  if (!musicSatisfied(clip) || !clip.renderVerified) throw new Error('The clip has not passed render verification.');
   if ((clip.targets || []).some(target => ['publishing', 'processing', 'posted'].includes(target.status))) throw new Error('This clip already has an active or completed platform upload.');
   clip.status = 'ready'; clip.readyAt = Date.now(); clip.scheduledAt = null; clip.targets = []; save(); return clip;
 }
@@ -268,7 +268,7 @@ function applyAutomationForOwner(ownerId, ownerClips) {
     let remaining = Math.max(0, settings.maxPerProject - alreadyAutomatic);
     if (!remaining) continue;
     const eligible = clips
-      .filter(clip => clip.status === 'waiting' && clip.musicVerified && clip.renderVerified)
+      .filter(clip => clip.status === 'waiting' && musicSatisfied(clip) && clip.renderVerified)
       .filter(clip => Number(clip.score || 0) >= settings.minimumScore)
       .filter(clip => Number(clip.quality?.overall || 0) >= settings.minimumQuality)
       .filter(clip => !settings.skipReviewRequired || !clip.reviewRequired)
@@ -366,7 +366,7 @@ async function publishClip(clip) {
 export async function publishNow(id) {
   const clip = clipById(id);
   if (!clip) throw new Error('That clip no longer exists.');
-  if (!clip.musicVerified || !clip.renderVerified) throw new Error('The clip has not passed render verification.');
+  if (!musicSatisfied(clip) || !clip.renderVerified) throw new Error('The clip has not passed render verification.');
   if (['posted', 'publishing'].includes(clip.status)) throw new Error(`This clip is already ${clip.status}.`);
   if (clip.status === 'waiting') {
     clip.status = 'approved'; clip.approvedAt = Date.now(); clip.approvedBy = 'manual';

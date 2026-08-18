@@ -237,6 +237,8 @@ function publicClip(clip) {
     scheduledAt: clip.scheduledAt, scheduledLabel: clip.scheduledAt ? formatLocal(clip.scheduledAt) : null,
     readyAt: clip.readyAt || null, postedAt: clip.postedAt,
     musicName: clip.musicName, musicVerified: Boolean(clip.musicVerified),
+    // false only when the job deliberately had no nasheed; absent means required.
+    musicEnabled: clip.musicEnabled !== false,
     templateId: clip.templateId, templateName: clip.templateName, templateVersion: clip.templateVersion || 1,
     templateOutdated: Boolean(currentTemplate && Number(currentTemplate.version || 1) > Number(clip.templateVersion || 1)),
     // This clip's own style tweaks, and whether the rendered file still matches
@@ -655,7 +657,7 @@ async function route(req, res, url) {
     const sourceMeta = Array.isArray(body.sourceMeta) ? body.sourceMeta : [];
     const results = [];
     for (const source of urls) {
-      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '', currentUser.id, { sourceRange, sourceMeta, idempotencyKey: body.idempotencyKey }) }); }
+      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '', currentUser.id, { sourceRange, sourceMeta, idempotencyKey: body.idempotencyKey, musicEnabled: body.musicEnabled !== false }) }); }
       catch (error) { results.push({ url: source, error: error.message }); }
     }
     return json(res, 200, { results, sourceRange });

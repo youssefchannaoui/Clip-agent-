@@ -284,5 +284,21 @@ export function ownerOfRecord(record) {
   return (state.authUsers || []).find(user => user.id === id) || { id, role: 'creator' };
 }
 
+// Whether a clip's music requirement is satisfied.
+//
+// Music is mandatory by default and every gate below used to say so directly:
+// `!clip.musicVerified` in eight places. A job may now deliberately be rendered
+// without a nasheed, and for those clips musicVerified is false and honest --
+// nothing was mixed, so nothing was verified. musicEnabled is what records that
+// this was asked for, so the two are never confused.
+//
+// Absent means the old behaviour: required. A clip from before this existed
+// must not become exempt by having no opinion recorded.
+export function musicSatisfied(clip) {
+  if (!clip) return false;
+  if (clip.musicEnabled === false) return true;
+  return Boolean(clip.musicVerified);
+}
+
 export function clipsOwnedBy(userId) { return ownedBy(state.clips, userId); }
 export function projectsOwnedBy(userId) { return ownedBy(state.projects, userId); }

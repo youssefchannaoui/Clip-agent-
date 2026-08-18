@@ -30,6 +30,8 @@
     openProject: null,
     jobUrl: '',
     jobTplId: '',
+    // undefined/true = mix a nasheed in; false = this job runs without one.
+    jobMusic: true,
     jobTrackId: null,
     countsOpen: false,
     playingTrack: null,
@@ -900,7 +902,10 @@
             // The four checks the design requires before anything may go out.
             // Post now stays disabled until all four pass.
             var checks = [
-              { label: 'Nasheed mixed in', ok: Boolean(c.musicVerified) },
+              // A clip rendered deliberately without a nasheed passes this: it
+              // is not a failed check, it is a choice the job recorded.
+              { label: c.musicEnabled === false ? 'No nasheed (chosen)' : 'Nasheed mixed in',
+                ok: c.musicEnabled === false || Boolean(c.musicVerified) },
               { label: 'Captions rendered', ok: Boolean(c.transcript) },
               { label: 'Clip Style applied', ok: Boolean(c.templateId) },
               { label: 'Render verified', ok: Boolean(c.renderVerified) },
@@ -2183,7 +2188,15 @@
         : 'Cost confirmed before processing',
       // A picker, not a label: the template renders one button per entry, so a
       // string here renders one button per character.
-      jobNasheeds: tracks.map(function (t) {
+      // Nasheed off for this job. Music is mandatory by default and stays that
+      // way; this is a per-job choice, not a setting, so forgetting to upload
+      // one still fails loudly instead of quietly shipping silent clips.
+      jobMusicOn: UI.jobMusic !== false,
+      jobMusicLabel: UI.jobMusic === false ? 'No nasheed' : 'Nasheed on',
+      jobMusicTrack: switchTrack(UI.jobMusic !== false),
+      jobMusicKnob: switchKnob(UI.jobMusic !== false),
+      toggleJobMusic: function (e) { stop(e); setUI({ jobMusic: UI.jobMusic === false }); },
+      jobNasheeds: (UI.jobMusic === false ? [] : tracks).map(function (t) {
         var on = UI.jobTrackId === t.id || (!UI.jobTrackId && tracks.length > 0);
         return {
           label: t.name || t.fileName || 'Untitled',
@@ -2200,7 +2213,7 @@
         setUI({ generating: true });
         global.StudioAdapter.onGenerate(job.url, job.durationKnown
           ? { startSec: Math.round(job.start), endSec: Math.round(job.end) }
-          : null);
+          : null, { musicEnabled: UI.jobMusic !== false });
       },
       genBusy: UI.generating,
       genLabel: UI.generating ? 'Starting…' : 'Generate clips',
@@ -2274,7 +2287,10 @@
       edTrackName: edClip && edClip.musicName ? 'Nasheed · ' + edClip.musicName : 'No nasheed mixed in',
       edTrackNote: edClip && edClip.musicName
         ? (edClip.musicVerified ? 'Mixed and verified' : 'Not yet verified')
-        : 'Upload one under Nasheed library',
+        // "Upload one" is wrong advice for a clip that was asked to have none.
+        : (edClip && edClip.musicEnabled === false
+          ? 'This clip was rendered without one'
+          : 'Upload one under Nasheed library'),
       edSourceLabel: edClip ? secsToClock((edClip.durationMs || 0) / 1000) + ' · clip' : '',
       edTimeReadout: edClip ? '0:00 / ' + secsToClock((edClip.durationMs || 0) / 1000) : '',
 

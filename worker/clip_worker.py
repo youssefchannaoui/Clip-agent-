@@ -1463,7 +1463,7 @@ def quality_report(candidate: Candidate, template: dict[str, Any]) -> dict[str, 
 
 def render_clip(
     job: dict[str, Any], candidate: Candidate, index: int, source: Path,
-    track: dict[str, Any], output_dir: Path,
+    track: dict[str, Any] | None, output_dir: Path,
     on_fraction: Callable[[float], None] | None = None,
 ) -> dict[str, Any]:
     ffmpeg = job["ffmpeg"]
@@ -1495,21 +1495,33 @@ def render_clip(
             )
         except Exception:
             crop_plan = None
-    filter_complex = (
-        build_video_filter(template, ass_file, crop_plan=crop_plan)
-        + ";"
-        + f"[0:a]{voice_chain}asetpts=PTS-STARTPTS,asplit=2[voice_mix][voice_sidechain];"
-        + f"[1:a]volume={volume:.3f}[music];"
-        + "[music][voice_sidechain]sidechaincompress="
-          "threshold=0.025:ratio=10:attack=15:release=650[ducked];"
-        + "[voice_mix][ducked]amix=inputs=2:duration=first:dropout_transition=2,"
-        + "loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
-    )
+    # With no nasheed there is no second input to duck against or mix in, so the
+    # chain is the voice alone -- still levelled, since a bare export is far
+    # quieter than a mixed one and would stand out in a feed.
+    if track is None:
+        filter_complex = (
+            build_video_filter(template, ass_file, crop_plan=crop_plan)
+            + ";"
+            + f"[0:a]{voice_chain}asetpts=PTS-STARTPTS,"
+            + "loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
+        )
+    else:
+        filter_complex = (
+            build_video_filter(template, ass_file, crop_plan=crop_plan)
+            + ";"
+            + f"[0:a]{voice_chain}asetpts=PTS-STARTPTS,asplit=2[voice_mix][voice_sidechain];"
+            + f"[1:a]volume={volume:.3f}[music];"
+            + "[music][voice_sidechain]sidechaincompress="
+              "threshold=0.025:ratio=10:attack=15:release=650[ducked];"
+            + "[voice_mix][ducked]amix=inputs=2:duration=first:dropout_transition=2,"
+            + "loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
+        )
 
     export = [
         ffmpeg, "-y", *(PROGRESS_FLAGS if on_fraction is not None else []),
         "-ss", f"{candidate.start:.3f}", "-t", f"{candidate.duration:.3f}",
-        "-i", str(source), "-stream_loop", "-1", "-i", str(track["path"]),
+        "-i", str(source),
+        *([] if track is None else ["-stream_loop", "-1", "-i", str(track["path"])]),
         "-filter_complex", filter_complex,
         "-map", "[vout]", "-map", "[aout]",
         "-c:v", "libx264", "-threads", ffmpeg_threads, "-preset", "veryfast", "-crf", "19",
@@ -1562,8 +1574,11 @@ def render_clip(
         "scoreReasons": candidate.reasons,
         "quality": report,
         "reviewRequired": candidate.quote_risk,
-        "musicName": track.get("name") or "Nasheed",
-        "musicVerified": True,
+        "musicName": (track.get("name") or "Nasheed") if track else "",
+        # False, not a convenient True: nothing was mixed, so nothing was
+        # verified. musicEnabled is what tells the app this was asked for.
+        "musicVerified": bool(track),
+        "musicEnabled": bool(track),
         "templateId": template["id"],
         "templateName": template["name"],
         "templateVersion": int(template.get("version", 1)),
@@ -1672,7 +1687,11 @@ def process_rerender(job: dict[str, Any], job_file: Path) -> None:
     if not source_file.exists():
         raise RuntimeError("The original source file is unavailable, so this clip cannot be re-rendered.")
     tracks = [track for track in job.get("musicTracks", []) if Path(track.get("path", "")).exists()]
-    if not tracks:
+    # A job may deliberately carry no nasheed. Music is still the default and
+    # still mandatory when asked for -- a missing upload must not silently
+    # become a silent clip -- so only an explicit musicEnabled: false allows it.
+    music_wanted = job.get("settings", {}).get("musicEnabled", True) is not False
+    if not tracks and music_wanted:
         raise RuntimeError("Music is mandatory. Upload at least one nasheed before re-rendering.")
     if not job.get("template", {}).get("id"):
         raise RuntimeError("A valid app-owned template is mandatory.")
@@ -1702,7 +1721,7 @@ def process_rerender(job: dict[str, Any], job_file: Path) -> None:
         ai_title=str(clip.get("title") or ""),
     )
     seed = int(hashlib.sha256(str(job.get("clipIdOverride") or job["id"]).encode()).hexdigest()[:12], 16)
-    track = tracks[seed % len(tracks)]
+    track = tracks[seed % len(tracks)] if tracks else None
     progress("Re-rendering clip with the saved template", 25)
     rendered = render_clip(job, candidate, 1, source_file, track, output_dir)
     progress("Verifying template, captions, video and music", 92)
@@ -1718,7 +1737,11 @@ def process_more_clips(job: dict[str, Any], job_file: Path) -> None:
         raise RuntimeError("The saved source video is unavailable. Generate-more cannot re-download the lecture because that would create a duplicate project.")
 
     tracks = [track for track in job.get("musicTracks", []) if Path(track.get("path", "")).exists()]
-    if not tracks:
+    # A job may deliberately carry no nasheed. Music is still the default and
+    # still mandatory when asked for -- a missing upload must not silently
+    # become a silent clip -- so only an explicit musicEnabled: false allows it.
+    music_wanted = job.get("settings", {}).get("musicEnabled", True) is not False
+    if not tracks and music_wanted:
         raise RuntimeError("Music is mandatory. Upload at least one nasheed before generating more clips.")
     if not job.get("template", {}).get("id"):
         raise RuntimeError("A valid app-owned template is mandatory.")
@@ -1761,7 +1784,7 @@ def process_more_clips(job: dict[str, Any], job_file: Path) -> None:
             currentClip=index, totalClips=total, requestedClips=requested,
             reusedSource=True, reusedTranscript=True, etaSec=None,
         )
-        track = shuffled_tracks[(index - 1) % len(shuffled_tracks)]
+        track = shuffled_tracks[(index - 1) % len(shuffled_tracks)] if shuffled_tracks else None
         rendered.append(render_clip(job, candidate, index, source_file, track, output_dir))
 
     result = {
@@ -1799,7 +1822,11 @@ def process(job_file: Path) -> None:
     result_file = Path(job["resultPath"])
 
     tracks = [track for track in job.get("musicTracks", []) if Path(track.get("path", "")).exists()]
-    if not tracks:
+    # A job may deliberately carry no nasheed. Music is still the default and
+    # still mandatory when asked for -- a missing upload must not silently
+    # become a silent clip -- so only an explicit musicEnabled: false allows it.
+    music_wanted = job.get("settings", {}).get("musicEnabled", True) is not False
+    if not tracks and music_wanted:
         raise RuntimeError("Music is mandatory. Upload at least one nasheed before processing.")
     if not job.get("template", {}).get("id"):
         raise RuntimeError("A valid app-owned template is mandatory.")
@@ -1893,7 +1920,7 @@ def process(job_file: Path) -> None:
             )
 
         report(0.0, force=True)
-        track = shuffled_tracks[(index - 1) % len(shuffled_tracks)]
+        track = shuffled_tracks[(index - 1) % len(shuffled_tracks)] if shuffled_tracks else None
         rendered.append(render_clip(job, candidate, index, source_file, track, output_dir, on_fraction=report))
         clip_seconds.append(time.time() - clip_started)
 

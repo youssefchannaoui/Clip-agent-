@@ -81,6 +81,18 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 #studioLiveHome.slh-idle .slb-dot { background: #4A4A52; animation: none; }
 .slh-empty { padding: 13px; font-size: 11.5px; color: #6E6E76; }
 
+/* Nasheed on/off, sitting with the job panel's own nasheed row. */
+#studioJobMusic { display: flex; align-items: center; gap: 9px; margin-top: 8px; }
+#studioJobMusic.hide { display: none; }
+#studioJobMusic span { flex: 1; font-size: 11.5px; color: #8B8B93; }
+#studioJobMusic button {
+  width: 34px; height: 19px; flex: none; padding: 0; border: 1px solid #26262A;
+  border-radius: 999px; background: #17171A; cursor: pointer; position: relative;
+}
+#studioJobMusic button i { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #6E6E76; transition: left .16s ease, background .16s ease; }
+#studioJobMusic button[aria-checked="true"] { border-color: rgba(217,180,120,.5); background: rgba(217,180,120,.16); }
+#studioJobMusic button[aria-checked="true"] i { left: 17px; background: #F0D6A6; }
+
 /* Caption animation in the preview, mirroring what the renderer emits: the live
    word starts at the configured scale and settles, and the caption event fades
    in. --dc-pop is set per word so one keyframe serves every setting. */
@@ -1250,6 +1262,10 @@ select:focus{outline:none;border-color:var(--blue)}
      its own colour, face, slant and glow; the design draws no rows for any of
      it, so this is docked into the Captions panel. -->
 <div id="studioHighlight" class="hide" data-host-owned></div>
+<!-- Nasheed on/off for a single job. The design draws the nasheed picker but no
+     way to decline one, and music is mandatory everywhere else, so this is the
+     only place the choice can be made. -->
+<div id="studioJobMusic" class="hide" data-host-owned></div>
 <div id="studioPreviewPic" class="hide" data-host-owned aria-hidden="true">
   <div class="pv-back"></div><div class="pv-img"></div><div class="pv-fx"></div><span class="pv-snap"></span>
 </div>
@@ -2381,6 +2397,31 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       set(settings,{'max-height':'100%','overflow-y':'auto','min-height':'0'});
     }
 
+    /* Docked under the job panel's nasheed row. Anchored on the NASHEED label
+       the design draws, so a re-import that moves the panel still finds it. */
+    const jobMusicEl=$('#studioJobMusic');
+    function paintJobMusic(vals){
+      alive(jobMusicEl);
+      const open=Boolean(StudioAdapter.ui.job);
+      if(!open){jobMusicEl.classList.add('hide');return}
+      const label=[...document.querySelectorAll('#studio span,#studio div')]
+        .filter(n=>/^nasheed$/i.test((n.textContent||'').trim())
+          &&![...n.children].some(c=>/^nasheed$/i.test((c.textContent||'').trim()))).pop();
+      const row=label&&label.parentElement;
+      jobMusicEl.classList.toggle('hide',!row);
+      if(!row)return;
+      if(jobMusicEl.parentElement!==row)row.appendChild(jobMusicEl);
+      if(!jobMusicEl.dataset.built){
+        jobMusicEl.dataset.built='1';
+        jobMusicEl.innerHTML='<span></span><button type="button" role="switch" aria-label="Mix a nasheed into this job"><i></i></button>';
+        jobMusicEl.querySelector('button').onclick=e=>StudioAdapter.bindings(DATA).toggleJobMusic(e);
+      }
+      const text=jobMusicEl.querySelector('span');
+      const want=vals.jobMusicOn?'Nasheed mixed in':'No nasheed — voice only';
+      if(text.textContent!==want)text.textContent=want;
+      jobMusicEl.querySelector('button').setAttribute('aria-checked',String(vals.jobMusicOn));
+    }
+
     function paintLiveWork(vals){
       alive(liveEls.home);alive(liveEls.bar);
       const onHome=StudioAdapter.ui.screen==='home';
@@ -2621,10 +2662,13 @@ function renderStudio(){
        after the project was created; without this the user retries and pays for
        the same lecture twice. */
     let pendingJobKey=null;
-    StudioAdapter.onGenerate=(url,range)=>studioDo(async()=>{
+    StudioAdapter.onGenerate=(url,range,opts)=>studioDo(async()=>{
       if(!pendingJobKey)pendingJobKey=`job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
       const body=range?{urls:url,sourceStartSeconds:range.startSec,sourceEndSeconds:range.endSec}:{urls:url};
       body.idempotencyKey=pendingJobKey;
+      /* Only sent when switched off. Absent means the default, which is on --
+         the server must not read a missing field as a waiver. */
+      if(opts&&opts.musicEnabled===false)body.musicEnabled=false;
       /* The probe already fetched the title, duration and poster; sending them
          stores the maxres thumbnail rather than leaving the server to derive
          hqdefault from the URL. Not sending it at all is why every lecture had
@@ -2691,6 +2735,7 @@ function paintStudio(){
   paintCaptionWords(vals);
   paintPreviewPlayer(vals);
   paintHighlight(vals);
+  paintJobMusic(vals);
   paintTemplatesLayout();
   /* No unread activity -> hide the dot the design hardcoded on. */
   document.body.classList.toggle('studio-read',!vals.activityUnread);

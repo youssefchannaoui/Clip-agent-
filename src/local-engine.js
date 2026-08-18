@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { config } from './config.js';
-import { state, save, log, clipSettings, musicSettings, ownerOfRecord } from './store.js';
+import { state, save, log, clipSettings, musicSettings, ownerOfRecord, musicSatisfied } from './store.js';
 import { selectedTemplate, templateById, templateForClip } from './templates.js';
 import { withOwner, ownerOf } from './tenancy.js';
 import { workerMusicTracks } from './audio.js';
@@ -129,9 +129,14 @@ async function cacheRemotePublishClip(clip) {
  * with the settings of the person the work belongs to. Background work has no
  * signed-in user, so the owner is resolved from the record instead.
  */
-function sharedSettings(user) {
+// `musicEnabled` travels in settings because the worker reads it there, and it
+// has to be explicit: an empty musicTracks list alone is ambiguous between "the
+// user switched the nasheed off" and "the upload went missing", and those two
+// must not render the same.
+function sharedSettings(user, options = {}) {
   return {
     ...clipSettings(user), ...musicSettings(user),
+    musicEnabled: options.musicEnabled !== false,
     model: config.aiModel, device: config.aiDevice, computeType: config.aiComputeType,
     task: config.aiTask, language: config.aiLanguage, maxSourceMinutes: config.maxSourceMinutes,
     keepSourceFiles: config.keepSourceFiles, ollamaUrl: config.ollamaUrl, ollamaModel: config.ollamaModel,
@@ -410,8 +415,13 @@ function validateSubmission(url, user, options = {}) {
   const template = selectedTemplate(user);
   if (!template?.id) throw new Error('Select a valid template before submitting.');
   const tracks = workerMusicTracks(user);
-  if (!tracks.length) throw new Error('Music is required on every clip. Upload at least one nasheed first.');
-  return { value, template, tracks };
+  // Music stays required by default. Only an explicit choice on the job panel
+  // waives it, so a forgotten upload still fails loudly rather than quietly
+  // producing silent clips.
+  if (!tracks.length && options.musicEnabled !== false) {
+    throw new Error('Music is required on every clip. Upload at least one nasheed first, or switch the nasheed off for this job.');
+  }
+  return { value, template, tracks: options.musicEnabled === false ? [] : tracks };
 }
 
 export function readiness(user) {
@@ -467,7 +477,8 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     engine: useRemote ? 'remote' : useVizard ? 'vizard' : 'self-hosted', status: 'queued',
     stage: useRemote ? 'queued' : useVizard ? 'Waiting for secure YouTube import' : 'Waiting for the local AI worker', progress: 0,
     submittedAt: Date.now(), clipCount: 0, templateIdUsed: template.id, templateNameUsed: template.name,
-    templateVersionUsed: template.version || 1, templateSnapshot: template, musicRequired: true, error: null,
+    templateVersionUsed: template.version || 1, templateSnapshot: template,
+    musicRequired: options.musicEnabled !== false, musicEnabled: options.musicEnabled !== false, error: null,
     sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
     sourceTitle: sourceMeta?.title || null, sourceDurationSec: sourceMeta?.durationSec || null,
     // Falls back to the URL's own poster: the dashboard did not send sourceMeta,
@@ -486,7 +497,7 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     source: options.sourceKind === 'object_storage'
       ? { type: 'object_storage', objectKey: assertStorageObjectKey(value), title: options.originalFileName || sourceMeta?.title || '' }
       : { type: 'youtube', url: parseYouTubeUrl(value).canonicalUrl },
-    template, musicTracks: remoteMusicTracks(tracks, user.id), settings: sharedSettings(user),
+    template, musicTracks: remoteMusicTracks(tracks, user.id), settings: sharedSettings(user, options),
     requestedClipCount: clipSettings(user).clipsPerVideo,
     sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
     callbackUrl: config.publicBaseUrl ? `${config.publicBaseUrl}/api/worker-callbacks/${encodeURIComponent(projectId)}` : '',
@@ -494,7 +505,7 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     id: projectId, url: value, title: String(title || '').trim(), sourceDir: sourcesDir,
     outputDir: path.join(clipsDir, projectId), resultPath: resultFile(projectId),
     ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath, template, musicTracks: tracks,
-    settings: sharedSettings(user), sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
+    settings: sharedSettings(user, options), sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
     sourceTitle: sourceMeta?.title || null, sourceDurationSec: sourceMeta?.durationSec || null,
     // Falls back to the URL's own poster: the dashboard did not send sourceMeta,
     // so every lecture stored null here and the library showed empty cards.
@@ -892,7 +903,7 @@ async function renderVizardVideo(project, video, index, owner, template, tracks)
   fs.writeFileSync(jobPath, JSON.stringify(payload, null, 2));
   const result = await runWorkerJob(jobPath, resultPath, `DeenClipped render ${index}`);
   const rendered = result.clips?.[0];
-  if (!rendered?.renderVerified || !rendered?.musicVerified || !rendered?.clipFile || !fs.existsSync(rendered.clipFile)) {
+  if (!rendered?.renderVerified || !musicSatisfied(rendered) || !rendered?.clipFile || !fs.existsSync(rendered.clipFile)) {
     throw new Error(`Generated clip ${index} did not pass DeenClipped's render checks.`);
   }
   return withOwner({
@@ -1077,7 +1088,7 @@ function runMoreClips(project, jobRecord) {
 
 function importRerenderResultObject(jobRecord, result) {
   const rendered = result.clips?.[0];
-  if (!rendered?.renderVerified || !rendered?.musicVerified) throw new Error('The re-render did not pass verification.');
+  if (!rendered?.renderVerified || !musicSatisfied(rendered)) throw new Error('The re-render did not pass verification.');
   const original = clipById(jobRecord.clipId);
   if (!original) throw new Error('The original clip was removed before the re-render completed.');
   const newer = state.rerenderJobs.find(item => item.clipId === jobRecord.clipId && !item.asVariant && item.createdAt > jobRecord.createdAt && ['queued', 'processing', 'done'].includes(item.status));
@@ -1397,7 +1408,7 @@ export async function socialPublishFile(clipId, provider) {
     log(`Rendering a TikTok-safe copy of "${clip.title}" without the app watermark.`, 'info', ownerOfRecord(clip));
     const result = await runWorkerJob(jobPath, resultPath, 'TikTok-safe render');
     const rendered = result.clips?.[0];
-    if (!rendered?.renderVerified || !rendered?.musicVerified || !rendered?.clipFile || !fs.existsSync(rendered.clipFile)) {
+    if (!rendered?.renderVerified || !musicSatisfied(rendered) || !rendered?.clipFile || !fs.existsSync(rendered.clipFile)) {
       throw new Error('The TikTok-safe copy did not pass video, audio and music verification.');
     }
     clip.socialVariants = { ...(clip.socialVariants || {}), tiktok: { ...rendered, createdAt: Date.now() } };
