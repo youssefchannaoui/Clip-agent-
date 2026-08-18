@@ -9,8 +9,20 @@ function escapeHtml(value = '') {
     .replaceAll("'", '&#039;');
 }
 
+/**
+ * The DeenClipped mark: the mihrab arch the Studio dashboard already uses.
+ *
+ * This was a play triangle inside a rounded square, which is YouTube's icon in
+ * everything but colour. The YouTube API Services compliance review (policy
+ * III.F.2a,b) flagged it in both the site header and the footer -- their
+ * branding guidelines do not allow their icon's shape to be reused or altered,
+ * and a product that publishes to YouTube must not look like it is YouTube.
+ *
+ * The arch is the app's own identity, carries no borrowed shape, and now makes
+ * the marketing site and the dashboard agree.
+ */
 function logoMark() {
-  return `<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><rect x="4" y="4" width="24" height="24" rx="8"/><path d="M13 11.5 21 16l-8 4.5Z" fill="currentColor" stroke="none"/><path d="M9.5 7.5h13" opacity=".45"/></svg></span>`;
+  return `<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M16 3.5c-5.8 0-10.5 4.7-10.5 10.5v14.5h21V14c0-5.8-4.7-10.5-10.5-10.5Z"/><path d="M16 12v9" opacity=".55"/><path d="M12.4 15.2h7.2" opacity=".55"/></svg></span>`;
 }
 
 function icon(name) {
@@ -18,7 +30,9 @@ function icon(name) {
     check: '<svg viewBox="0 0 24 24" fill="none"><path d="m5 12.5 4.2 4.2L19 7"/></svg>',
     link: '<svg viewBox="0 0 24 24" fill="none"><path d="M10 13.5 14 9.5"/><path d="M7.2 16.3 5.8 17.7a4 4 0 0 1-5.6-5.6l3.5-3.5a4 4 0 0 1 5.6 0"/><path d="m16.8 7.7 1.4-1.4a4 4 0 0 1 5.6 5.6l-3.5 3.5a4 4 0 0 1-5.6 0"/></svg>',
     upload: '<svg viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 15v5h16v-5"/></svg>',
-    clips: '<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="m10 9 6 3-6 3Z"/></svg>',
+    // Film frames rather than a play triangle in a rounded rectangle: the same
+    // borrowed YouTube shape the brand mark carried, for the same reason.
+    clips: '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7 5v14M17 5v14"/><path d="M3 12h4M17 12h4"/></svg>',
     edit: '<svg viewBox="0 0 24 24" fill="none"><path d="m4 16.5 9-9 3.5 3.5-9 9H4Z"/><path d="m15 6 1.5-1.5a2 2 0 0 1 2.8 0l.2.2a2 2 0 0 1 0 2.8L18 9"/></svg>',
     publish: '<svg viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 20h16"/></svg>',
     captions: '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 10a3 3 0 1 0 0 4m7-4a3 3 0 1 0 0 4"/></svg>',

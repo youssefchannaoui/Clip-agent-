@@ -224,6 +224,26 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 .studio-conn-switch[aria-checked="true"] { border-color: rgba(127,209,166,.5); background: rgba(127,209,166,.16); }
 .studio-conn-switch[aria-checked="true"] i { left: 17px; background: #7FD1A6; }
 .studio-conn-switch[disabled] { opacity: .4; cursor: not-allowed; }
+
+/* YouTube's own icon, unmodified, at or above their 20px minimum.
+
+   Policy III.F.2a,b of the YouTube API Services compliance review: their icon's
+   colour and shape must not be modified, and it must appear in Red-and-White or
+   Black-and-White. The app drew it with Phosphor's ph-youtube-logo, which is a
+   redrawn shape and inherits currentColor -- so it rendered in the dashboard's
+   gold. Wrong shape and wrong colour, in five places.
+
+   The glyph is suppressed and the official mark drawn in its place, so every
+   binding that asks for a YouTube icon gets a compliant one without each call
+   site having to know. */
+#studio i.ph-youtube-logo::before{content:"";}
+#studio i.ph-youtube-logo{
+  display:inline-block;
+  width:1em;height:1em;min-width:20px;min-height:20px;
+  color:transparent;
+  background-repeat:no-repeat;background-position:center;background-size:contain;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23FF0000' d='M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z'/%3E%3Cpath fill='%23FFFFFF' d='M9.545 15.568V8.432L15.818 12l-6.273 3.568z'/%3E%3C/svg%3E");
+}
 </style>
 <style>
 :root{
