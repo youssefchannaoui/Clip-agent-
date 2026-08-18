@@ -41,6 +41,13 @@ const DEFAULTS = Object.freeze({
   // always rendered these; nothing here stored them, so sanitiseTemplate()
   // dropped every value and the worker silently used its own defaults.
   captionHighlightFont: 'DejaVu Serif',
+  // The face the Arabic is set in. Amiri and Scheherazade both draw the
+  // end-of-ayah ornament with the verse number inside it; a Latin face does not
+  // and would leave a bare circle.
+  captionArabicFont: 'Amiri',
+  // Translation under the ayah, in the Quran caption mode.
+  captionTranslation: true,
+  captionTranslationSize: 46,
   captionHighlightItalic: true,
   captionHighlightGlow: 0,
   // Caption animation. The renderer has always popped the live word by 8% over
@@ -87,7 +94,10 @@ const ENUMS = {
   fitMode: ['contain', 'blur', 'crop'],
   smartFramingBias: ['auto', 'left', 'center', 'right'],
   filterPreset: ['natural', 'crisp', 'warm', 'cinematic', 'monochrome', 'custom'],
-  captionMode: ['phrase', 'word', 'dynamic-stack'],
+  // 'quran' captions the ayah being recited, in Arabic with its translation,
+  // taken from the corpus rather than from the transcript. It falls back to
+  // phrase captions on any segment that is not a confident match.
+  captionMode: ['phrase', 'word', 'dynamic-stack', 'quran'],
   captionPosition: ['top', 'middle', 'bottom'],
   captionHorizontal: ['left', 'center', 'right'],
   watermarkPosition: ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'],
@@ -105,6 +115,7 @@ export const NUMBER_RANGES = {
   captionFontSize: [24, 140], captionOutlineWidth: [0, 14], captionShadow: [0, 8], captionBackgroundOpacity: [0, 100],
   // Clamped to what clip_worker.py accepts for the highlight's glow.
   captionHighlightGlow: [0, 30],
+  captionTranslationSize: [20, 90],
   // 100 = no pop. 0ms on either timing switches that animation off.
   // Below 100 starts the word small and grows it in; above, it overshoots and
   // settles. 100 is no pop either way.
@@ -157,7 +168,7 @@ export function sanitiseTemplate(input = {}, { id = '', builtIn = false, userId 
   for (const key of ['frameBackground', 'captionPrimary', 'captionHighlight', 'captionOutline', 'captionBackground', 'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor']) {
     output[key] = cleanColor(source[key], DEFAULTS[key]);
   }
-  for (const key of ['captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic']) {
+  for (const key of ['captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic', 'captionTranslation']) {
     output[key] = Boolean(source[key]);
   }
   // Opening title cards are intentionally disabled. Clips begin immediately with spoken captions.
@@ -168,6 +179,7 @@ export function sanitiseTemplate(input = {}, { id = '', builtIn = false, userId 
   }
   output.captionFont = cleanText(source.captionFont, DEFAULTS.captionFont, 80);
   output.captionHighlightFont = cleanText(source.captionHighlightFont, DEFAULTS.captionHighlightFont, 80);
+  output.captionArabicFont = cleanText(source.captionArabicFont, DEFAULTS.captionArabicFont, 80);
   output.watermark = cleanText(source.watermark, DEFAULTS.watermark, 60);
   output.version = Math.max(1, Math.round(Number(source.version) || 1));
   output.updatedAt = Number(source.updatedAt) || Date.now();
@@ -191,8 +203,8 @@ export const CLIP_STYLE_FIELDS = Object.freeze([
   ...Object.keys(NUMBER_RANGES).filter(key => key !== 'width' && key !== 'height'),
   'frameBackground', 'captionPrimary', 'captionHighlight', 'captionOutline', 'captionBackground',
   'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor',
-  'captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic',
-  'captionFont', 'captionHighlightFont', 'watermark',
+  'captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic', 'captionTranslation',
+  'captionFont', 'captionHighlightFont', 'captionArabicFont', 'watermark',
 ]);
 
 const CLIP_STYLE_FIELD_SET = new Set(CLIP_STYLE_FIELDS);
@@ -225,7 +237,7 @@ export function sanitiseClipStyle(patch = {}) {
       if (/^#[0-9A-F]{6}$/.test(text)) output[key] = text;
     } else if (BOOLEAN_FIELDS.has(key)) {
       output[key] = Boolean(value);
-    } else if (key === 'captionFont' || key === 'captionHighlightFont') {
+    } else if (key === 'captionFont' || key === 'captionHighlightFont' || key === 'captionArabicFont') {
       output[key] = cleanText(value, DEFAULTS[key], 80);
     } else if (key === 'watermark') {
       output[key] = cleanText(value, DEFAULTS.watermark, 60);

@@ -1150,6 +1150,7 @@ function summariseWorkerBuild(capabilities) {
   if (!capabilities.clipBreakdown) missing.push('per-clip progress');
   if (!capabilities.downloadProgress) missing.push('download size');
   if (!capabilities.faceDetection) missing.push(`face detection (${capabilities.faceDetectionNote || 'unavailable'})`);
+  if (!capabilities.quranCaptions) missing.push('the Quran corpus, so the recitation template falls back to plain captions');
   if ((capabilities.missingFonts || []).length) missing.push(`fonts: ${capabilities.missingFonts.join(', ')}`);
   return missing.length
     ? `Rebuild needed — the running worker is missing ${missing.join('; ')}.`

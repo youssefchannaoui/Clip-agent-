@@ -37,7 +37,19 @@ RUN python -m pip install --upgrade pip setuptools wheel \
 
 COPY worker /app/worker
 RUN mkdir -p /var/lib/deenclipped/jobs /var/lib/deenclipped/tmp /var/lib/deenclipped/models \
-    && python -m py_compile /app/worker/service.py /app/worker/import_providers.py /app/worker/object_storage.py /app/worker/clip_worker.py
+    && python -m py_compile /app/worker/service.py /app/worker/import_providers.py /app/worker/object_storage.py /app/worker/clip_worker.py /app/worker/quran.py
+
+# The Quran corpus for the recitation template: the Arabic text and a
+# translation, ~3MB, baked into the image so a render never waits on a network
+# call and an offline box still works.
+#
+# Deliberately not vendored into the repo: scripture in a source tree gets
+# edited by accident. Deliberately not fatal either -- a build behind a
+# firewall still produces a working worker, and the Quran template reports
+# itself unavailable rather than captioning approximations of scripture.
+RUN python /app/worker/quran.py --build || \
+    echo "WARNING: Quran corpus unavailable at build time; the Quran template will be inactive."
+
 
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=8s --start-period=30s --retries=3 \

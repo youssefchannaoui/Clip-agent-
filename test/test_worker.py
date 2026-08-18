@@ -1,6 +1,7 @@
 import importlib.util
 import pathlib
 import re
+import tempfile
 import sys
 import unittest
 
@@ -307,6 +308,90 @@ class CaptionAnimationTests(unittest.TestCase):
         source = (ROOT / "worker" / "clip_worker.py").read_text(encoding="utf-8")
         self.assertIn("fade_tag = ", source)
         self.assertEqual(source.count("{fade_tag}{"), 3, "all three caption modes fade")
+
+
+class QuranCaptionTests(unittest.TestCase):
+    """The recitation template captions the ayah, not the transcript.
+
+    Whisper's Arabic is used as a search query. Putting its approximation of
+    scripture on screen would not be acceptable, so anything it cannot match
+    confidently falls through to an ordinary caption.
+    """
+
+    AYAHS = [
+        {"surah": 23, "ayah": 36, "surahName": "Al-Mu'minun", "surahArabic": "المؤمنون",
+         "arabic": "هَيْهَاتَ هَيْهَاتَ لِمَا تُوعَدُونَ",
+         "translation": "Far, very far is that which ye are promised!"},
+        {"surah": 53, "ayah": 39, "surahName": "An-Najm", "surahArabic": "النجم",
+         "arabic": "وَأَن لَّيْسَ لِلْإِنسَٰنِ إِلَّا مَا سَعَىٰ",
+         "translation": "That man can have nothing but what he strives for."},
+    ]
+
+    def _render(self, segments, **overrides):
+        import quran as quran_module
+        quran_module._CORPUS = quran_module.Corpus(self.AYAHS)
+        worker.quran = quran_module
+        candidate = worker.Candidate(
+            0, 12.0, " ".join(s["text"] for s in segments), segments, 90, [], False,
+        )
+        template = {
+            "width": 1080, "height": 1920, "captionMode": "quran",
+            "captionArabicFont": "Amiri", "captionFont": "DejaVu Serif",
+            "captionFontSize": 74, "captionTranslation": True, "captionMarginV": 420,
+            **overrides,
+        }
+        out = pathlib.Path(tempfile.mkdtemp()) / "c.ass"
+        worker.write_ass(candidate, template, out)
+        return out.read_text(encoding="utf-8")
+
+    def test_the_ayah_on_screen_is_the_corpus_text_not_the_transcript(self):
+        text = self._render([{"start": 0.0, "end": 4.0, "text": "هيهات هيهات لما توعدون"}])
+        # The Uthmani text, with its diacritics, rather than what was heard.
+        self.assertIn("هَيْهَاتَ", text)
+        self.assertIn("Far, very far", text, "the translation goes under it")
+
+    def test_the_verse_number_is_drawn_in_the_mushaf_ornament(self):
+        text = self._render([{"start": 0.0, "end": 4.0, "text": "وان ليس للانسان الا ما سعى"}])
+        self.assertIn("۝٣٩", text, "end-of-ayah mark with Arabic-Indic digits")
+
+    def test_the_arabic_and_the_translation_use_their_own_styles(self):
+        text = self._render([{"start": 0.0, "end": 4.0, "text": "هيهات هيهات لما توعدون"}])
+        self.assertIn("Style: Ayah,Amiri,", text, "the Arabic is set in a Quranic face")
+        self.assertIn("Style: Translation,DejaVu Serif,", text)
+        self.assertIn(",Ayah,,", text)
+        self.assertIn(",Translation,,", text)
+
+    def test_speech_that_is_not_recitation_falls_through_to_a_plain_caption(self):
+        text = self._render([{"start": 0.0, "end": 4.0, "text": "قال الشيخ ان الصبر مفتاح الفرج"}])
+        self.assertNotIn(",Ayah,,", text, "no ayah is invented")
+        self.assertIn(",Caption,,", text, "but the words still appear")
+
+    def test_the_translation_can_be_turned_off(self):
+        text = self._render(
+            [{"start": 0.0, "end": 4.0, "text": "هيهات هيهات لما توعدون"}],
+            captionTranslation=False,
+        )
+        self.assertIn(",Ayah,,", text)
+        self.assertNotIn("Far, very far", text)
+
+    def test_without_the_corpus_it_renders_ordinary_captions(self):
+        # A worker that never downloaded the corpus must still produce clips.
+        import quran as quran_module
+        quran_module._CORPUS = None
+        original, worker.quran = worker.quran, None
+        try:
+            text = self._render_without_corpus()
+        finally:
+            worker.quran = original
+        self.assertNotIn(",Ayah,,", text)
+        self.assertIn(",Caption,,", text)
+
+    def _render_without_corpus(self):
+        segments = [{"start": 0.0, "end": 4.0, "text": "هيهات هيهات لما توعدون"}]
+        candidate = worker.Candidate(0, 12.0, segments[0]["text"], segments, 90, [], False)
+        out = pathlib.Path(tempfile.mkdtemp()) / "c.ass"
+        worker.write_ass(candidate, {"width": 1080, "height": 1920, "captionMode": "quran"}, out)
+        return out.read_text(encoding="utf-8")
 
 
 class CaptionFontTests(unittest.TestCase):

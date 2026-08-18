@@ -34,6 +34,11 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 
 try:
+    import quran
+except ImportError:  # pragma: no cover - the module ships beside this one
+    quran = None
+
+try:
     import cv2  # type: ignore
 except Exception:  # pragma: no cover
     cv2 = None
@@ -913,6 +918,7 @@ def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) ->
     # A fade is applied per caption event rather than per word, so a stacked
     # line does not flicker as the highlight moves along it.
     fade_ms = int(max(0, min(600, int(template.get("captionFadeMs", 0)))))
+    translation_size = int(max(20, min(90, int(template.get("captionTranslationSize", 46)))))
     fade_tag = f"{{\\fad({fade_ms},{fade_ms})}}" if fade_ms else ""
     font_size = int(template.get("captionFontSize", 62))
     margin_v = int(template.get("captionMarginV", 220))
@@ -952,6 +958,8 @@ WrapStyle: 2
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Caption,{font},{font_size},{primary},{highlight},{outline},{back},-1,0,0,0,100,{scale_y},0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
+Style: Ayah,{arabic_font},{font_size},{primary},{highlight},{outline},{back},0,0,0,0,100,100,0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
+Style: Translation,{font},{translation_size},{primary},{highlight},{outline},{back},0,0,0,0,100,100,0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
 Style: Watermark,{font},{watermark_size},{watermark_color},{watermark_color},{outline},&H00000000,1,0,0,0,100,100,2,0,1,1,0,{watermark_align},{watermark_margin_h},{watermark_margin_h},{watermark_margin_v},1
 
 [Events]
@@ -963,6 +971,52 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
     mode = str(template.get("captionMode", "dynamic-stack"))
     words = candidate_words(candidate)
+
+    # Quran mode: caption the ayah being recited, in the Quran's own words.
+    #
+    # Whisper's Arabic is a search query here, never the caption -- it drops
+    # diacritics and mishears elongated tajweed, and putting an approximation of
+    # scripture on screen is not acceptable. Any segment that is not a confident
+    # match falls through to ordinary phrase captions rather than guessing, and
+    # a worker with no corpus downloaded behaves as though the mode were never
+    # selected.
+    if mode == "quran":
+        corpus = quran.load() if quran else None
+        if corpus is None:
+            emit("warning", code="quran_corpus_missing",
+                 message="Quran captions need the ayah corpus; this clip used ordinary captions.")
+            mode = "phrase"
+        else:
+            show_translation = bool(template.get("captionTranslation", True))
+            captioned = 0
+            for segment in candidate.segments:
+                start = max(0.0, float(segment["start"]) - candidate.start)
+                end = min(candidate.duration, float(segment["end"]) - candidate.start)
+                if end <= start:
+                    continue
+                found = corpus.match(str(segment.get("text") or ""))
+                if not found:
+                    text = wrap_caption(ass_escape(str(segment["text"])), 28)
+                    events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}{text}")
+                    continue
+                captioned += 1
+                ayah_text = ass_escape(quran.ayah_with_ornament(found["arabic"], found["ayah"]))
+                events.append(
+                    f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Ayah,,0,0,0,,{fade_tag}{ayah_text}"
+                )
+                if show_translation and found["translation"]:
+                    # Sits below the ayah rather than beside it, so it reads as a
+                    # gloss. MarginV is pushed down by roughly one Arabic line.
+                    below = max(10, margin_v - int(font_size * 1.5))
+                    translation = ass_escape(wrap_caption(found["translation"], 44))
+                    events.append(
+                        f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Translation,,0,0,{below},,{fade_tag}{translation}"
+                    )
+            if captioned:
+                emit("progress", stage="Matching recited ayahs", progress=72,
+                     ayahsMatched=captioned, etaSec=None)
+            ass_file.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
+            return
     if mode == "dynamic-stack" and words:
         for frame in dynamic_caption_frames(candidate, template):
             lines: list[str] = []
@@ -1574,6 +1628,11 @@ def capabilities() -> dict[str, Any]:
         "captionFonts": fonts,
         "missingFonts": [f for f in CAPTION_FAMILIES if f not in fonts],
         "pipelinePhases": callable(globals().get("phase_for")),
+        # The Quran template needs the corpus baked into the image; without it
+        # the mode falls back to ordinary captions rather than approximating
+        # scripture, so this has to be visible from the app.
+        "quranCaptions": bool(quran and quran.available()),
+        "quranAyahs": len(quran.load()) if quran and quran.available() else 0,
         # Does a render report which clip it is on, so the app can show the
         # per-clip breakdown rather than only "rendering"?
         "clipBreakdown": _source_has("clipPlan=clip_plan"),
