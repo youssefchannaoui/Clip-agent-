@@ -108,3 +108,45 @@ test('a forked name cannot collide with one the user already chose', () => {
   const forked = templates.saveTemplate(user, 'deenclipped-gold', { captionFontSize: 55 }, { allowFork: true });
   assert.notEqual(forked.template.name, 'DeenClipped Gold (my copy)');
 });
+
+// ── the built-in templates new accounts start from ─────────────────────────
+
+test('Simple Bold is two thick words a line, dimmed behind the live one', () => {
+  // The reference clip: short uppercase lines low in the frame, the word being
+  // said in white and the rest greyed — no colour, no outline, no sticker.
+  const t = templates.templateById('simple-bold', user);
+  assert.ok(t, 'the template ships');
+  assert.equal(t.captionStackMaxWords, 2, 'two words a line is what gives it the rhythm');
+  assert.equal(t.captionUppercase, true);
+  assert.equal(t.captionOutlineWidth, 0, 'no outline');
+  assert.equal(t.captionBackgroundOpacity, 0, 'and no box');
+  // The dimming is primary vs highlight, not a second colour.
+  assert.equal(t.captionHighlight, '#FFFFFF', 'the live word');
+  assert.notEqual(t.captionPrimary, '#FFFFFF', 'the rest are dimmed');
+  assert.equal(t.captionHighlightFont, t.captionFont, 'the live word must not change face too');
+  assert.equal(t.captionPosition, 'bottom');
+});
+
+test('Quran Recitation captions scripture, not the transcript', () => {
+  const t = templates.templateById('quran-recitation', user);
+  assert.ok(t, 'the template ships');
+  assert.equal(t.captionMode, 'quran');
+  assert.equal(t.captionTranslation, true, 'the translation sits under the ayah');
+  // Amiri and Scheherazade draw the end-of-ayah ornament with the verse number
+  // inside it; a Latin face leaves a bare circle.
+  assert.ok(['Amiri', 'Scheherazade'].includes(t.captionArabicFont), t.captionArabicFont);
+  // An ayah is one held line, not a stack that builds word by word.
+  assert.equal(t.captionPopMs, 0, 'no word pop');
+});
+
+test('every built-in survives its own sanitiser unchanged', () => {
+  // A template that loses a field on load is a template whose look silently
+  // differs from the file that defines it.
+  for (const template of templates.listTemplates(user).filter(t => t.builtIn)) {
+    const again = templates.sanitiseTemplate(template, { id: template.id, builtIn: true });
+    for (const key of ['captionMode', 'captionFont', 'captionArabicFont', 'captionUppercase',
+      'captionPrimary', 'captionHighlight', 'captionPopScale', 'captionPopMs', 'captionFadeMs']) {
+      assert.deepEqual(again[key], template[key], `${template.id}.${key}`);
+    }
+  }
+});
