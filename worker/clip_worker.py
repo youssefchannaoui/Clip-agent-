@@ -39,6 +39,13 @@ except ImportError:  # pragma: no cover - the module ships beside this one
     quran = None
 
 try:
+    from import_providers import youtube_network_options
+except Exception:  # pragma: no cover - clip_worker must still run standalone
+    def youtube_network_options() -> dict[str, Any]:
+        """No proxy or cookies available; the download is attempted as-is."""
+        return {}
+
+try:
     import cv2  # type: ignore
 except Exception:  # pragma: no cover
     cv2 = None
@@ -315,6 +322,7 @@ def copy_or_download(job: dict[str, Any], destination: Path) -> tuple[Path, str]
     detected_title, prepared, failures = "", None, []
     for attempt, client in enumerate(YOUTUBE_CLIENTS):
         current = dict(options)
+        current.update(youtube_network_options())
         if client:
             current["extractor_args"] = {"youtube": {"player_client": [client]}}
         try:
@@ -329,9 +337,11 @@ def copy_or_download(job: dict[str, Any], destination: Path) -> tuple[Path, str]
             blocked = any(sign in message.lower() for sign in YOUTUBE_BLOCK_SIGNS)
             if not blocked or attempt == len(YOUTUBE_CLIENTS) - 1:
                 raise RuntimeError(
-                    "YouTube refused this download from every client tried. This is usually an "
-                    "out-of-date yt-dlp: rebuild the worker to pick up the current release. "
-                    f"Attempts: {'; '.join(failures)}"[:800]
+                    "YouTube refused this download from every client tried. Every client failing "
+                    "usually means this server's IP is blocked rather than the downloader being "
+                    "out of date: set VIDEO_IMPORT_PROXY, or VIDEO_IMPORT_COOKIES to a cookies.txt "
+                    "from a signed-in account. Uploading the MP4 avoids YouTube entirely. "
+                    f"Attempts: {'; '.join(failures)}"[:900]
                 ) from exc
     if prepared is None:
         raise RuntimeError("The downloader produced no result.")
@@ -1687,6 +1697,12 @@ def capabilities() -> dict[str, Any]:
         # was never involved.
         "importProvider": os.getenv("VIDEO_IMPORT_PROVIDER", "ffmpegapi").lower(),
         "importFallback": os.getenv("VIDEO_IMPORT_FALLBACK", "ytdlp").lower(),
+        # Whether the box has a way past an IP block. Reported, never the values
+        # themselves -- a proxy URL carries credentials and a cookie file is an
+        # account session.
+        "importProxy": bool(os.getenv("VIDEO_IMPORT_PROXY", "").strip()),
+        "importCookies": bool(os.getenv("VIDEO_IMPORT_COOKIES", "").strip()
+                              or os.getenv("VIDEO_IMPORT_COOKIES_FROM_BROWSER", "").strip()),
         "python": sys.version.split()[0],
     }
     return _CAPABILITIES

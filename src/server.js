@@ -1161,9 +1161,14 @@ function summariseWorkerBuild(capabilities) {
     ? 'Imports download on the worker itself.'
     : `Imports download via ${capabilities.importProvider || 'a managed provider'}`
       + (capabilities.importFallback === 'off' ? ', with no fallback.' : ', falling back to the worker if it is blocked.');
+  // Only worth mentioning once a block is the live problem: without one of
+  // these the worker has no way past YouTube refusing its address.
+  const past = capabilities.importProxy || capabilities.importCookies
+    ? ` The worker can retry through ${[capabilities.importProxy && 'a proxy', capabilities.importCookies && 'signed-in cookies'].filter(Boolean).join(' and ')}.`
+    : ' It has no proxy or cookies configured, so a blocked IP has nothing to fall back to.';
   return missing.length
-    ? `Rebuild needed — the running worker is missing ${missing.join('; ')}. ${via}`
-    : `Up to date — the running worker has every current feature. ${via}`;
+    ? `Rebuild needed — the running worker is missing ${missing.join('; ')}. ${via}${past}`
+    : `Up to date — the running worker has every current feature. ${via}${past}`;
 }
 
 export const server = http.createServer((req, res) => {

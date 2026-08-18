@@ -156,6 +156,62 @@ class ImportFallbackTests(unittest.TestCase):
         self.assertEqual(names, ["ffmpegapi"])
 
 
+class BlockedAddressTests(unittest.TestCase):
+    """What is left once YouTube refuses the box's address itself.
+
+    Every client failing is the signature of an IP block, not of a stale
+    downloader: the request never gets far enough for the client to matter. The
+    two things that work are asking from somewhere else, or asking as someone
+    signed in.
+    """
+
+    def setUp(self):
+        for key in ("VIDEO_IMPORT_PROXY", "VIDEO_IMPORT_COOKIES", "VIDEO_IMPORT_COOKIES_FROM_BROWSER"):
+            os.environ.pop(key, None)
+        self.ip = importlib.reload(importlib.import_module("import_providers"))
+
+    def tearDown(self):
+        for key in ("VIDEO_IMPORT_PROXY", "VIDEO_IMPORT_COOKIES", "VIDEO_IMPORT_COOKIES_FROM_BROWSER"):
+            os.environ.pop(key, None)
+
+    def test_nothing_is_configured_by_default(self):
+        # A proxy costs money and cookies are an account credential. Neither is
+        # something to switch on for someone.
+        self.assertEqual(self.ip.youtube_network_options(), {})
+
+    def test_a_proxy_is_passed_to_the_downloader(self):
+        os.environ["VIDEO_IMPORT_PROXY"] = "http://box:8080"
+        self.assertEqual(self.ip.youtube_network_options()["proxy"], "http://box:8080")
+
+    def test_a_cookie_file_is_only_used_when_it_exists(self):
+        # A path typo must not look like working cookies.
+        os.environ["VIDEO_IMPORT_COOKIES"] = "/nonexistent/cookies.txt"
+        self.assertNotIn("cookiefile", self.ip.youtube_network_options())
+        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as handle:
+            handle.write(b"# Netscape HTTP Cookie File\n")
+            path = handle.name
+        os.environ["VIDEO_IMPORT_COOKIES"] = path
+        self.assertEqual(self.ip.youtube_network_options()["cookiefile"], path)
+        os.unlink(path)
+
+    def test_the_advice_changes_once_a_proxy_is_in_place(self):
+        # "Rebuild the worker" was right until a rebuild had already happened
+        # and every client still failed. Repeating it then sends someone in a
+        # circle.
+        without = self.ip._download_failure(["ytdlp: 403"])
+        self.assertIn("VIDEO_IMPORT_PROXY", without)
+        # It may say a stale downloader is *not* the cause; it must not send
+        # someone to rebuild again after they already have.
+        self.assertNotIn("rebuild", without.lower())
+        os.environ["VIDEO_IMPORT_PROXY"] = "http://box:8080"
+        with_proxy = self.ip._download_failure(["ytdlp: 403"])
+        self.assertNotIn("VIDEO_IMPORT_PROXY", with_proxy)
+        self.assertIn("video itself", with_proxy)
+
+    def test_uploading_is_offered_as_the_way_round_youtube(self):
+        self.assertIn("Uploading the MP4", self.ip._download_failure(["ytdlp: 403"]))
+
+
 class WorkerPersistenceTests(unittest.TestCase):
     def setUp(self):
         self.temp = pathlib.Path(tempfile.mkdtemp())

@@ -62,11 +62,14 @@ test('only a block is retried, not a video that is simply gone', () => {
   assert.match(providers, /"http error 403", "forbidden"/);
 });
 
-test('the failure names what was tried and what usually fixes it', () => {
-  // "HTTP Error 403" alone reads as a broken product. An out-of-date yt-dlp is
-  // the usual cause and a rebuild is the usual fix.
+test('the failure names what was tried and what to do about it', () => {
+  // "HTTP Error 403" alone reads as a broken product. Every client failing is
+  // the signature of a blocked IP, so the advice is a proxy, cookies, or
+  // uploading — not another rebuild, which is where this pointed until a
+  // rebuild had already been done and changed nothing.
   for (const [name, source] of [['import_providers', providers], ['clip_worker', worker]]) {
-    assert.match(source, /rebuild the worker to pick up the current/, name);
+    assert.match(source, /VIDEO_IMPORT_PROXY/, `${name} offers a way past a block`);
+    assert.match(source, /Uploading the MP4|Uploading the MP4 avoids/, `${name} offers the way round YouTube`);
     assert.match(source, /Attempts: /, `${name} lists the clients tried`);
   }
 });

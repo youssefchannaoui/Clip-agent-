@@ -11,7 +11,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 
 class ImportProviderError(RuntimeError):
@@ -185,6 +185,28 @@ def _looks_blocked(message: str) -> bool:
     return any(sign in lowered for sign in _BLOCK_SIGNS)
 
 
+def youtube_network_options() -> dict[str, Any]:
+    """Proxy and cookie settings for the local downloader.
+
+    Once YouTube blocks the box's IP outright, no amount of client rotation
+    helps -- the request never gets far enough for the client to matter. The two
+    things that do work are asking from somewhere else (a proxy) and asking as
+    someone signed in (cookies). Neither is a default: a proxy costs money and
+    cookies are an account credential, so both are opt-in.
+    """
+    options: dict[str, Any] = {}
+    proxy = os.getenv("VIDEO_IMPORT_PROXY", "").strip()
+    if proxy:
+        options["proxy"] = proxy
+    cookies = os.getenv("VIDEO_IMPORT_COOKIES", "").strip()
+    if cookies and Path(cookies).is_file():
+        options["cookiefile"] = cookies
+    browser = os.getenv("VIDEO_IMPORT_COOKIES_FROM_BROWSER", "").strip()
+    if browser:
+        options["cookiesfrombrowser"] = (browser,)
+    return options
+
+
 def _download_failure(failures: list[str]) -> str:
     """One message naming every client that was tried.
 
@@ -194,11 +216,19 @@ def _download_failure(failures: list[str]) -> str:
     break older versions regularly and that is usually the fix.
     """
     tried = "; ".join(failures[-len(YOUTUBE_CLIENTS):])
-    return (
-        "YouTube refused this download from every client tried. This is usually "
-        "an out-of-date yt-dlp: rebuild the worker to pick up the current "
-        f"release. Attempts: {tried}"[:800]
-    )
+    network = youtube_network_options()
+    if network.get("proxy") or network.get("cookiefile") or network.get("cookiesfrombrowser"):
+        remedy = ("A proxy or cookies are configured and were used, so this looks like the "
+                  "video itself rather than the address it was asked from.")
+    else:
+        # Every client failing is the signature of the address being blocked,
+        # not of a stale downloader -- rotating clients cannot help when the
+        # request never gets far enough for the client to matter.
+        remedy = ("Every client failed, which usually means this server's IP is blocked rather "
+                  "than the downloader being out of date. Set VIDEO_IMPORT_PROXY to route the "
+                  "request elsewhere, or VIDEO_IMPORT_COOKIES to a cookies.txt from a signed-in "
+                  "account. Uploading the MP4 avoids YouTube entirely.")
+    return f"YouTube refused this download from every client tried. {remedy} Attempts: {tried}"[:900]
 
 
 class YtDlpImportProvider(ManagedImportProvider):
@@ -246,6 +276,7 @@ class YtDlpImportProvider(ManagedImportProvider):
             if cancelled():
                 raise ImportProviderError("Job cancelled.")
             options = dict(ydl_opts)
+            options.update(youtube_network_options())
             if client:
                 options["extractor_args"] = {"youtube": {"player_client": [client]}}
             try:
