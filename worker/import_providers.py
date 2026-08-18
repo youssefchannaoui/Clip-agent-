@@ -106,6 +106,11 @@ def download_https(
 class ImportedSource:
     file: Path
     title: str = ""
+    # Which provider actually served it. With a fallback chain, "the import
+    # worked" no longer says the configured provider is healthy -- socialkit can
+    # fail on every job while ytdlp quietly carries it, and nothing surfaces
+    # that until it is the job record's business to.
+    provider: str = ""
 
 
 class ManagedImportProvider:
@@ -581,7 +586,9 @@ def import_with_fallback(source: dict, destination: Path, cancelled: Callable[[]
     failures: list[str] = []
     for index, provider in enumerate(providers):
         try:
-            return provider.import_video(source, destination, cancelled)
+            imported = provider.import_video(source, destination, cancelled)
+            imported.provider = provider.name
+            return imported
         except ImportProviderError as exc:
             message = str(exc)
             if "cancelled" in message.lower():
@@ -591,5 +598,12 @@ def import_with_fallback(source: dict, destination: Path, cancelled: Callable[[]
             # A video that is private, deleted or age-gated fails the same way
             # everywhere; only a block is worth another provider's turn.
             if last or not _looks_blocked(message):
-                raise ImportProviderError(" | ".join(failures)[:900]) from exc
+                # Uploads never reach here (their chain is one provider and
+                # raises above), so "upload it instead" is always the honest
+                # way through for whoever reads this -- operator or, after the
+                # web app's rewrite, the customer.
+                trail = " | ".join(failures)[:800]
+                raise ImportProviderError(
+                    f"{trail} — uploading the video file (MP4 or MOV) will still work."
+                ) from exc
     raise ImportProviderError("No import provider was available.")

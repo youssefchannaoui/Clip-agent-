@@ -134,6 +134,23 @@ class ImportFallbackTests(unittest.TestCase):
         self.assertIn("ffmpegapi:", message)
         self.assertIn("ytdlp:", message)
 
+    def test_the_failure_says_uploading_is_the_way_through(self):
+        # The trail of provider errors is for the operator; the customer's next
+        # move has to be in there too, because uploads use a different path and
+        # keep working when every URL route is down.
+        with self.assertRaises(self.ip.ImportProviderError) as caught:
+            self._run([self._provider("socialkit", self.BLOCKED), self._provider("ytdlp", self.BLOCKED)])
+        self.assertIn("uploading the video file", str(caught.exception))
+
+    def test_the_serving_provider_is_recorded(self):
+        # "The import worked" no longer says the configured provider is healthy:
+        # socialkit can fail every job while ytdlp quietly carries it. The
+        # record has to name who actually served the bytes.
+        result = self._run([self._provider("socialkit", self.BLOCKED), self._provider("ytdlp")])
+        self.assertEqual(result.provider, "ytdlp")
+        direct = self._run([self._provider("socialkit")])
+        self.assertEqual(direct.provider, "socialkit")
+
     def test_cancelling_is_never_retried(self):
         with self.assertRaises(self.ip.ImportProviderError) as caught:
             self._run([self._provider("ffmpegapi", "Job cancelled."), self._provider("ytdlp")])

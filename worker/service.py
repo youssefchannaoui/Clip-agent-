@@ -431,6 +431,11 @@ class Processor:
             )
             if source.stat().st_size > MAX_DOWNLOAD_BYTES:
                 raise RuntimeError("The source exceeds the worker download limit.")
+            # Which provider actually served it, in the job record. The chain
+            # means a green import no longer says the configured provider works:
+            # socialkit can fail every job while ytdlp quietly carries it, and
+            # this is where that stops being invisible.
+            self.store.update(job_id, importProvider=imported.provider or None)
             self.progress(job_id, "downloading", 8)
             tracks = self.fetch_music(payload, work)
             result_path = work / "result.json"
@@ -472,6 +477,8 @@ class Processor:
             job_path = work / "job.json"
             job_path.write_text(json.dumps(worker_job, indent=2), encoding="utf-8")
             result = self.run_clip_worker(job_id, job_path, result_path)
+            if isinstance(result.get("project"), dict):
+                result["project"]["importProvider"] = imported.provider or None
             public_result = self.upload_result(job_id, result)
             status = self.store.update(job_id, status="completed", stage="completed", progress=100, result=public_result, error=None, completedAt=now_ms())
             self.callback(payload, status)

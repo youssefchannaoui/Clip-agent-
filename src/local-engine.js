@@ -643,6 +643,10 @@ function importResultObject(project, result, engine = 'self-hosted') {
   project.sourceObjectKey = result.project?.sourceObjectKey || project.sourceObjectKey || null;
   project.sourceUrl = result.project?.sourceUrl || project.sourceUrl || null;
   project.transcriptObjectKey = result.project?.transcriptObjectKey || null;
+  // Which import provider actually served the source. With a fallback chain,
+  // "the import worked" says nothing about the configured provider's health;
+  // this makes "socialkit failed, ytdlp carried it" answerable from the record.
+  project.importProvider = result.project?.importProvider || project.importProvider || null;
   project.transcriptUrl = result.project?.transcriptUrl || null;
   project.clipCount = imported.length;
   // Kept so the UI can explain a shortfall rather than leaving it unexplained.

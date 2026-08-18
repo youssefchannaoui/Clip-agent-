@@ -45,6 +45,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # rebuild with nothing in the diff to explain it. test/test_worker.py fails if
 # yt-dlp-ejs is required without this line.
 COPY --from=denoland/deno:bin-2.9.5 /deno /usr/local/bin/deno
+# Assert at build time that the runtime actually runs (right binary for the
+# arch, linked against libs this base image has). A broken copy must fail the
+# build here, not a customer job with a 403 three stages later.
+RUN deno --version
 
 WORKDIR /app
 COPY worker/requirements.txt /app/worker/requirements.txt
