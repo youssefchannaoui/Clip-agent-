@@ -572,6 +572,39 @@ class CookieInstallScriptTests(unittest.TestCase):
         self.assertIn("THROWAWAY", self._script())
 
 
+class MixedScriptCaptionTests(unittest.TestCase):
+    """A speaker who quotes in Arabic and explains in English is the normal case.
+
+    Word and stacked modes already switched face per word. Phrase captions did
+    not, so a mixed sentence rendered entirely in the Latin face and every
+    Arabic word came out as empty boxes.
+    """
+
+    def test_each_word_gets_a_face_that_can_draw_it(self):
+        line = worker.mixed_script_line(
+            "The Prophet said إن الله جميل and he loved beauty",
+            font="DejaVu Sans", arabic_font="Amiri", uppercase=False,
+        )
+        self.assertEqual(line.count(r"\fnAmiri"), 3, "the three Arabic words")
+        self.assertEqual(line.count(r"\fnDejaVu Sans"), 7, "the seven English words")
+
+    def test_uppercase_applies_to_the_latin_words_only(self):
+        line = worker.mixed_script_line(
+            "he said الله", font="DejaVu Sans", arabic_font="Amiri", uppercase=True,
+        )
+        self.assertIn("HE", line)
+        self.assertIn("SAID", line)
+        self.assertIn("الله", line, "Arabic is unchanged -- it has no case")
+
+    def test_an_all_english_line_still_reads_normally(self):
+        line = worker.mixed_script_line(
+            "patience is the key", font="DejaVu Sans", arabic_font="Amiri", uppercase=False,
+        )
+        self.assertNotIn("Amiri", line)
+        for word in ("patience", "is", "the", "key"):
+            self.assertIn(word, line)
+
+
 class OpenCVVersionGuardTests(unittest.TestCase):
     """OpenCV 5 removed cv2.CascadeClassifier, which speaker framing needs.
 

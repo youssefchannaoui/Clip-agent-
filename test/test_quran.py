@@ -91,6 +91,41 @@ class MatchingTests(unittest.TestCase):
         self.assertGreater(found["confidence"], 0.9)
 
 
+class AutoDetectionTests(unittest.TestCase):
+    """Recited scripture is matched whatever template the clip is using.
+
+    Ayah matching used to depend on the operator having picked the Quran
+    template: the same recitation clipped with any other style put Whisper's
+    approximation of the ayah on screen. Choosing a font must not decide
+    whether scripture is quoted correctly.
+    """
+
+    def setUp(self):
+        self.corpus = quran.Corpus(FIXTURE)
+
+    def test_the_stricter_threshold_still_finds_a_real_recitation(self):
+        # Auto-detection runs unasked, so it uses 0.72 rather than the Quran
+        # mode's 0.55. A genuine recitation has to clear it comfortably.
+        found = self.corpus.match("هيهات هيهات لما توعدون", minimum=0.72)
+        self.assertIsNotNone(found)
+        self.assertEqual((found["surah"], found["ayah"]), (23, 36))
+
+    def test_ordinary_arabic_speech_is_left_as_spoken(self):
+        # A false positive here would replace a lecture's own words with an
+        # ayah nobody recited -- worse than leaving the transcript alone.
+        for line in ["قال الشيخ ان الصبر مفتاح الفرج",
+                     "اليوم نتكلم عن اهمية الصلاة في حياة المسلم",
+                     "السلام عليكم ورحمة الله وبركاته"]:
+            self.assertIsNone(self.corpus.match(line, minimum=0.72), line)
+
+    def test_a_loose_transcription_of_a_real_ayah_still_matches(self):
+        # Whisper drops diacritics and flattens alef forms; the stricter floor
+        # must not throw away real recitations along with the false ones.
+        found = self.corpus.match("وان ليس للانسان الا ما سعى", minimum=0.72)
+        self.assertIsNotNone(found)
+        self.assertEqual((found["surah"], found["ayah"]), (53, 39))
+
+
 class OrnamentTests(unittest.TestCase):
     """The verse number sits inside U+06DD, the way a mushaf prints it."""
 

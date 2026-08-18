@@ -757,6 +757,28 @@ def contains_arabic(text: str) -> bool:
     return bool(re.search(r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]", str(text)))
 
 
+def mixed_script_line(raw: str, *, font: str, arabic_font: str, uppercase: bool) -> str:
+    """A line that may switch between Arabic and English, word by word.
+
+    Word and stacked modes already switch face per word through
+    caption_word_override; phrase captions did not, so a sentence that mixed the
+    two rendered entirely in the Latin face and every Arabic word came out as
+    empty boxes. A speaker who quotes in Arabic and explains in English is the
+    normal case here, not an edge one.
+
+    Uppercase is applied only to the Latin runs: Arabic has no case, and
+    .upper() on it is a no-op that would still be misleading to write.
+    """
+    out: list[str] = []
+    for word in str(raw).split():
+        if contains_arabic(word):
+            out.append(f"{{\\fn{arabic_font}\\i0}}{ass_escape(word)}")
+        else:
+            value = word.upper() if uppercase else word
+            out.append(f"{{\\fn{font}}}{ass_escape(value)}")
+    return " ".join(out)
+
+
 def caption_word_override(
     text: str,
     *,
@@ -1013,6 +1035,38 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     mode = str(template.get("captionMode", "dynamic-stack"))
     words = candidate_words(candidate)
 
+    # Recited scripture is captioned from the Quran on every template, not only
+    # the Quran one.
+    #
+    # Ayah matching used to depend on the operator having picked the right
+    # template: a lecture that opened with recitation, clipped with any other
+    # style, put Whisper's approximation of the ayah on screen -- dropped
+    # diacritics, misheard tajweed, invented spellings. Choosing a font should
+    # not decide whether scripture is quoted correctly.
+    #
+    # The threshold is stricter than the Quran mode's, because this runs
+    # unasked: a false positive here would replace ordinary Arabic speech with
+    # an ayah nobody recited, which is far worse than leaving it as spoken.
+    auto_ayahs: list[dict[str, Any]] = []
+    if mode != "quran" and quran is not None:
+        auto_corpus = quran.load()
+        if auto_corpus is not None:
+            for segment in candidate.segments:
+                start = max(0.0, float(segment["start"]) - candidate.start)
+                end = min(candidate.duration, float(segment["end"]) - candidate.start)
+                if end <= start:
+                    continue
+                found = auto_corpus.match(str(segment.get("text") or ""), minimum=0.72)
+                if found:
+                    auto_ayahs.append({"start": start, "end": end, "found": found})
+
+    def inside_ayah(at: float) -> bool:
+        """Whether this moment is already being captioned as an ayah."""
+        for span in auto_ayahs:
+            if span["start"] <= at < span["end"]:
+                return True
+        return False
+
     # Quran mode: caption the ayah being recited, in the Quran's own words.
     #
     # Whisper's Arabic is a search query here, never the caption -- it drops
@@ -1037,7 +1091,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     continue
                 found = corpus.match(str(segment.get("text") or ""))
                 if not found:
-                    text = wrap_caption(ass_escape(str(segment["text"])), 28)
+                    # Arabic that is not a match -- the speaker's own words in
+                    # either language -- still has to render in a face that can
+                    # draw it.
+                    text = mixed_script_line(
+                        wrap_caption(str(segment["text"]), 28),
+                        font=font, arabic_font=arabic_font, uppercase=uppercase,
+                    )
                     events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}{text}")
                     continue
                 captioned += 1
@@ -1071,6 +1131,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     pop_scale=pop_scale, pop_ms=pop_ms,
                 ))
             text = "\\N".join(lines)
+            if inside_ayah((float(frame["start"]) + float(frame["end"])) / 2):
+                continue
             events.append(f"Dialogue: 2,{ass_time(frame['start'])},{ass_time(frame['end'])},Caption,,0,0,0,,{fade_tag}{text}")
     elif mode == "word" and words:
         for group in chunked(words, max_words):
@@ -1086,6 +1148,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     ))
                 start = float(active["start"])
                 end = max(start + 0.08, float(active["end"]))
+                if inside_ayah((start + end) / 2):
+                    continue
                 events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}{' '.join(text_parts)}")
     else:
         for segment in candidate.segments:
@@ -1093,10 +1157,28 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             end = min(candidate.duration, float(segment["end"]) - candidate.start)
             if end <= start:
                 continue
-            raw = str(segment["text"])
-            raw = raw.upper() if uppercase else raw
-            text = wrap_caption(ass_escape(raw), 28)
+            if inside_ayah((start + end) / 2):
+                continue
+            text = mixed_script_line(
+                wrap_caption(str(segment["text"]), 28),
+                font=font, arabic_font=arabic_font, uppercase=uppercase,
+            )
             events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}{text}")
+
+    # The ayahs found above, in the Quran's own words and the Arabic face,
+    # whatever style the rest of the clip is using.
+    for span in auto_ayahs:
+        found = span["found"]
+        ayah_text = ass_escape(quran.ayah_with_ornament(found["arabic"], found["ayah"]))
+        events.append(
+            f"Dialogue: 2,{ass_time(span['start'])},{ass_time(span['end'])},Ayah,,0,0,0,,{fade_tag}{ayah_text}"
+        )
+        if bool(template.get("captionTranslation", True)) and found["translation"]:
+            below = max(10, margin_v - int(font_size * 1.5))
+            translation = ass_escape(wrap_caption(found["translation"], 44))
+            events.append(
+                f"Dialogue: 2,{ass_time(span['start'])},{ass_time(span['end'])},Translation,,0,0,{below},,{fade_tag}{translation}"
+            )
     ass_file.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
 
 
