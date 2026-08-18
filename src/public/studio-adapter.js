@@ -1945,7 +1945,13 @@
 
       edTitle: edClip ? edClip.title || 'Untitled clip' : '',
       edLecture: edClip ? projectTitle[edClip.projectId] || '' : '',
-      edTimeLabel: edClip ? secsToClock((edClip.durationMs || 0) / 1000) : '',
+      // Elapsed / total, so the little pill under the preview is a readout
+      // rather than a label. It showed only the total, which never moved.
+      edTimeLabel: edClip ? secsToClock(edTime) + ' / ' + secsToClock(edDuration) : '',
+      // Which caption block is being spoken. The host repaints immediately when
+      // this changes, so captions land on the word rather than on the next tick.
+      edLiveIndex: edLiveIndex,
+      edProgress: edTime / edDuration,
       // This element IS the preview frame and establishes the containing block
       // for every overlay below it. Making it `position: absolute; inset: 0`
       // instead lets the overlays resolve against <main> and cover the tool rail.
