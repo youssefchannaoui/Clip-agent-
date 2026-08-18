@@ -1181,9 +1181,23 @@ async function route(req, res, url) {
       // a supported state rather than an error.
       let applied = 0; let queued = 0; const errors = [];
       for (const sibling of siblings) {
-        // They are meant to end up looking the same, so this replaces the
-        // sibling's own tweaks rather than merging underneath them.
-        sibling.styleOverrides = { ...overrides };
+        // They are meant to end up looking the same, so the look replaces the
+        // sibling's own tweaks rather than merging underneath them -- but the
+        // framing is the sibling's alone and survives.
+        //
+        // Two clips from one lecture are different moments, so the speaker sits
+        // in a different part of each frame. Copying this clip's crop across
+        // re-centres every sibling on wherever *this* speaker was and cuts the
+        // others' heads off. The whole point of "same look, own framing".
+        const keptFraming = {};
+        for (const field of templates.FRAMING_FIELDS) {
+          if (sibling.styleOverrides && sibling.styleOverrides[field] !== undefined) {
+            keptFraming[field] = sibling.styleOverrides[field];
+          }
+        }
+        const look = { ...overrides };
+        for (const field of templates.FRAMING_FIELDS) delete look[field];
+        sibling.styleOverrides = { ...look, ...keptFraming };
         sibling.stylePending = true;
         applied += 1;
         try {

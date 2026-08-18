@@ -2072,9 +2072,20 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(save&&save.parentElement&&save.previousElementSibling!==applyEl)save.parentElement.insertBefore(applyEl,save);
       const label=`Save to all ${others + 1} clips`;
       const busy=StudioAdapter.ui.edApplying===true;
-      const want=`<i class="ph ph-stack"></i><span>${busy?'Applying…':esc(label)}</span>`;
+      /* Real progress, not a spinner. The style lands in one round trip; the
+         part that takes time is the sibling clips re-rendering, and each one
+         reports its own job. Counting the finished ones answers "how far along
+         is this" -- a spinner claims work is happening without ever saying how
+         much is left, and this can take minutes. */
+      const clip=(DATA?.clips||[]).find(c=>c.id===StudioAdapter.ui.edClipId);
+      const family=(DATA?.clips||[]).filter(c=>clip&&c.projectId===clip.projectId&&c.id!==clip.id&&!c.variantOf&&c.status!=='posted');
+      const working=family.filter(c=>c.rerender&&['queued','processing'].includes(c.rerender.status));
+      const done=family.length-working.length;
+      const want=working.length
+        ? `<i class="ph ph-stack"></i><span>Re-rendering ${done} of ${family.length}</span>`
+        : `<i class="ph ph-stack"></i><span>${busy?'Saving…':esc(label)}</span>`;
       if(applyEl.dataset.label!==want){applyEl.dataset.label=want;applyEl.innerHTML=want}
-      applyEl.disabled=busy;
+      applyEl.disabled=busy||working.length>0;
       applyEl.title=`Saves this clip, then gives every other clip from this lecture the same look. Other lectures are untouched.`;
       applyEl.onclick=()=>StudioAdapter.onApplyToLecture(StudioAdapter.ui.edClipId);
     }
@@ -2132,6 +2143,81 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       const i=STUDIO.handlers.indexOf(vals.dragCaption);
       return i<0?null:document.querySelector(`#studio [data-dc-h*="mousedown=${i}"]`);
     }
+    /* The editor's real video.
+
+       The design compiles the editor preview to a still frame with the
+       thumbnail as a background image, so the actual clip is a host-owned
+       <video> docked inside that frame. It has to be host-owned for two
+       reasons: the patcher would tear a playing element down on every
+       re-render, and the adapter cannot hold a DOM reference across renders.
+
+       The adapter owns the state (time, playing, which caption is live) and
+       reads the element back through StudioAdapter.setEditorVideo. */
+    let edVideoNode=null, edVideoTick=null;
+    function editorFrame(vals){
+      if(!STUDIO||!STUDIO.handlers)return null;
+      const i=STUDIO.handlers.indexOf(vals.dragEdCap);
+      if(i<0)return null;
+      const overlay=document.querySelector(`#studio [data-dc-h*="mousedown=${i}"]`);
+      return overlay?overlay.parentElement:null;
+    }
+    function paintEditorVideo(vals){
+      const onEditor=StudioAdapter.ui.screen==='editor'&&vals.edVideoUrl;
+      if(!onEditor){
+        if(edVideoNode){edVideoNode.pause();edVideoNode.remove();edVideoNode=null;StudioAdapter.setEditorVideo(null)}
+        if(edVideoTick){cancelAnimationFrame(edVideoTick);edVideoTick=null}
+        return;
+      }
+      const frame=editorFrame(vals);
+      if(!frame)return;
+      if(!edVideoNode||!edVideoNode.isConnected){
+        edVideoNode=document.createElement('video');
+        edVideoNode.setAttribute('data-host-owned','');
+        edVideoNode.setAttribute('data-host-style','');
+        edVideoNode.playsInline=true;
+        edVideoNode.preload='metadata';
+        edVideoNode.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:1;background:#000;border-radius:inherit;cursor:pointer';
+        /* Behind the caption overlay and the guides, which are generated
+           siblings: prepend, so it is the frame's backdrop rather than a lid
+           over the very controls being dragged. */
+        frame.insertBefore(edVideoNode,frame.firstChild);
+        /* Click the picture to play/pause -- the design draws no play button
+           inside the frame, and this is what a video is expected to do. */
+        edVideoNode.onclick=e=>{e.preventDefault();StudioAdapter.bindings(DATA).togglePlay(e)};
+        edVideoNode.onplay=()=>{StudioAdapter.ui.edPlaying=true;paintStudio()};
+        edVideoNode.onpause=()=>{StudioAdapter.ui.edPlaying=false;paintStudio()};
+        /* rAF rather than timeupdate: timeupdate fires ~4x a second, which
+           makes captions land visibly late against the speech. */
+        const follow=()=>{
+          edVideoTick=null;
+          if(!edVideoNode||!edVideoNode.isConnected)return;
+          if(!edVideoNode.paused){
+            const t=edVideoNode.currentTime;
+            if(Math.abs(t-(StudioAdapter.ui.edTime||0))>0.03){
+              StudioAdapter.ui.edTime=t;
+              StudioAdapter.ui.edPlayhead=t/Math.max(1,edVideoNode.duration||1);
+              paintStudio();
+            }
+            edVideoTick=requestAnimationFrame(follow);
+          }
+        };
+        edVideoNode.addEventListener('play',()=>{if(!edVideoTick)edVideoTick=requestAnimationFrame(follow)});
+        StudioAdapter.setEditorVideo(edVideoNode);
+      }
+      if(edVideoNode.dataset.src!==vals.edVideoUrl){
+        edVideoNode.dataset.src=vals.edVideoUrl;
+        edVideoNode.src=withPw(vals.edVideoUrl);
+        if(vals.edPoster)edVideoNode.poster=withPw(vals.edPoster);
+      }
+      /* Framing, matching what the renderer will do: contain for fit, cover
+         for crop and blur, with the crop zoom applied on top. */
+      const fit=vals.edVideoFit||'cover';
+      const zoom=Number(vals.edVideoZoom)||1;
+      if(edVideoNode.style.objectFit!==fit)edVideoNode.style.objectFit=fit;
+      const want=zoom===1?'':`scale(${zoom})`;
+      if(edVideoNode.style.transform!==want)edVideoNode.style.transform=want;
+    }
+
     function paintCaptionWords(vals){
       const box=captionBox(vals);
       if(!box)return;
@@ -2395,6 +2481,89 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       }
       set(row,{'flex':'1 1 auto','min-height':'0','align-items':'flex-start'});
       set(settings,{'max-height':'100%','overflow-y':'auto','min-height':'0'});
+    }
+
+    /* The editor has the same problem the Templates screen had, worse: the
+       preview column runs 1363px tall inside a 481px row, so the 9:16 frame is
+       pushed below the fold and the editor opens on an empty black rectangle.
+
+       Same remedy as paintTemplatesLayout: the page stops scrolling as one, the
+       workspace row takes the leftover height, and only the tool panel scrolls,
+       so the preview and the timeline are always in view. Structural finders and
+       inline styles, because the generated class names change on every import.
+       Held separately from tplLayout so leaving one screen cannot tear down the
+       other's styles. */
+    let edLayout=null;
+    function clearEditorLayout(){
+      if(!edLayout)return;
+      for(const [node,props] of edLayout){
+        for(const k of props)node.style.removeProperty(k);
+        if(!node.getAttribute('style'))node.removeAttribute('data-host-style');
+      }
+      edLayout=null;
+    }
+    function paintEditorLayout(vals){
+      if(StudioAdapter.ui.screen!=='editor'||!StudioAdapter.ui.edClipId){clearEditorLayout();return}
+      const frame=edVideoNode&&edVideoNode.parentElement;
+      if(!frame){clearEditorLayout();return}
+      /* Anchored on the tool rail rather than on "a parent with two children":
+         the frame's own parent already has siblings, so that test matched
+         immediately and made previewCol the frame itself -- both sets of styles
+         landed on one node and the aspect ratio collapsed.
+
+         The rail is the element holding all five tab labels; the row is the
+         first ancestor of the frame that also contains it. */
+      const labels=['Captions','Framing','Audio','Look','Export'];
+      const rail=[...document.querySelectorAll('#studio div')].filter(n=>{
+        if(!n.children.length||n.children.length>8)return false;
+        const kids=[...n.children].map(c=>(c.textContent||'').trim());
+        return labels.every(l=>kids.some(k=>k===l||k.endsWith(l)));
+      })[0];
+      if(!rail){clearEditorLayout();return}
+      let row=frame.parentElement;
+      while(row&&row.id!=='studio'&&!row.contains(rail))row=row.parentElement;
+      if(!row||row.id==='studio'){clearEditorLayout();return}
+      const previewCol=[...row.children].find(n=>n===frame||n.contains(frame));
+      const panel=[...row.children].find(n=>n!==previewCol&&(n===rail||n.contains(rail)));
+      if(!previewCol||!panel||previewCol===panel){clearEditorLayout();return}
+      /* Measured rather than flex-derived. The Templates fix hunts for a
+         scrolling ancestor to convert into a column; the editor has none --
+         the walk runs all the way to #studio and gives up, which is why the
+         first attempt silently did nothing.
+
+         So the row is simply told how much room is left: viewport height minus
+         where the row starts minus whatever siblings (the timeline) sit under
+         it. Recomputed on every paint, so it survives window resizes and the
+         timeline changing height. */
+      const page=row.parentElement;
+      if(!page){clearEditorLayout();return}
+      const gap=14;
+      let siblings=0;
+      for(const child of page.children){
+        if(child!==row)siblings+=child.getBoundingClientRect().height;
+      }
+      const avail=Math.max(240,window.innerHeight-row.getBoundingClientRect().top-siblings-gap);
+      clearEditorLayout();
+      const set=(node,props)=>{
+        node.setAttribute('data-host-style','');
+        for(const [k,v] of Object.entries(props))node.style.setProperty(k,v);
+        edLayout=(edLayout||[]).concat([[node,Object.keys(props)]]);
+      };
+      set(row,{'height':avail+'px','min-height':'0','align-items':'stretch','overflow':'hidden'});
+      /* Only the tool panel scrolls. The preview column is capped to the row so
+         the frame sizes against a real height instead of running off the page. */
+      set(panel,{'max-height':'100%','overflow-y':'auto','min-height':'0'});
+      /* Guarded: when the frame IS the row's child, the column styles and the
+         frame styles would stack on one node and cancel the aspect ratio. */
+      if(previewCol!==frame){
+        set(previewCol,{'max-height':'100%','min-height':'0','overflow':'hidden',
+          'display':'flex','align-items':'center','justify-content':'center'});
+      }
+      /* Height-led, not width-led: inside a short row a width-led 9:16 box
+         overflows downward, which is what pushed it out of view. Height drives
+         it and the aspect ratio derives the width. */
+      set(frame,{'height':'100%','width':'auto','max-width':'100%','max-height':'100%',
+        'flex':'0 0 auto','align-self':'center','margin':'0 auto'});
     }
 
     /* Docked under the job panel's nasheed row. Anchored on the NASHEED label
@@ -2733,6 +2902,8 @@ function paintStudio(){
   paintApplyLecture(vals);
   paintPreviewPic(vals);
   paintCaptionWords(vals);
+  paintEditorVideo(vals);
+  paintEditorLayout(vals);
   paintPreviewPlayer(vals);
   paintHighlight(vals);
   paintJobMusic(vals);

@@ -207,6 +207,23 @@ export const CLIP_STYLE_FIELDS = Object.freeze([
   'captionFont', 'captionHighlightFont', 'captionArabicFont', 'watermark',
 ]);
 
+/**
+ * Framing belongs to the clip, never to the shared look.
+ *
+ * Two clips cut from one lecture point at different moments, so the speaker is
+ * in a different part of the frame in each. Copying one clip's crop onto its
+ * siblings re-centres them all on wherever *this* clip's speaker happened to be
+ * and decapitates the rest -- which is why "Save to all clips" must carry the
+ * look and leave the framing alone.
+ *
+ * cropPositionX/Y were already kept out of CLIP_STYLE_FIELDS for this reason;
+ * these are the rest of the Framing tab, which the apply-style route was
+ * overwriting because it replaced a sibling's overrides wholesale.
+ */
+export const FRAMING_FIELDS = Object.freeze([
+  'cropPositionX', 'cropPositionY', 'fitMode', 'smartFramingZoom', 'smartFramingEnabled',
+]);
+
 const CLIP_STYLE_FIELD_SET = new Set(CLIP_STYLE_FIELDS);
 const COLOUR_FIELDS = new Set(['frameBackground', 'captionPrimary', 'captionHighlight', 'captionOutline',
   'captionBackground', 'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor']);

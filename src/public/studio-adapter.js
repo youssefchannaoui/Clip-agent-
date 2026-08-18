@@ -74,7 +74,14 @@
     edTab: 'captions',
     edCaption: null,
     edBlock: 0,
+    // The editor's real playhead, in seconds, and whether the clip is playing.
+    // edPlayhead stays as the 0..1 fraction the design's styles are built from,
+    // but it is now derived from edTime rather than being the source of truth:
+    // a fraction cannot seek a <video>, and everything downstream (captions,
+    // ruler, readout) needs the seconds.
     edPlayhead: 0,
+    edTime: 0,
+    edPlaying: false,
     edBlockDraft: null,
     edDirty: false,
     edSaving: false,
@@ -93,6 +100,23 @@
     refresh();
   }
   function stop(e) { if (e && e.preventDefault) e.preventDefault(); }
+
+  // ── the editor's <video> ──────────────────────────────────────────────────
+  // The design exports a still frame for the editor preview, so the real video
+  // is a host-owned element the host layer docks inside that frame (the same
+  // pattern as every other host node). The adapter owns the *state* -- time,
+  // playing, which caption is live -- and reaches the element through these,
+  // because a compiled template cannot hold a ref and re-rendering must never
+  // tear down a playing video.
+  var edVideoEl = null;
+  function edVideo(node) { if (node !== undefined) edVideoEl = node; return edVideoEl; }
+  function seekHost(seconds) {
+    var v = edVideoEl;
+    if (!v) return;
+    // Guarded: seeking before metadata arrives throws in Safari, and the clip
+    // is the whole file here, so a seek past its end silently does nothing.
+    try { v.currentTime = Math.max(0, Number(seconds) || 0); } catch (err) { /* not seekable yet */ }
+  }
 
   // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -1302,18 +1326,50 @@
       : String(edCaptionText).split(/(?<=[.!?\u061F])\s+/).filter(Boolean).map(function (line) {
         return { text: line, start: null, end: null };
       });
+    // Clip length in seconds. Everything on the timeline is a fraction of this,
+    // so a zero would divide the whole editor by zero; 1 is the floor.
+    var edDuration = Math.max(1, edClip ? (edClip.durationMs || 0) / 1000 : 1);
+    var edTime = Math.max(0, Math.min(edDuration, Number(UI.edTime) || 0));
+    // Which block is being spoken *now*. This is what the preview overlay shows,
+    // so the caption on screen follows the video instead of showing whichever
+    // block was last clicked. Blocks without timings (the flat-transcript
+    // fallback) can never match, so selection stays the answer for those.
+    var edLiveIndex = -1;
+    for (var bi = 0; bi < rawBlocks.length; bi++) {
+      var rb = rawBlocks[bi];
+      if (rb.start !== null && rb.start !== undefined && edTime >= rb.start && edTime < rb.end) { edLiveIndex = bi; break; }
+    }
     var edCaptionBlocks = rawBlocks.map(function (block, i) {
       var on = UI.edBlock === i;
+      var live = edLiveIndex === i;
+      var timed = block.start !== null && block.start !== undefined;
       return {
         text: block.text,
         // A block with real timings can say when it is; a fallback one cannot.
-        time: block.start === null ? '' : secsToClock(block.start) + ' – ' + secsToClock(block.end),
-        style: 'padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 12.5px; line-height: 1.45; background: #121214; border: 1px solid ' +
-          (on ? 'rgba(217,180,120,.55)' : '#1E1E22') + ';',
-        select: function (e) { stop(e); setUI({ edBlock: i, edBlockDraft: null }); },
+        time: timed ? secsToClock(block.start) + ' – ' + secsToClock(block.end) : '',
+        // Width proportional to the block's real duration, and positioned by its
+        // start, so the track reads as a timeline rather than as a list. Untimed
+        // blocks fall back to equal shares.
+        style: 'padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 12.5px; line-height: 1.45; background: '
+          + (live ? 'rgba(217,180,120,.16)' : '#121214') + '; border: 1px solid '
+          + (live ? 'rgba(240,214,166,.85)' : on ? 'rgba(217,180,120,.55)' : '#1E1E22') + ';',
+        // Selecting a block also moves the playhead to it: on a timeline,
+        // clicking a caption means "take me there", and editing the text of a
+        // moment you cannot see is the thing that made this editor feel dead.
+        select: function (e) {
+          stop(e);
+          var next = { edBlock: i, edBlockDraft: null };
+          if (timed) { next.edTime = block.start; next.edPlayhead = block.start / edDuration; }
+          setUI(next);
+          if (timed) seekHost(block.start);
+        },
       };
     });
+    // The block whose text the side panel edits: the live one while playing, the
+    // clicked one otherwise. Without this the panel edits block 0 forever while
+    // the video runs past it.
     var selectedBlock = edCaptionBlocks[UI.edBlock] || null;
+    var overlayBlock = edLiveIndex >= 0 ? edCaptionBlocks[edLiveIndex] : selectedBlock;
 
     // Other clips cut from the same lecture, for the editor's filmstrip.
     // The design renders this as a line of text, not as a strip of thumbnails --
@@ -1900,8 +1956,14 @@
       // The SELECTED CAPTION box edits the chosen block, not the whole clip.
       // It was bound to the entire transcript and stayed empty because nothing
       // ever selected anything.
-      edCapText: selectedBlock
-        ? (UI.edBlockDraft !== null && UI.edBlockDraft !== undefined ? UI.edBlockDraft : selectedBlock.text)
+      // What the preview overlay draws: the block being spoken at the playhead,
+      // falling back to the selected one when the clip is paused at a gap or
+      // the blocks carry no timings. Bound to the selected block alone, the
+      // caption sat frozen on one line while the video played past it.
+      edCapText: overlayBlock
+        ? (overlayBlock === selectedBlock && UI.edBlockDraft !== null && UI.edBlockDraft !== undefined
+          ? UI.edBlockDraft
+          : overlayBlock.text)
         : '',
       setCapText: function (e) { UI.edBlockDraft = e.target.value; UI.edDirty = true; refresh(); },
       edSelText: selectedBlock ? selectedBlock.text : '',
@@ -2071,9 +2133,38 @@
         ' font-family: Outfit, Inter, sans-serif; font-size: 8.5px; font-weight: 700; letter-spacing: .12em; color: ' +
         (tpl.watermarkColor || '#F0D6A6') + '; display: ' + (Number(tpl.watermarkOpacity) > 0 ? 'block' : 'none') + ';',
       edPlayStyle: 'display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid #26262A; background: #17171A; color: #F0D6A6; cursor: pointer;',
-      edPlayHeadStyle: 'position: absolute; top: 0; bottom: 0; left: ' + (UI.edPlayhead * 100).toFixed(2) + '%; width: 2px; background: #F0D6A6;',
-      edProgressStyle: 'height: 3px; border-radius: 3px; width: ' + (UI.edPlayhead * 100).toFixed(2) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
-      edProgressLabel: edClip ? secsToClock((edClip.durationMs || 0) / 1000 * UI.edPlayhead) : '0:00',
+      edPlayHeadStyle: 'position: absolute; top: 0; bottom: 0; left: ' + ((edTime / edDuration) * 100).toFixed(2) + '%; width: 2px; background: #F0D6A6;',
+      edProgressStyle: 'height: 3px; border-radius: 3px; width: ' + ((edTime / edDuration) * 100).toFixed(2) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
+      edProgressLabel: secsToClock(edTime),
+      // The video itself. Empty when no clip is open, which is how the host
+      // knows to tear the element down rather than leave the last clip playing.
+      edVideoUrl: edClip ? edClip.videoUrl || '' : '',
+      edPoster: edClip ? edClip.thumbUrl || '' : '',
+      edPlaying: Boolean(UI.edPlaying),
+      edPlayIcon: UI.edPlaying ? 'ph ph-pause' : 'ph ph-play',
+      edDurationSec: edDuration,
+      edTimeSec: edTime,
+      // How the video sits in the 9:16 frame: the same three modes the renderer
+      // uses, so what the editor shows is what the export produces.
+      edVideoFit: tpl.fitMode === 'fit' ? 'contain' : 'cover',
+      edVideoZoom: tpl.fitMode === 'crop' ? Math.max(0.75, Math.min(2.5, Number(tpl.smartFramingZoom) || 1)) : 1,
+      edVideoBlurBg: tpl.fitMode === 'blur',
+      // Play/pause. The design draws the button but exports no handler for it,
+      // so the binding exists for the host to attach.
+      togglePlay: function (e) {
+        stop(e);
+        var v = edVideo();
+        if (!v) return;
+        if (v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
+        else v.pause();
+      },
+      // Ruler marks across the real duration, replacing the design's six
+      // hardcoded strings ("0s 8s 15s ...") that described some other clip.
+      edRuler: (function () {
+        var marks = [];
+        for (var m = 0; m < 6; m++) marks.push({ label: secsToClock(edDuration * (m / 5)) });
+        return marks;
+      })(),
       edSiblings: edSiblingCount
         ? edSiblingCount + ' other clip' + (edSiblingCount === 1 ? '' : 's') + ' from this lecture'
         : 'The only clip from this lecture',
@@ -2291,8 +2382,8 @@
         : (edClip && edClip.musicEnabled === false
           ? 'This clip was rendered without one'
           : 'Upload one under Nasheed library'),
-      edSourceLabel: edClip ? secsToClock((edClip.durationMs || 0) / 1000) + ' · clip' : '',
-      edTimeReadout: edClip ? '0:00 / ' + secsToClock((edClip.durationMs || 0) / 1000) : '',
+      edSourceLabel: edClip ? secsToClock(edDuration) + ' · clip' : '',
+      edTimeReadout: edClip ? secsToClock(edTime) + ' / ' + secsToClock(edDuration) : '',
 
       // ── Chrome: option sheet, toast, player, tour, boot ──
       // The sheet is how every picker on the Templates screen asks its question,
@@ -2325,16 +2416,18 @@
       playerTitle: UI.playerClip ? UI.playerClip.title : '',
       playerThumb: 'width: 100%; aspect-ratio: 9 / 16; border-radius: 10px; background: ' + thumb(UI.playerClip && UI.playerClip.thumbUrl) + ';',
       closePlayer: function (e) { stop(e); setUI({ playerClip: null }); },
-      // Moves the playhead by where the bar was clicked. There is no <video>
-      // wired into the preview yet, so this positions the head and the readout
-      // rather than scrubbing playback.
+      // Scrubs the clip: click anywhere on the timeline to move the playhead,
+      // and the video follows. e.dcTarget is the delegation fix -- currentTarget
+      // is the mount, not the bar that was clicked.
       seek: function (e) {
-        var bar = e && e.currentTarget;
+        var bar = (e && e.dcTarget) || (e && e.currentTarget);
         if (!bar || !bar.getBoundingClientRect) return;
         var box = bar.getBoundingClientRect();
         if (!box.width) return;
         var ratio = Math.max(0, Math.min(1, (e.clientX - box.left) / box.width));
-        setUI({ edPlayhead: ratio });
+        var seconds = ratio * edDuration;
+        setUI({ edPlayhead: ratio, edTime: seconds });
+        seekHost(seconds);
       },
 
       // No boot animation: the host page has already run its own splash by the
@@ -2942,6 +3035,13 @@
     bindings: bindings,
     ui: UI,
     setRefresh: function (fn) { refresh = fn || function () {}; },
+    // The host registers the editor's <video> here and reports playback back.
+    // The adapter cannot create the element itself -- the design compiles to a
+    // still frame, and a re-render would tear a playing video down -- so the
+    // element is host-owned and this is the seam between them.
+    setEditorVideo: function (node) { edVideo(node); },
+    editorVideo: function () { return edVideo(); },
+    seekEditor: seekHost,
     // Overridden by the host page so the adapter never talks to the API directly.
     onApprove: function () {},
     onReject: function () {},
