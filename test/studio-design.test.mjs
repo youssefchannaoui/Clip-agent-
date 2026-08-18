@@ -230,6 +230,7 @@ test('a source without an <x-dc> block is rejected with a usable message', () =>
 
 await import('../src/public/studio-template.generated.js');
 await import('../src/public/studio-adapter.js');
+const templatesModule = await import('../src/templates.js');
 const { StudioAdapter, STUDIO_TEMPLATE, STUDIO_BINDINGS } = globalThis;
 
 const SAMPLE_STATE = {
@@ -1661,6 +1662,41 @@ test('the new caption fields survive a per-clip override', async () => {
   const templates = await import('../src/templates.js');
   const kept = templates.sanitiseClipStyle(patch);
   assert.deepEqual(kept, patch);
+});
+
+test('the output shape is a choice, and the renderer already honoured it', () => {
+  // The pipeline has always been generic here -- every fit mode scales to
+  // {width}:{height} and the subtitle canvas follows -- but the UI pinned it to
+  // 9:16 and the button existed only to say the presets were fixed.
+  const shape = (width, height) => {
+    Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null, edClipId: null, sheet: null });
+    const t = { id: 'x', name: 'X', width, height };
+    return StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates: [t], selectedTemplate: t });
+  };
+  assert.equal(shape(1080, 1920).safePresetLabel, 'Shorts + Reels · 9:16');
+  assert.equal(shape(1080, 1080).safePresetLabel, 'Square · 1:1');
+  assert.equal(shape(1920, 1080).safePresetLabel, 'Widescreen · 16:9');
+  // The preview frame follows, or Fit and Blur letterbox against the wrong box.
+  assert.equal(shape(1080, 1080).pvAspect, '1080 / 1080');
+  // A size set by hand is reported rather than shown as the wrong preset.
+  assert.equal(shape(1400, 900).safePresetLabel, '1400×900');
+});
+
+test('picking a shape offers the three platforms actually target', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null, edClipId: null, sheet: null });
+  const t = { id: 'x', name: 'X', width: 1080, height: 1920 };
+  const state = { projects: [], clips: [], tracks: [], templates: [t], selectedTemplate: t };
+  StudioAdapter.bindings(state).cyclePreset({ preventDefault() {} });
+  assert.deepEqual(StudioAdapter.ui.sheet.options,
+    ['Shorts + Reels · 9:16', 'Square · 1:1', 'Widescreen · 16:9']);
+  StudioAdapter.ui.sheet = null;
+});
+
+test('the output shape stays a template setting, never a per-clip one', () => {
+  // Resizing one clip would desync it from every sibling in the lecture, which
+  // is why width and height are excluded from CLIP_STYLE_FIELDS.
+  const kept = templatesModule.sanitiseClipStyle({ width: 1080, height: 1080, captionFontSize: 90 });
+  assert.deepEqual(kept, { captionFontSize: 90 });
 });
 
 // ── the sample plays ───────────────────────────────────────────────────────

@@ -499,6 +499,25 @@
     return Math.floor(whole / 60) + ':' + String(whole % 60).padStart(2, '0');
   }
 
+  // The shapes the platforms actually take. Named for where they are posted
+  // rather than by ratio, which is what the person choosing is thinking about.
+  var RATIO_PRESETS = [
+    { label: 'Shorts + Reels · 9:16', width: 1080, height: 1920 },
+    { label: 'Square · 1:1', width: 1080, height: 1080 },
+    { label: 'Widescreen · 16:9', width: 1920, height: 1080 },
+  ];
+
+  function ratioLabel(width, height) {
+    for (var i = 0; i < RATIO_PRESETS.length; i++) {
+      if (RATIO_PRESETS[i].width === Number(width) && RATIO_PRESETS[i].height === Number(height)) {
+        return RATIO_PRESETS[i].label;
+      }
+    }
+    // A size set before the presets existed, or by hand. Report it rather than
+    // showing the wrong preset as selected.
+    return (Number(width) || 1080) + '×' + (Number(height) || 1920);
+  }
+
   function handleStyle(on) {
     return on
       ? 'position: absolute; inset: -6px; border: 1px dashed rgba(217,180,120,.7); border-radius: 6px; pointer-events: none;'
@@ -2517,8 +2536,24 @@
         + (UI.dragKind ? 'repeating-linear-gradient(to bottom, rgba(240,214,166,.5) 0 6px, transparent 6px 12px)' : 'rgba(217,180,120,.18)') + ';',
       guideHStyle: guideOverlayStyle(Boolean(UI.dragKind), UI.dragAt, UI.dragSnapped, SNAP_LINES),
       edSafe: true,
-      safePresetLabel: 'Shorts + Reels',
-      cyclePreset: function (e) { stop(e); toast('Safe-zone presets are fixed for vertical output.'); },
+      // Output shape. The render pipeline has always been generic here -- every
+      // fit mode scales to {width}:{height} and the subtitle canvas follows --
+      // but the UI pinned it to 9:16 and this button only explained that the
+      // presets were fixed. Template-level only: width and height are excluded
+      // from CLIP_STYLE_FIELDS on purpose, since resizing one clip would desync
+      // it from every sibling in the lecture.
+      safePresetLabel: ratioLabel(tpl.width, tpl.height),
+      cyclePreset: function (e) {
+        stop(e);
+        var labels = RATIO_PRESETS.map(function (r) { return r.label; });
+        global.StudioAdapter.onPickOption('Output shape', labels, function (chosen) {
+          var picked = RATIO_PRESETS.filter(function (r) { return r.label === chosen; })[0];
+          if (picked) saveStyle({ width: picked.width, height: picked.height });
+        });
+      },
+      // The preview frame follows the chosen shape, or Fit and Blur would be
+      // letterboxing against the wrong box.
+      pvAspect: Math.max(1, Number(tpl.width) || 1080) + ' / ' + Math.max(1, Number(tpl.height) || 1920),
       // Real dragging, onto fields that reach the render. Vertical is continuous
       // (captionMarginV, 20-800 in the schema); horizontal snaps to the three
       // alignments the renderer supports, because there is no free-form X.

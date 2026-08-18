@@ -2053,11 +2053,20 @@ function studioWanted(){return window.STUDIO_SHELL===true}
     function paintPreviewPic(vals){
       const wanted=StudioAdapter.ui.screen==='templates'||StudioAdapter.ui.screen==='editor';
       if(!wanted){pvEl.classList.add('hide');return}
-      const frame=[...document.querySelectorAll('#studio div,#studio section')]
-        .find(n=>n!==pvEl&&!pvEl.contains(n)&&getComputedStyle(n).aspectRatio==='9 / 16');
+      /* Matched on "has any aspect-ratio", not on 9/16: the shape is a setting
+         now, so pinning the finder to one value meant the frame became
+         unfindable the moment it was changed. Once docked, its own parent is
+         the answer. */
+      const frame=(pvEl.parentElement&&getComputedStyle(pvEl.parentElement).aspectRatio!=='auto')
+        ? pvEl.parentElement
+        : [...document.querySelectorAll('#studio div,#studio section')]
+            .find(n=>n!==pvEl&&!pvEl.contains(n)&&getComputedStyle(n).aspectRatio!=='auto');
       pvEl.classList.toggle('hide',!frame);
       if(!frame)return;
       if(frame.firstElementChild!==pvEl)frame.insertBefore(pvEl,frame.firstElementChild);
+      /* The design fixes the frame at 9:16 in a hoisted class. Re-applied on
+         every paint rather than once, so the patcher cannot quietly drop it. */
+      if(vals.pvAspect&&frame.style.aspectRatio!==vals.pvAspect)frame.style.aspectRatio=vals.pvAspect;
       const set=(sel,style)=>{const n=pvEl.querySelector(sel);if(n&&n.getAttribute('style')!==style)n.setAttribute('style',style)};
       set('.pv-back',vals.pvBackStyle);
       set('.pv-img',vals.pvImgStyle);
