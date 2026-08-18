@@ -2636,8 +2636,13 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           set(bar,{'flex-wrap':'nowrap','align-items':'center'});
           for(const child of bar.children){
             /* The title is the one child that can afford to lose width; the
-               controls must keep theirs or they start clipping. */
-            const holdsTitle=child.contains(backLink)?false:/[a-z]{4}/.test((child.textContent||''))&&!child.querySelector('button');
+               controls must keep theirs or they start clipping. Matched on the
+               clip's actual title -- a generic "has words in it" test also
+               caught the save-status text and ellipsised it to
+               "All changes save". */
+            const title=String(vals.edTitle||'').trim();
+            const holdsTitle=!child.contains(backLink)&&title.length>0
+              &&(child.textContent||'').indexOf(title.slice(0,18))>=0;
             set(child,holdsTitle
               ?{'min-width':'0','overflow':'hidden','text-overflow':'ellipsis','white-space':'nowrap'}
               :{'flex':'0 0 auto'});

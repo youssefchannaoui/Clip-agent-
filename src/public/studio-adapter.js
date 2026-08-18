@@ -2147,7 +2147,11 @@
         (String(tpl.watermarkPosition).indexOf('top') === 0 ? 'top: 11px;' : 'bottom: 42px;') +
         ' font-family: Outfit, Inter, sans-serif; font-size: 8.5px; font-weight: 700; letter-spacing: .12em; color: ' +
         (tpl.watermarkColor || '#F0D6A6') + '; display: ' + (Number(tpl.watermarkOpacity) > 0 ? 'block' : 'none') + ';',
-      edPlayStyle: 'display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid #26262A; background: #17171A; color: #F0D6A6; cursor: pointer;',
+      // The playhead's wrapper. The design draws it as a 34px round button, which
+      // in the timeline is an empty circle taking a lane's worth of height while
+      // the actual playhead -- the absolutely positioned line inside it -- spans
+      // the track anyway. Made into a transparent overlay so only the line shows.
+      edPlayStyle: 'position: absolute; inset: 0; pointer-events: none;',
       edPlayHeadStyle: 'position: absolute; top: 0; bottom: 0; left: ' + ((edTime / edDuration) * 100).toFixed(2) + '%; width: 2px; background: #F0D6A6;',
       edProgressStyle: 'height: 3px; border-radius: 3px; width: ' + ((edTime / edDuration) * 100).toFixed(2) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
       edProgressLabel: secsToClock(edTime),
