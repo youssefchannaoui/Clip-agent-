@@ -1699,6 +1699,44 @@ test('the output shape stays a template setting, never a per-clip one', () => {
   assert.deepEqual(kept, { captionFontSize: 90 });
 });
 
+test('Templates scrolls its settings column, not the whole page', () => {
+  // Scrolling the page meant the preview slid off-screen as soon as you reached
+  // a control near the bottom of the column -- the preview being the point of
+  // the screen.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const fn = /function paintTemplatesLayout\([\s\S]*?\n    \}\n/.exec(html)[0];
+  assert.match(fn, /'overflow-y':'hidden'/, 'the page itself stops scrolling');
+  assert.match(fn, /'overflow-y':'auto'/, 'the settings column takes over');
+  // A flex child will not shrink below its content without this, so the
+  // overflow never engages and nothing scrolls at all.
+  assert.match(fn, /'min-height':'0'/);
+  assert.match(fn, /screen!=='templates'.*clearTemplatesLayout/, 'and it is torn down elsewhere');
+});
+
+test('the layout is found structurally, not by generated class names', () => {
+  // s8a/s8b are regenerated on every design import.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const fn = /function paintTemplatesLayout\([\s\S]*?\n    \}\n/.exec(html)[0];
+  assert.doesNotMatch(fn, /\bs8a\b|\bs8b\b|\bs1m\b/);
+  // The row is the common ancestor of the preview frame and the caption block.
+  // Walking up from the frame alone stopped at the preview column's own flex
+  // container, which is also a flex box with several children.
+  assert.match(fn, /row\.contains\(frame\)/);
+  assert.match(fn, /n\.contains\(hlEl\)/);
+});
+
+test('a host-owned node survives its screen being torn down', () => {
+  // The patcher protects these from being paired against, but not from an
+  // ancestor being replaced -- so changing screen and coming back left the
+  // preview picture, the caption panel or the live section gone for good.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  assert.match(html, /function alive\(node\)\{\s*if\(node&&!node\.isConnected\)document\.body\.appendChild\(node\)/);
+  for (const paint of ['paintPreviewPic', 'paintApplyLecture', 'paintHighlight', 'paintLiveWork']) {
+    const fn = new RegExp(`function ${paint}\\(vals\\)\\{\\s*alive\\(`);
+    assert.match(html, fn, `${paint} re-attaches before docking`);
+  }
+});
+
 // ── the sample plays ───────────────────────────────────────────────────────
 
 function previewAt(seconds, extra = {}) {

@@ -1908,6 +1908,16 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        screen shows a compact bar that expands when more than one job runs. The
        design supplies only the bar, and put it on Home too, where it sat on top
        of the toast dock. */
+    /* Host-owned nodes get docked inside the design's tree, and the patcher only
+       protects them from being *paired against*; when the whole subtree around
+       one is replaced -- changing screen -- it goes with it. The JS reference
+       survives, so this puts it back rather than losing the element for the rest
+       of the session. Without it, visiting another screen and returning left the
+       preview picture, the caption panel or the live section permanently gone. */
+    function alive(node){
+      if(node&&!node.isConnected)document.body.appendChild(node);
+      return node;
+    }
     const liveEls={home:$('#studioLiveHome'),bar:$('#studioLiveBar')};
     /* Which lectures have their per-clip list open. Home defaults to open —
        there is room for it and it is the page you go to in order to look — while
@@ -2030,6 +2040,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        a reason when there is nothing to spread. */
     const applyEl=$('#studioApplyLecture');
     function paintApplyLecture(vals){
+      alive(applyEl);
       const inEditor=StudioAdapter.ui.screen==='editor'&&StudioAdapter.ui.edClipId;
       const others=Number(vals.edLectureOthers||0);
       applyEl.classList.toggle('hide',!(inEditor&&others>0));
@@ -2051,6 +2062,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        Templates and editor previews use one, and only one is ever rendered. */
     const pvEl=$('#studioPreviewPic');
     function paintPreviewPic(vals){
+      alive(pvEl);
       const wanted=StudioAdapter.ui.screen==='templates'||StudioAdapter.ui.screen==='editor';
       if(!wanted){pvEl.classList.add('hide');return}
       /* Matched on "has any aspect-ratio", not on 9/16: the shape is a setting
@@ -2177,6 +2189,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       return row&&row.parentElement;
     }
     function paintHighlight(vals){
+      alive(hlEl);
       const panel=hlAnchor(vals);
       hlEl.classList.toggle('hide',!panel);
       if(!panel)return;
@@ -2255,7 +2268,63 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       }
     }
 
+    /* On Templates the page scrolled as one, so the preview slid off-screen the
+       moment you reached for a control near the bottom of the settings column --
+       the preview being the entire point of the screen. The column scrolls on
+       its own instead and the preview stays put.
+
+       Applied as inline styles from structural finders rather than CSS on the
+       generated class names, which are regenerated on every design import. The
+       patcher may strip them, so they are re-applied on each paint and torn down
+       explicitly when leaving the screen. */
+    let tplLayout=null;
+    function clearTemplatesLayout(){
+      if(!tplLayout)return;
+      for(const [node,props] of tplLayout){
+        for(const k of props)node.style.removeProperty(k);
+      }
+      tplLayout=null;
+    }
+    function paintTemplatesLayout(){
+      if(StudioAdapter.ui.screen!=='templates'){clearTemplatesLayout();return}
+      const frame=pvEl.parentElement;
+      if(!frame||getComputedStyle(frame).aspectRatio==='auto'){clearTemplatesLayout();return}
+      /* The row is the common ancestor of the preview frame and the caption
+         block, which paintHighlight has already docked into the settings column.
+         Walking up from the frame alone stopped at the preview column's own
+         flex container -- it is a flex box with several children too, so
+         "a flex parent with two or more children" matched the wrong thing. */
+      if(hlEl.classList.contains('hide')||!hlEl.parentElement){clearTemplatesLayout();return}
+      let row=hlEl.parentElement;
+      while(row&&row.id!=='studio'&&!row.contains(frame))row=row.parentElement;
+      if(!row||row.id==='studio'){clearTemplatesLayout();return}
+      const settings=[...row.children].find(n=>n.contains(hlEl));
+      const previewCol=[...row.children].find(n=>n.contains(frame));
+      if(!settings||!previewCol||settings===previewCol){clearTemplatesLayout();return}
+      let scroller=row.parentElement;
+      while(scroller&&scroller.id!=='studio'&&!/auto|scroll/.test(getComputedStyle(scroller).overflowY)){
+        scroller=scroller.parentElement;
+      }
+      if(!scroller||scroller.id==='studio'){clearTemplatesLayout();return}
+      clearTemplatesLayout();
+      const set=(node,props)=>{
+        for(const [k,v] of Object.entries(props))node.style.setProperty(k,v);
+        tplLayout=(tplLayout||[]).concat([[node,Object.keys(props)]]);
+      };
+      /* The scroller becomes a column that does not scroll; the row takes the
+         leftover height; the settings column takes the scrolling. min-height:0
+         on both, or a flex child refuses to shrink below its content and the
+         overflow never engages. */
+      set(scroller,{'overflow-y':'hidden','display':'flex','flex-direction':'column'});
+      for(const child of scroller.children){
+        if(child!==row)set(child,{'flex':'0 0 auto'});
+      }
+      set(row,{'flex':'1 1 auto','min-height':'0','align-items':'flex-start'});
+      set(settings,{'max-height':'100%','overflow-y':'auto','min-height':'0'});
+    }
+
     function paintLiveWork(vals){
+      alive(liveEls.home);alive(liveEls.bar);
       const onHome=StudioAdapter.ui.screen==='home';
       const any=vals.liveCount>0;
       liveEls.bar.classList.toggle('hide',!(!onHome&&any));
@@ -2564,6 +2633,7 @@ function paintStudio(){
   paintCaptionWords(vals);
   paintPreviewPlayer(vals);
   paintHighlight(vals);
+  paintTemplatesLayout();
   /* No unread activity -> hide the dot the design hardcoded on. */
   document.body.classList.toggle('studio-read',!vals.activityUnread);
 }
