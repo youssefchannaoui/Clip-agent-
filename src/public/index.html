@@ -2078,7 +2078,10 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(frame.firstElementChild!==pvEl)frame.insertBefore(pvEl,frame.firstElementChild);
       /* The design fixes the frame at 9:16 in a hoisted class. Re-applied on
          every paint rather than once, so the patcher cannot quietly drop it. */
-      if(vals.pvAspect&&frame.style.aspectRatio!==vals.pvAspect)frame.style.aspectRatio=vals.pvAspect;
+      if(vals.pvAspect&&frame.style.aspectRatio!==vals.pvAspect){
+        frame.setAttribute('data-host-style','');
+        frame.style.aspectRatio=vals.pvAspect;
+      }
       const set=(sel,style)=>{const n=pvEl.querySelector(sel);if(n&&n.getAttribute('style')!==style)n.setAttribute('style',style)};
       set('.pv-back',vals.pvBackStyle);
       set('.pv-img',vals.pvImgStyle);
@@ -2282,6 +2285,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(!tplLayout)return;
       for(const [node,props] of tplLayout){
         for(const k of props)node.style.removeProperty(k);
+        if(!node.getAttribute('style'))node.removeAttribute('data-host-style');
       }
       tplLayout=null;
     }
@@ -2301,13 +2305,25 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       const settings=[...row.children].find(n=>n.contains(hlEl));
       const previewCol=[...row.children].find(n=>n.contains(frame));
       if(!settings||!previewCol||settings===previewCol){clearTemplatesLayout();return}
+      /* Accepts a node this already claimed, not only one that still scrolls:
+         applying the fix sets overflow-y to hidden, so a search for auto|scroll
+         walked straight past its own handiwork, failed, and tore the layout
+         down -- then the next paint re-applied it. That alternation is what read
+         as the page letting you scroll and yanking you back every two seconds. */
       let scroller=row.parentElement;
-      while(scroller&&scroller.id!=='studio'&&!/auto|scroll/.test(getComputedStyle(scroller).overflowY)){
+      while(scroller&&scroller.id!=='studio'
+        &&!/auto|scroll/.test(getComputedStyle(scroller).overflowY)
+        &&!scroller.hasAttribute('data-host-style')){
         scroller=scroller.parentElement;
       }
       if(!scroller||scroller.id==='studio'){clearTemplatesLayout();return}
       clearTemplatesLayout();
       const set=(node,props)=>{
+        /* Marks the style as host-owned so syncAttributes leaves it alone. Without
+           it the patcher stripped these on the next poll, the page became
+           scrollable again, and the paint after that reset the scroll position --
+           which reads as being yanked back to the top every two seconds. */
+        node.setAttribute('data-host-style','');
         for(const [k,v] of Object.entries(props))node.style.setProperty(k,v);
         tplLayout=(tplLayout||[]).concat([[node,Object.keys(props)]]);
       };

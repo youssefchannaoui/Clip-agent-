@@ -1713,6 +1713,30 @@ test('Templates scrolls its settings column, not the whole page', () => {
   assert.match(fn, /screen!=='templates'.*clearTemplatesLayout/, 'and it is torn down elsewhere');
 });
 
+test('the layout finder does not walk past its own handiwork', () => {
+  // Applying the fix sets the scroller to overflow-y: hidden, so a search for an
+  // auto|scroll ancestor walked straight past it, failed, and tore the layout
+  // down -- then the next paint re-applied it. Alternating like that is what
+  // read as the page letting you scroll and yanking you back every two seconds.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const fn = /function paintTemplatesLayout\([\s\S]*?\n    \}\n/.exec(html)[0];
+  assert.match(fn, /!scroller\.hasAttribute\('data-host-style'\)/,
+    'a node it already claimed still counts as the scroller');
+});
+
+test('the patcher leaves host-owned styles on the design\'s own nodes', () => {
+  // The generated source carries no style attribute for these, so syncing
+  // blindly stripped them on every patch.
+  const runtime = fs.readFileSync(path.join(ROOT, 'src/public/studio-runtime.js'), 'utf8');
+  const fn = /function syncAttributes\(target, source\) \{[\s\S]*?\n  \}/.exec(runtime)[0];
+  assert.match(fn, /hasAttribute\('data-host-style'\)/);
+  assert.match(fn, /if \(hostStyled && attr\.name === 'style'\) continue/, 'not overwritten');
+  assert.match(fn, /if \(hostStyled && name === 'style'\) continue/, 'and not removed');
+  // The marker itself has to survive, or it is stripped on the first patch and
+  // takes the protection with it.
+  assert.match(fn, /name\.indexOf\('data-host'\) === 0\) continue/);
+});
+
 test('the layout is found structurally, not by generated class names', () => {
   // s8a/s8b are regenerated on every design import.
   const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');

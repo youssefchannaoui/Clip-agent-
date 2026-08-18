@@ -271,9 +271,21 @@
   }
 
   function syncAttributes(target, source) {
+    // The host styles some of the design's own nodes -- the preview frame's
+    // shape, the Templates column that has to scroll rather than the page. The
+    // generated source carries no style attribute for those, so syncing blindly
+    // stripped them on every patch: the page became scrollable again between
+    // paints, and the next paint reset the scroll position, which read as being
+    // yanked back to the top every couple of seconds.
+    //
+    // data-host-style marks a node whose style the host owns. Attributes named
+    // data-host-* are never removed either, or the marker would be stripped on
+    // the first patch and take the protection with it.
+    var hostStyled = target.hasAttribute('data-host-style');
     var next = source.attributes;
     for (var i = 0; i < next.length; i++) {
       var attr = next[i];
+      if (hostStyled && attr.name === 'style') continue;
       if (target.getAttribute(attr.name) !== attr.value) target.setAttribute(attr.name, attr.value);
     }
     // Remove anything the new render dropped, walking backwards because the
@@ -281,6 +293,8 @@
     var current = target.attributes;
     for (var j = current.length - 1; j >= 0; j--) {
       var name = current[j].name;
+      if (name.indexOf('data-host') === 0) continue;
+      if (hostStyled && name === 'style') continue;
       if (!source.hasAttribute(name)) target.removeAttribute(name);
     }
     // Form state lives on the property, not the attribute. Skip the field the
