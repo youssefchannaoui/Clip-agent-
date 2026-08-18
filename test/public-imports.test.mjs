@@ -31,6 +31,27 @@ test('YouTube bot checks become a customer-safe upload recovery message', () => 
   assert.doesNotMatch(result.message, /--cookies|cookies-from-browser/i);
 });
 
+test('a 403 from every import route becomes a customer-safe message', () => {
+  // The real string, exactly as it reached the customer: both providers named,
+  // a yt-dlp traceback, and nothing they could act on.
+  const result = engine.customerSafeProjectError(
+    'socialkit: Download failed (yt-dlp): ERROR: unable to download video data: '
+    + 'HTTP Error 403: Forbidden | ytdlp: YouTube refused this download from this server.',
+  );
+  assert.equal(result.code, 'youtube_import_blocked');
+  assert.match(result.message, /upload/i, 'says what to do instead');
+  // Vendor names are ours, not the customer's. They read as the product being
+  // broken and send people to check a plan that is fine.
+  assert.doesNotMatch(result.message, /yt-dlp/i);
+  assert.doesNotMatch(result.message, /socialkit/i);
+});
+
+test('an unrelated failure keeps its own message rather than blaming YouTube', () => {
+  const result = engine.customerSafeProjectError('ffmpeg exited with code 1: no space left on device');
+  assert.equal(result.code, 'processing_failed');
+  assert.match(result.message, /no space left/);
+});
+
 test('video uploads are streamed into an account-scoped directory', async () => {
   const request = new PassThrough();
   request.headers = { 'x-file-name': encodeURIComponent('My Lecture.mp4'), 'content-type': 'video/mp4', 'content-length': '12' };

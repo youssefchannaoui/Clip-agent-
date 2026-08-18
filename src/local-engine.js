@@ -604,6 +604,22 @@ export function customerSafeProjectError(value = '') {
       message: 'YouTube blocked this server-side import. Upload the original MP4 or MOV instead; DeenClipped never asks customers for browser cookies.',
     };
   }
+  // A 403 that came back through both the import service and the direct
+  // fallback. Reached the customer as a raw yt-dlp traceback naming providers
+  // they have never heard of, which reads as the product being broken.
+  //
+  // Verified by hand before writing this: the same key downloaded a different
+  // video a minute later, so a 403 here is the video being refused rather than
+  // a spent key or a broken account. The message says so, because "403" alone
+  // sends people to check a plan that is fine.
+  if (/http error 403|403: forbidden|\brefused this download\b/i.test(raw)) {
+    return {
+      code: 'youtube_import_blocked',
+      message: 'YouTube refused to hand this video over (403) — both to the import service and directly. '
+        + 'That points at this particular video rather than your account or your plan; other lectures usually still import. '
+        + 'Download it yourself and upload the MP4 or MOV instead.',
+    };
+  }
   return { code: 'processing_failed', message: raw.slice(-1800) || 'The video could not be processed.' };
 }
 
