@@ -35,6 +35,35 @@ function ensureAuthState() {
   if (!state.authOAuthStates || typeof state.authOAuthStates !== 'object') state.authOAuthStates = {};
   if (!state.authSettings || typeof state.authSettings !== 'object') state.authSettings = { onboardingComplete: false };
   ensureBootstrapUser();
+  elevateOperators();
+}
+
+/**
+ * Accounts in config.operatorEmails become admins, retroactively included.
+ *
+ * Production disables the admin-password fallback, so the bootstrap owner
+ * exists but cannot sign in -- which quietly meant no account that could
+ * actually log in held operator access, and every operator page 404'd for
+ * everyone forever. Elevation runs here rather than only at sign-up so an
+ * account created before its email was listed is fixed by the next deploy,
+ * not by deleting and re-creating it.
+ *
+ * Only ever upward, and never touching 'owner': the bootstrap owner keeps
+ * its role, and removing an email from the list is not a demotion -- taking
+ * access away is an explicit human decision, not a config diff side effect.
+ */
+function elevateOperators() {
+  const listed = new Set((config.operatorEmails || []).map(cleanEmail).filter(Boolean));
+  if (!listed.size) return;
+  let changed = false;
+  for (const user of state.authUsers) {
+    if (listed.has(cleanEmail(user.email)) && !['owner', 'admin'].includes(String(user.role || '').toLowerCase())) {
+      user.role = 'admin';
+      user.updatedAt = now();
+      changed = true;
+    }
+  }
+  if (changed) save();
 }
 
 function ensureBootstrapUser() {

@@ -41,3 +41,22 @@ test('with nothing configured the source is untouched', () => {
   const source = { type: 'youtube', url: 'https://www.youtube.com/watch?v=abc12345678' };
   assert.equal(engine.withImportNetwork(source), source);
 });
+
+test('a listed operator email is elevated even for an account that already exists', async () => {
+  // Production disables the admin-password fallback, so the bootstrap owner
+  // cannot sign in and no living account could reach an operator page. The
+  // listed operator's existing creator account must be promoted on boot, not
+  // only at sign-up.
+  const auth = await import('../src/auth.js');
+  const { state } = store;
+  auth.ownerUser(); // bootstrap first, as production did long ago
+  state.authUsers.push({ id: 'user_op_test', email: 'youssefchannaoui05@gmail.com', role: 'creator', providers: {}, createdAt: Date.now() });
+  auth.ownerUser(); // any auth entry point runs ensureAuthState -> elevateOperators
+  const promoted = state.authUsers.find(user => user.id === 'user_op_test');
+  assert.equal(promoted.role, 'admin');
+  // The bootstrap owner is untouched and an unlisted account stays a creator.
+  state.authUsers.push({ id: 'user_random', email: 'someone@example.com', role: 'creator', providers: {}, createdAt: Date.now() });
+  auth.ownerUser();
+  assert.equal(state.authUsers.find(user => user.id === 'user_random').role, 'creator');
+  assert.equal(state.authUsers.find(user => user.role === 'owner')?.id, 'user_admin');
+});

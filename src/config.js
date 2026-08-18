@@ -88,6 +88,13 @@ export const config = {
   emailSigninEnabled: boolean(process.env.EMAIL_SIGNIN_ENABLED, true),
   sessionSecret: process.env.APP_SESSION_SECRET || process.env.SOCIAL_TOKEN_KEY || process.env.APP_PASSWORD || 'dev-session-secret-change-me',
   adminEmail: process.env.ADMIN_EMAIL || 'admin@deenclipped.local',
+  // Accounts that get operator (admin) access when they sign in, whatever
+  // provider they arrive through. Exists because production disables the
+  // admin-password fallback, which made the bootstrap owner unreachable and
+  // left no living account able to open an operator page. The default is the
+  // operator's own address so a fresh deploy is administrable at all.
+  operatorEmails: String(process.env.OPERATOR_EMAILS ?? 'youssefchannaoui05@gmail.com')
+    .split(',').map(entry => entry.trim().toLowerCase()).filter(Boolean),
   adminName: process.env.ADMIN_NAME || 'DeenClipped Admin',
 
   googleSigninClientId: process.env.GOOGLE_SIGNIN_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '',
