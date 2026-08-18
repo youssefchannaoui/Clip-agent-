@@ -60,3 +60,24 @@ test('the free tier is enough to finish one real lecture', () => {
   assert.ok(config.tokensFree >= 30, 'a trial that cannot finish a lecture proves nothing');
   assert.ok(config.tokensFree * 1 >= config.minimumTokensToStart * 2);
 });
+
+test('the Quran template does not mix a nasheed under the recitation by default', () => {
+  // Music is mandatory everywhere else, and that default is right -- but a
+  // nasheed playing under recited Quran is not a style choice. The reference
+  // clips this template copies have recitation and nothing else.
+  const template = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'src/templates/quran-recitation.json'), 'utf8'));
+  assert.equal(template.captionMode, 'quran');
+  const adapter = fs.readFileSync(path.join(process.cwd(), 'src/public/studio-adapter.js'), 'utf8');
+  assert.match(adapter, /jobTemplateMode === 'quran' \? false/, 'the quran template starts with the nasheed off');
+  // It stays a choice: once the operator touches the switch, their answer wins.
+  assert.match(adapter, /UI\.jobMusicTouched/);
+});
+
+test('nothing is drawn over the top of scripture', () => {
+  const template = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'src/templates/quran-recitation.json'), 'utf8'));
+  assert.equal(template.watermarkOpacity, 0, 'no watermark over an ayah');
+  assert.equal(template.brandLineEnabled, false);
+  assert.equal(template.hookEnabled, false);
+  assert.equal(template.captionBackgroundOpacity, 0, 'no box behind the ayah');
+  assert.ok(template.vignette <= 0.2, 'a heavy vignette reads as a filter over scripture');
+});

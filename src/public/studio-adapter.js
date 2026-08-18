@@ -1450,6 +1450,14 @@
     }());
 
     var job = UI.job;
+    // A nasheed under Quran recitation is not a style choice, so the Quran
+    // template starts with it off. Still a toggle -- once the operator touches
+    // it their answer stands -- but the default follows the template rather
+    // than mixing music under scripture because that is the global default.
+    var jobTemplateMode = activeTemplate ? activeTemplate.captionMode : '';
+    var jobMusicOn = UI.jobMusicTouched
+      ? UI.jobMusic !== false
+      : (jobTemplateMode === 'quran' ? false : UI.jobMusic !== false);
     var tokenRate = Number((DATA.billing && DATA.billing.tokenRatePerMinute) || 1);
 
     // The connection the modal is showing, if any.
@@ -2400,11 +2408,11 @@
       // Nasheed off for this job. Music is mandatory by default and stays that
       // way; this is a per-job choice, not a setting, so forgetting to upload
       // one still fails loudly instead of quietly shipping silent clips.
-      jobMusicOn: UI.jobMusic !== false,
+      jobMusicOn: jobMusicOn,
       jobMusicLabel: UI.jobMusic === false ? 'No nasheed' : 'Nasheed on',
       jobMusicTrack: switchTrack(UI.jobMusic !== false),
       jobMusicKnob: switchKnob(UI.jobMusic !== false),
-      toggleJobMusic: function (e) { stop(e); setUI({ jobMusic: UI.jobMusic === false }); },
+      toggleJobMusic: function (e) { stop(e); setUI({ jobMusic: UI.jobMusic === false, jobMusicTouched: true }); },
       jobNasheeds: (UI.jobMusic === false ? [] : tracks).map(function (t) {
         var on = UI.jobTrackId === t.id || (!UI.jobTrackId && tracks.length > 0);
         return {
@@ -2422,7 +2430,7 @@
         setUI({ generating: true });
         global.StudioAdapter.onGenerate(job.url, job.durationKnown
           ? { startSec: Math.round(job.start), endSec: Math.round(job.end) }
-          : null, { musicEnabled: UI.jobMusic !== false });
+          : null, { musicEnabled: jobMusicOn });
       },
       genBusy: UI.generating,
       genLabel: UI.generating ? 'Starting…' : 'Generate clips',
