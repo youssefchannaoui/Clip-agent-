@@ -1988,11 +1988,58 @@
       // Which caption block is being spoken. The host repaints immediately when
       // this changes, so captions land on the word rather than on the next tick.
       edLiveIndex: edLiveIndex,
+
+      // The live block drawn the way the renderer will draw it: the template's
+      // caption mode, its line length, and the highlighted word in its own
+      // colour and font. The overlay was one flat run of text in a generic
+      // font, so nothing about the Clip Style was visible in the editor -- the
+      // one screen where you are choosing it.
+      //
+      // Word timings are distributed evenly across the block: the worker
+      // persists sentence timings only. The export uses Whisper's real
+      // per-word timings, so the highlight here is a fair approximation rather
+      // than frame-exact.
+      edCapWords: (function () {
+        if (!overlayBlock || UI.edBurned) return [];
+        var raw = rawBlocks[edLiveIndex >= 0 ? edLiveIndex : UI.edBlock] || null;
+        var text = String(overlayBlock.text || '').trim();
+        if (!text) return [];
+        var all = text.split(/\s+/);
+        var timed = raw && raw.start !== null && raw.start !== undefined;
+        var span = timed ? Math.max(0.2, raw.end - raw.start) : 0;
+        var through = timed ? Math.max(0, Math.min(1, (edTime - raw.start) / span)) : 0;
+        var at = timed ? Math.min(all.length - 1, Math.floor(through * all.length)) : -1;
+
+        // The same three modes the renderer has: one word, the whole line, or a
+        // stack of a few. Shown from the same template fields the export reads.
+        var mode = tpl.captionMode;
+        var shown = all; var offset = 0;
+        if (mode === 'word' && at >= 0) { shown = [all[at]]; offset = at; }
+        else if (mode !== 'phrase') {
+          var per = Math.max(1, Math.min(8, Number(tpl.captionStackMaxWords) || Number(tpl.captionMaxWords) || 4));
+          var chunk = Math.max(0, Math.floor((at < 0 ? 0 : at) / per));
+          shown = all.slice(chunk * per, chunk * per + per);
+          offset = chunk * per;
+        }
+        var glow = Math.max(0, Math.min(30, Number(tpl.captionHighlightGlow) || 0));
+        return shown.map(function (word, i) {
+          var on = (offset + i) === at;
+          return {
+            text: word,
+            style: on
+              ? 'color: ' + (tpl.captionHighlight || '#D9B478') + ';'
+                + ' font-family: ' + webFontFor(tpl.captionHighlightFont) + ';'
+                + (tpl.captionHighlightItalic ? ' font-style: italic;' : '')
+                + (glow ? ' text-shadow: 0 0 ' + Math.round(glow / 2) + 'px ' + (tpl.captionHighlight || '#D9B478') + ';' : '')
+              : '',
+          };
+        });
+      }()),
       edProgress: edTime / edDuration,
       // This element IS the preview frame and establishes the containing block
       // for every overlay below it. Making it `position: absolute; inset: 0`
       // instead lets the overlays resolve against <main> and cover the tool rail.
-      edThumbStyle: 'position: relative; width: 100%; max-width: 268px; aspect-ratio: 9 / 16; border-radius: 13px; overflow: hidden; border: 1px solid #26262A; background: ' +
+      edThumbStyle: 'position: relative; container-type: inline-size; width: 100%; max-width: 268px; aspect-ratio: 9 / 16; border-radius: 13px; overflow: hidden; border: 1px solid #26262A; background: ' +
         thumb(edClip && edClip.thumbUrl) + '; box-shadow: 0 26px 60px rgba(0,0,0,.5);',
       closeEditor: function (e) { stop(e); setUI({ screen: 'queue', edClipId: null }); },
 
@@ -2017,11 +2064,21 @@
       // the Templates preview and the renderer do. It used to sit on capTop
       // alone, so the box only ever showed three positions and a drag or the
       // vertical slider appeared to do nothing between them.
-      edCapOverlayStyle: 'position: absolute; z-index: 8; width: 80%; left: 50%; ' + edCapVertical + ' text-align: center; padding: 7px 9px; border-radius: 6px; background: rgba(10,10,12,.5); color: ' +
-        (tpl.captionPrimary || '#F0D6A6') + '; font-family: Outfit, Inter, sans-serif; font-weight: 600; line-height: 1.2; font-size: ' +
-        Math.max(8, Math.round(Number(tpl.captionFontSize || 96) / 8)) + 'px;'
+      // Drawn the way the export draws it: the template's font, colour, case,
+      // outline, shadow and background box, at the same size relative to the
+      // frame. It used to be a fixed grey pill in Outfit at a size guessed by
+      // dividing by eight, so the preview said nothing true about the clip.
+      //
+      // The size is in cqw -- a percentage of the frame's own width -- so it
+      // stays right at any preview size, with a px value first as the fallback
+      // for anything that does not know container units.
+      edCapOverlayStyle: 'position: absolute; z-index: 8; width: 84%; left: 50%; ' + edCapVertical
+        + ' text-align: center; color: ' + (tpl.captionPrimary || '#F0D6A6') + ';'
+        + ' font-family: ' + webFontFor(tpl.captionFont) + '; font-weight: 700;'
+        + ' font-size: ' + Math.max(9, Math.round(Number(tpl.captionFontSize || 96) / 7)) + 'px;'
+        + ' font-size: ' + ((Number(tpl.captionFontSize || 96) / Math.max(1, Number(tpl.width || 1080))) * 100).toFixed(2) + 'cqw;'
         + (tpl.captionUppercase ? ' text-transform: uppercase;' : '')
-        + ' font-family: ' + webFontFor(tpl.captionFont) + ';'
+        + capInkStyle(tpl)
         + (UI.edBurned ? ' display: none;' : ''),
       edCapHandle: 'position: absolute; inset: -5px; border: 1px dashed rgba(240,214,166,.7); border-radius: 8px; pointer-events: none;',
       dragEdCap: dragCaptionFrom,

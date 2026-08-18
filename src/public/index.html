@@ -2334,6 +2334,32 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(fill)fill.style.width=(Math.max(0,Math.min(1,Number(vals.edProgress)||0))*100).toFixed(2)+'%';
     }
 
+    /* The editor's caption, drawn word by word so the highlighted word can wear
+       its own colour and font -- the same shape paintCaptionWords uses for the
+       Templates preview, against the clip's real words instead of the sample.
+
+       The binding's own text node is blanked and a host-owned span appended:
+       patch() skips host-owned nodes when pairing, so appending cannot shift
+       the four drag handles that are this node's other children. */
+    function paintEditorCaption(vals){
+      if(StudioAdapter.ui.screen!=='editor')return;
+      const box=nodeFor(vals.dragEdCap);
+      if(!box)return;
+      for(const node of box.childNodes){
+        if(node.nodeType===3&&node.nodeValue.trim())node.nodeValue='';
+      }
+      let span=box.querySelector(':scope > [data-host-owned]');
+      if(!span){
+        span=document.createElement('span');
+        span.setAttribute('data-host-owned','');
+        box.appendChild(span);
+      }
+      const want=(vals.edCapWords||[]).map(w=>w.style
+        ? `<span style="${esc(w.style)}">${esc(w.text)}</span>`
+        : esc(w.text)).join(' ');
+      if(span.dataset.words!==want){span.dataset.words=want;span.innerHTML=want}
+    }
+
     function paintCaptionWords(vals){
       /* Templates only. These are sample words for previewing a style; the
          editor draws the clip's real captions. */
@@ -3131,6 +3157,7 @@ function paintStudio(){
   paintApplyLecture(vals);
   paintPreviewPic(vals);
   paintCaptionWords(vals);
+  paintEditorCaption(vals);
   paintEditorVideo(vals);
   paintEditorPlayer(vals);
   paintEditorLayout(vals);
