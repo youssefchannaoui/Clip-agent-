@@ -570,6 +570,50 @@ async function route(req, res, url) {
     return res.end(body);
   }
 
+  // Import network settings, as a server-rendered page rather than a JSON API.
+  // MUST stay above the non-/api catch-all below: this route first shipped
+  // underneath it and was unreachable dead code answering the generic 404 --
+  // indistinguishable, from the outside, from the operator lacking the role.
+  // These get set exactly when URL imports are down and the operator's only
+  // other tool is the Hetzner web console, which mangles the characters a
+  // proxy URL is made of. A plain form in the browser has no such failure mode.
+  if (pathname === '/admin/import-network') {
+    // Signed out: to the login page, like every other page. Signed in without
+    // the role: the masked 404. The two must stay distinguishable -- when this
+    // route was dead code, its generic 404 was read as a role problem and the
+    // real bug went unfound.
+    if (!currentUser) return redirect(res, `/login?returnTo=${encodeURIComponent('/admin/import-network')}`);
+    try { requireOperator(currentUser); } catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+    if (method === 'POST') {
+      const raw = await readRawBody(req, 2_000_000);
+      const form = new URLSearchParams(raw);
+      const proxy = String(form.get('proxy') || '').trim();
+      const cookiesText = String(form.get('cookiesText') || '').trim();
+      if (proxy) {
+        let parsed;
+        try { parsed = new URL(proxy); } catch { parsed = null; }
+        if (!parsed || !['http:', 'https:', 'socks5:'].includes(parsed.protocol)) {
+          return html(res, 400, importNetworkPage({ error: 'The proxy must be a full URL like http://user:pass@host:port' }));
+        }
+      }
+      if (cookiesText && !/youtube\.com/.test(cookiesText)) {
+        return html(res, 400, importNetworkPage({ error: 'That does not look like a YouTube cookies export — it has no youtube.com lines.' }));
+      }
+      // Empty means "keep what is saved": values are never echoed back into
+      // the form, so an empty field on submit is almost always an untouched
+      // one, and treating it as "clear" would wipe a credential the operator
+      // could not see was there. Clearing is the explicit checkboxes.
+      const update = {};
+      if (proxy) update.proxy = proxy; else if (form.get('clearProxy')) update.proxy = '';
+      if (cookiesText) update.cookiesText = cookiesText; else if (form.get('clearCookies')) update.cookiesText = '';
+      setImportNetworkSettings(update);
+      const describe = (value, cleared) => (value ? 'set' : cleared ? 'cleared' : 'kept');
+      log(`Import network settings updated by ${currentUser.email || currentUser.id}: proxy ${describe(proxy, form.get('clearProxy'))}, cookies ${describe(cookiesText, form.get('clearCookies'))}.`, 'info');
+      return html(res, 200, importNetworkPage({ saved: true }));
+    }
+    return html(res, 200, importNetworkPage({}));
+  }
+
   if (!pathname.startsWith('/api/')) return json(res, 404, { error: 'Not found.' });
   if (auth.enabled() && !currentUser) return json(res, 401, { error: 'Sign in to continue.', loginRequired: true });
   if (!auth.enabled() && !auth.sessionUser(req) && !authed(req, url)) return json(res, 401, { error: 'Wrong password.' });
@@ -602,41 +646,6 @@ async function route(req, res, url) {
     catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
   }
 
-  // Import network settings, as a server-rendered page rather than a JSON API.
-  // These get set exactly when URL imports are down and the operator's only
-  // other tool is the Hetzner web console, which mangles the characters a
-  // proxy URL is made of. A plain form in the browser has no such failure mode.
-  if (pathname === '/admin/import-network') {
-    try { requireOperator(currentUser); } catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
-    if (method === 'POST') {
-      const raw = await readRawBody(req, 2_000_000);
-      const form = new URLSearchParams(raw);
-      const proxy = String(form.get('proxy') || '').trim();
-      const cookiesText = String(form.get('cookiesText') || '').trim();
-      if (proxy) {
-        let parsed;
-        try { parsed = new URL(proxy); } catch { parsed = null; }
-        if (!parsed || !['http:', 'https:', 'socks5:'].includes(parsed.protocol)) {
-          return html(res, 400, importNetworkPage({ error: 'The proxy must be a full URL like http://user:pass@host:port' }));
-        }
-      }
-      if (cookiesText && !/youtube\.com/.test(cookiesText)) {
-        return html(res, 400, importNetworkPage({ error: 'That does not look like a YouTube cookies export — it has no youtube.com lines.' }));
-      }
-      // Empty means "keep what is saved": values are never echoed back into
-      // the form, so an empty field on submit is almost always an untouched
-      // one, and treating it as "clear" would wipe a credential the operator
-      // could not see was there. Clearing is the explicit checkboxes.
-      const update = {};
-      if (proxy) update.proxy = proxy; else if (form.get('clearProxy')) update.proxy = '';
-      if (cookiesText) update.cookiesText = cookiesText; else if (form.get('clearCookies')) update.cookiesText = '';
-      setImportNetworkSettings(update);
-      const describe = (value, cleared) => (value ? 'set' : cleared ? 'cleared' : 'kept');
-      log(`Import network settings updated by ${currentUser.email || currentUser.id}: proxy ${describe(proxy, form.get('clearProxy'))}, cookies ${describe(cookiesText, form.get('clearCookies'))}.`, 'info');
-      return html(res, 200, importNetworkPage({ saved: true }));
-    }
-    return html(res, 200, importNetworkPage({}));
-  }
 
   const socialConnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok)\/connect$/);
   if (method === 'POST' && socialConnect) {
