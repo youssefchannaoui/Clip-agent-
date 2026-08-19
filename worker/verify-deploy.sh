@@ -49,6 +49,10 @@ check_code "heartbeat recorded"         "heartbeatAt"        /app/worker/service
 # failure this script exists to catch.
 check_code "ayah detection on every style" "auto_ayahs"        /app/worker/clip_worker.py
 check_code "mixed Arabic/English captions" "mixed_script_line" /app/worker/clip_worker.py
+# Re-rendering an imported lecture reads back "projects/<id>/source.mp4". Only
+# "uploads/" was accepted, so every re-render of a link import failed.
+check_code "re-render reads stored sources"  "projects/"        /app/worker/import_providers.py
+check_code "ayahs stored on the clip"        "matched_ayahs"     /app/worker/clip_worker.py
 
 echo
 

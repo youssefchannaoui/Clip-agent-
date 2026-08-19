@@ -458,8 +458,22 @@ class DirectUploadProvider(ManagedImportProvider):
 
     def import_video(self, source: dict, destination: Path, cancelled: Callable[[], bool]) -> ImportedSource:
         key = str(source.get("objectKey") or "")
-        if not key.startswith("uploads/") or ".." in key.split("/"):
-            raise ImportProviderError("The uploaded video reference is invalid.")
+        # Two prefixes are legitimate, and only accepting the first broke every
+        # re-render of an imported lecture:
+        #
+        #   uploads/   a file the customer sent us
+        #   projects/  the source this worker saved after importing a link
+        #
+        # A re-render of a link-imported lecture reads back the second, so
+        # "Apply template" and "Save to all clips" failed on every such lecture
+        # with a message about an upload the customer never made.
+        #
+        # The traversal guard stays: it is what stops a crafted key walking out
+        # of the bucket, and it is checked before the prefix so a key like
+        # "uploads/../../etc" cannot pass on its prefix alone.
+        segments = key.split("/")
+        if ".." in segments or not (key.startswith("uploads/") or key.startswith("projects/")):
+            raise ImportProviderError(f"The stored source reference is not one this worker can read: {key[:80] or '(empty)'}")
         if cancelled():
             raise ImportProviderError("Job cancelled.")
         self.storage.download(key, destination)
@@ -646,9 +660,12 @@ def import_with_fallback(source: dict, destination: Path, cancelled: Callable[[]
                 # way through for whoever reads this -- operator or, after the
                 # web app's rewrite, the customer.
                 trail = " | ".join(failures)[:800]
-                raise ImportProviderError(
-                    f"{trail} — uploading the video file (MP4 or MOV) will still work."
-                ) from exc
+                # The hint belongs to a link import. Suggesting an upload to
+                # someone whose stored source failed to read is advice about a
+                # thing they already did.
+                if source.get("type") == "youtube":
+                    trail += " — uploading the video file (MP4 or MOV) will still work."
+                raise ImportProviderError(trail) from exc
     raise ImportProviderError("No import provider was available.")
 
 

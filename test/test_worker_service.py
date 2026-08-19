@@ -78,6 +78,55 @@ class ManagedImportProviderTests(unittest.TestCase):
                 )
 
 
+class DirectUploadKeyTests(unittest.TestCase):
+    """Which stored sources the worker will read back.
+
+    Only "uploads/" was accepted, but a re-render of an imported lecture points
+    at "projects/<id>/source.mp4" -- the source this worker saved itself. So
+    every re-render of a link-imported lecture failed, and with it "Apply
+    template" and "Save to all clips", reporting an invalid upload the customer
+    had never made.
+    """
+
+    def setUp(self):
+        self.ip = importlib.reload(importlib.import_module("import_providers"))
+        self.temp = pathlib.Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.temp, ignore_errors=True)
+
+    def _read(self, key):
+        downloaded = {}
+
+        class Storage:
+            def download(self, object_key, destination):
+                downloaded["key"] = object_key
+                destination.write_bytes(b"video")
+
+        provider = self.ip.DirectUploadProvider(Storage())
+        provider.import_video({"type": "object_storage", "objectKey": key}, self.temp / "s.mp4", lambda: False)
+        return downloaded["key"]
+
+    def test_a_customer_upload_is_read(self):
+        self.assertEqual(self._read("uploads/user_1/talk.mp4"), "uploads/user_1/talk.mp4")
+
+    def test_an_imported_lecture_source_is_read(self):
+        # The case that was broken.
+        self.assertEqual(self._read("projects/project_abc/source.mp4"), "projects/project_abc/source.mp4")
+
+    def test_a_key_that_walks_out_of_the_bucket_is_refused(self):
+        # Checked before the prefix, so a valid-looking prefix cannot carry a
+        # traversal through with it.
+        for key in ["uploads/../../etc/passwd", "projects/../secrets/key", "../outside.mp4"]:
+            with self.assertRaises(self.ip.ImportProviderError, msg=key):
+                self._read(key)
+
+    def test_an_unknown_prefix_is_refused(self):
+        for key in ["clips/other_customer/clip.mp4", "", "s3://bucket/x.mp4"]:
+            with self.assertRaises(self.ip.ImportProviderError, msg=key):
+                self._read(key)
+
+
 class ImportFallbackTests(unittest.TestCase):
     """A managed provider being blocked is not the end of the attempt.
 
