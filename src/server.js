@@ -22,6 +22,7 @@ import * as auth from './auth.js';
 import * as billing from './billing.js';
 import * as marketing from './marketing.js';
 import * as admin from './admin.js';
+import { startYouTubeRetention } from './youtube-retention.js';
 import { saveVideoUpload, removeUploadedFile } from './uploads.js';
 import * as objectStorage from './object-storage.js';
 import { assertStorageObjectKey } from './video-import.js';
@@ -1270,4 +1271,11 @@ export const server = http.createServer((req, res) => {
   let url; try { url = new URL(req.url, `http://${req.headers.host || 'localhost'}`); } catch { return json(res, 400, { error: 'Bad request.' }); }
   route(req, res, url).catch(error => { console.error(error); if (!res.headersSent) json(res, 500, { error: error.message || 'Unexpected server error.' }); });
 });
-server.listen(config.port, () => { console.log(`DeenClipped self-hosted engine listening on http://localhost:${config.port}`); agent.start(); });
+server.listen(config.port, () => {
+  console.log(`DeenClipped self-hosted engine listening on http://localhost:${config.port}`);
+  agent.start();
+  // YouTube API Data is cleared after 30 days (policy III.E.4.a-g). Started
+  // here rather than on import so a test that loads this module does not sweep
+  // a real state file as a side effect.
+  startYouTubeRetention();
+});

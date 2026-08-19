@@ -484,6 +484,9 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     // Falls back to the URL's own poster: the dashboard did not send sourceMeta,
     // so every lecture stored null here and the library showed empty cards.
     sourceThumbUrl: sourceMeta?.thumbnail || fallbackThumb(value) || null,
+    // Dates the YouTube API data cached above, so the retention sweep knows
+    // how old it is. Policy III.E.4 gives it 30 days.
+    youtubeDataAt: sourceMeta ? Date.now() : null,
     sourceKind: options.sourceKind || 'link', originalFileName: options.originalFileName || null,
     uploadedInputFile: options.uploadedInputFile || null, sourceObjectKey: options.sourceKind === 'object_storage' ? value : null,
   }, user.id);

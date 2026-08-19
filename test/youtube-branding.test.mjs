@@ -21,6 +21,24 @@ test('the DeenClipped mark is not a play triangle in a rounded square', () => {
   assert.match(mark, /10\.5 10\.5/, 'the mihrab arch the dashboard already uses');
 });
 
+test('the mark is the arch and nothing else', () => {
+  // A vertical stroke crossed by a horizontal one is a cross. It has no place
+  // on a Muslim product, and it went out in the first version of this fix.
+  const mark = /function logoMark\(\)[\s\S]*?\n}/.exec(marketing)[0];
+  const svg = /<svg[\s\S]*?<\/svg>/.exec(mark)[0];
+  const paths = svg.match(/<path/g) || [];
+  assert.equal(paths.length, 1, 'the arch outline, with nothing drawn inside it');
+});
+
+test('the mark is the arch and nothing else', () => {
+  // A vertical stroke crossed by a horizontal one is a cross. It has no place
+  // on a Muslim product, and it went out in the first version of this fix.
+  const mark = /function logoMark\(\)[\s\S]*?\n}/.exec(marketing)[0];
+  const svg = /<svg[\s\S]*?<\/svg>/.exec(mark)[0];
+  const paths = svg.match(/<path/g) || [];
+  assert.equal(paths.length, 1, 'the arch outline, with nothing drawn inside it');
+});
+
 test('no icon anywhere is a play triangle inside a rounded rectangle', () => {
   // The clips icon carried the same borrowed shape as the brand mark.
   const clips = /clips: '<svg[^']*'/.exec(marketing)[0];

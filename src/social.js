@@ -192,6 +192,9 @@ async function connectYouTube(code, userId) {
   const connection = {
     provider: 'youtube', accountId: channel.id, name: channel.snippet?.title || 'YouTube channel',
     avatar: channel.snippet?.thumbnails?.default?.url || '', scopes: token.scope || '',
+      // Dates the channel title and avatar read from the Data API, for the
+      // 30-day retention sweep in youtube-retention.js (policy III.E.4).
+      youtubeDataAt: Date.now(),
     token: encrypt({ ...token, expiresAt: Date.now() + Number(token.expires_in || 3600) * 1000 }), connectedAt: Date.now(),
   };
   setConnection(state.socialConnections, userId, 'youtube', connection);
