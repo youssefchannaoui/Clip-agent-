@@ -395,6 +395,13 @@ class QuranCaptionTests(unittest.TestCase):
     def test_the_arabic_and_the_translation_use_their_own_styles(self):
         text = self._render([{"start": 0.0, "end": 4.0, "text": "هيهات هيهات لما توعدون"}])
         self.assertIn("Style: Ayah,Amiri,", text, "the Arabic is set in a Quranic face")
+        # Sized up over the caption size: the mushaf faces reserve tall metrics
+        # for tashkeel, so at equal size the ayah rendered smaller than its own
+        # translation. In the reference the Arabic is the dominant element.
+        import re as _re
+        ayah_size = int(_re.search(r"Style: Ayah,[^,]+,(\d+),", text).group(1))
+        caption_size = int(_re.search(r"Style: Caption,[^,]+,(\d+),", text).group(1))
+        self.assertGreater(ayah_size, caption_size, "the ayah is the dominant element")
         self.assertIn(",Ayah,,", text)
         # The translation is a second line of the ayah's own event, not an event
         # of its own. It used to be separate with a computed MarginV, which a

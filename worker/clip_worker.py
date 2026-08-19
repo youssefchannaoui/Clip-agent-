@@ -800,6 +800,12 @@ def quran_font(fallback: str) -> str:
 
 AYAH_MAX_WORDS = 5
 AYAH_FADE_MS = 300
+# Quranic faces (Amiri Quran, Scheherazade) reserve tall vertical metrics for
+# stacked tashkeel, so at a given font size the glyph body renders far smaller
+# than a Latin face -- in a test frame the ayah came out smaller than its own
+# translation. In the reference the Arabic is the dominant element, so the
+# Ayah style is set proportionally larger to land at the same visual size.
+AYAH_SIZE_SCALE = 1.6
 
 
 def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: float,
@@ -1085,7 +1091,8 @@ def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) ->
     font = str(template.get("captionFont", "DejaVu Sans"))
     highlight_font = str(template.get("captionHighlightFont", "DejaVu Serif"))
     arabic_font = str(template.get("captionArabicFont", "Amiri"))
-    # Quranic script for an ayah, general Arabic for everything else.
+    # Quranic script for an ayah, general Arabic for everything else, sized up
+    # to compensate for the mushaf faces' tall vertical metrics.
     ayah_font = quran_font(arabic_font)
     highlight_italic = bool(template.get("captionHighlightItalic", True))
     highlight_glow = max(0.0, min(30.0, float(template.get("captionHighlightGlow", 0))))
@@ -1097,6 +1104,7 @@ def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) ->
     translation_size = int(max(20, min(90, int(template.get("captionTranslationSize", 46)))))
     fade_tag = f"{{\\fad({fade_ms},{fade_ms})}}" if fade_ms else ""
     font_size = int(template.get("captionFontSize", 62))
+    ayah_size = int(round(font_size * AYAH_SIZE_SCALE))
     margin_v = int(template.get("captionMarginV", 220))
     outline_width = float(template.get("captionOutlineWidth", 5))
     shadow = float(template.get("captionShadow", 1))
@@ -1134,7 +1142,7 @@ WrapStyle: 2
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Caption,{font},{font_size},{primary},{highlight},{outline},{back},-1,0,0,0,100,{scale_y},0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
-Style: Ayah,{ayah_font},{font_size},{primary},{highlight},{outline},{back},0,0,0,0,100,100,0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
+Style: Ayah,{ayah_font},{ayah_size},{primary},{highlight},{outline},{back},0,0,0,0,100,100,0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
 Style: Translation,{font},{translation_size},{primary},{highlight},{outline},{back},0,0,0,0,100,100,0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
 Style: Watermark,{font},{watermark_size},{watermark_color},{watermark_color},{outline},&H00000000,1,0,0,0,100,100,2,0,1,1,0,{watermark_align},{watermark_margin_h},{watermark_margin_h},{watermark_margin_v},1
 
