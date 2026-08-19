@@ -2444,6 +2444,9 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(playerVideoNode.dataset.src!==clip.videoUrl){
         playerVideoNode.dataset.src=clip.videoUrl;
         playerVideoNode.src=/^https?:/i.test(clip.videoUrl)?clip.videoUrl:withPw(clip.videoUrl);
+        /* The modal opened from a click, so playing with sound is permitted;
+           if the browser refuses anyway the native controls are right there. */
+        const p=playerVideoNode.play();if(p&&p.catch)p.catch(()=>{});
       }
     }
 
