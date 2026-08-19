@@ -2619,7 +2619,11 @@
 
       playerOpen: Boolean(UI.playerClip),
       playerTitle: UI.playerClip ? UI.playerClip.title : '',
-      playerThumb: 'width: 100%; aspect-ratio: 9 / 16; border-radius: 10px; background: ' + thumb(UI.playerClip && UI.playerClip.thumbUrl) + ';',
+      // Height-led, not width-led: at width:100% a 9:16 frame inside the modal
+      // was taller than the screen, so the preview opened with its controls and
+      // most of the picture below the fold. 70vh keeps the whole clip and the
+      // close button in view on any window.
+      playerThumb: 'position: relative; height: min(70vh, 640px); aspect-ratio: 9 / 16; width: auto; margin: 0 auto; border-radius: 10px; background: ' + thumb(UI.playerClip && UI.playerClip.thumbUrl) + ';',
       closePlayer: function (e) { stop(e); setUI({ playerClip: null }); },
       // Scrubs the clip: click anywhere on the timeline to move the playhead,
       // and the video follows. e.dcTarget is the delegation fix -- currentTarget
