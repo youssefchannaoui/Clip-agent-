@@ -104,7 +104,10 @@ class JobStore:
                 return existing, False
             directory = self.directory(job_id)
             directory.mkdir(parents=True, exist_ok=False)
+            # The payload can carry the operator's session cookies and proxy
+            # credentials (source.network); nobody but this process reads it.
             self.payload_path(job_id).write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            self.payload_path(job_id).chmod(0o600)
             status = {
                 "id": job_id, "status": "queued", "stage": "queued", "progress": 0,
                 "createdAt": now_ms(), "updatedAt": now_ms(), "cancelRequested": False,
@@ -124,11 +127,32 @@ class JobStore:
             return status
 
     def update(self, job_id: str, **changes: Any) -> dict[str, Any]:
-        status = self.read(job_id)
-        if not status:
-            raise KeyError(job_id)
-        status.update(changes)
-        return self.write(job_id, status)
+        # Read-modify-write under the lock: a progress update racing a cancel
+        # could read before the cancel and write after it, silently flipping
+        # cancelRequested back off while the app already heard "cancelled".
+        with self.lock:
+            status = self.read(job_id)
+            if not status:
+                raise KeyError(job_id)
+            status.update(changes)
+            return self.write(job_id, status)
+
+    def scrub_network(self, job_id: str) -> None:
+        """Drop borrowed credentials from a finished job's payload.
+
+        The cookies and proxy in source.network were lent for the import; a
+        job that has ended has no further claim on them, and recover() only
+        requeues unfinished jobs, so nothing ever misses them.
+        """
+        try:
+            payload = self.payload(job_id)
+        except (OSError, ValueError):
+            return
+        source = payload.get("source")
+        if isinstance(source, dict) and source.pop("network", None) is not None:
+            path = self.payload_path(job_id)
+            path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            path.chmod(0o600)
 
     def recover(self) -> list[str]:
         recovered = []
@@ -183,13 +207,14 @@ class Processor:
         return bool(status.get("cancelRequested"))
 
     def cancel(self, job_id: str) -> dict[str, Any]:
-        status = self.store.read(job_id)
-        if not status:
-            raise KeyError(job_id)
-        if status.get("status") in {"completed", "failed", "cancelled"}:
-            return status
-        status.update(cancelRequested=True, status="cancelled", stage="cancelled", error=None)
-        self.store.write(job_id, status)
+        with self.store.lock:
+            status = self.store.read(job_id)
+            if not status:
+                raise KeyError(job_id)
+            if status.get("status") in {"completed", "failed", "cancelled"}:
+                return status
+            status.update(cancelRequested=True, status="cancelled", stage="cancelled", error=None)
+            self.store.write(job_id, status)
         with self.lock:
             child = self.running.get(job_id)
         if child and child.poll() is None:
@@ -483,13 +508,21 @@ class Processor:
             status = self.store.update(job_id, status="completed", stage="completed", progress=100, result=public_result, error=None, completedAt=now_ms())
             self.callback(payload, status)
         except Exception as exc:
-            if self.cancelled(job_id):
-                status = self.store.update(job_id, status="cancelled", stage="cancelled", error=None)
-            else:
-                status = self.store.update(job_id, status="failed", stage="failed", error=clean_error(exc), completedAt=now_ms())
-            self.callback(payload, status)
+            # Best effort only: update() writes to disk and can itself raise
+            # (ENOSPC is the realistic one, mid-render). That must not escape --
+            # it would pass through loop()'s KeyError-only guard and end the one
+            # consumer thread, leaving a worker that accepts jobs and runs none.
+            try:
+                if self.cancelled(job_id):
+                    status = self.store.update(job_id, status="cancelled", stage="cancelled", error=None)
+                else:
+                    status = self.store.update(job_id, status="failed", stage="failed", error=clean_error(exc), completedAt=now_ms())
+                self.callback(payload, status)
+            except Exception as report_exc:  # noqa: BLE001
+                print(f"[worker] job {job_id} failed and the failure could not be recorded: {clean_error(report_exc)}", file=sys.stderr, flush=True)
         finally:
             shutil.rmtree(work, ignore_errors=True)
+            self.store.scrub_network(job_id)
 
     def loop(self) -> None:
         while not self.stop.is_set():
@@ -508,7 +541,7 @@ class Processor:
             except Exception as exc:  # noqa: BLE001 - the loop must outlive any job
                 try:
                     self.store.update(job_id, status="failed", stage="failed", error=clean_error(exc))
-                except KeyError:
+                except Exception:  # noqa: BLE001 - a failing status write must not end the loop either
                     pass
                 print(f"[worker] job {job_id} crashed the processor: {clean_error(exc)}", file=sys.stderr, flush=True)
             finally:
@@ -521,6 +554,19 @@ class Processor:
                 if item.stat().st_mtime < cutoff:
                     shutil.rmtree(item) if item.is_dir() else item.unlink()
             except OSError:
+                pass
+        # Finished job records age out too. They accumulated forever, and each
+        # one carried the full payload -- including, before scrub_network, any
+        # cookies and proxy credentials the import borrowed.
+        for item in JOBS_DIR.iterdir() if JOBS_DIR.exists() else []:
+            try:
+                status_path = item / "status.json"
+                if not item.is_dir() or not status_path.exists():
+                    continue
+                status = json.loads(status_path.read_text(encoding="utf-8"))
+                if status.get("status") in {"completed", "failed", "cancelled"} and status_path.stat().st_mtime < cutoff:
+                    shutil.rmtree(item)
+            except (OSError, ValueError):
                 pass
 
 

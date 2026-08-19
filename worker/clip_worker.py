@@ -224,15 +224,36 @@ def run_with_progress(
     (see PROGRESS_FLAGS) rather than having them spliced in here, so what runs
     is exactly what the caller wrote.
     """
-    started = time.monotonic()
     proc = subprocess.Popen(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     tail: list[str] = []
+    # stderr is drained as it arrives. Reading it only after stdout closed
+    # meant a chatty ffmpeg (libass warnings, DTS complaints) filled the pipe,
+    # blocked on write, stopped emitting progress lines -- and the stdout loop
+    # below then blocked too, so the render hung and the timeout never ran.
+    stderr_chunks: list[str] = []
+
+    def _drain() -> None:
+        try:
+            stderr_chunks.append(proc.stderr.read() if proc.stderr else "")
+        except Exception:
+            stderr_chunks.append("")
+
+    drain = threading.Thread(target=_drain, daemon=True)
+    drain.start()
+    # The deadline fires whether or not progress lines arrive; checking it
+    # inside the read loop made it dead code the moment the loop blocked.
+    timed_out = threading.Event()
+    timer: threading.Timer | None = None
+    if timeout is not None:
+        def _expire() -> None:
+            timed_out.set()
+            proc.kill()
+        timer = threading.Timer(timeout, _expire)
+        timer.daemon = True
+        timer.start()
     try:
         assert proc.stdout is not None
         for line in proc.stdout:
-            if timeout is not None and time.monotonic() - started > timeout:
-                proc.kill()
-                raise subprocess.TimeoutExpired(command, timeout)
             key, _, value = line.strip().partition("=")
             if key not in {"out_time_us", "out_time_ms"} or not value.isdigit():
                 continue
@@ -244,11 +265,15 @@ def run_with_progress(
     finally:
         if proc.stdout:
             proc.stdout.close()
-        stderr = proc.stderr.read() if proc.stderr else ""
+        code = proc.wait()
+        if timer:
+            timer.cancel()
+        drain.join(timeout=10)
         if proc.stderr:
             proc.stderr.close()
-        code = proc.wait()
-        tail.append(stderr or "")
+        tail.append(stderr_chunks[0] if stderr_chunks else "")
+    if timed_out.is_set():
+        raise subprocess.TimeoutExpired(command, timeout)
     if code != 0:
         raise RuntimeError(f"Command failed ({code}): {' '.join(command[:4])}\n{tail[-1][-1800:]}")
 

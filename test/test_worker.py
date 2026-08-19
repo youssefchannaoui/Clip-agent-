@@ -1103,3 +1103,33 @@ class CaptionBlockTests(unittest.TestCase):
 
     def test_no_words_yields_no_blocks_rather_than_an_empty_one(self):
         self.assertEqual(worker.caption_blocks(self._candidate([], "")), [])
+
+
+class StderrFloodTests(unittest.TestCase):
+    """A chatty command must not deadlock the render, and the deadline must
+    fire even when no progress line ever arrives."""
+
+    def test_a_stderr_flood_does_not_hang_the_render(self):
+        # 256 KB of stderr -- past any pipe buffer. Before stderr was drained
+        # concurrently, the child blocked writing it, stopped printing
+        # progress, and this call never returned.
+        script = (
+            "import sys\n"
+            "sys.stderr.write('x' * 262144)\n"
+            "sys.stderr.flush()\n"
+            "print('out_time_us=15000000')\n"
+        )
+        seen = []
+        worker.run_with_progress([sys.executable, "-c", script], 30.0, seen.append, timeout=30)
+        self.assertEqual(seen, [0.5])
+
+    def test_the_timeout_fires_even_with_no_progress_lines(self):
+        # The old check lived inside the stdout read loop, so a silent child
+        # made the timeout dead code.
+        script = "import time\ntime.sleep(60)\n"
+        import subprocess
+        import time
+        started = time.monotonic()
+        with self.assertRaises(subprocess.TimeoutExpired):
+            worker.run_with_progress([sys.executable, "-c", script], 10.0, lambda f: None, timeout=1)
+        self.assertLess(time.monotonic() - started, 30)

@@ -491,6 +491,59 @@ class WorkerPersistenceTests(unittest.TestCase):
         self.assertEqual(recovered["status"], "queued")
         self.assertLessEqual(recovered["progress"], 5)
 
+    def test_a_finished_job_record_ages_out_and_its_credentials_are_scrubbed(self):
+        store = self.service.JobStore()
+        store.create({"id": "job_net", "source": {"type": "youtube", "network": {"cookiesText": "SECRET-COOKIE", "proxy": "http://user:pass@proxy:8080"}}})
+        # The payload holds borrowed credentials only while the job is alive.
+        self.assertIn("SECRET-COOKIE", store.payload_path("job_net").read_text())
+        self.assertEqual(store.payload_path("job_net").stat().st_mode & 0o077, 0, "the payload is not readable by other users")
+        store.scrub_network("job_net")
+        text = store.payload_path("job_net").read_text()
+        self.assertNotIn("SECRET-COOKIE", text)
+        self.assertNotIn("user:pass", text)
+        # And the whole record leaves the disk once it is old and finished.
+        store.update("job_net", status="completed")
+        old = time.time() - self.service.JOB_TTL_SECONDS - 5
+        os.utime(store.status_path("job_net"), (old, old))
+        self.service.Processor(store).cleanup_abandoned()
+        self.assertFalse(store.directory("job_net").exists())
+
+    def test_an_unfinished_job_record_is_never_pruned(self):
+        store = self.service.JobStore()
+        store.create({"id": "job_alive", "source": {"type": "youtube"}})
+        old = time.time() - self.service.JOB_TTL_SECONDS - 5
+        os.utime(store.status_path("job_alive"), (old, old))
+        self.service.Processor(store).cleanup_abandoned()
+        self.assertTrue(store.directory("job_alive").exists(), "recover() still needs it after a restart")
+
+    def test_a_cancel_is_not_lost_to_a_racing_progress_update(self):
+        store = self.service.JobStore()
+        processor = self.service.Processor(store)
+        store.create({"id": "job_race", "source": {"type": "youtube"}})
+        stop = threading.Event()
+
+        def hammer():
+            while not stop.is_set():
+                try:
+                    status = store.read("job_race")
+                    if status.get("cancelRequested"):
+                        break
+                    store.update("job_race", progress=1)
+                except KeyError:
+                    break
+
+        thread = threading.Thread(target=hammer)
+        thread.start()
+        try:
+            time.sleep(0.02)
+            processor.cancel("job_race")
+        finally:
+            stop.set()
+            thread.join(timeout=5)
+        status = store.read("job_race")
+        self.assertTrue(status["cancelRequested"], "the cancel survived concurrent updates")
+        self.assertEqual(status["status"], "cancelled")
+
     def test_abandoned_temporary_directories_are_removed(self):
         abandoned = self.service.TEMP_DIR / "abandoned"
         abandoned.mkdir(parents=True)

@@ -409,7 +409,13 @@ function validateSubmission(url, user, options = {}) {
   if (!value) throw new Error(options.sourceKind === 'object_storage' ? 'Upload a video first.' : 'Paste a video link first.');
   if (remoteProcessing() && options.sourceKind === 'object_storage') assertStorageObjectKey(value);
   else if (remoteProcessing()) parseYouTubeUrl(value);
-  else if (!/^https?:\/\//i.test(value) && !value.startsWith('file://') && !path.isAbsolute(value)) {
+  else if (/^https?:\/\//i.test(value)) { /* a link is fine in any mode */ }
+  else if (value.startsWith('file://') || path.isAbsolute(value)) {
+    // Only the upload route may name a file on this box. Through the link
+    // form it would let one account read any media path the process can --
+    // another tenant's upload included.
+    if (options.sourceKind !== 'upload') throw new Error('Use a complete http(s) video link.');
+  } else {
     throw new Error('Use a complete http(s) video link.');
   }
   // The job's own choice first. The token page picks a content kind, and the

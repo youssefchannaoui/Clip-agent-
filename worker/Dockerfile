@@ -61,7 +61,11 @@ RUN python -m pip install --upgrade pip setuptools wheel \
 
 COPY worker /app/worker
 RUN mkdir -p /var/lib/deenclipped/jobs /var/lib/deenclipped/tmp /var/lib/deenclipped/models \
-    && python -m py_compile /app/worker/service.py /app/worker/import_providers.py /app/worker/object_storage.py /app/worker/clip_worker.py /app/worker/quran.py
+    && python -m py_compile /app/worker/service.py /app/worker/import_providers.py /app/worker/object_storage.py /app/worker/clip_worker.py /app/worker/quran.py \
+    # ffmpeg, libass, yt-dlp and OpenCV all parse media a customer chose. None
+    # of that needs root, so none of it gets root.
+    && useradd --system --no-create-home --shell /usr/sbin/nologin worker \
+    && chown -R worker /var/lib/deenclipped
 
 # The Quran corpus for the recitation template: the Arabic text and a
 # translation, ~3MB, baked into the image so a render never waits on a network
@@ -74,6 +78,8 @@ RUN mkdir -p /var/lib/deenclipped/jobs /var/lib/deenclipped/tmp /var/lib/deencli
 RUN python /app/worker/quran.py --build || \
     echo "WARNING: Quran corpus unavailable at build time; the Quran template will be inactive."
 
+
+USER worker
 
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=8s --start-period=30s --retries=3 \
