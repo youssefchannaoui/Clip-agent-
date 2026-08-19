@@ -193,6 +193,12 @@ function queueTemplateForEveryUnpostedClip(template, user, reason = 'template up
     // Saving from the clip editor applies to that lecture, per the design; the
     // Templates screen still applies to everything unposted.
     if (projectId && clip.projectId !== projectId) { skipped += 1; continue; }
+    // ... everything unposted THAT USES THIS TEMPLATE. Without this, saving
+    // Quran Recitation queued a re-render of every unposted clip the account
+    // had ever made -- lecture clips, old test clips -- onto the recitation
+    // template, flooding the worker with twenty-plus renders nobody asked for
+    // and overwriting clips with a style that was never theirs.
+    if (clip.templateId && clip.templateId !== template.id) { skipped += 1; continue; }
     try {
       agent.engine.queueClipRerender(clip.id, template.id, { asVariant: false });
       queued += 1;
