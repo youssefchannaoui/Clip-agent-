@@ -2877,24 +2877,44 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(jobTypeEl.nextElementSibling!==row||jobTypeEl.parentElement!==row.parentElement){
         row.parentElement.insertBefore(jobTypeEl,row);
       }
-      if(!jobTypeEl.dataset.built){
-        jobTypeEl.dataset.built='1';
-        jobTypeEl.style.cssText='display:flex;gap:8px;align-items:center;margin:10px 0';
-        jobTypeEl.innerHTML='<span style="font-size:11px;letter-spacing:.08em;color:#8B8B93;text-transform:uppercase">Content</span>'
-          +'<button type="button" data-kind="lecture"></button>'
-          +'<button type="button" data-kind="quran"></button>';
+      /* Two cards, not two pills: this is the decision that sets the template,
+         the caption treatment and the nasheed default, so it reads as the
+         primary choice on the panel -- an icon, a name, and one line saying
+         what each kind actually does. dataset.built is versioned so shipping a
+         new layout rebuilds nodes built by the old one. */
+      if(jobTypeEl.dataset.built!=='2'){
+        jobTypeEl.dataset.built='2';
+        jobTypeEl.style.cssText='display:block;margin:14px 0 12px';
+        jobTypeEl.innerHTML='<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin-bottom:8px">What are you clipping?</div>'
+          +'<div style="display:flex;gap:10px">'
+          +'<button type="button" data-kind="lecture"><i class="ph ph-microphone-stage"></i><span class="t"></span><span class="d"></span><i class="ph-fill ph-check-circle k"></i></button>'
+          +'<button type="button" data-kind="quran"><i class="ph ph-book-open-text"></i><span class="t"></span><span class="d"></span><i class="ph-fill ph-check-circle k"></i></button>'
+          +'</div>';
         for(const b of jobTypeEl.querySelectorAll('button')){
           b.onclick=e=>{e.preventDefault();StudioAdapter.bindings(DATA).pickJobType(b.dataset.kind)};
         }
+        const lecT=jobTypeEl.querySelector('[data-kind=lecture] .t');
+        const lecD=jobTypeEl.querySelector('[data-kind=lecture] .d');
+        const qurT=jobTypeEl.querySelector('[data-kind=quran] .t');
+        const qurD=jobTypeEl.querySelector('[data-kind=quran] .d');
+        lecT.textContent='Islamic lecture';
+        lecD.textContent='Bold word-by-word captions, nasheed under the voice';
+        qurT.textContent='Quran recitation';
+        qurD.textContent='The ayah in mushaf script with its translation — no nasheed';
       }
-      const styleFor=on=>'padding:7px 14px;border-radius:999px;font:600 12.5px Outfit,Inter,sans-serif;cursor:pointer;border:1px solid '
-        +(on?'rgba(240,214,166,.85);background:rgba(217,180,120,.16);color:#F0D6A6':'#26262A;background:#141416;color:#B9B9C0');
-      const lec=jobTypeEl.querySelector('[data-kind=lecture]');
-      const qur=jobTypeEl.querySelector('[data-kind=quran]');
-      if(lec.textContent!=='Islamic lecture')lec.textContent='Islamic lecture';
-      if(qur.textContent!=='Quran recitation')qur.textContent='Quran recitation';
-      lec.style.cssText=styleFor(!vals.jobTypeQuran);
-      qur.style.cssText=styleFor(vals.jobTypeQuran);
+      const cardFor=on=>'position:relative;flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:3px;'
+        +'padding:12px 14px 11px;border-radius:12px;text-align:left;cursor:pointer;transition:border-color .15s,background .15s;'
+        +'border:1.5px solid '+(on?'rgba(240,214,166,.9)':'#26262A')+';'
+        +'background:'+(on?'linear-gradient(180deg,rgba(217,180,120,.14),rgba(217,180,120,.05))':'#131315')+';';
+      for(const b of jobTypeEl.querySelectorAll('button[data-kind]')){
+        const on=(b.dataset.kind==='quran')===Boolean(vals.jobTypeQuran);
+        b.style.cssText=cardFor(on);
+        const icon=b.firstElementChild;
+        icon.style.cssText='font-size:19px;color:'+(on?'#F0D6A6':'#7C7C85');
+        b.querySelector('.t').style.cssText='font:600 13.5px Outfit,Inter,sans-serif;color:'+(on?'#F0D6A6':'#D2D2D8');
+        b.querySelector('.d').style.cssText='font:400 11px Outfit,Inter,sans-serif;line-height:1.35;color:'+(on?'#C9B896':'#8B8B93');
+        b.querySelector('.k').style.cssText='position:absolute;top:9px;right:10px;font-size:15px;color:#F0D6A6;'+(on?'':'display:none;');
+      }
     }
 
     /* Docked under the job panel's nasheed row. Anchored on the NASHEED label
