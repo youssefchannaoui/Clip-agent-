@@ -101,6 +101,25 @@ These were each a real bug and each has a test named after it.
 
 ---
 
+## Rendering gotchas that cost real time
+
+- **libass sizes text by win ascent+descent, not em** (VSFilter compat). Amiri
+  reserves ~3.3x its em vertically for tashkeel, so at a nominal font size its
+  glyphs render at ~30% of what DejaVu renders. `AYAH_SIZE_SCALE = 3.0` in
+  clip_worker.py compensates; it looked like "the multiplier does nothing"
+  until measured on a real frame, because 1.25x of 30% is still tiny.
+- **"Amiri Quran" is worse, not better** — even taller metrics; frames came
+  out at a quarter size. quran_font() deliberately prefers plain Amiri, which
+  is mushaf naskh and draws U+06DD with the digits inside.
+- **Only a rendered frame settles a caption question.** Every one of the above
+  passed unit tests; two deploy cycles were spent on renders that "should"
+  have been right. Frame-check via the clip's public R2 URL in a <video>.
+- **The Hetzner console silently disconnects.** Keystrokes typed into a dead
+  console echo as ghost text and never run — a pull+build was "done" twice
+  without happening. Confirm a live prompt echo (type Return, see a fresh
+  prompt) before every command batch, and verify `git pull` output names the
+  expected commits.
+
 ## Deploys
 
 - Branch `deenclipped-v2-2` auto-deploys the web service to Render on push.
