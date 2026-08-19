@@ -340,11 +340,12 @@ class CaptionAnimationTests(unittest.TestCase):
         self.assertTrue(caption_events, "the caption modes emit events")
         for event in caption_events:
             self.assertIn("{fade_tag}", event, event[:90])
-        # Scripture is the exception, deliberately: an ayah fading in reads as a
-        # graphic effect laid over the Quran. It is on screen for exactly as
-        # long as it is recited, and ayah_event() builds it without a fade.
-        ayah_builder = re.search(r"def ayah_event\([\s\S]*?\n    return[^\n]*", source).group(0)
-        self.assertNotIn("fade_tag", ayah_builder, "an ayah does not animate")
+        # Scripture fades between phrases and does nothing else: ayah_events()
+        # builds its own gentle \\fad and must never gain the pop/transform the
+        # spoken captions have.
+        ayah_builder = re.search(r"def ayah_events\([\s\S]*?\n    return events", source).group(0)
+        self.assertIn("\\\\fad(", ayah_builder, "phrases fade out and in")
+        self.assertNotIn("\\\\t(", ayah_builder, "no pop or transform on scripture")
 
 
 class QuranCaptionTests(unittest.TestCase):
@@ -582,46 +583,80 @@ class CookieInstallScriptTests(unittest.TestCase):
 
 
 class AyahEventTests(unittest.TestCase):
-    """How a matched ayah is drawn, from the reference clip the design copies."""
+    """How a matched ayah is drawn, copying the reference frame exactly.
 
-    FOUND = {
+    The reference: a short ayah sits whole in white mushaf script with the
+    verse mark on the end of the sentence and a small serif translation
+    directly beneath. A long recitation moves through in phrases of a few
+    words, each fading out and the next fading in.
+    """
+
+    SHORT = {
         "arabic": "وَكَانَ ٱللَّهُ غَفُورًا رَّحِيمًا",
         "ayah": 70,
         "translation": "and Allah is Oft-Forgiving Most Merciful",
     }
+    LONG = {
+        "arabic": "وَلَا تَحْسَبَنَّ ٱلَّذِينَ قُتِلُوا فِى سَبِيلِ ٱللَّهِ أَمْوَاتًا بَلْ أَحْيَاءٌ عِندَ رَبِّهِمْ يُرْزَقُونَ",
+        "ayah": 169,
+        "translation": "Think not of those who are slain in Allah's way as dead. Nay, they live, finding their sustenance in the presence of their Lord;",
+    }
 
-    def _event(self, **kw):
-        args = dict(start=1.0, end=5.0, latin_font="DejaVu Serif",
+    def _events(self, found, **kw):
+        args = dict(start=0.0, end=12.0, latin_font="DejaVu Serif",
                     translation_size=32, show_translation=True)
         args.update(kw)
-        return worker.ayah_event(self.FOUND, ornament='\u06dd\u0667\u0660', **args)
+        return worker.ayah_events(found, ornament="\u06dd\u0667\u0660", **args)
 
-    def test_the_verse_mark_cannot_wrap_onto_its_own_line(self):
-        # Joined with a hard space. With an ordinary one the renderer broke the
-        # line between the ayah and its number, which a mushaf never does.
-        event = self._event()
-        self.assertIn("\\h\u06dd", event, "the mark is hard-spaced to the last word")
-        self.assertNotIn(" \u06dd", event, "never a breakable space before the mark")
+    def test_a_short_ayah_is_one_frame_exactly_like_the_reference(self):
+        events = self._events(self.SHORT, end=4.0)
+        self.assertEqual(len(events), 1)
+        self.assertIn("Oft-Forgiving", events[0], "translation directly beneath")
 
-    def test_scripture_does_not_animate(self):
-        # An ayah fading in reads as a graphic. It is simply on screen for as
-        # long as it is recited.
-        self.assertNotIn("\\fad(", self._event())
+    def test_a_long_ayah_moves_through_in_short_phrases(self):
+        # Never the whole ayah as one block of text on screen.
+        events = self._events(self.LONG)
+        self.assertGreater(len(events), 1)
+        for event in events:
+            arabic = event.split(",Ayah,,0,0,0,,")[1].split("\\N")[0]
+            visible = arabic.split("}")[-1]
+            self.assertLessEqual(len(visible.split()), worker.AYAH_MAX_WORDS, visible)
 
-    def test_the_translation_is_a_second_line_of_the_same_event(self):
-        # Not a separate event with its own MarginV: a middle alignment ignores
-        # MarginV, so the gloss was drawn at the ayah's height and hidden
-        # behind it.
-        event = self._event()
-        self.assertIn("\\N", event, "line break inside one event")
-        self.assertIn("Oft-Forgiving", event)
-        self.assertIn("\\fs32", event, "set at the translation size")
-        self.assertIn("\\fnDejaVu Serif", event, "and in the Latin face")
+    def test_each_phrase_fades_out_and_the_next_fades_in(self):
+        # A gentle fad and nothing else. No pop, no per-word highlight:
+        # scripture does not do word animations.
+        for event in self._events(self.LONG):
+            self.assertIn("\\fad(", event)
+            self.assertNotIn("\\t(", event, "no pop or transform on scripture")
+
+    def test_the_verse_mark_ends_the_sentence_and_only_the_sentence(self):
+        # Hard-spaced to the ayah's final word -- a mushaf never wraps the
+        # number onto its own line -- and never shown mid-ayah.
+        events = self._events(self.LONG)
+        for event in events[:-1]:
+            self.assertNotIn("\u06dd", event, "no mark before the ayah ends")
+        self.assertIn("\\h\u06dd", events[-1])
+
+    def test_the_phrases_tile_the_recitation_without_gaps(self):
+        events = self._events(self.LONG, start=2.0, end=14.0)
+        times = [event.split(",")[1:3] for event in events]
+        self.assertEqual(times[0][0], worker.ass_time(2.0))
+        self.assertEqual(times[-1][1], worker.ass_time(14.0))
+        for previous, current in zip(times, times[1:]):
+            self.assertEqual(previous[1], current[0], "each phrase starts where the last ended")
+
+    def test_the_translation_travels_with_its_phrase(self):
+        events = self._events(self.LONG)
+        self.assertIn("Think not of those", events[0])
+        self.assertIn("their Lord;", events[-1])
+        for event in events:
+            self.assertIn("\\fnDejaVu Serif", event)
+            self.assertIn("\\fs32", event)
 
     def test_a_template_without_translations_gets_only_the_ayah(self):
-        event = self._event(show_translation=False)
-        self.assertNotIn("Oft-Forgiving", event)
-        self.assertIn("\u06dd", event, "the ayah and its mark are still there")
+        for event in self._events(self.SHORT, end=4.0, show_translation=False):
+            self.assertNotIn("Oft-Forgiving", event)
+            self.assertIn("\u06dd", event)
 
 
 class QuranFontTests(unittest.TestCase):

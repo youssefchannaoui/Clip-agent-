@@ -798,29 +798,74 @@ def quran_font(fallback: str) -> str:
     return fallback
 
 
-def ayah_event(found: dict[str, Any], *, ornament: str, start: float, end: float,
-               latin_font: str, translation_size: int, show_translation: bool) -> str:
-    """One Dialogue line carrying an ayah, its verse mark and its translation.
+AYAH_MAX_WORDS = 5
+AYAH_FADE_MS = 300
 
-    Three things this settles that separate events did not:
 
-    The verse mark is joined to the last word with a hard space (\\h), so the
-    renderer cannot break the line between them. With an ordinary space the
-    number wrapped onto a line of its own, which a mushaf never does.
+def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: float,
+                latin_font: str, translation_size: int, show_translation: bool) -> list[str]:
+    """The Dialogue lines carrying an ayah, a short phrase at a time.
 
-    The translation is a second line of the same event rather than its own
-    event with a computed MarginV. A middle alignment ignores MarginV entirely
-    (see alignment_for), so the translation was being drawn at the same height
-    as the ayah and hidden behind it -- which is why it never appeared.
+    Modelled on the reference clips: a long ayah is not held on screen as one
+    block of text, it moves through in phrases of a few words, each fading out
+    and the next fading in. So:
 
-    No fade. Scripture that animates in reads as a graphic; the ayah is simply
-    on screen for as long as it is recited.
+    A long ayah is split into balanced chunks of at most AYAH_MAX_WORDS words,
+    and the segment's time is shared out in proportion to each chunk's length.
+    A short ayah stays whole, which is exactly the reference frame.
+
+    Each chunk fades in and out (a gentle \\fad, nothing else -- no pop and no
+    per-word highlight; scripture does not do word animations).
+
+    The verse mark appears once, joined to the ayah's final word with a hard
+    space (\\h) so the renderer cannot wrap the number onto its own line.
+
+    The translation travels with its chunk as a second line of the same event:
+    the matching words of the translation, split in the same proportions. A
+    separate Translation event had its MarginV ignored by the middle alignment
+    and was hidden behind the Arabic.
     """
-    body = ass_escape(found["arabic"]) + "\\h" + ass_escape(ornament)
-    if show_translation and found.get("translation"):
-        gloss = ass_escape(wrap_caption(str(found["translation"]), 44))
-        body += "\\N{\\fn" + latin_font + "\\fs" + str(translation_size) + "}" + gloss
-    return f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Ayah,,0,0,0,,{body}"
+    words = str(found["arabic"]).split()
+    if not words:
+        return []
+    chunk_count = max(1, -(-len(words) // AYAH_MAX_WORDS))  # ceil
+    base, extra = divmod(len(words), chunk_count)
+    chunks: list[list[str]] = []
+    taken = 0
+    for index in range(chunk_count):
+        size = base + (1 if index < extra else 0)
+        chunks.append(words[taken:taken + size])
+        taken += size
+
+    gloss_words = str(found.get("translation") or "").split() if show_translation else []
+    span = max(0.4, end - start)
+    fade = min(AYAH_FADE_MS, int(span / max(1, chunk_count) * 1000 / 3))
+    fade_tag = f"{{\\fad({fade},{fade})}}"
+
+    events: list[str] = []
+    at = start
+    g_taken = 0
+    for index, chunk in enumerate(chunks):
+        share = span * (len(chunk) / len(words))
+        chunk_start, chunk_end = at, min(end, at + share)
+        if index == chunk_count - 1:
+            chunk_end = end
+        at = chunk_end
+
+        text = ass_escape(" ".join(chunk))
+        if index == chunk_count - 1:
+            text += "\\h" + ass_escape(ornament)
+
+        if gloss_words:
+            g_size = round(len(gloss_words) * len(chunk) / len(words)) if index < chunk_count - 1 else len(gloss_words) - g_taken
+            g_size = max(0, min(g_size, len(gloss_words) - g_taken))
+            piece = " ".join(gloss_words[g_taken:g_taken + g_size]).strip()
+            g_taken += g_size
+            if piece:
+                text += "\\N{\\fn" + latin_font + "\\fs" + str(translation_size) + "}" + ass_escape(piece)
+
+        events.append(f"Dialogue: 2,{ass_time(chunk_start)},{ass_time(chunk_end)},Ayah,,0,0,0,,{fade_tag}{text}")
+    return events
 
 
 def mixed_script_line(raw: str, *, font: str, arabic_font: str, uppercase: bool) -> str:
@@ -1180,7 +1225,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     "surahName": found["surahName"], "arabic": found["arabic"],
                     "translation": found["translation"], "confidence": found["confidence"],
                 })
-                events.append(ayah_event(
+                events.extend(ayah_events(
                     found, ornament=quran.ornament_for(found["ayah"]), start=start, end=end,
                     latin_font=font, translation_size=translation_size,
                     show_translation=show_translation,
@@ -1247,7 +1292,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             "surahName": found["surahName"], "arabic": found["arabic"],
             "translation": found["translation"], "confidence": found["confidence"],
         })
-        events.append(ayah_event(
+        events.extend(ayah_events(
             found, ornament=quran.ornament_for(found["ayah"]), start=span["start"], end=span["end"],
             latin_font=font, translation_size=translation_size,
             show_translation=bool(template.get("captionTranslation", True)),
