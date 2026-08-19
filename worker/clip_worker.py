@@ -805,12 +805,17 @@ def quran_font(fallback: str) -> str:
 
 AYAH_MAX_WORDS = 5
 AYAH_FADE_MS = 300
-# The ayah is the dominant element in the reference, so it is set somewhat
-# larger than the caption size. Kept modest: the compensation for a face's own
-# metrics belongs in the face choice, not in a magic multiplier -- Amiri Quran
-# was tried first and rendered at a quarter of the expected size at ANY
-# multiplier, because its glyphs occupy a small fraction of a very tall em.
-AYAH_SIZE_SCALE = 1.25
+# Why the ayah size is multiplied by three:
+#
+# libass sizes text the way VSFilter did -- the requested font size maps to the
+# face's win ascent + descent, not to its em. Amiri reserves about 3.3x its em
+# vertically for stacked tashkeel, so at a nominal size its glyph bodies render
+# at roughly 30% of what a Latin face renders (DejaVu is ~86%). Measured on a
+# rendered frame: the ayah at nominal 85 drew SMALLER than its own translation
+# at 32. The shrink is linear, so a constant recovers it exactly: ~2.9x makes
+# the Arabic land about twice the visual height of the gloss, which is the
+# reference's proportion.
+AYAH_SIZE_SCALE = 3.0
 
 
 def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: float,
