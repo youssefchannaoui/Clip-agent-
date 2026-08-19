@@ -268,6 +268,11 @@ function publicClip(clip) {
     // Sentence-level caption timings from the renderer. Without these the editor
     // has nothing to build a timeline from and can only show one giant block.
     captionSegments: Array.isArray(clip.captionSegments) ? clip.captionSegments : [],
+    // The ayahs the renderer matched in this clip. The editor draws these in
+    // place of the transcript for the moments they cover, so what it shows is
+    // what the export burns in -- it used to show Whisper's transcription of
+    // the recitation, which is the thing the corpus exists to replace.
+    ayahs: Array.isArray(clip.ayahs) ? clip.ayahs : [],
     score: clip.score, scoreReasons: clip.scoreReasons || [], quality: clip.quality || null,
     reviewRequired: Boolean(clip.reviewRequired), startSec: clip.startSec, endSec: clip.endSec, durationMs: clip.durationMs,
     status: clip.status, approvedBy: clip.approvedBy || null,

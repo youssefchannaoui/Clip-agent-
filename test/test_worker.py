@@ -337,11 +337,14 @@ class CaptionAnimationTests(unittest.TestCase):
         source = (ROOT / "worker" / "clip_worker.py").read_text(encoding="utf-8")
         self.assertIn("fade_tag = ", source)
         caption_events = re.findall(r'f"Dialogue: 2,[^"]*Caption,,[^"]*"', source)
-        ayah_events = re.findall(r'f"Dialogue: 2,[^"]*(?:Ayah|Translation),,[^"]*"', source)
         self.assertTrue(caption_events, "the caption modes emit events")
-        self.assertTrue(ayah_events, "so does the Quran mode")
-        for event in caption_events + ayah_events:
+        for event in caption_events:
             self.assertIn("{fade_tag}", event, event[:90])
+        # Scripture is the exception, deliberately: an ayah fading in reads as a
+        # graphic effect laid over the Quran. It is on screen for exactly as
+        # long as it is recited, and ayah_event() builds it without a fade.
+        ayah_builder = re.search(r"def ayah_event\([\s\S]*?\n    return[^\n]*", source).group(0)
+        self.assertNotIn("fade_tag", ayah_builder, "an ayah does not animate")
 
 
 class QuranCaptionTests(unittest.TestCase):
@@ -391,9 +394,15 @@ class QuranCaptionTests(unittest.TestCase):
     def test_the_arabic_and_the_translation_use_their_own_styles(self):
         text = self._render([{"start": 0.0, "end": 4.0, "text": "هيهات هيهات لما توعدون"}])
         self.assertIn("Style: Ayah,Amiri,", text, "the Arabic is set in a Quranic face")
-        self.assertIn("Style: Translation,DejaVu Serif,", text)
         self.assertIn(",Ayah,,", text)
-        self.assertIn(",Translation,,", text)
+        # The translation is a second line of the ayah's own event, not an event
+        # of its own. It used to be separate with a computed MarginV, which a
+        # middle alignment ignores -- so it was drawn at the ayah's height and
+        # hidden behind it, and never appeared in a finished clip.
+        ayah_line = [line for line in text.splitlines() if ",Ayah,," in line][0]
+        self.assertIn("\\N", ayah_line, "the gloss is a second line")
+        self.assertIn("\\fnDejaVu Serif", ayah_line, "set in the Latin face")
+        self.assertNotIn(",Translation,,", text, "no separate event to be hidden behind")
 
     def test_speech_that_is_not_recitation_falls_through_to_a_plain_caption(self):
         text = self._render([{"start": 0.0, "end": 4.0, "text": "قال الشيخ ان الصبر مفتاح الفرج"}])
@@ -570,6 +579,75 @@ class CookieInstallScriptTests(unittest.TestCase):
 
     def test_the_script_warns_against_the_channel_account(self):
         self.assertIn("THROWAWAY", self._script())
+
+
+class AyahEventTests(unittest.TestCase):
+    """How a matched ayah is drawn, from the reference clip the design copies."""
+
+    FOUND = {
+        "arabic": "وَكَانَ ٱللَّهُ غَفُورًا رَّحِيمًا",
+        "ayah": 70,
+        "translation": "and Allah is Oft-Forgiving Most Merciful",
+    }
+
+    def _event(self, **kw):
+        args = dict(start=1.0, end=5.0, latin_font="DejaVu Serif",
+                    translation_size=32, show_translation=True)
+        args.update(kw)
+        return worker.ayah_event(self.FOUND, ornament='\u06dd\u0667\u0660', **args)
+
+    def test_the_verse_mark_cannot_wrap_onto_its_own_line(self):
+        # Joined with a hard space. With an ordinary one the renderer broke the
+        # line between the ayah and its number, which a mushaf never does.
+        event = self._event()
+        self.assertIn("\\h\u06dd", event, "the mark is hard-spaced to the last word")
+        self.assertNotIn(" \u06dd", event, "never a breakable space before the mark")
+
+    def test_scripture_does_not_animate(self):
+        # An ayah fading in reads as a graphic. It is simply on screen for as
+        # long as it is recited.
+        self.assertNotIn("\\fad(", self._event())
+
+    def test_the_translation_is_a_second_line_of_the_same_event(self):
+        # Not a separate event with its own MarginV: a middle alignment ignores
+        # MarginV, so the gloss was drawn at the ayah's height and hidden
+        # behind it.
+        event = self._event()
+        self.assertIn("\\N", event, "line break inside one event")
+        self.assertIn("Oft-Forgiving", event)
+        self.assertIn("\\fs32", event, "set at the translation size")
+        self.assertIn("\\fnDejaVu Serif", event, "and in the Latin face")
+
+    def test_a_template_without_translations_gets_only_the_ayah(self):
+        event = self._event(show_translation=False)
+        self.assertNotIn("Oft-Forgiving", event)
+        self.assertIn("\u06dd", event, "the ayah and its mark are still there")
+
+
+class QuranFontTests(unittest.TestCase):
+    """An ayah is set in a Quranic face, not a general Arabic one.
+
+    A mushaf face draws U+06DD as the ornamented circle with the verse number
+    inside it. A general Arabic face leaves a bare mark, which is what made a
+    rendered ayah look like plain Arabic with a number after it.
+    """
+
+    def test_a_quranic_face_is_preferred_when_installed(self):
+        worker._INSTALLED_FAMILIES = {"DejaVu Sans", "Amiri", "Amiri Quran", "Scheherazade New"}
+        self.assertEqual(worker.quran_font("DejaVu Sans"), "Amiri Quran")
+
+    def test_it_falls_back_through_the_faces_that_exist(self):
+        worker._INSTALLED_FAMILIES = {"DejaVu Sans", "Amiri"}
+        self.assertEqual(worker.quran_font("DejaVu Sans"), "Amiri")
+
+    def test_with_no_arabic_face_it_keeps_the_template_choice(self):
+        # Better the template's own font than a silent substitution to
+        # something with no Arabic glyphs at all.
+        worker._INSTALLED_FAMILIES = {"DejaVu Sans"}
+        self.assertEqual(worker.quran_font("Scheherazade"), "Scheherazade")
+
+    def tearDown(self):
+        worker._INSTALLED_FAMILIES = None
 
 
 class MixedScriptCaptionTests(unittest.TestCase):

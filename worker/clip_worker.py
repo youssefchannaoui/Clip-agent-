@@ -757,6 +757,72 @@ def contains_arabic(text: str) -> bool:
     return bool(re.search(r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]", str(text)))
 
 
+_INSTALLED_FAMILIES: set[str] | None = None
+
+
+def installed_families() -> set[str]:
+    """Font families fontconfig can see, read once."""
+    global _INSTALLED_FAMILIES
+    if _INSTALLED_FAMILIES is None:
+        try:
+            listed = run(["fc-list", ":", "family"], timeout=15).stdout
+        except Exception:  # pragma: no cover - fontconfig missing
+            listed = ""
+        families = set()
+        for line in listed.splitlines():
+            for name in line.split(","):
+                cleaned = name.strip()
+                if cleaned:
+                    families.add(cleaned)
+        _INSTALLED_FAMILIES = families
+    return _INSTALLED_FAMILIES
+
+
+def quran_font(fallback: str) -> str:
+    """The face an ayah is set in.
+
+    Ordinary Arabic and Quranic Arabic are not the same typographic job. A
+    mushaf face carries the full tashkeel and, critically, draws U+06DD as the
+    ornamented circle with the verse number inside it; a general Arabic face
+    leaves it as a bare mark, which is what made a rendered ayah look like plain
+    Arabic text with a number after it.
+
+    Chosen from what is actually installed rather than hardcoded, so a box
+    without the Quran faces degrades to the template's Arabic font instead of
+    having libass silently substitute something with no Arabic at all.
+    """
+    families = installed_families()
+    for candidate in ("Amiri Quran", "Scheherazade New", "Scheherazade", "Amiri"):
+        if candidate in families:
+            return candidate
+    return fallback
+
+
+def ayah_event(found: dict[str, Any], *, ornament: str, start: float, end: float,
+               latin_font: str, translation_size: int, show_translation: bool) -> str:
+    """One Dialogue line carrying an ayah, its verse mark and its translation.
+
+    Three things this settles that separate events did not:
+
+    The verse mark is joined to the last word with a hard space (\\h), so the
+    renderer cannot break the line between them. With an ordinary space the
+    number wrapped onto a line of its own, which a mushaf never does.
+
+    The translation is a second line of the same event rather than its own
+    event with a computed MarginV. A middle alignment ignores MarginV entirely
+    (see alignment_for), so the translation was being drawn at the same height
+    as the ayah and hidden behind it -- which is why it never appeared.
+
+    No fade. Scripture that animates in reads as a graphic; the ayah is simply
+    on screen for as long as it is recited.
+    """
+    body = ass_escape(found["arabic"]) + "\\h" + ass_escape(ornament)
+    if show_translation and found.get("translation"):
+        gloss = ass_escape(wrap_caption(str(found["translation"]), 44))
+        body += "\\N{\\fn" + latin_font + "\\fs" + str(translation_size) + "}" + gloss
+    return f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Ayah,,0,0,0,,{body}"
+
+
 def mixed_script_line(raw: str, *, font: str, arabic_font: str, uppercase: bool) -> str:
     """A line that may switch between Arabic and English, word by word.
 
@@ -968,12 +1034,14 @@ def dynamic_caption_frames(candidate: Candidate, template: dict[str, Any]) -> li
     return frames
 
 
-def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) -> None:
+def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) -> list[dict[str, Any]]:
     width = int(template.get("width", 1080))
     height = int(template.get("height", 1920))
     font = str(template.get("captionFont", "DejaVu Sans"))
     highlight_font = str(template.get("captionHighlightFont", "DejaVu Serif"))
     arabic_font = str(template.get("captionArabicFont", "Amiri"))
+    # Quranic script for an ayah, general Arabic for everything else.
+    ayah_font = quran_font(arabic_font)
     highlight_italic = bool(template.get("captionHighlightItalic", True))
     highlight_glow = max(0.0, min(30.0, float(template.get("captionHighlightGlow", 0))))
     pop_scale = int(max(60, min(140, int(template.get("captionPopScale", 108)))))
@@ -1021,7 +1089,7 @@ WrapStyle: 2
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Caption,{font},{font_size},{primary},{highlight},{outline},{back},-1,0,0,0,100,{scale_y},0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
-Style: Ayah,{arabic_font},{font_size},{primary},{highlight},{outline},{back},0,0,0,0,100,100,0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
+Style: Ayah,{ayah_font},{font_size},{primary},{highlight},{outline},{back},0,0,0,0,100,100,0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
 Style: Translation,{font},{translation_size},{primary},{highlight},{outline},{back},0,0,0,0,100,100,0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
 Style: Watermark,{font},{watermark_size},{watermark_color},{watermark_color},{outline},&H00000000,1,0,0,0,100,100,2,0,1,1,0,{watermark_align},{watermark_margin_h},{watermark_margin_h},{watermark_margin_v},1
 
@@ -1029,6 +1097,11 @@ Style: Watermark,{font},{watermark_size},{watermark_color},{watermark_color},{ou
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     events: list[str] = []
+    # The ayahs this clip actually matched, returned to the caller and stored on
+    # the clip. The editor drew Whisper's raw transcript because the match only
+    # ever existed inside this function -- so a Quran clip showed "40." in the
+    # caption box while the export showed the ayah.
+    matched_ayahs: list[dict[str, Any]] = []
     if watermark:
         events.append(f"Dialogue: 1,0:00:00.00,{ass_time(candidate.duration)},Watermark,,0,0,0,,{watermark}")
 
@@ -1101,23 +1174,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}{text}")
                     continue
                 captioned += 1
-                ayah_text = ass_escape(quran.ayah_with_ornament(found["arabic"], found["ayah"]))
-                events.append(
-                    f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Ayah,,0,0,0,,{fade_tag}{ayah_text}"
-                )
-                if show_translation and found["translation"]:
-                    # Sits below the ayah rather than beside it, so it reads as a
-                    # gloss. MarginV is pushed down by roughly one Arabic line.
-                    below = max(10, margin_v - int(font_size * 1.5))
-                    translation = ass_escape(wrap_caption(found["translation"], 44))
-                    events.append(
-                        f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Translation,,0,0,{below},,{fade_tag}{translation}"
-                    )
+                matched_ayahs.append({
+                    "start": round(start, 3), "end": round(end, 3),
+                    "surah": found["surah"], "ayah": found["ayah"],
+                    "surahName": found["surahName"], "arabic": found["arabic"],
+                    "translation": found["translation"], "confidence": found["confidence"],
+                })
+                events.append(ayah_event(
+                    found, ornament=quran.ornament_for(found["ayah"]), start=start, end=end,
+                    latin_font=font, translation_size=translation_size,
+                    show_translation=show_translation,
+                ))
             if captioned:
                 emit("progress", stage="Matching recited ayahs", progress=72,
                      ayahsMatched=captioned, etaSec=None)
             ass_file.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
-            return
+            return matched_ayahs
     if mode == "dynamic-stack" and words:
         for frame in dynamic_caption_frames(candidate, template):
             lines: list[str] = []
@@ -1169,17 +1241,19 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     # whatever style the rest of the clip is using.
     for span in auto_ayahs:
         found = span["found"]
-        ayah_text = ass_escape(quran.ayah_with_ornament(found["arabic"], found["ayah"]))
-        events.append(
-            f"Dialogue: 2,{ass_time(span['start'])},{ass_time(span['end'])},Ayah,,0,0,0,,{fade_tag}{ayah_text}"
-        )
-        if bool(template.get("captionTranslation", True)) and found["translation"]:
-            below = max(10, margin_v - int(font_size * 1.5))
-            translation = ass_escape(wrap_caption(found["translation"], 44))
-            events.append(
-                f"Dialogue: 2,{ass_time(span['start'])},{ass_time(span['end'])},Translation,,0,0,{below},,{fade_tag}{translation}"
-            )
+        matched_ayahs.append({
+            "start": round(span["start"], 3), "end": round(span["end"], 3),
+            "surah": found["surah"], "ayah": found["ayah"],
+            "surahName": found["surahName"], "arabic": found["arabic"],
+            "translation": found["translation"], "confidence": found["confidence"],
+        })
+        events.append(ayah_event(
+            found, ornament=quran.ornament_for(found["ayah"]), start=span["start"], end=span["end"],
+            latin_font=font, translation_size=translation_size,
+            show_translation=bool(template.get("captionTranslation", True)),
+        ))
     ass_file.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
+    return matched_ayahs
 
 
 # Openers that carry no meaning and read badly as a title.
@@ -1599,7 +1673,7 @@ def render_clip(
     clip_file = output_dir / f"{clip_id}.mp4"
     thumb_file = output_dir / f"{clip_id}.jpg"
     ass_file = output_dir / f"{clip_id}.ass"
-    write_ass(candidate, template, ass_file)
+    matched_ayahs = write_ass(candidate, template, ass_file)
 
     volume = max(0.01, min(0.5, float(settings.get("musicVolumePercent", 13)) / 100.0))
     voice_chain = "highpass=f=75,lowpass=f=15000,acompressor=threshold=-18dB:ratio=2.5:attack=12:release=160," if bool(template.get("voiceEnhance", True)) else ""
@@ -1690,6 +1764,10 @@ def render_clip(
         "hashtags": "#IslamicReminder #DeenClipped",
         "transcript": candidate.text,
         "captionSegments": caption_blocks(candidate),
+        # The ayahs this clip matched, so the editor can show the words the
+        # export actually burns in rather than Whisper's transcript of the
+        # recitation. Empty for a clip with no recitation in it.
+        "ayahs": matched_ayahs,
         "startSec": round(candidate.start, 3),
         "endSec": round(candidate.end, 3),
         "durationMs": int(round(candidate.duration * 1000)),

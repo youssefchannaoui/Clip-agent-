@@ -2374,9 +2374,14 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         span.setAttribute('data-host-owned','');
         box.appendChild(span);
       }
-      const want=(vals.edCapWords||[]).map(w=>w.style
+      let want=(vals.edCapWords||[]).map(w=>w.style
         ? `<span style="${esc(w.style)}">${esc(w.text)}</span>`
         : esc(w.text)).join(' ');
+      /* An ayah carries its translation underneath, the way the export draws
+         it: a second line in the Latin face at roughly half the size. */
+      if(vals.edCapIsAyah&&vals.edCapTranslation){
+        want+=`<span style="display:block;font-size:.46em;opacity:.92;margin-top:.35em;font-family:'DejaVu Serif',Georgia,serif">${esc(vals.edCapTranslation)}</span>`;
+      }
       if(span.dataset.words!==want){span.dataset.words=want;span.innerHTML=want}
     }
 

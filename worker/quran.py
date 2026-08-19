@@ -216,6 +216,16 @@ def arabic_number(value: int) -> str:
     return "".join(_ARABIC_DIGITS[int(d)] for d in str(int(value)))
 
 
+def ornament_for(ayah: int) -> str:
+    """Just the end-of-ayah mark and its number, with nothing joined to it.
+
+    The caller decides how to attach this. Joining it here with an ordinary
+    space let the renderer break the line between the ayah and its mark, so the
+    number appeared alone on a second line -- a mushaf never does that.
+    """
+    return f"\u06dd{arabic_number(ayah)}"
+
+
 def ayah_with_ornament(arabic: str, ayah: int) -> str:
     """The ayah followed by ۝ and its number, the way a mushaf prints it.
 

@@ -1361,12 +1361,31 @@
       var rb = rawBlocks[bi];
       if (rb.start !== null && rb.start !== undefined && edTime >= rb.start && edTime < rb.end) { edLiveIndex = bi; break; }
     }
+    // The ayahs the renderer matched, if this clip has recitation in it. A block
+    // that overlaps one is shown as the ayah rather than as Whisper's
+    // transcription of it -- the editor showed "40." while the export showed the
+    // verse, which made the editor look wrong about its own clip.
+    var edAyahs = (edClip && Array.isArray(edClip.ayahs)) ? edClip.ayahs : [];
+    function ayahAt(block) {
+      if (!edAyahs.length || block.start === null || block.start === undefined) return null;
+      var mid = (block.start + block.end) / 2;
+      for (var a = 0; a < edAyahs.length; a++) {
+        if (edAyahs[a].start <= mid && mid < edAyahs[a].end) return edAyahs[a];
+      }
+      return null;
+    }
+
     var edCaptionBlocks = rawBlocks.map(function (block, i) {
       var on = UI.edBlock === i;
       var live = edLiveIndex === i;
       var timed = block.start !== null && block.start !== undefined;
+      var verse = ayahAt(block);
       return {
-        text: block.text,
+        // The Quran's own words when this moment is an ayah, and a flag so the
+        // panel can say the text is scripture rather than an editable line.
+        text: verse ? verse.arabic : block.text,
+        ayah: verse || null,
+        translation: verse ? verse.translation : '',
         // A block with real timings can say when it is; a fallback one cannot.
         time: timed ? secsToClock(block.start) + ' – ' + secsToClock(block.end) : '',
         // Placed by its own start and duration, so the lane reads as a timeline
@@ -2007,8 +2026,14 @@
       // persists sentence timings only. The export uses Whisper's real
       // per-word timings, so the highlight here is a fair approximation rather
       // than frame-exact.
+      // Scripture is drawn whole and unanimated: the export sets an ayah on
+      // screen for as long as it is recited, with no word-by-word highlight and
+      // no pop, so the preview must not invent one.
+      edCapIsAyah: Boolean(overlayBlock && overlayBlock.ayah),
+      edCapTranslation: overlayBlock && overlayBlock.ayah ? overlayBlock.translation : '',
       edCapWords: (function () {
         if (!overlayBlock || UI.edBurned) return [];
+        if (overlayBlock.ayah) return [{ text: overlayBlock.text, style: '' }];
         var raw = rawBlocks[edLiveIndex >= 0 ? edLiveIndex : UI.edBlock] || null;
         var text = String(overlayBlock.text || '').trim();
         if (!text) return [];
