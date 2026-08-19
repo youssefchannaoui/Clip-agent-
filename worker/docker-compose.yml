@@ -19,6 +19,10 @@ services:
       # every import from this datacenter IP came to die on YouTube's
       # "Sign in to confirm you're not a bot" wall.
       YTDLP_POT_PROVIDER_URL: http://bgutil-provider:4416
+      # The clip AI. This was never set anywhere, so the Ollama container ran
+      # for weeks -- model loaded, health checks green -- and no job ever
+      # called it; every title was the transcript-head fallback.
+      OLLAMA_URL: http://ollama:11434
     volumes:
       - deenclipped-worker-data:/var/lib/deenclipped
     ports:

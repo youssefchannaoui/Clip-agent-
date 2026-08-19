@@ -53,6 +53,11 @@ check_code "mixed Arabic/English captions" "mixed_script_line" /app/worker/clip_
 # "uploads/" was accepted, so every re-render of a link import failed.
 check_code "re-render reads stored sources"  "projects/"        /app/worker/import_providers.py
 check_code "ayahs stored on the clip"        "matched_ayahs"     /app/worker/clip_worker.py
+# The AI ran zero jobs while its container sat green: nothing checked that the
+# worker was configured to CALL it, only that it was up. The worker now
+# defaults to its sidecar; this catches the default being lost again.
+check_code "worker calls its own clip AI"   "http://ollama:11434" /app/worker/clip_worker.py
+check_code "viral titling prompt"           "TRANSCRIPT DATA"     /app/worker/clip_worker.py
 
 echo
 

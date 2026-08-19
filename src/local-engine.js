@@ -412,7 +412,11 @@ function validateSubmission(url, user, options = {}) {
   else if (!/^https?:\/\//i.test(value) && !value.startsWith('file://') && !path.isAbsolute(value)) {
     throw new Error('Use a complete http(s) video link.');
   }
-  const template = selectedTemplate(user);
+  // The job's own choice first. The token page picks a content kind, and the
+  // kind picks the template -- but the id never left the browser, so a job
+  // showing "Quran Recitation" in its dropdown silently rendered with the
+  // account's selected template instead. The picker was cosmetic.
+  const template = (options.templateId && templateById(String(options.templateId), user)) || selectedTemplate(user);
   if (!template?.id) throw new Error('Select a valid template before submitting.');
   const tracks = workerMusicTracks(user);
   // Music stays required by default. Only an explicit choice on the job panel

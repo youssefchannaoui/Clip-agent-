@@ -1425,6 +1425,40 @@
     var selectedBlock = edCaptionBlocks[UI.edBlock] || null;
     var overlayBlock = edLiveIndex >= 0 ? edCaptionBlocks[edLiveIndex] : selectedBlock;
 
+    // The phrase of the ayah under the playhead, split exactly the way the
+    // export splits it: at most five words, spans shared in proportion to
+    // phrase length, the translation sliced in the same proportions. Computed
+    // once here because both the Arabic line and the gloss line need the SAME
+    // slice -- the overlay previously showed the whole ayah and the whole
+    // translation, a wall of text the render never draws.
+    var edAyahPhrase = (function () {
+      if (!overlayBlock || !overlayBlock.ayah) return null;
+      var verse = overlayBlock.ayah;
+      var aWords = String(verse.arabic || '').split(/\s+/).filter(Boolean);
+      var gWords = String(verse.translation || '').split(/\s+/).filter(Boolean);
+      var MAXW = 5;
+      var count = Math.max(1, Math.ceil(aWords.length / MAXW));
+      if (count === 1) return { text: verse.arabic, gloss: verse.translation || '' };
+      var span = Math.max(0.4, (verse.end - verse.start) || 1);
+      var through = Math.max(0, Math.min(0.999, (edTime - verse.start) / span));
+      var sizeBase = Math.floor(aWords.length / count);
+      var extra = aWords.length % count;
+      var acc = 0; var taken = 0; var gTaken = 0;
+      for (var ci = 0; ci < count; ci++) {
+        var size = sizeBase + (ci < extra ? 1 : 0);
+        var gSize = ci < count - 1 ? Math.round(gWords.length * size / aWords.length) : gWords.length - gTaken;
+        var share = size / aWords.length;
+        if (through < acc + share || ci === count - 1) {
+          return {
+            text: aWords.slice(taken, taken + size).join(' '),
+            gloss: gWords.slice(gTaken, gTaken + Math.max(0, gSize)).join(' '),
+          };
+        }
+        acc += share; taken += size; gTaken += Math.max(0, gSize);
+      }
+      return { text: verse.arabic, gloss: verse.translation || '' };
+    }());
+
     // Other clips cut from the same lecture, for the editor's filmstrip.
     // The design renders this as a line of text, not as a strip of thumbnails --
     // there is no sc-for over it anywhere. Supplying the list of clips put
@@ -2038,11 +2072,11 @@
       // Scripture is drawn whole and unanimated: the export sets an ayah on
       // screen for as long as it is recited, with no word-by-word highlight and
       // no pop, so the preview must not invent one.
-      edCapIsAyah: Boolean(overlayBlock && overlayBlock.ayah),
-      edCapTranslation: overlayBlock && overlayBlock.ayah ? overlayBlock.translation : '',
+      edCapIsAyah: Boolean(edAyahPhrase),
+      edCapTranslation: edAyahPhrase ? edAyahPhrase.gloss : '',
       edCapWords: (function () {
         if (!overlayBlock || UI.edBurned) return [];
-        if (overlayBlock.ayah) return [{ text: overlayBlock.text, style: '' }];
+        if (edAyahPhrase) return [{ text: edAyahPhrase.text, style: '' }];
         var raw = rawBlocks[edLiveIndex >= 0 ? edLiveIndex : UI.edBlock] || null;
         var text = String(overlayBlock.text || '').trim();
         if (!text) return [];
@@ -2463,7 +2497,11 @@
           select: function (e) { stop(e); setUI({ jobTrackId: t.id }); },
         };
       }),
-      closeJob: function (e) { stop(e); setUI({ job: null }); },
+      // jobTplId is cleared with the panel: it is the JOB's template choice,
+      // and left behind it pinned activeTemplate everywhere -- the Templates
+      // screen preview stopped following the selection because a stale job
+      // choice silently outranked it.
+      closeJob: function (e) { stop(e); setUI({ job: null, jobTplId: null }); },
       runGenerate: function (e) {
         stop(e);
         if (!job || UI.generating) return;
@@ -2471,7 +2509,7 @@
         setUI({ generating: true });
         global.StudioAdapter.onGenerate(job.url, job.durationKnown
           ? { startSec: Math.round(job.start), endSec: Math.round(job.end) }
-          : null, { musicEnabled: jobMusicOn });
+          : null, { musicEnabled: jobMusicOn, templateId: (activeTemplate && activeTemplate.id) || '' });
       },
       genBusy: UI.generating,
       genLabel: UI.generating ? 'Starting…' : 'Generate clips',

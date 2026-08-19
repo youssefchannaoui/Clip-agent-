@@ -2386,6 +2386,57 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(span.dataset.words!==want){span.dataset.words=want;span.innerHTML=want}
     }
 
+    /* Click a clip's thumbnail anywhere -- queue, deck, lecture detail -- and
+       it plays right there, in the modal the design already has. The design
+       gives thumbs no click handler and the modal a still image, so "preview a
+       clip" meant opening the full editor, which makes no sense for a
+       ten-second check before approving.
+
+       Delegated, because the compiled template offers no hook: a click on a
+       9:16 tile whose background names a clip's thumbnail resolves back to the
+       clip through that URL. */
+    let playerVideoNode=null;
+    document.addEventListener('click',e=>{
+      if(!window.STUDIO||!DATA)return;
+      if(StudioAdapter.ui.screen==='editor')return;
+      const tile=e.target.closest&&e.target.closest('#studio [style*="aspect-ratio: 9 / 16"]');
+      if(!tile)return;
+      const style=tile.getAttribute('style')||'';
+      const m=style.match(/url\("?([^")]+)"?\)/);
+      if(!m)return;
+      const hit=(DATA.clips||[]).find(c=>c.thumbUrl&&m[1].indexOf(c.thumbUrl)>=0||c.thumbUrl&&c.thumbUrl.indexOf(m[1])>=0);
+      if(!hit||!hit.videoUrl)return;
+      e.preventDefault();e.stopPropagation();
+      StudioAdapter.ui.playerClip=hit;
+      paintStudio();
+    },true);
+    function paintPlayerVideo(vals){
+      if(!vals.playerOpen){
+        if(playerVideoNode){playerVideoNode.pause();playerVideoNode.remove();playerVideoNode=null}
+        return;
+      }
+      const clip=StudioAdapter.ui.playerClip;
+      if(!clip||!clip.videoUrl)return;
+      /* The modal's 9:16 still, found by the poster it shows. */
+      const frame=[...document.querySelectorAll('#studio [style*="aspect-ratio: 9 / 16"]')]
+        .find(n=>clip.thumbUrl&&(n.getAttribute('style')||'').indexOf(clip.thumbUrl)>=0&&!n.closest('article'));
+      if(!frame)return;
+      if(!playerVideoNode||!playerVideoNode.isConnected){
+        playerVideoNode=document.createElement('video');
+        playerVideoNode.setAttribute('data-host-owned','');
+        playerVideoNode.controls=true;
+        playerVideoNode.playsInline=true;
+        playerVideoNode.autoplay=true;
+        playerVideoNode.style.cssText='position:absolute;inset:0;width:100%;height:100%;background:#000;border-radius:inherit;object-fit:contain';
+        frame.style.position='relative';
+        frame.appendChild(playerVideoNode);
+      }
+      if(playerVideoNode.dataset.src!==clip.videoUrl){
+        playerVideoNode.dataset.src=clip.videoUrl;
+        playerVideoNode.src=/^https?:/i.test(clip.videoUrl)?clip.videoUrl:withPw(clip.videoUrl);
+      }
+    }
+
     function paintCaptionWords(vals){
       /* Templates only. These are sample words for previewing a style; the
          editor draws the clip's real captions. */
@@ -3199,6 +3250,10 @@ function renderStudio(){
       /* Only sent when switched off. Absent means the default, which is on --
          the server must not read a missing field as a waiver. */
       if(opts&&opts.musicEnabled===false)body.musicEnabled=false;
+      /* The content kind's template. Without this the picker was cosmetic:
+         the dropdown said Quran Recitation while the job rendered with the
+         account's selected template. */
+      if(opts&&opts.templateId)body.templateId=opts.templateId;
       /* The probe already fetched the title, duration and poster; sending them
          stores the maxres thumbnail rather than leaving the server to derive
          hqdefault from the URL. Not sending it at all is why every lecture had
@@ -3264,6 +3319,7 @@ function paintStudio(){
   paintPreviewPic(vals);
   paintCaptionWords(vals);
   paintEditorCaption(vals);
+  paintPlayerVideo(vals);
   paintEditorVideo(vals);
   paintEditorPlayer(vals);
   paintEditorLayout(vals);

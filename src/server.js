@@ -744,7 +744,7 @@ async function route(req, res, url) {
     const sourceMeta = Array.isArray(body.sourceMeta) ? body.sourceMeta : [];
     const results = [];
     for (const source of urls) {
-      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '', currentUser.id, { sourceRange, sourceMeta, idempotencyKey: body.idempotencyKey, musicEnabled: body.musicEnabled !== false }) }); }
+      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '', currentUser.id, { sourceRange, sourceMeta, idempotencyKey: body.idempotencyKey, musicEnabled: body.musicEnabled !== false, templateId: String(body.templateId || '') }) }); }
       catch (error) { results.push({ url: source, error: error.message }); }
     }
     return json(res, 200, { results, sourceRange });
