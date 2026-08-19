@@ -50,7 +50,8 @@ test('a listed operator email is elevated even for an account that already exist
   const auth = await import('../src/auth.js');
   const { state } = store;
   auth.ownerUser(); // bootstrap first, as production did long ago
-  state.authUsers.push({ id: 'user_op_test', email: 'youssefchannaoui05@gmail.com', role: 'creator', providers: {}, createdAt: Date.now() });
+  // The account signed in with Google, so the address is verified.
+  state.authUsers.push({ id: 'user_op_test', email: 'youssefchannaoui05@gmail.com', role: 'creator', providers: { google: { sub: 'op-sub', email: 'youssefchannaoui05@gmail.com' } }, createdAt: Date.now() });
   auth.ownerUser(); // any auth entry point runs ensureAuthState -> elevateOperators
   const promoted = state.authUsers.find(user => user.id === 'user_op_test');
   assert.equal(promoted.role, 'admin');

@@ -150,7 +150,9 @@ export function ensureUserBilling(user) {
     billing.periodStart = now();
     billing.periodEnd = now() + periodMs(billing.plan);
     billing.tokensUsed = 0;
-    billing.tokensReserved = 0;
+    // tokensReserved is left alone: those holds belong to jobs still running,
+    // and each is released when its job finishes. Zeroing it here let a later
+    // release clobber another job's hold.
   }
   return billing;
 }
@@ -320,20 +322,26 @@ export function releaseTokens(userId, tokens) {
   return { released: before - billing.tokensReserved };
 }
 
-export function chargeTokens(userId, tokens, reason = 'usage', meta = {}) {
+export function chargeTokens(userId, tokens, reason = 'usage', meta = {}, { allowPartial = false } = {}) {
   ensureBillingState();
   const user = (state.authUsers || []).find(item => item.id === userId);
-  if (!user || isUnlimited(user)) return { charged: 0, unlimited: true };
+  if (!user || isUnlimited(user)) return { charged: 0, unlimited: true, shortfall: 0 };
   const billing = ensureUserBilling(user);
-  const amount = Math.max(1, Math.ceil(Number(tokens || 0)));
+  const owed = Math.max(1, Math.ceil(Number(tokens || 0)));
   const planAllowance = allowance(billing.plan || 'free');
   const usedBefore = Math.max(0, Number(billing.tokensUsed || 0));
   const reserved = Math.max(0, Number(billing.tokensReserved || 0));
   const baseAvailable = Math.max(0, planAllowance - usedBefore - reserved);
   const bonusAvailable = Math.max(0, Number(billing.bonusTokens || 0));
-  if (baseAvailable + bonusAvailable < amount) {
-    throw new Error(`Not enough tokens. This charge needs ${amount}, but only ${baseAvailable + bonusAvailable} are available.`);
+  if (baseAvailable + bonusAvailable < owed && !allowPartial) {
+    throw new Error(`Not enough tokens. This charge needs ${owed}, but only ${baseAvailable + bonusAvailable} are available.`);
   }
+  // A completed job is charged for whatever the account can cover. Waiving the
+  // whole charge on a shortfall meant the work was delivered free and the
+  // balance left untouched, so it could be repeated indefinitely.
+  const amount = Math.min(owed, baseAvailable + bonusAvailable);
+  const shortfall = owed - amount;
+  if (!amount) return { charged: 0, unlimited: false, shortfall };
   const subscriptionUsed = Math.min(baseAvailable, amount);
   const bonusUsed = amount - subscriptionUsed;
   billing.bonusTokens = Math.max(0, Number(billing.bonusTokens || 0) - bonusUsed);
@@ -351,12 +359,12 @@ export function chargeTokens(userId, tokens, reason = 'usage', meta = {}) {
   state.billingEvents = state.billingEvents.slice(0, 500);
   save();
   log(`Charged ${amount} token${amount === 1 ? '' : 's'} to ${user.email || user.id} for ${reason}.`, 'info', user.id);
-  return { charged: amount, unlimited: false, event };
+  return { charged: amount, unlimited: false, shortfall, event };
 }
 
-export function chargeSourceMinutes(userId, seconds, meta = {}) {
+export function chargeSourceMinutes(userId, seconds, meta = {}, options = {}) {
   const tokens = tokenCostForSeconds(seconds);
-  return chargeTokens(userId, tokens, 'source minutes', { seconds: Math.round(Number(seconds || 0)), ...meta });
+  return chargeTokens(userId, tokens, 'source minutes', { seconds: Math.round(Number(seconds || 0)), ...meta }, options);
 }
 
 export function chargeOutputMinutes(userId, seconds, meta = {}) {
@@ -555,7 +563,6 @@ function updateFromSubscription(subscription = {}) {
   billing.trialEnd = secondsToMs(subscription.trial_end) || billing.trialEnd || null;
   if (nextPeriodStart && nextPeriodStart !== oldPeriodStart) {
     billing.tokensUsed = 0;
-    billing.tokensReserved = 0;
   }
   user.updatedAt = now();
   save();
@@ -574,7 +581,6 @@ function clearSubscription(subscription = {}) {
   billing.periodStart = now();
   billing.periodEnd = null;
   billing.tokensUsed = 0;
-  billing.tokensReserved = 0;
   save();
   log(`Billing cancelled for ${user.email || user.id}; reverted to free tokens.`, 'info', user.id);
   return user;
@@ -660,7 +666,7 @@ export function needsPlanChoice(user) {
 
 function safeReturn(value = '/') {
   const raw = String(value || '/').trim() || '/';
-  if (!raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/auth/') || raw.startsWith('/login') || raw.startsWith('/plans') || /[\r\n]/.test(raw)) return '/';
+  if (!raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\') || raw.startsWith('/auth/') || raw.startsWith('/login') || raw.startsWith('/plans') || /[\r\n]/.test(raw)) return '/';
   return raw;
 }
 

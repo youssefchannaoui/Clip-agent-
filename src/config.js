@@ -196,4 +196,12 @@ if (!config.password) {
 }
 if (config.authRequired && config.sessionSecret === 'dev-session-secret-change-me') {
   console.warn('[warn] APP_SESSION_SECRET is not set. Set a long random secret before public launch.');
+} else if (config.authRequired && !process.env.APP_SESSION_SECRET) {
+  // The fallback chain above reaches SOCIAL_TOKEN_KEY and then APP_PASSWORD. A
+  // short admin password makes a short session-signing key, and a forged session
+  // is then one brute force away -- so say so, rather than only catching the
+  // literal dev default.
+  console.warn('[warn] APP_SESSION_SECRET is not set; sessions are being signed with a fallback value. Set APP_SESSION_SECRET to its own long random secret (openssl rand -hex 32).');
+} else if (config.authRequired && config.sessionSecret.length < 32) {
+  console.warn('[warn] APP_SESSION_SECRET is shorter than 32 characters. Session cookies signed with a short secret can be forged; use a longer one (openssl rand -hex 32).');
 }

@@ -406,7 +406,7 @@ async function route(req, res, url) {
     return html(res, 200, billing.plansPage(currentUser, { error: url.searchParams.get('error') || '', info: url.searchParams.get('info') || '', returnTo: url.searchParams.get('returnTo') || '/app' }));
   }
   if (method === 'POST' && pathname === '/billing/continue-free') {
-    try { const body = await formBody(req); billing.markPlansSeen(currentUser); return redirect(res, body.returnTo || '/app'); }
+    try { const body = await formBody(req); billing.markPlansSeen(currentUser); return redirect(res, billing.postLoginRedirect(currentUser, body.returnTo || '/app')); }
     catch (error) { return redirect(res, `/plans?error=${encodeURIComponent(error.message)}`); }
   }
   if (method === 'POST' && pathname === '/billing/checkout') {
@@ -732,6 +732,9 @@ async function route(req, res, url) {
     if (body.objectKey) {
       try {
         const objectKey = assertStorageObjectKey(body.objectKey);
+        // The key shape is checked above; this checks it is *this* account's
+        // upload, so one tenant cannot submit another tenant's file.
+        if (!objectKey.startsWith(objectStorage.uploadPrefixFor(currentUser.id))) throw new Error('The uploaded video reference is outside the permitted storage area.');
         const projectId = await agent.submitVideo(objectKey, body.title || body.fileName || '', currentUser.id, {
           sourceKind: 'object_storage', originalFileName: body.fileName || '', displayUrl: `Uploaded file · ${body.fileName || 'video'}`,
           sourceMeta: { title: body.title || body.fileName || '', durationSec: Number(body.durationSec || 0) || null, thumbnail: '' },

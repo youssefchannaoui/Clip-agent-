@@ -62,11 +62,13 @@ export function presign({ method = 'GET', key, expiresSec = 900, contentType = '
   return base.toString();
 }
 
+export const uploadPrefixFor = userId => `uploads/${String(userId).replace(/[^A-Za-z0-9_-]/g, '_')}/`;
+
 export function createUpload(userId, fileName, contentType = 'video/mp4') {
   if (!configured()) throw new Error('Direct upload storage is not configured. Contact the site owner.');
   const extension = path.extname(String(fileName || '')).toLowerCase();
   if (!['.mp4', '.mov', '.m4v', '.webm', '.mkv'].includes(extension)) throw new Error('Upload an MP4, MOV, M4V, WebM or MKV video.');
   const safeName = path.basename(String(fileName || 'video.mp4')).replace(/[^A-Za-z0-9._-]+/g, '-').slice(-120);
-  const key = assertStorageObjectKey(`uploads/${String(userId).replace(/[^A-Za-z0-9_-]/g, '_')}/${Date.now()}-${crypto.randomBytes(6).toString('hex')}-${safeName}`);
+  const key = assertStorageObjectKey(`${uploadPrefixFor(userId)}${Date.now()}-${crypto.randomBytes(6).toString('hex')}-${safeName}`);
   return { key, uploadUrl: presign({ method: 'PUT', key, contentType }), contentType, expiresIn: 900 };
 }

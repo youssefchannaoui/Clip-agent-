@@ -20,11 +20,13 @@ const now = () => Date.now();
 const b64url = value => Buffer.from(value).toString('base64url');
 const token = (bytes = 32) => crypto.randomBytes(bytes).toString('base64url');
 const sha256 = value => crypto.createHash('sha256').update(String(value)).digest('hex');
+const SESSIONS_PER_USER = 25;
+const OAUTH_STATE_LIMIT = 500;
 const cleanEmail = value => String(value || '').trim().toLowerCase();
-const safeReturn = value => {
+export const safeReturn = value => {
   const fallback = '/';
   const raw = String(value || fallback).trim() || fallback;
-  if (!raw.startsWith('/') || raw.startsWith('//') || /[\r\n]/.test(raw)) return fallback;
+  if (!raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\') || /[\r\n]/.test(raw)) return fallback;
   if (raw.startsWith('/auth/') || raw.startsWith('/login')) return fallback;
   return raw;
 };
@@ -52,11 +54,17 @@ function ensureAuthState() {
  * its role, and removing an email from the list is not a demotion -- taking
  * access away is an explicit human decision, not a config diff side effect.
  */
+// An email address only counts as an identity when a provider vouched for it.
+// Email/password sign-up takes any address unverified, so a listed operator
+// address typed into that form must not be enough to become an operator.
+const verifiedIdentity = user => Boolean(user?.providers?.google?.sub || user?.providers?.apple?.sub);
+
 function elevateOperators() {
   const listed = new Set((config.operatorEmails || []).map(cleanEmail).filter(Boolean));
   if (!listed.size) return;
   let changed = false;
   for (const user of state.authUsers) {
+    if (!verifiedIdentity(user)) continue;
     if (listed.has(cleanEmail(user.email)) && !['owner', 'admin'].includes(String(user.role || '').toLowerCase())) {
       user.role = 'admin';
       user.updatedAt = now();
@@ -121,7 +129,8 @@ export function parseCookies(req) {
     if (index === -1) continue;
     const key = part.slice(0, index).trim();
     const value = part.slice(index + 1).trim();
-    if (key) cookies[key] = decodeURIComponent(value);
+    if (!key) continue;
+    try { cookies[key] = decodeURIComponent(value); } catch { cookies[key] = value; }
   }
   return cookies;
 }
@@ -166,7 +175,15 @@ export function createSession(user, details = {}) {
     createdAt: now(), expiresAt: now() + SESSION_TTL_MS, lastSeenAt: now(), provider: details.provider || 'password',
   };
   state.authSessions.unshift(session);
-  state.authSessions = state.authSessions.filter(item => Number(item.expiresAt || 0) > now()).slice(0, 200);
+  // Drop expired sessions, and keep only the newest few per account. A global
+  // cap would let one account's sign-ins evict everyone else's sessions.
+  const perUser = new Map();
+  state.authSessions = state.authSessions.filter(item => {
+    if (Number(item.expiresAt || 0) <= now()) return false;
+    const count = (perUser.get(item.userId) || 0) + 1;
+    perUser.set(item.userId, count);
+    return count <= SESSIONS_PER_USER;
+  });
   user.lastLoginAt = now();
   save();
   return raw;
@@ -250,6 +267,11 @@ export function oauthStart(provider, req, returnTo = '/') {
   if (!configured(provider)) throw new Error(`${provider === 'apple' ? 'Apple' : 'Google'} sign-in is not configured yet.`);
   const stateId = token(24);
   const nonce = token(24);
+  // Prune here too, not only on callback: a loop of start requests must not
+  // grow state.json without bound, and it is rewritten in full on every save.
+  const entries = Object.entries(state.authOAuthStates).filter(([, value]) => Number(value.expiresAt || 0) > now());
+  entries.sort((a, b) => Number(b[1].createdAt || 0) - Number(a[1].createdAt || 0));
+  state.authOAuthStates = Object.fromEntries(entries.slice(0, OAUTH_STATE_LIMIT - 1));
   state.authOAuthStates[stateId] = { provider, nonce, returnTo: safeReturn(returnTo), createdAt: now(), expiresAt: now() + OAUTH_TTL_MS };
   save();
   if (provider === 'google') {
@@ -347,12 +369,26 @@ function appleClientSecret() {
   return `${input}.${signature}`;
 }
 
-function upsertUser(provider, claims, rawUser = null) {
+export function upsertUser(provider, claims, rawUser = null) {
   ensureAuthState();
   const subject = String(claims.sub || '');
   const email = cleanEmail(claims.email || rawUser?.email || '');
   const providerKey = `${provider}:${subject}`;
-  let user = state.authUsers.find(item => item.providers?.[provider]?.sub === subject) || (email ? state.authUsers.find(item => item.email === email) : null);
+  // Google says explicitly when an address is unverified; Apple only issues
+  // addresses it has verified. Never attach an unverified address to an account
+  // that already exists.
+  const emailVerified = !(claims.email_verified === false || claims.email_verified === 'false');
+  let user = state.authUsers.find(item => item.providers?.[provider]?.sub === subject)
+    || (email && emailVerified ? state.authUsers.find(item => cleanEmail(item.email) === email) : null);
+  if (user && !user.providers?.[provider] && user.passwordHash && !verifiedIdentity(user)) {
+    // The account was created by typing this address into the password form,
+    // which proves nothing. The provider has now proved who owns the address,
+    // so the password stops being a way in -- otherwise anyone could register
+    // a victim's address first and keep a key to the workspace they sign into.
+    delete user.passwordHash;
+    if (user.providers?.email) { const { email: _dropped, ...rest } = user.providers; user.providers = rest; }
+    log(`Password sign-in for ${email} was replaced by ${provider} sign-in, which verified the address.`, 'warn', user.id);
+  }
   if (!user) {
     user = { id: `user_${now().toString(36)}_${token(5)}`, email, name: '', picture: '', role: state.authUsers.length ? 'creator' : 'owner', providers: {}, createdAt: now() };
     state.authUsers.push(user);
