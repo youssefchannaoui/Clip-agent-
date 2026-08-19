@@ -191,6 +191,27 @@ for (const dir of [
   fs.mkdirSync(dir, { recursive: true });
 }
 
+export function productionConfigurationErrors() {
+  const errors = [];
+  if (!config.authRequired) errors.push('AUTH_REQUIRED must be enabled.');
+  if (!config.sessionSecret || config.sessionSecret === 'dev-session-secret-change-me' || config.sessionSecret.length < 32) errors.push('APP_SESSION_SECRET must contain at least 32 characters.');
+  if (config.password && config.password.length < 12) errors.push('APP_PASSWORD must contain at least 12 characters when the admin password fallback is enabled.');
+  if (config.socialPublishEnabled && (!config.socialTokenKey || config.socialTokenKey.length < 32)) errors.push('SOCIAL_TOKEN_KEY must contain at least 32 characters when social publishing is enabled.');
+  if (config.processingMode === 'remote') {
+    if (!config.workerBaseUrl) errors.push('WORKER_BASE_URL is required for remote processing.');
+    if (!config.workerSharedSecret || config.workerSharedSecret.length < 32) errors.push('WORKER_SHARED_SECRET must contain at least 32 characters.');
+    if (!config.workerCallbackSecret || config.workerCallbackSecret.length < 32) errors.push('WORKER_CALLBACK_SECRET must contain at least 32 characters.');
+    if (!config.objectStorageEndpoint || !config.objectStorageBucket || !config.objectStorageAccessKey || !config.objectStorageSecretKey) errors.push('Object storage credentials are required for remote processing.');
+  }
+  if (config.stripeEnabled) {
+    if (!config.stripeSecretKey) errors.push('STRIPE_SECRET_KEY is required when Stripe is enabled.');
+    if (!config.stripeWebhookSecret) errors.push('STRIPE_WEBHOOK_SECRET is required when Stripe is enabled.');
+    if (!config.stripePriceWeekly || !config.stripePriceMonthly || !config.stripePriceYearly) errors.push('All subscription Stripe price IDs are required when Stripe is enabled.');
+    if (!config.stripePriceTopup100 || !config.stripePriceTopup300 || !config.stripePriceTopup750) errors.push('All token top-up Stripe price IDs are required when Stripe is enabled.');
+  }
+  return errors;
+}
+
 if (!config.password) {
   console.warn('[warn] APP_PASSWORD is not set. Anyone with the link can use the app if AUTH_REQUIRED is disabled.');
 }

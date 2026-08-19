@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
-import { config } from './config.js';
+import { config, productionConfigurationErrors } from './config.js';
 import {
   state, save, log, logFor, clipSettings, setClipSettings, musicSettings, setMusicSettings,
   automationSettings, setAutomationSettings, publishingSettings, setPublishingSettings,
@@ -361,6 +361,14 @@ function runDoctor() {
 async function route(req, res, url) {
   const { pathname } = url; const method = req.method || 'GET';
   if (pathname === '/healthz') return json(res, 200, { ok: true, engine: config.processingMode === 'remote' ? 'remote-worker' : 'self-hosted' });
+  if (pathname === '/readyz') {
+    const errors = productionConfigurationErrors();
+    try { fs.accessSync(config.dataDir, fs.constants.R_OK | fs.constants.W_OK); } catch { errors.push('Persistent data storage is not readable and writable.'); }
+    if (config.processingMode === 'remote' && !errors.some(item => item.startsWith('WORKER_'))) {
+      try { await workerClient.readiness(); } catch (error) { errors.push(`External worker is not ready: ${error.message}`); }
+    }
+    return json(res, errors.length ? 503 : 200, { ok: errors.length === 0, engine: config.processingMode, checks: errors.length ? errors : ['configuration', 'storage', 'worker'] });
+  }
   const workerCallback = pathname.match(/^\/api\/worker-callbacks\/([^/]+)$/);
   if (method === 'POST' && workerCallback) {
     const raw = await readRawBody(req, 5_000_000);
