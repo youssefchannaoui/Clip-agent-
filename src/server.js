@@ -266,7 +266,10 @@ function streamFile(req, res, file, { downloadName = '', contentType = '', cache
 
 function latestRerender(clipId) { return state.rerenderJobs.find(job => job.clipId === clipId) || null; }
 function publicClip(clip) {
-  const currentTemplate = templates.templateById(clip.templateId);
+  // Resolved as the clip's owner sees it. Without the user, the account's own
+  // template edits are invisible here, so "outdated" compared against the
+  // shipped file and the badge never showed for an edited built-in.
+  const currentTemplate = templates.templateById(clip.templateId, clip.userId || '');
   const rerender = latestRerender(clip.id);
   return {
     id: clip.id, projectId: clip.projectId, projectTitle: clip.projectTitle,

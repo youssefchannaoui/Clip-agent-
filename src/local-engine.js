@@ -6,7 +6,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { config } from './config.js';
 import { state, save, log, clipSettings, musicSettings, ownerOfRecord, musicSatisfied, importNetworkSettings } from './store.js';
-import { selectedTemplate, templateById, templateForClip } from './templates.js';
+import { sanitiseTemplate, selectedTemplate, templateById, templateForClip } from './templates.js';
 import { withOwner, ownerOf } from './tenancy.js';
 import { workerMusicTracks } from './audio.js';
 import * as billing from './billing.js';
@@ -1160,6 +1160,8 @@ function importRerenderResultObject(jobRecord, result) {
     const variant = withOwner({
       ...original, ...rendered, id: rendered.id, projectId: original.projectId, projectTitle: original.projectTitle,
       status: 'waiting', scheduledAt: null, readyAt: null, postedAt: null, addedAt: Date.now(),
+      // Just rendered with the current style, whatever the original still owes.
+      stylePending: false,
       variantOf: original.id, renderVersion: (original.renderVersion || 1) + 1,
       title: original.title, description: original.description, hashtags: original.hashtags,
     }, ownerOf(original));
@@ -1180,6 +1182,10 @@ function importRerenderResultObject(jobRecord, result) {
     Object.assign(original, rendered, preserved, {
       renderVersion: (original.renderVersion || 1) + 1,
       rerenderedAt: Date.now(),
+      // The video now matches the style the editor shows, so the "out of
+      // date" flag comes off. It used to stay on forever -- nothing cleared
+      // it, and the editor kept offering a re-render that changed nothing.
+      stylePending: false,
     });
     for (const oldFile of oldFiles) {
       if (oldFile && ![original.clipFile, original.thumbFile].includes(oldFile)) removeDataFile(oldFile);
@@ -1336,7 +1342,16 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
     throw new Error('The original source file is unavailable. Keep source files enabled to re-render clips.');
   }
   const owner = ownerOfRecord(clip);
-  const baseTemplate = templateById(templateId, owner) || selectedTemplate(owner);
+  // The caller's template, else the clip's own, else the exact template the
+  // original render used (the project keeps a snapshot). Falling back to the
+  // account's *selected* template silently re-rendered the clip in a style it
+  // never had -- a Quran clip re-rendered as a lecture because of a dropdown.
+  const requested = templateById(templateId, owner);
+  const own = requested || templateById(clip.templateId, owner);
+  const snapshot = !own && project.templateSnapshot && project.templateSnapshot.id === (templateId || clip.templateId || project.templateSnapshot.id)
+    ? sanitiseTemplate(project.templateSnapshot, { id: project.templateSnapshot.id, builtIn: Boolean(project.templateSnapshot.builtIn), userId: ownerOf(clip) })
+    : null;
+  const baseTemplate = own || snapshot || selectedTemplate(owner);
   if (!baseTemplate?.id) throw new Error('Choose a valid saved template.');
   // This clip's own tweaks win over the shared style. Without this, editing one
   // clip either changed every clip on the template or was silently discarded at
