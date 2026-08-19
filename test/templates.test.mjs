@@ -22,91 +22,49 @@ test('invalid template selection is blocked', () => {
   assert.throws(() => templates.setSelectedTemplate(user, 'does-not-exist'), /not available/i);
 });
 
-test('custom templates can be created, versioned, duplicated and deleted', () => {
-  const created = templates.createTemplate(user, { name: 'Test Studio', captionHighlight: '#12AB34', filterPreset: 'crisp' });
-  assert.equal(created.version, 1);
-  assert.equal(created.captionHighlight, '#12AB34');
-  const updated = templates.updateTemplate(user, created.id, { captionFontSize: 76 });
-  assert.equal(updated.version, 2);
-  assert.equal(updated.captionFontSize, 76);
-  const copy = templates.duplicateTemplate(user, updated.id, 'Test Studio Variant');
-  assert.notEqual(copy.id, updated.id);
-  assert.equal(copy.name, 'Test Studio Variant');
-  assert.equal(templates.deleteTemplate(user, copy.id), true);
-  assert.equal(templates.templateById(copy.id, user), null);
+// ── one template per content type, edited in place ────────────────────────
+//
+// The catalogue is exactly two templates: Quran Recitation for recitations and
+// Simple Bold for lectures. Forking and duplicating are gone -- they are what
+// turned two templates into eight rows of near-identical copies -- and an
+// account's edits to a built-in are stored as a patch over the shipped file,
+// so ids stay stable and Save always means save.
+
+test('the catalogue is exactly one template per content type', () => {
+  const list = templates.listTemplates(user);
+  assert.deepEqual(list.map(t => t.id).sort(), ['quran-recitation', 'simple-bold']);
+  const modes = Object.fromEntries(list.map(t => [t.id, t.captionMode]));
+  assert.equal(modes['quran-recitation'], 'quran');
+  assert.notEqual(modes['simple-bold'], 'quran');
 });
 
-test('built-in templates are protected from destructive edits', () => {
-  assert.throws(() => templates.updateTemplate(user, 'deenclipped-gold', { name: 'Changed' }), /protected/i);
-  assert.throws(() => templates.deleteTemplate(user, 'deenclipped-gold'), /cannot be deleted/i);
+test('saving a built-in edits it in place for this account only', () => {
+  const saved = templates.saveTemplate(user, 'simple-bold', { captionFontSize: 120 }, { allowFork: true });
+  assert.equal(saved.forked, false, 'no copy is ever minted');
+  assert.equal(saved.template.id, 'simple-bold', 'identity never moves');
+  assert.equal(saved.template.captionFontSize, 120);
+  // Another account still sees the shipped template.
+  assert.notEqual(templates.templateById('simple-bold', otherUser).captionFontSize, 120);
+  // And the catalogue has not grown.
+  assert.equal(templates.listTemplates(user).length, 2);
 });
 
-test('a custom template is invisible and unreachable to another account', () => {
-  const created = templates.createTemplate(user, { name: 'Private Template' });
-  assert.equal(templates.templateById(created.id, otherUser), null);
-  assert.ok(!templates.listTemplates(otherUser).some(t => t.id === created.id));
-  assert.throws(() => templates.updateTemplate(otherUser, created.id, { name: 'Hijacked' }), /does not exist/i);
+test('a second save bumps the version, so propagation can tell clips are stale', () => {
+  const before = templates.templateById('quran-recitation', user).version;
+  const saved = templates.saveTemplate(user, 'quran-recitation', { vignette: 0.2 }, { allowFork: false });
+  assert.equal(saved.template.version, before + 1);
+  assert.equal(saved.template.id, 'quran-recitation');
 });
 
-// ── Save always means save ─────────────────────────────────────────────────
-
-test('saving a built-in forks it onto the user\'s own copy', () => {
-  // Pressing Save on a built-in used to fail with "Duplicate it first, then
-  // edit your copy" — an instruction to do by hand the one thing the button was
-  // for. The built-ins still have to stay pristine, since every account shares
-  // them, so the edit lands on a copy instead.
-  const saved = templates.saveTemplate(user, 'modern-minimal', { captionFontSize: 120 }, { allowFork: true });
-  assert.equal(saved.forked, true);
-  assert.equal(saved.from, 'Modern Minimal');
-  assert.equal(saved.template.builtIn, false);
-  assert.equal(saved.template.captionFontSize, 120, 'the edit survives the fork');
-  assert.match(saved.template.name, /^Modern Minimal \(my copy\)/);
-  // The original is untouched, for every other account too.
-  assert.notEqual(templates.templateById('modern-minimal', user).captionFontSize, 120);
-  // And the user is left on the copy, not still editing the protected one.
-  assert.equal(templates.selectedTemplate(user).id, saved.template.id);
+test('minting new templates is refused, with the reason', () => {
+  // A slider drag on a debounce must never create a template, and neither may
+  // anything else: the product is one template per content type.
+  assert.throws(() => templates.createTemplate(user, { name: 'Another One' }), /one template per content type/i);
+  assert.throws(() => templates.duplicateTemplate(user, 'simple-bold'), /one template per content type/i);
 });
 
-test('forking without asking is refused, so a slider drag cannot mint copies', () => {
-  // Every control on the Templates screen writes through the same endpoint on a
-  // debounce. Unguarded, dragging one slider would create a template per pixel.
-  assert.throws(
-    () => templates.saveTemplate(user, 'clean-white', { captionFontSize: 100 }),
-    /protected/i,
-  );
-});
-
-test('saving a template of your own updates it in place', () => {
-  const created = templates.createTemplate(user, { name: 'Mine To Edit' });
-  const saved = templates.saveTemplate(user, created.id, { captionFontSize: 64 });
-  assert.equal(saved.forked, false);
-  assert.equal(saved.template.id, created.id, 'same template, not a copy');
-  assert.equal(saved.template.captionFontSize, 64);
-  assert.equal(saved.template.version, created.version + 1);
-});
-
-test('two copies never share a name, because the picker selects by name', () => {
-  // Duplicating twice produced two rows both reading "X Copy", and choosing the
-  // second always resolved to the first — it could not be selected at all.
-  const a = templates.duplicateTemplate(user, 'viral-stacked');
-  const b = templates.duplicateTemplate(user, 'viral-stacked');
-  const c = templates.duplicateTemplate(user, 'viral-stacked');
-  const names = [a.name, b.name, c.name];
-  assert.equal(new Set(names).size, 3, names.join(' / '));
-  assert.notEqual(a.id, b.id);
-});
-
-test('repeated forks of the same built-in are told apart', () => {
-  const first = templates.saveTemplate(user, 'clean-white', { captionFontSize: 30 }, { allowFork: true });
-  const second = templates.saveTemplate(user, 'clean-white', { captionFontSize: 40 }, { allowFork: true });
-  assert.notEqual(first.template.name, second.template.name);
-  assert.match(second.template.name, /my copy 2/);
-});
-
-test('a forked name cannot collide with one the user already chose', () => {
-  templates.createTemplate(user, { name: 'DeenClipped Gold (my copy)' });
-  const forked = templates.saveTemplate(user, 'deenclipped-gold', { captionFontSize: 55 }, { allowFork: true });
-  assert.notEqual(forked.template.name, 'DeenClipped Gold (my copy)');
+test('the built-ins cannot be deleted', () => {
+  assert.throws(() => templates.deleteTemplate(user, 'simple-bold'), /cannot be deleted/i);
 });
 
 // ── the built-in templates new accounts start from ─────────────────────────

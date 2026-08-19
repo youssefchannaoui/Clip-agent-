@@ -1286,6 +1286,7 @@ select:focus{outline:none;border-color:var(--blue)}
      way to decline one, and music is mandatory everywhere else, so this is the
      only place the choice can be made. -->
 <div id="studioJobMusic" class="hide" data-host-owned></div>
+<div id="studioJobType" class="hide" data-host-owned></div>
 <div id="studioPreviewPic" class="hide" data-host-owned aria-hidden="true">
   <div class="pv-back"></div><div class="pv-img"></div><div class="pv-fx"></div><span class="pv-snap"></span>
 </div>
@@ -2772,9 +2773,15 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       const lanes=videoLane&&videoLane.parentElement;
       if(lanes&&getComputedStyle(lanes).flexDirection==='column'){
         const kids=[...lanes.children];
-        const capLane=kids.find(n=>n!==videoLane&&n.children.length>2&&!n.contains(waveform)
-          &&/[a-z]{4}/.test(n.textContent||'')&&!/Nasheed/.test(n.textContent||''));
         const nasheedLane=kids.find(n=>/Nasheed/.test(n.textContent||''));
+        /* Structural, not textual: the caption lane is the child with the most
+           blocks that is neither the ruler, the waveform nor the nasheed. The
+           old test required four LATIN letters, so on an all-Arabic clip -- a
+           Quran recitation, the flagship case -- no lane matched, the scrub
+           handler swallowed every pointerdown, and captions could not be
+           selected at all. */
+        const capLane=kids.slice(1).filter(n=>n!==videoLane&&n!==nasheedLane&&!n.contains(waveform))
+          .sort((a,b)=>b.children.length-a.children.length)[0]||null;
         const ruler=kids[0];
         if(ruler){
           set(ruler,{'order':'0'});
@@ -2809,7 +2816,23 @@ function studioWanted(){return window.STUDIO_SHELL===true}
             paintStudio();
           };
           lanes.addEventListener('pointerdown',e=>{
-            if(capLane&&capLane.contains(e.target))return;
+            /* The lanes are found fresh per event: the wiring survives paints
+               but capLane/nasheedLane captured at wire time go stale when the
+               patcher rebuilds children, which read as clicks doing nothing. */
+            const currentKids=[...lanes.children];
+            const nl=currentKids.find(n=>/Nasheed/.test(n.textContent||''));
+            const wf2=currentKids.find(n=>/waveform/i.test(n.textContent||''));
+            const cl=currentKids.slice(1).filter(n=>n!==nl&&n!==wf2)
+              .sort((a,b)=>b.children.length-a.children.length)[0]||null;
+            if(cl&&cl.contains(e.target))return;
+            /* The nasheed lane is a control, not a scrub target: clicking it
+               opens the Audio tab where its loudness lives. */
+            if(nl&&nl.contains(e.target)){
+              e.preventDefault();
+              StudioAdapter.ui.edTab='audio';
+              paintStudio();
+              return;
+            }
             e.preventDefault();
             scrubTo(e);
             const move=m=>{if(m.buttons)scrubTo(m)};
@@ -2834,6 +2857,44 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          it and the aspect ratio derives the width. */
       set(frame,{'height':'100%','width':'auto','max-width':'100%','max-height':'100%',
         'flex':'0 0 auto','align-self':'center','margin':'0 auto'});
+    }
+
+    /* The content-type picker on the token page: Quran recitation or Islamic
+       lecture. Two kinds, one template each -- the kind chooses the template,
+       and the nasheed default follows the kind (off for recitation). Docked
+       above the nasheed row, anchored on the same NASHEED label. */
+    const jobTypeEl=$('#studioJobType');
+    function paintJobType(vals){
+      alive(jobTypeEl);
+      const open=Boolean(StudioAdapter.ui.job);
+      if(!open){jobTypeEl.classList.add('hide');return}
+      const label=[...document.querySelectorAll('#studio span,#studio div')]
+        .filter(n=>/^nasheed$/i.test((n.textContent||'').trim())
+          &&![...n.children].some(c=>/^nasheed$/i.test((c.textContent||'').trim()))).pop();
+      const row=label&&label.parentElement;
+      jobTypeEl.classList.toggle('hide',!row);
+      if(!row||!row.parentElement)return;
+      if(jobTypeEl.nextElementSibling!==row||jobTypeEl.parentElement!==row.parentElement){
+        row.parentElement.insertBefore(jobTypeEl,row);
+      }
+      if(!jobTypeEl.dataset.built){
+        jobTypeEl.dataset.built='1';
+        jobTypeEl.style.cssText='display:flex;gap:8px;align-items:center;margin:10px 0';
+        jobTypeEl.innerHTML='<span style="font-size:11px;letter-spacing:.08em;color:#8B8B93;text-transform:uppercase">Content</span>'
+          +'<button type="button" data-kind="lecture"></button>'
+          +'<button type="button" data-kind="quran"></button>';
+        for(const b of jobTypeEl.querySelectorAll('button')){
+          b.onclick=e=>{e.preventDefault();StudioAdapter.bindings(DATA).pickJobType(b.dataset.kind)};
+        }
+      }
+      const styleFor=on=>'padding:7px 14px;border-radius:999px;font:600 12.5px Outfit,Inter,sans-serif;cursor:pointer;border:1px solid '
+        +(on?'rgba(240,214,166,.85);background:rgba(217,180,120,.16);color:#F0D6A6':'#26262A;background:#141416;color:#B9B9C0');
+      const lec=jobTypeEl.querySelector('[data-kind=lecture]');
+      const qur=jobTypeEl.querySelector('[data-kind=quran]');
+      if(lec.textContent!=='Islamic lecture')lec.textContent='Islamic lecture';
+      if(qur.textContent!=='Quran recitation')qur.textContent='Quran recitation';
+      lec.style.cssText=styleFor(!vals.jobTypeQuran);
+      qur.style.cssText=styleFor(vals.jobTypeQuran);
     }
 
     /* Docked under the job panel's nasheed row. Anchored on the NASHEED label
@@ -3188,6 +3249,7 @@ function paintStudio(){
   paintEditorLayout(vals);
   paintPreviewPlayer(vals);
   paintHighlight(vals);
+  paintJobType(vals);
   paintJobMusic(vals);
   paintTemplatesLayout();
   /* No unread activity -> hide the dot the design hardcoded on. */

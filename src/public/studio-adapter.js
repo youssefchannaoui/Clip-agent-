@@ -822,7 +822,7 @@
         // Approve / edit / reject is the card's action row; `third` is reject.
         third: function (e) { stop(e); reject(c.id); },
         thirdIcon: 'ph ph-x',
-        edit: function (e) { stop(e); setUI({ screen: 'editor', edClipId: c.id }); },
+        edit: function (e) { stop(e); setUI({ screen: 'editor', edClipId: c.id, edStyleDraft: null, edBlockDraft: null, edBlock: 0, edTime: 0, edPlayhead: 0 }); },
         openLecture: function (e) { stop(e); setUI({ screen: 'detail', openProject: c.projectId }); },
       };
     }
@@ -1121,9 +1121,13 @@
       if (UI.edStyleTimer) global.clearTimeout(UI.edStyleTimer);
       UI.edStyleTimer = global.setTimeout(function () {
         UI.edStyleTimer = null;
-        var pending = UI.edStyleDraft;
-        UI.edStyleDraft = null;
-        global.StudioAdapter.onClipStyle(UI.edClipId, pending);
+        // The draft is NOT cleared on send. Clearing it here opened a gap --
+        // between this PATCH and /api/state returning, tpl fell back to the
+        // clip's old overrides, so a dragged caption visibly snapped back to
+        // its old place and then jumped forward again a second later. The
+        // draft stays as the local truth; the server's copy merges underneath
+        // it, and it is discarded when the editor closes or changes clip.
+        global.StudioAdapter.onClipStyle(UI.edClipId, Object.assign({}, UI.edStyleDraft));
       }, 450);
     }
 
@@ -1477,6 +1481,11 @@
     var jobMusicOn = UI.jobMusicTouched
       ? UI.jobMusic !== false
       : (jobTemplateMode === 'quran' ? false : UI.jobMusic !== false);
+    // What kind of content this job is. Two kinds, one template each: the
+    // picker on the token page chooses the kind, and the kind chooses the
+    // template -- when more templates exist they will be added per kind, so
+    // the kind is the primary axis and the template follows it.
+    var jobTypeQuran = jobTemplateMode === 'quran';
     var tokenRate = Number((DATA.billing && DATA.billing.tokenRatePerMinute) || 1);
 
     // The connection the modal is showing, if any.
@@ -2074,7 +2083,7 @@
       // instead lets the overlays resolve against <main> and cover the tool rail.
       edThumbStyle: 'position: relative; container-type: inline-size; width: 100%; max-width: 268px; aspect-ratio: 9 / 16; border-radius: 13px; overflow: hidden; border: 1px solid #26262A; background: ' +
         thumb(edClip && edClip.thumbUrl) + '; box-shadow: 0 26px 60px rgba(0,0,0,.5);',
-      closeEditor: function (e) { stop(e); setUI({ screen: 'queue', edClipId: null }); },
+      closeEditor: function (e) { stop(e); setUI({ screen: 'queue', edClipId: null, edStyleDraft: null, edBlockDraft: null }); },
 
       // The SELECTED CAPTION box edits the chosen block, not the whole clip.
       // It was bound to the entire transcript and stayed empty because nothing
@@ -2434,6 +2443,13 @@
       // way; this is a per-job choice, not a setting, so forgetting to upload
       // one still fails loudly instead of quietly shipping silent clips.
       jobMusicOn: jobMusicOn,
+      jobTypeQuran: jobTypeQuran,
+      // Picking a kind also resets the nasheed switch to that kind's default
+      // (off for recitation), unless the operator already touched it -- their
+      // explicit answer outlives a kind change.
+      pickJobType: function (kind) {
+        setUI({ jobTplId: kind === 'quran' ? 'quran-recitation' : 'simple-bold' });
+      },
       jobMusicLabel: UI.jobMusic === false ? 'No nasheed' : 'Nasheed on',
       jobMusicTrack: switchTrack(UI.jobMusic !== false),
       jobMusicKnob: switchKnob(UI.jobMusic !== false),

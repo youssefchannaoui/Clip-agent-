@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 import { state, save, selectedTemplateId, setSelectedTemplateId, settingDefaults } from './store.js';
+import { readUserSetting, writeUserSetting } from './tenancy.js';
 
 const builtInDir = path.join(config.root, 'src', 'templates');
 const customDir = path.join(config.dataDir, 'templates');
@@ -322,13 +323,16 @@ export function listTemplates(user) {
   const builtIns = fs.existsSync(builtInDir)
     ? fs.readdirSync(builtInDir).filter(name => name.endsWith('.json')).map(name => readTemplateFile(path.join(builtInDir, name), true)).filter(Boolean)
     : [];
-  const custom = fs.readdirSync(customDir)
-    .filter(name => name.endsWith('.json'))
-    .map(name => readTemplateFile(path.join(customDir, name), false))
-    .filter(Boolean)
-    .filter(template => viewerId && templateOwner(template) === viewerId);
+  // Two templates, one per kind of content: Quran Recitation for recitations,
+  // Simple Bold for lectures. The old catalogue (four more built-ins plus
+  // every fork a customer had ever saved) put eight near-identical rows in the
+  // picker; the product decision is one template per content type, and future
+  // templates are added per type rather than as a flat list. Existing custom
+  // forks stay on disk so nothing a clip references is destroyed, but they are
+  // no longer listed or selectable.
+  const custom = [];
   const byId = new Map();
-  for (const template of [...builtIns, ...custom]) byId.set(template.id, template);
+  for (const template of [...builtIns, ...custom]) byId.set(template.id, withAccountEdits(template, user));
   return [...byId.values()].sort((a, b) => Number(a.builtIn) - Number(b.builtIn) || a.name.localeCompare(b.name));
 }
 
@@ -355,6 +359,10 @@ function writeCustom(template) {
 }
 
 export function createTemplate(user, input = {}) {
+  // One template per content type. Minting copies is what turned two templates
+  // into eight near-identical rows; edits land on the built-in itself, scoped
+  // to the account, so there is nothing a copy would be for.
+  throw new Error('One template per content type — edit the template directly; copies are no longer created.');
   const ownerId = userIdOf(user);
   if (!ownerId) throw new Error('A template needs an account.');
   // Ids are unique across every account, not just the caller's, so one
@@ -394,22 +402,54 @@ export function updateTemplate(user, id, input = {}) {
 // Returns { template, forked, from } so the caller can say what happened.
 // Silently editing something other than what the user had open would be worse
 // than the error was.
+/**
+ * Per-account edits to a built-in, keyed by the built-in's id.
+ *
+ * The catalogue is one template per kind of content, so editing one must not
+ * mint a copy -- forking is what turned two templates into eight. An account's
+ * changes are stored as a patch over the shipped file and merged at read time,
+ * so ids stay stable ('quran-recitation', 'simple-bold'), every clip keeps a
+ * resolvable templateId, and Save always means save.
+ */
+function builtInOverrides(user) {
+  const id = userIdOf(user);
+  if (!id) return {};
+  const stored = readUserSetting(state, id, 'templateOverrides');
+  return stored && typeof stored === 'object' ? stored : {};
+}
+
+function withAccountEdits(template, user) {
+  if (!template?.builtIn) return template;
+  const patch = builtInOverrides(user)[template.id];
+  if (!patch || typeof patch !== 'object') return { ...template, editable: true };
+  const merged = sanitiseTemplate({ ...template, ...patch }, { id: template.id, builtIn: true, userId: '' });
+  merged.editable = true;
+  merged.version = Number(patch.version) || template.version || 1;
+  return merged;
+}
+
 export function saveTemplate(user, id, input = {}, { allowFork = false } = {}) {
   const existing = templateById(id, user);
   if (!existing) throw new Error('That template does not exist.');
   if (!existing.builtIn) {
     return { template: updateTemplate(user, id, input), forked: false, from: '' };
   }
-  // Forking is deliberate, not implicit. Every control on the Templates screen
-  // writes through the same endpoint on a debounce, so an unguarded fork would
-  // mint a fresh copy on each slider drag. Only the explicit Save asks for it;
-  // anything else still gets the old refusal.
-  if (!allowFork) throw new Error('Built-in templates are protected. Duplicate it first, then edit your copy.');
-  const template = createTemplate(user, {
-    ...existing, ...input, id: '', name: copyName(user, existing.name), builtIn: false,
-  });
-  setSelectedTemplate(user, template.id);
-  return { template, forked: true, from: existing.name };
+  // An account edits the built-in in place; identity never moves.
+  const userId = userIdOf(user);
+  if (!userId) throw new Error('Saving a template needs an account.');
+  const cleaned = sanitiseTemplate({ ...existing, ...input }, { id, builtIn: true, userId: '' });
+  const patch = {};
+  const shipped = readTemplateFile(path.join(builtInDir, `${id}.json`), true) || existing;
+  for (const key of Object.keys(cleaned)) {
+    if (['id', 'builtIn', 'editable', 'userId', 'version', 'updatedAt'].includes(key)) continue;
+    if (JSON.stringify(cleaned[key]) !== JSON.stringify(shipped[key])) patch[key] = cleaned[key];
+  }
+  patch.version = (Number(existing.version) || 1) + 1;
+  const all = { ...builtInOverrides(user) };
+  all[id] = patch;
+  writeUserSetting(state, userId, 'templateOverrides', all);
+  save();
+  return { template: templateById(id, user), forked: false, from: '' };
 }
 
 // "Modern Minimal (my copy)", then "(my copy 2)" and so on. Numbering only from
@@ -432,6 +472,7 @@ function uniqueName(user, wanted, numbered = n => `${wanted} ${n}`) {
 }
 
 export function duplicateTemplate(user, id, name = '') {
+  throw new Error('One template per content type — edit the template directly; copies are no longer created.');
   const source = templateById(id, user);
   if (!source) throw new Error('That template does not exist.');
   return createTemplate(user, { ...source, id: '', name: cleanText(name, `${source.name} Copy`, 70), description: source.description });
