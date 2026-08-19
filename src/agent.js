@@ -300,11 +300,23 @@ function updateClipPublishingStatus(clip) {
   }
 }
 
+// Instagram and TikTok hand back an id to poll. Once the platform has said
+// that id failed, keeping it means every later Retry re-polls the same dead
+// container and fails again forever; forgetting it lets a retry start over.
+// A finished publish is kept, since retrying that must not post twice.
+function forgetDeadUpload(target) {
+  if (!['instagram', 'tiktok'].includes(target.provider)) return;
+  if (target.providerState?.stage === 'published' && target.providerState?.publishedId) return;
+  target.externalId = null;
+  target.providerState = null;
+}
+
 async function processTarget(clip, target) {
   const now = Date.now();
   if (target.nextTryAt && target.nextTryAt > now) return;
   if (target.processingStartedAt && now - target.processingStartedAt > config.socialProcessingTimeoutMs) {
     target.status = 'failed'; target.stage = `${target.provider} processing timed out`; target.error = `${target.provider} did not finish processing within the allowed time.`; target.nextTryAt = null;
+    forgetDeadUpload(target);
     updateClipPublishingStatus(clip); save(); return;
   }
   target.updatedAt = now;
@@ -346,6 +358,7 @@ async function processTarget(clip, target) {
       log(`${target.provider} publishing will retry for "${clip.title}" (${target.attempts}/${config.socialMaxAttempts}): ${error.message}`, 'warn', ownerOf(clip));
     } else {
       target.status = 'failed'; target.stage = `${target.provider} failed`; target.nextTryAt = null; delete target.processingStartedAt;
+      forgetDeadUpload(target);
       log(`${target.provider} publishing failed for "${clip.title}": ${error.message}`, 'error', ownerOf(clip));
     }
   }

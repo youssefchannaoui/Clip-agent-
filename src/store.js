@@ -103,8 +103,21 @@ function migrate(parsed) {
 }
 
 function load() {
-  try { return migrate(JSON.parse(fs.readFileSync(stateFile, 'utf8'))); }
-  catch { return blankState(); }
+  let raw;
+  try { raw = fs.readFileSync(stateFile, 'utf8'); }
+  catch (error) {
+    if (error.code === 'ENOENT') return blankState();
+    throw new Error(`Cannot read ${stateFile}: ${error.message}. Refusing to start rather than run on an empty state and overwrite it.`);
+  }
+  try { return migrate(JSON.parse(raw)); }
+  catch (error) {
+    // Starting blank here would be followed by the first save() writing that
+    // blank state over the real file -- atomically, and for good. Keep the
+    // evidence and stop.
+    const backup = `${stateFile}.corrupt-${Date.now()}`;
+    try { fs.copyFileSync(stateFile, backup); } catch {}
+    throw new Error(`${stateFile} is not valid state (${error.message}). A copy was kept at ${backup}; fix or remove the file, then start again.`);
+  }
 }
 
 export const state = load();

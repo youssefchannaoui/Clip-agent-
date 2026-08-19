@@ -67,6 +67,9 @@ export function sweepYouTubeData({ now = Date.now(), retentionMs = RETENTION_MS 
     // Only link imports carry API data. An uploaded file's title came from the
     // customer's own filename and is theirs, not YouTube's.
     if (!project?.url) continue;
+    // Uploads carry a display string in url ("Uploaded file · name.mp4"); the
+    // kind is what says where the title came from.
+    if (project.sourceKind && project.sourceKind !== 'link') continue;
     if (!expired(project, now, retentionMs)) continue;
     let touched = false;
     for (const field of PROJECT_FIELDS) {
@@ -77,7 +80,10 @@ export function sweepYouTubeData({ now = Date.now(), retentionMs = RETENTION_MS 
 
   const byUser = state.socialConnections && typeof state.socialConnections === 'object' ? state.socialConnections : {};
   for (const accounts of Object.values(byUser)) {
-    for (const account of Array.isArray(accounts) ? accounts : []) {
+    // tenancy.setConnection stores one object per provider under each user;
+    // an array is the older shape and is still read.
+    const list = Array.isArray(accounts) ? accounts : Object.values(accounts && typeof accounts === 'object' ? accounts : {});
+    for (const account of list) {
       if (account?.provider !== 'youtube') continue;
       if (!expired(account, now, retentionMs)) continue;
       let touched = false;

@@ -131,3 +131,23 @@ test('a source length that costs a given number of tokens round-trips', () => {
     assert.equal(billing.tokenCostForSeconds(billing.secondsForTokenCost(tokens)), tokens);
   }
 });
+
+test('a completed job that costs more than the balance takes the balance, not nothing', () => {
+  const user = makeUser('reserve-h');
+  const total = billing.publicBilling(user).current.remaining;
+  const result = billing.chargeTokens(user.id, total + 7, 'test', {}, { allowPartial: true });
+  assert.equal(result.charged, total, 'everything the account had was charged');
+  assert.equal(result.shortfall, 7, 'and the uncovered remainder is reported');
+  assert.equal(billing.publicBilling(user).current.remaining, 0);
+  // With nothing left, the next job cannot start -- the shortfall cannot repeat.
+  assert.throws(() => billing.reserveTokens(user.id, 1), /Not enough tokens/);
+});
+
+test('a period rollover keeps the holds of jobs still running', () => {
+  const user = makeUser('reserve-i', 'monthly');
+  billing.reserveTokens(user.id, 30); // job A
+  user.billing.periodEnd = Date.now() - 1000; // the month ends while A is running
+  billing.reserveTokens(user.id, 25); // job B starts in the new period
+  billing.releaseTokens(user.id, 30); // A finishes
+  assert.equal(billing.publicBilling(user).current.reserved, 25, "B's hold is still counted");
+});

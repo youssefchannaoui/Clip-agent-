@@ -531,7 +531,19 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
   // nothing at all, the clips were delivered before the charge was attempted,
   // and a shortfall only ever became a warning on a project nobody reads --
   // so the work was given away and could be repeated indefinitely.
-  reserveProjectHold(project, estimateSeconds || billing.secondsForTokenCost(config.minimumTokensToStart));
+  // The client supplies durationSec for a link, so a tiny value must not buy a
+  // tiny hold: never hold less than the start minimum.
+  const holdSeconds = Math.max(Number(estimateSeconds) || 0, billing.secondsForTokenCost(config.minimumTokensToStart));
+  try {
+    reserveProjectHold(project, holdSeconds);
+  } catch (error) {
+    // The project was already listed so the id could be reserved; an unpaid
+    // job must not stay behind as a queued ghost that pump() then runs.
+    state.projects = state.projects.filter(item => item.id !== projectId);
+    fs.rmSync(dir, { recursive: true, force: true });
+    save();
+    throw error;
+  }
 
   fs.writeFileSync(jobFile(projectId), JSON.stringify(job, null, 2));
   const rangeCopy = sourceRange.endSec ? ` · source window ${Math.round(sourceRange.startSec / 60)}–${Math.round(sourceRange.endSec / 60)} min` : (sourceRange.startSec ? ` · source starts at ${Math.round(sourceRange.startSec / 60)} min` : '');
@@ -664,8 +676,13 @@ function importResultObject(project, result, engine = 'self-hosted') {
     // The hold goes back first, so the real charge is measured against true
     // availability rather than against the estimate that was reserved.
     releaseProjectHold(project);
-    const charge = billing.chargeSourceMinutes(ownerOf(project), Number(project.durationSec || 0), { projectId: project.id, title: project.title });
+    const charge = billing.chargeSourceMinutes(ownerOf(project), Number(project.durationSec || 0), { projectId: project.id, title: project.title }, { allowPartial: true });
     if (charge.charged) project.tokensCharged = charge.charged;
+    if (charge.shortfall) {
+      project.tokensOwed = charge.shortfall;
+      project.billingWarning = `This lecture cost ${charge.shortfall} more token${charge.shortfall === 1 ? '' : 's'} than the account had; the balance was used up.`;
+      log(`"${project.title}" ran ${charge.shortfall} tokens past the balance; the account was charged what it had.`, 'warn', ownerOf(project));
+    }
   } catch (error) {
     project.billingWarning = error.message;
     log(`Could not charge tokens for "${project.title}": ${error.message}`, 'warn', ownerOf(project));
@@ -1019,8 +1036,14 @@ async function runVizardProject(project) {
     project.error = null;
     project.errorCode = null;
     try {
-      const charge = billing.chargeSourceMinutes(ownerOf(project), Number(project.sourceDurationSec || 0), { projectId: project.id, title: project.title });
+      releaseProjectHold(project);
+      const charge = billing.chargeSourceMinutes(ownerOf(project), Number(project.sourceDurationSec || 0), { projectId: project.id, title: project.title }, { allowPartial: true });
       if (charge.charged) project.tokensCharged = charge.charged;
+      if (charge.shortfall) {
+        project.tokensOwed = charge.shortfall;
+        project.billingWarning = `This lecture cost ${charge.shortfall} more token${charge.shortfall === 1 ? '' : 's'} than the account had; the balance was used up.`;
+        log(`"${project.title}" ran ${charge.shortfall} tokens past the balance; the account was charged what it had.`, 'warn', ownerOf(project));
+      }
     } catch (error) {
       project.billingWarning = error.message;
       log(`Could not charge tokens for "${project.title}": ${error.message}`, 'warn', ownerOf(project));
@@ -1496,6 +1519,13 @@ export function retryProject(projectId) {
   const project = projectById(projectId);
   if (!project) throw new Error('That project does not exist.');
   if (running.has(projectId)) throw new Error('That project is already processing.');
+  // The same condition the dashboard uses to offer Retry. Without it a finished
+  // project could be re-run: every clip imported a second time and charged again.
+  if (!['failed', 'cancelled'].includes(project.status) && !project.error) throw new Error('Only a failed project can be retried.');
+  // The hold was released when the project failed; a rerun needs a new one, or
+  // the work runs with nothing held against the account.
+  const retryEstimate = project.sourceEndSec ? project.sourceEndSec - (project.sourceStartSec || 0) : Number(project.sourceDurationSec || 0);
+  reserveProjectHold(project, Math.max(retryEstimate || 0, billing.secondsForTokenCost(config.minimumTokensToStart)));
   if (project.engine === 'remote') {
     // The worker keys jobs by id and returns the existing record rather than
     // starting a new run, so retrying under the same id re-read the old failure

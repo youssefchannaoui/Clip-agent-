@@ -42,20 +42,24 @@ test('III.E.4: cached video metadata is cleared after 30 days', () => {
 test('III.E.4: an uploaded file keeps its own title, which is not API Data', () => {
   const now = Date.now();
   store.state.projects.length = 0;
-  store.state.projects.push({ id: 'upload', url: '', sourceTitle: 'khutbah-recording.mp4', youtubeDataAt: now - 90 * DAY });
+  // Stored the way submitVideo stores an upload: the url field carries a
+  // display string, and sourceKind says where it came from.
+  store.state.projects.push({ id: 'upload', url: 'Uploaded file · khutbah-recording.mp4', sourceKind: 'object_storage', sourceTitle: 'khutbah-recording.mp4', sourceDurationSec: 1800, youtubeDataAt: now - 90 * DAY });
   retention.sweepYouTubeData({ now });
   assert.equal(store.state.projects[0].sourceTitle, 'khutbah-recording.mp4',
     "the customer's own filename came from them, not from YouTube");
+  assert.equal(store.state.projects[0].sourceDurationSec, 1800);
 });
 
 test('III.E.4: a stale channel name is cleared but the connection survives', () => {
   const now = Date.now();
+  // The shape tenancy.setConnection writes: one object per provider, per user.
   store.state.socialConnections = {
-    user_1: [{ provider: 'youtube', accountId: 'UC123', name: 'The Masjid Channel', avatar: 'https://yt3.ggpht.com/a.jpg', youtubeDataAt: now - 40 * DAY }],
+    user_1: { youtube: { provider: 'youtube', accountId: 'UC123', name: 'The Masjid Channel', avatar: 'https://yt3.ggpht.com/a.jpg', youtubeDataAt: now - 40 * DAY } },
   };
   const cleared = retention.sweepYouTubeData({ now });
   assert.equal(cleared.connections, 1);
-  const account = store.state.socialConnections.user_1[0];
+  const account = store.state.socialConnections.user_1.youtube;
   assert.equal(account.name, '');
   assert.equal(account.avatar, '');
   // The channel id is where publishing is addressed, not a description of a
