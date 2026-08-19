@@ -2117,7 +2117,14 @@ function studioWanted(){return window.STUDIO_SHELL===true}
     const pvEl=$('#studioPreviewPic');
     function paintPreviewPic(vals){
       alive(pvEl);
-      const wanted=StudioAdapter.ui.screen==='templates'||StudioAdapter.ui.screen==='editor';
+      /* Templates only. This is the SAMPLE preview -- speaker picture, sample
+         caption -- and it used to dock into "whichever 9:16 frame is on
+         screen", which in the editor was the frame the real video lives in.
+         The result was the template's sample caption showing underneath the
+         editor's own overlay: the "bottom text" that then appeared to sink
+         into the real one. The editor previews the actual clip; the sample
+         belongs to Templates alone. */
+      const wanted=StudioAdapter.ui.screen==='templates';
       if(!wanted){pvEl.classList.add('hide');return}
       /* Matched on "has any aspect-ratio", not on 9/16: the shape is a setting
          now, so pinning the finder to one value meant the frame became
@@ -2397,7 +2404,10 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        clip through that URL. */
     let playerVideoNode=null;
     document.addEventListener('click',e=>{
-      if(!window.STUDIO||!DATA)return;
+      /* Bare identifiers: STUDIO and DATA are top-level consts, which are NOT
+         window properties -- window.STUDIO is undefined, so the first version
+         of this guard exited on every click and the feature never fired. */
+      if(typeof STUDIO==='undefined'||!STUDIO||!DATA)return;
       if(StudioAdapter.ui.screen==='editor')return;
       const tile=e.target.closest&&e.target.closest('#studio [style*="aspect-ratio: 9 / 16"]');
       if(!tile)return;
