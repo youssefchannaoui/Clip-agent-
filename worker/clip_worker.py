@@ -792,7 +792,12 @@ def quran_font(fallback: str) -> str:
     having libass silently substitute something with no Arabic at all.
     """
     families = installed_families()
-    for candidate in ("Amiri Quran", "Scheherazade New", "Scheherazade", "Amiri"):
+    # Amiri first, deliberately. It is a revival of the naskh the mushaf is
+    # printed in, draws U+06DD as the ornamented circle with the digits inside,
+    # and renders at sane metrics. Amiri Quran, despite the name, reserves so
+    # much vertical room for stacked marks that rendered frames came out at a
+    # quarter of the expected size.
+    for candidate in ("Amiri", "Scheherazade New", "Scheherazade"):
         if candidate in families:
             return candidate
     return fallback
@@ -800,12 +805,12 @@ def quran_font(fallback: str) -> str:
 
 AYAH_MAX_WORDS = 5
 AYAH_FADE_MS = 300
-# Quranic faces (Amiri Quran, Scheherazade) reserve tall vertical metrics for
-# stacked tashkeel, so at a given font size the glyph body renders far smaller
-# than a Latin face -- in a test frame the ayah came out smaller than its own
-# translation. In the reference the Arabic is the dominant element, so the
-# Ayah style is set proportionally larger to land at the same visual size.
-AYAH_SIZE_SCALE = 1.6
+# The ayah is the dominant element in the reference, so it is set somewhat
+# larger than the caption size. Kept modest: the compensation for a face's own
+# metrics belongs in the face choice, not in a magic multiplier -- Amiri Quran
+# was tried first and rendered at a quarter of the expected size at ANY
+# multiplier, because its glyphs occupy a small fraction of a very tall em.
+AYAH_SIZE_SCALE = 1.25
 
 
 def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: float,

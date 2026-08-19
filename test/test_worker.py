@@ -674,13 +674,18 @@ class QuranFontTests(unittest.TestCase):
     rendered ayah look like plain Arabic with a number after it.
     """
 
-    def test_a_quranic_face_is_preferred_when_installed(self):
+    def test_amiri_is_preferred_even_when_amiri_quran_is_installed(self):
+        # Amiri Quran, despite the name, reserves so much vertical room for
+        # stacked marks that rendered ayahs came out at a quarter of the
+        # expected size -- smaller than their own translation, at any
+        # multiplier. Plain Amiri is the naskh the mushaf is printed in and
+        # draws the U+06DD ornament with the digits inside.
         worker._INSTALLED_FAMILIES = {"DejaVu Sans", "Amiri", "Amiri Quran", "Scheherazade New"}
-        self.assertEqual(worker.quran_font("DejaVu Sans"), "Amiri Quran")
+        self.assertEqual(worker.quran_font("DejaVu Sans"), "Amiri")
 
     def test_it_falls_back_through_the_faces_that_exist(self):
-        worker._INSTALLED_FAMILIES = {"DejaVu Sans", "Amiri"}
-        self.assertEqual(worker.quran_font("DejaVu Sans"), "Amiri")
+        worker._INSTALLED_FAMILIES = {"DejaVu Sans", "Scheherazade New"}
+        self.assertEqual(worker.quran_font("DejaVu Sans"), "Scheherazade New")
 
     def test_with_no_arabic_face_it_keeps_the_template_choice(self):
         # Better the template's own font than a silent substitution to
