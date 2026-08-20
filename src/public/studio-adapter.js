@@ -1047,10 +1047,11 @@
         openClips: function (e) { stop(e); setUI({ screen: 'detail', openProject: p.id }); },
         more: function (e) {
           stop(e);
-          global.StudioAdapter.onPickOption('More clips from this lecture',
-            ['Cut 4 more clips', 'Cut 8 more clips', 'Cancel'], function (choice) {
+          global.StudioAdapter.onPickOption('This lecture',
+            ['Cut 4 more clips', 'Cut 8 more clips', 'Delete this lecture', 'Cancel'], function (choice) {
               var n = choice === 'Cut 4 more clips' ? 4 : choice === 'Cut 8 more clips' ? 8 : 0;
               if (n) global.StudioAdapter.onMoreClips(p.id, n);
+              else if (choice === 'Delete this lecture') global.StudioAdapter.onDeleteProject(p.id, p.title || 'this lecture');
             });
         },
       };
@@ -2280,9 +2281,22 @@
       // the style (edits pending, or the template moved on since it was
       // burned), say so -- otherwise the difference between this preview and
       // the video reads as the editor being broken.
-      edRenderNotice: edClipRecord && (edClipRecord.stylePending || edClipRecord.templateOutdated)
-        ? 'Preview shows the next render — the current video still has the earlier style. Save re-renders it.'
-        : '',
+      edRenderNotice: (function () {
+        if (!edClipRecord) return '';
+        var job = edClipRecord.rerender;
+        if (job && (job.status === 'queued' || job.status === 'processing')) {
+          var pct = Math.max(0, Math.min(100, Math.round(Number(job.progress) || 0)));
+          return job.status === 'queued' ? 'Re-rendering with your changes — queued…'
+            : 'Re-rendering with your changes — ' + pct + '%';
+        }
+        if (job && job.status === 'failed') {
+          return 'The automatic re-render failed: ' + (job.error || 'unknown error') + ' — Save retries it.';
+        }
+        if (edClipRecord.stylePending || edClipRecord.templateOutdated) {
+          return 'Preview shows the next render — it will re-render automatically a few seconds after you stop editing.';
+        }
+        return '';
+      }()),
       edCapHandle: 'position: absolute; inset: -5px; border: 1px dashed rgba(240,214,166,.7); border-radius: 8px; pointer-events: none;',
       dragEdCap: dragCaptionFrom,
 

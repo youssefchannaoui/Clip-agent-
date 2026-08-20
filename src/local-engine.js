@@ -1507,6 +1507,15 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
     asVariant: Boolean(asVariant), status: 'queued', stage: 'Waiting to re-render', progress: 0, engine: project.engine === 'remote' ? 'remote' : 'self-hosted',
     createdAt: Date.now(), jobFile: file, resultPath,
   }, ownerOf(clip));
+  // A newer request replaces any still-queued render for the same clip --
+  // only the latest style matters, and auto-triggered renders must never pile
+  // up behind each other. A job already processing is left to finish; the
+  // import-time supersede check discards its result if this one lands after.
+  for (const stale of state.rerenderJobs) {
+    if (stale.clipId === clip.id && !stale.asVariant && !asVariant && stale.status === 'queued') {
+      stale.status = 'superseded'; stale.stage = 'Replaced by a newer edit'; stale.completedAt = Date.now();
+    }
+  }
   state.rerenderJobs.unshift(record);
   // Cap the *finished* history only. A flat slice dropped still-queued jobs
   // off the end of a big propagation sweep -- pump() could never find them,

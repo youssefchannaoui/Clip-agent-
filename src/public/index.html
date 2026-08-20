@@ -3331,9 +3331,30 @@ function renderStudio(){
        user decides when to spend a token redoing the video. */
     /* Returns the promise so a caller that has to know the write landed -- Save
        to all clips, which reads the overrides back off the server -- can wait. */
+    /* Edits re-render themselves: once the tweaks settle for a few seconds,
+       the render is queued automatically -- no Save required. Server-side,
+       a newer request supersedes any still-queued one for the same clip, so
+       a burst of tweaks costs one render, and the burned video converges on
+       the preview without the user managing renders at all. */
+    const autoRenderTimers={};
+    function scheduleAutoRender(id){
+      if(autoRenderTimers[id])clearTimeout(autoRenderTimers[id]);
+      autoRenderTimers[id]=setTimeout(async()=>{
+        delete autoRenderTimers[id];
+        const clip=(DATA&&DATA.clips||[]).find(c=>c.id===id);
+        if(!clip||!clip.stylePending)return;
+        try{
+          await api(`/api/clips/${encodeURIComponent(id)}/rerender`,{method:'POST',
+            body:JSON.stringify({templateId:clip.templateId||'',asVariant:clip.status==='posted'})});
+          await refresh();
+        }catch(e){/* source gone or worker busy: the banner keeps saying the
+          video is behind; Save still offers the explicit path. */}
+      },4000);
+    }
     StudioAdapter.onClipStyle=(id,patch)=>{if(!id||!patch||!Object.keys(patch).length)return Promise.resolve();
       return studioDo(async()=>{
-        await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({styleOverrides:patch})})})};
+        await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({styleOverrides:patch})});
+        scheduleAutoRender(id)})};
     /* The old always-on behaviour, kept but made deliberate: push this clip's
        tweaks onto the style, so every clip using it picks them up. */
     /* Saves this clip first, then copies its look onto the rest of the lecture.
@@ -3383,6 +3404,11 @@ function renderStudio(){
       const current=(DATA?.templates||[]).find(t=>t.id===id)||{};
       const {id:_drop,version:_v,updatedAt:_u,...rest}=current;
       await api('/api/templates',{method:'POST',body:JSON.stringify({template:{...rest,name:`${current.name||'Template'} copy`},select:false})})},'Template duplicated')};
+    /* Deleting a lecture removes its clips and rendered files everywhere --
+       local and object storage -- so it asks plainly first. */
+    StudioAdapter.onDeleteProject=(id,title)=>{
+      if(!confirm(`Delete \u201C${title}\u201D and all of its clips? The rendered files are removed too. This cannot be undone.`))return;
+      studioDo(()=>api(`/api/projects/${encodeURIComponent(id)}`,{method:'DELETE'}),'Lecture deleted')};
     StudioAdapter.onReject=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'rejected'})}));
     StudioAdapter.onPostNow=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}/publish`,{method:'POST'}),'Publishing started');
     StudioAdapter.onSendBack=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'waiting'})}),'Back in the review queue');
