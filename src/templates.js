@@ -44,6 +44,10 @@ const DEFAULTS = Object.freeze({
   // Nudges every caption earlier (negative) or later. The editor's timing
   // control wrote this into the void.
   captionTimingOffsetMs: 0,
+  // Tracking between caption letters, in frame pixels (ASS Spacing). Applies
+  // to the Latin caption face only -- Arabic letters join, so spacing an ayah
+  // out would break the script.
+  captionLetterSpacing: 0,
   captionMode: 'dynamic-stack',
   captionFont: 'DejaVu Sans',
   captionFontSize: 96,
@@ -126,6 +130,7 @@ export const NUMBER_RANGES = {
   // crop multiplier, so 1 is the untouched framing.
   grain: [0, 100], warm: [-100, 100], smartFramingZoom: [0.75, 2.5],
   cropPositionX: [0, 1], cropPositionY: [0, 1], smartFramingPadding: [0, 0.5], captionTimingOffsetMs: [-2000, 2000],
+  captionLetterSpacing: [-4, 40],
   captionFontSize: [24, 140], captionOutlineWidth: [0, 14], captionShadow: [0, 8], captionBackgroundOpacity: [0, 100],
   // Clamped to what clip_worker.py accepts for the highlight's glow.
   captionHighlightGlow: [0, 30],

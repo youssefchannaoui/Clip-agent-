@@ -6,6 +6,10 @@ import sys
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+# So `import quran` inside the module under test resolves when this file runs
+# alone -- discovery happened to work only because another test file put the
+# worker directory on sys.path first.
+sys.path.insert(0, str(ROOT / "worker"))
 spec = importlib.util.spec_from_file_location("clip_worker", ROOT / "worker" / "clip_worker.py")
 worker = importlib.util.module_from_spec(spec)
 assert spec.loader
@@ -443,6 +447,21 @@ class QuranCaptionTests(unittest.TestCase):
         out = pathlib.Path(tempfile.mkdtemp()) / "c.ass"
         worker.write_ass(candidate, {"width": 1080, "height": 1920, "captionMode": "quran"}, out)
         return out.read_text(encoding="utf-8")
+
+
+class LetterSpacingTests(unittest.TestCase):
+    def test_caption_letter_spacing_reaches_the_ass_style(self):
+        segments = [{"start": 0.0, "end": 4.0, "text": "small little things"}]
+        candidate = worker.Candidate(0, 12.0, segments[0]["text"], segments, 90, [], False)
+        out = pathlib.Path(tempfile.mkdtemp()) / "c.ass"
+        worker.write_ass(candidate, {"width": 1080, "height": 1920, "captionLetterSpacing": 12}, out)
+        ass = out.read_text(encoding="utf-8")
+        caption_style = [l for l in ass.splitlines() if l.startswith("Style: Caption,")][0]
+        # Format: ...ScaleX, ScaleY, Spacing, Angle... -> Spacing is field index 13
+        self.assertEqual(caption_style.split(",")[13].strip(), "12")
+        # The ayah styles stay untracked: Arabic letters join.
+        ayah_style = [l for l in ass.splitlines() if l.startswith("Style: Ayah,")][0]
+        self.assertEqual(ayah_style.split(",")[13].strip(), "0")
 
 
 class CaptionFontTests(unittest.TestCase):

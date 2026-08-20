@@ -118,6 +118,13 @@ test('a per-clip captionTranslation override survives sanitising', () => {
     'the schema advertises it as overridable, so the validator must keep it');
 });
 
+test('letter spacing is a real field, per clip too', () => {
+  const clean = templates.sanitiseTemplate({ captionLetterSpacing: 12.5 });
+  assert.equal(clean.captionLetterSpacing, 12.5);
+  assert.equal(templates.sanitiseTemplate({ captionLetterSpacing: 99 }).captionLetterSpacing, 40, 'clamped');
+  assert.deepEqual(templates.sanitiseClipStyle({ captionLetterSpacing: -2 }), { captionLetterSpacing: -2 });
+});
+
 test('manual framing and caption timing are real fields now', () => {
   const clean = templates.sanitiseTemplate({ cropPositionX: 0.2, cropPositionY: 1.7, captionTimingOffsetMs: -250, smartFramingPadding: 0.3 });
   assert.equal(clean.cropPositionX, 0.2);

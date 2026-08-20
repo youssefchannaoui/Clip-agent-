@@ -1270,6 +1270,7 @@ def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) ->
     background_opacity = float(template.get("captionBackgroundOpacity", 0))
     back = ass_color(template.get("captionBackground", "#000000"), opacity_alpha(background_opacity))
     border_style = 3 if background_opacity > 0 else 1
+    letter_spacing = max(-4.0, min(40.0, float(template.get("captionLetterSpacing", 0) or 0)))
     uppercase = bool(template.get("captionUppercase", False))
     max_words = int(template.get("captionMaxWords", 6))
 
@@ -1290,7 +1291,7 @@ WrapStyle: 2
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,{font},{font_size},{primary},{highlight},{outline},{back},-1,0,0,0,100,{scale_y},0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
+Style: Caption,{font},{font_size},{primary},{highlight},{outline},{back},-1,0,0,0,100,{scale_y},{letter_spacing:g},0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
 Style: Ayah,{ayah_font},{ayah_size},{primary},{highlight},{outline},{back},0,0,0,0,100,100,0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
 Style: Translation,{font},{translation_size},{primary},{highlight},{outline},{back},0,0,0,0,100,100,0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
 Style: Watermark,{font},{watermark_size},{watermark_color},{watermark_color},{outline},&H00000000,1,0,0,0,100,100,2,0,1,1,0,{watermark_align},{watermark_margin_h},{watermark_margin_h},{watermark_margin_v},1

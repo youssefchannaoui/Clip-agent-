@@ -2568,11 +2568,44 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(!panel)return;
       if(hlEl.parentElement!==panel)panel.appendChild(hlEl);
       const key=vals.capFonts.map(f=>f.name).join('|')+'|'+StudioAdapter.ui.screen;
+      const inEditor=StudioAdapter.ui.screen==='editor';
+      if(inEditor){
+        /* The design's own template-level controls on this tab -- the font
+           group the dock is anchored inside, and the All caps row -- hide with
+           the rest of the look controls. data-host-style keeps the patcher
+           from stripping the inline style on the next poll. */
+        for(const child of panel.children){
+          if(child!==hlEl){child.setAttribute('data-host-style','');child.style.display='none'}
+        }
+        const col=panel.parentElement;
+        if(col)for(const row of col.children){
+          if((row.textContent||'').trim()==='All caps'){row.setAttribute('data-host-style','');row.style.display='none'}
+        }
+      }
       if(hlEl.dataset.key!==key){
         hlEl.dataset.key=key;
         const fontRow=(list,attr)=>`<div class="hl-fonts">${list.map((f,i)=>
           `<button type="button" class="hl-font" data-${attr}="${i}" style="font-family:${f.web}">${esc(f.label)}</button>`).join('')}</div>`;
-        hlEl.innerHTML=`<span class="hl-label">Caption text</span>
+        /* The editor keeps only the per-clip fitting controls: where the
+           caption sits, how wide it tracks, how tight the lines are. The look
+           itself -- fonts, colours, outline, the highlighted word, animation --
+           belongs to the template and is edited on the Templates screen. It
+           used to duplicate the whole template system per clip, which read as
+           noise and invited restyling one clip away from its siblings. */
+        hlEl.innerHTML=inEditor?`
+          <div class="hl-row"><span>Alignment</span>
+            <div class="hl-fonts" style="margin:0" id="capAlignRow">
+              <button type="button" class="hl-font" data-align="left">Left</button>
+              <button type="button" class="hl-font" data-align="center">Middle</button>
+              <button type="button" class="hl-font" data-align="right">Right</button>
+            </div></div>
+          <div class="hl-row"><span>Letter spacing</span>
+            <input type="range" min="-4" max="40" id="edCapTracking" aria-label="Letter spacing">
+            <span class="hl-hex" id="edCapTrackingVal"></span></div>
+          <div class="hl-row"><span>Line spacing</span>
+            <input type="range" min="65" max="140" id="edCapLineHeight" aria-label="Line spacing">
+            <span class="hl-hex" id="edCapLineHeightVal"></span></div>`
+        :`<span class="hl-label">Caption text</span>
           ${fontRow(vals.capFonts,'cap-font')}
           <div class="hl-row"><span>Size</span>
             <input type="range" min="24" max="140" id="capSize" aria-label="Caption size">
@@ -2582,6 +2615,9 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           <div class="hl-row"><span>Words per line</span>
             <input type="range" min="1" max="12" id="capMaxWords" aria-label="Words per line">
             <span class="hl-hex" id="capMaxWordsVal"></span></div>
+          <div class="hl-row"><span>Letter spacing</span>
+            <input type="range" min="-4" max="40" id="capLetterSpacing" aria-label="Letter spacing">
+            <span class="hl-hex" id="capLetterSpacingVal"></span></div>
           <div class="hl-row"><span>Line spacing</span>
             <input type="range" min="65" max="140" id="capLineHeight" aria-label="Line spacing">
             <span class="hl-hex" id="capLineHeightVal"></span></div>
@@ -2629,10 +2665,14 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         bind('capSize','setCapSize'); bind('hlColour','setHlColour'); bind('hlGlow','setHlGlow');
         bind('animPop','setAnimPop'); bind('animPopMs','setAnimPopMs'); bind('animFade','setAnimFade');
         bind('capMaxWords','setCapMaxWords'); bind('capLineHeight','setCapLineHeight');
+        bind('capLetterSpacing','setCapLetterSpacing');
+        bind('edCapTracking','setCapLetterSpacing'); bind('edCapLineHeight','setCapLineHeight');
         bind('capOutline','setCapOutline'); bind('capOutlineWidth','setCapOutlineWidth');
         bind('capShadow','setCapShadow'); bind('capBg','setCapBg'); bind('capBgOpacity','setCapBgOpacity');
-        $('#capUpper').onclick=e=>StudioAdapter.bindings(DATA).toggleCapUpper(e);
-        $('#hlItalic').onclick=e=>StudioAdapter.bindings(DATA).toggleHlItalic(e);
+        const upper=$('#capUpper'); if(upper)upper.onclick=e=>StudioAdapter.bindings(DATA).toggleCapUpper(e);
+        const italic=$('#hlItalic'); if(italic)italic.onclick=e=>StudioAdapter.bindings(DATA).toggleHlItalic(e);
+        hlEl.querySelectorAll('[data-align]').forEach(b=>b.onclick=e=>{e.preventDefault();
+          StudioAdapter.bindings(DATA).setCapAlign(b.dataset.align)});
         hlEl.querySelectorAll('[data-cap-font]').forEach(b=>b.onclick=e=>
           StudioAdapter.bindings(DATA).capFonts[Number(b.dataset.capFont)].select(e));
         hlEl.querySelectorAll('[data-hl-font]').forEach(b=>b.onclick=e=>
@@ -2650,6 +2690,11 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       slider('animFade',vals.animFade); text('animFadeVal',vals.animFadeLabel);
       slider('capMaxWords',vals.capMaxWords); text('capMaxWordsVal',vals.capMaxWordsLabel);
       slider('capLineHeight',vals.capLineHeight); text('capLineHeightVal',vals.capLineHeightLabel);
+      slider('capLetterSpacing',vals.capLetterSpacing); text('capLetterSpacingVal',vals.capLetterSpacingLabel);
+      slider('edCapTracking',vals.capLetterSpacing); text('edCapTrackingVal',vals.capLetterSpacingLabel);
+      slider('edCapLineHeight',vals.capLineHeight); text('edCapLineHeightVal',vals.capLineHeightLabel);
+      hlEl.querySelectorAll('[data-align]').forEach(b=>
+        b.setAttribute('aria-pressed',String(vals.capAlign===b.dataset.align)));
       slider('capOutlineWidth',vals.capOutlineWidth); text('capOutlineWidthVal',vals.capOutlineWidthLabel);
       slider('capShadow',vals.capShadow); text('capShadowVal',vals.capShadowLabel);
       slider('capBgOpacity',vals.capBgOpacity); text('capBgOpacityVal',vals.capBgOpacityLabel);

@@ -672,10 +672,12 @@
   function captionFaceStyle(t) {
     var size = (Number(t.captionFontSize) || 96) * assFactor(t.captionFont);
     var width = Math.max(1, Number(t.width) || 1080);
+    var tracking = Math.max(-4, Math.min(40, Number(t.captionLetterSpacing) || 0));
     return ' color: ' + (t.captionPrimary || '#FFFFFF') + ';'
       + ' font-family: ' + webFontFor(t.captionFont) + '; font-weight: 700;'
       + ' font-size: ' + Math.max(9, Math.round((size / width) * 268)) + 'px;'
       + ' font-size: ' + ((size / width) * 100).toFixed(2) + 'cqw;'
+      + (tracking ? ' letter-spacing: ' + (tracking / Math.max(1, Number(t.captionFontSize) || 96)).toFixed(3) + 'em;' : '')
       + (t.captionUppercase ? ' text-transform: uppercase;' : '');
   }
 
@@ -2379,6 +2381,12 @@
       setCapSize: function (e) { saveStyle({ captionFontSize: Number(e.target.value) }); },
       capUpper: Boolean(tpl.captionUppercase),
       toggleCapUpper: function (e) { stop(e); saveStyle({ captionUppercase: !tpl.captionUppercase }); },
+      // The editor's few per-clip fitting controls.
+      capAlign: tpl.captionHorizontal || 'center',
+      setCapAlign: function (value) { saveStyle({ captionHorizontal: String(value) }); },
+      capLetterSpacing: Math.max(-4, Math.min(40, Number(tpl.captionLetterSpacing) || 0)),
+      capLetterSpacingLabel: (Number(tpl.captionLetterSpacing) || 0) ? (Math.round(Number(tpl.captionLetterSpacing))) + ' px' : 'Normal',
+      setCapLetterSpacing: function (e) { saveStyle({ captionLetterSpacing: Number(e.target.value) }); },
 
       edFonts: CAPTION_FONTS.map(function (f) {
         return {
