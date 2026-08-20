@@ -3088,12 +3088,19 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           html+='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:9px;align-items:center">'
             +`<button type="button" data-bg-id="" style="${pill(!ui.jobBgId)}">Shuffle</button>`
             +list.map(b=>`<span style="position:relative;display:inline-flex;align-items:center">`
-              +`<button type="button" data-bg-id="${esc(b.id)}" style="${pill(ui.jobBgId===b.id)}">${esc(b.name)} \u00B7 ${Math.round(b.durationSec)}s</button>`
-              +(b.own?`<button type="button" data-bg-del="${esc(b.id)}" title="Delete" style="margin-left:3px;border:0;background:none;color:#8B8B93;cursor:pointer;font-size:13px">\u00D7</button>`:'')
+              +`<button type="button" data-bg-id="${esc(b.id)}" style="${pill(ui.jobBgId===b.id)}">${esc(b.name)} \u00B7 ${Math.round(b.durationSec)}s${b.shared?' \u2726':''}</button>`
+              +((b.deletable!==undefined?b.deletable:b.own)?`<button type="button" data-bg-del="${esc(b.id)}" title="Delete" style="margin-left:3px;border:0;background:none;color:#8B8B93;cursor:pointer;font-size:13px">\u00D7</button>`:'')
               +'</span>').join('')
             +'<button type="button" data-bg-upload style="'+pill(false)+'border-style:dashed">+ Add video</button>'
             +'<input type="file" accept="video/mp4,video/quicktime,video/webm" data-bg-file style="display:none">'
             +'</div>';
+          /* The operator curates the stock set: their uploads can go into
+             every account's library, marked with a star in the picker. */
+          if(['owner','admin'].includes(String((DATA.user&&DATA.user.role)||'').toLowerCase())){
+            html+='<label style="display:flex;align-items:center;gap:6px;margin-top:8px;font:400 11.5px Outfit,Inter,sans-serif;color:#A2A2AA;cursor:pointer">'
+              +`<input type="checkbox" data-bg-shared ${ui.jobBgShared?'checked':''} style="accent-color:#D9B478">`
+              +'add uploads to everyone\u2019s stock library \u2726</label>';
+          }
           if(!list.length)html+='<div style="font:400 11px Outfit,Inter,sans-serif;color:#8B8B93;margin-top:7px">Upload a scenery loop to use as the background \u2014 nature, rain, the Kaaba. Shuffle picks one per lecture.</div>';
         }
         if(mode==='intro'){
@@ -3118,9 +3125,11 @@ function studioWanted(){return window.STUDIO_SHELL===true}
             studioDo(async()=>{
               const data=await new Promise((resolve,reject)=>{const r=new FileReader();
                 r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=reject;r.readAsDataURL(file)});
-              const saved=await api('/api/backgrounds',{method:'POST',body:JSON.stringify({name:file.name.replace(/\.[^.]+$/,''),data,mimeType:file.type||'video/mp4'})});
+              const saved=await api('/api/backgrounds',{method:'POST',body:JSON.stringify({name:file.name.replace(/\.[^.]+$/,''),data,mimeType:file.type||'video/mp4',shared:Boolean(ui.jobBgShared)})});
               ui.jobBgId=saved.background.id},'Background added')};
         }
+        const sharedBox=jobBgEl.querySelector('[data-bg-shared]');
+        if(sharedBox)sharedBox.onchange=()=>{ui.jobBgShared=sharedBox.checked};
         const intro=jobBgEl.querySelector('[data-bg-intro]');
         if(intro){intro.value=String(ui.jobBgIntro);
           intro.oninput=()=>{ui.jobBgIntro=Number(intro.value);

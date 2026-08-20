@@ -342,7 +342,11 @@ function appState(user = null) {
   return {
     engine: config.processingMode === 'remote' ? 'remote-worker' : 'self-hosted', user: auth.userPublic(user), auth: auth.publicConfig(), readiness, clipSettings: clipSettings(user), musicSettings: musicSettings(user), automationSettings: automationSettings(user),
     selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(),
-    backgrounds: backgrounds.listBackgrounds(user).map(entry => ({ id: entry.id, name: entry.name, durationSec: entry.durationSec, shared: Boolean(entry.shared), own: !entry.shared })),
+    backgrounds: backgrounds.listBackgrounds(user).map(entry => ({
+      id: entry.id, name: entry.name, durationSec: entry.durationSec, shared: Boolean(entry.shared),
+      own: entry.userId === user.id && !entry.shared,
+      deletable: entry.userId === user.id || (Boolean(entry.shared) && ['owner', 'admin'].includes(String(user.role || '').toLowerCase())),
+    })),
     tracks: audio.listNasheeds(user),
     projects: projectsForUser.map(project => ({
       id: project.id, title: project.title, url: project.url, engine: project.engine, status: project.status,
@@ -1011,7 +1015,9 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/api/backgrounds') return json(res, 200, { backgrounds: backgrounds.listBackgrounds(currentUser) });
   if (method === 'POST' && pathname === '/api/backgrounds') {
     const body = await readBody(req, 170 * 1024 * 1024);
-    try { const entry = await backgrounds.saveBackground(currentUser, body.name, body.data, body.mimeType); log(`Added background video "${entry.name}".`, 'info', currentUser.id); return json(res, 200, { ok: true, background: entry }); }
+    // Only the operator can publish into every account's library.
+    const shared = body.shared === true && ['owner', 'admin'].includes(String(currentUser?.role || '').toLowerCase());
+    try { const entry = await backgrounds.saveBackground(currentUser, body.name, body.data, body.mimeType, { shared }); log(`Added background video "${entry.name}"${shared ? ' to the shared stock library' : ''}.`, 'info', currentUser.id); return json(res, 200, { ok: true, background: entry }); }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
   const backgroundVideo = pathname.match(/^\/api\/backgrounds\/([^/]+)\/video$/);
@@ -1020,7 +1026,10 @@ async function route(req, res, url) {
     return streamFile(req, res, found.file, { contentType: 'video/mp4' });
   }
   const backgroundDelete = pathname.match(/^\/api\/backgrounds\/([^/]+)$/);
-  if (method === 'DELETE' && backgroundDelete) return backgrounds.deleteBackground(currentUser, decodeURIComponent(backgroundDelete[1])) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'Background not found.' });
+  if (method === 'DELETE' && backgroundDelete) {
+    const operator = ['owner', 'admin'].includes(String(currentUser?.role || '').toLowerCase());
+    return backgrounds.deleteBackground(currentUser, decodeURIComponent(backgroundDelete[1]), { operator }) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'Background not found.' });
+  }
 
   if (pathname === '/api/diagnostics') {
     try { requireOperator(currentUser); }

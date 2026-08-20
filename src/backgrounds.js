@@ -58,7 +58,7 @@ function ownsEntry(entry, userId) {
   return Boolean(entry && userId && entry.userId === userId);
 }
 
-export async function saveBackground(user, name, base64Data, mimeType = '') {
+export async function saveBackground(user, name, base64Data, mimeType = '', { shared = false } = {}) {
   const userId = user?.id || user || '';
   if (!userId) throw new Error('Sign in to add background videos.');
   const buffer = Buffer.from(String(base64Data || ''), 'base64');
@@ -83,7 +83,7 @@ export async function saveBackground(user, name, base64Data, mimeType = '') {
   const entry = {
     id,
     userId,
-    shared: false,
+    shared: Boolean(shared),
     name: String(name || '').trim().slice(0, 120) || 'Untitled background',
     filename,
     durationSec: probed.durationSec,
@@ -96,13 +96,15 @@ export async function saveBackground(user, name, base64Data, mimeType = '') {
   return entry;
 }
 
-export function deleteBackground(user, id) {
+export function deleteBackground(user, id, { operator = false } = {}) {
   const userId = user?.id || user || '';
   const list = loadLibrary();
   const entry = list.find(item => item.id === id);
-  // Confined to your own uploads: the shared starter set stays put, and
-  // another account's video is not even acknowledged to exist.
-  if (!entry || !ownsEntry(entry, userId)) return false;
+  // Confined to your own uploads; the operator additionally curates the
+  // shared stock set. Another account's private video is not even
+  // acknowledged to exist.
+  const allowed = ownsEntry(entry, userId) || (entry?.shared && operator);
+  if (!entry || !allowed) return false;
   fs.rmSync(path.join(backgroundsDir, path.basename(entry.filename)), { force: true });
   writeLibrary(list.filter(item => item.id !== id));
   return true;

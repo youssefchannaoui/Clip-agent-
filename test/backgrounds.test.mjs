@@ -55,3 +55,9 @@ test('deleting is confined to your own uploads', () => {
   assert.equal(backgrounds.deleteBackground({ id: 'user_a' }, 'a2'), true);
   assert.equal(fs.existsSync(path.join(backgroundsDir, 'a2.mp4')), false, 'the file goes with the entry');
 });
+
+test('the operator curates the shared stock set; nobody else can', () => {
+  seed([{ id: 'st1', userId: 'user_admin', shared: true, name: 'Stock', filename: 'st1.mp4', durationSec: 30 }]);
+  assert.equal(backgrounds.deleteBackground({ id: 'user_a' }, 'st1', { operator: false }), false, 'a creator cannot delete stock');
+  assert.equal(backgrounds.deleteBackground({ id: 'user_admin' }, 'st1', { operator: true }), true, 'the operator can');
+});
