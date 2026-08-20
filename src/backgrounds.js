@@ -91,6 +91,10 @@ export async function registerBackgroundFile(user, name, sourceFile, mimeType = 
       : 'That file could not be read as a video of at least 3 seconds.');
   }
 
+  // The picker's thumbnail, made now while the file is hot in page cache.
+  // A failure only costs the poster -- the route backfills on first view.
+  try { await writePoster(file, file.replace(/\.[^.]+$/, '.jpg'), probed.durationSec); } catch { /* backfilled lazily */ }
+
   const entry = {
     id,
     userId,
@@ -118,6 +122,30 @@ export async function saveBackground(user, name, base64Data, mimeType = '', { sh
   return registerBackgroundFile(user, name, temp, mimeType, { shared });
 }
 
+/** One poster frame per background, made server-side with ffmpeg so the
+ * browser never loads whole videos just to paint a picker. Generated at
+ * register time and lazily backfilled for entries that predate posters. */
+async function writePoster(videoFile, posterFile, durationSec = 0) {
+  const at = Math.max(0.5, Math.min(2, (Number(durationSec) || 4) / 2));
+  await run(config.ffmpegPath, [
+    '-y', '-ss', String(at), '-i', videoFile,
+    '-frames:v', '1', '-vf', 'scale=216:-2', '-q:v', '4', posterFile,
+  ]);
+}
+
+export async function posterPathFor(user, id) {
+  const userId = user?.id || user || '';
+  const entry = loadLibrary().find(item => item.id === id && (item.shared || item.userId === userId));
+  if (!entry) return null;
+  const video = path.join(backgroundsDir, path.basename(entry.filename));
+  if (!video.startsWith(backgroundsDir) || !fs.existsSync(video)) return null;
+  const poster = video.replace(/\.[^.]+$/, '.jpg');
+  if (!fs.existsSync(poster)) {
+    try { await writePoster(video, poster, entry.durationSec); } catch { return null; }
+  }
+  return fs.existsSync(poster) ? poster : null;
+}
+
 export function deleteBackground(user, id, { operator = false } = {}) {
   const userId = user?.id || user || '';
   const list = loadLibrary();
@@ -128,6 +156,7 @@ export function deleteBackground(user, id, { operator = false } = {}) {
   const allowed = ownsEntry(entry, userId) || (entry?.shared && operator);
   if (!entry || !allowed) return false;
   fs.rmSync(path.join(backgroundsDir, path.basename(entry.filename)), { force: true });
+  fs.rmSync(path.join(backgroundsDir, path.basename(entry.filename).replace(/\.[^.]+$/, '.jpg')), { force: true });
   writeLibrary(list.filter(item => item.id !== id));
   return true;
 }

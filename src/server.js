@@ -352,6 +352,7 @@ function appState(user = null) {
     selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(),
     backgrounds: backgrounds.listBackgrounds(user).map(entry => ({
       id: entry.id, name: entry.name, durationSec: entry.durationSec, shared: Boolean(entry.shared),
+      posterUrl: `/api/backgrounds/${encodeURIComponent(entry.id)}/poster`,
       own: entry.userId === user.id && !entry.shared,
       deletable: entry.userId === user.id || (Boolean(entry.shared) && ['owner', 'admin'].includes(String(user.role || '').toLowerCase())),
     })),
@@ -1073,6 +1074,16 @@ async function route(req, res, url) {
   if (method === 'DELETE' && musicDelete) return audio.deleteNasheed(currentUser, decodeURIComponent(musicDelete[1])) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'Track not found.' });
 
   // Stock background videos for the Quran recitation flow.
+  const backgroundPoster = pathname.match(/^\/api\/backgrounds\/([^/]+)\/poster$/);
+  if (method === 'GET' && backgroundPoster) {
+    const poster = await backgrounds.posterPathFor(currentUser, decodeURIComponent(backgroundPoster[1]));
+    if (!poster) {
+      res.setHeader('Cache-Control', 'private, max-age=300');
+      return json(res, 404, { error: 'No poster for that background.' });
+    }
+    return streamFile(req, res, poster, { contentType: 'image/jpeg', cacheControl: 'private, max-age=86400' });
+  }
+
   if (method === 'GET' && pathname === '/api/backgrounds') return json(res, 200, { backgrounds: backgrounds.listBackgrounds(currentUser) });
   if (method === 'POST' && pathname === '/api/backgrounds') {
     const body = await readBody(req, 170 * 1024 * 1024);

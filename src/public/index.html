@@ -552,6 +552,36 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 
 .clip-main{display:flex;gap:16px;align-items:flex-start}
 .clip-content{flex:1;min-width:0}
+.bgt-row{display:flex;gap:9px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.bgt-card{flex:none;width:60px;background:none;border:0;padding:0;cursor:pointer;text-align:center}
+.bgt-thumb{position:relative;display:block;width:54px;height:96px;margin:0 auto;border-radius:9px;border:1.5px solid #26262A;background-color:#131315;background-size:cover;background-position:center;transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease;overflow:hidden}
+.bgt-card:not(.on):hover .bgt-thumb{border-color:#3A3A42;transform:translateY(-1px)}
+.bgt-card.on .bgt-thumb{border-color:rgba(240,214,166,.9);box-shadow:0 0 0 3px rgba(240,214,166,.12)}
+.bgt-name{display:block;margin-top:5px;font:500 10px Outfit,Inter,sans-serif;color:#8B8B93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bgt-card.on .bgt-name{color:#F0D6A6}
+.bgt-badge{position:absolute;top:4px;left:4px;padding:1px 5px;border-radius:6px;background:rgba(10,10,12,.78);border:1px solid rgba(217,180,120,.4);color:#F0D6A6;font:700 6.5px Outfit,sans-serif;letter-spacing:.04em}
+.bgt-del{position:absolute;top:3px;right:3px;width:16px;height:16px;border-radius:5px;border:0;background:rgba(10,10,12,.72);color:#B9B9C0;font-size:11px;line-height:1;cursor:pointer;display:grid;place-items:center;opacity:0;transition:opacity .12s ease}
+.bgt-card:hover .bgt-del{opacity:1}
+.bgt-ph{display:grid;place-items:center;color:#8B8B93;font-size:18px}
+.bgt-dash{border-style:dashed;background:transparent}
+.jt-row{display:flex;gap:10px;align-items:stretch}
+.jt-card{position:relative;flex:1;display:flex;gap:12px;align-items:center;padding:11px 12px;border-radius:12px;text-align:left;cursor:pointer;background:#131315;border:1.5px solid #26262A;transition:border-color .15s ease,background .15s ease,transform .15s ease,box-shadow .15s ease}
+.jt-card .jt-body{display:flex;flex-direction:column;gap:3px;min-width:0}
+.jt-card .t{font:600 14px Outfit,Inter,sans-serif;color:#D2D2D8;transition:color .15s ease}
+.jt-card .d{font:400 11px Outfit,Inter,sans-serif;line-height:1.4;color:#8B8B93;transition:color .15s ease}
+.jt-card .k{position:absolute;top:9px;right:10px;font-size:15px;color:#F0D6A6;opacity:0;transform:translateX(6px);transition:opacity .15s ease,transform .15s ease}
+.jt-mini{flex:none;width:44px;height:78px;border-radius:7px;border:1px solid #26262A;background:linear-gradient(180deg,#1A1A1E 0%,#0E0E11 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;overflow:hidden;filter:saturate(.55);opacity:.7;transition:filter .15s ease,opacity .15s ease,border-color .15s ease}
+.jt-mini .m1{font:700 7px Outfit,Inter,sans-serif;color:#F0D6A6;letter-spacing:.01em}
+.jt-mini .m2{font:700 7px Outfit,Inter,sans-serif;color:#9AA0A6}
+.jt-mini .mq{font:400 10px 'Scheherazade New','Amiri','KFGQPC HAFS Uthmanic Script',serif;color:#F2F2F4;line-height:1}
+.jt-mini .mt{width:22px;height:2.5px;border-radius:2px;background:#8B8B93;opacity:.7}
+.jt-card:not(.on):hover{border-color:#3A3A42;transform:translateY(-1px)}
+.jt-card.on{border-color:rgba(240,214,166,.9);background:linear-gradient(180deg,rgba(217,180,120,.14),rgba(217,180,120,.05));box-shadow:0 0 0 3px rgba(240,214,166,.12)}
+.jt-card.on .t{color:#F0D6A6}
+.jt-card.on .d{color:#C9B896}
+.jt-card.on .k{opacity:1;transform:translateX(0)}
+.jt-card.on .jt-mini{filter:none;opacity:1;border-color:rgba(240,214,166,.35)}
+@media (max-width:480px){.jt-row{flex-direction:column}}
 .slh-act{display:inline-grid;place-items:center;width:24px;height:24px;flex:none;border:1px solid var(--line-lit,#26262A);border-radius:7px;background:transparent;color:var(--mute-2,#8B8B93);cursor:pointer;font-size:12px;transition:color .12s ease,border-color .12s ease}
 .slh-act:hover{color:#F2F2F4;border-color:#34343A}
 .slh-act.on{color:#F0D6A6;border-color:rgba(217,180,120,.5);cursor:default}
@@ -3442,38 +3472,32 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          primary choice on the panel -- an icon, a name, and one line saying
          what each kind actually does. dataset.built is versioned so shipping a
          new layout rebuilds nodes built by the old one. */
-      if(jobTypeEl.dataset.built!=='2'){
-        jobTypeEl.dataset.built='2';
+      /* Each card opens with a miniature of what that kind actually renders:
+         a tiny 9:16 frame -- stacked gold word-captions for a lecture, one
+         line of mushaf-style script with a thin translation bar for Quran.
+         The choice explains itself before a word of the description is read.
+         Pure CSS, class-driven so hover/selected/mobile live in the
+         stylesheet; the paint only toggles .on. */
+      if(jobTypeEl.dataset.built!=='3'){
+        jobTypeEl.dataset.built='3';
         jobTypeEl.style.cssText='display:block;margin:14px 0 12px';
         jobTypeEl.innerHTML='<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin-bottom:8px">What are you clipping?</div>'
-          +'<div style="display:flex;gap:10px">'
-          +'<button type="button" data-kind="lecture"><i class="ph ph-microphone-stage"></i><span class="t"></span><span class="d"></span><i class="ph-fill ph-check-circle k"></i></button>'
-          +'<button type="button" data-kind="quran"><i class="ph ph-book-open-text"></i><span class="t"></span><span class="d"></span><i class="ph-fill ph-check-circle k"></i></button>'
+          +'<div class="jt-row">'
+          +'<button type="button" class="jt-card" data-kind="lecture">'
+            +'<span class="jt-mini"><span class="m1">the heart</span><span class="m2">finds rest</span></span>'
+            +'<span class="jt-body"><span class="t">Islamic lecture</span><span class="d">Bold word-by-word captions, nasheed under the voice</span></span>'
+            +'<i class="ph-fill ph-check-circle k"></i></button>'
+          +'<button type="button" class="jt-card" data-kind="quran">'
+            +'<span class="jt-mini"><span class="mq">\u0627\u0644\u0644\u0651\u064E\u0647\u064F \u0646\u064F\u0648\u0631\u064F</span><span class="mt"></span></span>'
+            +'<span class="jt-body"><span class="t">Quran recitation</span><span class="d">The ayah in mushaf script with its translation \u2014 no nasheed</span></span>'
+            +'<i class="ph-fill ph-check-circle k"></i></button>'
           +'</div>';
         for(const b of jobTypeEl.querySelectorAll('button')){
           b.onclick=e=>{e.preventDefault();StudioAdapter.bindings(DATA).pickJobType(b.dataset.kind)};
         }
-        const lecT=jobTypeEl.querySelector('[data-kind=lecture] .t');
-        const lecD=jobTypeEl.querySelector('[data-kind=lecture] .d');
-        const qurT=jobTypeEl.querySelector('[data-kind=quran] .t');
-        const qurD=jobTypeEl.querySelector('[data-kind=quran] .d');
-        lecT.textContent='Islamic lecture';
-        lecD.textContent='Bold word-by-word captions, nasheed under the voice';
-        qurT.textContent='Quran recitation';
-        qurD.textContent='The ayah in mushaf script with its translation — no nasheed';
       }
-      const cardFor=on=>'position:relative;flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:3px;'
-        +'padding:12px 14px 11px;border-radius:12px;text-align:left;cursor:pointer;transition:border-color .15s,background .15s;'
-        +'border:1.5px solid '+(on?'rgba(240,214,166,.9)':'#26262A')+';'
-        +'background:'+(on?'linear-gradient(180deg,rgba(217,180,120,.14),rgba(217,180,120,.05))':'#131315')+';';
       for(const b of jobTypeEl.querySelectorAll('button[data-kind]')){
-        const on=(b.dataset.kind==='quran')===Boolean(vals.jobTypeQuran);
-        b.style.cssText=cardFor(on);
-        const icon=b.firstElementChild;
-        icon.style.cssText='font-size:19px;color:'+(on?'#F0D6A6':'#7C7C85');
-        b.querySelector('.t').style.cssText='font:600 13.5px Outfit,Inter,sans-serif;color:'+(on?'#F0D6A6':'#D2D2D8');
-        b.querySelector('.d').style.cssText='font:400 11px Outfit,Inter,sans-serif;line-height:1.35;color:'+(on?'#C9B896':'#8B8B93');
-        b.querySelector('.k').style.cssText='position:absolute;top:9px;right:10px;font-size:15px;color:#F0D6A6;'+(on?'':'display:none;');
+        b.classList.toggle('on',(b.dataset.kind==='quran')===Boolean(vals.jobTypeQuran));
       }
     }
 
@@ -3516,13 +3540,30 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           +modes.map(m=>`<button type="button" data-bg-mode="${m[0]}" title="${m[2]}" style="${pill(mode===m[0])}">${m[1]}</button>`).join('')
           +'</div>';
         if(mode!=='own'){
-          html+='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:9px;align-items:center">'
-            +`<button type="button" data-bg-id="" style="${pill(!ui.jobBgId)}">Shuffle</button>`
-            +list.map(b=>`<span style="position:relative;display:inline-flex;align-items:center">`
-              +`<button type="button" data-bg-id="${esc(b.id)}" style="${pill(ui.jobBgId===b.id)}">${esc(b.name)} \u00B7 ${Math.round(b.durationSec)}s${b.shared?' \u2726':''}</button>`
-              +((b.deletable!==undefined?b.deletable:b.own)?`<button type="button" data-bg-del="${esc(b.id)}" title="Delete" style="margin-left:3px;border:0;background:none;color:#8B8B93;cursor:pointer;font-size:13px">\u00D7</button>`:'')
-              +'</span>').join('')
-            +'<button type="button" data-bg-upload style="'+pill(false)+'border-style:dashed">+ Add video</button>'
+          /* The library as it will look on screen, not as a list of names:
+             each background is a 9:16 poster card, DeenClipped's shared set
+             first (badged), the account's own after, Upload last. Posters are
+             single server-made jpg frames -- the browser never loads a video
+             to paint this row. Shared entries never leave the row empty. */
+          const ordered=[...list.filter(b=>b.shared),...list.filter(b=>!b.shared)];
+          const card=(b)=>{
+            const on=ui.jobBgId===b.id;
+            const del=(b.deletable!==undefined?b.deletable:b.own);
+            return `<button type="button" class="bgt-card${on?' on':''}" data-bg-id="${esc(b.id)}" title="${esc(b.name)} \u00B7 ${Math.round(b.durationSec)}s">`
+              +`<span class="bgt-thumb" style="background-image:url('${esc(withPw(b.posterUrl||''))}')">`
+              +(b.shared?'<span class="bgt-badge">DeenClipped</span>':'')
+              +(del?`<span role="button" class="bgt-del" data-bg-del="${esc(b.id)}" title="Delete">\u00D7</span>`:'')
+              +'</span>'
+              +`<span class="bgt-name">${esc(b.name)}</span></button>`;
+          };
+          html+='<div class="bgt-row" style="margin-top:10px">'
+            +`<button type="button" class="bgt-card${!ui.jobBgId?' on':''}" data-bg-id="" title="A different background each lecture">`
+            +'<span class="bgt-thumb bgt-ph"><i class="ph ph-shuffle"></i></span>'
+            +'<span class="bgt-name">Shuffle</span></button>'
+            +ordered.map(card).join('')
+            +'<button type="button" class="bgt-card" data-bg-upload title="Upload a background video">'
+            +'<span class="bgt-thumb bgt-ph bgt-dash"><i class="ph ph-plus"></i></span>'
+            +'<span class="bgt-name">Upload</span></button>'
             +'<input type="file" accept="video/mp4,video/quicktime,video/webm" data-bg-file style="display:none">'
             +'</div>';
           /* The operator curates the stock set: their uploads can go into
@@ -3530,7 +3571,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           if(['owner','admin'].includes(String((DATA.user&&DATA.user.role)||'').toLowerCase())){
             html+='<label style="display:flex;align-items:center;gap:6px;margin-top:8px;font:400 11.5px Outfit,Inter,sans-serif;color:#A2A2AA;cursor:pointer">'
               +`<input type="checkbox" data-bg-shared ${ui.jobBgShared?'checked':''} style="accent-color:#D9B478">`
-              +'add uploads to everyone\u2019s stock library \u2726</label>';
+              +'Add to DeenClipped library \u2726 \u2014 every account sees it</label>';
           }
           if(!list.length)html+='<div style="font:400 11px Outfit,Inter,sans-serif;color:#8B8B93;margin-top:7px">Upload a scenery loop to use as the background \u2014 nature, rain, the Kaaba. Shuffle picks one per lecture.</div>';
         }
@@ -3543,7 +3584,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         jobBgEl.innerHTML=html;
         jobBgEl.querySelectorAll('[data-bg-mode]').forEach(b=>b.onclick=e=>{e.preventDefault();ui.jobBgMode=b.dataset.bgMode;paintJobBackground(vals)});
         jobBgEl.querySelectorAll('[data-bg-id]').forEach(b=>b.onclick=e=>{e.preventDefault();ui.jobBgId=b.dataset.bgId;paintJobBackground(vals)});
-        jobBgEl.querySelectorAll('[data-bg-del]').forEach(b=>b.onclick=e=>{e.preventDefault();
+        jobBgEl.querySelectorAll('[data-bg-del]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();
           if(!confirm('Delete this background video?'))return;
           studioDo(async()=>{await api(`/api/backgrounds/${encodeURIComponent(b.dataset.bgDel)}`,{method:'DELETE'});
             if(ui.jobBgId===b.dataset.bgDel)ui.jobBgId=''},'Background deleted')});
