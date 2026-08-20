@@ -58,20 +58,26 @@ function ownsEntry(entry, userId) {
   return Boolean(entry && userId && entry.userId === userId);
 }
 
-export async function saveBackground(user, name, base64Data, mimeType = '', { shared = false } = {}) {
+/** Register a video file already sitting on this disk as a library entry.
+ * Owns the file from here: it is renamed into the library on success and
+ * removed on failure. */
+export async function registerBackgroundFile(user, name, sourceFile, mimeType = '', { shared = false } = {}) {
   const userId = user?.id || user || '';
   if (!userId) throw new Error('Sign in to add background videos.');
-  const buffer = Buffer.from(String(base64Data || ''), 'base64');
-  if (!buffer.length) throw new Error('Choose a valid video file.');
-  if (buffer.length > MAX_BACKGROUND_BYTES) throw new Error('Keep each background video under 120MB — a short loop is all a clip needs.');
-
-  const extension = mimeType.includes('webm') ? 'webm'
-    : mimeType.includes('quicktime') || mimeType.includes('mov') ? 'mov'
+  const size = fs.statSync(sourceFile).size;
+  if (!size) throw new Error('Choose a valid video file.');
+  if (size > MAX_BACKGROUND_BYTES) {
+    fs.rmSync(sourceFile, { force: true });
+    throw new Error('Keep each background video under 120MB — a short loop is all a clip needs.');
+  }
+  const lowered = `${mimeType} ${sourceFile}`.toLowerCase();
+  const extension = lowered.includes('webm') ? 'webm'
+    : lowered.includes('quicktime') || lowered.includes('.mov') ? 'mov'
       : 'mp4';
   const id = crypto.randomBytes(8).toString('hex');
   const filename = `${id}.${extension}`;
   const file = path.join(backgroundsDir, filename);
-  fs.writeFileSync(file, buffer);
+  fs.renameSync(sourceFile, file);
 
   let probed = { durationSec: 0, hasVideo: false };
   try { probed = await probeVideo(file); } catch {}
@@ -87,13 +93,24 @@ export async function saveBackground(user, name, base64Data, mimeType = '', { sh
     name: String(name || '').trim().slice(0, 120) || 'Untitled background',
     filename,
     durationSec: probed.durationSec,
-    sizeBytes: buffer.length,
+    sizeBytes: size,
     addedAt: Date.now(),
   };
   const list = loadLibrary();
   list.push(entry);
   writeLibrary(list);
   return entry;
+}
+
+export async function saveBackground(user, name, base64Data, mimeType = '', { shared = false } = {}) {
+  const userId = user?.id || user || '';
+  if (!userId) throw new Error('Sign in to add background videos.');
+  const buffer = Buffer.from(String(base64Data || ''), 'base64');
+  if (!buffer.length) throw new Error('Choose a valid video file.');
+  if (buffer.length > MAX_BACKGROUND_BYTES) throw new Error('Keep each background video under 120MB — a short loop is all a clip needs.');
+  const temp = path.join(backgroundsDir, `incoming-${crypto.randomBytes(6).toString('hex')}`);
+  fs.writeFileSync(temp, buffer);
+  return registerBackgroundFile(user, name, temp, mimeType, { shared });
 }
 
 export function deleteBackground(user, id, { operator = false } = {}) {

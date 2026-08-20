@@ -3138,11 +3138,33 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         if(uploadBtn&&fileInput){
           uploadBtn.onclick=e=>{e.preventDefault();fileInput.click()};
           fileInput.onchange=()=>{const file=fileInput.files[0];if(!file)return;
-            uploadBtn.textContent='Uploading\u2026';
+            const meta={name:file.name.replace(/\.[^.]+$/,''),mimeType:file.type||'video/mp4',shared:Boolean(ui.jobBgShared)};
             studioDo(async()=>{
-              const data=await new Promise((resolve,reject)=>{const r=new FileReader();
-                r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=reject;r.readAsDataURL(file)});
-              const saved=await api('/api/backgrounds',{method:'POST',body:JSON.stringify({name:file.name.replace(/\.[^.]+$/,''),data,mimeType:file.type||'video/mp4',shared:Boolean(ui.jobBgShared)})});
+              /* Straight to object storage with a presigned URL and a live
+                 percentage -- the base64-through-the-app path took the whole
+                 file through one JSON POST and read as a hang. Falls back to
+                 base64 only when storage is not configured (self-hosted). */
+              let saved;
+              try{
+                const presign=await api('/api/uploads/presign',{method:'POST',body:JSON.stringify({fileName:file.name,contentType:meta.mimeType})});
+                await new Promise((resolve,reject)=>{
+                  const x=new XMLHttpRequest();
+                  x.open('PUT',presign.uploadUrl);
+                  const hdrs=presign.headers||{'Content-Type':meta.mimeType};
+                  for(const k of Object.keys(hdrs))x.setRequestHeader(k,hdrs[k]);
+                  x.upload.onprogress=ev=>{if(ev.lengthComputable)uploadBtn.textContent='Uploading '+Math.round(ev.loaded/ev.total*100)+'%'};
+                  x.onload=()=>x.status>=200&&x.status<300?resolve():reject(new Error('Upload failed \u2014 the storage service rejected the file.'));
+                  x.onerror=()=>reject(new Error('Upload failed \u2014 network error.'));
+                  x.send(file)});
+                uploadBtn.textContent='Processing\u2026';
+                saved=await api('/api/backgrounds',{method:'POST',body:JSON.stringify({...meta,objectKey:presign.objectKey})});
+              }catch(err){
+                if(!/not configured/i.test(err.message))throw err;
+                uploadBtn.textContent='Uploading\u2026';
+                const data=await new Promise((resolve,reject)=>{const r=new FileReader();
+                  r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=reject;r.readAsDataURL(file)});
+                saved=await api('/api/backgrounds',{method:'POST',body:JSON.stringify({...meta,data})});
+              }
               ui.jobBgId=saved.background.id},'Background added')};
         }
         const sharedBox=jobBgEl.querySelector('[data-bg-shared]');

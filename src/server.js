@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { config, productionConfigurationErrors } from './config.js';
 import {
   state, save, log, logFor, clipSettings, setClipSettings, musicSettings, setMusicSettings,
@@ -1017,7 +1019,29 @@ async function route(req, res, url) {
     const body = await readBody(req, 170 * 1024 * 1024);
     // Only the operator can publish into every account's library.
     const shared = body.shared === true && ['owner', 'admin'].includes(String(currentUser?.role || '').toLowerCase());
-    try { const entry = await backgrounds.saveBackground(currentUser, body.name, body.data, body.mimeType, { shared }); log(`Added background video "${entry.name}"${shared ? ' to the shared stock library' : ''}.`, 'info', currentUser.id); return json(res, 200, { ok: true, background: entry }); }
+    try {
+      let entry;
+      if (body.objectKey) {
+        // The fast path: the browser PUT the raw file straight to object
+        // storage with a presigned URL (no base64, no app server in the upload
+        // path), and this registers it -- the server pulls it down on its own
+        // datacenter bandwidth. Same prefix guard as video submissions.
+        const objectKey = assertStorageObjectKey(String(body.objectKey));
+        if (!objectKey.startsWith(objectStorage.uploadPrefixFor(currentUser.id))) throw new Error('The uploaded video reference is outside the permitted storage area.');
+        const temp = path.join(config.dataDir, 'backgrounds', `incoming-${crypto.randomBytes(6).toString('hex')}`);
+        fs.mkdirSync(path.dirname(temp), { recursive: true });
+        const response = await fetch(objectStorage.presign({ method: 'GET', key: objectKey, expiresSec: 600 }));
+        if (!response.ok || !response.body) throw new Error(`The uploaded file could not be fetched from storage (HTTP ${response.status}).`);
+        await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(temp));
+        entry = await backgrounds.registerBackgroundFile(currentUser, body.name, temp, body.mimeType, { shared });
+        // The staging object has served its purpose.
+        objectStorage.deleteObject(objectKey).catch(() => {});
+      } else {
+        entry = await backgrounds.saveBackground(currentUser, body.name, body.data, body.mimeType, { shared });
+      }
+      log(`Added background video "${entry.name}"${shared ? ' to the shared stock library' : ''}.`, 'info', currentUser.id);
+      return json(res, 200, { ok: true, background: entry });
+    }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
   const backgroundVideo = pathname.match(/^\/api\/backgrounds\/([^/]+)\/video$/);
