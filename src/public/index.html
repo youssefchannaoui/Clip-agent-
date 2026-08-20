@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="DeenClipped AI">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Outfit:wght@500;600;700&family=Amiri:wght@400;700&family=Scheherazade+New:wght@400;700&family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">
 <!-- Studio dashboard, generated from the Claude Design project. See design/README.md. -->
 <link rel="stylesheet" href="/studio-styles.generated.css">
 <style>
@@ -2386,9 +2386,10 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         ? `<span style="${esc(w.style)}">${esc(w.text)}</span>`
         : esc(w.text)).join(' '));
       /* An ayah carries its translation underneath, the way the export draws
-         it: a second line in the Latin face at roughly half the size. */
+         it: the template's own Latin face at captionTranslationSize, computed
+         by the adapter from the same metrics the render uses. */
       if(vals.edCapIsAyah&&vals.edCapTranslation){
-        want+=`<span style="display:block;font-size:.46em;opacity:.92;margin-top:.35em;font-family:'DejaVu Serif',Georgia,serif">${esc(vals.edCapTranslation)}</span>`;
+        want+=`<span style="${esc(vals.edCapGlossStyle||'display:block;font-size:.46em;opacity:.92;margin-top:.35em')}">${esc(vals.edCapTranslation)}</span>`;
       }
       if(span.dataset.words!==want){span.dataset.words=want;span.innerHTML=want}
     }
@@ -2476,9 +2477,13 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         span.setAttribute('data-host-owned','');
         box.appendChild(span);
       }
-      const want=scaleAyahMarks((vals.capWords||[]).map(w=>w.style
+      let want=scaleAyahMarks((vals.capWords||[]).map(w=>w.style
         ? `<span style="${esc(w.style)}">${esc(w.text)}</span>`
         : esc(w.text)).join(' '));
+      /* The Quran sample carries its translation, as the render draws one. */
+      if(vals.capGloss){
+        want+=`<span style="${esc(vals.capGlossStyle||'')}">${esc(vals.capGloss)}</span>`;
+      }
       if(span.dataset.words!==want){span.dataset.words=want;span.innerHTML=want}
     }
 

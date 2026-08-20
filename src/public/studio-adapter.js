@@ -444,6 +444,32 @@
     { name: 'Scheherazade New', label: 'Scheherazade', web: '"Scheherazade New", Amiri, Georgia, serif' },
   ];
 
+  // How much smaller libass draws each face than CSS does at the same nominal
+  // size. libass sizes a font by its Win cell (usWinAscent + usWinDescent);
+  // CSS sizes by the em square. Measured from the exact font files the worker
+  // installs: factor = unitsPerEm / (usWinAscent + usWinDescent). Multiplying
+  // the preview's font size by this shows the size the export truly draws --
+  // without it the preview ran ~16% large in DejaVu and nearly 3x large in
+  // Amiri, which is why the editor and the rendered clip looked like two
+  // different products.
+  var ASS_SIZE_FACTOR = {
+    'DejaVu Sans': 0.859,
+    'DejaVu Serif': 0.851,
+    'Liberation Sans': 0.895,
+    'Open Sans': 0.694,
+    'Amiri': 0.362,
+    'Scheherazade New': 0.411,
+  };
+  function assFactor(name) {
+    return ASS_SIZE_FACTOR[name] || 0.86;
+  }
+
+  // Mirrors AYAH_SIZE_SCALE in worker/clip_worker.py: the render sets ayahs at
+  // three times the caption size to compensate for the mushaf faces' tall Win
+  // metrics. The preview applies the same 3x and then the face's own factor,
+  // landing on the visual size the export draws.
+  var AYAH_SIZE_SCALE = 3.0;
+
   function webFontFor(name) {
     for (var i = 0; i < CAPTION_FONTS.length; i++) {
       if (CAPTION_FONTS[i].name === name) return CAPTION_FONTS[i].web;
@@ -457,6 +483,14 @@
   // what a caption mode actually does: "word by word" and "stacked lines" are
   // indistinguishable from a still. Three lines, roughly the length and cadence
   // of a real clip's captions.
+  // The sample for the Quran caption mode: a short, whole ayah (Ar-Ra'd 28)
+  // with its verse mark and translation, shown the way ayah_events draws one.
+  var SAMPLE_AYAH = {
+    arabic: '\u0623\u064E\u0644\u064E\u0627 \u0628\u0650\u0630\u0650\u0643\u0652\u0631\u0650 \u0627\u0644\u0644\u064E\u0651\u0647\u0650 \u062A\u064E\u0637\u0652\u0645\u064E\u0626\u0650\u0646\u064E\u0651 \u0627\u0644\u0652\u0642\u064F\u0644\u064F\u0648\u0628\u064F',
+    mark: '\u06DD\u0662\u0668',
+    gloss: 'Verily, in the remembrance of Allah do hearts find rest',
+  };
+
   var SAMPLE_LINES = [
     'He has the whole of the dunya given to us',
     'and we still complain about the small things',
@@ -626,13 +660,37 @@
   }
 
   function captionFaceStyle(t) {
-    var size = Number(t.captionFontSize) || 96;
+    var size = (Number(t.captionFontSize) || 96) * assFactor(t.captionFont);
     var width = Math.max(1, Number(t.width) || 1080);
     return ' color: ' + (t.captionPrimary || '#FFFFFF') + ';'
       + ' font-family: ' + webFontFor(t.captionFont) + '; font-weight: 700;'
       + ' font-size: ' + Math.max(9, Math.round((size / width) * 268)) + 'px;'
       + ' font-size: ' + ((size / width) * 100).toFixed(2) + 'cqw;'
       + (t.captionUppercase ? ' text-transform: uppercase;' : '');
+  }
+
+  // An ayah is set in the Quranic face at the render's own scale, never
+  // uppercased and not bold -- the Ayah style in write_ass is Bold 0.
+  function ayahFaceStyle(t) {
+    var arabic = t.captionArabicFont || 'Amiri';
+    var size = (Number(t.captionFontSize) || 96) * AYAH_SIZE_SCALE * assFactor(arabic);
+    var width = Math.max(1, Number(t.width) || 1080);
+    return ' color: ' + (t.captionPrimary || '#FFFFFF') + ';'
+      + ' font-family: ' + webFontFor(arabic) + '; font-weight: 400;'
+      + ' font-size: ' + Math.max(9, Math.round((size / width) * 268)) + 'px;'
+      + ' font-size: ' + ((size / width) * 100).toFixed(2) + 'cqw;';
+  }
+
+  // The translation under an ayah: the Latin caption face at
+  // captionTranslationSize, exactly as the render's \fn+\fs override sets it,
+  // expressed relative to the ayah span it sits inside.
+  function ayahGlossStyle(t) {
+    var arabic = t.captionArabicFont || 'Amiri';
+    var ayahPx = (Number(t.captionFontSize) || 96) * AYAH_SIZE_SCALE * assFactor(arabic);
+    var glossPx = (Number(t.captionTranslationSize) || 46) * assFactor(t.captionFont);
+    var em = Math.max(0.15, Math.min(1.2, glossPx / Math.max(1, ayahPx)));
+    return 'display: block; font-size: ' + em.toFixed(3) + 'em; line-height: 1.25; opacity: .92; margin-top: .35em;'
+      + ' font-family: ' + webFontFor(t.captionFont) + '; font-weight: 400; text-transform: none;';
   }
 
   // The live word's own colour, face, slant, glow and pop -- the render has
@@ -2196,9 +2254,13 @@
       // and captionMarginH), size by a different divisor, and skip the pop --
       // so the two previews could not agree even on a freshly opened clip.
       edCapOverlayStyle: 'z-index: 8; ' + captionPlacementStyle(tpl, edCapDragY)
-        + captionFaceStyle(tpl)
+        + (edAyahPhrase ? ayahFaceStyle(tpl) : captionFaceStyle(tpl))
         + capInkStyle(tpl)
         + (UI.edBurned ? ' display: none;' : ''),
+      // The translation line under an ayah, styled the way the render's own
+      // \fn+\fs override styles it. The painter used to hardcode .46em in a
+      // face the template never chose.
+      edCapGlossStyle: ayahGlossStyle(tpl),
       edCapHandle: 'position: absolute; inset: -5px; border: 1px dashed rgba(240,214,166,.7); border-radius: 8px; pointer-events: none;',
       dragEdCap: dragCaptionFrom,
 
@@ -2865,13 +2927,20 @@
       // The design bakes one phrase in, so picking "Word by word" changed the
       // row's label and nothing else -- the one control whose whole meaning is
       // what the caption looks like.
-      capPreviewText: sampleCaptionAt(previewAt, tpl.captionMode, tpl.captionStackMaxWords),
+      capPreviewText: tpl.captionMode === 'quran' ? SAMPLE_AYAH.arabic : sampleCaptionAt(previewAt, tpl.captionMode, tpl.captionStackMaxWords),
 
       // The words on screen, with the live one marked, so the preview can show
       // the highlight in its own face, slant, colour and glow -- the thing that
       // makes the stacked style read, and which the renderer has always done
       // even though nothing could configure it.
       capWords: (function () {
+        // Quran mode draws scripture: one ayah in the Quranic face with its
+        // verse mark and translation, no per-word highlight -- the render
+        // never animates an ayah. The English sample said nothing true about
+        // this mode.
+        if (tpl.captionMode === 'quran') {
+          return [{ text: SAMPLE_AYAH.arabic + '\u00A0' + SAMPLE_AYAH.mark, style: '' }];
+        }
         var parts = sampleCaptionParts(previewAt, tpl.captionMode, tpl.captionStackMaxWords);
         return parts.words.map(function (text, i) {
           var on = i === parts.liveIndex;
@@ -2952,8 +3021,10 @@
           + (grain ? ' background-size: auto, 3px 3px;' : '');
       }()),
 
+      capGloss: tpl.captionMode === 'quran' && tpl.captionTranslation !== false ? SAMPLE_AYAH.gloss : '',
+      capGlossStyle: ayahGlossStyle(tpl),
       capStyle: captionPlacementStyle(tpl, UI.dragPreview && UI.dragPreview.kind === 'caption' ? UI.dragPreview.y : null)
-        + captionFaceStyle(tpl)
+        + (tpl.captionMode === 'quran' ? ayahFaceStyle(tpl) : captionFaceStyle(tpl))
         + capInkStyle(tpl)
         + capFadeStyle(tpl, UI.pvPlaying)
         + grabStyle(UI.dragKind === 'caption')
