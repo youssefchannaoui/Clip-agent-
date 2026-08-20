@@ -2,6 +2,7 @@ FROM python:3.12-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
+    XDG_CACHE_HOME=/var/lib/deenclipped/cache \
     WORKER_DATA_DIR=/var/lib/deenclipped \
     WORKER_TEMP_DIR=/var/lib/deenclipped/tmp \
     HF_HOME=/var/lib/deenclipped/models \
@@ -66,7 +67,7 @@ COPY worker /app/worker
 RUN mkdir -p /usr/share/fonts/truetype/deenclipped \
     && cp /app/worker/fonts/*.ttf /usr/share/fonts/truetype/deenclipped/ \
     && fc-cache -f
-RUN mkdir -p /var/lib/deenclipped/jobs /var/lib/deenclipped/tmp /var/lib/deenclipped/models \
+RUN mkdir -p /var/lib/deenclipped/jobs /var/lib/deenclipped/tmp /var/lib/deenclipped/models /var/lib/deenclipped/cache \
     && python -m py_compile /app/worker/service.py /app/worker/import_providers.py /app/worker/object_storage.py /app/worker/clip_worker.py /app/worker/quran.py \
     # ffmpeg, libass, yt-dlp and OpenCV all parse media a customer chose. None
     # of that needs root, so none of it gets root.
