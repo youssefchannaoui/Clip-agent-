@@ -2382,9 +2382,9 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         span.setAttribute('data-host-owned','');
         box.appendChild(span);
       }
-      let want=(vals.edCapWords||[]).map(w=>w.style
+      let want=scaleAyahMarks((vals.edCapWords||[]).map(w=>w.style
         ? `<span style="${esc(w.style)}">${esc(w.text)}</span>`
-        : esc(w.text)).join(' ');
+        : esc(w.text)).join(' '));
       /* An ayah carries its translation underneath, the way the export draws
          it: a second line in the Latin face at roughly half the size. */
       if(vals.edCapIsAyah&&vals.edCapTranslation){
@@ -2450,6 +2450,11 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       }
     }
 
+    /* The end-of-ayah ornament (U+06DD + Arabic-Indic digits) at its own,
+       larger size -- write_ass scales it by 1.45 over the ayah text, and the
+       previews draw what the export draws. Runs on escaped HTML; the marker
+       characters pass esc() untouched. */
+    const scaleAyahMarks=html=>html.replace(/\u06DD[\u0660-\u0669\u06F0-\u06F90-9]*/g,m=>`<span style="font-size:1.45em;line-height:1">${m}</span>`);
     function paintCaptionWords(vals){
       /* Templates only. These are sample words for previewing a style; the
          editor draws the clip's real captions. */
@@ -2471,9 +2476,9 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         span.setAttribute('data-host-owned','');
         box.appendChild(span);
       }
-      const want=(vals.capWords||[]).map(w=>w.style
+      const want=scaleAyahMarks((vals.capWords||[]).map(w=>w.style
         ? `<span style="${esc(w.style)}">${esc(w.text)}</span>`
-        : esc(w.text)).join(' ');
+        : esc(w.text)).join(' '));
       if(span.dataset.words!==want){span.dataset.words=want;span.innerHTML=want}
     }
 

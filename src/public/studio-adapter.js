@@ -1505,9 +1505,17 @@
       var verse = overlayBlock.ayah;
       var aWords = String(verse.arabic || '').split(/\s+/).filter(Boolean);
       var gWords = String(verse.translation || '').split(/\s+/).filter(Boolean);
+      // The end-of-ayah mark and its verse number, joined to the final word the
+      // way the export joins them (quran.ornament_for). The renderer shows the
+      // mark once, on the ayah's last phrase; the preview does the same, and
+      // the painter sets it at the export's own larger size.
+      var digits = '٠١٢٣٤٥٦٧٨٩';
+      var mark = verse.ayah
+        ? '\u00A0\u06DD' + String(verse.ayah).split('').map(function (d) { return digits[Number(d)] || d; }).join('')
+        : '';
       var MAXW = 5;
       var count = Math.max(1, Math.ceil(aWords.length / MAXW));
-      if (count === 1) return { text: verse.arabic, gloss: verse.translation || '' };
+      if (count === 1) return { text: verse.arabic + mark, gloss: verse.translation || '' };
       var span = Math.max(0.4, (verse.end - verse.start) || 1);
       var through = Math.max(0, Math.min(0.999, (edTime - verse.start) / span));
       var sizeBase = Math.floor(aWords.length / count);
@@ -1519,13 +1527,13 @@
         var share = size / aWords.length;
         if (through < acc + share || ci === count - 1) {
           return {
-            text: aWords.slice(taken, taken + size).join(' '),
+            text: aWords.slice(taken, taken + size).join(' ') + (ci === count - 1 ? mark : ''),
             gloss: gWords.slice(gTaken, gTaken + Math.max(0, gSize)).join(' '),
           };
         }
         acc += share; taken += size; gTaken += Math.max(0, gSize);
       }
-      return { text: verse.arabic, gloss: verse.translation || '' };
+      return { text: verse.arabic + mark, gloss: verse.translation || '' };
     }());
 
     // Other clips cut from the same lecture, for the editor's filmstrip.

@@ -878,9 +878,15 @@ AYAH_FADE_MS = 300
 # reference's proportion.
 AYAH_SIZE_SCALE = 3.0
 
+# The end-of-ayah ornament, relative to the ayah text. At 1.0 the verse number
+# inside the circle is unreadably small -- the ornament needs its own size,
+# the way a mushaf sets it visibly larger than the letters around it.
+AYAH_MARK_SCALE = 1.45
+
 
 def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: float,
-                latin_font: str, translation_size: int, show_translation: bool) -> list[str]:
+                latin_font: str, translation_size: int, show_translation: bool,
+                ayah_size: int = 0) -> list[str]:
     """The Dialogue lines carrying an ayah, a short phrase at a time.
 
     Modelled on the reference clips: a long ayah is not held on screen as one
@@ -931,7 +937,12 @@ def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: floa
 
         text = ass_escape(" ".join(chunk))
         if index == chunk_count - 1:
-            text += "\\h" + ass_escape(ornament)
+            # The ornament at its own, larger size. Nothing follows it on this
+            # line, and the translation line below sets its own \fn and \fs,
+            # so the override needs no reset.
+            mark_size = int(round((ayah_size or translation_size) * AYAH_MARK_SCALE)) if ayah_size else 0
+            mark_tag = f"{{\\fs{mark_size}}}" if mark_size else ""
+            text += "\\h" + mark_tag + ass_escape(ornament)
 
         if gloss_words:
             g_size = round(len(gloss_words) * len(chunk) / len(words)) if index < chunk_count - 1 else len(gloss_words) - g_taken
@@ -1328,7 +1339,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 events.extend(ayah_events(
                     found, ornament=quran.ornament_for(found["ayah"]), start=start, end=end,
                     latin_font=font, translation_size=translation_size,
-                    show_translation=show_translation,
+                    show_translation=show_translation, ayah_size=ayah_size,
                 ))
             if captioned:
                 emit("progress", stage="Matching recited ayahs", progress=72,
@@ -1395,7 +1406,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         events.extend(ayah_events(
             found, ornament=quran.ornament_for(found["ayah"]), start=span["start"], end=span["end"],
             latin_font=font, translation_size=translation_size,
-            show_translation=bool(template.get("captionTranslation", True)),
+            show_translation=bool(template.get("captionTranslation", True)), ayah_size=ayah_size,
         ))
     ass_file.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
     return matched_ayahs

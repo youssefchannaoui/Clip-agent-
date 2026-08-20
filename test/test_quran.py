@@ -134,6 +134,29 @@ class OrnamentTests(unittest.TestCase):
         self.assertEqual(quran.arabic_number(255), "٢٥٥")
         self.assertEqual(quran.arabic_number(1), "١")
 
+    def test_the_verse_number_renders_larger_than_the_ayah(self):
+        # At the ayah's own size the digits inside the ornament are unreadably
+        # small; the mark gets its own \fs, scaled from the ayah size, and the
+        # translation line below resets its own size so nothing else grows.
+        import importlib.util as _ilu
+        _spec = _ilu.spec_from_file_location("clip_worker", ROOT / "worker" / "clip_worker.py")
+        clip_worker = _ilu.module_from_spec(_spec)
+        sys.modules[_spec.name] = clip_worker
+        _spec.loader.exec_module(clip_worker)
+        events = clip_worker.ayah_events(
+            {"arabic": "قل هو الله أحد", "translation": "Say He is Allah the One"},
+            ornament=quran.ornament_for(112), start=0.0, end=4.0,
+            latin_font="DejaVu Serif", translation_size=46,
+            show_translation=True, ayah_size=354,
+        )
+        final = events[-1]
+        expected = int(round(354 * clip_worker.AYAH_MARK_SCALE))
+        self.assertIn("{\\fs%d}" % expected + "\u06dd", final)
+        self.assertIn("{\\fnDejaVu Serif\\fs46}", final, "the translation still sets its own size")
+        # The mark appears once, on the final phrase only.
+        for event in events[:-1]:
+            self.assertNotIn("\u06dd", event)
+
     def test_the_ornament_follows_the_ayah(self):
         marked = quran.ayah_with_ornament("قُلْ هُوَ ٱللَّهُ أَحَدٌ", 1)
         self.assertTrue(marked.startswith("قُلْ"))
