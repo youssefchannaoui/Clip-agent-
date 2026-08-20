@@ -3053,6 +3053,81 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       }
     }
 
+    /* The Quran flow's background choice, docked under the kind cards.
+       'own' plays the source video as always; 'stock' plays a background
+       video for the whole clip; 'intro' opens on the source for a few seconds
+       and hands over to the background -- the shape all over TikTok. */
+    const jobBgEl=document.createElement('div');jobBgEl.id='studioJobBg';
+    function paintJobBackground(vals){
+      alive(jobBgEl);
+      const ui=StudioAdapter.ui;
+      if(ui.jobBgMode===undefined){ui.jobBgMode='own';ui.jobBgId='';ui.jobBgIntro=3}
+      const open=Boolean(ui.job)&&Boolean(vals.jobTypeQuran);
+      jobBgEl.classList.toggle('hide',!open);
+      if(!open)return;
+      if(jobBgEl.previousElementSibling!==jobTypeEl||jobBgEl.parentElement!==jobTypeEl.parentElement){
+        jobTypeEl.parentElement&&jobTypeEl.parentElement.insertBefore(jobBgEl,jobTypeEl.nextSibling);
+      }
+      const list=(DATA&&DATA.backgrounds)||[];
+      const mode=ui.jobBgMode;
+      const pill=(on)=>'padding:6px 11px;border-radius:999px;font:500 11.5px Outfit,Inter,sans-serif;cursor:pointer;'
+        +'border:1px solid '+(on?'rgba(240,214,166,.9)':'#26262A')+';'
+        +'background:'+(on?'rgba(217,180,120,.14)':'#131315')+';color:'+(on?'#F0D6A6':'#A2A2AA')+';';
+      const modes=[['own','Their video','The recitation\u2019s own footage'],
+        ['stock','Scenery','A background video plays the whole clip'],
+        ['intro','Video \u2192 scenery','Their video opens, then scenery takes over']];
+      const sig=[mode,ui.jobBgId,ui.jobBgIntro,list.map(b=>b.id).join('.')].join('|');
+      if(jobBgEl.dataset.sig!==sig){
+        jobBgEl.dataset.sig=sig;
+        jobBgEl.style.cssText='display:block;margin:0 0 12px';
+        let html='<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin:2px 0 8px">Background</div>'
+          +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+          +modes.map(m=>`<button type="button" data-bg-mode="${m[0]}" title="${m[2]}" style="${pill(mode===m[0])}">${m[1]}</button>`).join('')
+          +'</div>';
+        if(mode!=='own'){
+          html+='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:9px;align-items:center">'
+            +`<button type="button" data-bg-id="" style="${pill(!ui.jobBgId)}">Shuffle</button>`
+            +list.map(b=>`<span style="position:relative;display:inline-flex;align-items:center">`
+              +`<button type="button" data-bg-id="${esc(b.id)}" style="${pill(ui.jobBgId===b.id)}">${esc(b.name)} \u00B7 ${Math.round(b.durationSec)}s</button>`
+              +(b.own?`<button type="button" data-bg-del="${esc(b.id)}" title="Delete" style="margin-left:3px;border:0;background:none;color:#8B8B93;cursor:pointer;font-size:13px">\u00D7</button>`:'')
+              +'</span>').join('')
+            +'<button type="button" data-bg-upload style="'+pill(false)+'border-style:dashed">+ Add video</button>'
+            +'<input type="file" accept="video/mp4,video/quicktime,video/webm" data-bg-file style="display:none">'
+            +'</div>';
+          if(!list.length)html+='<div style="font:400 11px Outfit,Inter,sans-serif;color:#8B8B93;margin-top:7px">Upload a scenery loop to use as the background \u2014 nature, rain, the Kaaba. Shuffle picks one per lecture.</div>';
+        }
+        if(mode==='intro'){
+          html+='<div style="display:flex;align-items:center;gap:10px;margin-top:10px;font:400 12px Outfit,Inter,sans-serif;color:#A2A2AA">'
+            +'<span>Their video plays for</span>'
+            +'<input type="range" min="2" max="10" step="1" data-bg-intro style="flex:0 0 130px">'
+            +`<span data-bg-intro-val>${ui.jobBgIntro}s</span></div>`;
+        }
+        jobBgEl.innerHTML=html;
+        jobBgEl.querySelectorAll('[data-bg-mode]').forEach(b=>b.onclick=e=>{e.preventDefault();ui.jobBgMode=b.dataset.bgMode;paintJobBackground(vals)});
+        jobBgEl.querySelectorAll('[data-bg-id]').forEach(b=>b.onclick=e=>{e.preventDefault();ui.jobBgId=b.dataset.bgId;paintJobBackground(vals)});
+        jobBgEl.querySelectorAll('[data-bg-del]').forEach(b=>b.onclick=e=>{e.preventDefault();
+          if(!confirm('Delete this background video?'))return;
+          studioDo(async()=>{await api(`/api/backgrounds/${encodeURIComponent(b.dataset.bgDel)}`,{method:'DELETE'});
+            if(ui.jobBgId===b.dataset.bgDel)ui.jobBgId=''},'Background deleted')});
+        const fileInput=jobBgEl.querySelector('[data-bg-file]');
+        const uploadBtn=jobBgEl.querySelector('[data-bg-upload]');
+        if(uploadBtn&&fileInput){
+          uploadBtn.onclick=e=>{e.preventDefault();fileInput.click()};
+          fileInput.onchange=()=>{const file=fileInput.files[0];if(!file)return;
+            uploadBtn.textContent='Uploading\u2026';
+            studioDo(async()=>{
+              const data=await new Promise((resolve,reject)=>{const r=new FileReader();
+                r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=reject;r.readAsDataURL(file)});
+              const saved=await api('/api/backgrounds',{method:'POST',body:JSON.stringify({name:file.name.replace(/\.[^.]+$/,''),data,mimeType:file.type||'video/mp4'})});
+              ui.jobBgId=saved.background.id},'Background added')};
+        }
+        const intro=jobBgEl.querySelector('[data-bg-intro]');
+        if(intro){intro.value=String(ui.jobBgIntro);
+          intro.oninput=()=>{ui.jobBgIntro=Number(intro.value);
+            const val=jobBgEl.querySelector('[data-bg-intro-val]');if(val)val.textContent=intro.value+'s'};}
+      }
+    }
+
     /* Docked under the job panel's nasheed row. Anchored on the NASHEED label
        the design draws, so a re-import that moves the panel still finds it. */
     const jobMusicEl=$('#studioJobMusic');
@@ -3354,6 +3429,12 @@ function renderStudio(){
          sourceThumbUrl null and the library rendered empty cards. */
       const j=StudioAdapter.ui.job;
       if(j&&j.url===url)body.sourceMeta=[{url,title:j.title||'',durationSec:j.durationSec||null,thumbnail:j.thumbnail||''}];
+      /* The Quran flow's background choice, from the panel's own controls.
+         A lecture job always renders on its own footage. */
+      const quranJob=(StudioAdapter.ui.jobTplId||'')==='quran-recitation';
+      body.backgroundMode=quranJob?(StudioAdapter.ui.jobBgMode||'own'):'own';
+      body.backgroundId=quranJob?(StudioAdapter.ui.jobBgId||''):'';
+      body.introSeconds=StudioAdapter.ui.jobBgIntro||3;
       const r=await api('/api/videos',{method:'POST',body:JSON.stringify(body)});
       /* /api/videos answers 200 even when it refused the source — the reason is
          per-URL inside results[]. Without this a rejection ("upload a nasheed
@@ -3394,7 +3475,9 @@ function renderStudio(){
       const presign=await api('/api/uploads/presign',{method:'POST',body:JSON.stringify({fileName:file.name,contentType:file.type||'video/mp4'})});
       const put=await fetch(presign.uploadUrl,{method:'PUT',headers:presign.headers||{'Content-Type':file.type||'video/mp4'},body:file});
       if(!put.ok)throw new Error('Upload failed — the storage service rejected the file.');
-      await api('/api/videos',{method:'POST',body:JSON.stringify({objectKey:presign.objectKey,fileName:file.name,title:file.name})})},'Upload queued');
+      await api('/api/videos',{method:'POST',body:JSON.stringify({objectKey:presign.objectKey,fileName:file.name,title:file.name,
+        backgroundMode:(StudioAdapter.ui.jobTplId||'')==='quran-recitation'?(StudioAdapter.ui.jobBgMode||'own'):'own',
+        backgroundId:StudioAdapter.ui.jobBgId||'',introSeconds:StudioAdapter.ui.jobBgIntro||3})})},'Upload queued');
     document.body.classList.add('studio-active');
   }
   paintStudio();
@@ -3420,6 +3503,7 @@ function paintStudio(){
   paintPreviewPlayer(vals);
   paintHighlight(vals);
   paintJobType(vals);
+  paintJobBackground(vals);
   paintJobMusic(vals);
   paintTemplatesLayout();
   /* No unread activity -> hide the dot the design hardcoded on. */

@@ -311,6 +311,18 @@ class Processor:
             raise RuntimeError("No worker-accessible nasheed track was supplied.")
         return tracks
 
+    def fetch_background(self, payload: dict[str, Any], work: Path) -> dict[str, Any] | None:
+        background = payload.get("background")
+        if not isinstance(background, dict) or str(background.get("mode") or "own") == "own":
+            return None
+        url = str(background.get("url") or "")
+        if not url.startswith("https://"):
+            return None
+        destination = work / "background.mp4"
+        download_https(url, destination, 200 * 1024 * 1024, 180, lambda: self.cancelled(str(payload["id"])))
+        return {"mode": str(background["mode"]), "path": str(destination),
+                "introSeconds": float(background.get("introSeconds") or 3), "name": str(background.get("name") or "")}
+
     def run_clip_worker(self, job_id: str, job_file: Path, result_path: Path) -> dict[str, Any]:
         env = {
             **os.environ,
@@ -463,6 +475,7 @@ class Processor:
             self.store.update(job_id, importProvider=imported.provider or None)
             self.progress(job_id, "downloading", 8)
             tracks = self.fetch_music(payload, work)
+            job_background = self.fetch_background(payload, work)
             result_path = work / "result.json"
             mode = str(payload.get("mode") or "process")
             transcript_segments = []
@@ -486,6 +499,7 @@ class Processor:
                 "sourceStartSec": payload.get("sourceStartSec") or 0,
                 "sourceEndSec": payload.get("sourceEndSec"),
                 "sourceTitle": payload.get("title") or imported.title,
+                "background": job_background,
             }
             if mode == "rerender":
                 worker_job.update(

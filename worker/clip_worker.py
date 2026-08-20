@@ -1760,7 +1760,46 @@ def filter_values(template: dict[str, Any]) -> tuple[float, float, float, float]
     )
 
 
-def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict[str, Any] | None = None) -> str:
+def cover_chain(width: int, height: int) -> str:
+    """Scale-to-cover and centre-crop to the frame, normalised for xfade."""
+    return (f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height},fps=30,setsar=1,format=yuv420p")
+
+
+def background_visual(background: dict[str, Any] | None, width: int, height: int,
+                      duration: float, bg_input: int) -> tuple[str, str] | None:
+    """The pre-composed visual for a background job: (filter prelude, label).
+
+    'stock' plays the background video for the whole clip; 'intro' opens on
+    the source and crossfades into the background -- the TikTok shape. The
+    recitation audio always comes from the source; the background's own audio
+    is never mapped. Returns None when the clip should render on its source.
+    """
+    if not background or not background.get("path"):
+        return None
+    mode = str(background.get("mode") or "own")
+    cover = cover_chain(width, height)
+    if mode == "stock":
+        prelude = (f"[{bg_input}:v]{cover},trim=0:{duration:.3f},setpts=PTS-STARTPTS[vsrc]")
+        return prelude, "vsrc"
+    if mode == "intro":
+        intro = max(2.0, min(10.0, float(background.get("introSeconds") or 3)))
+        fade = 0.5
+        if intro >= duration - 1.5:
+            # The clip is barely longer than the intro; a transition would be
+            # a stutter. Render on the source, as if 'own' had been chosen.
+            return None
+        prelude = (
+            f"[0:v]{cover},trim=0:{intro + fade:.3f},setpts=PTS-STARTPTS[introv];"
+            f"[{bg_input}:v]{cover},trim=0:{duration - intro:.3f},setpts=PTS-STARTPTS[scenv];"
+            f"[introv][scenv]xfade=transition=fade:duration={fade:.2f}:offset={intro:.3f}[vsrc]"
+        )
+        return prelude, "vsrc"
+    return None
+
+
+def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict[str, Any] | None = None,
+                       src: str = "0:v", pre_sized: bool = False) -> str:
     width = int(template.get("width", 1080))
     height = int(template.get("height", 1920))
     subtitle = escape_filter_path(ass_file)
@@ -1768,7 +1807,11 @@ def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict
     # Crop zoom. 1.0 is the framing the worker already produced, so a template
     # without the field renders exactly as before.
     zoom = max(0.75, min(2.5, float(template.get("smartFramingZoom", 1) or 1)))
-    if fit_mode == "crop":
+    if pre_sized:
+        # A background job pre-composes its visual at exactly the frame size,
+        # so the geometry is done; the look filters and captions still apply.
+        graph = f"[{src}]setsar=1[base]"
+    elif fit_mode == "crop":
         if crop_plan:
             crop_w = int(crop_plan.get("w") or width)
             crop_h = int(crop_plan.get("h") or height)
@@ -1887,8 +1930,17 @@ def render_clip(
 
     volume = max(0.01, min(0.5, float(settings.get("musicVolumePercent", 13)) / 100.0))
     voice_chain = "highpass=f=75,lowpass=f=15000,acompressor=threshold=-18dB:ratio=2.5:attack=12:release=160," if bool(template.get("voiceEnhance", True)) else ""
+    # The background visual, when the job asked for one. The recitation audio
+    # always comes from the source; face-tracked framing is meaningless on
+    # scenery, so it is skipped for background jobs.
+    background = job.get("background") if isinstance(job.get("background"), dict) else None
+    if background and not Path(str(background.get("path") or "")).exists():
+        background = None
+    bg_input = (1 if track is None else 2)
+    bg_visual = background_visual(background, int(template.get("width", 1080)), int(template.get("height", 1920)),
+                                  candidate.duration, bg_input)
     crop_plan = None
-    if bool(template.get("smartFramingEnabled")) and str(template.get("fitMode") or "contain") == "crop":
+    if bg_visual is None and bool(template.get("smartFramingEnabled")) and str(template.get("fitMode") or "contain") == "crop":
         try:
             crop_plan = detect_main_face_crop(
                 source,
@@ -1905,16 +1957,22 @@ def render_clip(
     # With no nasheed there is no second input to duck against or mix in, so the
     # chain is the voice alone -- still levelled, since a bare export is far
     # quieter than a mixed one and would stand out in a feed.
+    bg_prelude = (bg_visual[0] + ";") if bg_visual else ""
+    video_graph = build_video_filter(template, ass_file, crop_plan=crop_plan,
+                                     src=bg_visual[1] if bg_visual else "0:v",
+                                     pre_sized=bool(bg_visual))
     if track is None:
         filter_complex = (
-            build_video_filter(template, ass_file, crop_plan=crop_plan)
+            bg_prelude
+            + video_graph
             + ";"
             + f"[0:a]{voice_chain}asetpts=PTS-STARTPTS,"
             + "loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
         )
     else:
         filter_complex = (
-            build_video_filter(template, ass_file, crop_plan=crop_plan)
+            bg_prelude
+            + video_graph
             + ";"
             + f"[0:a]{voice_chain}asetpts=PTS-STARTPTS,asplit=2[voice_mix][voice_sidechain];"
             + f"[1:a]volume={volume:.3f}[music];"
@@ -1929,6 +1987,7 @@ def render_clip(
         "-ss", f"{candidate.start:.3f}", "-t", f"{candidate.duration:.3f}",
         "-i", str(source),
         *([] if track is None else ["-stream_loop", "-1", "-i", str(track["path"])]),
+        *([] if not bg_visual else ["-stream_loop", "-1", "-t", f"{candidate.duration + 2:.3f}", "-i", str(background["path"])]),
         "-filter_complex", filter_complex,
         "-map", "[vout]", "-map", "[aout]",
         "-c:v", "libx264", "-threads", ffmpeg_threads, "-preset", "veryfast", "-crf", "19",

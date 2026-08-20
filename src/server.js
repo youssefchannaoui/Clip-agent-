@@ -12,6 +12,7 @@ import {
 import { ownedBy, findOwned } from './tenancy.js';
 import * as audio from './audio.js';
 import * as templates from './templates.js';
+import * as backgrounds from './backgrounds.js';
 import { wordsForClip, silenceSpans } from './captions.js';
 import * as agent from './agent.js';
 import { fallbackThumb } from './local-engine.js';
@@ -341,6 +342,7 @@ function appState(user = null) {
   return {
     engine: config.processingMode === 'remote' ? 'remote-worker' : 'self-hosted', user: auth.userPublic(user), auth: auth.publicConfig(), readiness, clipSettings: clipSettings(user), musicSettings: musicSettings(user), automationSettings: automationSettings(user),
     selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(),
+    backgrounds: backgrounds.listBackgrounds(user).map(entry => ({ id: entry.id, name: entry.name, durationSec: entry.durationSec, shared: Boolean(entry.shared), own: !entry.shared })),
     tracks: audio.listNasheeds(user),
     projects: projectsForUser.map(project => ({
       id: project.id, title: project.title, url: project.url, engine: project.engine, status: project.status,
@@ -414,6 +416,17 @@ async function route(req, res, url) {
     const found = audio.nasheedFilePath(userId, trackId);
     if (!found) return json(res, 404, { error: 'Track not found.' });
     return streamFile(req, res, found.file, { contentType: 'audio/mpeg' });
+  }
+  const workerBackground = pathname.match(/^\/api\/worker-assets\/background\/([^/]+)$/);
+  if (method === 'GET' && workerBackground) {
+    const bgId = decodeURIComponent(workerBackground[1]);
+    const userId = String(url.searchParams.get('user') || '');
+    if (!agent.engine.verifyWorkerAssetSignature(`background:${bgId}`, userId, url.searchParams.get('exp'), url.searchParams.get('sig'))) {
+      return json(res, 401, { error: 'Invalid or expired worker asset link.' });
+    }
+    const found = backgrounds.backgroundFilePath(userId, bgId);
+    if (!found) return json(res, 404, { error: 'Background not found.' });
+    return streamFile(req, res, found.file, { contentType: 'video/mp4' });
   }
   if (method === 'POST' && pathname === '/api/billing/webhook') {
     try {
@@ -782,6 +795,7 @@ async function route(req, res, url) {
         // upload, so one tenant cannot submit another tenant's file.
         if (!objectKey.startsWith(objectStorage.uploadPrefixFor(currentUser.id))) throw new Error('The uploaded video reference is outside the permitted storage area.');
         const projectId = await agent.submitVideo(objectKey, body.title || body.fileName || '', currentUser.id, {
+          backgroundMode: body.backgroundMode, backgroundId: body.backgroundId, introSeconds: body.introSeconds,
           sourceKind: 'object_storage', originalFileName: body.fileName || '', displayUrl: `Uploaded file · ${body.fileName || 'video'}`,
           sourceMeta: { title: body.title || body.fileName || '', durationSec: Number(body.durationSec || 0) || null, thumbnail: '' },
           sourceRange: { startSec: Number(body.sourceStartSeconds || 0), endSec: Number(body.sourceEndSeconds) || null },
@@ -799,7 +813,7 @@ async function route(req, res, url) {
     const sourceMeta = Array.isArray(body.sourceMeta) ? body.sourceMeta : [];
     const results = [];
     for (const source of urls) {
-      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '', currentUser.id, { sourceRange, sourceMeta, idempotencyKey: body.idempotencyKey, musicEnabled: body.musicEnabled !== false, templateId: String(body.templateId || '') }) }); }
+      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '', currentUser.id, { sourceRange, sourceMeta, idempotencyKey: body.idempotencyKey, musicEnabled: body.musicEnabled !== false, templateId: String(body.templateId || ''), backgroundMode: body.backgroundMode, backgroundId: body.backgroundId, introSeconds: body.introSeconds }) }); }
       catch (error) { results.push({ url: source, error: error.message }); }
     }
     return json(res, 200, { results, sourceRange });
@@ -818,6 +832,7 @@ async function route(req, res, url) {
       if (sourceEndSeconds !== null && sourceEndSeconds - sourceStartSeconds < 30) throw new Error('Choose at least 30 seconds of source video.');
       const durationSec = Math.max(0, Math.round(Number(req.headers['x-source-duration-seconds'] || 0)));
       const projectId = await agent.submitVideo(upload.filePath, upload.title, currentUser.id, {
+        backgroundMode: String(req.headers['x-background-mode'] || ''), backgroundId: String(req.headers['x-background-id'] || ''), introSeconds: Number(req.headers['x-intro-seconds'] || 0),
         sourceRange: { startSec: sourceStartSeconds, endSec: sourceEndSeconds },
         sourceMeta: { title: upload.title, durationSec: durationSec || null, thumbnail: '' },
         sourceKind: 'upload', originalFileName: upload.fileName, uploadedInputFile: upload.filePath,
@@ -991,6 +1006,21 @@ async function route(req, res, url) {
   }
   const musicDelete = pathname.match(/^\/api\/music\/([^/]+)$/);
   if (method === 'DELETE' && musicDelete) return audio.deleteNasheed(currentUser, decodeURIComponent(musicDelete[1])) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'Track not found.' });
+
+  // Stock background videos for the Quran recitation flow.
+  if (method === 'GET' && pathname === '/api/backgrounds') return json(res, 200, { backgrounds: backgrounds.listBackgrounds(currentUser) });
+  if (method === 'POST' && pathname === '/api/backgrounds') {
+    const body = await readBody(req, 170 * 1024 * 1024);
+    try { const entry = await backgrounds.saveBackground(currentUser, body.name, body.data, body.mimeType); log(`Added background video "${entry.name}".`, 'info', currentUser.id); return json(res, 200, { ok: true, background: entry }); }
+    catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  const backgroundVideo = pathname.match(/^\/api\/backgrounds\/([^/]+)\/video$/);
+  if (method === 'GET' && backgroundVideo) {
+    const found = backgrounds.backgroundFilePath(currentUser, decodeURIComponent(backgroundVideo[1])); if (!found) return json(res, 404, { error: 'Background not found.' });
+    return streamFile(req, res, found.file, { contentType: 'video/mp4' });
+  }
+  const backgroundDelete = pathname.match(/^\/api\/backgrounds\/([^/]+)$/);
+  if (method === 'DELETE' && backgroundDelete) return backgrounds.deleteBackground(currentUser, decodeURIComponent(backgroundDelete[1])) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'Background not found.' });
 
   if (pathname === '/api/diagnostics') {
     try { requireOperator(currentUser); }

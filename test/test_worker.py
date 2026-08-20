@@ -449,6 +449,39 @@ class QuranCaptionTests(unittest.TestCase):
         return out.read_text(encoding="utf-8")
 
 
+class BackgroundVisualTests(unittest.TestCase):
+    """The Quran flow's background modes, as ffmpeg filter graphs."""
+
+    def test_no_background_or_own_mode_renders_on_the_source(self):
+        self.assertIsNone(worker.background_visual(None, 1080, 1920, 30.0, 1))
+        self.assertIsNone(worker.background_visual({"mode": "stock"}, 1080, 1920, 30.0, 1))  # no path
+
+    def test_stock_plays_the_background_for_the_whole_clip(self):
+        prelude, label = worker.background_visual(
+            {"mode": "stock", "path": "/tmp/bg.mp4"}, 1080, 1920, 30.0, 2)
+        self.assertEqual(label, "vsrc")
+        self.assertIn("[2:v]", prelude)
+        self.assertIn("trim=0:30.000", prelude)
+        self.assertIn("scale=1080:1920:force_original_aspect_ratio=increase", prelude)
+        self.assertIn("crop=1080:1920", prelude)
+
+    def test_intro_opens_on_the_source_and_hands_over(self):
+        prelude, label = worker.background_visual(
+            {"mode": "intro", "path": "/tmp/bg.mp4", "introSeconds": 4}, 1080, 1920, 30.0, 1)
+        self.assertEqual(label, "vsrc")
+        # Source plays intro + fade, scenery covers the remainder, and the
+        # crossfade starts exactly when the intro ends -- total = clip length.
+        self.assertIn("[0:v]", prelude)
+        self.assertIn("trim=0:4.500", prelude)
+        self.assertIn("[1:v]", prelude)
+        self.assertIn("trim=0:26.000", prelude)
+        self.assertIn("xfade=transition=fade:duration=0.50:offset=4.000", prelude)
+
+    def test_an_intro_longer_than_the_clip_falls_back_to_the_source(self):
+        self.assertIsNone(worker.background_visual(
+            {"mode": "intro", "path": "/tmp/bg.mp4", "introSeconds": 10}, 1080, 1920, 11.0, 1))
+
+
 class LetterSpacingTests(unittest.TestCase):
     def test_caption_letter_spacing_reaches_the_ass_style(self):
         segments = [{"start": 0.0, "end": 4.0, "text": "small little things"}]

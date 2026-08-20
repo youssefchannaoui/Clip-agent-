@@ -14,6 +14,7 @@ import * as vizard from './vizard.js';
 import * as workerClient from './worker-client.js';
 import { parseYouTubeUrl, assertStorageObjectKey } from './video-import.js';
 import * as objectStorage from './object-storage.js';
+import * as backgroundsLib from './backgrounds.js';
 
 const jobsDir = path.join(config.dataDir, 'jobs');
 const sourcesDir = path.join(config.dataDir, 'sources');
@@ -82,6 +83,19 @@ function releaseProjectHold(project) {
   project.tokensReserved = 0;
   try { billing.releaseTokens(ownerOf(project), held); } catch { /* nothing to release */ }
 }
+// The background block a job payload carries: nothing for the source video,
+// otherwise the mode, the file (local path, or a signed URL the worker can
+// fetch), and the intro length. Resolved fresh from the project's stored
+// choice so rerenders keep the exact background the lecture was set up with.
+function jobBackground(project, owner, { remote = false } = {}) {
+  const mode = String(project?.backgroundMode || 'own');
+  if (mode === 'own') return null;
+  const entry = backgroundsLib.backgroundForJob(owner, String(project.backgroundId || ''));
+  if (!entry) return null; // the video was deleted since; render on the source rather than fail
+  const base = { mode, introSeconds: Math.max(2, Math.min(10, Number(project.introSeconds) || 3)), name: entry.name };
+  return remote ? { ...base, url: signedBackgroundUrl(entry, ownerOfRecord(project)?.id || '') } : { ...base, path: entry.path };
+}
+
 // The template this project's clips were rendered with, resolved fresh (so
 // the account's latest edits apply), falling back to the exact snapshot the
 // original render kept. Never the account's *selected* template -- that turns
@@ -163,6 +177,15 @@ function signedMusicUrl(track, userId) {
   const message = `${track.id}\n${userId}\n${expires}`;
   const sig = crypto.createHmac('sha256', config.workerCallbackSecret).update(message).digest('hex');
   return `${config.publicBaseUrl}/api/worker-assets/music/${encodeURIComponent(track.id)}?user=${encodeURIComponent(userId)}&exp=${expires}&sig=${sig}`;
+}
+
+function signedBackgroundUrl(entry, userId) {
+  const expires = Date.now() + config.workerJobTimeoutMs;
+  // The kind is baked into the signed message, so a music link cannot be
+  // replayed against the background route or vice versa.
+  const message = `background:${entry.id}\n${userId}\n${expires}`;
+  const sig = crypto.createHmac('sha256', config.workerCallbackSecret).update(message).digest('hex');
+  return `${config.publicBaseUrl}/api/worker-assets/background/${encodeURIComponent(entry.id)}?user=${encodeURIComponent(userId)}&exp=${expires}&sig=${sig}`;
 }
 
 export function verifyWorkerAssetSignature(trackId, userId, expires, supplied) {
@@ -435,6 +458,19 @@ function validateSubmission(url, user, options = {}) {
   // kind picks the template -- but the id never left the browser, so a job
   // showing "Quran Recitation" in its dropdown silently rendered with the
   // account's selected template instead. The picker was cosmetic.
+  // The Quran flow's background choice. 'own' is the source video as always;
+  // 'stock' plays a background video for the whole clip; 'intro' opens on the
+  // source for a few seconds and hands over to the background -- the TikTok
+  // shape. Resolved here so a job that cannot be fulfilled fails before any
+  // tokens are held.
+  const backgroundMode = ['own', 'stock', 'intro'].includes(String(options.backgroundMode || '')) ? String(options.backgroundMode) : 'own';
+  let background = null;
+  if (backgroundMode !== 'own') {
+    background = backgroundsLib.backgroundForJob(user, String(options.backgroundId || ''));
+    if (!background) throw new Error('Upload at least one background video first, or switch the background back to the source video.');
+  }
+  const introSeconds = Math.max(2, Math.min(10, Math.round(Number(options.introSeconds) || 3)));
+
   let template;
   if (options.templateId) {
     template = templateById(String(options.templateId), user);
@@ -452,7 +488,7 @@ function validateSubmission(url, user, options = {}) {
   if (!tracks.length && options.musicEnabled !== false) {
     throw new Error('Music is required on every clip. Upload at least one nasheed first, or switch the nasheed off for this job.');
   }
-  return { value, template, tracks: options.musicEnabled === false ? [] : tracks };
+  return { value, template, tracks: options.musicEnabled === false ? [] : tracks, backgroundMode, background, introSeconds };
 }
 
 export function readiness(user) {
@@ -482,7 +518,7 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     if (existing) return existing.id;
   }
 
-  const { value, template, tracks } = validateSubmission(url, user, options);
+  const { value, template, tracks, backgroundMode, background, introSeconds } = validateSubmission(url, user, options);
   billing.assertCanStartProject(user);
   const sourceRange = cleanSourceRange(options);
   const sourceMeta = Array.isArray(options?.sourceMeta) ? options.sourceMeta.find(item => String(item?.url || '') === value) || options.sourceMeta[0] : (options?.sourceMeta || {});
@@ -518,6 +554,7 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     // Dates the YouTube API data cached above, so the retention sweep knows
     // how old it is. Policy III.E.4 gives it 30 days.
     youtubeDataAt: sourceMeta ? Date.now() : null,
+    backgroundMode, backgroundId: background?.id || null, backgroundName: background?.name || null, introSeconds,
     sourceKind: options.sourceKind || 'link', originalFileName: options.originalFileName || null,
     uploadedInputFile: options.uploadedInputFile || null, sourceObjectKey: options.sourceKind === 'object_storage' ? value : null,
   }, user.id);
@@ -532,6 +569,7 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
       ? { type: 'object_storage', objectKey: assertStorageObjectKey(value), title: options.originalFileName || sourceMeta?.title || '' }
       : withImportNetwork({ type: 'youtube', url: parseYouTubeUrl(value).canonicalUrl }),
     template, musicTracks: remoteMusicTracks(tracks, user.id), settings: sharedSettings(user, options),
+    background: background ? { mode: backgroundMode, introSeconds, name: background.name, url: signedBackgroundUrl(background, user.id) } : null,
     requestedClipCount: clipSettings(user).clipsPerVideo,
     sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
     callbackUrl: config.publicBaseUrl ? `${config.publicBaseUrl}/api/worker-callbacks/${encodeURIComponent(projectId)}` : '',
@@ -540,6 +578,7 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     outputDir: path.join(clipsDir, projectId), resultPath: resultFile(projectId),
     ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath, template, musicTracks: tracks,
     settings: sharedSettings(user, options), sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
+    background: background ? { mode: backgroundMode, introSeconds, name: background.name, path: background.path } : null,
     sourceTitle: sourceMeta?.title || null, sourceDurationSec: sourceMeta?.durationSec || null,
     // Falls back to the URL's own poster: the dashboard did not send sourceMeta,
     // so every lecture stored null here and the library showed empty cards.
@@ -1333,11 +1372,13 @@ export function queueMoreClips(projectId, requestedCount = 8) {
     ...(project.url && !project.sourceObjectKey
       ? { sourceStartSec: Number(project.sourceStartSec || 0), sourceEndSec: Number(project.sourceEndSec) || null }
       : {}),
+    background: jobBackground(project, owner, { remote: true }),
     transcript: { objectKey: project.transcriptObjectKey }, existingRanges,
     template, musicTracks: remoteMusicTracks(tracks, owner.id), settings: { ...sharedSettings(owner), clipsPerVideo: count },
     callbackUrl: '',
   } : {
     mode: 'more_clips', id: moreId, projectId: project.id, projectTitle: project.title, requestedCount: count,
+    background: jobBackground(project, owner),
     sourceFile: project.sourceFile, transcriptFile: project.transcriptFile, transcriptSegments, existingRanges,
     outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
     template, musicTracks: tracks, settings: { ...sharedSettings(owner), clipsPerVideo: count },
@@ -1438,6 +1479,7 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
   const payload = project.engine === 'remote' ? {
     mode: 'rerender', id: rerenderId, projectId: project.id, clipIdOverride: outputClipId,
     source: remoteSourceFor(project), ...remoteWindow,
+    background: jobBackground(project, owner, { remote: true }),
     transcript: { objectKey: project.transcriptObjectKey || '' }, template,
     musicTracks: remoteMusicTracks(tracks, owner.id), settings: sharedSettings(owner),
     clip: {
@@ -1449,6 +1491,7 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
   } : {
     mode: 'rerender', id: rerenderId, projectId: project.id, clipIdOverride: outputClipId,
     sourceFile, outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
+    background: jobBackground(project, owner),
     template, musicTracks: tracks, settings: sharedSettings(owner), transcriptSegments,
     clip: {
       id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
