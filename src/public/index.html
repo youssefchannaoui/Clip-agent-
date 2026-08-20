@@ -3595,8 +3595,23 @@ function renderStudio(){
     StudioAdapter.setRefresh(()=>{
       if(paintQueued)return;
       paintQueued=true;
-      requestAnimationFrame(()=>{paintQueued=false;paintStudio()});
+      const run=()=>{if(!paintQueued)return;paintQueued=false;paintStudio()};
+      requestAnimationFrame(run);
+      /* Never rAF alone. Chrome suspends rAF for windows it considers
+         occluded, and macOS gets that wrong -- a screenshot overlay is
+         enough to wedge it -- after which ONE suspended frame held the
+         paintQueued latch and swallowed every later refresh: clicks kept
+         landing and state kept changing while the screen never updated
+         again. Every tab and button on the editor's right side "died" this
+         way. The timer paints regardless; whichever fires first wins and
+         the loser is a no-op through the latch. */
+      setTimeout(run,80);
     });
+    /* And when the window comes back from wherever Chrome had parked it,
+       paint immediately rather than waiting for the next poll. */
+    window.addEventListener('focus',()=>{if(DATA&&STUDIO)paintStudio()});
+    document.addEventListener('visibilitychange',()=>{
+      if(document.visibilityState==='visible'&&DATA&&STUDIO)paintStudio()});
     /* The adapter never calls the API itself; approving routes back through the
        existing endpoint so both dashboards stay consistent. */
     /* Every hook routes through the same endpoints the legacy dashboard uses, so
