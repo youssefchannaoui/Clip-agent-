@@ -330,7 +330,7 @@ function publicClip(clip, { detail = false } = {}) {
     styleOverrides: clip.styleOverrides ? { ...clip.styleOverrides } : null,
     styleOverrideCount: clip.styleOverrides ? Object.keys(clip.styleOverrides).length : 0,
     stylePending: Boolean(clip.stylePending),
-    renderVersion: clip.renderVersion || 1, renderVerified: Boolean(clip.renderVerified),
+    renderVersion: clip.renderVersion || 1, renderVerified: Boolean(clip.renderVerified), renderQuality: clip.renderQuality || null,
     renderedWidth: clip.renderedWidth || null, renderedHeight: clip.renderedHeight || null,
     variantOf: clip.variantOf || null, addedAt: clip.addedAt,
     targets: (clip.targets || []).map(social.targetPublic),

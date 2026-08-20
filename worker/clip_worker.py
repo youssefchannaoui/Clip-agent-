@@ -456,7 +456,10 @@ def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, durat
     )
     model = WhisperModel(model_name, device=device, compute_type=compute_type)
     kwargs: dict[str, Any] = {
-        "beam_size": 5,
+        # Greedy decoding. beam_size=5 cost roughly a third more wall time on
+        # the 2-vCPU worker for a marginal gain on clear lecture speech; the
+        # speed pass measured and chose 1.
+        "beam_size": 1,
         "vad_filter": True,
         "vad_parameters": {"min_silence_duration_ms": 450},
         "word_timestamps": True,
@@ -1991,6 +1994,23 @@ def render_clip(
             + "loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
         )
 
+    # A draft is the review queue's copy: quarter-resolution, ultrafast, made
+    # to be judged and thrown away. Everything about the AUDIO chain -- the
+    # nasheed mix, the ducking, the loudness -- is identical to a final render,
+    # so the music gate verifies the same thing it always did. The full
+    # 1080x1920 render happens on approve.
+    draft = str(settings.get("renderQuality") or "final") == "draft"
+    # Draft dimensions keep the template's own aspect -- a 1:1 or 16:9 style
+    # must not be squeezed into a portrait box just to be reviewed. The long
+    # edge lands near 854 and both edges stay even for yuv420p.
+    t_width = int(template.get("width", 1080))
+    t_height = int(template.get("height", 1920))
+    d_scale = 854.0 / max(t_width, t_height)
+    draft_width = max(2, int(t_width * d_scale / 2) * 2)
+    draft_height = max(2, int(t_height * d_scale / 2) * 2)
+    if draft:
+        filter_complex = filter_complex.replace("[vout]", "[vfull]", 1)
+        filter_complex += f";[vfull]scale={draft_width}:{draft_height}:flags=fast_bilinear[vout]"
     export = [
         ffmpeg, "-y", *(PROGRESS_FLAGS if on_fraction is not None else []),
         "-ss", f"{candidate.start:.3f}", "-t", f"{candidate.duration:.3f}",
@@ -1999,7 +2019,8 @@ def render_clip(
         *([] if not bg_visual else ["-stream_loop", "-1", "-t", f"{candidate.duration + 2:.3f}", "-i", str(background["path"])]),
         "-filter_complex", filter_complex,
         "-map", "[vout]", "-map", "[aout]",
-        "-c:v", "libx264", "-threads", ffmpeg_threads, "-preset", "veryfast", "-crf", "19",
+        "-c:v", "libx264", "-threads", ffmpeg_threads,
+        "-preset", "ultrafast" if draft else "veryfast", "-crf", "27" if draft else "19",
         "-pix_fmt", "yuv420p", "-r", "30", "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart", "-shortest", str(clip_file),
     ]
@@ -2015,8 +2036,8 @@ def render_clip(
     stream_types = {stream.get("codec_type") for stream in streams}
     video_stream = next((stream for stream in streams if stream.get("codec_type") == "video"), {})
     rendered_duration = media_duration(ffprobe, clip_file)
-    expected_width = int(template.get("width", 1080))
-    expected_height = int(template.get("height", 1920))
+    expected_width = draft_width if draft else int(template.get("width", 1080))
+    expected_height = draft_height if draft else int(template.get("height", 1920))
     if (
         "video" not in stream_types or "audio" not in stream_types
         or rendered_duration < max(2, candidate.duration - 2.5)
@@ -2035,6 +2056,7 @@ def render_clip(
     return {
         "id": clip_id,
         "projectId": job.get("projectId") or job["id"],
+        "renderQuality": "draft" if draft else "final",
         "clipFile": str(clip_file),
         "thumbFile": str(thumb_file),
         "title": candidate.ai_title or title_from_text(candidate.text, index),
@@ -2209,6 +2231,60 @@ def doctor() -> int:
     print(json.dumps(checks, ensure_ascii=False))
     return 0 if checks.get("yt_dlp") is True and checks.get("faster_whisper") is True else 1
 
+
+
+def transcript_cache_path(job: dict[str, Any], start: float, end: float) -> Path | None:
+    """Where this exact transcription lives, if the service gave us a cache.
+
+    Keyed by the SOURCE (the service's download-cache key: video id, not URL
+    variants), the selected range, and everything that changes the output --
+    model, task, language. Re-importing the same lecture over the same range
+    reuses minutes of whisper time; any change in what would be transcribed
+    misses the cache instead of serving the wrong words.
+    """
+    cache_dir = str(job.get("transcriptCacheDir") or "").strip()
+    source_key = str(job.get("sourceCacheKey") or "").strip()
+    if not cache_dir or not source_key:
+        return None
+    settings = job.get("settings", {})
+    key = "_".join([
+        source_key,
+        str(settings.get("model") or "small"),
+        str(settings.get("task") or "translate"),
+        str(settings.get("language") or "auto"),
+        f"{start:.2f}", f"{end:.2f}",
+    ])
+    safe = re.sub(r"[^A-Za-z0-9._-]", "-", key)
+    return Path(cache_dir) / f"{safe}.json"
+
+
+def transcript_cache_lookup(job: dict[str, Any], start: float, end: float) -> list[dict[str, Any]] | None:
+    path = transcript_cache_path(job, start, end)
+    if path is None or not path.is_file():
+        return None
+    try:
+        segments = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(segments, list) or not segments:
+        return None
+    # Touch it so the service's TTL prune treats reuse as freshness.
+    try:
+        os.utime(path, None)
+    except OSError:
+        pass
+    return segments
+
+
+def transcript_cache_store(job: dict[str, Any], start: float, end: float, segments: list[dict[str, Any]]) -> None:
+    path = transcript_cache_path(job, start, end)
+    if path is None:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(segments, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def apply_source_window(job: dict[str, Any], source_file: Path) -> Path:
@@ -2421,7 +2497,14 @@ def process(job_file: Path) -> None:
     extract_audio(job["ffmpeg"], source_file, audio_file)
 
     progress("Preparing transcription", 12, sourceDurationSec=round(duration, 2), etaSec=None)
-    segments = transcribe(job, audio_file, duration)
+    cached_transcript = transcript_cache_lookup(job, selected_start, selected_end)
+    if cached_transcript is not None:
+        progress("Reusing the stored transcript", 58, sourceDurationSec=round(duration, 2),
+                 reusedTranscript=True, etaSec=None)
+        segments = cached_transcript
+    else:
+        segments = transcribe(job, audio_file, duration)
+        transcript_cache_store(job, selected_start, selected_end, segments)
     transcript_file.write_text(json.dumps(segments, ensure_ascii=False, indent=2), encoding="utf-8")
 
     progress("Analysing transcript", 61, sourceDurationSec=round(duration, 2), processedSec=round(duration, 2), etaSec=None)

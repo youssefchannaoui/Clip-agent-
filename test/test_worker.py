@@ -1208,3 +1208,31 @@ class StderrFloodTests(unittest.TestCase):
         with self.assertRaises(subprocess.TimeoutExpired):
             worker.run_with_progress([sys.executable, "-c", script], 10.0, lambda f: None, timeout=1)
         self.assertLess(time.monotonic() - started, 30)
+
+
+class SpeedPassTests(unittest.TestCase):
+    """The speed pass's worker-side facts, pinned."""
+
+    def test_transcription_is_greedy_with_vad(self):
+        source = (ROOT / "worker" / "clip_worker.py").read_text(encoding="utf-8")
+        self.assertIn('"beam_size": 1,', source)
+        self.assertIn('"vad_filter": True,', source)
+
+    def test_the_transcript_cache_key_covers_everything_that_changes_the_words(self):
+        job = {"transcriptCacheDir": "/tmp/tc", "sourceCacheKey": "vid123",
+               "settings": {"model": "small", "task": "translate", "language": ""}}
+        a = worker.transcript_cache_path(job, 30.0, 90.0)
+        self.assertIn("vid123", str(a))
+        self.assertIn("small", str(a))
+        # A different range, model or task is a different transcript.
+        self.assertNotEqual(a, worker.transcript_cache_path(job, 30.0, 91.0))
+        job2 = {**job, "settings": {**job["settings"], "model": "base"}}
+        self.assertNotEqual(a, worker.transcript_cache_path(job2, 30.0, 90.0))
+        # No cache offered means no path, never a crash.
+        self.assertIsNone(worker.transcript_cache_path({"settings": {}}, 0, 10))
+
+    def test_draft_renders_scale_with_the_template_aspect(self):
+        source = (ROOT / "worker" / "clip_worker.py").read_text(encoding="utf-8")
+        self.assertIn('"ultrafast" if draft else "veryfast"', source)
+        self.assertIn('854.0 / max(t_width, t_height)', source)
+        self.assertIn('"renderQuality": "draft" if draft else "final"', source)

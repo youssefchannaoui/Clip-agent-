@@ -577,7 +577,11 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     source: options.sourceKind === 'object_storage'
       ? { type: 'object_storage', objectKey: assertStorageObjectKey(value), title: options.originalFileName || sourceMeta?.title || '' }
       : withImportNetwork({ type: 'youtube', url: parseYouTubeUrl(value).canonicalUrl }),
-    template, musicTracks: remoteMusicTracks(tracks, user.id), settings: sharedSettings(user, options),
+    template, musicTracks: remoteMusicTracks(tracks, user.id),
+    // The review queue's copy: quarter-resolution drafts, judged fast and
+    // re-rendered at full quality only on approve. The audio chain and the
+    // music gate are identical to a final render.
+    settings: { ...sharedSettings(user, options), renderQuality: 'draft' },
     background: background ? { mode: backgroundMode, introSeconds, name: background.name, url: signedBackgroundUrl(background, user.id) } : null,
     requestedClipCount: clipSettings(user).clipsPerVideo,
     sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
@@ -586,7 +590,7 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     id: projectId, url: value, title: String(title || '').trim(), sourceDir: sourcesDir,
     outputDir: path.join(clipsDir, projectId), resultPath: resultFile(projectId),
     ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath, template, musicTracks: tracks,
-    settings: sharedSettings(user, options), sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
+    settings: { ...sharedSettings(user, options), renderQuality: 'draft' }, sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
     background: background ? { mode: backgroundMode, introSeconds, name: background.name, path: background.path } : null,
     sourceTitle: sourceMeta?.title || null, sourceDurationSec: sourceMeta?.durationSec || null,
     // Falls back to the URL's own poster: the dashboard did not send sourceMeta,
@@ -1448,14 +1452,14 @@ export function queueMoreClips(projectId, requestedCount = 8) {
       : {}),
     background: jobBackground(project, owner, { remote: true }),
     transcript: { objectKey: project.transcriptObjectKey }, existingRanges,
-    template, musicTracks: remoteMusicTracks(tracks, owner.id), settings: { ...sharedSettings(owner), clipsPerVideo: count },
+    template, musicTracks: remoteMusicTracks(tracks, owner.id), settings: { ...sharedSettings(owner), clipsPerVideo: count, renderQuality: 'draft' },
     callbackUrl: '',
   } : {
     mode: 'more_clips', id: moreId, projectId: project.id, projectTitle: project.title, requestedCount: count,
     background: jobBackground(project, owner),
     sourceFile: project.sourceFile, transcriptFile: project.transcriptFile, transcriptSegments, existingRanges,
     outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
-    template, musicTracks: tracks, settings: { ...sharedSettings(owner), clipsPerVideo: count },
+    template, musicTracks: tracks, settings: { ...sharedSettings(owner), clipsPerVideo: count, renderQuality: 'draft' },
   };
   const file = path.join(dir, 'job.json');
   fs.writeFileSync(file, JSON.stringify(payload, null, 2));
@@ -1505,10 +1509,14 @@ export function withImportNetwork(source) {
   return Object.keys(network).length ? { ...source, network } : source;
 }
 
-export function queueClipRerender(clipId, templateId, { asVariant = false, priority = 1 } = {}) {
+export function queueClipRerender(clipId, templateId, { asVariant = false, priority = 1, quality = '' } = {}) {
   const clip = clipById(clipId);
   if (!clip) throw new Error('That clip does not exist.');
   if (clip.status === 'posted' && !asVariant) throw new Error('A posted video cannot be changed. Create a re-post variant instead.');
+  // Unapproved clips keep the fast draft loop -- an editor tweak should not
+  // cost a full 1080p render nobody has approved yet. Anything approved or
+  // beyond renders final, and approve itself asks for final explicitly.
+  const renderQuality = quality || (['approved', 'scheduled', 'posted'].includes(clip.status) || asVariant ? 'final' : 'draft');
   const project = projectById(clip.projectId);
   // Guarded because the lines below dereference it directly. A clip whose
   // lecture was deleted otherwise threw a raw TypeError at the user.
@@ -1562,7 +1570,7 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
     source: remoteSourceFor(project), ...remoteWindow,
     background: jobBackground(project, owner, { remote: true }),
     transcript: { objectKey: project.transcriptObjectKey || '' }, template,
-    musicTracks: remoteMusicTracks(tracks, owner.id), settings: sharedSettings(owner),
+    musicTracks: remoteMusicTracks(tracks, owner.id), settings: { ...sharedSettings(owner), renderQuality },
     clip: {
       id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
       transcriptEdited: Boolean(clip.transcriptEdited),
@@ -1573,7 +1581,7 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
     mode: 'rerender', id: rerenderId, projectId: project.id, clipIdOverride: outputClipId,
     sourceFile, outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
     background: jobBackground(project, owner),
-    template, musicTracks: tracks, settings: sharedSettings(owner), transcriptSegments,
+    template, musicTracks: tracks, settings: { ...sharedSettings(owner), renderQuality }, transcriptSegments,
     clip: {
       id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
       transcriptEdited: Boolean(clip.transcriptEdited),

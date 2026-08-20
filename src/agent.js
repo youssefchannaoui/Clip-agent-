@@ -33,7 +33,15 @@ export function approveClip(id) {
   clip.status = 'approved'; clip.approvedAt = Date.now(); clip.approvedBy = 'manual';
   const publishing = publishingSettings(ownerOfRecord(clip));
   if (publishing.enabled && publishing.tiktok?.enabled) clip.tiktokConsentAt = Date.now();
-  save(); tick().catch(() => {}); return clip;
+  save();
+  // Approval is the promotion: the review copy was a quarter-resolution
+  // draft, so the full 1080p render starts now, ahead of the batch sweeps.
+  // The publish gate holds until it lands, so approval itself never blocks.
+  if (clip.renderQuality === 'draft') {
+    try { engine.queueClipRerender(clip.id, clip.templateId || '', { priority: 1, quality: 'final' }); }
+    catch (error) { log(`The full-quality render of "${clip.title}" could not start: ${error.message}`, 'warn', ownerOf(clip)); }
+  }
+  tick().catch(() => {}); return clip;
 }
 
 // Rejecting is a real, persisted decision. It used to live only in the browser,
@@ -387,6 +395,12 @@ async function processTarget(clip, target) {
 }
 
 async function publishClip(clip) {
+  // A draft file must never leave the house. Approve queues the final render;
+  // the scheduler skips drafts until it lands, and this is the backstop for
+  // every other path into publishing.
+  if (clip.renderQuality === 'draft') {
+    throw new Error('The full-quality render is still queued for this clip. It publishes as soon as that finishes.');
+  }
   if (publishing.has(clip.id)) return;
   publishing.add(clip.id);
   try {
@@ -401,6 +415,11 @@ export async function publishNow(id) {
   const clip = clipById(id);
   if (!clip) throw new Error('That clip no longer exists.');
   if (!musicSatisfied(clip) || !clip.renderVerified) throw new Error('The clip has not passed render verification.');
+  // Say it at the button, not in a background log: the review copy is a
+  // draft, and the full render approve queued has not landed yet.
+  if (clip.renderQuality === 'draft') {
+    throw new Error('The full-quality render is still queued for this clip. It publishes as soon as that finishes.');
+  }
   if (['posted', 'publishing'].includes(clip.status)) throw new Error(`This clip is already ${clip.status}.`);
   if (clip.status === 'waiting') {
     clip.status = 'approved'; clip.approvedAt = Date.now(); clip.approvedBy = 'manual';
@@ -464,6 +483,7 @@ export async function tick() {
           log(`Could not automatically schedule "${clip.title}": ${error.message}`, 'warn', ownerOf(clip));
         }
       }
+      if (clip.renderQuality === 'draft' && clip.status === 'scheduled') continue;
       if (clip.status === 'scheduled' && clip.scheduledAt && clip.scheduledAt <= Date.now()) {
         if (publishingSettings(ownerOfRecord(clip)).enabled && clip.targets?.length) await publishClip(clip);
         else { clip.status = 'ready'; clip.readyAt = Date.now(); log(`"${clip.title}" is ready to download and post.`, 'info', ownerOf(clip)); }

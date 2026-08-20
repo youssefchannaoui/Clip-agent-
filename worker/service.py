@@ -40,6 +40,7 @@ JOB_TTL_SECONDS = max(3600, int(os.getenv("WORKER_TEMP_TTL_HOURS", "24")) * 3600
 # caption. The cache is keyed by what the source *is* (object key or URL), so
 # an edit gets its bytes in the time a hardlink takes.
 SOURCE_CACHE_DIR = DATA_DIR / "cache" / "sources"
+TRANSCRIPT_CACHE_DIR = DATA_DIR / "cache" / "transcripts"
 SOURCE_CACHE_TTL_SECONDS = max(3600, int(os.getenv("WORKER_SOURCE_CACHE_HOURS", "48")) * 3600)
 SOURCE_CACHE_MAX_BYTES = max(1, int(os.getenv("WORKER_SOURCE_CACHE_GB", "15"))) * 1024 ** 3
 
@@ -84,6 +85,23 @@ def source_cache_store(key: str | None, file: Path) -> None:
         tmp.replace(cached)
     except OSError:
         tmp.unlink(missing_ok=True)
+
+
+def transcript_cache_prune() -> None:
+    """Transcripts age out with the same TTL as the sources they came from.
+
+    They are kilobytes, but a cache that only grows is a disk leak on a small
+    box all the same -- and a transcript with no source behind it will never
+    be asked for by the key that made it."""
+    if not TRANSCRIPT_CACHE_DIR.exists():
+        return
+    cutoff = time.time() - SOURCE_CACHE_TTL_SECONDS
+    for item in TRANSCRIPT_CACHE_DIR.iterdir():
+        try:
+            if item.stat().st_mtime < cutoff:
+                item.unlink()
+        except OSError:
+            pass
 
 
 def source_cache_prune() -> None:
@@ -607,6 +625,8 @@ class Processor:
                     "model": os.getenv("WHISPER_MODEL", "small"),
                     "ffmpegThreads": max(1, int(os.getenv("FFMPEG_THREADS", "4"))),
                 },
+                "sourceCacheKey": cache_key,
+                "transcriptCacheDir": str(TRANSCRIPT_CACHE_DIR),
                 "sourceStartSec": payload.get("sourceStartSec") or 0,
                 "sourceEndSec": payload.get("sourceEndSec"),
                 "sourceTitle": payload.get("title") or imported.title,
@@ -675,6 +695,7 @@ class Processor:
 
     def cleanup_abandoned(self) -> None:
         source_cache_prune()
+        transcript_cache_prune()
         cutoff = time.time() - JOB_TTL_SECONDS
         for item in TEMP_DIR.iterdir() if TEMP_DIR.exists() else []:
             try:

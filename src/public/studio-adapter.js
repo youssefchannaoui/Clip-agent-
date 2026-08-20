@@ -964,7 +964,7 @@
       return {
         caption: c.title || '',
         duration: secsToClock((c.durationMs || 0) / 1000),
-        style: c.templateName || '',
+        style: (c.templateName || '') + (c.renderQuality === 'draft' ? ((c.templateName ? ' \u00b7 ' : '') + 'draft') : ''),
         lecTitle: projectTitle[c.projectId] || '',
         score: c.score || '—',
         flagged: gate && Boolean(c.reviewRequired),

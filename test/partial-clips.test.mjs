@@ -125,3 +125,28 @@ test('a queued lecture can be cancelled, and a boost moves it to the front', () 
   // Only queued work can be boosted.
   assert.throws(() => engine.prioritizeWork('project', 'qc1'), /queued/i);
 });
+
+test('review renders are drafts; approve promotes to a final render; drafts never publish', async () => {
+  const agent = await import('../src/agent.js');
+  const src = path.join(dataDir, 'draft-source.mp4');
+  fs.writeFileSync(src, 'x');
+  state.projects.push({ id: 'dp1', userId: 'user_admin', title: 'L', status: 'done', engine: 'self-hosted',
+    sourceFile: src, templateSnapshot: { id: 'clean-bold', name: 'Clean Bold', version: 1, builtIn: true } });
+  state.clips.push({ id: 'dc1', projectId: 'dp1', userId: 'user_admin', title: 'C', status: 'waiting',
+    templateId: 'clean-bold', startSec: 0, endSec: 30, durationMs: 30000,
+    renderQuality: 'draft', renderVerified: true, musicEnabled: false, musicVerified: true });
+
+  // An edit on an unapproved draft re-renders as a draft; approve asks for final.
+  const editJob = engine.queueClipRerender('dc1', 'clean-bold', {});
+  const readJob = (record) => JSON.parse(fs.readFileSync(record.jobFile, 'utf8'));
+  assert.equal(readJob(editJob).settings.renderQuality, 'draft', 'editor loop stays fast');
+
+  const approved = agent.approveClip('dc1');
+  assert.ok(['approved', 'scheduled'].includes(approved.status), 'approved (tick may schedule it at once)');
+  const finalJob = state.rerenderJobs.find((job) => job.clipId === 'dc1' && job.status !== 'superseded');
+  assert.equal(readJob(finalJob).settings.renderQuality, 'final', 'approve queues the full render');
+
+  // Nothing publishes a draft file.
+  state.clips.find((c) => c.id === 'dc1').targets = [{ platform: 'youtube', status: 'pending' }];
+  await assert.rejects(() => agent.publishNow('dc1'), /full-quality render/i);
+});
