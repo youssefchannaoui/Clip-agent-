@@ -227,7 +227,7 @@ function queueTemplateForEveryUnpostedClip(template, user, reason = 'template up
     // and overwriting clips with a style that was never theirs.
     if (clip.templateId !== template.id) { skipped += 1; continue; }
     try {
-      agent.engine.queueClipRerender(clip.id, template.id, { asVariant: false });
+      agent.engine.queueClipRerender(clip.id, template.id, { asVariant: false, priority: 2 });
       queued += 1;
     } catch (error) {
       skipped += 1;
@@ -579,7 +579,15 @@ async function route(req, res, url) {
     const asset = STUDIO_ASSETS[pathname];
     if (!fs.existsSync(asset.file)) return json(res, 404, { error: 'Studio asset not found. Run `npm run design:import`.' });
     const body = fs.readFileSync(asset.file);
-    res.writeHead(200, { 'Content-Type': asset.type, 'Content-Length': body.length, 'Cache-Control': 'no-store' });
+    // no-cache (revalidate), not no-store (re-download): with a content ETag,
+    // an unchanged asset costs a 304 instead of shipping ~700KB of JS on
+    // every page load, while a deploy still takes effect immediately.
+    const etag = `"${crypto.createHash('sha1').update(body).digest('hex')}"`;
+    if (req.headers['if-none-match'] === etag) {
+      res.writeHead(304, { ETag: etag, 'Cache-Control': 'no-cache' });
+      return res.end();
+    }
+    res.writeHead(200, { 'Content-Type': asset.type, 'Content-Length': body.length, 'Cache-Control': 'no-cache', ETag: etag });
     return res.end(body);
   }
   const oauthCallback = pathname.match(/^\/auth\/(youtube|meta|tiktok)\/callback$/);
@@ -950,7 +958,7 @@ async function route(req, res, url) {
     for (const clip of ownedBy(state.clips, currentUser.id)) {
       if (clip.variantOf) { skipped += 1; continue; }
       try {
-        agent.engine.queueClipRerender(clip.id, template.id, { asVariant: clip.status === 'posted' });
+        agent.engine.queueClipRerender(clip.id, template.id, { asVariant: clip.status === 'posted', priority: 2 });
         queued += 1;
       } catch (error) {
         skipped += 1; errors.push({ clipId: clip.id, error: error.message });
@@ -1125,7 +1133,7 @@ async function route(req, res, url) {
   const rerenderClip = pathname.match(/^\/api\/clips\/([^/]+)\/rerender$/);
   if (method === 'POST' && rerenderClip) {
     const body = await readBody(req);
-    try { const id = decodeURIComponent(rerenderClip[1]); assertCanAccessClip(currentUser, id); return json(res, 202, { ok: true, job: agent.engine.queueClipRerender(id, String(body.templateId || ''), { asVariant: Boolean(body.asVariant) }) }); }
+    try { const id = decodeURIComponent(rerenderClip[1]); assertCanAccessClip(currentUser, id); return json(res, 202, { ok: true, job: agent.engine.queueClipRerender(id, String(body.templateId || ''), { asVariant: Boolean(body.asVariant), priority: 0 }) }); }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
   const clipPublish = pathname.match(/^\/api\/clips\/([^/]+)\/publish$/);

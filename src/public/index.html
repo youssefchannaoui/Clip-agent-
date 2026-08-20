@@ -1917,16 +1917,34 @@ const when=ms=>ms?new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',h
 const age=ms=>{if(!ms)return'';const d=Date.now()-ms;if(d<60000)return'now';if(d<3600000)return`${Math.floor(d/60000)}m ago`;if(d<86400000)return`${Math.floor(d/3600000)}h ago`;return`${Math.floor(d/86400000)}d ago`};
 function toast(message,type=''){const box=$('#toasts');if(!box)return;const n=document.createElement('div');n.className=`toast ${type}`;n.textContent=message;box.append(n);setTimeout(()=>n.remove(),3600)}
 let API_SEQUENCE=0;
+/* The global activity bar: a 2px gold shimmer at the very top whenever any
+   request has been in flight longer than 250ms. One honest signal for every
+   wait, everywhere, instead of screens that look frozen. */
+let __inflight=0,__barTimer=null;
+function __bar(){let b=document.getElementById('dcActivityBar');
+  if(!b){b=document.createElement('div');b.id='dcActivityBar';
+    b.style.cssText='position:fixed;top:0;left:0;right:0;height:2px;z-index:99999;pointer-events:none;opacity:0;transition:opacity .2s;'
+      +'background:linear-gradient(90deg,transparent,#D9B478,#F0D6A6,#D9B478,transparent);background-size:50% 100%;background-repeat:no-repeat;animation:dcBarSlide 1.1s linear infinite';
+    const st=document.createElement('style');st.textContent='@keyframes dcBarSlide{0%{background-position:-50% 0}100%{background-position:150% 0}}';
+    document.head.appendChild(st);document.body.appendChild(b)}
+  return b}
+function __apiStart(){__inflight++;if(__barTimer)return;
+  __barTimer=setTimeout(()=>{if(__inflight>0)__bar().style.opacity='1'},250)}
+function __apiEnd(){__inflight=Math.max(0,__inflight-1);
+  if(__inflight===0){clearTimeout(__barTimer);__barTimer=null;const b=document.getElementById('dcActivityBar');if(b)b.style.opacity='0'}}
 async function api(url,options={}){
   const method=String(options.method||'GET').toUpperCase(),requestId=`api-${++API_SEQUENCE}`;
   if(method!=='GET')window.dispatchEvent(new CustomEvent('deen:api-start',{detail:{id:requestId,url,method}}));
+  __apiStart();
   try{
     const r=await fetch(url,{...options,headers:{'Content-Type':'application/json','x-app-password':PW,...(options.headers||{})}});let b={};try{b=await r.json()}catch{}
     if(!r.ok)throw new Error(b.error||`Request failed (${r.status})`);
     if(method!=='GET')window.dispatchEvent(new CustomEvent('deen:api-end',{detail:{id:requestId,url,method,ok:true,result:b}}));
+    __apiEnd();
     return b;
   }catch(error){
     if(method!=='GET')window.dispatchEvent(new CustomEvent('deen:api-end',{detail:{id:requestId,url,method,ok:false,error:error.message}}));
+    __apiEnd();
     throw error;
   }
 }
@@ -2258,6 +2276,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
            siblings: prepend, so it is the frame's backdrop rather than a lid
            over the very controls being dragged. */
         frame.insertBefore(edVideoNode,frame.firstChild);
+        attachVideoLoadingOverlay(edVideoNode,frame);
         /* Click the picture to play/pause -- the design draws no play button
            inside the frame, and this is what a video is expected to do. */
         edVideoNode.onclick=e=>{e.preventDefault();StudioAdapter.bindings(DATA).togglePlay(e)};
@@ -2406,6 +2425,32 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        The binding's own text node is blanked and a host-owned span appended:
        patch() skips host-owned nodes when pairing, so appending cannot shift
        the four drag handles that are this node's other children. */
+    /* "Loading video…" over any host video while it buffers. A black frame
+       with no signal reads as broken; a spinner reads as loading. */
+    function attachVideoLoadingOverlay(video,frame){
+      let note=frame.querySelector(':scope > [data-host-video-loading]');
+      if(!note){
+        note=document.createElement('div');
+        note.setAttribute('data-host-video-loading','');
+        note.style.cssText='position:absolute;inset:0;z-index:4;display:none;align-items:center;justify-content:center;gap:9px;'
+          +'background:rgba(9,9,10,.35);color:#C9B896;font:500 12px Outfit,Inter,sans-serif;pointer-events:none';
+        note.innerHTML='<span style="width:14px;height:14px;border:2px solid rgba(217,180,120,.35);border-top-color:#F0D6A6;border-radius:50%;display:inline-block;animation:dcSpin .8s linear infinite"></span>Loading video…';
+        if(!document.getElementById('dcSpinKeyframes')){
+          const st=document.createElement('style');st.id='dcSpinKeyframes';
+          st.textContent='@keyframes dcSpin{to{transform:rotate(360deg)}}';
+          document.head.appendChild(st)}
+        frame.appendChild(note);
+      }
+      const show=()=>{if(video.currentSrc)note.style.display='flex'};
+      const hide=()=>{note.style.display='none'};
+      video.addEventListener('loadstart',show);
+      video.addEventListener('waiting',show);
+      video.addEventListener('canplay',hide);
+      video.addEventListener('playing',hide);
+      video.addEventListener('error',hide);
+      video.addEventListener('emptied',hide);
+    }
+
     function paintEditorCaption(vals){
       if(StudioAdapter.ui.screen!=='editor')return;
       const box=nodeFor(vals.dragEdCap);
@@ -2494,6 +2539,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         playerVideoNode.autoplay=true;
         playerVideoNode.style.cssText='position:absolute;inset:0;width:100%;height:100%;background:#000;border-radius:inherit;object-fit:contain';
         frame.style.position='relative';
+        attachVideoLoadingOverlay(playerVideoNode,frame);
         frame.appendChild(playerVideoNode);
       }
       if(playerVideoNode.dataset.src!==clip.videoUrl){

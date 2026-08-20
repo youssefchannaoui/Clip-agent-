@@ -44,3 +44,11 @@ test('a new re-render supersedes any still-queued one for the same clip', async 
   assert.equal(jobs.find(j => j.id === second.id).status, 'superseded', 'the older queued job is replaced');
   assert.equal(jobs.find(j => j.id === third.id).status, 'queued', 'only the newest waits to run');
 });
+
+test('interactive renders carry a higher priority than batch sweeps', () => {
+  const interactive = engine.queueClipRerender('c1', 'simple-bold', { priority: 0 });
+  const batch = engine.queueClipRerender('c1', 'simple-bold', { priority: 2 });
+  assert.equal(interactive.priority, 0, 'someone watching goes first');
+  assert.equal(batch.priority, 2);
+  assert.equal(engine.queueClipRerender('c1', 'simple-bold', {}).priority, 1, 'a deliberate single action sits between');
+});

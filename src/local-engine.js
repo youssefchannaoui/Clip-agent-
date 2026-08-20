@@ -1431,7 +1431,7 @@ export function withImportNetwork(source) {
   return Object.keys(network).length ? { ...source, network } : source;
 }
 
-export function queueClipRerender(clipId, templateId, { asVariant = false } = {}) {
+export function queueClipRerender(clipId, templateId, { asVariant = false, priority = 1 } = {}) {
   const clip = clipById(clipId);
   if (!clip) throw new Error('That clip does not exist.');
   if (clip.status === 'posted' && !asVariant) throw new Error('A posted video cannot be changed. Create a re-post variant instead.');
@@ -1504,6 +1504,9 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
   fs.writeFileSync(file, JSON.stringify(payload, null, 2));
   const record = withOwner({
     id: rerenderId, clipId: clip.id, templateId: template.id, templateName: template.name,
+    // 0 = someone is watching (the editor); 1 = a deliberate single action;
+    // 2 = batch sweeps. The queue serves the person at the screen first.
+    priority: Math.max(0, Math.min(2, Number(priority) || 0)),
     asVariant: Boolean(asVariant), status: 'queued', stage: 'Waiting to re-render', progress: 0, engine: project.engine === 'remote' ? 'remote' : 'self-hosted',
     createdAt: Date.now(), jobFile: file, resultPath,
   }, ownerOf(clip));
@@ -1542,7 +1545,7 @@ export async function pump() {
         ...state.projects.filter(item => item.moreJob?.engine !== 'remote' && item.moreJob?.status === 'queued').map(item => ({ type: 'more', item: item.moreJob, project: item, at: item.moreJob.createdAt })),
         ...state.rerenderJobs.filter(item => item.engine === 'remote' && item.status === 'queued' && Number(item.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote-rerender', item, project: projectById(clipById(item.clipId)?.projectId), at: item.createdAt })),
         ...state.rerenderJobs.filter(item => item.engine !== 'remote' && item.status === 'queued').map(item => ({ type: 'rerender', item, at: item.createdAt })),
-      ].sort((a, b) => a.at - b.at);
+      ].sort((a, b) => ((a.item.priority ?? 1) - (b.item.priority ?? 1)) || (a.at - b.at));
       const next = candidates[0];
       if (!next) break;
       if (next.type === 'remote') runRemoteProject(next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
