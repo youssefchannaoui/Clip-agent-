@@ -30,12 +30,18 @@ test('invalid template selection is blocked', () => {
 // account's edits to a built-in are stored as a patch over the shipped file,
 // so ids stay stable and Save always means save.
 
-test('the catalogue is exactly one template per content type', () => {
+test('the catalogue carries the shipped set: one Quran style, four lecture styles', () => {
+  // Grown from "one per content type" on request: the lecture styles are
+  // modelled on the reference reels (clean bold, greyscale minimal, slate
+  // stack) plus the original Simple Bold.
   const list = templates.listTemplates(user);
-  assert.deepEqual(list.map(t => t.id).sort(), ['quran-recitation', 'simple-bold']);
+  assert.deepEqual(list.map(t => t.id).sort(),
+    ['clean-bold', 'mono-minimal', 'quran-recitation', 'simple-bold', 'slate-stack']);
   const modes = Object.fromEntries(list.map(t => [t.id, t.captionMode]));
   assert.equal(modes['quran-recitation'], 'quran');
-  assert.notEqual(modes['simple-bold'], 'quran');
+  for (const id of ['clean-bold', 'mono-minimal', 'simple-bold', 'slate-stack']) {
+    assert.notEqual(modes[id], 'quran', id + ' captions the transcript');
+  }
 });
 
 test('saving a built-in edits it in place for this account only', () => {
@@ -46,7 +52,7 @@ test('saving a built-in edits it in place for this account only', () => {
   // Another account still sees the shipped template.
   assert.notEqual(templates.templateById('simple-bold', otherUser).captionFontSize, 120);
   // And the catalogue has not grown.
-  assert.equal(templates.listTemplates(user).length, 2);
+  assert.equal(templates.listTemplates(user).length, 5);
 });
 
 test('a second save bumps the version, so propagation can tell clips are stale', () => {

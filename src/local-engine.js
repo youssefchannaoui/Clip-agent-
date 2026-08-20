@@ -497,7 +497,7 @@ function validateSubmission(url, user, options = {}) {
     jobTracks = tracks.filter(track => track.id === options.musicTrackId);
     if (!jobTracks.length) throw new Error('The chosen nasheed is no longer in your library. Pick another or rotate all.');
   }
-  return { value, template, tracks: jobTracks, backgroundMode, background, introSeconds };
+  return { value, template: enforceWatermarkPlan(template, user.id), tracks: jobTracks, backgroundMode, background, introSeconds };
 }
 
 export function readiness(user) {
@@ -786,6 +786,19 @@ function plural_en(n, one) { return `${n} ${one}${n === 1 ? '' : 's'}`; }
 // customer A -- but reported as a bare count, never as whose. Re-render and
 // more-clips jobs are minutes, not lectures, so they are left out rather than
 // inflating the number.
+// The free plan renders with the DeenClipped watermark, always. The route
+// gate stops a free account SAVING a watermark-free style, but the built-in
+// templates ship watermark-off -- without this, picking one quietly bypassed
+// the plan rule at render time. Paid plans render whatever the style says.
+function enforceWatermarkPlan(template, ownerId) {
+  const owner = state.authUsers?.find(user => user.id === ownerId);
+  if (!owner || billing.isPaid(owner)) return template;
+  const forced = { ...template };
+  if (!String(forced.watermark || '').trim()) forced.watermark = 'DEENCLIPPED';
+  if (!(Number(forced.watermarkOpacity) > 0)) forced.watermarkOpacity = 85;
+  return forced;
+}
+
 export function queueAhead(projectId) {
   const target = projectById(projectId);
   if (!target || target.status !== 'queued') return 0;
@@ -1523,7 +1536,7 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
   // This clip's own tweaks win over the shared style. Without this, editing one
   // clip either changed every clip on the template or was silently discarded at
   // render time.
-  const template = templateForClip(baseTemplate, clip.styleOverrides);
+  const template = enforceWatermarkPlan(templateForClip(baseTemplate, clip.styleOverrides), ownerOf(clip));
   const tracks = workerMusicTracks(owner);
   if (!tracks.length) throw new Error('Music is mandatory. Upload at least one nasheed first.');
   const transcriptSegments = project.transcriptFile && fs.existsSync(project.transcriptFile)

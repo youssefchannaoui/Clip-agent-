@@ -70,3 +70,39 @@ test('queueAhead counts processing and earlier-queued lectures across accounts',
   assert.equal(engine.queueAhead('qa2'), 1, 'just the processing one');
   assert.equal(engine.queueAhead('qa1'), 0, 'a processing job is not waiting');
 });
+
+test('a free plan renders with the watermark even when the style says none', () => {
+  const src = path.join(dataDir, 'wm-source.mp4');
+  fs.writeFileSync(src, 'x');
+  const musicDir = path.join(dataDir, 'music');
+  fs.mkdirSync(musicDir, { recursive: true });
+  fs.writeFileSync(path.join(musicDir, 'wm.mp3'), 'x');
+  fs.writeFileSync(path.join(musicDir, 'library.json'), JSON.stringify([
+    { id: 'wm1', userId: 'free_wm', shared: true, name: 'T', filename: 'wm.mp3', durationSec: 60 },
+  ]));
+  state.authUsers.push(
+    { id: 'free_wm', email: 'f@f', role: 'creator', providers: {}, billing: { plan: 'free' }, createdAt: Date.now() },
+    { id: 'paid_wm', email: 'p@p', role: 'creator', providers: {}, billing: { plan: 'monthly' }, createdAt: Date.now() },
+  );
+  const snapshot = {
+    id: 'clean-bold', name: 'Clean Bold', version: 1, builtIn: true,
+    watermark: '', watermarkOpacity: 0,
+  };
+  for (const [pid, cid, uid] of [['wmp1', 'wmc1', 'free_wm'], ['wmp2', 'wmc2', 'paid_wm']]) {
+    state.projects.push({ id: pid, userId: uid, title: 'L', status: 'done', engine: 'self-hosted',
+      sourceFile: src, templateSnapshot: { ...snapshot } });
+    state.clips.push({ id: cid, projectId: pid, userId: uid, title: 'C', status: 'waiting',
+      templateId: 'clean-bold', startSec: 0, endSec: 30, durationMs: 30000, musicEnabled: false });
+  }
+  engine.queueClipRerender('wmc1', 'clean-bold', {});
+  engine.queueClipRerender('wmc2', 'clean-bold', {});
+  const jobFor = (id) => {
+    const record = state.rerenderJobs.find((job) => job.clipId === id);
+    return JSON.parse(fs.readFileSync(record.jobFile, 'utf8'));
+  };
+  const freeTpl = jobFor('wmc1').template;
+  assert.equal(freeTpl.watermark, 'DEENCLIPPED', 'free renders carry the watermark');
+  assert.ok(Number(freeTpl.watermarkOpacity) > 0, 'and it is visible');
+  const paidTpl = jobFor('wmc2').template;
+  assert.equal(String(paidTpl.watermark || ''), '', 'paid renders keep the clean style');
+});
