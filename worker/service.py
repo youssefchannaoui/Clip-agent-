@@ -299,6 +299,11 @@ class Processor:
             pass
 
     def fetch_music(self, payload: dict[str, Any], work: Path) -> list[dict[str, str]]:
+        # A voice-only job (musicEnabled: false -- the Quran flow's default)
+        # deliberately carries no tracks. Raising on the empty list here failed
+        # every such job with "No worker-accessible nasheed track was supplied"
+        # before the renderer, which handles a missing track fine, ever ran.
+        music_wanted = (payload.get("settings") or {}).get("musicEnabled", True) is not False
         tracks = []
         for index, track in enumerate(payload.get("musicTracks") or []):
             url = str(track.get("url") or "")
@@ -307,7 +312,7 @@ class Processor:
             destination = work / f"music-{index}.mp3"
             download_https(url, destination, 100 * 1024 * 1024, 120, lambda: self.cancelled(str(payload["id"])))
             tracks.append({"name": str(track.get("name") or destination.name), "path": str(destination)})
-        if not tracks:
+        if not tracks and music_wanted:
             raise RuntimeError("No worker-accessible nasheed track was supplied.")
         return tracks
 

@@ -544,6 +544,16 @@ class WorkerPersistenceTests(unittest.TestCase):
         self.assertTrue(status["cancelRequested"], "the cancel survived concurrent updates")
         self.assertEqual(status["status"], "cancelled")
 
+    def test_a_voice_only_job_is_not_failed_over_its_empty_track_list(self):
+        # musicEnabled: false is the Quran flow's default; the renderer handles
+        # a missing track. fetch_music used to raise before it ever ran.
+        processor = self.service.Processor(self.service.JobStore())
+        work = self.temp / "voice-only"; work.mkdir(parents=True, exist_ok=True)
+        payload = {"id": "job_v", "musicTracks": [], "settings": {"musicEnabled": False}}
+        self.assertEqual(processor.fetch_music(payload, work), [])
+        with self.assertRaises(RuntimeError):
+            processor.fetch_music({"id": "job_w", "musicTracks": [], "settings": {}}, work)
+
     def test_abandoned_temporary_directories_are_removed(self):
         abandoned = self.service.TEMP_DIR / "abandoned"
         abandoned.mkdir(parents=True)

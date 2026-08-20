@@ -2276,6 +2276,13 @@
       // face the template never chose.
       edCapGlossStyle: ayahGlossStyle(tpl),
       edCapMarkScale: ayahMarkScale(tpl.captionArabicFont || 'Amiri'),
+      // The editor previews the NEXT render. When the rendered file predates
+      // the style (edits pending, or the template moved on since it was
+      // burned), say so -- otherwise the difference between this preview and
+      // the video reads as the editor being broken.
+      edRenderNotice: edClipRecord && (edClipRecord.stylePending || edClipRecord.templateOutdated)
+        ? 'Preview shows the next render — the current video still has the earlier style. Save re-renders it.'
+        : '',
       edCapHandle: 'position: absolute; inset: -5px; border: 1px dashed rgba(240,214,166,.7); border-radius: 8px; pointer-events: none;',
       dragEdCap: dragCaptionFrom,
 

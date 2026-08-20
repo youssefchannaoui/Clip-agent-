@@ -2384,6 +2384,23 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(StudioAdapter.ui.screen!=='editor')return;
       const box=nodeFor(vals.dragEdCap);
       if(!box)return;
+      /* The out-of-date banner, on the frame itself where the confusion
+         happens. Host-owned so the patcher never pairs against it. */
+      const frame=box.offsetParent;
+      if(frame){
+        let note=frame.querySelector(':scope > [data-host-notice]');
+        if(vals.edRenderNotice){
+          if(!note){
+            note=document.createElement('div');
+            note.setAttribute('data-host-notice','');
+            note.style.cssText='position:absolute;left:0;right:0;top:0;z-index:9;padding:7px 10px;'
+              +'background:linear-gradient(180deg,rgba(9,9,10,.92),rgba(9,9,10,.55) 80%,transparent);'
+              +'color:#F0D6A6;font:500 10.5px Outfit,Inter,sans-serif;line-height:1.35;text-align:center;pointer-events:none';
+            frame.appendChild(note);
+          }
+          if(note.textContent!==vals.edRenderNotice)note.textContent=vals.edRenderNotice;
+        }else if(note)note.remove();
+      }
       for(const node of box.childNodes){
         if(node.nodeType===3&&node.nodeValue.trim())node.nodeValue='';
       }
