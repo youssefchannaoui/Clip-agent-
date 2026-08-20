@@ -9,7 +9,7 @@ import { config, productionConfigurationErrors } from './config.js';
 import {
   state, save, log, logFor, clipSettings, setClipSettings, musicSettings, setMusicSettings,
   automationSettings, setAutomationSettings, publishingSettings, setPublishingSettings,
-  importNetworkSettings, setImportNetworkSettings,
+  importNetworkSettings, setImportNetworkSettings, stateRev,
 } from './store.js';
 import { ownedBy, findOwned } from './tenancy.js';
 import * as audio from './audio.js';
@@ -292,7 +292,7 @@ function streamFile(req, res, file, { downloadName = '', contentType = '', cache
 }
 
 function latestRerender(clipId) { return state.rerenderJobs.find(job => job.clipId === clipId) || null; }
-function publicClip(clip) {
+function publicClip(clip, { detail = false } = {}) {
   // Resolved as the clip's owner sees it. Without the user, the account's own
   // template edits are invisible here, so "outdated" compared against the
   // shipped file and the badge never showed for an edited built-in.
@@ -301,14 +301,14 @@ function publicClip(clip) {
   return {
     id: clip.id, projectId: clip.projectId, projectTitle: clip.projectTitle,
     title: clip.title, description: clip.description, hashtags: clip.hashtags, transcript: clip.transcript,
-    // Sentence-level caption timings from the renderer. Without these the editor
-    // has nothing to build a timeline from and can only show one giant block.
-    captionSegments: Array.isArray(clip.captionSegments) ? clip.captionSegments : [],
-    // The ayahs the renderer matched in this clip. The editor draws these in
-    // place of the transcript for the moments they cover, so what it shows is
-    // what the export burns in -- it used to show Whisper's transcription of
-    // the recitation, which is the thing the corpus exists to replace.
-    ayahs: Array.isArray(clip.ayahs) ? clip.ayahs : [],
+    // Sentence-level caption timings and matched ayahs are editor-only and by
+    // far the heaviest fields on a clip (~85% of its bytes). The list payload
+    // the dashboard polls every 2s omits them; the editor fetches
+    // /api/clips/:id/detail for the one clip it has open.
+    ...(detail ? {
+      captionSegments: Array.isArray(clip.captionSegments) ? clip.captionSegments : [],
+      ayahs: Array.isArray(clip.ayahs) ? clip.ayahs : [],
+    } : {}),
     score: clip.score, scoreReasons: clip.scoreReasons || [], quality: clip.quality || null,
     reviewRequired: Boolean(clip.reviewRequired), startSec: clip.startSec, endSec: clip.endSec, durationMs: clip.durationMs,
     status: clip.status, approvedBy: clip.approvedBy || null,
@@ -696,7 +696,11 @@ async function route(req, res, url) {
   if (!auth.enabled() && !auth.sessionUser(req) && !authed(req, url)) return json(res, 401, { error: 'Wrong password.' });
 
   if (method === 'GET' && pathname === '/api/auth/me') return json(res, 200, { user: auth.userPublic(currentUser), auth: auth.publicConfig() });
-  if (method === 'GET' && pathname === '/api/state') return json(res, 200, appState(currentUser));
+  if (method === 'GET' && pathname === '/api/state') {
+    const rev = stateRev();
+    if (url.searchParams.get('rev') === rev) return json(res, 200, { unchanged: true, rev });
+    return json(res, 200, { ...appState(currentUser), rev });
+  }
   if (method === 'GET' && pathname === '/api/billing') return json(res, 200, billing.publicBilling(currentUser));
   if (method === 'POST' && pathname === '/api/billing/estimate') {
     const body = await readBody(req);
@@ -1154,6 +1158,12 @@ async function route(req, res, url) {
   // sync with speech. The worker already stores exact word-level timings
   // from Faster-Whisper in the project transcript, in absolute source time;
   // this converts them to clip-relative time for the clip in question.
+  const clipDetail = pathname.match(/^\/api\/clips\/([^/]+)\/detail$/);
+  if (method === 'GET' && clipDetail) {
+    const id = decodeURIComponent(clipDetail[1]);
+    let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 403, { error: error.message }); }
+    return json(res, 200, { ok: true, clip: publicClip(clip, { detail: true }) });
+  }
   const clipCaptions = pathname.match(/^\/api\/clips\/([^/]+)\/captions$/);
   if (method === 'GET' && clipCaptions) {
     const id = decodeURIComponent(clipCaptions[1]);

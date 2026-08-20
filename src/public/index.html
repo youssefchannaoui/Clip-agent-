@@ -1942,7 +1942,33 @@ function downloadClip(id){location.href=withPw(`/api/clips/${encodeURIComponent(
 async function copyText(text){await navigator.clipboard.writeText(text);toast('Copied','good')}
 
 async function boot(){try{DATA=await api('/api/state');localStorage.setItem('deenPw',PW);$('#gate')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#app')?.classList.remove('hide');renderAll();handleOAuthResult();maybeOpenTour();return true}catch(e){$('#app')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#gate')?.classList.remove('hide');if($('#gateErr'))$('#gateErr').textContent=e.message;return false}}
-async function refresh({quiet=true}={}){try{DATA=await api('/api/state');renderAll()}catch(e){if(!quiet)toast(e.message,'bad')}}
+/* The open editor clip needs its heavy fields (caption timings, ayahs),
+   which the list payload deliberately omits. Fetched once per clip version
+   and merged back in after every poll. */
+let clipDetailCache=null;
+async function hydrateEditorClip(){
+  const id=window.StudioAdapter&&StudioAdapter.ui&&StudioAdapter.ui.edClipId;
+  if(!id||!DATA||!DATA.clips)return;
+  const clip=DATA.clips.find(c=>c.id===id);
+  if(!clip)return;
+  const key=id+':'+(clip.renderVersion||1)+':'+(clip.rerender&&clip.rerender.status||'');
+  if(!clipDetailCache||clipDetailCache.key!==key){
+    try{const r=await api(`/api/clips/${encodeURIComponent(id)}/detail`);
+      clipDetailCache={key,captionSegments:r.clip.captionSegments||[],ayahs:r.clip.ayahs||[]}}
+    catch(e){return}
+  }
+  clip.captionSegments=clipDetailCache.captionSegments;
+  clip.ayahs=clipDetailCache.ayahs;
+}
+async function refresh({quiet=true}={}){try{
+  const r=await api('/api/state'+(DATA&&DATA.rev?`?rev=${encodeURIComponent(DATA.rev)}`:''));
+  if(r&&r.unchanged){return}
+  DATA=r;
+  await hydrateEditorClip();
+  renderAll()}catch(e){if(!quiet)toast(e.message,'bad')}}
+/* Opening a clip must hydrate immediately, not on the next poll. */
+setInterval(()=>{const id=window.StudioAdapter&&StudioAdapter.ui&&StudioAdapter.ui.edClipId;
+  if(id&&(!clipDetailCache||!clipDetailCache.key.startsWith(id+':'))){hydrateEditorClip().then(()=>renderAll())}},400);
 function handleOAuthResult(){const q=new URLSearchParams(location.search);if(!q.get('social'))return;toast(q.get('social')==='connected'?`${q.get('provider')} connected`:q.get('message')||'Connection failed',q.get('social')==='connected'?'good':'bad');history.replaceState({},'',location.pathname)}
 
 function showView(name,direction=1){const previous=$('.panel:not(.hide)');ACTIVE_VIEW=name;$$('.tab').forEach(b=>b.classList.toggle('on',b.dataset.view===name));$$('.panel').forEach(p=>p.classList.toggle('hide',p.id!==`view-${name}`));const next=$(`#view-${CSS.escape(name)}`);if(next&&next!==previous){next.classList.remove('slide-fwd','slide-back');void next.offsetWidth;next.classList.add(direction>=0?'slide-fwd':'slide-back');setTimeout(()=>next.classList.remove('slide-fwd','slide-back'),380)}if(name==='templates')loadTemplateEditor(DATA?.selectedTemplate?.id);if(name==='publishing')renderPublishing();if(name==='automation')renderAutomation()}

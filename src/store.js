@@ -121,10 +121,18 @@ function load() {
 }
 
 export const state = load();
+// Bumped on every save. /api/state hands it to the client, which echoes it
+// back; an unchanged rev turns a poll into a ~60-byte handshake instead of a
+// full serialize-transfer-parse-repaint cycle. The boot id makes a restart
+// (or state reload) look like a change.
+const bootId = Math.random().toString(36).slice(2, 10);
+let revCounter = 0;
+export function stateRev() { return `${bootId}-${revCounter}`; }
 let writing = false;
 let dirty = false;
 
 export function save() {
+  revCounter += 1;
   if (writing) { dirty = true; return; }
   writing = true;
   fs.mkdirSync(path.dirname(stateFile), { recursive: true });

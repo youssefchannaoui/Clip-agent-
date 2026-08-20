@@ -1664,19 +1664,37 @@
 
     // Everything actually in flight: lectures, extra-clip runs, re-renders and
     // uploads to a platform. Watching projects alone missed most of it.
+    //
+    // An ETA for every bar: when the server has none, it is computed from how
+    // fast the percentage is actually moving (rate over the last few minutes
+    // of samples). Honest by construction -- a stalled job shows no ETA
+    // rather than a fantasy one.
+    var etaSamples = global.__dcEtaSamples || (global.__dcEtaSamples = {});
+    function estimateEta(key, progress, serverEta) {
+      if (serverEta !== null && serverEta !== undefined && isFinite(serverEta)) return serverEta;
+      var now = Date.now();
+      var s = etaSamples[key] || (etaSamples[key] = []);
+      if (!s.length || s[s.length - 1].p !== progress) s.push({ t: now, p: progress });
+      while (s.length > 30 || (s.length && now - s[0].t > 5 * 60_000)) s.shift();
+      if (s.length < 2) return null;
+      var dt = (now - s[0].t) / 1000;
+      var dp = progress - s[0].p;
+      if (dp <= 0.5 || dt < 5) return null;
+      return Math.max(5, (100 - progress) * dt / dp);
+    }
     var jobsLive = [];
     projects.forEach(function (pr) {
       if (['queued', 'processing'].indexOf(pr.status) > -1) {
-        jobsLive.push({ kind: 'project', title: projectTitle[pr.id], stage: pr.stage || pr.status, progress: Number(pr.progress || 0), etaSec: pr.etaSec, bytesDone: pr.bytesDone, bytesTotal: pr.bytesTotal, at: pr.startedAt || pr.submittedAt, project: pr });
+        jobsLive.push({ kind: 'project', title: projectTitle[pr.id], stage: pr.stage || pr.status, progress: Number(pr.progress || 0), etaSec: estimateEta('p:' + pr.id, Number(pr.progress || 0), pr.etaSec), bytesDone: pr.bytesDone, bytesTotal: pr.bytesTotal, at: pr.startedAt || pr.submittedAt, project: pr });
       }
       if (pr.moreJob && ['queued', 'processing'].indexOf(pr.moreJob.status) > -1) {
-        jobsLive.push({ kind: 'project', title: 'More clips · ' + projectTitle[pr.id], stage: pr.moreJob.stage || pr.moreJob.status, progress: Number(pr.moreJob.progress || 0), at: pr.moreJob.startedAt || pr.moreJob.createdAt });
+        jobsLive.push({ kind: 'project', title: 'More clips · ' + projectTitle[pr.id], stage: pr.moreJob.stage || pr.moreJob.status, progress: Number(pr.moreJob.progress || 0), etaSec: estimateEta('m:' + pr.id, Number(pr.moreJob.progress || 0), null), at: pr.moreJob.startedAt || pr.moreJob.createdAt });
       }
     });
     (DATA.rerenderJobs || []).forEach(function (j) {
       if (['queued', 'processing'].indexOf(j.status) > -1) {
         var c = clips.filter(function (x) { return x.id === j.clipId; })[0];
-        jobsLive.push({ kind: 'render', title: 'Editing ' + ((c && c.title) || 'clip'), stage: j.stage || j.status, progress: Number(j.progress || 0), at: j.startedAt || j.createdAt });
+        jobsLive.push({ kind: 'render', title: 'Editing ' + ((c && c.title) || 'clip'), stage: j.stage || j.status, progress: Number(j.progress || 0), etaSec: estimateEta('r:' + j.id, Number(j.progress || 0), null), at: j.startedAt || j.createdAt });
       }
     });
     clips.forEach(function (c) {

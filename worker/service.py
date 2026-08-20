@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
 
-from import_providers import ImportProviderError, download_https, import_with_fallback, provider_for
+from import_providers import ImportedSource, ImportProviderError, download_https, import_with_fallback, provider_for
 from object_storage import ObjectStorage
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +34,77 @@ MIN_FREE_BYTES = max(1, int(os.getenv("WORKER_MIN_FREE_GB", "10"))) * 1024**3
 IMPORT_HEARTBEAT_SECONDS = 15
 
 JOB_TTL_SECONDS = max(3600, int(os.getenv("WORKER_TEMP_TTL_HOURS", "24")) * 3600)
+
+# Downloaded sources are cached across jobs. A re-render or a more-clips run
+# used to re-download the whole lecture -- minutes of waiting to change a
+# caption. The cache is keyed by what the source *is* (object key or URL), so
+# an edit gets its bytes in the time a hardlink takes.
+SOURCE_CACHE_DIR = DATA_DIR / "cache" / "sources"
+SOURCE_CACHE_TTL_SECONDS = max(3600, int(os.getenv("WORKER_SOURCE_CACHE_HOURS", "48")) * 3600)
+SOURCE_CACHE_MAX_BYTES = max(1, int(os.getenv("WORKER_SOURCE_CACHE_GB", "15"))) * 1024 ** 3
+
+
+def source_cache_key(source: dict) -> str | None:
+    """A stable identity for the bytes a source resolves to, or None when the
+    source has no stable identity worth caching."""
+    if not isinstance(source, dict):
+        return None
+    if source.get("objectKey"):
+        raw = f"object:{source['objectKey']}"
+    elif source.get("url"):
+        raw = f"url:{source['url']}"
+    else:
+        return None
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def source_cache_lookup(key: str | None) -> Path | None:
+    if not key:
+        return None
+    cached = SOURCE_CACHE_DIR / f"{key}.mp4"
+    if cached.exists() and cached.stat().st_size > 0:
+        os.utime(cached)  # refresh for LRU pruning
+        return cached
+    return None
+
+
+def source_cache_store(key: str | None, file: Path) -> None:
+    if not key or not file.exists() or not file.stat().st_size:
+        return
+    SOURCE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cached = SOURCE_CACHE_DIR / f"{key}.mp4"
+    if cached.exists():
+        return
+    tmp = SOURCE_CACHE_DIR / f".{key}.tmp"
+    try:
+        try:
+            os.link(file, tmp)  # same volume: instant, no extra disk
+        except OSError:
+            shutil.copy2(file, tmp)
+        tmp.replace(cached)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+
+
+def source_cache_prune() -> None:
+    if not SOURCE_CACHE_DIR.exists():
+        return
+    entries = []
+    for item in SOURCE_CACHE_DIR.iterdir():
+        try:
+            stat = item.stat()
+        except OSError:
+            continue
+        if time.time() - stat.st_mtime > SOURCE_CACHE_TTL_SECONDS:
+            item.unlink(missing_ok=True)
+        else:
+            entries.append((stat.st_mtime, stat.st_size, item))
+    total = sum(size for _, size, _ in entries)
+    for _, size, item in sorted(entries):  # oldest first
+        if total <= SOURCE_CACHE_MAX_BYTES:
+            break
+        item.unlink(missing_ok=True)
+        total -= size
 SHARED_SECRET = os.getenv("WORKER_SHARED_SECRET", "")
 
 
@@ -468,9 +539,20 @@ class Processor:
             # blocked: its error arrives as a quoted string from a service the
             # operator cannot see or retry, which reads as though this box had
             # failed when nothing here was ever involved.
-            imported = import_with_fallback(
-                payload.get("source") or {}, source, self.import_pulse(job_id), self.storage
-            )
+            cache_key = source_cache_key(payload.get("source") or {})
+            cached = source_cache_lookup(cache_key)
+            if cached is not None:
+                try:
+                    os.link(cached, source)
+                except OSError:
+                    shutil.copy2(cached, source)
+                imported = ImportedSource(file=source, provider="cache", title=str(payload.get("title") or ""))
+                self.progress(job_id, "importing", 6)
+            else:
+                imported = import_with_fallback(
+                    payload.get("source") or {}, source, self.import_pulse(job_id), self.storage
+                )
+                source_cache_store(cache_key, source)
             if source.stat().st_size > MAX_DOWNLOAD_BYTES:
                 raise RuntimeError("The source exceeds the worker download limit.")
             # Which provider actually served it, in the job record. The chain
@@ -567,6 +649,7 @@ class Processor:
                 self.queue.task_done()
 
     def cleanup_abandoned(self) -> None:
+        source_cache_prune()
         cutoff = time.time() - JOB_TTL_SECONDS
         for item in TEMP_DIR.iterdir() if TEMP_DIR.exists() else []:
             try:

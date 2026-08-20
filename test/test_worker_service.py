@@ -544,6 +544,24 @@ class WorkerPersistenceTests(unittest.TestCase):
         self.assertTrue(status["cancelRequested"], "the cancel survived concurrent updates")
         self.assertEqual(status["status"], "cancelled")
 
+    def test_the_source_cache_round_trips_and_prunes(self):
+        key = self.service.source_cache_key({"objectKey": "uploads/u/x.mp4"})
+        self.assertIsNotNone(key)
+        self.assertEqual(key, self.service.source_cache_key({"objectKey": "uploads/u/x.mp4"}), "stable identity")
+        self.assertNotEqual(key, self.service.source_cache_key({"url": "https://youtu.be/x"}))
+        self.assertIsNone(self.service.source_cache_key({}), "no identity, no cache")
+        self.assertIsNone(self.service.source_cache_lookup(key), "empty cache misses")
+        src = self.temp / "dl.mp4"; src.write_bytes(b"x" * 64)
+        self.service.source_cache_store(key, src)
+        hit = self.service.source_cache_lookup(key)
+        self.assertIsNotNone(hit)
+        self.assertEqual(hit.read_bytes(), b"x" * 64)
+        # TTL pruning drops stale entries.
+        old = time.time() - self.service.SOURCE_CACHE_TTL_SECONDS - 5
+        os.utime(hit, (old, old))
+        self.service.source_cache_prune()
+        self.assertIsNone(self.service.source_cache_lookup(key))
+
     def test_a_voice_only_job_is_not_failed_over_its_empty_track_list(self):
         # musicEnabled: false is the Quran flow's default; the renderer handles
         # a missing track. fetch_music used to raise before it ever ran.
