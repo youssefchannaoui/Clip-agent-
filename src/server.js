@@ -365,6 +365,7 @@ function appState(user = null) {
       clipPercent: project.clipPercent ?? null, clipPlan: project.clipPlan || null,
       submittedAt: project.submittedAt, completedAt: project.completedAt || null, clipCount: project.clipCount || 0,
       queueAhead: project.status === 'queued' ? agent.engine.queueAhead(project.id) : null,
+      priority: project.priority ?? null,
       clipsRequested: project.clipsRequested || 0,
       durationSec: project.durationSec || project.sourceDurationSec || null, sourceDurationSec: project.sourceDurationSec || null,       // Derived at read time as well as at submit: lectures queued before the
       // dashboard sent sourceMeta have null on the record, and back-filling here
@@ -886,6 +887,28 @@ async function route(req, res, url) {
     } catch (error) { return json(res, 400, { error: error.message }); }
   }
   const projectMatch = pathname.match(/^\/api\/projects\/([^/]+)$/);
+  // The Happening-now rows' own controls: remove a job from the queue, or
+  // move a queued one to the front. Ownership is checked per kind -- a render
+  // belongs to whoever owns its clip, everything else to the project owner.
+  if (method === 'POST' && (pathname === '/api/queue/cancel' || pathname === '/api/queue/prioritize')) {
+    const body = await readBody(req);
+    const kind = String(body.kind || 'project');
+    const id = String(body.id || '');
+    try {
+      if (kind === 'render') {
+        const job = state.rerenderJobs.find(item => item.id === id);
+        if (!job) throw new Error('That render is no longer in the queue.');
+        assertCanAccessClip(currentUser, job.clipId);
+      } else {
+        assertCanAccessProject(currentUser, id);
+      }
+      const item = pathname.endsWith('/cancel')
+        ? agent.engine.cancelWork(kind, id)
+        : agent.engine.prioritizeWork(kind, id);
+      return json(res, 200, { ok: true, status: item.status || null });
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+
   if (method === 'DELETE' && projectMatch) {
     try { const id = decodeURIComponent(projectMatch[1]); assertCanAccessProject(currentUser, id); agent.engine.deleteProject(id); return json(res, 200, { ok: true }); }
     catch (error) { return json(res, 400, { error: error.message }); }

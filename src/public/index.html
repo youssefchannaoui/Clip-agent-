@@ -552,6 +552,9 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 
 .clip-main{display:flex;gap:16px;align-items:flex-start}
 .clip-content{flex:1;min-width:0}
+.slh-act{display:inline-grid;place-items:center;width:24px;height:24px;flex:none;border:1px solid var(--line-lit,#26262A);border-radius:7px;background:transparent;color:var(--mute-2,#8B8B93);cursor:pointer;font-size:12px;transition:color .12s ease,border-color .12s ease}
+.slh-act:hover{color:#F2F2F4;border-color:#34343A}
+.slh-act.on{color:#F0D6A6;border-color:rgba(217,180,120,.5);cursor:default}
 .clip-thumb{
   flex:none;width:112px;aspect-ratio:9/16;border-radius:8px;overflow:hidden;
   background:var(--surface-2);border:1px solid var(--line);
@@ -2048,6 +2051,18 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         clipsOpen[b.dataset.clips]=b.getAttribute('aria-expanded')!=='true';
         renderAll();
       });
+      /* The row's own queue controls. Cancel confirms -- it stops real work
+         and drops the row; a queued job's boost is safe and immediate. */
+      const act=(sel,path,confirmMsg)=>host.querySelectorAll(sel).forEach(b=>b.onclick=e=>{
+        e.preventDefault();e.stopPropagation();
+        const [kind,...rest]=b.dataset.livePrio?b.dataset.livePrio.split(':'):b.dataset.liveCancel.split(':');
+        const id=rest.join(':');
+        if(confirmMsg&&!confirm(confirmMsg))return;
+        studioDo(()=>api(path,{method:'POST',body:JSON.stringify({kind,id})}),
+          path.endsWith('cancel')?'Removed from the queue':'Moved to the front of the queue');
+      });
+      act('[data-live-prio]','/api/queue/prioritize','');
+      act('[data-live-cancel]','/api/queue/cancel','Cancel this job and remove it from the queue?');
     }
     function clipLineHtml(c){
       return `<div class="slc-row"><i class="${esc(c.icon)}" style="${esc(c.iconStyle)}"></i>
@@ -2069,6 +2084,9 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         ${r.hasClips?`<button type="button" class="slc-toggle" data-clips="${esc(clipKey(r,onHome))}"
           aria-expanded="${open}" title="${open?'Hide the clips':'Show each clip'}"
           ><span>${esc(r.clipsLabel)}</span><i class="ph ph-caret-down"></i></button>`:''}
+        ${r.canBoost?`<button type="button" class="slh-act" data-live-prio="${esc(r.kind)}:${esc(r.id)}" title="Run this next"><i class="ph ph-arrow-line-up"></i></button>`:''}
+        ${r.boosted?`<span class="slh-act on" title="Runs next"><i class="ph ph-arrow-line-up"></i></span>`:''}
+        ${r.canCancel?`<button type="button" class="slh-act" data-live-cancel="${esc(r.kind)}:${esc(r.id)}" title="Cancel and remove"><i class="ph ph-x"></i></button>`:''}
         <span class="pct">${esc(pct)}</span></div>
         ${open?`<div class="slc-list${r.clipsScroll?' scroll':''}">${r.clips.map(clipLineHtml).join('')}</div>`:''}</div>`;
     }
@@ -2106,7 +2124,8 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        clips each has, and whether its list is open. Anything that is only a
        number is written into the existing nodes instead. */
     function liveKey(rows,onHome){
-      return rows.map(r=>[r.title,r.icon,r.clipCount||0,r.hasClips&&clipsAreOpen(r,onHome)?1:0].join('|')).join('~');
+      return rows.map(r=>[r.title,r.icon,r.clipCount||0,r.hasClips&&clipsAreOpen(r,onHome)?1:0,
+        r.canBoost?1:0,r.boosted?1:0].join('|')).join('~');
     }
     function paintRows(host,rows,html,onHome){
       const key=liveKey(rows,onHome);

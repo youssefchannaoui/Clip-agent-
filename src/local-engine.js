@@ -803,10 +803,14 @@ export function queueAhead(projectId) {
   const target = projectById(projectId);
   if (!target || target.status !== 'queued') return 0;
   let ahead = 0;
+  const rank = project => [Number(project.priority ?? 1), Number(project.submittedAt || 0)];
+  const mine = rank(target);
   for (const project of state.projects) {
     if (project.id === target.id) continue;
-    if (project.status === 'processing') ahead += 1;
-    else if (project.status === 'queued' && Number(project.submittedAt || 0) < Number(target.submittedAt || 0)) ahead += 1;
+    if (project.status === 'processing') { ahead += 1; continue; }
+    if (project.status !== 'queued') continue;
+    const theirs = rank(project);
+    if (theirs[0] < mine[0] || (theirs[0] === mine[0] && theirs[1] < mine[1])) ahead += 1;
   }
   return ahead;
 }
@@ -1786,6 +1790,59 @@ export function retryProject(projectId) {
   });
   save(); pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
   return project;
+}
+
+// ── Queue controls: the Happening-now rows ──────────────────────────────────
+// "Remove" and "run next" for anything the live strip shows. Kind mirrors the
+// strip's own rows: a lecture import ('project'), a more-clips sweep ('more'),
+// an edit re-render ('render').
+export function cancelWork(kind, id) {
+  if (kind === 'render') {
+    const job = state.rerenderJobs.find(item => item.id === id);
+    if (!job) throw new Error('That render is no longer in the queue.');
+    if (!['queued', 'processing'].includes(job.status)) throw new Error('That render has already finished.');
+    if (job.status === 'processing') {
+      if (job.engine === 'remote') workerClient.cancelJob(job.id).catch(() => {});
+      const run = running.get(job.id);
+      if (typeof run?.kill === 'function') run.kill('SIGTERM'); else if (run) run.cancelled = true;
+    }
+    job.status = 'cancelled'; job.stage = 'Cancelled'; job.completedAt = Date.now(); save();
+    return job;
+  }
+  const project = projectById(kind === 'more' ? id : id);
+  if (!project) throw new Error('That lecture is no longer in the queue.');
+  if (kind === 'more') {
+    const job = project.moreJob;
+    if (!job || !['queued', 'processing'].includes(job.status)) throw new Error('That job has already finished.');
+    if (job.status === 'processing') {
+      if (job.engine === 'remote') workerClient.cancelJob(job.id).catch(() => {});
+      const run = running.get(job.id);
+      if (typeof run?.kill === 'function') run.kill('SIGTERM'); else if (run) run.cancelled = true;
+    }
+    job.status = 'cancelled'; job.stage = 'Cancelled'; job.completedAt = Date.now(); save();
+    return job;
+  }
+  if (!['queued', 'processing'].includes(project.status)) throw new Error('That lecture has already finished.');
+  cancelProject(project.id);
+  // cancelProject stops the run and releases the hold but leaves a queued
+  // record queued -- the pump would simply start it again.
+  project.status = 'cancelled'; project.stage = 'cancelled'; project.error = null; save();
+  return project;
+}
+
+export function prioritizeWork(kind, id) {
+  const item = kind === 'render'
+    ? state.rerenderJobs.find(record => record.id === id)
+    : kind === 'more' ? projectById(id)?.moreJob : projectById(id);
+  if (!item) throw new Error('That job is no longer in the queue.');
+  if (item.status !== 'queued') throw new Error('Only a queued job can be moved forward.');
+  // 0 is the watcher priority the pump already serves first; the tie inside
+  // priority 0 falls back to age, so two boosts keep their relative order.
+  item.priority = 0;
+  item.nextRetryAt = 0;
+  save();
+  pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
+  return item;
 }
 
 export function cancelProject(projectId) {

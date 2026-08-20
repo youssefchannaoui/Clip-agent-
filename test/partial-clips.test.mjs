@@ -106,3 +106,22 @@ test('a free plan renders with the watermark even when the style says none', () 
   const paidTpl = jobFor('wmc2').template;
   assert.equal(String(paidTpl.watermark || ''), '', 'paid renders keep the clean style');
 });
+
+test('a queued lecture can be cancelled, and a boost moves it to the front', () => {
+  const now = Date.now();
+  state.projects.push(
+    { id: 'qc1', userId: 'user_admin', title: 'A', status: 'queued', engine: 'remote', submittedAt: now - 9000 },
+    { id: 'qc2', userId: 'user_admin', title: 'B', status: 'queued', engine: 'remote', submittedAt: now - 8000 },
+  );
+  // The newer job jumps the older one.
+  assert.equal(engine.queueAhead('qc2') > engine.queueAhead('qc1'), true, 'age orders the queue');
+  engine.prioritizeWork('project', 'qc2');
+  const boosted = state.projects.find((p) => p.id === 'qc2');
+  assert.equal(boosted.priority, 0);
+  assert.equal(engine.queueAhead('qc2') < engine.queueAhead('qc1'), true, 'the boost reverses the order');
+  // Cancel removes the other from the queue entirely.
+  engine.cancelWork('project', 'qc1');
+  assert.equal(state.projects.find((p) => p.id === 'qc1').status, 'cancelled');
+  // Only queued work can be boosted.
+  assert.throws(() => engine.prioritizeWork('project', 'qc1'), /queued/i);
+});

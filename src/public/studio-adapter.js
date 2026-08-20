@@ -1767,16 +1767,16 @@
           : pr.status === 'queued' && pr.queueAhead === 0
             ? 'Next in line'
             : null;
-        jobsLive.push({ kind: 'project', title: projectTitle[pr.id], stage: queuedStage || pr.stage || pr.status, progress: Number(pr.progress || 0), etaSec: estimateEta('p:' + pr.id, Number(pr.progress || 0), pr.etaSec), bytesDone: pr.bytesDone, bytesTotal: pr.bytesTotal, at: pr.startedAt || pr.submittedAt, project: pr });
+        jobsLive.push({ kind: 'project', id: pr.id, queued: pr.status === 'queued', boosted: pr.priority === 0, title: projectTitle[pr.id], stage: queuedStage || pr.stage || pr.status, progress: Number(pr.progress || 0), etaSec: estimateEta('p:' + pr.id, Number(pr.progress || 0), pr.etaSec), bytesDone: pr.bytesDone, bytesTotal: pr.bytesTotal, at: pr.startedAt || pr.submittedAt, project: pr });
       }
       if (pr.moreJob && ['queued', 'processing'].indexOf(pr.moreJob.status) > -1) {
-        jobsLive.push({ kind: 'project', title: 'More clips · ' + projectTitle[pr.id], stage: pr.moreJob.stage || pr.moreJob.status, progress: Number(pr.moreJob.progress || 0), etaSec: estimateEta('m:' + pr.id, Number(pr.moreJob.progress || 0), null), at: pr.moreJob.startedAt || pr.moreJob.createdAt });
+        jobsLive.push({ kind: 'more', id: pr.id, queued: pr.moreJob.status === 'queued', boosted: pr.moreJob.priority === 0, title: 'More clips · ' + projectTitle[pr.id], stage: pr.moreJob.stage || pr.moreJob.status, progress: Number(pr.moreJob.progress || 0), etaSec: estimateEta('m:' + pr.id, Number(pr.moreJob.progress || 0), null), at: pr.moreJob.startedAt || pr.moreJob.createdAt });
       }
     });
     (DATA.rerenderJobs || []).forEach(function (j) {
       if (['queued', 'processing'].indexOf(j.status) > -1) {
         var c = clips.filter(function (x) { return x.id === j.clipId; })[0];
-        jobsLive.push({ kind: 'render', title: 'Editing ' + ((c && c.title) || 'clip'), stage: j.stage || j.status, progress: Number(j.progress || 0), etaSec: estimateEta('r:' + j.id, Number(j.progress || 0), null), at: j.startedAt || j.createdAt });
+        jobsLive.push({ kind: 'render', id: j.id, queued: j.status === 'queued', boosted: j.priority === 0, title: 'Editing ' + ((c && c.title) || 'clip'), stage: j.stage || j.status, progress: Number(j.progress || 0), etaSec: estimateEta('r:' + j.id, Number(j.progress || 0), null), at: j.startedAt || j.createdAt });
       }
     });
     clips.forEach(function (c) {
@@ -1884,6 +1884,12 @@
         label: j.title,
         title: j.title,
         stage: j.stage,
+        // The row's own controls: remove it, or send a queued one to the front.
+        kind: j.kind || '',
+        id: j.id || '',
+        canCancel: Boolean(j.id),
+        canBoost: Boolean(j.id && j.queued && !j.boosted),
+        boosted: Boolean(j.boosted && j.queued),
         // One line per clip while a lecture renders, so "clip 2 of 4" can be
         // opened rather than only read.
         clips: clips,
