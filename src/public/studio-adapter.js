@@ -822,7 +822,7 @@
 
   function navItem(key, label, icon, count) {
     var on = UI.screen === key;
-    var open = UI.railOpen;
+    var open = UI.railOpen && (global.innerWidth || 1280) > 820;
     return {
       label: label,
       icon: icon,
@@ -1007,6 +1007,7 @@
 
     var libraryItems = projects.filter(function (p) {
       if (q && (projectTitle[p.id] || '').toLowerCase().indexOf(q) === -1) return false;
+      if (q && ((p.title || '') + ' ' + (p.url || '')).toLowerCase().indexOf(q) === -1) return false;
       return UI.libFilter === 'all' || lecState(p) === UI.libFilter;
     }).map(function (p) {
       var state = lecState(p);
@@ -1892,7 +1893,7 @@
     else if (tracks.length < 2) { blocker = 'Only one nasheed uploaded — rotation needs two or more before automatic posting can run.'; blockerScreen = 'music'; }
     else if (connectedCount === 0) { blocker = 'No publishing account connected — approved clips will queue up with nowhere to go.'; blockerScreen = 'templates'; }
 
-    var open = UI.railOpen;
+    var open = UI.railOpen && (global.innerWidth || 1280) > 820;
 
     var vals = {
       // ── shell: rail ──
@@ -1900,7 +1901,7 @@
       railStyle: 'align-self: stretch; height: 100%; min-height: 0; ' + (open ? 'overflow-y: auto; overflow-x: hidden; ' : 'overflow: visible; ') + 'display: flex; flex-direction: column; gap: 18px; width: ' + (open ? '228px' : '68px') + '; padding: 16px 12px; border-right: 1px solid #1E1E22; background: linear-gradient(180deg, #101013, #0B0B0D); transition: width .18s ease;',
       brandRowStyle: 'display: flex; align-items: center; gap: 10px; padding: ' + (open ? '4px 6px' : '4px 0') + '; ' + (open ? '' : 'flex-direction: column;'),
       brandTextStyle: open ? 'display: flex; flex-direction: column; line-height: 1.2; min-width: 0;' : 'display: none;',
-      railToggleStyle: 'display: grid; place-items: center; width: 26px; height: 26px; flex: none; ' + (open ? 'margin-left: auto; ' : '') + 'border: 1px solid #26262A; border-radius: 7px; background: #121214; color: #8B8B93; cursor: pointer; transition: border-color .14s ease, color .14s ease;',
+      railToggleStyle: ((global.innerWidth || 1280) <= 820 ? 'display: none; ' : 'display: grid; ') + 'place-items: center; width: 26px; height: 26px; flex: none; ' + (open ? 'margin-left: auto; ' : '') + 'border: 1px solid #26262A; border-radius: 7px; background: #121214; color: #8B8B93; cursor: pointer; transition: border-color .14s ease, color .14s ease;',
       railToggleIcon: open ? 'ph ph-caret-left' : 'ph ph-caret-right',
       railToggleTitle: open ? 'Collapse sidebar' : 'Expand sidebar',
       toggleRail: function (e) { stop(e); setUI({ railOpen: !UI.railOpen }); },

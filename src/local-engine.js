@@ -1454,8 +1454,15 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
   const snapshot = !own && project.templateSnapshot && project.templateSnapshot.id === (templateId || clip.templateId || project.templateSnapshot.id)
     ? sanitiseTemplate(project.templateSnapshot, { id: project.templateSnapshot.id, builtIn: Boolean(project.templateSnapshot.builtIn), userId: ownerOf(clip) })
     : null;
-  const baseTemplate = own || snapshot;
-  if (!baseTemplate?.id) throw new Error('The style this clip was rendered with is no longer available. Pick a template for it explicitly.');
+  let baseTemplate = own || snapshot;
+  if (!baseTemplate?.id) {
+    // Last resort rather than refusal: the clip's own style is gone, so the
+    // account's selected template is the only honest option left -- and the
+    // switch is said out loud instead of silently or not at all.
+    baseTemplate = selectedTemplate(owner);
+    if (!baseTemplate?.id) throw new Error('Choose a valid saved template.');
+    log(`"${clip.title || clip.id}" was rendered with a style that no longer exists; re-rendering with "${baseTemplate.name}" instead.`, 'warn', ownerOf(clip));
+  }
   // This clip's own tweaks win over the shared style. Without this, editing one
   // clip either changed every clip on the template or was silently discarded at
   // render time.

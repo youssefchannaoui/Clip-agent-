@@ -22,6 +22,16 @@
   font-display: swap;
 }
 </style>
+<style>
+/* Mobile: the design was drawn at desktop width. Element-level rules beat the
+   generated inline styles via !important; the rail itself is handled by the
+   adapter (always the icon rail under 820px). */
+@media (max-width: 820px){
+  #studio h1{font-size:clamp(24px,8vw,38px)!important;line-height:1.12!important}
+  #studio h2{font-size:clamp(18px,5.5vw,24px)!important}
+  #studio main{min-width:0!important}
+}
+</style>
 <!-- Studio dashboard, generated from the Claude Design project. See design/README.md. -->
 <link rel="stylesheet" href="/studio-styles.generated.css">
 <style>
@@ -2451,6 +2461,78 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       video.addEventListener('emptied',hide);
     }
 
+    /* The design bakes six tick labels from its mockup clip (0s, 8s, 15s…).
+       Rewritten from the real duration on every paint, and independent of
+       paintEditorLayout's gates -- when a clip's video is missing that
+       painter bails early, and the ruler used to keep lying forever. */
+    /* Global search: the header input used to filter only the Review queue,
+       so typing anywhere else did nothing visible -- a dead control on every
+       other screen. Now it drops a results panel under the input: clips open
+       in the editor, lectures open the library. Escape or clicking away
+       closes it. */
+    let searchEl=null;
+    function paintGlobalSearch(vals){
+      const input=[...document.querySelectorAll('#studio input')].find(n=>/search clips or lectures/i.test(n.placeholder||''));
+      if(!input)return;
+      const q=String(StudioAdapter.ui.query||'').trim().toLowerCase();
+      if(!searchEl){
+        searchEl=document.createElement('div');
+        searchEl.setAttribute('data-host-owned','');
+        searchEl.style.cssText='position:absolute;z-index:9999;min-width:340px;max-width:440px;max-height:60vh;overflow-y:auto;'
+          +'background:#141416;border:1px solid #2A2A2F;border-radius:12px;box-shadow:0 22px 50px rgba(0,0,0,.55);display:none';
+        document.body.appendChild(searchEl);
+        document.addEventListener('pointerdown',e=>{
+          if(searchEl.style.display!=='none'&&!searchEl.contains(e.target)&&e.target!==input){searchEl.style.display='none'}});
+        document.addEventListener('keydown',e=>{if(e.key==='Escape')searchEl.style.display='none'});
+        searchEl.addEventListener('click',e=>{
+          const row=e.target.closest('[data-search-clip],[data-search-project]');
+          if(!row)return;
+          searchEl.style.display='none';
+          StudioAdapter.ui.query='';
+          const inp=[...document.querySelectorAll('#studio input')].find(n=>/search clips or lectures/i.test(n.placeholder||''));
+          if(inp)inp.value='';
+          if(row.dataset.searchClip){
+            StudioAdapter.ui.screen='editor';StudioAdapter.ui.edClipId=row.dataset.searchClip;
+            StudioAdapter.ui.edTab='captions';StudioAdapter.ui.edStyleDraft=null;StudioAdapter.ui.edBlock=0;
+          }else{StudioAdapter.ui.screen='library'}
+          paintStudio()});
+      }
+      if(!q||!DATA){searchEl.style.display='none';return}
+      const pt={};(DATA.projects||[]).forEach(p=>pt[p.id]=p.title||'Lecture');
+      const clips=(DATA.clips||[]).filter(c=>((c.title||'')+' '+(pt[c.projectId]||'')+' '+(c.transcript||'')).toLowerCase().includes(q)).slice(0,6);
+      const lectures=(DATA.projects||[]).filter(p=>((p.title||'')+' '+(p.url||'')).toLowerCase().includes(q)).slice(0,4);
+      const row=(attr,id,img,title,sub)=>`<div ${attr}="${esc(id)}" style="display:flex;gap:10px;align-items:center;padding:9px 12px;cursor:pointer;border-bottom:1px solid #1D1D21" onmouseover="this.style.background='#1B1B1F'" onmouseout="this.style.background=''">`
+        +(img?`<img src="${esc(img)}" style="width:34px;height:60px;object-fit:cover;border-radius:6px;background:#0E0E10">`:'<div style="width:34px;height:60px;border-radius:6px;background:#0E0E10"></div>')
+        +`<div style="min-width:0"><div style="font:600 12.5px Outfit,Inter,sans-serif;color:#E8E8EC;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(title)}</div>`
+        +`<div style="font:400 11px Outfit,Inter,sans-serif;color:#8B8B93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sub)}</div></div></div>`;
+      let html='';
+      if(clips.length)html+='<div style="padding:8px 12px 4px;font:600 10px Outfit,sans-serif;letter-spacing:.1em;color:#8B8B93">CLIPS</div>'
+        +clips.map(c=>row('data-search-clip',c.id,c.thumbUrl?withPw(c.thumbUrl):'',c.title||'Clip',pt[c.projectId]||'')).join('');
+      if(lectures.length)html+='<div style="padding:8px 12px 4px;font:600 10px Outfit,sans-serif;letter-spacing:.1em;color:#8B8B93">LECTURES</div>'
+        +lectures.map(p=>row('data-search-project',p.id,p.sourceThumbUrl||'',p.title||'Lecture',(p.clipCount||0)+' clips')).join('');
+      if(!html)html='<div style="padding:14px;font:400 12px Outfit,sans-serif;color:#8B8B93">Nothing matches \u201C'+esc(StudioAdapter.ui.query)+'\u201D</div>';
+      if(searchEl.innerHTML!==html)searchEl.innerHTML=html;
+      const r=input.getBoundingClientRect();
+      searchEl.style.left=Math.max(8,Math.min(window.innerWidth-460,r.left))+'px';
+      searchEl.style.top=(r.bottom+6)+'px';
+      searchEl.style.display='block';
+    }
+
+    function paintEditorRuler(vals){
+      if(StudioAdapter.ui.screen!=='editor'||!vals.edRuler)return;
+      const tick=/^\d+s$|^\d+:\d\d$/;
+      const rows=[...document.querySelectorAll('#studio div')].filter(n=>{
+        const kids=[...n.children];
+        return kids.length>=5&&kids.length<=7&&kids.every(k=>k.tagName==='SPAN'&&tick.test((k.textContent||'').trim()));
+      });
+      for(const row of rows){
+        [...row.children].forEach((span,i)=>{
+          const label=vals.edRuler[i]&&vals.edRuler[i].label;
+          if(label&&span.textContent!==label)span.textContent=label;
+        });
+      }
+    }
+
     function paintEditorCaption(vals){
       if(StudioAdapter.ui.screen!=='editor')return;
       const box=nodeFor(vals.dragEdCap);
@@ -2899,6 +2981,73 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       edLayout=null;
     }
     let edLayoutSig='';
+
+    function paintEditorScrub(){
+      /* Wired every paint, not from inside paintEditorLayout: the layout pass
+         bails on an unchanged signature, and the patcher can replace the lanes
+         node between paints. Both left a timeline with no pointerdown handler,
+         so clicking a caption block selected nothing. Locating the lanes and
+         checking one dataset flag per paint is cheap; the handler itself is
+         attached once per node. */
+      if(StudioAdapter.ui.screen!=='editor'||!StudioAdapter.ui.edClipId)return;
+      const waveform=[...document.querySelectorAll('#studio span,#studio div')]
+        .filter(n=>/^Video · speech waveform$/.test((n.textContent||'').trim())).pop();
+      const videoLane=waveform&&waveform.parentElement;
+      const lanes=videoLane&&videoLane.parentElement;
+      if(!lanes||lanes.dataset.wiredScrub)return;
+      /* Drag the timeline to move through the clip. Click already seeks;
+       holding and moving is what makes it feel like a timeline. Started
+       only outside the caption lane, so clicking a caption still means
+       "select this block" rather than "seek to exactly here". */
+      lanes.dataset.wiredScrub='1';
+      const scrubTo=e=>{
+        const box=lanes.getBoundingClientRect();
+        if(!box.width)return;
+        const ratio=Math.max(0,Math.min(1,(e.clientX-box.left)/box.width));
+        const seconds=ratio*Number(StudioAdapter.bindings(DATA).edDurationSec||1);
+        StudioAdapter.ui.edTime=seconds;
+        StudioAdapter.ui.edPlayhead=ratio;
+        StudioAdapter.seekEditor(seconds);
+        paintStudio();
+      };
+      lanes.addEventListener('pointerdown',e=>{
+        /* A caption block is selected on pointerdown, before the scrub or
+           any repaint can get in the way. The old caption-lane heuristic
+           picked the child with the MOST children -- with three caption
+           blocks the six-tick ruler won, the lane was never excluded, and
+           a real mouse click seeked-and-repainted instead of selecting. A
+           block is identified by its own style signature, not by counting. */
+        const blockOf=n=>{for(let x=n;x&&x!==lanes;x=x.parentElement){
+          const st=x.getAttribute&&(x.getAttribute('style')||'');
+          if(st&&st.includes('cursor: pointer')&&st.includes('text-overflow: ellipsis'))return x}return null};
+        const hit=blockOf(e.target);
+        if(hit){
+          const lane=hit.parentElement;
+          const idx=[...lane.children].filter(n=>blockOf(n)===n).indexOf(hit);
+          const blocks=StudioAdapter.bindings(DATA).edCapBlocks||[];
+          if(idx>-1&&blocks[idx]&&blocks[idx].select)blocks[idx].select(e);
+          return;
+        }
+        const currentKids=[...lanes.children];
+        const nl=currentKids.find(n=>/Nasheed/.test(n.textContent||''));
+        /* The nasheed lane is a control, not a scrub target: clicking it
+           opens the Audio tab where its loudness lives. */
+        if(nl&&nl.contains(e.target)){
+          e.preventDefault();
+          StudioAdapter.ui.edTab='audio';
+          paintStudio();
+          return;
+        }
+        e.preventDefault();
+        scrubTo(e);
+        const move=m=>{if(m.buttons)scrubTo(m)};
+        const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up)};
+        window.addEventListener('pointermove',move);
+        window.addEventListener('pointerup',up);
+      });
+      lanes.style.cursor='ew-resize';
+
+    }
     function paintEditorLayout(vals){
       if(StudioAdapter.ui.screen!=='editor'||!StudioAdapter.ui.edClipId){edLayoutSig='';clearEditorLayout();return}
       const frame=edVideoNode&&edVideoNode.parentElement;
@@ -2956,7 +3105,17 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         for(const [k,v] of Object.entries(props))node.style.setProperty(k,v);
         edLayout=(edLayout||[]).concat([[node,Object.keys(props)]]);
       };
+      const narrowEditor=window.innerWidth<=820;
+      if(narrowEditor){
+        /* Phone layout: preview above, controls below, the page scrolls as a
+           whole. The desktop math pins the row to the leftover height, which
+           on a phone squeezes both columns into an unusable sliver. */
+        set(row,{'display':'flex','flex-direction':'column','height':'auto','min-height':'0','overflow':'visible','align-items':'stretch'});
+        set(previewCol,{'width':'100%','max-width':'100%','flex':'0 0 auto'});
+        set(panel,{'width':'100%','max-width':'100%','flex':'0 0 auto','overflow':'visible'});
+      }else{
       set(row,{'height':avail+'px','min-height':'0','align-items':'stretch','overflow':'hidden'});
+      }
 
       /* One bar, not two. The header is a wrapping flex row, so the buttons
          dropped onto a second line and the editor lost 50px of picture to a
@@ -3024,50 +3183,18 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         set(videoLane,{'order':'2'});
         if(nasheedLane)set(nasheedLane,{'order':'3'});
 
-        /* Drag the timeline to move through the clip. Click already seeks;
-           holding and moving is what makes it feel like a timeline. Started
-           only outside the caption lane, so clicking a caption still means
-           "select this block" rather than "seek to exactly here". */
-        if(!lanes.dataset.wiredScrub){
-          lanes.dataset.wiredScrub='1';
-          const scrubTo=e=>{
-            const box=lanes.getBoundingClientRect();
-            if(!box.width)return;
-            const ratio=Math.max(0,Math.min(1,(e.clientX-box.left)/box.width));
-            const seconds=ratio*Number(StudioAdapter.bindings(DATA).edDurationSec||1);
-            StudioAdapter.ui.edTime=seconds;
-            StudioAdapter.ui.edPlayhead=ratio;
-            StudioAdapter.seekEditor(seconds);
-            paintStudio();
-          };
-          lanes.addEventListener('pointerdown',e=>{
-            /* The lanes are found fresh per event: the wiring survives paints
-               but capLane/nasheedLane captured at wire time go stale when the
-               patcher rebuilds children, which read as clicks doing nothing. */
-            const currentKids=[...lanes.children];
-            const nl=currentKids.find(n=>/Nasheed/.test(n.textContent||''));
-            const wf2=currentKids.find(n=>/waveform/i.test(n.textContent||''));
-            const cl=currentKids.slice(1).filter(n=>n!==nl&&n!==wf2)
-              .sort((a,b)=>b.children.length-a.children.length)[0]||null;
-            if(cl&&cl.contains(e.target))return;
-            /* The nasheed lane is a control, not a scrub target: clicking it
-               opens the Audio tab where its loudness lives. */
-            if(nl&&nl.contains(e.target)){
-              e.preventDefault();
-              StudioAdapter.ui.edTab='audio';
-              paintStudio();
-              return;
-            }
-            e.preventDefault();
-            scrubTo(e);
-            const move=m=>{if(m.buttons)scrubTo(m)};
-            const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up)};
-            window.addEventListener('pointermove',move);
-            window.addEventListener('pointerup',up);
-          });
-          lanes.style.cursor='ew-resize';
-        }
       }
+      if(narrowEditor){
+        /* Phone: the frame is width-led (a comfortable portrait block), the
+           panel flows below at natural height, and the timeline pans
+           sideways -- percent-based lanes at 390px squeeze every caption
+           block into confetti otherwise. */
+        set(frame,{'height':'auto','width':'min(72vw, 300px)','max-width':'100%','margin':'8px auto'});
+        if(lanes&&lanes.parentElement){
+          set(lanes.parentElement,{'overflow-x':'auto','-webkit-overflow-scrolling':'touch'});
+          set(lanes,{'min-width':'640px'});
+        }
+      }else{
       /* Only the tool panel scrolls. The preview column is capped to the row so
          the frame sizes against a real height instead of running off the page. */
       set(panel,{'max-height':'100%','overflow-y':'auto','min-height':'0'});
@@ -3082,6 +3209,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          it and the aspect ratio derives the width. */
       set(frame,{'height':'100%','width':'auto','max-width':'100%','max-height':'100%',
         'flex':'0 0 auto','align-self':'center','margin':'0 auto'});
+      }
     }
 
     /* The content-type picker on the token page: Quran recitation or Islamic
@@ -3441,8 +3569,13 @@ function renderStudio(){
           await api(`/api/clips/${encodeURIComponent(id)}/rerender`,{method:'POST',
             body:JSON.stringify({templateId:clip.templateId||'',asVariant:clip.status==='posted'})});
           await refresh();
-        }catch(e){/* source gone or worker busy: the banner keeps saying the
-          video is behind; Save still offers the explicit path. */}
+        }catch(e){
+          /* Once per distinct reason, so a settle-loop cannot spam. */
+          if(window.__lastAutoRenderErr!==e.message){
+            window.__lastAutoRenderErr=e.message;
+            toast('Automatic re-render could not start: '+e.message,'bad');
+          }
+        }
       },4000);
     }
     StudioAdapter.onClipStyle=(id,patch)=>{if(!id||!patch||!Object.keys(patch).length)return Promise.resolve();
@@ -3464,11 +3597,12 @@ function renderStudio(){
         /* Two numbers, because they differ: the style always lands, but a clip
            whose source has been cleaned up cannot be rebuilt right now. Saying
            only "3 updated" would imply three new videos. */
+        const failWhy=(r&&Array.isArray(r.errors)&&r.errors[0]&&r.errors[0].error)||'';
         StudioAdapter.showToast(!applied
           ? 'Saved. This lecture has no other clip to update.'
           : queued===applied
             ? `Saved — ${applied} other clip${applied===1?'':'s'} in this lecture re-rendering to match`
-            : `Saved to ${applied} other clip${applied===1?'':'s'}; ${queued} re-rendering, ${applied-queued} need the source re-imported`);
+            : `Saved to ${applied} other clip${applied===1?'':'s'}, but re-rendering could not start${failWhy?': '+failWhy:''}`);
       },null,m=>StudioAdapter.showToast(m)).finally(()=>{StudioAdapter.ui.edApplying=false;renderAll()})};
     StudioAdapter.onPromoteClipStyle=(id)=>{if(!id)return;studioDo(async()=>{
       await api(`/api/clips/${encodeURIComponent(id)}/promote-style`,{method:'POST',body:'{}'})},'Applied to every clip using this style')};
@@ -3641,11 +3775,14 @@ function paintStudio(){
   paintApplyLecture(vals);
   paintPreviewPic(vals);
   paintCaptionWords(vals);
+  paintGlobalSearch(vals);
+  paintEditorRuler(vals);
   paintEditorCaption(vals);
   paintPlayerVideo(vals);
   paintEditorVideo(vals);
   paintEditorPlayer(vals);
   paintEditorLayout(vals);
+  paintEditorScrub();
   paintPreviewPlayer(vals);
   paintHighlight(vals);
   paintJobType(vals);
@@ -4000,6 +4137,8 @@ $('#scheduleSelectedLibraryClips').onclick=async()=>{
 };
 $('#postSelectedLibraryClips').onclick=async()=>{const ids=[...LIBRARY_SELECTED].filter(id=>libraryClipAvailable(clipById(id)||{}));if(!ids.length)return toast('Select at least one unposted clip','bad');if(!confirm(`Post ${ids.length} selected clip${ids.length===1?'':'s'} now?`))return;setBusy($('#postSelectedLibraryClips'),true,'Starting…');let ok=0;for(const id of ids)try{await api(`/api/clips/${encodeURIComponent(id)}/publish`,{method:'POST'});ok++}catch(e){toast(e.message,'bad')}toast(`${ok} publishing transfer${ok===1?'':'s'} created`,'good');LIBRARY_SELECTED.clear();await refresh();setBusy($('#postSelectedLibraryClips'),false)};
 
+/* Crossing the mobile breakpoint must re-derive every viewport-aware style. */
+let __resizeT=null;window.addEventListener('resize',()=>{clearTimeout(__resizeT);__resizeT=setTimeout(()=>{if(typeof paintStudio==='function')paintStudio()},150)});
 setInterval(updateClock,1000);const splashMinTime=new Promise(r=>setTimeout(r,350));const splashTimeout=new Promise(r=>setTimeout(()=>r('timeout'),12000));/* Always ask the server who we are. Gating this on a locally cached app password meant anyone who signed in with email, Google or Apple -- who has a valid session but no deenPw -- was shown the password wall instead of their dashboard, with no way through but the admin password. boot() reveals #gate itself if /api/state actually refuses. */
 const realCheck=boot();Promise.race([Promise.all([splashMinTime,realCheck]),splashTimeout]).then(result=>{if(result==='timeout'&&$('#gate')?.classList.contains('hide')&&$('#connect')?.classList.contains('hide')&&$('#app')?.classList.contains('hide')){$('#gate')?.classList.remove('hide');if($('#gateErr'))$('#gateErr').textContent='Taking longer than expected to reach the server. Check your connection and try again.'}$('#splash')?.classList.add('out');setTimeout(()=>$('#splash')?.remove(),500)});/* Two cadences. Fast while work is in flight, so progress moves; slow otherwise,
    so the notification bell can actually notice a scheduler failure, an
