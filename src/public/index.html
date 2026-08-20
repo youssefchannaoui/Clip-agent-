@@ -2751,7 +2751,16 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(vals.edCapIsAyah&&vals.edCapTranslation){
         want+=`<span style="${esc(vals.edCapGlossStyle||'display:block;font-size:.46em;opacity:.92;margin-top:.35em')}">${esc(vals.edCapTranslation)}</span>`;
       }
-      if(span.dataset.words!==want){span.dataset.words=want;span.innerHTML=want}
+      if(span.dataset.words!==want){
+        span.dataset.words=want;span.innerHTML=want;
+        /* The render's phrase fade (ayah_events \fad 550ms), previewed: each
+           caption change re-arms a soft opacity-in so the editor moves the
+           way the export will. Restart via reflow -- resetting animation-name
+           alone is coalesced by the style engine and never replays. */
+        span.style.animation='none';
+        void span.offsetWidth;
+        span.style.animation='dcCapFade .55s ease-out';
+      }
     }
 
     /* Click a clip's thumbnail anywhere -- queue, deck, lecture detail -- and

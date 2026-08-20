@@ -696,6 +696,21 @@ class AyahEventTests(unittest.TestCase):
             self.assertIn("\\fad(", event)
             self.assertNotIn("\\t(", event, "no pop or transform on scripture")
 
+    def test_the_ayah_fade_matches_the_reference_timing(self):
+        # Measured from the reference recitation clip: ~550ms in, ~450ms out.
+        # A chunk on screen long enough must use exactly those; a short chunk
+        # caps each side at a third of its own screen time.
+        events = worker.ayah_events(
+            {"arabic": "\u0628\u0650\u0630\u0650\u0643\u0652\u0631\u0650 \u0627\u0644\u0644\u0651\u0647\u0650", "translation": "in the remembrance of Allah"},
+            ornament="\u06dd", start=0.0, end=8.0, latin_font="DejaVu Serif",
+            translation_size=40, show_translation=True, ayah_size=96)
+        self.assertIn("\\fad(550,450)", events[0])
+        short = worker.ayah_events(
+            {"arabic": "\u0628\u0650\u0630\u0650\u0643\u0652\u0631\u0650", "translation": ""},
+            ornament="\u06dd", start=0.0, end=0.9, latin_font="DejaVu Serif",
+            translation_size=40, show_translation=False, ayah_size=96)
+        self.assertIn("\\fad(300,300)", short[0], "a third of 900ms per side")
+
     def test_the_verse_mark_ends_the_sentence_and_only_the_sentence(self):
         # Hard-spaced to the ayah's final word -- a mushaf never wraps the
         # number onto its own line -- and never shown mid-ayah.

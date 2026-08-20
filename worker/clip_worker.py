@@ -870,7 +870,12 @@ def quran_font(fallback: str) -> str:
 
 
 AYAH_MAX_WORDS = 5
-AYAH_FADE_MS = 300
+# Measured from the reference recitation clips (frame-by-frame brightness of
+# the text band): phrases enter over roughly half a second and leave slightly
+# faster -- a calm, pure opacity fade, no scale and no drift. 300ms symmetric
+# read as abrupt next to it.
+AYAH_FADE_IN_MS = 550
+AYAH_FADE_OUT_MS = 450
 # Why the ayah size is multiplied by three:
 #
 # libass sizes text the way VSFilter did -- the requested font size maps to the
@@ -968,8 +973,12 @@ def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: floa
 
     gloss_words = str(found.get("translation") or "").split() if show_translation else []
     span = max(0.4, end - start)
-    fade = min(AYAH_FADE_MS, int(span / max(1, chunk_count) * 1000 / 3))
-    fade_tag = f"{{\\fad({fade},{fade})}}"
+    # Still capped by the chunk's own length so a short phrase is not all
+    # fade: each side may use at most a third of the time it is on screen.
+    per_chunk_ms = span / max(1, chunk_count) * 1000
+    fade_in = min(AYAH_FADE_IN_MS, int(per_chunk_ms / 3))
+    fade_out = min(AYAH_FADE_OUT_MS, int(per_chunk_ms / 3))
+    fade_tag = f"{{\\fad({fade_in},{fade_out})}}"
 
     events: list[str] = []
     at = start
