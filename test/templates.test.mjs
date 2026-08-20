@@ -90,9 +90,10 @@ test('Quran Recitation captions scripture, not the transcript', () => {
   assert.ok(t, 'the template ships');
   assert.equal(t.captionMode, 'quran');
   assert.equal(t.captionTranslation, true, 'the translation sits under the ayah');
-  // Amiri and Scheherazade draw the end-of-ayah ornament with the verse number
-  // inside it; a Latin face leaves a bare circle.
-  assert.ok(['Amiri', 'Scheherazade'].includes(t.captionArabicFont), t.captionArabicFont);
+  // A mushaf face draws the end-of-ayah ornament with the verse number inside
+  // it; a Latin face leaves a bare circle. KFGQPC HAFS is the Madinah mushaf's
+  // own digital face and ships bundled in worker/fonts.
+  assert.ok(['KFGQPC HAFS Uthmanic Script', 'Amiri', 'Scheherazade'].includes(t.captionArabicFont), t.captionArabicFont);
   // An ayah is one held line, not a stack that builds word by word.
   assert.equal(t.captionPopMs, 0, 'no word pop');
 });

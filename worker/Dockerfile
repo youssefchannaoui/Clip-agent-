@@ -60,6 +60,12 @@ RUN python -m pip install --upgrade pip setuptools wheel \
     && python -m pip install --upgrade -r /app/worker/requirements.txt
 
 COPY worker /app/worker
+# Bundled faces (see worker/fonts/NOTICE.md): the KFGQPC HAFS mushaf face --
+# the one Quran apps use, whose U+06DD is the ornamented verse medallion --
+# and Outfit, the product's own sans, for the translation line.
+RUN mkdir -p /usr/share/fonts/truetype/deenclipped \
+    && cp /app/worker/fonts/*.ttf /usr/share/fonts/truetype/deenclipped/ \
+    && fc-cache -f
 RUN mkdir -p /var/lib/deenclipped/jobs /var/lib/deenclipped/tmp /var/lib/deenclipped/models \
     && python -m py_compile /app/worker/service.py /app/worker/import_providers.py /app/worker/object_storage.py /app/worker/clip_worker.py /app/worker/quran.py \
     # ffmpeg, libass, yt-dlp and OpenCV all parse media a customer chose. None

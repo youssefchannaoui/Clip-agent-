@@ -10,7 +10,18 @@
 <meta name="apple-mobile-web-app-title" content="DeenClipped AI">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Outfit:wght@500;600;700&family=Amiri:wght@400;700&family=Scheherazade+New:wght@400;700&family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Outfit:wght@400;500;600;700&family=Amiri:wght@400;700&family=Scheherazade+New:wght@400;700&family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* The mushaf face the render burns ayat in (KFGQPC HAFS v2.1, see
+   worker/fonts/NOTICE.md), self-hosted so previews draw the same glyphs --
+   including the ornamented verse medallion at U+06DD. */
+@font-face {
+  font-family: 'KFGQPC HAFS Uthmanic Script';
+  src: url('/fonts/UthmanicHafs.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+</style>
 <!-- Studio dashboard, generated from the Claude Design project. See design/README.md. -->
 <link rel="stylesheet" href="/studio-styles.generated.css">
 <style>
@@ -2384,7 +2395,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       }
       let want=scaleAyahMarks((vals.edCapWords||[]).map(w=>w.style
         ? `<span style="${esc(w.style)}">${esc(w.text)}</span>`
-        : esc(w.text)).join(' '));
+        : esc(w.text)).join(' '),vals.edCapMarkScale);
       /* An ayah carries its translation underneath, the way the export draws
          it: the template's own Latin face at captionTranslationSize, computed
          by the adapter from the same metrics the render uses. */
@@ -2455,7 +2466,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        larger size -- write_ass scales it by 1.45 over the ayah text, and the
        previews draw what the export draws. Runs on escaped HTML; the marker
        characters pass esc() untouched. */
-    const scaleAyahMarks=html=>html.replace(/\u06DD[\u0660-\u0669\u06F0-\u06F90-9]*/g,m=>`<span style="font-size:1.45em;line-height:1">${m}</span>`);
+    const scaleAyahMarks=(html,scale)=>html.replace(/(?:\u06DD[\u0660-\u0669\u06F0-\u06F90-9]*|\u00A0[\u0660-\u0669\u06F0-\u06F9]+$)/g,m=>`<span style="font-size:${Number(scale)||1.45}em;line-height:1">${m}</span>`);
     function paintCaptionWords(vals){
       /* Templates only. These are sample words for previewing a style; the
          editor draws the clip's real captions. */
@@ -2479,7 +2490,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       }
       let want=scaleAyahMarks((vals.capWords||[]).map(w=>w.style
         ? `<span style="${esc(w.style)}">${esc(w.text)}</span>`
-        : esc(w.text)).join(' '));
+        : esc(w.text)).join(' '),vals.capMarkScale);
       /* The Quran sample carries its translation, as the render draws one. */
       if(vals.capGloss){
         want+=`<span style="${esc(vals.capGlossStyle||'')}">${esc(vals.capGloss)}</span>`;

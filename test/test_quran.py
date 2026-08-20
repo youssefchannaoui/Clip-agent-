@@ -157,6 +157,18 @@ class OrnamentTests(unittest.TestCase):
         for event in events[:-1]:
             self.assertNotIn("\u06dd", event)
 
+    def test_the_marker_is_written_the_way_each_face_expects(self):
+        # Amiri composes U+06DD with the digits after it; the KFGQPC HAFS face
+        # medallions a bare digit run and draws an extra empty ring if U+06DD
+        # is fed alongside it.
+        import importlib.util as _ilu
+        _spec = _ilu.spec_from_file_location("clip_worker_marks", ROOT / "worker" / "clip_worker.py")
+        cw = _ilu.module_from_spec(_spec)
+        sys.modules[_spec.name] = cw
+        _spec.loader.exec_module(cw)
+        self.assertEqual(cw.ornament_text("Amiri", 20), "\u06dd\u0662\u0660")
+        self.assertEqual(cw.ornament_text("KFGQPC HAFS Uthmanic Script", 20), "\u0662\u0660")
+
     def test_the_ornament_follows_the_ayah(self):
         marked = quran.ayah_with_ornament("قُلْ هُوَ ٱللَّهُ أَحَدٌ", 1)
         self.assertTrue(marked.startswith("قُلْ"))

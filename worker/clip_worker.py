@@ -131,6 +131,7 @@ YOUTUBE_BLOCK_SIGNS = (
 # app rather than only when a clip renders in the wrong face.
 CAPTION_FAMILIES = (
     "DejaVu Sans", "DejaVu Serif", "Liberation Sans", "Open Sans", "Amiri", "Scheherazade",
+    "KFGQPC HAFS Uthmanic Script", "Outfit",
 )
 
 # Makes ffmpeg report machine-readable progress on stdout. -nostats suppresses
@@ -858,7 +859,11 @@ def quran_font(fallback: str) -> str:
     # and renders at sane metrics. Amiri Quran, despite the name, reserves so
     # much vertical room for stacked marks that rendered frames came out at a
     # quarter of the expected size.
-    for candidate in ("Amiri", "Scheherazade New", "Scheherazade"):
+    # The KFGQPC HAFS face first: it is the Madinah mushaf's own digital face,
+    # the one every major Quran app sets ayat in, and its U+06DD is the full
+    # ornamented medallion with the verse number inside. Amiri stays the
+    # fallback for an image built before the font was bundled.
+    for candidate in ("KFGQPC HAFS Uthmanic Script", "Amiri", "Scheherazade New", "Scheherazade"):
         if candidate in families:
             return candidate
     return fallback
@@ -878,15 +883,56 @@ AYAH_FADE_MS = 300
 # reference's proportion.
 AYAH_SIZE_SCALE = 3.0
 
+# libass sizes a font by its Win cell (usWinAscent + usWinDescent, in em).
+# The mushaf faces have very tall cells, so the same nominal size draws them
+# much smaller than a Latin face -- the reason ayahs were "tripled". The cell
+# heights below are measured from the exact font files the image installs, and
+# the nominal ayah size is computed per face so every face lands on the same
+# VISUAL size: AYAH_VISUAL em of the caption font size. AYAH_VISUAL is pinned
+# to what 3.0x nominal Amiri (cell 2.76) always produced, so existing Amiri
+# output is unchanged.
+AYAH_FONT_CELL = {
+    "KFGQPC HAFS Uthmanic Script": 1.758,
+    "Amiri": 2.760,
+    "Scheherazade New": 2.434,
+    "Scheherazade": 2.434,
+}
+AYAH_VISUAL = AYAH_SIZE_SCALE / AYAH_FONT_CELL["Amiri"]
+
+
+def ayah_nominal_scale(face: str) -> float:
+    return AYAH_VISUAL * AYAH_FONT_CELL.get(str(face), AYAH_FONT_CELL["Amiri"])
+
+
 # The end-of-ayah ornament, relative to the ayah text. At 1.0 the verse number
 # inside the circle is unreadably small -- the ornament needs its own size,
-# the way a mushaf sets it visibly larger than the letters around it.
+# the way a mushaf sets it visibly larger than the letters around it. The HAFS
+# face draws the full medallion already sized like a mushaf's, so it only gets
+# a gentle nudge where Amiri's plain rosette needs a real one.
 AYAH_MARK_SCALE = 1.45
+AYAH_MARK_SCALE_BY_FACE = {"KFGQPC HAFS Uthmanic Script": 1.4}
+
+
+def ayah_mark_scale(face: str) -> float:
+    return AYAH_MARK_SCALE_BY_FACE.get(str(face), AYAH_MARK_SCALE)
+
+
+def ornament_text(face: str, ayah: int) -> str:
+    """The end-of-ayah marker, written the way the face expects it.
+
+    Amiri and Scheherazade compose U+06DD with the digits that follow it into
+    one numbered rosette. The KFGQPC HAFS face medallions a bare digit run by
+    itself -- feeding it U+06DD as well draws a second, empty ring beside the
+    numbered one.
+    """
+    if str(face) == "KFGQPC HAFS Uthmanic Script":
+        return quran.arabic_number(ayah)
+    return quran.ornament_for(ayah)
 
 
 def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: float,
                 latin_font: str, translation_size: int, show_translation: bool,
-                ayah_size: int = 0) -> list[str]:
+                ayah_size: int = 0, mark_size: int = 0) -> list[str]:
     """The Dialogue lines carrying an ayah, a short phrase at a time.
 
     Modelled on the reference clips: a long ayah is not held on screen as one
@@ -937,11 +983,11 @@ def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: floa
 
         text = ass_escape(" ".join(chunk))
         if index == chunk_count - 1:
-            # The ornament at its own, larger size. Nothing follows it on this
-            # line, and the translation line below sets its own \fn and \fs,
-            # so the override needs no reset.
-            mark_size = int(round((ayah_size or translation_size) * AYAH_MARK_SCALE)) if ayah_size else 0
-            mark_tag = f"{{\\fs{mark_size}}}" if mark_size else ""
+            # The ornament at its own size (see ayah_mark_scale). Nothing
+            # follows it on this line, and the translation line below sets its
+            # own \fn and \fs, so the override needs no reset.
+            size = mark_size or (int(round(ayah_size * AYAH_MARK_SCALE)) if ayah_size else 0)
+            mark_tag = f"{{\\fs{size}}}" if size else ""
             text += "\\h" + mark_tag + ass_escape(ornament)
 
         if gloss_words:
@@ -1207,7 +1253,7 @@ def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) ->
     translation_size = int(max(20, min(90, int(template.get("captionTranslationSize", 46)))))
     fade_tag = f"{{\\fad({fade_ms},{fade_ms})}}" if fade_ms else ""
     font_size = int(template.get("captionFontSize", 62))
-    ayah_size = int(round(font_size * AYAH_SIZE_SCALE))
+    ayah_size = int(round(font_size * ayah_nominal_scale(ayah_font)))
     margin_v = int(template.get("captionMarginV", 220))
     outline_width = float(template.get("captionOutlineWidth", 5))
     shadow = float(template.get("captionShadow", 1))
@@ -1337,9 +1383,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     "translation": found["translation"], "confidence": found["confidence"],
                 })
                 events.extend(ayah_events(
-                    found, ornament=quran.ornament_for(found["ayah"]), start=start, end=end,
+                    found, ornament=ornament_text(ayah_font, found["ayah"]), start=start, end=end,
                     latin_font=font, translation_size=translation_size,
                     show_translation=show_translation, ayah_size=ayah_size,
+                    mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))),
                 ))
             if captioned:
                 emit("progress", stage="Matching recited ayahs", progress=72,
@@ -1404,9 +1451,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             "translation": found["translation"], "confidence": found["confidence"],
         })
         events.extend(ayah_events(
-            found, ornament=quran.ornament_for(found["ayah"]), start=span["start"], end=span["end"],
+            found, ornament=ornament_text(ayah_font, found["ayah"]), start=span["start"], end=span["end"],
             latin_font=font, translation_size=translation_size,
             show_translation=bool(template.get("captionTranslation", True)), ayah_size=ayah_size,
+            mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))),
         ))
     ass_file.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
     return matched_ayahs

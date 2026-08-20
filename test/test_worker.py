@@ -468,10 +468,18 @@ class CaptionFontTests(unittest.TestCase):
             "Open Sans": "fonts-open-sans",
             "Amiri": "fonts-hosny-amiri",
             "Scheherazade New": "fonts-sil-scheherazade",
+            # Bundled in worker/fonts (see its NOTICE.md) rather than apt.
+            "KFGQPC HAFS Uthmanic Script": "worker/fonts",
+            "Outfit": "worker/fonts",
         }
+        bundled = {"KFGQPC HAFS Uthmanic Script": "UthmanicHafs.ttf", "Outfit": "Outfit-Regular.ttf"}
         for font in self._picker_fonts():
             self.assertIn(font, packages, f"{font} is offered but no package is recorded for it")
-            self.assertIn(packages[font], dockerfile, f"{font} needs {packages[font]} installed")
+            if font in bundled:
+                self.assertTrue((ROOT / "worker" / "fonts" / bundled[font]).exists(), f"{font} must be bundled at worker/fonts/{bundled[font]}")
+                self.assertIn("cp /app/worker/fonts/*.ttf", dockerfile, "the Dockerfile must install the bundled fonts")
+            else:
+                self.assertIn(packages[font], dockerfile, f"{font} needs {packages[font]} installed")
 
     def test_inter_is_not_offered_because_it_is_not_installed(self):
         self.assertNotIn("Inter", self._picker_fonts())

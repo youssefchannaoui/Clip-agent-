@@ -442,6 +442,10 @@
     { name: 'DejaVu Serif', label: 'DejaVu Serif', web: '"DejaVu Serif", Georgia, serif' },
     { name: 'Amiri', label: 'Amiri', web: 'Amiri, "Scheherazade New", Georgia, serif' },
     { name: 'Scheherazade New', label: 'Scheherazade', web: '"Scheherazade New", Amiri, Georgia, serif' },
+    // The Madinah mushaf's own digital face; U+06DD is the verse medallion.
+    { name: 'KFGQPC HAFS Uthmanic Script', label: 'Uthmani HAFS', web: '"KFGQPC HAFS Uthmanic Script", Amiri, serif' },
+    // The product's own sans, bundled in the worker for the translation line.
+    { name: 'Outfit', label: 'Outfit', web: 'Outfit, "Segoe UI", sans-serif' },
   ];
 
   // How much smaller libass draws each face than CSS does at the same nominal
@@ -459,16 +463,22 @@
     'Open Sans': 0.694,
     'Amiri': 0.362,
     'Scheherazade New': 0.411,
+    'KFGQPC HAFS Uthmanic Script': 0.569,
+    'Outfit': 0.794,
   };
   function assFactor(name) {
     return ASS_SIZE_FACTOR[name] || 0.86;
   }
 
-  // Mirrors AYAH_SIZE_SCALE in worker/clip_worker.py: the render sets ayahs at
-  // three times the caption size to compensate for the mushaf faces' tall Win
-  // metrics. The preview applies the same 3x and then the face's own factor,
-  // landing on the visual size the export draws.
-  var AYAH_SIZE_SCALE = 3.0;
+  // Mirrors worker/clip_worker.py: the render computes each face's nominal
+  // ayah size from its measured Win cell so every face lands on the same
+  // VISUAL size -- AYAH_VISUAL em of the caption font size. In the preview the
+  // cell terms cancel, so this single multiplier is the whole story.
+  var AYAH_VISUAL = 3.0 / 2.76;
+  // ayah_mark_scale in the worker: the HAFS medallion is already mushaf-sized.
+  function ayahMarkScale(arabicFont) {
+    return arabicFont === 'KFGQPC HAFS Uthmanic Script' ? 1.4 : 1.45;
+  }
 
   function webFontFor(name) {
     for (var i = 0; i < CAPTION_FONTS.length; i++) {
@@ -673,7 +683,7 @@
   // uppercased and not bold -- the Ayah style in write_ass is Bold 0.
   function ayahFaceStyle(t) {
     var arabic = t.captionArabicFont || 'Amiri';
-    var size = (Number(t.captionFontSize) || 96) * AYAH_SIZE_SCALE * assFactor(arabic);
+    var size = (Number(t.captionFontSize) || 96) * AYAH_VISUAL;
     var width = Math.max(1, Number(t.width) || 1080);
     return ' color: ' + (t.captionPrimary || '#FFFFFF') + ';'
       + ' font-family: ' + webFontFor(arabic) + '; font-weight: 400;'
@@ -685,8 +695,7 @@
   // captionTranslationSize, exactly as the render's \fn+\fs override sets it,
   // expressed relative to the ayah span it sits inside.
   function ayahGlossStyle(t) {
-    var arabic = t.captionArabicFont || 'Amiri';
-    var ayahPx = (Number(t.captionFontSize) || 96) * AYAH_SIZE_SCALE * assFactor(arabic);
+    var ayahPx = (Number(t.captionFontSize) || 96) * AYAH_VISUAL;
     var glossPx = (Number(t.captionTranslationSize) || 46) * assFactor(t.captionFont);
     var em = Math.max(0.15, Math.min(1.2, glossPx / Math.max(1, ayahPx)));
     return 'display: block; font-size: ' + em.toFixed(3) + 'em; line-height: 1.25; opacity: .92; margin-top: .35em;'
@@ -1568,8 +1577,11 @@
       // mark once, on the ayah's last phrase; the preview does the same, and
       // the painter sets it at the export's own larger size.
       var digits = '٠١٢٣٤٥٦٧٨٩';
+      // The HAFS face medallions a bare digit run by itself; U+06DD beside it
+      // draws a second, empty ring. Amiri wants the mark then the digits.
+      var hafs = (tpl.captionArabicFont || 'Amiri') === 'KFGQPC HAFS Uthmanic Script';
       var mark = verse.ayah
-        ? '\u00A0\u06DD' + String(verse.ayah).split('').map(function (d) { return digits[Number(d)] || d; }).join('')
+        ? '\u00A0' + (hafs ? '' : '\u06DD') + String(verse.ayah).split('').map(function (d) { return digits[Number(d)] || d; }).join('')
         : '';
       var MAXW = 5;
       var count = Math.max(1, Math.ceil(aWords.length / MAXW));
@@ -2261,6 +2273,7 @@
       // \fn+\fs override styles it. The painter used to hardcode .46em in a
       // face the template never chose.
       edCapGlossStyle: ayahGlossStyle(tpl),
+      edCapMarkScale: ayahMarkScale(tpl.captionArabicFont || 'Amiri'),
       edCapHandle: 'position: absolute; inset: -5px; border: 1px dashed rgba(240,214,166,.7); border-radius: 8px; pointer-events: none;',
       dragEdCap: dragCaptionFrom,
 
@@ -2939,7 +2952,10 @@
         // never animates an ayah. The English sample said nothing true about
         // this mode.
         if (tpl.captionMode === 'quran') {
-          return [{ text: SAMPLE_AYAH.arabic + '\u00A0' + SAMPLE_AYAH.mark, style: '' }];
+          var sampleMark = (tpl.captionArabicFont || 'Amiri') === 'KFGQPC HAFS Uthmanic Script'
+            ? SAMPLE_AYAH.mark.replace('\u06DD', '')
+            : SAMPLE_AYAH.mark;
+          return [{ text: SAMPLE_AYAH.arabic + '\u00A0' + sampleMark, style: '' }];
         }
         var parts = sampleCaptionParts(previewAt, tpl.captionMode, tpl.captionStackMaxWords);
         return parts.words.map(function (text, i) {
@@ -3023,6 +3039,7 @@
 
       capGloss: tpl.captionMode === 'quran' && tpl.captionTranslation !== false ? SAMPLE_AYAH.gloss : '',
       capGlossStyle: ayahGlossStyle(tpl),
+      capMarkScale: ayahMarkScale(tpl.captionArabicFont || 'Amiri'),
       capStyle: captionPlacementStyle(tpl, UI.dragPreview && UI.dragPreview.kind === 'caption' ? UI.dragPreview.y : null)
         + (tpl.captionMode === 'quran' ? ayahFaceStyle(tpl) : captionFaceStyle(tpl))
         + capInkStyle(tpl)

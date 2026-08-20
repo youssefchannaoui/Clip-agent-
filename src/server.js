@@ -503,6 +503,17 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/marketing.js') {
     return streamFile(req, res, marketingJsPage, { contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=3600' });
   }
+  if (method === 'GET' && pathname.startsWith('/fonts/')) {
+    // The bundled caption faces (see worker/fonts/NOTICE.md), so the editor
+    // previews ayat in the exact face the render burns in.
+    const name = path.basename(decodeURIComponent(pathname));
+    const fontsDir = path.resolve(config.root, 'src', 'public', 'fonts');
+    const file = path.resolve(fontsDir, name);
+    if (!file.startsWith(fontsDir + path.sep) || !file.endsWith('.ttf') || !fs.existsSync(file)) {
+      return json(res, 404, { error: 'Not found.' });
+    }
+    return streamFile(req, res, file, { contentType: 'font/ttf', cacheControl: 'public, max-age=604800, immutable' });
+  }
   if (method === 'GET' && pathname.startsWith('/marketing-assets/')) {
     const name = path.basename(decodeURIComponent(pathname));
     let file = null;
