@@ -2336,6 +2336,9 @@ def process_more_clips(job: dict[str, Any], job_file: Path) -> None:
         )
         track = shuffled_tracks[(index - 1) % len(shuffled_tracks)] if shuffled_tracks else None
         rendered.append(render_clip(job, candidate, index, source_file, track, output_dir))
+        # Announced the moment it exists, not when the batch ends: the service
+        # uploads it and the review queue shows it while the rest still render.
+        emit("clip_ready", clip=rendered[-1], index=index, total=total)
 
     result = {
         "project": {
@@ -2478,6 +2481,11 @@ def process(job_file: Path) -> None:
         track = shuffled_tracks[(index - 1) % len(shuffled_tracks)] if shuffled_tracks else None
         rendered.append(render_clip(job, candidate, index, source_file, track, output_dir, on_fraction=report))
         clip_seconds.append(time.time() - clip_started)
+        # Announced the moment it exists, not when the batch ends: someone who
+        # sees clip 1 at minute six stays; someone staring at a bar for forty
+        # minutes leaves. The service uploads it and the web inserts it into
+        # the review queue while the remaining clips still render.
+        emit("clip_ready", clip=rendered[-1], index=index, total=total)
 
     audio_file.unlink(missing_ok=True)
     result = {

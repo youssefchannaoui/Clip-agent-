@@ -364,6 +364,7 @@ function appState(user = null) {
       currentClip: project.currentClip ?? null, totalClips: project.totalClips ?? null,
       clipPercent: project.clipPercent ?? null, clipPlan: project.clipPlan || null,
       submittedAt: project.submittedAt, completedAt: project.completedAt || null, clipCount: project.clipCount || 0,
+      queueAhead: project.status === 'queued' ? agent.engine.queueAhead(project.id) : null,
       clipsRequested: project.clipsRequested || 0,
       durationSec: project.durationSec || project.sourceDurationSec || null, sourceDurationSec: project.sourceDurationSec || null,       // Derived at read time as well as at submit: lectures queued before the
       // dashboard sent sourceMeta have null on the record, and back-filling here

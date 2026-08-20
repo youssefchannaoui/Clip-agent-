@@ -755,3 +755,69 @@ class WorkerPersistenceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PartialClipUploadTests(unittest.TestCase):
+    """Clips announced mid-render are uploaded once, not twice.
+
+    clip_ready events trigger an early upload so the review queue fills while
+    later clips still render; the final upload_result pass must reuse those
+    uploads instead of sending the same bytes again.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.mkdtemp()
+        os.environ["WORKER_DATA_DIR"] = self.temp
+        os.environ["WORKER_TEMP_DIR"] = os.path.join(self.temp, "tmp")
+        os.environ["WORKER_SHARED_SECRET"] = "secret-for-tests"
+        for module in ("service",):
+            sys.modules.pop(module, None)
+        self.service = importlib.import_module("service")
+
+    def tearDown(self):
+        shutil.rmtree(self.temp, ignore_errors=True)
+
+    def _processor_with_counting_storage(self):
+        processor = self.service.Processor(self.service.JobStore())
+        calls = []
+
+        class Storage:
+            configured = True
+
+            def upload(self, source, key, content_type):
+                calls.append(str(key))
+                return {"key": key, "url": f"https://cdn.example/{key}"}
+
+        processor.storage = Storage()
+        return processor, calls
+
+    def _fake_clip(self, clip_id):
+        clip_file = pathlib.Path(self.temp) / f"{clip_id}.mp4"
+        thumb_file = pathlib.Path(self.temp) / f"{clip_id}.jpg"
+        clip_file.write_bytes(b"v")
+        thumb_file.write_bytes(b"t")
+        return {"id": clip_id, "title": clip_id, "clipFile": str(clip_file), "thumbFile": str(thumb_file)}
+
+    def test_an_early_upload_is_reused_by_the_final_pass(self):
+        processor, calls = self._processor_with_counting_storage()
+        early = processor.upload_clip("job_p", self._fake_clip("clip1"))
+        self.assertEqual(early["clipUrl"], "https://cdn.example/clips/job_p/clip1.mp4")
+        self.assertNotIn("clipFile", early, "local paths never leave the worker")
+        processor.partial_uploads.setdefault("job_p", {})["clip1"] = early
+
+        store = self.service.JobStore()
+        store.create({"id": "job_p", "source": {"type": "youtube"}})
+        uploads_before = len(calls)
+        result = processor.upload_result("job_p", {
+            "project": {},
+            "clips": [self._fake_clip("clip1"), self._fake_clip("clip2")],
+        })
+        new_keys = calls[uploads_before:]
+        self.assertEqual(len(result["clips"]), 2)
+        self.assertNotIn("clips/job_p/clip1.mp4", new_keys, "clip1's bytes were not sent twice")
+        self.assertIn("clips/job_p/clip2.mp4", new_keys, "the unannounced clip still uploads")
+
+    def test_a_missing_file_fails_the_early_upload_loudly(self):
+        processor, _ = self._processor_with_counting_storage()
+        with self.assertRaises(RuntimeError):
+            processor.upload_clip("job_p", {"id": "ghost", "clipFile": "/nope.mp4", "thumbFile": "/nope.jpg"})

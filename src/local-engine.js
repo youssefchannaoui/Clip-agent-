@@ -720,8 +720,17 @@ export function customerSafeProjectError(value = '') {
 function importResultObject(project, result, engine = 'self-hosted') {
   const imported = [];
   for (const clip of result.clips || []) {
+    // Upsert, not push: clips announced early (clip_ready -> partialClips)
+    // are already records. Pushing again would show every clip twice the
+    // moment its job finished.
+    const existing = state.clips.find(item => item.id === clip.id);
+    if (existing) {
+      Object.assign(existing, clip, { projectId: project.id, projectTitle: result.project?.title || project.title });
+      imported.push(existing);
+      continue;
+    }
     const record = withOwner({
-      ...clip, status: 'waiting', targets: [], addedAt: Date.now(), scheduledAt: null, postedAt: null,
+      ...clip, projectId: project.id, status: 'waiting', targets: [], addedAt: Date.now(), scheduledAt: null, postedAt: null,
       projectTitle: result.project?.title || project.title, engine, renderVersion: 1,
     }, ownerOf(project));
     state.clips.push(record);
@@ -770,6 +779,25 @@ function importResult(project, file) {
   importResultObject(project, JSON.parse(fs.readFileSync(file, 'utf8')), 'self-hosted');
 }
 
+function plural_en(n, one) { return `${n} ${one}${n === 1 ? '' : 's'}`; }
+
+// How many jobs stand between a queued lecture and the worker. Counted across
+// every account -- MAX_CONCURRENT_JOBS=1 means customer B genuinely waits for
+// customer A -- but reported as a bare count, never as whose. Re-render and
+// more-clips jobs are minutes, not lectures, so they are left out rather than
+// inflating the number.
+export function queueAhead(projectId) {
+  const target = projectById(projectId);
+  if (!target || target.status !== 'queued') return 0;
+  let ahead = 0;
+  for (const project of state.projects) {
+    if (project.id === target.id) continue;
+    if (project.status === 'processing') ahead += 1;
+    else if (project.status === 'queued' && Number(project.submittedAt || 0) < Number(target.submittedAt || 0)) ahead += 1;
+  }
+  return ahead;
+}
+
 export function acceptRemoteUpdate(projectId, update) {
   const project = projectById(projectId);
   if (!project || project.engine !== 'remote') return null;
@@ -788,6 +816,26 @@ export function acceptRemoteUpdate(projectId, update) {
     project.lastWarning = String(update.lastWarning);
     project.lastWarningCode = String(update.lastWarningCode || '');
     log(project.lastWarning, 'warn', ownerOf(project));
+  }
+  // Clips the worker has finished and uploaded while the rest still render.
+  // Inserted the moment they arrive so the review queue fills as the job
+  // runs -- seeing clip 1 at minute six is the difference between waiting
+  // and leaving. The completion pass upserts over these records.
+  if (Array.isArray(update.partialClips) && update.partialClips.length && project.status !== 'done') {
+    let added = 0;
+    for (const clip of update.partialClips) {
+      if (!clip || !clip.id || state.clips.some(item => item.id === clip.id)) continue;
+      state.clips.push(withOwner({
+        ...clip, projectId: project.id, status: 'waiting', targets: [], addedAt: Date.now(),
+        scheduledAt: null, postedAt: null, projectTitle: project.title, engine: 'remote-worker', renderVersion: 1,
+      }, ownerOf(project)));
+      added += 1;
+    }
+    if (added) {
+      project.clipCount = state.clips.filter(item => item.projectId === project.id).length;
+      save();
+      log(`${plural_en(added, 'clip')} from "${project.title}" ${added === 1 ? 'is' : 'are'} already in the review queue while the rest render.`, 'info', ownerOf(project));
+    }
   }
   if (update.status === 'completed' && update.result && project.status !== 'done') {
     importResultObject(project, update.result, 'remote-worker');

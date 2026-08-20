@@ -270,6 +270,15 @@
     { label: 'Mixed \u00b7 10-90s', min: 10, max: 90 },
   ];
 
+  // "45\u201370 min" from a selected length: measured whisper throughput plus
+  // render time, floored so a five-minute clip does not promise three.
+  function jobEtaRange(seconds) {
+    var mins = Math.max(1, seconds / 60);
+    var lo = Math.max(4, Math.round(mins * 0.6));
+    var hi = Math.max(8, Math.round(mins * 1.0));
+    return lo + '\u2013' + hi + ' min';
+  }
+
   function toast(message) { global.StudioAdapter.onToast(message); }
 
   // Keys match the `interval` each plan reports, so the tabs filter real data
@@ -1718,7 +1727,15 @@
     var jobsLive = [];
     projects.forEach(function (pr) {
       if (['queued', 'processing'].indexOf(pr.status) > -1) {
-        jobsLive.push({ kind: 'project', title: projectTitle[pr.id], stage: pr.stage || pr.status, progress: Number(pr.progress || 0), etaSec: estimateEta('p:' + pr.id, Number(pr.progress || 0), pr.etaSec), bytesDone: pr.bytesDone, bytesTotal: pr.bytesTotal, at: pr.startedAt || pr.submittedAt, project: pr });
+        // A queued job says where it stands, not just "queued": one worker
+        // means the wait is real, and a visible position reads as a line
+        // moving rather than a job stuck.
+        var queuedStage = pr.status === 'queued' && pr.queueAhead > 0
+          ? plural(pr.queueAhead, 'job') + ' ahead of yours'
+          : pr.status === 'queued' && pr.queueAhead === 0
+            ? 'Next in line'
+            : null;
+        jobsLive.push({ kind: 'project', title: projectTitle[pr.id], stage: queuedStage || pr.stage || pr.status, progress: Number(pr.progress || 0), etaSec: estimateEta('p:' + pr.id, Number(pr.progress || 0), pr.etaSec), bytesDone: pr.bytesDone, bytesTotal: pr.bytesTotal, at: pr.startedAt || pr.submittedAt, project: pr });
       }
       if (pr.moreJob && ['queued', 'processing'].indexOf(pr.moreJob.status) > -1) {
         jobsLive.push({ kind: 'project', title: 'More clips · ' + projectTitle[pr.id], stage: pr.moreJob.stage || pr.moreJob.status, progress: Number(pr.moreJob.progress || 0), etaSec: estimateEta('m:' + pr.id, Number(pr.moreJob.progress || 0), null), at: pr.moreJob.startedAt || pr.moreJob.createdAt });
@@ -2666,9 +2683,16 @@
           Math.max(1, (job.end - job.start) / job.durationSec * 100) + '%; border-radius: 4px; background: rgba(217,180,120,.28); border: 1px solid rgba(217,180,120,.5);'
         : 'position: absolute; inset: 0; border-radius: 4px; background: rgba(217,180,120,.18); border: 1px solid rgba(217,180,120,.35);',
       jobRangeLabel: !job ? '' : job.durationKnown ? secsToClock(job.start) + ' – ' + secsToClock(job.end) : 'Whole lecture',
+      // The expectation is set before tokens are committed, not discovered
+      // mid-wait. The range is measured, not vibes: whisper-small transcribes
+      // at ~0.21x duration on the worker (benchmarked 20 Aug 2026 on a real
+      // lecture), and download + scoring + rendering brings the whole job to
+      // roughly 0.6-1.0x the selected length on the current single worker.
       jobLenLabel: !job ? '' : job.durationKnown
-        ? humanDuration(job.end - job.start) + ' selected'
-        : 'Length is confirmed once the worker downloads the source.',
+        ? humanDuration(job.end - job.start) + ' selected · ready in roughly '
+          + jobEtaRange(job.end - job.start)
+        : 'Length is confirmed once the worker downloads the source. '
+          + 'As a guide: a 60-minute lecture takes roughly 35\u201360 minutes to transcribe and render.',
       // The design followed that label with the literal "of 42:11 — drag the top
       // handle...", so every lecture claimed to be 42 minutes 11 seconds long no
       // matter its real length. text-overrides.json turns it into this binding.

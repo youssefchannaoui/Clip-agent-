@@ -253,6 +253,10 @@ class Processor:
         self.lock = threading.RLock()
         self.stop = threading.Event()
         self.threads = [threading.Thread(target=self.loop, name=f"job-{index}", daemon=True) for index in range(MAX_CONCURRENT)]
+        # Clips uploaded early, per job, so upload_result does not send the
+        # same bytes twice. Keyed by job so a crashed job cannot leak into the
+        # next one; cleaned in process()'s finally.
+        self.partial_uploads: dict[str, dict[str, dict[str, Any]]] = {}
 
     def start(self) -> None:
         for job_id in self.store.recover():
@@ -454,6 +458,18 @@ class Processor:
                     lastWarning=str(event.get("warning") or ""),
                     lastWarningCode=str(event.get("code") or ""),
                 )
+            if event.get("type") == "clip_ready":
+                # Upload now, show now. A failed early upload is logged and
+                # left for upload_result's final pass -- it must not fail the
+                # job that is otherwise still rendering fine.
+                clip = event.get("clip") or {}
+                try:
+                    item = self.upload_clip(job_id, clip)
+                    uploads = self.partial_uploads.setdefault(job_id, {})
+                    uploads[str(clip.get("id"))] = item
+                    note(partialClips=list(uploads.values()))
+                except Exception as exc:  # noqa: BLE001
+                    print(f"[worker] early clip upload failed: {clean_error(exc)}", file=sys.stderr, flush=True)
             if event.get("type") == "heartbeat":
                 # The worker beats every 10s. Recording it is what lets the
                 # caller tell "still working" apart from "hung": without this
@@ -493,6 +509,20 @@ class Processor:
             raise RuntimeError("Processing engine failed: " + detail[-1000:])
         return json.loads(result_path.read_text(encoding="utf-8"))
 
+    def upload_clip(self, job_id: str, clip: dict[str, Any]) -> dict[str, Any]:
+        item = dict(clip)
+        clip_file = Path(str(item.get("clipFile") or ""))
+        thumb_file = Path(str(item.get("thumbFile") or ""))
+        if not clip_file.is_file() or not thumb_file.is_file():
+            raise RuntimeError("A rendered clip or thumbnail is missing before upload.")
+        video = self.storage.upload(clip_file, f"clips/{job_id}/{item['id']}.mp4", "video/mp4")
+        thumb = self.storage.upload(thumb_file, f"clips/{job_id}/{item['id']}.jpg", "image/jpeg")
+        item.update(clipObjectKey=video["key"], clipUrl=video["url"], thumbObjectKey=thumb["key"], thumbUrl=thumb["url"])
+        item.pop("clipFile", None)
+        item.pop("thumbFile", None)
+        item.pop("sourceFile", None)
+        return item
+
     def upload_result(self, job_id: str, result: dict[str, Any]) -> dict[str, Any]:
         self.progress(job_id, "uploading", 97)
         project = dict(result.get("project") or {})
@@ -508,20 +538,14 @@ class Processor:
             project["sourceUrl"] = stored["url"]
         project.pop("sourceFile", None)
         project.pop("transcriptFile", None)
+        # Clips announced as clip_ready were uploaded while later ones were
+        # still rendering; sending their bytes again here would double the
+        # upload band for nothing.
+        uploaded = self.partial_uploads.get(job_id, {})
         clips = []
         for clip in result.get("clips") or []:
-            item = dict(clip)
-            clip_file = Path(str(item.get("clipFile") or ""))
-            thumb_file = Path(str(item.get("thumbFile") or ""))
-            if not clip_file.is_file() or not thumb_file.is_file():
-                raise RuntimeError("A rendered clip or thumbnail is missing before upload.")
-            video = self.storage.upload(clip_file, f"clips/{job_id}/{item['id']}.mp4", "video/mp4")
-            thumb = self.storage.upload(thumb_file, f"clips/{job_id}/{item['id']}.jpg", "image/jpeg")
-            item.update(clipObjectKey=video["key"], clipUrl=video["url"], thumbObjectKey=thumb["key"], thumbUrl=thumb["url"])
-            item.pop("clipFile", None)
-            item.pop("thumbFile", None)
-            item.pop("sourceFile", None)
-            clips.append(item)
+            cached = uploaded.get(str(clip.get("id")))
+            clips.append(cached if cached else self.upload_clip(job_id, clip))
         return {"project": project, "clips": clips}
 
     def process(self, job_id: str) -> None:
@@ -622,6 +646,7 @@ class Processor:
             except Exception as report_exc:  # noqa: BLE001
                 print(f"[worker] job {job_id} failed and the failure could not be recorded: {clean_error(report_exc)}", file=sys.stderr, flush=True)
         finally:
+            self.partial_uploads.pop(job_id, None)
             shutil.rmtree(work, ignore_errors=True)
             self.store.scrub_network(job_id)
 
