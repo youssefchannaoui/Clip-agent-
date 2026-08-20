@@ -1123,8 +1123,28 @@ async function route(req, res, url) {
     const id = decodeURIComponent(clipVideo[1]); const kind = clipVideo[2];
     let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
     const remoteUrl = kind === 'thumb' ? clip?.thumbUrl : clip?.clipUrl;
-    if (remoteUrl) return temporaryRedirect(res, remoteUrl);
-    const file = agent.engine.clipFilePath(id, kind === 'thumb' ? 'thumb' : 'video'); if (!file) return json(res, 404, { error: 'Rendered file not found.' });
+    if (remoteUrl) {
+      // Thumbnail redirects may be cached briefly: they are painted as CSS
+      // backgrounds on every poll repaint, and a no-store redirect to a dead
+      // object meant the browser walked into the same 404 forever. Video
+      // redirects stay no-store -- they can point at presigned URLs that
+      // expire, and a cached one would replay a signature past its window.
+      if (kind === 'thumb') {
+        res.writeHead(307, { Location: remoteUrl, 'Cache-Control': 'private, max-age=300' });
+        return res.end();
+      }
+      return temporaryRedirect(res, remoteUrl);
+    }
+    const file = agent.engine.clipFilePath(id, kind === 'thumb' ? 'thumb' : 'video');
+    if (!file) {
+      // A cacheable miss. Thumbnails are painted as CSS backgrounds, and a
+      // repaint re-resolves the URL: with a plain 404 the browser asked for
+      // the same missing file on every poll, forever. Five cached minutes
+      // turns the loop into one request, without hiding a thumb for long
+      // once a render finally produces it.
+      res.setHeader('Cache-Control', 'private, max-age=300');
+      return json(res, 404, { error: kind === 'thumb' ? 'No thumbnail rendered.' : 'Rendered file not found.' });
+    }
     if (kind === 'thumb') return streamFile(req, res, file, { contentType: 'image/jpeg' });
     const filename = `${(clip?.title || 'deenclipped').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 70) || 'deenclipped'}.mp4`;
     return streamFile(req, res, file, kind === 'download' ? { downloadName: filename } : {});

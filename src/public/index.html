@@ -2261,12 +2261,20 @@ function studioWanted(){return window.STUDIO_SHELL===true}
 
        The adapter owns the state (time, playing, which caption is live) and
        reads the element back through StudioAdapter.setEditorVideo. */
-    let edVideoNode=null, edVideoTick=null;
+    let edVideoNode=null, edVideoTick=null, edVideoClip=null;
     function editorFrame(vals){
       const overlay=nodeFor(vals.dragEdCap);
       return overlay?overlay.parentElement:null;
     }
     function paintEditorVideo(vals){
+      /* The burned-fallback latch belongs to ONE clip. It was never cleared,
+         so the first clip without a clean plate put every clip opened after
+         it into burned mode too. Same for the missing-file flag below. */
+      if(StudioAdapter.ui.edClipId!==edVideoClip){
+        edVideoClip=StudioAdapter.ui.edClipId;
+        StudioAdapter.ui.edBurned=false;
+        StudioAdapter.ui.edVideoMissing=false;
+      }
       const onEditor=StudioAdapter.ui.screen==='editor'&&vals.edVideoUrl;
       if(!onEditor){
         if(edVideoNode){edVideoNode.pause();edVideoNode.remove();edVideoNode=null;StudioAdapter.setEditorVideo(null)}
@@ -2334,10 +2342,24 @@ function studioWanted(){return window.STUDIO_SHELL===true}
            A one-way latch: the export must not then fail back to the source it
            just replaced. */
         edVideoNode.onerror=()=>{
-          if(StudioAdapter.ui.edBurned)return;
+          if(StudioAdapter.ui.edBurned){
+            /* The fallback failed too: no clean plate AND no rendered export.
+               Silence here was a black box; say so, and offer the way out. */
+            if(!StudioAdapter.ui.edVideoMissing){
+              StudioAdapter.ui.edVideoMissing=true;
+              paintStudio();
+            }
+            return;
+          }
           StudioAdapter.ui.edBurned=true;
           paintStudio();
         };
+        edVideoNode.addEventListener('loadeddata',()=>{
+          if(StudioAdapter.ui.edVideoMissing){
+            StudioAdapter.ui.edVideoMissing=false;
+            paintStudio();
+          }
+        });
         /* A clean plate starts at the top of the lecture, so playback begins at
            the clip's own start rather than at the beginning of the talk. */
         edVideoNode.onloadedmetadata=()=>{
@@ -2362,6 +2384,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         edVideoNode.src=sameOrigin(vals.edVideoUrl)?withPw(vals.edVideoUrl):vals.edVideoUrl;
         if(vals.edPoster)edVideoNode.poster=sameOrigin(vals.edPoster)?withPw(vals.edPoster):vals.edPoster;
         edVideoNode.load();
+        armVideoWatchdog();
       }
       /* Framing, matching what the renderer will do: contain for fit, cover
          for crop and blur, with the crop zoom applied on top. */
@@ -2370,6 +2393,72 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(edVideoNode.style.objectFit!==fit)edVideoNode.style.objectFit=fit;
       const want=zoom===1?'':`scale(${zoom})`;
       if(edVideoNode.style.transform!==want)edVideoNode.style.transform=want;
+    }
+
+    /* When both the clean plate and the rendered export are gone (a storage
+       cleanup, the August restore), the editor used to show a silent black
+       rectangle. This says what happened and offers the one action that
+       fixes it. Cleared by loadeddata, a clip switch, or leaving the editor. */
+    /* The media element's own error event is not a reliable messenger: a 404
+       on the preview URL has been observed to leave the element parked at
+       networkState LOADING forever, error never firing -- the silent black
+       box again, only one layer down. So every src assignment arms a probe:
+       if nothing has loaded after a few seconds, one 1-byte ranged fetch asks
+       the server directly, and a dead answer drives the same onerror chain
+       the event should have. */
+    let edVideoWatch=null;
+    function armVideoWatchdog(){
+      if(edVideoWatch)clearTimeout(edVideoWatch);
+      edVideoWatch=setTimeout(()=>{
+        edVideoWatch=null;
+        const v=edVideoNode;
+        if(!v||!v.isConnected||v.readyState>0)return;
+        const src=v.src;
+        fetch(src,{headers:{'Range':'bytes=0-0'}}).then(r=>{
+          if(r.ok||r.status===206)return;
+          if(edVideoNode===v&&v.src===src&&v.readyState===0&&v.onerror)v.onerror();
+        }).catch(()=>{
+          if(edVideoNode===v&&v.src===src&&v.readyState===0&&v.onerror)v.onerror();
+        });
+      },3500);
+    }
+
+    let edMissingEl=null;
+    function paintEditorMissing(){
+      const on=StudioAdapter.ui.screen==='editor'&&StudioAdapter.ui.edVideoMissing;
+      const frame=edVideoNode&&edVideoNode.isConnected&&edVideoNode.parentElement;
+      if(!on||!frame){if(edMissingEl){edMissingEl.remove();edMissingEl=null}return}
+      if(edMissingEl&&edMissingEl.isConnected&&edMissingEl.parentElement===frame)return;
+      if(edMissingEl)edMissingEl.remove();
+      edMissingEl=document.createElement('div');
+      edMissingEl.setAttribute('data-host-owned','');
+      edMissingEl.style.cssText='position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;'
+        +'align-items:center;justify-content:center;gap:10px;text-align:center;'
+        +'background:rgba(10,10,12,.86);border-radius:inherit;padding:20px';
+      edMissingEl.innerHTML='<i class="ph ph-video-camera-slash" style="font-size:26px;color:#8B8B93"></i>'
+        +'<div style="font:600 13px Outfit,Inter,sans-serif;color:#E8E8EC">This clip\u2019s video file is missing</div>'
+        +'<div style="font:400 11.5px Outfit,Inter,sans-serif;color:#8B8B93;max-width:240px">'
+        +'The rendered file is no longer in storage. Re-render the clip from its lecture to bring it back.</div>'
+        +'<button style="margin-top:4px;display:inline-flex;align-items:center;gap:7px;padding:8px 14px;'
+        +'border-radius:8px;border:1px solid rgba(217,180,120,.45);background:rgba(217,180,120,.12);'
+        +'color:#F0D6A6;font:600 12px Outfit,Inter,sans-serif;cursor:pointer">'
+        +'<i class="ph ph-arrows-clockwise"></i>Re-render clip</button>';
+      const btn=edMissingEl.querySelector('button');
+      btn.onclick=async e=>{
+        e.preventDefault();
+        btn.disabled=true;btn.style.opacity='.6';btn.textContent='Queued\u2026';
+        const id=StudioAdapter.ui.edClipId;
+        const clip=(DATA&&DATA.clips||[]).find(c=>c.id===id)||{};
+        try{
+          await api(`/api/clips/${encodeURIComponent(id)}/rerender`,{method:'POST',
+            body:JSON.stringify({templateId:clip.templateId||''})});
+          await refresh();
+        }catch(err){
+          toast('Re-render could not start: '+err.message,'bad');
+          btn.disabled=false;btn.style.opacity='';btn.innerHTML='<i class="ph ph-arrows-clockwise"></i>Re-render clip';
+        }
+      };
+      frame.appendChild(edMissingEl);
     }
 
     /* The play bar the design draws inside the preview frame.
@@ -2470,6 +2559,34 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        other screen. Now it drops a results panel under the input: clips open
        in the editor, lectures open the library. Escape or clicking away
        closes it. */
+    /* Floating panels close the way every dropdown on the web closes: Escape,
+       or a click that lands somewhere else. Neither existed -- the activity
+       bell and the account menu could only be dismissed by re-finding their
+       toggle buttons. Escape peels the topmost layer first (an option sheet,
+       then the player, then the dropdowns); the click path skips interactive
+       controls, because the toggles flip their own state and closing here
+       first would make the same click reopen what it just closed. */
+    document.addEventListener('keydown',e=>{
+      if(e.key!=='Escape'||!window.StudioAdapter||!StudioAdapter.ui)return;
+      const ui=StudioAdapter.ui;
+      if(ui.sheet){ui.sheet=null;paintStudio();return}
+      if(ui.playerClip){ui.playerClip=null;paintStudio();return}
+      if(ui.bellOpen||ui.menuOpen){ui.bellOpen=false;ui.menuOpen=false;paintStudio()}
+    });
+    document.addEventListener('pointerdown',e=>{
+      if(!window.StudioAdapter||!StudioAdapter.ui)return;
+      const ui=StudioAdapter.ui;
+      if(!ui.bellOpen&&!ui.menuOpen)return;
+      for(let n=e.target;n&&n.nodeType===1;n=n.parentElement){
+        const tag=n.tagName;
+        if(tag==='BUTTON'||tag==='A'||tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA')return;
+        /* Anything absolutely positioned is a floating layer -- the panel
+           itself, or an overlay above it. Clicks inside stay inside. */
+        const cs=getComputedStyle(n);
+        if((cs.position==='absolute'||cs.position==='fixed')&&n.id!=='studio')return;
+      }
+      ui.bellOpen=false;ui.menuOpen=false;paintStudio();
+    });
     let searchEl=null;
     function paintGlobalSearch(vals){
       const input=[...document.querySelectorAll('#studio input')].find(n=>/search clips or lectures/i.test(n.placeholder||''));
@@ -3783,6 +3900,7 @@ function paintStudio(){
   paintEditorPlayer(vals);
   paintEditorLayout(vals);
   paintEditorScrub();
+  paintEditorMissing();
   paintPreviewPlayer(vals);
   paintHighlight(vals);
   paintJobType(vals);

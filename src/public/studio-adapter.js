@@ -50,6 +50,7 @@
     // replayed in either direction. Redo used to be a button that only ever
     // explained why it did nothing.
     tplPast: [],
+    tplHistCtx: '',
     tplFuture: [],
     tplReplaying: false,
     // What is being dragged in a preview, where it is, and whether it has caught
@@ -1221,24 +1222,6 @@
     // unposted clip. The value is applied locally at once so the control feels
     // live, and the write is trailing-debounced.
     function saveTemplate(patch) {
-      // Record the step before applying it, so Undo has something to go back
-      // to. Skipped while replaying, or undoing would push its own inverse and
-      // the two buttons would fight each other.
-      if (!UI.tplReplaying) {
-        var before = {};
-        var moved = false;
-        for (var key in patch) {
-          if (!Object.prototype.hasOwnProperty.call(patch, key)) continue;
-          if (tpl[key] === patch[key]) continue;
-          before[key] = tpl[key];
-          moved = true;
-        }
-        if (moved) {
-          UI.tplPast = UI.tplPast.concat([{ undo: before, redo: Object.assign({}, patch) }]).slice(-50);
-          // A fresh edit invalidates anything that was undone past.
-          UI.tplFuture = [];
-        }
-      }
       UI.tplDirty = true;
       UI.tplDraft = Object.assign({}, UI.tplDraft, patch);
       refresh();
@@ -1274,7 +1257,35 @@
     // One decision, made once: the Templates screen edits the style everything
     // shares, the clip editor edits a single clip. Every control below calls
     // this, so no control can be wired to the wrong target by accident.
+    //
+    // History is recorded HERE, not in saveTemplate: recording only there left
+    // the editor with an always-empty stack, so its Undo button silently did
+    // nothing -- the exact dead control the button was meant to replace. One
+    // stack serves both screens, so it is cleared whenever the target changes
+    // (template screen <-> a clip, or one clip to another): replaying a
+    // template step onto a clip would write the wrong record.
     function saveStyle(patch) {
+      var ctx = (UI.screen === 'editor' && UI.edClipId)
+        ? 'clip:' + UI.edClipId
+        : 'tpl:' + (activeTemplate && activeTemplate.id);
+      if (UI.tplHistCtx !== ctx) { UI.tplHistCtx = ctx; UI.tplPast = []; UI.tplFuture = []; }
+      // Skipped while replaying, or undoing would push its own inverse and the
+      // two buttons would fight each other.
+      if (!UI.tplReplaying) {
+        var before = {};
+        var moved = false;
+        for (var key in patch) {
+          if (!Object.prototype.hasOwnProperty.call(patch, key)) continue;
+          if (tpl[key] === patch[key]) continue;
+          before[key] = tpl[key];
+          moved = true;
+        }
+        if (moved) {
+          UI.tplPast = UI.tplPast.concat([{ undo: before, redo: Object.assign({}, patch) }]).slice(-50);
+          // A fresh edit invalidates anything that was undone past.
+          UI.tplFuture = [];
+        }
+      }
       if (UI.screen === 'editor' && UI.edClipId) return saveClipStyle(patch);
       return saveTemplate(patch);
     }
@@ -2469,7 +2480,15 @@
       // Alignment guides only appear while dragging, as in the design.
       edGuideV: 'position: absolute; top: 0; bottom: 0; width: 1px; z-index: 6; pointer-events: none; left: 50%; display: none; background: rgba(240,214,166,.6);',
       edGuideH: 'position: absolute; left: 0; right: 0; height: 1px; z-index: 6; pointer-events: none; top: ' + capTop + '%; display: none; background: rgba(240,214,166,.6);',
-      edSafeBtnStyle: toggleBtnStyle(UI.edSafe),
+      // Not toggleBtnStyle: that is a 30px icon square, and this button holds
+      // "Social safe zones" as text -- squeezed into the square, the label
+      // wrapped straight over its neighbouring caption. A pill that grows with
+      // its own words.
+      edSafeBtnStyle: 'display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; height: 28px; '
+        + 'border-radius: 7px; cursor: pointer; white-space: nowrap; font: 500 11px Outfit, Inter, sans-serif; '
+        + 'transition: background .14s ease; border: 1px solid '
+        + (UI.edSafe ? 'rgba(217,180,120,.45); background: rgba(217,180,120,.12); color: #F0D6A6;'
+                     : '#26262A; background: #121214; color: #8B8B93;'),
       toggleSafe: function (e) { stop(e); setUI({ edSafe: !UI.edSafe }); },
       edMarkStyle: 'position: absolute; z-index: 8; right: 11px; ' +
         (String(tpl.watermarkPosition).indexOf('top') === 0 ? 'top: 11px;' : 'bottom: 42px;') +
@@ -3141,6 +3160,10 @@
       undoEdit: function (e) {
         stop(e);
         if (UI.tplPast.length) return replayStyle(UI.tplPast, UI.tplFuture, 'undo');
+        // The editor has no "discard the shared template" fallback: with no
+        // steps recorded there is nothing to go back to, and saying so beats
+        // resetting a template the user is not even looking at.
+        if (UI.screen === 'editor') { toast('Nothing to undo.'); return; }
         if (UI.tplTimer) { global.clearTimeout(UI.tplTimer); UI.tplTimer = null; }
         UI.tplDraft = null;
         setUI({ tplDirty: false });
