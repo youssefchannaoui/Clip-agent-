@@ -108,3 +108,47 @@ test('every built-in survives its own sanitiser unchanged', () => {
     }
   }
 });
+
+// ── the fixes from the template/editor rework ──────────────────────────────
+
+test('a per-clip captionTranslation override survives sanitising', () => {
+  const patch = templates.sanitiseClipStyle({ captionTranslation: false });
+  assert.deepEqual(patch, { captionTranslation: false },
+    'the schema advertises it as overridable, so the validator must keep it');
+});
+
+test('manual framing and caption timing are real fields now', () => {
+  const clean = templates.sanitiseTemplate({ cropPositionX: 0.2, cropPositionY: 1.7, captionTimingOffsetMs: -250, smartFramingPadding: 0.3 });
+  assert.equal(clean.cropPositionX, 0.2);
+  assert.equal(clean.cropPositionY, 1, 'clamped to the frame');
+  assert.equal(clean.captionTimingOffsetMs, -250);
+  assert.equal(clean.smartFramingPadding, 0.3);
+  // And per clip: position is framing, so a clip may hold its own.
+  const patch = templates.sanitiseClipStyle({ cropPositionX: 0.9, captionTimingOffsetMs: 5000 });
+  assert.equal(patch.cropPositionX, 0.9);
+  assert.equal(patch.captionTimingOffsetMs, 2000, 'clamped to the schema range');
+});
+
+test('a shipped version bump still shows through an account patch', async () => {
+  const { state } = await import('../src/store.js');
+  const saved = templates.saveTemplate(user, 'simple-bold', { captionFontSize: 101 }).template;
+  const before = templates.templateById('simple-bold', user).version;
+  assert.equal(before, saved.version, 'sanity: reads see the saved counter');
+  // Simulate the patch predating a deploy that bumped the shipped file: the
+  // stored shippedVersion is one behind what ships now.
+  const tenancy = await import('../src/tenancy.js');
+  const all = tenancy.readUserSetting(state, user.id, 'templateOverrides');
+  assert.ok(Number(all['simple-bold'].shippedVersion) >= 1, 'the patch records the shipped version it was made against');
+  all['simple-bold'].shippedVersion -= 1;
+  tenancy.writeUserSetting(state, user.id, 'templateOverrides', all);
+  const after = templates.templateById('simple-bold', user).version;
+  assert.equal(after, before + 1,
+    'the deploy drift adds on top of the account counter, so templateOutdated can fire');
+  all['simple-bold'].shippedVersion += 1;
+  tenancy.writeUserSetting(state, user.id, 'templateOverrides', all);
+});
+
+test('deleting any resolvable template is refused, and a missing one is a no-op', () => {
+  assert.throws(() => templates.deleteTemplate(user, 'quran-recitation'), /cannot be deleted/i);
+  assert.equal(templates.deleteTemplate(user, 'ghost-template'), false);
+});

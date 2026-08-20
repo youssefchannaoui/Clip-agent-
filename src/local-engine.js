@@ -13,6 +13,7 @@ import * as billing from './billing.js';
 import * as vizard from './vizard.js';
 import * as workerClient from './worker-client.js';
 import { parseYouTubeUrl, assertStorageObjectKey } from './video-import.js';
+import * as objectStorage from './object-storage.js';
 
 const jobsDir = path.join(config.dataDir, 'jobs');
 const sourcesDir = path.join(config.dataDir, 'sources');
@@ -80,6 +81,18 @@ function releaseProjectHold(project) {
   if (!held) return;
   project.tokensReserved = 0;
   try { billing.releaseTokens(ownerOf(project), held); } catch { /* nothing to release */ }
+}
+// The template this project's clips were rendered with, resolved fresh (so
+// the account's latest edits apply), falling back to the exact snapshot the
+// original render kept. Never the account's *selected* template -- that turns
+// "more clips from this Quran lecture" into lecture-styled clips because of a
+// dropdown elsewhere.
+function projectTemplate(project, owner) {
+  return templateById(project.templateIdUsed, owner)
+    || (project.templateSnapshot?.id
+      ? sanitiseTemplate(project.templateSnapshot, { id: project.templateSnapshot.id, builtIn: Boolean(project.templateSnapshot.builtIn), userId: ownerOfRecord(project)?.id || '' })
+      : null)
+    || selectedTemplate(owner);
 }
 function resultFile(projectId) { return path.join(jobsDir, projectId, 'result.json'); }
 function removeDataFile(file) {
@@ -422,7 +435,15 @@ function validateSubmission(url, user, options = {}) {
   // kind picks the template -- but the id never left the browser, so a job
   // showing "Quran Recitation" in its dropdown silently rendered with the
   // account's selected template instead. The picker was cosmetic.
-  const template = (options.templateId && templateById(String(options.templateId), user)) || selectedTemplate(user);
+  let template;
+  if (options.templateId) {
+    template = templateById(String(options.templateId), user);
+    // Falling back silently is how the kind picker became cosmetic once: the
+    // job said "Quran Recitation" and rendered with the account default.
+    if (!template) throw new Error('That template is not available. Pick one from the list.');
+  } else {
+    template = selectedTemplate(user);
+  }
   if (!template?.id) throw new Error('Select a valid template before submitting.');
   const tracks = workerMusicTracks(user);
   // Music stays required by default. Only an explicit choice on the job panel
@@ -847,12 +868,18 @@ async function runRemoteAux(project, jobRecord, kind) {
     }
     throw new Error('The processing worker exceeded the job timeout.');
   } catch (error) {
-    jobRecord.status = error.code === 'worker_unavailable' ? 'queued' : 'failed';
-    jobRecord.stage = error.code === 'worker_unavailable' ? 'Worker unavailable — retrying' : 'failed';
-    jobRecord.error = error.message;
-    if (error.code === 'worker_unavailable') jobRecord.nextRetryAt = Date.now() + 30_000;
+    // Bounded like project retries. An unreachable worker used to re-queue
+    // this every 30s forever, showing "retrying" for days.
+    const unavailable = error.code === 'worker_unavailable';
+    const attempts = Number(jobRecord.workerRetries || 0) + (unavailable ? 1 : 0);
+    const exhausted = unavailable && attempts > MAX_WORKER_RETRIES;
+    jobRecord.workerRetries = unavailable ? attempts : 0;
+    jobRecord.status = unavailable && !exhausted ? 'queued' : 'failed';
+    jobRecord.stage = unavailable && !exhausted ? `Worker unavailable — retrying (${attempts}/${MAX_WORKER_RETRIES})` : 'failed';
+    jobRecord.error = exhausted ? 'The processing worker has been unreachable for several minutes. Retry once it is back.' : error.message;
+    if (unavailable && !exhausted) jobRecord.nextRetryAt = Date.now() + 30_000;
     save();
-    if (error.code === 'worker_unavailable') setTimeout(() => pump().catch(() => {}), 30_000);
+    if (unavailable && !exhausted) setTimeout(() => pump().catch(() => {}), 30_000);
   } finally {
     running.delete(jobRecord.id);
     pump().catch(() => {});
@@ -1021,7 +1048,7 @@ async function runVizardProject(project) {
     project.vizardShareLink = result.shareLink || project.vizardShareLink || null;
     save();
 
-    const template = selectedTemplate(owner);
+    const template = projectTemplate(project, owner);
     const tracks = workerMusicTracks(owner);
     if (!template?.id || !tracks.length) throw new Error('A saved template and at least one nasheed are required to finish these clips.');
     const imported = [];
@@ -1121,13 +1148,25 @@ function runMoreClips(project, jobRecord) {
     });
     running.set(jobRecord.id, child);
     let stdoutBuffer = '', stderr = '';
+    let lastOutputAt = Date.now();
+    // Same stall rule as projects: the worker heartbeats every 10s, so minutes
+    // of silence is a hang, not work. Without this a stuck child held the
+    // single render slot until the server restarted.
+    const watchdog = setInterval(() => {
+      if (Date.now() - lastOutputAt > STALL_TIMEOUT_MS) {
+        jobRecord.error = 'The render stopped reporting progress and was stopped.';
+        try { child.kill('SIGKILL'); } catch {}
+      }
+    }, 30_000);
     child.stdout.on('data', chunk => {
+      lastOutputAt = Date.now();
       stdoutBuffer += chunk.toString(); const lines = stdoutBuffer.split(/\r?\n/); stdoutBuffer = lines.pop() || '';
       for (const line of lines) if (line.trim()) parseWorkerLine(jobRecord, line.trim());
     });
-    child.stderr.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-8000); });
+    child.stderr.on('data', chunk => { lastOutputAt = Date.now(); stderr = (stderr + chunk.toString()).slice(-8000); });
     child.on('error', error => { jobRecord.error = error.message; });
     child.on('close', code => {
+      clearInterval(watchdog);
       running.delete(jobRecord.id);
       if (stdoutBuffer.trim()) parseWorkerLine(jobRecord, stdoutBuffer.trim());
       try {
@@ -1159,7 +1198,7 @@ function importRerenderResultObject(jobRecord, result) {
   if (jobRecord.asVariant) {
     const variant = withOwner({
       ...original, ...rendered, id: rendered.id, projectId: original.projectId, projectTitle: original.projectTitle,
-      status: 'waiting', scheduledAt: null, readyAt: null, postedAt: null, addedAt: Date.now(),
+      status: 'waiting', scheduledAt: null, readyAt: null, postedAt: null, addedAt: Date.now(), targets: [],
       // Just rendered with the current style, whatever the original still owes.
       stylePending: false,
       variantOf: original.id, renderVersion: (original.renderVersion || 1) + 1,
@@ -1173,6 +1212,7 @@ function importRerenderResultObject(jobRecord, result) {
   } else {
     if (original.status === 'posted') throw new Error('Posted videos cannot be replaced. Create a re-post variant instead.');
     const oldFiles = [original.clipFile, original.thumbFile];
+    const oldObjects = [original.clipObjectKey, original.thumbObjectKey];
     const preserved = {
       id: original.id, title: original.title, description: original.description, hashtags: original.hashtags,
       status: original.status, scheduledAt: original.scheduledAt, readyAt: original.readyAt,
@@ -1185,10 +1225,17 @@ function importRerenderResultObject(jobRecord, result) {
       // The video now matches the style the editor shows, so the "out of
       // date" flag comes off. It used to stay on forever -- nothing cleared
       // it, and the editor kept offering a re-render that changed nothing.
-      stylePending: false,
+      // Unless the clip was edited again after this job was queued: the job
+      // rendered the older style, so the newest tweaks are still owed.
+      stylePending: Number(original.updatedAt || 0) > Number(jobRecord.createdAt || 0),
     });
     for (const oldFile of oldFiles) {
       if (oldFile && ![original.clipFile, original.thumbFile].includes(oldFile)) removeDataFile(oldFile);
+    }
+    for (const oldKey of oldObjects) {
+      if (oldKey && ![original.clipObjectKey, original.thumbObjectKey].includes(oldKey)) {
+        objectStorage.deleteObject(oldKey).catch(error => log(`Old render object was not deleted: ${error.message}`, 'warn', ownerOf(original)));
+      }
     }
     jobRecord.resultClipId = original.id;
     log(`Re-rendered "${original.title}" with template "${rendered.templateName}" while preserving its queue status.`, 'info', ownerOfRecord(original));
@@ -1213,13 +1260,25 @@ function runRerender(jobRecord) {
     });
     running.set(jobRecord.id, child);
     let stdoutBuffer = '', stderr = '';
+    let lastOutputAt = Date.now();
+    // Same stall rule as projects: the worker heartbeats every 10s, so minutes
+    // of silence is a hang, not work. Without this a stuck child held the
+    // single render slot until the server restarted.
+    const watchdog = setInterval(() => {
+      if (Date.now() - lastOutputAt > STALL_TIMEOUT_MS) {
+        jobRecord.error = 'The render stopped reporting progress and was stopped.';
+        try { child.kill('SIGKILL'); } catch {}
+      }
+    }, 30_000);
     child.stdout.on('data', chunk => {
+      lastOutputAt = Date.now();
       stdoutBuffer += chunk.toString(); const lines = stdoutBuffer.split(/\r?\n/); stdoutBuffer = lines.pop() || '';
       for (const line of lines) if (line.trim()) parseWorkerLine(jobRecord, line.trim());
     });
-    child.stderr.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-8000); });
+    child.stderr.on('data', chunk => { lastOutputAt = Date.now(); stderr = (stderr + chunk.toString()).slice(-8000); });
     child.on('error', error => { jobRecord.error = error.message; });
     child.on('close', code => {
+      clearInterval(watchdog);
       running.delete(jobRecord.id);
       if (stdoutBuffer.trim()) parseWorkerLine(jobRecord, stdoutBuffer.trim());
       try {
@@ -1253,7 +1312,7 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   const count = Math.max(1, Math.min(20, Math.round(Number(requestedCount) || 8)));
   const owner = ownerOfRecord(project);
   billing.assertCanSpend(owner, billing.tokenCostForSeconds(count * (clipSettings(owner).clipMaxSeconds || 60)), 'generate more clips');
-  const template = selectedTemplate(owner);
+  const template = projectTemplate(project, owner);
   if (!template?.id) throw new Error('Choose a valid saved template.');
   const tracks = workerMusicTracks(owner);
   if (!tracks.length) throw new Error('Music is mandatory. Upload at least one nasheed first.');
@@ -1271,6 +1330,9 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   const payload = project.engine === 'remote' ? {
     mode: 'more_clips', id: moreId, projectId: project.id, projectTitle: project.title, requestedCount: count,
     source: remoteSourceFor(project),
+    ...(project.url && !project.sourceObjectKey
+      ? { sourceStartSec: Number(project.sourceStartSec || 0), sourceEndSec: Number(project.sourceEndSec) || null }
+      : {}),
     transcript: { objectKey: project.transcriptObjectKey }, existingRanges,
     template, musicTracks: remoteMusicTracks(tracks, owner.id), settings: { ...sharedSettings(owner), clipsPerVideo: count },
     callbackUrl: '',
@@ -1351,8 +1413,8 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
   const snapshot = !own && project.templateSnapshot && project.templateSnapshot.id === (templateId || clip.templateId || project.templateSnapshot.id)
     ? sanitiseTemplate(project.templateSnapshot, { id: project.templateSnapshot.id, builtIn: Boolean(project.templateSnapshot.builtIn), userId: ownerOf(clip) })
     : null;
-  const baseTemplate = own || snapshot || selectedTemplate(owner);
-  if (!baseTemplate?.id) throw new Error('Choose a valid saved template.');
+  const baseTemplate = own || snapshot;
+  if (!baseTemplate?.id) throw new Error('The style this clip was rendered with is no longer available. Pick a template for it explicitly.');
   // This clip's own tweaks win over the shared style. Without this, editing one
   // clip either changed every clip on the template or was silently discarded at
   // render time.
@@ -1367,13 +1429,20 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
   const resultPath = path.join(dir, 'result.json');
   const outputDir = path.join(clipsDir, project.id, 'rerenders');
   const outputClipId = asVariant ? `${clip.id}-variant-${Date.now().toString(36)}` : `${clip.id}-render-${Date.now().toString(36)}`;
+  // The stored source object is the already-trimmed window; a URL re-import is
+  // the whole video. Without the window, a clip's startSec (relative to the
+  // trim) cuts the wrong moment of the full download.
+  const remoteWindow = project.url && !project.sourceObjectKey
+    ? { sourceStartSec: Number(project.sourceStartSec || 0), sourceEndSec: Number(project.sourceEndSec) || null }
+    : {};
   const payload = project.engine === 'remote' ? {
     mode: 'rerender', id: rerenderId, projectId: project.id, clipIdOverride: outputClipId,
-    source: remoteSourceFor(project),
+    source: remoteSourceFor(project), ...remoteWindow,
     transcript: { objectKey: project.transcriptObjectKey || '' }, template,
     musicTracks: remoteMusicTracks(tracks, owner.id), settings: sharedSettings(owner),
     clip: {
       id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
+      transcriptEdited: Boolean(clip.transcriptEdited),
       startSec: clip.startSec, endSec: clip.endSec, score: clip.score, scoreReasons: clip.scoreReasons,
       reviewRequired: clip.reviewRequired,
     }, callbackUrl: '',
@@ -1383,6 +1452,7 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
     template, musicTracks: tracks, settings: sharedSettings(owner), transcriptSegments,
     clip: {
       id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
+      transcriptEdited: Boolean(clip.transcriptEdited),
       startSec: clip.startSec, endSec: clip.endSec, score: clip.score, scoreReasons: clip.scoreReasons,
       reviewRequired: clip.reviewRequired,
     },
@@ -1395,7 +1465,12 @@ export function queueClipRerender(clipId, templateId, { asVariant = false } = {}
     createdAt: Date.now(), jobFile: file, resultPath,
   }, ownerOf(clip));
   state.rerenderJobs.unshift(record);
-  state.rerenderJobs = state.rerenderJobs.slice(0, 60);
+  // Cap the *finished* history only. A flat slice dropped still-queued jobs
+  // off the end of a big propagation sweep -- pump() could never find them,
+  // so they simply never ran.
+  const live = state.rerenderJobs.filter(item => ['queued', 'processing'].includes(item.status));
+  const done = state.rerenderJobs.filter(item => !['queued', 'processing'].includes(item.status)).slice(0, 60);
+  state.rerenderJobs = [...live, ...done].sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
   save();
   log(`Queued ${asVariant ? 'a re-post variant' : 'a re-render'} of "${clip.title}" using "${template.name}".`, 'info', ownerOf(clip));
   pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
@@ -1566,7 +1641,7 @@ export function retryProject(projectId) {
   if (!fs.existsSync(jobFile(projectId))) throw new Error('The project job file is missing. Submit the video again.');
   const job = JSON.parse(fs.readFileSync(jobFile(projectId), 'utf8'));
   const projectOwner = ownerOfRecord(project);
-  const template = selectedTemplate(projectOwner); const tracks = workerMusicTracks(projectOwner);
+  const template = projectTemplate(project, projectOwner); const tracks = workerMusicTracks(projectOwner);
   if (!template?.id) throw new Error('Select a template before retrying.');
   if (!tracks.length) throw new Error('Upload at least one nasheed before retrying.');
   job.template = template; job.musicTracks = tracks; job.settings = sharedSettings(projectOwner);
@@ -1615,7 +1690,18 @@ export function deleteProject(projectId) {
   if (project.sourceFile) removeDataFile(project.sourceFile);
   if (project.uploadedInputFile) removeDataFile(project.uploadedInputFile);
   for (const clip of projectClips) if (clip.sourceFile) removeDataFile(clip.sourceFile);
-  save(); log(`Removed "${project.title}" and its local rendered files.`, 'info', ownerOf(project));
+  // The stored copies too. Deleting a lecture used to leave every rendered
+  // MP4 and thumbnail in the bucket, publicly addressable and billed.
+  const objectKeys = [project.sourceObjectKey, project.transcriptObjectKey,
+    ...projectClips.flatMap(clip => [clip.clipObjectKey, clip.thumbObjectKey])].filter(Boolean);
+  for (const key of objectKeys) {
+    objectStorage.deleteObject(key).catch(error => log(`Stored object was not deleted: ${error.message}`, 'warn', ownerOf(project)));
+  }
+  save(); log(`Removed "${project.title}" and its rendered files.`, 'info', ownerOf(project));
+}
+
+export function deleteStoredObject(key) {
+  return objectStorage.deleteObject(key);
 }
 
 export function clipFilePath(clipId, kind = 'video') {

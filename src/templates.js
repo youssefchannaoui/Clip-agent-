@@ -32,6 +32,18 @@ const DEFAULTS = Object.freeze({
   grain: 0,
   warm: 0,
   smartFramingZoom: 1,
+  // Where the crop window sits when framing is manual, as fractions of the
+  // slack (0.5/0.5 is centred -- the old hardcoded behaviour). The editor has
+  // always drawn the drag-to-position control; the values were dropped here.
+  cropPositionX: 0.5,
+  cropPositionY: 0.5,
+  // How much air detect_main_face_crop leaves around the speaker. The worker
+  // has read this for as long as smart framing existed (default 0.18); the
+  // editor's slider saved it and this schema threw it away.
+  smartFramingPadding: 0.18,
+  // Nudges every caption earlier (negative) or later. The editor's timing
+  // control wrote this into the void.
+  captionTimingOffsetMs: 0,
   captionMode: 'dynamic-stack',
   captionFont: 'DejaVu Sans',
   captionFontSize: 96,
@@ -113,6 +125,7 @@ export const NUMBER_RANGES = {
   // grain is a percentage; warm runs cool-to-warm through neutral; zoom is a
   // crop multiplier, so 1 is the untouched framing.
   grain: [0, 100], warm: [-100, 100], smartFramingZoom: [0.75, 2.5],
+  cropPositionX: [0, 1], cropPositionY: [0, 1], smartFramingPadding: [0, 0.5], captionTimingOffsetMs: [-2000, 2000],
   captionFontSize: [24, 140], captionOutlineWidth: [0, 14], captionShadow: [0, 8], captionBackgroundOpacity: [0, 100],
   // Clamped to what clip_worker.py accepts for the highlight's glow.
   captionHighlightGlow: [0, 30],
@@ -222,13 +235,13 @@ export const CLIP_STYLE_FIELDS = Object.freeze([
  * overwriting because it replaced a sibling's overrides wholesale.
  */
 export const FRAMING_FIELDS = Object.freeze([
-  'cropPositionX', 'cropPositionY', 'fitMode', 'smartFramingZoom', 'smartFramingEnabled',
+  'cropPositionX', 'cropPositionY', 'fitMode', 'smartFramingZoom', 'smartFramingEnabled', 'smartFramingPadding',
 ]);
 
 const CLIP_STYLE_FIELD_SET = new Set(CLIP_STYLE_FIELDS);
 const COLOUR_FIELDS = new Set(['frameBackground', 'captionPrimary', 'captionHighlight', 'captionOutline',
   'captionBackground', 'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor']);
-const BOOLEAN_FIELDS = new Set(['captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic']);
+const BOOLEAN_FIELDS = new Set(['captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic', 'captionTranslation']);
 
 /**
  * Validate a partial style patch for a single clip.
@@ -353,42 +366,11 @@ export function setSelectedTemplate(user, id) {
   return template;
 }
 
-function writeCustom(template) {
-  const file = path.join(customDir, `${safeId(template.id)}.json`);
-  fs.writeFileSync(file, JSON.stringify({ ...template, builtIn: undefined, editable: undefined }, null, 2));
-}
-
-export function createTemplate(user, input = {}) {
+export function createTemplate() {
   // One template per content type. Minting copies is what turned two templates
   // into eight near-identical rows; edits land on the built-in itself, scoped
   // to the account, so there is nothing a copy would be for.
   throw new Error('One template per content type — edit the template directly; copies are no longer created.');
-  const ownerId = userIdOf(user);
-  if (!ownerId) throw new Error('A template needs an account.');
-  // Ids are unique across every account, not just the caller's, so one
-  // creator's new template can never overwrite another's file on disk.
-  const takenIds = new Set(allTemplateIds());
-  let id = safeId(input.id || input.name || 'custom-template');
-  if (takenIds.has(id)) id = `${id}-${crypto.randomBytes(3).toString('hex')}`;
-  // Names have to be unique too, not just ids. The template picker selects by
-  // name, so duplicating twice produced two rows reading "X copy" and the second
-  // one could never be chosen -- picking it always resolved to the first.
-  const name = uniqueName(user, input.name || 'Custom template');
-  const template = sanitiseTemplate({ ...DEFAULTS, ...input, id, name, version: 1, updatedAt: Date.now() }, { id, builtIn: false, userId: ownerId });
-  writeCustom(template);
-  return template;
-}
-
-export function updateTemplate(user, id, input = {}) {
-  const existing = templateById(id, user);
-  if (!existing) throw new Error('That template does not exist.');
-  if (existing.builtIn) throw new Error('Built-in templates are protected. Duplicate it first, then edit your copy.');
-  const template = sanitiseTemplate(
-    { ...existing, ...input, id, version: (existing.version || 1) + 1, updatedAt: Date.now() },
-    { id, builtIn: false, userId: templateOwner(existing) },
-  );
-  writeCustom(template);
-  return template;
 }
 
 // Save always means save.
@@ -424,17 +406,24 @@ function withAccountEdits(template, user) {
   if (!patch || typeof patch !== 'object') return { ...template, editable: true };
   const merged = sanitiseTemplate({ ...template, ...patch }, { id: template.id, builtIn: true, userId: '' });
   merged.editable = true;
-  merged.version = Number(patch.version) || template.version || 1;
+  // The account's own save counter, plus any shipped bump that landed after
+  // the patch was written. Without the second term a deploy that changed the
+  // shipped file was invisible: the look changed under the account's clips
+  // and "outdated" never showed, because the patch's counter masked it.
+  const recordedShipped = Number.isFinite(Number(patch.shippedVersion)) && patch.shippedVersion !== undefined && patch.shippedVersion !== null
+    ? Number(patch.shippedVersion)
+    : (template.version || 1);
+  const shippedDrift = Math.max(0, (template.version || 1) - recordedShipped);
+  merged.version = (Number(patch.version) || template.version || 1) + shippedDrift;
+  if (Number(patch.updatedAt)) merged.updatedAt = Number(patch.updatedAt);
   return merged;
 }
 
-export function saveTemplate(user, id, input = {}, { allowFork = false } = {}) {
+export function saveTemplate(user, id, input = {}) {
   const existing = templateById(id, user);
   if (!existing) throw new Error('That template does not exist.');
-  if (!existing.builtIn) {
-    return { template: updateTemplate(user, id, input), forked: false, from: '' };
-  }
-  // An account edits the built-in in place; identity never moves.
+  // Every listed template is a built-in; an account edits it in place and the
+  // change is scoped to that account. Identity never moves.
   const userId = userIdOf(user);
   if (!userId) throw new Error('Saving a template needs an account.');
   const cleaned = sanitiseTemplate({ ...existing, ...input }, { id, builtIn: true, userId: '' });
@@ -445,6 +434,8 @@ export function saveTemplate(user, id, input = {}, { allowFork = false } = {}) {
     if (JSON.stringify(cleaned[key]) !== JSON.stringify(shipped[key])) patch[key] = cleaned[key];
   }
   patch.version = (Number(existing.version) || 1) + 1;
+  patch.shippedVersion = Number(shipped.version) || 1;
+  patch.updatedAt = Date.now();
   const all = { ...builtInOverrides(user) };
   all[id] = patch;
   writeUserSetting(state, userId, 'templateOverrides', all);
@@ -452,48 +443,14 @@ export function saveTemplate(user, id, input = {}, { allowFork = false } = {}) {
   return { template: templateById(id, user), forked: false, from: '' };
 }
 
-// "Modern Minimal (my copy)", then "(my copy 2)" and so on. Numbering only from
-// the second, because "(my copy 1)" reads like there are others.
-function copyName(user, base) {
-  return uniqueName(user, `${base} (my copy)`, n => `${base} (my copy ${n})`);
-}
-
-// A name no other template of this user already has. `numbered` builds the
-// fallbacks; by default it appends " 2", " 3" and so on.
-function uniqueName(user, wanted, numbered = n => `${wanted} ${n}`) {
-  const clean = cleanText(wanted, 'Custom template', 70);
-  const taken = new Set(listTemplates(user).map(template => template.name));
-  if (!taken.has(clean)) return clean;
-  for (let n = 2; n < 200; n += 1) {
-    const candidate = cleanText(numbered(n), 'Custom template', 70);
-    if (!taken.has(candidate)) return candidate;
-  }
-  return cleanText(`${clean} ${Date.now()}`, 'Custom template', 70);
-}
-
-export function duplicateTemplate(user, id, name = '') {
+export function duplicateTemplate() {
   throw new Error('One template per content type — edit the template directly; copies are no longer created.');
-  const source = templateById(id, user);
-  if (!source) throw new Error('That template does not exist.');
-  return createTemplate(user, { ...source, id: '', name: cleanText(name, `${source.name} Copy`, 70), description: source.description });
 }
 
 export function deleteTemplate(user, id) {
   const existing = templateById(id, user);
   if (!existing) return false;
-  if (existing.builtIn) throw new Error('Built-in templates cannot be deleted.');
-  fs.rmSync(path.join(customDir, `${safeId(id)}.json`), { force: true });
-  if (selectedTemplateId(user) === id) setSelectedTemplateId(user, config.defaultTemplateId);
-  return true;
-}
-
-/** Every custom template id on disk, across all accounts. */
-function allTemplateIds() {
-  const builtIns = fs.existsSync(builtInDir)
-    ? fs.readdirSync(builtInDir).filter(name => name.endsWith('.json')).map(name => path.basename(name, '.json'))
-    : [];
-  const custom = fs.readdirSync(customDir).filter(name => name.endsWith('.json')).map(name => path.basename(name, '.json'));
-  return [...builtIns, ...custom];
+  throw new Error('Built-in templates cannot be deleted.');
 }
 
 export function defaultTemplateDraft() {

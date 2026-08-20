@@ -121,11 +121,18 @@ test('an already posted clip is left alone', async () => {
   assert.deepEqual(byId('one-c').styleOverrides, LOOK);
 });
 
-test('a clip with nothing of its own to spread is refused', async () => {
+test('a clip with nothing of its own to spread is a no-op, not an error', async () => {
+  // The button shows whenever sibling clips exist, so pressing it with no
+  // changes must not toast an error at the user.
   seed();
   const response = await apply('one-b');
-  assert.equal(response.status, 400);
-  assert.match((await response.json()).error, /no changes of its own/i);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.applied, 0);
+  assert.equal(body.queued, 0);
+  // And the no-op wrote nothing to the clip itself.
+  assert.equal(byId('one-b').styleOverrides, undefined);
 });
 
 test('an unknown scope is refused rather than guessed at', async () => {

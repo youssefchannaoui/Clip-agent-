@@ -64,6 +64,24 @@ export function presign({ method = 'GET', key, expiresSec = 900, contentType = '
 
 export const uploadPrefixFor = userId => `uploads/${String(userId).replace(/[^A-Za-z0-9_-]/g, '_')}/`;
 
+/**
+ * Best-effort delete of a stored object. Rerenders and deletions replace the
+ * object keys on the record; without this the superseded MP4s and thumbnails
+ * stayed in the bucket forever, publicly addressable and billed.
+ * Failures are logged by the caller's catch -- a leak is not worth failing
+ * the operation that revealed it.
+ */
+export async function deleteObject(key) {
+  if (!configured() || !key) return false;
+  const url = presign({ method: 'DELETE', key, expiresSec: 300 });
+  const response = await fetch(url, { method: 'DELETE' });
+  // 204 is the success; 404 means it is already gone, which is the goal state.
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`Object storage delete returned HTTP ${response.status}.`);
+  }
+  return true;
+}
+
 export function createUpload(userId, fileName, contentType = 'video/mp4') {
   if (!configured()) throw new Error('Direct upload storage is not configured. Contact the site owner.');
   const extension = path.extname(String(fileName || '')).toLowerCase();

@@ -1062,6 +1062,12 @@
     var clipStyle = (UI.screen === 'editor' && edClipRecord)
       ? Object.assign({}, edClipRecord.styleOverrides || {}, UI.edStyleDraft || {})
       : null;
+    // In the editor the base is THIS clip's template. The render always uses
+    // the clip's template; previewing on the selected one showed a different
+    // style than the export whenever the two differed.
+    if (UI.screen === 'editor' && edClipRecord && edClipRecord.templateId) {
+      activeTemplate = templates.filter(function (t) { return t.id === edClipRecord.templateId; })[0] || activeTemplate;
+    }
 
     // The template being edited, with the schema's own defaults behind it so a
     // partially-populated record cannot render blanks.

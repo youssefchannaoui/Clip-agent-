@@ -1156,7 +1156,28 @@ def dynamic_caption_frames(candidate: Candidate, template: dict[str, Any]) -> li
     return frames
 
 
+def shift_segments(segments: list[dict[str, Any]], offset: float) -> list[dict[str, Any]]:
+    shifted = []
+    for segment in segments:
+        copy = dict(segment)
+        copy["start"] = float(copy.get("start", 0)) + offset
+        copy["end"] = float(copy.get("end", 0)) + offset
+        copy["words"] = [
+            {**word, "start": float(word.get("start", 0)) + offset, "end": float(word.get("end", 0)) + offset}
+            for word in (copy.get("words") or [])
+        ]
+        shifted.append(copy)
+    return shifted
+
+
 def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) -> list[dict[str, Any]]:
+    # The caption nudge. Shifting the source words moves every caption mode
+    # together; ass_time clamps at zero so a large negative nudge cannot put an
+    # event before the clip starts.
+    timing_offset = max(-2.0, min(2.0, float(template.get("captionTimingOffsetMs", 0) or 0) / 1000.0))
+    if abs(timing_offset) > 0.0005:
+        from dataclasses import replace
+        candidate = replace(candidate, segments=shift_segments(candidate.segments, timing_offset))
     width = int(template.get("width", 1080))
     height = int(template.get("height", 1920))
     font = str(template.get("captionFont", "DejaVu Sans"))
@@ -1708,9 +1729,14 @@ def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict
         else:
             scale_w = int(width * zoom)
             scale_h = int(height * zoom)
+            # Manual framing: the crop window sits at the chosen fraction of
+            # the slack. 0.5/0.5 is dead centre -- exactly the old behaviour,
+            # which hardcoded ffmpeg's centred default.
+            pos_x = max(0.0, min(1.0, float(template.get("cropPositionX", 0.5) or 0.5)))
+            pos_y = max(0.0, min(1.0, float(template.get("cropPositionY", 0.5) or 0.5)))
             graph = (
                 f"[0:v]scale={scale_w}:{scale_h}:force_original_aspect_ratio=increase,"
-                f"crop={width}:{height},setsar=1[base]"
+                f"crop={width}:{height}:(iw-ow)*{pos_x:.4f}:(ih-oh)*{pos_y:.4f},setsar=1[base]"
             )
     elif fit_mode == "contain":
         background = str(template.get("frameBackground", "#000000")).replace("#", "0x")
@@ -2057,12 +2083,34 @@ def doctor() -> int:
 
 
 
+def apply_source_window(job: dict[str, Any], source_file: Path) -> Path:
+    """Trim the aux job's source to the project's window when the payload asks.
+
+    Present only when the worker re-imported from the URL: the stored source
+    object is already trimmed, but a fresh download is the whole video, and
+    clip timestamps are relative to the window. Cutting the full file with
+    window-relative timestamps renders the wrong moment with the right captions.
+    """
+    start = max(0.0, float(job.get("sourceStartSec") or 0.0))
+    end = float(job.get("sourceEndSec") or 0.0)
+    if start <= 0 and end <= 0:
+        return source_file
+    duration = media_duration(job.get("ffprobe", "ffprobe"), source_file)
+    stop = min(end, duration) if end > start else duration
+    if start <= 0 and stop >= duration - 0.5:
+        return source_file
+    trimmed = source_file.with_name(f"{source_file.stem}-window{source_file.suffix}")
+    trim_source_window(job["ffmpeg"], source_file, trimmed, start, stop - start)
+    return trimmed
+
+
 def process_rerender(job: dict[str, Any], job_file: Path) -> None:
     result_file = Path(job["resultPath"])
     output_dir = Path(job["outputDir"])
     source_file = Path(job["sourceFile"])
     if not source_file.exists():
         raise RuntimeError("The original source file is unavailable, so this clip cannot be re-rendered.")
+    source_file = apply_source_window(job, source_file)
     tracks = [track for track in job.get("musicTracks", []) if Path(track.get("path", "")).exists()]
     # A job may deliberately carry no nasheed. Music is still the default and
     # still mandatory when asked for -- a missing upload must not silently
@@ -2083,7 +2131,12 @@ def process_rerender(job: dict[str, Any], job_file: Path) -> None:
         segment for segment in all_segments
         if float(segment.get("end", 0)) > start and float(segment.get("start", 0)) < end
     ]
-    if not segments:
+    if clip.get("transcriptEdited") and str(clip.get("transcript") or "").strip():
+        # The editor's caption text wins over Whisper's. Word timing is
+        # approximated across the clip, which is the honest trade: the words
+        # on screen are the words the user wrote.
+        segments = [{"start": start, "end": end, "text": str(clip["transcript"]).strip(), "words": []}]
+    elif not segments:
         segments = [{"start": start, "end": end, "text": str(clip.get("transcript") or clip.get("description") or "Reminder"), "words": []}]
     text = " ".join(str(segment.get("text") or "").strip() for segment in segments).strip()
     score = int(clip.get("score") or 70)
@@ -2112,6 +2165,7 @@ def process_more_clips(job: dict[str, Any], job_file: Path) -> None:
     source_file = Path(job["sourceFile"])
     if not source_file.exists():
         raise RuntimeError("The saved source video is unavailable. Generate-more cannot re-download the lecture because that would create a duplicate project.")
+    source_file = apply_source_window(job, source_file)
 
     tracks = [track for track in job.get("musicTracks", []) if Path(track.get("path", "")).exists()]
     # A job may deliberately carry no nasheed. Music is still the default and

@@ -2323,17 +2323,20 @@ async function saveEditorDraft(){
     await callApi(`/api/clips/${encodeURIComponent(clip.id)}`,{method:'PATCH',body:JSON.stringify({transcript:editor.captionText})});
     const draft=cleanDraft(editor.draft),current=DATA?.selectedTemplate;
     let result;
-    if(current?.builtIn){
-      result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...draft,id:'',name:'My DeenClipped Template'},select:true})});
-    }else if(current?.id){
-      result=await callApi(`/api/templates/${encodeURIComponent(current.id)}`,{method:'PUT',body:JSON.stringify({template:{...draft,id:current.id,name:current.name}})});
+    if(current?.id){
+      // Built-ins accept account-scoped edits through PUT now; the old POST
+      // fallback minted a copy, which the one-template-per-type catalogue
+      // refuses -- Save errored on the default account state.
+      // propagate is lecture-scoped: saving from a clip's editor re-renders
+      // this lecture's unposted clips, matching what the toast says.
+      result=await callApi(`/api/templates/${encodeURIComponent(current.id)}`,{method:'PUT',body:JSON.stringify({template:{...draft,id:current.id,name:current.name},propagate:true,propagateProjectId:clip.projectId||''})});
     }else{
-      result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...draft,id:'',name:'My DeenClipped Template'},select:true})});
+      result=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...draft,id:''},select:true})});
     }
     editor.draft={...clone(result.template),__clipId:clip.id};
     editor.dirty=false;clearEditorLocal();
     const count=Number(result.propagation?.queued||0);
-    notify(`Saved. ${count} unposted clip${count===1?'':'s'} queued with this exact template, including scheduled clips.`);
+    notify(count?`Saved. ${count} unposted clip${count===1?'':'s'} from this lecture queued to re-render.`:'Saved. New renders use this style.');
     await refreshData();renderEditor(currentClip()||clip);
   }catch(error){notify(error.message,'bad')}finally{if(button){button.disabled=false;button.textContent='Save'}}
 }
@@ -2387,11 +2390,10 @@ async function renderEditedClip(){
   const clip=currentClip(),button=$('#dcRenderClip');if(!clip)return;button.disabled=true;button.textContent='Queueing…';
   try{
     const title=$('#dcMetaTitle')?.value??clip.title,description=$('#dcMetaDescription')?.value??clip.description,hashtags=$('#dcMetaHashtags')?.value??clip.hashtags;
-    await callApi(`/api/clips/${encodeURIComponent(clip.id)}`,{method:'PATCH',body:JSON.stringify({title,description,hashtags,transcript:editor.captionText})});
+    await callApi(`/api/clips/${encodeURIComponent(clip.id)}`,{method:'PATCH',body:JSON.stringify({title,description,hashtags,transcript:editor.captionText,styleOverrides:cleanDraft(editor.draft)})});
     if(editor.draft.musicVolumePercent)await callApi('/api/music-settings',{method:'POST',body:JSON.stringify({volumePercent:Number(editor.draft.musicVolumePercent)})});
-    const template=await callApi('/api/templates',{method:'POST',body:JSON.stringify({template:{...cleanDraft(editor.draft),id:'',name:`${clip.title||'Clip'} · Editor`},select:false})});
     const asVariant=clip.status==='posted';
-    await callApi(`/api/clips/${encodeURIComponent(clip.id)}/rerender`,{method:'POST',body:JSON.stringify({templateId:template.template.id,asVariant})});
+    await callApi(`/api/clips/${encodeURIComponent(clip.id)}/rerender`,{method:'POST',body:JSON.stringify({templateId:clip.templateId||'',asVariant})});
     editor.dirty=false;clearEditorLocal();notify(asVariant?'Edited repost variant queued':'Edited clip queued for rendering');await refreshData();go('home');
   }catch(error){notify(error.message,'bad')}finally{if(button){button.disabled=false;button.textContent='Export video'}}
 }

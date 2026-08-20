@@ -132,6 +132,20 @@ export function updateClip(id, fields = {}) {
     if (typeof fields[key] === 'string') clip[key] = fields[key].trim();
   }
 
+  // The editor's caption text. This arrived in every Save and was silently
+  // dropped -- the UI toasted "saved" while the edit went nowhere. The burned
+  // captions come from the transcript at render time, so an edit also marks
+  // the video out of date.
+  if (typeof fields.transcript === 'string') {
+    const text = fields.transcript.trim().slice(0, 20000);
+    if (text !== String(clip.transcript || '')) {
+      clip.transcript = text;
+      clip.transcriptEdited = true;
+      clip.stylePending = true;
+      clip.updatedAt = Date.now();
+    }
+  }
+
   // Style tweaks belong to THIS clip. Writing them to the shared template is how
   // moving one caption used to move it on every clip in the lecture.
   if (fields.styleOverrides && typeof fields.styleOverrides === 'object') {
@@ -139,8 +153,8 @@ export function updateClip(id, fields = {}) {
     if (Object.keys(patch).length) {
       clip.styleOverrides = { ...(clip.styleOverrides || {}), ...patch };
       // The file on disk was rendered with the old values, so it no longer
-      // matches what the editor is showing. Re-rendering is an explicit,
-      // charged action — this only marks that one is owed.
+      // matches what the editor is showing. Re-rendering stays an explicit
+      // action (it is free, per billing) — this only marks that one is owed.
       clip.stylePending = true;
       clip.updatedAt = Date.now();
     }
@@ -233,8 +247,15 @@ export function deleteClip(id) {
   const clip = clipById(id);
   if (!clip) throw new Error('That clip no longer exists.');
   if ((clip.targets || []).some(target => ['publishing', 'processing'].includes(target.status))) throw new Error('Wait for the active platform transfer to finish before deleting this clip.');
-  state.clips = state.clips.filter(item => item.id !== id); save();
+  state.clips = state.clips.filter(item => item.id !== id);
+  // Its pending re-renders go with it -- otherwise the worker runs the whole
+  // job (remote: re-downloads the source) and fails at import.
+  state.rerenderJobs = state.rerenderJobs.filter(job => job.clipId !== id || job.status === 'processing');
+  save();
   for (const file of [clip.clipFile, clip.thumbFile, clip.sourceFile]) { try { removeDataFile(file); } catch {} }
+  for (const key of [clip.clipObjectKey, clip.thumbObjectKey]) {
+    if (key) engine.deleteStoredObject(key).catch(() => {});
+  }
 }
 
 function applyAutomation() {

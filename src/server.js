@@ -181,6 +181,30 @@ function requireOperator(user) {
   return user;
 }
 
+// One clip's look becomes the shared template (per-account patch on a
+// built-in). Framing never travels. Returns the saved template.
+function promoteClipLook(user, clip) {
+  const overrides = clip.styleOverrides && Object.keys(clip.styleOverrides).length ? clip.styleOverrides : null;
+  if (!overrides) throw new Error('This clip has no changes of its own to apply.');
+  const base = templates.templateById(clip.templateId, user);
+  if (!base) throw new Error('The style this clip uses no longer exists.');
+  const look = { ...overrides };
+  for (const field of templates.FRAMING_FIELDS) delete look[field];
+  if (!Object.keys(look).length) throw new Error('Only framing was changed, and framing belongs to this clip alone.');
+  const { template } = templates.saveTemplate(user, base.id, look);
+  // The look now lives in the style itself; holding it twice would make a
+  // later style edit look like it had no effect on this clip. The framing
+  // never travelled, so it stays the clip's own.
+  const keptFraming = {};
+  for (const field of templates.FRAMING_FIELDS) {
+    if (clip.styleOverrides[field] !== undefined) keptFraming[field] = clip.styleOverrides[field];
+  }
+  if (Object.keys(keptFraming).length) clip.styleOverrides = keptFraming;
+  else delete clip.styleOverrides;
+  clip.stylePending = true;
+  return template;
+}
+
 function queueTemplateForEveryUnpostedClip(template, user, reason = 'template update', projectId = '') {
   let queued = 0;
   let skipped = 0;
@@ -198,7 +222,7 @@ function queueTemplateForEveryUnpostedClip(template, user, reason = 'template up
     // had ever made -- lecture clips, old test clips -- onto the recitation
     // template, flooding the worker with twenty-plus renders nobody asked for
     // and overwriting clips with a style that was never theirs.
-    if (clip.templateId && clip.templateId !== template.id) { skipped += 1; continue; }
+    if (clip.templateId !== template.id) { skipped += 1; continue; }
     try {
       agent.engine.queueClipRerender(clip.id, template.id, { asVariant: false });
       queued += 1;
@@ -817,14 +841,28 @@ async function route(req, res, url) {
 
   if (method === 'GET' && pathname === '/api/templates') return json(res, 200, { templates: templates.listTemplates(currentUser), selectedTemplate: templates.selectedTemplate(currentUser), draft: templates.defaultTemplateDraft() });
   if (method === 'POST' && pathname === '/api/templates') {
+    // The editor's Save posts here when the open template is built in -- a
+    // holdover from when built-ins were read-only and Save had to mint a copy.
+    // Copies are gone (one template per content type), and built-ins take
+    // per-account edits now, so this saves onto the template the draft came
+    // from. Refusing here made the editor's Save button an error message.
     const body = await readBody(req);
     try {
-      const template = templates.createTemplate(currentUser, body.template || body);
-      const selected = body.select !== false;
-      if (selected) templates.setSelectedTemplate(currentUser, template.id);
-      const propagation = selected ? queueTemplateForEveryUnpostedClip(template, currentUser, 'creating and selecting it') : { queued: 0, skipped: 0, errors: [] };
-      log(`Created template "${template.name}". It is ready for automated renders.`, 'info', currentUser.id);
-      return json(res, 200, { ok: true, template, propagation });
+      const draft = body.template || body;
+      const byName = templates.listTemplates(currentUser).find(item => item.name === String(draft.name || '').trim());
+      let target = templates.templateById(String(draft.id || ''), currentUser) || byName;
+      if (!target && body.select === false) {
+        // No identity and no intent to select: this is the old "mint a copy"
+        // shape (the Duplicate buttons). Copies are gone, one template per
+        // content type -- refuse rather than overwrite a template it never named.
+        return json(res, 400, { error: 'One template per content type — edit the template directly; copies are no longer created.' });
+      }
+      target = target || templates.selectedTemplate(currentUser);
+      if (!target?.id) return json(res, 400, { error: 'There is no template to save onto.' });
+      const saved = templates.saveTemplate(currentUser, target.id, draft);
+      if (body.select !== false) templates.setSelectedTemplate(currentUser, target.id);
+      log(`Saved template "${saved.template.name}" version ${saved.template.version}. New renders use it automatically.`, 'info', currentUser.id);
+      return json(res, 200, { ok: true, template: saved.template, propagation: { queued: 0, skipped: 0, errors: [] } });
     } catch (error) { return json(res, 400, { error: error.message }); }
   }
   const duplicateTemplate = pathname.match(/^\/api\/templates\/([^/]+)\/duplicate$/);
@@ -843,16 +881,19 @@ async function route(req, res, url) {
       // Editing a built-in forks it onto the user's own copy rather than
       // refusing, so Save always means save. `forked` travels back so the page
       // can say which template it actually saved.
-      const saved = templates.saveTemplate(currentUser, decodeURIComponent(templateMatch[1]), body.template || body,
-        { allowFork: body.allowFork === true });
+      const saved = templates.saveTemplate(currentUser, decodeURIComponent(templateMatch[1]), body.template || body);
       const template = saved.template;
-      const selected = templates.selectedTemplate(currentUser);
       // Re-rendering every unposted clip is explicit now. It used to fire on any
       // field write, and the editor's sliders write on every `input` event, so
       // dragging one slider queued a re-render per clip per pixel -- each of
       // which re-downloads the whole source on a single-slot worker.
-      const propagation = body.propagate === true && selected?.id === template.id
-        ? queueTemplateForEveryUnpostedClip(template, currentUser, 'saving the active template', String(body.propagateProjectId || ''))
+      //
+      // The sweep itself is scoped to clips *using this template*, so it no
+      // longer also requires the template to be the selected one -- that gate
+      // made "save and re-render" silently do nothing whenever the clip's
+      // template differed from the account default.
+      const propagation = body.propagate === true
+        ? queueTemplateForEveryUnpostedClip(template, currentUser, 'saving the template', String(body.propagateProjectId || ''))
         : { queued: 0, skipped: 0, errors: [] };
       log(saved.forked
         ? `"${saved.from}" is built in, so your changes were saved to "${template.name}" and it is now selected.`
@@ -884,12 +925,17 @@ async function route(req, res, url) {
   }
 
   if (method === 'POST' && pathname === '/api/template') {
+    // Selection is a default for future renders, nothing more. The dashboard
+    // posts here on every job submission, and this used to queue a re-render
+    // of every unposted clip already on the template -- so submitting one new
+    // lecture re-rendered the whole backlog, charged. Re-rendering existing
+    // clips stays explicit: /api/templates/apply-all or a template save with
+    // propagate: true.
     const body = await readBody(req);
     try {
       const template = templates.setSelectedTemplate(currentUser, String(body.id || ''));
-      const propagation = queueTemplateForEveryUnpostedClip(template, currentUser, 'selecting it as the default');
-      log(`Automation template set to "${template.name}". Every new and unposted clip is locked to this saved version.`, 'info', currentUser.id);
-      return json(res, 200, { ok: true, template, propagation });
+      log(`Automation template set to "${template.name}". New renders use it.`, 'info', currentUser.id);
+      return json(res, 200, { ok: true, template, propagation: { queued: 0, skipped: 0, errors: [] } });
     } catch (error) { return json(res, 400, { error: error.message }); }
   }
 
@@ -1061,7 +1107,7 @@ async function route(req, res, url) {
       words,
       exact,
       synced: exact,
-      edited: false,
+      edited: Boolean(clip.transcriptEdited),
       transcript: clip.transcript || '',
       durationSec: duration,
       silence: silenceSpans(words, duration),
@@ -1193,7 +1239,16 @@ async function route(req, res, url) {
       const clip = state.clips.find(item => item.id === id);
       if (!clip) return json(res, 404, { error: 'That clip no longer exists.' });
       const overrides = clip.styleOverrides && Object.keys(clip.styleOverrides).length ? clip.styleOverrides : null;
-      if (!overrides) return json(res, 400, { error: 'This clip has no changes of its own to apply.' });
+      // The button shows whenever siblings exist; pressing it with nothing
+      // changed is a no-op, not a mistake to scold.
+      if (!overrides) return json(res, 200, { ok: true, scope, applied: 0, queued: 0, pending: 0, errors: [] });
+      if (scope === 'template') {
+        // The old promote-style behaviour the route comment promises: the look
+        // lands on the shared template, so every lecture using it follows.
+        const updated = promoteClipLook(currentUser, clip);
+        save();
+        return json(res, 200, { ok: true, scope, template: updated, clip: publicClip(clip) });
+      }
       if (scope !== 'lecture') return json(res, 400, { error: 'Unknown scope.' });
 
       // Siblings from the same lecture, this account only, and never a clip that
@@ -1248,16 +1303,7 @@ async function route(req, res, url) {
       assertCanAccessClip(currentUser, id);
       const clip = state.clips.find(item => item.id === id);
       if (!clip) return json(res, 404, { error: 'That clip no longer exists.' });
-      const overrides = clip.styleOverrides && Object.keys(clip.styleOverrides).length ? clip.styleOverrides : null;
-      if (!overrides) return json(res, 400, { error: 'This clip has no changes of its own to apply.' });
-      const base = templates.templateById(clip.templateId, currentUser);
-      if (!base) return json(res, 400, { error: 'The style this clip uses no longer exists.' });
-      if (base.builtIn) return json(res, 400, { error: 'Built-in styles are protected. Duplicate the style first, then apply.' });
-      const updated = templates.updateTemplate(currentUser, base.id, overrides);
-      // The clip's tweaks now live in the style itself, so holding them twice
-      // would make a later style edit look like it had no effect on this clip.
-      delete clip.styleOverrides;
-      clip.stylePending = true;
+      const updated = promoteClipLook(currentUser, clip);
       save();
       return json(res, 200, { ok: true, template: updated, clip: publicClip(clip) });
     } catch (error) { return json(res, 400, { error: error.message }); }
