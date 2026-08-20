@@ -51,6 +51,8 @@
     // explained why it did nothing.
     tplPast: [],
     tplHistCtx: '',
+    selClips: {},
+    selLecs: {},
     tplFuture: [],
     tplReplaying: false,
     // What is being dragged in a preview, where it is, and whether it has caught
@@ -973,9 +975,21 @@
           '; animation: dcRise .26s cubic-bezier(.2,.8,.2,1) ' + Math.min(i * 0.03, 0.4) + 's both; box-shadow: 0 8px 22px rgba(0,0,0,.26);',
         stateChip: st === 'approved' ? 'Approved' : st === 'rejected' ? 'Rejected' : '',
         stateChipStyle: st
-          ? 'position: absolute; top: 8px; right: 8px; padding: 2px 8px; border-radius: 20px; font-size: 9.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; border: 1px solid ' +
+          ? 'position: absolute; top: 8px; right: 38px; padding: 2px 8px; border-radius: 20px; font-size: 9.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; border: 1px solid ' +
             (st === 'rejected' ? '#3A2A2A; background: rgba(10,10,12,.85); color: #E3928C;' : 'rgba(127,209,166,.35); background: rgba(10,10,12,.85); color: #7FD1A6;')
           : 'display: none;',
+        selStyle: 'position: absolute; top: 8px; right: 8px; z-index: 3; display: grid; place-items: center; '
+          + 'width: 22px; height: 22px; border-radius: 7px; cursor: pointer; transition: background .12s ease; border: 1px solid '
+          + (UI.selClips[c.id]
+            ? '#D9B478; background: rgba(217,180,120,.92); color: #0E0E11;'
+            : 'rgba(255,255,255,.35); background: rgba(10,10,12,.6); color: transparent;'),
+        toggleSel: function (e) {
+          stop(e);
+          if (e && e.stopPropagation) e.stopPropagation();
+          var map = Object.assign({}, UI.selClips);
+          if (map[c.id]) delete map[c.id]; else map[c.id] = true;
+          setUI({ selClips: map });
+        },
         primaryLabel: st === 'approved' ? 'Approved' : 'Approve',
         primaryIcon: st === 'approved' ? 'ph-fill ph-check-circle' : 'ph ph-check',
         primaryStyle: 'display: flex; align-items: center; justify-content: center; gap: 6px; flex: 1; padding: 7px 10px; border-radius: 8px; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid ' +
@@ -1078,6 +1092,20 @@
             ? mine.length + ' of ' + p.clipsRequested + ' asked for · the rest overlapped'
             : median ? 'median score ' + median : 'no clips yet',
         openClips: function (e) { stop(e); setUI({ screen: 'detail', openProject: p.id }); },
+        selStyle: 'position: absolute; top: 9px; right: 9px; z-index: 3; display: grid; place-items: center; '
+          + 'width: 22px; height: 22px; border-radius: 7px; cursor: pointer; transition: background .12s ease; border: 1px solid '
+          + (UI.selLecs[p.id]
+            ? '#D9B478; background: rgba(217,180,120,.92); color: #0E0E11;'
+            : 'rgba(255,255,255,.35); background: rgba(10,10,12,.6); color: transparent;'),
+        toggleSel: function (e) {
+          stop(e);
+          // The card itself opens the lecture on click; a selection tap must
+          // not also navigate.
+          if (e && e.stopPropagation) e.stopPropagation();
+          var map = Object.assign({}, UI.selLecs);
+          if (map[p.id]) delete map[p.id]; else map[p.id] = true;
+          setUI({ selLecs: map });
+        },
         more: function (e) {
           stop(e);
           global.StudioAdapter.onPickOption('This lecture',
@@ -2054,7 +2082,8 @@
 
       librarySummary: plural(projects.length, 'lecture') + ' · ' + plural(clips.length, 'clip'),
 
-      lectures: projects.slice(0, 4).map(function (p) {
+      // Two rows, not one: 8 cards against the grid's auto-fill columns.
+      lectures: projects.slice(0, 8).map(function (p) {
         // Through lecState, not a second opinion. Home and the Lecture library
         // read the same records; when this had its own test they disagreed --
         // PROCESSING here, Ready there, on one page load.
@@ -2134,6 +2163,33 @@
 
       deckMode: UI.deckMode,
       gridMode: !UI.deckMode,
+      // Bulk review. Selection lives on ids, counted against the clips that
+      // still exist so a deleted record cannot inflate the label.
+      anySel: clips.some(function (c) { return UI.selClips[c.id]; }),
+      selCount: plural(clips.filter(function (c) { return UI.selClips[c.id]; }).length, 'clip') + ' selected',
+      selApprove: function (e) {
+        stop(e);
+        var ids = clips.filter(function (c) { return UI.selClips[c.id]; }).map(function (c) { return c.id; });
+        setUI({ selClips: {} });
+        global.StudioAdapter.onBulkClips(ids, 'approve');
+      },
+      selReject: function (e) {
+        stop(e);
+        var ids = clips.filter(function (c) { return UI.selClips[c.id]; }).map(function (c) { return c.id; });
+        setUI({ selClips: {} });
+        global.StudioAdapter.onBulkClips(ids, 'delete');
+      },
+      selClear: function (e) { stop(e); setUI({ selClips: {} }); },
+      // The library's bulk delete, same shape.
+      libAnySel: projects.some(function (p) { return UI.selLecs[p.id]; }),
+      libSelCount: plural(projects.filter(function (p) { return UI.selLecs[p.id]; }).length, 'lecture') + ' selected',
+      libSelDelete: function (e) {
+        stop(e);
+        var ids = projects.filter(function (p) { return UI.selLecs[p.id]; }).map(function (p) { return p.id; });
+        setUI({ selLecs: {} });
+        global.StudioAdapter.onBulkProjects(ids);
+      },
+      libSelClear: function (e) { stop(e); setUI({ selLecs: {} }); },
       gridBtnStyle: toggleBtnStyle(!UI.deckMode),
       deckBtnStyle: toggleBtnStyle(UI.deckMode),
       setGrid: function (e) { stop(e); setUI({ deckMode: false }); },
@@ -2527,8 +2583,13 @@
       notPro: String((current && current.plan) || 'free') === 'free',
 
       // Alignment guides only appear while dragging, as in the design.
-      edGuideV: 'position: absolute; top: 0; bottom: 0; width: 1px; z-index: 6; pointer-events: none; left: 50%; display: none; background: rgba(240,214,166,.6);',
-      edGuideH: 'position: absolute; left: 0; right: 0; height: 1px; z-index: 6; pointer-events: none; top: ' + capTop + '%; display: none; background: rgba(240,214,166,.6);',
+      // The same live drag guides the Templates preview draws -- the editor
+      // used to keep these permanently display:none, so dragging a caption
+      // here had no snap lines, no feedback, and read as a rougher tool for
+      // the very same operation.
+      edGuideV: 'position: absolute; top: 0; bottom: 0; width: 1px; z-index: 6; pointer-events: none; left: 50%; background: '
+        + (UI.dragKind ? 'repeating-linear-gradient(to bottom, rgba(240,214,166,.5) 0 6px, transparent 6px 12px)' : 'transparent') + ';',
+      edGuideH: 'z-index: 6; ' + guideOverlayStyle(Boolean(UI.dragKind), UI.dragAt, UI.dragSnapped, SNAP_LINES),
       // Not toggleBtnStyle: that is a 30px icon square, and this button holds
       // "Social safe zones" as text -- squeezed into the square, the label
       // wrapped straight over its neighbouring caption. A pill that grows with
@@ -3556,6 +3617,8 @@
     onGenerate: function () {},
     onUploadNasheedPrompt: function () {},
     onApplyTemplateToClip: function () {},
+    onBulkClips: function () {},
+    onBulkProjects: function () {},
     onSaveClip: function () {},
     clipSaved: function () { UI.edSaving = false; UI.edDirty = false; UI.edCaption = null; UI.edBlockDraft = null; refresh(); },
     // Called by the host once /api/source-info resolves, so the range picker can

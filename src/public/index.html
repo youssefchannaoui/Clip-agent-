@@ -3840,6 +3840,26 @@ function renderStudio(){
        and its queue row all go. It used to only mark the status, so rejects
        piled up in the app forever. */
     StudioAdapter.onReject=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'DELETE'}),'Clip rejected and removed');
+    /* Bulk review actions. One refresh at the end, not one per clip -- and
+       one confirm for the destructive path, since twelve confirms teaches
+       people to stop reading them. */
+    StudioAdapter.onBulkClips=(ids,action)=>{
+      if(!ids||!ids.length)return;
+      if(action==='delete'&&!confirm(`Reject and permanently delete ${ids.length} clip${ids.length===1?'':'s'}? The rendered files are removed too.`))return;
+      studioDo(async()=>{
+        for(const id of ids){
+          if(action==='approve')await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'approved'})});
+          else await api(`/api/clips/${encodeURIComponent(id)}`,{method:'DELETE'});
+        }
+      },`${ids.length} clip${ids.length===1?'':'s'} ${action==='approve'?'approved':'rejected and removed'}`);
+    };
+    StudioAdapter.onBulkProjects=ids=>{
+      if(!ids||!ids.length)return;
+      if(!confirm(`Delete ${ids.length} lecture${ids.length===1?'':'s'} and all of their clips? The rendered files are removed too. This cannot be undone.`))return;
+      studioDo(async()=>{
+        for(const id of ids)await api(`/api/projects/${encodeURIComponent(id)}`,{method:'DELETE'});
+      },`${ids.length} lecture${ids.length===1?'':'s'} deleted`);
+    };
     /* The editor's template dropdown: apply the picked template to THIS clip
        and re-render it at watcher priority. The preview flips immediately via
        ui.edTplId; the rendered file follows. */

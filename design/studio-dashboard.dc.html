@@ -526,6 +526,14 @@
             </div>
           </div>
         </sc-if>
+        <sc-if value="{{ anySel }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid rgba(217,180,120,.4); border-radius: 11px; background: rgba(217,180,120,.08);">
+            <span style="font-size: 12.5px; font-weight: 600; color: #F0D6A6;">{{ selCount }}</span>
+            <button onClick="{{ selApprove }}" style="display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border: 1px solid rgba(217,180,120,.45); border-radius: 8px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(217,180,120,.14);"><i class="ph ph-check" style="font-size: 13px;"></i>Approve all</button>
+            <button onClick="{{ selReject }}" style="display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border: 1px solid #3A2A2A; border-radius: 8px; background: transparent; color: #E3928C; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(227,146,140,.12);"><i class="ph ph-trash" style="font-size: 13px;"></i>Reject & delete</button>
+            <button onClick="{{ selClear }}" style="margin-left: auto; padding: 7px 12px; border: 1px solid #26262A; border-radius: 8px; background: transparent; color: #8B8B93; font-family: inherit; font-size: 12px; cursor: pointer;" style-hover="color: #F2F2F4;">Clear</button>
+          </div>
+        </sc-if>
         <sc-if value="{{ gridMode }}" hint-placeholder-val="{{ true }}">
         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; align-content: start;">
           <sc-for list="{{ queueClips }}" as="clip" hint-placeholder-count="8">
@@ -538,6 +546,7 @@
                   <span style="position: absolute; top: 34px; left: 8px; display: flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 20px; border: 1px solid rgba(240,214,166,.3); background: rgba(10,10,12,.78); color: #E7DCC8; font-size: 10px; font-weight: 600;"><i class="ph ph-book-open-text" style="font-size: 11px;"></i>Quote review</span>
                 </sc-if>
                 <span style="position: absolute; left: 8px; right: 8px; bottom: 26px; height: 16px; background: repeating-linear-gradient(90deg, rgba(240,214,166,.55) 0 2px, transparent 2px 5px); mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); opacity: .5;"></span>
+                <button onClick="{{ clip.toggleSel }}" title="Select" style="{{ clip.selStyle }}"><i class="ph-bold ph-check" style="font-size: 12px;"></i></button>
                 <span style="position: absolute; left: 8px; bottom: 7px; font-size: 10.5px; font-weight: 600; color: #E9E9ED;">{{ clip.duration }}</span>
                 <span style="position: absolute; right: 8px; bottom: 7px; font-size: 10px; color: #BCBCC3;">{{ clip.style }}</span>
               </div>
@@ -566,33 +575,7 @@
       </section>
 
       <aside style="flex: 0 0 300px; max-width: 300px; display: flex; flex-direction: column; gap: 14px; min-width: 0;">
-        <section style="display: flex; flex-direction: column; gap: 11px; padding: 14px; border: 1px solid #1E1E22; border-radius: 12px; background: linear-gradient(160deg, #141417, #101013); box-shadow: 0 18px 44px rgba(0,0,0,.34);">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600; letter-spacing: -.01em;">Processing now</span>
-            <span style="margin-left: auto; display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: #8B8B93;">
-              <span style="width: 5px; height: 5px; border-radius: 50%; background: #F0D6A6; animation: dcPulse 1.8s ease-in-out infinite;"></span>{{ stageLabel }}
-            </span>
-          </div>
-          <div style="display: flex; align-items: center; gap: 9px;">
-            <span style="width: 34px; height: 46px; flex: none; border-radius: 6px; border: 1px solid #26262A; background: linear-gradient(180deg, #1D1D21, #131316);"></span>
-            <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0;">
-              <strong style="font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Patience in Hardship — Part 2</strong>
-              <span style="font-size: 11px; color: #8B8B93;">42:11 source · 6 clips requested</span>
-            </span>
-          </div>
-          <div style="position: relative; height: 5px; border-radius: 20px; background: #1D1D21; overflow: hidden;">
-            <span style="position: absolute; inset: 0 auto 0 0; width: {{ progress }}%; border-radius: 20px; background: linear-gradient(90deg, #D9B478, #F0D6A6); transition: width .5s ease;"></span>
-          </div>
-          <div style="display: flex; flex-direction: column; gap: 5px;">
-            <sc-for list="{{ stages }}" as="stage" hint-placeholder-count="5">
-              <div style="display: flex; align-items: center; gap: 8px; font-size: 11.5px;">
-                <i class="{{ stage.icon }}" style="{{ stage.iconStyle }}"></i>
-                <span style="{{ stage.labelStyle }}">{{ stage.label }}</span>
-                <span style="margin-left: auto; font-size: 10.5px; color: #6E6E76;">{{ stage.meta }}</span>
-              </div>
-            </sc-for>
-          </div>
-        </section>
+        
 
         <section style="display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
           <div style="display: flex; align-items: center; gap: 8px;">
@@ -614,16 +597,7 @@
           </div>
         </section>
 
-        <section style="display: flex; flex-direction: column; gap: 9px; padding: 14px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
-          <span style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;">Safeguards</span>
-          <sc-for list="{{ checks }}" as="check" hint-placeholder-count="4">
-            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px;">
-              <i class="{{ check.icon }}" style="{{ check.iconStyle }}"></i>
-              <span style="color: #BCBCC3;">{{ check.label }}</span>
-              <span style="margin-left: auto; font-size: 11px; color: #8B8B93;">{{ check.value }}</span>
-            </div>
-          </sc-for>
-        </section>
+        
       </aside>
     </div>
     </div>
@@ -645,6 +619,13 @@
             </div>
           </div>
 
+          <sc-if value="{{ libAnySel }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid rgba(217,180,120,.4); border-radius: 11px; background: rgba(217,180,120,.08);">
+              <span style="font-size: 12.5px; font-weight: 600; color: #F0D6A6;">{{ libSelCount }}</span>
+              <button onClick="{{ libSelDelete }}" style="display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border: 1px solid #3A2A2A; border-radius: 8px; background: transparent; color: #E3928C; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(227,146,140,.12);"><i class="ph ph-trash" style="font-size: 13px;"></i>Delete selected</button>
+              <button onClick="{{ libSelClear }}" style="margin-left: auto; padding: 7px 12px; border: 1px solid #26262A; border-radius: 8px; background: transparent; color: #8B8B93; font-family: inherit; font-size: 12px; cursor: pointer;" style-hover="color: #F2F2F4;">Clear</button>
+            </div>
+          </sc-if>
           <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px;">
             <sc-for list="{{ libraryItems }}" as="lec" hint-placeholder-count="6">
               <article onClick="{{ lec.openClips }}" style="display: flex; flex-direction: column; border: 1px solid #1E1E22; border-radius: 12px; overflow: hidden; background: #121214; cursor: pointer; transition: border-color .14s ease, transform .14s ease, box-shadow .14s ease;" style-hover="border-color: #34343A; transform: translateY(-2px); box-shadow: 0 16px 38px rgba(0,0,0,.36);">
@@ -653,7 +634,8 @@
                   <span style="position: absolute; top: 9px; left: 9px; display: flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 20px; border: 1px solid #33333A; background: rgba(10,10,12,.8); color: #BCBCC3; font-size: 10px;" title="{{ lec.srcLabel }}">
                     <i class="{{ lec.srcIcon }}" style="font-size: 11px;"></i>{{ lec.dur }}
                   </span>
-                  <span style="position: absolute; top: 9px; right: 9px;"><span style="{{ lec.chipStyle }}"><i class="{{ lec.chipIcon }}" style="{{ lec.chipIconStyle }}"></i>{{ lec.stateChip }}</span></span>
+                  <span style="position: absolute; top: 9px; right: 40px;"><span style="{{ lec.chipStyle }}"><i class="{{ lec.chipIcon }}" style="{{ lec.chipIconStyle }}"></i>{{ lec.stateChip }}</span></span>
+                  <button onClick="{{ lec.toggleSel }}" title="Select" style="{{ lec.selStyle }}"><i class="ph-bold ph-check" style="font-size: 12px;"></i></button>
                   <span style="position: absolute; left: 10px; right: 10px; bottom: 9px; display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: #E9E9ED;">
                     <i class="ph-fill ph-film-strip" style="font-size: 12px; color: #F0D6A6;"></i>{{ lec.clips }}
                     <span style="margin-left: auto; color: #A2A2AA;">{{ lec.metric }}</span>

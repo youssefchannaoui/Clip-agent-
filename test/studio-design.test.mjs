@@ -1560,9 +1560,11 @@ test('the snap lines are the safe box the design actually draws', () => {
   assert.match(adapter, /var SAFE_TOP = 0\.08;/);
   assert.match(adapter, /var SAFE_BOTTOM = 0\.86;/);
   const css = fs.readFileSync(path.join(ROOT, 'src/public/studio-styles.generated.css'), 'utf8');
-  const box = /\.s8n\{[^}]*\}/.exec(css)[0];
-  assert.match(box, /top: 8%/);
-  assert.match(box, /bottom: 14%/, 'so SAFE_BOTTOM is 1 - 0.14');
+  // Found by its geometry, not by a hoisted class name -- the importer
+  // renumbers classes whenever the design gains or loses a node, and pinning
+  // .s8n broke on an unrelated section being removed.
+  const box = /\.[a-z0-9]+\{[^}]*top: 8%[^}]*bottom: 14%[^}]*\}/.exec(css);
+  assert.ok(box, 'a class drawing the top-8% / bottom-14% safe box exists');
 });
 
 test('the caption cannot be dragged outside the safe box', () => {
