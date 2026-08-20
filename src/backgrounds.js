@@ -80,10 +80,15 @@ export async function registerBackgroundFile(user, name, sourceFile, mimeType = 
   fs.renameSync(sourceFile, file);
 
   let probed = { durationSec: 0, hasVideo: false };
-  try { probed = await probeVideo(file); } catch {}
+  let probeError = '';
+  // The reason travels: a swallowed probe failure turned "ffprobe is not
+  // installed" and "that's a PDF" into the same unhelpful sentence.
+  try { probed = await probeVideo(file); } catch (error) { probeError = error.message; }
   if (!probed.hasVideo || probed.durationSec < 3) {
     fs.rmSync(file, { force: true });
-    throw new Error('That file could not be read as a video of at least 3 seconds.');
+    throw new Error(probeError
+      ? `The video could not be checked: ${probeError}`
+      : 'That file could not be read as a video of at least 3 seconds.');
   }
 
   const entry = {

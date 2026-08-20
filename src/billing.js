@@ -157,6 +157,13 @@ export function ensureUserBilling(user) {
   return billing;
 }
 
+// "Pro" for feature gates: any plan that is not free. The admin plan counts --
+// the operator's own account must never be locked out of its own features.
+export function isPaid(user) {
+  const billing = ensureUserBilling(user);
+  return Boolean(billing && billing.plan && billing.plan !== 'free');
+}
+
 export function isUnlimited(user) {
   return Boolean(user && ['owner', 'admin'].includes(String(user.role || '').toLowerCase()));
 }

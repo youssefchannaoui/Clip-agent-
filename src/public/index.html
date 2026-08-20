@@ -2276,6 +2276,9 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         edVideoClip=StudioAdapter.ui.edClipId;
         StudioAdapter.ui.edBurned=false;
         StudioAdapter.ui.edVideoMissing=false;
+        /* The template picked for the previous clip must not leak onto this
+           one -- the override only bridges pick-to-render for one clip. */
+        StudioAdapter.ui.edTplId=null;
       }
       const onEditor=StudioAdapter.ui.screen==='editor'&&vals.edVideoUrl;
       if(!onEditor){
@@ -2388,13 +2391,70 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         edVideoNode.load();
         armVideoWatchdog();
       }
-      /* Framing, matching what the renderer will do: contain for fit, cover
-         for crop and blur, with the crop zoom applied on top. */
+      /* Framing, matching what the renderer will do: contain for Full and
+         Blur (the whole video is visible), cover for Fill, with the crop
+         zoom applied on top. */
       const fit=vals.edVideoFit||'cover';
       const zoom=Number(vals.edVideoZoom)||1;
       if(edVideoNode.style.objectFit!==fit)edVideoNode.style.objectFit=fit;
       const want=zoom===1?'':`scale(${zoom})`;
       if(edVideoNode.style.transform!==want)edVideoNode.style.transform=want;
+      /* The Look grade on the real footage -- the same preset+warmth maths the
+         renderer runs, as CSS. Without this every Look control read as dead in
+         the editor: the export changed, the preview never did. */
+      const filt=vals.edVideoFilter||'';
+      if(edVideoNode.style.filter!==filt)edVideoNode.style.filter=filt;
+      paintEditorGrade(vals,frame);
+    }
+
+    /* Host-drawn layers the video element cannot carry itself: the blurred
+       backdrop behind Blur mode, and the vignette / grain washes of the Look
+       tab. All pointer-transparent, all under the caption overlay. */
+    let edBlurEl=null,edVignEl=null,edGrainEl=null;
+    function paintEditorGrade(vals,frame){
+      const wantBlur=Boolean(vals.edVideoBlurBg);
+      if(wantBlur){
+        if(!edBlurEl||!edBlurEl.isConnected||edBlurEl.parentElement!==frame){
+          if(edBlurEl)edBlurEl.remove();
+          edBlurEl=document.createElement('div');
+          edBlurEl.setAttribute('data-host-owned','');
+          edBlurEl.style.cssText='position:absolute;inset:0;z-index:0;border-radius:inherit;overflow:hidden;'
+            +'background:#000 center/cover no-repeat;filter:blur(18px) brightness(.6);transform:scale(1.18)';
+          frame.insertBefore(edBlurEl,frame.firstChild);
+        }
+        /* The clip's own frame, blurred -- the poster is the honest stand-in
+           for the moving footage the renderer blurs. */
+        const bg=vals.edPoster?`url("${withPw(vals.edPoster)}")`:'';
+        if(edBlurEl.dataset.bg!==bg){edBlurEl.dataset.bg=bg;edBlurEl.style.backgroundImage=bg}
+        if(edVideoNode&&edVideoNode.style.background!=='transparent')edVideoNode.style.background='transparent';
+      }else if(edBlurEl){edBlurEl.remove();edBlurEl=null;
+        if(edVideoNode)edVideoNode.style.background='#000'}
+      const vig=Number(vals.edVideoVignette)||0;
+      if(vig>0){
+        if(!edVignEl||!edVignEl.isConnected||edVignEl.parentElement!==frame){
+          if(edVignEl)edVignEl.remove();
+          edVignEl=document.createElement('div');
+          edVignEl.setAttribute('data-host-owned','');
+          edVignEl.style.cssText='position:absolute;inset:0;z-index:2;pointer-events:none;border-radius:inherit';
+          frame.appendChild(edVignEl);
+        }
+        const shade=`radial-gradient(ellipse at center, transparent ${Math.round(62-vig*22)}%, rgba(0,0,0,${(vig*0.75).toFixed(2)}) 100%)`;
+        if(edVignEl.dataset.shade!==shade){edVignEl.dataset.shade=shade;edVignEl.style.background=shade}
+      }else if(edVignEl){edVignEl.remove();edVignEl=null}
+      const grain=Number(vals.edVideoGrain)||0;
+      if(grain>0){
+        if(!edGrainEl||!edGrainEl.isConnected||edGrainEl.parentElement!==frame){
+          if(edGrainEl)edGrainEl.remove();
+          edGrainEl=document.createElement('div');
+          edGrainEl.setAttribute('data-host-owned','');
+          const noise='data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2"/></filter><rect width="160" height="160" filter="url(#n)" opacity="0.9"/></svg>');
+          edGrainEl.style.cssText='position:absolute;inset:0;z-index:2;pointer-events:none;border-radius:inherit;'
+            +`background:url("${noise}") repeat;mix-blend-mode:overlay`;
+          frame.appendChild(edGrainEl);
+        }
+        const op=(grain/100*0.5).toFixed(2);
+        if(edGrainEl.style.opacity!==op)edGrainEl.style.opacity=op;
+      }else if(edGrainEl){edGrainEl.remove();edGrainEl=null}
     }
 
     /* When both the clean plate and the rendered export are gone (a storage
@@ -3394,6 +3454,13 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        video for the whole clip; 'intro' opens on the source for a few seconds
        and hands over to the background -- the shape all over TikTok. */
     const jobBgEl=document.createElement('div');jobBgEl.id='studioJobBg';
+    /* Run an API action, refresh, and toast the outcome. Top level, not
+       inside renderStudio: the background upload and delete handlers live in
+       a top-level painter, and with studioDo scoped to renderStudio their
+       clicks died on a ReferenceError -- picking a file simply did nothing. */
+    const studioDo=async(fn,ok,onFail)=>{try{await fn();await refresh();StudioAdapter.settled();if(ok)toast(ok,'good')}
+      catch(e){toast(e.message,'bad');StudioAdapter.settled();if(onFail)onFail(e.message);renderAll()}};
+
     function paintJobBackground(vals){
       alive(jobBgEl);
       const ui=StudioAdapter.ui;
@@ -3620,8 +3687,6 @@ function renderStudio(){
     /* onFail is opt-in. Routing every failure into the job panel meant an
        unrelated template PUT 400 printed under the "Generate clips" button as
        though the lecture itself had been refused. */
-    const studioDo=async(fn,ok,onFail)=>{try{await fn();await refresh();StudioAdapter.settled();if(ok)toast(ok,'good')}
-      catch(e){toast(e.message,'bad');StudioAdapter.settled();if(onFail)onFail(e.message);renderAll()}};
     /* Toasts surface in the design's own dock while the Studio shell is visible. */
     StudioAdapter.onToast=m=>StudioAdapter.showToast(m);
     /* Clicking any social icon opens one dialog listing all four platforms,
@@ -3771,7 +3836,18 @@ function renderStudio(){
     StudioAdapter.onDeleteProject=(id,title)=>{
       if(!confirm(`Delete \u201C${title}\u201D and all of its clips? The rendered files are removed too. This cannot be undone.`))return;
       studioDo(()=>api(`/api/projects/${encodeURIComponent(id)}`,{method:'DELETE'}),'Lecture deleted')};
-    StudioAdapter.onReject=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'rejected'})}));
+    /* Rejecting means "this clip should not exist": the record, its files
+       and its queue row all go. It used to only mark the status, so rejects
+       piled up in the app forever. */
+    StudioAdapter.onReject=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'DELETE'}),'Clip rejected and removed');
+    /* The editor's template dropdown: apply the picked template to THIS clip
+       and re-render it at watcher priority. The preview flips immediately via
+       ui.edTplId; the rendered file follows. */
+    StudioAdapter.onApplyTemplateToClip=(id,templateId)=>studioDo(async()=>{
+      await api(`/api/clips/${encodeURIComponent(id)}/rerender`,{method:'POST',
+        body:JSON.stringify({templateId})});
+      await refresh();
+    },'Template applied — re-rendering this clip');
     StudioAdapter.onPostNow=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}/publish`,{method:'POST'}),'Publishing started');
     StudioAdapter.onSendBack=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'waiting'})}),'Back in the review queue');
     StudioAdapter.onScheduleClip=id=>studioDo(()=>api('/api/clips/schedule-selected',{method:'POST',body:JSON.stringify({ids:[id]})}),'Scheduled');

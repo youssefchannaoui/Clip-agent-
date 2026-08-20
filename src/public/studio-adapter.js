@@ -75,6 +75,7 @@
     jobError: null,
     edClipId: null,
     edTab: 'captions',
+    edTplId: null,
     edCaption: null,
     edBlock: 0,
     // The editor's real playhead, in seconds, and whether the clip is playing.
@@ -1230,8 +1231,11 @@
     // In the editor the base is THIS clip's template. The render always uses
     // the clip's template; previewing on the selected one showed a different
     // style than the export whenever the two differed.
-    if (UI.screen === 'editor' && edClipRecord && edClipRecord.templateId) {
-      activeTemplate = templates.filter(function (t) { return t.id === edClipRecord.templateId; })[0] || activeTemplate;
+    if (UI.screen === 'editor' && edClipRecord) {
+      // The freshly picked template wins over the clip's stored one until the
+      // re-render lands, so the preview answers the pick immediately.
+      var pinnedId = UI.edTplId || edClipRecord.templateId;
+      if (pinnedId) activeTemplate = templates.filter(function (t) { return t.id === pinnedId; })[0] || activeTemplate;
     }
 
     // The template being edited, with the schema's own defaults behind it so a
@@ -1970,7 +1974,6 @@
       navSetup: [
         navItem('templates', 'Templates', 'ph ph-text-aa', ''),
         navItem('music', 'Nasheed library', 'ph ph-music-notes', ''),
-        navItem('language', 'Arabic & terms', 'ph ph-translate', ''),
         navItem('performance', 'Performance', 'ph ph-chart-line-up', ''),
       ],
 
@@ -2493,7 +2496,7 @@
 
       // fitMode, and the one framing toggle the schema keeps.
       edCrops: ENUMS.fitMode.map(function (m) {
-        var labels = { contain: 'Fit', blur: 'Blur', crop: 'Fill' };
+        var labels = { contain: 'Full', blur: 'Blur', crop: 'Fill' };
         return { label: labels[m], style: tabStyle(tpl.fitMode === m), select: function (e) { stop(e); saveStyle({ fitMode: m }); } };
       }),
       edFaceTrack: switchTrack(Boolean(tpl.smartFramingEnabled)),
@@ -2519,7 +2522,9 @@
       edWmKnob: sliderKnob(Number(tpl.watermarkOpacity) > 0),
       edWmNote: tpl.watermark ? tpl.watermark + ' at ' + (Number(tpl.watermarkOpacity) || 0) + '%' : 'No watermark',
       toggleWatermark: function (e) { stop(e); saveStyle({ watermarkOpacity: Number(tpl.watermarkOpacity) > 0 ? 0 : 100 }); },
-      notPro: false,
+      // Lights the design's "Pro" chip on the watermark row: removal is a
+      // paid feature, and the server refuses it for free plans.
+      notPro: String((current && current.plan) || 'free') === 'free',
 
       // Alignment guides only appear while dragging, as in the design.
       edGuideV: 'position: absolute; top: 0; bottom: 0; width: 1px; z-index: 6; pointer-events: none; left: 50%; display: none; background: rgba(240,214,166,.6);',
@@ -2569,9 +2574,17 @@
       edTimeSec: edTime,
       // How the video sits in the 9:16 frame: the same three modes the renderer
       // uses, so what the editor shows is what the export produces.
-      edVideoFit: tpl.fitMode === 'fit' ? 'contain' : 'cover',
+      // 'fit' is not a mode the schema has -- the enum value is 'contain',
+      // so Full-video mode was previewing as a crop. Blur also shows the
+      // whole video; only Fill covers.
+      edVideoFit: (tpl.fitMode === 'contain' || tpl.fitMode === 'blur') ? 'contain' : 'cover',
       edVideoZoom: tpl.fitMode === 'crop' ? Math.max(0.75, Math.min(2.5, Number(tpl.smartFramingZoom) || 1)) : 1,
       edVideoBlurBg: tpl.fitMode === 'blur',
+      // The renderer's grade, as CSS, applied to the real footage: preset +
+      // warmth via lookFilter, vignette and grain as host-drawn overlays.
+      edVideoFilter: lookFilter(tpl).replace(/^filter:\s*/, '').replace(/;$/, ''),
+      edVideoVignette: Math.max(0, Math.min(1, Number(tpl.vignette) || 0)),
+      edVideoGrain: Math.max(0, Math.min(100, Number(tpl.grain) || 0)),
       // Play/pause. The design draws the button but exports no handler for it,
       // so the binding exists for the host to attach.
       togglePlay: function (e) {
@@ -2998,7 +3011,17 @@
           var clash = templates.filter(function (o) { return o.name === t.name; }).length > 1;
           return (clash ? t.name + ' (' + (i + 1) + ')' : t.name) === label;
         })[0];
-        if (picked) global.StudioAdapter.onSelectTemplate(picked.id);
+        if (!picked) return;
+        // In the editor this dropdown means "render THIS CLIP with that
+        // template". It used to change the account's default template
+        // instead, which the pinned clip never reads -- so picking a style
+        // here visibly did nothing.
+        if (UI.screen === 'editor' && UI.edClipId) {
+          setUI({ edTplId: picked.id, edStyleDraft: null, edBlockDraft: null });
+          global.StudioAdapter.onApplyTemplateToClip(UI.edClipId, picked.id);
+          return;
+        }
+        global.StudioAdapter.onSelectTemplate(picked.id);
       },
       tplStyleRows: tplRow([
         { icon: 'ph ph-layout', label: 'Clip layout', field: 'fitMode', opts: ENUMS.fitMode, labels: { contain: 'Fit with blurred bars', blur: 'Blurred background', crop: 'Fill, face-tracked' } },
@@ -3532,6 +3555,7 @@
     onProbeSource: function () {},
     onGenerate: function () {},
     onUploadNasheedPrompt: function () {},
+    onApplyTemplateToClip: function () {},
     onSaveClip: function () {},
     clipSaved: function () { UI.edSaving = false; UI.edDirty = false; UI.edCaption = null; UI.edBlockDraft = null; refresh(); },
     // Called by the host once /api/source-info resolves, so the range picker can

@@ -166,3 +166,10 @@ test('an explicitly empty watermark is saveable (TikTok forbids third-party wate
   assert.equal(templates.sanitiseTemplate({ watermark: '   ' }).watermark, '', 'whitespace-only reads as none');
   assert.equal(templates.sanitiseTemplate({}).watermark, 'DEENCLIPPED', 'an absent field still defaults');
 });
+
+test('watermark removal is a paid feature (isPaid drives the gate)', async () => {
+  const billing = await import('../src/billing.js');
+  assert.equal(billing.isPaid({ id: 'f1', role: 'creator', billing: { plan: 'free' } }), false);
+  assert.equal(billing.isPaid({ id: 'p1', role: 'creator', billing: { plan: 'monthly' } }), true);
+  assert.equal(billing.isPaid({ id: 'a1', role: 'owner', billing: {} }), true, 'the operator is never locked out');
+});

@@ -926,6 +926,21 @@ async function route(req, res, url) {
       return json(res, 200, { ok: true, template });
     } catch (error) { return json(res, 400, { error: error.message }); }
   }
+  // Publishing without the DeenClipped watermark is a paid feature. The gate
+  // sits on the two style write paths, not in sanitiseTemplate, because the
+  // sanitiser cannot know who is asking. Only an EXPLICIT empty watermark is
+  // blocked -- absent fields and non-empty text pass untouched.
+  function assertWatermarkAllowed(style) {
+    if (!style || typeof style !== 'object') return;
+    // Emptying the text and zeroing the opacity are the same act -- a clip
+    // with no visible watermark -- so the gate covers both doors.
+    const wantsNone = ('watermark' in style && String(style.watermark ?? '').trim() === '')
+      || ('watermarkOpacity' in style && Number(style.watermarkOpacity) <= 0);
+    if (!wantsNone) return;
+    if (billing.isPaid(currentUser)) return;
+    throw new Error('Removing the DeenClipped watermark is a Pro feature. Upgrade to any paid plan to publish without it.');
+  }
+
   const templateMatch = pathname.match(/^\/api\/templates\/([^/]+)$/);
   if (method === 'PUT' && templateMatch) {
     const body = await readBody(req);
@@ -933,6 +948,7 @@ async function route(req, res, url) {
       // Editing a built-in forks it onto the user's own copy rather than
       // refusing, so Save always means save. `forked` travels back so the page
       // can say which template it actually saved.
+      assertWatermarkAllowed(body.template || body);
       const saved = templates.saveTemplate(currentUser, decodeURIComponent(templateMatch[1]), body.template || body);
       const template = saved.template;
       // Re-rendering every unposted clip is explicit now. It used to fire on any
@@ -1325,6 +1341,7 @@ async function route(req, res, url) {
     const id = decodeURIComponent(clipMatch[1]); const body = await readBody(req);
     try {
       assertCanAccessClip(currentUser, id);
+      assertWatermarkAllowed(body.styleOverrides);
       agent.updateClip(id, body); let clip;
       if (body.status === 'approved') clip = agent.approveClip(id); else if (body.status === 'rejected') clip = agent.rejectClip(id); else if (body.status === 'waiting') clip = state.clips.find(item => item.id === id)?.status === 'rejected' ? agent.unrejectClip(id) : agent.pullBack(id); else clip = state.clips.find(item => item.id === id);
       return json(res, 200, { ok: true, clip: publicClip(clip) });
