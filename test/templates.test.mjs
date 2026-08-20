@@ -160,3 +160,9 @@ test('deleting any resolvable template is refused, and a missing one is a no-op'
   assert.throws(() => templates.deleteTemplate(user, 'quran-recitation'), /cannot be deleted/i);
   assert.equal(templates.deleteTemplate(user, 'ghost-template'), false);
 });
+
+test('an explicitly empty watermark is saveable (TikTok forbids third-party watermarks)', () => {
+  assert.equal(templates.sanitiseTemplate({ watermark: '' }).watermark, '', 'empty string survives');
+  assert.equal(templates.sanitiseTemplate({ watermark: '   ' }).watermark, '', 'whitespace-only reads as none');
+  assert.equal(templates.sanitiseTemplate({}).watermark, 'DEENCLIPPED', 'an absent field still defaults');
+});

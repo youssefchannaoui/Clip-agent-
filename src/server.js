@@ -42,6 +42,12 @@ const STUDIO_ASSETS = {
   '/studio-runtime.js': { file: studioAsset('studio-runtime.js'), type: JS_TYPE },
   '/studio-adapter.js': { file: studioAsset('studio-adapter.js'), type: JS_TYPE },
   '/studio-styles.generated.css': { file: studioAsset('studio-styles.generated.css'), type: 'text/css; charset=utf-8' },
+  // The browser-tab identity. /favicon.ico is served as PNG -- every modern
+  // browser accepts it, and agents that request the path blindly stop 404ing.
+  '/favicon.svg': { file: studioAsset('favicon.svg'), type: 'image/svg+xml' },
+  '/favicon.ico': { file: studioAsset('apple-touch-icon.png'), type: 'image/png' },
+  '/apple-touch-icon.png': { file: studioAsset('apple-touch-icon.png'), type: 'image/png' },
+  '/og-image.jpg': { file: studioAsset('og-image.jpg'), type: 'image/jpeg' },
 };
 const marketingJsPage = path.join(config.root, 'src', 'public', 'marketing.js');
 // Marketing images are looked for in a dedicated subfolder first, then in
@@ -350,6 +356,7 @@ function appState(user = null) {
       deletable: entry.userId === user.id || (Boolean(entry.shared) && ['owner', 'admin'].includes(String(user.role || '').toLowerCase())),
     })),
     tracks: audio.listNasheeds(user),
+    storage: agent.engine.storageBytes(user.id),
     projects: projectsForUser.map(project => ({
       id: project.id, title: project.title, url: project.url, engine: project.engine, status: project.status,
       stage: project.stage, phase: project.phase || '', progress: project.progress || 0, etaSec: project.etaSec ?? null, error: project.error || null, errorCode: project.errorCode || null,
@@ -831,7 +838,7 @@ async function route(req, res, url) {
     const sourceMeta = Array.isArray(body.sourceMeta) ? body.sourceMeta : [];
     const results = [];
     for (const source of urls) {
-      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '', currentUser.id, { sourceRange, sourceMeta, idempotencyKey: body.idempotencyKey, musicEnabled: body.musicEnabled !== false, templateId: String(body.templateId || ''), backgroundMode: body.backgroundMode, backgroundId: body.backgroundId, introSeconds: body.introSeconds }) }); }
+      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '', currentUser.id, { sourceRange, sourceMeta, idempotencyKey: body.idempotencyKey, musicEnabled: body.musicEnabled !== false, musicTrackId: String(body.musicTrackId || ''), templateId: String(body.templateId || ''), backgroundMode: body.backgroundMode, backgroundId: body.backgroundId, introSeconds: body.introSeconds }) }); }
       catch (error) { results.push({ url: source, error: error.message }); }
     }
     return json(res, 200, { results, sourceRange });

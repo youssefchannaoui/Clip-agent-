@@ -70,6 +70,13 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
   <meta property="og:description" content="${safeDescription}">
   <meta property="og:type" content="website">
   <meta property="og:url" content="${canonical}">
+  <meta property="og:image" content="${String(base || 'https://deenclipped.online').replace(/\/+$/, '')}/og-image.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="DeenClipped">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="canonical" href="${canonical}">
   <link rel="stylesheet" href="/marketing.css">
 </head>
@@ -275,7 +282,7 @@ export function home({ base, currentUser }) {
 
     <section class="section final-section"><div class="wrap final-cta reveal"><div><span class="section-label">Start creating</span><h2>Turn the next lecture into clips worth watching.</h2><p>Bring in a source, choose the range and build a review-ready set of short clips in one connected workspace.</p></div><a class="button primary" href="/login?returnTo=/app">Open DeenClipped ${icon('arrow')}</a></div></section>
   </main>`;
-  return layout({ base, currentUser, title: 'DeenClipped', description: 'DeenClipped is a web application that helps users create, edit, and publish short-form clips from long videos.', canonicalPath: '/', body });
+  return layout({ base, currentUser, title: 'DeenClipped — Turn Islamic lectures into ready-to-post clips', description: 'Turn Islamic lectures into ready-to-post clips with captions and nasheed — the worker transcribes, scores the moments and renders; you review before anything publishes.', canonicalPath: '/', body });
 }
 
 export function features({ base, currentUser }) {

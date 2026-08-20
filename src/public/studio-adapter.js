@@ -141,6 +141,12 @@
     return u ? '#17171A url("' + cssUrl(u) + '") center/cover no-repeat' : '#17171A';
   }
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
+  // Bytes for humans. Below a megabyte the honest answer is "almost nothing".
+  function fmtBytes(bytes) {
+    if (!bytes) return '0 MB';
+    if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+    return Math.max(1, Math.round(bytes / (1024 * 1024))) + ' MB';
+  }
 
   // Clip lengths are seconds-scale, so m:ss reads naturally.
   function secsToClock(s) {
@@ -259,6 +265,9 @@
     { label: '30-45s', min: 30, max: 45 },
     { label: '45-60s', min: 45, max: 60 },
     { label: 'Up to 90s', min: 45, max: 90 },
+    // The widest honest range: the planner cuts each clip at its natural
+    // length inside the window, which is what "a mix of lengths" really is.
+    { label: 'Mixed \u00b7 10-90s', min: 10, max: 90 },
   ];
 
   function toast(message) { global.StudioAdapter.onToast(message); }
@@ -881,7 +890,19 @@
     var projects = DATA.projects || [];
     var clips = DATA.clips || [];
     var tracks = DATA.tracks || [];
-    var log = DATA.log || [];
+    var storage = DATA.storage || { sourceBytes: 0, clipBytes: 0 };
+    var storageTotal = (storage.sourceBytes || 0) + (storage.clipBytes || 0);
+    var signInSeen = false;
+    // Sign-ins are auth bookkeeping, not studio activity: five "Signed in"
+    // rows in a six-row feed buried everything the feed exists to surface.
+    // The newest one stays (it answers "when was I last here?"); the rest go.
+    var log = (DATA.log || []).filter(function (entry) {
+      var isSignIn = /^Signed in /.test(String(entry.message || entry.text || ''));
+      if (!isSignIn) return true;
+      if (signInSeen) return false;
+      signInSeen = true;
+      return true;
+    });
     var social = DATA.social || {};
     var current = (DATA.billing && DATA.billing.current) || {};
 
@@ -1875,6 +1896,9 @@
 
     var seenAt = lastSeen();
     var unreadCount = failures.length + log.filter(function (e) {
+      // The surviving sign-in row is context, not news -- it must not light
+      // the bell's unread dot.
+      if (/^Signed in /.test(String(e.message || e.text || ''))) return false;
       return Number(e.at || e.createdAt || 0) > seenAt;
     }).length;
 
@@ -1888,6 +1912,9 @@
     // Blockers name a real gap and send you to the screen that fixes it.
     var seenAt = lastSeen();
     var unreadCount = failures.length + log.filter(function (e) {
+      // The surviving sign-in row is context, not news -- it must not light
+      // the bell's unread dot.
+      if (/^Signed in /.test(String(e.message || e.text || ''))) return false;
       return Number(e.at || e.createdAt || 0) > seenAt;
     }).length;
 
@@ -2655,7 +2682,7 @@
       // length is known. The server confirms the real cost before processing.
       jobTokenLabel: !job ? '' : job.durationKnown
         ? '≈ ' + plural(Math.max(1, Math.ceil((job.end - job.start) / 60 * tokenRate)), 'token')
-        : 'Cost confirmed before processing',
+        : '\u22481 token per minute of lecture \u2014 confirmed after download',
       // A picker, not a label: the template renders one button per entry, so a
       // string here renders one button per character.
       // Nasheed off for this job. Music is mandatory by default and stays that
@@ -2673,15 +2700,21 @@
       jobMusicTrack: switchTrack(UI.jobMusic !== false),
       jobMusicKnob: switchKnob(UI.jobMusic !== false),
       toggleJobMusic: function (e) { stop(e); setUI({ jobMusic: UI.jobMusic === false, jobMusicTouched: true }); },
-      jobNasheeds: (UI.jobMusic === false ? [] : tracks).map(function (t) {
-        var on = UI.jobTrackId === t.id || (!UI.jobTrackId && tracks.length > 0);
+      jobNasheeds: (UI.jobMusic === false ? [] : [{ id: '', name: 'Rotate all' }].concat(tracks)).map(function (t) {
+        var on = t.id ? UI.jobTrackId === t.id : !UI.jobTrackId;
         return {
           label: t.name || t.fileName || 'Untitled',
           style: 'display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 20px; font-family: inherit; font-size: 11.5px; cursor: pointer; border: 1px solid ' +
             (on ? 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;' : '#26262A; background: #121214; color: #A2A2AA;'),
-          select: function (e) { stop(e); setUI({ jobTrackId: t.id }); },
+          select: function (e) { stop(e); setUI({ jobTrackId: t.id || null }); },
         };
-      }),
+      }).concat(UI.jobMusic === false ? [] : [{
+        // Upload right here, as the spec asked -- not a trip to the Music
+        // screen mid-job. The host owns the file dialog.
+        label: 'Upload\u2026',
+        style: 'display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 20px; font-family: inherit; font-size: 11.5px; cursor: pointer; border: 1px dashed #33333A; background: transparent; color: #8B8B93;',
+        select: function (e) { stop(e); global.StudioAdapter.onUploadNasheedPrompt(); },
+      }]),
       // jobTplId is cleared with the panel: it is the JOB's template choice,
       // and left behind it pinned activeTemplate everywhere -- the Templates
       // screen preview stopped following the selection because a stale job
@@ -2694,7 +2727,13 @@
         setUI({ generating: true });
         global.StudioAdapter.onGenerate(job.url, job.durationKnown
           ? { startSec: Math.round(job.start), endSec: Math.round(job.end) }
-          : null, { musicEnabled: jobMusicOn, templateId: (activeTemplate && activeTemplate.id) || '' });
+          : null, {
+            musicEnabled: jobMusicOn,
+            templateId: (activeTemplate && activeTemplate.id) || '',
+            // The chip row was cosmetic before this: a picked nasheed was
+            // never sent, so every job shuffled the whole library anyway.
+            musicTrackId: (jobMusicOn && UI.jobTrackId) || '',
+          });
       },
       genBusy: UI.generating,
       genLabel: UI.generating ? 'Starting…' : 'Generate clips',
@@ -2717,10 +2756,12 @@
         : 'No accounts connected',
       cardLabel: current.stripeCustomerId ? 'Card on file · manage in billing' : 'No card on file',
       spendSummary: (current.used || 0) + ' spent this period · top-up tokens never expire',
-      // The product does not measure storage, so these report what it does know.
-      storageSummary: plural(projects.length, 'lecture') + ' · ' + plural(clips.length, 'clip'),
-      storageSources: String(projects.length),
-      storageClips: String(clips.length),
+      // Real bytes, measured from the files on disk (engine storageBytes).
+      // These tiles used to dress record counts up as a storage figure.
+      storageSummary: plural(projects.length, 'lecture') + ' · ' + plural(clips.length, 'clip')
+        + (storageTotal ? ' · ' + fmtBytes(storageTotal) : ''),
+      storageSources: storage.sourceBytes ? fmtBytes(storage.sourceBytes) : String(projects.length),
+      storageClips: storage.clipBytes ? fmtBytes(storage.clipBytes) : String(clips.length),
       storageTranscripts: String(projects.filter(function (p) { return lecState(p) === 'ready'; }).length),
       jobTitle: active ? projectTitle[active.id] : 'Nothing processing',
       jobMeta: active
@@ -3466,6 +3507,7 @@
     onSignOut: function () {},
     onProbeSource: function () {},
     onGenerate: function () {},
+    onUploadNasheedPrompt: function () {},
     onSaveClip: function () {},
     clipSaved: function () { UI.edSaving = false; UI.edDirty = false; UI.edCaption = null; UI.edBlockDraft = null; refresh(); },
     // Called by the host once /api/source-info resolves, so the range picker can

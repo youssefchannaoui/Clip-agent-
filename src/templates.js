@@ -199,7 +199,12 @@ export function sanitiseTemplate(input = {}, { id = '', builtIn = false, userId 
   output.captionFont = cleanText(source.captionFont, DEFAULTS.captionFont, 80);
   output.captionHighlightFont = cleanText(source.captionHighlightFont, DEFAULTS.captionHighlightFont, 80);
   output.captionArabicFont = cleanText(source.captionArabicFont, DEFAULTS.captionArabicFont, 80);
-  output.watermark = cleanText(source.watermark, DEFAULTS.watermark, 60);
+  // An empty watermark is a real choice, not a missing field: TikTok rejects
+  // videos carrying third-party watermarks, so "none" must be saveable. Only
+  // an absent field falls back to the default.
+  output.watermark = String(source.watermark ?? '').trim() === '' && 'watermark' in (input || {})
+    ? ''
+    : cleanText(source.watermark, DEFAULTS.watermark, 60);
   output.version = Math.max(1, Math.round(Number(source.version) || 1));
   output.updatedAt = Number(source.updatedAt) || Date.now();
   output.builtIn = Boolean(builtIn);

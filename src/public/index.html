@@ -8,6 +8,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="DeenClipped AI">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Outfit:wght@400;500;600;700&family=Amiri:wght@400;700&family=Scheherazade+New:wght@400;700&family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">
@@ -3820,6 +3822,8 @@ function renderStudio(){
          the dropdown said Quran Recitation while the job rendered with the
          account's selected template. */
       if(opts&&opts.templateId)body.templateId=opts.templateId;
+      /* One chosen nasheed for this job; absent means rotate the library. */
+      if(opts&&opts.musicTrackId)body.musicTrackId=opts.musicTrackId;
       /* The probe already fetched the title, duration and poster; sending them
          stores the maxres thumbnail rather than leaving the server to derive
          hqdefault from the URL. Not sending it at all is why every lecture had
@@ -3862,6 +3866,26 @@ function renderStudio(){
       if(r&&r.url)location.href=r.url});
     /* Nasheeds go to /api/music as base64, not through the video presign path.
        Uploading them as videos is what made a fresh account unusable. */
+    /* The job panel's "Upload…" chip. A file dialog is host work -- the
+       adapter only asks. Reuses the same upload path as the Music screen,
+       then selects the newest track for this job so uploading it means
+       using it. */
+    StudioAdapter.onUploadNasheedPrompt=()=>{
+      const input=document.createElement('input');
+      input.type='file';input.accept='audio/*';input.multiple=false;
+      input.onchange=async()=>{
+        const file=input.files&&input.files[0];
+        if(!file)return;
+        await StudioAdapter.onUploadNasheeds([file]);
+        const tracks=(DATA&&DATA.tracks)||[];
+        /* listNasheeds order is not guaranteed newest-first; find by name. */
+        const mine=tracks.filter(t=>(t.name||t.fileName||'')===file.name);
+        const pick=mine.length?mine[mine.length-1]:tracks[tracks.length-1];
+        if(pick)StudioAdapter.ui.jobTrackId=pick.id;
+        paintStudio();
+      };
+      input.click();
+    };
     StudioAdapter.onUploadNasheeds=files=>studioDo(async()=>{
       for(const file of files){
         const data=await new Promise((resolve,reject)=>{const r=new FileReader();

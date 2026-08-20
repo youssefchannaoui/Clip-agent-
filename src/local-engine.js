@@ -488,7 +488,16 @@ function validateSubmission(url, user, options = {}) {
   if (!tracks.length && options.musicEnabled !== false) {
     throw new Error('Music is required on every clip. Upload at least one nasheed first, or switch the nasheed off for this job.');
   }
-  return { value, template, tracks: options.musicEnabled === false ? [] : tracks, backgroundMode, background, introSeconds };
+  // One chosen nasheed for this job. The picker in the panel used to be
+  // cosmetic -- the choice never left the browser and every job shuffled the
+  // whole library. An id that no longer resolves fails loudly rather than
+  // silently falling back to the rotation the user deliberately narrowed.
+  let jobTracks = options.musicEnabled === false ? [] : tracks;
+  if (options.musicEnabled !== false && options.musicTrackId) {
+    jobTracks = tracks.filter(track => track.id === options.musicTrackId);
+    if (!jobTracks.length) throw new Error('The chosen nasheed is no longer in your library. Pick another or rotate all.');
+  }
+  return { value, template, tracks: jobTracks, backgroundMode, background, introSeconds };
 }
 
 export function readiness(user) {
@@ -1773,6 +1782,34 @@ export function clipFilePath(clipId, kind = 'video') {
   const resolved = path.resolve(candidate); const allowedRoot = path.resolve(config.dataDir) + path.sep;
   if (!resolved.startsWith(allowedRoot) || !fs.existsSync(resolved)) return null;
   return resolved;
+}
+
+// ── Storage accounting ───────────────────────────────────────────────────────
+// The dashboard's storage tiles used to show record counts dressed up as a
+// storage figure. These are real bytes, measured from the files on disk.
+// stat() results are cached per path so the state poll does not touch the
+// filesystem 30 times a second; a re-render writes a new path, which misses
+// the cache and is measured fresh.
+const fileBytesCache = new Map();
+function fileBytes(candidate) {
+  if (!candidate) return 0;
+  if (fileBytesCache.has(candidate)) return fileBytesCache.get(candidate);
+  let bytes = 0;
+  try { bytes = fs.statSync(candidate).size; } catch { /* deleted or remote */ }
+  fileBytesCache.set(candidate, bytes);
+  return bytes;
+}
+export function storageBytes(userId) {
+  let sourceBytes = 0; let clipBytes = 0;
+  for (const project of state.projects) {
+    if (ownerOf(project) !== userId) continue;
+    sourceBytes += fileBytes(project.sourceFile);
+  }
+  for (const clip of state.clips) {
+    if (ownerOf(clip) !== userId) continue;
+    clipBytes += fileBytes(clip.clipFile) + fileBytes(clip.thumbFile);
+  }
+  return { sourceBytes, clipBytes };
 }
 
 export function recoverInterruptedJobs() {

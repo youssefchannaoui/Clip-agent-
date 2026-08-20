@@ -591,7 +591,7 @@ test('an unknown source duration shows the whole lecture, not an empty range', (
   const vals = StudioAdapter.bindings(SAMPLE_STATE);
   assert.equal(vals.jobRangeLabel, 'Whole lecture');
   assert.match(vals.jobLenLabel, /confirmed once the worker/i);
-  assert.match(vals.jobTokenLabel, /confirmed before processing/i);
+  assert.match(vals.jobTokenLabel, /confirmed after download/i);
   assert.doesNotMatch(vals.jobBandStyle, /display: none/, 'the band fills rather than vanishing');
 });
 
@@ -2710,4 +2710,33 @@ test('opening a job keeps the thumbnail the probe returned', () => {
   const vals = StudioAdapter.bindings(JOB_STATE);
   assert.match(vals.jobPosterStyle, /background-image/, 'the poster actually paints something');
   assert.match(vals.jobPosterStyle, /abc123/);
+});
+
+test('sign-in entries collapse to the newest and never light the unread dot', () => {
+  const state = JSON.parse(JSON.stringify(SAMPLE_STATE));
+  const now = Date.now();
+  state.log = [
+    { level: 'info', message: 'Signed in someone@example.com with email.', at: now - 1000 },
+    { level: 'info', message: 'Signed in someone@example.com with email.', at: now - 2000 },
+    { level: 'info', message: 'Signed in someone@example.com with email.', at: now - 3000 },
+    { level: 'info', message: 'Rendered "Clip one"', at: now - 4000 },
+  ];
+  const vals = StudioAdapter.bindings(state);
+  const signIns = vals.activity.filter((row) => /^Signed in /.test(row.text));
+  assert.equal(signIns.length, 1, 'only the newest sign-in survives');
+  assert.ok(vals.activity.some((row) => /Rendered/.test(row.text)), 'real activity stays');
+});
+
+test('the chosen nasheed travels with the job', () => {
+  const state = JSON.parse(JSON.stringify(SAMPLE_STATE));
+  state.tracks = [{ id: 't1', name: 'Nasheed one' }, { id: 't2', name: 'Nasheed two' }];
+  StudioAdapter.openJob({ url: 'https://youtu.be/x', title: 'Talk', durationSec: 600 });
+  StudioAdapter.ui.jobTrackId = 't2';
+  let sent = null;
+  StudioAdapter.onGenerate = (url, range, opts) => { sent = opts; };
+  StudioAdapter.bindings(state).runGenerate({ preventDefault() {} });
+  assert.equal(sent.musicTrackId, 't2');
+  StudioAdapter.ui.generating = false;
+  StudioAdapter.ui.jobTrackId = null;
+  StudioAdapter.onGenerate = () => {};
 });
