@@ -573,21 +573,84 @@
         + ' -webkit-box-decoration-break: clone;';
     }
 
+    // Outline and shadow in em, so they keep the render's ratio to the glyphs
+    // at any preview size. ASS measures both in frame pixels; dividing by the
+    // font size gives the same ratio in a unit the preview scales for free.
+    // Fixed px looked right in one preview box and wrong in the other, which
+    // is exactly the editor-vs-templates mismatch.
+    var fontPx = Math.max(1, Number(t.captionFontSize) || 96);
     var shadows = [];
     var width = Math.max(0, Math.min(14, Number(t.captionOutlineWidth) || 0));
     if (width) {
-      // Scaled to the preview, which is a fraction of the real frame.
-      var px = Math.max(1, Math.round(width / 3));
+      var em = (width / fontPx).toFixed(3) + 'em';
       var colour = t.captionOutline || '#09090A';
       var steps = [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]];
       for (var i = 0; i < steps.length; i++) {
-        shadows.push((steps[i][0] * px) + 'px ' + (steps[i][1] * px) + 'px 0 ' + colour);
+        shadows.push('calc(' + steps[i][0] + ' * ' + em + ') calc(' + steps[i][1] + ' * ' + em + ') 0 ' + colour);
       }
     }
     var drop = Math.max(0, Math.min(8, Number(t.captionShadow) || 0));
-    if (drop) shadows.push(Math.round(drop / 2) + 'px ' + Math.round(drop / 2) + 'px ' + drop + 'px rgba(0,0,0,.75)');
+    if (drop) {
+      var dropEm = (drop / fontPx).toFixed(3) + 'em';
+      shadows.push(dropEm + ' ' + dropEm + ' ' + (2 * drop / fontPx).toFixed(3) + 'em rgba(0,0,0,.75)');
+    }
     if (shadows.length) out += ' text-shadow: ' + shadows.join(', ') + ';';
     return out;
+  }
+
+  // ── The one caption look ──
+  // The Templates preview and the clip editor both draw the caption with the
+  // three helpers below, so the caption a clip shows inside the editor is the
+  // caption its template shows outside it. Each follows write_ass: the block
+  // spans the frame minus captionMarginH each side (ASS wraps inside its
+  // margins) and text-align carries captionHorizontal; captionMarginV is
+  // measured from the anchoring edge and ignored by a middle alignment; the
+  // font size is the template's, as a fraction of the frame width (cqw), with
+  // a px value first for anything that lacks container units.
+  function captionPlacementStyle(t, dragY) {
+    var width = Math.max(1, Number(t.width) || 1080);
+    var height = Math.max(1, Number(t.height) || 1920);
+    var inset = Math.max(1, Math.min(35, (Math.max(0, Number(t.captionMarginH) || 0) / width) * 100)).toFixed(2) + '%';
+    var align = t.captionHorizontal === 'left' ? 'left' : t.captionHorizontal === 'right' ? 'right' : 'center';
+    var h = 'left: ' + inset + '; right: ' + inset + '; text-align: ' + align + ';';
+    var v;
+    if (dragY !== null && dragY !== undefined) {
+      v = 'top: ' + (dragY * 100).toFixed(2) + '%; translate: 0 -50%;';
+    } else if (t.captionPosition === 'top' || t.captionPosition === 'bottom') {
+      var pct = Math.max(1, Math.min(50, (Number(t.captionMarginV) || 0) / height * 100)).toFixed(2);
+      v = (t.captionPosition === 'top' ? 'top: ' : 'bottom: ') + pct + '%; translate: 0 0;';
+    } else {
+      v = 'top: 50%; translate: 0 -50%;';
+    }
+    return 'position: absolute; ' + h + ' ' + v;
+  }
+
+  function captionFaceStyle(t) {
+    var size = Number(t.captionFontSize) || 96;
+    var width = Math.max(1, Number(t.width) || 1080);
+    return ' color: ' + (t.captionPrimary || '#FFFFFF') + ';'
+      + ' font-family: ' + webFontFor(t.captionFont) + '; font-weight: 700;'
+      + ' font-size: ' + Math.max(9, Math.round((size / width) * 268)) + 'px;'
+      + ' font-size: ' + ((size / width) * 100).toFixed(2) + 'cqw;'
+      + (t.captionUppercase ? ' text-transform: uppercase;' : '');
+  }
+
+  // The live word's own colour, face, slant, glow and pop -- the render has
+  // always drawn these; the two previews used to disagree on which of them
+  // they simulated.
+  function captionHighlightStyle(t) {
+    var glow = Math.max(0, Math.min(30, Number(t.captionHighlightGlow) || 0));
+    var fontPx = Math.max(1, Number(t.captionFontSize) || 96);
+    var popScale = Math.max(60, Math.min(140, Number(t.captionPopScale) || 100));
+    var popMs = Math.max(0, Math.min(400, Number(t.captionPopMs) || 0));
+    var popping = popScale !== 100 && popMs > 0;
+    return 'color: ' + (t.captionHighlight || '#D9B478') + ';'
+      + ' font-family: ' + webFontFor(t.captionHighlightFont) + ';'
+      + (t.captionHighlightItalic ? ' font-style: italic;' : '')
+      + (glow ? ' text-shadow: 0 0 ' + ((glow / 2) / fontPx).toFixed(3) + 'em ' + (t.captionHighlight || '#D9B478') + ';' : '')
+      // display:inline-block, or transform does nothing on an inline box.
+      + (popping ? ' display: inline-block; --dc-pop: ' + (popScale / 100).toFixed(3)
+        + '; animation: dcCapPop ' + popMs + 'ms ease-out 1;' : '');
   }
 
   function hexToRgba(hex, alpha) {
@@ -1494,23 +1557,10 @@
     var previewAt = (UI.pvPlaying || UI.pvTime) ? UI.pvTime : 1.2;
 
     var capTop = tpl.captionPosition === 'top' ? 22 : tpl.captionPosition === 'bottom' ? 80 : 50;
-    // The editor's caption overlay, placed the way the renderer places it:
-    // MarginV measured from whichever edge the alignment anchors to, and ignored
-    // entirely for a middle alignment. The overlay is centred on its own box, so
-    // the translate has to change with the anchor or it drifts by half its
-    // height.
-    var edCapVertical = (function () {
-      // Mid-drag the caption follows the pointer, not the saved style: the
-      // style is only written on release, so without this the overlay would sit
-      // still while being dragged.
-      if (UI.dragPreview && UI.dragPreview.kind === 'caption') {
-        return 'top: ' + (UI.dragPreview.y * 100).toFixed(2) + '%; translate: -50% -50%;';
-      }
-      var pos = tpl.captionPosition;
-      if (pos !== 'top' && pos !== 'bottom') return 'top: ' + capTop + '%; translate: -50% -50%;';
-      var pct = Math.max(2, Math.min(50, (Number(tpl.captionMarginV) || 0) / Math.max(1, Number(tpl.height || 1920)) * 100));
-      return (pos === 'top' ? 'top: ' : 'bottom: ') + pct.toFixed(2) + '%; translate: -50% 0;';
-    }());
+    // Mid-drag the caption follows the pointer, not the saved style: the style
+    // is only written on release, so without this the overlay would sit still
+    // while being dragged.
+    var edCapDragY = UI.dragPreview && UI.dragPreview.kind === 'caption' ? UI.dragPreview.y : null;
 
     var job = UI.job;
     // A nasheed under Quran recitation is not a style choice, so the Quran
@@ -2103,18 +2153,9 @@
           shown = all.slice(chunk * per, chunk * per + per);
           offset = chunk * per;
         }
-        var glow = Math.max(0, Math.min(30, Number(tpl.captionHighlightGlow) || 0));
         return shown.map(function (word, i) {
           var on = (offset + i) === at;
-          return {
-            text: word,
-            style: on
-              ? 'color: ' + (tpl.captionHighlight || '#D9B478') + ';'
-                + ' font-family: ' + webFontFor(tpl.captionHighlightFont) + ';'
-                + (tpl.captionHighlightItalic ? ' font-style: italic;' : '')
-                + (glow ? ' text-shadow: 0 0 ' + Math.round(glow / 2) + 'px ' + (tpl.captionHighlight || '#D9B478') + ';' : '')
-              : '',
-          };
+          return { text: word, style: on ? captionHighlightStyle(tpl) : '' };
         });
       }()),
       edProgress: edTime / edDuration,
@@ -2141,25 +2182,13 @@
       edSelText: selectedBlock ? selectedBlock.text : '',
       edSelRange: selectedBlock ? selectedBlock.time : '',
       edCapBlocks: edCaptionBlocks,
-      // Overlays sit inside the preview frame, positioned as fractions of it.
-      // Positioned from captionMarginV against the anchoring edge, exactly as
-      // the Templates preview and the renderer do. It used to sit on capTop
-      // alone, so the box only ever showed three positions and a drag or the
-      // vertical slider appeared to do nothing between them.
-      // Drawn the way the export draws it: the template's font, colour, case,
-      // outline, shadow and background box, at the same size relative to the
-      // frame. It used to be a fixed grey pill in Outfit at a size guessed by
-      // dividing by eight, so the preview said nothing true about the clip.
-      //
-      // The size is in cqw -- a percentage of the frame's own width -- so it
-      // stays right at any preview size, with a px value first as the fallback
-      // for anything that does not know container units.
-      edCapOverlayStyle: 'position: absolute; z-index: 8; width: 84%; left: 50%; ' + edCapVertical
-        + ' text-align: center; color: ' + (tpl.captionPrimary || '#F0D6A6') + ';'
-        + ' font-family: ' + webFontFor(tpl.captionFont) + '; font-weight: 700;'
-        + ' font-size: ' + Math.max(9, Math.round(Number(tpl.captionFontSize || 96) / 7)) + 'px;'
-        + ' font-size: ' + ((Number(tpl.captionFontSize || 96) / Math.max(1, Number(tpl.width || 1080))) * 100).toFixed(2) + 'cqw;'
-        + (tpl.captionUppercase ? ' text-transform: uppercase;' : '')
+      // The same helpers the Templates preview uses, so the caption a clip
+      // shows inside the editor is the caption its template shows outside it.
+      // The editor used to centre unconditionally (ignoring captionHorizontal
+      // and captionMarginH), size by a different divisor, and skip the pop --
+      // so the two previews could not agree even on a freshly opened clip.
+      edCapOverlayStyle: 'z-index: 8; ' + captionPlacementStyle(tpl, edCapDragY)
+        + captionFaceStyle(tpl)
         + capInkStyle(tpl)
         + (UI.edBurned ? ' display: none;' : ''),
       edCapHandle: 'position: absolute; inset: -5px; border: 1px dashed rgba(240,214,166,.7); border-radius: 8px; pointer-events: none;',
@@ -2836,27 +2865,11 @@
       // even though nothing could configure it.
       capWords: (function () {
         var parts = sampleCaptionParts(previewAt, tpl.captionMode, tpl.captionStackMaxWords);
-        var glow = Math.max(0, Math.min(30, Number(tpl.captionHighlightGlow) || 0));
-        // The pop, drawn the way the renderer draws it: start at the configured
-        // scale and settle to 1 over the configured time. Without this the two
-        // animation sliders moved numbers that the preview never showed, which
-        // is indistinguishable from their not working.
-        var popScale = Math.max(60, Math.min(140, Number(tpl.captionPopScale) || 100));
-        var popMs = Math.max(0, Math.min(400, Number(tpl.captionPopMs) || 0));
-        var popping = popScale !== 100 && popMs > 0;
         return parts.words.map(function (text, i) {
           var on = i === parts.liveIndex;
           return {
             text: text,
-            style: on
-              ? 'color: ' + (tpl.captionHighlight || '#D9B478') + ';'
-                + ' font-family: ' + webFontFor(tpl.captionHighlightFont) + ';'
-                + (tpl.captionHighlightItalic ? ' font-style: italic;' : '')
-                + (glow ? ' text-shadow: 0 0 ' + Math.round(glow / 2) + 'px ' + (tpl.captionHighlight || '#D9B478') + ';' : '')
-                // display:inline-block, or transform does nothing on an inline box.
-                + (popping ? ' display: inline-block; --dc-pop: ' + (popScale / 100).toFixed(3)
-                  + '; animation: dcCapPop ' + popMs + 'ms ease-out 1;' : '')
-              : '',
+            style: on ? captionHighlightStyle(tpl) : '',
           };
         });
       }()),
@@ -2931,9 +2944,8 @@
           + (grain ? ' background-size: auto, 3px 3px;' : '');
       }()),
 
-      capStyle: overlayStyle(tpl.captionPosition, tpl.captionHorizontal, tpl.captionPrimary, tpl.captionFontSize,
-        Number(tpl.captionMarginV || 0) / Math.max(1, Number(tpl.height || 1920)),
-        webFontFor(tpl.captionFont), tpl.captionUppercase)
+      capStyle: captionPlacementStyle(tpl, UI.dragPreview && UI.dragPreview.kind === 'caption' ? UI.dragPreview.y : null)
+        + captionFaceStyle(tpl)
         + capInkStyle(tpl)
         + capFadeStyle(tpl, UI.pvPlaying)
         + grabStyle(UI.dragKind === 'caption')

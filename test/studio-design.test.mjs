@@ -2314,8 +2314,9 @@ test('the preview shows where the caption actually is', () => {
   assert.match(style({ captionMarginV: 192, captionPosition: 'top' }), /top: 10\.00%/, 'anchored to its own edge');
   // Middle ignores the margin and stays centred, as the renderer does.
   assert.match(style({ captionMarginV: 192, captionPosition: 'middle' }), /top: 50%/);
-  // Clamped, so a stored extreme cannot push the box out of the frame.
-  assert.match(style({ captionMarginV: 20, captionPosition: 'bottom' }), /bottom: 2/);
+  // The schema's own floor (captionMarginV 20 of a 1920 frame) shows true:
+  // 20/1920 = 1.04%, exactly where the render puts it.
+  assert.match(style({ captionMarginV: 20, captionPosition: 'bottom' }), /bottom: 1\.04%/);
 });
 
 test('the editor offers to spread a look across the lecture, sized to it', () => {

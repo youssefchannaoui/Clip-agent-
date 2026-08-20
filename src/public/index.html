@@ -2456,6 +2456,12 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(StudioAdapter.ui.screen!=='templates')return;
       const box=captionBox(vals);
       if(!box)return;
+      /* The caption sizes itself in cqw so it scales with the frame, exactly
+         like the editor preview. The design's frame predates container units,
+         so the containing block is promoted to a container here -- without
+         this, cqw falls back to the viewport and the sample caption is huge. */
+      const frame=box.offsetParent;
+      if(frame&&frame.style.containerType!=='inline-size')frame.style.containerType='inline-size';
       for(const node of box.childNodes){
         if(node.nodeType===3&&node.nodeValue.trim())node.nodeValue='';
       }
