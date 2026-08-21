@@ -1545,7 +1545,14 @@
       // platform's own chrome, so letting it go there only produces clips with
       // hidden words.
       var snappedY = snapped(Math.max(SAFE_TOP, Math.min(SAFE_BOTTOM, y)));
-      var align = x < 0.34 ? 'left' : x > 0.66 ? 'right' : 'center';
+      // An ayah is a long line that needs the frame's whole width. Snapping it
+      // to an edge leaves a narrow column, and the render wraps scripture into
+      // three cramped lines against the side of the picture -- which is what a
+      // single stray drag did to a finished Quran clip. Vertical position is
+      // still free; the horizontal answer for scripture is always centre.
+      var align = tpl.captionMode === 'quran'
+        ? 'center'
+        : (x < 0.34 ? 'left' : x > 0.66 ? 'right' : 'center');
 
       // Anchored to the nearer edge, not to thirds.
       //

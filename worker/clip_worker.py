@@ -1338,10 +1338,18 @@ def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) ->
     margin_v = int(template.get("captionMarginV", 220))
     outline_width = float(template.get("captionOutlineWidth", 5))
     shadow = float(template.get("captionShadow", 1))
-    alignment = alignment_for(
-        str(template.get("captionPosition", "middle")),
-        str(template.get("captionHorizontal", "right")),
-    )
+    # Scripture is always centred, whatever the style says.
+    #
+    # A caption drag writes captionHorizontal onto the clip, and one stray drag
+    # on a finished Quran clip snapped the ayah to the right edge: the line no
+    # longer had the width it needs, so the render wrapped it into three
+    # cramped lines against the side of the picture. The editor no longer
+    # offers the choice for scripture, and this makes every clip that already
+    # carries the old value render correctly without touching stored data.
+    horizontal = str(template.get("captionHorizontal", "right"))
+    if str(template.get("captionMode", "")) == "quran":
+        horizontal = "center"
+    alignment = alignment_for(str(template.get("captionPosition", "middle")), horizontal)
     margin_h = int(template.get("captionMarginH", 90))
     line_height = max(0.65, min(1.4, float(template.get("captionLineHeight", 0.88))))
     scale_y = int(round(line_height * 100))

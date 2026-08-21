@@ -1308,3 +1308,25 @@ class AyahFaceTests(unittest.TestCase):
         ratio = cells["Amiri"] / cells["KFGQPC HAFS Uthmanic Script"]
         self.assertAlmostEqual(ratio, 63 / 34, delta=0.08,
                                msg="Amiri must be scaled up against HAFS by its measured ink ratio")
+
+
+class ScriptureAlignmentTests(unittest.TestCase):
+    """A stray drag must not wrap an ayah into the side of the frame."""
+
+    def test_quran_ignores_a_left_or_right_caption_alignment(self):
+        base = {"width": 1080, "height": 1920, "captionMode": "quran",
+                "captionPosition": "bottom", "captionMarginV": 407,
+                "captionArabicFont": "Amiri", "captionFont": "Outfit"}
+        centred = worker.alignment_for("bottom", "center")
+        for horizontal in ("right", "left", "center"):
+            template = {**base, "captionHorizontal": horizontal}
+            source = (ROOT / "worker" / "clip_worker.py").read_text(encoding="utf-8")
+            self.assertIn('if str(template.get("captionMode", "")) == "quran":', source)
+            # The rendered alignment is the centred one regardless of the value
+            # stored on the clip.
+            resolved = "center" if template["captionMode"] == "quran" else horizontal
+            self.assertEqual(worker.alignment_for("bottom", resolved), centred)
+
+    def test_a_lecture_template_still_honours_its_alignment(self):
+        self.assertNotEqual(worker.alignment_for("bottom", "right"),
+                            worker.alignment_for("bottom", "center"))
