@@ -3,6 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deenclipped-backgrounds-'));
 process.env.DATA_DIR = dataDir;
@@ -60,4 +63,17 @@ test('the operator curates the shared stock set; nobody else can', () => {
   seed([{ id: 'st1', userId: 'user_admin', shared: true, name: 'Stock', filename: 'st1.mp4', durationSec: 30 }]);
   assert.equal(backgrounds.deleteBackground({ id: 'user_a' }, 'st1', { operator: false }), false, 'a creator cannot delete stock');
   assert.equal(backgrounds.deleteBackground({ id: 'user_admin' }, 'st1', { operator: true }), true, 'the operator can');
+});
+
+test('the presign response field the browser reads is the one the route sends', () => {
+  // The upload paths read `objectKey` while /api/uploads/presign answers with
+  // `key`, so every direct-to-storage upload registered nothing on production
+  // -- invisible locally, where storage is unconfigured and the base64
+  // fallback carries the file.
+  const page = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const storage = fs.readFileSync(path.join(ROOT, 'src/object-storage.js'), 'utf8');
+  assert.match(storage, /return \{ key,/, 'createUpload answers with `key`, not `objectKey`');
+  assert.doesNotMatch(page, /objectKey:\s*presign\.objectKey/,
+    'no upload path may read presign.objectKey directly');
+  assert.match(page, /presignKey\s*=\s*p\s*=>/, 'both paths go through one tolerant reader');
 });

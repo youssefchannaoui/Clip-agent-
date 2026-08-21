@@ -3619,6 +3619,13 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        video for the whole clip; 'intro' opens on the source for a few seconds
        and hands over to the background -- the shape all over TikTok. */
     const jobBgEl=document.createElement('div');jobBgEl.id='studioJobBg';
+    /* The presign route answers with `key`; both upload paths were reading
+       `objectKey` and sending undefined, so every direct-to-storage upload
+       registered nothing on production. (Locally it was invisible: storage is
+       unconfigured there, presign throws "not configured", and the base64
+       fallback carried the file.) Read both names, once. */
+    const presignKey=p=>String((p&&(p.key||p.objectKey))||'');
+
     /* Run an API action, refresh, and toast the outcome. Top level, not
        inside renderStudio: the background upload and delete handlers live in
        a top-level painter, and with studioDo scoped to renderStudio their
@@ -3725,7 +3732,9 @@ function studioWanted(){return window.STUDIO_SHELL===true}
                   x.onerror=()=>reject(new Error('Upload failed \u2014 network error.'));
                   x.send(file)});
                 uploadBtn.textContent='Processing\u2026';
-                saved=await api('/api/backgrounds',{method:'POST',body:JSON.stringify({...meta,objectKey:presign.objectKey})});
+                const key=presignKey(presign);
+                if(!key)throw new Error('The storage service did not return an upload reference.');
+                saved=await api('/api/backgrounds',{method:'POST',body:JSON.stringify({...meta,objectKey:key})});
               }catch(err){
                 if(!/not configured/i.test(err.message))throw err;
                 uploadBtn.textContent='Uploading\u2026';
@@ -4189,7 +4198,7 @@ function renderStudio(){
       const presign=await api('/api/uploads/presign',{method:'POST',body:JSON.stringify({fileName:file.name,contentType:file.type||'video/mp4'})});
       const put=await fetch(presign.uploadUrl,{method:'PUT',headers:presign.headers||{'Content-Type':file.type||'video/mp4'},body:file});
       if(!put.ok)throw new Error('Upload failed — the storage service rejected the file.');
-      await api('/api/videos',{method:'POST',body:JSON.stringify({objectKey:presign.objectKey,fileName:file.name,title:file.name,
+      await api('/api/videos',{method:'POST',body:JSON.stringify({objectKey:presignKey(presign),fileName:file.name,title:file.name,
         backgroundMode:(StudioAdapter.ui.jobTplId||'')==='quran-recitation'?(StudioAdapter.ui.jobBgMode||'own'):'own',
         backgroundId:StudioAdapter.ui.jobBgId||'',introSeconds:StudioAdapter.ui.jobBgIntro||3})})},'Upload queued');
     document.body.classList.add('studio-active');
