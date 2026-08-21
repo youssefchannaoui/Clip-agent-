@@ -1272,3 +1272,24 @@ class SubtitleBurnFilterTests(unittest.TestCase):
         # shaping and Uthmanic Arabic renders as bare diacritics with every
         # base letter missing. Never go back to it.
         self.assertNotIn("subtitles=", graph)
+
+
+class AyahFaceTests(unittest.TestCase):
+    """The ayah face must render Tanzil Uthmani text correctly."""
+
+    def test_the_kfgqpc_face_is_not_preferred_for_tanzil_text(self):
+        # KFGQPC HAFS is cut for KFGQPC's own encoding: against this corpus its
+        # Uthmani marks shape as dotted-circle placeholders (U+06DF appears
+        # 3988 times), which rendered a white ring mid-ayah.
+        source = (ROOT / "worker" / "clip_worker.py").read_text(encoding="utf-8")
+        order = source.split('for candidate in (')[1].split(')')[0]
+        self.assertLess(order.index('"Amiri"'), order.index('"KFGQPC HAFS Uthmanic Script"'))
+
+    def test_face_sizes_come_from_measured_ink(self):
+        # Equal nominal size must mean equal size on screen. The entries are
+        # the inverse of measured ink height, so a face swap does not resize
+        # the scripture.
+        cells = worker.AYAH_FONT_CELL
+        ratio = cells["Amiri"] / cells["KFGQPC HAFS Uthmanic Script"]
+        self.assertAlmostEqual(ratio, 63 / 34, delta=0.08,
+                               msg="Amiri must be scaled up against HAFS by its measured ink ratio")

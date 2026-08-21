@@ -870,6 +870,15 @@ def installed_families() -> set[str]:
 def quran_font(fallback: str) -> str:
     """The face an ayah is set in.
 
+    NOT the KFGQPC faces, despite them being the mushaf look. The KFGQPC
+    fonts are cut for KFGQPC's OWN text encoding; fed the Tanzil Uthmani text
+    this corpus carries, most letters set correctly but the Uthmani marks do
+    not attach -- U+06DF (small high rounded zero, 3988 occurrences) shapes
+    as a dotted-circle placeholder, so every "قتلوا۟" rendered a large white
+    ring mid-ayah. Amiri, drawn against ordinary Unicode Arabic, attaches the
+    same mark correctly and still draws U+06DD as the ornamented medallion.
+    Verified by rendering the identical string in both faces.
+
     Ordinary Arabic and Quranic Arabic are not the same typographic job. A
     mushaf face carries the full tashkeel and, critically, draws U+06DD as the
     ornamented circle with the verse number inside it; a general Arabic face
@@ -886,11 +895,13 @@ def quran_font(fallback: str) -> str:
     # and renders at sane metrics. Amiri Quran, despite the name, reserves so
     # much vertical room for stacked marks that rendered frames came out at a
     # quarter of the expected size.
-    # The KFGQPC HAFS face first: it is the Madinah mushaf's own digital face,
-    # the one every major Quran app sets ayat in, and its U+06DD is the full
-    # ornamented medallion with the verse number inside. Amiri stays the
-    # fallback for an image built before the font was bundled.
-    for candidate in ("KFGQPC HAFS Uthmanic Script", "Amiri", "Scheherazade New", "Scheherazade"):
+    # Amiri leads again. KFGQPC HAFS is the Madinah mushaf's own digital face
+    # and looks the part, but it is cut for KFGQPC's text encoding: against
+    # the Tanzil Uthmani text this corpus ships, its Uthmani marks fail to
+    # attach and shape as dotted-circle placeholders. Correct scripture beats
+    # a closer typeface, so HAFS is last -- reachable only if nothing else is
+    # installed, where a ring is still better than no Arabic at all.
+    for candidate in ("Amiri", "Scheherazade New", "Scheherazade", "KFGQPC HAFS Uthmanic Script"):
         if candidate in families:
             return candidate
     return fallback
@@ -913,7 +924,7 @@ AYAH_FADE_OUT_MS = 450
 # at 32. The shrink is linear, so a constant recovers it exactly: ~2.9x makes
 # the Arabic land about twice the visual height of the gloss, which is the
 # reference's proportion.
-AYAH_SIZE_SCALE = 3.0
+AYAH_SIZE_SCALE = 3.54
 
 # libass sizes a font by its Win cell (usWinAscent + usWinDescent, in em).
 # The mushaf faces have very tall cells, so the same nominal size draws them
@@ -923,11 +934,17 @@ AYAH_SIZE_SCALE = 3.0
 # VISUAL size: AYAH_VISUAL em of the caption font size. AYAH_VISUAL is pinned
 # to what 3.0x nominal Amiri (cell 2.76) always produced, so existing Amiri
 # output is unchanged.
+# Measured from rendered frames, not from font tables: the same word set at
+# the same nominal size, with the ink bounding box read off the pixels
+# (KFGQPC HAFS 63px tall, Amiri 34px, Scheherazade New 89px). A face's entry is
+# the inverse of that ink, so every face reaches the same size on screen. The
+# old numbers came from OS/2 metrics and left Scheherazade twice too large and
+# Amiri a fifth too small.
 AYAH_FONT_CELL = {
-    "KFGQPC HAFS Uthmanic Script": 1.758,
-    "Amiri": 2.760,
-    "Scheherazade New": 2.434,
-    "Scheherazade": 2.434,
+    "KFGQPC HAFS Uthmanic Script": 1.587,
+    "Amiri": 2.941,
+    "Scheherazade New": 1.124,
+    "Scheherazade": 1.124,
 }
 AYAH_VISUAL = AYAH_SIZE_SCALE / AYAH_FONT_CELL["Amiri"]
 
