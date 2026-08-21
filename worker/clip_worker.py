@@ -897,7 +897,11 @@ def quran_font(fallback: str) -> str:
     return fallback
 
 
-AYAH_MAX_WORDS = 5
+# Four, not five. Five words of Uthmani script with full tashkeel overruns the
+# frame's usable width on a long ayah, and libass wraps it into three cramped
+# lines instead of the single calm line the reference clips hold. Measured on
+# 3:169, the longest ayah in this surah's set.
+AYAH_MAX_WORDS = 4
 # Measured from the reference recitation clips (frame-by-frame brightness of
 # the text band): phrases enter over roughly half a second and leave slightly
 # faster -- a calm, pure opacity fade, no scale and no drift. 300ms symmetric
@@ -2094,7 +2098,11 @@ def render_clip(
     # edge lands near 854 and both edges stay even for yuv420p.
     t_width = int(template.get("width", 1080))
     t_height = int(template.get("height", 1920))
-    d_scale = 854.0 / max(t_width, t_height)
+    # 1280, not 854. A draft is judged by eye in the review queue, and at
+    # quarter resolution a mushaf ayah reads as soft and small next to the
+    # finals it is compared with -- "you broke it" was partly this. 720p-class
+    # drafts still render far faster than the full 1080x1920 pass.
+    d_scale = 1280.0 / max(t_width, t_height)
     draft_width = max(2, int(t_width * d_scale / 2) * 2)
     draft_height = max(2, int(t_height * d_scale / 2) * 2)
     if draft:
@@ -2109,7 +2117,7 @@ def render_clip(
         "-filter_complex", filter_complex,
         "-map", "[vout]", "-map", "[aout]",
         "-c:v", "libx264", "-threads", ffmpeg_threads,
-        "-preset", "ultrafast" if draft else "veryfast", "-crf", "27" if draft else "19",
+        "-preset", "ultrafast" if draft else "veryfast", "-crf", "24" if draft else "19",
         "-pix_fmt", "yuv420p", "-r", "30", "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart", "-shortest", str(clip_file),
     ]

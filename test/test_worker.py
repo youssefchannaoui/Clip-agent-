@@ -1234,7 +1234,10 @@ class SpeedPassTests(unittest.TestCase):
     def test_draft_renders_scale_with_the_template_aspect(self):
         source = (ROOT / "worker" / "clip_worker.py").read_text(encoding="utf-8")
         self.assertIn('"ultrafast" if draft else "veryfast"', source)
-        self.assertIn('854.0 / max(t_width, t_height)', source)
+        # The long edge is a product decision (854 was too soft to judge a
+        # mushaf ayah by); what must hold is that it is derived from the
+        # template's own aspect rather than hardcoded to a portrait box.
+        self.assertRegex(source, r'd_scale = \d+\.0 / max\(t_width, t_height\)')
         self.assertIn('"renderQuality": "draft" if draft else "final"', source)
 
 
