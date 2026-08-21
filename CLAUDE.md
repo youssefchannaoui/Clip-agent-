@@ -75,6 +75,15 @@ These were each a real bug and each has a test named after it.
 4. **One timeline origin.** Ruler, caption blocks and playhead all derive from
    `timelineGeometry()`. Three separate origins once made the playhead miss the
    caption it pointed at.
+   **Extended 21 Aug 2026 to the preview itself:** the clip editor plays the
+   RENDERED clip (`/api/clips/:id/video?rv=…`) -- the same bytes the review
+   queue plays -- with no CSS captions over it and no offset arithmetic. The
+   old path (clean source + HTML/CSS captions + `edStartSec` subtraction) was
+   a second rendering engine that could never agree with libass, and it is
+   what "the preview looks nothing like the export" always meant. The clean
+   source survives only when a render does not exist, and must stay labelled
+   as the uncaptioned source. Never reintroduce a drawn imitation of a file
+   that exists.
 5. **Clip-local vs media time.** `applyMediaTimebase()` — a clean plate offsets
    by `startSec`, an export does not. Getting this wrong makes the editor look
    completely dead, not slightly off.
@@ -98,6 +107,11 @@ These were each a real bug and each has a test named after it.
   because code moved into a function, while real behaviour changes passed.
 - **A green suite is not verification for anything visual.** Every layout bug
   here shipped green.
+- **Chrome will not decode video in a hidden automation tab.** readyState stays
+  0 even for a blob URL holding every byte, so "the preview is black" in an
+  agent screenshot is usually the harness, not the app. Verify video paths by
+  what the element is pointed at plus the file's own frames (ffmpeg), and say
+  which one the evidence is.
 
 ---
 
