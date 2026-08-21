@@ -194,3 +194,28 @@ class CacheTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PassageMatchTests(unittest.TestCase):
+    """A re-render hands the matcher a whole passage, not one verse."""
+
+    def setUp(self):
+        self.corpus = quran.Corpus(FIXTURE)
+
+    def test_a_long_passage_splits_back_into_ayat(self):
+        passage = " ".join(a["arabic"] for a in FIXTURE[:3])
+        # match() answers None for a passage: it compares the whole query with
+        # ONE ayah, which is why a re-rendered Quran clip lost its ayah
+        # treatment and fell back to wrapped plain captions -- no medallion, no
+        # translation, the verse broken across three cramped lines.
+        self.assertIsNone(self.corpus.match(passage))
+        found = self.corpus.match_sequence(passage)
+        self.assertEqual([(f["ayah"]["surah"], f["ayah"]["ayah"]) for f in found],
+                         [(23, 36), (53, 39), (1, 2)])
+        # Spans are in order and do not overlap, so each ayah can be given its
+        # share of the segment's time.
+        for earlier, later in zip(found, found[1:]):
+            self.assertLessEqual(earlier["wordEnd"], later["wordStart"])
+
+    def test_ordinary_speech_still_matches_nothing(self):
+        self.assertEqual(self.corpus.match_sequence("brothers and sisters let us talk about patience"), [])

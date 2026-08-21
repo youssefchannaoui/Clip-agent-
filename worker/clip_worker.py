@@ -1458,8 +1458,41 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 end = min(candidate.duration, float(segment["end"]) - candidate.start)
                 if end <= start:
                     continue
-                found = corpus.match(str(segment.get("text") or ""))
+                seg_text = str(segment.get("text") or "")
+                found = corpus.match(seg_text)
                 if not found:
+                    # A whole passage rather than a verse -- which is exactly
+                    # what a re-render hands us, since it rebuilds one segment
+                    # from the clip's stored transcript. Walk it and caption
+                    # each ayah in turn instead of dropping to plain captions,
+                    # which is how a re-rendered Quran clip lost its medallion,
+                    # its translation and its line breaks.
+                    passage = corpus.match_sequence(seg_text) if hasattr(corpus, "match_sequence") else []
+                    if passage:
+                        seg_words = max(1, len(seg_text.split()))
+                        span = max(0.1, end - start)
+                        for piece in passage:
+                            piece_start = start + span * (piece["wordStart"] / seg_words)
+                            piece_end = start + span * (piece["wordEnd"] / seg_words)
+                            if piece_end <= piece_start:
+                                continue
+                            hit = piece["ayah"]
+                            captioned += 1
+                            matched_ayahs.append({
+                                "start": round(piece_start, 3), "end": round(piece_end, 3),
+                                "surah": hit["surah"], "ayah": hit["ayah"],
+                                "surahName": hit["surahName"], "arabic": hit["arabic"],
+                                "translation": hit.get("translation") or "",
+                            })
+                            events.extend(ayah_events(
+                                hit, ornament=ornament_text(ayah_font, hit["ayah"]),
+                                start=piece_start, end=piece_end,
+                                latin_font=font, translation_size=translation_size,
+                                show_translation=show_translation, ayah_size=ayah_size,
+                                mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))),
+                                ayah_font=ayah_font,
+                            ))
+                        continue
                     # Arabic that is not a match -- the speaker's own words in
                     # either language -- still has to render in a face that can
                     # draw it.

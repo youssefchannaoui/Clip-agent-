@@ -136,6 +136,55 @@ class Corpus:
     def __len__(self) -> int:
         return len(self.records)
 
+    def match_sequence(self, transcript: str, minimum: float = 0.62) -> list[dict[str, Any]]:
+        """Every ayah recited across a long passage, in order.
+
+        `match` compares a whole query against ONE ayah, so it answers None for
+        anything longer than a verse: a re-render hands it the clip's entire
+        stored transcript, 169 words of it, and the ayah treatment silently
+        fell back to ordinary captions -- no medallion, no translation, the
+        verse wrapped into three cramped lines. This walks the passage instead,
+        taking the best window at each position.
+
+        Each result carries the word span it consumed so the caller can give
+        each ayah its share of the segment's time.
+        """
+        words = str(transcript or "").split()
+        if not words:
+            return []
+        found: list[dict[str, Any]] = []
+        index = 0
+        while index < len(words):
+            best = None
+            # Ayah lengths in this corpus run from a couple of words to a few
+            # dozen; the windows bracket that without trying every length.
+            for size in (6, 10, 14, 20, 28, 40):
+                if index + 3 > len(words):
+                    break
+                window = " ".join(words[index:index + size])
+                hit = self.match(window, minimum=minimum)
+                if not hit:
+                    continue
+                score = difflib.SequenceMatcher(
+                    None, normalise(window), normalise(hit["arabic"])).ratio()
+                if best is None or score > best["score"]:
+                    best = {"ayah": hit, "score": score}
+            if best is None:
+                index += 1
+                continue
+            # Consume the AYAH's own length, not the window that found it.
+            # Advancing by the window skipped whatever sat between the end of a
+            # short ayah and the end of the window -- a seven-word verse
+            # vanished from the middle of a passage that way.
+            size = max(1, min(len(str(best["ayah"]["arabic"]).split()), len(words) - index))
+            found.append({
+                "ayah": best["ayah"],
+                "wordStart": index,
+                "wordEnd": index + size,
+            })
+            index += size
+        return found
+
     def match(self, transcript: str, minimum: float = 0.55) -> dict[str, Any] | None:
         """Best matching ayah for a chunk of transcript, or None.
 
