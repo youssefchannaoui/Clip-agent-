@@ -68,6 +68,13 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
   font-family: Inter, system-ui, sans-serif; color: #F2F2F4; overflow: hidden;
 }
 #studioLiveBar.hide, #studioLiveHome.hide { display: none; }
+/* The width above reserves room for the desktop rail (100vw - 300px). On a
+   phone that arithmetic leaves an 84px sliver -- the bar was unreadable at
+   390px. There is no rail to dodge at that size. */
+@media (max-width: 820px) {
+  #studioLiveBar { width: calc(100vw - 24px); bottom: 12px; }
+  #studioLiveBar.slb-min { max-width: calc(100vw - 24px); right: 12px; }
+}
 .slb-head { display: flex; align-items: center; gap: 10px; padding: 10px 13px; }
 .slb-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: #7FD1A6; animation: dcPulse 1.8s ease-in-out infinite; }
 .slb-title { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -78,6 +85,14 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 .slb-eta:empty, .slb-size:empty, .slb-pct:empty { display: none; }
 .slb-btn { flex: none; padding: 4px 9px; border: 1px solid #26262A; border-radius: 7px; background: #17171A; color: #A2A2AA; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
 .slb-btn:hover { color: #F2F2F4; border-color: #34343A; }
+.slb-icon { flex: none; display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 1px solid #26262A; border-radius: 7px; background: #17171A; color: #8B8B93; font-size: 12px; cursor: pointer; transition: color .12s ease, border-color .12s ease; }
+.slb-icon:hover { color: #F2F2F4; border-color: #34343A; }
+/* Collapsed: a small pill that still reports progress, so minimising the
+   bar never means losing sight of the work. */
+#studioLiveBar.slb-min { width: auto; max-width: min(320px, calc(100vw - 40px)); left: auto; right: 18px; translate: none; }
+#studioLiveBar.slb-min .slb-list, #studioLiveBar.slb-min .slb-size, #studioLiveBar.slb-min .slb-eta, #studioLiveBar.slb-min #slbToggle, #studioLiveBar.slb-min #slbHome { display: none; }
+#studioLiveBar.slb-min .slb-head { padding: 7px 9px 7px 11px; gap: 8px; }
+#studioLiveBar.slb-min .slb-title { font-size: 11.5px; font-weight: 500; color: #BCBCC3; }
 .slb-bar { height: 2px; background: #1E1E22; }
 .slb-bar i { display: block; height: 100%; background: linear-gradient(90deg, #D9B478, #F0D6A6); transition: width .4s ease; }
 .slb-list { border-top: 1px solid #1E1E22; max-height: 210px; overflow: auto; }
@@ -2062,6 +2077,10 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       return node;
     }
     const liveEls={home:$('#studioLiveHome'),bar:$('#studioLiveBar')};
+    /* Remembered, not just held in memory: a bar the user collapsed should
+       still be collapsed after a reload, or it reads as ignoring them. */
+    function liveMinimised(){try{return localStorage.getItem('dcLiveMin')==='1'}catch{return false}}
+    function setLiveMinimised(on){try{localStorage.setItem('dcLiveMin',on?'1':'0')}catch{}}
     /* Which lectures have their per-clip list open. Home defaults to open —
        there is room for it and it is the page you go to in order to look — while
        the floating bar defaults to closed so it stays a bar. */
@@ -3836,18 +3855,37 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       /* Keyed on what changes the structure — which jobs, and whether the queue
          is open — so a numbers-only update leaves the nodes, and the spinner
          inside them, alone. */
-      const key=liveKey(vals.liveAll)+'|'+(StudioAdapter.ui.liveOpen?'open':'shut')+'|'+vals.liveMore;
+      /* Collapsed is the user's standing choice: it sticks across paints,
+         screens and reloads, and new work does not force the bar back open --
+         the pill keeps reporting, which is what they asked it to do. */
+      const liveMin=liveMinimised();
+      liveEls.bar.classList.toggle('slb-min',liveMin);
+      const key=liveKey(vals.liveAll)+'|'+(StudioAdapter.ui.liveOpen?'open':'shut')+'|'+vals.liveMore+'|'+(liveMin?'min':'full');
       if(liveEls.bar.dataset.liveKey!==key){
         liveEls.bar.dataset.liveKey=key;
         liveEls.bar.innerHTML=`<div class="slb-head"><span class="slb-dot"></span>
           <span class="slb-title">${esc(first.title)} · ${esc(first.stage)}</span>
           <span class="slb-pct"></span><span class="slb-size"></span><span class="slb-eta"></span>
           ${vals.liveMore?`<button type="button" class="slb-btn" id="slbToggle">${StudioAdapter.ui.liveOpen?'Hide':esc(vals.liveMoreLabel)}</button>`:''}
-          <button type="button" class="slb-btn" id="slbHome">Open home</button></div>
+          <button type="button" class="slb-btn" id="slbHome">Open home</button>
+          <button type="button" class="slb-icon" id="slbMin" title="${liveMin?'Expand':'Collapse'}" aria-label="${liveMin?'Expand':'Collapse'}"><i class="ph ph-caret-${liveMin?'up':'down'}"></i></button></div>
           <div class="slb-bar"><i></i></div>
           ${StudioAdapter.ui.liveOpen?`<div class="slb-list">${vals.liveAll.map(r=>liveRowHtml(r,false)).join('')}</div>`:''}`;
         const t=$('#slbToggle'); if(t)t.onclick=()=>{StudioAdapter.ui.liveOpen=!StudioAdapter.ui.liveOpen;renderAll()};
         const h=$('#slbHome'); if(h)h.onclick=()=>{StudioAdapter.ui.screen='home';StudioAdapter.ui.liveOpen=false;renderAll()};
+        const m=$('#slbMin'); if(m)m.onclick=()=>{
+          const next=!liveMinimised();
+          setLiveMinimised(next);
+          if(next)StudioAdapter.ui.liveOpen=false;
+          renderAll();
+        };
+        /* Collapsed, the whole pill is the way back -- a 22px caret is a small
+           target for something that is mostly out of the way on purpose. */
+        const head=liveEls.bar.querySelector('.slb-head');
+        if(head)head.onclick=e=>{
+          if(!liveMinimised()||e.target.closest('button'))return;
+          setLiveMinimised(false);renderAll();
+        };
         bindClipToggles(liveEls.bar);
         /* The queue was rebuilt here, so the key paintRows would compare against
            is stale. Seeding it keeps the very next paint an in-place update
