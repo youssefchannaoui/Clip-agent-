@@ -97,7 +97,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **386 JS + 182 Python**
+- `npm test` and `npm run check` must pass. Currently **425 JS + 212 Python**
   (7 Python skipped). Update these numbers when they change — they were wrong by
   more than a factor of two, which makes them useless as a tripwire.
 - **The 7 skips are `SpeakerTrackingTests`**, which need a test video that is not
@@ -128,6 +128,16 @@ These were each a real bug and each has a test named after it.
 - **Only a rendered frame settles a caption question.** Every one of the above
   passed unit tests; two deploy cycles were spent on renders that "should"
   have been right. Frame-check via the clip's public R2 URL in a <video>.
+- **A re-render captions the STORED transcript, not fresh speech.**
+  `process_rerender` rebuilds one segment holding the clip's whole transcript,
+  so a recitation arrives as a 169-word passage. `Corpus.match()` scores an
+  entire query against ONE ayah and therefore matched nothing, and the render
+  fell through to plain wrapped captions -- every re-render silently stripped
+  the medallion and translation off a Quran clip. `Corpus.match_sequence()`
+  splits a passage back into ayat; it advances by the matched ayah's own word
+  count, because advancing by the search window swallowed short verses.
+  Any future caption feature must be tested on a re-render, not only on a
+  first render -- they take different paths through `write_ass`.
 - **The Hetzner console silently disconnects.** Keystrokes typed into a dead
   console echo as ghost text and never run — a pull+build was "done" twice
   without happening. Confirm a live prompt echo (type Return, see a fresh
