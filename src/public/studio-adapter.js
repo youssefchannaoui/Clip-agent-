@@ -51,6 +51,7 @@
     // explained why it did nothing.
     tplPast: [],
     tplHistCtx: '',
+    tourStep: undefined,
     selClips: {},
     selLecs: {},
     tplFuture: [],
@@ -285,6 +286,37 @@
     var lo = Math.max(4, Math.round(mins * 0.6));
     var hi = Math.max(8, Math.round(mins * 1.0));
     return lo + '\u2013' + hi + ' min';
+  }
+
+  // The tour, anchored on the elements the design already marks with
+  // data-tour. Three steps, because that is how many anchors exist and
+  // because the app's whole loop is paste, start, review.
+  var TOUR_STEPS = [
+    {
+      anchor: 'paste',
+      title: 'Start with a lecture',
+      body: 'Paste a YouTube link you own or are allowed to use, or upload an MP4. DeenClipped transcribes it, scores the strongest moments and cuts them into vertical clips.',
+    },
+    {
+      anchor: 'start',
+      title: 'Choose the look, then start',
+      body: 'Pick a Clip Style and the lengths you want. Islamic lecture gives bold word-by-word captions; Quran recitation sets the ayah in mushaf script with its translation.',
+    },
+    {
+      anchor: 'rail',
+      title: 'Review before anything posts',
+      body: 'Finished clips land in the review queue for you to approve or reject. Nothing publishes on its own, and the editor lets you fix a caption or reframe a clip first.',
+    },
+  ];
+
+  // Remembered per browser: a tour that reappears on every visit is an
+  // interruption, and one that can never be reopened is a dead end -- the
+  // account menu can start it again.
+  function tourSeen() {
+    try { return global.localStorage.getItem('dcTourSeen') === '1'; } catch (err) { return true; }
+  }
+  function markTourSeen() {
+    try { global.localStorage.setItem('dcTourSeen', '1'); } catch (err) { /* private mode */ }
   }
 
   function toast(message) { global.StudioAdapter.onToast(message); }
@@ -1721,6 +1753,24 @@
     // is only written on release, so without this the overlay would sit still
     // while being dragged.
     var edCapDragY = UI.dragPreview && UI.dragPreview.kind === 'caption' ? UI.dragPreview.y : null;
+
+    // The tour runs on Home only -- every anchor lives there -- and starts
+    // itself once for an account with nothing in it yet.
+    if (UI.tourStep === undefined) {
+      UI.tourStep = (!tourSeen() && projects.length === 0 && UI.screen === 'home') ? 0 : -1;
+    }
+    var tourIndex = Math.max(0, Math.min(TOUR_STEPS.length - 1, Number(UI.tourStep)));
+    var tourOn = Number(UI.tourStep) >= 0 && UI.screen === 'home';
+    var tourStep = tourOn ? TOUR_STEPS[tourIndex] : null;
+    var tourRect = null;
+    if (tourOn && global.document) {
+      var anchorEl = global.document.querySelector('[data-tour="' + tourStep.anchor + '"]');
+      if (anchorEl && anchorEl.getBoundingClientRect) {
+        var r = anchorEl.getBoundingClientRect();
+        if (r.width && r.height) tourRect = r;
+      }
+    }
+    function endTour() { markTourSeen(); setUI({ tourStep: -1 }); }
     // Set by the host only when the rendered file fails to play.
     var edSourceFallback = Boolean(UI.edSourceFallback);
 
@@ -2990,12 +3040,69 @@
       // time the dashboard mounts, and a second one just delays the first paint.
       booting: false,
       navLoading: false,
-      // The tour belongs to the legacy dashboard, which owns onboarding.
-      tourOn: false,
-      tourNotFirst: false,
-      tourTitle: '', tourBody: '', tourCount: '', tourNextLabel: '', tourDots: [],
-      tourCardStyle: 'display: none;', tourVeilStyle: 'display: none;', tourSpotStyle: 'display: none;',
-      tourNext: function () {}, tourBack: function () {}, tourSkip: function () {},
+      // ── The guided tour ──
+      // The design ships the whole thing -- veil, spotlight, card, dots -- and
+      // it was stubbed off with a note about the legacy dashboard "owning
+      // onboarding". That dashboard is gone, so a new account was handed an
+      // empty studio and no explanation, and three data-tour anchors sat in
+      // the markup doing nothing. A control that cannot fire must not be
+      // shipped (CLAUDE.md); this makes it fire.
+      tourOn: tourOn,
+      tourNotFirst: tourIndex > 0,
+      tourTitle: tourStep ? tourStep.title : '',
+      tourBody: tourStep ? tourStep.body : '',
+      tourCount: tourStep ? 'Step ' + (tourIndex + 1) + ' of ' + TOUR_STEPS.length : '',
+      tourNextLabel: tourIndex >= TOUR_STEPS.length - 1 ? 'Start clipping' : 'Next',
+      tourDots: TOUR_STEPS.map(function (_step, i) {
+        return {
+          style: 'width: ' + (i === tourIndex ? '16px' : '6px') + '; height: 6px; border-radius: 20px; background: '
+            + (i === tourIndex ? '#F0D6A6' : '#33333A') + '; transition: width .18s ease, background .18s ease;',
+        };
+      }),
+      tourVeilStyle: tourOn
+        ? 'position: fixed; inset: 0; z-index: 200; background: rgba(6,6,8,.72); backdrop-filter: blur(2px);'
+        : 'display: none;',
+      // The spotlight is the anchor's own rectangle, measured each paint, with
+      // a ring around it -- so it keeps up with a collapsing rail or a resize
+      // instead of pointing at where an element used to be.
+      tourSpotStyle: (function () {
+        if (!tourOn) return 'display: none;';
+        var box = tourRect;
+        if (!box) return 'display: none;';
+        return 'position: fixed; z-index: 201; pointer-events: none; border-radius: 12px;'
+          + ' left: ' + Math.round(box.left - 6) + 'px; top: ' + Math.round(box.top - 6) + 'px;'
+          + ' width: ' + Math.round(box.width + 12) + 'px; height: ' + Math.round(box.height + 12) + 'px;'
+          + ' box-shadow: 0 0 0 9999px rgba(6,6,8,.72), 0 0 0 2px rgba(240,214,166,.9);';
+      }()),
+      tourCardStyle: (function () {
+        if (!tourOn) return 'display: none;';
+        var base = 'position: fixed; z-index: 202; width: min(340px, calc(100vw - 32px));'
+          + ' display: flex; flex-direction: column; gap: 9px; padding: 16px;'
+          + ' border: 1px solid #2C2C32; border-radius: 14px;'
+          + ' background: linear-gradient(160deg, #16161A, #101013);'
+          + ' box-shadow: 0 30px 70px rgba(0,0,0,.7);';
+        var box = tourRect;
+        if (!box) return base + ' left: 50%; top: 50%; transform: translate(-50%, -50%);';
+        // Below the anchor when there is room, otherwise above it; clamped so
+        // the card cannot leave the viewport on a phone.
+        var width = Math.min(340, (global.innerWidth || 1280) - 32);
+        var left = Math.max(16, Math.min((global.innerWidth || 1280) - width - 16, box.left));
+        var below = box.top + box.height + 14;
+        var fitsBelow = below + 190 < (global.innerHeight || 800);
+        return base + ' left: ' + Math.round(left) + 'px; '
+          + (fitsBelow ? 'top: ' + Math.round(below) + 'px;'
+                       : 'bottom: ' + Math.round((global.innerHeight || 800) - box.top + 14) + 'px;');
+      }()),
+      tourNext: function (e) {
+        stop(e);
+        if (tourIndex >= TOUR_STEPS.length - 1) return endTour();
+        setUI({ tourStep: tourIndex + 1 });
+      },
+      tourBack: function (e) { stop(e); setUI({ tourStep: Math.max(0, tourIndex - 1) }); },
+      tourSkip: function (e) { stop(e); endTour(); },
+      // Offered for good in the account menu, so it is repeatable rather than
+      // a one-shot a new user can lose by clicking past it.
+      startTour: function (e) { stop(e); setUI({ tourStep: 0, menuOpen: false, screen: 'home' }); },
 
       // The design's own dock is off on every screen. Live work is rendered by
       // the host instead: a stable docked section on Home (#studioLiveHome) and

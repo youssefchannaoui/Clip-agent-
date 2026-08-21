@@ -3638,6 +3638,33 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       tag.textContent=`.${cls}>*{flex-shrink:0}.${cls}{overscroll-behavior:contain}`;
     }
 
+    /* A way back into the tour. It starts itself once for a new account, but
+       a first-run-only tour is a dead end for anyone who clicked past it, so
+       Home carries a quiet link beside Start job. Host-painted because the
+       design has no slot for it. */
+    let tourLinkEl=null;
+    function paintTourEntry(vals){
+      const start=document.querySelector('#studio [data-tour="start"]');
+      const row=start&&start.parentElement;
+      if(!row||StudioAdapter.ui.screen!=='home'||vals.tourOn){
+        if(tourLinkEl){tourLinkEl.remove();tourLinkEl=null}
+        return;
+      }
+      if(tourLinkEl&&tourLinkEl.isConnected&&tourLinkEl.parentElement===row)return;
+      if(tourLinkEl)tourLinkEl.remove();
+      tourLinkEl=document.createElement('button');
+      tourLinkEl.type='button';
+      tourLinkEl.setAttribute('data-host-owned','');
+      tourLinkEl.style.cssText='display:inline-flex;align-items:center;gap:6px;padding:10px 12px;border:0;'
+        +'background:transparent;color:#8B8B93;font:500 12px Outfit,Inter,sans-serif;cursor:pointer;'
+        +'transition:color .14s ease';
+      tourLinkEl.innerHTML='<i class="ph ph-compass" style="font-size:14px"></i>Take the tour';
+      tourLinkEl.onmouseenter=()=>{tourLinkEl.style.color='#F0D6A6'};
+      tourLinkEl.onmouseleave=()=>{tourLinkEl.style.color='#8B8B93'};
+      tourLinkEl.onclick=e=>{e.preventDefault();StudioAdapter.bindings(DATA).startTour(e)};
+      row.appendChild(tourLinkEl);
+    }
+
     function paintJobStyleRow(vals){
       alive(jobStyleEl);
       const open=Boolean(StudioAdapter.ui.job);
@@ -4350,6 +4377,7 @@ function paintStudio(){
   paintEditorLayout(vals);
   paintEditorScrub();
   paintJobStyleRow(vals);
+  paintTourEntry(vals);
   paintJobPanelScroll();
   paintEditorMissing();
   paintPreviewPlayer(vals);

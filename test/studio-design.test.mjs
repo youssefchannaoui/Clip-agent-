@@ -2786,3 +2786,36 @@ test('the caption overlay is a positioning ghost, loud only while dragging', () 
   StudioAdapter.ui.screen = 'home';
   StudioAdapter.ui.edClipId = null;
 });
+
+test('a new account gets the guided tour, and it can be reopened', () => {
+  const fresh = JSON.parse(JSON.stringify(SAMPLE_STATE));
+  fresh.projects = [];
+  fresh.clips = [];
+  StudioAdapter.ui.screen = 'home';
+  StudioAdapter.ui.tourStep = 0;
+  const vals = StudioAdapter.bindings(fresh);
+  assert.equal(vals.tourOn, true, 'the design ships the tour; it must actually run');
+  assert.match(vals.tourCount, /Step 1 of 3/);
+  assert.ok(vals.tourTitle.length > 0 && vals.tourBody.length > 0, 'a step says something');
+  assert.equal(vals.tourDots.length, 3);
+  assert.doesNotMatch(vals.tourVeilStyle, /display: none/, 'the page dims behind it');
+
+  // Every step must point at an anchor the markup actually carries, or the
+  // spotlight highlights nothing.
+  const page = fs.readFileSync(path.join(ROOT, 'src/public/studio-template.generated.js'), 'utf8');
+  for (const anchor of ['paste', 'start', 'rail']) {
+    assert.ok(page.includes(`"data-tour":"${anchor}"`), `the ${anchor} anchor exists in the template`);
+  }
+
+  // Last step commits, and the tour is repeatable from the account menu.
+  StudioAdapter.ui.tourStep = 2;
+  const last = StudioAdapter.bindings(fresh);
+  assert.equal(last.tourNextLabel, 'Start clipping');
+  assert.equal(typeof last.startTour, 'function', 'a first-run-only tour would be a dead end');
+
+  StudioAdapter.ui.tourStep = -1;
+  const off = StudioAdapter.bindings(fresh);
+  assert.equal(off.tourOn, false);
+  assert.match(off.tourCardStyle, /display: none/);
+  StudioAdapter.ui.screen = 'home';
+});
