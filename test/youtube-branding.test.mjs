@@ -55,7 +55,12 @@ test("YouTube's icon is drawn in their colours, not the dashboard's", () => {
 });
 
 test("the icon never renders below YouTube's 20px minimum", () => {
+  // The floor is what matters, not a particular number: the mark is set at a
+  // fixed size because 1em resolves to 17px in the "Posting to" row and 13px
+  // in the schedule list, both under YouTube's minimum.
   const rule = /#studio i\.ph-youtube-logo\{[\s\S]*?\}/.exec(shell)[0];
-  assert.match(rule, /min-width:20px/);
-  assert.match(rule, /min-height:20px/);
+  const px = (prop) => Number((new RegExp(prop + ':(\\d+)px').exec(rule) || [])[1] || 0);
+  for (const prop of ['min-width', 'min-height', 'width', 'height']) {
+    assert.ok(px(prop) >= 20, `${prop} must be at least 20px, got ${px(prop)}px`);
+  }
 });

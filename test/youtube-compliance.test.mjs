@@ -3,6 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 // The YouTube API Services ToS Violations Report of 13 Aug 2026. Each test is
 // named for the policy it keeps, so a future change that breaks compliance
@@ -109,5 +112,33 @@ test('the claim that no statistics are read stays true in the code', () => {
   assert.ok(requests.length > 0, 'the metadata request should still exist');
   for (const request of requests) {
     assert.doesNotMatch(request, /statistics/, 'asking for statistics would make the privacy policy false');
+  }
+});
+
+test('the YouTube mark is unmodified, uncontained and at least 20px', () => {
+  const page = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  // Official colours only: YouTube red on white, no currentColor tinting.
+  assert.match(page, /fill='%23FF0000'/, 'the official red');
+  assert.match(page, /fill='%23FFFFFF'/, 'the official white triangle');
+  assert.doesNotMatch(page, /i\.ph-youtube-logo\{[^}]*color:\s*(?!transparent)/,
+    'the glyph must never inherit the dashboard palette');
+  // Their stated 20px minimum, not 1em (which is 17px in the posting row).
+  assert.match(page, /i\.ph-youtube-logo\{[^}]*min-height:22px/);
+  // No tile chrome around the mark: a bordered rounded box restates its shape.
+  assert.match(page, /:has\(> i\.ph-youtube-logo\)\{[^}]*border-color:transparent/);
+});
+
+test('the privacy policy names the API calls, the retention and the way out', async () => {
+  const marketing = await import('../src/marketing.js');
+  const html = marketing.privacy({ base: 'https://deenclipped.online', currentUser: null });
+  for (const needle of [
+    'channels.list', 'videos.list',                     // what is called
+    'encrypted OAuth access and refresh tokens',        // what is stored
+    'automatically deleted after 30 days',              // how long
+    'https://policies.google.com/privacy',              // Google's own policy
+    'https://myaccount.google.com/permissions',         // how to revoke
+    'does <strong>not</strong> request, store or display YouTube statistics',
+  ]) {
+    assert.ok(html.includes(needle), `privacy policy must state: ${needle}`);
   }
 });
