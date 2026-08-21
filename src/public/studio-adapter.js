@@ -2722,7 +2722,13 @@
       // uploads and returns a 404 page for the rest, which rendered as an empty
       // black box. A failed background layer is simply skipped, so hqdefault --
       // which always exists -- shows through underneath.
-      jobPosterStyle: 'position: relative; aspect-ratio: 16 / 9; border-radius: 11px; overflow: hidden; border: 1px solid #26262A; background-color: #17171A;'
+      // flex: none, because the panel is a scrolling flex column: with the
+      // style row and length chips added the content outgrew 88vh, every
+      // child shrank to share the space, and an aspect-ratio box shrinks to
+      // a sliver -- the lecture's own thumbnail vanished into a hairline at
+      // the top of the panel. Capped too, so a tall window does not give the
+      // poster half the dialog.
+      jobPosterStyle: 'position: relative; flex: none; aspect-ratio: 16 / 9; max-height: 30vh; border-radius: 11px; overflow: hidden; border: 1px solid #26262A; background-color: #17171A;'
         + (job && job.thumbnail ? ' background-image: ' + posterLayers(job) + '; background-size: cover; background-position: center; background-repeat: no-repeat;' : ''),
 
       // ── The range handles ──

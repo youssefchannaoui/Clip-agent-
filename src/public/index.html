@@ -3534,6 +3534,33 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       return `<span class="bgt-thumb" style="display:flex;flex-direction:column;align-items:${align};justify-content:flex-start;${pad}${mono?'filter:grayscale(1);':''}">`
         +`<span style="display:flex;flex-direction:column;align-items:${align};margin-top:${pos};gap:1px;max-width:100%">${inner}</span></span>`;
     }
+    /* The job panel is a flex column with max-height: 88vh and overflow:
+       auto. Once its content outgrew that height every child started
+       shrinking to share the space instead of the panel scrolling -- the
+       lecture poster collapsed to a hairline and the footer got squeezed.
+       Children must keep their natural height so the panel actually scrolls.
+       Written as one CSS rule keyed to the panel's own generated class, so
+       no child is marked host-owned and every template-driven style (the
+       poster's own background, for one) keeps updating normally. */
+    let jobPanelCls='';
+    function paintJobPanelScroll(){
+      if(!StudioAdapter.ui.job)return;
+      const anchorNode=document.querySelector('#studioJobType');
+      if(!anchorNode)return;
+      let panel=null;
+      for(let n=anchorNode.parentElement;n&&n.id!=='studio';n=n.parentElement){
+        const cs=getComputedStyle(n);
+        if(cs.flexDirection==='column'&&/(auto|scroll)/.test(cs.overflowY)&&n.className){panel=n;break}
+      }
+      if(!panel)return;
+      const cls=String(panel.className).trim().split(/\s+/)[0];
+      if(!cls||cls===jobPanelCls)return;
+      jobPanelCls=cls;
+      let tag=document.getElementById('dcJobPanelCss');
+      if(!tag){tag=document.createElement('style');tag.id='dcJobPanelCss';document.head.appendChild(tag)}
+      tag.textContent=`.${cls}>*{flex-shrink:0}.${cls}{overscroll-behavior:contain}`;
+    }
+
     function paintJobStyleRow(vals){
       alive(jobStyleEl);
       const open=Boolean(StudioAdapter.ui.job);
@@ -4227,6 +4254,7 @@ function paintStudio(){
   paintEditorLayout(vals);
   paintEditorScrub();
   paintJobStyleRow(vals);
+  paintJobPanelScroll();
   paintEditorMissing();
   paintPreviewPlayer(vals);
   paintHighlight(vals);
