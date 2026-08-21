@@ -1036,7 +1036,16 @@ async function route(req, res, url) {
     const minimum = Math.round(Number(body.clipMinSeconds)); const maximum = Math.round(Number(body.clipMaxSeconds));
     if (!Number.isFinite(count) || count < 1 || count > 30) return json(res, 400, { error: 'Clips per video must be between 1 and 30.' });
     if (!Number.isFinite(minimum) || !Number.isFinite(maximum) || minimum < 3 || maximum > 180 || minimum >= maximum) return json(res, 400, { error: 'Choose a valid clip range between 3 and 180 seconds.' });
-    setClipSettings(currentUser, { clipsPerVideo: count, clipMinSeconds: minimum, clipMaxSeconds: maximum });
+    // More than one length preset may be picked; each band is a [min,max]
+    // pair inside the envelope the two fields above already carry.
+    let bands = [];
+    if (Array.isArray(body.clipLengthBands)) {
+      bands = body.clipLengthBands
+        .map(pair => [Math.round(Number(pair?.[0])), Math.round(Number(pair?.[1]))])
+        .filter(([lo, hi]) => Number.isFinite(lo) && Number.isFinite(hi) && lo >= 3 && hi <= 180 && lo < hi)
+        .slice(0, 6);
+    }
+    setClipSettings(currentUser, { clipsPerVideo: count, clipMinSeconds: minimum, clipMaxSeconds: maximum, clipLengthBands: bands });
     return json(res, 200, { ok: true, clipSettings: clipSettings(currentUser) });
   }
   if (method === 'POST' && pathname === '/api/automation-settings') {

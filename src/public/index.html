@@ -3501,6 +3501,119 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       }
     }
 
+    /* The template dropdown gave three names and no way to tell them apart.
+       This paints each saved template as a miniature of its own output --
+       colours, caption mode, position and grade all read from the template
+       record itself -- and turns the clip-length dropdown into multi-select
+       chips, because "30-45s AND 60-90s" is a real request a single range
+       cannot say. The design's two selects are hidden (data-host-style) but
+       keep their bindings; the cards drive the same setTpl/onClipSettings. */
+    const jobStyleEl=document.createElement('div');jobStyleEl.id='studioJobStyle';
+    /* Host-owned: this docks INSIDE the panel's own controls row, which the
+       patcher rebuilds -- an unmarked node there is reconciled away, and the
+       whole picker silently vanished on the next paint. */
+    jobStyleEl.setAttribute('data-host-owned','');
+    const LENGTH_BANDS=[[10,30,'Up to 30s'],[30,45,'30\u201345s'],[45,60,'45\u201360s'],[60,90,'60\u201390s']];
+    function tplMiniHtml(t){
+      const mono=t.filterPreset==='monochrome';
+      const pos=t.captionPosition==='top'?'16%':t.captionPosition==='bottom'?'64%':'42%';
+      const align=t.captionHorizontal==='left'?'flex-start':t.captionHorizontal==='right'?'flex-end':'center';
+      const pad=t.captionHorizontal==='left'?'padding-left:6px;':t.captionHorizontal==='right'?'padding-right:6px;':'';
+      const fam=`'${esc(t.captionFont||'Outfit')}',Outfit,Inter,sans-serif`;
+      const tt=t.captionUppercase?'text-transform:uppercase;':'';
+      let inner;
+      if(t.captionMode==='quran'){
+        inner=`<span style="font:400 10px 'Scheherazade New','Amiri',serif;color:#F2F2F4;line-height:1">\u0627\u0644\u0644\u0651\u064E\u0647\u064F \u0646\u064F\u0648\u0631\u064F</span>`
+          +'<span style="width:22px;height:2.5px;border-radius:2px;background:#8B8B93;opacity:.7;margin-top:3px"></span>';
+      }else if(t.captionMode==='word'){
+        inner=`<span style="font:700 7.5px ${fam};${tt}color:${esc(t.captionHighlight||'#FFFFFF')}">rest</span>`;
+      }else{
+        inner=`<span style="font:700 7px ${fam};${tt}color:${esc(t.captionHighlight||'#FFFFFF')}">the heart</span>`
+          +`<span style="font:700 7px ${fam};${tt}color:${esc(t.captionPrimary||'#9AA0A6')}">finds rest</span>`;
+      }
+      return `<span class="bgt-thumb" style="display:flex;flex-direction:column;align-items:${align};justify-content:flex-start;${pad}${mono?'filter:grayscale(1);':''}">`
+        +`<span style="display:flex;flex-direction:column;align-items:${align};margin-top:${pos};gap:1px;max-width:100%">${inner}</span></span>`;
+    }
+    function paintJobStyleRow(vals){
+      alive(jobStyleEl);
+      const open=Boolean(StudioAdapter.ui.job);
+      jobStyleEl.classList.toggle('hide',!open);
+      if(!open)return;
+      /* The two selects to replace, found by their own contents. */
+      const selects=[...document.querySelectorAll('#studio select')];
+      const tplNames=(DATA.templates||[]).map(t=>t.name);
+      const tplSelect=selects.find(el=>[...el.options].some(o=>tplNames.includes(o.value)));
+      const durSelect=selects.find(el=>el!==tplSelect&&[...el.options].every(o=>/s$/.test(o.value.trim())));
+      const row=tplSelect&&tplSelect.closest('label')&&tplSelect.closest('label').parentElement;
+      if(!row){jobStyleEl.classList.add('hide');return}
+      for(const el of [tplSelect,durSelect]){
+        const wrap=el&&el.closest('label');
+        if(wrap&&!wrap.hasAttribute('data-host-style')){wrap.setAttribute('data-host-style','');wrap.style.display='none'}
+      }
+      if(jobStyleEl.parentElement!==row.parentElement||jobStyleEl.previousElementSibling!==row){
+        row.parentElement.insertBefore(jobStyleEl,row.nextSibling);
+      }
+      const cs=(DATA.clipSettings||{});
+      let bands=Array.isArray(cs.clipLengthBands)&&cs.clipLengthBands.length?cs.clipLengthBands:null;
+      if(!bands){
+        /* No bands saved yet: light the preset the stored single range matches,
+           or the envelope's nearest. */
+        const hit=LENGTH_BANDS.find(([lo,hi])=>lo===cs.clipMinSeconds&&hi===cs.clipMaxSeconds);
+        bands=hit?[[hit[0],hit[1]]]:[[Number(cs.clipMinSeconds)||10,Number(cs.clipMaxSeconds)||90]];
+      }
+      const bandOn=(lo,hi)=>bands.some(b=>Number(b[0])===lo&&Number(b[1])===hi);
+      const active=vals.jobTpl||'';
+      const sig=[tplNames.join('.'),active,JSON.stringify(bands)].join('|');
+      if(jobStyleEl.dataset.sig===sig)return;
+      jobStyleEl.dataset.sig=sig;
+      jobStyleEl.style.cssText='display:block;margin:2px 0 0';
+      const pill=on=>'padding:6px 11px;border-radius:999px;font:500 11.5px Outfit,Inter,sans-serif;cursor:pointer;'
+        +'border:1px solid '+(on?'rgba(240,214,166,.9)':'#26262A')+';'
+        +'background:'+(on?'rgba(217,180,120,.14)':'#131315')+';color:'+(on?'#F0D6A6':'#A2A2AA')+';';
+      let html='<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin:10px 0 6px">Clip style</div>'
+        +'<div class="bgt-row">'
+        +(DATA.templates||[]).map(t=>{
+          const on=t.name===active;
+          return `<button type="button" class="bgt-card${on?' on':''}" data-tpl-name="${esc(t.name)}" title="${esc(t.description||t.name)}">`
+            +tplMiniHtml(t)
+            +`<span class="bgt-name">${esc(t.name)}</span></button>`;
+        }).join('')
+        +'</div>'
+        +'<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin:8px 0 6px">Clip length \u00b7 pick any</div>'
+        +'<div style="display:flex;gap:7px;flex-wrap:wrap">'
+        +LENGTH_BANDS.map(([lo,hi,label])=>`<button type="button" data-band="${lo}-${hi}" style="${pill(bandOn(lo,hi))}">${label}</button>`).join('')
+        +'</div>';
+      jobStyleEl.innerHTML=html;
+      jobStyleEl.querySelectorAll('[data-tpl-name]').forEach(b=>b.onclick=e=>{
+        e.preventDefault();
+        /* Through the design's own binding, clash-numbered exactly as its
+           option labels are, so behaviour cannot drift from the hidden select. */
+        const names=(DATA.templates||[]).map(x=>x.name);
+        const t=(DATA.templates||[]).find(x=>x.name===b.dataset.tplName);
+        const i=(DATA.templates||[]).indexOf(t);
+        const clash=names.filter(n=>n===t.name).length>1;
+        StudioAdapter.bindings(DATA).setTpl({target:{value:clash?t.name+' ('+(i+1)+')':t.name},preventDefault(){}});
+      });
+      jobStyleEl.querySelectorAll('[data-band]').forEach(b=>b.onclick=e=>{
+        e.preventDefault();
+        const [lo,hi]=b.dataset.band.split('-').map(Number);
+        /* A legacy single range that matches no preset is not a real chip;
+           the first press replaces it instead of dragging it along as an
+           invisible band that quietly widens the filter. */
+        const presets=bands.filter(x=>LENGTH_BANDS.some(([a,c])=>Number(x[0])===a&&Number(x[1])===c));
+        const base=presets.length?presets:[];
+        let next=base.filter(x=>!(Number(x[0])===lo&&Number(x[1])===hi));
+        if(next.length===base.length)next=[...base,[lo,hi]];
+        if(!next.length)return; /* at least one length stays chosen */
+        next=next.map(x=>[Number(x[0]),Number(x[1])]).sort((a,c)=>a[0]-c[0]);
+        StudioAdapter.onClipSettings({
+          clipMinSeconds:Math.min(...next.map(x=>x[0])),
+          clipMaxSeconds:Math.max(...next.map(x=>x[1])),
+          clipLengthBands:next,
+        });
+      });
+    }
+
     /* The Quran flow's background choice, docked under the kind cards.
        'own' plays the source video as always; 'stock' plays a background
        video for the whole clip; 'intro' opens on the source for a few seconds
@@ -4104,6 +4217,7 @@ function paintStudio(){
   paintEditorPlayer(vals);
   paintEditorLayout(vals);
   paintEditorScrub();
+  paintJobStyleRow(vals);
   paintEditorMissing();
   paintPreviewPlayer(vals);
   paintHighlight(vals);

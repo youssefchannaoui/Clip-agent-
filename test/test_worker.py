@@ -1236,3 +1236,25 @@ class SpeedPassTests(unittest.TestCase):
         self.assertIn('"ultrafast" if draft else "veryfast"', source)
         self.assertIn('854.0 / max(t_width, t_height)', source)
         self.assertIn('"renderQuality": "draft" if draft else "final"', source)
+
+
+class LengthBandTests(unittest.TestCase):
+    """More than one clip-length preset may be chosen."""
+
+    def _c(self, seconds):
+        return worker.Candidate(0.0, float(seconds), "text", [], 70, [], False)
+
+    def test_only_lengths_inside_a_chosen_band_survive(self):
+        cands = [self._c(20), self._c(38), self._c(52), self._c(75)]
+        kept = worker.filter_length_bands(cands, {"clipLengthBands": [[30, 45], [60, 90]]})
+        self.assertEqual([round(c.duration) for c in kept], [38, 75],
+                         "the 52s clip sits between the two chosen bands")
+
+    def test_no_bands_means_no_filtering(self):
+        cands = [self._c(20), self._c(75)]
+        self.assertEqual(len(worker.filter_length_bands(cands, {})), 2)
+
+    def test_bands_that_match_nothing_never_deliver_zero_clips(self):
+        cands = [self._c(20), self._c(75)]
+        kept = worker.filter_length_bands(cands, {"clipLengthBands": [[100, 120]]})
+        self.assertEqual(len(kept), 2, "a wrong length beats no clip at all")

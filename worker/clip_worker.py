@@ -621,6 +621,30 @@ def score_candidate(start: float, end: float, text: str, segments: list[dict[str
     return max(1, min(100, int(round(score)))), reasons[:4], quote_risk
 
 
+def filter_length_bands(candidates: list[Candidate], settings: dict[str, Any]) -> list[Candidate]:
+    """Keep candidates whose length falls inside ANY chosen band.
+
+    The panel lets more than one preset be picked -- "30-45s and 60-90s" is a
+    real request, and a single min/max envelope would quietly accept the 50s
+    clips the user excluded. A tolerance of 1.5s matches the envelope's own
+    slack. If the bands are so tight nothing survives, the unfiltered list is
+    used rather than delivering zero clips: a wrong length beats no clip.
+    """
+    raw = settings.get("clipLengthBands") or []
+    bands: list[tuple[float, float]] = []
+    for item in raw:
+        try:
+            lo, hi = float(item[0]), float(item[1])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if hi > lo > 0:
+            bands.append((lo, hi))
+    if not bands:
+        return candidates
+    banded = [c for c in candidates if any(lo - 1.5 <= c.duration <= hi + 1.5 for lo, hi in bands)]
+    return banded or candidates
+
+
 def build_candidates(segments: list[dict[str, Any]], minimum: float, maximum: float) -> list[Candidate]:
     candidates: list[Candidate] = []
     count = len(segments)
@@ -2393,11 +2417,11 @@ def process_more_clips(job: dict[str, Any], job_file: Path) -> None:
     requested = max(1, min(20, int(job.get("requestedCount") or settings.get("clipsPerVideo", 8))))
     progress("Loading saved lecture and transcript", 5, requestedClips=requested, reusedSource=True, reusedTranscript=True)
 
-    candidates = build_candidates(
+    candidates = filter_length_bands(build_candidates(
         segments,
         float(settings.get("clipMinSeconds", 20)),
         float(settings.get("clipMaxSeconds", 90)),
-    )
+    ), settings)
     progress("Removing moments already used", 25, candidateCount=len(candidates), requestedClips=requested)
     candidates = remove_existing_moments(candidates, list(job.get("existingRanges") or []))
     progress("Scoring unused moments", 40, candidateCount=len(candidates), requestedClips=requested)
@@ -2509,11 +2533,11 @@ def process(job_file: Path) -> None:
 
     progress("Analysing transcript", 61, sourceDurationSec=round(duration, 2), processedSec=round(duration, 2), etaSec=None)
     settings = job["settings"]
-    candidates = build_candidates(
+    candidates = filter_length_bands(build_candidates(
         segments,
         float(settings.get("clipMinSeconds", 20)),
         float(settings.get("clipMaxSeconds", 90)),
-    )
+    ), settings)
     progress("Finding and scoring clips", 69, candidateCount=len(candidates), etaSec=None)
     candidates = refine_with_ollama(candidates, settings)
     selected = select_candidates(candidates, int(settings.get("clipsPerVideo", 8)))

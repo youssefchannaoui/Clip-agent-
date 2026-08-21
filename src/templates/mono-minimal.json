@@ -20,7 +20,7 @@
   "captionBackground": "#000000",
   "captionBackgroundOpacity": 0,
   "captionPosition": "middle",
-  "captionHorizontal": "middle",
+  "captionHorizontal": "center",
   "captionMarginV": 180,
   "captionMarginH": 70,
   "captionMaxWords": 1,

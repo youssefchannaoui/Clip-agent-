@@ -179,3 +179,15 @@ test('watermark removal is a paid feature (isPaid drives the gate)', async () =>
   assert.equal(billing.isPaid({ id: 'p1', role: 'creator', billing: { plan: 'monthly' } }), true);
   assert.equal(billing.isPaid({ id: 'a1', role: 'owner', billing: {} }), true, 'the operator is never locked out');
 });
+
+test('every built-in survives the enum: no field silently falls back', () => {
+  // Mono Minimal shipped captionHorizontal "middle", which is not in the
+  // enum -- it became "right" and the greyscale style rendered off-centre
+  // instead of centred like its reference. Sanitising must be a no-op.
+  for (const template of templates.listTemplates(user)) {
+    const clean = templates.sanitiseTemplate(template, { id: template.id, builtIn: true });
+    for (const field of ['captionHorizontal', 'captionPosition', 'captionMode', 'fitMode', 'filterPreset']) {
+      assert.equal(clean[field], template[field], `${template.id}.${field} must be a valid value`);
+    }
+  }
+});

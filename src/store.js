@@ -20,6 +20,7 @@ export function settingDefaults() {
       clipsPerVideo: config.clipsPerVideo,
       clipMinSeconds: config.clipMinSeconds,
       clipMaxSeconds: config.clipMaxSeconds,
+      clipLengthBands: [],
     },
     musicSettings: {
       required: true,
