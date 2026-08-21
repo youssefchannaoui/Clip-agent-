@@ -1277,13 +1277,28 @@ class SubtitleBurnFilterTests(unittest.TestCase):
 class AyahFaceTests(unittest.TestCase):
     """The ayah face must render Tanzil Uthmani text correctly."""
 
-    def test_the_kfgqpc_face_is_not_preferred_for_tanzil_text(self):
-        # KFGQPC HAFS is cut for KFGQPC's own encoding: against this corpus its
-        # Uthmani marks shape as dotted-circle placeholders (U+06DF appears
-        # 3988 times), which rendered a white ring mid-ayah.
+    def test_the_mushaf_face_leads_and_drops_only_what_it_cannot_attach(self):
+        # KFGQPC HAFS is the face the reference clips use and the one to keep.
+        # It cannot attach ten Uthmani marks against this corpus -- measured by
+        # rendering each after a bare alef -- so those are stripped for this
+        # face only. Every other face keeps the full orthography.
         source = (ROOT / "worker" / "clip_worker.py").read_text(encoding="utf-8")
         order = source.split('for candidate in (')[1].split(')')[0]
-        self.assertLess(order.index('"Amiri"'), order.index('"KFGQPC HAFS Uthmanic Script"'))
+        self.assertLess(order.index('"KFGQPC HAFS Uthmanic Script"'), order.index('"Amiri"'))
+
+        ayah = "قُتِلُوا۟ فِى سَبِيلِ"          # carries U+06DF, the white ring
+        hafs = worker.strip_unattachable_marks(ayah, "KFGQPC HAFS Uthmanic Script")
+        self.assertNotIn("\u06DF", hafs, "the mark HAFS draws beside the word is dropped")
+        self.assertIn("قُتِلُوا", hafs, "the word itself is untouched")
+        self.assertEqual(worker.strip_unattachable_marks(ayah, "Amiri"), ayah,
+                         "a face that can attach it keeps it")
+
+    def test_only_marks_are_ever_dropped_never_letters(self):
+        # Nothing in the strip list may be a letter: this is orthography, not
+        # scripture, and the distinction has to hold automatically.
+        for ch in worker.UNATTACHABLE_IN_KFGQPC:
+            self.assertTrue(0x0610 <= ord(ch) <= 0x061A or 0x06D6 <= ord(ch) <= 0x06ED,
+                            f"U+{ord(ch):04X} is outside the Arabic mark ranges")
 
     def test_face_sizes_come_from_measured_ink(self):
         # Equal nominal size must mean equal size on screen. The entries are

@@ -870,15 +870,6 @@ def installed_families() -> set[str]:
 def quran_font(fallback: str) -> str:
     """The face an ayah is set in.
 
-    NOT the KFGQPC faces, despite them being the mushaf look. The KFGQPC
-    fonts are cut for KFGQPC's OWN text encoding; fed the Tanzil Uthmani text
-    this corpus carries, most letters set correctly but the Uthmani marks do
-    not attach -- U+06DF (small high rounded zero, 3988 occurrences) shapes
-    as a dotted-circle placeholder, so every "قتلوا۟" rendered a large white
-    ring mid-ayah. Amiri, drawn against ordinary Unicode Arabic, attaches the
-    same mark correctly and still draws U+06DD as the ornamented medallion.
-    Verified by rendering the identical string in both faces.
-
     Ordinary Arabic and Quranic Arabic are not the same typographic job. A
     mushaf face carries the full tashkeel and, critically, draws U+06DD as the
     ornamented circle with the verse number inside it; a general Arabic face
@@ -895,13 +886,12 @@ def quran_font(fallback: str) -> str:
     # and renders at sane metrics. Amiri Quran, despite the name, reserves so
     # much vertical room for stacked marks that rendered frames came out at a
     # quarter of the expected size.
-    # Amiri leads again. KFGQPC HAFS is the Madinah mushaf's own digital face
-    # and looks the part, but it is cut for KFGQPC's text encoding: against
-    # the Tanzil Uthmani text this corpus ships, its Uthmani marks fail to
-    # attach and shape as dotted-circle placeholders. Correct scripture beats
-    # a closer typeface, so HAFS is last -- reachable only if nothing else is
-    # installed, where a ring is still better than no Arabic at all.
-    for candidate in ("Amiri", "Scheherazade New", "Scheherazade", "KFGQPC HAFS Uthmanic Script"):
+    # KFGQPC HAFS first: it is the Madinah mushaf's own digital face, the one
+    # the reference clips are set in, and its U+06DD is the full ornamented
+    # medallion with the verse number inside. It cannot attach ten of the
+    # Uthmani marks in this corpus (see UNATTACHABLE_IN_KFGQPC); those are
+    # dropped at render time rather than drawn as detached blobs.
+    for candidate in ("KFGQPC HAFS Uthmanic Script", "Amiri", "Scheherazade New", "Scheherazade"):
         if candidate in families:
             return candidate
     return fallback
@@ -940,6 +930,41 @@ AYAH_SIZE_SCALE = 3.54
 # the inverse of that ink, so every face reaches the same size on screen. The
 # old numbers came from OS/2 metrics and left Scheherazade twice too large and
 # Amiri a fifth too small.
+# Uthmani marks the KFGQPC faces cannot attach to their base letter.
+#
+# Measured, not guessed: each mark was rendered after a bare alef and the ink
+# width compared with the alef alone. Twenty marks attach within a few pixels;
+# these ten add 13-46px because the face draws them as SPACING glyphs, so they
+# land beside the word instead of above it -- the large white ring that showed
+# up mid-ayah was U+06DF doing exactly that, 3988 times across the Quran.
+#
+# They are dropped from the ayah text when a KFGQPC face is used. All ten are
+# orthographic aids -- the silent-letter circle, waqf (pause) signs, the small
+# waw/yeh pronunciation letters, the rub-el-hizb and sajdah ornaments. No
+# letter and no word of the ayah changes; only these annotations are omitted,
+# and only for this face. Amiri and Scheherazade attach all of them, so a
+# template set in either keeps the full Uthmani orthography.
+UNATTACHABLE_IN_KFGQPC = {
+    "\u06DF",  # small high rounded zero (silent letter)      3988
+    "\u06D6",  # small high sad-lam-alef maksura (waqf)       1682
+    "\u06E5",  # small waw                                    1257
+    "\u06E6",  # small yeh                                     995
+    "\u06D7",  # small high qaf-lam-alef maksura (waqf)        603
+    "\u06DE",  # start of rub el hizb                          199
+    "\u06E9",  # place of sajdah                                15
+    "\u06DC",  # small high seen                                 7
+    "\u06EB",  # empty centre high stop                          1
+    "\u06E3",  # small low seen                                  1
+}
+
+
+def strip_unattachable_marks(text: str, face: str) -> str:
+    """Drop marks the chosen face would draw beside the word instead of above."""
+    if "KFGQPC" not in str(face):
+        return text
+    return "".join(ch for ch in str(text) if ch not in UNATTACHABLE_IN_KFGQPC)
+
+
 AYAH_FONT_CELL = {
     "KFGQPC HAFS Uthmanic Script": 1.587,
     "Amiri": 2.941,
@@ -981,7 +1006,7 @@ def ornament_text(face: str, ayah: int) -> str:
 
 def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: float,
                 latin_font: str, translation_size: int, show_translation: bool,
-                ayah_size: int = 0, mark_size: int = 0) -> list[str]:
+                ayah_size: int = 0, mark_size: int = 0, ayah_font: str = "") -> list[str]:
     """The Dialogue lines carrying an ayah, a short phrase at a time.
 
     Modelled on the reference clips: a long ayah is not held on screen as one
@@ -1003,7 +1028,10 @@ def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: floa
     separate Translation event had its MarginV ignored by the middle alignment
     and was hidden behind the Arabic.
     """
-    words = str(found["arabic"]).split()
+    # Marks the chosen face cannot attach are dropped here, at the last
+    # moment before the text becomes an ASS event, so the corpus itself is
+    # never altered and any other face still gets the full orthography.
+    words = strip_unattachable_marks(str(found["arabic"]), ayah_font).split()
     if not words:
         return []
     chunk_count = max(1, -(-len(words) // AYAH_MAX_WORDS))  # ceil
@@ -1441,6 +1469,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     latin_font=font, translation_size=translation_size,
                     show_translation=show_translation, ayah_size=ayah_size,
                     mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))),
+                    ayah_font=ayah_font,
                 ))
             if captioned:
                 emit("progress", stage="Matching recited ayahs", progress=72,
@@ -1509,6 +1538,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             latin_font=font, translation_size=translation_size,
             show_translation=bool(template.get("captionTranslation", True)), ayah_size=ayah_size,
             mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))),
+            ayah_font=ayah_font,
         ))
     ass_file.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
     return matched_ayahs

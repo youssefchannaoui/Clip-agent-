@@ -50,7 +50,7 @@
   "smartFramingBias": "auto",
   "smartFramingPadding": 0.18,
   "smartFramingZoom": 1.0,
-  "captionArabicFont": "Amiri",
+  "captionArabicFont": "KFGQPC HAFS Uthmanic Script",
   "captionTranslation": true,
   "captionTranslationSize": 56,
   "captionPopScale": 100,
