@@ -2742,3 +2742,47 @@ test('the chosen nasheed travels with the job', () => {
   StudioAdapter.ui.jobTrackId = null;
   StudioAdapter.onGenerate = () => {};
 });
+
+test('the editor previews the render itself, not a browser imitation of it', () => {
+  // CLAUDE.md: one timeline origin. The editor used to play the uncaptioned
+  // source with CSS captions drawn over it -- a second rendering engine that
+  // could never agree with libass on line breaking, spacing, outline or word
+  // timing, and whose clip-local overlay drifted against a whole-lecture
+  // video. It plays the rendered clip now.
+  const state = JSON.parse(JSON.stringify(SAMPLE_STATE));
+  const clip = state.clips[0];
+  StudioAdapter.ui.screen = 'editor';
+  StudioAdapter.ui.edClipId = clip.id;
+  StudioAdapter.ui.edSourceFallback = false;
+  const vals = StudioAdapter.bindings(state);
+  assert.match(vals.edVideoUrl, /\/video\?rv=/, 'the rendered clip, cache-busted by render version');
+  assert.doesNotMatch(vals.edVideoUrl, /source-preview/);
+  assert.equal(vals.edStartSec, 0, 'the render IS the clip: no offset arithmetic');
+  assert.equal(vals.edCapWords.length, 0, 'no CSS captions are drawn over the render');
+  assert.equal(vals.edSourceNote, '', 'nothing to warn about while the render plays');
+
+  // The fallback stays, and says what it is.
+  StudioAdapter.ui.edSourceFallback = true;
+  const fallback = StudioAdapter.bindings(state);
+  assert.match(fallback.edVideoUrl, /source-preview/);
+  assert.match(fallback.edSourceNote, /uncaptioned source/i, 'labelled, never passed off as the clip');
+  assert.equal(fallback.edStartSec, Number(clip.startSec) || 0, 'only this path needs the offset');
+  StudioAdapter.ui.edSourceFallback = false;
+  StudioAdapter.ui.screen = 'home';
+  StudioAdapter.ui.edClipId = null;
+});
+
+test('the caption overlay is a positioning ghost, loud only while dragging', () => {
+  const state = JSON.parse(JSON.stringify(SAMPLE_STATE));
+  StudioAdapter.ui.screen = 'editor';
+  StudioAdapter.ui.edClipId = state.clips[0].id;
+  const idle = StudioAdapter.bindings(state).edCapOverlayStyle;
+  assert.match(idle, /dashed/, 'a faint handle at rest');
+  assert.doesNotMatch(idle, /font-family/, 'it carries no type from the template');
+  StudioAdapter.ui.dragKind = 'caption';
+  const dragging = StudioAdapter.bindings(state).edCapOverlayStyle;
+  assert.match(dragging, /solid rgba\(240,214,166/, 'and fills while the drag is live');
+  StudioAdapter.ui.dragKind = null;
+  StudioAdapter.ui.screen = 'home';
+  StudioAdapter.ui.edClipId = null;
+});

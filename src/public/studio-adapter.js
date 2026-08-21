@@ -92,7 +92,12 @@
     // back to the captioned export. The overlay caption hides in that state,
     // because the export already has captions burned into the picture and two
     // sets on screen is worse than none of your own.
-    edBurned: false,
+    // The editor shows the RENDER. This latch is set only when that file
+    // genuinely cannot be played, and it puts the uncaptioned source on
+    // screen with a label saying so. It used to be the other way round: the
+    // source was the default and the render the fallback, which is why the
+    // editor and the review queue never looked the same.
+    edSourceFallback: false,
     edBlockDraft: null,
     edDirty: false,
     edSaving: false,
@@ -1716,6 +1721,8 @@
     // is only written on release, so without this the overlay would sit still
     // while being dragged.
     var edCapDragY = UI.dragPreview && UI.dragPreview.kind === 'caption' ? UI.dragPreview.y : null;
+    // Set by the host only when the rendered file fails to play.
+    var edSourceFallback = Boolean(UI.edSourceFallback);
 
     var job = UI.job;
     // A nasheed under Quran recitation is not a style choice, so the Quran
@@ -2351,32 +2358,10 @@
       edCapIsAyah: Boolean(edAyahPhrase),
       edCapTranslation: edAyahPhrase ? edAyahPhrase.gloss : '',
       edCapWords: (function () {
-        if (!overlayBlock || UI.edBurned) return [];
-        if (edAyahPhrase) return [{ text: edAyahPhrase.text, style: '' }];
-        var raw = rawBlocks[edLiveIndex >= 0 ? edLiveIndex : UI.edBlock] || null;
-        var text = String(overlayBlock.text || '').trim();
-        if (!text) return [];
-        var all = text.split(/\s+/);
-        var timed = raw && raw.start !== null && raw.start !== undefined;
-        var span = timed ? Math.max(0.2, raw.end - raw.start) : 0;
-        var through = timed ? Math.max(0, Math.min(1, (edTime - raw.start) / span)) : 0;
-        var at = timed ? Math.min(all.length - 1, Math.floor(through * all.length)) : -1;
-
-        // The same three modes the renderer has: one word, the whole line, or a
-        // stack of a few. Shown from the same template fields the export reads.
-        var mode = tpl.captionMode;
-        var shown = all; var offset = 0;
-        if (mode === 'word' && at >= 0) { shown = [all[at]]; offset = at; }
-        else if (mode !== 'phrase') {
-          var per = Math.max(1, Math.min(8, Number(tpl.captionStackMaxWords) || Number(tpl.captionMaxWords) || 4));
-          var chunk = Math.max(0, Math.floor((at < 0 ? 0 : at) / per));
-          shown = all.slice(chunk * per, chunk * per + per);
-          offset = chunk * per;
-        }
-        return shown.map(function (word, i) {
-          var on = (offset + i) === at;
-          return { text: word, style: on ? captionHighlightStyle(tpl) : '' };
-        });
+        // Nothing. The render already carries its captions; a second set drawn
+        // in CSS is the imitation this whole path exists to stop. The box is a
+        // positioning control now, not a preview -- see edCapOverlayStyle.
+        return [];
       }()),
       edProgress: edTime / edDuration,
       // This element IS the preview frame and establishes the containing block
@@ -2407,10 +2392,16 @@
       // The editor used to centre unconditionally (ignoring captionHorizontal
       // and captionMarginH), size by a different divisor, and skip the pop --
       // so the two previews could not agree even on a freshly opened clip.
+      // A positioning ghost, never a preview. Idle it is a faint dashed
+      // rectangle marking the draggable caption area over the real render;
+      // during a drag it fills and brightens to say "this is where it will
+      // land". It carries no text, no font and no colour from the template --
+      // those questions are answered by the render underneath it.
       edCapOverlayStyle: 'z-index: 8; ' + captionPlacementStyle(tpl, edCapDragY)
-        + (edAyahPhrase ? ayahFaceStyle(tpl) : captionFaceStyle(tpl))
-        + capInkStyle(tpl)
-        + (UI.edBurned ? ' display: none;' : ''),
+        + ' box-sizing: border-box; border-radius: 10px; pointer-events: auto; cursor: grab;'
+        + (UI.dragKind === 'caption'
+          ? ' border: 1.5px solid rgba(240,214,166,.95); background: rgba(217,180,120,.16); box-shadow: 0 0 0 3px rgba(240,214,166,.12); min-height: 46px;'
+          : ' border: 1px dashed rgba(240,214,166,.34); background: transparent; min-height: 40px;'),
       // The translation line under an ayah, styled the way the render's own
       // \fn+\fs override styles it. The painter used to hardcode .46em in a
       // face the template never chose.
@@ -2423,16 +2414,19 @@
       edRenderNotice: (function () {
         if (!edClipRecord) return '';
         var job = edClipRecord.rerender;
+        // The preview IS the render now, so this reports the only thing that
+        // matters while it is behind: how long until what you see is what you
+        // changed.
         if (job && (job.status === 'queued' || job.status === 'processing')) {
           var pct = Math.max(0, Math.min(100, Math.round(Number(job.progress) || 0)));
-          return job.status === 'queued' ? 'Re-rendering with your changes — queued…'
-            : 'Re-rendering with your changes — ' + pct + '%';
+          return job.status === 'queued' ? 'Updating preview — queued…'
+            : 'Updating preview — ' + pct + '%';
         }
         if (job && job.status === 'failed') {
-          return 'The automatic re-render failed: ' + (job.error || 'unknown error') + ' — Save retries it.';
+          return 'The preview could not be updated: ' + (job.error || 'unknown error') + ' — Save retries it.';
         }
         if (edClipRecord.stylePending || edClipRecord.templateOutdated) {
-          return 'Preview shows the next render — it will re-render automatically a few seconds after you stop editing.';
+          return 'Preview is one render behind — it updates a few seconds after you stop editing.';
         }
         return '';
       }()),
@@ -2623,17 +2617,34 @@
       //
       // The rendered export has captions burned into the picture, so previewing
       // it under the editor's own caption overlay shows the same words twice.
-      // The clean source -- the lecture before any captions -- is what the
-      // editor should draw on, with the clip's own range played out of it.
-      // Falling back to the export is supported (an old lecture's source may be
-      // gone); the overlay hides in that case rather than doubling up.
-      edVideoUrl: edClip ? (UI.edBurned ? (edClip.videoUrl || '') : '/api/clips/' + encodeURIComponent(edClip.id) + '/source-preview') : '',
+      // ONE video, ONE origin, ONE set of captions (CLAUDE.md's "one timeline
+      // origin" rule). The editor plays the rendered clip -- the same file the
+      // review queue plays, captions burned by libass at full size -- so what
+      // is on screen is what ships. Drawing the lecture's clean source and
+      // painting CSS captions over it made two engines disagree about line
+      // breaking, spacing, outline and word timing, which is what "the preview
+      // looks nothing like the export" always was.
+      //
+      // Served through the app's own path rather than the storage URL so the
+      // render version can bust the cache: a fresh draft must replace what is
+      // on screen, and a signed bucket URL cannot carry an extra query.
+      edVideoUrl: !edClip ? '' : (edSourceFallback
+        ? '/api/clips/' + encodeURIComponent(edClip.id) + '/source-preview'
+        : '/api/clips/' + encodeURIComponent(edClip.id) + '/video?rv='
+          + encodeURIComponent(String(edClip.renderVersion || 1) + '.' + String(edClip.renderQuality || 'final'))),
       edExportUrl: edClip ? edClip.videoUrl || '' : '',
-      edBurned: Boolean(UI.edBurned),
-      // Where this clip sits inside the lecture. A clean plate is the whole
-      // lecture, so every seek is offset by this; the export is already cut and
-      // starts at zero.
-      edStartSec: (edClip && !UI.edBurned) ? Number(edClip.startSec) || 0 : 0,
+      // True only while the fallback is on screen; the host labels the frame
+      // so the uncaptioned source can never be mistaken for the clip.
+      edSourceFallback: edSourceFallback,
+      edSourceNote: edSourceFallback
+        ? 'Uncaptioned source — this clip has no rendered file yet'
+        : '',
+      edIsDraft: Boolean(edClip && edClip.renderQuality === 'draft' && !edSourceFallback),
+      // Clip-local time. The rendered clip IS the clip: it starts at zero and
+      // its timeline equals the clip's, so there is no offset arithmetic on
+      // this path at all. Only the clean-source fallback plays the whole
+      // lecture and needs the clip's start subtracted.
+      edStartSec: (edClip && edSourceFallback) ? Number(edClip.startSec) || 0 : 0,
       edPoster: edClip ? edClip.thumbUrl || '' : '',
       edPlaying: Boolean(UI.edPlaying),
       edPlayIcon: UI.edPlaying ? 'ph ph-pause' : 'ph ph-play',

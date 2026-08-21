@@ -2342,7 +2342,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          it into burned mode too. Same for the missing-file flag below. */
       if(StudioAdapter.ui.edClipId!==edVideoClip){
         edVideoClip=StudioAdapter.ui.edClipId;
-        StudioAdapter.ui.edBurned=false;
+        StudioAdapter.ui.edSourceFallback=false;
         StudioAdapter.ui.edVideoMissing=false;
         /* The template picked for the previous clip must not leak onto this
            one -- the override only bridges pick-to-render for one clip. */
@@ -2415,7 +2415,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
            A one-way latch: the export must not then fail back to the source it
            just replaced. */
         edVideoNode.onerror=()=>{
-          if(StudioAdapter.ui.edBurned){
+          if(StudioAdapter.ui.edSourceFallback){
             /* The fallback failed too: no clean plate AND no rendered export.
                Silence here was a black box; say so, and offer the way out. */
             if(!StudioAdapter.ui.edVideoMissing){
@@ -2424,7 +2424,10 @@ function studioWanted(){return window.STUDIO_SHELL===true}
             }
             return;
           }
-          StudioAdapter.ui.edBurned=true;
+          /* The render would not play -- it may not exist yet. Fall back to
+             the lecture's clean source, which the frame then LABELS as the
+             uncaptioned source rather than passing it off as the clip. */
+          StudioAdapter.ui.edSourceFallback=true;
           paintStudio();
         };
         edVideoNode.addEventListener('loadeddata',()=>{
@@ -2462,17 +2465,42 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       /* Framing, matching what the renderer will do: contain for Full and
          Blur (the whole video is visible), cover for Fill, with the crop
          zoom applied on top. */
-      const fit=vals.edVideoFit||'cover';
-      const zoom=Number(vals.edVideoZoom)||1;
+      /* The rendered clip is already framed, graded and 9:16 -- applying the
+         template's fit, zoom, blur backdrop, filter, vignette and grain on top
+         of it would double every one of them. Those treatments exist to
+         approximate the render on the CLEAN SOURCE, so they only run there. */
+      const onRender=!vals.edSourceFallback;
+      const fit=onRender?'contain':(vals.edVideoFit||'cover');
+      const zoom=onRender?1:(Number(vals.edVideoZoom)||1);
       if(edVideoNode.style.objectFit!==fit)edVideoNode.style.objectFit=fit;
       const want=zoom===1?'':`scale(${zoom})`;
       if(edVideoNode.style.transform!==want)edVideoNode.style.transform=want;
       /* The Look grade on the real footage -- the same preset+warmth maths the
          renderer runs, as CSS. Without this every Look control read as dead in
          the editor: the export changed, the preview never did. */
-      const filt=vals.edVideoFilter||'';
+      const filt=onRender?'':(vals.edVideoFilter||'');
       if(edVideoNode.style.filter!==filt)edVideoNode.style.filter=filt;
-      paintEditorGrade(vals,frame);
+      paintEditorGrade(onRender?{...vals,edVideoBlurBg:false,edVideoVignette:0,edVideoGrain:0}:vals,frame);
+      paintEditorSourceNote(vals,frame);
+    }
+
+    /* The fallback's own label. When the render cannot be played the editor
+       shows the lecture's clean source -- useful, but it is NOT the clip, so
+       it says so on the frame instead of quietly looking wrong. */
+    let edSrcNoteEl=null;
+    function paintEditorSourceNote(vals,frame){
+      const note=vals.edSourceNote||'';
+      if(!note||!frame){if(edSrcNoteEl){edSrcNoteEl.remove();edSrcNoteEl=null}return}
+      if(!edSrcNoteEl||!edSrcNoteEl.isConnected||edSrcNoteEl.parentElement!==frame){
+        if(edSrcNoteEl)edSrcNoteEl.remove();
+        edSrcNoteEl=document.createElement('div');
+        edSrcNoteEl.setAttribute('data-host-owned','');
+        edSrcNoteEl.style.cssText='position:absolute;left:8px;right:8px;top:8px;z-index:9;padding:5px 8px;'
+          +'border-radius:8px;border:1px solid rgba(230,183,112,.4);background:rgba(10,10,12,.86);'
+          +'color:#E6B770;font:600 10px Outfit,Inter,sans-serif;text-align:center;pointer-events:none';
+        frame.appendChild(edSrcNoteEl);
+      }
+      if(edSrcNoteEl.textContent!==note)edSrcNoteEl.textContent=note;
     }
 
     /* Host-drawn layers the video element cannot carry itself: the blurred
@@ -2819,6 +2847,18 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(vals.edCapIsAyah&&vals.edCapTranslation){
         want+=`<span style="${esc(vals.edCapGlossStyle||'display:block;font-size:.46em;opacity:.92;margin-top:.35em')}">${esc(vals.edCapTranslation)}</span>`;
       }
+      /* The ghost's only text: what is being positioned, shown while the
+         drag is live. Never the caption's own words -- those belong to the
+         render underneath. */
+      if(!vals.edCapWords||!vals.edCapWords.length){
+        const dragging=StudioAdapter.ui.dragKind==='caption';
+        const ghost=dragging
+          ? `<span style="font:600 10px Outfit,Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#F0D6A6;opacity:.9">Caption position</span>`
+          : '';
+        if(span.dataset.words!==ghost){span.dataset.words=ghost;span.innerHTML=ghost}
+        span.style.cssText='display:flex;align-items:center;justify-content:center;width:100%;height:100%;pointer-events:none';
+        return;
+      }
       if(span.dataset.words!==want){
         span.dataset.words=want;span.innerHTML=want;
         /* The render's phrase fade (ayah_events \fad 550ms), previewed: each
@@ -2883,6 +2923,10 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(playerVideoNode.dataset.src!==clip.videoUrl){
         playerVideoNode.dataset.src=clip.videoUrl;
         playerVideoNode.src=/^https?:/i.test(clip.videoUrl)?clip.videoUrl:withPw(clip.videoUrl);
+        /* The render's own first frame while it loads, so the modal opens on
+           the clip rather than on a black rectangle -- and so this surface and
+           the editor show the same picture at rest. */
+        if(clip.thumbUrl)playerVideoNode.poster=/^https?:/i.test(clip.thumbUrl)?clip.thumbUrl:withPw(clip.thumbUrl);
         /* The modal opened from a click, so playing with sound is permitted;
            if the browser refuses anyway the native controls are right there. */
         const p=playerVideoNode.play();if(p&&p.catch)p.catch(()=>{});
