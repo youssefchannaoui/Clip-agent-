@@ -1258,3 +1258,17 @@ class LengthBandTests(unittest.TestCase):
         cands = [self._c(20), self._c(75)]
         kept = worker.filter_length_bands(cands, {"clipLengthBands": [[100, 120]]})
         self.assertEqual(len(kept), 2, "a wrong length beats no clip at all")
+
+
+class SubtitleBurnFilterTests(unittest.TestCase):
+    """Arabic needs complex shaping, and only one of the two filters offers it."""
+
+    def test_captions_burn_through_the_ass_filter_with_complex_shaping(self):
+        template = {"width": 1080, "height": 1920, "fitMode": "crop", "filterPreset": "natural"}
+        graph = worker.build_video_filter(template, pathlib.Path("/tmp/x.ass"))
+        self.assertIn("ass='", graph)
+        self.assertIn("shaping=complex", graph)
+        # `subtitles` has no shaping option: through it, libass loses complex
+        # shaping and Uthmanic Arabic renders as bare diacritics with every
+        # base letter missing. Never go back to it.
+        self.assertNotIn("subtitles=", graph)

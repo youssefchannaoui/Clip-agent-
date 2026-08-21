@@ -1913,7 +1913,17 @@ def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict
     grain = max(0.0, min(100.0, float(template.get("grain", 0))))
     if grain > 0:
         filters.append(f"noise=alls={max(1, int(round(grain * 0.4)))}:allf=t+u")
-    filters.append(f"subtitles='{subtitle}'")
+    # The `ass` filter, not `subtitles`, and complex shaping stated outright.
+    #
+    # They are not interchangeable. `subtitles` routes the file through
+    # libavcodec's ASS decoder and exposes no `shaping` option; in that path
+    # complex-script shaping is lost, and Arabic renders with its base letters
+    # missing -- only the tashkeel and the verse medallion survive. Latin text
+    # is unaffected, which is why this hid for so long: every Quran clip has
+    # been shipping as floating diacritics while the English translation under
+    # it looked perfect. Proven by rendering one identical .ass through both
+    # filters (ass= correct, subtitles= letterless).
+    filters.append(f"ass='{subtitle}':shaping=complex")
     if bool(template.get("brandLineEnabled", False)):
         color = str(template.get("brandLineColor", "#D9B478")).replace("#", "0x")
         line_height = int(template.get("brandLineHeight", 8))
