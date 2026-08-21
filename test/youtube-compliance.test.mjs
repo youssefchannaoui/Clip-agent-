@@ -142,3 +142,22 @@ test('the privacy policy names the API calls, the retention and the way out', as
     assert.ok(html.includes(needle), `privacy policy must state: ${needle}`);
   }
 });
+
+test('the URL-processing section describes production, not the local-mode path', async () => {
+  // This section goes to Google as part of a ToS response, so it must match
+  // the running configuration: WORKER_BASE_URL is set in production, which
+  // makes processingMode "remote", and the worker's verified provider chain
+  // is socialkit -> ytdlp. Vizard is only reachable in local mode.
+  const marketing = await import('../src/marketing.js');
+  const html = marketing.privacy({ base: 'https://deenclipped.online', currentUser: null });
+  const section = html.slice(html.indexOf('YouTube URL processing'), html.indexOf('Security and storage'));
+  assert.match(section, /SocialKit/, 'names the provider production actually calls');
+  assert.match(section, /api\.socialkit\.dev/, 'and the endpoint');
+  assert.match(section, /No Google credentials are sent/i);
+  // Vizard may be mentioned only as the non-production path.
+  const vizardAt = section.indexOf('Vizard');
+  assert.ok(vizardAt === -1 || /self-hosted copy[\s\S]*Vizard/.test(section),
+    'Vizard may only appear framed as the self-hosted/local path');
+  assert.ok(section.indexOf('SocialKit') < (vizardAt === -1 ? Infinity : vizardAt),
+    'production path is described first');
+});
