@@ -392,6 +392,36 @@ class QuranCaptionTests(unittest.TestCase):
         self.assertIn("هَيْهَاتَ", text)
         self.assertIn("Far, very far", text, "the translation goes under it")
 
+    def test_a_re_render_passage_becomes_consecutive_ayat(self):
+        """One segment holding several ayat is what a re-render always sends.
+
+        `process_rerender` rebuilds a single segment from the clip's stored
+        transcript, so the matcher is handed the whole recitation at once.
+        Before match_sequence() this scored nothing and the clip lost its
+        medallion and translation to plain wrapped captions.
+        """
+        passage = " ".join(a["arabic"] for a in self.AYAHS)
+        text = self._render([{"start": 0.0, "end": 12.0, "text": passage}])
+        self.assertIn("هَيْهَاتَ", text)
+        self.assertIn("سَعَىٰ", text, "the second ayah is captioned too")
+        self.assertIn("۝٣٦", text)
+        self.assertIn("۝٣٩", text, "each ayah keeps its own end mark")
+        self.assertIn("Far, very far", text)
+        self.assertIn("what he strives for", text)
+
+    def test_the_speaker_between_two_ayat_is_still_captioned(self):
+        """An aside between two verses must not vanish.
+
+        Emitting only the matched spans would leave the screen blank for
+        however long the speaker talks between them.
+        """
+        aside = "and my brothers listen closely to what follows"
+        passage = f'{self.AYAHS[0]["arabic"]} {aside} {self.AYAHS[1]["arabic"]}'
+        text = self._render([{"start": 0.0, "end": 20.0, "text": passage}])
+        self.assertIn("brothers", text, "the aside is captioned between the ayat")
+        self.assertIn("هَيْهَاتَ", text)
+        self.assertIn("سَعَىٰ", text)
+
     def test_the_verse_number_is_drawn_in_the_mushaf_ornament(self):
         text = self._render([{"start": 0.0, "end": 4.0, "text": "وان ليس للانسان الا ما سعى"}])
         self.assertIn("۝٣٩", text, "end-of-ayah mark with Arabic-Indic digits")

@@ -1469,9 +1469,37 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     # its translation and its line breaks.
                     passage = corpus.match_sequence(seg_text) if hasattr(corpus, "match_sequence") else []
                     if passage:
-                        seg_words = max(1, len(seg_text.split()))
+                        all_words = seg_text.split()
+                        seg_words = max(1, len(all_words))
                         span = max(0.1, end - start)
+
+                        def word_time(word_index: int) -> float:
+                            return start + span * (min(word_index, seg_words) / seg_words)
+
+                        # Whatever sits between two ayat is the speaker talking,
+                        # and it still has to be captioned -- emitting only the
+                        # matched spans would leave the clip silent through
+                        # every aside.
+                        def caption_gap(first: int, last: int) -> None:
+                            gap = all_words[first:last]
+                            if not gap:
+                                return
+                            gap_start, gap_end = word_time(first), word_time(last)
+                            if gap_end - gap_start < 0.35:
+                                return
+                            line = mixed_script_line(
+                                wrap_caption(" ".join(gap), 28),
+                                font=font, arabic_font=arabic_font, uppercase=uppercase,
+                            )
+                            events.append(
+                                f"Dialogue: 2,{ass_time(gap_start)},{ass_time(gap_end)},"
+                                f"Caption,,0,0,0,,{fade_tag}{line}"
+                            )
+
+                        cursor = 0
                         for piece in passage:
+                            caption_gap(cursor, piece["wordStart"])
+                            cursor = piece["wordEnd"]
                             piece_start = start + span * (piece["wordStart"] / seg_words)
                             piece_end = start + span * (piece["wordEnd"] / seg_words)
                             if piece_end <= piece_start:
@@ -1492,6 +1520,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                                 mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))),
                                 ayah_font=ayah_font,
                             ))
+                        caption_gap(cursor, seg_words)
                         continue
                     # Arabic that is not a match -- the speaker's own words in
                     # either language -- still has to render in a face that can

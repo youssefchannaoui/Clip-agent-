@@ -161,28 +161,33 @@ class Corpus:
             for size in (6, 10, 14, 20, 28, 40):
                 if index + 3 > len(words):
                     break
-                window = " ".join(words[index:index + size])
-                hit = self.match(window, minimum=minimum)
+                window = words[index:index + size]
+                hit = self.match(" ".join(window), minimum=minimum)
                 if not hit:
                     continue
+                span = _covered_span(window, hit["arabic"])
+                if span is None:
+                    continue
                 score = difflib.SequenceMatcher(
-                    None, normalise(window), normalise(hit["arabic"])).ratio()
+                    None, normalise(" ".join(window[span[0]:span[1]])),
+                    normalise(hit["arabic"])).ratio()
                 if best is None or score > best["score"]:
-                    best = {"ayah": hit, "score": score}
+                    best = {"ayah": hit, "score": score, "span": span}
             if best is None:
                 index += 1
                 continue
-            # Consume the AYAH's own length, not the window that found it.
-            # Advancing by the window skipped whatever sat between the end of a
-            # short ayah and the end of the window -- a seven-word verse
-            # vanished from the middle of a passage that way.
-            size = max(1, min(len(str(best["ayah"]["arabic"]).split()), len(words) - index))
+            # Where the verse actually sits inside the window, not where the
+            # window happened to start. normalise() drops Latin text, so a
+            # window whose first words are the speaker talking still scores a
+            # perfect match -- consuming from the window's start then swallowed
+            # the aside and left the ayah to be matched a second time.
+            first, last = best["span"]
             found.append({
                 "ayah": best["ayah"],
-                "wordStart": index,
-                "wordEnd": index + size,
+                "wordStart": index + first,
+                "wordEnd": index + last,
             })
-            index += size
+            index += max(1, last)
         return found
 
     def match(self, transcript: str, minimum: float = 0.55) -> dict[str, Any] | None:
@@ -218,6 +223,12 @@ class Corpus:
             return None
 
         row = self.records[best]
+        # A query far longer than the verse it matched is a passage, not that
+        # verse: half of it matching is enough to clear `minimum`, and the
+        # caption would then show one ayah over everything else that was
+        # recited. Let the caller split it with match_sequence instead.
+        if len(query.split()) > len(normalise(row["arabic"]).split()) * 1.6:
+            return None
         return {
             "surah": row["surah"],
             "ayah": row["ayah"],
@@ -228,6 +239,21 @@ class Corpus:
             "confidence": round(best_score, 3),
         }
 
+
+def _covered_span(window: list[str], arabic: str) -> tuple[int, int] | None:
+    """The slice of `window` that belongs to `arabic`, or None.
+
+    A word counts as part of the verse when its normalised form appears in the
+    verse. That is loose on its own, which is why the caller only asks after
+    match() has already accepted the window.
+    """
+    verse = set(normalise(arabic).split())
+    if not verse:
+        return None
+    hits = [i for i, word in enumerate(window) if normalise(word) in verse]
+    if not hits:
+        return None
+    return hits[0], hits[-1] + 1
 
 _CORPUS: Corpus | None = None
 
