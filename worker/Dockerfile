@@ -28,6 +28,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg ca-certificates curl fontconfig fonts-dejavu-core \
     fonts-liberation fonts-open-sans \
     fonts-hosny-amiri fonts-sil-scheherazade \
+    # MediaPipe's C bindings dlopen libGLESv2 and libEGL even for a CPU-only
+    # graph, so the image needs the GL runtime present or `import
+    # mediapipe.tasks` dies with "libGLESv2.so.2: cannot open shared object
+    # file". These are the runtime libraries only -- cv2 stays headless.
+    libgles2 libegl1 libglib2.0-0 \
     && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
 

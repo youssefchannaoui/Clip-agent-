@@ -2708,6 +2708,11 @@ def render_clip(
                     ffmpeg=ffmpeg, source=source, destination=output_dir / f"{clip_id}-matte.mp4",
                     start=candidate.start, duration=candidate.duration, width=src_w, height=src_h,
                 )
+                if matte_file is None:
+                    # Falling back is fine; falling back for a reason nobody
+                    # can read is not.
+                    emit("progress", stage="Captions behind speaker unavailable", progress=74,
+                         detail=getattr(subject_matte, "LAST_ERROR", "") or "segmentation produced no matte")
     if matte_file is not None:
         matte_index = 1 + (0 if track is None else 1) + (0 if bg_visual is None else 1)
         matte_input = f"{matte_index}:v"
