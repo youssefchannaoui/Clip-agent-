@@ -1608,3 +1608,32 @@ class FillCaptionTests(unittest.TestCase):
         worker.write_ass(candidate, {"width": 1080, "height": 1920, "captionMode": "fill"}, out)
         text = out.read_text(encoding="utf-8")
         self.assertIn("Astaghfirullah", text)
+
+
+class WrappedCaptionTests(unittest.TestCase):
+    """A wrapped caption must not print its own line break."""
+
+    def _phrase(self, text, **overrides):
+        segments = [{"start": 0.0, "end": 6.0, "text": text, "words": []}]
+        candidate = worker.Candidate(0, 6.0, text, segments, 90, [], False)
+        out = pathlib.Path(tempfile.mkdtemp()) / "c.ass"
+        worker.write_ass(candidate, {
+            "width": 1080, "height": 1920, "captionMode": "phrase",
+            "captionFont": "Outfit", **overrides,
+        }, out)
+        return [l for l in out.read_text(encoding="utf-8").splitlines() if l.startswith("Dialogue: 2")][0]
+
+    def test_a_long_line_breaks_without_printing_a_backslash(self):
+        # Shipped like this: "The scholars say wajhullah\" with a visible
+        # backslash at the end of the line, because wrap_caption's \N break was
+        # escaped along with the word it was stuck to.
+        line = self._phrase("The scholars say wajhullah means His presence, His realities, essence, His")
+        body = line.split(",,0,0,0,,", 1)[1]
+        self.assertIn("\\N", body, "it still wraps")
+        self.assertNotIn("\\\\N", body, "but the break is a break, not a printed backslash")
+
+    def test_an_arabic_and_english_line_wraps_the_same_way(self):
+        line = self._phrase("قال الشيخ that patience is the key to relief for every believer here")
+        body = line.split(",,0,0,0,,", 1)[1]
+        self.assertNotIn("\\\\N", body)
+        self.assertIn("الشيخ", body)

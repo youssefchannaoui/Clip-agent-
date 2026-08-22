@@ -1175,11 +1175,22 @@ def mixed_script_line(raw: str, *, font: str, arabic_font: str, uppercase: bool)
     """
     out: list[str] = []
     for word in str(raw).split():
-        if contains_arabic(word):
-            out.append(f"{{\\fn{arabic_font}\\i0}}{ass_escape(word)}")
-        else:
-            value = word.upper() if uppercase else word
-            out.append(f"{{\\fn{font}}}{ass_escape(value)}")
+        # wrap_caption hands us ASS's own \\N breaks, stuck to the word they
+        # follow. Escaping one turns it into a backslash PRINTED on screen --
+        # "wajhullah\\" sat at the end of a line in a shipped clip. The break is
+        # kept as a break and only the text around it is escaped.
+        pieces = word.split("\\N")
+        rendered: list[str] = []
+        for piece in pieces:
+            if not piece:
+                rendered.append("")
+                continue
+            if contains_arabic(piece):
+                rendered.append(f"{{\\fn{arabic_font}\\i0}}{ass_escape(piece)}")
+            else:
+                value = piece.upper() if uppercase else piece
+                rendered.append(f"{{\\fn{font}}}{ass_escape(value)}")
+        out.append("\\N".join(rendered))
     return " ".join(out)
 
 
