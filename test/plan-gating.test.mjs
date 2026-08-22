@@ -45,3 +45,53 @@ test('a custom template is never Pro', () => {
   const forged = templates.sanitiseTemplate({ name: 'Mine', pro: true }, { id: 'mine', builtIn: false });
   assert.equal(forged.pro, false);
 });
+
+
+// ── core work stays free ───────────────────────────────────────────────────
+//
+// Decided 23 Aug 2026: "all scheduling and automation of course should work on
+// free, all core work should work." Publishing is the point of the product --
+// gating it sells nothing and teaches nobody what DeenClipped is for. And
+// capping clips per lecture would protect nothing: tokens are charged per
+// source MINUTE, so ten clips from one lecture cost exactly what three do.
+//
+// These tests read the source. That is deliberate: the rule is about what the
+// code is ALLOWED to gate, and the failure they exist to catch is somebody
+// adding a gate later, in good faith, somewhere else.
+
+const billing = await import('../src/billing.js');
+const src = url => fs.readFileSync(new URL(url, import.meta.url), 'utf8');
+
+test('the Pro list is exactly the watermark and the templates', () => {
+  assert.deepEqual(Object.keys(billing.PRO_FEATURES).sort(), ['templates', 'watermark']);
+});
+
+test('a free account is told what it already has', () => {
+  const includes = billing.FREE_INCLUDES.join(' ').toLowerCase();
+  for (const promise of ['publishing', 'scheduling', 'automation', 'as many clips', 'editor']) {
+    assert.ok(includes.includes(promise), `the free plan should still promise ${promise}`);
+  }
+});
+
+test('every plan gate in the app is one of the two Pro features', () => {
+  // isPaid() is the only way to gate on a plan. Each call site is named here
+  // with what it guards; a new one fails this test until it is either removed
+  // or argued for in PRO_FEATURES.
+  const allowed = new Map([
+    ['src/server.js', ['assertWatermarkAllowed', 'assertTemplateAllowed']],
+    ['src/local-engine.js', ['enforceWatermarkPlan', 'enforceTemplatePlan']],
+    ['src/billing.js', ['planFeatures']],
+  ]);
+  for (const [file, guards] of allowed) {
+    const text = src(`../${file}`);
+    // The lookbehind skips the declaration itself in billing.js.
+    const calls = (text.match(/(?<!function )(?:billing\.)?isPaid\(/g) || []).length;
+    assert.equal(calls, guards.length,
+      `${file} has ${calls} plan gates but ${guards.length} are accounted for: ${guards.join(', ')}`);
+  }
+  // And nowhere else reaches for it at all.
+  for (const file of ['src/social.js', 'src/agent.js', 'src/slots.js', 'src/backgrounds.js', 'src/uploads.js']) {
+    assert.doesNotMatch(src(`../${file}`), /isPaid\(/,
+      `${file} is core work and must not be gated on a plan`);
+  }
+});

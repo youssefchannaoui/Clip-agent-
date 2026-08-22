@@ -157,6 +157,43 @@ export function ensureUserBilling(user) {
   return billing;
 }
 
+/**
+ * What the free plan may and may not do -- the whole rule, in one place.
+ *
+ * The decision (23 Aug 2026) is that free limits VOLUME and POLISH, never
+ * capability. A free account runs the entire loop: import, clip, edit,
+ * re-render, schedule, automate and publish straight to TikTok, YouTube and
+ * Instagram, with as many clips per lecture as it likes. Publishing is the
+ * point of the product; gating it would sell nothing and teach nobody what
+ * DeenClipped is for. Clips per lecture cost nothing extra to gate anyway --
+ * tokens are charged per source MINUTE, so ten clips from one lecture cost
+ * exactly what three do.
+ *
+ * The ceiling is the token allowance, and the two Pro features are the two
+ * that touch how a clip LOOKS: whose name is on it, and which style it is in.
+ *
+ * PRO is the exhaustive list. Anything not named here is core and free, and
+ * test/plan-gating.test.mjs fails if a gate appears anywhere else.
+ */
+export const PRO_FEATURES = Object.freeze({
+  watermark: 'Remove the DeenClipped watermark, or put your own name there instead',
+  templates: 'Every template in the catalogue, not only the default style',
+});
+
+export const FREE_INCLUDES = Object.freeze([
+  'Publishing straight to TikTok, YouTube and Instagram',
+  'Scheduling and automation',
+  'As many clips per lecture as you want',
+  'The editor, the review queue and re-renders',
+  'The default template, with the DeenClipped watermark',
+]);
+
+/** Which Pro features this account has. Everything else is core. */
+export function planFeatures(user) {
+  const paid = isPaid(user);
+  return { watermark: paid, templates: paid };
+}
+
 // "Pro" for feature gates: any plan that is not free. The admin plan counts --
 // the operator's own account must never be locked out of its own features.
 export function isPaid(user) {
@@ -226,8 +263,11 @@ export function publicBilling(user) {
       'Unused trial access does not roll into another trial',
       'Purchased top-up tokens do not expire when a subscription renews',
     ],
+    proFeatures: PRO_FEATURES,
+    freeIncludes: FREE_INCLUDES,
     current: {
       plan: currentPlan,
+      features: planFeatures(user),
       status: billing.status || 'free',
       unlimited,
       allowance: unlimited ? null : allow,
