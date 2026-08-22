@@ -1531,9 +1531,30 @@ def caption_cards(candidate: Candidate, template: dict[str, Any]) -> list[dict[s
     if not words:
         return []
     max_words = max(1, min(12, int(template.get("captionMaxWords", 5) or 5)))
+    # The widest the line may be drawn. The script never wraps, so a card that
+    # is too long does not spill onto a second line -- it runs off both edges
+    # of the frame and the words at each end are simply gone.
+    frame_width = int(template.get("width", 1080) or 1080)
+    margin_h = int(template.get("captionMarginH", 90) or 90)
+    block = max(30.0, min(100.0, float(template.get("captionBlockWidth", 100) or 100))) / 100.0
+    usable = max(120, min(int(frame_width * block), frame_width - margin_h * 2))
+    # A character of this face averages just under half its em once the
+    # template's tracking is in -- measured off the reference line, which came
+    # to 557px for 20 characters at an em of 57. Rounded up, so the estimate
+    # errs toward breaking a card early rather than overflowing one.
+    per_character = 0.50 * (int(template.get("captionFontSize", 62) or 62) / STACK_CELL)
+
+    def too_wide(run: list[dict[str, Any]]) -> bool:
+        return len(" ".join(str(w["word"]).strip() for w in run)) * per_character > usable
+
     groups: list[list[dict[str, Any]]] = []
     current: list[dict[str, Any]] = []
     for word in words:
+        # Checked before the word is committed: afterwards the card has
+        # already outgrown the frame.
+        if current and too_wide(current + [word]):
+            groups.append(current)
+            current = []
         current.append(word)
         if len(current) >= max_words or re.search(r"[.!?\u2026][\"']?$", str(word.get("word") or "").strip()):
             groups.append(current)
@@ -2131,8 +2152,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             # Spacing: an Arabic word in the card introduces an override block,
             # and the style's spacing does not survive one.
             spacing = f"{{\\fsp{letter_spacing:g}}}" if abs(letter_spacing) > 0.001 else ""
+            # \q0 for this mode only. The script header sets WrapStyle 2 --
+            # never wrap -- which the positioned modes depend on, but here it
+            # means a card the estimate above underjudged runs off the frame
+            # instead of taking a second line. A rare second line is worth far
+            # more than the words at both ends of an overflowing one.
             span = f"{ass_time(card['start'])},{ass_time(card['end'])}"
-            events.append(f"Dialogue: 2,{span},Caption,,0,0,0,,{fade_tag}{spacing}{text}")
+            events.append(f"Dialogue: 2,{span},Caption,,0,0,0,,{fade_tag}{{\\q0}}{spacing}{text}")
     elif mode == "fill" and words:
         # The word fills left to right as it is spoken. ASS does this itself
         # with \\kf, which sweeps from the style's SecondaryColour to its

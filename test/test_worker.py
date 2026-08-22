@@ -1961,3 +1961,70 @@ class CaptionCardTests(unittest.TestCase):
             # Bottom-centre, so the measured baseline is reachable by margin.
             style = next(l for l in out.read_text().splitlines() if l.startswith("Style: Caption,"))
             self.assertEqual(style.split(",")[18], "2", "alignment 2 is bottom-centre")
+
+
+class CardOverflowTests(unittest.TestCase):
+    """A card must never be wider than the frame it is drawn on.
+
+    Shipped as a bug: the script header says WrapStyle 2, never wrap, so an
+    over-long card did not spill onto a second line -- it ran off both edges
+    and the words at each end were gone. Seen on a real clip as
+    "sion of separation, loneliness, randomn".
+    """
+
+    LONG = ["illusion", "of", "separation,", "loneliness,", "randomness",
+            "and", "meaninglessness", "all", "in", "one", "shot."]
+
+    def _template(self, **over):
+        template = {
+            "captionMode": "cards", "captionFontSize": 89, "width": 1080,
+            "captionMarginH": 90, "captionMaxWords": 5, "captionBlockWidth": 100,
+        }
+        template.update(over)
+        return template
+
+    def _candidate(self):
+        segments = [{"start": i * 0.4, "end": i * 0.4 + 0.35, "text": w,
+                     "words": [{"start": i * 0.4, "end": i * 0.4 + 0.35, "word": w}]}
+                    for i, w in enumerate(self.LONG)]
+        return worker.Candidate(
+            start=0.0, end=6.0, text=" ".join(self.LONG),
+            segments=segments, score=80, reasons=[], quote_risk=False)
+
+    def _widest(self, **over):
+        template = self._template(**over)
+        em = template["captionFontSize"] / worker.STACK_CELL
+        cards = worker.caption_cards(self._candidate(), template)
+        self.assertTrue(cards)
+        return max(len(" ".join(str(w["word"]) for w in c["words"])) * 0.50 * em for c in cards)
+
+    def test_a_long_run_is_split_rather_than_overflowed(self):
+        # 1080 wide with 90px margins leaves 900.
+        self.assertLessEqual(self._widest(), 900)
+
+    def test_the_word_count_is_still_respected(self):
+        cards = worker.caption_cards(self._candidate(), self._template())
+        self.assertTrue(all(len(c["words"]) <= 5 for c in cards))
+
+    def test_a_narrower_block_splits_further(self):
+        self.assertLess(self._widest(captionBlockWidth=60), self._widest(captionBlockWidth=100))
+
+    def test_one_unbreakable_word_still_gets_a_card(self):
+        # Nowhere better for it to go, and pushing it on would loop forever.
+        words = [("supercalifragilisticexpialidocious", 0.0, 1.0)]
+        segments = [{"start": s, "end": e, "text": w,
+                     "words": [{"start": s, "end": e, "word": w}]} for w, s, e in words]
+        candidate = worker.Candidate(start=0.0, end=2.0, text=words[0][0],
+                                     segments=segments, score=80, reasons=[], quote_risk=False)
+        cards = worker.caption_cards(candidate, self._template())
+        self.assertEqual(len(cards), 1)
+        self.assertEqual(len(cards[0]["words"]), 1)
+
+    def test_the_rendered_card_asks_libass_to_wrap_as_a_backstop(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = pathlib.Path(tmp) / "c.ass"
+            worker.write_ass(self._candidate(), self._template(), out)
+            cards = [l for l in out.read_text().splitlines() if l.startswith("Dialogue: 2,")]
+            self.assertTrue(cards)
+            for line in cards:
+                self.assertIn(r"{\q0}", line, "an underjudged card must wrap, not overflow")
