@@ -428,17 +428,13 @@ class QuranCaptionTests(unittest.TestCase):
         self.assertIn("۝٣٦", text)
         self.assertNotIn("۝٣٩", text)
 
-    def test_the_speaker_between_two_ayat_is_still_captioned(self):
-        """An aside between two verses must not vanish.
-
-        Emitting only the matched spans would leave the screen blank for
-        however long the speaker talks between them.
-        """
+    def test_nothing_between_two_ayat_is_captioned(self):
+        """The Quran template shows verses only, so an aside is left alone."""
         aside = "and my brothers listen closely to what follows here"
         passage = f'{self.AYAHS[0]["arabic"]} {aside} {self.AYAHS[1]["arabic"]}'
         text = self._render([{"start": 0.0, "end": 20.0, "text": passage}])
-        self.assertIn("brothers", text, "the aside is captioned between the ayat")
-        self.assertIn("هَيْهَاتَ", text)
+        self.assertNotIn("brothers", text)
+        self.assertIn("هَيْهَاتَ", text, "both verses are still captioned")
         self.assertIn("سَعَىٰ", text)
 
     def test_a_stumble_between_two_ayat_is_not_captioned(self):
@@ -479,10 +475,26 @@ class QuranCaptionTests(unittest.TestCase):
         self.assertIn("\\fnDejaVu Serif", ayah_line, "set in the Latin face")
         self.assertNotIn(",Translation,,", text, "no separate event to be hidden behind")
 
-    def test_speech_that_is_not_recitation_falls_through_to_a_plain_caption(self):
+    def test_the_quran_template_captions_scripture_and_nothing_else(self):
+        """Set 22 Aug 2026 by Youssef: "quran template is ONLY QURAN".
+
+        It used to caption unmatched speech in the lecture face, which put the
+        reciter's own introduction -- and Whisper's guess at words it half
+        heard -- on screen under a verse. Every OTHER template captions that
+        speech, and translates it when it is Arabic.
+        """
         text = self._render([{"start": 0.0, "end": 4.0, "text": "قال الشيخ ان الصبر مفتاح الفرج"}])
         self.assertNotIn(",Ayah,,", text, "no ayah is invented")
-        self.assertIn(",Caption,,", text, "but the words still appear")
+        self.assertNotIn(",Caption,,", text, "and the speech is left alone")
+
+    def test_scripture_in_the_same_clip_is_still_captioned(self):
+        # Silence for speech must not become silence for the recitation too.
+        text = self._render([
+            {"start": 0.0, "end": 4.0, "text": "قال الشيخ ان الصبر مفتاح الفرج"},
+            {"start": 4.0, "end": 8.0, "text": "هيهات هيهات لما توعدون"},
+        ])
+        self.assertIn(",Ayah,,", text)
+        self.assertIn("هَيْهَاتَ", text)
 
     def test_the_translation_can_be_turned_off(self):
         text = self._render(
@@ -1437,3 +1449,70 @@ class EditedTranscriptTimingTests(unittest.TestCase):
     def test_no_segments_means_nothing_to_reflow_onto(self):
         self.assertEqual(worker.reflow_segments([], "some words"), [])
         self.assertEqual(worker.reflow_segments(self.SEGMENTS, "   "), [])
+
+
+class ThreeScriptsTests(unittest.TestCase):
+    """Set 22 Aug 2026 by Youssef: every template but the Quran one handles
+    Arabic, Quran and English -- scripture as the ayah, other Arabic with an
+    English line under it, English as it always was."""
+
+    AYAHS = [
+        {"surah": 23, "ayah": 36, "surahName": "Al-Mu'minun", "surahArabic": "المؤمنون",
+         "arabic": "هَيْهَاتَ هَيْهَاتَ لِمَا تُوعَدُونَ",
+         "translation": "Far, very far is that which ye are promised!"},
+    ]
+
+    def _render(self, segments, **overrides):
+        import quran as quran_module
+        quran_module._CORPUS = quran_module.Corpus(self.AYAHS)
+        worker.quran = quran_module
+        candidate = worker.Candidate(
+            0, 12.0, " ".join(s["text"] for s in segments), segments, 90, [], False,
+        )
+        template = {
+            "width": 1080, "height": 1920, "captionMode": "phrase",
+            "captionArabicFont": "Amiri", "captionFont": "DejaVu Serif",
+            "captionFontSize": 70, "captionMarginV": 300, **overrides,
+        }
+        out = pathlib.Path(tempfile.mkdtemp()) / "c.ass"
+        worker.write_ass(candidate, template, out)
+        return out.read_text(encoding="utf-8")
+
+    def test_arabic_speech_carries_its_english(self):
+        text = self._render([{
+            "start": 0.0, "end": 4.0, "words": [],
+            "text": "قال الشيخ ان الصبر مفتاح الفرج",
+            "english": "The sheikh said that patience is the key to relief.",
+        }])
+        self.assertIn("الصبر", text, "the Arabic is what was said")
+        self.assertIn("relief", text, "with the English under it")
+        self.assertIn(f"\\fs{46}", text, "the English is in the smaller translation size")
+
+    def test_recitation_is_still_the_ayah_not_the_translation_pass(self):
+        # Scripture takes the corpus text and the corpus translation, never
+        # Whisper's rendering of either.
+        text = self._render([{
+            "start": 0.0, "end": 4.0, "words": [],
+            "text": "هيهات هيهات لما توعدون",
+            "english": "How far, how far is what you are promised",
+        }])
+        self.assertIn("هَيْهَاتَ", text)
+        self.assertIn("Far, very far", text)
+        self.assertNotIn("How far, how far", text)
+
+    def test_english_speech_is_left_alone(self):
+        text = self._render([{
+            "start": 0.0, "end": 4.0, "words": [],
+            "text": "patience is the key to relief",
+        }])
+        self.assertIn("patience", text)
+        self.assertEqual(text.count("relief"), 1, "captioned once, not doubled under itself")
+        self.assertEqual(text.count(",Ayah,,"), 0)
+
+    def test_arabic_with_no_translation_captions_as_before(self):
+        # The translation pass can be off, or the audio can be English: the
+        # Arabic still has to appear.
+        text = self._render([{
+            "start": 0.0, "end": 4.0, "words": [], "text": "قال الشيخ ان الصبر مفتاح الفرج",
+        }])
+        self.assertIn("الصبر", text)

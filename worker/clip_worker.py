@@ -157,7 +157,10 @@ PHASES = (
     # import sits above transcribe: "Loading saved lecture and transcript"
     # contains "transcri" inside the word "transcript".
     ("import", ("download", "loading saved", "preparing selected", "import")),
-    ("transcribe", ("transcri", "speech audio", "extracting audio")),
+    # "translat" belongs here, not in the import bucket it would otherwise fall
+    # through to: the English pass runs straight after transcription, and
+    # classifying it as import drags the progress rail backwards mid-job.
+    ("transcribe", ("transcri", "translat", "speech audio", "extracting audio")),
 )
 
 
@@ -470,7 +473,7 @@ def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, durat
     if language:
         kwargs["language"] = language
 
-    segments, _info = model.transcribe(str(audio_file), **kwargs)
+    segments, info = model.transcribe(str(audio_file), **kwargs)
     output: list[dict[str, Any]] = []
     transcription_started = time.time()
     last_percent = 15
@@ -508,7 +511,72 @@ def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, durat
         })
     if not output:
         raise RuntimeError("The transcription model did not find any speech in the source.")
+
+    # Speech that is not English gets an English line under it, so a clip of an
+    # Arabic lecture is watchable by someone who does not read Arabic. Whisper
+    # does the translating itself on a second pass over the same audio -- the
+    # first pass has to stay `transcribe`, because the Arabic words are what
+    # goes on screen above the translation, and they are also what the ayah
+    # matcher searches the Quran with.
+    spoken = str(getattr(info, "language", "") or "").lower()
+    wants_english = (
+        spoken and not spoken.startswith("en")
+        and str(kwargs.get("task") or "") == "transcribe"
+        and settings.get("translateCaptions") is not False
+    )
+    if wants_english:
+        progress("Translating speech to English", 61,
+                 model=model_name, spokenLanguage=spoken, etaSec=None)
+        english = translate_audio(model, audio_file, kwargs)
+        attach_english(output, english)
     return output
+
+def translate_audio(model: Any, audio_file: Path, kwargs: dict[str, Any]) -> list[dict[str, Any]]:
+    """The same audio read out in English, as timed lines.
+
+    Word timings are not asked for: the English is drawn as one line under the
+    speech, never word by word, and asking for them costs time for nothing.
+    """
+    options: dict[str, Any] = {
+        "beam_size": kwargs.get("beam_size", 1),
+        "vad_filter": kwargs.get("vad_filter", True),
+        "condition_on_previous_text": False,
+        "task": "translate",
+    }
+    if kwargs.get("vad_parameters"):
+        options["vad_parameters"] = kwargs["vad_parameters"]
+    if kwargs.get("language"):
+        options["language"] = kwargs["language"]
+    lines: list[dict[str, Any]] = []
+    for segment in model.transcribe(str(audio_file), **options)[0]:
+        text = str(segment.text or "").strip()
+        if text:
+            lines.append({"start": float(segment.start), "end": float(segment.end), "text": text})
+    return lines
+
+
+def attach_english(segments: list[dict[str, Any]], english: list[dict[str, Any]]) -> None:
+    """Put each English line on the segment whose speech it covers.
+
+    The two passes segment the audio differently -- the translation of one
+    Arabic sentence can arrive as one English line spanning two of them -- so
+    the match is by overlap in time rather than by index, and a line that
+    straddles a boundary lands on the segment it overlaps most.
+    """
+    if not english:
+        return
+    for segment in segments:
+        start, end = float(segment.get("start") or 0), float(segment.get("end") or 0)
+        span = max(0.01, end - start)
+        parts: list[str] = []
+        for line in english:
+            overlap = min(end, float(line.get("end") or 0)) - max(start, float(line.get("start") or 0))
+            if overlap > 0 and overlap >= min(span, max(0.01, float(line.get("end") or 0) - float(line.get("start") or 0))) * 0.4:
+                text = str(line.get("text") or "").strip()
+                if text and text not in parts:
+                    parts.append(text)
+        if parts:
+            segment["english"] = " ".join(parts)
 
 
 def transcribe(job: dict[str, Any], audio_file: Path, duration_sec: float) -> list[dict[str, Any]]:
@@ -1431,13 +1499,53 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 end = min(candidate.duration, float(segment["end"]) - candidate.start)
                 if end <= start:
                     continue
-                found = auto_corpus.match(str(segment.get("text") or ""), minimum=0.72)
+                seg_text = str(segment.get("text") or "")
+                found = auto_corpus.match(seg_text, minimum=0.72)
+                # Several verses recited in one breath, on a lecture template.
+                # The same walk the Quran template uses, at the stricter floor
+                # this path runs at.
+                if (not found or float(found.get("confidence") or 0) < 0.8) and hasattr(auto_corpus, "match_sequence"):
+                    spread = auto_corpus.match_sequence(seg_text, minimum=0.72)
+                    if len(spread) > 1:
+                        seg_words = max(1, len(seg_text.split()))
+                        span = max(0.1, end - start)
+                        for piece in spread:
+                            piece_start = start + span * (piece["wordStart"] / seg_words)
+                            piece_end = start + span * (piece["wordEnd"] / seg_words)
+                            if piece_end > piece_start:
+                                auto_ayahs.append({"start": piece_start, "end": piece_end, "found": piece["ayah"]})
+                        continue
                 if found:
                     auto_ayahs.append({"start": start, "end": end, "found": found})
 
     def inside_ayah(at: float) -> bool:
         """Whether this moment is already being captioned as an ayah."""
         for span in auto_ayahs:
+            if span["start"] <= at < span["end"]:
+                return True
+        return False
+
+    # Arabic that is not scripture -- the speaker's own words -- is captioned
+    # in Arabic with its English underneath, so the clip is watchable by
+    # someone who does not read Arabic. The English comes from Whisper's
+    # translation pass and rides on the segment; without it there is nothing to
+    # draw and the speech captions as it always did.
+    spoken_arabic: list[dict[str, Any]] = []
+    if mode != "quran":
+        for segment in candidate.segments:
+            english = str(segment.get("english") or "").strip()
+            arabic = str(segment.get("text") or "").strip()
+            if not english or not contains_arabic(arabic):
+                continue
+            start = max(0.0, float(segment["start"]) - candidate.start)
+            end = min(candidate.duration, float(segment["end"]) - candidate.start)
+            if end <= start or inside_ayah((start + end) / 2):
+                continue
+            spoken_arabic.append({"start": start, "end": end, "arabic": arabic, "english": english})
+
+    def inside_arabic(at: float) -> bool:
+        """Whether this moment is captioned as Arabic speech with a translation."""
+        for span in spoken_arabic:
             if span["start"] <= at < span["end"]:
                 return True
         return False
@@ -1504,6 +1612,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                         # matched spans would leave the clip silent through
                         # every aside.
                         def caption_gap(first: int, last: int) -> None:
+                            # The Quran template captions scripture and nothing
+                            # else, so whatever sits between two ayat is left
+                            # alone. Every other template captions the speaker.
+                            return
                             # Reciters announce the verse number, and Whisper
                             # stumbles over the words either side of a verse it
                             # half-heard. Neither is an aside, and both looked
@@ -1554,14 +1666,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                             ))
                         caption_gap(cursor, seg_words)
                         continue
-                    # Arabic that is not a match -- the speaker's own words in
-                    # either language -- still has to render in a face that can
-                    # draw it.
-                    text = mixed_script_line(
-                        wrap_caption(str(segment["text"]), 28),
-                        font=font, arabic_font=arabic_font, uppercase=uppercase,
-                    )
-                    events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}{text}")
+                    # Speech that is not scripture is not captioned here. The
+                    # Quran template is for recitation: an introduction, an
+                    # aside, or Whisper's guess at a half-heard word appearing
+                    # in the lecture face under a verse is what made these
+                    # clips look wrong. Every other template captions it, and
+                    # translates it when it is Arabic.
                     continue
                 captioned += 1
                 matched_ayahs.append({
@@ -1595,7 +1705,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     pop_scale=pop_scale, pop_ms=pop_ms,
                 ))
             text = "\\N".join(lines)
-            if inside_ayah((float(frame["start"]) + float(frame["end"])) / 2):
+            midpoint = (float(frame["start"]) + float(frame["end"])) / 2
+            if inside_ayah(midpoint) or inside_arabic(midpoint):
                 continue
             events.append(f"Dialogue: 2,{ass_time(frame['start'])},{ass_time(frame['end'])},Caption,,0,0,0,,{fade_tag}{text}")
     elif mode == "word" and words:
@@ -1612,7 +1723,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     ))
                 start = float(active["start"])
                 end = max(start + 0.08, float(active["end"]))
-                if inside_ayah((start + end) / 2):
+                if inside_ayah((start + end) / 2) or inside_arabic((start + end) / 2):
                     continue
                 events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}{' '.join(text_parts)}")
     else:
@@ -1621,13 +1732,27 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             end = min(candidate.duration, float(segment["end"]) - candidate.start)
             if end <= start:
                 continue
-            if inside_ayah((start + end) / 2):
+            if inside_ayah((start + end) / 2) or inside_arabic((start + end) / 2):
                 continue
             text = mixed_script_line(
                 wrap_caption(str(segment["text"]), 28),
                 font=font, arabic_font=arabic_font, uppercase=uppercase,
             )
             events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}{text}")
+
+    # Arabic speech, with the English under it in the translation style. The
+    # Arabic is drawn as a whole line rather than word by word: a single word
+    # with a sentence of English beneath it reads as a mistake, and the
+    # translation is of the sentence in any case.
+    for span in spoken_arabic:
+        arabic_line = mixed_script_line(
+            wrap_caption(span["arabic"], 30), font=font, arabic_font=arabic_font, uppercase=False,
+        )
+        english_line = ass_escape(wrap_caption(span["english"], 42))
+        events.append(
+            f"Dialogue: 2,{ass_time(span['start'])},{ass_time(span['end'])},Caption,,0,0,0,,{fade_tag}"
+            f"{arabic_line}\\N{{\\fn{font}\\fs{translation_size}}}{english_line}"
+        )
 
     # The ayahs found above, in the Quran's own words and the Arabic face,
     # whatever style the rest of the clip is using.
