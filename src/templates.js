@@ -240,6 +240,10 @@ export function sanitiseTemplate(input = {}, { id = '', builtIn = false, userId 
   output.updatedAt = Number(source.updatedAt) || Date.now();
   output.builtIn = Boolean(builtIn);
   output.editable = !builtIn;
+  // Which plan a template belongs to. Read from the shipped file and only for
+  // built-ins, so it is a property of the catalogue rather than of the style:
+  // a custom template or an account's patch cannot declare itself free.
+  output.pro = builtIn ? Boolean(source.pro) : false;
   // Built-in templates are shared by everyone; custom ones belong to one account.
   output.userId = builtIn ? null : (userId || source.userId || null);
   return output;
@@ -334,6 +338,7 @@ export function templateForClip(template, overrides) {
   );
   merged.name = template.name;
   merged.description = template.description;
+  merged.pro = Boolean(template.pro);
   merged.version = template.version || 1;
   merged.updatedAt = template.updatedAt || Date.now();
   return merged;
@@ -448,6 +453,9 @@ function withAccountEdits(template, user) {
   if (!patch || typeof patch !== 'object') return { ...template, editable: true };
   const merged = sanitiseTemplate({ ...template, ...patch }, { id: template.id, builtIn: true, userId: '' });
   merged.editable = true;
+  // Taken from the shipped template, never from the patch: an account's own
+  // edits decide how a template looks, not which plan it is on.
+  merged.pro = Boolean(template.pro);
   // The account's own save counter, plus any shipped bump that landed after
   // the patch was written. Without the second term a deploy that changed the
   // shipped file was invisible: the look changed under the account's clips
@@ -472,7 +480,7 @@ export function saveTemplate(user, id, input = {}) {
   const patch = {};
   const shipped = readTemplateFile(path.join(builtInDir, `${id}.json`), true) || existing;
   for (const key of Object.keys(cleaned)) {
-    if (['id', 'builtIn', 'editable', 'userId', 'version', 'updatedAt'].includes(key)) continue;
+    if (['id', 'builtIn', 'editable', 'userId', 'version', 'updatedAt', 'pro'].includes(key)) continue;
     if (JSON.stringify(cleaned[key]) !== JSON.stringify(shipped[key])) patch[key] = cleaned[key];
   }
   patch.version = (Number(existing.version) || 1) + 1;

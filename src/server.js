@@ -965,6 +965,17 @@ async function route(req, res, url) {
     throw new Error('Removing the DeenClipped watermark is a Pro feature. Upgrade to any paid plan to publish without it.');
   }
 
+  // Which templates a plan may actually use. Free gets the default one; every
+  // other built-in is Pro. Blocked here at the door rather than only at render
+  // time so the account is told why, instead of quietly getting a clip in a
+  // style it did not pick. The render still enforces it too -- a subscription
+  // can lapse between queueing a job and rendering it.
+  function assertTemplateAllowed(template) {
+    if (!template?.pro) return template;
+    if (billing.isPaid(currentUser)) return template;
+    throw new Error(`"${template.name}" is a Pro template. The ${templates.templateById(config.defaultTemplateId, currentUser)?.name || 'default'} style is included on the free plan; any paid plan unlocks the rest.`);
+  }
+
   const templateMatch = pathname.match(/^\/api\/templates\/([^/]+)$/);
   if (method === 'PUT' && templateMatch) {
     const body = await readBody(req);
@@ -1002,6 +1013,8 @@ async function route(req, res, url) {
     const body = await readBody(req);
     const template = templates.templateById(String(body.templateId || ''), currentUser) || templates.selectedTemplate(currentUser);
     if (!template?.id) return json(res, 400, { error: 'Choose a valid saved template.' });
+    try { assertTemplateAllowed(template); }
+    catch (error) { return json(res, 402, { error: error.message, upgrade: true }); }
     let queued = 0; let skipped = 0; const errors = [];
     for (const clip of ownedBy(state.clips, currentUser.id)) {
       if (clip.variantOf) { skipped += 1; continue; }
@@ -1025,6 +1038,7 @@ async function route(req, res, url) {
     // propagate: true.
     const body = await readBody(req);
     try {
+      assertTemplateAllowed(templates.templateById(String(body.id || ''), currentUser));
       const template = templates.setSelectedTemplate(currentUser, String(body.id || ''));
       log(`Automation template set to "${template.name}". New renders use it.`, 'info', currentUser.id);
       return json(res, 200, { ok: true, template, propagation: { queued: 0, skipped: 0, errors: [] } });

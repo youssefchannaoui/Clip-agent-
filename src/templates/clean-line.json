@@ -67,5 +67,6 @@
   "smartFramingZoom": 1.0,
   "framingSubjectBias": 0,
   "grain": 0,
-  "vignette": 0
+  "vignette": 0,
+  "pro": false
 }

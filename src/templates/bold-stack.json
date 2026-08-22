@@ -64,5 +64,6 @@
   "grain": 0,
   "vignette": 0.1,
   "framingSubjectBias": 16,
-  "captionBlockWidth": 80
+  "captionBlockWidth": 80,
+  "pro": true
 }

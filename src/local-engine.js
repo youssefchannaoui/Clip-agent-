@@ -497,7 +497,7 @@ function validateSubmission(url, user, options = {}) {
     jobTracks = tracks.filter(track => track.id === options.musicTrackId);
     if (!jobTracks.length) throw new Error('The chosen nasheed is no longer in your library. Pick another or rotate all.');
   }
-  return { value, template: enforceWatermarkPlan(template, user.id), tracks: jobTracks, backgroundMode, background, introSeconds };
+  return { value, template: enforcePlan(template, user.id), tracks: jobTracks, backgroundMode, background, introSeconds };
 }
 
 export function readiness(user) {
@@ -790,17 +790,52 @@ function plural_en(n, one) { return `${n} ${one}${n === 1 ? '' : 's'}`; }
 // customer A -- but reported as a bare count, never as whose. Re-render and
 // more-clips jobs are minutes, not lectures, so they are left out rather than
 // inflating the number.
-// The free plan renders with the DeenClipped watermark, always. The route
-// gate stops a free account SAVING a watermark-free style, but the built-in
-// templates ship watermark-off -- without this, picking one quietly bypassed
-// the plan rule at render time. Paid plans render whatever the style says.
+// The free plan renders with the DeenClipped watermark, always, and it says
+// DeenClipped -- not whatever the account typed. The route gate stops a free
+// account SAVING a watermark-free style, but the built-in templates ship
+// watermark-off, so without this, picking one quietly bypassed the plan rule
+// at render time. Paid plans render whatever the style says.
+//
+// Top centre rather than a corner: it is the position a re-uploader cannot
+// crop away without cropping the speaker's head, which is the whole point of
+// branding a free clip.
+export const FREE_WATERMARK = Object.freeze({
+  watermark: 'DEENCLIPPED',
+  watermarkPosition: 'top-center',
+  watermarkOpacity: 85,
+  watermarkFontSize: 30,
+  watermarkColor: '#FFFFFF',
+  watermarkMarginV: 90,
+});
+
 function enforceWatermarkPlan(template, ownerId) {
   const owner = state.authUsers?.find(user => user.id === ownerId);
   if (!owner || billing.isPaid(owner)) return template;
-  const forced = { ...template };
-  if (!String(forced.watermark || '').trim()) forced.watermark = 'DEENCLIPPED';
-  if (!(Number(forced.watermarkOpacity) > 0)) forced.watermarkOpacity = 85;
-  return forced;
+  return { ...template, ...FREE_WATERMARK };
+}
+
+/**
+ * The template a free account actually renders with.
+ *
+ * Selection is already gated in the routes, but a template can reach a render
+ * without passing through one: a clip made while the account was paid, a
+ * subscription that lapsed between queueing and rendering, a stored
+ * templateIdUsed from months ago. Falling back here means the plan rule holds
+ * whatever route the job took, and it falls back to the free template rather
+ * than refusing -- a lapsed account should get clips it can still use.
+ */
+function enforceTemplatePlan(template, ownerId) {
+  const owner = state.authUsers?.find(user => user.id === ownerId);
+  if (!owner || !template?.pro || billing.isPaid(owner)) return template;
+  const free = templateById(config.defaultTemplateId, owner);
+  if (!free || free.pro) return template;
+  // The clip's own framing and per-clip tweaks are style, not catalogue, and
+  // they belong to the clip. Only the look comes from the free template.
+  return { ...free, id: free.id, name: free.name };
+}
+
+function enforcePlan(template, ownerId) {
+  return enforceWatermarkPlan(enforceTemplatePlan(template, ownerId), ownerId);
 }
 
 export function queueAhead(projectId) {
@@ -1548,7 +1583,7 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
   // This clip's own tweaks win over the shared style. Without this, editing one
   // clip either changed every clip on the template or was silently discarded at
   // render time.
-  const template = enforceWatermarkPlan(templateForClip(baseTemplate, clip.styleOverrides), ownerOf(clip));
+  const template = enforcePlan(templateForClip(baseTemplate, clip.styleOverrides), ownerOf(clip));
   const tracks = workerMusicTracks(owner);
   if (!tracks.length) throw new Error('Music is mandatory. Upload at least one nasheed first.');
   const transcriptSegments = project.transcriptFile && fs.existsSync(project.transcriptFile)

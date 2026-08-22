@@ -57,5 +57,6 @@
   "captionPopMs": 0,
   "captionFadeMs": 160,
   "grain": 42,
-  "vignette": 0.32
+  "vignette": 0.32,
+  "pro": true
 }
