@@ -2028,3 +2028,54 @@ class CardOverflowTests(unittest.TestCase):
             self.assertTrue(cards)
             for line in cards:
                 self.assertIn(r"{\q0}", line, "an underjudged card must wrap, not overflow")
+
+
+class StackAlignmentTests(unittest.TestCase):
+    """The stacked build positions every line, so it has to choose its own anchor.
+
+    It was hardcoded to \\an7 -- hang the line off its left edge -- which is
+    right for a block set down one side and wrong for a centred one, where it
+    pushed every line off toward the right of the frame.
+    """
+
+    WORDS = [("you", 0.2, 0.4), ("will", 0.4, 0.6), ("never", 0.6, 0.9),
+             ("feel", 1.0, 1.3), ("tired", 1.3, 1.7)]
+
+    def _events(self, horizontal, uppercase=False):
+        segments = [{"start": s, "end": e, "text": w,
+                     "words": [{"start": s, "end": e, "word": w}]} for w, s, e in self.WORDS]
+        candidate = worker.Candidate(start=0.0, end=3.0, text=" ".join(w for w, _, _ in self.WORDS),
+                                     segments=segments, score=80, reasons=[], quote_risk=False)
+        template = {
+            "captionMode": "stack-build", "captionFontSize": 136, "width": 1080,
+            "captionMarginH": 60, "captionMarginV": 300, "captionStackMaxWords": 3,
+            "captionStackLines": 3, "captionClearPause": 0.9, "captionLineHeight": 1.15,
+            "captionHorizontal": horizontal, "captionUppercase": uppercase,
+            "captionPrimary": "#FFFFFF", "captionHighlight": "#6E6C70",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            out = pathlib.Path(tmp) / "c.ass"
+            worker.write_ass(candidate, template, out)
+            return [l for l in out.read_text().splitlines() if l.startswith("Dialogue: 2,")]
+
+    def test_left_hangs_the_line_off_the_left_margin(self):
+        for event in self._events("left"):
+            self.assertIn(r"\an7\pos(60,", event)
+
+    def test_centre_anchors_every_line_on_the_frame_centre(self):
+        for event in self._events("center"):
+            self.assertIn(r"\an8\pos(540,", event)
+
+    def test_right_anchors_on_the_far_margin(self):
+        for event in self._events("right"):
+            self.assertIn(r"\an9\pos(1020,", event)
+
+    def test_capitals_are_applied_in_this_mode_too(self):
+        # It read captionUppercase nowhere, so a capitalised template rendered
+        # in whatever case the transcript happened to use.
+        joined = " ".join(self._events("center", uppercase=True))
+        self.assertIn("NEVER", joined)
+        self.assertNotIn("never", joined)
+
+    def test_lower_case_is_left_alone_when_not_asked_for(self):
+        self.assertIn("never", " ".join(self._events("center", uppercase=False)))

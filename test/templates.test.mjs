@@ -31,19 +31,36 @@ test('invalid template selection is blocked', () => {
 // are stored as a patch over the shipped file, so ids stay stable and Save
 // always means save.
 
-test('the catalogue carries the shipped set: one Quran style, three lecture styles', () => {
+test('the catalogue carries the shipped set: one Quran style, four lecture styles', () => {
   // Cut back to two on request (22 Aug 2026): "delete everything except mono
   // and quran so i have 1 lecture 1 quran recitation". Bold Stack was then
   // built from reference edits (22 Aug 2026) as the second lecture style, so a
   // kind having more than one member is now expected -- what is not allowed is
   // a template that exists only because somebody duplicated another.
   const list = templates.listTemplates(user);
-  assert.deepEqual(list.map(t => t.id).sort(), ['bold-stack', 'clean-line', 'mono-minimal', 'quran-recitation']);
+  assert.deepEqual(list.map(t => t.id).sort(),
+    ['bold-stack', 'clean-line', 'headline', 'mono-minimal', 'quran-recitation']);
   const modes = Object.fromEntries(list.map(t => [t.id, t.captionMode]));
   assert.equal(modes['quran-recitation'], 'quran');
   assert.notEqual(modes['mono-minimal'], 'quran', 'the lecture style captions the transcript');
   assert.notEqual(modes['bold-stack'], 'quran', 'the lecture style captions the transcript');
   assert.notEqual(modes['clean-line'], 'quran', 'the lecture style captions the transcript');
+  assert.notEqual(modes['headline'], 'quran', 'the lecture style captions the transcript');
+});
+
+test('Headline is the stacked build set centred and in capitals', () => {
+  // Same engine as Bold Stack; what makes it a different look is the
+  // alignment, the capitals and a dimmer colour for the waiting line.
+  const tpl = templates.templateById('headline', user);
+  const bold = templates.templateById('bold-stack', user);
+  assert.equal(tpl.captionMode, bold.captionMode);
+  assert.equal(tpl.captionHorizontal, 'center');
+  assert.equal(bold.captionHorizontal, 'left', 'the two must not drift into each other');
+  assert.equal(tpl.captionUppercase, true);
+  assert.equal(tpl.captionFontSize, 136, 'capitals measured 61px tall');
+  assert.equal(tpl.captionHighlight, '#6E6C70', 'the waiting line is dimmer than Bold Stack\'s');
+  assert.equal(tpl.captionSizeVariation, 0, 'its lines are all one size');
+  assert.equal(tpl.captionBehindSubject, true);
 });
 
 test('Clean Line keeps the values measured off its reference, and is the default', () => {

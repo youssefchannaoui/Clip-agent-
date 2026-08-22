@@ -1607,7 +1607,10 @@ def stack_build_blocks(candidate: Candidate, template: dict[str, Any]) -> list[d
     # long one runs under them.
     block = max(30.0, min(100.0, float(template.get("captionBlockWidth", 100) or 100))) / 100.0
     frame_width = int(template.get("width", 1080) or 1080)
-    usable = max(120, int(frame_width * block) - margin_h)
+    # A centred block spends its margin on both sides; one set down an edge
+    # spends it once and runs toward the far side.
+    sides = 1 if str(template.get("captionHorizontal", "left")) == "left" else 2
+    usable = max(120, int(frame_width * block) - margin_h * sides)
 
     blocks: list[list[dict[str, Any]]] = []
     lines: list[dict[str, Any]] = []
@@ -1692,6 +1695,7 @@ def stack_build_events(
     blocks: list[dict[str, Any]], *, duration: float, font_size: int, primary: str, queued: str,
     arabic_font: str, fade_tag: str, margin_h: int, margin_v: int, line_height: float,
     letter_spacing: float, skip: Callable[[float], bool],
+    horizontal: str = "left", width: int = 1080, uppercase: bool = False,
 ) -> list[str]:
     """One event per line per word: the block as it stands the moment that word appears.
 
@@ -1707,6 +1711,14 @@ def stack_build_events(
     reference stacks at. ScaleY is not the lever either: in ASS it squashes the
     glyphs themselves, not just the leading.
     """
+    # Each line is positioned outright, so the anchor has to be chosen here
+    # rather than left to the style's Alignment: \\an7 hangs a line off its left
+    # edge, which is only right for a block set down one side.
+    anchor, anchor_x = {
+        "center": (8, width // 2),
+        "right": (9, width - margin_h),
+    }.get(str(horizontal), (7, margin_h))
+
     events: list[str] = []
     for block_index, block in enumerate(blocks):
         lines: list[list[dict[str, Any]]] = block["lines"]
@@ -1751,6 +1763,8 @@ def stack_build_events(
                     if draw_line == line_index and draw_word > word_index:
                         break
                     value = str(lines[draw_line][draw_word]["word"]).strip()
+                    if uppercase and not contains_arabic(value):
+                        value = value.upper()
                     face = f"\\fn{arabic_font}" if contains_arabic(value) else ""
                     if draw_line == line_index and draw_word == word_index:
                         delay = max(0, int(round((float(word["start"]) - appear) * 1000)))
@@ -1770,7 +1784,7 @@ def stack_build_events(
                 spacing = letter_spacing * sizes[draw_line]
                 events.append(
                     f"Dialogue: 2,{ass_time(appear)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}"
-                    f"{{\\an7\\pos({margin_h},{tops[draw_line]})\\fs{size_px}\\fsp{spacing:.1f}}}"
+                    f"{{\\an{anchor}\\pos({anchor_x},{tops[draw_line]})\\fs{size_px}\\fsp{spacing:.1f}}}"
                     + " ".join(parts)
                 )
     return events
@@ -2137,6 +2151,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             margin_v=margin_v,
             line_height=line_height,
             letter_spacing=letter_spacing,
+            horizontal=horizontal,
+            width=width,
+            uppercase=uppercase,
             skip=lambda at: inside_ayah(at) or inside_arabic(at),
         ))
     elif mode == "cards" and words:
