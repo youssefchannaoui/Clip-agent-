@@ -30,29 +30,34 @@ test('invalid template selection is blocked', () => {
 // account's edits to a built-in are stored as a patch over the shipped file,
 // so ids stay stable and Save always means save.
 
-test('the catalogue carries the shipped set: one Quran style, four lecture styles', () => {
+test('the catalogue carries the shipped set: one Quran style, five lecture styles', () => {
   // Grown from "one per content type" on request: the lecture styles are
   // modelled on the reference reels (clean bold, greyscale minimal, slate
-  // stack) plus the original Simple Bold.
+  // stack, ink fill) plus the original Simple Bold.
   const list = templates.listTemplates(user);
   assert.deepEqual(list.map(t => t.id).sort(),
-    ['clean-bold', 'mono-minimal', 'quran-recitation', 'simple-bold', 'slate-stack']);
+    ['clean-bold', 'ink-fill', 'mono-minimal', 'quran-recitation', 'simple-bold', 'slate-stack']);
   const modes = Object.fromEntries(list.map(t => [t.id, t.captionMode]));
   assert.equal(modes['quran-recitation'], 'quran');
-  for (const id of ['clean-bold', 'mono-minimal', 'simple-bold', 'slate-stack']) {
+  for (const id of ['clean-bold', 'ink-fill', 'mono-minimal', 'simple-bold', 'slate-stack']) {
     assert.notEqual(modes[id], 'quran', id + ' captions the transcript');
   }
+  // Ink Fill is the only one that sweeps the word as it is spoken.
+  assert.equal(modes['ink-fill'], 'fill');
 });
 
 test('saving a built-in edits it in place for this account only', () => {
+  const before = templates.listTemplates(user).length;
   const saved = templates.saveTemplate(user, 'simple-bold', { captionFontSize: 120 }, { allowFork: true });
   assert.equal(saved.forked, false, 'no copy is ever minted');
   assert.equal(saved.template.id, 'simple-bold', 'identity never moves');
   assert.equal(saved.template.captionFontSize, 120);
   // Another account still sees the shipped template.
   assert.notEqual(templates.templateById('simple-bold', otherUser).captionFontSize, 120);
-  // And the catalogue has not grown.
-  assert.equal(templates.listTemplates(user).length, 5);
+  // And the catalogue has not grown. Counted before and after rather than
+  // against a number: the point is that a save mints nothing, which stayed
+  // true every time the shipped set itself changed size.
+  assert.equal(templates.listTemplates(user).length, before);
 });
 
 test('a second save bumps the version, so propagation can tell clips are stale', () => {

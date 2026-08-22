@@ -1559,3 +1559,52 @@ class ThreeScriptsTests(unittest.TestCase):
             "start": 0.0, "end": 4.0, "words": [], "text": "قال الشيخ ان الصبر مفتاح الفرج",
         }])
         self.assertIn("الصبر", text)
+
+
+class FillCaptionTests(unittest.TestCase):
+    """The word fills left to right as it is spoken (Ink Fill)."""
+
+    def _render(self, **overrides):
+        words = [
+            {"start": 0.0, "end": 1.4, "word": "Astaghfirullah"},
+            {"start": 1.5, "end": 2.1, "word": "means"},
+        ]
+        segments = [{"start": 0.0, "end": 2.4, "text": "Astaghfirullah means", "words": words}]
+        candidate = worker.Candidate(0, 2.4, segments[0]["text"], segments, 90, [], False)
+        template = {
+            "width": 1080, "height": 1920, "captionMode": "fill", "captionMaxWords": 1,
+            "captionFont": "Outfit", "captionFontSize": 132,
+            "captionPrimary": "#2A2C39", "captionHighlight": "#4B5869", **overrides,
+        }
+        out = pathlib.Path(tempfile.mkdtemp()) / "c.ass"
+        worker.write_ass(candidate, template, out)
+        return out.read_text(encoding="utf-8")
+
+    def test_each_word_sweeps_over_its_own_spoken_length(self):
+        text = self._render()
+        lines = [l for l in text.splitlines() if l.startswith("Dialogue: 2")]
+        self.assertEqual(len(lines), 2, "one event per word")
+        # \kf takes centiseconds, and the sweep has to last exactly as long as
+        # the word was spoken -- 1.4s and 0.6s here.
+        self.assertIn("{\\kf140}Astaghfirullah", lines[0])
+        self.assertIn("{\\kf60}means", lines[1])
+
+    def test_the_two_colours_are_the_style_pair_the_sweep_runs_between(self):
+        # \kf sweeps SecondaryColour -> PrimaryColour, so the template's
+        # highlight is the colour the word waits in and primary is what it
+        # becomes. Getting these the wrong way round reverses the effect.
+        text = self._render()
+        style = [l for l in text.splitlines() if l.startswith("Style: Caption,")][0]
+        fields = style.split(",")
+        self.assertEqual(fields[3], worker.ass_color("#2A2C39"), "primary is the filled colour")
+        self.assertEqual(fields[4], worker.ass_color("#4B5869"), "secondary is the unfilled colour")
+
+    def test_without_word_timings_it_still_captions(self):
+        # A re-render of an edited transcript has no word timings; the clip must
+        # not come out silent.
+        segments = [{"start": 0.0, "end": 2.4, "text": "Astaghfirullah means", "words": []}]
+        candidate = worker.Candidate(0, 2.4, segments[0]["text"], segments, 90, [], False)
+        out = pathlib.Path(tempfile.mkdtemp()) / "c.ass"
+        worker.write_ass(candidate, {"width": 1080, "height": 1920, "captionMode": "fill"}, out)
+        text = out.read_text(encoding="utf-8")
+        self.assertIn("Astaghfirullah", text)

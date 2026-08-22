@@ -114,7 +114,7 @@ const ENUMS = {
   // 'quran' captions the ayah being recited, in Arabic with its translation,
   // taken from the corpus rather than from the transcript. It falls back to
   // phrase captions on any segment that is not a confident match.
-  captionMode: ['phrase', 'word', 'dynamic-stack', 'quran'],
+  captionMode: ['phrase', 'word', 'dynamic-stack', 'quran', 'fill'],
   captionPosition: ['top', 'middle', 'bottom'],
   captionHorizontal: ['left', 'center', 'right'],
   watermarkPosition: ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'],

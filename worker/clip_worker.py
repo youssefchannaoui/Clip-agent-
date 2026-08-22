@@ -1763,6 +1763,27 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             if inside_ayah(midpoint) or inside_arabic(midpoint):
                 continue
             events.append(f"Dialogue: 2,{ass_time(frame['start'])},{ass_time(frame['end'])},Caption,,0,0,0,,{fade_tag}{text}")
+    elif mode == "fill" and words:
+        # The word fills left to right as it is spoken. ASS does this itself
+        # with \\kf, which sweeps from the style's SecondaryColour to its
+        # PrimaryColour over the duration given -- so captionHighlight is the
+        # colour the word waits in and captionPrimary is the colour it becomes.
+        # Whisper's word timings are what the sweep is timed to, which is why
+        # this mode needs them and falls back to the phrase caption without.
+        for group in chunked(words, max_words):
+            start = float(group[0]["start"])
+            end = max(start + 0.08, float(group[-1]["end"]))
+            parts: list[str] = []
+            for word in group:
+                value = word["word"].upper() if uppercase else word["word"]
+                centiseconds = max(1, int(round((float(word["end"]) - float(word["start"])) * 100)))
+                face = f"{{\\fn{arabic_font}}}" if contains_arabic(value) else ""
+                parts.append(f"{{\\kf{centiseconds}}}{face}{ass_escape(value)}")
+            if inside_ayah((start + end) / 2) or inside_arabic((start + end) / 2):
+                continue
+            events.append(
+                f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}" + " ".join(parts)
+            )
     elif mode == "word" and words:
         for group in chunked(words, max_words):
             for active_index, active in enumerate(group):
