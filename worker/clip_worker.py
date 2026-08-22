@@ -1460,14 +1460,18 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     continue
                 seg_text = str(segment.get("text") or "")
                 found = corpus.match(seg_text)
-                # A segment with room for more than the verse it matched is
-                # usually two verses read together. Held as one match, the
-                # first ayah stayed on screen for the whole span -- thirty-
-                # seven seconds on one clip, with the verse recited in the
-                # middle of it never shown at all. The walk is only worth its
-                # cost when there is that much spare room.
+                # Two verses read in one breath match as one, and that ayah
+                # then holds the screen for the whole segment -- thirty-seven
+                # seconds on one clip, with the verse recited in the middle of
+                # it never shown. A segment that really is one verse matches it
+                # confidently; measured across a real recitation, single-verse
+                # segments scored 0.79-0.97 and the two-verse one scored 0.66.
+                # So a weak match is the signal to walk the segment, and the
+                # walk only wins if it finds more than the one verse. Word
+                # counts do not separate these cases: the two-verse segment was
+                # shorter, relative to its match, than several single ones.
                 spread: list[dict[str, Any]] | None = None
-                if found and len(seg_text.split()) > len(str(found["arabic"]).split()) * 1.35:
+                if found and float(found.get("confidence") or 0) < 0.75:
                     spread = corpus.match_sequence(seg_text) if hasattr(corpus, "match_sequence") else []
                     if len(spread) > 1:
                         found = None

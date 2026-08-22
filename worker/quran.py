@@ -173,6 +173,14 @@ class Corpus:
                     normalise(hit["arabic"])).ratio()
                 if best is None or score > best["score"]:
                     best = {"ayah": hit, "score": score, "span": span}
+            # A window can clear match()'s floor on the strength of the verse
+            # buried in it and still align poorly once the speaker's own words
+            # are excluded. Measured on a real recitation: the verses actually
+            # recited aligned at 0.68-0.97, while a spurious ayah from another
+            # surah aligned at 0.40. Below the floor it is a guess, and a
+            # confident wrong ayah on screen is worse than none.
+            if best is not None and best["score"] < minimum:
+                best = None
             if best is None:
                 index += 1
                 continue
@@ -186,6 +194,11 @@ class Corpus:
                 "ayah": best["ayah"],
                 "wordStart": index + first,
                 "wordEnd": index + last,
+                # How well this piece matched, so a caller can refuse a walk
+                # that only holds together because one of its verses is a
+                # guess. A confident wrong ayah on screen is the worst outcome
+                # this module has.
+                "score": round(best["score"], 3),
             })
             index += max(1, last)
         return found

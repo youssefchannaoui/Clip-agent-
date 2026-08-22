@@ -217,5 +217,16 @@ class PassageMatchTests(unittest.TestCase):
         for earlier, later in zip(found, found[1:]):
             self.assertLessEqual(earlier["wordEnd"], later["wordStart"])
 
+    def test_a_piece_that_only_aligns_weakly_is_dropped(self):
+        """Every verse the walk keeps has to stand on its own.
+
+        A window can clear match()'s floor on the strength of one verse inside
+        it and still align badly once the surrounding words are excluded. On a
+        real recitation that produced an ayah from Yusuf in the middle of Al
+        Imran, aligned at 0.40 where the genuine verses sat at 0.68-0.97.
+        """
+        for piece in self.corpus.match_sequence(" ".join(a["arabic"] for a in FIXTURE[:3])):
+            self.assertGreaterEqual(piece["score"], 0.62)
+
     def test_ordinary_speech_still_matches_nothing(self):
         self.assertEqual(self.corpus.match_sequence("brothers and sisters let us talk about patience"), [])
