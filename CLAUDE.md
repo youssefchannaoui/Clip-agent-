@@ -90,14 +90,21 @@ These were each a real bug and each has a test named after it.
 6. **The clean-source wait is a backstop, not a race.** A 2.5s watchdog once
    sat inside the real 2487–2571ms load spread, so clips fell back to their
    captioned export at random and showed two sets of captions.
-7. **No dead controls.** A control that cannot reach an export must not be
+7. **Three scripts on every template except the Quran one** (set 22 Aug 2026
+   by Youssef). Recited scripture becomes the ayah with its translation;
+   other Arabic is captioned in Arabic with an English line under it, from
+   Whisper's second (translate) pass; English captions as it always did. The
+   Quran template captions scripture and NOTHING else -- an aside or a
+   half-heard word in the lecture face under a verse is what made those clips
+   look wrong.
+8. **No dead controls.** A control that cannot reach an export must not be
    shown. `hookEnabled` is hard-disabled in `sanitiseTemplate()`.
 
 ---
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **426 JS + 223 Python**
+- `npm test` and `npm run check` must pass. Currently **426 JS + 230 Python**
   (7 Python skipped). Update these numbers when they change — they were wrong by
   more than a factor of two, which makes them useless as a tripwire.
 - **The 7 skips are `SpeakerTrackingTests`**, which need a test video that is not
