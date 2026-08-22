@@ -2467,6 +2467,38 @@ def apply_source_window(job: dict[str, Any], source_file: Path) -> Path:
     return trimmed
 
 
+
+def reflow_segments(segments: list[dict[str, Any]], text: str) -> list[dict[str, Any]]:
+    """Edited words spread over the segments Whisper actually timed.
+
+    Each segment keeps its own start and end and takes a share of the new text
+    proportional to how much of the old text it held. Word timings are dropped:
+    they described words that may no longer be there, and a wrong word timing
+    is worse than none.
+    """
+    words = str(text or "").split()
+    if not words or not segments:
+        return []
+    sizes = [max(1, len(str(s.get("text") or "").split())) for s in segments]
+    total = sum(sizes)
+    out: list[dict[str, Any]] = []
+    taken = 0
+    for index, segment in enumerate(segments):
+        share = (len(words) - taken) if index == len(segments) - 1 else round(len(words) * sizes[index] / total)
+        share = max(0, min(int(share), len(words) - taken))
+        chunk = words[taken:taken + share]
+        taken += share
+        if not chunk:
+            continue
+        out.append({
+            "start": float(segment.get("start") or 0.0),
+            "end": float(segment.get("end") or 0.0),
+            "text": " ".join(chunk),
+            "words": [],
+        })
+    return out
+
+
 def process_rerender(job: dict[str, Any], job_file: Path) -> None:
     result_file = Path(job["resultPath"])
     output_dir = Path(job["outputDir"])
@@ -2495,10 +2527,15 @@ def process_rerender(job: dict[str, Any], job_file: Path) -> None:
         if float(segment.get("end", 0)) > start and float(segment.get("start", 0)) < end
     ]
     if clip.get("transcriptEdited") and str(clip.get("transcript") or "").strip():
-        # The editor's caption text wins over Whisper's. Word timing is
-        # approximated across the clip, which is the honest trade: the words
-        # on screen are the words the user wrote.
-        segments = [{"start": start, "end": end, "text": str(clip["transcript"]).strip(), "words": []}]
+        # The editor's caption text wins over Whisper's -- but not its timings.
+        # Collapsing the edit into one span across the whole clip spread the
+        # words evenly and every caption drifted, by up to four seconds on a
+        # sixty-second clip. The edit is laid back over the real segment
+        # boundaries instead, so the words are the user's and the timing is
+        # still the speech's.
+        segments = reflow_segments(segments, str(clip["transcript"]).strip()) or [
+            {"start": start, "end": end, "text": str(clip["transcript"]).strip(), "words": []}
+        ]
     elif not segments:
         segments = [{"start": start, "end": end, "text": str(clip.get("transcript") or clip.get("description") or "Reminder"), "words": []}]
     text = " ".join(str(segment.get("text") or "").strip() for segment in segments).strip()

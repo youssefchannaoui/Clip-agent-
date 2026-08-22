@@ -1645,6 +1645,12 @@
         // The Quran's own words when this moment is an ayah, and a flag so the
         // panel can say the text is scripture rather than an editable line.
         text: verse ? verse.arabic : block.text,
+        // What Whisper heard, kept alongside the display text. Saving used to
+        // join the display text, so opening a recitation clip and pressing
+        // Save replaced the transcript with the matched ayahs -- each verse
+        // repeated once per block -- and marked the clip edited. Every later
+        // re-render then had no real timings to caption against.
+        sourceText: block.text,
         ayah: verse || null,
         translation: verse ? verse.translation : '',
         // A block with real timings can say when it is; a fallback one cannot.
@@ -2771,7 +2777,7 @@
         // Rebuild the transcript from the blocks, with the edited one swapped in.
         var text = edCaptionBlocks.map(function (b, i) {
           return (i === UI.edBlock && UI.edBlockDraft !== null && UI.edBlockDraft !== undefined)
-            ? UI.edBlockDraft : b.text;
+            ? UI.edBlockDraft : b.sourceText;
         }).join(' ').trim();
         global.StudioAdapter.onSaveClip(edClip.id, { transcript: text || edClip.transcript });
       },

@@ -1363,3 +1363,44 @@ class ScriptureAlignmentTests(unittest.TestCase):
     def test_a_lecture_template_still_honours_its_alignment(self):
         self.assertNotEqual(worker.alignment_for("bottom", "right"),
                             worker.alignment_for("bottom", "center"))
+
+
+class EditedTranscriptTimingTests(unittest.TestCase):
+    """An edited transcript keeps the user's words and Whisper's clock.
+
+    A re-render used to collapse an edited transcript into one span across the
+    whole clip. The words then spread evenly, so on a sixty-second recitation
+    each verse appeared up to four seconds before it was recited.
+    """
+
+    SEGMENTS = [
+        {"start": 0.5, "end": 13.59, "text": "one two three four", "words": [{"word": "one"}]},
+        {"start": 13.59, "end": 32.04, "text": "five six seven eight nine ten", "words": []},
+        {"start": 32.04, "end": 43.92, "text": "eleven twelve", "words": []},
+    ]
+
+    def test_the_segment_boundaries_survive_the_edit(self):
+        out = worker.reflow_segments(self.SEGMENTS, " ".join(f"w{i}" for i in range(24)))
+        self.assertEqual([(s["start"], s["end"]) for s in out],
+                         [(0.5, 13.59), (13.59, 32.04), (32.04, 43.92)])
+
+    def test_every_edited_word_is_kept_once_and_in_order(self):
+        words = [f"w{i}" for i in range(24)]
+        out = worker.reflow_segments(self.SEGMENTS, " ".join(words))
+        self.assertEqual(" ".join(s["text"] for s in out), " ".join(words))
+
+    def test_a_longer_segment_takes_more_of_the_new_text(self):
+        out = worker.reflow_segments(self.SEGMENTS, " ".join(f"w{i}" for i in range(24)))
+        counts = [len(s["text"].split()) for s in out]
+        self.assertGreater(counts[1], counts[0], "the six-word segment carries more than the four-word one")
+        self.assertGreater(counts[0], counts[2])
+
+    def test_stale_word_timings_are_dropped(self):
+        # They described words that may no longer be there; a wrong word timing
+        # is worse than none.
+        out = worker.reflow_segments(self.SEGMENTS, "a b c d e f")
+        self.assertTrue(all(s["words"] == [] for s in out))
+
+    def test_no_segments_means_nothing_to_reflow_onto(self):
+        self.assertEqual(worker.reflow_segments([], "some words"), [])
+        self.assertEqual(worker.reflow_segments(self.SEGMENTS, "   "), [])

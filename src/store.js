@@ -71,6 +71,20 @@ function blankState() {
   };
 }
 
+// The editor shows the matched verse in place of what Whisper heard, so a Save
+// that changed nothing arrives as the ayahs joined together -- each one
+// repeated once per caption block. Accepting that as an edit throws away the
+// timings every later re-render needs, and the captions drift seconds out.
+// Older browsers still run the old editor, so the guard lives on this side too.
+export function isAyahEcho(clip, text) {
+  const ayahs = Array.isArray(clip?.ayahs) ? clip.ayahs : [];
+  if (!ayahs.length) return false;
+  const flat = value => String(value || '').replace(/\s+/g, ' ').trim();
+  const incoming = flat(text);
+  if (!incoming) return false;
+  return incoming === flat(ayahs.map(ayah => ayah.arabic).join(' '));
+}
+
 function migrate(parsed) {
   const fresh = blankState();
   if ([2, 3, 4].includes(parsed?.engineVersion)) {
@@ -78,6 +92,14 @@ function migrate(parsed) {
       ...fresh,
       ...parsed,
       engineVersion: 4,
+      // Clips whose "edit" is only the editor echoing back the ayahs it drew.
+      // Left standing, each of those re-renders with no timings to caption
+      // against and runs seconds ahead of the recitation.
+      clips: (Array.isArray(parsed.clips) ? parsed.clips : []).map(clip => (
+        clip?.transcriptEdited && isAyahEcho(clip, clip.transcript)
+          ? { ...clip, transcriptEdited: false }
+          : clip
+      )),
       rerenderJobs: Array.isArray(parsed.rerenderJobs) ? parsed.rerenderJobs : [],
       socialConnections: parsed.socialConnections && typeof parsed.socialConnections === 'object' ? parsed.socialConnections : {},
       oauthStates: parsed.oauthStates && typeof parsed.oauthStates === 'object' ? parsed.oauthStates : {},

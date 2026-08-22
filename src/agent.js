@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
-import { state, save, log, automationSettings, publishingSettings, ownerOfRecord, musicSatisfied } from './store.js';
+import { state, save, log, automationSettings, publishingSettings, ownerOfRecord, musicSatisfied, isAyahEcho } from './store.js';
 import { ownedBy, ownerOf } from './tenancy.js';
 import { sanitiseClipStyle } from './templates.js';
 import { nextSlot } from './slots.js';
@@ -146,7 +146,7 @@ export function updateClip(id, fields = {}) {
   // the video out of date.
   if (typeof fields.transcript === 'string') {
     const text = fields.transcript.trim().slice(0, 20000);
-    if (text !== String(clip.transcript || '')) {
+    if (text !== String(clip.transcript || '') && !isAyahEcho(clip, text)) {
       clip.transcript = text;
       clip.transcriptEdited = true;
       clip.stylePending = true;

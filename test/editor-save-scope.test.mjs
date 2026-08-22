@@ -44,3 +44,26 @@ test('applying one clip\'s look keeps each sibling\'s own framing', () => {
   // And a framing field the edited clip set does not leak across.
   assert.equal(result.fitMode, undefined);
 });
+
+test('saving a recitation clip untouched is not an edit', async () => {
+  // The editor draws the matched verse in place of what Whisper heard. Saving
+  // used to join what was drawn, so opening a Quran clip and pressing Save
+  // replaced the transcript with the ayahs -- each one repeated once per
+  // caption block -- and marked the clip edited. Every later re-render then
+  // captioned one flat span with no timings and ran seconds ahead of the
+  // recitation.
+  const { isAyahEcho } = await import('../src/store.js');
+  const clip = {
+    transcript: 'ولا تحسبن الذين قتلوا في سبيل الله أمواتا',
+    ayahs: [
+      { arabic: 'وَلَا تَحْسَبَنَّ ٱلَّذِينَ قُتِلُوا۟', start: 0, end: 4 },
+      { arabic: 'وَلَا تَحْسَبَنَّ ٱلَّذِينَ قُتِلُوا۟', start: 4, end: 9 },
+      { arabic: 'فَرِحِينَ بِمَآ ءَاتَىٰهُمُ ٱللَّهُ', start: 9, end: 16 },
+    ],
+  };
+  const echo = clip.ayahs.map(a => a.arabic).join(' ');
+  assert.equal(isAyahEcho(clip, echo), true);
+  assert.equal(isAyahEcho(clip, `${echo} `), true, 'whitespace alone is not an edit');
+  assert.equal(isAyahEcho(clip, 'the words the user actually typed'), false);
+  assert.equal(isAyahEcho({ ...clip, ayahs: [] }, echo), false, 'a clip with no ayahs cannot echo one');
+});
