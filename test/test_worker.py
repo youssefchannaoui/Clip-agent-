@@ -1495,6 +1495,28 @@ class ThreeScriptsTests(unittest.TestCase):
         self.assertNotIn("\\\\N", line, "no doubled escape")
         self.assertNotIn("\\\\fs", line)
 
+    def test_long_arabic_moves_through_in_phrases(self):
+        """Wrapped Arabic sat a whole blank line apart.
+
+        libass gives each line the face's full ascent+descent, and the Arabic
+        face reserves about three times its em for tashkeel, so a two-line
+        wrap left a visible hole. The speech moves through in short phrases
+        instead, the way the ayah treatment does.
+        """
+        text = self._render([{
+            "start": 0.0, "end": 12.0, "words": [],
+            "text": "قال الشيخ ان الصبر مفتاح الفرج وان الله مع الصابرين في كل حال",
+            "english": "The sheikh said patience is the key to relief and Allah is with the patient always.",
+        }])
+        lines = [l for l in text.splitlines() if l.startswith("Dialogue: 2")]
+        self.assertGreater(len(lines), 1, "split into phrases, not held as one block")
+        for line in lines:
+            body = line.split(",,0,0,0,,", 1)[1]
+            self.assertEqual(body.count("\\N"), 1, "one Arabic line and one English line")
+            self.assertNotIn("\\\\", body, "no escaped backslash printed on screen")
+        starts = [l.split(",")[1] for l in lines]
+        self.assertEqual(starts, sorted(starts), "phrases run in order")
+
     def test_the_arabic_reads_larger_than_its_translation(self):
         # libass sizes by the face's win ascent+descent, and Amiri reserves
         # about three times its em for tashkeel, so at the template's nominal

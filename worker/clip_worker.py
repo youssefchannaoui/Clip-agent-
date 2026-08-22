@@ -1220,6 +1220,60 @@ def caption_word_override(
     return "{" + "".join(tags) + "}" + ass_escape(text) + "{\\rCaption}"
 
 
+# Spoken Arabic moves through in short phrases, like the ayah treatment above,
+# rather than being wrapped into a block. Wrapping looked wrong for a reason
+# worth writing down: libass gives every line the face's full ascent+descent,
+# and the Arabic face needs three times its em for tashkeel, so two wrapped
+# lines sat a whole blank line apart.
+SPOKEN_MAX_WORDS = 5
+
+
+def spoken_events(arabic: str, english: str, *, start: float, end: float,
+                  arabic_font: str, arabic_size: int, latin_font: str,
+                  translation_size: int, fade_tag: str) -> list[str]:
+    """Arabic speech a phrase at a time, with its English under each phrase.
+
+    The English is split across the phrases in the same proportions as the
+    Arabic, so the two stay together instead of one sentence of English
+    sitting under a changing line of Arabic.
+    """
+    words = str(arabic or "").split()
+    if not words:
+        return []
+    chunk_count = max(1, -(-len(words) // SPOKEN_MAX_WORDS))
+    base, extra = divmod(len(words), chunk_count)
+    chunks: list[list[str]] = []
+    taken = 0
+    for index in range(chunk_count):
+        size = base + (1 if index < extra else 0)
+        chunks.append(words[taken:taken + size])
+        taken += size
+    gloss = str(english or "").split()
+    span = max(0.1, end - start)
+    events: list[str] = []
+    at = start
+    g_taken = 0
+    for index, chunk in enumerate(chunks):
+        share = span * (len(chunk) / len(words))
+        chunk_start, chunk_end = at, (end if index == chunk_count - 1 else min(end, at + share))
+        at = chunk_end
+        if chunk_end <= chunk_start:
+            continue
+        line = "{\\fn" + arabic_font + "\\fs" + str(arabic_size) + "}" + ass_escape(" ".join(chunk))
+        if gloss:
+            g_size = (len(gloss) - g_taken) if index == chunk_count - 1 else round(len(gloss) * len(chunk) / len(words))
+            g_size = max(0, min(int(g_size), len(gloss) - g_taken))
+            piece = gloss[g_taken:g_taken + g_size]
+            g_taken += g_size
+            if piece:
+                line += "\\N{\\fn" + latin_font + "\\fs" + str(translation_size) + "}" + ass_escape(" ".join(piece))
+        events.append(
+            f"Dialogue: 2,{ass_time(chunk_start)},{ass_time(chunk_end)},Caption,,0,0,0,,{fade_tag}" + line
+        )
+    return events
+
+
+
 def wrap_caption(text: str, width: int = 28) -> str:
     words = text.strip().split()
     lines: list[str] = []
@@ -1745,24 +1799,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     # with a sentence of English beneath it reads as a mistake, and the
     # translation is of the sentence in any case.
     for span in spoken_arabic:
-        arabic_line = mixed_script_line(
-            wrap_caption(span["arabic"], 30), font=font, arabic_font=arabic_font, uppercase=False,
-        )
-        # Escape first, wrap second: wrap_caption returns ASS's own \\N breaks,
-        # and escaping after that turned each one into a literal backslash
-        # printed in the middle of the sentence.
-        english_line = wrap_caption(ass_escape(span["english"]), 42)
-        # The Arabic is the line that was actually spoken, so it has to read as
-        # the primary one. libass sizes by the face's win ascent+descent, and
-        # Amiri reserves roughly three times its em for tashkeel -- at the
-        # template's nominal size it came out smaller than the English
-        # underneath it, which inverted the hierarchy.
-        spoken_size = int(round(font_size * ayah_nominal_scale(arabic_font)))
-        events.append(
-            f"Dialogue: 2,{ass_time(span['start'])},{ass_time(span['end'])},Caption,,0,0,0,,{fade_tag}"
-            + "{\\fs" + str(spoken_size) + "}" + arabic_line
-            + "\\N{\\fn" + font + "\\fs" + str(translation_size) + "}" + english_line
-        )
+        # The Arabic is what was actually said, so it reads as the primary
+        # line. libass sizes by the face's win ascent+descent and the Arabic
+        # face reserves about three times its em for tashkeel, so at the
+        # template's nominal size it came out SMALLER than the English under
+        # it, which inverted the hierarchy.
+        events.extend(spoken_events(
+            span["arabic"], span["english"], start=span["start"], end=span["end"],
+            arabic_font=arabic_font,
+            arabic_size=int(round(font_size * ayah_nominal_scale(arabic_font))),
+            latin_font=font, translation_size=translation_size, fade_tag=fade_tag,
+        ))
 
     # The ayahs found above, in the Quran's own words and the Arabic face,
     # whatever style the rest of the clip is using.
