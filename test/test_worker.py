@@ -434,11 +434,25 @@ class QuranCaptionTests(unittest.TestCase):
         Emitting only the matched spans would leave the screen blank for
         however long the speaker talks between them.
         """
-        aside = "and my brothers listen closely to what follows"
+        aside = "and my brothers listen closely to what follows here"
         passage = f'{self.AYAHS[0]["arabic"]} {aside} {self.AYAHS[1]["arabic"]}'
         text = self._render([{"start": 0.0, "end": 20.0, "text": passage}])
         self.assertIn("brothers", text, "the aside is captioned between the ayat")
         self.assertIn("هَيْهَاتَ", text)
+        self.assertIn("سَعَىٰ", text)
+
+    def test_a_stumble_between_two_ayat_is_not_captioned(self):
+        """Not everything between two verses is speech worth burning in.
+
+        A reciter announces the verse number and Whisper guesses at the words
+        around a verse it half-heard. Rendered, that put "157-" alone on screen
+        between two ayat, which reads as a bug rather than as a caption.
+        """
+        passage = f'{self.AYAHS[0]["arabic"]} 157- كن يسارعون {self.AYAHS[1]["arabic"]}'
+        text = self._render([{"start": 0.0, "end": 20.0, "text": passage}])
+        self.assertNotIn("157", text)
+        self.assertNotIn("يسارعون", text)
+        self.assertIn("هَيْهَاتَ", text, "both verses are still captioned")
         self.assertIn("سَعَىٰ", text)
 
     def test_the_verse_number_is_drawn_in_the_mushaf_ornament(self):

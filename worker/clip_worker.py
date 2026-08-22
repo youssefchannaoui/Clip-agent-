@@ -901,6 +901,12 @@ def quran_font(fallback: str) -> str:
 # frame's usable width on a long ayah, and libass wraps it into three cramped
 # lines instead of the single calm line the reference clips hold. Measured on
 # 3:169, the longest ayah in this surah's set.
+# How much speech has to sit between two ayat before it is captioned in its
+# own right. Below this it is the reciter announcing a verse number, or
+# Whisper's guess at the words around one, and burning that into a recitation
+# clip reads as a mistake rather than as a caption.
+GAP_CAPTION_MIN_WORDS = 6
+
 AYAH_MAX_WORDS = 4
 # Measured from the reference recitation clips (frame-by-frame brightness of
 # the text band): phrases enter over roughly half a second and leave slightly
@@ -1498,8 +1504,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                         # matched spans would leave the clip silent through
                         # every aside.
                         def caption_gap(first: int, last: int) -> None:
-                            gap = all_words[first:last]
-                            if not gap:
+                            # Reciters announce the verse number, and Whisper
+                            # stumbles over the words either side of a verse it
+                            # half-heard. Neither is an aside, and both looked
+                            # like a mistake burnt into the clip: "157-" alone
+                            # on screen between two ayat. A real aside runs to a
+                            # sentence, so that is the floor.
+                            gap = [
+                                word for word in all_words[first:last]
+                                if not re.fullmatch(r"[\d\u0660-\u0669]+[-\u2013\u2014.:)\]]*", word)
+                            ]
+                            if len(gap) < GAP_CAPTION_MIN_WORDS:
                                 return
                             gap_start, gap_end = word_time(first), word_time(last)
                             if gap_end - gap_start < 0.35:
