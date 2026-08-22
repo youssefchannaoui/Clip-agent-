@@ -1168,7 +1168,8 @@ def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: floa
     return events
 
 
-def mixed_script_line(raw: str, *, font: str, arabic_font: str, uppercase: bool) -> str:
+def mixed_script_line(raw: str, *, font: str, arabic_font: str, uppercase: bool,
+                      tag_latin: bool = True) -> str:
     """A line that may switch between Arabic and English, word by word.
 
     Word and stacked modes already switch face per word through
@@ -1179,6 +1180,11 @@ def mixed_script_line(raw: str, *, font: str, arabic_font: str, uppercase: bool)
 
     Uppercase is applied only to the Latin runs: Arabic has no case, and
     .upper() on it is a no-op that would still be misleading to write.
+
+    tag_latin=False leaves Latin words as bare text, for callers whose style is
+    already set in that face. Every override block starts a fresh layout run in
+    libass, and the style's Spacing is not carried across one -- so naming the
+    face again on every word silently threw the tracking away.
     """
     out: list[str] = []
     for word in str(raw).split():
@@ -1196,7 +1202,9 @@ def mixed_script_line(raw: str, *, font: str, arabic_font: str, uppercase: bool)
                 rendered.append(f"{{\\fn{arabic_font}\\i0}}{ass_escape(piece)}")
             else:
                 value = piece.upper() if uppercase else piece
-                rendered.append(f"{{\\fn{font}}}{ass_escape(value)}")
+                rendered.append(
+                    f"{{\\fn{font}}}{ass_escape(value)}" if tag_latin else ass_escape(value)
+                )
         out.append("\\N".join(rendered))
     return " ".join(out)
 
@@ -2117,11 +2125,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 continue
             text = mixed_script_line(
                 " ".join(str(word["word"]).strip() for word in card["words"]),
-                font=font, arabic_font=arabic_font, uppercase=uppercase,
+                font=font, arabic_font=arabic_font, uppercase=uppercase, tag_latin=False,
             )
-            events.append(
-                f"Dialogue: 2,{ass_time(card['start'])},{ass_time(card['end'])},Caption,,0,0,0,,{fade_tag}{text}"
-            )
+            # Tracking is stated on the line rather than left to the style's
+            # Spacing: an Arabic word in the card introduces an override block,
+            # and the style's spacing does not survive one.
+            spacing = f"{{\\fsp{letter_spacing:g}}}" if abs(letter_spacing) > 0.001 else ""
+            span = f"{ass_time(card['start'])},{ass_time(card['end'])}"
+            events.append(f"Dialogue: 2,{span},Caption,,0,0,0,,{fade_tag}{spacing}{text}")
     elif mode == "fill" and words:
         # The word fills left to right as it is spoken. ASS does this itself
         # with \\kf, which sweeps from the style's SecondaryColour to its
