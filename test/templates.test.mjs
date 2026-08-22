@@ -65,6 +65,16 @@ test('Bold Stack keeps the values measured off the reference edits', () => {
   assert.equal(tpl.captionSizeVariation, 100);
   assert.equal(tpl.captionStackLines, 4);
   assert.equal(tpl.captionBehindSubject, true);
+  // Asked for 22 Aug 2026: the speaker moves right so the captions down the
+  // left have clear picture to sit on, and the block wraps before the frame
+  // edge. Both are scoped to this template -- the defaults are 0 and 100.
+  assert.equal(tpl.framingSubjectBias, 16);
+  assert.equal(tpl.captionBlockWidth, 80);
+  for (const other of ['mono-minimal', 'quran-recitation']) {
+    const t = templates.templateById(other, user);
+    assert.equal(t.framingSubjectBias, 0, `${other} keeps its framing`);
+    assert.equal(t.captionBlockWidth, 100, `${other} keeps the full width`);
+  }
 });
 
 test('a clip may take the stacked build and the behind-speaker cut-out', () => {

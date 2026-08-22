@@ -1818,3 +1818,69 @@ class CaptionsBehindSubjectTests(unittest.TestCase):
 
     def test_the_matte_is_read_as_luma(self):
         self.assertIn("format=gray", self._graph(matte_src="1:v"))
+
+
+class SubjectBiasTests(unittest.TestCase):
+    """Pushing the framed subject aside to clear room for the captions.
+
+    A template whose captions live down one edge needs the speaker off that
+    edge. Moving the captions instead only moves the collision.
+    """
+
+    def _origin(self, center_x, bias=0.0, src_w=1920):
+        x, _ = worker.crop_origin_from_center(
+            center_x, src_h := 540, src_w, 1080, 608, 1080, subject_bias=bias,
+        )
+        return x
+
+    def test_no_bias_frames_exactly_as_before(self):
+        self.assertEqual(self._origin(960, 0.0), self._origin(960))
+
+    def test_a_positive_bias_moves_the_subject_right_in_the_crop(self):
+        # The crop window moves LEFT, which is what puts the subject right.
+        self.assertLess(self._origin(960, 0.16), self._origin(960, 0.0))
+
+    def test_the_subject_never_leaves_the_frame(self):
+        # Even at the extremes the subject stays between 15% and 85% across,
+        # so a hard bias cannot slice a side-seated speaker in half.
+        for center in (200, 960, 1700):
+            for bias in (-0.5, -0.16, 0.16, 0.5):
+                x = self._origin(center, bias)
+                self.assertGreaterEqual(x, 0)
+                self.assertLessEqual(x + 608, 1920)
+                offset = (center - x) / 608
+                self.assertTrue(-0.01 <= offset <= 1.01, f"subject at {offset:.2f} of the crop")
+
+    def test_a_speaker_against_the_far_edge_is_nudged_not_dragged(self):
+        # Already at the right of the source: the bias must not push them off.
+        plain = self._origin(1700, 0.0)
+        pushed = self._origin(1700, 0.16)
+        self.assertLessEqual(abs(pushed - plain), 608 * 0.16 + 1)
+
+
+class CaptionBlockWidthTests(unittest.TestCase):
+    """Wrapping earlier so a line finishes before it reaches the speaker."""
+
+    def _lines(self, block_width):
+        words = [(w, i * 0.4, i * 0.4 + 0.3) for i, w in enumerate(
+            ["everything", "you", "were", "promised", "is", "waiting", "here"])]
+        segments = [{"start": s, "end": e, "text": w,
+                     "words": [{"start": s, "end": e, "word": w}]} for w, s, e in words]
+        candidate = worker.Candidate(
+            start=0.0, end=5.0, text=" ".join(w for w, _, _ in words),
+            segments=segments, score=80, reasons=[], quote_risk=False)
+        template = {
+            "captionMode": "stack-build", "captionFontSize": 187, "width": 1080,
+            "captionMarginH": 52, "captionStackMaxWords": 4, "captionStackLines": 4,
+            "captionClearPause": 0.9, "captionBlockWidth": block_width,
+        }
+        blocks = worker.stack_build_blocks(candidate, template)
+        return [len(" ".join(str(w["word"]) for w in line))
+                for block in blocks for line in block["lines"]]
+
+    def test_a_narrower_block_never_sets_a_longer_line(self):
+        self.assertLessEqual(max(self._lines(70)), max(self._lines(100)))
+
+    def test_the_default_is_edge_to_edge(self):
+        # Templates that do not set it must wrap exactly where they used to.
+        self.assertEqual(self._lines(100), self._lines(100.0))

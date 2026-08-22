@@ -1528,7 +1528,13 @@ def stack_build_blocks(candidate: Candidate, template: dict[str, Any]) -> list[d
     variation = max(0.0, min(100.0, float(template.get("captionSizeVariation", 0) or 0))) / 100.0
     font_size = int(template.get("captionFontSize", 62) or 62)
     margin_h = int(template.get("captionMarginH", 90) or 90)
-    usable = max(120, int(template.get("width", 1080) or 1080) - margin_h * 2)
+    # How much of the frame the block may fill before it wraps. 100 is edge to
+    # edge; a template that leaves the far side of the frame to the speaker
+    # sets less, so most lines finish in clear picture and only the occasional
+    # long one runs under them.
+    block = max(30.0, min(100.0, float(template.get("captionBlockWidth", 100) or 100))) / 100.0
+    frame_width = int(template.get("width", 1080) or 1080)
+    usable = max(120, int(frame_width * block) - margin_h)
 
     blocks: list[list[dict[str, Any]]] = []
     lines: list[dict[str, Any]] = []
@@ -2264,6 +2270,7 @@ def crop_origin_from_center(
     crop_h: int,
     padding: float = 0.18,
     vertical_face_ratio: float = 0.38,
+    subject_bias: float = 0.0,
 ) -> tuple[int, int]:
     """Given where the subject actually is, compute the crop's top-left corner.
 
@@ -2293,6 +2300,17 @@ def crop_origin_from_center(
         desired_ratio = 0.22 + padding * 0.10
     elif center_x > src_w * 0.58:
         desired_ratio = 0.78 - padding * 0.10
+    # Push the subject across the frame to clear room beside them. A template
+    # whose captions live down one edge needs the speaker off that edge, and
+    # framing is the only place that can be arranged -- moving the captions
+    # instead just moves the collision.
+    #
+    # Applied on top of the placement above rather than replacing it, so a
+    # speaker already sitting against the far edge of the source is nudged
+    # rather than dragged across and sliced. 0 leaves the framing untouched,
+    # which is every template that does not ask.
+    if abs(subject_bias) > 0.0005:
+        desired_ratio = max(0.15, min(0.85, desired_ratio + subject_bias))
     x = int(max(0, min(src_w - crop_w, round(center_x - crop_w * desired_ratio))))
 
     if center_y is None:
@@ -2304,7 +2322,7 @@ def crop_origin_from_center(
     return x, y
 
 
-def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_width: int, out_height: int, bias: str = "auto", padding: float = 0.18, zoom: float = 1.0) -> dict[str, Any] | None:
+def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_width: int, out_height: int, bias: str = "auto", padding: float = 0.18, zoom: float = 1.0, subject_bias: float = 0.0) -> dict[str, Any] | None:
     """Choose one stable crop that keeps the main speaker visible.
 
     This intentionally avoids frame-by-frame camera movement. It samples a few
@@ -2424,7 +2442,8 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
     # vertical position instead of a fixed guess. The fixed guess used to
     # apply no matter where the subject really was, which is what cut
     # heads off when a video's framing didn't match that one assumption.
-    x, y = crop_origin_from_center(center, center_y, src_w, src_h, crop_w, crop_h, padding)
+    x, y = crop_origin_from_center(center, center_y, src_w, src_h, crop_w, crop_h, padding,
+                                   subject_bias=subject_bias)
     method = "face" if face_centers else ("upper-body" if body_centers else "foreground")
     return {"x": x, "y": y, "w": crop_w, "h": crop_h, "method": method}
 
@@ -2535,6 +2554,13 @@ def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict
             # which hardcoded ffmpeg's centred default.
             pos_x = max(0.0, min(1.0, float(template.get("cropPositionX", 0.5) or 0.5)))
             pos_y = max(0.0, min(1.0, float(template.get("cropPositionY", 0.5) or 0.5)))
+            # Same nudge smart framing applies, for the path that runs when
+            # there is no detection to nudge -- otherwise a clip whose face
+            # detection came up empty would frame differently from its
+            # siblings on the same template. Moving the crop window left is
+            # what moves the subject right.
+            subject_bias = max(-50.0, min(50.0, float(template.get("framingSubjectBias", 0) or 0))) / 100.0
+            pos_x = max(0.0, min(1.0, pos_x - subject_bias))
             return (
                 f"[{label}]{lead}scale={scale_w}:{scale_h}:force_original_aspect_ratio=increase,"
                 f"crop={width}:{height}:(iw-ow)*{pos_x:.4f}:(ih-oh)*{pos_y:.4f},setsar=1[{out}]"
@@ -2679,6 +2705,7 @@ def render_clip(
                 str(template.get("smartFramingBias") or "auto"),
                 float(template.get("smartFramingPadding", 0.18)),
                 float(template.get("smartFramingZoom", 1.0)),
+                subject_bias=max(-50.0, min(50.0, float(template.get("framingSubjectBias", 0) or 0))) / 100.0,
             )
         except Exception:
             crop_plan = None
@@ -3415,6 +3442,7 @@ def track_speaker_keyframes(
     smoothing: float = 0.82,
     sample_hz: float = 2.0,
     speech_spans: list[tuple[float, float]] | None = None,
+    subject_bias: float = 0.0,
 ) -> dict[str, Any]:
     """Follow the active speaker across a clip and return smoothed keyframes.
 
@@ -3561,7 +3589,8 @@ def track_speaker_keyframes(
     for (t, cx, cy) in raw:
         smooth_x += (cx - smooth_x) * alpha
         smooth_y += (cy - smooth_y) * alpha
-        x, y = crop_origin_from_center(smooth_x, smooth_y, src_w, src_h, crop_w, crop_h, padding)
+        x, y = crop_origin_from_center(smooth_x, smooth_y, src_w, src_h, crop_w, crop_h, padding,
+                                       subject_bias=subject_bias)
         keyframes.append({"t": round(t, 3), "x": x, "y": y, "w": crop_w, "h": crop_h})
 
     return {
@@ -3593,6 +3622,7 @@ def main() -> int:
             float(request.get("zoom") or 1.0),
             float(request.get("smoothing") or 0.82),
             speech_spans=spans or None,
+            subject_bias=max(-50.0, min(50.0, float(request.get("subjectBias") or 0))) / 100.0,
         )
         print(json.dumps({"plan": plan}))
         return 0

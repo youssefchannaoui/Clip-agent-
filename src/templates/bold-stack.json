@@ -62,5 +62,7 @@
   "smartFramingPadding": 0.18,
   "smartFramingZoom": 1.0,
   "grain": 0,
-  "vignette": 0.1
+  "vignette": 0.1,
+  "framingSubjectBias": 16,
+  "captionBlockWidth": 80
 }

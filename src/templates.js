@@ -17,6 +17,10 @@ const DEFAULTS = Object.freeze({
   fitMode: 'contain',
   smartFramingEnabled: true,
   smartFramingBias: 'auto',
+  // Push the framed subject across the frame, as a percentage, to clear room
+  // beside them. Positive moves them right. 0 leaves smart framing to place
+  // them as it always has, which is every template that does not ask.
+  framingSubjectBias: 0,
   frameBackground: '#000000',
   blurStrength: 28,
   filterPreset: 'natural',
@@ -91,6 +95,9 @@ const DEFAULTS = Object.freeze({
   // its rhythm. Only the stack-build caption mode reads either.
   captionStackLines: 4,
   captionSizeVariation: 0,
+  // How much of the frame width a stacked-build block may fill before it
+  // wraps. 100 is edge to edge.
+  captionBlockWidth: 100,
   captionStackProbability: 0.42,
   captionClearPause: 0.42,
   captionLineHeight: 0.88,
@@ -165,6 +172,7 @@ export const NUMBER_RANGES = {
   // either side, and the drag stalled there.
   captionMarginV: [20, 960], captionMarginH: [20, 700], captionMaxWords: [1, 12],
   captionStackMaxWords: [1, 6], captionStackLines: [2, 6], captionSizeVariation: [0, 100],
+  captionBlockWidth: [30, 100], framingSubjectBias: [-50, 50],
   captionStackProbability: [0, 1], captionClearPause: [0.15, 2], captionLineHeight: [0.65, 1.4],
   hookDuration: [0.5, 8], hookFontSize: [24, 120], hookBackgroundOpacity: [0, 100],
   watermarkFontSize: [12, 90], watermarkOpacity: [0, 100], watermarkMarginV: [10, 500], watermarkMarginH: [10, 500],
