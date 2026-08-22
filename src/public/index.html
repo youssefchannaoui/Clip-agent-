@@ -582,8 +582,19 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .clip-main{display:flex;gap:16px;align-items:flex-start}
 .clip-content{flex:1;min-width:0}
 .bgt-row{display:flex;gap:9px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
-.bgt-card{flex:none;width:60px;background:none;border:0;padding:0;cursor:pointer;text-align:center}
-.bgt-thumb{position:relative;display:block;width:54px;height:96px;margin:0 auto;border-radius:9px;border:1.5px solid #26262A;background-color:#131315;background-size:cover;background-position:center;transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease;overflow:hidden}
+.bgt-card{position:relative;flex:none;width:104px;background:none;border:0;padding:0;cursor:pointer;text-align:center}
+.bgt-thumb{position:relative;display:block;width:98px;height:174px;margin:0 auto;border-radius:9px;border:1.5px solid #26262A;background-color:#131315;background-size:cover;background-position:center;transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease;overflow:hidden}
+/* A Pro style stays legible -- the point of showing it is to want it -- but
+   reads as out of reach until the plan changes. A corner chip rather than a
+   scrim: at 98px the preview IS the pitch, and covering it defeats the row.
+   The card is the positioning context; without that the chip lands against
+   the page and its gradient wipes out every name below it. */
+.bgt-card.locked .bgt-thumb{filter:saturate(.55) brightness(.86)}
+.bgt-card.locked:hover .bgt-thumb{border-color:#4A4038}
+/* Bottom-left, because that is the one corner none of the caption styles
+   uses: Bold Stack sets top-left, Headline top-centre, the rest centre. */
+.bgt-lock{position:absolute;top:150px;left:9px;display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:999px;background:rgba(10,10,12,.8);border:1px solid rgba(217,180,120,.45);color:#F0D6A6;font:600 8.5px Outfit,Inter,sans-serif;letter-spacing:.03em;pointer-events:none}
+.bgt-name{white-space:normal;line-height:1.35}
 .bgt-card:not(.on):hover .bgt-thumb{border-color:#3A3A42;transform:translateY(-1px)}
 .bgt-card.on .bgt-thumb{border-color:rgba(240,214,166,.9);box-shadow:0 0 0 3px rgba(240,214,166,.12)}
 .bgt-name{display:block;margin-top:5px;font:500 10px Outfit,Inter,sans-serif;color:#8B8B93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -3591,25 +3602,67 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        whole picker silently vanished on the next paint. */
     jobStyleEl.setAttribute('data-host-owned','');
     const LENGTH_BANDS=[[10,30,'Up to 30s'],[30,45,'30\u201345s'],[45,60,'45\u201360s'],[60,90,'60\u201390s']];
+    /* Whether this account may use the Pro styles. The server is the
+       authority -- it refuses the selection and the render either way -- so
+       an unknown answer here paints no locks rather than inventing one. */
+    function tplPaid(){
+      const b=DATA.billing&&DATA.billing.current;
+      if(!b)return true;
+      if(b.features&&typeof b.features.templates==='boolean')return b.features.templates;
+      return String(b.plan||'free')!=='free';
+    }
+
+    /* A preview of the caption style, drawn from the template's own fields.
+       The old one painted the same two lines ("the heart / finds rest") in
+       every style at 7px, so five templates looked like five copies of each
+       other -- the one thing that actually separates them is what the
+       captions DO, and none of it was visible.
+
+       Sizes are the template's real captionFontSize scaled into the thumb,
+       through the same Win-cell divisor libass uses, so a style that renders
+       large looks large here. */
+    const MINI_W = 98;
     function tplMiniHtml(t){
-      const mono=t.filterPreset==='monochrome';
-      const pos=t.captionPosition==='top'?'16%':t.captionPosition==='bottom'?'64%':'42%';
-      const align=t.captionHorizontal==='left'?'flex-start':t.captionHorizontal==='right'?'flex-end':'center';
-      const pad=t.captionHorizontal==='left'?'padding-left:6px;':t.captionHorizontal==='right'?'padding-right:6px;':'';
-      const fam=`'${esc(t.captionFont||'Outfit')}',Outfit,Inter,sans-serif`;
-      const tt=t.captionUppercase?'text-transform:uppercase;':'';
+      const mono = t.filterPreset === 'monochrome';
+      const fam = `'${esc(t.captionFont || 'Outfit')}',Outfit,Inter,sans-serif`;
+      const tt = t.captionUppercase ? 'text-transform:uppercase;' : '';
+      const primary = esc(t.captionPrimary || '#FFFFFF');
+      const queued = esc(t.captionHighlight || '#808080');
+      /* 1080 is the frame the templates are authored against; 1.562 is the
+         Win cell that turns an ASS size into an em. */
+      const px = n => Math.max(4, (Number(n) || 60) / 1.562 * (MINI_W / 1080)).toFixed(1);
+      const justify = t.captionPosition === 'top' ? 'flex-start'
+        : t.captionPosition === 'bottom' ? 'flex-end' : 'center';
+      const align = t.captionHorizontal === 'left' ? 'flex-start'
+        : t.captionHorizontal === 'right' ? 'flex-end' : 'center';
+      const textAlign = t.captionHorizontal === 'left' ? 'left'
+        : t.captionHorizontal === 'right' ? 'right' : 'center';
+      const line = (text, size, color, extra = '') =>
+        `<span style="font:${t.captionUppercase ? '800' : '700'} ${size}px ${fam};${tt}color:${color};line-height:1.07;text-align:${textAlign};${extra}">${text}</span>`;
+
       let inner;
-      if(t.captionMode==='quran'){
-        inner=`<span style="font:400 10px 'Scheherazade New','Amiri',serif;color:#F2F2F4;line-height:1">\u0627\u0644\u0644\u0651\u064E\u0647\u064F \u0646\u064F\u0648\u0631\u064F</span>`
-          +'<span style="width:22px;height:2.5px;border-radius:2px;background:#8B8B93;opacity:.7;margin-top:3px"></span>';
-      }else if(t.captionMode==='word'){
-        inner=`<span style="font:700 7.5px ${fam};${tt}color:${esc(t.captionHighlight||'#FFFFFF')}">rest</span>`;
-      }else{
-        inner=`<span style="font:700 7px ${fam};${tt}color:${esc(t.captionHighlight||'#FFFFFF')}">the heart</span>`
-          +`<span style="font:700 7px ${fam};${tt}color:${esc(t.captionPrimary||'#9AA0A6')}">finds rest</span>`;
+      if (t.captionMode === 'quran') {
+        inner = `<span style="font:400 ${px(t.captionFontSize * 2.4)}px 'Scheherazade New','Amiri',serif;color:#F2F2F4;line-height:1.2">\u0627\u0644\u0631\u0651\u064E\u062D\u0652\u0645\u064E\u0670\u0646\u064F</span>`
+          + `<span style="font:500 ${px(t.captionTranslationSize)}px ${fam};color:#F2F2F4;margin-top:2px">The Most Merciful</span>`;
+      } else if (t.captionMode === 'stack-build') {
+        /* Lines of different sizes with the next one waiting in grey -- the
+           whole point of the style. */
+        const s1 = px(t.captionFontSize * 0.58), s2 = px(t.captionFontSize * 0.74), s3 = px(t.captionFontSize);
+        inner = line('if you', s2, primary) + line('looked at', s1, primary)
+          + line('from a real', s3, primary) + line('perspective', s2, queued);
+      } else if (t.captionMode === 'cards') {
+        inner = line('of a person\u2019s islam', px(t.captionFontSize), primary);
+      } else if (t.captionMode === 'word') {
+        inner = line('remember', px(t.captionFontSize), primary);
+      } else if (t.captionMode === 'fill') {
+        inner = line('every word', px(t.captionFontSize), primary);
+      } else {
+        inner = line('the heart', px(t.captionFontSize), primary)
+          + line('finds rest', px(t.captionFontSize), queued);
       }
-      return `<span class="bgt-thumb" style="display:flex;flex-direction:column;align-items:${align};justify-content:flex-start;${pad}${mono?'filter:grayscale(1);':''}">`
-        +`<span style="display:flex;flex-direction:column;align-items:${align};margin-top:${pos};gap:1px;max-width:100%">${inner}</span></span>`;
+      const inset = t.captionHorizontal === 'center' ? '0 7px' : '0 6px';
+      return `<span class="bgt-thumb" style="display:flex;flex-direction:column;align-items:${align};justify-content:${justify};padding:9px ${inset};${mono ? 'filter:grayscale(1);' : ''}">`
+        + `<span style="display:flex;flex-direction:column;align-items:${align};gap:1px;max-width:100%">${inner}</span></span>`;
     }
     /* The job panel is a flex column with max-height: 88vh and overflow:
        auto. Once its content outgrew that height every child started
@@ -3705,8 +3758,12 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         +'<div class="bgt-row">'
         +(DATA.templates||[]).map(t=>{
           const on=t.name===active;
-          return `<button type="button" class="bgt-card${on?' on':''}" data-tpl-name="${esc(t.name)}" title="${esc(t.description||t.name)}">`
+          /* Pro styles stay in the row rather than being hidden: a style you
+             cannot see is a style you never upgrade for. */
+          const locked=Boolean(t.pro)&&!tplPaid();
+          return `<button type="button" class="bgt-card${on?' on':''}${locked?' locked':''}" data-tpl-name="${esc(t.name)}"${locked?' data-tpl-locked="1"':''} title="${esc(t.description||t.name)}">`
             +tplMiniHtml(t)
+            +(locked?'<span class="bgt-lock"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>Pro</span>':'')
             +`<span class="bgt-name">${esc(t.name)}</span></button>`;
         }).join('')
         +'</div>'
@@ -3717,6 +3774,13 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       jobStyleEl.innerHTML=html;
       jobStyleEl.querySelectorAll('[data-tpl-name]').forEach(b=>b.onclick=e=>{
         e.preventDefault();
+        /* The server refuses this too. Saying so here means the answer is
+           immediate and names the style, rather than arriving as a 402. */
+        if(b.dataset.tplLocked){
+          const free=(DATA.templates||[]).find(x=>!x.pro);
+          toast(`"${b.dataset.tplName}" is a Pro style${free?` \u2014 ${free.name} is included free`:''}. Any paid plan unlocks the rest.`);
+          return;
+        }
         /* Through the design's own binding, clash-numbered exactly as its
            option labels are, so behaviour cannot drift from the hidden select. */
         const names=(DATA.templates||[]).map(x=>x.name);
