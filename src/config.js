@@ -67,7 +67,7 @@ export const config = {
   objectStorageSecretKey: process.env.OBJECT_STORAGE_SECRET_KEY || '',
   objectStoragePublicUrl: (process.env.OBJECT_STORAGE_PUBLIC_URL || '').replace(/\/+$/, ''),
 
-  defaultTemplateId: process.env.DEFAULT_TEMPLATE_ID || 'mono-minimal',
+  defaultTemplateId: process.env.DEFAULT_TEMPLATE_ID || 'clean-line',
   clipsPerVideo: Math.max(1, Math.round(number(process.env.CLIPS_PER_VIDEO, 8))),
   clipMinSeconds: Math.max(3, Math.round(number(process.env.CLIP_MIN_SECONDS, 20))),
   clipMaxSeconds: Math.max(5, Math.round(number(process.env.CLIP_MAX_SECONDS, 90))),

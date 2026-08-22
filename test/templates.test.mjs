@@ -31,18 +31,37 @@ test('invalid template selection is blocked', () => {
 // are stored as a patch over the shipped file, so ids stay stable and Save
 // always means save.
 
-test('the catalogue carries the shipped set: one Quran style, two lecture styles', () => {
+test('the catalogue carries the shipped set: one Quran style, three lecture styles', () => {
   // Cut back to two on request (22 Aug 2026): "delete everything except mono
   // and quran so i have 1 lecture 1 quran recitation". Bold Stack was then
   // built from reference edits (22 Aug 2026) as the second lecture style, so a
   // kind having more than one member is now expected -- what is not allowed is
   // a template that exists only because somebody duplicated another.
   const list = templates.listTemplates(user);
-  assert.deepEqual(list.map(t => t.id).sort(), ['bold-stack', 'mono-minimal', 'quran-recitation']);
+  assert.deepEqual(list.map(t => t.id).sort(), ['bold-stack', 'clean-line', 'mono-minimal', 'quran-recitation']);
   const modes = Object.fromEntries(list.map(t => [t.id, t.captionMode]));
   assert.equal(modes['quran-recitation'], 'quran');
   assert.notEqual(modes['mono-minimal'], 'quran', 'the lecture style captions the transcript');
   assert.notEqual(modes['bold-stack'], 'quran', 'the lecture style captions the transcript');
+  assert.notEqual(modes['clean-line'], 'quran', 'the lecture style captions the transcript');
+});
+
+test('Clean Line keeps the values measured off its reference, and is the default', () => {
+  // The third reference was a native 1080x1920 upload, so these transfer
+  // one to one rather than being scaled off a square.
+  const tpl = templates.templateById('clean-line', user);
+  assert.equal(tpl.captionMode, 'cards');
+  assert.equal(tpl.captionFont, 'Montserrat');
+  assert.equal(tpl.captionFontSize, 87, 'the line measured an x-height of 30px');
+  assert.equal(tpl.captionPrimary, tpl.captionHighlight, 'no word is emphasised in this style');
+  assert.equal(tpl.captionPosition, 'bottom');
+  assert.equal(tpl.captionHorizontal, 'center');
+  assert.equal(tpl.captionMarginV, 466, 'the baseline sat at y=1429 of 1920');
+  assert.equal(tpl.captionMaxWords, 5);
+  assert.equal(tpl.captionFadeMs, 0, 'the reference cuts between cards, it does not fade');
+  assert.equal(tpl.captionBehindSubject, false);
+  // Chosen as the shipped default (22 Aug 2026).
+  assert.equal(templates.selectedTemplate({ id: 'user_never_chose' }).id, 'clean-line');
 });
 
 test('Bold Stack keeps the values measured off the reference edits', () => {

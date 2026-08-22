@@ -135,7 +135,9 @@ const ENUMS = {
   // 'stack-build' reveals a word at a time into a block that grows downward
   // and then clears whole -- captionHighlight is the colour a word waits in
   // before it is spoken, the same meaning it carries in 'fill'.
-  captionMode: ['phrase', 'word', 'dynamic-stack', 'quran', 'fill', 'stack-build'],
+  // 'cards' is the plainest of them: a fixed number of words on one line,
+  // swapped outright when the next card is due -- no highlight and no fade.
+  captionMode: ['phrase', 'word', 'dynamic-stack', 'quran', 'fill', 'stack-build', 'cards'],
   captionPosition: ['top', 'middle', 'bottom'],
   captionHorizontal: ['left', 'center', 'right'],
   watermarkPosition: ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'],

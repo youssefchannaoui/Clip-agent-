@@ -599,11 +599,13 @@ class CaptionFontTests(unittest.TestCase):
             "KFGQPC HAFS Uthmanic Script": "worker/fonts",
             "Outfit": "worker/fonts",
             "Montserrat ExtraBold": "worker/fonts",
+            "Montserrat": "worker/fonts",
         }
         bundled = {
             "KFGQPC HAFS Uthmanic Script": "UthmanicHafs.ttf",
             "Outfit": "Outfit-Regular.ttf",
             "Montserrat ExtraBold": "Montserrat-ExtraBold.ttf",
+            "Montserrat": "Montserrat-Bold.ttf",
         }
         for font in self._picker_fonts():
             self.assertIn(font, packages, f"{font} is offered but no package is recorded for it")
@@ -1884,3 +1886,78 @@ class CaptionBlockWidthTests(unittest.TestCase):
     def test_the_default_is_edge_to_edge(self):
         # Templates that do not set it must wrap exactly where they used to.
         self.assertEqual(self._lines(100), self._lines(100.0))
+
+
+class CaptionCardTests(unittest.TestCase):
+    """Phrase cards: the plainest mode, and the default template's.
+
+    Measured off the third reference at 60fps -- one centred line, swapped
+    outright between two consecutive frames. No fade, no highlight, and never
+    a second line.
+    """
+
+    WORDS = [("we", 0.20, 0.34), ("look", 0.34, 0.62), ("at", 0.62, 0.74),
+             ("the", 0.74, 0.86), ("deficiencies", 0.86, 1.60),
+             ("of", 2.90, 3.02), ("everyone", 3.02, 3.50), ("else", 3.50, 3.74),
+             ("around", 3.74, 4.06), ("us.", 4.06, 4.30),
+             ("if", 4.50, 4.62), ("only", 4.62, 4.90), ("we", 4.90, 5.02)]
+
+    def _candidate(self):
+        segments = [{"start": s, "end": e, "text": w,
+                     "words": [{"start": s, "end": e, "word": w}]} for w, s, e in self.WORDS]
+        return worker.Candidate(
+            start=0.0, end=7.0, text=" ".join(w for w, _, _ in self.WORDS),
+            segments=segments, score=80, reasons=[], quote_risk=False)
+
+    def _cards(self, **over):
+        template = {"captionMaxWords": 5}
+        template.update(over)
+        return worker.caption_cards(self._candidate(), template)
+
+    def test_cards_hold_the_configured_number_of_words(self):
+        self.assertTrue(all(len(c["words"]) <= 5 for c in self._cards()))
+
+    def test_a_sentence_ending_closes_a_card_early(self):
+        # "us." ends the second card at four words rather than running the
+        # next sentence's opening words in beside it.
+        texts = [" ".join(str(w["word"]) for w in c["words"]) for c in self._cards()]
+        self.assertTrue(any(t.endswith("us.") for t in texts), texts)
+        following = texts[texts.index(next(t for t in texts if t.endswith("us."))) + 1]
+        self.assertTrue(following.startswith("if"), following)
+
+    def test_a_card_holds_until_the_next_one_starts(self):
+        # Otherwise the caption blinks out through every pause; the reference
+        # runs them near-continuously.
+        cards = self._cards()
+        first, second = cards[0], cards[1]
+        self.assertGreater(first["end"], float(first["words"][-1]["end"]))
+        self.assertLessEqual(first["end"], second["start"] + 0.001)
+
+    def test_a_long_silence_does_not_leave_a_stale_card_on_screen(self):
+        cards = self._cards()
+        for card in cards:
+            self.assertLessEqual(card["end"] - float(card["words"][-1]["end"]),
+                                 worker.CARD_HOLD_SEC + 0.001)
+
+    def test_cards_never_overlap(self):
+        cards = self._cards()
+        for earlier, later in zip(cards, cards[1:]):
+            self.assertLessEqual(earlier["end"], later["start"] + 0.001)
+
+    def test_the_rendered_events_carry_no_fade_and_no_second_colour(self):
+        template = {
+            "captionMode": "cards", "captionMaxWords": 5, "captionFont": "Montserrat",
+            "captionPrimary": "#FFFFFF", "captionHighlight": "#FFFFFF", "captionFadeMs": 0,
+            "captionPosition": "bottom", "captionHorizontal": "center", "captionMarginV": 466,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            out = pathlib.Path(tmp) / "c.ass"
+            worker.write_ass(self._candidate(), template, out)
+            lines = [l for l in out.read_text().splitlines() if l.startswith("Dialogue: 2,")]
+            self.assertTrue(lines)
+            for line in lines:
+                self.assertNotIn(r"\fad(", line)
+                self.assertNotIn(r"\N", line, "a card is always one line")
+            # Bottom-centre, so the measured baseline is reachable by margin.
+            style = next(l for l in out.read_text().splitlines() if l.startswith("Style: Caption,"))
+            self.assertEqual(style.split(",")[18], "2", "alignment 2 is bottom-centre")

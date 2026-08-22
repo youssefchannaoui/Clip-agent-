@@ -391,7 +391,7 @@
     fitMode: ['contain', 'blur', 'crop'],
     smartFramingBias: ['auto', 'left', 'center', 'right'],
     filterPreset: ['natural', 'crisp', 'warm', 'cinematic', 'monochrome'],
-    captionMode: ['phrase', 'word', 'dynamic-stack', 'stack-build'],
+    captionMode: ['phrase', 'word', 'dynamic-stack', 'stack-build', 'cards'],
     captionPosition: ['top', 'middle', 'bottom'],
     captionHorizontal: ['left', 'center', 'right'],
     watermarkPosition: ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'],
@@ -505,8 +505,10 @@
     { name: 'KFGQPC HAFS Uthmanic Script', label: 'Uthmani HAFS', web: '"KFGQPC HAFS Uthmanic Script", Amiri, serif' },
     // The product's own sans, bundled in the worker for the translation line.
     { name: 'Outfit', label: 'Outfit', web: 'Outfit, "Segoe UI", sans-serif' },
-    // Bundled at weight 800 for the stacked-build lecture template.
-    { name: 'Montserrat ExtraBold', label: 'Montserrat', web: '"Montserrat ExtraBold", Montserrat, "Segoe UI", sans-serif' },
+    // Bundled at weight 700 for the default template's caption line, and at
+    // 800 as its own family for the stacked-build one.
+    { name: 'Montserrat', label: 'Montserrat', web: 'Montserrat, "Segoe UI", sans-serif' },
+    { name: 'Montserrat ExtraBold', label: 'Montserrat Heavy', web: '"Montserrat ExtraBold", Montserrat, "Segoe UI", sans-serif' },
   ];
 
   // How much smaller libass draws each face than CSS does at the same nominal
@@ -527,6 +529,7 @@
     'KFGQPC HAFS Uthmanic Script': 0.569,
     'Outfit': 0.794,
     'Montserrat ExtraBold': 0.640,
+    'Montserrat': 0.640,
   };
   function assFactor(name) {
     return ASS_SIZE_FACTOR[name] || 0.86;
@@ -3233,7 +3236,7 @@
       tplStyleRows: tplRow([
         { icon: 'ph ph-layout', label: 'Clip layout', field: 'fitMode', opts: ENUMS.fitMode, labels: { contain: 'Fit with blurred bars', blur: 'Blurred background', crop: 'Fill, face-tracked' } },
         { icon: 'ph ph-crosshair', label: 'Framing bias', field: 'smartFramingBias', opts: ENUMS.smartFramingBias },
-        { icon: 'ph ph-closed-captioning', label: 'Caption', field: 'captionMode', opts: ENUMS.captionMode, labels: { phrase: 'One phrase', word: 'Word by word', 'dynamic-stack': 'Stacked lines', 'stack-build': 'Building stack' } },
+        { icon: 'ph ph-closed-captioning', label: 'Caption', field: 'captionMode', opts: ENUMS.captionMode, labels: { phrase: 'One phrase', word: 'Word by word', 'dynamic-stack': 'Stacked lines', 'stack-build': 'Building stack', cards: 'Phrase cards' } },
         { icon: 'ph ph-palette', label: 'Look', field: 'filterPreset', opts: ENUMS.filterPreset },
       ]),
       tplBrandRows: tplRow([

@@ -138,7 +138,7 @@ YOUTUBE_BLOCK_SIGNS = (
 # app rather than only when a clip renders in the wrong face.
 CAPTION_FAMILIES = (
     "DejaVu Sans", "DejaVu Serif", "Liberation Sans", "Open Sans", "Amiri", "Scheherazade",
-    "KFGQPC HAFS Uthmanic Script", "Outfit", "Montserrat ExtraBold",
+    "KFGQPC HAFS Uthmanic Script", "Outfit", "Montserrat", "Montserrat ExtraBold",
 )
 
 # Makes ffmpeg report machine-readable progress on stdout. -nostats suppresses
@@ -1500,6 +1500,50 @@ def _ink_bottom(text: str, size: float) -> float:
     return size * STACK_INK_DESCENDER if any(ch in STACK_DESCENDER_CHARS for ch in text) else 0.0
 
 
+# How long a card may linger past its own last word. A card holds until the
+# next one starts so the caption does not blink out through every pause -- the
+# reference edit runs captions near-continuously -- but a long silence should
+# not leave a stale line sitting on screen either.
+CARD_HOLD_SEC = 1.2
+
+
+def caption_cards(candidate: Candidate, template: dict[str, Any]) -> list[dict[str, Any]]:
+    """Whole phrases, a card at a time, cut rather than faded.
+
+    The plainest of the caption modes and the one the default template uses: a
+    fixed number of words on one centred line, swapped outright when the next
+    card is due. Measured off the reference at 60fps -- the swap happens
+    between two consecutive frames with no intermediate, so there is no fade
+    here on purpose.
+
+    Cards also break on a sentence ending, so a full stop never lands mid-card
+    with the next sentence's opening words beside it.
+    """
+    words = candidate_words(candidate)
+    if not words:
+        return []
+    max_words = max(1, min(12, int(template.get("captionMaxWords", 5) or 5)))
+    groups: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+    for word in words:
+        current.append(word)
+        if len(current) >= max_words or re.search(r"[.!?\u2026][\"']?$", str(word.get("word") or "").strip()):
+            groups.append(current)
+            current = []
+    if current:
+        groups.append(current)
+
+    cards: list[dict[str, Any]] = []
+    for index, group in enumerate(groups):
+        start = float(group[0]["start"])
+        end = float(groups[index + 1][0]["start"]) if index + 1 < len(groups) else candidate.duration
+        end = min(end, float(group[-1]["end"]) + CARD_HOLD_SEC, candidate.duration)
+        if end <= start:
+            continue
+        cards.append({"start": start, "end": max(start + 0.08, end), "words": group})
+    return cards
+
+
 def stack_build_blocks(candidate: Candidate, template: dict[str, Any]) -> list[dict[str, Any]]:
     """Group a clip's words into the blocks the stacked-build caption draws.
 
@@ -2064,6 +2108,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             letter_spacing=letter_spacing,
             skip=lambda at: inside_ayah(at) or inside_arabic(at),
         ))
+    elif mode == "cards" and words:
+        # One centred line, held until the next card is due. No highlight, no
+        # fade: the reference swaps between two frames at 60fps.
+        for card in caption_cards(candidate, template):
+            middle = (float(card["start"]) + float(card["end"])) / 2
+            if inside_ayah(middle) or inside_arabic(middle):
+                continue
+            text = mixed_script_line(
+                " ".join(str(word["word"]).strip() for word in card["words"]),
+                font=font, arabic_font=arabic_font, uppercase=uppercase,
+            )
+            events.append(
+                f"Dialogue: 2,{ass_time(card['start'])},{ass_time(card['end'])},Caption,,0,0,0,,{fade_tag}{text}"
+            )
     elif mode == "fill" and words:
         # The word fills left to right as it is spoken. ASS does this itself
         # with \\kf, which sweeps from the style's SecondaryColour to its
