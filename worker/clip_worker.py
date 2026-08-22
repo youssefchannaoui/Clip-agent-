@@ -1631,9 +1631,11 @@ def stack_build_blocks(candidate: Candidate, template: dict[str, Any]) -> list[d
     def too_wide(candidate_words_on_line: list[dict[str, Any]], size: float) -> bool:
         """Whether that run of words would spill past the usable width.
 
-        A character of this face averages 0.46 of its em once the template's
-        tracking is in, measured off the reference lines; the em itself is the
-        ASS size over the face's Win cell.
+        0.46 of an em per character is deliberately pessimistic: rendered
+        lines measure nearer 0.33 at this weight and tracking, so the guard
+        breaks a line sooner than it strictly has to. That is the direction to
+        be wrong in here -- these lines are set at 120px of em beside a
+        speaker, and a line that overruns loses its last word behind him.
         """
         characters = len(" ".join(str(word["word"]).strip() for word in candidate_words_on_line))
         return characters * 0.46 * (font_size * size / STACK_CELL) > usable
