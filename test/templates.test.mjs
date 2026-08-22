@@ -52,11 +52,15 @@ test('Clean Line keeps the values measured off its reference, and is the default
   const tpl = templates.templateById('clean-line', user);
   assert.equal(tpl.captionMode, 'cards');
   assert.equal(tpl.captionFont, 'Montserrat');
-  assert.equal(tpl.captionFontSize, 87, 'the line measured an x-height of 30px');
+  // Swept on the real renderer against the reference frame rather than
+  // computed: 89 is where the x-height lands on 30px and -2 where the line
+  // measures 557px against the reference's 555.
+  assert.equal(tpl.captionFontSize, 89, 'the line measured an x-height of 30px');
+  assert.equal(tpl.captionLetterSpacing, -2);
   assert.equal(tpl.captionPrimary, tpl.captionHighlight, 'no word is emphasised in this style');
   assert.equal(tpl.captionPosition, 'bottom');
   assert.equal(tpl.captionHorizontal, 'center');
-  assert.equal(tpl.captionMarginV, 466, 'the baseline sat at y=1429 of 1920');
+  assert.equal(tpl.captionMarginV, 464, 'the baseline sat at y=1429 of 1920');
   assert.equal(tpl.captionMaxWords, 5);
   assert.equal(tpl.captionFadeMs, 0, 'the reference cuts between cards, it does not fade');
   assert.equal(tpl.captionBehindSubject, false);
