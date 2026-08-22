@@ -58,17 +58,26 @@ COPY worker/requirements.txt /app/worker/requirements.txt
 # yt-dlp fails in exactly the same 403 way a missing runtime does. The version
 # caps in requirements.txt still hold -- this upgrades within them.
 RUN python -m pip install --upgrade pip setuptools wheel \
-    && python -m pip install --upgrade -r /app/worker/requirements.txt
+    && python -m pip install --upgrade -r /app/worker/requirements.txt \
+    # mediapipe drags in opencv-contrib-python, the GUI build, whose cv2
+    # overwrites the headless one and then fails to import for want of libGL.
+    # Put headless back last so `import cv2` is the build this image installed
+    # on purpose. Framing detection breaks loudly if this ever regresses:
+    # cv2_problem() reports it and capabilities() surfaces it in the app.
+    && python -m pip uninstall -y opencv-contrib-python \
+    && python -m pip install --upgrade --force-reinstall --no-deps \
+       "opencv-python-headless>=4.10.0.84,<5.0.0"
 
 COPY worker /app/worker
 # Bundled faces (see worker/fonts/NOTICE.md): the KFGQPC HAFS mushaf face --
 # the one Quran apps use, whose U+06DD is the ornamented verse medallion --
-# and Outfit, the product's own sans, for the translation line.
+# Outfit, the product's own sans, for the translation line, and Montserrat
+# ExtraBold, the face the stacked-build lecture template is set in.
 RUN mkdir -p /usr/share/fonts/truetype/deenclipped \
     && cp /app/worker/fonts/*.ttf /usr/share/fonts/truetype/deenclipped/ \
     && fc-cache -f
 RUN mkdir -p /var/lib/deenclipped/jobs /var/lib/deenclipped/tmp /var/lib/deenclipped/models /var/lib/deenclipped/cache \
-    && python -m py_compile /app/worker/service.py /app/worker/import_providers.py /app/worker/object_storage.py /app/worker/clip_worker.py /app/worker/quran.py \
+    && python -m py_compile /app/worker/service.py /app/worker/import_providers.py /app/worker/object_storage.py /app/worker/clip_worker.py /app/worker/quran.py /app/worker/matte.py \
     # ffmpeg, libass, yt-dlp and OpenCV all parse media a customer chose. None
     # of that needs root, so none of it gets root.
     && useradd --system --no-create-home --shell /usr/sbin/nologin worker \

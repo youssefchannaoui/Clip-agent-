@@ -40,6 +40,13 @@ except ImportError:  # pragma: no cover - the module ships beside this one
     quran = None
 
 try:
+    import matte as subject_matte
+    from matte import MATTE_FPS
+except ImportError:  # pragma: no cover - the module ships beside this one
+    subject_matte = None
+    MATTE_FPS = 30
+
+try:
     from import_providers import youtube_network_options
 except Exception:  # pragma: no cover - clip_worker must still run standalone
     def youtube_network_options() -> dict[str, Any]:
@@ -131,7 +138,7 @@ YOUTUBE_BLOCK_SIGNS = (
 # app rather than only when a clip renders in the wrong face.
 CAPTION_FAMILIES = (
     "DejaVu Sans", "DejaVu Serif", "Liberation Sans", "Open Sans", "Amiri", "Scheherazade",
-    "KFGQPC HAFS Uthmanic Script", "Outfit",
+    "KFGQPC HAFS Uthmanic Script", "Outfit", "Montserrat ExtraBold",
 )
 
 # Makes ffmpeg report machine-readable progress on stdout. -nostats suppresses
@@ -1437,6 +1444,192 @@ def dynamic_caption_frames(candidate: Candidate, template: dict[str, Any]) -> li
     return frames
 
 
+# The size steps a stacked-build line is drawn at, as multiples of the
+# template's caption size. Measured off the reference edits: within one block
+# the x-heights came out 38 / 48 / 65 px, which is 0.58 / 0.74 / 1.00 of the
+# largest line. captionSizeVariation blends between "every line the same" (0)
+# and the full spread (100), so a template that wants a flat stack keeps one.
+STACK_SIZE_STEPS = (0.58, 0.74, 1.0)
+
+# How long a word takes to go from the queued colour to the spoken one. The
+# reference ramps over about six frames at 60fps.
+STACK_REVEAL_MS = 100
+
+# How long a finished block stays on screen before it clears. The reference
+# held the last line for roughly this before cutting to blank.
+STACK_HOLD_SEC = 0.8
+
+# Where libass puts the top of a line box, as a multiple of the nominal font
+# size. libass fits the face's whole Win cell (usWinAscent + usWinDescent) into
+# the size it is given, so the ascent is that cell's top share, not the raw
+# metric: Montserrat ExtraBold is 1109 up and 453 down over a 1000 em, so the
+# cell is 1.562em and the ascent lands at 1109/1562 = 0.710 of the size.
+#
+# A template set in another face shifts the whole block by the difference,
+# which is a few pixels and drag-correctable in the editor -- the spacing
+# *between* lines, which is what carries the look, is unaffected.
+STACK_ASCENT = 0.710
+
+
+def stack_build_blocks(candidate: Candidate, template: dict[str, Any]) -> list[dict[str, Any]]:
+    """Group a clip's words into the blocks the stacked-build caption draws.
+
+    A block is a list of lines; a line is a list of words. Words reveal one at
+    a time into the line they belong to, the block grows downward, and once it
+    is full the whole thing clears rather than scrolling -- which is what the
+    reference edits do and why this cannot be built out of dynamic-stack, where
+    every word is its own line.
+
+    Line lengths are jittered between two words and captionStackMaxWords so the
+    block does not read as a rigid grid, and each line's size is drawn from
+    STACK_SIZE_STEPS. Both are keyed off a stable hash of the clip text, so a
+    re-render of the same clip lays out identically.
+    """
+    words = candidate_words(candidate)
+    if not words:
+        return []
+    max_words = max(1, min(6, int(template.get("captionStackMaxWords", 4) or 4)))
+    max_lines = max(2, min(6, int(template.get("captionStackLines", 4) or 4)))
+    clear_pause = max(0.15, min(2.0, float(template.get("captionClearPause", 0.42) or 0.42)))
+    variation = max(0.0, min(100.0, float(template.get("captionSizeVariation", 0) or 0))) / 100.0
+
+    blocks: list[list[list[dict[str, Any]]]] = []
+    lines: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+    line_number = 0
+
+    def line_target() -> int:
+        if max_words <= 2:
+            return max_words
+        span = max_words - 1
+        pick = _stable_fraction(f"{candidate.text}|line|{len(blocks)}|{line_number}")
+        return 2 + min(span - 1, int(pick * span))
+
+    def close_line() -> None:
+        nonlocal current, line_number
+        if current:
+            lines.append(current)
+            current = []
+            line_number += 1
+
+    def close_block() -> None:
+        nonlocal lines, line_number
+        close_line()
+        if lines:
+            blocks.append(lines)
+        lines = []
+        line_number = 0
+
+    for index, word in enumerate(words):
+        previous = words[index - 1] if index else None
+        if previous is None:
+            close_block()
+        else:
+            pause = float(word["start"]) - float(previous["end"])
+            previous_text = str(previous.get("word") or "").strip()
+            if pause >= clear_pause or re.search(r"[.!?…][\"']?$", previous_text):
+                close_block()
+        current.append(word)
+        if len(current) >= line_target():
+            close_line()
+            if len(lines) >= max_lines:
+                close_block()
+    close_block()
+
+    out: list[dict[str, Any]] = []
+    for block_index, block_lines in enumerate(blocks):
+        sizes: list[float] = []
+        for line_index in range(len(block_lines)):
+            step = STACK_SIZE_STEPS[
+                int(_stable_fraction(f"{candidate.text}|size|{block_index}|{line_index}") * len(STACK_SIZE_STEPS))
+                % len(STACK_SIZE_STEPS)
+            ]
+            sizes.append(1.0 + (step - 1.0) * variation)
+        out.append({"lines": block_lines, "sizes": sizes})
+    return out
+
+
+def stack_build_events(
+    blocks: list[dict[str, Any]], *, duration: float, font_size: int, primary: str, queued: str,
+    arabic_font: str, fade_tag: str, margin_h: int, margin_v: int, line_height: float,
+    letter_spacing: float, skip: Callable[[float], bool],
+) -> list[str]:
+    """One event per line per word: the block as it stands the moment that word appears.
+
+    The word enters in the queued colour at the instant the previous word
+    finished, then ramps to the spoken colour at its own start time -- so a
+    word that follows a pause sits grey for the length of the pause, which is
+    exactly what the reference does. Everything already spoken is drawn in the
+    spoken colour; nothing later is drawn at all, so the block grows downward.
+
+    Each line is positioned outright rather than left to \\N, because the lines
+    are different sizes and libass spaces wrapped lines by the face's win
+    ascent and descent -- 1.56em for Montserrat, nearly double the 0.8em the
+    reference stacks at. ScaleY is not the lever either: in ASS it squashes the
+    glyphs themselves, not just the leading.
+    """
+    events: list[str] = []
+    for block_index, block in enumerate(blocks):
+        lines: list[list[dict[str, Any]]] = block["lines"]
+        sizes: list[float] = block["sizes"]
+        flat = [(line_index, word_index, word)
+                for line_index, line in enumerate(lines)
+                for word_index, word in enumerate(line)]
+        if not flat:
+            continue
+        # Baselines first, then the box tops libass actually positions from.
+        # The gap between two baselines is half the line height times the two
+        # sizes either side of it, which is the relation the reference lines
+        # measured out to.
+        pixel_sizes = [max(8, int(round(font_size * size))) for size in sizes]
+        tops: list[int] = []
+        baseline = margin_v + STACK_ASCENT * pixel_sizes[0]
+        for index, size_px in enumerate(pixel_sizes):
+            if index:
+                baseline += line_height * 0.5 * (pixel_sizes[index - 1] + size_px)
+            tops.append(int(round(baseline - STACK_ASCENT * size_px)))
+
+        block_end = min(duration, float(flat[-1][2]["end"]) + STACK_HOLD_SEC)
+        if block_index + 1 < len(blocks):
+            following = blocks[block_index + 1]["lines"][0][0]
+            block_end = min(block_end, float(following["start"]))
+        for position, (line_index, word_index, word) in enumerate(flat):
+            previous = flat[position - 1][2] if position else None
+            appear = float(word["start"]) if previous is None else min(float(word["start"]), float(previous["end"]))
+            end = block_end if position + 1 == len(flat) else max(appear + 0.04, float(word["end"]))
+            if end <= appear or skip((appear + end) / 2):
+                continue
+            for draw_line in range(line_index + 1):
+                parts: list[str] = []
+                for draw_word in range(len(lines[draw_line])):
+                    if draw_line == line_index and draw_word > word_index:
+                        break
+                    value = str(lines[draw_line][draw_word]["word"]).strip()
+                    face = f"\\fn{arabic_font}" if contains_arabic(value) else ""
+                    if draw_line == line_index and draw_word == word_index:
+                        delay = max(0, int(round((float(word["start"]) - appear) * 1000)))
+                        colour = (
+                            f"{{\\c{queued.replace('&H00', '&H')}&{face}"
+                            f"\\t({delay},{delay + STACK_REVEAL_MS},\\c{primary.replace('&H00', '&H')}&)}}"
+                        )
+                    else:
+                        colour = f"{{\\c{primary.replace('&H00', '&H')}&{face}}}"
+                    parts.append(colour + ass_escape(value))
+                if not parts:
+                    continue
+                size_px = pixel_sizes[draw_line]
+                # Tracking is a pixel value in ASS, so it has to be scaled with
+                # the line or the small lines come out far tighter than the big
+                # ones -- the template's number is the tracking at full size.
+                spacing = letter_spacing * sizes[draw_line]
+                events.append(
+                    f"Dialogue: 2,{ass_time(appear)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}"
+                    f"{{\\an7\\pos({margin_h},{tops[draw_line]})\\fs{size_px}\\fsp{spacing:.1f}}}"
+                    + " ".join(parts)
+                )
+    return events
+
+
 def shift_segments(segments: list[dict[str, Any]], offset: float) -> list[dict[str, Any]]:
     shifted = []
     for segment in segments:
@@ -1495,14 +1688,20 @@ def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) ->
     alignment = alignment_for(str(template.get("captionPosition", "middle")), horizontal)
     margin_h = int(template.get("captionMarginH", 90))
     line_height = max(0.65, min(1.4, float(template.get("captionLineHeight", 0.88))))
-    scale_y = int(round(line_height * 100))
+    # Everywhere else captionLineHeight is ASS ScaleY, which squashes the
+    # glyphs as well as the leading. The stacked build positions every line
+    # itself and reads the same number as pure leading, so its glyphs keep
+    # their proper shape.
+    scale_y = 100 if str(template.get("captionMode", "")) == "stack-build" else int(round(line_height * 100))
     primary = ass_color(template.get("captionPrimary", "#FFFFFF"))
     highlight = ass_color(template.get("captionHighlight", "#D9B478"))
     outline = ass_color(template.get("captionOutline", "#000000"))
     background_opacity = float(template.get("captionBackgroundOpacity", 0))
     back = ass_color(template.get("captionBackground", "#000000"), opacity_alpha(background_opacity))
     border_style = 3 if background_opacity > 0 else 1
-    letter_spacing = max(-4.0, min(40.0, float(template.get("captionLetterSpacing", 0) or 0)))
+    # -20, matching the schema. The floor used to be -4, which silently threw
+    # away two thirds of the tracking a tightly-set stacked build asks for.
+    letter_spacing = max(-20.0, min(40.0, float(template.get("captionLetterSpacing", 0) or 0)))
     uppercase = bool(template.get("captionUppercase", False))
     max_words = int(template.get("captionMaxWords", 6))
 
@@ -1774,6 +1973,26 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             if inside_ayah(midpoint) or inside_arabic(midpoint):
                 continue
             events.append(f"Dialogue: 2,{ass_time(frame['start'])},{ass_time(frame['end'])},Caption,,0,0,0,,{fade_tag}{text}")
+    elif mode == "stack-build" and words:
+        # The reference lecture edits: each word appears in the queued colour
+        # the moment the one before it finishes, turns the spoken colour as it
+        # is said, and the lines pile downward until the block is full and
+        # clears. captionHighlight is the colour a word waits in -- the same
+        # meaning it carries in the fill mode below, not an emphasis colour.
+        events.extend(stack_build_events(
+            stack_build_blocks(candidate, template),
+            duration=candidate.duration,
+            font_size=font_size,
+            primary=primary,
+            queued=highlight,
+            arabic_font=arabic_font,
+            fade_tag=fade_tag,
+            margin_h=margin_h,
+            margin_v=margin_v,
+            line_height=line_height,
+            letter_spacing=letter_spacing,
+            skip=lambda at: inside_ayah(at) or inside_arabic(at),
+        ))
     elif mode == "fill" and words:
         # The word fills left to right as it is spoken. ASS does this itself
         # with \\kf, which sweeps from the style's SecondaryColour to its
@@ -2202,7 +2421,8 @@ def background_visual(background: dict[str, Any] | None, width: int, height: int
 
 
 def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict[str, Any] | None = None,
-                       src: str = "0:v", pre_sized: bool = False) -> str:
+                       src: str = "0:v", pre_sized: bool = False,
+                       matte_src: str | None = None, source_size: tuple[int, int] | None = None) -> str:
     width = int(template.get("width", 1080))
     height = int(template.get("height", 1920))
     subtitle = escape_filter_path(ass_file)
@@ -2210,29 +2430,39 @@ def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict
     # Crop zoom. 1.0 is the framing the worker already produced, so a template
     # without the field renders exactly as before.
     zoom = max(0.75, min(2.5, float(template.get("smartFramingZoom", 1) or 1)))
-    if pre_sized:
-        # A background job pre-composes its visual at exactly the frame size,
-        # so the geometry is done; the look filters and captions still apply.
-        graph = f"[{src}]setsar=1[base]"
-    elif fit_mode == "crop":
-        if crop_plan:
-            crop_w = int(crop_plan.get("w") or width)
-            crop_h = int(crop_plan.get("h") or height)
-            crop_x = int(crop_plan.get("x") or 0)
-            crop_y = int(crop_plan.get("y") or 0)
-            if abs(zoom - 1.0) > 0.001:
-                # Shrink the tracked box around its own centre so the subject
-                # stays framed while the crop tightens.
-                zoom_w = max(16, int(crop_w / zoom))
-                zoom_h = max(16, int(crop_h / zoom))
-                crop_x += (crop_w - zoom_w) // 2
-                crop_y += (crop_h - zoom_h) // 2
-                crop_w, crop_h = zoom_w, zoom_h
-            graph = (
-                f"[0:v]crop={crop_w}:{crop_h}:{crop_x}:{crop_y},"
-                f"scale={width}:{height},setsar=1[base]"
-            )
-        else:
+
+    def geometry(label: str, out: str, tag: str, matte: bool = False) -> str:
+        """The framing chain, from one input label to one output label.
+
+        The matte has to travel through exactly the geometry the picture does
+        or the alpha lands on the wrong pixels, so both are built here rather
+        than the picture's being written out by hand.
+        """
+        lead = ""
+        if matte and source_size:
+            # Absolute crop coordinates are in source pixels, and the matte is
+            # generated small; put it back on the source's grid first.
+            lead = f"scale={source_size[0]}:{source_size[1]},"
+        if pre_sized:
+            return f"[{label}]setsar=1[{out}]"
+        if fit_mode == "crop":
+            if crop_plan:
+                crop_w = int(crop_plan.get("w") or width)
+                crop_h = int(crop_plan.get("h") or height)
+                crop_x = int(crop_plan.get("x") or 0)
+                crop_y = int(crop_plan.get("y") or 0)
+                if abs(zoom - 1.0) > 0.001:
+                    # Shrink the tracked box around its own centre so the subject
+                    # stays framed while the crop tightens.
+                    zoom_w = max(16, int(crop_w / zoom))
+                    zoom_h = max(16, int(crop_h / zoom))
+                    crop_x += (crop_w - zoom_w) // 2
+                    crop_y += (crop_h - zoom_h) // 2
+                    crop_w, crop_h = zoom_w, zoom_h
+                return (
+                    f"[{label}]{lead}crop={crop_w}:{crop_h}:{crop_x}:{crop_y},"
+                    f"scale={width}:{height},setsar=1[{out}]"
+                )
             scale_w = int(width * zoom)
             scale_h = int(height * zoom)
             # Manual framing: the crop window sits at the chosen fraction of
@@ -2240,25 +2470,29 @@ def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict
             # which hardcoded ffmpeg's centred default.
             pos_x = max(0.0, min(1.0, float(template.get("cropPositionX", 0.5) or 0.5)))
             pos_y = max(0.0, min(1.0, float(template.get("cropPositionY", 0.5) or 0.5)))
-            graph = (
-                f"[0:v]scale={scale_w}:{scale_h}:force_original_aspect_ratio=increase,"
-                f"crop={width}:{height}:(iw-ow)*{pos_x:.4f}:(ih-oh)*{pos_y:.4f},setsar=1[base]"
+            return (
+                f"[{label}]{lead}scale={scale_w}:{scale_h}:force_original_aspect_ratio=increase,"
+                f"crop={width}:{height}:(iw-ow)*{pos_x:.4f}:(ih-oh)*{pos_y:.4f},setsar=1[{out}]"
             )
-    elif fit_mode == "contain":
-        background = str(template.get("frameBackground", "#000000")).replace("#", "0x")
-        graph = (
-            f"[0:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
-            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color={background},setsar=1[base]"
-        )
-    else:
+        if fit_mode == "contain" or matte:
+            # A matte follows the sharp foreground wherever it is placed, so
+            # the blurred-background mode mattes like contain does: the person
+            # only ever appears in the fitted layer.
+            background = "black" if matte else str(template.get("frameBackground", "#000000")).replace("#", "0x")
+            return (
+                f"[{label}]{lead}scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color={background},setsar=1[{out}]"
+            )
         blur = float(template.get("blurStrength", 28))
-        graph = (
-            f"[0:v]split=2[bg][fg];"
-            f"[bg]scale={width}:{height}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{height},gblur=sigma={blur:.2f}[bg2];"
-            f"[fg]scale={width}:{height}:force_original_aspect_ratio=decrease[fg2];"
-            f"[bg2][fg2]overlay=(W-w)/2:(H-h)/2,setsar=1[base]"
+        return (
+            f"[{label}]split=2[{tag}bg][{tag}fg];"
+            f"[{tag}bg]scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height},gblur=sigma={blur:.2f}[{tag}bg2];"
+            f"[{tag}fg]scale={width}:{height}:force_original_aspect_ratio=decrease[{tag}fg2];"
+            f"[{tag}bg2][{tag}fg2]overlay=(W-w)/2:(H-h)/2,setsar=1[{out}]"
         )
+
+    graph = geometry(src if pre_sized else "0:v", "base", "v")
 
     brightness, contrast, saturation, gamma = filter_values(template)
     filters = [f"eq=brightness={brightness:.3f}:contrast={contrast:.3f}:saturation={saturation:.3f}:gamma={gamma:.3f}"]
@@ -2290,12 +2524,28 @@ def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict
     # been shipping as floating diacritics while the English translation under
     # it looked perfect. Proven by rendering one identical .ass through both
     # filters (ass= correct, subtitles= letterless).
-    filters.append(f"ass='{subtitle}':shaping=complex")
+    captions = f"ass='{subtitle}':shaping=complex"
+    brand = ""
     if bool(template.get("brandLineEnabled", False)):
         color = str(template.get("brandLineColor", "#D9B478")).replace("#", "0x")
         line_height = int(template.get("brandLineHeight", 8))
-        filters.append(f"drawbox=x=0:y=ih-{line_height}:w=iw:h={line_height}:color={color}:t=fill")
-    graph += ";[base]" + ",".join(filters) + "[vout]"
+        brand = f",drawbox=x=0:y=ih-{line_height}:w=iw:h={line_height}:color={color}:t=fill"
+
+    if matte_src:
+        # Captions behind the speaker. The graded picture is split: one copy
+        # takes the subtitles, the other becomes a cut-out of the speaker with
+        # the matte as its alpha, and that cut-out is laid back over the
+        # captioned copy. Both sides are pinned to the render's own 30fps so
+        # alphamerge is never handed two streams with different frame counts.
+        graph += ";[base]" + ",".join(filters) + f",fps={MATTE_FPS}[graded]"
+        graph += ";[graded]split=2[capbase][subject]"
+        graph += f";[capbase]{captions}[captioned]"
+        graph += ";" + geometry(matte_src, "mbase", "m", matte=True)
+        graph += f";[mbase]format=gray,fps={MATTE_FPS}[malpha]"
+        graph += ";[subject][malpha]alphamerge[cutout]"
+        graph += f";[captioned][cutout]overlay=0:0:format=auto{brand}[vout]"
+        return graph
+    graph += ";[base]" + ",".join(filters) + f",{captions}{brand}[vout]"
     return graph
 
 
@@ -2371,9 +2621,35 @@ def render_clip(
     # chain is the voice alone -- still levelled, since a bare export is far
     # quieter than a mixed one and would stand out in a feed.
     bg_prelude = (bg_visual[0] + ";") if bg_visual else ""
+    # Captions behind the speaker. Segmenting is the expensive half, so it only
+    # runs when the template asks for it and there is a speaker to segment --
+    # a background-visual job is scenery, and a matte of scenery is nothing.
+    # Any failure leaves matte_file None and the captions render in front,
+    # which is how every template drew them before this existed.
+    matte_file: Path | None = None
+    matte_input: str | None = None
+    source_size: tuple[int, int] | None = None
+    if bool(template.get("captionBehindSubject", False)) and bg_visual is None and subject_matte is not None:
+        reason = subject_matte.available()
+        if reason:
+            emit("progress", stage="Captions behind speaker unavailable", progress=74, detail=reason)
+        else:
+            probe = ffprobe_json(ffprobe, source)
+            stream = next((s for s in probe.get("streams", []) if s.get("codec_type") == "video"), {})
+            src_w, src_h = int(stream.get("width") or 0), int(stream.get("height") or 0)
+            if src_w > 0 and src_h > 0:
+                source_size = (src_w, src_h)
+                matte_file = subject_matte.write_matte(
+                    ffmpeg=ffmpeg, source=source, destination=output_dir / f"{clip_id}-matte.mp4",
+                    start=candidate.start, duration=candidate.duration, width=src_w, height=src_h,
+                )
+    if matte_file is not None:
+        matte_index = 1 + (0 if track is None else 1) + (0 if bg_visual is None else 1)
+        matte_input = f"{matte_index}:v"
     video_graph = build_video_filter(template, ass_file, crop_plan=crop_plan,
                                      src=bg_visual[1] if bg_visual else "0:v",
-                                     pre_sized=bool(bg_visual))
+                                     pre_sized=bool(bg_visual),
+                                     matte_src=matte_input, source_size=source_size)
     if track is None:
         filter_complex = (
             bg_prelude
@@ -2422,6 +2698,7 @@ def render_clip(
         "-i", str(source),
         *([] if track is None else ["-stream_loop", "-1", "-i", str(track["path"])]),
         *([] if not bg_visual else ["-stream_loop", "-1", "-t", f"{candidate.duration + 2:.3f}", "-i", str(background["path"])]),
+        *([] if matte_file is None else ["-i", str(matte_file)]),
         "-filter_complex", filter_complex,
         "-map", "[vout]", "-map", "[aout]",
         "-c:v", "libx264", "-threads", ffmpeg_threads,
@@ -2431,10 +2708,16 @@ def render_clip(
     ]
     # This is the long call of the two; the thumbnail after it is near-instant,
     # so the export's own progress is the clip's progress.
-    if on_fraction is not None:
-        run_with_progress(export, candidate.duration, on_fraction, timeout=60 * 60)
-    else:
-        run(export, timeout=60 * 60)
+    try:
+        if on_fraction is not None:
+            run_with_progress(export, candidate.duration, on_fraction, timeout=60 * 60)
+        else:
+            run(export, timeout=60 * 60)
+    finally:
+        # The matte is scratch: it is the size of the clip again and means
+        # nothing once the alpha has been baked in.
+        if matte_file is not None:
+            matte_file.unlink(missing_ok=True)
 
     info = ffprobe_json(ffprobe, clip_file)
     streams = info.get("streams", [])

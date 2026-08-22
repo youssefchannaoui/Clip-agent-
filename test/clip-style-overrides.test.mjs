@@ -33,7 +33,7 @@ test('identity and frame geometry can never be overridden per clip', () => {
 
 test('out-of-range numbers clamp and bad values are dropped, not thrown', () => {
   const patch = templates.sanitiseClipStyle({
-    captionFontSize: 9999,      // above the 140 ceiling
+    captionFontSize: 9999,      // above the 240 ceiling
     smartFramingZoom: 0.1,      // below the 0.75 floor
     captionPosition: 'sideways',// not in the enum
     captionPrimary: 'red',      // not a hex colour
@@ -41,7 +41,7 @@ test('out-of-range numbers clamp and bad values are dropped, not thrown', () => 
     voiceEnhance: 0,            // coerces to false
     somethingElse: 'ignored',
   });
-  assert.equal(patch.captionFontSize, 140);
+  assert.equal(patch.captionFontSize, 240);
   assert.equal(patch.smartFramingZoom, 0.75);
   assert.equal('captionPosition' in patch, false);
   assert.equal('captionPrimary' in patch, false);

@@ -391,7 +391,7 @@
     fitMode: ['contain', 'blur', 'crop'],
     smartFramingBias: ['auto', 'left', 'center', 'right'],
     filterPreset: ['natural', 'crisp', 'warm', 'cinematic', 'monochrome'],
-    captionMode: ['phrase', 'word', 'dynamic-stack'],
+    captionMode: ['phrase', 'word', 'dynamic-stack', 'stack-build'],
     captionPosition: ['top', 'middle', 'bottom'],
     captionHorizontal: ['left', 'center', 'right'],
     watermarkPosition: ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'],
@@ -505,6 +505,8 @@
     { name: 'KFGQPC HAFS Uthmanic Script', label: 'Uthmani HAFS', web: '"KFGQPC HAFS Uthmanic Script", Amiri, serif' },
     // The product's own sans, bundled in the worker for the translation line.
     { name: 'Outfit', label: 'Outfit', web: 'Outfit, "Segoe UI", sans-serif' },
+    // Bundled at weight 800 for the stacked-build lecture template.
+    { name: 'Montserrat ExtraBold', label: 'Montserrat', web: '"Montserrat ExtraBold", Montserrat, "Segoe UI", sans-serif' },
   ];
 
   // How much smaller libass draws each face than CSS does at the same nominal
@@ -524,6 +526,7 @@
     'Scheherazade New': 0.411,
     'KFGQPC HAFS Uthmanic Script': 0.569,
     'Outfit': 0.794,
+    'Montserrat ExtraBold': 0.640,
   };
   function assFactor(name) {
     return ASS_SIZE_FACTOR[name] || 0.86;
@@ -3230,7 +3233,7 @@
       tplStyleRows: tplRow([
         { icon: 'ph ph-layout', label: 'Clip layout', field: 'fitMode', opts: ENUMS.fitMode, labels: { contain: 'Fit with blurred bars', blur: 'Blurred background', crop: 'Fill, face-tracked' } },
         { icon: 'ph ph-crosshair', label: 'Framing bias', field: 'smartFramingBias', opts: ENUMS.smartFramingBias },
-        { icon: 'ph ph-closed-captioning', label: 'Caption', field: 'captionMode', opts: ENUMS.captionMode, labels: { phrase: 'One phrase', word: 'Word by word', 'dynamic-stack': 'Stacked lines' } },
+        { icon: 'ph ph-closed-captioning', label: 'Caption', field: 'captionMode', opts: ENUMS.captionMode, labels: { phrase: 'One phrase', word: 'Word by word', 'dynamic-stack': 'Stacked lines', 'stack-build': 'Building stack' } },
         { icon: 'ph ph-palette', label: 'Look', field: 'filterPreset', opts: ENUMS.filterPreset },
       ]),
       tplBrandRows: tplRow([
@@ -3239,7 +3242,8 @@
         { icon: 'ph ph-align-center-horizontal', label: 'Caption alignment', field: 'captionHorizontal', opts: ENUMS.captionHorizontal },
       ]),
       // Voice enhancement is the one processing toggle the worker really applies.
-      tplAIRows: [{ key: 'voiceEnhance', icon: 'ph ph-waveform', label: 'Voice enhancement', note: 'levels and clarity on speech' }].map(function (r) {
+      tplAIRows: [{ key: 'voiceEnhance', icon: 'ph ph-waveform', label: 'Voice enhancement', note: 'levels and clarity on speech' },
+        { key: 'captionBehindSubject', icon: 'ph ph-user-focus', label: 'Captions behind speaker', note: 'the speaker is cut out and laid over the text' }].map(function (r) {
         var on = Boolean(tpl[r.key]);
         return {
           icon: r.icon, label: r.label, note: r.note,

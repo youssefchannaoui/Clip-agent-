@@ -598,8 +598,13 @@ class CaptionFontTests(unittest.TestCase):
             # Bundled in worker/fonts (see its NOTICE.md) rather than apt.
             "KFGQPC HAFS Uthmanic Script": "worker/fonts",
             "Outfit": "worker/fonts",
+            "Montserrat ExtraBold": "worker/fonts",
         }
-        bundled = {"KFGQPC HAFS Uthmanic Script": "UthmanicHafs.ttf", "Outfit": "Outfit-Regular.ttf"}
+        bundled = {
+            "KFGQPC HAFS Uthmanic Script": "UthmanicHafs.ttf",
+            "Outfit": "Outfit-Regular.ttf",
+            "Montserrat ExtraBold": "Montserrat-ExtraBold.ttf",
+        }
         for font in self._picker_fonts():
             self.assertIn(font, packages, f"{font} is offered but no package is recorded for it")
             if font in bundled:
@@ -1637,3 +1642,168 @@ class WrappedCaptionTests(unittest.TestCase):
         body = line.split(",,0,0,0,,", 1)[1]
         self.assertNotIn("\\\\N", body)
         self.assertIn("الشيخ", body)
+
+
+class StackBuildCaptionTests(unittest.TestCase):
+    """The stacked build: a word at a time into a block that grows and clears.
+
+    Measured off two reference lecture edits. A word appears in the queued
+    colour the instant the one before it finishes and turns the spoken colour
+    as it is said, so a word after a long pause sits grey for the length of the
+    pause. Lines pile downward at different sizes and the whole block clears
+    rather than scrolling.
+    """
+
+    WORDS = [
+        ("if", 0.30, 0.48), ("you", 0.48, 0.72), ("looked", 0.86, 1.20),
+        ("at", 1.20, 1.34), ("Islam", 1.34, 1.80), ("from", 1.92, 2.18),
+        ("a", 2.24, 2.34), ("real", 2.52, 2.88), ("perspective", 3.10, 3.80),
+    ]
+
+    def _candidate(self):
+        segments = [{"start": s, "end": e, "text": w,
+                     "words": [{"start": s, "end": e, "word": w}]} for w, s, e in self.WORDS]
+        return worker.Candidate(
+            start=0.0, end=6.0, text=" ".join(w for w, _, _ in self.WORDS),
+            segments=segments, score=80, reasons=[], quote_risk=False,
+        )
+
+    def _template(self, **over):
+        template = {
+            "captionMode": "stack-build", "captionFontSize": 187,
+            "captionStackMaxWords": 4, "captionStackLines": 4,
+            "captionSizeVariation": 100, "captionClearPause": 0.9,
+            "captionLineHeight": 0.69, "captionLetterSpacing": -11,
+            "captionMarginH": 52, "captionMarginV": 260,
+            "captionPrimary": "#FFFFFF", "captionHighlight": "#808080",
+        }
+        template.update(over)
+        return template
+
+    def _events(self, **over):
+        template = self._template(**over)
+        return worker.stack_build_events(
+            worker.stack_build_blocks(self._candidate(), template),
+            duration=6.0, font_size=int(template["captionFontSize"]),
+            primary=worker.ass_color(template["captionPrimary"]),
+            queued=worker.ass_color(template["captionHighlight"]),
+            arabic_font="Amiri", fade_tag="",
+            margin_h=int(template["captionMarginH"]), margin_v=int(template["captionMarginV"]),
+            line_height=float(template["captionLineHeight"]),
+            letter_spacing=float(template["captionLetterSpacing"]),
+            skip=lambda at: False,
+        )
+
+    def test_a_block_never_grows_past_its_line_limit(self):
+        blocks = worker.stack_build_blocks(self._candidate(), self._template(captionStackLines=2))
+        for block in blocks:
+            self.assertLessEqual(len(block["lines"]), 2)
+
+    def test_every_word_lands_in_exactly_one_line(self):
+        blocks = worker.stack_build_blocks(self._candidate(), self._template())
+        placed = [w["word"] for block in blocks for line in block["lines"] for w in line]
+        self.assertEqual(placed, [w for w, _, _ in self.WORDS])
+
+    def test_a_word_waits_in_the_queued_colour_and_ramps_when_spoken(self):
+        # "looked" is spoken at 0.86 but the word before it ends at 0.72, so it
+        # appears 140ms early in grey and only turns white on its own start.
+        event = next(e for e in self._events() if ",0:00:00.72," in e and "looked" in e)
+        self.assertIn(r"\c&H808080&", event)
+        self.assertIn(r"\t(140,240,\c&HFFFFFF&)", event)
+
+    def test_a_word_with_no_gap_before_it_ramps_immediately(self):
+        event = next(e for e in self._events() if ",0:00:00.48," in e and "you" in e)
+        self.assertIn(r"\t(0,100,\c&HFFFFFF&)", event)
+
+    def test_everything_already_spoken_stays_in_the_spoken_colour(self):
+        event = next(e for e in self._events() if ",0:00:00.72," in e and "looked" in e)
+        head = event.split("looked")[0]
+        self.assertEqual(head.count(r"\c&H808080&"), 1, "only the live word is queued")
+
+    def test_nothing_later_than_the_live_word_is_drawn(self):
+        event = next(e for e in self._events() if ",0:00:00.48," in e and "you" in e)
+        self.assertNotIn("looked", event, "the block grows; it is not laid out in advance")
+
+    def test_lines_stack_downward_and_never_overlap(self):
+        tops = []
+        for event in self._events():
+            match = re.search(r"\\pos\((\d+),(\d+)\)", event)
+            if match:
+                tops.append((int(match.group(1)), int(match.group(2))))
+        self.assertTrue(tops)
+        self.assertTrue(all(x == 52 for x, _ in tops), "the block is left-aligned on its margin")
+        self.assertEqual(min(y for _, y in tops), 260, "the first line sits on the top margin")
+        self.assertGreater(len(set(y for _, y in tops)), 1, "later lines sit lower")
+
+    def test_variation_changes_line_sizes_and_zero_variation_does_not(self):
+        varied = {int(m.group(1)) for e in self._events() for m in [re.search(r"\\fs(\d+)", e)] if m}
+        flat = {int(m.group(1)) for e in self._events(captionSizeVariation=0)
+                for m in [re.search(r"\\fs(\d+)", e)] if m}
+        self.assertGreater(len(varied), 1, "the reference varies its line sizes")
+        self.assertEqual(flat, {187}, "no variation means every line at the caption size")
+
+    def test_tracking_scales_with_the_line_so_small_lines_are_not_tighter(self):
+        for event in self._events():
+            size = re.search(r"\\fs(\d+)", event)
+            spacing = re.search(r"\\fsp(-?[\d.]+)", event)
+            self.assertTrue(size and spacing)
+            self.assertAlmostEqual(float(spacing.group(1)) / int(size.group(1)), -11 / 187, places=2)
+
+    def test_the_style_never_squashes_the_glyphs_in_this_mode(self):
+        # captionLineHeight is ASS ScaleY everywhere else, which squashes the
+        # letters; here it is leading and the glyphs must keep their shape.
+        with tempfile.TemporaryDirectory() as tmp:
+            out = pathlib.Path(tmp) / "c.ass"
+            worker.write_ass(self._candidate(), self._template(), out)
+            style = next(l for l in out.read_text().splitlines() if l.startswith("Style: Caption,"))
+            # Style fields: 0 name, 1 font, 2 size, 3-6 colours, 7-10 flags,
+            # 11 ScaleX, 12 ScaleY, 13 Spacing.
+            self.assertEqual(style.split(",")[12], "100", "ScaleY stays 100")
+
+
+class CaptionsBehindSubjectTests(unittest.TestCase):
+    """The matte has to travel through exactly the geometry the picture does.
+
+    If it does not, the alpha lands on the wrong pixels and the speaker is cut
+    out of the wrong part of the frame.
+    """
+
+    TEMPLATE = {
+        "width": 1080, "height": 1920, "fitMode": "crop",
+        "captionBehindSubject": True, "sharpen": 0,
+    }
+
+    def _graph(self, **kw):
+        with tempfile.TemporaryDirectory() as tmp:
+            return worker.build_video_filter(
+                dict(self.TEMPLATE), pathlib.Path(tmp) / "c.ass",
+                crop_plan={"w": 900, "h": 1600, "x": 120, "y": 40},
+                source_size=(1920, 1080), **kw,
+            )
+
+    def test_without_a_matte_the_graph_is_the_one_it_always_was(self):
+        graph = self._graph()
+        self.assertNotIn("alphamerge", graph)
+        self.assertIn("ass=", graph)
+        self.assertTrue(graph.endswith("[vout]"))
+
+    def test_the_subject_is_laid_back_over_the_captions(self):
+        graph = self._graph(matte_src="1:v")
+        self.assertIn("alphamerge", graph)
+        # The captioned copy is the overlay's base and the cut-out is on top;
+        # the other way round would put the text in front again.
+        self.assertIn("[captioned][cutout]overlay", graph)
+
+    def test_the_matte_takes_the_same_crop_as_the_picture(self):
+        graph = self._graph(matte_src="1:v")
+        self.assertEqual(graph.count("crop=900:1600:120:40"), 2)
+        self.assertIn("[1:v]scale=1920:1080,crop=900:1600:120:40", graph,
+                      "the matte is put back on the source's grid before the crop")
+
+    def test_both_sides_are_pinned_to_one_frame_rate(self):
+        # alphamerge handed two different frame counts drifts the alpha.
+        graph = self._graph(matte_src="1:v")
+        self.assertEqual(graph.count(f"fps={worker.MATTE_FPS}"), 2)
+
+    def test_the_matte_is_read_as_luma(self):
+        self.assertIn("format=gray", self._graph(matte_src="1:v"))

@@ -84,6 +84,13 @@ const DEFAULTS = Object.freeze({
   captionMarginH: 90,
   captionMaxWords: 4,
   captionStackMaxWords: 4,
+  // How many lines a stacked-build block grows to before it clears, and how
+  // far the lines vary in size. 0 variation draws every line at
+  // captionFontSize; 100 is the full spread measured off the reference edits
+  // (0.58 / 0.74 / 1.00 of the caption size), which is what gives the block
+  // its rhythm. Only the stack-build caption mode reads either.
+  captionStackLines: 4,
+  captionSizeVariation: 0,
   captionStackProbability: 0.42,
   captionClearPause: 0.42,
   captionLineHeight: 0.88,
@@ -105,6 +112,10 @@ const DEFAULTS = Object.freeze({
   brandLineColor: '#D9B478',
   brandLineHeight: 8,
   voiceEnhance: true,
+  // Draw the captions behind the speaker rather than over them. The worker
+  // segments the person per frame to do it; where that is unavailable the
+  // captions render in front, so this is a preference, never a hard promise.
+  captionBehindSubject: false,
 });
 
 const ENUMS = {
@@ -114,7 +125,10 @@ const ENUMS = {
   // 'quran' captions the ayah being recited, in Arabic with its translation,
   // taken from the corpus rather than from the transcript. It falls back to
   // phrase captions on any segment that is not a confident match.
-  captionMode: ['phrase', 'word', 'dynamic-stack', 'quran', 'fill'],
+  // 'stack-build' reveals a word at a time into a block that grows downward
+  // and then clears whole -- captionHighlight is the colour a word waits in
+  // before it is spoken, the same meaning it carries in 'fill'.
+  captionMode: ['phrase', 'word', 'dynamic-stack', 'quran', 'fill', 'stack-build'],
   captionPosition: ['top', 'middle', 'bottom'],
   captionHorizontal: ['left', 'center', 'right'],
   watermarkPosition: ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'],
@@ -130,8 +144,14 @@ export const NUMBER_RANGES = {
   // crop multiplier, so 1 is the untouched framing.
   grain: [0, 100], warm: [-100, 100], smartFramingZoom: [0.75, 2.5],
   cropPositionX: [0, 1], cropPositionY: [0, 1], smartFramingPadding: [0, 0.5], captionTimingOffsetMs: [-2000, 2000],
-  captionLetterSpacing: [-4, 40],
-  captionFontSize: [24, 140], captionOutlineWidth: [0, 14], captionShadow: [0, 8], captionBackgroundOpacity: [0, 100],
+  // Down to -20 because the stacked-build face is set very tight: matching the
+  // reference at a 126px caption needs about -11px, and the old -4 floor
+  // silently truncated it to a third of the ask.
+  captionLetterSpacing: [-20, 40],
+  // Up to 240 because ASS sizes are Win-cell sizes, not em sizes: Montserrat's
+  // cell is 1.562em, so the reference's largest line -- an x-height of 65px --
+  // is \fs187. At the old 140 ceiling it silently came out two thirds the size.
+  captionFontSize: [24, 240], captionOutlineWidth: [0, 14], captionShadow: [0, 8], captionBackgroundOpacity: [0, 100],
   // Clamped to what clip_worker.py accepts for the highlight's glow.
   captionHighlightGlow: [0, 30],
   captionTranslationSize: [20, 90],
@@ -144,7 +164,8 @@ export const NUMBER_RANGES = {
   // travel -- at 800 there was a band around the middle it could not reach from
   // either side, and the drag stalled there.
   captionMarginV: [20, 960], captionMarginH: [20, 700], captionMaxWords: [1, 12],
-  captionStackMaxWords: [1, 6], captionStackProbability: [0, 1], captionClearPause: [0.15, 2], captionLineHeight: [0.65, 1.4],
+  captionStackMaxWords: [1, 6], captionStackLines: [2, 6], captionSizeVariation: [0, 100],
+  captionStackProbability: [0, 1], captionClearPause: [0.15, 2], captionLineHeight: [0.65, 1.4],
   hookDuration: [0.5, 8], hookFontSize: [24, 120], hookBackgroundOpacity: [0, 100],
   watermarkFontSize: [12, 90], watermarkOpacity: [0, 100], watermarkMarginV: [10, 500], watermarkMarginH: [10, 500],
   brandLineHeight: [2, 30],
@@ -187,7 +208,7 @@ export function sanitiseTemplate(input = {}, { id = '', builtIn = false, userId 
   for (const key of ['frameBackground', 'captionPrimary', 'captionHighlight', 'captionOutline', 'captionBackground', 'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor']) {
     output[key] = cleanColor(source[key], DEFAULTS[key]);
   }
-  for (const key of ['captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic', 'captionTranslation']) {
+  for (const key of ['captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic', 'captionTranslation', 'captionBehindSubject']) {
     output[key] = Boolean(source[key]);
   }
   // Opening title cards are intentionally disabled. Clips begin immediately with spoken captions.
@@ -228,6 +249,7 @@ export const CLIP_STYLE_FIELDS = Object.freeze([
   'frameBackground', 'captionPrimary', 'captionHighlight', 'captionOutline', 'captionBackground',
   'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor',
   'captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic', 'captionTranslation',
+  'captionBehindSubject',
   'captionFont', 'captionHighlightFont', 'captionArabicFont', 'watermark',
 ]);
 
@@ -251,7 +273,7 @@ export const FRAMING_FIELDS = Object.freeze([
 const CLIP_STYLE_FIELD_SET = new Set(CLIP_STYLE_FIELDS);
 const COLOUR_FIELDS = new Set(['frameBackground', 'captionPrimary', 'captionHighlight', 'captionOutline',
   'captionBackground', 'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor']);
-const BOOLEAN_FIELDS = new Set(['captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic', 'captionTranslation']);
+const BOOLEAN_FIELDS = new Set(['captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic', 'captionTranslation', 'captionBehindSubject']);
 
 /**
  * Validate a partial style patch for a single clip.

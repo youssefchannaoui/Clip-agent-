@@ -22,24 +22,63 @@ test('invalid template selection is blocked', () => {
   assert.throws(() => templates.setSelectedTemplate(user, 'does-not-exist'), /not available/i);
 });
 
-// ── one template per content type, edited in place ────────────────────────
+// ── templates are added per content type, edited in place ─────────────────
 //
-// The catalogue is exactly two templates: Quran Recitation for recitations and
-// Simple Bold for lectures. Forking and duplicating are gone -- they are what
-// turned two templates into eight rows of near-identical copies -- and an
-// account's edits to a built-in are stored as a patch over the shipped file,
-// so ids stay stable and Save always means save.
+// The catalogue is built per kind of content rather than as a flat pile of
+// forks: Quran Recitation for recitations, and lecture styles for lectures.
+// Forking and duplicating are gone -- they are what turned two templates into
+// eight rows of near-identical copies -- and an account's edits to a built-in
+// are stored as a patch over the shipped file, so ids stay stable and Save
+// always means save.
 
-test('the catalogue carries the shipped set: one Quran style, one lecture style', () => {
+test('the catalogue carries the shipped set: one Quran style, two lecture styles', () => {
   // Cut back to two on request (22 Aug 2026): "delete everything except mono
-  // and quran so i have 1 lecture 1 quran recitation". The four that went --
-  // Clean Bold, Simple Bold, Slate Stack, Ink Fill -- are rebuilt from
-  // references rather than kept around as near-duplicates.
+  // and quran so i have 1 lecture 1 quran recitation". Bold Stack was then
+  // built from reference edits (22 Aug 2026) as the second lecture style, so a
+  // kind having more than one member is now expected -- what is not allowed is
+  // a template that exists only because somebody duplicated another.
   const list = templates.listTemplates(user);
-  assert.deepEqual(list.map(t => t.id).sort(), ['mono-minimal', 'quran-recitation']);
+  assert.deepEqual(list.map(t => t.id).sort(), ['bold-stack', 'mono-minimal', 'quran-recitation']);
   const modes = Object.fromEntries(list.map(t => [t.id, t.captionMode]));
   assert.equal(modes['quran-recitation'], 'quran');
   assert.notEqual(modes['mono-minimal'], 'quran', 'the lecture style captions the transcript');
+  assert.notEqual(modes['bold-stack'], 'quran', 'the lecture style captions the transcript');
+});
+
+test('Bold Stack keeps the values measured off the reference edits', () => {
+  // These are not taste. Each one was measured off the reference frames and a
+  // silent clamp would change the look without changing the file, which is
+  // exactly what the old -4 letter-spacing floor did.
+  const tpl = templates.templateById('bold-stack', user);
+  assert.equal(tpl.captionMode, 'stack-build');
+  assert.equal(tpl.captionFont, 'Montserrat ExtraBold');
+  // 187, not 120: ASS sizes are Win-cell sizes. Montserrat's cell is 1.562em,
+  // so an x-height of 65px is \\fs187, and the em it actually draws is 120.
+  assert.equal(tpl.captionFontSize, 187, 'the largest line measured an x-height of 65px');
+  assert.equal(tpl.captionLineHeight, 0.69, 'baselines sit a shade under one x-height apart');
+  assert.equal(tpl.captionLetterSpacing, -11, 'the face is set very tight; -4 would truncate it');
+  assert.equal(tpl.captionPrimary, '#FFFFFF');
+  assert.equal(tpl.captionHighlight, '#808080', 'the colour a word waits in before it is spoken');
+  assert.equal(tpl.captionPosition, 'top');
+  assert.equal(tpl.captionHorizontal, 'left');
+  assert.equal(tpl.captionMarginH, 52);
+  assert.equal(tpl.captionSizeVariation, 100);
+  assert.equal(tpl.captionStackLines, 4);
+  assert.equal(tpl.captionBehindSubject, true);
+});
+
+test('a clip may take the stacked build and the behind-speaker cut-out', () => {
+  // Both have to survive sanitiseClipStyle or a per-clip tweak would quietly
+  // drop them and the clip would re-render in the wrong style.
+  const patch = templates.sanitiseClipStyle({
+    captionMode: 'stack-build', captionBehindSubject: true,
+    captionSizeVariation: 100, captionStackLines: 4, captionLetterSpacing: -11,
+  });
+  assert.equal(patch.captionMode, 'stack-build');
+  assert.equal(patch.captionBehindSubject, true);
+  assert.equal(patch.captionSizeVariation, 100);
+  assert.equal(patch.captionStackLines, 4);
+  assert.equal(patch.captionLetterSpacing, -11);
 });
 
 test('saving a built-in edits it in place for this account only', () => {
