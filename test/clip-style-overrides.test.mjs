@@ -51,7 +51,7 @@ test('out-of-range numbers clamp and bad values are dropped, not thrown', () => 
 });
 
 test('a clip renders with its own tweaks laid over the template', () => {
-  const base = { ...templates.templateById('simple-bold', user), captionFontSize: 96, captionPosition: 'middle' };
+  const base = { ...templates.templateById('mono-minimal', user), captionFontSize: 96, captionPosition: 'middle' };
   const merged = templates.templateForClip(base, { captionFontSize: 60, captionPosition: 'bottom' });
   assert.equal(merged.captionFontSize, 60);
   assert.equal(merged.captionPosition, 'bottom');
@@ -60,7 +60,7 @@ test('a clip renders with its own tweaks laid over the template', () => {
 });
 
 test('overriding a clip never renames or re-versions the shared style', () => {
-  const base = { ...templates.templateById('simple-bold', user), captionFontSize: 96 };
+  const base = { ...templates.templateById('mono-minimal', user), captionFontSize: 96 };
   const merged = templates.templateForClip(base, { captionFontSize: 48, name: 'Sneaky', version: 99 });
   assert.equal(merged.id, base.id);
   assert.equal(merged.name, base.name);
@@ -69,7 +69,7 @@ test('overriding a clip never renames or re-versions the shared style', () => {
 });
 
 test('a clip with no tweaks renders with the template object itself', () => {
-  const base = templates.templateById('simple-bold', user);
+  const base = templates.templateById('mono-minimal', user);
   assert.equal(templates.templateForClip(base, undefined), base);
   assert.equal(templates.templateForClip(base, {}), base);
   // A patch of only-invalid keys is the same as no patch.
@@ -77,9 +77,9 @@ test('a clip with no tweaks renders with the template object itself', () => {
 });
 
 test('editing one clip leaves the shared style untouched on disk', () => {
-  const before = templates.templateById('simple-bold', user).captionFontSize;
-  templates.templateForClip(templates.templateById('simple-bold', user), { captionFontSize: 40 });
-  const reread = templates.templateById('simple-bold', user);
+  const before = templates.templateById('mono-minimal', user).captionFontSize;
+  templates.templateForClip(templates.templateById('mono-minimal', user), { captionFontSize: 40 });
+  const reread = templates.templateById('mono-minimal', user);
   assert.equal(reread.captionFontSize, before, 'the template must not absorb a per-clip tweak');
 });
 

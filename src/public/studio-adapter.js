@@ -2878,7 +2878,7 @@
       // (off for recitation), unless the operator already touched it -- their
       // explicit answer outlives a kind change.
       pickJobType: function (kind) {
-        setUI({ jobTplId: kind === 'quran' ? 'quran-recitation' : 'simple-bold' });
+        setUI({ jobTplId: kind === 'quran' ? 'quran-recitation' : 'mono-minimal' });
       },
       jobMusicLabel: UI.jobMusic === false ? 'No nasheed' : 'Nasheed on',
       jobMusicTrack: switchTrack(UI.jobMusic !== false),

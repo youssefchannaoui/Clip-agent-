@@ -30,30 +30,26 @@ test('invalid template selection is blocked', () => {
 // account's edits to a built-in are stored as a patch over the shipped file,
 // so ids stay stable and Save always means save.
 
-test('the catalogue carries the shipped set: one Quran style, five lecture styles', () => {
-  // Grown from "one per content type" on request: the lecture styles are
-  // modelled on the reference reels (clean bold, greyscale minimal, slate
-  // stack, ink fill) plus the original Simple Bold.
+test('the catalogue carries the shipped set: one Quran style, one lecture style', () => {
+  // Cut back to two on request (22 Aug 2026): "delete everything except mono
+  // and quran so i have 1 lecture 1 quran recitation". The four that went --
+  // Clean Bold, Simple Bold, Slate Stack, Ink Fill -- are rebuilt from
+  // references rather than kept around as near-duplicates.
   const list = templates.listTemplates(user);
-  assert.deepEqual(list.map(t => t.id).sort(),
-    ['clean-bold', 'ink-fill', 'mono-minimal', 'quran-recitation', 'simple-bold', 'slate-stack']);
+  assert.deepEqual(list.map(t => t.id).sort(), ['mono-minimal', 'quran-recitation']);
   const modes = Object.fromEntries(list.map(t => [t.id, t.captionMode]));
   assert.equal(modes['quran-recitation'], 'quran');
-  for (const id of ['clean-bold', 'ink-fill', 'mono-minimal', 'simple-bold', 'slate-stack']) {
-    assert.notEqual(modes[id], 'quran', id + ' captions the transcript');
-  }
-  // Ink Fill is the only one that sweeps the word as it is spoken.
-  assert.equal(modes['ink-fill'], 'fill');
+  assert.notEqual(modes['mono-minimal'], 'quran', 'the lecture style captions the transcript');
 });
 
 test('saving a built-in edits it in place for this account only', () => {
   const before = templates.listTemplates(user).length;
-  const saved = templates.saveTemplate(user, 'simple-bold', { captionFontSize: 120 }, { allowFork: true });
+  const saved = templates.saveTemplate(user, 'mono-minimal', { captionFontSize: 120 }, { allowFork: true });
   assert.equal(saved.forked, false, 'no copy is ever minted');
-  assert.equal(saved.template.id, 'simple-bold', 'identity never moves');
+  assert.equal(saved.template.id, 'mono-minimal', 'identity never moves');
   assert.equal(saved.template.captionFontSize, 120);
   // Another account still sees the shipped template.
-  assert.notEqual(templates.templateById('simple-bold', otherUser).captionFontSize, 120);
+  assert.notEqual(templates.templateById('mono-minimal', otherUser).captionFontSize, 120);
   // And the catalogue has not grown. Counted before and after rather than
   // against a number: the point is that a save mints nothing, which stayed
   // true every time the shipped set itself changed size.
@@ -71,29 +67,25 @@ test('minting new templates is refused, with the reason', () => {
   // A slider drag on a debounce must never create a template, and neither may
   // anything else: the product is one template per content type.
   assert.throws(() => templates.createTemplate(user, { name: 'Another One' }), /one template per content type/i);
-  assert.throws(() => templates.duplicateTemplate(user, 'simple-bold'), /one template per content type/i);
+  assert.throws(() => templates.duplicateTemplate(user, 'mono-minimal'), /one template per content type/i);
 });
 
 test('the built-ins cannot be deleted', () => {
-  assert.throws(() => templates.deleteTemplate(user, 'simple-bold'), /cannot be deleted/i);
+  assert.throws(() => templates.deleteTemplate(user, 'mono-minimal'), /cannot be deleted/i);
 });
 
 // ── the built-in templates new accounts start from ─────────────────────────
 
-test('Simple Bold is two thick words a line, dimmed behind the live one', () => {
-  // The reference clip: short uppercase lines low in the frame, the word being
-  // said in white and the rest greyed — no colour, no outline, no sticker.
-  const t = templates.templateById('simple-bold', user);
+test('Mono Minimal is the one lecture style: greyscale, one word at a time', () => {
+  // The style Youssef kept when the set was cut to two. Characterised here so
+  // an edit that quietly changes its look has to change this test too.
+  const t = templates.templateById('mono-minimal', user);
   assert.ok(t, 'the template ships');
-  assert.equal(t.captionStackMaxWords, 2, 'two words a line is what gives it the rhythm');
-  assert.equal(t.captionUppercase, true);
+  assert.equal(t.filterPreset, 'monochrome', 'the black and white is the whole point');
+  assert.equal(t.captionMode, 'word');
+  assert.equal(t.captionMaxWords, 1, 'one word at a time');
   assert.equal(t.captionOutlineWidth, 0, 'no outline');
   assert.equal(t.captionBackgroundOpacity, 0, 'and no box');
-  // The dimming is primary vs highlight, not a second colour.
-  assert.equal(t.captionHighlight, '#FFFFFF', 'the live word');
-  assert.notEqual(t.captionPrimary, '#FFFFFF', 'the rest are dimmed');
-  assert.equal(t.captionHighlightFont, t.captionFont, 'the live word must not change face too');
-  assert.equal(t.captionPosition, 'bottom');
 });
 
 test('Quran Recitation captions scripture, not the transcript', () => {
@@ -150,20 +142,20 @@ test('manual framing and caption timing are real fields now', () => {
 
 test('a shipped version bump still shows through an account patch', async () => {
   const { state } = await import('../src/store.js');
-  const saved = templates.saveTemplate(user, 'simple-bold', { captionFontSize: 101 }).template;
-  const before = templates.templateById('simple-bold', user).version;
+  const saved = templates.saveTemplate(user, 'mono-minimal', { captionFontSize: 101 }).template;
+  const before = templates.templateById('mono-minimal', user).version;
   assert.equal(before, saved.version, 'sanity: reads see the saved counter');
   // Simulate the patch predating a deploy that bumped the shipped file: the
   // stored shippedVersion is one behind what ships now.
   const tenancy = await import('../src/tenancy.js');
   const all = tenancy.readUserSetting(state, user.id, 'templateOverrides');
-  assert.ok(Number(all['simple-bold'].shippedVersion) >= 1, 'the patch records the shipped version it was made against');
-  all['simple-bold'].shippedVersion -= 1;
+  assert.ok(Number(all['mono-minimal'].shippedVersion) >= 1, 'the patch records the shipped version it was made against');
+  all['mono-minimal'].shippedVersion -= 1;
   tenancy.writeUserSetting(state, user.id, 'templateOverrides', all);
-  const after = templates.templateById('simple-bold', user).version;
+  const after = templates.templateById('mono-minimal', user).version;
   assert.equal(after, before + 1,
     'the deploy drift adds on top of the account counter, so templateOutdated can fire');
-  all['simple-bold'].shippedVersion += 1;
+  all['mono-minimal'].shippedVersion += 1;
   tenancy.writeUserSetting(state, user.id, 'templateOverrides', all);
 });
 
