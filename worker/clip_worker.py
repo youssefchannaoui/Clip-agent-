@@ -1460,6 +1460,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     continue
                 seg_text = str(segment.get("text") or "")
                 found = corpus.match(seg_text)
+                # A segment with room for more than the verse it matched is
+                # usually two verses read together. Held as one match, the
+                # first ayah stayed on screen for the whole span -- thirty-
+                # seven seconds on one clip, with the verse recited in the
+                # middle of it never shown at all. The walk is only worth its
+                # cost when there is that much spare room.
+                spread: list[dict[str, Any]] | None = None
+                if found and len(seg_text.split()) > len(str(found["arabic"]).split()) * 1.35:
+                    spread = corpus.match_sequence(seg_text) if hasattr(corpus, "match_sequence") else []
+                    if len(spread) > 1:
+                        found = None
                 if not found:
                     # A whole passage rather than a verse -- which is exactly
                     # what a re-render hands us, since it rebuilds one segment
@@ -1467,7 +1478,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     # each ayah in turn instead of dropping to plain captions,
                     # which is how a re-rendered Quran clip lost its medallion,
                     # its translation and its line breaks.
-                    passage = corpus.match_sequence(seg_text) if hasattr(corpus, "match_sequence") else []
+                    passage = spread if spread is not None else (
+                        corpus.match_sequence(seg_text) if hasattr(corpus, "match_sequence") else []
+                    )
                     if passage:
                         all_words = seg_text.split()
                         seg_words = max(1, len(all_words))

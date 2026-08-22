@@ -409,6 +409,25 @@ class QuranCaptionTests(unittest.TestCase):
         self.assertIn("Far, very far", text)
         self.assertIn("what he strives for", text)
 
+    def test_two_verses_read_together_are_not_held_as_one(self):
+        """A long segment matched its first verse and stopped there.
+
+        match() answered with one ayah for a thirty-seven second segment, so
+        that verse sat on screen for the whole span and the verse recited in
+        the middle of it was never shown.
+        """
+        both = " ".join(a["arabic"] for a in self.AYAHS)
+        text = self._render([{"start": 0.0, "end": 12.0, "text": both}])
+        self.assertIn("۝٣٦", text)
+        self.assertIn("۝٣٩", text, "the second verse gets its own line and mark")
+
+    def test_a_single_verse_segment_still_takes_the_direct_match(self):
+        # The walk is only worth its cost when the segment has room for more
+        # than the verse it matched.
+        text = self._render([{"start": 0.0, "end": 4.0, "text": self.AYAHS[0]["arabic"]}])
+        self.assertIn("۝٣٦", text)
+        self.assertNotIn("۝٣٩", text)
+
     def test_the_speaker_between_two_ayat_is_still_captioned(self):
         """An aside between two verses must not vanish.
 
