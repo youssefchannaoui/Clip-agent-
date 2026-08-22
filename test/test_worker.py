@@ -1732,8 +1732,19 @@ class StackBuildCaptionTests(unittest.TestCase):
                 tops.append((int(match.group(1)), int(match.group(2))))
         self.assertTrue(tops)
         self.assertTrue(all(x == 52 for x, _ in tops), "the block is left-aligned on its margin")
-        self.assertEqual(min(y for _, y in tops), 260, "the first line sits on the top margin")
         self.assertGreater(len(set(y for _, y in tops)), 1, "later lines sit lower")
+
+    def test_the_first_line_puts_its_ink_on_the_top_margin(self):
+        # \an7 positions the line BOX, whose top sits above the ink by the
+        # face's win ascent. What has to land on the margin is the ink, or the
+        # block would hang higher for a big line than a small one.
+        events = self._events()
+        first = min(events, key=lambda e: worker.ass_time and e.split(",")[1])
+        size = int(re.search(r"\\fs(\d+)", first).group(1))
+        top = int(re.search(r"\\pos\(\d+,(\d+)\)", first).group(1))
+        text = first.split("}")[-1]
+        ink = top + worker.STACK_ASCENT * size - worker._ink_top(text, size)
+        self.assertAlmostEqual(ink, 260, delta=1)
 
     def test_variation_changes_line_sizes_and_zero_variation_does_not(self):
         varied = {int(m.group(1)) for e in self._events() for m in [re.search(r"\\fs(\d+)", e)] if m}

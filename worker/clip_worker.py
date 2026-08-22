@@ -1459,16 +1459,45 @@ STACK_REVEAL_MS = 100
 # held the last line for roughly this before cutting to blank.
 STACK_HOLD_SEC = 0.8
 
-# Where libass puts the top of a line box, as a multiple of the nominal font
-# size. libass fits the face's whole Win cell (usWinAscent + usWinDescent) into
-# the size it is given, so the ascent is that cell's top share, not the raw
-# metric: Montserrat ExtraBold is 1109 up and 453 down over a 1000 em, so the
-# cell is 1.562em and the ascent lands at 1109/1562 = 0.710 of the size.
+# The face's shape, as fractions of the nominal ASS size.
 #
-# A template set in another face shifts the whole block by the difference,
-# which is a few pixels and drag-correctable in the editor -- the spacing
-# *between* lines, which is what carries the look, is unaffected.
-STACK_ASCENT = 0.710
+# libass fits the whole Win cell (usWinAscent + usWinDescent) into the size it
+# is given, so none of these are the raw em metrics: Montserrat ExtraBold is
+# 1109 up and 453 down over a 1000 em, a cell of 1.562em, and every ratio below
+# is the em figure divided by that.
+#
+# STACK_ASCENT is where libass puts the top of the line box, which is what
+# \an7 positions from. The other three are where the *ink* actually starts and
+# stops, which is what the reference packs its lines by.
+STACK_CELL = 1.562            # (usWinAscent + usWinDescent) / em
+STACK_ASCENT = 0.710          # 1109/1562
+STACK_INK_ASCENDER = 0.467    # ascenders and capitals, ~0.73em
+STACK_INK_XHEIGHT = 0.347     # 542/1000 over the cell
+STACK_INK_DESCENDER = 0.150   # g j p q y, ~0.23em
+
+# The gap the reference leaves between one line's lowest ink and the next
+# line's highest, as a fraction of the caption size. Measured at 11-12px on a
+# 1080-wide frame against lines of three different sizes -- it is a constant
+# gap, not a multiple of either line. captionLineHeight scales it.
+STACK_INK_GAP = 0.070
+
+# Letters that reach above the x-height, and letters that drop below the
+# baseline. Which of them a line contains is what decides where it sits: a line
+# starting "perspective" tucks up under the one above, where "looked at Islam"
+# has to clear its ascenders.
+STACK_ASCENDER_CHARS = set("bdfhijklt")
+STACK_DESCENDER_CHARS = set("gjpqy")
+
+
+def _ink_top(text: str, size: float) -> float:
+    """How far the line's highest ink sits above its baseline."""
+    reach = any(ch in STACK_ASCENDER_CHARS or ch.isupper() or ch.isdigit() for ch in text)
+    return size * (STACK_INK_ASCENDER if reach else STACK_INK_XHEIGHT)
+
+
+def _ink_bottom(text: str, size: float) -> float:
+    """How far the line's lowest ink drops below its baseline."""
+    return size * STACK_INK_DESCENDER if any(ch in STACK_DESCENDER_CHARS for ch in text) else 0.0
 
 
 def stack_build_blocks(candidate: Candidate, template: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1484,6 +1513,11 @@ def stack_build_blocks(candidate: Candidate, template: dict[str, Any]) -> list[d
     block does not read as a rigid grid, and each line's size is drawn from
     STACK_SIZE_STEPS. Both are keyed off a stable hash of the clip text, so a
     re-render of the same clip lays out identically.
+
+    A line also breaks early when the next word would push it past the frame.
+    The reference lets a long line run under the speaker, but it only gets away
+    with that because the speaker is standing in front of the overflow; run it
+    off the edge of the frame instead and the words are simply gone.
     """
     words = candidate_words(candidate)
     if not words:
@@ -1492,23 +1526,43 @@ def stack_build_blocks(candidate: Candidate, template: dict[str, Any]) -> list[d
     max_lines = max(2, min(6, int(template.get("captionStackLines", 4) or 4)))
     clear_pause = max(0.15, min(2.0, float(template.get("captionClearPause", 0.42) or 0.42)))
     variation = max(0.0, min(100.0, float(template.get("captionSizeVariation", 0) or 0))) / 100.0
+    font_size = int(template.get("captionFontSize", 62) or 62)
+    margin_h = int(template.get("captionMarginH", 90) or 90)
+    usable = max(120, int(template.get("width", 1080) or 1080) - margin_h * 2)
 
-    blocks: list[list[list[dict[str, Any]]]] = []
-    lines: list[list[dict[str, Any]]] = []
+    blocks: list[list[dict[str, Any]]] = []
+    lines: list[dict[str, Any]] = []
     current: list[dict[str, Any]] = []
     line_number = 0
 
-    def line_target() -> int:
+    def line_size() -> float:
+        step = STACK_SIZE_STEPS[
+            int(_stable_fraction(f"{candidate.text}|size|{len(blocks)}|{line_number}") * len(STACK_SIZE_STEPS))
+            % len(STACK_SIZE_STEPS)
+        ]
+        return 1.0 + (step - 1.0) * variation
+
+    def line_words() -> int:
         if max_words <= 2:
             return max_words
         span = max_words - 1
         pick = _stable_fraction(f"{candidate.text}|line|{len(blocks)}|{line_number}")
         return 2 + min(span - 1, int(pick * span))
 
+    def too_wide(candidate_words_on_line: list[dict[str, Any]], size: float) -> bool:
+        """Whether that run of words would spill past the usable width.
+
+        A character of this face averages 0.46 of its em once the template's
+        tracking is in, measured off the reference lines; the em itself is the
+        ASS size over the face's Win cell.
+        """
+        characters = len(" ".join(str(word["word"]).strip() for word in candidate_words_on_line))
+        return characters * 0.46 * (font_size * size / STACK_CELL) > usable
+
     def close_line() -> None:
         nonlocal current, line_number
         if current:
-            lines.append(current)
+            lines.append({"words": current, "size": line_size()})
             current = []
             line_number += 1
 
@@ -1527,25 +1581,29 @@ def stack_build_blocks(candidate: Candidate, template: dict[str, Any]) -> list[d
         else:
             pause = float(word["start"]) - float(previous["end"])
             previous_text = str(previous.get("word") or "").strip()
-            if pause >= clear_pause or re.search(r"[.!?…][\"']?$", previous_text):
+            if pause >= clear_pause or re.search(r"[.!?\u2026][\"']?$", previous_text):
+                close_block()
+        # A word that would spill starts the next line instead. Checked before
+        # it is committed, not after: afterwards the line has already run off
+        # the frame. A single word wider than the frame stays where it is --
+        # there is nowhere better for it, and moving it on would loop.
+        if current and too_wide(current + [word], line_size()):
+            close_line()
+            if len(lines) >= max_lines:
                 close_block()
         current.append(word)
-        if len(current) >= line_target():
+        if len(current) >= line_words():
             close_line()
             if len(lines) >= max_lines:
                 close_block()
     close_block()
 
     out: list[dict[str, Any]] = []
-    for block_index, block_lines in enumerate(blocks):
-        sizes: list[float] = []
-        for line_index in range(len(block_lines)):
-            step = STACK_SIZE_STEPS[
-                int(_stable_fraction(f"{candidate.text}|size|{block_index}|{line_index}") * len(STACK_SIZE_STEPS))
-                % len(STACK_SIZE_STEPS)
-            ]
-            sizes.append(1.0 + (step - 1.0) * variation)
-        out.append({"lines": block_lines, "sizes": sizes})
+    for block_lines in blocks:
+        out.append({
+            "lines": [line["words"] for line in block_lines],
+            "sizes": [line["size"] for line in block_lines],
+        })
     return out
 
 
@@ -1578,15 +1636,22 @@ def stack_build_events(
         if not flat:
             continue
         # Baselines first, then the box tops libass actually positions from.
-        # The gap between two baselines is half the line height times the two
-        # sizes either side of it, which is the relation the reference lines
-        # measured out to.
+        #
+        # The lines are packed by their ink, not by their metrics: each one
+        # sits a constant gap below the lowest ink of the one above it. That is
+        # what the reference measured out to across three different line sizes,
+        # and it is why a line beginning "perspective" tucks up under the line
+        # above while one beginning "looked" has to clear its ascenders. A
+        # metrics-based advance cannot produce both.
         pixel_sizes = [max(8, int(round(font_size * size))) for size in sizes]
+        texts = [" ".join(str(word["word"]).strip() for word in line) for line in lines]
+        gap = line_height * STACK_INK_GAP * font_size
         tops: list[int] = []
-        baseline = margin_v + STACK_ASCENT * pixel_sizes[0]
+        baseline = margin_v + _ink_top(texts[0], pixel_sizes[0])
         for index, size_px in enumerate(pixel_sizes):
             if index:
-                baseline += line_height * 0.5 * (pixel_sizes[index - 1] + size_px)
+                baseline += _ink_bottom(texts[index - 1], pixel_sizes[index - 1])
+                baseline += gap + _ink_top(texts[index], size_px)
             tops.append(int(round(baseline - STACK_ASCENT * size_px)))
 
         block_end = min(duration, float(flat[-1][2]["end"]) + STACK_HOLD_SEC)

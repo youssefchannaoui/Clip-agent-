@@ -55,7 +55,7 @@ test('Bold Stack keeps the values measured off the reference edits', () => {
   // 187, not 120: ASS sizes are Win-cell sizes. Montserrat's cell is 1.562em,
   // so an x-height of 65px is \\fs187, and the em it actually draws is 120.
   assert.equal(tpl.captionFontSize, 187, 'the largest line measured an x-height of 65px');
-  assert.equal(tpl.captionLineHeight, 0.69, 'baselines sit a shade under one x-height apart');
+  assert.equal(tpl.captionLineHeight, 0.92, 'lines are packed 12px of ink apart');
   assert.equal(tpl.captionLetterSpacing, -11, 'the face is set very tight; -4 would truncate it');
   assert.equal(tpl.captionPrimary, '#FFFFFF');
   assert.equal(tpl.captionHighlight, '#808080', 'the colour a word waits in before it is spoken');
