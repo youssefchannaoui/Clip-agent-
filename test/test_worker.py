@@ -1487,6 +1487,27 @@ class ThreeScriptsTests(unittest.TestCase):
         self.assertIn("الصبر", text, "the Arabic is what was said")
         self.assertIn("relief", text, "with the English under it")
         self.assertIn(f"\\fs{46}", text, "the English is in the smaller translation size")
+        # The line break between the two has to be ASS's own \N. An escaped
+        # backslash reached a rendered frame as a stray "\" printed at the end
+        # of the Arabic and in the middle of the English.
+        line = [l for l in text.splitlines() if l.startswith("Dialogue: 2")][0]
+        self.assertIn("\\N", line)
+        self.assertNotIn("\\\\N", line, "no doubled escape")
+        self.assertNotIn("\\\\fs", line)
+
+    def test_the_arabic_reads_larger_than_its_translation(self):
+        # libass sizes by the face's win ascent+descent, and Amiri reserves
+        # about three times its em for tashkeel, so at the template's nominal
+        # size the spoken Arabic came out smaller than the English under it.
+        text = self._render([{
+            "start": 0.0, "end": 4.0, "words": [],
+            "text": "قال الشيخ ان الصبر مفتاح الفرج",
+            "english": "The sheikh said that patience is the key to relief.",
+        }], captionFontSize=70, captionTranslationSize=46)
+        line = [l for l in text.splitlines() if l.startswith("Dialogue: 2")][0]
+        sizes = [int(n) for n in re.findall(r"\\fs(\d+)", line)]
+        self.assertTrue(sizes, "the line carries explicit sizes")
+        self.assertGreater(max(sizes), 46, "the Arabic is scaled up, not left at nominal")
 
     def test_recitation_is_still_the_ayah_not_the_translation_pass(self):
         # Scripture takes the corpus text and the corpus translation, never

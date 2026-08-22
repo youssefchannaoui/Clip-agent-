@@ -1748,10 +1748,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         arabic_line = mixed_script_line(
             wrap_caption(span["arabic"], 30), font=font, arabic_font=arabic_font, uppercase=False,
         )
-        english_line = ass_escape(wrap_caption(span["english"], 42))
+        # Escape first, wrap second: wrap_caption returns ASS's own \\N breaks,
+        # and escaping after that turned each one into a literal backslash
+        # printed in the middle of the sentence.
+        english_line = wrap_caption(ass_escape(span["english"]), 42)
+        # The Arabic is the line that was actually spoken, so it has to read as
+        # the primary one. libass sizes by the face's win ascent+descent, and
+        # Amiri reserves roughly three times its em for tashkeel -- at the
+        # template's nominal size it came out smaller than the English
+        # underneath it, which inverted the hierarchy.
+        spoken_size = int(round(font_size * ayah_nominal_scale(arabic_font)))
         events.append(
             f"Dialogue: 2,{ass_time(span['start'])},{ass_time(span['end'])},Caption,,0,0,0,,{fade_tag}"
-            f"{arabic_line}\\N{{\\fn{font}\\fs{translation_size}}}{english_line}"
+            + "{\\fs" + str(spoken_size) + "}" + arabic_line
+            + "\\N{\\fn" + font + "\\fs" + str(translation_size) + "}" + english_line
         )
 
     # The ayahs found above, in the Quran's own words and the Arabic face,
