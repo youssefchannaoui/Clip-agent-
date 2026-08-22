@@ -97,7 +97,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **425 JS + 212 Python**
+- `npm test` and `npm run check` must pass. Currently **426 JS + 223 Python**
   (7 Python skipped). Update these numbers when they change — they were wrong by
   more than a factor of two, which makes them useless as a tripwire.
 - **The 7 skips are `SpeakerTrackingTests`**, which need a test video that is not
@@ -128,6 +128,15 @@ These were each a real bug and each has a test named after it.
 - **Only a rendered frame settles a caption question.** Every one of the above
   passed unit tests; two deploy cycles were spent on renders that "should"
   have been right. Frame-check via the clip's public R2 URL in a <video>.
+- **The editor must never save what it only draws.** The caption blocks show
+  the matched verse in place of Whisper's text, and Save rebuilt the transcript
+  from what was drawn -- so opening a recitation clip and pressing Save
+  replaced its transcript with the ayahs, each repeated once per block, and
+  marked it edited. `process_rerender` honours that flag by collapsing the clip
+  into one untimed segment, so every caption then drifted by up to four
+  seconds. Blocks carry `sourceText` for saving, `store.isAyahEcho` refuses the
+  echo server-side, and `reflow_segments` lays a genuine edit back over
+  Whisper's boundaries instead of one flat span.
 - **A re-render captions the STORED transcript, not fresh speech.**
   `process_rerender` rebuilds one segment holding the clip's whole transcript,
   so a recitation arrives as a 169-word passage. `Corpus.match()` scores an
