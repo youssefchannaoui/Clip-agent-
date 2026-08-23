@@ -114,6 +114,10 @@ function tooManyAttempts(res, retryAfterSec, returnTo) {
 
 const CSRF_EXEMPT = new Set(['/auth/apple/callback']);
 
+// Link previews, briefly. The title and duration of a lecture do not change
+// between two pastes of the same URL, and every miss is a live API call.
+const sourceInfoCache = new Map();
+
 /**
  * A state-changing POST must come from this site.
  *
@@ -895,9 +899,29 @@ async function route(req, res, url) {
     const body = await readBody(req);
     const urls = String(body.urls || '').split(/[\n,]+/).map(value => value.trim()).filter(Boolean);
     if (!urls.length) return json(res, 400, { error: 'Paste at least one video link.' });
+    // Each URL costs a live YouTube Data API call against one shared key and a
+    // daily quota. Eight per request with nothing counting them meant a few
+    // hundred scripted requests could burn the whole day's allowance -- for
+    // every account at once, since the key is the product's, not the user's.
+    const lookups = throttle.rateLimit(`sourceinfo:${currentUser.id}`, 120, 60 * 60_000);
+    if (!lookups.allowed) {
+      res.setHeader('Retry-After', String(lookups.retryAfterSec));
+      return json(res, 429, { error: 'Too many link previews in the last hour. Try again shortly.' });
+    }
     const sources = [];
     for (const source of urls.slice(0, 8)) {
-      try { sources.push(await agent.sourceInfo(source)); }
+      const cached = sourceInfoCache.get(source);
+      if (cached && cached.until > Date.now()) { sources.push(cached.value); continue; }
+      try {
+        const info = await agent.sourceInfo(source);
+        // A lecture's title and length do not change; a short cache turns a
+        // pasted-and-repasted link into one call instead of many.
+        sourceInfoCache.set(source, { value: info, until: Date.now() + 10 * 60_000 });
+        if (sourceInfoCache.size > 500) {
+          for (const [key, entry] of sourceInfoCache) if (entry.until < Date.now()) sourceInfoCache.delete(key);
+        }
+        sources.push(info);
+      }
       catch (error) { sources.push({ url: source, title: source, durationSec: null, thumbnail: '', error: error.message }); }
     }
     const durations = sources.map(item => Number(item.durationSec)).filter(value => Number.isFinite(value) && value > 0);
