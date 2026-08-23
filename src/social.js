@@ -39,9 +39,20 @@ function decrypt(payload) {
   if (!payload) return null;
   const [version, ivText, tagText, dataText] = String(payload).split('.');
   if (version !== 'v1' || !ivText || !tagText || !dataText) throw new SocialError('Stored social credentials could not be read. Reconnect the account.');
-  const decipher = crypto.createDecipheriv('aes-256-gcm', requireTokenKey(), Buffer.from(ivText, 'base64url'));
-  decipher.setAuthTag(Buffer.from(tagText, 'base64url'));
-  return JSON.parse(Buffer.concat([decipher.update(Buffer.from(dataText, 'base64url')), decipher.final()]).toString('utf8'));
+  try {
+    const decipher = crypto.createDecipheriv('aes-256-gcm', requireTokenKey(), Buffer.from(ivText, 'base64url'));
+    decipher.setAuthTag(Buffer.from(tagText, 'base64url'));
+    return JSON.parse(Buffer.concat([decipher.update(Buffer.from(dataText, 'base64url')), decipher.final()]).toString('utf8'));
+  } catch (error) {
+    // Almost always SOCIAL_TOKEN_KEY having been rotated: the tokens were
+    // sealed with the old one and cannot be opened with the new one. Rotating
+    // that key is a documented, deliberate act that forces every account to
+    // reconnect, so say that -- raw GCM failures read as a crash, and every
+    // caller here is either a publish or a connection test, where "unable to
+    // authenticate data" tells the person nothing they can act on.
+    // Not retryable: no number of attempts turns the old key into the new one.
+    throw new SocialError('Stored social credentials could not be read -- this account needs to be reconnected.', { retryable: false });
+  }
 }
 
 function baseUrl() {
