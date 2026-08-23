@@ -1574,14 +1574,41 @@
             </span>
           </sc-if>
           <sc-if value="{{ jobMusicOn }}" hint-placeholder-val="{{ true }}">
-            <span style="font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">Nasheed</span>
+            <span style="font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">Which nasheed</span>
             <span style="display: flex; flex-wrap: wrap; gap: 6px;">
               <sc-for list="{{ jobNasheeds }}" as="n" hint-placeholder-count="4">
                 <button onClick="{{ n.select }}" style="{{ n.style }}"><i class="ph ph-music-notes" style="font-size: 12px;"></i>{{ n.label }}</button>
               </sc-for>
             </span>
+            <span style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 8px;">
+              <span style="font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">How loud underneath</span>
+              <span style="font-family: Outfit, Inter, sans-serif; font-size: 12.5px; font-weight: 500; color: #F0D6A6;">{{ jobVolumeLabel }}</span>
+            </span>
+            <span style="display: flex; flex-wrap: wrap; gap: 6px;">
+              <sc-for list="{{ jobVolumeLevels }}" as="v" hint-placeholder-count="3">
+                <button onClick="{{ v.select }}" style="{{ v.style }}">{{ v.label }}</button>
+              </sc-for>
+            </span>
+            <span style="font-size: 11.5px; color: #5E5E66;">It is ducked automatically wherever the voice is loudest, so it never competes with the speaker.</span>
           </sc-if>
         </div>
+        </sc-if>
+
+        <!-- The review's numbers live in the rail, which left this column empty
+             on the last step. What goes here is the one thing the rail cannot
+             say: what is about to happen, and when it stops being automatic. -->
+        <sc-if value="{{ jobIsStepReview }}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; flex-direction: column; gap: 2px; animation: dcStep .3s cubic-bezier(.2,.75,.3,1) both; animation-delay: .04s;">
+            <sc-for list="{{ jobPlanSteps }}" as="p" hint-placeholder-count="4">
+              <span style="display: flex; align-items: flex-start; gap: 13px; padding: 11px 0;">
+                <span style="display: grid; place-items: center; width: 26px; height: 26px; flex: none; border-radius: 8px; border: 1px solid #26262A; background: #17171A; color: #8B8B93;"><i class="{{ p.icon }}" style="font-size: 13px;"></i></span>
+                <span style="display: flex; flex-direction: column; gap: 1px; min-width: 0;">
+                  <span style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 500; color: #E9E9ED;">{{ p.title }}</span>
+                  <span style="font-size: 12px; line-height: 1.5; color: #8B8B93;">{{ p.note }}</span>
+                </span>
+              </span>
+            </sc-for>
+          </div>
         </sc-if>
 
           <sc-if value="{{ jobBackShown }}" hint-placeholder-val="{{ true }}">
@@ -1617,10 +1644,10 @@
 
           <div style="display: flex; flex-direction: column; gap: 11px;">
             <sc-for list="{{ jobSummaryRows }}" as="row" hint-placeholder-count="4">
-              <span style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;">
-                <span style="font-size: 12.5px; color: #8B8B93;">{{ row.label }}</span>
+              <a href="#" onClick="{{ row.go }}" style="{{ row.rowStyle }}" style-hover="background: rgba(248,248,249,.04);">
+                <span style="display: inline-flex; align-items: baseline; gap: 6px; font-size: 12.5px; color: #8B8B93;">{{ row.label }}<span style="{{ row.editStyle }}">Edit</span></span>
                 <span style="{{ row.valueStyle }}">{{ row.value }}</span>
-              </span>
+              </a>
             </sc-for>
           </div>
 

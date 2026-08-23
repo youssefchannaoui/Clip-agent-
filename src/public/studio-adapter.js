@@ -323,11 +323,19 @@
    * and looking at the result.
    */
   function jobSummaryRows(DATA, job, tokenRate) {
-    var value = function (text, tone) {
+    // Each row knows which step produced it, so the review is a way back in
+    // rather than a wall of text you have to unpick with Back.
+    var value = function (text, tone, step) {
       return {
         value: text,
         valueStyle: 'font-family: Outfit, Inter, sans-serif; font-size: 12.5px; font-weight: 500; text-align: right; color: '
           + (tone === 'warn' ? '#FF5566' : tone === 'gold' ? '#F0D6A6' : '#F2F2F4') + ';',
+        rowStyle: 'display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; border-radius: 7px; margin: 0 -8px; padding: 5px 8px; text-decoration: none; color: inherit;'
+          + (step ? ' cursor: pointer;' : ' cursor: default;'),
+        editStyle: 'font-size: 11px; color: #6E6E76; display: ' + (step ? 'inline' : 'none') + ';',
+        go: step
+          ? function (e) { stop(e); setUI({ jobStep: step }); }
+          : function (e) { stop(e); },
       };
     };
     var rows = [];
@@ -335,12 +343,12 @@
     var cost = Math.max(1, Math.ceil((job.end - job.start) / 60 * tokenRate));
     if (job.durationKnown) {
       rows.push(Object.assign({ label: 'From the lecture' },
-        value(humanDuration(job.end - job.start) + ' of ' + humanDuration(job.durationSec))));
+        value(humanDuration(job.end - job.start) + ' of ' + humanDuration(job.durationSec), '', 2)));
     }
     var settings = (DATA && DATA.clipSettings) || {};
     var chosen = Array.isArray(settings.clipLengthBands) ? settings.clipLengthBands.length : 0;
     rows.push(Object.assign({ label: 'Clip lengths' },
-      chosen ? value(chosen + ' of 4 chosen') : value('Pick at least one', 'warn')));
+      chosen ? value(chosen + ' of 4 chosen', '', 3) : value('Pick at least one', 'warn', 3)));
     if (current && !current.unlimited && isFinite(Number(current.totalAvailable))) {
       var left = Number(current.totalAvailable);
       rows.push(Object.assign({ label: 'Balance afterwards' }, left >= cost
@@ -351,14 +359,20 @@
     if (tpl) {
       var locked = Boolean(tpl.pro) && !planAllowsProTemplates(DATA);
       rows.push(Object.assign({ label: 'Style' },
-        value(tpl.name + (locked ? ' \u00b7 Pro' : ''), locked ? 'gold' : '')));
+        value(tpl.name + (locked ? ' \u00b7 Pro' : ''), locked ? 'gold' : '', 4)));
       // The one behavioural difference between the kinds, said where the
       // choice is actually being made.
       rows.push(Object.assign({ label: 'Captions from' },
-        value(tpl.captionMode === 'quran' ? 'The Quran corpus' : 'What was said')));
+        value(tpl.captionMode === 'quran' ? 'The Quran corpus' : 'What was said', '', 4)));
       rows.push(Object.assign({ label: 'Underneath' },
-        value(tpl.captionMode === 'quran' ? 'Nothing — recitation' : 'Nasheed, ducked')));
+        value(tpl.captionMode === 'quran' ? 'Nothing \u2014 recitation' : 'Nasheed, ducked', '', 6)));
     }
+    // Where this job would land, from the queue as it stands right now.
+    var waiting = ((DATA && DATA.projects) || []).filter(function (project) {
+      return project.status === 'queued' || project.status === 'processing';
+    }).length;
+    rows.push(Object.assign({ label: 'Queue' },
+      value(waiting ? plural(waiting, 'job') + ' ahead of yours' : 'Next in line')));
     return rows;
   }
 
@@ -3045,6 +3059,19 @@
       jobIsStepPicture: jobStepId() === 'picture',
       jobIsStepSound: jobStepId() === 'sound',
       jobIsStepReview: jobStepId() === 'review',
+      // What pressing the button actually sets off. The last of these is the
+      // point: nothing is published without you, so the cost being spent here
+      // is not a decision about what goes out.
+      jobPlanSteps: [
+        { icon: 'ph ph-download-simple', title: 'The lecture comes down and is transcribed',
+          note: 'Word timings come from this, which is what every caption is cut against.' },
+        { icon: 'ph ph-magic-wand', title: 'Moments are scored and cut',
+          note: 'Only within the part you selected, and only to the lengths you allowed.' },
+        { icon: 'ph ph-film-strip', title: 'Each clip is rendered in your style',
+          note: 'Captions, framing, nasheed and watermark are burned in together.' },
+        { icon: 'ph ph-eye', title: 'They land in the review queue',
+          note: 'Nothing is published until you approve it. Editing and re-rendering are free.' },
+      ],
       jobSoundBlocked: jobStepId() === 'sound' && jobTypeQuran,
       jobBackShown: jobStepIndex() > 1,
       jobFirstStep: jobStepIndex() === 1,
@@ -3123,6 +3150,24 @@
         }
         setUI({ jobTplId: kind === 'quran' ? 'quran-recitation' : (lecture || 'clean-line') });
       },
+      // How loud the nasheed sits under the voice. It was only reachable from
+      // the Nasheed library screen, which is a trip away from the one moment
+      // anybody thinks about it. The server accepts 1-50%.
+      jobVolumeLabel: (Number((DATA.musicSettings || {}).volumePercent) || 13) + '% under the voice',
+      jobVolumeLevels: [
+        { v: 8, label: 'Barely there' },
+        { v: 13, label: 'Balanced' },
+        { v: 20, label: 'Present' },
+      ].map(function (level) {
+        var now = Number((DATA.musicSettings || {}).volumePercent) || 13;
+        var on = level.v === now;
+        return {
+          label: level.label,
+          style: 'display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 20px; font-family: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; transition: border-color .15s ease, background .15s ease, color .15s ease; border: 1px solid '
+            + (on ? 'rgba(217,180,120,.5); background: rgba(217,180,120,.13); color: #F0D6A6;' : '#26262A; background: #121214; color: #A2A2AA;'),
+          select: function (e) { stop(e); global.StudioAdapter.onMusicSettings({ volumePercent: level.v }); },
+        };
+      }),
       jobMusicLabel: UI.jobMusic === false ? 'No nasheed' : 'Nasheed on',
       jobMusicTrack: switchTrack(UI.jobMusic !== false),
       jobMusicKnob: switchKnob(UI.jobMusic !== false),
