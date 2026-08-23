@@ -122,3 +122,49 @@ test('a clip that waived music can still be re-rendered', () => {
   const body = engine.slice(at, at + 400);
   assert.match(body, /clip\.musicEnabled === false/);
 });
+
+// ── every tour step must be able to point at something ─────────────────────
+// A spotlight is drawn from its anchor's rectangle. An anchor that does not
+// exist produces a card floating over a dimmed screen, highlighting nothing --
+// and nothing else in the suite would notice.
+
+test('every tour step anchors on something the page actually carries', () => {
+  const adapter = read('src/public/studio-adapter.js');
+  const page = read('src/public/studio-template.generated.js');
+  const host = read('src/public/index.html');
+
+  const block = adapter.slice(adapter.indexOf('var TOURS = {'), adapter.indexOf('  };', adapter.indexOf('var TOURS = {')));
+  const anchors = [...block.matchAll(/anchor: '([^']+)'/g)].map(m => m[1]);
+  assert.ok(anchors.length >= 15, 'the tours cover the product, not one screen');
+
+  for (const anchor of anchors) {
+    if (/^[#.[]/.test(anchor)) {
+      // A CSS selector: at least its distinguishing id must exist somewhere.
+      const id = anchor.match(/#([A-Za-z0-9_-]+)/);
+      if (id) {
+        assert.ok(page.includes(id[1]) || host.includes(id[1]), `${anchor} resolves to real markup`);
+      }
+      continue;
+    }
+    assert.ok(page.includes(`"data-tour":"${anchor}"`),
+      `the ${anchor} anchor is missing — its step would spotlight nothing`);
+  }
+});
+
+test('every screen with a nav entry has a tour', () => {
+  const adapter = read('src/public/studio-adapter.js');
+  const block = adapter.slice(adapter.indexOf('var TOURS = {'), adapter.indexOf('  };', adapter.indexOf('var TOURS = {')));
+  const covered = [...block.matchAll(/^    (\w+): \[/gm)].map(m => m[1]);
+  for (const screen of ['home', 'queue', 'schedule', 'templates', 'music', 'library', 'performance', 'tokens', 'editor']) {
+    assert.ok(covered.includes(screen), `${screen} has no tour`);
+  }
+});
+
+test('a tour is remembered per screen, not once for the whole product', () => {
+  const adapter = read('src/public/studio-adapter.js');
+  assert.match(adapter, /'dcTour:' \+ screen/, 'each screen remembers its own');
+  // Anyone who already finished the old single tour must not be shown one on
+  // every screen the next time they sign in.
+  const seen = adapter.slice(adapter.indexOf('function tourSeen'), adapter.indexOf('function markTourSeen'));
+  assert.match(seen, /dcTourSeen/, 'the legacy flag still counts as seen');
+});

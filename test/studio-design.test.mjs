@@ -2843,7 +2843,11 @@ test('a new account gets the guided tour, and it can be reopened', () => {
   const fresh = JSON.parse(JSON.stringify(SAMPLE_STATE));
   fresh.projects = [];
   fresh.clips = [];
+  // Tours are per screen now, so a step belongs to a screen: tourHere and
+  // startTour both set the pair together. Setting only `screen` reads as
+  // navigating away, which correctly abandons whatever tour was running.
   StudioAdapter.ui.screen = 'home';
+  StudioAdapter.ui.tourScreen = 'home';
   StudioAdapter.ui.tourStep = 0;
   const vals = StudioAdapter.bindings(fresh);
   assert.equal(vals.tourOn, true, 'the design ships the tour; it must actually run');
@@ -2860,6 +2864,7 @@ test('a new account gets the guided tour, and it can be reopened', () => {
   }
 
   // Last step commits, and the tour is repeatable from the account menu.
+  StudioAdapter.ui.tourScreen = 'home';
   StudioAdapter.ui.tourStep = 2;
   const last = StudioAdapter.bindings(fresh);
   assert.equal(last.tourNextLabel, 'Start clipping');

@@ -473,32 +473,100 @@
   // The tour, anchored on the elements the design already marks with
   // data-tour. Three steps, because that is how many anchors exist and
   // because the app's whole loop is paste, start, review.
-  var TOUR_STEPS = [
-    {
-      anchor: 'paste',
-      title: 'Start with a lecture',
-      body: 'Paste a YouTube link you own or are allowed to use, or upload an MP4. DeenClipped transcribes it, scores the strongest moments and cuts them into vertical clips.',
-    },
-    {
-      anchor: 'start',
-      title: 'Choose the look, then start',
-      body: 'Pick a Clip Style and the lengths you want. Islamic lecture gives bold word-by-word captions; Quran recitation sets the ayah in mushaf script with its translation.',
-    },
-    {
-      anchor: 'rail',
-      title: 'Review before anything posts',
-      body: 'Finished clips land in the review queue for you to approve or reject. Nothing publishes on its own, and the editor lets you fix a caption or reframe a clip first.',
-    },
-  ];
+  // A short tour per screen, not one tour on Home. Each step names an anchor:
+  // a data-tour key, or any CSS selector when the screen already has a stable
+  // one. A step whose anchor is not on screen is SKIPPED rather than shown --
+  // a spotlight over nothing is the failure this design invites, and it is
+  // invisible to tests.
+  var TOURS = {
+    home: [
+      { anchor: 'paste', title: 'Start with a lecture',
+        body: 'Paste a YouTube link you own or are allowed to use, or upload an MP4. Nothing is queued yet — the link is read for its title, length and thumbnail.' },
+      { anchor: 'start', title: 'Start opens the setup panel',
+        body: 'Seven short questions: how much of the lecture to use, how long the clips should be, the caption style, what plays on screen and underneath. You see the token cost before anything runs.' },
+      { anchor: 'rail', title: 'Nothing posts without you',
+        body: 'Finished clips wait in the review queue for you to approve or reject. Approving starts a full-quality render; it does not send the clip anywhere.' },
+    ],
+    music: [
+      { anchor: 'music-upload', title: 'A nasheed is required',
+        body: 'Every clip mixes one underneath, so no lecture can finish processing while this library is empty. One track is enough to start; two or more lets it rotate.' },
+      { anchor: 'music-level', title: 'How loud it sits',
+        body: 'This is the nasheed level under the voice, from 1% to 50%. It is ducked further wherever the speaker is loudest, and applies to every clip rendered after you change it.' },
+    ],
+    queue: [
+      { anchor: 'queue-tabs', title: 'What each tab holds',
+        body: 'Awaiting decision is everything still unreviewed. Quote review is clips containing scripture, which are held back deliberately.' },
+      { anchor: 'queue-decide', title: 'Approve, edit or reject',
+        body: 'Approve starts the full-quality render. The middle button opens the clip in the editor. Rejecting keeps the clip under All clips and can be undone.' },
+    ],
+    schedule: [
+      { anchor: 'sched-views', title: 'Month, week or day',
+        body: 'The month shows every day\u2019s four posting slots at a glance. The week draws those slots as a grid you can fill, and the day opens one in full.' },
+      { anchor: 'sched-ready', title: 'Clips with no time yet',
+        body: 'Anything you approved but never gave a posting time. Slot it hands one to the next free window.' },
+      { anchor: 'sched-outlets', title: 'Where clips actually post',
+        body: 'Each row says whether an account is set up, connected, switched off or posting. With none switched on, approved clips sit in their slots and go nowhere.' },
+    ],
+    templates: [
+      { anchor: '#studio select', title: 'One style for every clip',
+        body: 'This sets the style new clips render with. Clean Line is included free; the rest are Pro and the server refuses them on a free plan.' },
+      { anchor: '#studioPreviewPic', title: 'Drag the caption and mark',
+        body: 'The frame draws a sample caption and the watermark using this template\u2019s own margins. Drag either to move it.' },
+      { anchor: 'tpl-save', title: 'Edits stay a draft until saved',
+        body: 'Changes are held in the browser and leaving the screen drops them. Saving also queues a re-render for every clip that has not posted yet.' },
+    ],
+    library: [
+      { anchor: 'lib-tabs', title: 'What each tab counts',
+        body: 'A lecture stays under Processing until the worker reports it finished, then moves to Ready. Archived holds the ones that were cancelled or failed.' },
+      { anchor: 'lib-add', title: 'Add another lecture',
+        body: 'Paste a link or upload an MP4. You are charged per source minute, and only for the range you pick in the setup panel — not the whole video.' },
+    ],
+    editor: [
+      { anchor: 'ed-preview', title: 'The preview is the render',
+        body: 'This plays the rendered clip itself, captions already burned in. Your edits show up after the next render, not before.' },
+      { anchor: 'ed-save', title: 'Save queues a new render',
+        body: 'Save stores the caption text and re-renders this clip alone; the lecture\u2019s other clips keep what they have. Re-renders are free.' },
+    ],
+    tokens: [
+      { anchor: 'tokens-balance', title: 'What the balance counts',
+        body: 'Your plan\u2019s allowance minus what finished jobs used and what running jobs are still holding, plus any top-ups. Charged per source minute.' },
+      { anchor: 'tokens-plans', title: 'What a paid plan adds',
+        body: 'Publishing, scheduling, automation, the editor and unlimited clips are on the free plan. Paying adds every caption style and lets you remove the watermark.' },
+    ],
+    performance: [
+      { anchor: 'perf-tiles', title: 'Counts of what you made',
+        body: 'Running totals for the account: clips generated, clips approved, clips posted, and lectures added.' },
+      { anchor: 'perf-board', title: 'No audience numbers here',
+        body: 'Clips are ranked by the score the worker gave each one when it cut them. DeenClipped does not collect views or watch time from any platform.' },
+    ],
+  };
 
   // Remembered per browser: a tour that reappears on every visit is an
   // interruption, and one that can never be reopened is a dead end -- the
   // account menu can start it again.
-  function tourSeen() {
-    try { return global.localStorage.getItem('dcTourSeen') === '1'; } catch (err) { return true; }
+  function tourSeen(screen) {
+    try {
+      // Anyone who finished the old Home-only tour has already been round the
+      // product; they are not shown a tour on every screen now.
+      if (global.localStorage.getItem('dcTourSeen') === '1') return true;
+      return global.localStorage.getItem('dcTour:' + screen) === '1';
+    } catch (err) { return true; }
   }
-  function markTourSeen() {
-    try { global.localStorage.setItem('dcTourSeen', '1'); } catch (err) { /* private mode */ }
+  function markTourSeen(screen) {
+    try { global.localStorage.setItem('dcTour:' + screen, '1'); } catch (err) { /* private mode */ }
+  }
+  function forgetTours() {
+    try {
+      global.localStorage.removeItem('dcTourSeen');
+      for (var key in TOURS) if (Object.prototype.hasOwnProperty.call(TOURS, key)) {
+        global.localStorage.removeItem('dcTour:' + key);
+      }
+    } catch (err) { /* private mode */ }
+  }
+  function tourAnchorEl(anchor) {
+    if (!global.document) return null;
+    var sel = /^[#.[]/.test(anchor) ? anchor : '[data-tour="' + anchor + '"]';
+    try { return global.document.querySelector(sel); } catch (err) { return null; }
   }
 
   function toast(message) { global.StudioAdapter.onToast(message); }
@@ -2186,23 +2254,52 @@
     // while being dragged.
     var edCapDragY = UI.dragPreview && UI.dragPreview.kind === 'caption' ? UI.dragPreview.y : null;
 
-    // The tour runs on Home only -- every anchor lives there -- and starts
-    // itself once for an account with nothing in it yet.
-    if (UI.tourStep === undefined) {
-      UI.tourStep = (!tourSeen() && projects.length === 0 && UI.screen === 'home') ? 0 : -1;
+    // Only the steps whose anchor is actually on screen. A tour that points at
+    // an element this account has not got -- an empty library has no cards --
+    // would spotlight nothing at all, and no test would notice.
+    var tourSteps = (TOURS[UI.screen] || []).filter(function (step) {
+      // Off a browser there is nothing to measure, so the model is the answer:
+      // filtering here would make every tour vanish under test and hide the
+      // very thing these steps are checked for.
+      if (!global.document) return true;
+      var el = tourAnchorEl(step.anchor);
+      if (!el || !el.getBoundingClientRect) return false;
+      var box = el.getBoundingClientRect();
+      return Boolean(box.width && box.height);
+    });
+
+    // Each screen carries its own tour and its own memory of having shown it.
+    //
+    // Bindings are computed BEFORE the new screen's markup reaches the
+    // document, so on the paint that changes screen every anchor still belongs
+    // to the screen being left. Deciding then would file the tour away as
+    // "nothing to show" and never look again -- so the decision waits until the
+    // anchors are visible, and one repaint is scheduled to make them so.
+    var hasTour = (TOURS[UI.screen] || []).length > 0;
+    var anchorsReady = !global.document || tourSteps.length > 0;
+    if (global.document && hasTour && !anchorsReady && UI.tourSettled !== UI.screen) {
+      UI.tourSettled = UI.screen;
+      global.setTimeout(function () { refresh(); }, 0);
     }
-    var tourIndex = Math.max(0, Math.min(TOUR_STEPS.length - 1, Number(UI.tourStep)));
-    var tourOn = Number(UI.tourStep) >= 0 && UI.screen === 'home';
-    var tourStep = tourOn ? TOUR_STEPS[tourIndex] : null;
+    // An explicit start (startTour, tourHere) sets the pair together, so the
+    // screen already matches and nothing is re-decided under it.
+    if (UI.tourScreen !== UI.screen && (anchorsReady || !hasTour)) {
+      UI.tourScreen = UI.screen;
+      UI.tourStep = (tourSteps.length && !tourSeen(UI.screen)) ? 0 : -1;
+    }
+    if (UI.tourStep === undefined) UI.tourStep = -1;
+    var tourIndex = Math.max(0, Math.min(Math.max(0, tourSteps.length - 1), Number(UI.tourStep)));
+    var tourOn = Number(UI.tourStep) >= 0 && tourSteps.length > 0;
+    var tourStep = tourOn ? tourSteps[tourIndex] : null;
     var tourRect = null;
-    if (tourOn && global.document) {
-      var anchorEl = global.document.querySelector('[data-tour="' + tourStep.anchor + '"]');
+    if (tourOn) {
+      var anchorEl = tourAnchorEl(tourStep.anchor);
       if (anchorEl && anchorEl.getBoundingClientRect) {
         var r = anchorEl.getBoundingClientRect();
         if (r.width && r.height) tourRect = r;
       }
     }
-    function endTour() { markTourSeen(); setUI({ tourStep: -1 }); }
+    function endTour() { markTourSeen(UI.screen); setUI({ tourStep: -1 }); }
     // Set by the host only when the rendered file fails to play.
     var edSourceFallback = Boolean(UI.edSourceFallback);
 
@@ -3708,9 +3805,11 @@
       tourNotFirst: tourIndex > 0,
       tourTitle: tourStep ? tourStep.title : '',
       tourBody: tourStep ? tourStep.body : '',
-      tourCount: tourStep ? 'Step ' + (tourIndex + 1) + ' of ' + TOUR_STEPS.length : '',
-      tourNextLabel: tourIndex >= TOUR_STEPS.length - 1 ? 'Start clipping' : 'Next',
-      tourDots: TOUR_STEPS.map(function (_step, i) {
+      tourCount: tourStep ? 'Step ' + (tourIndex + 1) + ' of ' + tourSteps.length : '',
+      // The last step on Home is the one that hands over to the actual work.
+      tourNextLabel: tourIndex < tourSteps.length - 1 ? 'Next'
+        : UI.screen === 'home' ? 'Start clipping' : 'Got it',
+      tourDots: tourSteps.map(function (_step, i) {
         return {
           style: 'width: ' + (i === tourIndex ? '16px' : '6px') + '; height: 6px; border-radius: 20px; background: '
             + (i === tourIndex ? '#F0D6A6' : '#33333A') + '; transition: width .18s ease, background .18s ease;',
@@ -3752,14 +3851,17 @@
       }()),
       tourNext: function (e) {
         stop(e);
-        if (tourIndex >= TOUR_STEPS.length - 1) return endTour();
+        if (tourIndex >= tourSteps.length - 1) return endTour();
         setUI({ tourStep: tourIndex + 1 });
       },
       tourBack: function (e) { stop(e); setUI({ tourStep: Math.max(0, tourIndex - 1) }); },
       tourSkip: function (e) { stop(e); endTour(); },
       // Offered for good in the account menu, so it is repeatable rather than
       // a one-shot a new user can lose by clicking past it.
-      startTour: function (e) { stop(e); setUI({ tourStep: 0, menuOpen: false, screen: 'home' }); },
+      startTour: function (e) { stop(e); forgetTours(); setUI({ tourStep: 0, tourScreen: 'home', menuOpen: false, screen: 'home' }); },
+      // "Show me around" on the screen you are looking at.
+      tourHere: function (e) { stop(e); setUI({ tourStep: 0, tourScreen: UI.screen }); },
+      tourHereShown: tourSteps.length > 0 && !tourOn,
 
       // The design's own dock is off on every screen. Live work is rendered by
       // the host instead: a stable docked section on Home (#studioLiveHome) and

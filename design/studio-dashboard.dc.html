@@ -412,7 +412,7 @@
 
 
 
-    <div style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 18px; padding: 18px 22px 24px; overflow: auto;">
+    <div data-tour="queue-tabs" style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 18px; padding: 18px 22px 24px; overflow: auto;">
 
       <section style="flex: 1 1 480px; display: flex; flex-direction: column; gap: 13px; min-width: 0;">
         <span style="font-size: 12px; color: #8B8B93; line-height: 1.5; max-width: 70ch;">Every clip still waiting on a decision, highest score first — across all lectures. To work through one lecture at a time, open it in the <a href="#" onClick="{{ goLibrary }}">lecture library</a>.</span>
@@ -448,7 +448,7 @@
                 <div style="display: flex; align-items: center; gap: 10px;">
                   <button onClick="{{ deckReject }}" title="Reject" style="display: grid; place-items: center; width: 46px; height: 46px; border: 1px solid #33333A; border-radius: 50%; background: #17171A; color: #E3928C; cursor: pointer; transition: border-color .14s ease, background .14s ease;" style-hover="border-color: #4A2E2E; background: #1D1618;"><i class="ph-bold ph-x" style="font-size: 18px;"></i></button>
                   <button onClick="{{ deckEdit }}" title="Edit" style="display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid #26262A; border-radius: 50%; background: #17171A; color: #BCBCC3; cursor: pointer; transition: color .14s ease;" style-hover="color: #F2F2F4;"><i class="ph ph-crop" style="font-size: 16px;"></i></button>
-                  <button onClick="{{ deckApprove }}" title="Approve" style="display: grid; place-items: center; width: 54px; height: 54px; border: 1px solid rgba(217,180,120,.55); border-radius: 50%; background: rgba(217,180,120,.13); color: #F0D6A6; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(217,180,120,.22);"><i class="ph-bold ph-check" style="font-size: 22px;"></i></button>
+                  <button data-tour="queue-decide" onClick="{{ deckApprove }}" title="Approve" style="display: grid; place-items: center; width: 54px; height: 54px; border: 1px solid rgba(217,180,120,.55); border-radius: 50%; background: rgba(217,180,120,.13); color: #F0D6A6; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(217,180,120,.22);"><i class="ph-bold ph-check" style="font-size: 22px;"></i></button>
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px;">
                   <button onClick="{{ deckBack }}" style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; border: 0; background: transparent; color: #8B8B93; font-family: inherit; font-size: 11.5px; cursor: pointer;" style-hover="color: #F2F2F4;"><i class="ph ph-arrow-left" style="font-size: 13px;"></i>Previous</button>
@@ -610,7 +610,7 @@
 
   <sc-if value="{{ isLibrary }}" hint-placeholder-val="{{ false }}">
     <div style="flex: 1; min-height: 0; overflow: auto; animation: dcScreen .24s cubic-bezier(.2,.8,.2,1);">
-      <div style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 18px; padding: 20px 40px 40px;">
+      <div data-tour="lib-tabs" style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 18px; padding: 20px 40px 40px;">
 
         <section style="flex: 1 1 480px; min-width: 0; display: flex; flex-direction: column; gap: 14px;">
           <span style="font-size: 12px; color: #8B8B93; line-height: 1.5; max-width: 70ch;">Your sources: what has been imported, what the worker produced from each, and what it costs to keep. Open a lecture to send its clips to review or re-cut it.</span>
@@ -674,7 +674,7 @@
         </section>
 
         <aside style="flex: 0 0 300px; max-width: 300px; min-width: 0; display: flex; flex-direction: column; gap: 14px;">
-          <section style="display: flex; flex-direction: column; gap: 11px; padding: 15px; border: 1px solid rgba(217,180,120,.2); border-radius: 12px; background: radial-gradient(circle at 90% -20%, rgba(217,180,120,.13), transparent 55%), #121214;">
+          <section data-tour="lib-add" style="display: flex; flex-direction: column; gap: 11px; padding: 15px; border: 1px solid rgba(217,180,120,.2); border-radius: 12px; background: radial-gradient(circle at 90% -20%, rgba(217,180,120,.13), transparent 55%), #121214;">
             <span style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;">Add a lecture</span>
             <label style="display: flex; align-items: center; gap: 8px; padding: 8px 11px; border: 1px solid #26262A; border-radius: 8px; background: #17171A; color: #6E6E76; transition: border-color .14s ease;" style-hover="border-color: #34343A;">
               <i class="ph ph-link-simple" style="font-size: 15px;"></i>
@@ -816,7 +816,7 @@
           <button onClick="{{ undoEdit }}" title="Undo" style="display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #8B8B93; cursor: pointer;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-arrow-counter-clockwise" style="font-size: 15px;"></i></button>
           <button onClick="{{ redoEdit }}" title="Redo" style="display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #8B8B93; cursor: pointer;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-arrow-clockwise" style="font-size: 15px;"></i></button>
           <button onClick="{{ duplicateTpl }}" title="Duplicate" style="display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #8B8B93; cursor: pointer;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-copy" style="font-size: 15px;"></i></button>
-          <button onClick="{{ saveTpl }}" style="display: flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid rgba(217,180,120,.45); border-radius: 8px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(217,180,120,.14);"><i class="ph ph-floppy-disk" style="font-size: 14px;"></i>Save template</button>
+          <button data-tour="tpl-save" onClick="{{ saveTpl }}" style="display: flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid rgba(217,180,120,.45); border-radius: 8px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(217,180,120,.14);"><i class="ph ph-floppy-disk" style="font-size: 14px;"></i>Save template</button>
         </div>
       </div>
 
@@ -897,7 +897,7 @@
           </div>
           <span style="display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: #8B8B93;"><i class="ph ph-hand-grabbing" style="font-size: 14px;"></i>Drag freely — it snaps to thirds, halves and the safe-zone edges</span>
           <div style="display: flex; gap: 8px;">
-            <button onClick="{{ previewClip }}" style="display: flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #BCBCC3; font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-eye" style="font-size: 13px;"></i>Preview on a real clip</button>
+            <button data-tour="ed-preview" onClick="{{ previewClip }}" style="display: flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #BCBCC3; font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-eye" style="font-size: 13px;"></i>Preview on a real clip</button>
             <button onClick="{{ cyclePreset }}" style="display: flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #BCBCC3; font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-devices" style="font-size: 13px;"></i>{{ safePresetLabel }}</button>
           </div>
         </section>
@@ -923,7 +923,7 @@
             </sc-if>
             <span style="{{ segRail }} margin-left: auto;">
               <sc-for list="{{ schedViewOpts }}" as="v" hint-placeholder-count="3">
-                <button onClick="{{ v.select }}" style="{{ v.style }}">{{ v.label }}</button>
+                <button data-tour="sched-views" onClick="{{ v.select }}" style="{{ v.style }}">{{ v.label }}</button>
               </sc-for>
             </span>
           </div>
@@ -1090,7 +1090,7 @@
 
           <!-- The supply. An empty calendar has two very different causes and
                nothing here could tell them apart. -->
-          <section style="display: flex; flex-direction: column; gap: 9px; padding: 13px 14px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
+          <section data-tour="sched-ready" style="display: flex; flex-direction: column; gap: 9px; padding: 13px 14px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
             <span style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;">Ready to schedule</span>
             <sc-if value="{{ schedHasWaiting }}" hint-placeholder-val="{{ true }}">
               <span style="font-size: 11.5px; color: #BCBCC3;">{{ schedWaitingLabel }}</span>
@@ -1111,7 +1111,7 @@
 
           <!-- Every card on this screen can read "No channel on" while the rail
                says nothing about why. -->
-          <section style="display: flex; flex-direction: column; gap: 9px; padding: 13px 14px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
+          <section data-tour="sched-outlets" style="display: flex; flex-direction: column; gap: 9px; padding: 13px 14px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
             <span style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;">Where it posts</span>
             <sc-if value="{{ schedNothingPosts }}" hint-placeholder-val="{{ false }}">
               <span style="display: flex; align-items: flex-start; gap: 8px; font-size: 11.5px; line-height: 1.5; color: #E0A188;"><i class="ph ph-warning-circle" style="font-size: 14px; margin-top: 1px;"></i>Nothing posts yet — no account is switched on. Clips will sit in their slots.</span>
@@ -1158,7 +1158,7 @@
             </article>
           </sc-for>
 
-          <label style="display: flex; flex-direction: column; align-items: center; gap: 7px; margin-top: 4px; padding: 26px; border: 1px dashed #2C2C32; border-radius: 12px; background: #0E0E11; cursor: pointer; transition: border-color .14s ease;" style-hover="border-color: rgba(217,180,120,.45);">
+          <label data-tour="music-upload" style="display: flex; flex-direction: column; align-items: center; gap: 7px; margin-top: 4px; padding: 26px; border: 1px dashed #2C2C32; border-radius: 12px; background: #0E0E11; cursor: pointer; transition: border-color .14s ease;" style-hover="border-color: rgba(217,180,120,.45);">
             <i class="ph ph-upload-simple" style="font-size: 22px; color: #F0D6A6;"></i>
             <strong style="font-family: Outfit, Inter, sans-serif; font-size: 13.5px; font-weight: 500;">Drop nasheeds here or browse</strong>
             <span style="font-size: 11.5px; color: #8B8B93;">MP3, M4A or WAV · instrument-free or duff-only recommended</span>
@@ -1168,7 +1168,7 @@
         </section>
 
         <aside style="flex: 0 0 300px; max-width: 300px; min-width: 0; display: flex; flex-direction: column; gap: 14px;">
-          <section style="display: flex; flex-direction: column; gap: 12px; padding: 15px; border: 1px solid rgba(217,180,120,.2); border-radius: 12px; background: radial-gradient(circle at 88% -25%, rgba(217,180,120,.13), transparent 55%), #121214;">
+          <section data-tour="music-level" style="display: flex; flex-direction: column; gap: 12px; padding: 15px; border: 1px solid rgba(217,180,120,.2); border-radius: 12px; background: radial-gradient(circle at 88% -25%, rgba(217,180,120,.13), transparent 55%), #121214;">
             <span style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;">Loudness in the mix</span>
             <div style="display: flex; align-items: baseline; gap: 8px;">
               <strong style="font-family: Outfit, Inter, sans-serif; font-size: 32px; font-weight: 600; letter-spacing: -.04em; line-height: 1;">{{ nasheedVolLabel }}</strong>
@@ -1220,7 +1220,7 @@
           <button onClick="{{ undoEdit }}" title="Undo" style="display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #8B8B93; cursor: pointer;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-arrow-counter-clockwise" style="font-size: 15px;"></i></button>
           <button onClick="{{ redoEdit }}" title="Redo" style="display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #8B8B93; cursor: pointer;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-arrow-clockwise" style="font-size: 15px;"></i></button>
           <button onClick="{{ previewClip }}" style="display: flex; align-items: center; gap: 7px; padding: 8px 13px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #BCBCC3; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-eye" style="font-size: 14px;"></i>Preview</button>
-          <button onClick="{{ saveEdit }}" style="display: flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid rgba(217,180,120,.45); border-radius: 8px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(217,180,120,.14);"><i class="{{ edSaveIcon }}" style="{{ edSaveIconStyle }}"></i>{{ edSaveLabel }}</button>
+          <button data-tour="ed-save" onClick="{{ saveEdit }}" style="display: flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid rgba(217,180,120,.45); border-radius: 8px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(217,180,120,.14);"><i class="{{ edSaveIcon }}" style="{{ edSaveIconStyle }}"></i>{{ edSaveLabel }}</button>
         </div>
       </div>
 
@@ -1419,7 +1419,7 @@
 
   <sc-if value="{{ isPerf }}" hint-placeholder-val="{{ false }}">
     <div style="flex: 1; min-height: 0; overflow: auto; padding: 20px 40px 44px; animation: dcScreen .24s cubic-bezier(.2,.8,.2,1);">
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); gap: 13px;">
+      <div data-tour="perf-tiles" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); gap: 13px;">
         <sc-for list="{{ perfTiles }}" as="t" hint-placeholder-count="4">
           <section style="display: flex; flex-direction: column; gap: 7px; padding: 15px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
             <span style="display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: #8B8B93;"><i class="{{ t.icon }}" style="font-size: 14px; color: #6E6E76;"></i>{{ t.label }}</span>
@@ -1434,7 +1434,7 @@
           <div style="display: flex; align-items: baseline; gap: 10px;">
             <h2 style="margin: 0; font-family: Outfit, Inter, sans-serif; font-size: 15px; font-weight: 600; letter-spacing: -.02em;">Your best clips</h2>
             <span style="font-size: 12px; color: #6E6E76;">Ranked by watch-through</span>
-            <div style="display: flex; gap: 6px; margin-left: auto;">
+            <div data-tour="perf-board" style="display: flex; gap: 6px; margin-left: auto;">
               <sc-for list="{{ perfRanges }}" as="r" hint-placeholder-count="3">
                 <button onClick="{{ r.select }}" style="{{ r.style }}">{{ r.label }}</button>
               </sc-for>
@@ -1540,7 +1540,7 @@
       <a href="#" onClick="{{ goBack }}" style="display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: #8B8B93;" style-hover="color: #F0D6A6;"><i class="ph ph-arrow-left" style="font-size: 14px;"></i>Back to studio</a>
 
       <div style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 18px; margin-top: 16px;">
-        <section style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 20px; border: 1px solid rgba(217,180,120,.22); border-radius: 14px; background: radial-gradient(circle at 88% -30%, rgba(217,180,120,.16), transparent 55%), #121214; box-shadow: 0 20px 50px rgba(0,0,0,.38);">
+        <section data-tour="tokens-balance" style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 20px; border: 1px solid rgba(217,180,120,.22); border-radius: 14px; background: radial-gradient(circle at 88% -30%, rgba(217,180,120,.16), transparent 55%), #121214; box-shadow: 0 20px 50px rgba(0,0,0,.38);">
           <span style="display: inline-flex; align-items: center; gap: 7px; color: #F0D6A6; font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;"><i class="ph-fill ph-coins" style="font-size: 13px;"></i>Balance</span>
           <div style="display: flex; align-items: baseline; gap: 9px;">
             <strong style="font-family: Outfit, Inter, sans-serif; font-size: 44px; font-weight: 600; letter-spacing: -.045em; line-height: 1;">{{ tokenBalance }}</strong>
@@ -1569,7 +1569,7 @@
       </div>
 
       <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 30px 0 14px;">
-        <h2 style="margin: 0; font-family: Outfit, Inter, sans-serif; font-size: 18px; font-weight: 600; letter-spacing: -.03em;">Plans</h2>
+        <h2 data-tour="tokens-plans" style="margin: 0; font-family: Outfit, Inter, sans-serif; font-size: 18px; font-weight: 600; letter-spacing: -.03em;">Plans</h2>
         <span style="font-size: 12px; color: #6E6E76;">{{ planNote }}</span>
         <div style="display: flex; gap: 6px; margin-left: auto;">
           <sc-for list="{{ planPeriods }}" as="p" hint-placeholder-count="3">
