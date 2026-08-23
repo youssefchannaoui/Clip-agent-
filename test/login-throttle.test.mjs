@@ -33,6 +33,9 @@ const post = (pathname, form, ip) => fetch(`${base}${pathname}`, {
   redirect: 'manual',
   headers: {
     'content-type': 'application/x-www-form-urlencoded',
+    // A browser sends this on every form post; sign-in refuses anything that
+    // does not come from the site, so the tests have to look like a browser.
+    origin: base,
     ...(ip ? { 'x-forwarded-for': ip } : {}),
   },
   body: new URLSearchParams(form).toString(),
@@ -103,4 +106,30 @@ test('email sign-in is throttled too, and a success clears the count', async () 
 
   const after = await post('/auth/email', { email, password: 'wrong' }, ip);
   assert.ok(!refused(after), 'and the failure count was cleared by the success');
+});
+
+test('a sign-in post from another site is refused outright', async () => {
+  throttle.reset();
+  // The forced-login attack: a page anywhere posts the attacker's credentials,
+  // silently signing the visitor into the attacker's account. They then work in
+  // it, and the attacker keeps everything they produce.
+  const res = await fetch(`${base}/auth/email`, {
+    method: 'POST',
+    redirect: 'manual',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', origin: 'https://evil.example' },
+    body: new URLSearchParams({ email: 'attacker@example.com', password: 'attacker-password' }).toString(),
+  });
+  assert.equal(res.status, 403);
+  assert.ok(!(res.headers.get('set-cookie') || '').includes('dc_session='), 'and no session is minted');
+});
+
+test('a post with no Origin or Referer at all is refused too', async () => {
+  throttle.reset();
+  const res = await fetch(`${base}/auth/password`, {
+    method: 'POST',
+    redirect: 'manual',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ password: process.env.APP_PASSWORD }).toString(),
+  });
+  assert.equal(res.status, 403, 'a browser always sends one; something that does not is not a form post from this site');
 });

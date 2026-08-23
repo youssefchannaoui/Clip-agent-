@@ -98,6 +98,27 @@ function tooManyAttempts(res, retryAfterSec, returnTo) {
   return redirect(res, `/login?error=${encodeURIComponent(`Too many sign-in attempts. Try again in ${wait}.`)}&returnTo=${encodeURIComponent(returnTo || '/app')}`);
 }
 
+const CSRF_EXEMPT = new Set(['/auth/apple/callback']);
+
+/**
+ * A state-changing POST must come from this site.
+ *
+ * Browsers send Origin on every cross-origin POST, so an absent Origin with a
+ * Referer that disagrees is equally a refusal. Apple's form_post callback is
+ * genuinely cross-origin and carries its own signed token, and the Stripe and
+ * worker webhooks verify signatures of their own, so those are exempt.
+ */
+function sameOriginPost(req, url) {
+  if (CSRF_EXEMPT.has(url.pathname)) return true;
+  const expected = (config.publicBaseUrl || `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host || ''}`).replace(/\/+$/, '');
+  const origin = String(req.headers.origin || '');
+  if (origin) return origin.replace(/\/+$/, '') === expected;
+  const referer = String(req.headers.referer || '');
+  if (referer) { try { return new URL(referer).origin.replace(/\/+$/, '') === expected; } catch { return false; } }
+  // Neither header: not a browser form post from this site.
+  return false;
+}
+
 function html(res, status, value) {
   const body = Buffer.from(String(value));
   res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
@@ -681,30 +702,9 @@ async function route(req, res, url) {
     const file = agent.engine.clipFilePath(clipId, 'video');
     return streamFile(req, res, file, { cacheControl: 'public, max-age=3600, immutable' });
   }
-  // Serve TikTok's root verification text file before the non-API 404.
-  // This supports TikTok-generated verification filenames without hard-coding one token.
-  if (method === 'GET') {
-    const verificationMatch = pathname.match(/^\/([A-Za-z0-9._-]+\.txt)$/);
-    if (verificationMatch) {
-      const verificationFile = path.resolve(config.root, verificationMatch[1]);
-      const rootPrefix = path.resolve(config.root) + path.sep;
-
-      if (
-        verificationFile.startsWith(rootPrefix) &&
-        fs.existsSync(verificationFile) &&
-        fs.statSync(verificationFile).isFile()
-      ) {
-        const body = fs.readFileSync(verificationFile);
-        res.writeHead(200, {
-          'Content-Type': 'text/plain; charset=utf-8',
-          'Content-Length': body.length,
-          'Cache-Control': 'no-store',
-        });
-        return res.end(body);
-      }
-    }
-  }
-
+  // A wildcard /:name.txt route used to live here and served ANY .txt file in
+  // the application directory to anyone, with no session. The narrow TikTok
+  // route below is what it was there to do.
   // TikTok URL-prefix verification files are uploaded to the repository root.
   // Serve only root-level TikTok .txt verification files publicly.
   if (method === 'GET' && /^\/tiktok[^/]*\.txt$/i.test(pathname)) {
@@ -998,6 +998,10 @@ async function route(req, res, url) {
       }
       target = target || templates.selectedTemplate(currentUser);
       if (!target?.id) return json(res, 400, { error: 'There is no template to save onto.' });
+      // The PUT route has always checked this; POST did not, so saving a draft
+      // with the watermark blanked through this door removed it on a free plan
+      // -- one of exactly two things the product charges for.
+      assertWatermarkAllowed(draft);
       const saved = templates.saveTemplate(currentUser, target.id, draft);
       if (body.select !== false) templates.setSelectedTemplate(currentUser, target.id);
       log(`Saved template "${saved.template.name}" version ${saved.template.version}. New renders use it automatically.`, 'info', currentUser.id);
@@ -1678,6 +1682,11 @@ function securityHeaders(res, { pathname }) {
 export const server = http.createServer((req, res) => {
   let url; try { url = new URL(req.url, `http://${req.headers.host || 'localhost'}`); } catch { return json(res, 400, { error: 'Bad request.' }); }
   securityHeaders(res, { pathname: url.pathname });
+  if ((req.method || 'GET') === 'POST'
+      && (url.pathname.startsWith('/auth/') || url.pathname.startsWith('/billing/'))
+      && !sameOriginPost(req, url)) {
+    return json(res, 403, { error: 'This request did not come from DeenClipped.' });
+  }
   route(req, res, url).catch(error => { console.error(error); if (!res.headersSent) json(res, 500, { error: error.message || 'Unexpected server error.' }); });
 });
 server.listen(config.port, () => {

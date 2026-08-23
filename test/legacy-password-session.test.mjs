@@ -25,7 +25,8 @@ for (let attempt = 0; attempt < 50; attempt += 1) {
 test('admin session bypasses the legacy password gate after login', async () => {
   const login = await fetch(`${base}/auth/password`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    // Sign-in now refuses a post that did not come from the site.
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: base },
     body: new URLSearchParams({ password: 'legacy-admin-password', returnTo: '/app' }),
     redirect: 'manual',
   });

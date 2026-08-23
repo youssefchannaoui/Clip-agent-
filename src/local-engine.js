@@ -1269,9 +1269,13 @@ function importMoreResultObject(project, jobRecord, result, engine = 'self-hoste
   jobRecord.status = 'done'; jobRecord.stage = `${imported.length} new clips ready`; jobRecord.progress = 100;
   jobRecord.completedAt = Date.now(); jobRecord.error = null; jobRecord.importedCount = imported.length;
   project.updatedAt = Date.now();
+  releaseMoreHold(project, jobRecord);
   try {
     const outputSeconds = imported.reduce((total, clip) => total + Math.max(0, Number(clip.endSec || 0) - Number(clip.startSec || 0)), 0);
-    const charge = billing.chargeOutputMinutes(ownerOf(project), outputSeconds, { projectId: project.id, jobId: jobRecord.id, clips: imported.length });
+    // allowPartial, as every other charging path uses: a shortfall bills what
+    // is there and records the rest, instead of throwing into a billingWarning
+    // field no screen reads -- which is how this work came out free.
+    const charge = billing.chargeOutputMinutes(ownerOf(project), outputSeconds, { projectId: project.id, jobId: jobRecord.id, clips: imported.length }, { allowPartial: true });
     if (charge.charged) jobRecord.tokensCharged = charge.charged;
   } catch (error) {
     jobRecord.billingWarning = error.message;
@@ -1279,6 +1283,14 @@ function importMoreResultObject(project, jobRecord, result, engine = 'self-hoste
   }
   save();
   log(`${imported.length} more clips were generated inside "${project.title}" using its saved source and transcript.`, 'info', ownerOf(project));
+}
+
+/** Safe to call twice; a hold already released clamps at zero. */
+function releaseMoreHold(project, jobRecord) {
+  const held = Number(jobRecord?.tokensReserved || 0);
+  if (!held) return;
+  jobRecord.tokensReserved = 0;
+  try { billing.releaseTokens(ownerOf(project), held); } catch { /* already released */ }
 }
 
 function importMoreResult(project, jobRecord, file) {
@@ -1290,7 +1302,8 @@ function runMoreClips(project, jobRecord) {
     const file = jobRecord.jobFile;
     if (!file || !fs.existsSync(file)) {
       jobRecord.status = 'failed'; jobRecord.stage = 'Generate-more job is missing';
-      jobRecord.error = 'The generate-more job file is missing. Start it again from Library.'; save(); resolve(); return;
+      jobRecord.error = 'The generate-more job file is missing. Start it again from Library.';
+      releaseMoreHold(project, jobRecord); save(); resolve(); return;
     }
     jobRecord.status = 'processing'; jobRecord.stage = 'Loading the saved lecture';
     jobRecord.progress = 1; jobRecord.startedAt = Date.now(); jobRecord.error = null; save();
@@ -1463,9 +1476,15 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   }
   const count = Math.max(1, Math.min(20, Math.round(Number(requestedCount) || 8)));
   const owner = ownerOfRecord(project);
-  billing.assertCanSpend(owner, billing.tokenCostForSeconds(count * (clipSettings(owner).clipMaxSeconds || 60)), 'generate more clips');
-  const template = projectTemplate(project, owner);
-  if (!template?.id) throw new Error('Choose a valid saved template.');
+  const moreCost = billing.tokenCostForSeconds(count * (clipSettings(owner).clipMaxSeconds || 60));
+  const moreHold = billing.reserveTokens(ownerOf(project), moreCost, { projectId: project.id, kind: 'more-clips' });
+  const baseTemplate = projectTemplate(project, owner);
+  if (!baseTemplate?.id) throw new Error('Choose a valid saved template.');
+  // Every other render path runs the plan through enforcePlan before the job
+  // leaves; this one did not, so "generate more clips" handed a free account
+  // both paid features -- a Pro style and no watermark -- on a lecture whose
+  // original clips had been correctly downgraded.
+  const template = enforcePlan(baseTemplate, ownerOf(project) || owner?.id);
   const tracks = workerMusicTracks(owner);
   if (!tracks.length) throw new Error('Music is mandatory. Upload at least one nasheed first.');
   const transcriptSegments = project.transcriptFile && fs.existsSync(project.transcriptFile) ? JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8')) : [];
@@ -1502,6 +1521,7 @@ export function queueMoreClips(projectId, requestedCount = 8) {
     id: moreId, status: 'queued', stage: 'Waiting to generate more clips', progress: 0,
     requestedCount: count, createdAt: Date.now(), updatedAt: Date.now(), jobFile: file, resultPath,
     reusedSource: true, reusedTranscript: true, engine: project.engine === 'remote' ? 'remote' : 'self-hosted',
+    tokensReserved: moreHold.reserved || 0,
   };
   project.moreJob = record;
   project.updatedAt = Date.now();
@@ -1680,11 +1700,11 @@ export async function pump() {
       const next = candidates[0];
       if (!next) break;
       if (next.type === 'remote') runRemoteProject(next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
-      else if (next.type === 'remote-more') runRemoteAux(next.project, next.item, 'more').catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
+      else if (next.type === 'remote-more') runRemoteAux(next.project, next.item, 'more').catch(error => { next.item.status = 'failed'; next.item.error = error.message; releaseMoreHold(next.project, next.item); save(); });
       else if (next.type === 'remote-rerender') runRemoteAux(next.project, next.item, 'rerender').catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
       else if (next.type === 'project') runProject(next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
       else if (next.type === 'vizard') runVizardProject(next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
-      else if (next.type === 'more') runMoreClips(next.project, next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
+      else if (next.type === 'more') runMoreClips(next.project, next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; releaseMoreHold(next.project, next.item); save(); });
       else runRerender(next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });
       await new Promise(resolve => setTimeout(resolve, 30));
     }
@@ -1869,7 +1889,8 @@ export function cancelWork(kind, id) {
       const run = running.get(job.id);
       if (typeof run?.kill === 'function') run.kill('SIGTERM'); else if (run) run.cancelled = true;
     }
-    job.status = 'cancelled'; job.stage = 'Cancelled'; job.completedAt = Date.now(); save();
+    job.status = 'cancelled'; job.stage = 'Cancelled'; job.completedAt = Date.now();
+    releaseMoreHold(project, job); save();
     return job;
   }
   if (!['queued', 'processing'].includes(project.status)) throw new Error('That lecture has already finished.');

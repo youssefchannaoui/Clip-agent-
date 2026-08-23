@@ -38,7 +38,9 @@ for (let attempt = 0; attempt < 50; attempt++) {
 async function signUp(email, password) {
   const res = await fetch(`${base}/auth/email`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    // Sign-in refuses a post that did not come from the site, so this has to
+    // carry the Origin a browser form post always carries.
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: base },
     body: new URLSearchParams({ email, password, returnTo: '/' }),
     redirect: 'manual',
   });
