@@ -333,6 +333,14 @@
     var rows = [];
     var current = DATA && DATA.billing && DATA.billing.current;
     var cost = Math.max(1, Math.ceil((job.end - job.start) / 60 * tokenRate));
+    if (job.durationKnown) {
+      rows.push(Object.assign({ label: 'From the lecture' },
+        value(humanDuration(job.end - job.start) + ' of ' + humanDuration(job.durationSec))));
+    }
+    var settings = (DATA && DATA.clipSettings) || {};
+    var chosen = Array.isArray(settings.clipLengthBands) ? settings.clipLengthBands.length : 0;
+    rows.push(Object.assign({ label: 'Clip lengths' },
+      chosen ? value(chosen + ' of 4 chosen') : value('Pick at least one', 'warn')));
     if (current && !current.unlimited && isFinite(Number(current.totalAvailable))) {
       var left = Number(current.totalAvailable);
       rows.push(Object.assign({ label: 'Balance afterwards' }, left >= cost
@@ -348,6 +356,8 @@
       // choice is actually being made.
       rows.push(Object.assign({ label: 'Captions from' },
         value(tpl.captionMode === 'quran' ? 'The Quran corpus' : 'What was said')));
+      rows.push(Object.assign({ label: 'Underneath' },
+        value(tpl.captionMode === 'quran' ? 'Nothing — recitation' : 'Nasheed, ducked')));
     }
     return rows;
   }
@@ -360,6 +370,57 @@
       if (wanted && list[i].id === wanted) return list[i];
     }
     return DATA && DATA.selectedTemplate ? DATA.selectedTemplate : (list[0] || null);
+  }
+
+  /**
+   * The job panel is a sequence, not a form.
+   *
+   * Everything it asks for was on one scrolling page, which meant reading the
+   * whole thing to answer any of it -- and the first question, what kind of
+   * thing you brought, is the one that decides what the rest should even
+   * offer. One question at a time, in the order the answers depend on each
+   * other, and the cost last because it is the sum of them.
+   */
+  var JOB_STEPS = [
+    { id: 'kind', title: 'What are you clipping?', hint: 'This decides which styles fit and whether a nasheed belongs underneath.' },
+    { id: 'trim', title: 'How much of the lecture?', hint: 'This is the part you pay for. Drag either handle.' },
+    { id: 'lengths', title: 'How long should the clips be?', hint: 'Pick any. Moments are cut to fit the lengths you allow.' },
+    { id: 'style', title: 'How should the captions look?', hint: 'Every preview is the style the renderer actually produces.' },
+    { id: 'picture', title: 'What plays on screen?', hint: 'The lecture itself, or scenery with the voice over it.' },
+    { id: 'sound', title: 'What plays underneath?', hint: 'A nasheed sits under the voice, ducked so it never competes with it.' },
+    { id: 'review', title: 'Ready to go', hint: 'Check it over. Anything here can be changed before you start.' },
+  ];
+
+  function jobStepIndex() {
+    var n = Number(UI.jobStep || 1);
+    return Math.max(1, Math.min(JOB_STEPS.length, n));
+  }
+
+  function jobStepId() {
+    return JOB_STEPS[jobStepIndex() - 1].id;
+  }
+
+  /**
+   * Why a step cannot be left, or '' when it can.
+   *
+   * Returned as the reason rather than a boolean so the button can say it.
+   * Nothing here blocks going BACK.
+   */
+  function jobStepBlocker(DATA, job) {
+    var id = jobStepId();
+    if (id === 'trim' && job && job.durationKnown && job.end - job.start < 20) {
+      return 'Select at least 20 seconds';
+    }
+    if (id === 'lengths') {
+      var settings = (DATA && DATA.clipSettings) || {};
+      var bands = settings.clipLengthBands;
+      if (Array.isArray(bands) && !bands.length) return 'Pick at least one length';
+    }
+    if (id === 'style') {
+      var tpl = activeJobTemplate(DATA);
+      if (tpl && tpl.pro && !planAllowsProTemplates(DATA)) return tpl.name + ' is a Pro style';
+    }
+    return '';
   }
 
   function jobEtaRange(seconds) {
@@ -2951,6 +3012,65 @@
         : '',
       // Charging is per source minute, so an estimate is only honest once the
       // length is known. The server confirms the real cost before processing.
+      // ── the wizard ───────────────────────────────────────────────────
+      jobStepNo: jobStepIndex(),
+      jobStepCount: JOB_STEPS.length,
+      jobStepTitle: JOB_STEPS[jobStepIndex() - 1].title,
+      jobStepHint: jobStepId() === 'sound' && jobTypeQuran
+        ? 'A recitation carries no nasheed. Nothing is mixed underneath it.'
+        : JOB_STEPS[jobStepIndex() - 1].hint,
+      jobStepLabel: 'Step ' + jobStepIndex() + ' of ' + JOB_STEPS.length,
+      jobStepDots: JOB_STEPS.map(function (step, i) {
+        var at = jobStepIndex();
+        var done = i + 1 < at;
+        var here = i + 1 === at;
+        return {
+          label: step.title,
+          style: 'height: 3px; border-radius: 3px; flex: 1 1 0; transition: background .28s ease; background: '
+            + (here ? '#F0D6A6' : done ? 'rgba(217,180,120,.45)' : '#26262A') + ';',
+          // Only steps already answered are reachable by clicking; jumping
+          // forward past a question would leave it unanswered.
+          go: done ? function (e) { stop(e); setUI({ jobStep: i + 1 }); } : function (e) { stop(e); },
+        };
+      }),
+      jobIsStepKind: jobStepId() === 'kind',
+      jobIsStepTrim: jobStepId() === 'trim',
+      jobIsStepLengths: jobStepId() === 'lengths',
+      jobIsStepStyle: jobStepId() === 'style',
+      jobIsStepPicture: jobStepId() === 'picture',
+      jobIsStepSound: jobStepId() === 'sound',
+      jobIsStepReview: jobStepId() === 'review',
+      jobSoundBlocked: jobStepId() === 'sound' && jobTypeQuran,
+      jobBackShown: jobStepIndex() > 1,
+      jobFirstStep: jobStepIndex() === 1,
+      // The last step's action is Generate, in the rail. Offering Continue
+      // beside it would be a button with nowhere to go.
+      jobNextShown: jobStepId() !== 'review',
+      // Wrappers rather than sc-if, because the template <select> is the
+      // binding the style row drives -- taking it out of the DOM would leave
+      // the picker writing to nothing.
+      jobTplSelectWrapStyle: 'position: relative; align-items: center; display: '
+        + (jobStepId() === 'style' ? 'flex' : 'none') + ';',
+      jobCountsWrapStyle: 'position: relative; display: '
+        + (jobStepId() === 'lengths' ? 'block' : 'none') + ';',
+      jobDurWrapStyle: 'position: relative; align-items: center; display: '
+        + (jobStepId() === 'lengths' ? 'flex' : 'none') + ';',
+      jobNextLabel: jobStepBlocker(DATA, job) || 'Continue',
+      jobNextStyle: 'display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 22px; border-radius: 9px; font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: '
+        + (jobStepBlocker(DATA, job) ? 'not-allowed' : 'pointer') + '; border: 1px solid '
+        + (jobStepBlocker(DATA, job) ? '#2A2A30; background: #17171A; color: #6E6E76;' : 'rgba(217,180,120,.5); background: rgba(217,180,120,.14); color: #F0D6A6;'),
+      jobNext: function (e) {
+        stop(e);
+        if (jobStepBlocker(DATA, job)) return;
+        setUI({ jobStep: Math.min(JOB_STEPS.length, jobStepIndex() + 1) });
+      },
+      jobBack: function (e) { stop(e); setUI({ jobStep: Math.max(1, jobStepIndex() - 1) }); },
+      // Every answered step is editable from the review, which is the point of
+      // showing the summary before anything is spent.
+      jobEditSteps: JOB_STEPS.slice(0, JOB_STEPS.length - 1).map(function (step, i) {
+        return { label: step.title, go: function (e) { stop(e); setUI({ jobStep: i + 1 }); } };
+      }),
+
       // ── the running total ────────────────────────────────────────────
       //
       // The panel used to commit tokens behind a single "≈ 45 tokens" line
@@ -3019,7 +3139,7 @@
       // and left behind it pinned activeTemplate everywhere -- the Templates
       // screen preview stopped following the selection because a stale job
       // choice silently outranked it.
-      closeJob: function (e) { stop(e); setUI({ job: null, jobTplId: null }); },
+      closeJob: function (e) { stop(e); setUI({ job: null, jobTplId: null, jobStep: 1 }); },
       runGenerate: function (e) {
         stop(e);
         if (!job || UI.generating) return;
@@ -3897,6 +4017,7 @@
         start: 0,
         end: dur,
       };
+      UI.jobStep = 1;
       UI.generating = false;
       UI.jobUrl = '';
       refresh();

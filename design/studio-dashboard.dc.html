@@ -1489,7 +1489,27 @@
           <button onClick="{{ closeJob }}" style="margin-left: auto; display: grid; place-items: center; width: 28px; height: 28px; flex: none; border: 1px solid #26262A; border-radius: 8px; background: #17171A; color: #8B8B93; cursor: pointer;" style-hover="color: #F2F2F4;"><i class="ph ph-x" style="font-size: 14px;"></i></button>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 9px;">
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <span style="display: flex; align-items: center; gap: 7px;">
+            <sc-for list="{{ jobStepDots }}" as="dot" hint-placeholder-count="7">
+              <a href="#" onClick="{{ dot.go }}" title="{{ dot.label }}" style="{{ dot.style }}"></a>
+            </sc-for>
+          </span>
+          <span style="display: flex; flex-direction: column; gap: 3px;">
+            <span style="font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">{{ jobStepLabel }}</span>
+            <strong style="font-family: Outfit, Inter, sans-serif; font-size: 20px; font-weight: 600; letter-spacing: -.02em; color: #F2F2F4;">{{ jobStepTitle }}</strong>
+            <span style="font-size: 12.5px; color: #8B8B93;">{{ jobStepHint }}</span>
+          </span>
+        </div>
+
+        <!-- Where the step blocks the page injects (kind cards, style row,
+             length chips, background picker) mount. They used to find their
+             place by searching the panel for a label's text, which broke the
+             moment a step hid that label. -->
+        <div id="studioJobSlot"></div>
+
+        <sc-if value="{{ jobIsStepTrim }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 9px; animation: dcPop .22s cubic-bezier(.2,.8,.2,1);">
           <span style="display: flex; align-items: center; font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">Use this part of the lecture<span style="margin-left: auto; letter-spacing: 0; text-transform: none; font-size: 11.5px; font-weight: 500; color: #F0D6A6;">{{ jobRangeLabel }}</span></span>
           <div style="position: relative; height: 44px; border-radius: 8px; border: 1px solid #1E1E22; background: #121214 repeating-linear-gradient(90deg, rgba(240,214,166,.14) 0 1px, transparent 1px 5px);">
             <span style="{{ jobBandStyle }}"></span>
@@ -1498,16 +1518,17 @@
           </div>
           <span style="font-size: 11px; color: #6E6E76;">{{ jobLenLabel }} of 42:11 — drag the top handle for the start, the bottom for the end.</span>
         </div>
+        </sc-if>
 
         <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
-          <label style="{{ selectWrapStyle }}">
+          <label style="{{ jobTplSelectWrapStyle }}">
             <i class="ph ph-text-aa" style="font-size: 14px; color: #8B8B93;"></i>
             <select value="{{ jobTpl }}" onChange="{{ setTpl }}" style="{{ selectStyle }}">
               <sc-for list="{{ tplNames }}" as="opt" hint-placeholder-count="4"><option value="{{ opt }}">{{ opt }}</option></sc-for>
             </select>
             <i class="ph ph-caret-down" style="font-size: 12px; color: #6E6E76;"></i>
           </label>
-          <div style="position: relative;">
+          <div style="{{ jobCountsWrapStyle }}">
             <button onClick="{{ toggleCounts }}" style="{{ selectWrapStyle }}">
               <i class="ph ph-film-strip" style="font-size: 14px; color: #8B8B93;"></i>
               <span style="font-size: 12px; font-weight: 500; color: #F2F2F4;">{{ countLabel }}</span>
@@ -1521,7 +1542,7 @@
               </div>
             </sc-if>
           </div>
-          <label style="{{ selectWrapStyle }}">
+          <label style="{{ jobDurWrapStyle }}">
             <i class="ph ph-timer" style="font-size: 14px; color: #8B8B93;"></i>
             <select value="{{ jobDur }}" onChange="{{ setDur }}" style="{{ selectStyle }}">
               <sc-for list="{{ durNames }}" as="opt" hint-placeholder-count="4"><option value="{{ opt }}">{{ opt }}</option></sc-for>
@@ -1530,17 +1551,47 @@
           </label>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 8px;">
-          <span style="font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">Nasheed</span>
-          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-            <sc-for list="{{ jobNasheeds }}" as="n" hint-placeholder-count="4">
-              <button onClick="{{ n.select }}" style="{{ n.style }}"><i class="ph ph-music-notes" style="font-size: 12px;"></i>{{ n.label }}</button>
-            </sc-for>
-          </div>
+        <sc-if value="{{ jobIsStepSound }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 8px; animation: dcPop .22s cubic-bezier(.2,.8,.2,1);">
+          <sc-if value="{{ jobSoundBlocked }}" hint-placeholder-val="{{ false }}">
+            <span style="display: flex; align-items: flex-start; gap: 11px; padding: 15px 17px; border: 1px solid #26262A; border-radius: 10px; background: #121214;">
+              <i class="ph ph-speaker-simple-slash" style="font-size: 17px; color: #8B8B93;"></i>
+              <span style="display: flex; flex-direction: column; gap: 2px;">
+                <span style="font-family: Outfit, Inter, sans-serif; font-size: 13.5px; font-weight: 500; color: #F2F2F4;">Nothing plays under a recitation</span>
+                <span style="font-size: 12.5px; color: #8B8B93;">The Quran is left as it was recited — no nasheed is mixed in, and scenery carries no music of its own.</span>
+              </span>
+            </span>
+          </sc-if>
+          <sc-if value="{{ jobMusicOn }}" hint-placeholder-val="{{ true }}">
+            <span style="font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">Nasheed</span>
+            <span style="display: flex; flex-wrap: wrap; gap: 6px;">
+              <sc-for list="{{ jobNasheeds }}" as="n" hint-placeholder-count="4">
+                <button onClick="{{ n.select }}" style="{{ n.style }}"><i class="ph ph-music-notes" style="font-size: 12px;"></i>{{ n.label }}</button>
+              </sc-for>
+            </span>
+          </sc-if>
+        </div>
+        </sc-if>
+
+          <sc-if value="{{ jobBackShown }}" hint-placeholder-val="{{ true }}">
+            <span style="display: flex; align-items: center; gap: 10px; padding-top: 4px;">
+              <button onClick="{{ jobBack }}" style="display: flex; align-items: center; gap: 7px; padding: 12px 18px; border: 1px solid #2A2A30; border-radius: 9px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer;" style-hover="color: #F2F2F4;"><i class="ph ph-arrow-left" style="font-size: 14px;"></i>Back</button>
+              <sc-if value="{{ jobIsStepReview }}" hint-placeholder-val="{{ false }}">
+                <span style="font-size: 12px; color: #6E6E76;">Anything above can still be changed.</span>
+              </sc-if>
+              <sc-if value="{{ jobNextShown }}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{ jobNext }}" style="{{ jobNextStyle }}">{{ jobNextLabel }}<i class="ph ph-arrow-right" style="font-size: 14px;"></i></button>
+              </sc-if>
+            </span>
+          </sc-if>
+          <sc-if value="{{ jobFirstStep }}" hint-placeholder-val="{{ false }}">
+            <span style="display: flex; padding-top: 4px;">
+              <button onClick="{{ jobNext }}" style="{{ jobNextStyle }}">{{ jobNextLabel }}<i class="ph ph-arrow-right" style="font-size: 14px;"></i></button>
+            </span>
+          </sc-if>
         </div>
 
-        </div>
-
+        <sc-if value="{{ jobIsStepReview }}" hint-placeholder-val="{{ true }}">
         <div style="position: sticky; top: 0; flex: 0 1 322px; min-width: 288px; display: flex; flex-direction: column; gap: 18px; padding: 22px; border: 1px solid #2E2A24; border-radius: 12px; background: linear-gradient(180deg, #16150F 0%, #121214 62%);">
           <div style="display: flex; flex-direction: column; gap: 5px;">
             <span style="font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">This run costs</span>
@@ -1581,6 +1632,7 @@
 
           <span style="font-size: 11px; line-height: 1.5; text-align: center; color: #5E5E66;">Cutting more clips, re-rendering and editing never cost another token.</span>
         </div>
+        </sc-if>
       </div>
     </div>
   </sc-if>

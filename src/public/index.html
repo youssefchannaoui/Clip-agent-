@@ -3545,16 +3545,14 @@ function studioWanted(){return window.STUDIO_SHELL===true}
     function paintJobType(vals){
       alive(jobTypeEl);
       const open=Boolean(StudioAdapter.ui.job);
-      if(!open){jobTypeEl.classList.add('hide');return}
-      const label=[...document.querySelectorAll('#studio span,#studio div')]
-        .filter(n=>/^nasheed$/i.test((n.textContent||'').trim())
-          &&![...n.children].some(c=>/^nasheed$/i.test((c.textContent||'').trim()))).pop();
-      const row=label&&label.parentElement;
-      jobTypeEl.classList.toggle('hide',!row);
-      if(!row||!row.parentElement)return;
-      if(jobTypeEl.nextElementSibling!==row||jobTypeEl.parentElement!==row.parentElement){
-        row.parentElement.insertBefore(jobTypeEl,row);
-      }
+      /* Each injected block belongs to one step of the panel now. Painting
+         them all at once is what made the panel a scroll instead of a
+         sequence. */
+      if(!open||!vals.jobIsStepKind){jobTypeEl.classList.add('hide');return}
+      const slot=$('#studioJobSlot');
+      jobTypeEl.classList.toggle('hide',!slot);
+      if(!slot)return;
+      if(jobTypeEl.parentElement!==slot)slot.appendChild(jobTypeEl);
       /* Two cards, not two pills: this is the decision that sets the template,
          the caption treatment and the nasheed default, so it reads as the
          primary choice on the panel -- an icon, a name, and one line saying
@@ -3737,7 +3735,9 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         const wrap=el&&el.closest('label');
         if(wrap&&!wrap.hasAttribute('data-host-style')){wrap.setAttribute('data-host-style','');wrap.style.display='none'}
       }
-      if(jobStyleEl.parentElement!==row.parentElement||jobStyleEl.previousElementSibling!==row){
+      const slot=$('#studioJobSlot');
+      if(slot&&jobStyleEl.parentElement!==slot)slot.appendChild(jobStyleEl);
+      else if(!slot&&(jobStyleEl.parentElement!==row.parentElement||jobStyleEl.previousElementSibling!==row)){
         row.parentElement.insertBefore(jobStyleEl,row.nextSibling);
       }
       const cs=(DATA.clipSettings||{});
@@ -3750,14 +3750,19 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       }
       const bandOn=(lo,hi)=>bands.some(b=>Number(b[0])===lo&&Number(b[1])===hi);
       const active=vals.jobTpl||'';
-      const sig=[tplNames.join('.'),active,JSON.stringify(bands)].join('|');
+      /* The step is part of the signature. Without it, moving from one step to
+         the next left this block returning early with whatever it drew last --
+         so the style row simply never appeared on its own step. */
+      const showStyle=Boolean(vals.jobIsStepStyle),showBands=Boolean(vals.jobIsStepLengths);
+      const sig=[tplNames.join('.'),active,JSON.stringify(bands),showStyle?'s':'',showBands?'b':''].join('|');
       if(jobStyleEl.dataset.sig===sig)return;
       jobStyleEl.dataset.sig=sig;
       jobStyleEl.style.cssText='display:block;margin:2px 0 0';
       const pill=on=>'padding:6px 11px;border-radius:999px;font:500 11.5px Outfit,Inter,sans-serif;cursor:pointer;'
         +'border:1px solid '+(on?'rgba(240,214,166,.9)':'#26262A')+';'
         +'background:'+(on?'rgba(217,180,120,.14)':'#131315')+';color:'+(on?'#F0D6A6':'#A2A2AA')+';';
-      let html='<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin:10px 0 6px">Clip style</div>'
+      if(!showStyle&&!showBands){jobStyleEl.classList.add('hide');jobStyleEl.innerHTML='';return}
+      let html=!showStyle?'':'<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin:10px 0 6px">Clip style</div>'
         +'<div class="bgt-row">'
         +(DATA.templates||[]).map(t=>{
           const on=t.name===active;
@@ -3769,8 +3774,8 @@ function studioWanted(){return window.STUDIO_SHELL===true}
             +(locked?'<span class="bgt-lock"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>Pro</span>':'')
             +`<span class="bgt-name">${esc(t.name)}</span></button>`;
         }).join('')
-        +'</div>'
-        +'<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin:8px 0 6px">Clip length \u00b7 pick any</div>'
+        +'</div>';
+      if(showBands)html+='<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin:8px 0 6px">Clip length \u00b7 pick any</div>'
         +'<div style="display:flex;gap:7px;flex-wrap:wrap">'
         +LENGTH_BANDS.map(([lo,hi,label])=>`<button type="button" data-band="${lo}-${hi}" style="${pill(bandOn(lo,hi))}">${label}</button>`).join('')
         +'</div>';
@@ -3835,12 +3840,14 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       alive(jobBgEl);
       const ui=StudioAdapter.ui;
       if(ui.jobBgMode===undefined){ui.jobBgMode='own';ui.jobBgId='';ui.jobBgIntro=3}
-      const open=Boolean(ui.job)&&Boolean(vals.jobTypeQuran);
+      /* Its own step now, and offered on a lecture as well as a recitation:
+         the engine's background path is not Quran-specific, it just had no
+         way in from the panel. */
+      const open=Boolean(ui.job)&&Boolean(vals.jobIsStepPicture);
       jobBgEl.classList.toggle('hide',!open);
       if(!open)return;
-      if(jobBgEl.previousElementSibling!==jobTypeEl||jobBgEl.parentElement!==jobTypeEl.parentElement){
-        jobTypeEl.parentElement&&jobTypeEl.parentElement.insertBefore(jobBgEl,jobTypeEl.nextSibling);
-      }
+      const bgSlot=$('#studioJobSlot');
+      if(bgSlot&&jobBgEl.parentElement!==bgSlot)bgSlot.appendChild(jobBgEl);
       const list=(DATA&&DATA.backgrounds)||[];
       const mode=ui.jobBgMode;
       const pill=(on)=>'padding:6px 11px;border-radius:999px;font:500 11.5px Outfit,Inter,sans-serif;cursor:pointer;'
