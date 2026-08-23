@@ -3815,7 +3815,14 @@
       countsOpen: UI.countsOpen,
       toggleCounts: function (e) { stop(e); setUI({ countsOpen: !UI.countsOpen }); },
       countLabel: plural(clipsPerVideo, 'clip') + ' per lecture',
-      countOpts: [3, 6, 9, 12].map(function (n) {
+      // The account's own value joins the presets when it is not one of them.
+      // Stored counts do not have to come from this control -- the settings
+      // screen and older versions both wrote others -- and an account on 8
+      // saw four options with none of them selected, a control that could not
+      // show its own state.
+      countOpts: [3, 6, 9, 12].concat([3, 6, 9, 12].indexOf(clipsPerVideo) === -1 && clipsPerVideo > 0 ? [clipsPerVideo] : [])
+        .sort(function (a, b) { return a - b; })
+        .map(function (n) {
         var on = clipsPerVideo === n;
         return {
           label: plural(n, 'clip'),

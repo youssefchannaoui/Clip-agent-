@@ -3819,10 +3819,37 @@ function studioWanted(){return window.STUDIO_SHELL===true}
             +`<span class="bgt-name">${esc(t.name)}</span></button>`;
         }).join('')
         +'</div>';
-      if(showBands)html+='<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin:8px 0 6px">Clip length \u00b7 pick any</div>'
-        +'<div style="display:flex;gap:7px;flex-wrap:wrap">'
-        +LENGTH_BANDS.map(([lo,hi,label])=>`<button type="button" data-band="${lo}-${hi}" style="${pill(bandOn(lo,hi))}">${label}</button>`).join('')
-        +'</div>';
+      if(showBands){
+        /* Each band draws its own length. As four identical pills the only way
+           to tell 30s from 90s was to read the label and do the arithmetic;
+           the bar puts them on one scale so the difference is visible before
+           the words are. Scaled against the longest band the worker cuts. */
+        const SPAN=LENGTH_BANDS[LENGTH_BANDS.length-1][1];
+        const bandCard=on=>'position:relative;display:flex;flex-direction:column;gap:9px;flex:1 1 0;min-width:104px;'
+          +'padding:12px 13px 13px;border-radius:11px;text-align:left;cursor:pointer;font-family:inherit;'
+          +'transition:border-color .16s ease,background .16s ease,box-shadow .16s ease;'
+          +'border:1px solid '+(on?'rgba(240,214,166,.85)':'#26262A')+';'
+          +'background:'+(on?'rgba(217,180,120,.06)':'#121214')+';'
+          +(on?'box-shadow:0 0 0 3px rgba(217,180,120,.1);':'');
+        const chosen=LENGTH_BANDS.filter(([lo,hi])=>bandOn(lo,hi));
+        html+='<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin:8px 0 9px">Clip length \u00b7 pick any</div>'
+          +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
+          +LENGTH_BANDS.map(([lo,hi,label])=>{
+            const on=bandOn(lo,hi);
+            return `<button type="button" data-band="${lo}-${hi}" style="${bandCard(on)}">`
+              +`<span style="font:600 13px Outfit,Inter,sans-serif;color:${on?'#F0D6A6':'#F2F2F4'}">${label}</span>`
+              +'<span style="position:relative;display:block;height:5px;border-radius:5px;background:#1D1D22">'
+              +`<span style="position:absolute;top:0;bottom:0;left:${(lo/SPAN*100).toFixed(1)}%;width:${((hi-lo)/SPAN*100).toFixed(1)}%;border-radius:5px;background:${on?'linear-gradient(90deg,#C9A468,#F0D6A6)':'#3A3A42'}"></span></span>`
+              +(on?'<span style="position:absolute;top:9px;right:10px;display:grid;place-items:center;width:16px;height:16px;border-radius:50%;background:#F0D6A6;color:#09090A;font-size:10px">\u2713</span>':'')
+              +'</button>';
+          }).join('')
+          +'</div>'
+          +'<div style="font-size:12px;color:#6E6E76;margin-top:9px">'
+          +(chosen.length
+            ? `Moments are cut between ${Math.min(...chosen.map(b=>b[0]))}s and ${Math.max(...chosen.map(b=>b[1]))}s. Anything shorter or longer is skipped.`
+            : 'Nothing can be cut until at least one length is allowed.')
+          +'</div>';
+      }
       jobStyleEl.innerHTML=html;
       jobStyleEl.querySelectorAll('[data-tpl-name]').forEach(b=>b.onclick=e=>{
         e.preventDefault();
