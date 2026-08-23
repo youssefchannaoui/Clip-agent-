@@ -1742,8 +1742,12 @@ function securityHeaders(res, { pathname }) {
   const csp = [
     "default-src 'self'",
     `script-src 'self' ${INLINE_SCRIPT_HASHES.join(' ')}`.trim(),
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com data:",
+    // The icon font is served from unpkg: the generated stylesheet @imports
+    // two Phosphor sheets from there, and those pull their font files from the
+    // same host. Leaving it out blocked every icon in the product -- the nav,
+    // the platform row, every control that is an icon rather than a word.
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com",
+    "font-src 'self' https://fonts.gstatic.com https://unpkg.com data:",
     // Clip thumbnails and renders can live on object storage, and the editor
     // reads frames through blob: URLs.
     "img-src 'self' data: blob: https:",
