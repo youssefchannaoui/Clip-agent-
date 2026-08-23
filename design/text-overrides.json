@@ -40,7 +40,6 @@
     "Midday": "postWindowName1",
     "Evening": "postWindowName2",
     "Late": "postWindowName3",
-    "Today is full — 4 of 4. Nothing posts unless its four checks pass.": "dailyLimitNote",
     "42:11 · source lecture": "edSourceLabel",
     "09:14 / 42:11": "edTimeReadout",
     "Nasheed · Tala al-Badru": "edTrackName",

@@ -4,7 +4,7 @@ import { config } from './config.js';
 import { state, save, log, automationSettings, publishingSettings, ownerOfRecord, musicSatisfied, isAyahEcho } from './store.js';
 import { ownedBy, ownerOf } from './tenancy.js';
 import { sanitiseClipStyle } from './templates.js';
-import { nextSlot } from './slots.js';
+import { nextSlot, startOfZonedDay } from './slots.js';
 import * as engine from './local-engine.js';
 import * as social from './social.js';
 
@@ -75,7 +75,7 @@ export function unrejectClip(id) {
   return clip;
 }
 
-export function scheduleSelected(ids = []) {
+export function scheduleSelected(ids = [], { at = null } = {}) {
   const uniqueIds = [...new Set((Array.isArray(ids) ? ids : []).map(value => String(value || '').trim()).filter(Boolean))];
   if (!uniqueIds.length) throw new Error('Select at least one clip to schedule.');
   if (uniqueIds.length > 100) throw new Error('Schedule no more than 100 clips at once.');
@@ -117,7 +117,7 @@ export function scheduleSelected(ids = []) {
       }
       if (clip.status !== 'approved') throw new Error(`This clip cannot be scheduled from its current ${clip.status} state.`);
 
-      scheduleApprovedClip(clip);
+      scheduleApprovedClip(clip, { at });
       scheduled++;
       results.push({ id: clip.id, ok: true, status: clip.status, scheduledAt: clip.scheduledAt });
     } catch (error) {
@@ -224,10 +224,21 @@ function setTargets(clip) {
   clip.targets = targets;
 }
 
-export function scheduleApprovedClip(clip) {
+// `at` asks for the first free posting time on or after that instant, which is
+// how the schedule screen puts a clip on the day you pressed. Without it every
+// day's button landed the clip in the next open slot regardless of which day
+// was pressed -- the button named a day it had no way to honour. A day that is
+// already full still rolls forward, and the caller is told where it landed.
+export function scheduleApprovedClip(clip, { at = null } = {}) {
   if (clip.status !== 'approved') return clip;
   const taken = ownedBy(state.clips, ownerOf(clip)).map(item => item.scheduledAt).filter(Boolean);
-  clip.scheduledAt = clip.scheduledAt || nextSlot(taken);
+  const wanted = Number(at);
+  // `at` names a day, so it is read as that whole day in the account's zone --
+  // never as the o'clock it happened to arrive as.
+  const from = Number.isFinite(wanted) && wanted > 0
+    ? Math.max(Date.now(), startOfZonedDay(wanted))
+    : null;
+  clip.scheduledAt = clip.scheduledAt || nextSlot(taken, from ? { from } : undefined);
   setTargets(clip);
   for (const target of clip.targets || []) target.nextTryAt = clip.scheduledAt;
   clip.status = 'scheduled'; save();

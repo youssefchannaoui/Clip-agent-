@@ -1431,30 +1431,158 @@
       return startOfDay(c.scheduledAt) < today && !c.postedAt;
     });
 
-    var scheduleDays = [];
-    for (var dnum = 0; dnum < 7; dnum++) {
-      (function (dayStart) {
-        var label = dnum === 0 ? 'Today' : dnum === 1 ? 'Tomorrow'
-          : new Date(dayStart).toLocaleDateString(undefined, { weekday: 'long' });
-        var items = scheduled.filter(function (c) { return startOfDay(c.scheduledAt) === dayStart; }).map(scheduleItem);
-        scheduleDays.push({
-          day: label,
-          countLabel: items.length + ' of 4 scheduled',
-          canAdd: items.length < 4,
-          items: items,
-          // Only approved clips with no slot yet can be scheduled.
-          addClip: function (e) {
-            stop(e);
-            var free = clips.filter(function (c) { return decision(c) === 'approved' && !c.scheduledAt && !c.postedAt; });
-            if (!free.length) { toast('Approve a clip in the review queue first.'); return; }
-            var labels = free.slice(0, 6).map(function (c) { return (c.title || 'Clip').slice(0, 46); });
-            global.StudioAdapter.onPickOption('Schedule into ' + label, labels.concat(['Cancel']), function (choice) {
-              var picked = free.filter(function (c) { return (c.title || 'Clip').slice(0, 46) === choice; })[0];
-              if (picked) global.StudioAdapter.onScheduleClip(picked.id);
-            });
-          },
+    // ── the schedule, as a calendar ───────────────────────────────────
+    // Seven day sections stacked down the page made a week a scroll and put a
+    // month out of reach entirely. The same clips at three densities: a month
+    // seen at once, a week beside itself, and one day in full.
+    var SCHED_VIEWS = ['day', 'week', 'month'];
+    var schedView = SCHED_VIEWS.indexOf(UI.schedView) === -1 ? 'month' : UI.schedView;
+    var schedAnchor = startOfDay(Number(UI.schedAnchor) || today);
+    var MONDAY_INDEX = function (ms) { return (new Date(ms).getDay() + 6) % 7; };
+    var weekStart = schedAnchor - MONDAY_INDEX(schedAnchor) * DAY_MS;
+
+    function dayItemsAt(dayStart) {
+      return scheduled.filter(function (c) { return startOfDay(c.scheduledAt) === dayStart; });
+    }
+    function dayNameOf(dayStart) {
+      return dayStart === today ? 'Today'
+        : dayStart === today + DAY_MS ? 'Tomorrow'
+        : dayStart === today - DAY_MS ? 'Yesterday'
+        : new Date(dayStart).toLocaleDateString(undefined, { weekday: 'long' });
+    }
+    function dateOf(dayStart, opts) {
+      return new Date(dayStart).toLocaleDateString(undefined, opts || { day: 'numeric', month: 'short' });
+    }
+    // The picked day travels with the clip now; the allocator puts it in the
+    // first free posting time on that day. Every day's button used to call the
+    // same allocator with no day at all, so it landed wherever was next free --
+    // a button that named a day it could not honour.
+    function addClipTo(dayStart) {
+      return function (e) {
+        stop(e);
+        if (dayStart < today) { toast('That day has already passed.'); return; }
+        var free = clips.filter(function (c) { return decision(c) === 'approved' && !c.scheduledAt && !c.postedAt; });
+        if (!free.length) { toast('Approve a clip in the review queue first.'); return; }
+        var labels = free.slice(0, 6).map(function (c) { return (c.title || 'Clip').slice(0, 46); });
+        global.StudioAdapter.onPickOption('Schedule into ' + dayNameOf(dayStart) + ', ' + dateOf(dayStart), labels.concat(['Cancel']), function (choice) {
+          var picked = free.filter(function (c) { return (c.title || 'Clip').slice(0, 46) === choice; })[0];
+          if (picked) global.StudioAdapter.onScheduleClip(picked.id, dayStart);
         });
-      })(today + dnum * DAY_MS);
+      };
+    }
+
+    // ── month ──
+    var anchorDate = new Date(schedAnchor);
+    var monthFirst = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1).getTime();
+    var gridStart = monthFirst - MONDAY_INDEX(monthFirst) * DAY_MS;
+    var daysInMonth = new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 1, 0).getDate();
+    var weeksNeeded = Math.ceil((MONDAY_INDEX(monthFirst) + daysInMonth) / 7);
+    var schedMonthWeeks = [];
+    for (var wk = 0; wk < weeksNeeded; wk += 1) {
+      (function (rowStart) {
+        var cells = [];
+        for (var cd = 0; cd < 7; cd += 1) {
+          (function (ds) {
+            var items = dayItemsAt(ds);
+            var inMonth = new Date(ds).getMonth() === anchorDate.getMonth();
+            var isToday = ds === today;
+            var past = ds < today;
+            cells.push({
+              date: String(new Date(ds).getDate()),
+              style: 'position: relative; display: flex; flex-direction: column; gap: 4px; min-height: 66px; padding: 6px 8px 7px;'
+                + ' border: 1px solid ' + (isToday ? 'rgba(240,214,166,.45)' : '#1C1C21') + '; border-radius: 10px;'
+                + ' background: ' + (isToday ? 'rgba(217,180,120,.05)' : inMonth ? '#141418' : '#0F0F12') + ';'
+                + ' text-align: left; font-family: inherit; cursor: pointer;'
+                + ' opacity: ' + (inMonth ? '1' : '.45') + '; transition: border-color .14s ease, background .14s ease;',
+              dateStyle: 'font-family: Outfit, Inter, sans-serif; font-size: 11.5px; font-weight: ' + (isToday ? '700' : '500') + ';'
+                + ' color: ' + (isToday ? '#F0D6A6' : past ? '#5E5E66' : '#9A9AA2') + '; font-variant-numeric: tabular-nums;',
+              // One pip per post the day can hold, filled for each one taken:
+              // the day's load without a number to read.
+              pips: items.length ? [0, 1, 2, 3].map(function (n) {
+                return { style: 'display: block; width: 5px; height: 5px; border-radius: 50%;'
+                  + ' background: ' + (n < items.length ? '#D9B478' : '#25252B') + ';' };
+              }) : [],
+              chips: items.slice(0, 2).map(function (c) {
+                return {
+                  label: timeOf(c.scheduledAt) + '  ' + String(c.title || 'Clip'),
+                  style: 'display: block; font-size: 10.5px; line-height: 1.35; color: #BCBCC3;'
+                    + ' white-space: nowrap; overflow: hidden; text-overflow: ellipsis;',
+                };
+              }),
+              moreLabel: items.length > 2 ? '+' + (items.length - 2) + ' more' : '',
+              hasMore: items.length > 2,
+              open: function (e) { stop(e); setUI({ schedView: 'day', schedAnchor: ds }); },
+            });
+          })(rowStart + cd * DAY_MS);
+        }
+        schedMonthWeeks.push({ cells: cells });
+      })(gridStart + wk * 7 * DAY_MS);
+    }
+
+    // ── week ──
+    var schedWeekCols = [];
+    for (var wd = 0; wd < 7; wd += 1) {
+      (function (ds) {
+        var items = dayItemsAt(ds);
+        var isToday = ds === today;
+        schedWeekCols.push({
+          name: new Date(ds).toLocaleDateString(undefined, { weekday: 'short' }),
+          date: dateOf(ds),
+          isToday: isToday,
+          headStyle: 'display: flex; flex-direction: column; gap: 1px; padding: 0 2px 8px;'
+            + ' color: ' + (isToday ? '#F0D6A6' : '#8B8B93') + ';',
+          style: 'display: flex; flex-direction: column; gap: 6px; flex: 1 1 0; min-width: 0; padding: 9px;'
+            + ' border: 1px solid ' + (isToday ? 'rgba(240,214,166,.4)' : '#1C1C21') + '; border-radius: 11px;'
+            + ' background: ' + (isToday ? 'rgba(217,180,120,.04)' : '#141418') + '; min-height: 300px;',
+          items: items.map(function (c) {
+            return {
+              time: timeOf(c.scheduledAt),
+              title: String(c.title || 'Clip'),
+              style: 'display: flex; flex-direction: column; gap: 2px; padding: 7px 8px; border-radius: 8px;'
+                + ' border: 0; background: #1B1B21; text-align: left; font-family: inherit; cursor: pointer; width: 100%;',
+              open: function (e) { stop(e); setUI({ schedView: 'day', schedAnchor: ds }); },
+            };
+          }),
+          canAdd: items.length < 4 && ds >= today,
+          addClip: addClipTo(ds),
+        });
+      })(weekStart + wd * DAY_MS);
+    }
+
+    // ── day ──
+    var schedDayItems = dayItemsAt(schedAnchor).map(scheduleItem);
+
+    // ── what the rail reports ──
+    var schedTodayCount = dayItemsAt(today).length;
+    var nextOut = scheduled.filter(function (c) { return Number(c.scheduledAt) > Date.now(); })
+      .sort(function (a, b) { return Number(a.scheduledAt) - Number(b.scheduledAt); })[0] || null;
+    var waitingForSlot = clips.filter(function (c) {
+      return decision(c) === 'approved' && !c.scheduledAt && !c.postedAt;
+    });
+    function untilLabel(at) {
+      var ms = Math.max(0, Number(at) - Date.now());
+      var mins = Math.round(ms / 60000);
+      if (mins < 60) return mins <= 1 ? 'in about a minute' : 'in ' + mins + ' min';
+      var hrs = Math.floor(mins / 60);
+      if (hrs < 24) return 'in ' + hrs + 'h ' + (mins % 60) + 'm';
+      var days = Math.round(hrs / 24);
+      return 'in ' + plural(days, 'day');
+    }
+
+    var schedRangeLabel = schedView === 'month'
+      ? new Date(schedAnchor).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+      : schedView === 'week'
+        ? dateOf(weekStart) + ' \u2013 ' + dateOf(weekStart + 6 * DAY_MS)
+        : dayNameOf(schedAnchor) + ', ' + dateOf(schedAnchor);
+
+    function shiftAnchor(dir) {
+      return function (e) {
+        stop(e);
+        if (schedView === 'day') { setUI({ schedAnchor: schedAnchor + dir * DAY_MS }); return; }
+        if (schedView === 'week') { setUI({ schedAnchor: schedAnchor + dir * 7 * DAY_MS }); return; }
+        var d = new Date(schedAnchor);
+        setUI({ schedAnchor: new Date(d.getFullYear(), d.getMonth() + dir, 1).getTime() });
+      };
     }
 
     var templates = DATA.templates || [];
@@ -2241,13 +2369,6 @@
       return Number(e.at || e.createdAt || 0) > seenAt;
     }).length;
 
-    var weekAgo = Date.now() - 7 * DAY_MS;
-    var postedThisWeek = clips.filter(function (c) { return c.postedAt && new Date(c.postedAt).getTime() >= weekAgo; });
-    var allScores = clips.map(function (c) { return Number(c.score || 0); }).filter(Boolean).sort(function (a, b) { return a - b; });
-    var medianScore = allScores.length ? allScores[Math.floor(allScores.length / 2)] : 0;
-    var postTimes = DATA.postTimes || [];
-    var todayCount = scheduled.filter(function (c) { return startOfDay(c.scheduledAt) === today; }).length;
-
     // Blockers name a real gap and send you to the screen that fixes it.
     var blocker = '', blockerScreen = 'music';
     if (tracks.length === 0) { blocker = 'No nasheed uploaded — every clip mixes one in, so processing cannot finish without at least one.'; blockerScreen = 'music'; }
@@ -2556,9 +2677,87 @@
       },
 
       // ── Schedule ──
-      // Overdue first, so a stranded post is the first thing seen rather than
-      // something no screen renders at all.
-      scheduleDays: (overdueRow ? [overdueRow] : []).concat(scheduleDays),
+      schedIsDay: schedView === 'day',
+      schedIsWeek: schedView === 'week',
+      schedIsMonth: schedView === 'month',
+      schedRangeLabel: schedRangeLabel,
+      schedWeekdays: schedWeekCols.map(function (c) { return { name: c.name }; }),
+      schedMonthWeeks: schedMonthWeeks,
+      schedWeekCols: schedWeekCols,
+      schedDayItems: schedDayItems,
+      schedDayCount: schedDayItems.length + ' of 4 scheduled',
+      schedDayCanAdd: schedDayItems.length < 4 && schedAnchor >= today,
+      schedDayAdd: addClipTo(schedAnchor),
+      schedDayEmpty: !schedDayItems.length,
+      schedPrev: shiftAnchor(-1),
+      schedNext: shiftAnchor(1),
+      schedToday: function (e) { stop(e); setUI({ schedAnchor: today, schedView: UI.schedView || 'month' }); },
+      schedOffToday: schedAnchor !== today,
+      schedViewOpts: [
+        { id: 'day', label: 'Day' },
+        { id: 'week', label: 'Week' },
+        { id: 'month', label: 'Month' },
+      ].map(function (v) {
+        return {
+          label: v.label,
+          style: wordOption(schedView === v.id, 13),
+          select: function (e) { stop(e); setUI({ schedView: v.id }); },
+        };
+      }),
+      // ── the rail ──
+      // The meter was four gold bars in the markup, full whatever the day held.
+      // It sat directly above the sentence "2 of 4 scheduled today" and
+      // contradicted it.
+      schedMeter: [0, 1, 2, 3].map(function (n) {
+        return { style: 'flex: 1; height: 5px; border-radius: 20px; transition: background .2s ease; background: '
+          + (n < schedTodayCount ? 'linear-gradient(90deg, #D9B478, #F0D6A6)' : '#26262C') + ';' };
+      }),
+
+      // What is going out next, in words rather than a timestamp to subtract
+      // from. Nothing was on this screen to answer it.
+      schedHasNext: Boolean(nextOut),
+      schedNextIn: nextOut ? untilLabel(nextOut.scheduledAt) : '',
+      schedNextTitle: nextOut ? String(nextOut.title || 'Clip') : '',
+      schedNextAt: nextOut ? timeOf(nextOut.scheduledAt) + ' \u00b7 ' + dateOf(startOfDay(nextOut.scheduledAt)) : '',
+
+      // The supply. An empty calendar has two very different causes -- nothing
+      // approved, or plenty approved and none of it placed -- and the screen
+      // could not tell them apart.
+      schedWaitingCount: waitingForSlot.length,
+      schedHasWaiting: waitingForSlot.length > 0,
+      schedWaitingLabel: plural(waitingForSlot.length, 'clip') + ' approved, no slot yet',
+      schedWaiting: waitingForSlot.slice(0, 3).map(function (c) {
+        return {
+          title: String(c.title || 'Clip'),
+          // Into the next open slot: from the rail no day has been named, so
+          // none is claimed.
+          schedule: function (e) { stop(e); global.StudioAdapter.onScheduleClip(c.id); },
+        };
+      }),
+      schedWaitingMore: waitingForSlot.length > 3 ? '+' + (waitingForSlot.length - 3) + ' more' : '',
+      schedHasWaitingMore: waitingForSlot.length > 3,
+      schedNoWaiting: !waitingForSlot.length,
+
+      // Every card on this screen said "No channel on" and the rail never
+      // explained why. A schedule with nowhere to post is a list of intentions.
+      schedOutlets: providers.map(function (p) {
+        var live = p.connected && p.enabled;
+        return {
+          name: PLATFORM_NAMES[p.key],
+          note: !p.configured ? 'Not set up' : !p.connected ? 'Not connected' : !p.enabled ? 'Switched off' : 'Posting',
+          dotStyle: 'display: block; width: 7px; height: 7px; flex: none; border-radius: 50%; background: '
+            + (live ? '#7FD1A6' : p.connected ? '#E6B770' : '#4A4A54') + ';',
+          noteStyle: 'margin-left: auto; font-size: 11px; color: ' + (live ? '#8B8B93' : '#E0A188') + ';',
+          open: function (e) { stop(e); global.StudioAdapter.onOpenConnections(p.key); },
+        };
+      }),
+      schedNothingPosts: !providers.some(function (p) { return p.connected && p.enabled; }),
+
+      // Overdue stays first: a stranded post used to be counted by the rail
+      // badge and rendered by no day at all.
+      schedHasOverdue: Boolean(overdueRow),
+      schedOverdueLabel: overdueRow ? overdueRow.countLabel : '',
+      schedOverdueItems: overdueRow ? overdueRow.items : [],
 
       // ── Clip editor ──
       // Split by what the server can actually keep. Caption text, title,

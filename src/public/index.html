@@ -4499,7 +4499,18 @@ function renderStudio(){
     },'Template applied — re-rendering this clip');
     StudioAdapter.onPostNow=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}/publish`,{method:'POST'}),'Publishing started');
     StudioAdapter.onSendBack=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'waiting'})}),'Back in the review queue');
-    StudioAdapter.onScheduleClip=id=>studioDo(()=>api('/api/clips/schedule-selected',{method:'POST',body:JSON.stringify({ids:[id]})}),'Scheduled');
+    /* The day the button belongs to travels with the clip. The server puts it
+       in the first free posting time on that day -- and says where it landed,
+       because a full day rolls forward and silently doing so would leave the
+       calendar disagreeing with the press that filled it. */
+    StudioAdapter.onScheduleClip=(id,at)=>studioDo(async()=>{
+      const r=await api('/api/clips/schedule-selected',{method:'POST',body:JSON.stringify(at?{ids:[id],at}:{ids:[id]})});
+      const got=r&&r.results&&r.results[0]&&r.results[0].scheduledAt;
+      if(at&&got){
+        const asked=new Date(at).toDateString(), landed=new Date(got).toDateString();
+        if(asked!==landed)toast(`That day was full \u2014 scheduled for ${new Date(got).toLocaleDateString(undefined,{weekday:'long'})} instead.`);
+      }
+    },'Scheduled');
     StudioAdapter.onMoreClips=(projectId,count)=>studioDo(()=>api(`/api/projects/${encodeURIComponent(projectId)}/more-clips`,{method:'POST',body:JSON.stringify({count})}),'Cutting more clips');
     StudioAdapter.onSignOut=()=>studioDo(async()=>{await api('/auth/logout',{method:'POST'});location.href='/'});
     /* Caption text is the clip's transcript and is the one visual thing the

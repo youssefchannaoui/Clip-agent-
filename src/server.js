@@ -1184,7 +1184,10 @@ async function route(req, res, url) {
     const body = await readBody(req);
     try {
       for (const id of (Array.isArray(body.ids) ? body.ids : [])) assertCanAccessClip(currentUser, String(id));
-      const summary = agent.scheduleSelected(body.ids);
+      // Optional: the day the caller pressed. Anything unparsable or in the
+      // past falls back to the next open slot rather than failing the request.
+      const at = Number(body.at);
+      const summary = agent.scheduleSelected(body.ids, Number.isFinite(at) && at > 0 ? { at } : {});
       return json(res, 200, { ok: summary.failed === 0, ...summary });
     } catch (error) { return json(res, 400, { error: error.message }); }
   }

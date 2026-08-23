@@ -906,15 +906,30 @@
 
   <sc-if value="{{ isSchedule }}" hint-placeholder-val="{{ false }}">
     <div style="flex: 1; min-height: 0; overflow: auto; animation: dcScreen .24s cubic-bezier(.2,.8,.2,1);">
-      <div style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 18px; padding: 20px 40px 44px;">
-        <section style="flex: 1 1 480px; min-width: 0; display: flex; flex-direction: column; gap: 18px;">
-          <sc-for list="{{ scheduleDays }}" as="day" hint-placeholder-count="3">
-            <div style="display: flex; flex-direction: column; gap: 10px;">
-              <div style="display: flex; align-items: baseline; gap: 10px;">
-                <h2 style="margin: 0; font-family: Outfit, Inter, sans-serif; font-size: 14px; font-weight: 600; letter-spacing: -.02em;">{{ day.day }}</h2>
-                <span style="font-size: 11.5px; color: #6E6E76;">{{ day.countLabel }}</span>
-              </div>
-              <sc-for list="{{ day.items }}" as="post" hint-placeholder-count="3">
+      <div style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 18px; padding: 20px 40px 20px;">
+        <section style="flex: 1 1 620px; min-width: 0; display: flex; flex-direction: column; gap: 14px;">
+          <!-- One header for all three densities: which range you are looking
+               at, how to step through it, and how close in to look. -->
+          <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <button onClick="{{ schedPrev }}" title="Previous" style="display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #26262A; border-radius: 9px; background: #17171A; color: #8B8B93; cursor: pointer; transition: color .14s ease, border-color .14s ease;" style-hover="color: #F2F2F4; border-color: #3A3A42;"><i class="ph ph-caret-left" style="font-size: 14px;"></i></button>
+              <button onClick="{{ schedNext }}" title="Next" style="display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #26262A; border-radius: 9px; background: #17171A; color: #8B8B93; cursor: pointer; transition: color .14s ease, border-color .14s ease;" style-hover="color: #F2F2F4; border-color: #3A3A42;"><i class="ph ph-caret-right" style="font-size: 14px;"></i></button>
+            </div>
+            <h2 style="margin: 0; font-family: Outfit, Inter, sans-serif; font-size: 19px; font-weight: 600; letter-spacing: -.025em; color: #F6F6F8;">{{ schedRangeLabel }}</h2>
+            <sc-if value="{{ schedOffToday }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ schedToday }}" style="padding: 7px 13px; border: 1px solid #26262A; border-radius: 9px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 12.5px; cursor: pointer;" style-hover="color: #F2F2F4; border-color: #3A3A42;">Today</button>
+            </sc-if>
+            <span style="{{ segRail }} margin-left: auto;">
+              <sc-for list="{{ schedViewOpts }}" as="v" hint-placeholder-count="3">
+                <button onClick="{{ v.select }}" style="{{ v.style }}">{{ v.label }}</button>
+              </sc-for>
+            </span>
+          </div>
+
+          <sc-if value="{{ schedHasOverdue }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; gap: 8px; padding: 13px 15px; border: 1px solid rgba(214,138,110,.3); border-radius: 12px; background: rgba(214,138,110,.05);">
+              <span style="display: flex; align-items: center; gap: 8px; font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600; color: #E0A188;"><i class="ph ph-warning-circle" style="font-size: 15px;"></i>{{ schedOverdueLabel }}</span>
+              <sc-for list="{{ schedOverdueItems }}" as="post" hint-placeholder-count="1">
                 <article style="{{ post.cardStyle }}">
                   <span style="{{ post.thumbStyle }}"></span>
                   <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1;">
@@ -938,36 +953,170 @@
                   </div>
                 </article>
               </sc-for>
-              <sc-if value="{{ day.canAdd }}" hint-placeholder-val="{{ true }}">
-                <button onClick="{{ day.addClip }}" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 13px; border: 1px dashed #2C2C32; border-radius: 11px; background: transparent; color: #8B8B93; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: border-color .14s ease, color .14s ease;" style-hover="border-color: rgba(217,180,120,.4); color: #F0D6A6;"><i class="ph ph-plus" style="font-size: 14px;"></i>Schedule an approved clip</button>
+            </div>
+          </sc-if>
+
+          <!-- Month: the whole thing at once. Each day carries one pip per post
+               it can hold, so a heavy week reads before any number does. -->
+          <sc-if value="{{ schedIsMonth }}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px;">
+                <sc-for list="{{ schedWeekdays }}" as="w" hint-placeholder-count="7">
+                  <span style="padding: 0 8px 2px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #6E6E76;">{{ w.name }}</span>
+                </sc-for>
+              </div>
+              <sc-for list="{{ schedMonthWeeks }}" as="week" hint-placeholder-count="6">
+                <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px;">
+                  <sc-for list="{{ week.cells }}" as="cell" hint-placeholder-count="7">
+                    <button onClick="{{ cell.open }}" style="{{ cell.style }}" style-hover="border-color: #3A3A42;">
+                      <span style="display: flex; align-items: center; gap: 5px;">
+                        <span style="{{ cell.dateStyle }}">{{ cell.date }}</span>
+                        <span style="margin-left: auto; display: inline-flex; gap: 3px;">
+                          <sc-for list="{{ cell.pips }}" as="pip" hint-placeholder-count="4">
+                            <span style="{{ pip.style }}"></span>
+                          </sc-for>
+                        </span>
+                      </span>
+                      <sc-for list="{{ cell.chips }}" as="chip" hint-placeholder-count="1">
+                        <span style="{{ chip.style }}">{{ chip.label }}</span>
+                      </sc-for>
+                      <sc-if value="{{ cell.hasMore }}" hint-placeholder-val="{{ false }}">
+                        <span style="font-size: 10px; color: #6E6E76;">{{ cell.moreLabel }}</span>
+                      </sc-if>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <!-- Week: seven days beside each other, so a gap is visible as a gap. -->
+          <sc-if value="{{ schedIsWeek }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; gap: 8px; align-items: stretch;">
+              <sc-for list="{{ schedWeekCols }}" as="col" hint-placeholder-count="7">
+                <div style="{{ col.style }}">
+                  <span style="{{ col.headStyle }}">
+                    <strong style="font-family: Outfit, Inter, sans-serif; font-size: 12.5px; font-weight: 600;">{{ col.name }}</strong>
+                    <span style="font-size: 10.5px; opacity: .8;">{{ col.date }}</span>
+                  </span>
+                  <sc-for list="{{ col.items }}" as="item" hint-placeholder-count="1">
+                    <button onClick="{{ item.open }}" style="{{ item.style }}" style-hover="background: #22222A;">
+                      <span style="font-family: Outfit, Inter, sans-serif; font-size: 11px; font-weight: 600; color: #F0D6A6;">{{ item.time }}</span>
+                      <span style="font-size: 11px; line-height: 1.35; color: #BCBCC3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">{{ item.title }}</span>
+                    </button>
+                  </sc-for>
+                  <sc-if value="{{ col.canAdd }}" hint-placeholder-val="{{ true }}">
+                    <button onClick="{{ col.addClip }}" title="Schedule an approved clip" style="margin-top: auto; display: grid; place-items: center; height: 30px; border: 1px dashed #2C2C32; border-radius: 8px; background: transparent; color: #6E6E76; cursor: pointer; transition: border-color .14s ease, color .14s ease;" style-hover="border-color: rgba(217,180,120,.45); color: #F0D6A6;"><i class="ph ph-plus" style="font-size: 13px;"></i></button>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <!-- Day: one day in full, where the detail belongs. -->
+          <sc-if value="{{ schedIsDay }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <span style="font-size: 12px; color: #6E6E76;">{{ schedDayCount }}</span>
+              <sc-for list="{{ schedDayItems }}" as="post" hint-placeholder-count="2">
+                <article style="{{ post.cardStyle }}">
+                  <span style="{{ post.thumbStyle }}"></span>
+                  <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1;">
+                    <div style="display: flex; align-items: center; gap: 9px; flex-wrap: wrap;">
+                      <strong style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;">{{ post.time }}</strong>
+                      <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: #8B8B93;"><i class="{{ post.icon }}" style="font-size: 13px;"></i>{{ post.dest }}</span>
+                      <span style="{{ post.statusStyle }}">{{ post.statusLabel }}</span>
+                    </div>
+                    <p style="margin: 0; font-size: 12px; color: #E9E9ED; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ post.caption }}</p>
+                    <sc-if value="{{ post.hasFailing }}" hint-placeholder-val="{{ false }}">
+                      <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                        <sc-for list="{{ post.checks }}" as="chk" hint-placeholder-count="1">
+                          <span style="{{ chk.style }}"><i class="{{ chk.icon }}" style="font-size: 12px;"></i>{{ chk.label }} missing</span>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 7px; flex: none;">
+                    <button onClick="{{ post.postNow }}" style="{{ post.postStyle }}" style-hover="background: rgba(217,180,120,.14);"><i class="ph ph-paper-plane-tilt" style="font-size: 13px;"></i>{{ post.postLabel }}</button>
+                    <button onClick="{{ post.sendBack }}" title="Send back to review" style="display: grid; place-items: center; width: 29px; height: 28px; border: 1px solid #26262A; border-radius: 7px; background: #17171A; color: #8B8B93; cursor: pointer; transition: color .14s ease, border-color .14s ease;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-arrow-u-up-left" style="font-size: 14px;"></i></button>
+                  </div>
+                </article>
+              </sc-for>
+              <sc-if value="{{ schedDayEmpty }}" hint-placeholder-val="{{ false }}">
+                <span style="padding: 22px 0 6px; font-size: 12.5px; color: #6E6E76;">Nothing is scheduled for this day.</span>
+              </sc-if>
+              <sc-if value="{{ schedDayCanAdd }}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{ schedDayAdd }}" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 13px; border: 1px dashed #2C2C32; border-radius: 11px; background: transparent; color: #8B8B93; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: border-color .14s ease, color .14s ease;" style-hover="border-color: rgba(217,180,120,.4); color: #F0D6A6;"><i class="ph ph-plus" style="font-size: 14px;"></i>Schedule an approved clip</button>
               </sc-if>
             </div>
-          </sc-for>
+          </sc-if>
         </section>
 
-        <aside style="flex: 0 0 300px; max-width: 300px; min-width: 0; display: flex; flex-direction: column; gap: 14px;">
-          <section style="display: flex; flex-direction: column; gap: 10px; padding: 15px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
-            <span style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;">Daily limit</span>
-            <span style="font-size: 11.5px; color: #BCBCC3; line-height: 1.55;">Four posts a day, spread across your connected accounts. The worker will not queue a fifth — it holds the clip for the next open day.</span>
-            <div style="display: flex; gap: 5px; margin-top: 2px;">
-              <span style="flex: 1; height: 5px; border-radius: 20px; background: linear-gradient(90deg, #D9B478, #F0D6A6);"></span>
-              <span style="flex: 1; height: 5px; border-radius: 20px; background: linear-gradient(90deg, #D9B478, #F0D6A6);"></span>
-              <span style="flex: 1; height: 5px; border-radius: 20px; background: linear-gradient(90deg, #D9B478, #F0D6A6);"></span>
-              <span style="flex: 1; height: 5px; border-radius: 20px; background: linear-gradient(90deg, #D9B478, #F0D6A6);"></span>
+        <aside style="flex: 0 0 300px; max-width: 300px; min-width: 0; display: flex; flex-direction: column; gap: 10px;">
+          <!-- What is going out next. The screen showed every post and never
+               answered the one question you open it with. -->
+          <section style="display: flex; flex-direction: column; gap: 9px; padding: 13px 14px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
+            <span style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;">Today</span>
+            <div style="display: flex; gap: 5px;">
+              <sc-for list="{{ schedMeter }}" as="pip" hint-placeholder-count="4">
+                <span style="{{ pip.style }}"></span>
+              </sc-for>
             </div>
-            <span style="font-size: 11px; color: #6E6E76;">Today is full — 4 of 4. Nothing posts unless its four checks pass.</span>
+            <span style="font-size: 11.5px; color: #BCBCC3; line-height: 1.55;">{{ dailyLimitNote }}</span>
+            <sc-if value="{{ schedHasNext }}" hint-placeholder-val="{{ true }}">
+              <span style="display: block; height: 1px; margin: 3px 0 1px; background: #1E1E22;"></span>
+              <span style="display: flex; align-items: baseline; gap: 7px;">
+                <span style="font-size: 11.5px; color: #8B8B93;">Next out</span>
+                <strong style="font-family: Outfit, Inter, sans-serif; font-size: 14px; font-weight: 600; color: #F0D6A6;">{{ schedNextIn }}</strong>
+              </span>
+              <span style="font-size: 11.5px; color: #E9E9ED; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ schedNextTitle }}</span>
+              <span style="font-size: 11px; color: #6E6E76;">{{ schedNextAt }}</span>
+            </sc-if>
           </section>
 
+          
 
+          <!-- The supply. An empty calendar has two very different causes and
+               nothing here could tell them apart. -->
+          <section style="display: flex; flex-direction: column; gap: 9px; padding: 13px 14px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
+            <span style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;">Ready to schedule</span>
+            <sc-if value="{{ schedHasWaiting }}" hint-placeholder-val="{{ true }}">
+              <span style="font-size: 11.5px; color: #BCBCC3;">{{ schedWaitingLabel }}</span>
+              <sc-for list="{{ schedWaiting }}" as="w" hint-placeholder-count="3">
+                <span style="display: flex; align-items: center; gap: 9px;">
+                  <span style="font-size: 12px; color: #E9E9ED; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ w.title }}</span>
+                  <button onClick="{{ w.schedule }}" title="Put it in the next open slot" style="margin-left: auto; flex: none; padding: 5px 10px; border: 1px solid #26262A; border-radius: 8px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 11.5px; cursor: pointer; transition: color .14s ease, border-color .14s ease;" style-hover="color: #F0D6A6; border-color: rgba(217,180,120,.45);">Slot it</button>
+                </span>
+              </sc-for>
+              <sc-if value="{{ schedHasWaitingMore }}" hint-placeholder-val="{{ false }}">
+                <span style="font-size: 11px; color: #6E6E76;">{{ schedWaitingMore }}</span>
+              </sc-if>
+            </sc-if>
+            <sc-if value="{{ schedNoWaiting }}" hint-placeholder-val="{{ false }}">
+              <span style="font-size: 11.5px; color: #6E6E76; line-height: 1.55;">Nothing is approved and waiting. Approve a clip in the review queue and it turns up here.</span>
+            </sc-if>
+          </section>
 
-          <section style="display: flex; flex-direction: column; gap: 10px; padding: 15px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
+          <!-- Every card on this screen can read "No channel on" while the rail
+               says nothing about why. -->
+          <section style="display: flex; flex-direction: column; gap: 9px; padding: 13px 14px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
+            <span style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;">Where it posts</span>
+            <sc-if value="{{ schedNothingPosts }}" hint-placeholder-val="{{ false }}">
+              <span style="display: flex; align-items: flex-start; gap: 8px; font-size: 11.5px; line-height: 1.5; color: #E0A188;"><i class="ph ph-warning-circle" style="font-size: 14px; margin-top: 1px;"></i>Nothing posts yet — no account is switched on. Clips will sit in their slots.</span>
+            </sc-if>
+            <sc-for list="{{ schedOutlets }}" as="o" hint-placeholder-count="4">
+              <button onClick="{{ o.open }}" style="display: flex; align-items: center; gap: 9px; padding: 0; border: 0; background: none; font-family: inherit; font-size: 12px; color: #BCBCC3; cursor: pointer; text-align: left;" style-hover="color: #F2F2F4;">
+                <span style="{{ o.dotStyle }}"></span>{{ o.name }}<span style="{{ o.noteStyle }}">{{ o.note }}</span>
+              </button>
+            </sc-for>
+          </section>
+
+          <section style="display: flex; flex-direction: column; gap: 9px; padding: 13px 14px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
             <div style="display: flex; align-items: center; gap: 8px;">
               <span style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;">Posting windows</span>
               <a href="#" onClick="{{ editWindows }}" style="margin-left: auto; font-size: 11px;">Edit</a>
             </div>
-            <span style="display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: #BCBCC3;"><i class="ph ph-sun-horizon" style="font-size: 14px; color: #6E6E76;"></i>Midday<strong style="margin-left: auto; font-weight: 500; color: #E9E9ED;">13:00–15:00</strong></span>
-            <span style="display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: #BCBCC3;"><i class="ph ph-cloud-sun" style="font-size: 14px; color: #6E6E76;"></i>Evening<strong style="margin-left: auto; font-weight: 500; color: #E9E9ED;">18:00–19:30</strong></span>
-            <span style="display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: #BCBCC3;"><i class="ph ph-moon" style="font-size: 14px; color: #6E6E76;"></i>Late<strong style="margin-left: auto; font-weight: 500; color: #E9E9ED;">21:00–23:00</strong></span>
+            <!-- Four rows with an icon each said one thing: the times. -->
+            <span style="font-family: Outfit, Inter, sans-serif; font-size: 13px; color: #E9E9ED; letter-spacing: -.01em;">{{ postWindow1 }} · {{ postWindow2 }} · {{ postWindow3 }}</span>
           </section>
         </aside>
       </div>

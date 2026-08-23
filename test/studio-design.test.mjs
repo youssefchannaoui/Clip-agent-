@@ -650,7 +650,9 @@ test('connected is not the same as switched on', () => {
 
 test('Post now unblocks once a connected channel is switched on', () => {
   // The reported symptom, exactly: YouTube connected, every scheduled row
-  // reading "No channel on".
+  // reading "No channel on". Anchored on the clip's own day, so an hour from
+  // now still shows late in the evening.
+  Object.assign(StudioAdapter.ui, { screen: 'schedule', schedAnchor: new Date(Date.now() + 3600000).setHours(0, 0, 0, 0) });
   const scheduled = on => ({
     social: { providers: { youtube: { configured: true, connected: true, accounts: [{ id: 'y1', name: 'DeenClipped' }] } } },
     publishingSettings: { enabled: on, youtube: { enabled: on } },
@@ -1251,18 +1253,58 @@ test('a clip scheduled in the past gets its own row instead of vanishing', () =>
     projects: [], tracks: [],
     clips: [{ id: 'a', title: 'Stranded', status: 'ready', scheduledAt: Date.now() - 3 * 86400000, targets: [{ provider: 'youtube', status: 'scheduled' }], musicVerified: true, renderVerified: true, templateId: 't', transcript: 'x' }],
   });
-  assert.equal(vals.scheduleDays[0].day, 'Overdue');
-  assert.match(vals.scheduleDays[0].countLabel, /missed its slot/);
-  assert.equal(vals.scheduleDays[0].items[0].caption, 'Stranded');
+  assert.equal(vals.schedHasOverdue, true);
+  assert.match(vals.schedOverdueLabel, /missed its slot/);
+  assert.equal(vals.schedOverdueItems[0].caption, 'Stranded');
+});
+
+// The rail drew four full gold bars in the markup whatever the day held, and
+// sat directly above the sentence counting the day. It read "2 of 4 scheduled
+// today" over a meter showing four of four.
+test('the daily meter fills to the number of posts actually scheduled today', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'schedule', schedAnchor: null });
+  const at = (h) => { const d = new Date(); d.setHours(h, 0, 0, 0); return d.getTime(); };
+  const filled = vals => vals.schedMeter.filter(p => /linear-gradient/.test(p.style)).length;
+  const two = StudioAdapter.bindings({
+    projects: [], tracks: [],
+    clips: [
+      { id: 'a', title: 'One', status: 'scheduled', scheduledAt: at(7), targets: [{ provider: 'youtube' }], musicVerified: true, renderVerified: true, templateId: 't', transcript: 'x' },
+      { id: 'b', title: 'Two', status: 'scheduled', scheduledAt: at(12), targets: [{ provider: 'youtube' }], musicVerified: true, renderVerified: true, templateId: 't', transcript: 'x' },
+    ],
+  });
+  assert.equal(two.schedMeter.length, 4, 'one bar per post the day can hold');
+  assert.equal(filled(two), 2, 'two scheduled, two bars');
+  assert.match(two.dailyLimitNote, /^2 of 4 scheduled today/, 'and the sentence agrees with the meter');
+
+  const none = StudioAdapter.bindings({ projects: [], tracks: [], clips: [] });
+  assert.equal(filled(none), 0, 'an empty day fills nothing');
+});
+
+// A schedule with nowhere to post is a list of intentions, and every card can
+// read "No channel on" while the rail explains nothing.
+test('the rail says when nothing can post, and stops saying it once a channel is on', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'schedule' });
+  const withPublishing = on => StudioAdapter.bindings({
+    projects: [], tracks: [], clips: [],
+    social: { providers: { youtube: { configured: true, connected: true, accounts: [{ id: 'y', name: 'D' }] } } },
+    publishingSettings: { enabled: on, youtube: { enabled: on } },
+    directPublishingEnabled: true,
+  });
+  assert.equal(withPublishing(false).schedNothingPosts, true);
+  assert.equal(withPublishing(true).schedNothingPosts, false);
+  const yt = withPublishing(true).schedOutlets.find(o => o.name === 'YouTube');
+  assert.equal(yt.note, 'Posting');
+  assert.match(yt.dotStyle, /#7FD1A6/, 'green only when it will actually post');
 });
 
 test('Post now is gated on the four checks', () => {
-  Object.assign(StudioAdapter.ui, { screen: 'schedule' });
+  const at = Date.now() + 3600e3;
+  Object.assign(StudioAdapter.ui, { screen: 'schedule', schedAnchor: new Date(at).setHours(0, 0, 0, 0) });
   const unverified = StudioAdapter.bindings({
     projects: [], tracks: [],
-    clips: [{ id: 'a', title: 'Not ready', status: 'scheduled', scheduledAt: Date.now() + 3600e3, targets: [{ provider: 'youtube' }], musicVerified: false, renderVerified: true, templateId: 't', transcript: 'x' }],
+    clips: [{ id: 'a', title: 'Not ready', status: 'scheduled', scheduledAt: at, targets: [{ provider: 'youtube' }], musicVerified: false, renderVerified: true, templateId: 't', transcript: 'x' }],
   });
-  const item = unverified.scheduleDays.flatMap(d => d.items)[0];
+  const item = unverified.schedDayItems[0];
   assert.equal(item.postLabel, 'Fix first');
   assert.equal(item.hasFailing, true);
   assert.match(item.statusLabel, /failing/);
@@ -1487,14 +1529,15 @@ test('a clip shortfall is explained rather than left as a silent gap', () => {
 });
 
 test('Post now says why it is unavailable instead of doing nothing', () => {
-  Object.assign(StudioAdapter.ui, { screen: 'schedule' });
-  const clip = { id: 'a', title: 'C', status: 'scheduled', scheduledAt: Date.now() + 3600e3, targets: [{ provider: 'youtube' }], musicVerified: true, renderVerified: true, templateId: 't', transcript: 'x' };
+  const postAt = Date.now() + 3600e3;
+  Object.assign(StudioAdapter.ui, { screen: 'schedule', schedAnchor: new Date(postAt).setHours(0, 0, 0, 0) });
+  const clip = { id: 'a', title: 'C', status: 'scheduled', scheduledAt: postAt, targets: [{ provider: 'youtube' }], musicVerified: true, renderVerified: true, templateId: 't', transcript: 'x' };
   const base = {
     projects: [], tracks: [], clips: [clip],
     social: { providers: { youtube: { configured: true, connected: true, accounts: [{ id: 'a', name: 'A' }] } } },
     publishingSettings: { youtube: { enabled: true } },
   };
-  const label = data => StudioAdapter.bindings(data).scheduleDays.flatMap(d => d.items)[0].postLabel;
+  const label = data => StudioAdapter.bindings(data).schedDayItems[0].postLabel;
   assert.equal(label({ ...base, directPublishingEnabled: true }), 'Post now');
   assert.equal(label({ ...base, directPublishingEnabled: false }), 'Publishing off');
   assert.equal(label({ ...base, directPublishingEnabled: true, publishingSettings: {} }), 'No channel on');

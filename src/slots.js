@@ -32,6 +32,21 @@ function localToday(timeZone, from = new Date()) {
 }
 
 /**
+ * Midnight, in the configured zone, of the day the given instant falls on.
+ *
+ * The schedule screen asks for a DAY, not a moment. Taken literally, "the 2nd"
+ * arrived as whatever o'clock it happened to be in the browser, and every
+ * posting time earlier in that day was already behind it -- so asking for a day
+ * reliably landed the clip on the day after. It also removes the browser's
+ * timezone from the answer: the account's zone decides which day is which.
+ */
+export function startOfZonedDay(ms) {
+  const tz = config.timezone;
+  const { y, m, d } = localToday(tz, new Date(ms));
+  return wallToInstant(y, m, d, 0, 0, tz);
+}
+
+/**
  * Next free posting slot, skipping any already taken and anything too soon.
  * `taken` is a list of ms timestamps already spoken for.
  */
