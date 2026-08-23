@@ -19,6 +19,7 @@ import * as backgrounds from './backgrounds.js';
 import { wordsForClip, silenceSpans } from './captions.js';
 import * as agent from './agent.js';
 import * as backup from './backup.js';
+import * as alerts from './alerts.js';
 import { fallbackThumb } from './local-engine.js';
 import * as social from './social.js';
 import { formatLocal } from './slots.js';
@@ -1815,6 +1816,21 @@ server.listen(config.port, () => {
   // same reason as the sweep below: importing this module in a test must not
   // ship a real state file to a real bucket.
   backup.start();
+  // Nothing ever told anyone the worker had stopped answering. Every render
+  // fails while the product looks fine, and the first report is a customer's.
+  if (config.processingMode === 'remote') {
+    const checkWorker = async () => {
+      try {
+        await workerClient.readiness();
+        await alerts.report('worker', false);
+      } catch (error) {
+        await alerts.report('worker', true, `The render worker is not answering: ${error.message}\nNothing can be transcribed or rendered until it is back.`);
+      }
+    };
+    const workerTimer = setInterval(() => { checkWorker().catch(() => {}); }, 5 * 60_000);
+    workerTimer.unref?.();
+    checkWorker().catch(() => {});
+  }
   // YouTube API Data is cleared after 30 days (policy III.E.4.a-g). Started
   // here rather than on import so a test that loads this module does not sweep
   // a real state file as a side effect.

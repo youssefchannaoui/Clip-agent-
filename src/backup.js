@@ -2,6 +2,7 @@ import { config } from './config.js';
 import * as storage from './object-storage.js';
 import * as secretBox from './secret-box.js';
 import { state, log } from './store.js';
+import * as alerts from './alerts.js';
 
 /**
  * Off-box backups of state.json.
@@ -93,11 +94,14 @@ export async function runBackup() {
       detail: `${accounts} account(s), ${clips} clip(s), ${(payload.length / 1024).toFixed(0)}KB, verified by reading it back`,
       keys,
     };
+    await alerts.report('backups', false);
     return last;
   } catch (error) {
     last = { at: Date.now(), ok: false, detail: error.message };
     // Loud, because a silent backup failure is the same as no backup at all.
-    log(`Backup failed: ${error.message}`, 'error');
+    // Backups fail quietly by nature: nothing about the running product looks
+    // different until the day someone needs one.
+    await alerts.report('backups', true, `Backups have stopped working: ${error.message}`);
     return last;
   }
 }
