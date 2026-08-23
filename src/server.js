@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { config, productionConfigurationErrors } from './config.js';
+import { config, productionConfigurationErrors, fatalConfigurationErrors } from './config.js';
 import {
   state, save, log, logFor, clipSettings, setClipSettings, musicSettings, setMusicSettings,
   automationSettings, setAutomationSettings, publishingSettings, setPublishingSettings,
@@ -90,6 +90,20 @@ function clientIp(req) {
 }
 
 /** A refused attempt says how long to wait, and nothing about the account. */
+/**
+ * Work costs real money -- worker time, storage, egress -- so it waits for a
+ * confirmed address. Only where email can actually be sent: on a deployment
+ * with no provider configured every account counts as verified and nothing
+ * changes, because refusing there would refuse everyone forever.
+ */
+function assertVerified(user) {
+  if (auth.isVerified(user)) return;
+  const error = new Error('Confirm your email address first — we sent you a link. Check your inbox, including spam.');
+  error.statusCode = 403;
+  error.needsVerification = true;
+  throw error;
+}
+
 function tooManyAttempts(res, retryAfterSec, returnTo) {
   res.setHeader('Retry-After', String(Math.max(1, retryAfterSec)));
   const wait = retryAfterSec >= 60
@@ -589,6 +603,8 @@ async function route(req, res, url) {
     try {
       const user = await auth.emailLogin(body.email || '', body.password || '', body.name || '');
       throttle.succeed(keys);
+      // Fire and forget: a provider outage must not stop someone signing in.
+      if (!known) auth.sendVerification(user, config.publicBaseUrl || `https://${req.headers.host || ''}`).catch(() => {});
       const session = auth.createSession(user, { provider: 'email' });
       return redirectWithCookies(res, billing.postLoginRedirect(user, body.returnTo || '/app'), auth.cookieHeaders(session));
     } catch (error) {
@@ -612,6 +628,23 @@ async function route(req, res, url) {
       throttle.fail(keys);
       return redirect(res, `/login?error=${encodeURIComponent(error.message)}`);
     }
+  }
+  if (method === 'GET' && pathname === '/auth/verify') {
+    const confirmed = auth.consumeVerification(url.searchParams.get('token') || '');
+    if (!confirmed) {
+      return redirect(res, `/login?error=${encodeURIComponent('That confirmation link has expired or has already been used. Sign in and we will send another.')}`);
+    }
+    // Signed straight in: the link proves the address, and asking someone to
+    // type a password immediately after proving it is friction for nothing.
+    const session = auth.createSession(confirmed, { provider: 'email' });
+    return redirectWithCookies(res, billing.postLoginRedirect(confirmed, '/app'), auth.cookieHeaders(session));
+  }
+  if (method === 'POST' && pathname === '/auth/resend-verification') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in first.' });
+    const gate = throttle.rateLimit(`verify:${currentUser.id}`, 5, 60 * 60_000);
+    if (!gate.allowed) return json(res, 429, { error: 'Another confirmation was sent recently. Check your inbox, including spam.' });
+    const sent = await auth.sendVerification(currentUser, config.publicBaseUrl || `https://${req.headers.host || ''}`);
+    return json(res, 200, { ok: true, sent });
   }
   if (method === 'POST' && pathname === '/auth/logout') {
     auth.destroySession(req);
@@ -896,6 +929,7 @@ async function route(req, res, url) {
     const body = await readBody(req);
     if (body.objectKey) {
       try {
+        assertVerified(currentUser);
         const objectKey = assertStorageObjectKey(body.objectKey);
         // The key shape is checked above; this checks it is *this* account's
         // upload, so one tenant cannot submit another tenant's file.
@@ -917,6 +951,8 @@ async function route(req, res, url) {
     }
     const urls = String(body.urls || '').split(/[\n,]+/).map(value => value.trim()).filter(Boolean);
     if (!urls.length) return json(res, 400, { error: 'Paste at least one video link.' });
+    try { assertVerified(currentUser); }
+    catch (error) { return json(res, error.statusCode || 403, { error: error.message, needsVerification: true }); }
     const sourceStartSeconds = Math.max(0, Math.round(Number(body.sourceStartSeconds || 0)));
     const sourceEndRaw = Number(body.sourceEndSeconds);
     const sourceEndSeconds = Number.isFinite(sourceEndRaw) && sourceEndRaw > sourceStartSeconds ? Math.round(sourceEndRaw) : null;
@@ -1712,6 +1748,16 @@ export const server = http.createServer((req, res) => {
   }
   route(req, res, url).catch(error => { console.error(error); if (!res.headersSent) json(res, 500, { error: error.message || 'Unexpected server error.' }); });
 });
+// Checked before the socket opens. A deployment that cannot be served safely
+// must not be served at all -- previously these only turned /readyz red while
+// the instance carried on answering customers.
+const fatal = fatalConfigurationErrors();
+if (fatal.length) {
+  for (const problem of fatal) console.error(`[fatal] ${problem}`);
+  console.error('[fatal] Fix the environment and redeploy. See SECRET-ROTATION.md.');
+  process.exit(1);
+}
+
 server.listen(config.port, () => {
   console.log(`DeenClipped self-hosted engine listening on http://localhost:${config.port}`);
   agent.start();

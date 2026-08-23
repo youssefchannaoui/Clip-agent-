@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import * as mailer from './mailer.js';
 import { config } from './config.js';
 import { state, save, log } from './store.js';
 import { canAccess as ownsRecord } from './tenancy.js';
@@ -257,6 +258,67 @@ export async function passwordLogin(password) {
   return user;
 }
 
+
+const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Address verification.
+ *
+ * Only meaningful where email can actually be sent: `required()` is false on a
+ * deployment with no provider configured, and every account there counts as
+ * verified, exactly as before. A provider signing in through Google or Apple
+ * is already proof of the address, so those accounts are verified on arrival.
+ */
+export function verificationRequired() {
+  return mailer.configured();
+}
+
+export function isVerified(user) {
+  if (!user) return false;
+  if (!verificationRequired()) return true;
+  if (user.emailVerifiedAt) return true;
+  // A provider that verified the address counts; a password does not.
+  return Object.keys(user.providers || {}).some(key => key === 'google' || key === 'apple');
+}
+
+/** A fresh single-use token. Stored as a hash, like sessions. */
+export function createVerification(user) {
+  ensureAuthState();
+  if (!Array.isArray(state.authVerifications)) state.authVerifications = [];
+  const raw = token(24);
+  state.authVerifications = state.authVerifications
+    .filter(item => item.userId !== user.id && Number(item.expiresAt || 0) > now());
+  state.authVerifications.push({
+    userId: user.id, hash: sha256(raw), createdAt: now(), expiresAt: now() + VERIFY_TTL_MS,
+  });
+  save();
+  return raw;
+}
+
+/** Consume a token. Returns the user, or null. Single use by deletion. */
+export function consumeVerification(raw) {
+  ensureAuthState();
+  const hash = sha256(String(raw || ''));
+  const found = (state.authVerifications || []).find(item => item.hash === hash && Number(item.expiresAt || 0) > now());
+  if (!found) return null;
+  state.authVerifications = (state.authVerifications || []).filter(item => item.hash !== hash);
+  const user = (state.authUsers || []).find(item => item.id === found.userId);
+  if (!user) { save(); return null; }
+  user.emailVerifiedAt = now();
+  user.updatedAt = now();
+  save();
+  log(`${user.email || user.id} confirmed their email address.`, 'info', user.id);
+  return user;
+}
+
+/** Send (or re-send) the confirmation. Never throws at the caller. */
+export async function sendVerification(user, baseUrlValue) {
+  if (!verificationRequired() || !user?.email || isVerified(user)) return false;
+  const raw = createVerification(user);
+  const link = `${String(baseUrlValue || config.publicBaseUrl || '').replace(/\/+$/, '')}/auth/verify?token=${encodeURIComponent(raw)}`;
+  const message = mailer.verificationMessage(link);
+  return mailer.send({ to: user.email, ...message });
+}
 
 /** Whether this address already has an account, without creating one. */
 export function accountExists(email) {

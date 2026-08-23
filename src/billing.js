@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import * as auth from './auth.js';
 import { config } from './config.js';
 import { state, save, log } from './store.js';
 
@@ -264,6 +265,10 @@ export function publicBilling(user) {
       'Purchased top-up tokens do not expire when a subscription renews',
     ],
     proFeatures: PRO_FEATURES,
+    // The dashboard needs to distinguish "no tokens" from "address not
+    // confirmed yet" -- they are refused the same way and mean different things.
+    emailVerificationRequired: auth.verificationRequired(),
+    emailVerified: auth.isVerified(user),
     freeIncludes: FREE_INCLUDES,
     current: {
       plan: currentPlan,

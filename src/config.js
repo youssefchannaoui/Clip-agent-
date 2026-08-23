@@ -91,6 +91,12 @@ export const config = {
   // anyone. Turning it off is now something you have to say out loud.
   authRequired: boolean(process.env.AUTH_REQUIRED, true),
   emailSigninEnabled: boolean(process.env.EMAIL_SIGNIN_ENABLED, true),
+  // Transactional email. Without a key and a from-address nothing is sent and
+  // address verification stays off, so an unconfigured deployment behaves
+  // exactly as it did rather than locking its owner out waiting for a mail.
+  emailProvider: (process.env.EMAIL_PROVIDER || 'resend').toLowerCase(),
+  emailApiKey: process.env.EMAIL_API_KEY || '',
+  emailFrom: process.env.EMAIL_FROM || '',
   sessionSecret: process.env.APP_SESSION_SECRET || process.env.SOCIAL_TOKEN_KEY || process.env.APP_PASSWORD || 'dev-session-secret-change-me',
   adminEmail: process.env.ADMIN_EMAIL || 'admin@deenclipped.local',
   // Accounts that get operator (admin) access when they sign in, whatever
@@ -194,6 +200,33 @@ for (const dir of [
   path.join(config.dataDir, 'music'),
 ]) {
   fs.mkdirSync(dir, { recursive: true });
+}
+
+/**
+ * The subset that means "this deployment is not safe to serve", as opposed to
+ * "this deployment is missing a feature". These stop the process; the rest only
+ * fail /readyz.
+ *
+ * The session-secret fallback chain reaches APP_PASSWORD, which was four
+ * characters on a public domain -- and the startup warning only ever caught the
+ * literal dev default, so a short real value passed in silence and cookies
+ * signed with it could be forged instantly. A misconfigured instance used to
+ * keep answering while its health check went red.
+ */
+export function fatalConfigurationErrors() {
+  const errors = [];
+  const live = config.publicBaseUrl.startsWith('https://');
+  if (!live) return errors;
+  if (!config.sessionSecret || config.sessionSecret === 'dev-session-secret-change-me' || config.sessionSecret.length < 32) {
+    errors.push('APP_SESSION_SECRET must be set to at least 32 random characters. Refusing to start: sessions signed with a short secret can be forged.');
+  }
+  if (!config.authRequired) {
+    errors.push('AUTH_REQUIRED is off on a public deployment. Refusing to start: this would serve the owner account to anyone.');
+  }
+  if (config.password && config.password.length < 12) {
+    errors.push('APP_PASSWORD is shorter than 12 characters. Refusing to start: it is a live credential on a public domain.');
+  }
+  return errors;
 }
 
 export function productionConfigurationErrors() {

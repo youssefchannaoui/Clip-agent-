@@ -14,7 +14,11 @@ const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deenclipped-headers-'));
 const port = 39900 + Math.floor(Math.random() * 90);
 process.env.DATA_DIR = dataDir;
 process.env.PORT = String(port);
-process.env.AUTH_REQUIRED = 'false';
+// A public https base URL is what makes HSTS apply -- and the server now
+// refuses to start on one with authentication off or a weak session secret,
+// so this has to be a configuration that would really be safe to serve.
+process.env.AUTH_REQUIRED = 'true';
+process.env.APP_SESSION_SECRET = 'headers-test-secret-long-enough-to-be-accepted';
 process.env.PUBLIC_BASE_URL = 'https://deenclipped.online';
 
 const base = `http://127.0.0.1:${port}`;
@@ -75,8 +79,35 @@ test('no served HTML carries an inline event handler', () => {
 });
 
 test('an API response is never stored by a shared cache', async () => {
+  // Headers are set before routing, so this holds whatever the route answers --
+  // including the 401 an unauthenticated call gets.
   const res = await fetch(`${base}/api/state`);
   assert.match(res.headers.get('cache-control') || '', /no-store/);
+});
+
+test('the server refuses to serve a configuration that is not safe', async () => {
+  const { fatalConfigurationErrors, config } = await import('../src/config.js');
+  const original = { secret: config.sessionSecret, auth: config.authRequired, password: config.password };
+  try {
+    // A short secret reachable through the APP_PASSWORD fallback: cookies
+    // signed with it can be forged, and the old startup warning only ever
+    // caught the literal dev default, so this passed in silence.
+    config.sessionSecret = 'Yc12';
+    assert.match(fatalConfigurationErrors().join(' '), /APP_SESSION_SECRET/);
+
+    config.sessionSecret = original.secret;
+    config.authRequired = false;
+    assert.match(fatalConfigurationErrors().join(' '), /AUTH_REQUIRED/);
+
+    config.authRequired = true;
+    config.password = 'short';
+    assert.match(fatalConfigurationErrors().join(' '), /APP_PASSWORD/);
+
+    config.password = original.password;
+    assert.deepEqual(fatalConfigurationErrors(), [], 'a sound configuration starts');
+  } finally {
+    Object.assign(config, { sessionSecret: original.secret, authRequired: original.auth, password: original.password });
+  }
 });
 
 test('a body over the cap is refused with a reason, not a 500', async () => {
