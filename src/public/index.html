@@ -4120,7 +4120,11 @@ function studioWanted(){return window.STUDIO_SHELL===true}
                 await new Promise((resolve,reject)=>{
                   const x=new XMLHttpRequest();
                   x.open('PUT',presign.uploadUrl);
-                  const hdrs=presign.headers||{'Content-Type':meta.mimeType};
+                  /* The type is the SIGNED one the server derived from the extension, not
+                     one the browser guessed. content-type is part of the signature, so a
+                     file the OS reports no type for used to send 'video/mp4' against a URL
+                     signed for video/x-matroska and fail at the bucket. */
+                  const hdrs={'Content-Type':presign.contentType||meta.mimeType};
                   for(const k of Object.keys(hdrs))x.setRequestHeader(k,hdrs[k]);
                   x.upload.onprogress=ev=>{if(ev.lengthComputable)uploadBtn.textContent='Uploading '+Math.round(ev.loaded/ev.total*100)+'%'};
                   x.onload=()=>x.status>=200&&x.status<300?resolve():reject(new Error('Upload failed \u2014 the storage service rejected the file.'));
@@ -4638,7 +4642,7 @@ function renderStudio(){
         throw new Error('Upload a nasheed first — every clip mixes one in, so a lecture cannot finish processing without at least one.');
       }
       const presign=await api('/api/uploads/presign',{method:'POST',body:JSON.stringify({fileName:file.name,size:file.size})});
-      const put=await fetch(presign.uploadUrl,{method:'PUT',headers:presign.headers||{'Content-Type':file.type||'video/mp4'},body:file});
+      const put=await fetch(presign.uploadUrl,{method:'PUT',headers:{'Content-Type':presign.contentType||file.type||'video/mp4'},body:file});
       if(!put.ok)throw new Error('Upload failed — the storage service rejected the file.');
       await api('/api/videos',{method:'POST',body:JSON.stringify({objectKey:presignKey(presign),fileName:file.name,title:file.name,
         templateId:StudioAdapter.ui.jobTplId||'',
