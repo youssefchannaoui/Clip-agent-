@@ -581,15 +581,20 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 
 .clip-main{display:flex;gap:16px;align-items:flex-start}
 .clip-content{flex:1;min-width:0}
-.lb-row{display:flex;gap:26px;flex-wrap:wrap;max-width:740px}
-.lb{flex:1 1 0;min-width:96px;display:flex;flex-direction:column;gap:10px;padding:0;border:0;background:none;text-align:left;cursor:pointer}
-.lb-t{font:400 14px Outfit,Inter,sans-serif;color:#8B8B93;transition:color .18s ease,font-weight .18s ease}
+.lb-row{display:flex;gap:12px;flex-wrap:wrap;max-width:800px}
+.lb{position:relative;flex:1 1 0;min-width:112px;display:flex;flex-direction:column;gap:11px;padding:13px 14px 14px;border:1px solid transparent;border-radius:11px;background:#151519;text-align:left;cursor:pointer;transition:background .16s ease,border-color .16s ease}
+.lb:hover{background:#1B1B21}
+.lb:focus-visible{outline:2px solid rgba(240,214,166,.6);outline-offset:2px}
+.lb.on{background:#1B1B21;border-color:rgba(240,214,166,.4)}
+.lb-t{font:400 14px Outfit,Inter,sans-serif;color:#9A9AA2;transition:color .18s ease}
 .lb.on .lb-t{color:#F6F6F8;font-weight:600}
-.lb-track{position:relative;display:block;height:3px;border-radius:3px;background:#1D1D22}
-.lb-fill{position:absolute;top:0;bottom:0;border-radius:3px;background:#33333B;transform-origin:left center;animation:lbGrow .42s cubic-bezier(.2,.75,.3,1) both;transition:background .18s ease}
+.lb:not(.on):hover .lb-t{color:#D2D2D8}
+.lb-track{position:relative;display:block;height:4px;border-radius:4px;background:#232329}
+.lb-fill{position:absolute;top:0;bottom:0;border-radius:4px;background:#3A3A44;transform-origin:left center;animation:lbGrow .42s cubic-bezier(.2,.75,.3,1) both;transition:background .18s ease}
 .lb.on .lb-fill{background:linear-gradient(90deg,#C9A468,#F0D6A6)}
-.lb:not(.on):hover .lb-t{color:#BCBCC3}
-.lb:not(.on):hover .lb-fill{background:#4A4A54}
+.lb:not(.on):hover .lb-fill{background:#50505C}
+.lb-k{position:absolute;top:12px;right:13px;font:700 11px Outfit,Inter,sans-serif;color:#F0D6A6;opacity:0;transform:scale(.7);transition:opacity .16s ease,transform .16s ease}
+.lb.on .lb-k{opacity:1;transform:none}
 @keyframes lbGrow{from{transform:scaleX(0)}to{transform:none}}
 @media (prefers-reduced-motion: reduce){.lb-fill{animation:none}}
 .bgt-row{display:flex;gap:12px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
@@ -2955,6 +2960,79 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       StudioAdapter.ui.playerClip=hit;
       paintStudio();
     },true);
+    /* The player modal's transport was drawn, not built: a static play glyph,
+       a bar hardcoded to 22%, and the literal text "09:14 / 42:11" straight
+       out of the mockup, sitting under a real <video>. It moved for nobody and
+       agreed with nothing. Wired to the element it sits under -- and the
+       native bar goes away, because two transports over one video is worse
+       than the fake one was. Mute stays reachable; it is the only thing the
+       native controls offered that this row did not. */
+    const mmss=t=>{const n=Math.max(0,Math.floor(Number(t)||0));return Math.floor(n/60)+':'+String(n%60).padStart(2,'0')};
+    function wireClipTransport(frame){
+      const video=playerVideoNode;
+      if(!video)return;
+      const modal=frame.parentElement;
+      if(!modal)return;
+      const row=[...modal.children].find(n=>n.querySelector&&n.querySelector('i[class*="ph-play"],i[class*="ph-pause"]'));
+      if(!row||row.children.length<2)return;
+      const icon=row.querySelector('i');
+      const track=[...row.children].find(n=>n!==icon&&n.firstElementChild);
+      const fill=track&&track.firstElementChild;
+      const label=[...row.children].find(n=>n!==icon&&n!==track);
+      if(!icon||!track||!fill)return;
+      const paint=()=>{
+        const dur=Number.isFinite(video.duration)&&video.duration>0?video.duration:0;
+        const at=Math.min(video.currentTime||0,dur||Infinity);
+        icon.className='ph-fill '+(video.paused?'ph-play-circle':'ph-pause-circle');
+        fill.style.width=(dur?Math.max(0,Math.min(1,at/dur))*100:0).toFixed(2)+'%';
+        if(label)label.textContent=dur?mmss(at)+' / '+mmss(dur):'\u2014';
+      };
+      if(row.dataset.wired!=='1'){
+        row.dataset.wired='1';
+        icon.style.cursor='pointer';
+        icon.setAttribute('role','button');
+        icon.setAttribute('tabindex','0');
+        icon.title='Play or pause';
+        icon.onclick=e=>{e.preventDefault();e.stopPropagation();
+          if(video.paused){const p=video.play();if(p&&p.catch)p.catch(()=>{})}else video.pause()};
+        icon.onkeydown=e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();icon.onclick(e)}};
+        const seek=e=>{
+          const dur=Number.isFinite(video.duration)?video.duration:0;
+          if(!dur)return;
+          const r=track.getBoundingClientRect();
+          const x=('touches' in e&&e.touches[0]?e.touches[0].clientX:e.clientX)-r.left;
+          video.currentTime=Math.max(0,Math.min(1,x/r.width))*dur;
+          paint();
+        };
+        track.style.cursor='pointer';
+        /* A 4px line is a hard target; the press area reaches above and below
+           it without changing how the line looks. */
+        track.style.padding='9px 0';
+        track.style.backgroundClip='content-box';
+        track.onmousedown=e=>{e.preventDefault();e.stopPropagation();seek(e);
+          const move=ev=>seek(ev);
+          const up=()=>{document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up)};
+          document.addEventListener('mousemove',move);document.addEventListener('mouseup',up)};
+        /* The row sits inside the overlay whose click closes the modal. */
+        row.onclick=e=>e.stopPropagation();
+        for(const evt of ['timeupdate','play','pause','loadedmetadata','durationchange','seeked','ended'])video.addEventListener(evt,paint);
+        if(!row.querySelector('[data-host-mute]')){
+          const mute=document.createElement('button');
+          mute.type='button';
+          mute.setAttribute('data-host-owned','');
+          mute.setAttribute('data-host-mute','');
+          mute.title='Mute';
+          mute.style.cssText='display:grid;place-items:center;width:26px;height:26px;flex:none;border:0;border-radius:7px;background:none;color:#8B8B93;cursor:pointer;transition:color .15s ease';
+          mute.innerHTML='<i class="ph ph-speaker-high" style="font-size:15px"></i>';
+          mute.onclick=e=>{e.preventDefault();e.stopPropagation();video.muted=!video.muted;
+            mute.firstChild.className='ph '+(video.muted?'ph-speaker-slash':'ph-speaker-high');
+            mute.title=video.muted?'Unmute':'Mute'};
+          row.appendChild(mute);
+        }
+      }
+      paint();
+    }
+
     function paintPlayerVideo(vals){
       if(!vals.playerOpen){
         if(playerVideoNode){playerVideoNode.pause();playerVideoNode.remove();playerVideoNode=null}
@@ -2969,7 +3047,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(!playerVideoNode||!playerVideoNode.isConnected){
         playerVideoNode=document.createElement('video');
         playerVideoNode.setAttribute('data-host-owned','');
-        playerVideoNode.controls=true;
+        playerVideoNode.controls=false;
         playerVideoNode.playsInline=true;
         playerVideoNode.autoplay=true;
         playerVideoNode.style.cssText='position:absolute;inset:0;width:100%;height:100%;background:#000;border-radius:inherit;object-fit:contain';
@@ -2988,6 +3066,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
            if the browser refuses anyway the native controls are right there. */
         const p=playerVideoNode.play();if(p&&p.catch)p.catch(()=>{});
       }
+      wireClipTransport(frame);
     }
 
     /* The end-of-ayah ornament (U+06DD + Arabic-Indic digits) at its own,
@@ -3869,7 +3948,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           +LENGTH_BANDS.map(([lo,hi,label])=>{
             const on=bandOn(lo,hi);
             return `<button type="button" class="lb${on?' on':''}" data-band="${lo}-${hi}">`
-              +`<span class="lb-t">${label}</span>`
+              +`<span class="lb-t">${label}</span><span class="lb-k">\u2713</span>`
               +'<span class="lb-track">'
               +`<span class="lb-fill" style="left:${(lo/SPAN*100).toFixed(1)}%;width:${((hi-lo)/SPAN*100).toFixed(1)}%"></span></span>`
               +'</button>';
@@ -4099,10 +4178,11 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       alive(jobMusicEl);
       const open=Boolean(StudioAdapter.ui.job);
       if(!open){jobMusicEl.classList.add('hide');return}
-      const label=[...document.querySelectorAll('#studio span,#studio div')]
-        .filter(n=>/^nasheed$/i.test((n.textContent||'').trim())
-          &&![...n.children].some(c=>/^nasheed$/i.test((c.textContent||'').trim()))).pop();
-      const row=label&&label.parentElement;
+      /* Its own slot on the sound step. This used to find its place by
+         hunting the panel for an element whose text was exactly "Nasheed" --
+         so it lived wherever that string happened to be, and when the sound
+         step's label was rewritten it silently moved into the new one. */
+      const row=$('#studioJobMusicSlot');
       jobMusicEl.classList.toggle('hide',!row);
       if(!row)return;
       if(jobMusicEl.parentElement!==row)row.appendChild(jobMusicEl);
@@ -4112,7 +4192,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         jobMusicEl.querySelector('button').onclick=e=>StudioAdapter.bindings(DATA).toggleJobMusic(e);
       }
       const text=jobMusicEl.querySelector('span');
-      const want=vals.jobMusicOn?'Nasheed mixed in':'No nasheed — voice only';
+            const want=vals.jobMusicOn?'Mixed in':'Off \u2014 voice only';
       if(text.textContent!==want)text.textContent=want;
       jobMusicEl.querySelector('button').setAttribute('aria-checked',String(vals.jobMusicOn));
     }

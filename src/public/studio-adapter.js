@@ -265,12 +265,16 @@
   // before it says which one is picked -- five of them in a row read as
   // decoration, and the wizard had four such rows.
   function wordOption(on, size) {
-    return 'padding: 3px 1px 6px; border: 0; border-bottom: 2px solid ' + (on ? '#F0D6A6' : 'transparent') + ';'
-      + ' background: none; font-family: inherit; font-size: ' + (size || 14) + 'px;'
-      + ' font-weight: ' + (on ? '600' : '400') + '; letter-spacing: -.01em; cursor: pointer;'
-      + ' color: ' + (on ? '#F6F6F8' : '#8B8B93') + ';'
-      + ' transition: color .18s ease, border-color .18s ease, font-weight .18s ease;';
+    return 'min-width: 46px; padding: 9px 15px; border: 0; border-radius: 8px; cursor: pointer;'
+      + ' background: ' + (on ? '#26262E' : 'transparent') + ';'
+      + ' font-family: inherit; font-size: ' + (size || 14) + 'px;'
+      + ' font-weight: ' + (on ? '600' : '400') + '; letter-spacing: -.01em;'
+      + ' color: ' + (on ? '#F6F6F8' : '#9A9AA2') + ';'
+      + ' transition: background .16s ease, color .16s ease;';
   }
+  // The track the segments sit in.
+  var SEG_RAIL = 'display: inline-flex; padding: 3px; border-radius: 11px;'
+    + ' background: #121215; border: 1px solid #212127;';
 
   var volumeSaveTimer = null;
   function saveVolumeSoon(n) {
@@ -3085,6 +3089,11 @@
         ? 'A recitation carries no nasheed. Nothing is mixed underneath it.'
         : JOB_STEPS[jobStepIndex() - 1].hint,
       jobStepCounter: jobStepIndex() + ' / ' + JOB_STEPS.length,
+      segRail: SEG_RAIL,
+      // A label, in its own column, not another word on the same line as the
+      // options -- as an inline run "Which nasheed" read as a fourth choice
+      // and highlighted like body text when anyone dragged over it.
+      fieldLabel: 'font-size: 13px; color: #8B8B93; user-select: none; white-space: nowrap;',
       // One line that fills. Seven separate segments, a numbered chip and the
       // words STEP 3 OF 7 were three renderings of one small fact, stacked on
       // top of the question they belonged to.
@@ -3113,6 +3122,9 @@
           note: 'Nothing is published until you approve it. Editing and re-rendering are free.' },
       ],
       jobSoundBlocked: jobStepId() === 'sound' && jobTypeQuran,
+      // A recitation carries nothing underneath, so the switch is not
+      // offered at all rather than offered and refused.
+      jobSoundOffered: jobStepId() === 'sound' && !jobTypeQuran,
       jobBackShown: jobStepIndex() > 1,
       jobFirstStep: jobStepIndex() === 1,
       // The last step's action is Generate, in the rail. Offering Continue
@@ -3211,15 +3223,13 @@
           style: wordOption(on, 14),
           select: function (e) { stop(e); setUI({ jobTrackId: t.id || null }); },
         };
-      }).concat(UI.jobMusic === false ? [] : [{
-        // Upload right here, as the spec asked -- not a trip to the Music
-        // screen mid-job. The host owns the file dialog.
-        label: 'Upload\u2026',
-        // An action, not a choice: it stays underlined so it never reads as a
-        // fourth nasheed sitting unselected next to the three that are.
-        style: 'padding: 3px 1px 6px; border: 0; border-bottom: 1px dashed #3A3A42; background: none; font-family: inherit; font-size: 14px; color: #6E6E76; cursor: pointer; transition: color .18s ease, border-color .18s ease;',
-        select: function (e) { stop(e); global.StudioAdapter.onUploadNasheedPrompt(); },
-      }]),
+      }),
+      // Upload right here, as the spec asked -- not a trip to the Music screen
+      // mid-job. The host owns the file dialog.
+      jobUploadStyle: 'display: inline-flex; align-items: center; gap: 6px; padding: 9px 13px; border: 1px dashed #33333C;'
+        + ' border-radius: 9px; background: none; font-family: inherit; font-size: 13.5px; color: #8B8B93;'
+        + ' cursor: pointer; transition: color .16s ease, border-color .16s ease;',
+      uploadNasheed: function (e) { stop(e); global.StudioAdapter.onUploadNasheedPrompt(); },
       // jobTplId is cleared with the panel: it is the JOB's template choice,
       // and left behind it pinned activeTemplate everywhere -- the Templates
       // screen preview stopped following the selection because a stale job

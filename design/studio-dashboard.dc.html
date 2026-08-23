@@ -1545,12 +1545,14 @@
             <i class="ph ph-caret-down" style="font-size: 12px; color: #6E6E76;"></i>
           </label>
           <div style="{{ jobCountsWrapStyle }}">
-            <span style="display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 22px;">
-              <span style="font-size: 13px; color: #8B8B93; margin-right: 2px;">How many</span>
-              <sc-for list="{{ countOpts }}" as="opt" hint-placeholder-count="4">
-                <button onClick="{{ opt.toggle }}" style="{{ opt.optStyle }}">{{ opt.label }}</button>
-              </sc-for>
-              <span style="font-size: 13px; color: #6E6E76; margin-left: -14px;">clips per lecture</span>
+            <span style="display: flex; align-items: center; flex-wrap: wrap; gap: 12px;">
+              <span style="{{ fieldLabel }}">How many</span>
+              <span style="{{ segRail }}">
+                <sc-for list="{{ countOpts }}" as="opt" hint-placeholder-count="4">
+                  <button onClick="{{ opt.toggle }}" style="{{ opt.optStyle }}">{{ opt.label }}</button>
+                </sc-for>
+              </span>
+              <span style="font-size: 13px; color: #6E6E76;">clips per lecture</span>
             </span>
           </div>
           <label style="{{ jobDurWrapStyle }}">
@@ -1573,19 +1575,32 @@
               </span>
             </span>
           </sc-if>
+          <!-- The switch sits OUTSIDE the jobMusicOn branch. Inside it, turning
+               the nasheed off would take its own control away with it. -->
+          <sc-if value="{{ jobSoundOffered }}" hint-placeholder-val="{{ true }}">
+            <div style="display: grid; grid-template-columns: 84px minmax(0, 1fr); align-items: center; gap: 18px 22px; margin-top: 2px;">
+              <span style="{{ fieldLabel }}">Nasheed</span>
+              <span id="studioJobMusicSlot" style="display: flex; align-items: center; gap: 11px; min-width: 0;"></span>
+            </div>
+          </sc-if>
           <sc-if value="{{ jobMusicOn }}" hint-placeholder-val="{{ true }}">
-            <span style="display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 22px;">
-              <span style="font-size: 13px; color: #8B8B93; margin-right: 2px;">Which nasheed</span>
-              <sc-for list="{{ jobNasheeds }}" as="n" hint-placeholder-count="4">
-                <button onClick="{{ n.select }}" style="{{ n.style }}">{{ n.label }}</button>
-              </sc-for>
-            </span>
-            <span style="display: flex; align-items: center; gap: 16px; margin-top: 20px;">
-              <span style="flex: none; font-size: 13px; color: #8B8B93;">How loud</span>
-              <input type="range" min="{{ jobVolumeMin }}" max="{{ jobVolumeMax }}" value="{{ jobVolume }}" onChange="{{ setJobVolume }}" style="flex: 1 1 auto; max-width: 300px; accent-color: #D9B478; background: transparent; cursor: pointer;">
-              <span style="flex: none; min-width: 42px; font-family: Outfit, Inter, sans-serif; font-size: 15px; font-weight: 600; color: #F6F6F8; font-variant-numeric: tabular-nums;">{{ jobVolumeValue }}</span>
-            </span>
-            <span style="margin-top: 14px; font-size: 12px; line-height: 1.55; color: #6E6E76;">Of the speaker's level, and ducked further wherever the voice is loudest — it never competes with them.</span>
+            <div style="display: grid; grid-template-columns: 84px minmax(0, 1fr); align-items: center; gap: 18px 22px; margin-top: 18px;">
+              <span style="{{ fieldLabel }}">Track</span>
+              <span style="display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-width: 0;">
+                <span style="{{ segRail }}">
+                  <sc-for list="{{ jobNasheeds }}" as="n" hint-placeholder-count="3">
+                    <button onClick="{{ n.select }}" style="{{ n.style }}">{{ n.label }}</button>
+                  </sc-for>
+                </span>
+                <button onClick="{{ uploadNasheed }}" style="{{ jobUploadStyle }}" style-hover="color: #F2F2F4; border-color: #4A4A54;"><i class="ph ph-upload-simple" style="font-size: 14px;"></i>Upload</button>
+              </span>
+              <span style="{{ fieldLabel }}">Level</span>
+              <span style="display: flex; align-items: center; gap: 16px; min-width: 0;">
+                <input type="range" min="{{ jobVolumeMin }}" max="{{ jobVolumeMax }}" value="{{ jobVolume }}" onChange="{{ setJobVolume }}" style="flex: 1 1 auto; max-width: 300px; accent-color: #D9B478; background: transparent; cursor: pointer;">
+                <span style="flex: none; min-width: 42px; font-family: Outfit, Inter, sans-serif; font-size: 15px; font-weight: 600; color: #F6F6F8; font-variant-numeric: tabular-nums;">{{ jobVolumeValue }}</span>
+              </span>
+            </div>
+            <span style="margin-top: 16px; font-size: 12px; line-height: 1.55; color: #6E6E76;">Of the speaker's level, and ducked further wherever the voice is loudest — it never competes with them.</span>
           </sc-if>
         </div>
         </sc-if>
