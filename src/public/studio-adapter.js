@@ -2950,7 +2950,9 @@
       // a sliver -- the lecture's own thumbnail vanished into a hairline at
       // the top of the panel. Capped too, so a tall window does not give the
       // poster half the dialog.
-      jobPosterStyle: 'position: relative; flex: none; aspect-ratio: 16 / 9; max-height: 30vh; border-radius: 11px; overflow: hidden; border: 1px solid #26262A; background-color: #17171A;'
+      // A fixed 152px strip, not a hero. The panel asks one question at a
+      // time now and the source is context for it, not the subject.
+      jobPosterStyle: 'position: relative; display: block; flex: none; width: 152px; aspect-ratio: 16 / 9; border-radius: 9px; overflow: hidden; border: 1px solid #26262A; background-color: #17171A;'
         + (job && job.thumbnail ? ' background-image: ' + posterLayers(job) + '; background-size: cover; background-position: center; background-repeat: no-repeat;' : ''),
 
       // ── The range handles ──
