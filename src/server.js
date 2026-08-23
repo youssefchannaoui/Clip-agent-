@@ -14,6 +14,7 @@ import {
 import { ownedBy, findOwned } from './tenancy.js';
 import * as audio from './audio.js';
 import * as templates from './templates.js';
+import * as throttle from './throttle.js';
 import * as backgrounds from './backgrounds.js';
 import { wordsForClip, silenceSpans } from './captions.js';
 import * as agent from './agent.js';
@@ -73,6 +74,30 @@ function redirectWithCookies(res, location, cookies = []) {
   if (cookies.length) headers['Set-Cookie'] = cookies;
   res.writeHead(302, headers); res.end();
 }
+/**
+ * The client address, as far as it can be trusted.
+ *
+ * Behind exactly one proxy the LAST entry of x-forwarded-for is the address
+ * that proxy actually observed; anything earlier was supplied by the caller
+ * and can be invented. Reading the first entry -- the usual mistake -- would
+ * let an attacker send a fresh fake address on every request and walk straight
+ * past a per-IP limit.
+ */
+function clientIp(req) {
+  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',').map(v => v.trim()).filter(Boolean);
+  if (forwarded.length) return forwarded[forwarded.length - 1];
+  return req.socket?.remoteAddress || '';
+}
+
+/** A refused attempt says how long to wait, and nothing about the account. */
+function tooManyAttempts(res, retryAfterSec, returnTo) {
+  res.setHeader('Retry-After', String(Math.max(1, retryAfterSec)));
+  const wait = retryAfterSec >= 60
+    ? `${Math.ceil(retryAfterSec / 60)} minutes`
+    : `${Math.max(1, retryAfterSec)} seconds`;
+  return redirect(res, `/login?error=${encodeURIComponent(`Too many sign-in attempts. Try again in ${wait}.`)}&returnTo=${encodeURIComponent(returnTo || '/app')}`);
+}
+
 function html(res, status, value) {
   const body = Buffer.from(String(value));
   res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' });
@@ -258,9 +283,25 @@ function verifyWorkerRequest(req, pathname, rawBody) {
 function authed(req, url) { return !config.password || sameSecret(req.headers['x-app-password'] || url.searchParams.get('pw') || '', config.password); }
 function readBody(req, limit = 1_000_000) {
   return new Promise((resolve, reject) => {
-    let raw = '', size = 0;
-    req.on('data', chunk => { size += chunk.length; if (size > limit) { reject(new Error('Request body is too large.')); req.destroy(); return; } raw += chunk; });
-    req.on('end', () => { if (!raw) return resolve({}); try { resolve(JSON.parse(raw)); } catch { reject(new Error('Request body was not valid JSON.')); } });
+    // A declared length over the cap is refused before a byte is buffered.
+    const declared = Number(req.headers['content-length'] || 0);
+    if (Number.isFinite(declared) && declared > limit) {
+      reject(new Error('Request body is too large.'));
+      req.destroy();
+      return;
+    }
+    const chunks = [];
+    let size = 0;
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > limit) { reject(new Error('Request body is too large.')); req.destroy(); return; }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      if (!size) return resolve({});
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
+      catch { reject(new Error('Request body was not valid JSON.')); }
+    });
     req.on('error', reject);
   });
 }
@@ -507,20 +548,36 @@ async function route(req, res, url) {
     } catch (error) { return redirect(res, `/login?error=${encodeURIComponent(error.message)}`); }
   }
   if (method === 'POST' && pathname === '/auth/email') {
+    const body = await formBody(req);
+    const keys = throttle.keysFor(clientIp(req), body.email || '');
+    const gate = throttle.check(keys);
+    if (!gate.allowed) return tooManyAttempts(res, gate.retryAfterSec, body.returnTo);
     try {
-      const body = await formBody(req);
-      const user = auth.emailLogin(body.email || '', body.password || '', body.name || '');
+      const user = await auth.emailLogin(body.email || '', body.password || '', body.name || '');
+      throttle.succeed(keys);
       const session = auth.createSession(user, { provider: 'email' });
       return redirectWithCookies(res, billing.postLoginRedirect(user, body.returnTo || '/app'), auth.cookieHeaders(session));
-    } catch (error) { return redirect(res, `/login?error=${encodeURIComponent(error.message)}`); }
+    } catch (error) {
+      throttle.fail(keys);
+      return redirect(res, `/login?error=${encodeURIComponent(error.message)}`);
+    }
   }
   if (method === 'POST' && pathname === '/auth/password') {
+    const body = await formBody(req);
+    // One shared secret and no account to name, so this is the endpoint most
+    // worth guessing at and the one that had nothing slowing it down.
+    const keys = throttle.keysFor(clientIp(req), 'admin-password');
+    const gate = throttle.check(keys);
+    if (!gate.allowed) return tooManyAttempts(res, gate.retryAfterSec, body.returnTo);
     try {
-      const body = await formBody(req);
-      const user = auth.passwordLogin(body.password || '');
+      const user = await auth.passwordLogin(body.password || '');
+      throttle.succeed(keys);
       const session = auth.createSession(user, { provider: 'password' });
       return redirectWithCookies(res, billing.postLoginRedirect(user, body.returnTo || '/app'), auth.cookieHeaders(session));
-    } catch (error) { return redirect(res, `/login?error=${encodeURIComponent(error.message)}`); }
+    } catch (error) {
+      throttle.fail(keys);
+      return redirect(res, `/login?error=${encodeURIComponent(error.message)}`);
+    }
   }
   if (method === 'POST' && pathname === '/auth/logout') {
     auth.destroySession(req);
@@ -1079,7 +1136,9 @@ async function route(req, res, url) {
 
   if (method === 'GET' && pathname === '/api/music') return json(res, 200, { tracks: audio.listNasheeds(currentUser), settings: musicSettings(currentUser) });
   if (method === 'POST' && pathname === '/api/music') {
-    const body = await readBody(req, 60 * 1024 * 1024);
+    let body;
+    try { body = await readBody(req, 24 * 1024 * 1024); }
+    catch { return json(res, 413, { error: 'That nasheed is too large to send this way. Keep it under 24MB.' }); }
     try { const track = await audio.saveNasheed(currentUser, body.name, body.data, body.mimeType); log(`Added "${track.name}". The renderer can rotate it across clips.`, 'info', currentUser.id); return json(res, 200, { ok: true, track }); }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
@@ -1110,7 +1169,11 @@ async function route(req, res, url) {
 
   if (method === 'GET' && pathname === '/api/backgrounds') return json(res, 200, { backgrounds: backgrounds.listBackgrounds(currentUser) });
   if (method === 'POST' && pathname === '/api/backgrounds') {
-    const body = await readBody(req, 170 * 1024 * 1024);
+    let body;
+    // Anything bigger goes straight to object storage from the browser and
+    // arrives here as an objectKey, which never touches this process.
+    try { body = await readBody(req, 12 * 1024 * 1024); }
+    catch { return json(res, 413, { error: 'That file is too large to send through the API. Configure object storage, or use a shorter loop under 12MB.' }); }
     // Only the operator can publish into every account's library.
     const shared = body.shared === true && ['owner', 'admin'].includes(String(currentUser?.role || '').toLowerCase());
     try {
@@ -1552,8 +1615,69 @@ function summariseWorkerBuild(capabilities) {
     : `Up to date — the running worker has every current feature. ${via}${past}`;
 }
 
+/**
+ * The one inline <script> the studio page carries, hashed so the policy can
+ * allow exactly it and nothing else. Computed at startup from the file on
+ * disk, so editing the page updates the hash instead of silently breaking it,
+ * and no attacker-injected script can ever match.
+ */
+const INLINE_SCRIPT_HASHES = (() => {
+  const hashes = new Set();
+  for (const file of [page]) {
+    let source; try { source = fs.readFileSync(file, 'utf8'); } catch { continue; }
+    for (const match of source.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)) {
+      hashes.add(`'sha256-${crypto.createHash('sha256').update(match[1], 'utf8').digest('base64')}'`);
+    }
+  }
+  return [...hashes];
+})();
+
+/**
+ * Security headers on every response.
+ *
+ * There were none at all. The Content-Security-Policy is the one that carries
+ * weight: script-src allows this origin plus the hash of the page's own inline
+ * block, so injected script cannot run even if something did get through the
+ * escaping. style-src has to keep 'unsafe-inline' -- the design system writes
+ * style="..." on nearly every element -- which is a real limit, and the reason
+ * the script side is kept strict.
+ */
+function securityHeaders(res, { pathname }) {
+  const csp = [
+    "default-src 'self'",
+    `script-src 'self' ${INLINE_SCRIPT_HASHES.join(' ')}`.trim(),
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    // Clip thumbnails and renders can live on object storage, and the editor
+    // reads frames through blob: URLs.
+    "img-src 'self' data: blob: https:",
+    "media-src 'self' blob: https:",
+    "connect-src 'self' https:",
+    // Nothing here is ever framed, and nothing may be framed into it.
+    "frame-ancestors 'none'",
+    "frame-src https://js.stripe.com https://checkout.stripe.com",
+    "base-uri 'self'",
+    "form-action 'self' https://checkout.stripe.com",
+    "object-src 'none'",
+    'upgrade-insecure-requests',
+  ].join('; ');
+  res.setHeader('Content-Security-Policy', csp);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(self "https://checkout.stripe.com")');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  // Only over TLS, and only where it cannot strand a local http deployment.
+  if (config.publicBaseUrl.startsWith('https://')) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  // A credentialed API response must never be cached by a shared proxy.
+  if (pathname.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
+}
+
 export const server = http.createServer((req, res) => {
   let url; try { url = new URL(req.url, `http://${req.headers.host || 'localhost'}`); } catch { return json(res, 400, { error: 'Bad request.' }); }
+  securityHeaders(res, { pathname: url.pathname });
   route(req, res, url).catch(error => { console.error(error); if (!res.headersSent) json(res, 500, { error: error.message || 'Unexpected server error.' }); });
 });
 server.listen(config.port, () => {

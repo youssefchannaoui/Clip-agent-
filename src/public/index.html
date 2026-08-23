@@ -597,6 +597,7 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .lb.on .lb-k{opacity:1;transform:none}
 @keyframes lbGrow{from{transform:scaleX(0)}to{transform:none}}
 @media (prefers-reduced-motion: reduce){.lb-fill{animation:none}}
+.dc-hover-row:hover{background:#1B1B1F}
 .bgt-row{display:flex;gap:12px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
 .bgt-card{position:relative;flex:none;width:124px;background:none;border:0;padding:0;cursor:pointer;text-align:center}
 .bgt-thumb{position:relative;display:block;width:124px;height:220px;margin:0 auto;border-radius:10px;border:1px solid #212127;background-color:#131315;background-size:cover;background-position:center;transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease;overflow:hidden}
@@ -1922,7 +1923,7 @@ select:focus{outline:none;border-color:var(--blue)}
           <summary class="card-head">Caption & template</summary>
           <div class="card-body">
             <div class="style-note">Captions, frame shape, video fit, filters, watermark and layout are saved inside your selected template. Videos start immediately without an opening title card.</div>
-            <button class="btn btn-ghost btn-sm" type="button" style="margin-top:11px;width:100%" onclick="showView('templates')">Open Template Studio</button>
+            <button class="btn btn-ghost btn-sm" type="button" style="margin-top:11px;width:100%" data-go="templates">Open Template Studio</button>
           </div>
         </details>
 
@@ -2814,7 +2815,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       const pt={};(DATA.projects||[]).forEach(p=>pt[p.id]=p.title||'Lecture');
       const clips=(DATA.clips||[]).filter(c=>((c.title||'')+' '+(pt[c.projectId]||'')+' '+(c.transcript||'')).toLowerCase().includes(q)).slice(0,6);
       const lectures=(DATA.projects||[]).filter(p=>((p.title||'')+' '+(p.url||'')).toLowerCase().includes(q)).slice(0,4);
-      const row=(attr,id,img,title,sub)=>`<div ${attr}="${esc(id)}" style="display:flex;gap:10px;align-items:center;padding:9px 12px;cursor:pointer;border-bottom:1px solid #1D1D21" onmouseover="this.style.background='#1B1B1F'" onmouseout="this.style.background=''">`
+      const row=(attr,id,img,title,sub)=>`<div ${attr}="${esc(id)}" style="display:flex;gap:10px;align-items:center;padding:9px 12px;cursor:pointer;border-bottom:1px solid #1D1D21" class="dc-hover-row">`
         +(img?`<img src="${esc(img)}" style="width:34px;height:60px;object-fit:cover;border-radius:6px;background:#0E0E10">`:'<div style="width:34px;height:60px;border-radius:6px;background:#0E0E10"></div>')
         +`<div style="min-width:0"><div style="font:600 12.5px Outfit,Inter,sans-serif;color:#E8E8EC;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(title)}</div>`
         +`<div style="font:400 11px Outfit,Inter,sans-serif;color:#8B8B93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sub)}</div></div></div>`;
