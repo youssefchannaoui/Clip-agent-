@@ -259,6 +259,28 @@
       (on ? '#F0D6A6' : '#6E6E76') + '; transition: left .16s ease, background .16s ease;';
   }
 
+  // Every word-sized choice in the job wizard wears this: the word itself,
+  // over a rule that is gold when chosen and invisible when not. A bordered
+  // pill with a tinted fill and a little icon announces that it is a control
+  // before it says which one is picked -- five of them in a row read as
+  // decoration, and the wizard had four such rows.
+  function wordOption(on, size) {
+    return 'padding: 3px 1px 6px; border: 0; border-bottom: 2px solid ' + (on ? '#F0D6A6' : 'transparent') + ';'
+      + ' background: none; font-family: inherit; font-size: ' + (size || 14) + 'px;'
+      + ' font-weight: ' + (on ? '600' : '400') + '; letter-spacing: -.01em; cursor: pointer;'
+      + ' color: ' + (on ? '#F6F6F8' : '#8B8B93') + ';'
+      + ' transition: color .18s ease, border-color .18s ease, font-weight .18s ease;';
+  }
+
+  var volumeSaveTimer = null;
+  function saveVolumeSoon(n) {
+    if (volumeSaveTimer) clearTimeout(volumeSaveTimer);
+    volumeSaveTimer = setTimeout(function () {
+      volumeSaveTimer = null;
+      global.StudioAdapter.onMusicSettings({ volumePercent: n });
+    }, 320);
+  }
+
   function sliderTrack() {
     return 'position: relative; flex: 1; height: 4px; border-radius: 4px; background: #26262A;';
   }
@@ -1443,7 +1465,17 @@
     }
     if (!durLabel && clipCfg.clipMaxSeconds) durLabel = 'Up to ' + clipCfg.clipMaxSeconds + 's';
 
-    var musicVolume = Number((DATA.musicSettings || {}).volumePercent || 0);
+    var musicVolume = UI.volumeDraft != null
+      ? UI.volumeDraft
+      : Number((DATA.musicSettings || {}).volumePercent || 0);
+    // The server refuses anything outside 1-50, and the sliders offered 0-60:
+    // dragging to either end returned a 400 and the level silently stayed put.
+    var VOL_MIN = 1, VOL_MAX = 50;
+    function setVolumeFrom(e) {
+      var n = Math.max(VOL_MIN, Math.min(VOL_MAX, Math.round(Number(e && e.target && e.target.value) || 0)));
+      setUI({ volumeDraft: n });
+      saveVolumeSoon(n);
+    }
 
     // In the clip editor the preview has to show THIS clip's tweaks on top of the
     // shared style. Without it the user drags a caption, the value is saved
@@ -2966,7 +2998,9 @@
       // poster half the dialog.
       // A fixed 152px strip, not a hero. The panel asks one question at a
       // time now and the source is context for it, not the subject.
-      jobPosterStyle: 'position: relative; display: block; flex: none; width: 152px; aspect-ratio: 16 / 9; border-radius: 9px; overflow: hidden; border: 1px solid #26262A; background-color: #17171A;'
+      jobPosterStyle: 'position: relative; display: block; flex: none; width: 216px; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden;'
+        + ' border: 1px solid #2A2A32; background-color: #17171A;'
+        + ' box-shadow: 0 10px 26px rgba(0,0,0,.5), inset 0 1px 0 rgba(248,248,249,.06);'
         + (job && job.thumbnail ? ' background-image: ' + posterLayers(job) + '; background-size: cover; background-position: center; background-repeat: no-repeat;' : ''),
 
       // ── The range handles ──
@@ -3045,29 +3079,19 @@
       })(),
 
       // ── the wizard ───────────────────────────────────────────────────
-      jobStepNo: jobStepIndex(),
       jobStepCount: JOB_STEPS.length,
       jobStepTitle: JOB_STEPS[jobStepIndex() - 1].title,
       jobStepHint: jobStepId() === 'sound' && jobTypeQuran
         ? 'A recitation carries no nasheed. Nothing is mixed underneath it.'
         : JOB_STEPS[jobStepIndex() - 1].hint,
-      jobStepLabel: 'Step ' + jobStepIndex() + ' of ' + JOB_STEPS.length,
-      jobStepDots: JOB_STEPS.map(function (step, i) {
-        var at = jobStepIndex();
-        var done = i + 1 < at;
-        var here = i + 1 === at;
-        return {
-          label: step.title,
-          style: 'height: 4px; border-radius: 4px; flex: 1 1 0; transition: background .3s ease, box-shadow .3s ease; '
-            + (here
-              ? 'background: linear-gradient(90deg, #C9A468, #F0D6A6); box-shadow: 0 0 12px rgba(240,214,166,.35);'
-              : done ? 'background: rgba(217,180,120,.42);' : 'background: #24242A;')
-            + (done ? ' cursor: pointer;' : ' cursor: default;'),
-          // Only steps already answered are reachable by clicking; jumping
-          // forward past a question would leave it unanswered.
-          go: done ? function (e) { stop(e); setUI({ jobStep: i + 1 }); } : function (e) { stop(e); },
-        };
-      }),
+      jobStepCounter: jobStepIndex() + ' / ' + JOB_STEPS.length,
+      // One line that fills. Seven separate segments, a numbered chip and the
+      // words STEP 3 OF 7 were three renderings of one small fact, stacked on
+      // top of the question they belonged to.
+      jobProgressStyle: 'position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px;'
+        + ' background: linear-gradient(90deg, #C9A468, #F0D6A6);'
+        + ' transition: width .34s cubic-bezier(.2,.75,.3,1);'
+        + ' width: ' + ((jobStepIndex() / JOB_STEPS.length) * 100).toFixed(2) + '%;',
       jobIsStepKind: jobStepId() === 'kind',
       jobIsStepTrim: jobStepId() === 'trim',
       jobIsStepLengths: jobStepId() === 'lengths',
@@ -3169,21 +3193,13 @@
       // How loud the nasheed sits under the voice. It was only reachable from
       // the Nasheed library screen, which is a trip away from the one moment
       // anybody thinks about it. The server accepts 1-50%.
-      jobVolumeLabel: (Number((DATA.musicSettings || {}).volumePercent) || 13) + '% under the voice',
-      jobVolumeLevels: [
-        { v: 8, label: 'Barely there' },
-        { v: 13, label: 'Balanced' },
-        { v: 20, label: 'Present' },
-      ].map(function (level) {
-        var now = Number((DATA.musicSettings || {}).volumePercent) || 13;
-        var on = level.v === now;
-        return {
-          label: level.label,
-          style: 'display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 20px; font-family: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; transition: border-color .15s ease, background .15s ease, color .15s ease; border: 1px solid '
-            + (on ? 'rgba(217,180,120,.5); background: rgba(217,180,120,.13); color: #F0D6A6;' : '#26262A; background: #121214; color: #A2A2AA;'),
-          select: function (e) { stop(e); global.StudioAdapter.onMusicSettings({ volumePercent: level.v }); },
-        };
-      }),
+      // Three named steps could not say 17%, and every level between them was
+      // unreachable from the one screen anybody sets it on.
+      jobVolume: musicVolume || 13,
+      jobVolumeValue: (musicVolume || 13) + '%',
+      jobVolumeMin: VOL_MIN,
+      jobVolumeMax: VOL_MAX,
+      setJobVolume: setVolumeFrom,
       jobMusicLabel: UI.jobMusic === false ? 'No nasheed' : 'Nasheed on',
       jobMusicTrack: switchTrack(UI.jobMusic !== false),
       jobMusicKnob: switchKnob(UI.jobMusic !== false),
@@ -3192,22 +3208,23 @@
         var on = t.id ? UI.jobTrackId === t.id : !UI.jobTrackId;
         return {
           label: t.name || t.fileName || 'Untitled',
-          style: 'display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 20px; font-family: inherit; font-size: 11.5px; cursor: pointer; border: 1px solid ' +
-            (on ? 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;' : '#26262A; background: #121214; color: #A2A2AA;'),
+          style: wordOption(on, 14),
           select: function (e) { stop(e); setUI({ jobTrackId: t.id || null }); },
         };
       }).concat(UI.jobMusic === false ? [] : [{
         // Upload right here, as the spec asked -- not a trip to the Music
         // screen mid-job. The host owns the file dialog.
         label: 'Upload\u2026',
-        style: 'display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 20px; font-family: inherit; font-size: 11.5px; cursor: pointer; border: 1px dashed #33333A; background: transparent; color: #8B8B93;',
+        // An action, not a choice: it stays underlined so it never reads as a
+        // fourth nasheed sitting unselected next to the three that are.
+        style: 'padding: 3px 1px 6px; border: 0; border-bottom: 1px dashed #3A3A42; background: none; font-family: inherit; font-size: 14px; color: #6E6E76; cursor: pointer; transition: color .18s ease, border-color .18s ease;',
         select: function (e) { stop(e); global.StudioAdapter.onUploadNasheedPrompt(); },
       }]),
       // jobTplId is cleared with the panel: it is the JOB's template choice,
       // and left behind it pinned activeTemplate everywhere -- the Templates
       // screen preview stopped following the selection because a stale job
       // choice silently outranked it.
-      closeJob: function (e) { stop(e); setUI({ job: null, jobTplId: null, jobStep: 1 }); },
+      closeJob: function (e) { stop(e); setUI({ job: null, jobTplId: null, jobStep: 1, volumeDraft: null }); },
       runGenerate: function (e) {
         stop(e);
         if (!job || UI.generating) return;
@@ -3825,15 +3842,16 @@
         .map(function (n) {
         var on = clipsPerVideo === n;
         return {
-          label: plural(n, 'clip'),
+          // The number alone. Five options each ending in "clips" repeated the
+          // unit five times; it is said once, after the row.
+          label: String(n),
           rowStyle: 'display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 8px; cursor: pointer; color: ' + (on ? '#F0D6A6' : '#BCBCC3') + ';',
           // Inline in the wizard rather than behind a dropdown. As a menu it
           // opened downward out of the panel, overlapping Continue and
           // clipping at the dialog's edge -- and it sat under the length
           // pills as a bare text button, which read as an afterthought
           // rather than the second half of the same question.
-          pillStyle: 'display: inline-flex; align-items: center; gap: 7px; padding: 9px 15px; border-radius: 20px; font-family: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; transition: border-color .15s ease, background .15s ease, color .15s ease; border: 1px solid '
-            + (on ? 'rgba(217,180,120,.55); background: rgba(217,180,120,.13); color: #F0D6A6;' : '#26262A; background: #121214; color: #A2A2AA;'),
+          optStyle: wordOption(on, 15),
           boxStyle: 'display: grid; place-items: center; width: 15px; height: 15px; flex: none; border-radius: 4px; border: 1px solid ' +
             (on ? '#D9B478; background: rgba(217,180,120,.18);' : '#33333A; background: #0E0E11;'),
           toggle: function (e) {
@@ -3881,7 +3899,7 @@
       nasheedVol: musicVolume,
       nasheedVolLabel: musicVolume + '%',
       nasheedDb: (musicVolume ? Math.round(20 * Math.log10(musicVolume / 100)) : -60) + ' dB under speech',
-      setVol: function (e) { global.StudioAdapter.onMusicSettings({ volumePercent: Number(e.target.value) }); },
+      setVol: setVolumeFrom,
       duckTrackStyle: sliderTrack(true),
       duckKnobStyle: sliderKnob(true),
       toggleDuck: function (e) { stop(e); toast('Ducking is always on — the nasheed drops under speech.'); },

@@ -114,6 +114,13 @@ These were each a real bug and each has a test named after it.
   because code moved into a function, while real behaviour changes passed.
 - **A green suite is not verification for anything visual.** Every layout bug
   here shipped green.
+- **Chrome will not run CSS animations in a hidden automation tab either.**
+  An agent screenshot brings the tab forward, which is when the animations
+  start -- so every capture lands a few frames into the entry animation and
+  staggered content photographs as blank or ghosted. Twice this looked like a
+  layout bug that was not there. Before capturing, settle them:
+  `document.getAnimations().forEach(a => { if (a.effect.getTiming().iterations !== Infinity) a.finish() })`
+  (skip the infinite ones -- `finish()` throws on those), then screenshot.
 - **Chrome will not decode video in a hidden automation tab.** readyState stays
   0 even for a blob URL holding every byte, so "the preview is black" in an
   agent screenshot is usually the harness, not the app. Verify video paths by

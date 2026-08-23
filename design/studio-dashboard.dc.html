@@ -36,7 +36,7 @@
   @keyframes dcBootFade { 0%,72% { opacity: 1 } 100% { opacity: 0; visibility: hidden } }
   @keyframes dcTrack { from { width: 4% } to { width: 100% } }
   @keyframes dcPop { from { opacity: 0; transform: translateY(-4px) scale(.97) } to { opacity: 1; transform: none } }
-  @keyframes dcStep { from { opacity: 0; transform: translateX(18px) } to { opacity: 1; transform: none } }
+  @keyframes dcStep { from { opacity: 0; transform: translateX(var(--dc-step-from, 18px)) } to { opacity: 1; transform: none } }
   @media (prefers-reduced-motion: reduce) { @keyframes dcStep { from { opacity: 1 } to { opacity: 1 } } }
   @keyframes dcScreen { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
   @keyframes dcToast { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
@@ -1012,7 +1012,7 @@
               <strong style="font-family: Outfit, Inter, sans-serif; font-size: 32px; font-weight: 600; letter-spacing: -.04em; line-height: 1;">{{ nasheedVolLabel }}</strong>
               <span style="font-size: 11.5px; color: #8B8B93;">{{ nasheedDb }}</span>
             </div>
-            <input type="range" min="0" max="60" value="{{ nasheedVol }}" onChange="{{ setVol }}" style="width: 100%; accent-color: #D9B478; cursor: pointer;">
+            <input type="range" min="1" max="50" value="{{ nasheedVol }}" onChange="{{ setVol }}" style="width: 100%; accent-color: #D9B478; cursor: pointer;">
             <div style="display: flex; justify-content: space-between; font-size: 10px; color: #6E6E76;">
               <span>Silent</span><span>Bed</span><span>Forward</span>
             </div>
@@ -1159,7 +1159,7 @@
             <div style="display: flex; flex-direction: column; gap: 13px;">
               <div style="display: flex; flex-direction: column; gap: 5px;">
                 <span style="display: flex; align-items: center; font-size: 11.5px; color: #BCBCC3;">Nasheed level<strong style="margin-left: auto; font-weight: 500; color: #F0D6A6;">{{ nasheedVolLabel }}</strong></span>
-                <input type="range" min="0" max="60" value="{{ nasheedVol }}" onChange="{{ setVol }}" style="width: 100%; accent-color: #D9B478; cursor: pointer;">
+                <input type="range" min="1" max="50" value="{{ nasheedVol }}" onChange="{{ setVol }}" style="width: 100%; accent-color: #D9B478; cursor: pointer;">
               </div>
               <span style="font-size: 11px; color: #8B8B93;">{{ nasheedDb }}</span>
               <div onClick="{{ toggleDuck }}" style="display: flex; align-items: center; gap: 9px; cursor: pointer;">
@@ -1474,7 +1474,7 @@
   </main>
 
   <sc-if value="{{ jobOpen }}" hint-placeholder-val="{{ false }}">
-    <div style="position: fixed; inset: 0; z-index: 94; display: grid; place-items: center; padding: 24px; background: rgba(6,6,8,.74); backdrop-filter: blur(9px);">
+    <div style="position: fixed; inset: 0; z-index: 94; display: grid; place-items: start center; padding: 6vh 24px 24px; background: radial-gradient(120% 90% at 50% 0%, rgba(38,29,18,.5), rgba(6,6,8,.86) 62%), rgba(6,6,8,.6); backdrop-filter: blur(9px);">
       <div style="width: 100%; max-width: 1060px; max-height: 92vh; overflow: auto; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 26px; padding: 26px 28px 24px; border: 1px solid #2C2C33; border-radius: 20px; background: radial-gradient(120% 80% at 82% -12%, rgba(217,180,120,.13), transparent 58%), linear-gradient(168deg, #18181D 0%, #121216 46%, #0D0D10 100%); box-shadow: 0 48px 120px rgba(0,0,0,.76), inset 0 1px 0 rgba(248,248,249,.05); animation: dcPop .18s cubic-bezier(.2,.8,.2,1);">
         <!-- min-height so the dialog does not jump size between steps: the
              tallest step is the style row and the shortest is the trim, and
@@ -1497,18 +1497,15 @@
         </div>
         <span style="display: block; height: 1px; background: linear-gradient(90deg, #2A2A31, rgba(42,42,49,0));"></span>
 
-        <div style="display: flex; flex-direction: column; gap: 12px;">
-          <span style="display: flex; align-items: center; gap: 7px;">
-            <sc-for list="{{ jobStepDots }}" as="dot" hint-placeholder-count="7">
-              <a href="#" onClick="{{ dot.go }}" title="{{ dot.label }}" style="{{ dot.style }}"></a>
-            </sc-for>
+        <div style="display: flex; flex-direction: column; gap: 13px;">
+          <span style="display: flex; align-items: center; gap: 12px;">
+            <span style="position: relative; flex: 1 1 auto; height: 2px; border-radius: 2px; background: #232329; overflow: hidden;">
+              <span style="{{ jobProgressStyle }}"></span>
+            </span>
+            <span style="flex: none; font-size: 11px; color: #6E6E76; font-variant-numeric: tabular-nums;">{{ jobStepCounter }}</span>
           </span>
           <span style="display: flex; flex-direction: column; gap: 6px; animation: dcStep .3s cubic-bezier(.2,.75,.3,1) both;">
-            <span style="display: inline-flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #A98B55;">
-              <span style="display: grid; place-items: center; width: 19px; height: 19px; border-radius: 6px; border: 1px solid rgba(217,180,120,.34); background: rgba(217,180,120,.1); color: #F0D6A6; font-size: 10.5px; letter-spacing: 0;">{{ jobStepNo }}</span>
-              {{ jobStepLabel }}
-            </span>
-            <strong style="font-family: Outfit, Inter, sans-serif; font-size: 26px; font-weight: 600; line-height: 1.15; letter-spacing: -.025em; color: #F6F6F8;">{{ jobStepTitle }}</strong>
+            <strong style="font-family: Outfit, Inter, sans-serif; font-size: 27px; font-weight: 600; line-height: 1.15; letter-spacing: -.025em; color: #F6F6F8;">{{ jobStepTitle }}</strong>
             <span style="font-size: 13px; line-height: 1.55; color: #8B8B93; max-width: 62ch;">{{ jobStepHint }}</span>
           </span>
         </div>
@@ -1521,7 +1518,7 @@
 
         <sc-if value="{{ jobIsStepTrim }}" hint-placeholder-val="{{ true }}">
         <div style="display: flex; flex-direction: column; gap: 10px; animation: dcStep .3s cubic-bezier(.2,.75,.3,1) both; animation-delay: .04s;">
-          <span style="display: flex; align-items: center; font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">Use this part of the lecture<span style="margin-left: auto; letter-spacing: 0; text-transform: none; font-size: 11.5px; font-weight: 500; color: #F0D6A6;">{{ jobRangeLabel }}</span></span>
+          <span style="display: flex; align-items: baseline; font-size: 13px; color: #8B8B93;"><span style="margin-left: auto; font-family: Outfit, Inter, sans-serif; font-size: 14px; font-weight: 600; color: #F6F6F8;">{{ jobRangeLabel }}</span></span>
           <div style="position: relative; height: 52px; border-radius: 9px; border: 1px solid #1E1E22; background: #101013; overflow: hidden;">
             <!-- A waveform rather than a barcode. The old fill was a repeating
                  gradient of identical hairlines, which said nothing about the
@@ -1548,13 +1545,12 @@
             <i class="ph ph-caret-down" style="font-size: 12px; color: #6E6E76;"></i>
           </label>
           <div style="{{ jobCountsWrapStyle }}">
-            <span style="display: flex; flex-direction: column; gap: 9px;">
-              <span style="font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">How many clips</span>
-              <span style="display: flex; flex-wrap: wrap; gap: 7px;">
-                <sc-for list="{{ countOpts }}" as="opt" hint-placeholder-count="4">
-                  <button onClick="{{ opt.toggle }}" style="{{ opt.pillStyle }}"><i class="ph ph-film-strip" style="font-size: 12px;"></i>{{ opt.label }}</button>
-                </sc-for>
-              </span>
+            <span style="display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 22px;">
+              <span style="font-size: 13px; color: #8B8B93; margin-right: 2px;">How many</span>
+              <sc-for list="{{ countOpts }}" as="opt" hint-placeholder-count="4">
+                <button onClick="{{ opt.toggle }}" style="{{ opt.optStyle }}">{{ opt.label }}</button>
+              </sc-for>
+              <span style="font-size: 13px; color: #6E6E76; margin-left: -14px;">clips per lecture</span>
             </span>
           </div>
           <label style="{{ jobDurWrapStyle }}">
@@ -1578,22 +1574,18 @@
             </span>
           </sc-if>
           <sc-if value="{{ jobMusicOn }}" hint-placeholder-val="{{ true }}">
-            <span style="font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">Which nasheed</span>
-            <span style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <span style="display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 22px;">
+              <span style="font-size: 13px; color: #8B8B93; margin-right: 2px;">Which nasheed</span>
               <sc-for list="{{ jobNasheeds }}" as="n" hint-placeholder-count="4">
-                <button onClick="{{ n.select }}" style="{{ n.style }}"><i class="ph ph-music-notes" style="font-size: 12px;"></i>{{ n.label }}</button>
+                <button onClick="{{ n.select }}" style="{{ n.style }}">{{ n.label }}</button>
               </sc-for>
             </span>
-            <span style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 8px;">
-              <span style="font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">How loud underneath</span>
-              <span style="font-family: Outfit, Inter, sans-serif; font-size: 12.5px; font-weight: 500; color: #F0D6A6;">{{ jobVolumeLabel }}</span>
+            <span style="display: flex; align-items: center; gap: 16px; margin-top: 20px;">
+              <span style="flex: none; font-size: 13px; color: #8B8B93;">How loud</span>
+              <input type="range" min="{{ jobVolumeMin }}" max="{{ jobVolumeMax }}" value="{{ jobVolume }}" onChange="{{ setJobVolume }}" style="flex: 1 1 auto; max-width: 300px; accent-color: #D9B478; background: transparent; cursor: pointer;">
+              <span style="flex: none; min-width: 42px; font-family: Outfit, Inter, sans-serif; font-size: 15px; font-weight: 600; color: #F6F6F8; font-variant-numeric: tabular-nums;">{{ jobVolumeValue }}</span>
             </span>
-            <span style="display: flex; flex-wrap: wrap; gap: 6px;">
-              <sc-for list="{{ jobVolumeLevels }}" as="v" hint-placeholder-count="3">
-                <button onClick="{{ v.select }}" style="{{ v.style }}">{{ v.label }}</button>
-              </sc-for>
-            </span>
-            <span style="font-size: 11.5px; color: #5E5E66;">It is ducked automatically wherever the voice is loudest, so it never competes with the speaker.</span>
+            <span style="margin-top: 14px; font-size: 12px; line-height: 1.55; color: #6E6E76;">Of the speaker's level, and ducked further wherever the voice is loudest — it never competes with them.</span>
           </sc-if>
         </div>
         </sc-if>

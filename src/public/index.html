@@ -581,9 +581,20 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 
 .clip-main{display:flex;gap:16px;align-items:flex-start}
 .clip-content{flex:1;min-width:0}
-.bgt-row{display:flex;gap:9px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
-.bgt-card{position:relative;flex:none;width:104px;background:none;border:0;padding:0;cursor:pointer;text-align:center}
-.bgt-thumb{position:relative;display:block;width:98px;height:174px;margin:0 auto;border-radius:9px;border:1.5px solid #26262A;background-color:#131315;background-size:cover;background-position:center;transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease;overflow:hidden}
+.lb-row{display:flex;gap:26px;flex-wrap:wrap;max-width:740px}
+.lb{flex:1 1 0;min-width:96px;display:flex;flex-direction:column;gap:10px;padding:0;border:0;background:none;text-align:left;cursor:pointer}
+.lb-t{font:400 14px Outfit,Inter,sans-serif;color:#8B8B93;transition:color .18s ease,font-weight .18s ease}
+.lb.on .lb-t{color:#F6F6F8;font-weight:600}
+.lb-track{position:relative;display:block;height:3px;border-radius:3px;background:#1D1D22}
+.lb-fill{position:absolute;top:0;bottom:0;border-radius:3px;background:#33333B;transform-origin:left center;animation:lbGrow .42s cubic-bezier(.2,.75,.3,1) both;transition:background .18s ease}
+.lb.on .lb-fill{background:linear-gradient(90deg,#C9A468,#F0D6A6)}
+.lb:not(.on):hover .lb-t{color:#BCBCC3}
+.lb:not(.on):hover .lb-fill{background:#4A4A54}
+@keyframes lbGrow{from{transform:scaleX(0)}to{transform:none}}
+@media (prefers-reduced-motion: reduce){.lb-fill{animation:none}}
+.bgt-row{display:flex;gap:12px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.bgt-card{position:relative;flex:none;width:124px;background:none;border:0;padding:0;cursor:pointer;text-align:center}
+.bgt-thumb{position:relative;display:block;width:124px;height:220px;margin:0 auto;border-radius:10px;border:1px solid #212127;background-color:#131315;background-size:cover;background-position:center;transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease;overflow:hidden}
 /* The previews run. A caption style is defined by what it DOES -- words
    arriving, a line waiting in grey, a card cutting to the next -- and a still
    frame shows none of it. One shared 5s loop so all five stay in phase, and
@@ -614,19 +625,19 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .bgt-card.locked:hover .bgt-thumb{border-color:#4A4038}
 /* Bottom-left, because that is the one corner none of the caption styles
    uses: Bold Stack sets top-left, Headline top-centre, the rest centre. */
-.bgt-lock{position:absolute;top:150px;left:9px;display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:999px;background:rgba(10,10,12,.8);border:1px solid rgba(217,180,120,.45);color:#F0D6A6;font:600 8.5px Outfit,Inter,sans-serif;letter-spacing:.03em;pointer-events:none}
+.bgt-lock{position:absolute;top:190px;left:9px;display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:999px;background:rgba(10,10,12,.8);border:1px solid rgba(217,180,120,.45);color:#F0D6A6;font:600 8.5px Outfit,Inter,sans-serif;letter-spacing:.03em;pointer-events:none}
 .bgt-name{white-space:normal;line-height:1.35}
 .bgt-card:not(.on):hover .bgt-thumb{border-color:#3A3A42;transform:translateY(-1px)}
-.bgt-card.on .bgt-thumb{border-color:rgba(240,214,166,.9);box-shadow:0 0 0 3px rgba(240,214,166,.12)}
-.bgt-name{display:block;margin-top:5px;font:500 10px Outfit,Inter,sans-serif;color:#8B8B93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bgt-card.on .bgt-name{color:#F0D6A6}
+.bgt-card.on .bgt-thumb{border-color:rgba(240,214,166,.8)}
+.bgt-name{display:block;margin-top:7px;font:400 12px Outfit,Inter,sans-serif;color:#8B8B93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bgt-card.on .bgt-name{color:#F6F6F8;font-weight:600}
 .bgt-badge{position:absolute;top:4px;left:4px;padding:1px 5px;border-radius:6px;background:rgba(10,10,12,.78);border:1px solid rgba(217,180,120,.4);color:#F0D6A6;font:700 6.5px Outfit,sans-serif;letter-spacing:.04em}
 .bgt-del{position:absolute;top:3px;right:3px;width:16px;height:16px;border-radius:5px;border:0;background:rgba(10,10,12,.72);color:#B9B9C0;font-size:11px;line-height:1;cursor:pointer;display:grid;place-items:center;opacity:0;transition:opacity .12s ease}
 .bgt-card:hover .bgt-del{opacity:1}
 .bgt-ph{display:grid;place-items:center;color:#8B8B93;font-size:18px}
 .bgt-dash{border-style:dashed;background:transparent}
 .jt-row{display:flex;gap:10px;align-items:stretch}
-.jt-card{position:relative;flex:1;display:flex;gap:12px;align-items:center;padding:11px 12px;border-radius:12px;text-align:left;cursor:pointer;background:#131315;border:1.5px solid #26262A;transition:border-color .15s ease,background .15s ease,transform .15s ease,box-shadow .15s ease}
+.jt-card{position:relative;flex:1;display:flex;gap:12px;align-items:center;padding:11px 12px;border-radius:12px;text-align:left;cursor:pointer;background:#101013;border:1px solid #212127;transition:border-color .18s ease}
 .jt-card .jt-body{display:flex;flex-direction:column;gap:3px;min-width:0}
 .jt-card .t{font:600 14px Outfit,Inter,sans-serif;color:#D2D2D8;transition:color .15s ease}
 .jt-card .d{font:400 11px Outfit,Inter,sans-serif;line-height:1.4;color:#8B8B93;transition:color .15s ease}
@@ -636,10 +647,10 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .jt-mini .m2{font:700 7px Outfit,Inter,sans-serif;color:#9AA0A6}
 .jt-mini .mq{font:400 10px 'Scheherazade New','Amiri','KFGQPC HAFS Uthmanic Script',serif;color:#F2F2F4;line-height:1}
 .jt-mini .mt{width:22px;height:2.5px;border-radius:2px;background:#8B8B93;opacity:.7}
-.jt-card:not(.on):hover{border-color:#3A3A42;transform:translateY(-1px)}
-.jt-card.on{border-color:rgba(240,214,166,.9);background:linear-gradient(180deg,rgba(217,180,120,.14),rgba(217,180,120,.05));box-shadow:0 0 0 3px rgba(240,214,166,.12)}
-.jt-card.on .t{color:#F0D6A6}
-.jt-card.on .d{color:#C9B896}
+.jt-card:not(.on):hover{border-color:#3A3A42}
+.jt-card.on{border-color:rgba(240,214,166,.7)}
+.jt-card.on .t{color:#F6F6F8}
+.jt-card.on .d{color:#A2A2AA}
 .jt-card.on .k{opacity:1;transform:translateX(0)}
 .jt-card.on .jt-mini{filter:none;opacity:1;border-color:rgba(240,214,166,.35)}
 @media (max-width:480px){.jt-row{flex-direction:column}}
@@ -3575,6 +3586,35 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       el.style.animation='dcStep .3s cubic-bezier(.2,.75,.3,1) both';
       el.style.animationDelay='.04s';
     }
+    /* Which way the panel moves. It slid in from the right whether you pressed
+       Continue or Back, so the one thing the motion could say -- that Back
+       goes back -- was the one thing it did not. The generated CSS reads this
+       custom property inside the dcStep keyframes, so template-owned blocks
+       turn around with the injected ones. */
+    let lastJobStep=0;
+    function stepDirection(){
+      const n=Number(StudioAdapter.ui.jobStep||1);
+      if(n!==lastJobStep){
+        document.documentElement.style.setProperty('--dc-step-from',n<lastJobStep?'-22px':'22px');
+        lastJobStep=n;
+      }
+    }
+    /* True the first time this element is painted for a given step, false on
+       the repaints that follow. Motion belongs to arriving at a question, not
+       to answering it. */
+    function entered(el,key){
+      if(el.dataset.enteredAs===key)return false;
+      el.dataset.enteredAs=key;
+      return true;
+    }
+    /* Options arrive in the order you read them rather than all at once. */
+    function stagger(el,sel){
+      if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+      [...el.querySelectorAll(sel)].forEach((n,i)=>{
+        n.style.animation='dcStep .34s cubic-bezier(.2,.75,.3,1) both';
+        n.style.animationDelay=(0.05+i*0.045).toFixed(3)+'s';
+      });
+    }
     const jobTypeEl=$('#studioJobType');
     function paintJobType(vals){
       alive(jobTypeEl);
@@ -3582,7 +3622,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       /* Each injected block belongs to one step of the panel now. Painting
          them all at once is what made the panel a scroll instead of a
          sequence. */
-      if(!open||!vals.jobIsStepKind){jobTypeEl.classList.add('hide');jobTypeEl.dataset.step='';return}
+      if(!open||!vals.jobIsStepKind){jobTypeEl.classList.add('hide');jobTypeEl.dataset.step='';jobTypeEl.dataset.enteredAs='';return}
       const slot=$('#studioJobSlot');
       jobTypeEl.classList.toggle('hide',!slot);
       if(!slot)return;
@@ -3602,19 +3642,18 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(jobTypeEl.dataset.built!=='4'){
         jobTypeEl.dataset.built='5';
         jobTypeEl.style.cssText='display:block;margin:14px 0 12px';
-        jobTypeEl.innerHTML='<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin-bottom:8px">What are you clipping?</div>'
-          +'<div class="jt-row">'
+        jobTypeEl.innerHTML='<div class="jt-row">'
           +'<button type="button" class="jt-card" data-kind="lecture">'
             +'<span class="jt-mini"><span class="m1 bgt-anim" style="animation-name:bgtL1">of a person\u2019s</span><span class="m2 bgt-anim" style="animation-name:bgtL2">islam</span></span>'
             /* Described by what the pick actually does, not by one style's
                look: the lecture side has four styles now and this used to
                describe Mono Minimal, which stopped being the default. */
             +'<span class="jt-body"><span class="t">Islamic lecture</span><span class="d">Captions what is said. Moments are scored and cut for you.</span></span>'
-            +'<i class="ph-fill ph-check-circle k"></i></button>'
+            +'</button>'
           +'<button type="button" class="jt-card" data-kind="quran">'
             +'<span class="jt-mini"><span class="mq bgt-anim" style="animation-name:bgtL1">\u0627\u0644\u0644\u0651\u064E\u0647\u064F \u0646\u064F\u0648\u0631\u064F</span><span class="mt bgt-anim" style="animation-name:bgtL2"></span></span>'
             +'<span class="jt-body"><span class="t">Quran recitation</span><span class="d">Captions the ayah from the Quran itself, with its translation.</span></span>'
-            +'<i class="ph-fill ph-check-circle k"></i></button>'
+            +'</button>'
           +'</div>';
         for(const b of jobTypeEl.querySelectorAll('button')){
           b.onclick=e=>{e.preventDefault();StudioAdapter.bindings(DATA).pickJobType(b.dataset.kind)};
@@ -3623,6 +3662,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       for(const b of jobTypeEl.querySelectorAll('button[data-kind]')){
         b.classList.toggle('on',(b.dataset.kind==='quran')===Boolean(vals.jobTypeQuran));
       }
+      if(entered(jobTypeEl,'kind'))stagger(jobTypeEl,'.jt-card');
     }
 
     /* The template dropdown gave three names and no way to tell them apart.
@@ -3657,7 +3697,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        Sizes are the template's real captionFontSize scaled into the thumb,
        through the same Win-cell divisor libass uses, so a style that renders
        large looks large here. */
-    const MINI_W = 98;
+    const MINI_W = 124;
     function tplMiniHtml(t){
       const mono = t.filterPreset === 'monochrome';
       const fam = `'${esc(t.captionFont || 'Outfit')}',Outfit,Inter,sans-serif`;
@@ -3666,7 +3706,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       const queued = esc(t.captionHighlight || '#808080');
       /* 1080 is the frame the templates are authored against; 1.562 is the
          Win cell that turns an ASS size into an em. */
-      const px = n => Math.max(4, (Number(n) || 60) / 1.562 * (MINI_W / 1080)).toFixed(1);
+      const px = n => Math.max(7, (Number(n) || 60) / 1.562 * (MINI_W / 1080) * 1.25).toFixed(1);
       const justify = t.captionPosition === 'top' ? 'flex-start'
         : t.captionPosition === 'bottom' ? 'flex-end' : 'center';
       const align = t.captionHorizontal === 'left' ? 'flex-start'
@@ -3804,10 +3844,9 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       const pill=on=>'padding:6px 11px;border-radius:999px;font:500 11.5px Outfit,Inter,sans-serif;cursor:pointer;'
         +'border:1px solid '+(on?'rgba(240,214,166,.9)':'#26262A')+';'
         +'background:'+(on?'rgba(217,180,120,.14)':'#131315')+';color:'+(on?'#F0D6A6':'#A2A2AA')+';';
-      if(!showStyle&&!showBands){jobStyleEl.classList.add('hide');jobStyleEl.innerHTML='';return}
+      if(!showStyle&&!showBands){jobStyleEl.classList.add('hide');jobStyleEl.innerHTML='';jobStyleEl.dataset.enteredAs='';return}
       slideIn(jobStyleEl);
-      let html=!showStyle?'':'<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin:10px 0 6px">Clip style</div>'
-        +'<div class="bgt-row">'
+      let html=!showStyle?'':'<div class="bgt-row">'
         +(DATA.templates||[]).map(t=>{
           const on=t.name===active;
           /* Pro styles stay in the row rather than being hidden: a style you
@@ -3825,32 +3864,25 @@ function studioWanted(){return window.STUDIO_SHELL===true}
            the bar puts them on one scale so the difference is visible before
            the words are. Scaled against the longest band the worker cuts. */
         const SPAN=LENGTH_BANDS[LENGTH_BANDS.length-1][1];
-        const bandCard=on=>'position:relative;display:flex;flex-direction:column;gap:9px;flex:1 1 0;min-width:104px;'
-          +'padding:12px 13px 13px;border-radius:11px;text-align:left;cursor:pointer;font-family:inherit;'
-          +'transition:border-color .16s ease,background .16s ease,box-shadow .16s ease;'
-          +'border:1px solid '+(on?'rgba(240,214,166,.85)':'#26262A')+';'
-          +'background:'+(on?'rgba(217,180,120,.06)':'#121214')+';'
-          +(on?'box-shadow:0 0 0 3px rgba(217,180,120,.1);':'');
         const chosen=LENGTH_BANDS.filter(([lo,hi])=>bandOn(lo,hi));
-        html+='<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin:8px 0 9px">Clip length \u00b7 pick any</div>'
-          +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
+        html+='<div class="lb-row">'
           +LENGTH_BANDS.map(([lo,hi,label])=>{
             const on=bandOn(lo,hi);
-            return `<button type="button" data-band="${lo}-${hi}" style="${bandCard(on)}">`
-              +`<span style="font:600 13px Outfit,Inter,sans-serif;color:${on?'#F0D6A6':'#F2F2F4'}">${label}</span>`
-              +'<span style="position:relative;display:block;height:5px;border-radius:5px;background:#1D1D22">'
-              +`<span style="position:absolute;top:0;bottom:0;left:${(lo/SPAN*100).toFixed(1)}%;width:${((hi-lo)/SPAN*100).toFixed(1)}%;border-radius:5px;background:${on?'linear-gradient(90deg,#C9A468,#F0D6A6)':'#3A3A42'}"></span></span>`
-              +(on?'<span style="position:absolute;top:9px;right:10px;display:grid;place-items:center;width:16px;height:16px;border-radius:50%;background:#F0D6A6;color:#09090A;font-size:10px">\u2713</span>':'')
+            return `<button type="button" class="lb${on?' on':''}" data-band="${lo}-${hi}">`
+              +`<span class="lb-t">${label}</span>`
+              +'<span class="lb-track">'
+              +`<span class="lb-fill" style="left:${(lo/SPAN*100).toFixed(1)}%;width:${((hi-lo)/SPAN*100).toFixed(1)}%"></span></span>`
               +'</button>';
           }).join('')
           +'</div>'
-          +'<div style="font-size:12px;color:#6E6E76;margin-top:9px">'
+          +'<div style="font-size:12.5px;color:#6E6E76;margin-top:14px">'
           +(chosen.length
-            ? `Moments are cut between ${Math.min(...chosen.map(b=>b[0]))}s and ${Math.max(...chosen.map(b=>b[1]))}s. Anything shorter or longer is skipped.`
+            ? `Cut between ${Math.min(...chosen.map(b=>b[0]))}s and ${Math.max(...chosen.map(b=>b[1]))}s \u2014 anything shorter or longer is skipped.`
             : 'Nothing can be cut until at least one length is allowed.')
           +'</div>';
       }
       jobStyleEl.innerHTML=html;
+      if(entered(jobStyleEl,showStyle?'style':'lengths'))stagger(jobStyleEl,'.bgt-card,.lb');
       jobStyleEl.querySelectorAll('[data-tpl-name]').forEach(b=>b.onclick=e=>{
         e.preventDefault();
         /* The server refuses this too. Saying so here means the answer is
@@ -3916,7 +3948,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          way in from the panel. */
       const open=Boolean(ui.job)&&Boolean(vals.jobIsStepPicture);
       jobBgEl.classList.toggle('hide',!open);
-      if(!open){jobBgEl.dataset.step='';return}
+      if(!open){jobBgEl.dataset.step='';jobBgEl.dataset.enteredAs='';return}
       const bgSlot=$('#studioJobSlot');
       if(bgSlot&&jobBgEl.parentElement!==bgSlot)bgSlot.appendChild(jobBgEl);
       if(jobBgEl.dataset.step!=='picture'){jobBgEl.dataset.step='picture';slideIn(jobBgEl)}
@@ -3926,10 +3958,8 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          neither what each mode does nor what it looks like, and "Their video"
          did not even say whose. Each carries a picture of its own outcome. */
       const modeCard=(on)=>'position:relative;display:flex;flex-direction:column;gap:9px;flex:1 1 0;min-width:150px;padding:11px;border-radius:11px;text-align:left;cursor:pointer;font-family:inherit;'
-        +'transition:border-color .16s ease,background .16s ease,box-shadow .16s ease;'
-        +'border:1px solid '+(on?'rgba(240,214,166,.85)':'#26262A')+';'
-        +'background:'+(on?'rgba(217,180,120,.06)':'#121214')+';'
-        +(on?'box-shadow:0 0 0 3px rgba(217,180,120,.1);':'');
+        +'transition:border-color .18s ease;background:#101013;'
+        +'border:1px solid '+(on?'rgba(240,214,166,.7)':'#212127')+';';
       const SRC_ART='linear-gradient(150deg,#3C3A46 0%,#23222B 52%,#121116 100%)';
       const SCENE_ART='linear-gradient(150deg,#6B7FA8 0%,#3A4E6E 48%,#151C2A 100%)';
       const modeArt=(kind)=>{
@@ -3949,8 +3979,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(jobBgEl.dataset.sig!==sig){
         jobBgEl.dataset.sig=sig;
         jobBgEl.style.cssText='display:block;margin:0 0 12px';
-        let html='<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin:2px 0 9px">Background</div>'
-          +'<div style="display:flex;gap:11px;flex-wrap:wrap">'
+        let html='<div style="display:flex;gap:11px;flex-wrap:wrap" class="bg-modes">'
           +modes.map(m=>{
             const on=mode===m[0];
             return `<button type="button" data-bg-mode="${m[0]}" style="${modeCard(on)}">`
@@ -3958,17 +3987,15 @@ function studioWanted(){return window.STUDIO_SHELL===true}
               +`<span style="display:flex;flex-direction:column;gap:2px">`
               +`<span style="font:600 13px Outfit,Inter,sans-serif;color:${on?'#F0D6A6':'#F2F2F4'}">${m[1]}</span>`
               +`<span style="font-size:11.5px;line-height:1.45;color:#8B8B93">${m[2]}</span></span>`
-              +(on?'<span style="position:absolute;top:9px;right:9px;display:grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#F0D6A6;color:#09090A;font-size:11px">\u2713</span>':'')
               +'</button>';
           }).join('')
           +'</div>';
         if(mode==='own'){
           /* Without this the step was three controls over an empty panel. It
              is also the only place that says the scenery library exists. */
-          html+='<div style="display:flex;align-items:flex-start;gap:11px;margin-top:13px;padding:14px 16px;border:1px solid #26262A;border-radius:10px;background:#121214">'
-            +'<span style="flex:none;color:#8B8B93;font-size:15px;line-height:1">\u2139</span>'
-            +'<span style="font-size:12.5px;line-height:1.55;color:#8B8B93">The clip plays the lecture as filmed \u2014 framing follows the speaker. '
-            +'Pick one of the other two to put scenery behind the voice instead, from your library or DeenClipped\u2019s.</span></div>';
+          html+='<div style="margin-top:15px;font-size:12.5px;line-height:1.6;color:#6E6E76;max-width:66ch">'
+            +'Framing follows the speaker. Pick one of the other two to put scenery behind the voice instead, '
+            +'from your library or DeenClipped\u2019s.</div>';
         }
         if(mode!=='own'){
           /* The library as it will look on screen, not as a list of names:
@@ -4013,6 +4040,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
             +`<span data-bg-intro-val>${ui.jobBgIntro}s</span></div>`;
         }
         jobBgEl.innerHTML=html;
+        if(entered(jobBgEl,'picture'))stagger(jobBgEl,'.bg-modes > button');
         jobBgEl.querySelectorAll('[data-bg-mode]').forEach(b=>b.onclick=e=>{e.preventDefault();ui.jobBgMode=b.dataset.bgMode;paintJobBackground(vals)});
         jobBgEl.querySelectorAll('[data-bg-id]').forEach(b=>b.onclick=e=>{e.preventDefault();ui.jobBgId=b.dataset.bgId;paintJobBackground(vals)});
         jobBgEl.querySelectorAll('[data-bg-del]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();
@@ -4556,6 +4584,7 @@ function paintStudio(){
   paintEditorPlayer(vals);
   paintEditorLayout(vals);
   paintEditorScrub();
+  stepDirection();
   paintJobStyleRow(vals);
   paintTourEntry(vals);
   paintJobPanelScroll();
