@@ -4116,7 +4116,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
                  base64 only when storage is not configured (self-hosted). */
               let saved;
               try{
-                const presign=await api('/api/uploads/presign',{method:'POST',body:JSON.stringify({fileName:file.name,contentType:meta.mimeType})});
+                const presign=await api('/api/uploads/presign',{method:'POST',body:JSON.stringify({fileName:file.name,size:file.size})});
                 await new Promise((resolve,reject)=>{
                   const x=new XMLHttpRequest();
                   x.open('PUT',presign.uploadUrl);
@@ -4637,7 +4637,7 @@ function renderStudio(){
       if(!((DATA&&DATA.tracks)||[]).length){
         throw new Error('Upload a nasheed first — every clip mixes one in, so a lecture cannot finish processing without at least one.');
       }
-      const presign=await api('/api/uploads/presign',{method:'POST',body:JSON.stringify({fileName:file.name,contentType:file.type||'video/mp4'})});
+      const presign=await api('/api/uploads/presign',{method:'POST',body:JSON.stringify({fileName:file.name,size:file.size})});
       const put=await fetch(presign.uploadUrl,{method:'PUT',headers:presign.headers||{'Content-Type':file.type||'video/mp4'},body:file});
       if(!put.ok)throw new Error('Upload failed — the storage service rejected the file.');
       await api('/api/videos',{method:'POST',body:JSON.stringify({objectKey:presignKey(presign),fileName:file.name,title:file.name,

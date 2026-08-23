@@ -64,7 +64,9 @@ test('direct uploads receive a signed S3 PUT without exposing credentials', () =
   // The caller no longer supplies a content type: it is derived from the
   // extension, so a video cannot be declared text/html and stored as a live
   // page on the media domain.
-  const result = storage.createUpload('user_1', 'lecture.mp4');
+  // The size is now required and signed into the URL, so the bucket refuses a
+  // body of any other length.
+  const result = storage.createUpload('user_1', 'lecture.mp4', 12 * 1024 * 1024);
   assert.equal(result.contentType, 'video/mp4');
   assert.match(result.key, /^uploads\/user_1\//);
   const url = new URL(result.uploadUrl);
@@ -132,9 +134,10 @@ test('the server publishes the breakdown to the browser', () => {
 });
 
 test('an upload cannot declare its own content type', () => {
-  // Whatever a caller passes, the type comes from the validated extension.
-  const sneaky = storage.createUpload('user_1', 'promo.mp4', 'text/html');
+  // There is no content-type parameter at all any more -- the type comes from
+  // the validated extension and nothing a caller sends can reach it.
+  const sneaky = storage.createUpload('user_1', 'promo.mp4', 1024);
   assert.equal(sneaky.contentType, 'video/mp4', 'a video stays a video');
-  assert.throws(() => storage.createUpload('user_1', 'page.html'), /MP4, MOV/);
-  assert.throws(() => storage.createUpload('user_1', 'shell.svg'), /MP4, MOV/);
+  assert.throws(() => storage.createUpload('user_1', 'page.html', 1024), /MP4, MOV/);
+  assert.throws(() => storage.createUpload('user_1', 'shell.svg', 1024), /MP4, MOV/);
 });

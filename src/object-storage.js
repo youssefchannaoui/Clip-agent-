@@ -25,7 +25,7 @@ export function publicObjectUrl(key) {
   return base.toString();
 }
 
-export function presign({ method = 'GET', key, expiresSec = 900, contentType = '' }) {
+export function presign({ method = 'GET', key, expiresSec = 900, contentType = '', contentLength = 0 }) {
   if (!configured()) throw new Error('Object storage is not configured.');
   const safeKey = String(key || '').split('/').filter(Boolean).map(encode).join('/');
   if (!safeKey) throw new Error('Object storage key is required.');
@@ -37,9 +37,14 @@ export function presign({ method = 'GET', key, expiresSec = 900, contentType = '
   const day = stamp.slice(0, 8);
   const region = config.objectStorageRegion || 'auto';
   const scope = `${day}/${region}/s3/aws4_request`;
-  const headerPairs = contentType
-    ? [['content-type', contentType], ['host', base.host]]
-    : [['host', base.host]];
+  // Signing content-length is what actually binds the size. A presigned PUT is
+  // otherwise a licence to write a file of ANY size into the bucket, and the
+  // only number anyone checked was one the client had sent about itself.
+  // Browsers set Content-Length from the body and forbid overriding it, so a
+  // caller that asks for 10MB and sends 3GB fails the signature at the bucket.
+  const headerPairs = [['host', base.host]];
+  if (contentType) headerPairs.push(['content-type', contentType]);
+  if (contentLength > 0) headerPairs.push(['content-length', String(contentLength)]);
   headerPairs.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   const signedHeaders = headerPairs.map(([name]) => name).join(';');
   const params = new URLSearchParams({
@@ -95,12 +100,17 @@ const UPLOAD_TYPES = Object.freeze({
   '.mkv': 'video/x-matroska',
 });
 
-export function createUpload(userId, fileName) {
+export function createUpload(userId, fileName, size = 0) {
   if (!configured()) throw new Error('Direct upload storage is not configured. Contact the site owner.');
   const extension = path.extname(String(fileName || '')).toLowerCase();
   const contentType = UPLOAD_TYPES[extension];
   if (!contentType) throw new Error('Upload an MP4, MOV, M4V, WebM or MKV video.');
+  const bytes = Math.floor(Number(size) || 0);
+  if (!(bytes > 0)) throw new Error('The size of the file is required before an upload can start.');
+  if (bytes > config.maxVideoUploadBytes) {
+    throw new Error(`That file is ${(bytes / 1024 / 1024 / 1024).toFixed(1)}GB. The limit is ${Math.round(config.maxVideoUploadBytes / 1024 / 1024)}MB.`);
+  }
   const safeName = path.basename(String(fileName || 'video.mp4')).replace(/[^A-Za-z0-9._-]+/g, '-').slice(-120);
   const key = assertStorageObjectKey(`${uploadPrefixFor(userId)}${Date.now()}-${crypto.randomBytes(6).toString('hex')}-${safeName}`);
-  return { key, uploadUrl: presign({ method: 'PUT', key, contentType }), contentType, expiresIn: 900 };
+  return { key, uploadUrl: presign({ method: 'PUT', key, contentType, contentLength: bytes }), contentType, expiresIn: 900, maxBytes: bytes };
 }

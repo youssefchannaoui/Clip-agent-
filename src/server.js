@@ -964,7 +964,7 @@ async function route(req, res, url) {
       return json(res, 429, { error: 'Too many uploads started in the last hour. Try again shortly.' });
     }
     try {
-      const upload = objectStorage.createUpload(currentUser.id, String(body.fileName || ''));
+      const upload = objectStorage.createUpload(currentUser.id, String(body.fileName || ''), Number(body.size));
       return json(res, 200, { ok: true, ...upload });
     } catch (error) { return json(res, 400, { error: error.message }); }
   }
