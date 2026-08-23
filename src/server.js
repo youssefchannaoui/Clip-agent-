@@ -18,6 +18,7 @@ import * as throttle from './throttle.js';
 import * as backgrounds from './backgrounds.js';
 import { wordsForClip, silenceSpans } from './captions.js';
 import * as agent from './agent.js';
+import * as backup from './backup.js';
 import { fallbackThumb } from './local-engine.js';
 import * as social from './social.js';
 import { formatLocal } from './slots.js';
@@ -499,7 +500,19 @@ async function route(req, res, url) {
     if (config.processingMode === 'remote' && !errors.some(item => item.startsWith('WORKER_'))) {
       try { await workerClient.readiness(); } catch (error) { errors.push(`External worker is not ready: ${error.message}`); }
     }
-    return json(res, errors.length ? 503 : 200, { ok: errors.length === 0, engine: config.processingMode, checks: errors.length ? errors : ['configuration', 'storage', 'worker'] });
+    // Reported, never fatal. A backup that cannot be written is serious, but
+    // failing readiness over it would take a working product offline and, on a
+    // platform that restarts unready instances, keep it there.
+    const backupState = backup.lastResult();
+    const backupReport = backup.blockedReason()
+      || (backupState.at === 0 ? 'no backup has run yet'
+        : `${backupState.ok ? 'ok' : 'FAILING'} -- ${backupState.detail} (${new Date(backupState.at).toISOString()})`);
+    return json(res, errors.length ? 503 : 200, {
+      ok: errors.length === 0,
+      engine: config.processingMode,
+      checks: errors.length ? errors : ['configuration', 'storage', 'worker'],
+      backup: backupReport,
+    });
   }
   const workerCallback = pathname.match(/^\/api\/worker-callbacks\/([^/]+)$/);
   if (method === 'POST' && workerCallback) {
@@ -1798,6 +1811,10 @@ if (fatal.length) {
 server.listen(config.port, () => {
   console.log(`DeenClipped self-hosted engine listening on http://localhost:${config.port}`);
   agent.start();
+  // Nothing anywhere held a second copy of state.json. Started here for the
+  // same reason as the sweep below: importing this module in a test must not
+  // ship a real state file to a real bucket.
+  backup.start();
   // YouTube API Data is cleared after 30 days (policy III.E.4.a-g). Started
   // here rather than on import so a test that loads this module does not sweep
   // a real state file as a side effect.

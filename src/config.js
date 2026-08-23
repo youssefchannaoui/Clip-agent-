@@ -67,6 +67,12 @@ export const config = {
   objectStorageSecretKey: process.env.OBJECT_STORAGE_SECRET_KEY || '',
   objectStoragePublicUrl: (process.env.OBJECT_STORAGE_PUBLIC_URL || '').replace(/\/+$/, ''),
 
+  // state.json is the whole database and nothing held a second copy of it.
+  // On by default: a deployment that has somewhere to put a backup should be
+  // taking one, not waiting to be told to.
+  backupEnabled: boolean(process.env.BACKUP_ENABLED, true),
+  backupIntervalHours: Math.max(1, Math.min(24, number(process.env.BACKUP_INTERVAL_HOURS, 4))),
+
   defaultTemplateId: process.env.DEFAULT_TEMPLATE_ID || 'clean-line',
   clipsPerVideo: Math.max(1, Math.round(number(process.env.CLIPS_PER_VIDEO, 8))),
   clipMinSeconds: Math.max(3, Math.round(number(process.env.CLIP_MIN_SECONDS, 20))),
