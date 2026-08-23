@@ -75,7 +75,7 @@ export function unrejectClip(id) {
   return clip;
 }
 
-export function scheduleSelected(ids = [], { at = null } = {}) {
+export function scheduleSelected(ids = [], { at = null, day = null } = {}) {
   const uniqueIds = [...new Set((Array.isArray(ids) ? ids : []).map(value => String(value || '').trim()).filter(Boolean))];
   if (!uniqueIds.length) throw new Error('Select at least one clip to schedule.');
   if (uniqueIds.length > 100) throw new Error('Schedule no more than 100 clips at once.');
@@ -117,7 +117,7 @@ export function scheduleSelected(ids = [], { at = null } = {}) {
       }
       if (clip.status !== 'approved') throw new Error(`This clip cannot be scheduled from its current ${clip.status} state.`);
 
-      scheduleApprovedClip(clip, { at });
+      scheduleApprovedClip(clip, { at, day });
       scheduled++;
       results.push({ id: clip.id, ok: true, status: clip.status, scheduledAt: clip.scheduledAt });
     } catch (error) {
@@ -224,21 +224,30 @@ function setTargets(clip) {
   clip.targets = targets;
 }
 
-// `at` asks for the first free posting time on or after that instant, which is
-// how the schedule screen puts a clip on the day you pressed. Without it every
-// day's button landed the clip in the next open slot regardless of which day
-// was pressed -- the button named a day it had no way to honour. A day that is
-// already full still rolls forward, and the caller is told where it landed.
-export function scheduleApprovedClip(clip, { at = null } = {}) {
+// Two ways to ask for a time, kept apart because they mean different things.
+// `day` is a calendar day, floored to midnight in the ACCOUNT's zone, so the
+// browser's clock and zone cannot decide which day was meant. `at` is an
+// instant -- one posting slot, pressed in the week grid -- honoured exactly
+// when it is free. Either way the allocator refuses the past and skips what is
+// taken, so a full day or a claimed slot rolls forward and the caller is told
+// where it landed. Without any of this, every day's button landed the clip in
+// the next open slot regardless of which day was pressed.
+const LEAD_MS = 15 * 60_000;
+export function scheduleApprovedClip(clip, { at = null, day = null } = {}) {
   if (clip.status !== 'approved') return clip;
   const taken = ownedBy(state.clips, ownerOf(clip)).map(item => item.scheduledAt).filter(Boolean);
-  const wanted = Number(at);
-  // `at` names a day, so it is read as that whole day in the account's zone --
-  // never as the o'clock it happened to arrive as.
-  const from = Number.isFinite(wanted) && wanted > 0
-    ? Math.max(Date.now(), startOfZonedDay(wanted))
-    : null;
-  clip.scheduledAt = clip.scheduledAt || nextSlot(taken, from ? { from } : undefined);
+  const exact = Number(at), whole = Number(day);
+  let opts;
+  if (Number.isFinite(exact) && exact > 0) {
+    // nextSlot keeps a 15-minute lead so nothing is scheduled a breath from
+    // now. Applied to an instant that IS the slot, that lead pushes the slot
+    // you pressed just out of reach and quietly hands back the next one -- so
+    // here the lead guards the floor instead, and the slot itself is exact.
+    opts = { from: Math.max(Date.now() + LEAD_MS, exact), leadMinutes: 0 };
+  } else if (Number.isFinite(whole) && whole > 0) {
+    opts = { from: Math.max(Date.now(), startOfZonedDay(whole)) };
+  }
+  clip.scheduledAt = clip.scheduledAt || nextSlot(taken, opts);
   setTargets(clip);
   for (const target of clip.targets || []) target.nextTryAt = clip.scheduledAt;
   clip.status = 'scheduled'; save();

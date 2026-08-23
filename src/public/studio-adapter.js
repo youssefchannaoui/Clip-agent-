@@ -1373,7 +1373,8 @@
               caption: c.title || '',
               score: c.score || '',
               duration: secsToClock((c.durationMs || 0) / 1000),
-              thumbStyle: 'width: 30px; height: 42px; flex: none; border-radius: 6px; border: 1px solid #26262A; background: ' + thumb(c.thumbUrl) + ';',
+              thumbStyle: 'width: 42px; height: 58px; flex: none; border-radius: 7px; border: 1px solid #26262A;'
+                + ' box-shadow: inset 0 0 0 1px rgba(0,0,0,.4); background: ' + thumb(c.thumbUrl) + ';',
               checks: checks.map(function (k) {
                 return {
                   label: k.label,
@@ -1466,7 +1467,7 @@
         var labels = free.slice(0, 6).map(function (c) { return (c.title || 'Clip').slice(0, 46); });
         global.StudioAdapter.onPickOption('Schedule into ' + dayNameOf(dayStart) + ', ' + dateOf(dayStart), labels.concat(['Cancel']), function (choice) {
           var picked = free.filter(function (c) { return (c.title || 'Clip').slice(0, 46) === choice; })[0];
-          if (picked) global.StudioAdapter.onScheduleClip(picked.id, dayStart);
+          if (picked) global.StudioAdapter.onScheduleClip(picked.id, { day: dayStart });
         });
       };
     }
@@ -1489,22 +1490,25 @@
             var past = ds < today;
             cells.push({
               date: String(new Date(ds).getDate()),
-              style: 'position: relative; display: flex; flex-direction: column; gap: 4px; min-height: 66px; padding: 6px 8px 7px;'
+              style: 'position: relative; display: flex; flex-direction: column; gap: 3px; min-height: 62px; padding: 5px 7px 6px;'
                 + ' border: 1px solid ' + (isToday ? 'rgba(240,214,166,.45)' : '#1C1C21') + '; border-radius: 10px;'
                 + ' background: ' + (isToday ? 'rgba(217,180,120,.05)' : inMonth ? '#141418' : '#0F0F12') + ';'
                 + ' text-align: left; font-family: inherit; cursor: pointer;'
-                + ' opacity: ' + (inMonth ? '1' : '.45') + '; transition: border-color .14s ease, background .14s ease;',
+                + ' opacity: ' + (!inMonth ? '.4' : past ? '.6' : '1') + '; transition: border-color .14s ease, background .14s ease;',
               dateStyle: 'font-family: Outfit, Inter, sans-serif; font-size: 11.5px; font-weight: ' + (isToday ? '700' : '500') + ';'
                 + ' color: ' + (isToday ? '#F0D6A6' : past ? '#5E5E66' : '#9A9AA2') + '; font-variant-numeric: tabular-nums;',
               // One pip per post the day can hold, filled for each one taken:
               // the day's load without a number to read.
-              pips: items.length ? [0, 1, 2, 3].map(function (n) {
+              pips: (items.length || (!past && inMonth)) ? [0, 1, 2, 3].map(function (n) {
                 return { style: 'display: block; width: 5px; height: 5px; border-radius: 50%;'
-                  + ' background: ' + (n < items.length ? '#D9B478' : '#25252B') + ';' };
+                  + ' background: ' + (n < items.length ? '#D9B478' : '#212127') + ';' };
               }) : [],
               chips: items.slice(0, 2).map(function (c) {
                 return {
                   label: timeOf(c.scheduledAt) + '  ' + String(c.title || 'Clip'),
+                  rowStyle: 'display: flex; align-items: center; gap: 5px; min-width: 0;',
+                  thumbStyle: 'width: 12px; height: 21px; flex: none; border-radius: 3px; border: 1px solid #26262A;'
+                    + ' background: ' + thumb(c.thumbUrl) + ';',
                   style: 'display: block; font-size: 10.5px; line-height: 1.35; color: #BCBCC3;'
                     + ' white-space: nowrap; overflow: hidden; text-overflow: ellipsis;',
                 };
@@ -1520,33 +1524,89 @@
     }
 
     // ── week ──
-    var schedWeekCols = [];
-    for (var wd = 0; wd < 7; wd += 1) {
-      (function (ds) {
-        var items = dayItemsAt(ds);
-        var isToday = ds === today;
-        schedWeekCols.push({
-          name: new Date(ds).toLocaleDateString(undefined, { weekday: 'short' }),
-          date: dateOf(ds),
-          isToday: isToday,
-          headStyle: 'display: flex; flex-direction: column; gap: 1px; padding: 0 2px 8px;'
-            + ' color: ' + (isToday ? '#F0D6A6' : '#8B8B93') + ';',
-          style: 'display: flex; flex-direction: column; gap: 6px; flex: 1 1 0; min-width: 0; padding: 9px;'
-            + ' border: 1px solid ' + (isToday ? 'rgba(240,214,166,.4)' : '#1C1C21') + '; border-radius: 11px;'
-            + ' background: ' + (isToday ? 'rgba(217,180,120,.04)' : '#141418') + '; min-height: 300px;',
-          items: items.map(function (c) {
-            return {
-              time: timeOf(c.scheduledAt),
-              title: String(c.title || 'Clip'),
-              style: 'display: flex; flex-direction: column; gap: 2px; padding: 7px 8px; border-radius: 8px;'
-                + ' border: 0; background: #1B1B21; text-align: left; font-family: inherit; cursor: pointer; width: 100%;',
-              open: function (e) { stop(e); setUI({ schedView: 'day', schedAnchor: ds }); },
-            };
-          }),
-          canAdd: items.length < 4 && ds >= today,
-          addClip: addClipTo(ds),
+    // Drawn as the posting windows themselves: four rows, seven columns, one
+    // cell per slot the account actually has. As bare columns an empty Tuesday
+    // and a Tuesday with no windows left looked identical -- blank space --
+    // and there was nothing to press to fill one.
+    var slotTimes = (DATA.postTimes || []).slice();
+    function instantOn(dayStart, hhmm) {
+      var parts = String(hhmm).split(':');
+      var d = new Date(dayStart);
+      d.setHours(Number(parts[0]) || 0, Number(parts[1]) || 0, 0, 0);
+      return d.getTime();
+    }
+    function addClipAt(at) {
+      return function (e) {
+        stop(e);
+        if (at < Date.now()) { toast('That slot has already passed.'); return; }
+        var free = clips.filter(function (c) { return decision(c) === 'approved' && !c.scheduledAt && !c.postedAt; });
+        if (!free.length) { toast('Approve a clip in the review queue first.'); return; }
+        var labels = free.slice(0, 6).map(function (c) { return (c.title || 'Clip').slice(0, 46); });
+        global.StudioAdapter.onPickOption('Schedule for ' + timeOf(at) + ' on ' + dayNameOf(startOfDay(at)), labels.concat(['Cancel']), function (choice) {
+          var picked = free.filter(function (c) { return (c.title || 'Clip').slice(0, 46) === choice; })[0];
+          if (picked) global.StudioAdapter.onScheduleClip(picked.id, { at: at });
         });
-      })(weekStart + wd * DAY_MS);
+      };
+    }
+    var weekDayStarts = [];
+    for (var wds = 0; wds < 7; wds += 1) weekDayStarts.push(weekStart + wds * DAY_MS);
+    var slotInstants = {};
+    var schedWeekRows = slotTimes.map(function (t) {
+      return {
+        label: t,
+        cells: weekDayStarts.map(function (ds) {
+          var at = instantOn(ds, t);
+          slotInstants[at] = true;
+          var held = scheduled.filter(function (c) { return Number(c.scheduledAt) === at; })[0];
+          var past = at < Date.now();
+          return {
+            filled: Boolean(held),
+            free: !held && !past,
+            title: held ? String(held.title || 'Clip') : '',
+            style: 'position: relative; display: flex; flex-direction: column; justify-content: flex-end; flex: 1 1 0; min-width: 0;'
+              + ' height: 62px; padding: 6px 7px; border-radius: 9px; overflow: hidden; text-align: left; font-family: inherit; cursor: '
+              + (held || !past ? 'pointer' : 'default') + ';'
+              + ' border: 1px ' + (held ? 'solid #26262E' : past ? 'solid #161619' : 'dashed #232329') + ';'
+              + (held && held.thumbUrl
+                ? ' background-image: linear-gradient(to bottom, rgba(8,8,10,.15) 30%, rgba(8,8,10,.88) 100%), url("' + cssUrl(held.thumbUrl) + '");'
+                  + ' background-size: cover, cover; background-position: center, center 28%; background-color: #17171A;'
+                : ' background: ' + (held ? '#1B1B21' : 'transparent') + ';')
+              + ' opacity: ' + (past && !held ? '.45' : '1') + '; transition: border-color .14s ease, background .14s ease;',
+            titleStyle: 'font-size: 11px; line-height: 1.25; color: #F2F2F4; text-shadow: 0 1px 3px rgba(0,0,0,.8);'
+              + ' display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;',
+            act: held
+              ? (function (d) { return function (e) { stop(e); setUI({ schedView: 'day', schedAnchor: d }); }; })(ds)
+              : past ? function (e) { stop(e); } : addClipAt(at),
+          };
+        }),
+      };
+    });
+    // Anything in this week that is not on one of the account's posting times --
+    // an older slot, or a time since changed. It has to be somewhere.
+    var strays = scheduled.filter(function (c) {
+      var at = Number(c.scheduledAt);
+      return at >= weekStart && at < weekStart + 7 * DAY_MS && !slotInstants[at];
+    });
+    if (strays.length) {
+      schedWeekRows.push({
+        label: 'Other',
+        cells: weekDayStarts.map(function (ds) {
+          var held = strays.filter(function (c) { return startOfDay(c.scheduledAt) === ds; })[0];
+          return {
+            filled: Boolean(held),
+            free: false,
+            title: held ? timeOf(held.scheduledAt) + '  ' + String(held.title || 'Clip') : '',
+            style: 'display: flex; flex-direction: column; justify-content: center; gap: 2px; flex: 1 1 0; min-width: 0;'
+              + ' height: 46px; padding: 6px 8px; border-radius: 9px; text-align: left; font-family: inherit;'
+              + ' border: 1px solid ' + (held ? '#26262E' : 'transparent') + '; background: ' + (held ? '#1B1B21' : 'transparent') + ';'
+              + ' cursor: ' + (held ? 'pointer' : 'default') + ';',
+            titleStyle: 'font-size: 11px; line-height: 1.3; color: #E9E9ED; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;',
+            act: held
+              ? (function (d) { return function (e) { stop(e); setUI({ schedView: 'day', schedAnchor: d }); }; })(ds)
+              : function (e) { stop(e); },
+          };
+        }),
+      });
     }
 
     // ── day ──
@@ -2681,9 +2741,20 @@
       schedIsWeek: schedView === 'week',
       schedIsMonth: schedView === 'month',
       schedRangeLabel: schedRangeLabel,
-      schedWeekdays: schedWeekCols.map(function (c) { return { name: c.name }; }),
+      schedWeekdays: weekDayStarts.map(function (ds) {
+        return { name: new Date(ds).toLocaleDateString(undefined, { weekday: 'short' }) };
+      }),
       schedMonthWeeks: schedMonthWeeks,
-      schedWeekCols: schedWeekCols,
+      schedWeekRows: schedWeekRows,
+      schedWeekDays: weekDayStarts.map(function (ds) {
+        var isToday = ds === today;
+        return {
+          name: new Date(ds).toLocaleDateString(undefined, { weekday: 'short' }),
+          date: dateOf(ds),
+          style: 'flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 0 8px 2px;'
+            + ' color: ' + (isToday ? '#F0D6A6' : '#8B8B93') + ';',
+        };
+      }),
       schedDayItems: schedDayItems,
       schedDayCount: schedDayItems.length + ' of 4 scheduled',
       schedDayCanAdd: schedDayItems.length < 4 && schedAnchor >= today,

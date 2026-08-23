@@ -4503,12 +4503,19 @@ function renderStudio(){
        in the first free posting time on that day -- and says where it landed,
        because a full day rolls forward and silently doing so would leave the
        calendar disagreeing with the press that filled it. */
-    StudioAdapter.onScheduleClip=(id,at)=>studioDo(async()=>{
-      const r=await api('/api/clips/schedule-selected',{method:'POST',body:JSON.stringify(at?{ids:[id],at}:{ids:[id]})});
+    /* `when` is either {day} -- the square you pressed -- or {at}, one exact
+       posting slot from the week grid. The server honours it and says where the
+       clip landed, because a full day or a claimed slot rolls forward and doing
+       that silently would leave the calendar disagreeing with the press. */
+    StudioAdapter.onScheduleClip=(id,when)=>studioDo(async()=>{
+      const w=(when&&typeof when==='object')?when:(when?{day:when}:{});
+      const r=await api('/api/clips/schedule-selected',{method:'POST',body:JSON.stringify(Object.assign({ids:[id]},w))});
       const got=r&&r.results&&r.results[0]&&r.results[0].scheduledAt;
-      if(at&&got){
-        const asked=new Date(at).toDateString(), landed=new Date(got).toDateString();
-        if(asked!==landed)toast(`That day was full \u2014 scheduled for ${new Date(got).toLocaleDateString(undefined,{weekday:'long'})} instead.`);
+      const asked=w.at||w.day;
+      if(asked&&got){
+        const fmt=t=>new Date(t).toLocaleString(undefined,{weekday:'long',hour:'2-digit',minute:'2-digit'});
+        const same=w.at?Number(w.at)===Number(got):new Date(asked).toDateString()===new Date(got).toDateString();
+        if(!same)toast(`${w.at?'That slot was taken':'That day was full'} \u2014 scheduled for ${fmt(got)} instead.`);
       }
     },'Scheduled');
     StudioAdapter.onMoreClips=(projectId,count)=>studioDo(()=>api(`/api/projects/${encodeURIComponent(projectId)}/more-clips`,{method:'POST',body:JSON.stringify({count})}),'Cutting more clips');
