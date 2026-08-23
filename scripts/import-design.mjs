@@ -124,6 +124,25 @@ function buildTree(tokens) {
 
 // ── expression + text handling ──────────────────────────────────────────────
 
+// The design file is HTML, so `&` is written `&amp;` -- correctly. The runtime
+// writes text through textContent, which does NOT decode entities, so every
+// one of them reached the screen literally: the account menu read
+// "Tokens &amp; billing". Decoded once here, at the point the HTML stops being
+// HTML and becomes data.
+const ENTITIES = {
+  '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&apos;': "'",
+  '&nbsp;': '\u00a0', '&mdash;': '\u2014', '&ndash;': '\u2013', '&hellip;': '\u2026',
+  '&middot;': '\u00b7', '&times;': '\u00d7', '&rsquo;': '\u2019', '&lsquo;': '\u2018',
+  '&ldquo;': '\u201c', '&rdquo;': '\u201d',
+};
+function decodeEntities(text) {
+  if (typeof text !== 'string' || text.indexOf('&') === -1) return text;
+  return text
+    .replace(/&(?:amp|lt|gt|quot|apos|nbsp|mdash|ndash|hellip|middot|times|rsquo|lsquo|ldquo|rdquo|#39);/g,
+      (m) => ENTITIES[m] || m)
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)));
+}
+
 const BINDING = /\{\{\s*([^}]+?)\s*\}\}/g;
 
 // `{{ x }}` -> {p:'x'} (a path looked up through the scope chain)
@@ -140,7 +159,8 @@ function expr(sourceText) {
 
 // A value that may interleave literal text and bindings becomes either a plain
 // string (no bindings), a single expr, or a concat list.
-function valueNode(text) {
+function valueNode(rawText) {
+  const text = decodeEntities(rawText);
   BINDING.lastIndex = 0;
   if (!text.includes('{{')) return text;
   const parts = [];

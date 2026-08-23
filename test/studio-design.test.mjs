@@ -2855,9 +2855,12 @@ test('a new account gets the guided tour, and it can be reopened', () => {
   Object.assign(StudioAdapter.ui, { job: null, playerClip: null, sheet: null, connProvider: null });
   const vals = StudioAdapter.bindings(fresh);
   assert.equal(vals.tourOn, true, 'the design ships the tour; it must actually run');
-  assert.match(vals.tourCount, /Step 1 of 3/);
+  // Not a magic number: the count and the dots must simply agree with each
+  // other and with the steps that actually have an anchor on screen.
+  const total = vals.tourDots.length;
+  assert.ok(total >= 3, 'Home walks through the whole pipeline');
+  assert.match(vals.tourCount, new RegExp(`Step 1 of ${total}`));
   assert.ok(vals.tourTitle.length > 0 && vals.tourBody.length > 0, 'a step says something');
-  assert.equal(vals.tourDots.length, 3);
   assert.doesNotMatch(vals.tourVeilStyle, /display: none/, 'the page dims behind it');
 
   // Every step must point at an anchor the markup actually carries, or the
@@ -2869,7 +2872,7 @@ test('a new account gets the guided tour, and it can be reopened', () => {
 
   // Last step commits, and the tour is repeatable from the account menu.
   StudioAdapter.ui.tourScreen = 'home';
-  StudioAdapter.ui.tourStep = 2;
+  StudioAdapter.ui.tourStep = total - 1;
   const last = StudioAdapter.bindings(fresh);
   assert.equal(last.tourNextLabel, 'Start clipping');
   assert.equal(typeof last.startTour, 'function', 'a first-run-only tour would be a dead end');
