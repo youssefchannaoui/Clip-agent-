@@ -3028,8 +3028,11 @@
         var here = i + 1 === at;
         return {
           label: step.title,
-          style: 'height: 3px; border-radius: 3px; flex: 1 1 0; transition: background .28s ease; background: '
-            + (here ? '#F0D6A6' : done ? 'rgba(217,180,120,.45)' : '#26262A') + ';',
+          style: 'height: 4px; border-radius: 4px; flex: 1 1 0; transition: background .3s ease, box-shadow .3s ease; '
+            + (here
+              ? 'background: linear-gradient(90deg, #C9A468, #F0D6A6); box-shadow: 0 0 12px rgba(240,214,166,.35);'
+              : done ? 'background: rgba(217,180,120,.42);' : 'background: #24242A;')
+            + (done ? ' cursor: pointer;' : ' cursor: default;'),
           // Only steps already answered are reachable by clicking; jumping
           // forward past a question would leave it unanswered.
           go: done ? function (e) { stop(e); setUI({ jobStep: i + 1 }); } : function (e) { stop(e); },
@@ -3058,9 +3061,11 @@
       jobDurWrapStyle: 'position: relative; align-items: center; display: '
         + (jobStepId() === 'lengths' ? 'flex' : 'none') + ';',
       jobNextLabel: jobStepBlocker(DATA, job) || 'Continue',
-      jobNextStyle: 'display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 22px; border-radius: 9px; font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: '
+      jobNextStyle: 'display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 24px; border-radius: 10px; font-family: inherit; font-size: 13.5px; font-weight: 600; transition: background .16s ease, box-shadow .16s ease; cursor: '
         + (jobStepBlocker(DATA, job) ? 'not-allowed' : 'pointer') + '; border: 1px solid '
-        + (jobStepBlocker(DATA, job) ? '#2A2A30; background: #17171A; color: #6E6E76;' : 'rgba(217,180,120,.5); background: rgba(217,180,120,.14); color: #F0D6A6;'),
+        + (jobStepBlocker(DATA, job)
+          ? '#2A2A30; background: #17171A; color: #6E6E76;'
+          : 'rgba(217,180,120,.55); background: linear-gradient(180deg, rgba(217,180,120,.2), rgba(217,180,120,.1)); color: #F5E3C0; box-shadow: 0 6px 18px rgba(217,180,120,.12);'),
       jobNext: function (e) {
         stop(e);
         if (jobStepBlocker(DATA, job)) return;

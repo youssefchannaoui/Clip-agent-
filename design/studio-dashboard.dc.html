@@ -36,6 +36,8 @@
   @keyframes dcBootFade { 0%,72% { opacity: 1 } 100% { opacity: 0; visibility: hidden } }
   @keyframes dcTrack { from { width: 4% } to { width: 100% } }
   @keyframes dcPop { from { opacity: 0; transform: translateY(-4px) scale(.97) } to { opacity: 1; transform: none } }
+  @keyframes dcStep { from { opacity: 0; transform: translateX(18px) } to { opacity: 1; transform: none } }
+  @media (prefers-reduced-motion: reduce) { @keyframes dcStep { from { opacity: 1 } to { opacity: 1 } } }
   @keyframes dcScreen { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
   @keyframes dcToast { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
   @keyframes dcBar { 0% { transform: translateX(-100%) } 100% { transform: translateX(340%) } }
@@ -1473,7 +1475,7 @@
 
   <sc-if value="{{ jobOpen }}" hint-placeholder-val="{{ false }}">
     <div style="position: fixed; inset: 0; z-index: 94; display: grid; place-items: center; padding: 24px; background: rgba(6,6,8,.74); backdrop-filter: blur(9px);">
-      <div style="width: 100%; max-width: 1060px; max-height: 92vh; overflow: auto; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 22px; padding: 22px; border: 1px solid #26262A; border-radius: 16px; background: radial-gradient(circle at 85% -20%, rgba(217,180,120,.12), transparent 55%), linear-gradient(160deg, #16161A, #101013); box-shadow: 0 40px 100px rgba(0,0,0,.72); animation: dcPop .18s cubic-bezier(.2,.8,.2,1);">
+      <div style="width: 100%; max-width: 1060px; max-height: 92vh; overflow: auto; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 26px; padding: 26px 28px 24px; border: 1px solid #2C2C33; border-radius: 20px; background: radial-gradient(120% 80% at 82% -12%, rgba(217,180,120,.13), transparent 58%), linear-gradient(168deg, #18181D 0%, #121216 46%, #0D0D10 100%); box-shadow: 0 48px 120px rgba(0,0,0,.76), inset 0 1px 0 rgba(248,248,249,.05); animation: dcPop .18s cubic-bezier(.2,.8,.2,1);">
         <!-- min-height so the dialog does not jump size between steps: the
              tallest step is the style row and the shortest is the trim, and
              resizing the box under the cursor on every Continue reads as a
@@ -1491,8 +1493,9 @@
             <strong style="font-family: Outfit, Inter, sans-serif; font-size: 15px; font-weight: 600; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ jobSourceLabel }}</strong>
             <span style="font-size: 11.5px; color: #8B8B93;">{{ jobLenLabel }}</span>
           </span>
-          <button onClick="{{ closeJob }}" style="display: grid; place-items: center; width: 28px; height: 28px; flex: none; border: 1px solid #26262A; border-radius: 8px; background: #17171A; color: #8B8B93; cursor: pointer;" style-hover="color: #F2F2F4;"><i class="ph ph-x" style="font-size: 14px;"></i></button>
+          <button onClick="{{ closeJob }}" style="display: grid; place-items: center; width: 30px; height: 30px; flex: none; border: 1px solid #2A2A31; border-radius: 9px; background: #17171A; color: #8B8B93; cursor: pointer; transition: color .15s ease, border-color .15s ease;" style-hover="color: #F2F2F4; border-color: #3A3A42;"><i class="ph ph-x" style="font-size: 14px;"></i></button>
         </div>
+        <span style="display: block; height: 1px; background: linear-gradient(90deg, #2A2A31, rgba(42,42,49,0));"></span>
 
         <div style="display: flex; flex-direction: column; gap: 12px;">
           <span style="display: flex; align-items: center; gap: 7px;">
@@ -1500,10 +1503,13 @@
               <a href="#" onClick="{{ dot.go }}" title="{{ dot.label }}" style="{{ dot.style }}"></a>
             </sc-for>
           </span>
-          <span style="display: flex; flex-direction: column; gap: 3px;">
-            <span style="font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">{{ jobStepLabel }}</span>
-            <strong style="font-family: Outfit, Inter, sans-serif; font-size: 20px; font-weight: 600; letter-spacing: -.02em; color: #F2F2F4;">{{ jobStepTitle }}</strong>
-            <span style="font-size: 12.5px; color: #8B8B93;">{{ jobStepHint }}</span>
+          <span style="display: flex; flex-direction: column; gap: 6px; animation: dcStep .3s cubic-bezier(.2,.75,.3,1) both;">
+            <span style="display: inline-flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #A98B55;">
+              <span style="display: grid; place-items: center; width: 19px; height: 19px; border-radius: 6px; border: 1px solid rgba(217,180,120,.34); background: rgba(217,180,120,.1); color: #F0D6A6; font-size: 10.5px; letter-spacing: 0;">{{ jobStepNo }}</span>
+              {{ jobStepLabel }}
+            </span>
+            <strong style="font-family: Outfit, Inter, sans-serif; font-size: 26px; font-weight: 600; line-height: 1.15; letter-spacing: -.025em; color: #F6F6F8;">{{ jobStepTitle }}</strong>
+            <span style="font-size: 13px; line-height: 1.55; color: #8B8B93; max-width: 62ch;">{{ jobStepHint }}</span>
           </span>
         </div>
 
@@ -1514,7 +1520,7 @@
         <div id="studioJobSlot"></div>
 
         <sc-if value="{{ jobIsStepTrim }}" hint-placeholder-val="{{ true }}">
-        <div style="display: flex; flex-direction: column; gap: 9px; animation: dcPop .22s cubic-bezier(.2,.8,.2,1);">
+        <div style="display: flex; flex-direction: column; gap: 10px; animation: dcStep .3s cubic-bezier(.2,.75,.3,1) both; animation-delay: .04s;">
           <span style="display: flex; align-items: center; font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">Use this part of the lecture<span style="margin-left: auto; letter-spacing: 0; text-transform: none; font-size: 11.5px; font-weight: 500; color: #F0D6A6;">{{ jobRangeLabel }}</span></span>
           <div style="position: relative; height: 44px; border-radius: 8px; border: 1px solid #1E1E22; background: #121214 repeating-linear-gradient(90deg, rgba(240,214,166,.14) 0 1px, transparent 1px 5px);">
             <span style="{{ jobBandStyle }}"></span>
@@ -1557,7 +1563,7 @@
         </div>
 
         <sc-if value="{{ jobIsStepSound }}" hint-placeholder-val="{{ true }}">
-        <div style="display: flex; flex-direction: column; gap: 8px; animation: dcPop .22s cubic-bezier(.2,.8,.2,1);">
+        <div style="display: flex; flex-direction: column; gap: 10px; animation: dcStep .3s cubic-bezier(.2,.75,.3,1) both; animation-delay: .04s;">
           <sc-if value="{{ jobSoundBlocked }}" hint-placeholder-val="{{ false }}">
             <span style="display: flex; align-items: flex-start; gap: 11px; padding: 15px 17px; border: 1px solid #26262A; border-radius: 10px; background: #121214;">
               <i class="ph ph-speaker-simple-slash" style="font-size: 17px; color: #8B8B93;"></i>
@@ -1579,8 +1585,8 @@
         </sc-if>
 
           <sc-if value="{{ jobBackShown }}" hint-placeholder-val="{{ true }}">
-            <span style="display: flex; align-items: center; gap: 10px; margin-top: auto; padding-top: 8px;">
-              <button onClick="{{ jobBack }}" style="display: flex; align-items: center; gap: 7px; padding: 12px 18px; border: 1px solid #2A2A30; border-radius: 9px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer;" style-hover="color: #F2F2F4;"><i class="ph ph-arrow-left" style="font-size: 14px;"></i>Back</button>
+            <span style="display: flex; align-items: center; gap: 10px; margin-top: auto; padding-top: 16px; border-top: 1px solid #1F1F25;">
+              <button onClick="{{ jobBack }}" style="display: flex; align-items: center; gap: 7px; padding: 12px 18px; border: 1px solid #2A2A30; border-radius: 10px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: color .15s ease, border-color .15s ease, background .15s ease;" style-hover="color: #F2F2F4; border-color: #3A3A42; background: #1C1C21;"><i class="ph ph-arrow-left" style="font-size: 14px;"></i>Back</button>
               <sc-if value="{{ jobIsStepReview }}" hint-placeholder-val="{{ false }}">
                 <span style="font-size: 12px; color: #6E6E76;">Anything above can still be changed.</span>
               </sc-if>
@@ -1590,7 +1596,7 @@
             </span>
           </sc-if>
           <sc-if value="{{ jobFirstStep }}" hint-placeholder-val="{{ false }}">
-            <span style="display: flex; margin-top: auto; padding-top: 8px;">
+            <span style="display: flex; margin-top: auto; padding-top: 16px; border-top: 1px solid #1F1F25;">
               <button onClick="{{ jobNext }}" style="{{ jobNextStyle }}">{{ jobNextLabel }}<i class="ph ph-arrow-right" style="font-size: 14px;"></i></button>
             </span>
           </sc-if>

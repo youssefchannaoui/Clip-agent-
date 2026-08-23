@@ -3541,6 +3541,19 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        lecture. Two kinds, one template each -- the kind chooses the template,
        and the nasheed default follows the kind (off for recitation). Docked
        above the nasheed row, anchored on the same NASHEED label. */
+    /* The step blocks are long-lived nodes moved between steps, not remounted,
+       so a CSS animation on them never retriggers on its own. Restart it when
+       the block becomes the visible one, so it arrives with the same motion as
+       the heading beside it. */
+    function slideIn(el){
+      if(!el)return;
+      const reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if(reduce){el.style.animation='';return}
+      el.style.animation='none';
+      void el.offsetWidth;
+      el.style.animation='dcStep .3s cubic-bezier(.2,.75,.3,1) both';
+      el.style.animationDelay='.04s';
+    }
     const jobTypeEl=$('#studioJobType');
     function paintJobType(vals){
       alive(jobTypeEl);
@@ -3548,11 +3561,12 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       /* Each injected block belongs to one step of the panel now. Painting
          them all at once is what made the panel a scroll instead of a
          sequence. */
-      if(!open||!vals.jobIsStepKind){jobTypeEl.classList.add('hide');return}
+      if(!open||!vals.jobIsStepKind){jobTypeEl.classList.add('hide');jobTypeEl.dataset.step='';return}
       const slot=$('#studioJobSlot');
       jobTypeEl.classList.toggle('hide',!slot);
       if(!slot)return;
       if(jobTypeEl.parentElement!==slot)slot.appendChild(jobTypeEl);
+      if(jobTypeEl.dataset.step!=='kind'){jobTypeEl.dataset.step='kind';slideIn(jobTypeEl)}
       /* Two cards, not two pills: this is the decision that sets the template,
          the caption treatment and the nasheed default, so it reads as the
          primary choice on the panel -- an icon, a name, and one line saying
@@ -3762,6 +3776,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         +'border:1px solid '+(on?'rgba(240,214,166,.9)':'#26262A')+';'
         +'background:'+(on?'rgba(217,180,120,.14)':'#131315')+';color:'+(on?'#F0D6A6':'#A2A2AA')+';';
       if(!showStyle&&!showBands){jobStyleEl.classList.add('hide');jobStyleEl.innerHTML='';return}
+      slideIn(jobStyleEl);
       let html=!showStyle?'':'<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin:10px 0 6px">Clip style</div>'
         +'<div class="bgt-row">'
         +(DATA.templates||[]).map(t=>{
@@ -3845,9 +3860,10 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          way in from the panel. */
       const open=Boolean(ui.job)&&Boolean(vals.jobIsStepPicture);
       jobBgEl.classList.toggle('hide',!open);
-      if(!open)return;
+      if(!open){jobBgEl.dataset.step='';return}
       const bgSlot=$('#studioJobSlot');
       if(bgSlot&&jobBgEl.parentElement!==bgSlot)bgSlot.appendChild(jobBgEl);
+      if(jobBgEl.dataset.step!=='picture'){jobBgEl.dataset.step='picture';slideIn(jobBgEl)}
       const list=(DATA&&DATA.backgrounds)||[];
       const mode=ui.jobBgMode;
       const pill=(on)=>'padding:6px 11px;border-radius:999px;font:500 11.5px Outfit,Inter,sans-serif;cursor:pointer;'
