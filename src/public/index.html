@@ -3895,20 +3895,54 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(jobBgEl.dataset.step!=='picture'){jobBgEl.dataset.step='picture';slideIn(jobBgEl)}
       const list=(DATA&&DATA.backgrounds)||[];
       const mode=ui.jobBgMode;
-      const pill=(on)=>'padding:6px 11px;border-radius:999px;font:500 11.5px Outfit,Inter,sans-serif;cursor:pointer;'
-        +'border:1px solid '+(on?'rgba(240,214,166,.9)':'#26262A')+';'
-        +'background:'+(on?'rgba(217,180,120,.14)':'#131315')+';color:'+(on?'#F0D6A6':'#A2A2AA')+';';
-      const modes=[['own','Their video','The recitation\u2019s own footage'],
-        ['stock','Scenery','A background video plays the whole clip'],
-        ['intro','Video \u2192 scenery','Their video opens, then scenery takes over']];
+      /* Cards, not pills. Three unlabelled chips over an empty panel said
+         neither what each mode does nor what it looks like, and "Their video"
+         did not even say whose. Each carries a picture of its own outcome. */
+      const modeCard=(on)=>'position:relative;display:flex;flex-direction:column;gap:9px;flex:1 1 0;min-width:150px;padding:11px;border-radius:11px;text-align:left;cursor:pointer;font-family:inherit;'
+        +'transition:border-color .16s ease,background .16s ease,box-shadow .16s ease;'
+        +'border:1px solid '+(on?'rgba(240,214,166,.85)':'#26262A')+';'
+        +'background:'+(on?'rgba(217,180,120,.06)':'#121214')+';'
+        +(on?'box-shadow:0 0 0 3px rgba(217,180,120,.1);':'');
+      const SRC_ART='linear-gradient(150deg,#3C3A46 0%,#23222B 52%,#121116 100%)';
+      const SCENE_ART='linear-gradient(150deg,#6B7FA8 0%,#3A4E6E 48%,#151C2A 100%)';
+      const modeArt=(kind)=>{
+        const frame='position:relative;display:block;height:56px;border-radius:7px;overflow:hidden;border:1px solid #26262A;';
+        if(kind==='own')return `<span style="${frame}background:${SRC_ART}"></span>`;
+        if(kind==='stock')return `<span style="${frame}background:${SCENE_ART}"></span>`;
+        /* Half the source, half the scenery, with the hand-over shown. */
+        return `<span style="${frame}display:flex">`
+          +`<span style="flex:1 1 0;background:${SRC_ART}"></span>`
+          +`<span style="flex:1 1 0;background:${SCENE_ART}"></span>`
+          +'<span style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:rgba(240,214,166,.6)"></span></span>';
+      };
+      const modes=[['own','The lecture itself','The speaker on screen, the whole clip'],
+        ['stock','Scenery instead','Their voice over a background video'],
+        ['intro','Lecture, then scenery','Opens on the speaker and hands over']];
       const sig=[mode,ui.jobBgId,ui.jobBgIntro,list.map(b=>b.id).join('.')].join('|');
       if(jobBgEl.dataset.sig!==sig){
         jobBgEl.dataset.sig=sig;
         jobBgEl.style.cssText='display:block;margin:0 0 12px';
-        let html='<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin:2px 0 8px">Background</div>'
-          +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
-          +modes.map(m=>`<button type="button" data-bg-mode="${m[0]}" title="${m[2]}" style="${pill(mode===m[0])}">${m[1]}</button>`).join('')
+        let html='<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin:2px 0 9px">Background</div>'
+          +'<div style="display:flex;gap:11px;flex-wrap:wrap">'
+          +modes.map(m=>{
+            const on=mode===m[0];
+            return `<button type="button" data-bg-mode="${m[0]}" style="${modeCard(on)}">`
+              +modeArt(m[0])
+              +`<span style="display:flex;flex-direction:column;gap:2px">`
+              +`<span style="font:600 13px Outfit,Inter,sans-serif;color:${on?'#F0D6A6':'#F2F2F4'}">${m[1]}</span>`
+              +`<span style="font-size:11.5px;line-height:1.45;color:#8B8B93">${m[2]}</span></span>`
+              +(on?'<span style="position:absolute;top:9px;right:9px;display:grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#F0D6A6;color:#09090A;font-size:11px">\u2713</span>':'')
+              +'</button>';
+          }).join('')
           +'</div>';
+        if(mode==='own'){
+          /* Without this the step was three controls over an empty panel. It
+             is also the only place that says the scenery library exists. */
+          html+='<div style="display:flex;align-items:flex-start;gap:11px;margin-top:13px;padding:14px 16px;border:1px solid #26262A;border-radius:10px;background:#121214">'
+            +'<span style="flex:none;color:#8B8B93;font-size:15px;line-height:1">\u2139</span>'
+            +'<span style="font-size:12.5px;line-height:1.55;color:#8B8B93">The clip plays the lecture as filmed \u2014 framing follows the speaker. '
+            +'Pick one of the other two to put scenery behind the voice instead, from your library or DeenClipped\u2019s.</span></div>';
+        }
         if(mode!=='own'){
           /* The library as it will look on screen, not as a list of names:
              each background is a 9:16 poster card, DeenClipped's shared set

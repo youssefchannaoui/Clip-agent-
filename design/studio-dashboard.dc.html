@@ -1548,18 +1548,14 @@
             <i class="ph ph-caret-down" style="font-size: 12px; color: #6E6E76;"></i>
           </label>
           <div style="{{ jobCountsWrapStyle }}">
-            <button onClick="{{ toggleCounts }}" style="{{ selectWrapStyle }}">
-              <i class="ph ph-film-strip" style="font-size: 14px; color: #8B8B93;"></i>
-              <span style="font-size: 12px; font-weight: 500; color: #F2F2F4;">{{ countLabel }}</span>
-              <i class="ph ph-caret-down" style="font-size: 12px; color: #6E6E76;"></i>
-            </button>
-            <sc-if value="{{ countsOpen }}" hint-placeholder-val="{{ false }}">
-              <div style="position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; width: 168px; padding: 5px; border: 1px solid #26262A; border-radius: 10px; background: #121214; box-shadow: 0 18px 44px rgba(0,0,0,.6);">
-                <sc-for list="{{ countOpts }}" as="opt" hint-placeholder-count="6">
-                  <a href="#" onClick="{{ opt.toggle }}" style="{{ opt.rowStyle }}" style-hover="background: #17171A;"><span style="{{ opt.boxStyle }}"><i class="ph-bold ph-check"></i></span>{{ opt.label }}</a>
+            <span style="display: flex; flex-direction: column; gap: 9px;">
+              <span style="font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">How many clips</span>
+              <span style="display: flex; flex-wrap: wrap; gap: 7px;">
+                <sc-for list="{{ countOpts }}" as="opt" hint-placeholder-count="4">
+                  <button onClick="{{ opt.toggle }}" style="{{ opt.pillStyle }}"><i class="ph ph-film-strip" style="font-size: 12px;"></i>{{ opt.label }}</button>
                 </sc-for>
-              </div>
-            </sc-if>
+              </span>
+            </span>
           </div>
           <label style="{{ jobDurWrapStyle }}">
             <i class="ph ph-timer" style="font-size: 14px; color: #8B8B93;"></i>

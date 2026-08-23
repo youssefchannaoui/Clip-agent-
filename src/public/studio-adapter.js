@@ -3099,7 +3099,7 @@
       // the picker writing to nothing.
       jobTplSelectWrapStyle: 'position: relative; align-items: center; display: '
         + (jobStepId() === 'style' ? 'flex' : 'none') + ';',
-      jobCountsWrapStyle: 'position: relative; display: '
+      jobCountsWrapStyle: 'position: relative; width: 100%; margin-top: 6px; display: '
         + (jobStepId() === 'lengths' ? 'block' : 'none') + ';',
       jobDurWrapStyle: 'position: relative; align-items: center; display: '
         + (jobStepId() === 'lengths' ? 'flex' : 'none') + ';',
@@ -3820,6 +3820,13 @@
         return {
           label: plural(n, 'clip'),
           rowStyle: 'display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 8px; cursor: pointer; color: ' + (on ? '#F0D6A6' : '#BCBCC3') + ';',
+          // Inline in the wizard rather than behind a dropdown. As a menu it
+          // opened downward out of the panel, overlapping Continue and
+          // clipping at the dialog's edge -- and it sat under the length
+          // pills as a bare text button, which read as an afterthought
+          // rather than the second half of the same question.
+          pillStyle: 'display: inline-flex; align-items: center; gap: 7px; padding: 9px 15px; border-radius: 20px; font-family: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; transition: border-color .15s ease, background .15s ease, color .15s ease; border: 1px solid '
+            + (on ? 'rgba(217,180,120,.55); background: rgba(217,180,120,.13); color: #F0D6A6;' : '#26262A; background: #121214; color: #A2A2AA;'),
           boxStyle: 'display: grid; place-items: center; width: 15px; height: 15px; flex: none; border-radius: 4px; border: 1px solid ' +
             (on ? '#D9B478; background: rgba(217,180,120,.18);' : '#33333A; background: #0E0E11;'),
           toggle: function (e) {
