@@ -2275,7 +2275,12 @@
     // to the screen being left. Deciding then would file the tour away as
     // "nothing to show" and never look again -- so the decision waits until the
     // anchors are visible, and one repaint is scheduled to make them so.
-    var hasTour = (TOURS[UI.screen] || []).length > 0;
+    // Nothing starts a tour while another layer already owns the screen. A
+    // brand-new browser used to get the old dashboard's six-step modal AND a
+    // screen tour veiling it from above -- two overlays at once, and no way
+    // through either.
+    var otherLayerOpen = Boolean(UI.job || UI.playerClip || UI.sheet || UI.connProvider);
+    var hasTour = !otherLayerOpen && (TOURS[UI.screen] || []).length > 0;
     var anchorsReady = !global.document || tourSteps.length > 0;
     if (global.document && hasTour && !anchorsReady && UI.tourSettled !== UI.screen) {
       UI.tourSettled = UI.screen;
@@ -2289,7 +2294,7 @@
     }
     if (UI.tourStep === undefined) UI.tourStep = -1;
     var tourIndex = Math.max(0, Math.min(Math.max(0, tourSteps.length - 1), Number(UI.tourStep)));
-    var tourOn = Number(UI.tourStep) >= 0 && tourSteps.length > 0;
+    var tourOn = Number(UI.tourStep) >= 0 && tourSteps.length > 0 && !otherLayerOpen;
     var tourStep = tourOn ? tourSteps[tourIndex] : null;
     var tourRect = null;
     if (tourOn) {
@@ -2926,6 +2931,15 @@
           select: function (e) { stop(e); setUI({ schedView: v.id }); },
         };
       }),
+      // The same progress, carried on every screen. Seen only on Home, a new
+      // user walking through the product has no idea anything is still
+      // outstanding until they navigate back.
+      setupChipStyle: 'display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 20px;'
+        + ' border: 1px solid rgba(217,180,120,.34); background: rgba(217,180,120,.08); color: #F0D6A6;'
+        + ' font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer;'
+        + ' transition: border-color .14s ease, background .14s ease;',
+      openSetup: function (e) { stop(e); setUI({ screen: 'home' }); },
+
       startDoneLabel: (function () {
         var t = (tracks.length > 0 ? 1 : 0)
           + (projects.length > 0 ? 1 : 0)
@@ -3897,22 +3911,30 @@
       }()),
       tourCardStyle: (function () {
         if (!tourOn) return 'display: none;';
+        var vh = global.innerHeight || 800;
+        var vw = global.innerWidth || 1280;
+        // Capped and scrollable, so a long step can never be taller than the
+        // screen it has to fit on.
         var base = 'position: fixed; z-index: 202; width: min(340px, calc(100vw - 32px));'
+          + ' max-height: calc(100vh - 32px); overflow: auto;'
           + ' display: flex; flex-direction: column; gap: 9px; padding: 16px;'
           + ' border: 1px solid #2C2C32; border-radius: 14px;'
           + ' background: linear-gradient(160deg, #16161A, #101013);'
           + ' box-shadow: 0 30px 70px rgba(0,0,0,.7);';
         var box = tourRect;
         if (!box) return base + ' left: 50%; top: 50%; transform: translate(-50%, -50%);';
-        // Below the anchor when there is room, otherwise above it; clamped so
-        // the card cannot leave the viewport on a phone.
-        var width = Math.min(340, (global.innerWidth || 1280) - 32);
-        var left = Math.max(16, Math.min((global.innerWidth || 1280) - width - 16, box.left));
+        // Below the anchor when there is room, otherwise above it -- and
+        // clamped on BOTH axes. It was clamped horizontally only, so placing
+        // above an anchor near the top of the page pushed the card off the top
+        // of the screen: the title and most of the body were simply not there,
+        // leaving a paragraph ending mid-sentence and a Next button.
+        var CARD_H = 230;
+        var width = Math.min(340, vw - 32);
+        var left = Math.max(16, Math.min(vw - width - 16, box.left));
         var below = box.top + box.height + 14;
-        var fitsBelow = below + 190 < (global.innerHeight || 800);
-        return base + ' left: ' + Math.round(left) + 'px; '
-          + (fitsBelow ? 'top: ' + Math.round(below) + 'px;'
-                       : 'bottom: ' + Math.round((global.innerHeight || 800) - box.top + 14) + 'px;');
+        var top = (below + CARD_H < vh) ? below : box.top - CARD_H - 14;
+        top = Math.max(16, Math.min(top, vh - CARD_H - 16));
+        return base + ' left: ' + Math.round(left) + 'px; top: ' + Math.round(top) + 'px;';
       }()),
       tourNext: function (e) {
         stop(e);
@@ -3921,6 +3943,9 @@
       },
       tourBack: function (e) { stop(e); setUI({ tourStep: Math.max(0, tourIndex - 1) }); },
       tourSkip: function (e) { stop(e); endTour(); },
+      // The dimmed area is a way out. A veil with nothing to dismiss it is an
+      // unusable page, and that is the one failure a tour must never cause.
+      tourDismiss: function (e) { stop(e); endTour(); },
       // Offered for good in the account menu, so it is repeatable rather than
       // a one-shot a new user can lose by clicking past it.
       startTour: function (e) { stop(e); forgetTours(); setUI({ tourStep: 0, tourScreen: 'home', menuOpen: false, screen: 'home' }); },

@@ -243,3 +243,41 @@ test('posting windows say where they come from instead of offering an edit', () 
   assert.match(adapter, /postWindowNote:/);
   assert.match(adapter, /Set on the server/);
 });
+
+// ── a tour must never make the page unusable ───────────────────────────────
+
+test('the tour card is clamped on both axes', () => {
+  const adapter = read('src/public/studio-adapter.js');
+  const at = adapter.indexOf('tourCardStyle:');
+  const body = adapter.slice(at, at + 1800);
+  // It was clamped horizontally only, so placing above an anchor near the top
+  // pushed the card off the top of the screen: the reader saw a paragraph
+  // ending mid-sentence and a Next button, with the title gone.
+  assert.match(body, /Math\.max\(16, Math\.min\(top/, 'the vertical position is clamped');
+  assert.match(body, /max-height: calc\(100vh - 32px\); overflow: auto/,
+    'and a long step can never be taller than the screen');
+});
+
+test('a tour never opens on top of another layer, and the veil is a way out', () => {
+  const adapter = read('src/public/studio-adapter.js');
+  assert.match(adapter, /otherLayerOpen/, 'nothing starts while a dialog owns the screen');
+  assert.match(adapter, /tourDismiss:/, 'the dimmed area ends the tour');
+  const design = read('design/studio-dashboard.dc.html');
+  assert.match(design, /onClick="\{\{ tourDismiss \}\}" style="\{\{ tourVeilStyle \}\}"/,
+    'a veil with nothing to dismiss it is an unusable page');
+});
+
+test('the old dashboard tour is gone, so a new browser gets one tour', () => {
+  const host = read('src/public/index.html');
+  for (const gone of ['tourModal', 'maybeOpenTour', 'deenTourSeen', 'TOUR_INDEX']) {
+    assert.ok(!host.includes(gone),
+      `${gone} belongs to the old six-step modal, which stacked under the studio tour`);
+  }
+});
+
+test('setup progress is visible from every screen', () => {
+  const design = read('design/studio-dashboard.dc.html');
+  const header = design.slice(design.indexOf('<header'), design.indexOf('</header>'));
+  assert.match(header, /\{\{ startDoneLabel \}\}/,
+    'seen only on Home, a new user cannot tell anything is outstanding');
+});

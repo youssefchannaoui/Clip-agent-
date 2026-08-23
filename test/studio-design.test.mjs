@@ -2851,6 +2851,8 @@ test('a new account gets the guided tour, and it can be reopened', () => {
   StudioAdapter.ui.screen = 'home';
   StudioAdapter.ui.tourScreen = 'home';
   StudioAdapter.ui.tourStep = 0;
+  // A tour never starts on top of another layer, so nothing else may be open.
+  Object.assign(StudioAdapter.ui, { job: null, playerClip: null, sheet: null, connProvider: null });
   const vals = StudioAdapter.bindings(fresh);
   assert.equal(vals.tourOn, true, 'the design ships the tour; it must actually run');
   assert.match(vals.tourCount, /Step 1 of 3/);

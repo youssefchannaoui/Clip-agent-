@@ -1478,7 +1478,6 @@ select:focus{outline:none;border-color:var(--blue)}
             <div class="code">Next post</div>
           </div>
         </div>
-        <button class="btn btn-ghost btn-sm top-tour-btn" type="button" id="openTour">Getting started</button>
       </div>
       <nav class="tabs">
         <button class="tab on" data-view="queue">Queue<span class="tab-count" id="cQueue">0</span></button>
@@ -1972,24 +1971,7 @@ select:focus{outline:none;border-color:var(--blue)}
 <div class="video-modal hide" id="videoModal"><div class="video-modal-card"><div class="video-modal-head"><strong id="previewTitle">Clip preview</strong><button class="btn btn-ghost btn-sm" id="closePreview">Close</button></div><video id="previewVideo" controls playsinline></video></div></div>
 <div class="video-modal hide" id="rerenderModal"><div class="card-lock" style="max-width:470px"><div class="lock-head"><div class="mark"><svg class="mark-dot" viewBox="0 0 24 26" fill="none"><path d="M3.2 25V11.4C3.2 6.6 12 1 12 1s8.8 5.6 8.8 10.4V25Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M10 11.2 15.4 14.6 10 18Z" fill="currentColor"/></svg><div><div class="mark-name">Apply template</div><div class="code" id="rerenderHelp"></div></div></div></div><div class="lock-body"><input type="hidden" id="rerenderClipId"><label class="field code">Saved template</label><select id="rerenderTemplate"></select><label class="editor-toggle" style="margin-top:13px"><input type="checkbox" id="rerenderVariant">Create a separate variant</label><div style="display:flex;gap:8px;margin-top:18px"><button class="btn btn-ghost" id="cancelRerender" style="flex:1">Cancel</button><button class="btn" id="confirmRerender" style="flex:1">Render</button></div></div></div></div>
 
-<div class="tour-modal hide" id="tourModal" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
-  <div class="tour-card">
-    <div class="tour-progress" aria-hidden="true"><span id="tourProgress"></span></div>
-    <div class="tour-body">
-      <div class="tour-step-icon" id="tourIcon"></div>
-      <h2 class="tour-title" id="tourTitle">Import a lecture</h2>
-      <p class="tour-copy" id="tourCopy">Paste a YouTube link and create clips.</p>
-    </div>
-    <div class="tour-foot">
-      <div class="tour-count" id="tourCount">Step 1 of 6</div>
-      <div class="tour-actions">
-        <button class="btn btn-ghost" type="button" id="tourSkip">Skip</button>
-        <button class="btn btn-ghost" type="button" id="tourBack">Back</button>
-        <button class="btn" type="button" id="tourNext">Next</button>
-      </div>
-    </div>
-  </div>
-</div>
+
 
 <div class="toasts" id="toasts"></div>
 
@@ -2027,19 +2009,6 @@ const ICONS={
 function icon(name,cls='icon-inline'){return `<span class="${cls}" aria-hidden="true">${ICONS[name]||ICONS.sparkles}</span>`}
 function platformIcon(name,cls='platform-logo'){return `<span class="${cls} ${esc(name)}" aria-hidden="true">${ICONS[name]||ICONS.send}</span>`}
 function decorateStaticIcons(){$$('[data-icon]').forEach(el=>{if(!el.dataset.iconDone){el.innerHTML=ICONS[el.dataset.icon]||ICONS.sparkles;el.dataset.iconDone='1'}});const tabs={queue:'scissors',schedule:'clock',insights:'analytics',music:'music',library:'library',templates:'template',publishing:'send',automation:'automation'};$$('.tab').forEach(tab=>{const key=tab.dataset.view;if(key&&!tab.dataset.iconified){tab.insertAdjacentHTML('afterbegin',icon(tabs[key]||'sparkles'));tab.dataset.iconified='1'}})}
-const TOUR_STEPS=[
-  ['youtube','Import a lecture','Paste a YouTube lecture link. DeenClipped downloads it, transcribes it and starts finding moments.'],
-  ['scissors','Generate AI clips','The worker ranks short moments by hook, quality and clarity, then renders vertical clips.'],
-  ['captions','Review and edit','Preview clips, fix titles or captions, then approve only the ones worth posting.'],
-  ['template','Choose a template','Templates control caption style, framing, watermark and safe spacing for every render.'],
-  ['send','Connect platforms','Connect YouTube, TikTok, Instagram or Facebook before scheduling uploads.'],
-  ['check','Publish or download','Post approved clips automatically, post now, or download the finished MP4.']
-];
-let TOUR_INDEX=0;
-function renderTour(){const step=TOUR_STEPS[TOUR_INDEX]||TOUR_STEPS[0];$('#tourIcon').innerHTML=ICONS[step[0]]||ICONS.sparkles;$('#tourTitle').textContent=step[1];$('#tourCopy').textContent=step[2];$('#tourCount').textContent=`Step ${TOUR_INDEX+1} of ${TOUR_STEPS.length}`;$('#tourProgress').style.width=`${((TOUR_INDEX+1)/TOUR_STEPS.length)*100}%`;$('#tourBack').disabled=TOUR_INDEX===0;$('#tourNext').textContent=TOUR_INDEX===TOUR_STEPS.length-1?'Finish':'Next'}
-function openTour(force=false){TOUR_INDEX=0;renderTour();$('#tourModal')?.classList.remove('hide');if(force)localStorage.setItem('deenTourSeen','1')}
-function closeTour(){localStorage.setItem('deenTourSeen','1');$('#tourModal')?.classList.add('hide')}
-function maybeOpenTour(){if(localStorage.getItem('deenTourSeen'))return;setTimeout(()=>openTour(false),600)}
 function visualEmpty(title,note,iconName='sparkles',action='') {return `<div class="empty-visual"><div class="empty-visual-icon">${ICONS[iconName]||ICONS.sparkles}</div><div class="empty-visual-title">${esc(title)}</div><div class="empty-visual-note">${esc(note)}</div>${action?`<div style="margin-top:16px">${action}</div>`:''}</div>`}
 
 const when=ms=>ms?new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}).format(new Date(ms)):'—';
@@ -2088,7 +2057,7 @@ function clipCaption(c){return [c.description,c.hashtags].filter(Boolean).join('
 function downloadClip(id){location.href=withPw(`/api/clips/${encodeURIComponent(id)}/download`)}
 async function copyText(text){await navigator.clipboard.writeText(text);toast('Copied','good')}
 
-async function boot(){try{DATA=await api('/api/state');localStorage.setItem('deenPw',PW);$('#gate')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#app')?.classList.remove('hide');renderAll();handleOAuthResult();maybeOpenTour();return true}catch(e){$('#app')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#gate')?.classList.remove('hide');if($('#gateErr'))$('#gateErr').textContent=e.message;return false}}
+async function boot(){try{DATA=await api('/api/state');localStorage.setItem('deenPw',PW);$('#gate')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#app')?.classList.remove('hide');renderAll();handleOAuthResult();return true}catch(e){$('#app')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#gate')?.classList.remove('hide');if($('#gateErr'))$('#gateErr').textContent=e.message;return false}}
 /* The open editor clip needs its heavy fields (caption timings, ayahs),
    which the list payload deliberately omits. Fetched once per clip version
    and merged back in after every poll. */
@@ -5013,12 +4982,6 @@ function openRerender(id){const c=clipById(id);if(!c)return;$('#rerenderClipId')
 $('#unlock').onclick=async()=>{PW=$('#pw').value;await boot()};$('#pw').onkeydown=e=>{if(e.key==='Enter')$('#unlock').click()};
 $$('.tab').forEach((b,i)=>b.onclick=()=>{const order=$$('.tab').map(x=>x.dataset.view);showView(b.dataset.view,order.indexOf(b.dataset.view)>=order.indexOf(ACTIVE_VIEW)?1:-1)});
 
-$('#openTour')?.addEventListener('click',()=>openTour(true));
-$('#tourSkip')?.addEventListener('click',closeTour);
-$('#tourBack')?.addEventListener('click',()=>{TOUR_INDEX=Math.max(0,TOUR_INDEX-1);renderTour()});
-$('#tourNext')?.addEventListener('click',()=>{if(TOUR_INDEX>=TOUR_STEPS.length-1)return closeTour();TOUR_INDEX++;renderTour()});
-$('#tourModal')?.addEventListener('click',e=>{if(e.target.id==='tourModal')closeTour()});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#tourModal')?.classList.contains('hide'))closeTour()});
 $('#quickYoutube')?.addEventListener('click',()=>{$('#urls')?.focus();$('#urls')?.scrollIntoView({behavior:'smooth',block:'center'})});
 $('#sourceYoutube')?.addEventListener('click',()=>{$('#urls')?.focus();$('#urls')?.scrollIntoView({behavior:'smooth',block:'center'})});
 document.addEventListener('click',e=>{const go=e.target.closest('[data-go]');if(go){showView(go.dataset.go)}});
