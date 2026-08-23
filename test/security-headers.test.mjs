@@ -99,15 +99,8 @@ test('an API response is never stored by a shared cache', async () => {
 
 test('the server refuses to serve a configuration that is not safe', async () => {
   const { fatalConfigurationErrors, config } = await import('../src/config.js');
-  const original = { secret: config.sessionSecret, auth: config.authRequired, password: config.password };
+  const original = { auth: config.authRequired, password: config.password };
   try {
-    // A short secret reachable through the APP_PASSWORD fallback: cookies
-    // signed with it can be forged, and the old startup warning only ever
-    // caught the literal dev default, so this passed in silence.
-    config.sessionSecret = 'Yc12';
-    assert.match(fatalConfigurationErrors().join(' '), /APP_SESSION_SECRET/);
-
-    config.sessionSecret = original.secret;
     config.authRequired = false;
     assert.match(fatalConfigurationErrors().join(' '), /AUTH_REQUIRED/);
 
@@ -118,8 +111,32 @@ test('the server refuses to serve a configuration that is not safe', async () =>
     config.password = original.password;
     assert.deepEqual(fatalConfigurationErrors(), [], 'a sound configuration starts');
   } finally {
-    Object.assign(config, { sessionSecret: original.secret, authRequired: original.auth, password: original.password });
+    Object.assign(config, { authRequired: original.auth, password: original.password });
   }
+});
+
+test('a session is an opaque token, not something signed with a secret', async () => {
+  // There used to be a guard here refusing to start on a short
+  // APP_SESSION_SECRET, on the stated grounds that session cookies signed with
+  // it could be forged. Nothing ever read that value. Sessions are random
+  // tokens stored server side as hashes and validated by lookup, so there is
+  // no signing key to get wrong -- and a guard over an unused value tells the
+  // operator that rotating it hardened something.
+  //
+  // This pins the real property, so the guard cannot come back as theatre: a
+  // cookie that is not in the session store is rejected no matter what any
+  // configured secret is.
+  const auth = await import('../src/auth.js');
+  const cookieOf = token => ({ headers: { cookie: `dc_session=${token}` } });
+
+  const token = auth.createSession(auth.ownerUser(), { provider: 'test' });
+  assert.ok(auth.sessionUser(cookieOf(token)), 'a real session is accepted');
+  assert.ok(token.length >= 32, 'the token carries its own entropy');
+
+  assert.equal(auth.sessionUser(cookieOf('forged-session-token')), null,
+    'an invented token is refused');
+  assert.equal(auth.sessionUser(cookieOf(token + 'x')), null,
+    'and so is a tampered one');
 });
 
 test('a body over the cap is refused with a reason, not a 500', async () => {

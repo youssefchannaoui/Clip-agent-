@@ -103,7 +103,13 @@ export const config = {
   emailProvider: (process.env.EMAIL_PROVIDER || 'resend').toLowerCase(),
   emailApiKey: process.env.EMAIL_API_KEY || '',
   emailFrom: process.env.EMAIL_FROM || '',
-  sessionSecret: process.env.APP_SESSION_SECRET || process.env.SOCIAL_TOKEN_KEY || process.env.APP_PASSWORD || 'dev-session-secret-change-me',
+  // APP_SESSION_SECRET is deliberately NOT read into config any more. Nothing
+  // ever consumed it: sessions are opaque 36-byte random tokens, stored server
+  // side as SHA-256 hashes and validated by lookup in auth.js sessionUser().
+  // They are never signed, so there was no secret to get wrong -- and the
+  // guards that refused to start on a "short session secret" were protecting a
+  // value no code path reads. Keeping them would have gone on telling the
+  // operator that rotating it hardened something.
   adminEmail: process.env.ADMIN_EMAIL || 'admin@deenclipped.local',
   // Accounts that get operator (admin) access when they sign in, whatever
   // provider they arrive through. Exists because production disables the
@@ -223,9 +229,6 @@ export function fatalConfigurationErrors() {
   const errors = [];
   const live = config.publicBaseUrl.startsWith('https://');
   if (!live) return errors;
-  if (!config.sessionSecret || config.sessionSecret === 'dev-session-secret-change-me' || config.sessionSecret.length < 32) {
-    errors.push('APP_SESSION_SECRET must be set to at least 32 random characters. Refusing to start: sessions signed with a short secret can be forged.');
-  }
   if (!config.authRequired) {
     errors.push('AUTH_REQUIRED is off on a public deployment. Refusing to start: this would serve the owner account to anyone.');
   }
@@ -238,7 +241,6 @@ export function fatalConfigurationErrors() {
 export function productionConfigurationErrors() {
   const errors = [];
   if (!config.authRequired) errors.push('AUTH_REQUIRED must be enabled.');
-  if (!config.sessionSecret || config.sessionSecret === 'dev-session-secret-change-me' || config.sessionSecret.length < 32) errors.push('APP_SESSION_SECRET must contain at least 32 characters.');
   if (config.password && config.password.length < 12) errors.push('APP_PASSWORD must contain at least 12 characters when the admin password fallback is enabled.');
   if (config.socialPublishEnabled && (!config.socialTokenKey || config.socialTokenKey.length < 32)) errors.push('SOCIAL_TOKEN_KEY must contain at least 32 characters when social publishing is enabled.');
   if (config.processingMode === 'remote') {
@@ -258,15 +260,4 @@ export function productionConfigurationErrors() {
 
 if (!config.password) {
   console.warn('[warn] APP_PASSWORD is not set. Anyone with the link can use the app if AUTH_REQUIRED is disabled.');
-}
-if (config.authRequired && config.sessionSecret === 'dev-session-secret-change-me') {
-  console.warn('[warn] APP_SESSION_SECRET is not set. Set a long random secret before public launch.');
-} else if (config.authRequired && !process.env.APP_SESSION_SECRET) {
-  // The fallback chain above reaches SOCIAL_TOKEN_KEY and then APP_PASSWORD. A
-  // short admin password makes a short session-signing key, and a forged session
-  // is then one brute force away -- so say so, rather than only catching the
-  // literal dev default.
-  console.warn('[warn] APP_SESSION_SECRET is not set; sessions are being signed with a fallback value. Set APP_SESSION_SECRET to its own long random secret (openssl rand -hex 32).');
-} else if (config.authRequired && config.sessionSecret.length < 32) {
-  console.warn('[warn] APP_SESSION_SECRET is shorter than 32 characters. Session cookies signed with a short secret can be forged; use a longer one (openssl rand -hex 32).');
 }

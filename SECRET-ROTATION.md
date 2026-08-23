@@ -29,35 +29,28 @@ Verified against Render on 9 Aug 2026: `APP_SESSION_SECRET` and
 in play today. They are recorded because unsetting either one silently
 reintroduces the problem, and nothing in the app would tell you.
 
-**1. If `APP_SESSION_SECRET` is ever removed, the session secret becomes four characters.**
+**1. ~~A four-character session secret makes forgeable cookies.~~ WITHDRAWN --
+this was never true.**
 
-`src/config.js:89`
+Checked properly on 24 Aug 2026: **nothing in the codebase reads
+`config.sessionSecret`.** Sessions are opaque 36-byte random tokens, stored
+server side as SHA-256 hashes in `state.authSessions` and validated by lookup
+in `sessionUser()` (`src/auth.js:146`). They are never signed, so there is no
+signing key to be too short.
 
-```js
-sessionSecret: process.env.APP_SESSION_SECRET
-  || process.env.SOCIAL_TOKEN_KEY
-  || process.env.APP_PASSWORD
-  || 'dev-session-secret-change-me',
-```
+The original entry claimed cookies signed with `APP_PASSWORD` could be forged
+instantly. They could not, because no cookie is signed with anything.
 
-If `APP_SESSION_SECRET` is not set on Render, the session secret silently falls
-back to `SOCIAL_TOKEN_KEY`, and failing that to `APP_PASSWORD` — currently
-`Yc12`. Session cookies signed with a four-character secret can be forged
-essentially instantly, which means anyone can mint a session for any account.
+Two guards were built on that mistaken premise -- a fatal startup check and a
+`/readyz` check, both refusing a "short session secret". Both have been
+removed: a guard over a value no code path reads does not protect anything, and
+leaving it in tells whoever runs this rotation that setting the value hardened
+something. The real property -- that a token not in the session store is
+rejected regardless of any configured secret -- is now pinned by a test in
+`test/security-headers.test.mjs`.
 
-The startup warning at line 187 does **not** catch this. It only fires when the
-secret equals the literal dev default, so a four-character real value passes
-silently.
-
-Status: **closed in code, 24 Aug 2026.** The server now refuses to start on a
-public deployment when the session secret is missing, default, or shorter than
-32 characters -- the fallback chain still exists, but a short value from it can
-no longer reach a running process. `AUTH_REQUIRED` also defaults to true rather
-than being inferred from whether sign-in credentials happen to be set, so a
-wiped environment group fails the deploy instead of quietly serving the owner
-account to the internet.
-
-Rotating the value is still worth doing: it was in the leaked set.
+Rotating `APP_SESSION_SECRET` is therefore optional and has no effect. The
+variable can be deleted outright.
 
 **2. `WORKER_CALLBACK_SECRET` falls back to `WORKER_SHARED_SECRET`.**
 
@@ -70,23 +63,22 @@ Status: **both set explicitly on Render, not a live problem.** Keep it that way.
 
 ## Order
 
-### 1. `APP_SESSION_SECRET` — already set, but rotate it anyway
+### 1. `APP_SESSION_SECRET` — nothing to do
 
-It exists on Render, so it is not urgent, but it was in the leaked set.
+Rotated on 24 Aug 2026 before the above was discovered. Harmless, and
+unnecessary: nothing reads it. **Nobody is signed out by changing it** — the
+earlier claim that they would be was wrong.
 
-- Generate 64 hex characters, replace on Render.
-- Effect: everyone signed out once. With your current user count, nobody notices.
-- Because it is set explicitly, rotating it does not disturb anything else.
+Delete the variable whenever convenient. It is not a credential.
 
-### 2. `APP_PASSWORD`
+### 2. `APP_PASSWORD` — already closed
 
-Was four characters on a public domain. `/readyz` now refuses a value under 12
-characters, and has been returning ok, so this one is no longer short -- but it
-was in the leaked set, so it still needs replacing.
+Verified on Render 24 Aug 2026: **it is not set at all.** `config.password`
+falls back to `''`, and the admin-password sign-in path is disabled when it is
+empty (the startup check only rejects a value that is set *and* under 12
+characters). The leaked `Yc12` is not a live credential anywhere.
 
-- Generate something long, set on Render.
-- Effect: none, once step 1 is done. Before step 1, this would also change every
-  session secret — which is exactly why step 1 comes first.
+Leave it unset. Setting it would re-open a sign-in path nothing needs.
 
 ### 3. `WORKER_SHARED_SECRET` and `WORKER_CALLBACK_SECRET`
 
