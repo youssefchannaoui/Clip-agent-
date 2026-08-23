@@ -56,16 +56,28 @@ test('the policy allows the page its own scripts and nothing injected', async ()
   assert.match(csp, /base-uri 'self'/);
 });
 
-test('the hash in the policy is the hash of the page actually served', async () => {
-  const csp = (await fetch(`${base}/healthz`)).headers.get('content-security-policy') || '';
-  const html = fs.readFileSync(path.join(root, 'src/public/index.html'), 'utf8');
+test('every inline script in the SERVED page is allowed by the policy', async () => {
+  // This asserted against the file on disk, which is not what the browser gets:
+  // serveAppShell injects `window.STUDIO_SHELL=true` into <head>, the policy
+  // knew nothing about it, the browser refused it, and every visitor silently
+  // got the old dashboard instead of the studio. Fetch the page.
+  // /app is behind sign-in, so this needs a session -- which is also the only
+  // way to see what a real visitor is actually served.
+  const auth = await import('../src/auth.js');
+  const token = auth.createSession(auth.ownerUser(), { provider: 'test' });
+  const res = await fetch(`${base}/app`, { headers: { cookie: `dc_session=${token}` } });
+  const html = await res.text();
+  const csp = res.headers.get('content-security-policy') || '';
   const crypto = await import('node:crypto');
-  // Computed the same way the browser will: the exact text between the tags.
-  for (const match of html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)) {
+
+  const blocks = [...html.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/gi)];
+  assert.ok(blocks.length >= 2, 'the served page carries the shell flag and the page script');
+  for (const match of blocks) {
     const hash = crypto.createHash('sha256').update(match[1], 'utf8').digest('base64');
     assert.ok(csp.includes(`'sha256-${hash}'`),
-      'an inline block the page carries is missing from the policy, so the page would break');
+      `an inline block the browser will receive is not in the policy: ${JSON.stringify(match[1].slice(0, 60))}`);
   }
+  assert.match(html, /STUDIO_SHELL/, 'and the studio shell is what is being served');
 });
 
 test('no served HTML carries an inline event handler', () => {

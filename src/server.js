@@ -193,6 +193,13 @@ function contactPage(req) { return marketing.contact(marketingContext(req)); }
 function privacyPage(req) { return marketing.privacy(marketingContext(req)); }
 function termsPage(req) { return marketing.terms(marketingContext(req)); }
 
+// Injected into <head> for the Studio shell. Declared here, once, because the
+// Content-Security-Policy has to allow this exact text by hash: shipping it as
+// a literal at the injection site meant the policy knew nothing about it, the
+// browser refused it, window.STUDIO_SHELL was never set, and every visitor got
+// the old dashboard instead of the studio.
+const STUDIO_SHELL_SCRIPT = 'window.STUDIO_SHELL=true;';
+
 function serveAppShell(req, res, url, currentUser) {
   if (auth.enabled() && !currentUser) return redirect(res, `/login?returnTo=${encodeURIComponent('/app' + (url.search || ''))}`);
   if (auth.enabled() && currentUser && billing.needsPlanChoice(currentUser)) return redirect(res, `/plans?returnTo=${encodeURIComponent('/app' + (url.search || ''))}`);
@@ -211,7 +218,7 @@ function serveAppShell(req, res, url, currentUser) {
     // parse, so a flag set at the end of the body would arrive after the decision.
     // The page reads this rather than sniffing for the scripts, so that merely
     // mentioning a script path in index.html cannot change what gets injected.
-    html = html.replace('</head>', '<script>window.STUDIO_SHELL=true;</script>\n</head>');
+    html = html.replace('</head>', `<script>${STUDIO_SHELL_SCRIPT}</script>\n</head>`);
   } else {
     const has = tag => html.includes(`src="${tag}"`);
     if (!has('/activity-fix.js')) html = html.replace('</body>', '<script src="/activity-fix.js"></script>\n</body>');
@@ -1710,6 +1717,8 @@ function summariseWorkerBuild(capabilities) {
  */
 const INLINE_SCRIPT_HASHES = (() => {
   const hashes = new Set();
+  // The shell flag the server injects, not just what is on disk.
+  hashes.add(`'sha256-${crypto.createHash('sha256').update(STUDIO_SHELL_SCRIPT, 'utf8').digest('base64')}'`);
   for (const file of [page]) {
     let source; try { source = fs.readFileSync(file, 'utf8'); } catch { continue; }
     for (const match of source.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)) {
