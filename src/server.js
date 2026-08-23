@@ -570,9 +570,22 @@ async function route(req, res, url) {
   }
   if (method === 'POST' && pathname === '/auth/email') {
     const body = await formBody(req);
-    const keys = throttle.keysFor(clientIp(req), body.email || '');
+    const ip = clientIp(req);
+    const keys = throttle.keysFor(ip, body.email || '');
     const gate = throttle.check(keys);
     if (!gate.allowed) return tooManyAttempts(res, gate.retryAfterSec, body.returnTo);
+    // Signing in and signing UP are the same request here, and there is no
+    // verification step, so one address could mint accounts as fast as it could
+    // post -- each one arriving with free tokens that cost real worker time and
+    // storage. Existing accounts are unaffected: this only counts addresses
+    // that have never been seen before.
+    const known = auth.accountExists(body.email || '');
+    if (!known) {
+      const signups = throttle.rateLimit(`signup:${ip}`, 3, 24 * 60 * 60_000);
+      if (!signups.allowed) {
+        return redirect(res, `/login?error=${encodeURIComponent('Too many new accounts from this connection today. Sign in to an existing account, or try again tomorrow.')}`);
+      }
+    }
     try {
       const user = await auth.emailLogin(body.email || '', body.password || '', body.name || '');
       throttle.succeed(keys);

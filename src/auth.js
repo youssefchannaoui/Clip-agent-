@@ -258,6 +258,14 @@ export async function passwordLogin(password) {
 }
 
 
+/** Whether this address already has an account, without creating one. */
+export function accountExists(email) {
+  ensureAuthState();
+  const clean = cleanEmail(email);
+  if (!clean) return false;
+  return (state.authUsers || []).some(item => cleanEmail(item.email) === clean);
+}
+
 export async function emailLogin(email, password, name = '') {
   ensureAuthState();
   if (!config.emailSigninEnabled) throw new Error('Email sign-in is not enabled.');

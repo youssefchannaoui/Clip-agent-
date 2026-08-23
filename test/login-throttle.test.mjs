@@ -133,3 +133,24 @@ test('a post with no Origin or Referer at all is refused too', async () => {
   });
   assert.equal(res.status, 403, 'a browser always sends one; something that does not is not a form post from this site');
 });
+
+test('new accounts from one connection are capped, existing ones are not', async () => {
+  throttle.reset();
+  const ip = '203.0.113.55';
+  // Signing in and signing up are the same request and nothing verifies the
+  // address, so one connection could mint accounts as fast as it could post --
+  // each arriving with free tokens that cost real worker time and storage.
+  const made = [];
+  for (let i = 0; i < 6; i += 1) {
+    const res = await post('/auth/email', { email: `fresh-${i}@example.com`, password: 'a-good-password' }, ip);
+    made.push((res.headers.get('set-cookie') || '').includes('dc_session='));
+  }
+  assert.ok(made.filter(Boolean).length <= 3, `made ${made.filter(Boolean).length} accounts, cap is 3`);
+  assert.ok(made[0], 'the first genuine sign-up still works');
+
+  // An account that already exists must still be able to sign in from that
+  // same address -- the cap is on creation, not on people.
+  const again = await post('/auth/email', { email: 'fresh-0@example.com', password: 'a-good-password' }, ip);
+  assert.ok((again.headers.get('set-cookie') || '').includes('dc_session='),
+    'an existing account signs in normally from a capped address');
+});
