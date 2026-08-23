@@ -281,6 +281,40 @@
 
   // "45\u201370 min" from a selected length: measured whisper throughput plus
   // render time, floored so a five-minute clip does not promise three.
+  /**
+   * Whether this account may pick a Pro template.
+   *
+   * The server decides, and refuses both the selection and the render either
+   * way. An answer the client does not have yet is treated as "allowed", so a
+   * slow or missing billing payload never locks somebody out of their own
+   * paid styles.
+   */
+  function planAllowsProTemplates(DATA) {
+    var current = DATA && DATA.billing && DATA.billing.current;
+    if (!current) return true;
+    if (current.features && typeof current.features.templates === 'boolean') {
+      return current.features.templates;
+    }
+    return String(current.plan || 'free') !== 'free';
+  }
+
+  /**
+   * The cost line, with what it leaves behind.
+   *
+   * "≈ 45 tokens" answers half the question. The half people actually act on
+   * is whether they can afford it, and finding out by pressing Start and
+   * being refused is the wrong moment to learn it.
+   */
+  function tokenCostLine(DATA, cost) {
+    var current = DATA && DATA.billing && DATA.billing.current;
+    var label = '\u2248 ' + plural(cost, 'token');
+    if (!current || current.unlimited) return label;
+    var left = Number(current.totalAvailable);
+    if (!isFinite(left)) return label;
+    if (left >= cost) return label + ' \u00b7 ' + (left - cost) + ' left after';
+    return label + ' \u00b7 short by ' + (cost - left);
+  }
+
   function jobEtaRange(seconds) {
     var mins = Math.max(1, seconds / 60);
     var lo = Math.max(4, Math.round(mins * 0.6));
@@ -2871,7 +2905,7 @@
       // Charging is per source minute, so an estimate is only honest once the
       // length is known. The server confirms the real cost before processing.
       jobTokenLabel: !job ? '' : job.durationKnown
-        ? '≈ ' + plural(Math.max(1, Math.ceil((job.end - job.start) / 60 * tokenRate)), 'token')
+        ? tokenCostLine(DATA, Math.max(1, Math.ceil((job.end - job.start) / 60 * tokenRate)))
         : '\u22481 token per minute of lecture \u2014 confirmed after download',
       // A picker, not a label: the template renders one button per entry, so a
       // string here renders one button per character.
@@ -2884,7 +2918,19 @@
       // (off for recitation), unless the operator already touched it -- their
       // explicit answer outlives a kind change.
       pickJobType: function (kind) {
-        setUI({ jobTplId: kind === 'quran' ? 'quran-recitation' : 'mono-minimal' });
+        // The lecture default has to be a style the account can actually use.
+        // This hardcoded 'mono-minimal', which became a Pro style when the
+        // catalogue was tiered -- so picking "lecture" on a free plan selected
+        // a template the server then refused, with nothing on screen saying
+        // why. Take the first style the account is entitled to instead.
+        var offered = (DATA.templates || []).filter(function (t) {
+          return !(t.pro && !planAllowsProTemplates(DATA));
+        });
+        var lecture = '';
+        for (var i = 0; i < offered.length; i += 1) {
+          if (offered[i].captionMode !== 'quran') { lecture = offered[i].id; break; }
+        }
+        setUI({ jobTplId: kind === 'quran' ? 'quran-recitation' : (lecture || 'clean-line') });
       },
       jobMusicLabel: UI.jobMusic === false ? 'No nasheed' : 'Nasheed on',
       jobMusicTrack: switchTrack(UI.jobMusic !== false),

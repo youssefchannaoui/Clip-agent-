@@ -95,3 +95,35 @@ test('every plan gate in the app is one of the two Pro features', () => {
       `${file} is core work and must not be gated on a plan`);
   }
 });
+
+
+// ── the job picker always has something to fall back to ────────────────────
+//
+// The "Islamic lecture" button used to select mono-minimal by name. That was
+// fine until the catalogue was tiered and mono-minimal became Pro -- from then
+// on, a free account pressing the lecture button selected a style the server
+// refused, with nothing on screen explaining it. The button now takes the
+// first style the account is entitled to, which is only safe while one exists.
+
+const { config } = await import('../src/config.js');
+
+test('there is always a free lecture style for the picker to land on', () => {
+  const usable = templates.listTemplates(user)
+    .filter(t => !t.pro && t.captionMode !== 'quran');
+  assert.ok(usable.length >= 1,
+    'a free account pressing "Islamic lecture" must land on a style it can use');
+});
+
+test('the shipped default template is itself free', () => {
+  // Anything else means a brand new account opens on a style it cannot render,
+  // which is the same bug one step earlier.
+  const fallback = templates.templateById(config.defaultTemplateId, user);
+  assert.ok(fallback, `defaultTemplateId "${config.defaultTemplateId}" must exist`);
+  assert.equal(fallback.pro, false, 'the default template cannot be Pro');
+});
+
+test('the Quran style is reachable by the id the picker asks for', () => {
+  // The recitation button asks for 'quran-recitation' by name; renaming the
+  // file would leave the button pointing at nothing.
+  assert.ok(templates.templateById('quran-recitation', user));
+});
