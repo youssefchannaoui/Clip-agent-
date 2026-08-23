@@ -1636,7 +1636,13 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
     source: remoteSourceFor(project), ...remoteWindow,
     background: jobBackground(project, owner, { remote: true }),
     transcript: { objectKey: project.transcriptObjectKey || '' }, template,
-    musicTracks: remoteMusicTracks(tracks, owner.id), settings: { ...sharedSettings(owner), renderQuality },
+    musicTracks: remoteMusicTracks(tracks, owner.id),
+    // The clip's waiver has to reach the worker too. The app stopped refusing
+    // these re-renders, but it still told the worker music was wanted while
+    // sending no tracks, and the worker refused instead -- so a clip made
+    // without a nasheed still could not be re-rendered, it just failed one
+    // step later with "No worker-accessible nasheed track was supplied."
+    settings: { ...sharedSettings(owner, { musicEnabled: !waivesMusic }), renderQuality },
     clip: {
       id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
       transcriptEdited: Boolean(clip.transcriptEdited),
@@ -1647,7 +1653,7 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
     mode: 'rerender', id: rerenderId, projectId: project.id, clipIdOverride: outputClipId,
     sourceFile, outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
     background: jobBackground(project, owner),
-    template, musicTracks: tracks, settings: { ...sharedSettings(owner), renderQuality }, transcriptSegments,
+    template, musicTracks: tracks, settings: { ...sharedSettings(owner, { musicEnabled: !waivesMusic }), renderQuality }, transcriptSegments,
     clip: {
       id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
       transcriptEdited: Boolean(clip.transcriptEdited),
