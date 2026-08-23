@@ -119,16 +119,26 @@ unset WS
 with the new value. Verify with an end-to-end job afterwards: a callback that
 fails signature verification shows up as a job that renders and never completes.
 
-### 4. Cloudflare R2 access key and secret
+### 4. Cloudflare R2 access key and secret — DONE 24 Aug 2026
 
-R2 supports multiple live keys, so this one has no downtime:
+Rotated to a single Account API token, `deenclipped-rotated-2026-08-24`, scoped
+**Object Read & Write** on `deenclipped-media-us` only. Both leaked Aug 6 tokens
+(`deenclipped-worker-token-us`, which had access to *all* buckets, and
+`deenclipped-worker-token`) were deleted after verification.
 
-1. Create a **new** key pair in the Cloudflare dashboard.
-2. Update Render and `/opt/deenclipped/.env` on the VPS.
-3. Confirm uploads and the admin storage figures still work.
-4. **Then** revoke the old pair.
+Two things worth recording for next time:
 
-Revoking first means broken uploads until both sides are updated.
+- Both Render and the worker use `deenclipped-media-us`. There is a second,
+  unused bucket called `deenclipped-media`; the old narrow token pointed at it,
+  which means the app had been running on the all-buckets token.
+- Object **Read & Write** is the minimum. Read-only breaks deletes of superseded
+  renders and thumbnails, and breaks the backup writer.
+
+Verified before deleting the old tokens, and again afterwards: a presigned
+upload (200), a backup write plus verification read, an existing clip still
+served (206), and a full re-render with zero `AccessDenied` /
+`InvalidAccessKeyId` / `SignatureDoesNotMatch` in the worker log -- which is
+the only check that exercises the worker's own copy of the credentials.
 
 ### 5. Provider secrets
 
