@@ -630,7 +630,15 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .bgt-card.locked:hover .bgt-thumb{border-color:#4A4038}
 /* Bottom-left, because that is the one corner none of the caption styles
    uses: Bold Stack sets top-left, Headline top-centre, the rest centre. */
-.bgt-lock{position:absolute;top:190px;left:9px;display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:999px;background:rgba(10,10,12,.8);border:1px solid rgba(217,180,120,.45);color:#F0D6A6;font:600 8.5px Outfit,Inter,sans-serif;letter-spacing:.03em;pointer-events:none}
+.dc-pro{position:relative;display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:999px;
+  border:1px solid rgba(217,180,120,.45);background:rgba(217,180,120,.12);color:#F0D6A6;
+  font:700 9px Outfit,Inter,sans-serif;letter-spacing:.08em;white-space:nowrap;overflow:hidden;vertical-align:middle}
+.dc-pro::after{content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(105deg,transparent 32%,rgba(255,240,214,.34) 50%,transparent 68%);
+  transform:translateX(-130%);animation:dcProShine 4.6s ease-in-out infinite}
+@keyframes dcProShine{0%,58%{transform:translateX(-130%)}84%,100%{transform:translateX(240%)}}
+@media (prefers-reduced-motion: reduce){.dc-pro::after{animation:none;opacity:0}}
+.bgt-lock{position:absolute;top:190px;left:9px;background:rgba(10,10,12,.86);pointer-events:none}
 .bgt-name{white-space:normal;line-height:1.35}
 .bgt-card:not(.on):hover .bgt-thumb{border-color:#3A3A42;transform:translateY(-1px)}
 .bgt-card.on .bgt-thumb{border-color:rgba(240,214,166,.8)}
@@ -3933,7 +3941,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           const locked=Boolean(t.pro)&&!tplPaid();
           return `<button type="button" class="bgt-card${on?' on':''}${locked?' locked':''}" data-tpl-name="${esc(t.name)}"${locked?' data-tpl-locked="1"':''} title="${esc(t.description||t.name)}">`
             +tplMiniHtml(t)
-            +(locked?'<span class="bgt-lock"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>Pro</span>':'')
+            +(locked?'<span class="bgt-lock dc-pro"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>Pro</span>':'')
             +`<span class="bgt-name">${esc(t.name)}</span></button>`;
         }).join('')
         +'</div>';
@@ -4468,7 +4476,12 @@ function renderStudio(){
     /* Rejecting means "this clip should not exist": the record, its files
        and its queue row all go. It used to only mark the status, so rejects
        piled up in the app forever. */
-    StudioAdapter.onReject=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'DELETE'}),'Clip rejected and removed');
+    /* Reject used to DELETE: one click on a card's X destroyed the clip, its
+       rendered file and its thumbnail, with no confirm and no way back -- while
+       the adapter's own comment said nothing was destroyed. It takes the
+       reversible path now, and a rejected card offers Restore. */
+    StudioAdapter.onReject=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'rejected'})}),'Rejected \u2014 kept under All clips, and it can be restored');
+    StudioAdapter.onRestore=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'waiting'})}),'Restored to Awaiting decision');
     /* Bulk review actions. One refresh at the end, not one per clip -- and
        one confirm for the destructive path, since twelve confirms teaches
        people to stop reading them. */
@@ -4650,11 +4663,20 @@ function renderStudio(){
           r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=reject;r.readAsDataURL(file)});
         await api('/api/music',{method:'POST',body:JSON.stringify({name:file.name,data,mimeType:file.type||'audio/mpeg'})});
       }},'Nasheed uploaded');
+    /* The prerequisite is checked BEFORE the bytes move. This used to presign,
+       PUT the whole file, and only then POST /api/videos -- which the empty
+       nasheed library refuses. A new account uploaded a lecture in full and got
+       an error for its trouble. It also sent no templateId, so the Clip Style
+       picked in the panel was ignored and the account default was used. */
     StudioAdapter.onUploadFile=file=>studioDo(async()=>{
+      if(!((DATA&&DATA.tracks)||[]).length){
+        throw new Error('Upload a nasheed first — every clip mixes one in, so a lecture cannot finish processing without at least one.');
+      }
       const presign=await api('/api/uploads/presign',{method:'POST',body:JSON.stringify({fileName:file.name,contentType:file.type||'video/mp4'})});
       const put=await fetch(presign.uploadUrl,{method:'PUT',headers:presign.headers||{'Content-Type':file.type||'video/mp4'},body:file});
       if(!put.ok)throw new Error('Upload failed — the storage service rejected the file.');
       await api('/api/videos',{method:'POST',body:JSON.stringify({objectKey:presignKey(presign),fileName:file.name,title:file.name,
+        templateId:StudioAdapter.ui.jobTplId||'',
         backgroundMode:(StudioAdapter.ui.jobTplId||'')==='quran-recitation'?(StudioAdapter.ui.jobBgMode||'own'):'own',
         backgroundId:StudioAdapter.ui.jobBgId||'',introSeconds:StudioAdapter.ui.jobBgIntro||3})})},'Upload queued');
     document.body.classList.add('studio-active');

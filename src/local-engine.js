@@ -1584,8 +1584,15 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
   // clip either changed every clip on the template or was silently discarded at
   // render time.
   const template = enforcePlan(templateForClip(baseTemplate, clip.styleOverrides), ownerOf(clip));
-  const tracks = workerMusicTracks(owner);
-  if (!tracks.length) throw new Error('Music is mandatory. Upload at least one nasheed first.');
+  // store.musicSatisfied already treats musicEnabled === false as satisfied,
+  // and validateSubmission lets a job start that way -- but this refused every
+  // re-render regardless, so a clip that was deliberately made without a
+  // nasheed could never be edited again. Moving any slider reported the failure
+  // four seconds later and Save said "Render not started", with nothing on
+  // screen pointing at the library.
+  const waivesMusic = clip.musicEnabled === false;
+  const tracks = waivesMusic ? [] : workerMusicTracks(owner);
+  if (!waivesMusic && !tracks.length) throw new Error('Music is mandatory. Upload at least one nasheed first.');
   const transcriptSegments = project.transcriptFile && fs.existsSync(project.transcriptFile)
     ? JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8')) : [];
   const rerenderId = id('rerender');

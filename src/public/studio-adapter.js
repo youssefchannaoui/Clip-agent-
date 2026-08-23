@@ -1215,12 +1215,14 @@
           if (map[c.id]) delete map[c.id]; else map[c.id] = true;
           setUI({ selClips: map });
         },
-        primaryLabel: st === 'approved' ? 'Approved' : 'Approve',
-        primaryIcon: st === 'approved' ? 'ph-fill ph-check-circle' : 'ph ph-check',
+        primaryLabel: st === 'rejected' ? 'Restore' : st === 'approved' ? 'Approved' : 'Approve',
+        primaryIcon: st === 'rejected' ? 'ph ph-arrow-u-up-left' : st === 'approved' ? 'ph-fill ph-check-circle' : 'ph ph-check',
         primaryStyle: 'display: flex; align-items: center; justify-content: center; gap: 6px; flex: 1; padding: 7px 10px; border-radius: 8px; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid ' +
           (st === 'approved' ? 'rgba(127,209,166,.4); background: rgba(127,209,166,.1); color: #7FD1A6;' : 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;'),
         approve: function (e) { stop(e); approve(c.id); },
-        primary: function (e) { stop(e); approve(c.id); },
+        primary: st === 'rejected'
+          ? function (e) { stop(e); global.StudioAdapter.onRestore(c.id); }
+          : function (e) { stop(e); approve(c.id); },
         reject: function (e) { stop(e); reject(c.id); },
         // Approve / edit / reject is the card's action row; `third` is reject.
         third: function (e) { stop(e); reject(c.id); },
@@ -1235,8 +1237,9 @@
       refresh();
       global.StudioAdapter.onApprove(id);
     }
-    // Rejecting persists now: the clip record has a `rejected` status, so a
-    // reviewed batch survives a reload. Nothing is destroyed -- the render stays
+    // Rejecting persists AND is reversible: the clip takes a `rejected` status
+    // through agent.rejectClip, so a reviewed batch survives a reload and can
+    // be restored. Nothing is destroyed -- the render stays
     // and the decision can be undone.
     function reject(id) {
       UI.pending[id] = 'rejected';
@@ -1529,11 +1532,41 @@
     // and a Tuesday with no windows left looked identical -- blank space --
     // and there was nothing to press to fill one.
     var slotTimes = (DATA.postTimes || []).slice();
+    // A posting time is a wall clock in the ACCOUNT's zone -- src/slots.js
+    // builds every real slot with wallToInstant against config.timezone. Built
+    // with the browser's setHours instead, the cells only lined up for someone
+    // sitting in that same zone; for anyone else no clip ever matched its slot,
+    // every cell rendered empty, the clips fell into the appended Other row,
+    // and pressing a cell sent an instant that was not a posting time at all.
+    // This mirrors slots.js rather than assuming an offset.
+    var SCHED_TZ = DATA.timezone || 'Australia/Perth';
+    function zoneOffset(ms) {
+      var p = new Intl.DateTimeFormat('en-US', {
+        timeZone: SCHED_TZ, hour12: false,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+      }).formatToParts(new Date(ms)).reduce(function (acc, part) {
+        if (part.type !== 'literal') acc[part.type] = Number(part.value);
+        return acc;
+      }, {});
+      return Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute, p.second) - ms;
+    }
+    function wallToInstant(y, m, d, hh, mm) {
+      var guess = Date.UTC(y, m - 1, d, hh, mm, 0);
+      var ms = guess - zoneOffset(guess);
+      // Run once more so a daylight-saving boundary lands correctly.
+      return guess - zoneOffset(ms);
+    }
+    function zonedYMD(ms) {
+      var p = new Intl.DateTimeFormat('en-CA', {
+        timeZone: SCHED_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date(ms)).split('-');
+      return { y: Number(p[0]), m: Number(p[1]), d: Number(p[2]) };
+    }
     function instantOn(dayStart, hhmm) {
       var parts = String(hhmm).split(':');
-      var d = new Date(dayStart);
-      d.setHours(Number(parts[0]) || 0, Number(parts[1]) || 0, 0, 0);
-      return d.getTime();
+      var ymd = zonedYMD(dayStart);
+      return wallToInstant(ymd.y, ymd.m, ymd.d, Number(parts[0]) || 0, Number(parts[1]) || 0);
     }
     function addClipAt(at) {
       return function (e) {
@@ -2430,10 +2463,14 @@
     }).length;
 
     // Blockers name a real gap and send you to the screen that fixes it.
-    var blocker = '', blockerScreen = 'music';
+    var blocker = '', blockerScreen = 'music', blockerCta = 'Upload nasheed', blockerOpensConnections = false;
     if (tracks.length === 0) { blocker = 'No nasheed uploaded — every clip mixes one in, so processing cannot finish without at least one.'; blockerScreen = 'music'; }
     else if (tracks.length < 2) { blocker = 'Only one nasheed uploaded — rotation needs two or more before automatic posting can run.'; blockerScreen = 'music'; }
-    else if (connectedCount === 0) { blocker = 'No publishing account connected — approved clips will queue up with nowhere to go.'; blockerScreen = 'templates'; }
+    else if (connectedCount === 0) {
+      blocker = 'No publishing account connected — approved clips will queue up with nowhere to go.';
+      blockerCta = 'Connect an account';
+      blockerOpensConnections = true;
+    }
 
     var open = UI.railOpen && (global.innerWidth || 1280) > 820;
 
@@ -2691,7 +2728,13 @@
 
       blockersOn: Boolean(blocker) && !UI.blockerDismissed,
       blockerText: blocker || '',
-      resolveBlocker: function (e) { stop(e); setUI({ blockerDismissed: true, screen: blockerScreen }); },
+      blockerCta: blockerCta,
+      resolveBlocker: function (e) {
+        stop(e);
+        setUI({ blockerDismissed: true });
+        if (blockerOpensConnections) { global.StudioAdapter.onOpenConnections(); return; }
+        setUI({ screen: blockerScreen });
+      },
       dismissBlocker: function (e) { stop(e); setUI({ blockerDismissed: true }); },
 
       // ── Lecture library ──
@@ -3802,7 +3845,8 @@
       // indistinguishable. Disambiguated here until the design can emit ids.
       tplList: templates.map(function (t, i) {
         var clash = templates.filter(function (o) { return o.name === t.name; }).length > 1;
-        return clash ? t.name + ' (' + (i + 1) + ')' : t.name;
+        var base = clash ? t.name + ' (' + (i + 1) + ')' : t.name;
+        return base + (t.pro && !planAllowsProTemplates(DATA) ? ' \u00b7 Pro' : '');
       }),
       activeTpl: (function () {
         if (!activeTemplate) return '';
@@ -3811,12 +3855,19 @@
         return clash && i > -1 ? activeTemplate.name + ' (' + (i + 1) + ')' : activeTemplate.name;
       })(),
       setActiveTpl: function (e) {
-        var label = e.target.value;
+        var label = String(e.target.value).replace(/ \u00b7 Pro$/, '');
         var picked = templates.filter(function (t, i) {
           var clash = templates.filter(function (o) { return o.name === t.name; }).length > 1;
           return (clash ? t.name + ' (' + (i + 1) + ')' : t.name) === label;
         })[0];
         if (!picked) return;
+        // Said here, before any request goes out, rather than arriving as a 400
+        // with the select snapping back.
+        if (picked.pro && !planAllowsProTemplates(DATA)) {
+          toast('"' + picked.name + '" is a Pro style. Any paid plan unlocks it.');
+          refresh();
+          return;
+        }
         // In the editor this dropdown means "render THIS CLIP with that
         // template". It used to change the account's default template
         // instead, which the pinned clip never reads -- so picking a style
@@ -4076,7 +4127,7 @@
       startJob: function (e) {
         stop(e);
         var url = (UI.jobUrl || '').trim();
-        if (!url) return;
+        if (!url) { toast('Paste a lecture link first, or upload an MP4.'); return; }
         global.StudioAdapter.onProbeSource(url);
       },
       // The same `onFile` binding serves the lecture uploader and the nasheed
@@ -4094,10 +4145,18 @@
       selectWrapStyle: 'position: relative; display: flex; align-items: center;',
       selectStyle: 'appearance: none; padding: 7px 26px 7px 10px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #F2F2F4; font-family: inherit; font-size: 12.5px; cursor: pointer;',
 
-      tplNames: templates.map(function (t) { return t.name; }),
+      tplNames: templates.map(function (t) {
+        return t.name + (t.pro && !planAllowsProTemplates(DATA) ? ' \u00b7 Pro' : '');
+      }),
       jobTpl: activeTemplate ? activeTemplate.name : '',
       setTpl: function (e) {
-        var picked = templates.filter(function (t) { return t.name === e.target.value; })[0];
+        var label = String(e.target.value).replace(/ \u00b7 Pro$/, '');
+        var picked = templates.filter(function (t) { return t.name === label; })[0];
+        if (picked && picked.pro && !planAllowsProTemplates(DATA)) {
+          toast('"' + picked.name + '" is a Pro style. Any paid plan unlocks it.');
+          refresh();
+          return;
+        }
         UI.jobTplId = picked ? picked.id : '';
         refresh();
       },
@@ -4418,6 +4477,7 @@
     onPostNow: function () {},
     onSendBack: function () {},
     onScheduleClip: function () {},
+    onRestore: function () {},
     onMoreClips: function () {},
     // Sends any pending clip-style edit immediately instead of waiting out the
     // debounce. "Save to all clips" reads the overrides back off the server to

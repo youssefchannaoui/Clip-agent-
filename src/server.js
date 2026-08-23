@@ -822,7 +822,13 @@ async function route(req, res, url) {
         // The key shape is checked above; this checks it is *this* account's
         // upload, so one tenant cannot submit another tenant's file.
         if (!objectKey.startsWith(objectStorage.uploadPrefixFor(currentUser.id))) throw new Error('The uploaded video reference is outside the permitted storage area.');
+        // templateId / musicEnabled / musicTrackId travel on the URL branch
+        // below and were dropped here, so an uploaded MP4 silently ignored the
+        // Clip Style that was picked and fell back to the account default.
         const projectId = await agent.submitVideo(objectKey, body.title || body.fileName || '', currentUser.id, {
+          templateId: String(body.templateId || ''),
+          musicEnabled: body.musicEnabled !== false,
+          musicTrackId: String(body.musicTrackId || ''),
           backgroundMode: body.backgroundMode, backgroundId: body.backgroundId, introSeconds: body.introSeconds,
           sourceKind: 'object_storage', originalFileName: body.fileName || '', displayUrl: `Uploaded file · ${body.fileName || 'video'}`,
           sourceMeta: { title: body.title || body.fileName || '', durationSec: Number(body.durationSec || 0) || null, thumbnail: '' },
@@ -1184,10 +1190,16 @@ async function route(req, res, url) {
     const body = await readBody(req);
     try {
       for (const id of (Array.isArray(body.ids) ? body.ids : [])) assertCanAccessClip(currentUser, String(id));
-      // Optional: the day the caller pressed. Anything unparsable or in the
-      // past falls back to the next open slot rather than failing the request.
-      const at = Number(body.at);
-      const summary = agent.scheduleSelected(body.ids, Number.isFinite(at) && at > 0 ? { at } : {});
+      // Optional. `day` is a calendar day, `at` one exact posting slot. This
+      // route read only `at`, so every per-day button sent a `day` the server
+      // dropped on the floor and the clip went to the next open slot -- the
+      // exact bug the day parameter was added to fix, still live because the
+      // unit tests called scheduleSelected directly and never crossed the route.
+      const at = Number(body.at), day = Number(body.day);
+      const summary = agent.scheduleSelected(body.ids, {
+        at: Number.isFinite(at) && at > 0 ? at : null,
+        day: Number.isFinite(day) && day > 0 ? day : null,
+      });
       return json(res, 200, { ok: summary.failed === 0, ...summary });
     } catch (error) { return json(res, 400, { error: error.message }); }
   }
@@ -1237,7 +1249,17 @@ async function route(req, res, url) {
   const rerenderClip = pathname.match(/^\/api\/clips\/([^/]+)\/rerender$/);
   if (method === 'POST' && rerenderClip) {
     const body = await readBody(req);
-    try { const id = decodeURIComponent(rerenderClip[1]); assertCanAccessClip(currentUser, id); return json(res, 202, { ok: true, job: agent.engine.queueClipRerender(id, String(body.templateId || ''), { asVariant: Boolean(body.asVariant), priority: 0 }) }); }
+    try {
+      const id = decodeURIComponent(rerenderClip[1]);
+      assertCanAccessClip(currentUser, id);
+      // The selection routes check the plan; this one never did, so a free
+      // account could re-render a clip onto a Pro style, get a success, and
+      // receive a clip in the default style because enforceTemplatePlan swaps
+      // it back at render. Refused at the door, with the reason.
+      const wanted = String(body.templateId || '');
+      if (wanted) assertTemplateAllowed(templates.templateById(wanted, currentUser));
+      return json(res, 202, { ok: true, job: agent.engine.queueClipRerender(id, wanted, { asVariant: Boolean(body.asVariant), priority: 0 }) });
+    }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
   const clipPublish = pathname.match(/^\/api\/clips\/([^/]+)\/publish$/);
