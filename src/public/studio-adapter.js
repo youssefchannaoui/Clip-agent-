@@ -1567,7 +1567,7 @@
             var past = ds < today;
             cells.push({
               date: String(new Date(ds).getDate()),
-              style: 'position: relative; display: flex; flex-direction: column; gap: 3px; min-height: 62px; padding: 5px 7px 6px;'
+              style: 'position: relative; display: flex; flex-direction: column; gap: 3px; height: 100%; min-height: 62px; padding: 5px 7px 6px;'
                 + ' border: 1px solid ' + (isToday ? 'rgba(240,214,166,.45)' : '#1C1C21') + '; border-radius: 10px;'
                 + ' background: ' + (isToday ? 'rgba(217,180,120,.05)' : inMonth ? '#141418' : '#0F0F12') + ';'
                 + ' text-align: left; font-family: inherit; cursor: pointer;'
@@ -1580,7 +1580,7 @@
                 return { style: 'display: block; width: 5px; height: 5px; border-radius: 50%;'
                   + ' background: ' + (n < items.length ? '#D9B478' : '#212127') + ';' };
               }) : [],
-              chips: items.slice(0, 2).map(function (c) {
+              chips: items.slice(0, 3).map(function (c) {
                 return {
                   label: timeOf(c.scheduledAt) + '  ' + String(c.title || 'Clip'),
                   rowStyle: 'display: flex; align-items: center; gap: 5px; min-width: 0;',
@@ -1590,8 +1590,8 @@
                     + ' white-space: nowrap; overflow: hidden; text-overflow: ellipsis;',
                 };
               }),
-              moreLabel: items.length > 2 ? '+' + (items.length - 2) + ' more' : '',
-              hasMore: items.length > 2,
+              moreLabel: items.length > 3 ? '+' + (items.length - 3) + ' more' : '',
+              hasMore: items.length > 3,
               open: function (e) { stop(e); setUI({ schedView: 'day', schedAnchor: ds }); },
             });
           })(rowStart + cd * DAY_MS);
@@ -1671,7 +1671,7 @@
             free: !held && !past,
             title: held ? String(held.title || 'Clip') : '',
             style: 'position: relative; display: flex; flex-direction: column; justify-content: flex-end; flex: 1 1 0; min-width: 0;'
-              + ' height: 62px; padding: 6px 7px; border-radius: 9px; overflow: hidden; text-align: left; font-family: inherit; cursor: '
+              + ' height: 100%; min-height: 56px; padding: 6px 7px; border-radius: 9px; overflow: hidden; text-align: left; font-family: inherit; cursor: '
               + (held || !past ? 'pointer' : 'default') + ';'
               + ' border: 1px ' + (held ? 'solid #26262E' : past ? 'solid #161619' : 'dashed #232329') + ';'
               + (held && held.thumbUrl
