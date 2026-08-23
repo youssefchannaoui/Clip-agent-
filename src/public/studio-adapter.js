@@ -2915,6 +2915,59 @@
           select: function (e) { stop(e); setUI({ schedView: v.id }); },
         };
       }),
+      startDoneLabel: (function () {
+        var t = (tracks.length > 0 ? 1 : 0)
+          + (projects.length > 0 ? 1 : 0)
+          + (clips.filter(function (c) { return decision(c) === 'approved'; }).length > 0 ? 1 : 0)
+          + (connectedCount > 0 ? 1 : 0)
+          + (scheduled.filter(function (c) { return Number(c.scheduledAt) > Date.now(); }).length > 0 ? 1 : 0);
+        return t + ' of 5 done';
+      }()),
+      // It disappears when it is finished, rather than becoming furniture.
+      startListOn: !(tracks.length > 0
+        && projects.length > 0
+        && clips.filter(function (c) { return decision(c) === 'approved'; }).length > 0
+        && connectedCount > 0
+        && scheduled.filter(function (c) { return Number(c.scheduledAt) > Date.now(); }).length > 0),
+
+      // ── the starter list ──
+      // Proved from the account's own data, never a stored "dismissed" flag: a
+      // checklist that ticks itself because you visited a screen teaches the
+      // wrong thing. Each item names the one action that finishes it.
+      startSteps: (function () {
+        var futureSlots = scheduled.filter(function (c) { return Number(c.scheduledAt) > Date.now(); }).length;
+        var approvedCount = clips.filter(function (c) { return decision(c) === 'approved'; }).length;
+        var items = [
+          { title: 'Upload a nasheed', note: 'Every clip mixes one in, so nothing finishes without it.', done: tracks.length > 0, go: 'music' },
+          { title: 'Add your first lecture', note: 'Paste a link you may use, or upload an MP4.', done: projects.length > 0, go: 'home' },
+          { title: 'Approve a clip', note: 'Nothing is published until you say so.', done: approvedCount > 0, go: 'queue' },
+          { title: 'Connect somewhere to post', note: 'Without this, approved clips sit in their slots.', done: connectedCount > 0, go: 'connections' },
+          { title: 'Give a clip a time', note: 'Press a free slot in the week, or Slot it.', done: futureSlots > 0, go: 'schedule' },
+        ];
+        return items.map(function (item, i) {
+          return {
+            title: item.title,
+            note: item.note,
+            done: item.done,
+            numStyle: 'display: grid; place-items: center; width: 22px; height: 22px; flex: none; border-radius: 50%;'
+              + ' font: 600 11px Outfit, Inter, sans-serif; border: 1px solid '
+              + (item.done ? 'rgba(127,209,166,.5); background: rgba(127,209,166,.14); color: #7FD1A6;'
+                           : '#2C2C33; background: #17171A; color: #8B8B93;'),
+            num: item.done ? '\u2713' : String(i + 1),
+            titleStyle: 'font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 500; color: '
+              + (item.done ? '#6E6E76' : '#F2F2F4') + ';' + (item.done ? ' text-decoration: line-through;' : ''),
+            rowStyle: 'display: flex; align-items: flex-start; gap: 11px; padding: 9px 10px; border-radius: 9px;'
+              + ' border: 0; background: none; width: 100%; text-align: left; font-family: inherit; cursor: pointer;'
+              + ' transition: background .14s ease;',
+            open: function (e) {
+              stop(e);
+              if (item.go === 'connections') { global.StudioAdapter.onOpenConnections(); return; }
+              setUI({ screen: item.go });
+            },
+          };
+        });
+      }()),
+
       // ── the rail ──
       // The meter was four gold bars in the markup, full whatever the day held.
       // It sat directly above the sentence "2 of 4 scheduled today" and
@@ -4399,8 +4452,23 @@
           name: p.name || p.id || '',
           price: p.priceLabel || (p.id === 'free' ? 'Free' : 'Price not set'),
           per: p.interval && p.interval !== 'one-time' ? 'per ' + p.interval : '',
-          tokens: p.tokens != null ? plural(p.tokens, 'token') : '',
-          lines: [{ text: p.description || '' }].filter(function (l) { return l.text; }),
+          // The markup already writes the word after it, so pluralising here
+          // produced "40 tokens tokens" on every card.
+          tokens: p.tokens != null ? String(p.tokens) : '',
+          // The server has computed exactly what a paid plan adds and exactly
+          // what free already includes since the plan split was built, and
+          // shipped both to the browser in publicBilling -- where nothing has
+          // ever rendered them. A free user had no screen telling them what
+          // paying changes, and the free card never said how much it already
+          // does. Both are named here, from the server's own lists, so the two
+          // can never drift from what the gates enforce.
+          lines: [{ text: p.description || '' }]
+            .concat(p.id === 'free'
+              ? (DATA.billing && DATA.billing.freeIncludes || []).map(function (t) { return { text: t }; })
+              : Object.keys(DATA.billing && DATA.billing.proFeatures || {}).map(function (k) {
+                return { text: DATA.billing.proFeatures[k] };
+              }))
+            .filter(function (l) { return l.text; }),
           hasTag: Boolean(isCurrent || p.badge),
           tag: isCurrent ? 'Current plan' : (p.badge || ''),
           tagStyle: 'padding: 2px 8px; border-radius: 20px; font-size: 9.5px; font-weight: 700; background: ' +

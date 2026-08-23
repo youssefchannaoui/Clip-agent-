@@ -1410,9 +1410,11 @@ test('the billing period tabs change the prices, not just the highlight', () => 
     StudioAdapter.ui.planPeriod = period;
     return StudioAdapter.bindings(BILLING_STATE).planCards.map(c => `${c.name} ${c.price} ${c.tokens}`);
   };
-  assert.ok(at('week').some(c => c.includes('Weekly £4 150 tokens')));
-  assert.ok(at('month').some(c => c.includes('Monthly £14 600 tokens')));
-  assert.ok(at('year').some(c => c.includes('Annual £140 8000 tokens')));
+  // `tokens` is the count alone: the markup writes the word after it, and
+  // pluralising in the binding too produced "150 tokens tokens" on every card.
+  assert.ok(at('week').some(c => c.includes('Weekly £4 150')));
+  assert.ok(at('month').some(c => c.includes('Monthly £14 600')));
+  assert.ok(at('year').some(c => c.includes('Annual £140 8000')));
   assert.ok(!at('week').some(c => c.includes('Monthly')), 'a period shows only its own plans');
 });
 

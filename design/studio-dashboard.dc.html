@@ -264,6 +264,29 @@
         </div>
       </section>
 
+      <!-- The first five things, proved from the account's own data. It goes
+           away when it is finished rather than becoming furniture. -->
+      <sc-if value="{{ startListOn }}" hint-placeholder-val="{{ true }}">
+        <div style="padding: 20px 40px 0;">
+          <section style="display: flex; flex-direction: column; gap: 4px; padding: 15px 14px; border: 1px solid #23231F; border-radius: 13px; background: linear-gradient(160deg, rgba(217,180,120,.05), #101013 62%);">
+            <div style="display: flex; align-items: baseline; gap: 10px; padding: 0 6px 6px;">
+              <strong style="font-family: Outfit, Inter, sans-serif; font-size: 14px; font-weight: 600; letter-spacing: -.02em;">Getting set up</strong>
+              <span style="font-size: 11.5px; color: #8B8B93;">{{ startDoneLabel }}</span>
+            </div>
+            <sc-for list="{{ startSteps }}" as="s" hint-placeholder-count="5">
+              <button onClick="{{ s.open }}" style="{{ s.rowStyle }}" style-hover="background: #17171A;">
+                <span style="{{ s.numStyle }}">{{ s.num }}</span>
+                <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+                  <span style="{{ s.titleStyle }}">{{ s.title }}</span>
+                  <span style="font-size: 11.5px; line-height: 1.45; color: #6E6E76;">{{ s.note }}</span>
+                </span>
+              </button>
+            </sc-for>
+          </section>
+        </div>
+      </sc-if>
+
+
 
 
       <div style="display: flex; flex-wrap: wrap; gap: 18px; padding: 22px 40px 40px; align-items: flex-start;">

@@ -168,3 +168,32 @@ test('a tour is remembered per screen, not once for the whole product', () => {
   const seen = adapter.slice(adapter.indexOf('function tourSeen'), adapter.indexOf('function markTourSeen'));
   assert.match(seen, /dcTourSeen/, 'the legacy flag still counts as seen');
 });
+
+// ── the starter list, and saying what Pro adds ─────────────────────────────
+
+test('the starter list is proved from account data, not a dismissed flag', () => {
+  const adapter = read('src/public/studio-adapter.js');
+  const at = adapter.indexOf('startSteps:');
+  assert.ok(at > 0, 'a new account gets a starter list');
+  const body = adapter.slice(at, at + 2200);
+  // Each item must be answered by real state, so it cannot tick itself just
+  // because someone visited the screen.
+  for (const proof of ['tracks.length > 0', 'projects.length > 0', 'connectedCount > 0']) {
+    assert.ok(body.includes(proof), `an item is proved by ${proof}`);
+  }
+  assert.match(adapter, /startListOn:/, 'and it goes away once finished');
+});
+
+test('the plans screen says what Pro adds and what free already includes', () => {
+  const adapter = read('src/public/studio-adapter.js');
+  const at = adapter.indexOf('planCards:');
+  assert.ok(at > 0);
+  const body = adapter.slice(at, at + 1800);
+  assert.match(body, /freeIncludes/, 'the free card lists what it already does');
+  assert.match(body, /proFeatures/, 'the paid card names the two things it adds');
+  // Read from the server's own lists so a badge and a plan card can never
+  // disagree with the gate that enforces them.
+  const billing = read('src/billing.js');
+  assert.match(billing, /proFeatures: PRO_FEATURES/);
+  assert.match(billing, /freeIncludes: FREE_INCLUDES/);
+});
