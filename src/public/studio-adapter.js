@@ -2571,6 +2571,17 @@
 
     var open = UI.railOpen && (global.innerWidth || 1280) > 820;
 
+    // The Performance range tabs stored a label nothing read, so all three
+    // showed identical numbers -- three tabs over one answer. This is the
+    // window they name, and every figure on the screen is taken through it.
+    var PERF_DAYS = { 'Last 7 days': 7, 'Last 30 days': 30 };
+    var PERF_WINDOW = PERF_DAYS[UI.perfRange] ? Date.now() - PERF_DAYS[UI.perfRange] * DAY_MS : 0;
+    var perfAt = function (c) {
+      return Number(c.createdAt || c.readyAt || c.approvedAt || c.postedAt || c.submittedAt || 0);
+    };
+    var perfClips = PERF_WINDOW ? clips.filter(function (c) { return perfAt(c) >= PERF_WINDOW; }) : clips;
+    var perfProjects = PERF_WINDOW ? projects.filter(function (p) { return perfAt(p) >= PERF_WINDOW; }) : projects;
+
     var vals = {
       // ── shell: rail ──
       railOpen: open,
@@ -3774,6 +3785,7 @@
       postWindowName1: windowName(postTimes[0]),
       postWindowName2: windowName(postTimes[1]),
       postWindowName3: postTimes.slice(2).map(windowName).join(' · ') || '—',
+      postWindowNote: 'Set on the server' + (DATA.timezone ? ' · ' + DATA.timezone : '') + '.',
       postWindow1: postTimes[0] || '—',
       postWindow2: postTimes[1] || '—',
       postWindow3: postTimes.slice(2).join(' · ') || '—',
@@ -4073,7 +4085,6 @@
         setUI({ tplDirty: false });
         global.StudioAdapter.onResetTemplate();
       },
-      duplicateTpl: function (e) { stop(e); global.StudioAdapter.onDuplicateTemplate(activeTemplate && activeTemplate.id); },
       // Opens the newest clip actually built on this template, rather than only
       // explaining that a preview would come from one. It stayed a message even
       // when the account had clips built on the very template being edited.
@@ -4356,7 +4367,6 @@
         };
       }),
 
-      archiveSources: function (e) { stop(e); toast('Archiving sources is not available yet.'); },
       // /more-clips does exactly this; it was reporting itself unavailable.
       recutClips: function (e) {
         stop(e);
@@ -4367,7 +4377,6 @@
             if (n) global.StudioAdapter.onMoreClips(detail.id, n);
           });
       },
-      editWindows: function (e) { stop(e); setUI({ screen: 'templates' }); },
 
       // ── Nasheed library ──
       nasheedList: tracks.map(function (t, i) {
@@ -4383,7 +4392,6 @@
           rotStyle: 'display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px; font-size: 10.5px; font-weight: 600; cursor: pointer; border: 1px solid rgba(127,209,166,.32); background: rgba(10,10,12,.82); color: #7FD1A6;',
           rotIcon: 'ph-fill ph-check-circle',
           rotLabel: 'In rotation',
-          toggleRot: function (e) { stop(e); toast('Every uploaded nasheed is in rotation.'); },
           remove: function (e) { stop(e); global.StudioAdapter.onRemoveTrack(t.id); },
         };
       }),
@@ -4394,15 +4402,17 @@
       nasheedVolLabel: musicVolume + '%',
       nasheedDb: (musicVolume ? Math.round(20 * Math.log10(musicVolume / 100)) : -60) + ' dB under speech',
       setVol: setVolumeFrom,
-      duckTrackStyle: sliderTrack(true),
-      duckKnobStyle: sliderKnob(true),
-      toggleDuck: function (e) { stop(e); toast('Ducking is always on — the nasheed drops under speech.'); },
 
       // ── Performance ──
       // The product does not collect view, save or watch-time data: a published
       // clip's record carries delivery status only. Rather than invent numbers,
       // the tiles report what is genuinely known and the leaderboard ranks by the
       // score the worker assigned.
+      // Everything on this screen now answers to the chosen range. A clip
+       // counts by when it was made, a lecture by when it was submitted.
+      perfRangeNote: PERF_WINDOW
+        ? 'Counting what was made in the ' + String(UI.perfRange).toLowerCase().replace(/^last /, 'last ') + '.'
+        : 'Counting everything on the account.',
       perfRanges: ['Last 7 days', 'Last 30 days', 'All time'].map(function (label) {
         return {
           label: label,
@@ -4411,14 +4421,14 @@
         };
       }),
       perfTiles: [
-        { icon: 'ph-fill ph-stack', label: 'Clips generated', value: String(clips.length) },
-        { icon: 'ph-fill ph-check-circle', label: 'Approved', value: String(clips.filter(function (c) { return decision(c) === 'approved'; }).length) },
-        { icon: 'ph-fill ph-paper-plane-tilt', label: 'Posted', value: String(clips.filter(function (c) { return c.postedAt; }).length) },
-        { icon: 'ph-fill ph-film-script', label: 'Lectures', value: String(projects.length) },
+        { icon: 'ph-fill ph-stack', label: 'Clips generated', value: String(perfClips.length) },
+        { icon: 'ph-fill ph-check-circle', label: 'Approved', value: String(perfClips.filter(function (c) { return decision(c) === 'approved'; }).length) },
+        { icon: 'ph-fill ph-paper-plane-tilt', label: 'Posted', value: String(perfClips.filter(function (c) { return c.postedAt; }).length) },
+        { icon: 'ph-fill ph-film-script', label: 'Lectures', value: String(perfProjects.length) },
       ].map(function (t) {
         return { icon: t.icon, label: t.label, value: t.value, delta: '', deltaIcon: '', deltaStyle: 'display: none;' };
       }),
-      perfBoard: clips.slice().sort(function (a, b) { return (b.score || 0) - (a.score || 0); }).slice(0, 5).map(function (c, i) {
+      perfBoard: perfClips.slice().sort(function (a, b) { return (b.score || 0) - (a.score || 0); }).slice(0, 5).map(function (c, i) {
         return {
           rank: String(i + 1),
           caption: c.title || '',

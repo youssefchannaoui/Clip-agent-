@@ -756,7 +756,6 @@
               <span style="display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: #BCBCC3;"><i class="ph ph-film-strip" style="font-size: 13px; color: #6E6E76;"></i>Rendered clips<strong style="margin-left: auto; font-weight: 500; color: #E9E9ED;">34 GB</strong></span>
               <span style="display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: #BCBCC3;"><i class="ph ph-file-text" style="font-size: 13px; color: #6E6E76;"></i>Transcripts<strong style="margin-left: auto; font-weight: 500; color: #E9E9ED;">2 GB</strong></span>
             </div>
-            <a href="#" onClick="{{ archiveSources }}" style="font-size: 11.5px; margin-top: 2px;">Archive old sources</a>
           </section>
 
           <section style="display: flex; flex-direction: column; gap: 9px; padding: 15px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
@@ -838,7 +837,6 @@
           <button onClick="{{ resetTpl }}" title="Reset positions" style="display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #8B8B93; cursor: pointer;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-crosshair" style="font-size: 15px;"></i></button>
           <button onClick="{{ undoEdit }}" title="Undo" style="display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #8B8B93; cursor: pointer;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-arrow-counter-clockwise" style="font-size: 15px;"></i></button>
           <button onClick="{{ redoEdit }}" title="Redo" style="display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #8B8B93; cursor: pointer;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-arrow-clockwise" style="font-size: 15px;"></i></button>
-          <button onClick="{{ duplicateTpl }}" title="Duplicate" style="display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #8B8B93; cursor: pointer;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-copy" style="font-size: 15px;"></i></button>
           <button data-tour="tpl-save" onClick="{{ saveTpl }}" style="display: flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid rgba(217,180,120,.45); border-radius: 8px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(217,180,120,.14);"><i class="ph ph-floppy-disk" style="font-size: 14px;"></i>Save template</button>
         </div>
       </div>
@@ -1149,10 +1147,10 @@
           <section style="display: flex; flex-direction: column; gap: 9px; padding: 13px 14px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
             <div style="display: flex; align-items: center; gap: 8px;">
               <span style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;">Posting windows</span>
-              <a href="#" onClick="{{ editWindows }}" style="margin-left: auto; font-size: 11px;">Edit</a>
             </div>
             <!-- Four rows with an icon each said one thing: the times. -->
             <span style="font-family: Outfit, Inter, sans-serif; font-size: 13px; color: #E9E9ED; letter-spacing: -.01em;">{{ postWindow1 }} · {{ postWindow2 }} · {{ postWindow3 }}</span>
+            <span style="font-size: 11px; color: #6E6E76;">{{ postWindowNote }}</span>
           </section>
         </aside>
       </div>
@@ -1176,7 +1174,7 @@
                 <span style="font-size: 11px; color: #8B8B93;">{{ track.dur }} · {{ track.mood }}</span>
               </span>
               <span style="{{ track.waveStyle }}"></span>
-              <button onClick="{{ track.toggleRot }}" style="{{ track.rotStyle }}"><i class="{{ track.rotIcon }}" style="font-size: 12px;"></i>{{ track.rotLabel }}</button>
+              <span style="{{ track.rotStyle }}"><i class="{{ track.rotIcon }}" style="font-size: 12px;"></i>{{ track.rotLabel }}</span>
               <button onClick="{{ track.remove }}" title="Remove" style="display: grid; place-items: center; width: 28px; height: 28px; flex: none; border: 1px solid #26262A; border-radius: 7px; background: #17171A; color: #8B8B93; cursor: pointer; transition: color .14s ease, border-color .14s ease;" style-hover="color: #E3928C; border-color: #3A2A2A;"><i class="ph ph-trash" style="font-size: 14px;"></i></button>
             </article>
           </sc-for>
@@ -1201,13 +1199,12 @@
             <div style="display: flex; justify-content: space-between; font-size: 10px; color: #6E6E76;">
               <span>Silent</span><span>Bed</span><span>Forward</span>
             </div>
-            <div onClick="{{ toggleDuck }}" style="display: flex; align-items: center; gap: 9px; padding-top: 10px; border-top: 1px solid #1E1E22; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 9px; padding-top: 10px; border-top: 1px solid #1E1E22;">
               <i class="ph ph-waveform" style="font-size: 15px; color: #8B8B93;"></i>
               <span style="display: flex; flex-direction: column; gap: 1px;">
-                <span style="font-size: 12px;">Duck under speech</span>
-                <span style="font-size: 10.5px; color: #6E6E76;">drops 6 dB while the shaykh talks</span>
+                <span style="font-size: 12px; color: #BCBCC3;">Ducked under the voice</span>
+                <span style="font-size: 10.5px; color: #6E6E76;">always on — the nasheed drops wherever the speaker is loudest</span>
               </span>
-              <span style="{{ duckTrackStyle }}"><span style="{{ duckKnobStyle }}"></span></span>
             </div>
           </section>
 
@@ -1347,10 +1344,9 @@
                 <input type="range" min="1" max="50" value="{{ nasheedVol }}" onChange="{{ setVol }}" style="width: 100%; accent-color: #D9B478; cursor: pointer;">
               </div>
               <span style="font-size: 11px; color: #8B8B93;">{{ nasheedDb }}</span>
-              <div onClick="{{ toggleDuck }}" style="display: flex; align-items: center; gap: 9px; cursor: pointer;">
+              <div style="display: flex; align-items: center; gap: 9px;">
                 <i class="ph ph-waveform" style="font-size: 15px; color: #8B8B93;"></i>
-                <span style="font-size: 12px;">Duck under speech</span>
-                <span style="{{ duckTrackStyle }}"><span style="{{ duckKnobStyle }}"></span></span>
+                <span style="font-size: 12px; color: #BCBCC3;">Ducked under the voice, always</span>
               </div>
               <span style="font-size: 11px; color: #6E6E76; line-height: 1.5;">{{ rotCount }} nasheeds in rotation — a different one is mixed into each clip.</span>
             </div>
@@ -1456,7 +1452,7 @@
         <section style="flex: 1 1 460px; min-width: 0; display: flex; flex-direction: column; gap: 11px;">
           <div style="display: flex; align-items: baseline; gap: 10px;">
             <h2 style="margin: 0; font-family: Outfit, Inter, sans-serif; font-size: 15px; font-weight: 600; letter-spacing: -.02em;">Your best clips</h2>
-            <span style="font-size: 12px; color: #6E6E76;">Ranked by watch-through</span>
+            <span style="font-size: 12px; color: #6E6E76;">Ranked by the score each clip was cut with</span>
             <div data-tour="perf-board" style="display: flex; gap: 6px; margin-left: auto;">
               <sc-for list="{{ perfRanges }}" as="r" hint-placeholder-count="3">
                 <button onClick="{{ r.select }}" style="{{ r.style }}">{{ r.label }}</button>

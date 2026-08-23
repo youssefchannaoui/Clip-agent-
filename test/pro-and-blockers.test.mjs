@@ -197,3 +197,49 @@ test('the plans screen says what Pro adds and what free already includes', () =>
   assert.match(billing, /proFeatures: PRO_FEATURES/);
   assert.match(billing, /freeIncludes: FREE_INCLUDES/);
 });
+
+// ── no dead controls (CLAUDE.md invariant 8) ───────────────────────────────
+// Seven controls could not reach any outcome. Each was either deleted or
+// replaced by the statement it was standing in for. This guards the shape of
+// the failure, not the specific seven: a control whose only behaviour is to
+// explain that it does nothing.
+
+test('no control exists only to say it does nothing', () => {
+  const adapter = read('src/public/studio-adapter.js');
+  for (const gone of [
+    'duplicateTpl',        // both duplicate paths refuse: one template per kind
+    'archiveSources',      // never built
+    'editWindows',         // posting times are server config, no write route
+    'toggleDuck',          // ducking is always on
+    'toggleRot',           // every uploaded nasheed is in rotation
+  ]) {
+    assert.ok(!adapter.includes(gone + ':'), `${gone} is a binding that could not act`);
+  }
+  const design = read('design/studio-dashboard.dc.html');
+  for (const gone of ['{{ duplicateTpl }}', '{{ archiveSources }}', '{{ editWindows }}', '{{ toggleDuck }}']) {
+    assert.ok(!design.includes(gone), `${gone} is still wired to a control`);
+  }
+});
+
+test('the performance range tabs change the numbers', () => {
+  const adapter = read('src/public/studio-adapter.js');
+  // They set UI.perfRange and nothing read it: three tabs over one answer.
+  assert.match(adapter, /PERF_WINDOW/, 'the range is applied');
+  const tiles = adapter.slice(adapter.indexOf('perfTiles:'), adapter.indexOf('perfBoard:'));
+  assert.match(tiles, /perfClips/, 'the tiles count the filtered set');
+  assert.doesNotMatch(tiles, /String\(clips\.length\)/, 'not the whole account regardless of range');
+});
+
+test('the dead duplicate route is gone, and the guard behind it stays', () => {
+  const server = read('src/server.js');
+  assert.doesNotMatch(server, /\/duplicate\$/, 'the route only ever returned its own refusal');
+  const templates = read('src/templates.js');
+  assert.match(templates, /export function duplicateTemplate/,
+    'the guard against minting templates stays, and its test with it');
+});
+
+test('posting windows say where they come from instead of offering an edit', () => {
+  const adapter = read('src/public/studio-adapter.js');
+  assert.match(adapter, /postWindowNote:/);
+  assert.match(adapter, /Set on the server/);
+});

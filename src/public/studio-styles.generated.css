@@ -303,117 +303,117 @@ html, body { margin: 0; background: #09090A; }
 .s7g{display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: #BCBCC3}
 .s7h{font-size: 13px; color: #6E6E76}
 .s7i{margin-left: auto; font-weight: 500; color: #E9E9ED}
-.s7j{font-size: 11.5px; margin-top: 2px}
-.s7k{display: flex; flex-direction: column; gap: 9px; padding: 15px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214}
-.s7l{display: flex; gap: 8px; font-size: 11.5px; color: #BCBCC3; line-height: 1.5}
-.s7m{font-size: 14px; flex: none; color: #7FD1A6; margin-top: 1px}
-.s7n{font-size: 14px; flex: none; color: #E6B770; margin-top: 1px}
-.s7o{flex: 1; min-height: 0; overflow: auto; padding: 20px 40px 40px; animation: dcScreen .24s cubic-bezier(.2,.8,.2,1)}
-.s7p{display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: #8B8B93}
-.s7q{display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 14px; padding: 16px; border: 1px solid #1E1E22; border-radius: 13px; background: linear-gradient(160deg, #141417, #101013)}
-.s7r{display: flex; flex-direction: column; gap: 6px; min-width: 200px; flex: 1 1 260px}
-.s7s{font-family: Outfit, Inter, sans-serif; font-size: 18px; font-weight: 600; letter-spacing: -.03em; line-height: 1.2}
-.s7t{display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 11.5px; color: #8B8B93}
-.s7u{display: inline-flex; align-items: center; gap: 6px}
-.s7v{font-size: 13px; color: #D9B478}
-.s7w{font-size: 11.5px; color: #BCBCC3; line-height: 1.5; max-width: 60ch}
-.s7x{display: flex; align-items: center; gap: 7px; padding: 8px 13px; border: 1px solid #26262A; border-radius: 8px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: color .14s ease, border-color .14s ease}
-.s7y{display: flex; align-items: center; gap: 7px; padding: 8px 13px; border: 1px solid rgba(217,180,120,.45); border-radius: 8px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .14s ease}
-.s7z{display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; margin-top: 16px}
-.s80:hover{background: rgba(217,180,120,.14) !important}
-.s81{display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 40px; border-bottom: 1px solid #1E1E22; background: #0C0C0E}
-.s82{display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; color: #8B8B93}
-.s83{display: flex; align-items: center; gap: 7px; margin-left: auto}
-.s84{display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #8B8B93; cursor: pointer}
-.s85{display: flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid rgba(217,180,120,.45); border-radius: 8px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .14s ease}
-.s86{display: flex; flex-wrap: wrap; align-items: flex-start; gap: 22px; padding: 22px 40px 44px}
-.s87{flex: 0 1 340px; min-width: 300px; display: flex; flex-direction: column; gap: 18px; padding: 16px; border: 1px solid #1E1E22; border-radius: 13px; background: #121214}
-.s88{font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6E6E76}
-.s89{display: flex; align-items: center; gap: 10px; padding: 9px 8px; border-radius: 8px; color: #E9E9ED; font-size: 12.5px; transition: background .14s ease}
-.s8a{font-size: 16px; color: #8B8B93}
-.s8b{margin-left: auto; max-width: 44%; font-size: 11.5px; color: #8B8B93; white-space: nowrap; overflow: hidden; text-overflow: ellipsis}
-.s8c{font-size: 13px; color: #4A4A52}
-.s8d{display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 8px; cursor: pointer; transition: background .14s ease}
-.s8e{font-size: 12.5px}
-.s8f{flex: 1 1 380px; min-width: 300px; display: flex; flex-direction: column; align-items: center; gap: 12px}
-.s8g{position: relative; width: 264px; aspect-ratio: 9 / 16; border-radius: 14px; overflow: hidden; border: 1px solid #26262A; background: #17171A url('/marketing-assets/reel-kaaba-a.webp') center/cover no-repeat; box-shadow: 0 26px 60px rgba(0,0,0,.5)}
-.s8h{position: absolute; inset: 0; background: linear-gradient(180deg, rgba(9,9,10,.4), transparent 34%, rgba(9,9,10,.6))}
-.s8i{position: absolute; top: 10px; left: 10px; padding: 2px 8px; border-radius: 20px; border: 1px solid #33333A; background: rgba(10,10,12,.75); color: #BCBCC3; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase}
-.s8j{position: absolute; left: 8%; right: 8%; top: 8%; bottom: 14%; z-index: 2; pointer-events: none; border: 1px dashed rgba(240,214,166,.35); border-radius: 6px}
-.s8k{position: absolute; z-index: 8; left: 10px; right: 10px; bottom: 12px; display: flex; align-items: center; gap: 8px}
-.s8l{font-size: 13px; color: #E9E9ED}
-.s8m{position: relative; flex: 1; height: 3px; border-radius: 20px; background: rgba(255,255,255,.2)}
-.s8n{position: absolute; inset: 0 auto 0 0; width: 38%; border-radius: 20px; background: #F0D6A6}
-.s8o{font-size: 9.5px; color: #E9E9ED}
-.s8p{display: flex; gap: 7px}
-.s8q{display: flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #BCBCC3; font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer}
-.s8r{display: flex; flex-wrap: wrap; align-items: flex-start; gap: 18px; padding: 20px 40px 20px}
-.s8s{flex: 1 1 620px; min-width: 0; display: flex; flex-direction: column; gap: 14px}
-.s8t{display: flex; align-items: center; flex-wrap: wrap; gap: 12px}
-.s8u{display: flex; align-items: center; gap: 4px}
-.s8v{display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #26262A; border-radius: 9px; background: #17171A; color: #8B8B93; cursor: pointer; transition: color .14s ease, border-color .14s ease}
-.s8w:hover{color: #F2F2F4; border-color: #3A3A42}
-.s8x{margin: 0; font-family: Outfit, Inter, sans-serif; font-size: 19px; font-weight: 600; letter-spacing: -.025em; color: #F6F6F8}
-.s8y{padding: 7px 13px; border: 1px solid #26262A; border-radius: 9px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 12.5px; cursor: pointer}
-.s8z{display: flex; flex-direction: column; gap: 8px; padding: 13px 15px; border: 1px solid rgba(214,138,110,.3); border-radius: 12px; background: rgba(214,138,110,.05)}
-.s90{display: flex; align-items: center; gap: 8px; font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600; color: #E0A188}
-.s91{display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1}
-.s92{display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: #8B8B93}
-.s93{margin: 0; font-size: 12px; color: #E9E9ED; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis}
-.s94{display: flex; flex-wrap: wrap; gap: 10px}
-.s95{display: flex; align-items: center; gap: 7px; flex: none}
-.s96{display: grid; place-items: center; width: 29px; height: 28px; border: 1px solid #26262A; border-radius: 7px; background: #17171A; color: #8B8B93; cursor: pointer; transition: color .14s ease, border-color .14s ease}
-.s97{display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px}
-.s98{padding: 0 8px 2px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #6E6E76}
-.s99:hover{border-color: #3A3A42 !important}
-.s9a{display: flex; align-items: center; gap: 5px}
-.s9b{margin-left: auto; display: inline-flex; gap: 3px}
-.s9c{font-size: 10px; color: #6E6E76}
-.s9d{display: flex; gap: 7px; padding-left: 54px}
-.s9e{font-family: Outfit, Inter, sans-serif; font-size: 12.5px; font-weight: 600}
-.s9f{font-size: 10.5px; opacity: .8}
-.s9g{display: flex; align-items: stretch; gap: 7px}
-.s9h{flex: 0 0 47px; display: flex; align-items: center; font-family: Outfit, Inter, sans-serif; font-size: 11.5px; font-weight: 500; color: #6E6E76; font-variant-numeric: tabular-nums}
-.s9i{display: block; text-align: center; font-size: 14px; color: #33333C}
-.s9j{display: flex; flex-direction: column; gap: 10px}
-.s9k{padding: 22px 0 6px; font-size: 12.5px; color: #6E6E76}
-.s9l{display: flex; align-items: center; justify-content: center; gap: 8px; padding: 13px; border: 1px dashed #2C2C32; border-radius: 11px; background: transparent; color: #8B8B93; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: border-color .14s ease, color .14s ease}
-.s9m:hover{border-color: rgba(217,180,120,.4); color: #F0D6A6}
-.s9n{flex: 0 0 300px; max-width: 300px; min-width: 0; display: flex; flex-direction: column; gap: 10px}
-.s9o{display: flex; flex-direction: column; gap: 9px; padding: 13px 14px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214}
-.s9p{font-size: 11.5px; color: #BCBCC3; line-height: 1.55}
-.s9q{display: block; height: 1px; margin: 3px 0 1px; background: #1E1E22}
-.s9r{display: flex; align-items: baseline; gap: 7px}
-.s9s{font-family: Outfit, Inter, sans-serif; font-size: 14px; font-weight: 600; color: #F0D6A6}
-.s9t{font-size: 11.5px; color: #E9E9ED; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis}
-.s9u{font-size: 11px; color: #6E6E76}
-.s9v{font-size: 11.5px; color: #BCBCC3}
-.s9w{display: flex; align-items: center; gap: 9px}
-.s9x{font-size: 12px; color: #E9E9ED; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis}
-.s9y{margin-left: auto; flex: none; padding: 5px 10px; border: 1px solid #26262A; border-radius: 8px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 11.5px; cursor: pointer; transition: color .14s ease, border-color .14s ease}
-.s9z:hover{color: #F0D6A6; border-color: rgba(217,180,120,.45)}
-.sa0{font-size: 11.5px; color: #6E6E76; line-height: 1.55}
-.sa1{display: flex; align-items: flex-start; gap: 8px; font-size: 11.5px; line-height: 1.5; color: #E0A188}
-.sa2{font-size: 14px; margin-top: 1px}
-.sa3{display: flex; align-items: center; gap: 9px; padding: 0; border: 0; background: none; font-family: inherit; font-size: 12px; color: #BCBCC3; cursor: pointer; text-align: left}
-.sa4{font-family: Outfit, Inter, sans-serif; font-size: 13px; color: #E9E9ED; letter-spacing: -.01em}
-.sa5{display: flex; flex-wrap: wrap; align-items: flex-start; gap: 18px; padding: 20px 40px 44px}
-.sa6{flex: 1 1 480px; min-width: 0; display: flex; flex-direction: column; gap: 12px}
-.sa7{margin: 0; font-family: Outfit, Inter, sans-serif; font-size: 15px; font-weight: 600; letter-spacing: -.02em}
-.sa8{display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 190px}
-.sa9{font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis}
-.saa{display: grid; place-items: center; width: 28px; height: 28px; flex: none; border: 1px solid #26262A; border-radius: 7px; background: #17171A; color: #8B8B93; cursor: pointer; transition: color .14s ease, border-color .14s ease}
-.sab{display: flex; flex-direction: column; align-items: center; gap: 7px; margin-top: 4px; padding: 26px; border: 1px dashed #2C2C32; border-radius: 12px; background: #0E0E11; cursor: pointer; transition: border-color .14s ease}
-.sac:hover{border-color: rgba(217,180,120,.45)}
-.sad{font-size: 22px; color: #F0D6A6}
-.sae{font-family: Outfit, Inter, sans-serif; font-size: 13.5px; font-weight: 500}
-.saf{display: flex; flex-direction: column; gap: 12px; padding: 15px; border: 1px solid rgba(217,180,120,.2); border-radius: 12px; background: radial-gradient(circle at 88% -25%, rgba(217,180,120,.13), transparent 55%), #121214}
-.sag{display: flex; align-items: baseline; gap: 8px}
-.sah{font-family: Outfit, Inter, sans-serif; font-size: 32px; font-weight: 600; letter-spacing: -.04em; line-height: 1}
-.sai{width: 100%; accent-color: #D9B478; cursor: pointer}
-.saj{display: flex; justify-content: space-between; font-size: 10px; color: #6E6E76}
-.sak{display: flex; align-items: center; gap: 9px; padding-top: 10px; border-top: 1px solid #1E1E22; cursor: pointer}
-.sal{display: flex; flex-direction: column; gap: 1px}
+.s7j{display: flex; flex-direction: column; gap: 9px; padding: 15px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214}
+.s7k{display: flex; gap: 8px; font-size: 11.5px; color: #BCBCC3; line-height: 1.5}
+.s7l{font-size: 14px; flex: none; color: #7FD1A6; margin-top: 1px}
+.s7m{font-size: 14px; flex: none; color: #E6B770; margin-top: 1px}
+.s7n{flex: 1; min-height: 0; overflow: auto; padding: 20px 40px 40px; animation: dcScreen .24s cubic-bezier(.2,.8,.2,1)}
+.s7o{display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: #8B8B93}
+.s7p{display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 14px; padding: 16px; border: 1px solid #1E1E22; border-radius: 13px; background: linear-gradient(160deg, #141417, #101013)}
+.s7q{display: flex; flex-direction: column; gap: 6px; min-width: 200px; flex: 1 1 260px}
+.s7r{font-family: Outfit, Inter, sans-serif; font-size: 18px; font-weight: 600; letter-spacing: -.03em; line-height: 1.2}
+.s7s{display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 11.5px; color: #8B8B93}
+.s7t{display: inline-flex; align-items: center; gap: 6px}
+.s7u{font-size: 13px; color: #D9B478}
+.s7v{font-size: 11.5px; color: #BCBCC3; line-height: 1.5; max-width: 60ch}
+.s7w{display: flex; align-items: center; gap: 7px; padding: 8px 13px; border: 1px solid #26262A; border-radius: 8px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: color .14s ease, border-color .14s ease}
+.s7x{display: flex; align-items: center; gap: 7px; padding: 8px 13px; border: 1px solid rgba(217,180,120,.45); border-radius: 8px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .14s ease}
+.s7y{display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; margin-top: 16px}
+.s7z:hover{background: rgba(217,180,120,.14) !important}
+.s80{display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 40px; border-bottom: 1px solid #1E1E22; background: #0C0C0E}
+.s81{display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; color: #8B8B93}
+.s82{display: flex; align-items: center; gap: 7px; margin-left: auto}
+.s83{display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #8B8B93; cursor: pointer}
+.s84{display: flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid rgba(217,180,120,.45); border-radius: 8px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .14s ease}
+.s85{display: flex; flex-wrap: wrap; align-items: flex-start; gap: 22px; padding: 22px 40px 44px}
+.s86{flex: 0 1 340px; min-width: 300px; display: flex; flex-direction: column; gap: 18px; padding: 16px; border: 1px solid #1E1E22; border-radius: 13px; background: #121214}
+.s87{font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6E6E76}
+.s88{display: flex; align-items: center; gap: 10px; padding: 9px 8px; border-radius: 8px; color: #E9E9ED; font-size: 12.5px; transition: background .14s ease}
+.s89{font-size: 16px; color: #8B8B93}
+.s8a{margin-left: auto; max-width: 44%; font-size: 11.5px; color: #8B8B93; white-space: nowrap; overflow: hidden; text-overflow: ellipsis}
+.s8b{font-size: 13px; color: #4A4A52}
+.s8c{display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 8px; cursor: pointer; transition: background .14s ease}
+.s8d{font-size: 12.5px}
+.s8e{flex: 1 1 380px; min-width: 300px; display: flex; flex-direction: column; align-items: center; gap: 12px}
+.s8f{position: relative; width: 264px; aspect-ratio: 9 / 16; border-radius: 14px; overflow: hidden; border: 1px solid #26262A; background: #17171A url('/marketing-assets/reel-kaaba-a.webp') center/cover no-repeat; box-shadow: 0 26px 60px rgba(0,0,0,.5)}
+.s8g{position: absolute; inset: 0; background: linear-gradient(180deg, rgba(9,9,10,.4), transparent 34%, rgba(9,9,10,.6))}
+.s8h{position: absolute; top: 10px; left: 10px; padding: 2px 8px; border-radius: 20px; border: 1px solid #33333A; background: rgba(10,10,12,.75); color: #BCBCC3; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase}
+.s8i{position: absolute; left: 8%; right: 8%; top: 8%; bottom: 14%; z-index: 2; pointer-events: none; border: 1px dashed rgba(240,214,166,.35); border-radius: 6px}
+.s8j{position: absolute; z-index: 8; left: 10px; right: 10px; bottom: 12px; display: flex; align-items: center; gap: 8px}
+.s8k{font-size: 13px; color: #E9E9ED}
+.s8l{position: relative; flex: 1; height: 3px; border-radius: 20px; background: rgba(255,255,255,.2)}
+.s8m{position: absolute; inset: 0 auto 0 0; width: 38%; border-radius: 20px; background: #F0D6A6}
+.s8n{font-size: 9.5px; color: #E9E9ED}
+.s8o{display: flex; gap: 7px}
+.s8p{display: flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #BCBCC3; font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer}
+.s8q{display: flex; flex-wrap: wrap; align-items: flex-start; gap: 18px; padding: 20px 40px 20px}
+.s8r{flex: 1 1 620px; min-width: 0; display: flex; flex-direction: column; gap: 14px}
+.s8s{display: flex; align-items: center; flex-wrap: wrap; gap: 12px}
+.s8t{display: flex; align-items: center; gap: 4px}
+.s8u{display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #26262A; border-radius: 9px; background: #17171A; color: #8B8B93; cursor: pointer; transition: color .14s ease, border-color .14s ease}
+.s8v:hover{color: #F2F2F4; border-color: #3A3A42}
+.s8w{margin: 0; font-family: Outfit, Inter, sans-serif; font-size: 19px; font-weight: 600; letter-spacing: -.025em; color: #F6F6F8}
+.s8x{padding: 7px 13px; border: 1px solid #26262A; border-radius: 9px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 12.5px; cursor: pointer}
+.s8y{display: flex; flex-direction: column; gap: 8px; padding: 13px 15px; border: 1px solid rgba(214,138,110,.3); border-radius: 12px; background: rgba(214,138,110,.05)}
+.s8z{display: flex; align-items: center; gap: 8px; font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600; color: #E0A188}
+.s90{display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1}
+.s91{display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: #8B8B93}
+.s92{margin: 0; font-size: 12px; color: #E9E9ED; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis}
+.s93{display: flex; flex-wrap: wrap; gap: 10px}
+.s94{display: flex; align-items: center; gap: 7px; flex: none}
+.s95{display: grid; place-items: center; width: 29px; height: 28px; border: 1px solid #26262A; border-radius: 7px; background: #17171A; color: #8B8B93; cursor: pointer; transition: color .14s ease, border-color .14s ease}
+.s96{display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px}
+.s97{padding: 0 8px 2px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #6E6E76}
+.s98:hover{border-color: #3A3A42 !important}
+.s99{display: flex; align-items: center; gap: 5px}
+.s9a{margin-left: auto; display: inline-flex; gap: 3px}
+.s9b{font-size: 10px; color: #6E6E76}
+.s9c{display: flex; gap: 7px; padding-left: 54px}
+.s9d{font-family: Outfit, Inter, sans-serif; font-size: 12.5px; font-weight: 600}
+.s9e{font-size: 10.5px; opacity: .8}
+.s9f{display: flex; align-items: stretch; gap: 7px}
+.s9g{flex: 0 0 47px; display: flex; align-items: center; font-family: Outfit, Inter, sans-serif; font-size: 11.5px; font-weight: 500; color: #6E6E76; font-variant-numeric: tabular-nums}
+.s9h{display: block; text-align: center; font-size: 14px; color: #33333C}
+.s9i{display: flex; flex-direction: column; gap: 10px}
+.s9j{padding: 22px 0 6px; font-size: 12.5px; color: #6E6E76}
+.s9k{display: flex; align-items: center; justify-content: center; gap: 8px; padding: 13px; border: 1px dashed #2C2C32; border-radius: 11px; background: transparent; color: #8B8B93; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: border-color .14s ease, color .14s ease}
+.s9l:hover{border-color: rgba(217,180,120,.4); color: #F0D6A6}
+.s9m{flex: 0 0 300px; max-width: 300px; min-width: 0; display: flex; flex-direction: column; gap: 10px}
+.s9n{display: flex; flex-direction: column; gap: 9px; padding: 13px 14px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214}
+.s9o{font-size: 11.5px; color: #BCBCC3; line-height: 1.55}
+.s9p{display: block; height: 1px; margin: 3px 0 1px; background: #1E1E22}
+.s9q{display: flex; align-items: baseline; gap: 7px}
+.s9r{font-family: Outfit, Inter, sans-serif; font-size: 14px; font-weight: 600; color: #F0D6A6}
+.s9s{font-size: 11.5px; color: #E9E9ED; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis}
+.s9t{font-size: 11px; color: #6E6E76}
+.s9u{font-size: 11.5px; color: #BCBCC3}
+.s9v{display: flex; align-items: center; gap: 9px}
+.s9w{font-size: 12px; color: #E9E9ED; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis}
+.s9x{margin-left: auto; flex: none; padding: 5px 10px; border: 1px solid #26262A; border-radius: 8px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 11.5px; cursor: pointer; transition: color .14s ease, border-color .14s ease}
+.s9y:hover{color: #F0D6A6; border-color: rgba(217,180,120,.45)}
+.s9z{font-size: 11.5px; color: #6E6E76; line-height: 1.55}
+.sa0{display: flex; align-items: flex-start; gap: 8px; font-size: 11.5px; line-height: 1.5; color: #E0A188}
+.sa1{font-size: 14px; margin-top: 1px}
+.sa2{display: flex; align-items: center; gap: 9px; padding: 0; border: 0; background: none; font-family: inherit; font-size: 12px; color: #BCBCC3; cursor: pointer; text-align: left}
+.sa3{font-family: Outfit, Inter, sans-serif; font-size: 13px; color: #E9E9ED; letter-spacing: -.01em}
+.sa4{display: flex; flex-wrap: wrap; align-items: flex-start; gap: 18px; padding: 20px 40px 44px}
+.sa5{flex: 1 1 480px; min-width: 0; display: flex; flex-direction: column; gap: 12px}
+.sa6{margin: 0; font-family: Outfit, Inter, sans-serif; font-size: 15px; font-weight: 600; letter-spacing: -.02em}
+.sa7{display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 190px}
+.sa8{font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis}
+.sa9{display: grid; place-items: center; width: 28px; height: 28px; flex: none; border: 1px solid #26262A; border-radius: 7px; background: #17171A; color: #8B8B93; cursor: pointer; transition: color .14s ease, border-color .14s ease}
+.saa{display: flex; flex-direction: column; align-items: center; gap: 7px; margin-top: 4px; padding: 26px; border: 1px dashed #2C2C32; border-radius: 12px; background: #0E0E11; cursor: pointer; transition: border-color .14s ease}
+.sab:hover{border-color: rgba(217,180,120,.45)}
+.sac{font-size: 22px; color: #F0D6A6}
+.sad{font-family: Outfit, Inter, sans-serif; font-size: 13.5px; font-weight: 500}
+.sae{display: flex; flex-direction: column; gap: 12px; padding: 15px; border: 1px solid rgba(217,180,120,.2); border-radius: 12px; background: radial-gradient(circle at 88% -25%, rgba(217,180,120,.13), transparent 55%), #121214}
+.saf{display: flex; align-items: baseline; gap: 8px}
+.sag{font-family: Outfit, Inter, sans-serif; font-size: 32px; font-weight: 600; letter-spacing: -.04em; line-height: 1}
+.sah{width: 100%; accent-color: #D9B478; cursor: pointer}
+.sai{display: flex; justify-content: space-between; font-size: 10px; color: #6E6E76}
+.saj{display: flex; align-items: center; gap: 9px; padding-top: 10px; border-top: 1px solid #1E1E22}
+.sak{display: flex; flex-direction: column; gap: 1px}
+.sal{font-size: 12px; color: #BCBCC3}
 .sam{position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; animation: dcScreen .24s cubic-bezier(.2,.8,.2,1)}
 .san{display: flex; flex-wrap: wrap; align-items: center; gap: 11px; padding: 11px 22px; border-bottom: 1px solid #1E1E22; background: #0C0C0E}
 .sao{width: 1px; height: 18px; background: #26262A}

@@ -947,15 +947,10 @@ async function route(req, res, url) {
       return json(res, 200, { ok: true, template: saved.template, propagation: { queued: 0, skipped: 0, errors: [] } });
     } catch (error) { return json(res, 400, { error: error.message }); }
   }
-  const duplicateTemplate = pathname.match(/^\/api\/templates\/([^/]+)\/duplicate$/);
-  if (method === 'POST' && duplicateTemplate) {
-    const body = await readBody(req);
-    try {
-      const template = templates.duplicateTemplate(currentUser, decodeURIComponent(duplicateTemplate[1]), body.name);
-      templates.setSelectedTemplate(currentUser, template.id);
-      return json(res, 200, { ok: true, template });
-    } catch (error) { return json(res, 400, { error: error.message }); }
-  }
+  // No duplicate route: templates.duplicateTemplate throws unconditionally
+  // because the product is one template per content type. The function stays
+  // as a guard against minting -- see test/templates.test.mjs -- but nothing
+  // is exposed that can only ever answer with its refusal.
   // Publishing without the DeenClipped watermark is a paid feature. The gate
   // sits on the two style write paths, not in sanitiseTemplate, because the
   // sanitiser cannot know who is asking. Only an EXPLICIT empty watermark is
