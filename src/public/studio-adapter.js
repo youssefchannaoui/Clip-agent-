@@ -3028,6 +3028,22 @@
         : '',
       // Charging is per source minute, so an estimate is only honest once the
       // length is known. The server confirms the real cost before processing.
+      // A stand-in waveform for the source. It is shaped, not random: the same
+      // lecture draws the same picture every time the panel opens, so the
+      // handles land against a fixed landmark rather than a shuffling one.
+      // Real peaks would need the audio decoded client-side, which is not
+      // worth a download to draw a scrubber.
+      jobWaveform: (function () {
+        var seed = String((job && job.url) || '').length + String((job && job.title) || '').length;
+        var bars = [];
+        for (var i = 0; i < 64; i += 1) {
+          var wave = Math.abs(Math.sin((i + seed) * 0.7) * Math.cos((i + seed) * 0.29));
+          var h = 22 + Math.round(52 * wave);
+          bars.push({ style: 'flex: 1 1 0; height: ' + h + '%; border-radius: 1px; background: #26262C;' });
+        }
+        return bars;
+      })(),
+
       // ── the wizard ───────────────────────────────────────────────────
       jobStepNo: jobStepIndex(),
       jobStepCount: JOB_STEPS.length,

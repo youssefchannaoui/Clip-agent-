@@ -1522,7 +1522,15 @@
         <sc-if value="{{ jobIsStepTrim }}" hint-placeholder-val="{{ true }}">
         <div style="display: flex; flex-direction: column; gap: 10px; animation: dcStep .3s cubic-bezier(.2,.75,.3,1) both; animation-delay: .04s;">
           <span style="display: flex; align-items: center; font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">Use this part of the lecture<span style="margin-left: auto; letter-spacing: 0; text-transform: none; font-size: 11.5px; font-weight: 500; color: #F0D6A6;">{{ jobRangeLabel }}</span></span>
-          <div style="position: relative; height: 44px; border-radius: 8px; border: 1px solid #1E1E22; background: #121214 repeating-linear-gradient(90deg, rgba(240,214,166,.14) 0 1px, transparent 1px 5px);">
+          <div style="position: relative; height: 52px; border-radius: 9px; border: 1px solid #1E1E22; background: #101013; overflow: hidden;">
+            <!-- A waveform rather than a barcode. The old fill was a repeating
+                 gradient of identical hairlines, which said nothing about the
+                 lecture and read as a loading state. -->
+            <span style="position: absolute; inset: 0; display: flex; align-items: center; gap: 2px; padding: 0 4px;">
+              <sc-for list="{{ jobWaveform }}" as="bar" hint-placeholder-count="64">
+                <span style="{{ bar.style }}"></span>
+              </sc-for>
+            </span>
             <span style="{{ jobBandStyle }}"></span>
             <input type="range" min="0" max="100" value="{{ jobStart }}" onChange="{{ setJobStart }}" style="position: absolute; left: 0; right: 0; top: 2px; width: 100%; accent-color: #D9B478; background: transparent; cursor: pointer;">
             <input type="range" min="0" max="100" value="{{ jobEnd }}" onChange="{{ setJobEnd }}" style="position: absolute; left: 0; right: 0; bottom: 2px; width: 100%; accent-color: #F0D6A6; background: transparent; cursor: pointer;">

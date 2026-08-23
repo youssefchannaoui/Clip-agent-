@@ -584,6 +584,27 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .bgt-row{display:flex;gap:9px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
 .bgt-card{position:relative;flex:none;width:104px;background:none;border:0;padding:0;cursor:pointer;text-align:center}
 .bgt-thumb{position:relative;display:block;width:98px;height:174px;margin:0 auto;border-radius:9px;border:1.5px solid #26262A;background-color:#131315;background-size:cover;background-position:center;transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease;overflow:hidden}
+/* The previews run. A caption style is defined by what it DOES -- words
+   arriving, a line waiting in grey, a card cutting to the next -- and a still
+   frame shows none of it. One shared 5s loop so all five stay in phase, and
+   every line clears together at 92% the way the renderer clears a block.
+   Pure CSS: five previews on JS timers would be five timers running behind a
+   dialog nobody is looking at. */
+@keyframes bgtL1{0%,3%{opacity:0}9%,86%{opacity:1}92%,100%{opacity:0}}
+@keyframes bgtL2{0%,15%{opacity:0}21%,86%{opacity:1}92%,100%{opacity:0}}
+@keyframes bgtL3{0%,27%{opacity:0}33%,86%{opacity:1}92%,100%{opacity:0}}
+@keyframes bgtL4{0%,39%{opacity:0}45%,86%{opacity:1}92%,100%{opacity:0}}
+/* A card cuts to the next phrase rather than stacking, so two lines trade
+   places on the same spot. */
+@keyframes bgtCardA{0%,3%{opacity:0}8%,44%{opacity:1}48%,100%{opacity:0}}
+@keyframes bgtCardB{0%,50%{opacity:0}55%,92%{opacity:1}96%,100%{opacity:0}}
+/* One word at a time, the whole point of the word mode. */
+@keyframes bgtW1{0%,2%{opacity:0}7%,29%{opacity:1}32%,100%{opacity:0}}
+@keyframes bgtW2{0%,32%{opacity:0}37%,60%{opacity:1}63%,100%{opacity:0}}
+@keyframes bgtW3{0%,63%{opacity:0}68%,91%{opacity:1}94%,100%{opacity:0}}
+.bgt-anim{animation-duration:5s;animation-iteration-count:infinite;animation-timing-function:linear}
+@media (prefers-reduced-motion: reduce){.bgt-anim{animation:none!important;opacity:1!important}}
+
 /* A Pro style stays legible -- the point of showing it is to want it -- but
    reads as out of reach until the plan changes. A corner chip rather than a
    scrim: at 98px the preview IS the pitch, and covering it defeats the row.
@@ -3579,19 +3600,19 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          Pure CSS, class-driven so hover/selected/mobile live in the
          stylesheet; the paint only toggles .on. */
       if(jobTypeEl.dataset.built!=='4'){
-        jobTypeEl.dataset.built='4';
+        jobTypeEl.dataset.built='5';
         jobTypeEl.style.cssText='display:block;margin:14px 0 12px';
         jobTypeEl.innerHTML='<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin-bottom:8px">What are you clipping?</div>'
           +'<div class="jt-row">'
           +'<button type="button" class="jt-card" data-kind="lecture">'
-            +'<span class="jt-mini"><span class="m1">of a person\u2019s</span><span class="m2">islam</span></span>'
+            +'<span class="jt-mini"><span class="m1 bgt-anim" style="animation-name:bgtL1">of a person\u2019s</span><span class="m2 bgt-anim" style="animation-name:bgtL2">islam</span></span>'
             /* Described by what the pick actually does, not by one style's
                look: the lecture side has four styles now and this used to
                describe Mono Minimal, which stopped being the default. */
             +'<span class="jt-body"><span class="t">Islamic lecture</span><span class="d">Captions what is said. Moments are scored and cut for you.</span></span>'
             +'<i class="ph-fill ph-check-circle k"></i></button>'
           +'<button type="button" class="jt-card" data-kind="quran">'
-            +'<span class="jt-mini"><span class="mq">\u0627\u0644\u0644\u0651\u064E\u0647\u064F \u0646\u064F\u0648\u0631\u064F</span><span class="mt"></span></span>'
+            +'<span class="jt-mini"><span class="mq bgt-anim" style="animation-name:bgtL1">\u0627\u0644\u0644\u0651\u064E\u0647\u064F \u0646\u064F\u0648\u0631\u064F</span><span class="mt bgt-anim" style="animation-name:bgtL2"></span></span>'
             +'<span class="jt-body"><span class="t">Quran recitation</span><span class="d">Captions the ayah from the Quran itself, with its translation.</span></span>'
             +'<i class="ph-fill ph-check-circle k"></i></button>'
           +'</div>';
@@ -3652,28 +3673,36 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         : t.captionHorizontal === 'right' ? 'flex-end' : 'center';
       const textAlign = t.captionHorizontal === 'left' ? 'left'
         : t.captionHorizontal === 'right' ? 'right' : 'center';
-      const line = (text, size, color, extra = '') =>
-        `<span style="font:${t.captionUppercase ? '800' : '700'} ${size}px ${fam};${tt}color:${color};line-height:1.07;text-align:${textAlign};${extra}">${text}</span>`;
+      const line = (text, size, color, anim = '', extra = '') =>
+        `<span class="${anim ? 'bgt-anim' : ''}" style="font:${t.captionUppercase ? '800' : '700'} ${size}px ${fam};${tt}color:${color};line-height:1.07;text-align:${textAlign};${anim ? `animation-name:${anim};` : ''}${extra}">${text}</span>`;
+      /* Cards and single words trade places on one spot, so they stack on top
+         of each other instead of sitting in a column. */
+      const overlay = (text, size, color, anim) =>
+        `<span class="bgt-anim" style="grid-area:1/1;font:${t.captionUppercase ? '800' : '700'} ${size}px ${fam};${tt}color:${color};line-height:1.07;text-align:${textAlign};animation-name:${anim}">${text}</span>`;
+      const stacked = html => `<span style="display:grid;justify-items:${align === 'flex-start' ? 'start' : align === 'flex-end' ? 'end' : 'center'};max-width:100%">${html}</span>`;
 
       let inner;
       if (t.captionMode === 'quran') {
-        inner = `<span style="font:400 ${px(t.captionFontSize * 2.4)}px 'Scheherazade New','Amiri',serif;color:#F2F2F4;line-height:1.2">\u0627\u0644\u0631\u0651\u064E\u062D\u0652\u0645\u064E\u0670\u0646\u064F</span>`
-          + `<span style="font:500 ${px(t.captionTranslationSize)}px ${fam};color:#F2F2F4;margin-top:2px">The Most Merciful</span>`;
+        inner = `<span class="bgt-anim" style="font:400 ${px(t.captionFontSize * 2.4)}px 'Scheherazade New','Amiri',serif;color:#F2F2F4;line-height:1.2;animation-name:bgtL1">\u0627\u0644\u0631\u0651\u064E\u062D\u0652\u0645\u064E\u0670\u0646\u064F</span>`
+          + `<span class="bgt-anim" style="font:500 ${px(t.captionTranslationSize)}px ${fam};color:#F2F2F4;margin-top:2px;animation-name:bgtL2">The Most Merciful</span>`;
       } else if (t.captionMode === 'stack-build') {
-        /* Lines of different sizes with the next one waiting in grey -- the
-           whole point of the style. */
+        /* Lines of different sizes arriving one after another, with the next
+           one waiting in grey -- the whole point of the style. */
         const s1 = px(t.captionFontSize * 0.58), s2 = px(t.captionFontSize * 0.74), s3 = px(t.captionFontSize);
-        inner = line('if you', s2, primary) + line('looked at', s1, primary)
-          + line('from a real', s3, primary) + line('perspective', s2, queued);
+        inner = line('if you', s2, primary, 'bgtL1') + line('looked at', s1, primary, 'bgtL2')
+          + line('from a real', s3, primary, 'bgtL3') + line('perspective', s2, queued, 'bgtL4');
       } else if (t.captionMode === 'cards') {
-        inner = line('of a person\u2019s islam', px(t.captionFontSize), primary);
+        inner = stacked(overlay('of a person\u2019s islam', px(t.captionFontSize), primary, 'bgtCardA')
+          + overlay('is to leave things', px(t.captionFontSize), primary, 'bgtCardB'));
       } else if (t.captionMode === 'word') {
-        inner = line('remember', px(t.captionFontSize), primary);
+        const w = px(t.captionFontSize);
+        inner = stacked(overlay('remember', w, primary, 'bgtW1')
+          + overlay('who', w, primary, 'bgtW2') + overlay('you are', w, primary, 'bgtW3'));
       } else if (t.captionMode === 'fill') {
-        inner = line('every word', px(t.captionFontSize), primary);
+        inner = line('every word', px(t.captionFontSize), primary, 'bgtL1');
       } else {
-        inner = line('the heart', px(t.captionFontSize), primary)
-          + line('finds rest', px(t.captionFontSize), queued);
+        inner = line('the heart', px(t.captionFontSize), primary, 'bgtL1')
+          + line('finds rest', px(t.captionFontSize), queued, 'bgtL2');
       }
       const inset = t.captionHorizontal === 'center' ? '0 7px' : '0 6px';
       return `<span class="bgt-thumb" style="display:flex;flex-direction:column;align-items:${align};justify-content:${justify};padding:9px ${inset};${mono ? 'filter:grayscale(1);' : ''}">`
