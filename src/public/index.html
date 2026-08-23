@@ -3566,18 +3566,21 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          The choice explains itself before a word of the description is read.
          Pure CSS, class-driven so hover/selected/mobile live in the
          stylesheet; the paint only toggles .on. */
-      if(jobTypeEl.dataset.built!=='3'){
-        jobTypeEl.dataset.built='3';
+      if(jobTypeEl.dataset.built!=='4'){
+        jobTypeEl.dataset.built='4';
         jobTypeEl.style.cssText='display:block;margin:14px 0 12px';
         jobTypeEl.innerHTML='<div style="font-size:11px;letter-spacing:.09em;color:#8B8B93;text-transform:uppercase;margin-bottom:8px">What are you clipping?</div>'
           +'<div class="jt-row">'
           +'<button type="button" class="jt-card" data-kind="lecture">'
-            +'<span class="jt-mini"><span class="m1">the heart</span><span class="m2">finds rest</span></span>'
-            +'<span class="jt-body"><span class="t">Islamic lecture</span><span class="d">Bold word-by-word captions, nasheed under the voice</span></span>'
+            +'<span class="jt-mini"><span class="m1">of a person\u2019s</span><span class="m2">islam</span></span>'
+            /* Described by what the pick actually does, not by one style's
+               look: the lecture side has four styles now and this used to
+               describe Mono Minimal, which stopped being the default. */
+            +'<span class="jt-body"><span class="t">Islamic lecture</span><span class="d">Captions what is said. Moments are scored and cut for you.</span></span>'
             +'<i class="ph-fill ph-check-circle k"></i></button>'
           +'<button type="button" class="jt-card" data-kind="quran">'
             +'<span class="jt-mini"><span class="mq">\u0627\u0644\u0644\u0651\u064E\u0647\u064F \u0646\u064F\u0648\u0631\u064F</span><span class="mt"></span></span>'
-            +'<span class="jt-body"><span class="t">Quran recitation</span><span class="d">The ayah in mushaf script with its translation \u2014 no nasheed</span></span>'
+            +'<span class="jt-body"><span class="t">Quran recitation</span><span class="d">Captions the ayah from the Quran itself, with its translation.</span></span>'
             +'<i class="ph-fill ph-check-circle k"></i></button>'
           +'</div>';
         for(const b of jobTypeEl.querySelectorAll('button')){

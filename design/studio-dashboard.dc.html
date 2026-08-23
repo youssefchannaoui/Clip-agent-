@@ -1473,7 +1473,8 @@
 
   <sc-if value="{{ jobOpen }}" hint-placeholder-val="{{ false }}">
     <div style="position: fixed; inset: 0; z-index: 94; display: grid; place-items: center; padding: 24px; background: rgba(6,6,8,.74); backdrop-filter: blur(9px);">
-      <div style="width: 100%; max-width: 560px; max-height: 88vh; overflow: auto; display: flex; flex-direction: column; gap: 16px; padding: 22px; border: 1px solid #26262A; border-radius: 16px; background: radial-gradient(circle at 85% -20%, rgba(217,180,120,.12), transparent 55%), linear-gradient(160deg, #16161A, #101013); box-shadow: 0 40px 100px rgba(0,0,0,.72); animation: dcPop .18s cubic-bezier(.2,.8,.2,1);">
+      <div style="width: 100%; max-width: 1060px; max-height: 88vh; overflow: auto; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 26px; padding: 26px; border: 1px solid #26262A; border-radius: 16px; background: radial-gradient(circle at 85% -20%, rgba(217,180,120,.12), transparent 55%), linear-gradient(160deg, #16161A, #101013); box-shadow: 0 40px 100px rgba(0,0,0,.72); animation: dcPop .18s cubic-bezier(.2,.8,.2,1);">
+        <div style="flex: 1 1 460px; min-width: 0; display: flex; flex-direction: column; gap: 16px;">
         <div style="position: relative; aspect-ratio: 16 / 9; border-radius: 11px; overflow: hidden; border: 1px solid #26262A; background: #17171A url('src/public/marketing-assets/reel-kaaba-a.webp') center/cover no-repeat;">
           <span style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(9,9,10,.25), rgba(9,9,10,.85));"></span>
           <span style="position: absolute; left: 12px; bottom: 11px; display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: #E9E9ED;"><i class="ph-fill ph-play-circle" style="font-size: 15px; color: #F0D6A6;"></i>42:11 · source lecture</span>
@@ -1538,17 +1539,47 @@
           </div>
         </div>
 
-        <sc-if value="{{ genBusy }}" hint-placeholder-val="{{ false }}">
-          <div style="display: flex; flex-direction: column; gap: 7px;">
-            <div style="position: relative; height: 5px; border-radius: 20px; background: #1D1D21; overflow: hidden;"><span style="{{ genBarStyle }}"></span></div>
-            <span style="font-size: 11px; color: #8B8B93;">{{ genProgressLabel }}</span>
-          </div>
-        </sc-if>
+        </div>
 
-        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-top: 14px; border-top: 1px solid #1E1E22;">
-          <span style="display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: #F0D6A6;"><i class="ph-fill ph-coins" style="font-size: 15px;"></i>{{ jobTokenLabel }}</span>
-          <span style="font-size: 11px; color: #6E6E76;">of {{ tokenBalance }} available</span>
-          <button onClick="{{ runGenerate }}" style="margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 10px 18px; border: 1px solid rgba(217,180,120,.5); border-radius: 9px; background: rgba(217,180,120,.1); color: #F0D6A6; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(217,180,120,.2);"><i class="{{ genIcon }}" style="{{ genIconStyle }}"></i>{{ genLabel }}</button>
+        <div style="position: sticky; top: 0; flex: 0 1 322px; min-width: 288px; display: flex; flex-direction: column; gap: 18px; padding: 22px; border: 1px solid #2E2A24; border-radius: 12px; background: linear-gradient(180deg, #16150F 0%, #121214 62%);">
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <span style="font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">This run costs</span>
+            <span style="display: flex; align-items: baseline; gap: 8px;">
+              <strong style="font-family: Outfit, Inter, sans-serif; font-size: 34px; font-weight: 600; line-height: 1; letter-spacing: -.03em; color: #F0D6A6;">{{ jobCostBig }}</strong>
+              <span style="font-size: 13px; color: #BCBCC3;">{{ jobCostUnit }}</span>
+            </span>
+            <span style="font-size: 11.5px; color: #8B8B93;">{{ jobCostBasis }}</span>
+          </div>
+
+          <span style="height: 1px; background: #2A2723;"></span>
+
+          <div style="display: flex; flex-direction: column; gap: 11px;">
+            <sc-for list="{{ jobSummaryRows }}" as="row" hint-placeholder-count="4">
+              <span style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;">
+                <span style="font-size: 12.5px; color: #8B8B93;">{{ row.label }}</span>
+                <span style="{{ row.valueStyle }}">{{ row.value }}</span>
+              </span>
+            </sc-for>
+          </div>
+
+          <span style="display: flex; align-items: center; gap: 11px; padding: 13px 15px; border: 1px solid #2A2723; border-radius: 9px; background: #17171A;">
+            <i class="ph ph-clock" style="font-size: 16px; color: #D9B478;"></i>
+            <span style="display: flex; flex-direction: column; gap: 1px; min-width: 0;">
+              <span style="font-family: Outfit, Inter, sans-serif; font-size: 12.5px; font-weight: 500; color: #F2F2F4;">{{ jobEtaLabel }}</span>
+              <span style="font-size: 11px; color: #8B8B93;">{{ jobQueueLabel }}</span>
+            </span>
+          </span>
+
+          <sc-if value="{{ genBusy }}" hint-placeholder-val="{{ false }}">
+            <span style="display: flex; flex-direction: column; gap: 7px;">
+              <span style="position: relative; display: block; height: 5px; border-radius: 20px; background: #1D1D21; overflow: hidden;"><span style="{{ genBarStyle }}"></span></span>
+              <span style="font-size: 11px; color: #8B8B93;">{{ genProgressLabel }}</span>
+            </span>
+          </sc-if>
+
+          <button onClick="{{ runGenerate }}" style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 13px 18px; border: 1px solid rgba(217,180,120,.5); border-radius: 9px; background: rgba(217,180,120,.1); color: #F0D6A6; font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(217,180,120,.2);"><i class="{{ genIcon }}" style="{{ genIconStyle }}"></i>{{ genLabel }}</button>
+
+          <span style="font-size: 11px; line-height: 1.5; text-align: center; color: #5E5E66;">Cutting more clips, re-rendering and editing never cost another token.</span>
         </div>
       </div>
     </div>

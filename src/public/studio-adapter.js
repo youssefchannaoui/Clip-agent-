@@ -315,6 +315,53 @@
     return label + ' \u00b7 short by ' + (cost - left);
   }
 
+  /**
+   * The four lines beside the cost: what it leaves you, what you get, in
+   * which style, and where the captions come from.
+   *
+   * Every one of these was previously only discoverable by starting the job
+   * and looking at the result.
+   */
+  function jobSummaryRows(DATA, job, tokenRate) {
+    var value = function (text, tone) {
+      return {
+        value: text,
+        valueStyle: 'font-family: Outfit, Inter, sans-serif; font-size: 12.5px; font-weight: 500; text-align: right; color: '
+          + (tone === 'warn' ? '#FF5566' : tone === 'gold' ? '#F0D6A6' : '#F2F2F4') + ';',
+      };
+    };
+    var rows = [];
+    var current = DATA && DATA.billing && DATA.billing.current;
+    var cost = Math.max(1, Math.ceil((job.end - job.start) / 60 * tokenRate));
+    if (current && !current.unlimited && isFinite(Number(current.totalAvailable))) {
+      var left = Number(current.totalAvailable);
+      rows.push(Object.assign({ label: 'Balance afterwards' }, left >= cost
+        ? value(plural(left - cost, 'token'))
+        : value('short by ' + (cost - left), 'warn')));
+    }
+    var tpl = activeJobTemplate(DATA);
+    if (tpl) {
+      var locked = Boolean(tpl.pro) && !planAllowsProTemplates(DATA);
+      rows.push(Object.assign({ label: 'Style' },
+        value(tpl.name + (locked ? ' \u00b7 Pro' : ''), locked ? 'gold' : '')));
+      // The one behavioural difference between the kinds, said where the
+      // choice is actually being made.
+      rows.push(Object.assign({ label: 'Captions from' },
+        value(tpl.captionMode === 'quran' ? 'The Quran corpus' : 'What was said')));
+    }
+    return rows;
+  }
+
+  /** The template this job will render with, by the same rule the panel uses. */
+  function activeJobTemplate(DATA) {
+    var list = (DATA && DATA.templates) || [];
+    var wanted = UI.jobTplId;
+    for (var i = 0; i < list.length; i += 1) {
+      if (wanted && list[i].id === wanted) return list[i];
+    }
+    return DATA && DATA.selectedTemplate ? DATA.selectedTemplate : (list[0] || null);
+  }
+
   function jobEtaRange(seconds) {
     var mins = Math.max(1, seconds / 60);
     var lo = Math.max(4, Math.round(mins * 0.6));
@@ -2904,6 +2951,23 @@
         : '',
       // Charging is per source minute, so an estimate is only honest once the
       // length is known. The server confirms the real cost before processing.
+      // ── the running total ────────────────────────────────────────────
+      //
+      // The panel used to commit tokens behind a single "≈ 45 tokens" line
+      // and say nothing about the wait. These are the four things somebody
+      // wants settled before they press Start.
+      jobCostBig: !job ? '' : job.durationKnown
+        ? String(Math.max(1, Math.ceil((job.end - job.start) / 60 * tokenRate)))
+        : '\u2248 1',
+      jobCostUnit: !job ? '' : job.durationKnown ? 'tokens' : 'token per minute',
+      jobCostBasis: !job ? '' : job.durationKnown
+        ? humanDuration(job.end - job.start) + ' of source, charged once'
+        : 'confirmed once the worker downloads the source',
+      jobSummaryRows: !job ? [] : jobSummaryRows(DATA, job, tokenRate),
+      jobEtaLabel: !job ? '' : job.durationKnown
+        ? 'Ready in roughly ' + jobEtaRange(job.end - job.start)
+        : 'Ready in roughly 0.6\u20131x the length',
+      jobQueueLabel: 'measured on the worker, not a guess',
       jobTokenLabel: !job ? '' : job.durationKnown
         ? tokenCostLine(DATA, Math.max(1, Math.ceil((job.end - job.start) / 60 * tokenRate)))
         : '\u22481 token per minute of lecture \u2014 confirmed after download',

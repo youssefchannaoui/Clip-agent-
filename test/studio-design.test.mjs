@@ -1509,17 +1509,26 @@ test('a submission carries an idempotency key so a 502 cannot charge twice', () 
 
 // ── rendering does not rebuild the page ────────────────────────────────────
 
-test('every slider can reach the whole range its field accepts', () => {
+test('every slider can reach the whole range its field accepts', async () => {
   // The design draws min/max as literals and they did not match the schema. The
   // caption's vertical position ran 20-88 against a field accepting 20-800, so
   // the control could only express the bottom tenth of its own range — and
   // touching it truncated a value the drag had set. Warmth ran 0-80 on a field
   // that is -100..100, so it could never be set cool at all.
+  //
+  // The bounds are READ from the schema rather than copied here. They were
+  // copied, and captionFontSize going to 240 for the big stacked styles left
+  // this test asserting a 140 ceiling the importer had already corrected --
+  // a duplicated constant failing for being out of date, which says nothing
+  // about whether a slider can reach its field.
   const template = fs.readFileSync(path.join(ROOT, 'src/public/studio-template.generated.js'), 'utf8');
-  const expected = {
-    edSize: [24, 140], edCapPosY: [20, 960], edGrain: [0, 100], edWarm: [-100, 100],
+  const { NUMBER_RANGES } = await import('../src/templates.js');
+  const fields = {
+    edSize: 'captionFontSize', edCapPosY: 'captionMarginV',
+    edGrain: 'grain', edWarm: 'warm',
   };
-  for (const [binding, [lo, hi]] of Object.entries(expected)) {
+  for (const [binding, field] of Object.entries(fields)) {
+    const [lo, hi] = NUMBER_RANGES[field];
     const re = new RegExp(`"type":"range","min":"(-?\\d+)","max":"(-?\\d+)","value":\\{"p":"${binding}"`);
     const found = re.exec(template);
     assert.ok(found, `${binding} is a range input`);
