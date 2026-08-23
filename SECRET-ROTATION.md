@@ -82,20 +82,42 @@ Leave it unset. Setting it would re-open a sign-in path nothing needs.
 
 ### 3. `WORKER_SHARED_SECRET` and `WORKER_CALLBACK_SECRET`
 
-**These must change on Render and the Hetzner worker together.** Between the two
-updates, every job callback fails signature verification.
+Checked against both sides on 24 Aug 2026. These are **not** symmetric, and the
+original instruction to change both on both machines was wrong:
+
+**`WORKER_CALLBACK_SECRET` — Render only, no worker change.**
+It never leaves the app. It signs the music and background asset URLs Render
+hands to the worker (`src/local-engine.js:178`, `:187`) and verifies them when
+the worker fetches (`verifyWorkerAssetSignature`). The worker only ever uses the
+signed URL it was given, and the value is not in `/opt/deenclipped/worker/.env`
+at all. Rotate it on Render alone.
+The only caveat: asset URLs already issued stop working, so do it with no job
+running or a mid-flight render loses its nasheed.
+
+**`WORKER_SHARED_SECRET` — must match on both.**
+The worker signs its callbacks with it and `verifyWorkerRequest`
+(`src/server.js:328`) verifies with it. Different values on the two sides means
+every callback answers 401 and finished jobs never come back.
+
+Do it with no job running. Between the two updates, callbacks fail; with an idle
+queue nothing is there to fail.
+
+1. Render: replace `WORKER_SHARED_SECRET`, save (this triggers a redeploy).
+2. The VPS, same value — over stdin so it stays out of your shell history:
 
 ```
-ssh into the VPS
-cd /opt/deenclipped
-nano .env          # update both values
-docker compose up -d
+printf 'WORKER_SHARED_SECRET: '; read -rs WS; echo
+printf '%s' "$WS" | ssh -i ~/.ssh/deenclipped_worker root@135.181.149.182 \
+  'read -r NEW; cd /opt/deenclipped/worker \
+   && cp .env .env.bak \
+   && sed -i "s|^WORKER_SHARED_SECRET=.*|WORKER_SHARED_SECRET=$NEW|" .env \
+   && docker compose up -d'
+unset WS
 ```
 
-Do the Render side and the VPS side back to back. Pick a moment with no job
-running — a mid-flight job will fail its callback and look like a worker crash.
-
-Set both keys explicitly this time, per the shadowing note above.
+`docker-compose.yml` uses `env_file: .env`, so `up -d` recreates the container
+with the new value. Verify with an end-to-end job afterwards: a callback that
+fails signature verification shows up as a job that renders and never completes.
 
 ### 4. Cloudflare R2 access key and secret
 
