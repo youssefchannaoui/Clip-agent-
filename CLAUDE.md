@@ -104,7 +104,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **426 JS + 230 Python**
+- `npm test` and `npm run check` must pass. Currently **505 JS + 273 Python**
   (7 Python skipped). Update these numbers when they change — they were wrong by
   more than a factor of two, which makes them useless as a tripwire.
 - **The 7 skips are `SpeakerTrackingTests`**, which need a test video that is not
@@ -166,6 +166,33 @@ These were each a real bug and each has a test named after it.
   without happening. Confirm a live prompt echo (type Return, see a fresh
   prompt) before every command batch, and verify `git pull` output names the
   expected commits.
+
+## Security posture (audited 24 Aug 2026)
+
+Six dimensions were audited with every finding put through a refutation pass;
+twenty survived. What that audit found strong, and what must stay that way:
+
+- **Tenant isolation** is enforced by making the record lookup itself
+  owner-scoped, not by a check bolted on afterwards. Keep it that way: a route
+  that fetches first and checks second is the shape of every IDOR.
+- **Ollama is self-hosted**, so transcripts never leave the server. Any move to
+  a hosted model changes what this product can promise about customer content.
+- **There is no shell-out anywhere** in the pipeline. Keep it that way.
+
+Habits the tests now enforce, and why:
+
+- `script-src` must never take `'unsafe-inline'`. The policy allows the page's
+  own inline block by sha256, computed at startup from the file, so editing the
+  page updates the hash rather than silently breaking it -- and no served HTML
+  may grow an inline event handler again. One of those was a reflected XSS.
+- Revoking a credential must revoke its sessions. Deleting a squatter's
+  password while leaving their session alive revoked nothing.
+- A limiter that is not crossed by a route protects nothing: the throttle and
+  the schedule-day parameter both had unit tests that passed while the route
+  ignored them. Test over HTTP.
+- Read the LAST `x-forwarded-for` entry. The first is caller-supplied.
+- Password hashing runs async. Sync hashing on a pre-auth route stalls every
+  other customer for the duration.
 
 ## Deploys
 
