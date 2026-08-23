@@ -84,7 +84,12 @@ export const config = {
   socialMediaUrlTtlMs: Math.max(60 * 60_000, Math.round(number(process.env.SOCIAL_MEDIA_URL_TTL_MS, 24 * 60 * 60_000))),
 
 
-  authRequired: boolean(process.env.AUTH_REQUIRED, Boolean(process.env.GOOGLE_SIGNIN_CLIENT_ID || process.env.APPLE_SIGNIN_CLIENT_ID || process.env.APP_PASSWORD)),
+  // Defaults to ON. It used to be derived from whether sign-in credentials
+  // happened to be configured, so if those variables ever went missing at once
+  // -- a botched rotation, a wiped environment group -- the app would come back
+  // up with authentication silently switched off and serve the owner account to
+  // anyone. Turning it off is now something you have to say out loud.
+  authRequired: boolean(process.env.AUTH_REQUIRED, true),
   emailSigninEnabled: boolean(process.env.EMAIL_SIGNIN_ENABLED, true),
   sessionSecret: process.env.APP_SESSION_SECRET || process.env.SOCIAL_TOKEN_KEY || process.env.APP_PASSWORD || 'dev-session-secret-change-me',
   adminEmail: process.env.ADMIN_EMAIL || 'admin@deenclipped.local',

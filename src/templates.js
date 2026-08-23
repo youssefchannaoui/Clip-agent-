@@ -191,6 +191,17 @@ function cleanText(value, fallback, max = 120) {
   return (text || fallback).slice(0, max);
 }
 
+/**
+ * A font name goes straight into an ASS style row, where fields are separated
+ * by commas and rows by newlines. Left alone, a name containing either could
+ * shift every following field or append whole style rows of its own -- the one
+ * piece of user text on the rendering path that was not sanitised.
+ */
+function cleanFontName(value, fallback, max = 80) {
+  const text = String(value ?? '').replace(/[,\r\n{}:]/g, ' ').replace(/\s+/g, ' ').trim();
+  return (text || fallback).slice(0, max);
+}
+
 function cleanColor(value, fallback) {
   const text = String(value || '').trim().toUpperCase();
   return /^#[0-9A-F]{6}$/.test(text) ? text : fallback;
@@ -227,9 +238,9 @@ export function sanitiseTemplate(input = {}, { id = '', builtIn = false, userId 
   if (input && input.captionMode === 'word' && input.captionStackMaxWords == null && input.captionHorizontal == null) {
     output.captionMode = 'dynamic-stack';
   }
-  output.captionFont = cleanText(source.captionFont, DEFAULTS.captionFont, 80);
-  output.captionHighlightFont = cleanText(source.captionHighlightFont, DEFAULTS.captionHighlightFont, 80);
-  output.captionArabicFont = cleanText(source.captionArabicFont, DEFAULTS.captionArabicFont, 80);
+  output.captionFont = cleanFontName(source.captionFont, DEFAULTS.captionFont, 80);
+  output.captionHighlightFont = cleanFontName(source.captionHighlightFont, DEFAULTS.captionHighlightFont, 80);
+  output.captionArabicFont = cleanFontName(source.captionArabicFont, DEFAULTS.captionArabicFont, 80);
   // An empty watermark is a real choice, not a missing field: TikTok rejects
   // videos carrying third-party watermarks, so "none" must be saveable. Only
   // an absent field falls back to the default.

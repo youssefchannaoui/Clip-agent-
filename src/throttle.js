@@ -114,6 +114,27 @@ export function keysFor(ip, identity) {
   return keys;
 }
 
+/**
+ * A plain rate limit, separate from the failure counters above: this counts
+ * every call, not just the ones that went wrong. Used where the ACT is the
+ * cost -- handing out upload URLs, spending third-party API quota -- rather
+ * than where a wrong answer is.
+ */
+const meters = new Map();
+export function rateLimit(key, max, windowMs) {
+  const now = Date.now();
+  let meter = meters.get(key);
+  if (!meter || now - meter.since > windowMs) { meter = { since: now, count: 0 }; meters.set(key, meter); }
+  meter.count += 1;
+  if (meters.size > 5000) {
+    for (const [k, v] of meters) if (now - v.since > windowMs) meters.delete(k);
+  }
+  if (meter.count > max) {
+    return { allowed: false, retryAfterSec: Math.max(1, Math.ceil((meter.since + windowMs - now) / 1000)) };
+  }
+  return { allowed: true, retryAfterSec: 0 };
+}
+
 /** Tests only. */
-export function reset() { buckets.clear(); }
+export function reset() { buckets.clear(); meters.clear(); }
 export const limits = { IP_LIMIT, ID_LIMIT };

@@ -82,10 +82,24 @@ export async function deleteObject(key) {
   return true;
 }
 
-export function createUpload(userId, fileName, contentType = 'video/mp4') {
+// The type is decided here, from the extension we just validated -- never
+// taken from the caller. The client used to send it and the server signed
+// whatever it was told, so a file named promo.mp4 could be declared text/html
+// and stored as a live web page on the media domain, served from the same
+// origin family as the product.
+const UPLOAD_TYPES = Object.freeze({
+  '.mp4': 'video/mp4',
+  '.m4v': 'video/x-m4v',
+  '.mov': 'video/quicktime',
+  '.webm': 'video/webm',
+  '.mkv': 'video/x-matroska',
+});
+
+export function createUpload(userId, fileName) {
   if (!configured()) throw new Error('Direct upload storage is not configured. Contact the site owner.');
   const extension = path.extname(String(fileName || '')).toLowerCase();
-  if (!['.mp4', '.mov', '.m4v', '.webm', '.mkv'].includes(extension)) throw new Error('Upload an MP4, MOV, M4V, WebM or MKV video.');
+  const contentType = UPLOAD_TYPES[extension];
+  if (!contentType) throw new Error('Upload an MP4, MOV, M4V, WebM or MKV video.');
   const safeName = path.basename(String(fileName || 'video.mp4')).replace(/[^A-Za-z0-9._-]+/g, '-').slice(-120);
   const key = assertStorageObjectKey(`${uploadPrefixFor(userId)}${Date.now()}-${crypto.randomBytes(6).toString('hex')}-${safeName}`);
   return { key, uploadUrl: presign({ method: 'PUT', key, contentType }), contentType, expiresIn: 900 };

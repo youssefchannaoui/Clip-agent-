@@ -1564,6 +1564,10 @@ export function withImportNetwork(source) {
   return Object.keys(network).length ? { ...source, network } : source;
 }
 
+// Priority 1, not 0. A free re-render is interactive and should be quick, but
+// it was hardcoded to outrank everything, and production runs one worker slot:
+// one account keeping a re-render queued could hold a paying customer's lecture
+// behind it indefinitely. Level with a submitted lecture, ahead of nothing.
 export function queueClipRerender(clipId, templateId, { asVariant = false, priority = 1, quality = '' } = {}) {
   const clip = clipById(clipId);
   if (!clip) throw new Error('That clip does not exist.');

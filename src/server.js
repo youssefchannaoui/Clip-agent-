@@ -865,8 +865,16 @@ async function route(req, res, url) {
 
   if (method === 'POST' && pathname === '/api/uploads/presign') {
     const body = await readBody(req);
+    // A signed URL is a licence to write into the bucket, and this handed out
+    // an unlimited number of them. The content type is no longer taken from
+    // the caller at all -- it is derived from the extension.
+    const gate = throttle.rateLimit(`presign:${currentUser.id}`, 60, 60 * 60_000);
+    if (!gate.allowed) {
+      res.setHeader('Retry-After', String(gate.retryAfterSec));
+      return json(res, 429, { error: 'Too many uploads started in the last hour. Try again shortly.' });
+    }
     try {
-      const upload = objectStorage.createUpload(currentUser.id, String(body.fileName || ''), String(body.contentType || 'video/mp4'));
+      const upload = objectStorage.createUpload(currentUser.id, String(body.fileName || ''));
       return json(res, 200, { ok: true, ...upload });
     } catch (error) { return json(res, 400, { error: error.message }); }
   }
@@ -1320,7 +1328,9 @@ async function route(req, res, url) {
       // it back at render. Refused at the door, with the reason.
       const wanted = String(body.templateId || '');
       if (wanted) assertTemplateAllowed(templates.templateById(wanted, currentUser));
-      return json(res, 202, { ok: true, job: agent.engine.queueClipRerender(id, wanted, { asVariant: Boolean(body.asVariant), priority: 0 }) });
+      // Priority 1, level with a submitted lecture. At 0 a free re-render
+      // outranked every paying customer's job on a single worker slot.
+      return json(res, 202, { ok: true, job: agent.engine.queueClipRerender(id, wanted, { asVariant: Boolean(body.asVariant), priority: 1 }) });
     }
     catch (error) { return json(res, 400, { error: error.message }); }
   }

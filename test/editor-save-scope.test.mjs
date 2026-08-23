@@ -6,6 +6,9 @@ import test from 'node:test';
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deenclipped-editor-save-'));
 process.env.DATA_DIR = dataDir;
+// AUTH_REQUIRED defaults to on now, so a test that calls routes without a
+// session has to say that is what it means to do.
+process.env.AUTH_REQUIRED = 'false';
 process.env.APP_SESSION_SECRET = 'editor-save-scope-secret-long-enough';
 
 const templates = await import('../src/templates.js');

@@ -61,7 +61,11 @@ test('network failures become actionable worker unavailable errors', async () =>
 });
 
 test('direct uploads receive a signed S3 PUT without exposing credentials', () => {
-  const result = storage.createUpload('user_1', 'lecture.mp4', 'video/mp4');
+  // The caller no longer supplies a content type: it is derived from the
+  // extension, so a video cannot be declared text/html and stored as a live
+  // page on the media domain.
+  const result = storage.createUpload('user_1', 'lecture.mp4');
+  assert.equal(result.contentType, 'video/mp4');
   assert.match(result.key, /^uploads\/user_1\//);
   const url = new URL(result.uploadUrl);
   assert.equal(url.hostname, 's3.test');
@@ -125,4 +129,12 @@ test('the server publishes the breakdown to the browser', () => {
   for (const field of ['currentClip', 'totalClips', 'clipPercent', 'clipPlan']) {
     assert.match(server, new RegExp(`${field}: project\\.${field}`), `${field} is published`);
   }
+});
+
+test('an upload cannot declare its own content type', () => {
+  // Whatever a caller passes, the type comes from the validated extension.
+  const sneaky = storage.createUpload('user_1', 'promo.mp4', 'text/html');
+  assert.equal(sneaky.contentType, 'video/mp4', 'a video stays a video');
+  assert.throws(() => storage.createUpload('user_1', 'page.html'), /MP4, MOV/);
+  assert.throws(() => storage.createUpload('user_1', 'shell.svg'), /MP4, MOV/);
 });

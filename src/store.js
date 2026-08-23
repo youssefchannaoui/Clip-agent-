@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import * as secretBox from './secret-box.js';
 import path from 'node:path';
 import { config } from './config.js';
 import { migrateLibraryOwnership } from './audio.js';
@@ -358,13 +359,20 @@ export function musicSatisfied(clip) {
  */
 export function importNetworkSettings() {
   const stored = state.importNetwork && typeof state.importNetwork === 'object' ? state.importNetwork : {};
-  return { proxy: String(stored.proxy || ''), cookiesText: String(stored.cookiesText || '') };
+  // Sealed on write; a value written before this was added comes back as-is
+  // and is sealed the next time it is saved.
+  const read = value => { try { return String(secretBox.open(value) || ''); } catch { return ''; } };
+  return { proxy: read(stored.proxy), cookiesText: read(stored.cookiesText) };
 }
 export function setImportNetworkSettings(next = {}) {
   const current = importNetworkSettings();
+  const proxy = next.proxy !== undefined ? String(next.proxy || '').trim() : current.proxy;
+  const cookiesText = next.cookiesText !== undefined ? String(next.cookiesText || '').trim() : current.cookiesText;
+  // A live YouTube session and a proxy password, in the same file where every
+  // other third-party credential is already encrypted.
   state.importNetwork = {
-    proxy: next.proxy !== undefined ? String(next.proxy || '').trim() : current.proxy,
-    cookiesText: next.cookiesText !== undefined ? String(next.cookiesText || '').trim() : current.cookiesText,
+    proxy: proxy ? secretBox.seal(proxy) : '',
+    cookiesText: cookiesText ? secretBox.seal(cookiesText) : '',
   };
   save();
   return importNetworkSettings();

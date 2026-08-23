@@ -16,6 +16,9 @@ import test from 'node:test';
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deenclipped-apply-style-'));
 const port = 39000 + Math.floor(Math.random() * 900);
 process.env.DATA_DIR = dataDir;
+// AUTH_REQUIRED defaults to on now, so a test that calls routes without a
+// session has to say that is what it means to do.
+process.env.AUTH_REQUIRED = 'false';
 process.env.PORT = String(port);
 
 const base = `http://127.0.0.1:${port}`;
