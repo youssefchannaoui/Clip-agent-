@@ -149,6 +149,15 @@ async function jsonRequest(url, options = {}, provider = '') {
   if (data?.error && data.error.code && data.error.code !== 'ok') {
     throw new SocialError(`${provider || 'Platform'} error: ${data.error.message || data.error.code}`, { provider });
   }
+  // OAuth2 endpoints answer 200 with {"error":"invalid_client","error_description":...},
+  // where `error` is a STRING and has no .code -- so the check above sails past
+  // it, the caller reads access_token off a failure payload, gets undefined, and
+  // sends `Bearer undefined` to the next call. What the operator then sees is
+  // "the access token is invalid or not found in the request", which is true and
+  // useless: the real answer was invalid_client, one request earlier.
+  if (typeof data?.error === 'string' && data.error && data.error !== 'ok') {
+    throw new SocialError(`${provider || 'Platform'} error: ${data.error_description || data.error}`, { provider });
+  }
   return data;
 }
 
@@ -242,6 +251,12 @@ async function connectTikTok(code, userId) {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cache-Control': 'no-cache' },
     body: new URLSearchParams({ client_key: config.tiktokClientKey, client_secret: config.tiktokClientSecret, code, grant_type: 'authorization_code', redirect_uri: redirectUri('tiktok') }),
   }, 'TikTok');
+  // Never carry an absent token into the next call. Without this the failure
+  // surfaces one request later as a 401 about the token, which sends you looking
+  // at the wrong thing entirely.
+  if (!token?.access_token) {
+    throw new SocialError('TikTok did not return an access token. This usually means the client key and client secret belong to different apps -- check that both are the sandbox pair, or both the production pair.', { provider: 'tiktok' });
+  }
   const profile = await jsonRequest(`${config.tiktokApiBase}/v2/user/info/?fields=open_id,union_id,avatar_url,display_name`, {
     headers: { Authorization: `Bearer ${token.access_token}` },
   }, 'TikTok');

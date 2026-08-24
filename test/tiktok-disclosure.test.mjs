@@ -112,3 +112,41 @@ test('a privacy level the connected account does not offer is still refused', ()
   next.tiktok.privacy = 'PUBLIC_TO_EVERYONE';
   assert.throws(() => social.validatePublishingSettings(next, USER), /does not currently allow/);
 });
+
+test('an OAuth2 error is reported as itself, not as a 401 one request later', async () => {
+  // TikTok answers a failed token exchange with HTTP 200 and
+  // {"error":"invalid_client", ...} -- a STRING error with no .code. The
+  // request helper used to sail past that, so the caller read access_token off
+  // a failure payload, sent `Bearer undefined` to /v2/user/info/, and the
+  // operator was told the access token was invalid. It was never issued.
+  const realFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, options) => {
+    calls.push(String(url));
+    if (String(url).includes('/oauth/token/')) {
+      return new Response(JSON.stringify({
+        error: 'invalid_client',
+        error_description: 'Client key and secret do not match.',
+        log_id: 'x',
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ error: { code: 'access_token_invalid', message: 'The access token is invalid or not found in the request.' } }),
+      { status: 401, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    await assert.rejects(
+      () => social.completeOAuth('tiktok', new URL('https://app.test/auth/tiktok/callback?code=abc&state=' + encodeURIComponent(social._testState ? social._testState() : 'bad'))),
+      err => {
+        // Either the state check or the token exchange must reject; what must
+        // NOT happen is a message about the access token being invalid.
+        assert.doesNotMatch(String(err.message), /access token is invalid or not found/i,
+          'the real failure must not be masked by the downstream 401');
+        return true;
+      });
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  // And the user-info call must never have been attempted with no token.
+  assert.ok(!calls.some(u => u.includes('/user/info/')),
+    'a missing access token stops the flow instead of being sent as "Bearer undefined"');
+});
