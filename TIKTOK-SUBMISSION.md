@@ -2,66 +2,53 @@
 
 Recorded 24 Aug 2026 by reading the developer portal against the code.
 
-App: **DeenClipped**, old App ID `7668669224428029959` (to be deleted), new App ID
-`7677448222683531285` created 24 Aug 2026. Individual ownership.
-Status: **Draft. Never submitted.** The changelog stops at 9 Aug 2026 and
-`Submit for review` has never been pressed.
-
-That single fact decides both open questions below, so check it before
-trusting any of this again.
+| | |
+|---|---|
+| Old app | `7668669224428029959` — Draft, never submitted. **To be deleted.** |
+| New app | `7677448222683531285` — created 24 Aug 2026, fresh client key + secret |
+| Ownership | Individual |
 
 ---
 
-## The client secret cannot be rotated in the portal
+## Why the app was rebuilt instead of the secret rotated
 
-`TIKTOK_CLIENT_SECRET` was pasted into a transcript on 6 Aug and is the last
-item outstanding from SECRET-ROTATION.md. There is **no rotation control**:
+`TIKTOK_CLIENT_SECRET` was pasted into a transcript on 6 Aug and was the last
+item outstanding from SECRET-ROTATION.md. **The portal has no rotation
+control**: the credentials card reveals only, and the overflow menu offers just
+`Transfer ownership` and `Delete app`. Checked directly, not assumed.
 
-- Credentials card: reveal (eye) only, for both client key and client secret.
-- Overflow menu (`...`): `Transfer ownership` and `Delete app`. Nothing else.
+So the choice was recreate, or ask support and wait. Recreate, because:
 
-So the choices are delete-and-recreate, or ask TikTok support to reset it.
-
-### Why this is not urgent, and why it is still now-or-never
-
-The leaked value is close to inert today, and it is worth being precise about
-why rather than treating every leaked string as equally on fire:
-
-- `client_key` + `client_secret` alone reach nothing. Every Content Posting
-  and user call needs a *user* access token.
-- Authorization codes are only ever delivered to the registered redirect URI,
-  `https://deenclipped.online/auth/tiktok/callback`. An attacker holding the
-  secret does not control that host, so they cannot obtain a code.
-- Refresh tokens are stored sealed under `SOCIAL_TOKEN_KEY`, which was rotated
-  on 24 Aug -- so any copy taken before that date is now undecryptable.
-- The app has never been approved, so no third-party creator has ever
-  connected an account through it. There is nothing to steal.
-
-It stops being inert the moment the app is approved and real creators connect.
-At that point the secret plus any leaked refresh token posts to their profiles.
-
-Recreating the app costs ~15 minutes of form-filling **now** and nothing else,
-because nothing has been approved. After approval it costs the approval.
+- Recreating is free **only while the app is unapproved**, and it was. After
+  approval the same move costs the approval.
+- The leak is close to inert today, which is why this was never urgent:
+  `client_key` + `client_secret` reach nothing on their own — every API call
+  needs a *user* access token; authorization codes are only ever delivered to
+  the registered redirect URI, which an attacker does not control; refresh
+  tokens are sealed under the `SOCIAL_TOKEN_KEY` rotated on 24 Aug; and no
+  third-party creator has ever connected through an unapproved app.
+- It stops being inert the moment the app is approved and creators connect —
+  exactly when it can no longer be fixed.
 
 ---
 
 ## Code / portal reconciliation
 
-Done by reading `src/social.js` against the portal, 24 Aug 2026.
-
 | Portal setting | Code says | Verdict |
 |---|---|---|
-| Direct Post enabled | `/v2/post/publish/video/init/` + `creator_info/query/` (`social.js:784,858`) | correct, keep |
-| `source: FILE_UPLOAD` = push_by_file (`social.js:856`) | — | **domain verification NOT required**; ignore the Verify button |
-| Scope `user.info.basic` | requested (`social.js:186`) | keep |
-| Scope `video.publish` | requested (`social.js:186`) | keep |
-| Scope `video.upload` | **never requested anywhere** | **remove before submitting** |
+| Direct Post ON | `/v2/post/publish/video/init/` + `creator_info/query/` (`social.js:784,858`) | correct, enabled |
+| Verify domains | `source: FILE_UPLOAD` = push_by_file (`social.js:856`) | **not needed** — pull_by_url only |
+| `user.info.basic` | requested (`social.js:186`) | keep |
+| `video.publish` | requested (`social.js:186`) | keep |
+| `video.upload` | **never requested** | **cannot be removed** — see below |
 
-`video.upload` is the draft-upload scope, served by the `inbox/video` endpoint.
-That endpoint appears nowhere in the codebase. The portal warns that scopes you
-do not need delay the review, and the review note below does not explain it --
-TikTok asks you to explain every scope, so an unexplained one is a rejection
-risk on its own.
+**`video.upload` is not removable, and its presence on the old app was never a
+mistake.** It ships bundled with Content Posting API: the scope list shows it as
+"Included in Content Posting API" with no delete control, and the `Add scopes`
+dialog offers only *additional* scopes (`user.info.stats`, `user.info.profile`,
+`video.list`) — the bundled three are not listed at all. Since TikTok asks you
+to explain every scope, the review note now says outright that `video.upload`
+comes with the product and the OAuth request asks only for the other two.
 
 Privacy handling is already correct for an unaudited app: `privacy` defaults to
 `SELF_ONLY` and is rejected unless it appears in the creator's returned
@@ -69,54 +56,107 @@ Privacy handling is already correct for an unaudited app: `privacy` defaults to
 
 ---
 
-## Preserved draft (so a recreate costs nothing)
+## URL properties are per-app, not per-account
 
-- **App name:** `DeenClipped`
-- **Category:** Education
-- **Description (111 chars):**
-  `Turns long-form Islamic lectures into short vertical clips with captions, then posts them to your own channels.`
-- **Terms of Service URL:** `https://deenclipped.online/terms`
-- **Privacy Policy URL:** `https://deenclipped.online/privacy`
-- **Website URL:** `https://deenclipped.online/`
-- **Platform:** Web
-- **Redirect URI (web):** `https://deenclipped.online/auth/tiktok/callback`
-- **Products:** Login Kit, Content Posting API (Direct Post ON)
-- **Scopes:** `user.info.basic`, `video.publish` (drop `video.upload`)
-- **Demo video:** `Screen Recording 2026-08-07 at 6.02.42 pm.mov`
+The new app started unverified, and both the terms and privacy URLs error until
+a signature file is served. Verified 24 Aug via **URL prefix**
+`https://deenclipped.online/` — the method the codebase already supports, since
+`server.js:781` globs any root-level `/tiktok*.txt`.
 
-### Review note, verbatim (976 chars)
+- New file: `tiktok3SmWqNIyTDMrApqikiaKuTrZPErJ1wCr.txt` (commit `f359a5e`)
+- Old file: `tiktok4j8mTWgMoRmOiR9kobH02eR2qThxiQIT.txt` — **delete once the old
+  app is deleted**, not before.
+
+The content format is `tiktok-developers-site-verification=<token from the
+filename>`, confirmed by the old file serving 200 in production and by the new
+one verifying on the first try.
+
+The DNS-record method (whole domain plus subdomains) was the alternative and is
+still available if a future app would rather not depend on a deploy.
+
+---
+
+## The form cannot be saved until a video is uploaded
+
+**This is the thing to know before touching the draft.** TikTok refuses `Save`
+while any error remains — "Please correct all errors before you save changes" —
+and the missing demo video is an error. So there is no way to bank partial
+progress: everything below was entered into the browser and is lost if the tab
+reloads before a video exists. Every value is recorded here for exactly that
+reason.
+
+### Entered and correct (as of 24 Aug, unsaved)
+
+- App name `DeenClipped`, Category Education
+- Icon: 1024x1024 (`~/Downloads/DeenClipped-TikTok-App-Icon.png`)
+- Description (111 chars): `Turns long-form Islamic lectures into short vertical clips with captions, then posts them to your own channels.`
+- Terms `https://deenclipped.online/terms`, Privacy `https://deenclipped.online/privacy`
+- Platform Web, Web/Desktop URL `https://deenclipped.online/`
+- Products: Login Kit (redirect URI `https://deenclipped.online/auth/tiktok/callback`), Content Posting API with Direct Post ON
+- Review note, 996/1000 chars — see below
+
+### Review note, verbatim
 
 ```
-DeenClipped turns a creator's own long-form lecture videos into short vertical clips with captions, then publishes them to that creator's own TikTok account.
+DeenClipped turns a creator's own long-form lectures into short vertical clips with captions, then publishes them to that creator's own TikTok account.
 
-Login Kit (user.info.basic): the creator connects their account via OAuth. We read open_id, display_name and avatar_url only, and show them in Settings > Channels so the creator can confirm which account is connected before anything is posted.
+Login Kit (user.info.basic): the creator connects their account via OAuth. We read open_id, display_name and avatar_url only, and show them in Settings > Channels so the creator can confirm the account before anything is posted.
 
-Content Posting API (video.publish): posts a clip the creator generated from their own source video. Before every post we call /v2/post/publish/creator_info/query/ and render the returned privacy_level_options, comment/duet/stitch settings and nickname, so the creator always sees current values, never cached ones. The creator picks a privacy level from the options the API returns; any level not in that list is rejected. Nothing posts automatically: each clip is manually approved and carries its own consent timestamp. Only content the creator uploaded is ever posted.
+Content Posting API (video.publish): posts a clip the creator made from their own source video. Before every post we call /v2/post/publish/creator_info/query/ and render the returned privacy_level_options, comment/duet/stitch settings and nickname, fetched fresh. The creator picks a privacy level from the options the API returns; any level not in that list is rejected. Nothing posts automatically: each clip is approved by hand. Only the creator's own content is posted.
+
+video.upload is listed only because it ships with Content Posting API; our OAuth request asks for user.info.basic and video.publish alone.
 ```
 
 ---
 
-## If the app is recreated
+## The demo video has to be re-recorded
 
-**Both** `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET` change together -- a new
-app issues a new pair. Updating only the secret leaves the key pointing at a
-deleted app, and `isConfigured('tiktok')` (`social.js:74`) reports "configured"
-for any two non-empty strings, so the UI will look fine either way.
+**The old one is unrecoverable.** In the portal it is a chip with a remove `x`
+and no preview or download control, and the local file is gone — Spotlight finds
+no `Screen Recording 2026-08-07`. `~/Movies/CapCut/0807.mov` is a different
+export (20:42 vs the uploaded 18:02), 286MB and 10m24s, over the 50MB cap.
 
-Also check `tiktok4j8mTWgMoRmOiR9kobH02eR2qThxiQIT.txt` in the repo root -- it
-is a domain-verification file for the old app. A new app may issue a new one.
+Whether the old one would have passed is moot, but worth knowing: in that
+CapCut recording, the Channels page still shows TikTok **"Not connected"** at
+10:00 of 10:24, and `0 connected` in the final seconds. No consent screen, no
+connected account, no post.
 
-## Verification, once the credentials change
+What a compliant recording must show, from TikTok's own rules on the page:
 
-The cheap test lies, for the same reason it lied during the Google rotation:
+1. Open `deenclipped.online` — the domain must match the Website URL.
+2. Connect TikTok: the OAuth consent screen, then the connected account's
+   display name and avatar in Settings > Channels. That is what demonstrates
+   `user.info.basic`.
+3. Pick a clip the creator made from their own source video.
+4. The publish dialog showing the privacy options returned by
+   `creator_info/query/` — comment/duet/stitch state and nickname.
+5. Post, and show the result. `SELF_ONLY` is the only level an unaudited app
+   can use.
 
-- `tiktokToken()` (`social.js:472`) returns the cached access token whenever it
-  has more than five minutes left, so **Test connection passes without ever
-  sending the client secret**.
-- TikTok access tokens default to 24h (`social.js:477`), so a wrong secret
-  looks healthy for a whole day and then fails at the first refresh.
+**Sandbox caveat, unresolved:** the portal says an app that has never been
+approved "is required to use a sandbox environment on the Developer Portal to
+demonstrate the integration." The Sandbox tab is a separate environment from
+Production and was not investigated. Confirm how it issues credentials before
+recording, or the recording may have to be done twice.
 
-What actually proves it: **disconnect TikTok in the app and reconnect it**,
-which forces a fresh authorization-code exchange through `connectTikTok`
-(`social.js:243`) -- the one path that must present the client secret. Look for
-`Connected TikTok account "..."` in the activity log.
+---
+
+## Remaining steps, in order
+
+1. **Record the demo video** (above). Under 50MB, mp4 or mov.
+2. **Upload it** to the new app's App review section. `Save` becomes possible
+   only at this point — save immediately.
+3. **Put the new credentials into Render** — owner only, both together:
+   `TIKTOK_CLIENT_KEY` *and* `TIKTOK_CLIENT_SECRET`. A new app issues a new
+   pair, and `isConfigured('tiktok')` (`social.js:74`) reports "configured" for
+   any two non-empty strings, so a half-updated pair looks healthy.
+4. **Verify with a fresh code exchange** — disconnect TikTok in the app and
+   reconnect it. Do not trust `Test connection`: `tiktokToken()`
+   (`social.js:472`) returns the cached access token whenever it has over five
+   minutes left, so the test passes without ever sending the client secret, and
+   TikTok access tokens last 24h (`social.js:477`) — a wrong secret looks
+   healthy for a full day, then fails at the first refresh. Look for
+   `Connected TikTok account "..."` in the activity log.
+5. **Submit for review.**
+6. **After that settles:** delete old app `7668669224428029959`, then remove
+   `tiktok4j8mTWgMoRmOiR9kobH02eR2qThxiQIT.txt` from the repo root.
