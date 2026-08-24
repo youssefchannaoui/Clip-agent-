@@ -6,7 +6,7 @@ import { state, save, log, publishingSettings, setPublishingSettings, ownerOfRec
 import { connectionFor, setConnection, removeConnection, ownerOf } from './tenancy.js';
 
 const PROVIDERS = ['youtube', 'instagram', 'facebook', 'tiktok'];
-const META_SCOPES = 'pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish';
+const META_SCOPES = 'pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish,business_management';
 const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -279,6 +279,61 @@ async function connectYouTube(code, userId) {
   save(); log(`Connected YouTube channel "${connection.name}" and switched it on.`, 'info', userId);
 }
 
+const META_PAGE_FIELDS = 'id,name,access_token,instagram_business_account{id,username,name,profile_picture_url}';
+
+/**
+ * Every Page the creator can publish to, which is NOT the same as
+ * `/me/accounts`.
+ *
+ * A Page owned by a business portfolio is absent from `/me/accounts` even when
+ * the creator holds Full access on it and every permission is granted -- the
+ * edge answers `{"data":[]}` with no error, so it looks exactly like an account
+ * that manages nothing. The Page node itself answers fine and hands back a Page
+ * access token, which is what proved the access was there all along; only the
+ * enumeration is missing. Relying on that one edge is what made connecting
+ * Facebook impossible for an owner who plainly owned a Page.
+ *
+ * So: ask the businesses too. `owned_pages` is the portfolio's own Pages and
+ * `client_pages` is Pages another portfolio has shared with it, and a Page can
+ * legitimately appear in both, hence the dedupe.
+ */
+async function metaPages(userToken) {
+  const get = async (path) => jsonRequest(
+    `${config.metaGraphBase}/${config.metaGraphVersion}/${path}?fields=${encodeURIComponent(META_PAGE_FIELDS)}&limit=100&access_token=${encodeURIComponent(userToken)}`,
+    {}, 'Meta',
+  );
+
+  const byId = new Map();
+  const add = (list) => { for (const page of list || []) if (page?.id && !byId.has(String(page.id))) byId.set(String(page.id), page); };
+
+  add((await get('me/accounts'))?.data);
+  if (byId.size) return [...byId.values()];
+
+  // Only reached when /me/accounts came back empty, so the extra calls are not
+  // on the common path. business_management is what makes them possible; when
+  // it was not granted this throws and the caller reports the empty result,
+  // which is the honest answer rather than a silent partial list.
+  let businesses = [];
+  try {
+    businesses = (await jsonRequest(
+      `${config.metaGraphBase}/${config.metaGraphVersion}/me/businesses?limit=100&access_token=${encodeURIComponent(userToken)}`,
+      {}, 'Meta',
+    ))?.data || [];
+  } catch (error) {
+    log(`Meta business lookup was refused, so only personally owned Pages are visible. ${error.message}`, 'warn');
+    return [];
+  }
+
+  for (const business of businesses) {
+    if (!business?.id) continue;
+    for (const edge of ['owned_pages', 'client_pages']) {
+      try { add((await get(`${encodeURIComponent(business.id)}/${edge}`))?.data); }
+      catch (error) { log(`Meta ${edge} lookup failed for business ${business.id}. ${error.message}`, 'warn'); }
+    }
+  }
+  return [...byId.values()];
+}
+
 async function connectMeta(code, userId) {
   const query = new URLSearchParams({ client_id: config.metaAppId, client_secret: config.metaAppSecret, redirect_uri: redirectUri('meta'), code });
   const short = await jsonRequest(`${config.metaGraphBase}/${config.metaGraphVersion}/oauth/access_token?${query}`, {}, 'Meta');
@@ -290,9 +345,8 @@ async function connectMeta(code, userId) {
   } catch (error) {
     log(`Meta long-lived token exchange was not available; using the returned token. ${error.message}`, 'warn');
   }
-  const fields = 'id,name,access_token,instagram_business_account{id,username,name,profile_picture_url}';
-  const pages = await jsonRequest(`${config.metaGraphBase}/${config.metaGraphVersion}/me/accounts?fields=${encodeURIComponent(fields)}&limit=100&access_token=${encodeURIComponent(userToken)}`, {}, 'Meta');
-  const accounts = (pages?.data || []).filter(page => page.id && page.access_token).map(page => ({
+  const pageList = await metaPages(userToken);
+  const accounts = pageList.filter(page => page.id && page.access_token).map(page => ({
     pageId: String(page.id), pageName: page.name || 'Facebook Page',
     instagramId: page.instagram_business_account?.id ? String(page.instagram_business_account.id) : '',
     instagramName: page.instagram_business_account?.username || page.instagram_business_account?.name || '',
