@@ -179,41 +179,65 @@ have not already looked up.
 The app is mid-submission and the note above says rotate before recording the
 demo video, not after -- confirm where that stands first.
 
-### 6. Stripe test key
+### 6. Stripe — DONE 24 Aug 2026 (one caveat)
 
-Dashboard → Developers → API keys → roll the secret key. Sandbox only, so the
-blast radius is test data. Update `STRIPE_SECRET_KEY` on Render.
+Confirmed sandbox first: account is `DeenClipped sandbox`, `pk_test`/`sk_test`,
+no live keys. The runbook's "blast radius is test data" still holds.
 
-### 7. `SOCIAL_TOKEN_KEY` — last, and deliberately
+**Two secrets, not one.** The original entry listed only `STRIPE_SECRET_KEY`.
+`STRIPE_WEBHOOK_SECRET` is equally a credential -- it verifies that incoming
+webhooks came from Stripe (`billing.js:575`). Anyone holding it could forge a
+webhook and tell the app a subscription was paid.
 
-This one is different. It encrypts stored OAuth tokens, so rotating it makes
-every stored token undecryptable and **forces every user to reconnect every
-channel**. There is no migration path short of writing a re-encryption script.
+`STRIPE_SECRET_KEY` rotated with a 24h expiry on the old key. Verified with a
+live API call: `/api/billing/portal` returned a real session on
+billing.stripe.com. Note the UI's `stripeConfigured` flag only checks the key is
+a non-empty string, so it reports "configured" with a completely dead key --
+only a live call proves anything.
 
-Which is the argument for doing it *now*. You have almost no users. This cost
-only ever grows — in six months it is an email to your entire customer base
-apologising for a forced reconnect.
+`STRIPE_WEBHOOK_SECRET` rolled, also with a 24h expiry, and a resent event
+delivered 200.
 
-Must be ≥32 characters, or `providerConfigured()` in `social.js` returns false
-and every social integration silently reports as unconfigured.
+**Caveat, deliberately not glossed:** that 200 is not proof. During the overlap
+Stripe signs each event with BOTH secrets and the verifier accepts if any `v1`
+matches, so a delivery succeeds whichever secret the app holds. A wrong value
+would look healthy until the old secret expires. **Check the endpoint's error
+rate the day after rotating.** If it is not 0%, re-copy the signing secret --
+unlike an API key, it stays viewable in Stripe.
 
-After rotating: reconnect YouTube on your own account and confirm publishing
-still works.
+Testing note: resending an already-processed event is safe.
+`handleWebhookEvent` short-circuits on a seen event ID (`billing.js:644`), so
+signature verification runs but nothing in billing state can change.
+
+### 7. `SOCIAL_TOKEN_KEY` — DONE 24 Aug 2026
+
+Rotated last, as intended. Confirmed by the thing that is supposed to break:
+stored tokens became undecryptable and the connection test returned "Stored
+social credentials could not be read -- this account needs to be reconnected."
+The dashboard still loaded throughout, which matters because it is the way back
+in to reconnect. YouTube reconnected and tested 200 against the live API, which
+proves the new key both seals and opens.
+
+Backups are sealed with this key, so every backup written before the rotation is
+now unreadable. A fresh one is written on the restart, so there is never a gap
+without a working backup -- but the history restarts. Worth doing early for that
+reason alone.
 
 ---
 
-## After all of it
+## Status: complete except TikTok
 
-- Restart the worker: `cd /opt/deenclipped && docker compose up -d --build`
-  (this also picks up the CPU/RAM metrics fix that has been outstanding since
-  the original handover)
-- Sign in, confirm sessions work
-- Run one end-to-end job: import → transcribe → render → publish
-- Check the admin console still reports R2 storage
+| Item | State |
+|---|---|
+| APP_SESSION_SECRET | Rotated, then found to be read by nothing. Delete it. |
+| APP_PASSWORD | Was never set. Leave unset. |
+| WORKER_SHARED_SECRET | Rotated, both sides, verified end to end |
+| WORKER_CALLBACK_SECRET | Rotated, Render only |
+| R2 key pair | Rotated, old tokens deleted |
+| Google OAuth secret | Rotated, old disabled (delete when satisfied) |
+| YOUTUBE_DATA_API_KEY | Rotated, old deleted |
+| STRIPE_SECRET_KEY | Rotated, verified |
+| STRIPE_WEBHOOK_SECRET | Rotated, verify error rate next day |
+| SOCIAL_TOKEN_KEY | Rotated, channels reconnected |
+| **TIKTOK_CLIENT_SECRET** | **Outstanding** -- pending submission status |
 
-## Worth doing at the same time
-
-Nothing reads these from a file in the repo, but `render.env` from the earlier
-session contained a full copy of production secrets. If a copy still exists
-anywhere on disk or in a synced folder, delete it — a rotated secret is no help
-if the old file is still sitting in Downloads.
