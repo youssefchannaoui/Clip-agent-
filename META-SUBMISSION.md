@@ -105,6 +105,62 @@ Domains when you see this error on a Login-for-Business app.
   features page and in the configuration picker, is **`instagram_content_publish`**
   -- which is what the code already sent. Do not "fix" the code to match that page.
 
+## BLOCKED 24 Aug 2026: the app's settings stopped saving
+
+**Connecting Facebook or Instagram does not work yet, and the cause is on
+Meta's side, not in this repo.**
+
+Every write to **App settings → Basic** and to **Facebook Login for Business →
+Settings** now reports "Changes saved" and is gone on reload. Proven with a
+control: setting **Namespace** to `deenclippedapp`, clicking the real
+**Save Changes** button, reloading -- empty. That field has no validation and
+nothing to do with OAuth, so this is not a rejected value, it is a silent
+write failure across the whole app-settings surface.
+
+What that breaks: `Valid OAuth Redirect URIs` cannot be populated, so the login
+dialog answers
+
+> Can't load URL — The domain of this URL isn't included in the app's domains.
+
+which sends you to App Domains. App Domains is correct (`deenclipped.online`,
+verified after reload) and is **not** the problem. The same error appears for
+`https://deenclipped.online/` -- the exact Site URL -- so it is not about the
+callback path either.
+
+### What was ruled out, and how
+
+| Suspicion | Test | Result |
+|---|---|---|
+| App Domains missing | Reloaded Basic settings, read the field | Present, correct |
+| Callback path not allowed | Used the exact Site URL as `redirect_uri` | Same error |
+| `scope` instead of `config_id` | Created a configuration, sent `config_id` | Same error |
+| App itself rejected | Sent no `redirect_uri` at all | Different error: "No redirect URI in the params" -- so the app and config_id are accepted, and `redirect_uri` is required |
+| A value Meta dislikes | Saved `Namespace`, an unrelated free-text field | Also did not persist |
+
+That last row is the finding. Nothing app-specific is wrong; the settings
+simply are not being written.
+
+### The leading hypothesis, untested
+
+Writes were working earlier in the same session -- privacy policy URL, terms
+URL, category, icon and the apex app domain all saved and survived a reload.
+They stopped some time after the app was **attached to the Yccosmeticcustoms
+business portfolio**. Adding `www.deenclipped.online` after the attach failed,
+where adding the apex before it had worked.
+
+The obvious next test is to **detach the app from the business portfolio and
+retry the redirect URI**. That was deliberately not done unilaterally: the
+portfolio is required for App Review later, and detaching is not a clean
+undo. It is the owner's call.
+
+If detaching does not fix it, this is a Meta console bug and the route is
+Support, or setting `app_domains` through the Graph API with an app access
+token.
+
+### Meanwhile
+
+Nothing here blocks the TikTok demo video, which needs no Meta app.
+
 ## The secret
 
 `META_APP_SECRET` is **not** in this file and must not be pasted into a chat
