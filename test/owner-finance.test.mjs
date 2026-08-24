@@ -276,8 +276,10 @@ test('variable spend is averaged from what was paid, not guessed', async () => {
   owner.recordSpend(ownerUser, { name: 'Usage', amount: 30, externalId: 'avg-1', paidAt: Date.now() - 5 * DAY });
   const log = owner.spend(ownerUser, { days: 30 });
   assert.equal(log.totalMinor, before + 3000);
-  // 30 days of window, so the monthly average is the window total.
-  assert.equal(log.monthlyAverageMinor, Math.round(log.totalMinor / 30 * 30));
+  // The property, not the formula: the rate is the money divided by the days
+  // it actually spans. An earlier version of this test pinned the arithmetic
+  // instead and had to be rewritten the moment the divisor was corrected.
+  assert.equal(log.monthlyAverageMinor, Math.round(log.totalMinor / log.coveredDays * 30));
 });
 
 test('a creator cannot record spend', async () => {
@@ -309,4 +311,24 @@ test('profit subtracts variable spend as well as subscriptions', async () => {
     'variable spend is part of what leaves the account');
   assert.ok(after.profit.monthlyNetMinor < before, 'and it reduces profit');
   owner.removeSpend(ownerUser, usage.id);
+});
+
+test('the usage average uses the days the payments span, not the window asked for', async () => {
+  for (const row of owner.spend(ownerUser, { days: 365 }).rows) owner.removeSpend(ownerUser, row.id);
+
+  // Two payments ten days apart, asked for over a 90-day window. Dividing by 90
+  // would report a third of the real rate -- worst on the day you start
+  // recording, which is when someone decides whether to trust the page.
+  owner.recordSpend(ownerUser, { name: 'A', amount: 10, externalId: 'span-a', paidAt: Date.now() - 10 * DAY });
+  owner.recordSpend(ownerUser, { name: 'B', amount: 10, externalId: 'span-b', paidAt: Date.now() - 2 * DAY });
+
+  const log = owner.spend(ownerUser, { days: 90 });
+  assert.equal(log.totalMinor, 2000);
+  assert.equal(log.coveredDays, 10, 'measured from the earliest payment to now');
+  assert.equal(log.monthlyAverageMinor, Math.round(2000 / 10 * 30));
+
+  // Floored at a week, so one charge today cannot extrapolate to a fortune.
+  for (const row of log.rows) owner.removeSpend(ownerUser, row.id);
+  owner.recordSpend(ownerUser, { name: 'C', amount: 10, externalId: 'span-c', paidAt: Date.now() });
+  assert.equal(owner.spend(ownerUser, { days: 90 }).coveredDays, 7);
 });

@@ -285,11 +285,25 @@ export function spend(user, { days = 90 } = {}) {
     const key = item.vendor || item.name;
     byVendor[key] = (byVendor[key] || 0) + item.amountMinor;
   }
+  /**
+   * Averaged over the period the data actually covers, not the window asked for.
+   *
+   * Dividing by a 90-day window when the first payment landed 27 days ago
+   * reports a third of the real rate -- and it does it most severely the day
+   * you start recording, which is exactly when someone is looking at the page
+   * deciding whether to trust it. Measured from the earliest payment in the
+   * window to now, floored at a week so a single charge on day one cannot
+   * extrapolate to a fortune.
+   */
+  const earliest = rows.length ? Math.min(...rows.map(item => Number(item.paidAt) || now())) : now();
+  const coveredDays = Math.max(7, Math.min(days, Math.round((now() - earliest) / DAY_MS) || 1));
+
   return {
     days, rows, totalMinor, byVendor,
+    coveredDays,
     // A per-month figure derived from what was actually paid, rather than a
     // number somebody guessed once and never revisited.
-    monthlyAverageMinor: rows.length ? Math.round(totalMinor / days * 30) : 0,
+    monthlyAverageMinor: rows.length ? Math.round(totalMinor / coveredDays * 30) : 0,
   };
 }
 

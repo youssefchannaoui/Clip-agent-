@@ -253,7 +253,7 @@
         tone: f.moneyOut.unpricedCount ? 'unknown' : '',
       }),
       tile('Usage and one-offs', money(f.moneyOut.oneOff?.monthlyAverageMinor || 0), {
-        foot: `Averaged from ${(f.moneyOut.oneOff?.rows || []).length} payment(s) over ${f.moneyOut.oneOff?.days || 90} days`,
+        foot: `Averaged from ${(f.moneyOut.oneOff?.rows || []).length} payment(s) across the ${f.moneyOut.oneOff?.coveredDays || 0} days they span`,
       }),
       tile('Total out, per month', money(f.moneyOut.totalMonthlyOutMinor), { foot: 'What profit is measured against' }),
       tile('Due in 60 days', money(f.moneyOut.dueNext60DaysTotalMinor), { foot: `${(f.moneyOut.dueNext60Days || []).length} payment(s) scheduled` }),
@@ -307,7 +307,7 @@
       spendRows, { empty: 'No one-off payments recorded yet.' }));
     replace($('spendHint'), [el('span', {
       text: oneOff.rows.length
-        ? `${money(oneOff.totalMinor)} over ${oneOff.days} days — about ${money(oneOff.monthlyAverageMinor)} a month, from what was actually paid.`
+        ? `${money(oneOff.totalMinor)} across ${oneOff.coveredDays} days of payments — about ${money(oneOff.monthlyAverageMinor)} a month, from what was actually paid.`
         : '',
     })]);
 
