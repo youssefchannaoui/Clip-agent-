@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Owner — DeenClipped</title>
+<link rel="icon" href="/favicon.svg">
+<link rel="stylesheet" href="/owner.css">
+</head>
+<body>
+<header class="ow-top">
+  <div class="ow-brand">
+    <span class="ow-mark" aria-hidden="true"></span>
+    <div>
+      <strong>Owner</strong>
+      <span class="ow-sub" id="ownerSubtitle">Loading the books…</span>
+    </div>
+  </div>
+  <div class="ow-top-actions">
+    <span class="ow-badge" id="ownerMode" hidden></span>
+    <label class="ow-window">
+      <span>Window</span>
+      <select id="ownerWindow">
+        <option value="30">30 days</option>
+        <option value="90">90 days</option>
+        <option value="180" selected>180 days</option>
+        <option value="365">365 days</option>
+      </select>
+    </label>
+    <button type="button" class="ow-btn" id="ownerRefresh">Refresh</button>
+    <a class="ow-btn ow-btn-quiet" href="/app">Back to studio</a>
+  </div>
+</header>
+
+<nav class="ow-tabs" id="ownerTabs" role="tablist">
+  <button type="button" role="tab" class="ow-tab is-active" data-tab="overview">Overview</button>
+  <button type="button" role="tab" class="ow-tab" data-tab="in">Money in</button>
+  <button type="button" role="tab" class="ow-tab" data-tab="out">Money out</button>
+  <button type="button" role="tab" class="ow-tab" data-tab="users">Users</button>
+  <button type="button" role="tab" class="ow-tab" data-tab="activity">Activity</button>
+</nav>
+
+<main class="ow-main">
+  <div id="ownerBanner" class="ow-banner" hidden></div>
+
+  <section class="ow-panel is-active" id="panel-overview" role="tabpanel">
+    <div class="ow-tiles" id="overviewTiles"></div>
+    <div class="ow-grid-2">
+      <article class="ow-card">
+        <header class="ow-card-h"><h2>In vs out, by month</h2><span class="ow-hint" id="chartHint"></span></header>
+        <div class="ow-chart" id="monthChart"></div>
+      </article>
+      <article class="ow-card">
+        <header class="ow-card-h"><h2>Due in the next 60 days</h2></header>
+        <div id="overviewUpcoming"></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="ow-panel" id="panel-in" role="tabpanel">
+    <div class="ow-tiles" id="inTiles"></div>
+    <article class="ow-card">
+      <header class="ow-card-h"><h2>Month by month</h2><span class="ow-hint" id="inSource"></span></header>
+      <div class="ow-scroll"><table class="ow-table" id="inMonths"></table></div>
+    </article>
+    <article class="ow-card">
+      <header class="ow-card-h"><h2>Active subscriptions by price</h2></header>
+      <div id="inPlans"></div>
+    </article>
+    <article class="ow-card">
+      <header class="ow-card-h"><h2>Payments recorded locally</h2><span class="ow-hint">Accrued from Stripe webhooks since this was built. Stripe stays the authority for older history.</span></header>
+      <div class="ow-scroll"><table class="ow-table" id="inRecent"></table></div>
+    </article>
+  </section>
+
+  <section class="ow-panel" id="panel-out" role="tabpanel">
+    <div class="ow-tiles" id="outTiles"></div>
+    <article class="ow-card">
+      <header class="ow-card-h">
+        <h2>Cost ledger</h2>
+        <button type="button" class="ow-btn ow-btn-gold" id="costAdd">Add a cost</button>
+      </header>
+      <p class="ow-note" id="outNote"></p>
+      <div class="ow-scroll"><table class="ow-table ow-table-costs" id="costTable"></table></div>
+    </article>
+    <article class="ow-card">
+      <header class="ow-card-h"><h2>Monthly spend by category</h2></header>
+      <div id="outCategories"></div>
+    </article>
+  </section>
+
+  <section class="ow-panel" id="panel-users" role="tabpanel">
+    <div class="ow-tiles" id="usersTiles"></div>
+    <article class="ow-card">
+      <header class="ow-card-h">
+        <h2>Every account</h2>
+        <input type="search" class="ow-search" id="userSearch" placeholder="Filter by name, email or plan">
+      </header>
+      <div class="ow-scroll"><table class="ow-table" id="userTable"></table></div>
+    </article>
+  </section>
+
+  <section class="ow-panel" id="panel-activity" role="tabpanel">
+    <div class="ow-grid-2">
+      <article class="ow-card">
+        <header class="ow-card-h"><h2>Token and billing events</h2></header>
+        <div class="ow-scroll"><table class="ow-table" id="activityBilling"></table></div>
+      </article>
+      <article class="ow-card">
+        <header class="ow-card-h"><h2>Connected publishing accounts</h2></header>
+        <div id="activitySocial"></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+<dialog class="ow-dialog" id="costDialog">
+  <form id="costForm" method="dialog">
+    <h2 id="costDialogTitle">Add a cost</h2>
+    <input type="hidden" id="costId">
+    <label>Name<input type="text" id="costName" required maxlength="120" placeholder="Render — web service"></label>
+    <label>Vendor<input type="text" id="costVendor" maxlength="120" placeholder="Render"></label>
+    <div class="ow-row">
+      <label>Amount<input type="number" id="costAmount" min="0" step="0.01" placeholder="0.00"></label>
+      <label>Currency<input type="text" id="costCurrency" maxlength="3" placeholder="aud"></label>
+    </div>
+    <div class="ow-row">
+      <label>Cadence<select id="costCadence"></select></label>
+      <label>Category<select id="costCategory"></select></label>
+    </div>
+    <label>Next payment date<input type="date" id="costDue"></label>
+    <label>Notes<textarea id="costNotes" maxlength="500" rows="2"></textarea></label>
+    <label class="ow-check"><input type="checkbox" id="costActive" checked> Counts towards burn</label>
+    <p class="ow-error" id="costError" hidden></p>
+    <div class="ow-dialog-actions">
+      <button type="button" class="ow-btn ow-btn-danger" id="costDelete" hidden>Delete</button>
+      <span class="ow-spacer"></span>
+      <button type="button" class="ow-btn ow-btn-quiet" id="costCancel">Cancel</button>
+      <button type="button" class="ow-btn ow-btn-gold" id="costSave">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="/owner.js"></script>
+</body>
+</html>

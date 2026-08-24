@@ -127,6 +127,7 @@ function trialState(billing = {}) {
 
 export function ensureBillingState() {
   if (!Array.isArray(state.billingEvents)) state.billingEvents = [];
+  if (!Array.isArray(state.revenueEvents)) state.revenueEvents = [];
   if (!Array.isArray(state.processedStripeEvents)) state.processedStripeEvents = [];
   if (!state.billingSettings || typeof state.billingSettings !== 'object') state.billingSettings = {};
   for (const user of state.authUsers || []) ensureUserBilling(user);
@@ -443,6 +444,40 @@ async function stripeRequest(pathname, params = {}) {
   return payload;
 }
 
+/**
+ * Read from Stripe.
+ *
+ * stripeRequest posts, because everything it was built for creates something.
+ * Reads need GET with a query string -- Stripe treats a POST to a read
+ * endpoint as a write attempt -- and the owner dashboard is all reads. Kept
+ * here rather than in owner.js so the secret key stays in one module.
+ *
+ * Returns null rather than throwing when Stripe is not configured: the owner
+ * dashboard must still render its costs and users on a deployment with no
+ * Stripe key, and a thrown error there would take the whole page down.
+ */
+export async function stripeGet(pathname, params = {}) {
+  if (!config.stripeSecretKey) return null;
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === '') continue;
+    if (Array.isArray(value)) { for (const item of value) query.append(key, String(item)); continue; }
+    query.append(key, String(value));
+  }
+  const suffix = query.toString() ? `?${query}` : '';
+  const response = await fetch(`https://api.stripe.com/v1${pathname}${suffix}`, {
+    headers: { Authorization: `Bearer ${config.stripeSecretKey}` },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error?.message || `Stripe read failed with ${response.status}.`);
+  return payload;
+}
+
+/** True when a Stripe key is present at all, so callers can say why a figure is missing. */
+export function stripeConfigured() {
+  return Boolean(config.stripeSecretKey);
+}
+
 async function ensureStripeCustomer(user) {
   const billing = ensureUserBilling(user);
   if (billing.stripeCustomerId) return billing.stripeCustomerId;
@@ -638,6 +673,38 @@ function clearSubscription(subscription = {}) {
   return user;
 }
 
+/**
+ * Record what a payment was actually worth.
+ *
+ * The webhook handler used to receive invoice.paid and keep nothing but the
+ * fact of it -- so the product knew a customer had paid and never how much.
+ * There was no figure anywhere in the app to answer "what came in this month",
+ * which is why the owner dashboard has to ask Stripe for history.
+ *
+ * Amounts are stored in minor units exactly as Stripe sends them (cents), with
+ * the currency beside them. Never as a float: 17.99 + 6.99 in binary floating
+ * point is not 24.98, and a money total that is wrong in the last cent is a
+ * money total nobody trusts.
+ *
+ * Stripe is still the authority for history -- this only accrues from now on,
+ * and is what lets the dashboard show revenue when Stripe is unreachable.
+ */
+function recordRevenue({ kind, userId = '', amountMinor = 0, currency = '', description = '', stripeId = '', eventId = '' }) {
+  const amount = Math.round(Number(amountMinor) || 0);
+  if (!amount) return;
+  ensureBillingState();
+  // Same guard the event log uses: a replayed webhook must not double-count
+  // money, and Stripe retries on any non-2xx.
+  if (stripeId && state.revenueEvents.some(item => item?.stripeId === stripeId)) return;
+  state.revenueEvents.unshift({
+    id: `rev_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`,
+    kind, userId, amountMinor: amount,
+    currency: String(currency || '').toLowerCase(),
+    description, stripeId, eventId, createdAt: now(),
+  });
+  state.revenueEvents = state.revenueEvents.slice(0, 5000);
+}
+
 export function handleWebhookEvent(event) {
   ensureBillingState();
   const eventId = String(event?.id || '');
@@ -655,6 +722,12 @@ export function handleWebhookEvent(event) {
         if (object.metadata?.kind === 'token_topup' || object.mode === 'payment') {
           if (object.payment_status !== 'paid') break;
           const packageId = object.metadata?.package || topupForPrice(object.line_items?.data?.[0]?.price?.id)?.id;
+          if (packageId) recordRevenue({
+            kind: 'topup', userId: user.id,
+            amountMinor: object.amount_total, currency: object.currency,
+            description: topups()[packageId]?.name || packageId,
+            stripeId: String(object.id || ''), eventId,
+          });
           if (packageId) grantTopup(user, packageId, {
             sessionId: object.id,
             eventId,
@@ -682,6 +755,15 @@ export function handleWebhookEvent(event) {
       const subscriptionId = typeof object.subscription === 'string' ? object.subscription : object.subscription?.id;
       const user = userBySubscription(subscriptionId) || userByCustomer(typeof object.customer === 'string' ? object.customer : object.customer?.id);
       if (user) { ensureUserBilling(user); save(); }
+      // Recorded whether or not the invoice maps to a known account: money that
+      // arrived is money that arrived, and dropping it because the customer
+      // lookup missed would understate revenue.
+      recordRevenue({
+        kind: 'subscription', userId: user?.id || '',
+        amountMinor: object.amount_paid, currency: object.currency,
+        description: object.lines?.data?.[0]?.description || 'Subscription invoice',
+        stripeId: String(object.id || ''), eventId,
+      });
       break;
     }
     case 'invoice.payment_failed': {

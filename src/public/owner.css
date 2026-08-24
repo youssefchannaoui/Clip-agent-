@@ -1,0 +1,193 @@
+/*
+ * The owner dashboard's own stylesheet.
+ *
+ * Deliberately standalone. The studio's CSS is generated from the design file
+ * and rewritten wholesale on every `design:import`, so sharing it would mean
+ * this page breaks whenever the product's design is pulled. The palette is
+ * copied from marketing.css by value for the same reason -- one page's look
+ * should not be able to break another's.
+ */
+:root {
+  --bg: #070708;
+  --bg-soft: #0b0b0d;
+  --panel: #101013;
+  --panel-2: #16161a;
+  --text: #f7f4ef;
+  --muted: #aaa59e;
+  --line: rgba(255, 255, 255, .09);
+  --line-strong: rgba(255, 255, 255, .16);
+  --gold: #d9b66f;
+  --gold-bright: #f1d18e;
+  --green: #70d1a0;
+  --red: #e2796f;
+  --amber: #e0b653;
+  --radius: 16px;
+}
+
+* { box-sizing: border-box; }
+
+/* .ow-btn sets display:inline-block, which beats the hidden attribute's own
+   display:none -- so the Delete button showed on an "Add a cost" dialog. This
+   has to outrank every component rule, hence the !important. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── chrome ─────────────────────────────────────────────────────────────── */
+.ow-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  padding: 18px 28px; border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--bg-soft), var(--bg));
+  position: sticky; top: 0; z-index: 20;
+}
+.ow-brand { display: flex; align-items: center; gap: 12px; }
+.ow-mark {
+  width: 32px; height: 32px; border-radius: 9px; flex: none;
+  background: linear-gradient(150deg, var(--gold-bright), #8a6a2c);
+}
+.ow-brand strong { display: block; font-size: 16px; letter-spacing: .2px; }
+.ow-sub { display: block; color: var(--muted); font-size: 12.5px; }
+.ow-top-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.ow-badge {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+  padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--amber);
+}
+.ow-badge[data-mode="live"] { color: var(--green); }
+
+.ow-window { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); }
+.ow-window select, .ow-search, .ow-dialog input, .ow-dialog select, .ow-dialog textarea {
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line-strong); border-radius: 9px; padding: 7px 9px; font: inherit; font-size: 13px;
+}
+.ow-search { min-width: 220px; }
+
+.ow-btn {
+  border: 1px solid var(--line-strong); background: var(--panel-2); color: var(--text);
+  padding: 8px 13px; border-radius: 10px; font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; text-decoration: none; display: inline-block; white-space: nowrap;
+}
+.ow-btn:hover { border-color: var(--gold); }
+.ow-btn-gold { background: linear-gradient(160deg, var(--gold-bright), var(--gold)); color: #23180a; border-color: transparent; }
+.ow-btn-quiet { background: transparent; color: var(--muted); }
+.ow-btn-danger { border-color: rgba(226, 121, 111, .5); color: var(--red); background: transparent; }
+
+.ow-tabs {
+  display: flex; gap: 4px; padding: 0 28px; border-bottom: 1px solid var(--line);
+  background: var(--bg); position: sticky; top: 69px; z-index: 19; overflow-x: auto;
+}
+.ow-tab {
+  background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted);
+  padding: 13px 14px; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.ow-tab:hover { color: var(--text); }
+.ow-tab.is-active { color: var(--gold-bright); border-bottom-color: var(--gold); }
+
+.ow-main { padding: 24px 28px 64px; max-width: 1400px; margin: 0 auto; }
+.ow-panel { display: none; }
+.ow-panel.is-active { display: block; }
+
+.ow-banner {
+  border: 1px solid rgba(224, 182, 83, .35); background: rgba(224, 182, 83, .08);
+  color: var(--gold-bright); padding: 12px 15px; border-radius: 12px; margin-bottom: 20px; font-size: 13.5px;
+}
+.ow-banner[data-kind="error"] { border-color: rgba(226, 121, 111, .4); background: rgba(226, 121, 111, .09); color: #f0a79e; }
+
+/* ── tiles ──────────────────────────────────────────────────────────────── */
+.ow-tiles {
+  display: grid; gap: 14px; margin-bottom: 22px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+.ow-tile {
+  background: linear-gradient(170deg, var(--panel), var(--bg-soft));
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 17px;
+}
+.ow-tile-label { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .07em; }
+.ow-tile-value { font-size: 25px; font-weight: 700; margin-top: 7px; letter-spacing: -.4px; font-variant-numeric: tabular-nums; }
+.ow-tile-value.is-pos { color: var(--green); }
+.ow-tile-value.is-neg { color: var(--red); }
+.ow-tile-value.is-unknown { color: var(--muted); font-size: 18px; font-weight: 600; }
+.ow-tile-foot { color: var(--muted); font-size: 12px; margin-top: 5px; }
+
+/* ── cards ──────────────────────────────────────────────────────────────── */
+.ow-card {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 18px; margin-bottom: 20px;
+}
+.ow-card-h { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
+.ow-card-h h2 { font-size: 15px; margin: 0; letter-spacing: .1px; }
+.ow-hint { color: var(--muted); font-size: 12px; max-width: 60ch; }
+.ow-note { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
+.ow-grid-2 { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+
+/* Wide content scrolls inside its own box; the page itself never scrolls sideways. */
+.ow-scroll { overflow-x: auto; }
+
+.ow-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ow-table th, .ow-table td { text-align: left; padding: 9px 11px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.ow-table th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; }
+.ow-table tbody tr:hover { background: rgba(255, 255, 255, .025); }
+.ow-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.ow-table td.wrap { white-space: normal; min-width: 200px; }
+.ow-table-costs td:last-child { text-align: right; }
+
+.ow-pill {
+  display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  border: 1px solid var(--line-strong); color: var(--muted);
+}
+.ow-pill[data-tone="good"] { color: var(--green); border-color: rgba(112, 209, 160, .4); }
+.ow-pill[data-tone="warn"] { color: var(--amber); border-color: rgba(224, 182, 83, .4); }
+.ow-pill[data-tone="bad"] { color: var(--red); border-color: rgba(226, 121, 111, .4); }
+.ow-pill[data-tone="gold"] { color: var(--gold-bright); border-color: rgba(217, 182, 111, .45); }
+
+.ow-empty { color: var(--muted); font-size: 13px; padding: 14px 2px; }
+
+/* ── chart ──────────────────────────────────────────────────────────────── */
+/* Bars, not a library: two series over six months needs no dependency, and the
+   repo has none anywhere else either. */
+.ow-chart { display: flex; align-items: flex-end; gap: 14px; height: 210px; padding-top: 8px; }
+.ow-chart-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 7px; min-width: 0; }
+.ow-chart-bars { flex: 1; display: flex; align-items: flex-end; gap: 4px; width: 100%; justify-content: center; }
+.ow-bar { width: 26px; border-radius: 5px 5px 0 0; min-height: 2px; position: relative; }
+.ow-bar-in { background: linear-gradient(180deg, var(--gold-bright), var(--gold)); }
+.ow-bar-out { background: linear-gradient(180deg, #4a4a52, #2b2b31); }
+.ow-chart-label { color: var(--muted); font-size: 11px; }
+.ow-legend { display: flex; gap: 14px; align-items: center; color: var(--muted); font-size: 12px; }
+.ow-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 5px; }
+
+.ow-catrow { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.ow-catrow .name { width: 120px; flex: none; text-transform: capitalize; }
+.ow-catbar { flex: 1; height: 8px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
+.ow-catbar span { display: block; height: 100%; background: linear-gradient(90deg, var(--gold), var(--gold-bright)); }
+.ow-catrow .val { width: 110px; text-align: right; font-variant-numeric: tabular-nums; flex: none; }
+
+/* ── dialog ─────────────────────────────────────────────────────────────── */
+.ow-dialog {
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--panel); color: var(--text); padding: 22px; width: min(520px, 92vw);
+}
+.ow-dialog::backdrop { background: rgba(0, 0, 0, .66); }
+.ow-dialog h2 { margin: 0 0 16px; font-size: 16px; }
+.ow-dialog label { display: block; margin-bottom: 12px; font-size: 12.5px; color: var(--muted); }
+.ow-dialog input, .ow-dialog select, .ow-dialog textarea { display: block; width: 100%; margin-top: 5px; color: var(--text); }
+.ow-dialog .ow-row { display: flex; gap: 12px; }
+.ow-dialog .ow-row label { flex: 1; }
+.ow-check { display: flex !important; align-items: center; gap: 8px; }
+.ow-check input { width: auto !important; margin: 0 !important; }
+.ow-dialog-actions { display: flex; align-items: center; gap: 9px; margin-top: 18px; }
+.ow-spacer { flex: 1; }
+.ow-error { color: var(--red); font-size: 12.5px; margin: 4px 0 0; }
+
+@media (max-width: 720px) {
+  .ow-top, .ow-tabs, .ow-main { padding-left: 14px; padding-right: 14px; }
+  .ow-top { flex-direction: column; align-items: flex-start; }
+  .ow-tabs { top: 0; position: static; }
+  .ow-tile-value { font-size: 21px; }
+  .ow-dialog .ow-row { flex-direction: column; gap: 0; }
+}

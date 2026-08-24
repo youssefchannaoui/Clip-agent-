@@ -28,6 +28,7 @@ import * as auth from './auth.js';
 import * as billing from './billing.js';
 import * as marketing from './marketing.js';
 import * as admin from './admin.js';
+import * as owner from './owner.js';
 import { startYouTubeRetention } from './youtube-retention.js';
 import { saveVideoUpload, removeUploadedFile } from './uploads.js';
 import * as objectStorage from './object-storage.js';
@@ -37,6 +38,9 @@ import * as workerClient from './worker-client.js';
 const page = path.join(config.root, 'src', 'public', 'index.html');
 const activityFixPage = path.join(config.root, 'src', 'public', 'activity-fix.js');
 const premiumDashboardPage = path.join(config.root, 'src', 'public', 'premium-dashboard.js');
+const ownerPage = path.join(config.root, 'src', 'public', 'owner.html');
+const ownerScript = path.join(config.root, 'src', 'public', 'owner.js');
+const ownerStyles = path.join(config.root, 'src', 'public', 'owner.css');
 const marketingCssPage = path.join(config.root, 'src', 'public', 'marketing.css');
 const studioAsset = name => path.join(config.root, 'src', 'public', name);
 const JS_TYPE = 'text/javascript; charset=utf-8';
@@ -720,6 +724,31 @@ async function route(req, res, url) {
   if (method === 'GET' && (pathname === '/app' || pathname === '/dashboard')) {
     return serveAppShell(req, res, url, currentUser);
   }
+
+  /**
+   * The owner's own surface, deliberately outside the studio.
+   *
+   * Not a tab inside /app for two reasons. The studio's markup is generated
+   * from design/studio-dashboard.dc.html, so anything hand-added there is
+   * erased by the next `npm run design:import`. And this is the operator's
+   * books -- it has no business sharing a shell with the page paying customers
+   * use, where a mistake in one is a mistake in the other.
+   *
+   * Gated like every other operator surface: 404, not 403, so it is
+   * indistinguishable from a route that does not exist. The script and
+   * stylesheet are gated the same way rather than left on 'self', because the
+   * shape of an admin page is itself worth not publishing.
+   */
+  const ownerAsset = { '/owner': [ownerPage, 'text/html; charset=utf-8'], '/owner.js': [ownerScript, 'text/javascript; charset=utf-8'], '/owner.css': [ownerStyles, 'text/css; charset=utf-8'] }[pathname];
+  if (method === 'GET' && ownerAsset) {
+    if (auth.enabled() && !currentUser) return redirect(res, `/login?returnTo=${encodeURIComponent('/owner')}`);
+    try { requireOperator(currentUser); } catch { return json(res, 404, { error: 'Not found.' }); }
+    const [file, type] = ownerAsset;
+    if (!fs.existsSync(file)) return json(res, 404, { error: 'Owner dashboard asset not found.' });
+    const body = fs.readFileSync(file);
+    res.writeHead(200, { 'Content-Type': type, 'Content-Length': body.length, 'Cache-Control': 'no-store' });
+    return res.end(body);
+  }
   if (method === 'GET' && pathname === '/activity-fix.js') {
     if (!fs.existsSync(activityFixPage)) return json(res, 404, { error: 'Activity UI script not found.' });
     const body = fs.readFileSync(activityFixPage);
@@ -870,6 +899,30 @@ async function route(req, res, url) {
 
   if (method === 'GET' && pathname === '/api/admin/analytics') {
     try { requireOperator(currentUser); return json(res, 200, admin.analytics(currentUser)); }
+    catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+  }
+
+  if (method === 'GET' && pathname === '/api/owner/finance') {
+    // Clamped rather than trusted: an unbounded day count is an unbounded
+    // number of Stripe pages, on a route one request can hold open.
+    const days = Math.min(365, Math.max(30, Number(url.searchParams.get('days')) || 180));
+    try { requireOperator(currentUser); return json(res, 200, await owner.finance(currentUser, { days })); }
+    catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+  }
+  if (method === 'GET' && pathname === '/api/owner/costs') {
+    try {
+      requireOperator(currentUser);
+      return json(res, 200, { costs: owner.costs(currentUser), cadences: owner.CADENCES, categories: owner.COST_CATEGORIES });
+    } catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+  }
+  if (method === 'POST' && pathname === '/api/owner/costs') {
+    const body = await readBody(req);
+    try { requireOperator(currentUser); return json(res, 200, { cost: owner.upsertCost(currentUser, body) }); }
+    catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+  }
+  const ownerCostDelete = pathname.match(/^\/api\/owner\/costs\/([\w-]+)$/);
+  if (method === 'DELETE' && ownerCostDelete) {
+    try { requireOperator(currentUser); return json(res, 200, { removed: owner.removeCost(currentUser, ownerCostDelete[1]) }); }
     catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
   }
 
