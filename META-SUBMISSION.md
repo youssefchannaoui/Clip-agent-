@@ -175,6 +175,58 @@ App Domains was correct throughout. This message appears when the **redirect
 URI** is not registered. Chasing App Domains on a Login-for-Business app wastes
 time; check the Valid OAuth Redirect URIs list, and confirm it by reloading.
 
+## Connecting: permissions are granted, the Page is not yet shared
+
+The login dialog works and the token exchange works. What fails is
+`connectMeta`'s `/me/accounts` call, which comes back empty.
+
+**This is not "you have no Page".** Checked directly:
+
+| Thing | State |
+|---|---|
+| Facebook Page **DeenClipped** | exists, ID `811031118760993` |
+| Owner | Yccosmeticcustoms business portfolio |
+| Youssef's role on the Page | **Full access** |
+| Instagram account linked to the Page | **`eurotrimau`** -- note, not a DeenClipped account |
+| Permissions granted to the app | all four visible in Business Integrations, every toggle on |
+| `pages_show_list` in the configuration | ticked |
+
+So Login for Business granted the *permissions* and shared *no Page*. Those are
+two separate steps in that flow and the second one was missed.
+
+The stale grant was removed from **Business Integrations** on 24 Aug so the next
+connect runs the full flow rather than skipping straight past the asset step.
+On reconnect, the middle screen must have the Page (and its Instagram account)
+selected before continuing.
+
+### If the asset step never appears
+
+Then the **user access token** choice on the configuration is the problem, and
+it cannot be edited -- that choice is fixed at creation. Meta's own description
+of the alternative names this exact case:
+
+> System-user access token -- ... This is only required if this configuration
+> needs continuous access to business assets (e.g. Facebook Pages, ad accounts
+> or Instagram accounts).
+
+This Page **is** a business asset. If reconnecting does not surface it, create a
+second configuration using a system-user access token and point
+`META_LOGIN_CONFIG_ID` at it -- but note that a system-user token is a different
+exchange from the one `connectMeta` performs today, so `src/social.js` would
+need real work, not just a new id.
+
+A cheaper alternative worth weighing first: a Page owned personally rather than
+by the portfolio is returned by `/me/accounts` on a plain user token, which is
+the path every other scheduling tool on this account (OpusClip, and others in
+the integrations list) is using.
+
+### The Instagram account is `eurotrimau`
+
+Whatever connects, Instagram Reels will publish to **`eurotrimau`**, because
+that is the professional account linked to the DeenClipped Page. If that is not
+intended, relink the Page to the right Instagram account before publishing
+anything.
+
 ## The secret
 
 `META_APP_SECRET` is **not** in this file and must not be pasted into a chat
