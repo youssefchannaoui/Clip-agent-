@@ -3013,6 +3013,16 @@
         && connectedCount > 0
         && scheduled.filter(function (c) { return Number(c.scheduledAt) > Date.now(); }).length > 0),
 
+      // The moment the fifth step lands. Derived from the same account data as
+      // the list itself, so it cannot congratulate anyone for work they have
+      // not done -- and it goes back to false if a step is undone, which is why
+      // the page, not this value, remembers that it has already been said.
+      setupComplete: tracks.length > 0
+        && projects.length > 0
+        && clips.filter(function (c) { return decision(c) === 'approved'; }).length > 0
+        && connectedCount > 0
+        && scheduled.filter(function (c) { return Number(c.scheduledAt) > Date.now(); }).length > 0,
+
       // ── the starter list ──
       // Proved from the account's own data, never a stored "dismissed" flag: a
       // checklist that ticks itself because you visited a screen teaches the

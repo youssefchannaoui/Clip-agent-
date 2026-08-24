@@ -2883,3 +2883,49 @@ test('a new account gets the guided tour, and it can be reopened', () => {
   assert.match(off.tourCardStyle, /display: none/);
   StudioAdapter.ui.screen = 'home';
 });
+
+test('the setup celebration cannot fire before all five steps are genuinely done', () => {
+  // The list is derived from account data rather than a "dismissed" flag, and
+  // the congratulation has to be derived the same way -- a popup that fires
+  // because someone visited a screen congratulates them for nothing.
+  // Shapes read off the adapter, not guessed: tracks live at DATA.tracks, a
+  // clip counts as approved when its status is in SETTLED, and `connected`
+  // comes from DATA.social.providers.<key>.connected.
+  const soon = Date.now() + 86400000;
+  const done = {
+    tracks: [{ id: 't', name: 'nasheed' }],
+    projects: [{ id: 'p', title: 'lecture', status: 'done' }],
+    clips: [{ id: 'c', projectId: 'p', status: 'approved', scheduledAt: soon }],
+    social: { providers: { youtube: { connected: true, accounts: [{ id: 'a', name: 'ch' }] } } },
+  };
+  assert.equal(StudioAdapter.bindings({}).setupComplete, false, 'an empty account has done nothing');
+
+  // Every step removed in turn must hold the celebration back.
+  const withoutMusic = StudioAdapter.bindings({ ...done, tracks: [] });
+  assert.equal(withoutMusic.setupComplete, false, 'no nasheed');
+
+  const withoutProject = StudioAdapter.bindings({ ...done, projects: [] });
+  assert.equal(withoutProject.setupComplete, false, 'no lecture');
+
+  const withoutApproval = StudioAdapter.bindings({
+    ...done,
+    clips: [{ id: 'c', projectId: 'p', status: 'waiting', scheduledAt: soon }],
+  });
+  assert.equal(withoutApproval.setupComplete, false, 'nothing approved');
+
+  const withoutConnection = StudioAdapter.bindings({ ...done, social: { providers: {} } });
+  assert.equal(withoutConnection.setupComplete, false, 'nowhere to post');
+
+  // A slot in the past is not a scheduled post.
+  const pastSlotOnly = StudioAdapter.bindings({
+    ...done,
+    clips: [{ id: 'c', projectId: 'p', status: 'approved', scheduledAt: Date.now() - 86400000 }],
+  });
+  assert.equal(pastSlotOnly.setupComplete, false, 'a lapsed slot does not count');
+
+  // And it must agree with the list it is celebrating: the list hides itself
+  // at exactly the moment the celebration is allowed to fire.
+  const all = StudioAdapter.bindings(done);
+  assert.equal(all.setupComplete, true, 'all five done');
+  assert.equal(all.startListOn, false, 'the checklist stands down at the same moment');
+});

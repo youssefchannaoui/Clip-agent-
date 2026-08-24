@@ -668,8 +668,26 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .jt-card.on .k{opacity:1;transform:translateX(0)}
 .jt-card.on .jt-mini{filter:none;opacity:1;border-color:rgba(240,214,166,.35)}
 @media (max-width:480px){.jt-row{flex-direction:column}}
-.slh-act{display:inline-grid;place-items:center;width:24px;height:24px;flex:none;border:1px solid var(--line-lit,#26262A);border-radius:7px;background:transparent;color:var(--mute-2,#8B8B93);cursor:pointer;font-size:12px;transition:color .12s ease,border-color .12s ease}
+.slh-act{display:inline-grid;place-items:center;width:24px;height:24px;flex:none;padding:0;border:1px solid var(--line-lit,#26262A);border-radius:7px;background:transparent;color:var(--mute-2,#8B8B93);cursor:pointer;font-size:12px;transition:color .12s ease,border-color .12s ease}
+.slh-act i{display:block;width:13px;height:13px;font-size:13px;line-height:1}
 .slh-act:hover{color:#F2F2F4;border-color:#34343A}
+/* The one moment the setup list is finished. Said once, then never again. */
+.dcw-veil{position:fixed;inset:0;z-index:120;display:grid;place-items:center;padding:24px;background:rgba(4,4,6,.72);backdrop-filter:blur(10px);opacity:0;animation:dcwIn .26s ease forwards}
+.dcw-veil.out{animation:dcwOut .18s ease forwards}
+@keyframes dcwIn{to{opacity:1}}
+@keyframes dcwOut{to{opacity:0}}
+.dcw-card{width:min(430px,100%);padding:32px 28px 24px;border:1px solid #26262A;border-radius:18px;background:linear-gradient(160deg,#1A1A1E,#101013);box-shadow:0 40px 110px rgba(0,0,0,.62);text-align:center;transform:translateY(12px) scale(.97);animation:dcwPop .34s cubic-bezier(.2,.9,.3,1) forwards}
+@keyframes dcwPop{to{transform:none}}
+.dcw-ring{width:66px;height:66px;margin:0 auto 20px;display:grid;place-items:center;border-radius:50%;border:1px solid rgba(217,180,120,.45);background:radial-gradient(circle at 50% 34%,rgba(217,180,120,.22),rgba(217,180,120,.04));color:#F0D6A6}
+.dcw-ring svg{width:29px;height:29px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.dcw-card h3{margin:0 0 9px;font:600 21px Outfit,Inter,sans-serif;letter-spacing:-.02em;color:#F2F2F4}
+.dcw-card p{margin:0 0 24px;font-size:13px;line-height:1.62;color:#A2A2AA}
+.dcw-acts{display:flex;gap:9px}
+.dcw-acts button{flex:1;height:43px;padding:0;border-radius:11px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;border:1px solid #2C2C33;background:#17171A;color:#BCBCC3;transition:border-color .14s ease,color .14s ease}
+.dcw-acts button:hover{color:#F2F2F4;border-color:#3A3A42}
+.dcw-acts button.go{border-color:transparent;background:linear-gradient(180deg,#F0D6A6,#D9B478);color:#1E1608;font-weight:700}
+.dcw-acts button.go:hover{background:#F4DEB4}
+@media(prefers-reduced-motion:reduce){.dcw-veil,.dcw-card{animation:none;opacity:1;transform:none}}
 .slh-act.on{color:#F0D6A6;border-color:rgba(217,180,120,.5);cursor:default}
 .clip-thumb{
   flex:none;width:112px;aspect-ratio:9/16;border-radius:8px;overflow:hidden;
@@ -4657,10 +4675,59 @@ function renderStudio(){
    layer -- the live-work section, the second save button, the preview picture --
    went stale the moment a control changed anything, which is the one time they
    most need repainting. */
+/* The setup list is derived from the account's own data, so it re-evaluates on
+   every paint and would congratulate the same person forever. The page
+   remembers instead -- the same try/catch shape the collapsed-bar flag uses,
+   because private browsing throws on localStorage rather than returning null.
+   Undoing a step and redoing it does not earn a second one. */
+function setupCelebrated(){try{return localStorage.getItem('dcSetupDone')==='1'}catch{return false}}
+function markSetupCelebrated(){try{localStorage.setItem('dcSetupDone','1')}catch{}}
+
+function paintSetupCelebration(vals){
+  if(!vals||!vals.setupComplete||setupCelebrated()||document.getElementById('dcWin'))return;
+  /* Marked before the node exists, not after: paints are coalesced per frame
+     but not serialised, and a second one arriving mid-animation would otherwise
+     stack a second dialog on top of the first. */
+  markSetupCelebrated();
+  const veil=document.createElement('div');
+  veil.id='dcWin';
+  veil.className='dcw-veil';
+  veil.setAttribute('role','dialog');
+  veil.setAttribute('aria-modal','true');
+  veil.setAttribute('aria-label','Setup complete');
+  veil.innerHTML=`<div class="dcw-card">
+      <div class="dcw-ring"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.2 4.2L19 7"/></svg></div>
+      <h3>That is everything set up.</h3>
+      <p>A nasheed, a lecture, an approved clip, somewhere to post and a time to post it. DeenClipped can run the whole way through now &mdash; approve a clip and it goes out on its own.</p>
+      <div class="dcw-acts">
+        <button type="button" data-win="close">Close</button>
+        <button type="button" class="go" data-win="go">Open the schedule</button>
+      </div>
+    </div>`;
+  document.body.appendChild(veil);
+  const shut=()=>{
+    document.removeEventListener('keydown',onKey);
+    veil.classList.add('out');
+    setTimeout(()=>veil.remove(),200);
+  };
+  const onKey=(e)=>{if(e.key==='Escape')shut()};
+  document.addEventListener('keydown',onKey);
+  veil.addEventListener('click',(e)=>{
+    const act=e.target.closest('[data-win]');
+    if(act&&act.dataset.win==='go'){shut();StudioAdapter.ui.screen='schedule';renderAll();return}
+    if(act){shut();return}
+    /* Only the backdrop itself, never a click that started inside the card. */
+    if(e.target===veil)shut();
+  });
+  const go=veil.querySelector('[data-win="go"]');
+  if(go)go.focus();
+}
+
 function paintStudio(){
   if(!DATA||!STUDIO)return;
   const vals=StudioAdapter.bindings(DATA);
   STUDIO.render(vals);
+  paintSetupCelebration(vals);
   paintLiveWork(vals);
   paintApplyLecture(vals);
   paintPreviewPic(vals);
