@@ -199,6 +199,26 @@ connect runs the full flow rather than skipping straight past the asset step.
 On reconnect, the middle screen must have the Page (and its Instagram account)
 selected before continuing.
 
+### The actual cause: "Continue" reuses an empty selection
+
+The dialog's second visit says:
+
+> You've previously linked DeenClipped to Facebook. Would you like to continue
+> with your previous settings?    [ Edit settings ]  [ Continue ]
+
+**Continue re-applies the previous asset selection, which was empty.** That is
+why every reconnect produced the same result, and why removing the grant from
+Business Integrations changed nothing -- Facebook keeps the remembered
+selection anyway.
+
+**You must click "Edit settings"** to reach the Page picker, then tick the
+DeenClipped Page and its Instagram account. There is no way to get there from
+Continue.
+
+This has nothing to do with the access-token type, and needs no code change.
+The section below was written before this was understood and is kept only as a
+fallback if Edit settings still shows no Page.
+
 ### If the asset step never appears
 
 Then the **user access token** choice on the configuration is the problem, and
