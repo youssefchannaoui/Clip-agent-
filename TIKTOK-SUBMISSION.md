@@ -158,5 +158,11 @@ recording, or the recording may have to be done twice.
    healthy for a full day, then fails at the first refresh. Look for
    `Connected TikTok account "..."` in the activity log.
 5. **Submit for review.**
-6. **After that settles:** delete old app `7668669224428029959`, then remove
-   `tiktok4j8mTWgMoRmOiR9kobH02eR2qThxiQIT.txt` from the repo root.
+6. **Delete old app `7668669224428029959`. This is the revocation, not
+   cleanup.** Updating Render only stops *this app* using the leaked secret --
+   the secret stays valid against the old app for as long as the old app
+   exists. The rotation is not closed until the app is gone. Do it once step 4
+   proves the new credentials work, and not before, because the old app is the
+   only way back if they do not.
+7. Then remove `tiktok4j8mTWgMoRmOiR9kobH02eR2qThxiQIT.txt` from the repo root,
+   and mark TIKTOK_CLIENT_SECRET done in SECRET-ROTATION.md.
