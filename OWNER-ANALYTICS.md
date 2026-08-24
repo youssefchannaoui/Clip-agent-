@@ -79,6 +79,31 @@ Two reasons, both load-bearing:
 So `/owner` is standalone: its own HTML, CSS and JS, and its own palette copied
 by value from `marketing.css` so a design pull cannot restyle it by accident.
 
+### The rail
+
+The page carries a copy of the studio's rail, so the owner surface sits beside
+the same navigation rather than replacing it. It is a **copy**, not the real
+one: the studio's rail is generated from the design file and lives inside a
+shell this page deliberately does not share.
+
+Its links deep-link into the studio (`/app#library`, `/app#schedule`, …), which
+`studio-adapter.js` reads once at boot. Without that every link would drop you
+on Home, which is worse than having no rail.
+
+Below 900px the rail is hidden — on a phone the analytics are the point, and a
+226px column is a third of the screen.
+
+### One currency, or none
+
+Nothing converts between currencies. An FX rate fetched at render time would
+make yesterday's burn disagree with today's for no reason a reader could see.
+
+So costs are meant to be entered in a single currency, and `moneyOut.byCurrency`
+plus `moneyOut.mixedCurrency` exist to say so loudly when they are not — the
+totals still add naively, because they cannot do anything else, and the warning
+is what stops that being a silent lie. Converting a foreign bill to AUD is a
+decision for whoever enters it, recorded in the note with the rate and date.
+
 ### Getting to it from the studio
 
 There is an **Owner** item at the bottom of the SET UP group in the studio rail,

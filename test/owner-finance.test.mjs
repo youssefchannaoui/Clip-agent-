@@ -219,3 +219,22 @@ test('a paused cost stops counting towards burn but stays in the ledger', async 
   assert.ok(owner.costs(ownerUser).some(entry => entry.id === cost.id), 'and the entry is still listed');
   owner.removeCost(ownerUser, cost.id);
 });
+
+test('costs in two currencies are not silently added together', async () => {
+  const aud = owner.upsertCost(ownerUser, { name: 'AUD thing', amount: 10, currency: 'aud', cadence: 'monthly' });
+  const usd = owner.upsertCost(ownerUser, { name: 'USD thing', amount: 10, currency: 'usd', cadence: 'monthly' });
+  const finance = await owner.finance(ownerUser);
+
+  assert.equal(finance.moneyOut.byCurrency.aud, 1000);
+  assert.equal(finance.moneyOut.byCurrency.usd, 1000);
+  // The total still adds up naively -- that is unavoidable without an FX rate.
+  // What must never happen is showing it without saying so.
+  assert.match(finance.moneyOut.mixedCurrency, /AUD and USD/);
+  assert.match(finance.moneyOut.mixedCurrency, /not meaningful/);
+  assert.match(finance.profit.completeness, /not meaningful/);
+
+  owner.removeCost(ownerUser, usd.id);
+  const single = await owner.finance(ownerUser);
+  assert.equal(single.moneyOut.mixedCurrency, '', 'one currency, no warning');
+  owner.removeCost(ownerUser, aud.id);
+});

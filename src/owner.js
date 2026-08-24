@@ -348,6 +348,25 @@ export async function finance(user, { days = 180 } = {}) {
   const burnMinor = activeLedger.reduce((sum, entry) => sum + entry.monthlyMinor, 0);
   const unpriced = activeLedger.filter(entry => entry.needsAmount);
 
+  /**
+   * Adding US dollars to Australian dollars produces a number, and the number
+   * is wrong. Nothing here converts -- an FX rate fetched at render time would
+   * make yesterday's burn disagree with today's for no reason a reader could
+   * see -- so costs are expected to be entered in one currency, and the page
+   * says so loudly when they are not.
+   */
+  const byCurrency = {};
+  for (const entry of activeLedger) {
+    if (!entry.monthlyMinor) continue;
+    const code = String(entry.currency || currency).toLowerCase();
+    byCurrency[code] = (byCurrency[code] || 0) + entry.monthlyMinor;
+  }
+  const currencies = Object.keys(byCurrency);
+  const mixedCurrency = currencies.length > 1
+    ? `Costs are recorded in ${currencies.map(code => code.toUpperCase()).join(' and ')}. `
+      + 'The burn and profit totals add them together without converting, so they are not meaningful until every cost uses one currency.'
+    : '';
+
   const horizon = now() + 60 * DAY_MS;
   const upcoming = activeLedger
     .filter(entry => entry.nextDueAt && entry.nextDueAt <= horizon)
@@ -395,6 +414,8 @@ export async function finance(user, { days = 180 } = {}) {
       entries: activeLedger.length,
       unpricedCount: unpriced.length,
       unpricedNames: unpriced.map(entry => entry.name),
+      byCurrency,
+      mixedCurrency,
       byCategory: activeLedger.reduce((acc, entry) => {
         acc[entry.category] = (acc[entry.category] || 0) + entry.monthlyMinor;
         return acc;
@@ -408,9 +429,12 @@ export async function finance(user, { days = 180 } = {}) {
       monthlyNetMinor: thisMonth.netMinor - burnMinor,
       marginPercent: thisMonth.netMinor ? Math.round(((thisMonth.netMinor - burnMinor) / thisMonth.netMinor) * 1000) / 10 : null,
       // Stated so the number is never read as more certain than it is.
-      completeness: unpriced.length
-        ? `${unpriced.length} cost${unpriced.length === 1 ? '' : 's'} still have no amount, so burn is understated.`
-        : '',
+      completeness: [
+        unpriced.length
+          ? `${unpriced.length} cost${unpriced.length === 1 ? '' : 's'} still have no amount, so burn is understated.`
+          : '',
+        mixedCurrency,
+      ].filter(Boolean).join(' '),
     },
     months,
     costs: ledger,

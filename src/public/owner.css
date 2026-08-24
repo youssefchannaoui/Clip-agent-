@@ -39,6 +39,47 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ── rail ───────────────────────────────────────────────────────────────── */
+/*
+ * A copy of the studio's rail, not the studio's rail itself.
+ *
+ * The real one is generated from the design file and lives inside the studio
+ * shell, which this page deliberately does not share. Copying the shape keeps
+ * the two feeling like one product while leaving the customer-facing page
+ * untouchable from here -- which is the whole reason the owner surface is
+ * standalone.
+ */
+.ow-app { display: flex; min-height: 100vh; align-items: stretch; }
+
+.ow-rail {
+  width: 226px; flex: none; display: flex; flex-direction: column; gap: 4px;
+  padding: 16px 12px; border-right: 1px solid var(--line);
+  background: var(--bg-soft); position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+.ow-shell { flex: 1; min-width: 0; }
+
+.ow-rail-brand { display: flex; align-items: center; gap: 10px; padding: 4px 6px 14px; text-decoration: none; color: inherit; }
+.ow-rail-brandtext { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+.ow-rail-brandtext strong { font-size: 14px; letter-spacing: .1px; }
+.ow-rail-brandtext small { color: var(--muted); font-size: 9.5px; letter-spacing: .16em; }
+
+.ow-rail-nav { display: flex; flex-direction: column; gap: 2px; }
+.ow-rail-group {
+  margin: 14px 0 4px; padding-left: 10px; color: var(--muted);
+  font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+}
+.ow-rail-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border-radius: 8px; border-left: 2px solid transparent;
+  color: #a2a2aa; text-decoration: none; font-size: 13.5px; white-space: nowrap;
+  transition: background .14s ease, color .14s ease;
+}
+.ow-rail-item svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ow-rail-item:hover { background: rgba(255, 255, 255, .04); color: var(--text); }
+.ow-rail-item.is-active {
+  border-left-color: var(--gold); background: rgba(217, 180, 120, .09); color: var(--gold-bright); font-weight: 500;
+}
+
 /* ── chrome ─────────────────────────────────────────────────────────────── */
 .ow-top {
   display: flex; align-items: center; justify-content: space-between; gap: 20px;
@@ -183,6 +224,12 @@ body {
 .ow-dialog-actions { display: flex; align-items: center; gap: 9px; margin-top: 18px; }
 .ow-spacer { flex: 1; }
 .ow-error { color: var(--red); font-size: 12.5px; margin: 4px 0 0; }
+
+/* The rail is the first thing to go when there is no room for it: on a phone
+   the analytics are the point, and a 226px column is a third of the screen. */
+@media (max-width: 900px) {
+  .ow-rail { display: none; }
+}
 
 @media (max-width: 720px) {
   .ow-top, .ow-tabs, .ow-main { padding-left: 14px; padding-right: 14px; }

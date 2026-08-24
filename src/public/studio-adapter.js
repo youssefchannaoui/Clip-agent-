@@ -112,6 +112,26 @@
   };
 
   var refresh = function () {};
+  /**
+   * Deep link a screen from the fragment: /app#library opens the library.
+   *
+   * Added because the owner dashboard is its own page, so its copy of the rail
+   * has to link back into the studio. Without this every one of those links
+   * would drop you on Home, which is worse than no rail at all.
+   *
+   * Read once at boot rather than on hashchange: the studio owns its screen
+   * state after that, and a hash left in the URL must not fight a click.
+   */
+  (function screenFromHash() {
+    var wanted = String((global.location && global.location.hash) || '').replace(/^#/, '');
+    // Listed literally rather than read from TITLES, which is a var assigned
+    // further down the file and is still undefined at this point.
+    if (['home', 'library', 'queue', 'schedule', 'templates', 'music', 'performance'].indexOf(wanted) !== -1) {
+      UI.screen = wanted;
+      UI.lastScreen = wanted;
+    }
+  })();
+
   function setUI(patch) {
     for (var k in patch) if (Object.prototype.hasOwnProperty.call(patch, k)) UI[k] = patch[k];
     refresh();
