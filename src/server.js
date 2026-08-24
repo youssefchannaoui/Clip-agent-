@@ -989,6 +989,15 @@ async function route(req, res, url) {
           brandedContent: Boolean(body.tiktok?.commercialContent) && Boolean(body.tiktok?.brandedContent),
         },
       };
+      // Connecting TikTok cannot switch it on, because its guidelines forbid a
+      // default audience and an enabled destination without one would queue
+      // posts that fail. It is marked at connect time instead, and this is the
+      // moment it becomes possible: the first save that carries an audience.
+      // Cleared either way, so turning it off later stays off.
+      if (next.tiktok.enableWhenReady && String(next.tiktok.privacy || '') && !body.tiktok?.enabled) {
+        next.tiktok.enabled = true;
+      }
+      if (String(next.tiktok.privacy || '')) next.tiktok.enableWhenReady = false;
       social.validatePublishingSettings(next, currentUser);
       if (next.facebook.enabled && clipSettings(currentUser).clipMaxSeconds > 60) {
         throw new Error('Facebook Reels currently requires clips of 60 seconds or less. Set Maximum seconds to 60 before enabling Facebook.');

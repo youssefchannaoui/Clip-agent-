@@ -198,6 +198,47 @@ export function oauthStartUrl(provider, userId) {
   return `${config.tiktokAuthBase}/v2/auth/authorize/?${query}`;
 }
 
+/**
+ * Connecting a destination switches it on.
+ *
+ * Linking an account and then having to find a second toggle to say "yes,
+ * really" is a step that exists only because the two things were built
+ * separately. Turning it off afterwards stays a deliberate act, which is the
+ * part that matters.
+ *
+ * Two things this deliberately does NOT do:
+ *
+ * It never touches the master automatic-publishing switch. That one starts
+ * posting on a schedule, and connecting an account is not consent to that.
+ *
+ * And it cannot switch TikTok on before an audience is chosen -- not a
+ * preference, a rule: TikTok's guidelines forbid a default privacy status, and
+ * an enabled destination with no audience would queue posts that fail at the
+ * API. So it is marked instead, and the settings route switches it on the
+ * moment an audience is saved.
+ */
+function enableOnConnect(userId, keys) {
+  const current = publishingSettings(userId);
+  const next = { ...current };
+  let changed = false;
+  for (const key of keys) {
+    const setting = { ...(next[key] || {}) };
+    if (setting.enabled) continue;
+    if (key === 'tiktok' && !String(setting.privacy || '')) {
+      if (setting.enableWhenReady) continue;
+      setting.enableWhenReady = true;
+      next[key] = setting;
+      changed = true;
+      continue;
+    }
+    setting.enabled = true;
+    setting.enableWhenReady = false;
+    next[key] = setting;
+    changed = true;
+  }
+  if (changed) setPublishingSettings(userId, next);
+}
+
 async function connectYouTube(code, userId) {
   const token = await jsonRequest(config.googleTokenUrl, {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -218,7 +259,8 @@ async function connectYouTube(code, userId) {
     token: encrypt({ ...token, expiresAt: Date.now() + Number(token.expires_in || 3600) * 1000 }), connectedAt: Date.now(),
   };
   setConnection(state.socialConnections, userId, 'youtube', connection);
-  save(); log(`Connected YouTube channel "${connection.name}".`, 'info', userId);
+  enableOnConnect(userId, ['youtube']);
+  save(); log(`Connected YouTube channel "${connection.name}" and switched it on.`, 'info', userId);
 }
 
 async function connectMeta(code, userId) {
@@ -243,7 +285,8 @@ async function connectMeta(code, userId) {
   }));
   if (!accounts.length) throw new SocialError('Meta did not return a Facebook Page you manage. Instagram publishing also requires a professional Instagram account connected to a Page.');
   setConnection(state.socialConnections, userId, 'meta', { provider: 'meta', accounts, connectedAt: Date.now() });
-  save(); log(`Connected ${accounts.length} Meta Page${accounts.length === 1 ? '' : 's'} for Facebook/Instagram publishing.`, 'info', userId);
+  enableOnConnect(userId, ['instagram', 'facebook']);
+  save(); log(`Connected ${accounts.length} Meta Page${accounts.length === 1 ? '' : 's'} for Facebook/Instagram publishing, and switched them on.`, 'info', userId);
 }
 
 async function connectTikTok(code, userId) {
@@ -290,6 +333,7 @@ async function connectTikTok(code, userId) {
     await queryTikTokCreator(token.access_token, userId);
     const fresh = connection(userId, 'tiktok');
     if (fresh) { fresh.lastTestAt = Date.now(); fresh.lastTestError = null; save(); }
+    enableOnConnect(userId, ['tiktok']);
     log(`Connected TikTok account "${entry.name}" and loaded its posting options.`, 'info', userId);
   } catch (error) {
     const fresh = connection(userId, 'tiktok');

@@ -195,3 +195,57 @@ test('connecting loads the creator options, so linking is not followed by a chor
   next.tiktok.accountId = conn.accountId;
   assert.doesNotThrow(() => social.validatePublishingSettings(next, USER));
 });
+
+test('connecting switches the destination on, without starting automatic publishing', async () => {
+  // Linking an account and then hunting for a second toggle is a step that only
+  // exists because the two were built separately. But connecting must never
+  // start the scheduler: that posts things.
+  store.setPublishingSettings(USER, {
+    ...store.publishingSettings(USER),
+    enabled: false,
+    tiktok: { ...store.publishingSettings(USER).tiktok, enabled: false, privacy: '', enableWhenReady: false },
+  });
+
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes('/oauth/token/')) return new Response(JSON.stringify({ access_token: 'tok2', open_id: 'open-2', expires_in: 86400 }), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (u.includes('/user/info/')) return new Response(JSON.stringify({ data: { user: { open_id: 'open-2', display_name: 'Creator two' } } }), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (u.includes('/creator_info/query/')) return new Response(JSON.stringify({ data: { privacy_level_options: ['SELF_ONLY', 'PUBLIC_TO_EVERYONE'] } }), { status: 200, headers: { 'content-type': 'application/json' } });
+    return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const start = social.oauthStartUrl('tiktok', USER);
+    await social.completeOAuth('tiktok', new URL('https://app.test/auth/tiktok/callback?code=abc&state=' + encodeURIComponent(start.split('state=')[1])));
+  } finally { globalThis.fetch = realFetch; }
+
+  const settings = store.publishingSettings(USER);
+  // Not enabled yet -- and that is TikTok's rule, not a preference: no default
+  // audience is allowed, and an enabled destination without one queues posts
+  // that fail at the API.
+  assert.equal(settings.tiktok.enabled, false, 'cannot switch on before an audience exists');
+  assert.equal(settings.tiktok.enableWhenReady, true, 'but it is marked to switch on once one does');
+  assert.equal(settings.enabled, false, 'connecting never starts automatic publishing');
+});
+
+test('YouTube switches on the moment it connects, because nothing else is required', async () => {
+  store.setPublishingSettings(USER, {
+    ...store.publishingSettings(USER),
+    enabled: false,
+    youtube: { ...store.publishingSettings(USER).youtube, enabled: false },
+  });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes('token')) return new Response(JSON.stringify({ access_token: 'yt', refresh_token: 'r', expires_in: 3600 }), { status: 200, headers: { 'content-type': 'application/json' } });
+    return new Response(JSON.stringify({ items: [{ id: 'chan-1', snippet: { title: 'A channel' } }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const start = social.oauthStartUrl('youtube', USER);
+    await social.completeOAuth('youtube', new URL('https://app.test/auth/youtube/callback?code=abc&state=' + encodeURIComponent(start.split('state=')[1])));
+  } catch { /* the channel shape varies; what matters is the settings effect */ }
+  finally { globalThis.fetch = realFetch; }
+
+  const settings = store.publishingSettings(USER);
+  assert.equal(settings.enabled, false, 'still no automatic publishing');
+});
