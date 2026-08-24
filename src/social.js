@@ -299,7 +299,13 @@ async function connectMeta(code, userId) {
     instagramAvatar: page.instagram_business_account?.profile_picture_url || '',
     token: encrypt({ access_token: page.access_token }),
   }));
-  if (!accounts.length) throw new SocialError('Meta did not return a Facebook Page you manage. Instagram publishing also requires a professional Instagram account connected to a Page.');
+  // Empty here almost never means "you have no Page". Facebook Login for
+  // Business grants the permissions and the Pages SEPARATELY: you can approve
+  // every permission and still share no Page, and then /me/accounts is empty
+  // while the app looks fully authorised. Say which half is missing, because
+  // the obvious reading -- that the account manages no Page -- sends someone to
+  // go and create a second one.
+  if (!accounts.length) throw new SocialError('Facebook connected, but no Page was shared with DeenClipped. Reconnect, and on the "What do you want to allow?" step pick your Page (and its Instagram account) before continuing -- approving the permissions alone does not share the Page. Instagram publishing also needs a professional Instagram account linked to that Page.', { provider: 'meta' });
   setConnection(state.socialConnections, userId, 'meta', { provider: 'meta', accounts, connectedAt: Date.now() });
   enableOnConnect(userId, ['instagram', 'facebook']);
   save(); log(`Connected ${accounts.length} Meta Page${accounts.length === 1 ? '' : 's'} for Facebook/Instagram publishing, and switched them on.`, 'info', userId);
