@@ -982,6 +982,11 @@ async function route(req, res, url) {
           ...current.tiktok, ...(body.tiktok || {}), enabled: Boolean(body.tiktok?.enabled),
           allowComments: body.tiktok?.allowComments !== false,
           allowDuet: Boolean(body.tiktok?.allowDuet), allowStitch: Boolean(body.tiktok?.allowStitch),
+          // Coerced rather than spread through: a sub-option arriving true with
+          // the parent off would post a declaration the creator never made.
+          commercialContent: Boolean(body.tiktok?.commercialContent),
+          yourBrand: Boolean(body.tiktok?.commercialContent) && Boolean(body.tiktok?.yourBrand),
+          brandedContent: Boolean(body.tiktok?.commercialContent) && Boolean(body.tiktok?.brandedContent),
         },
       };
       social.validatePublishingSettings(next, currentUser);

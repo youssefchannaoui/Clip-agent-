@@ -672,6 +672,29 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .slh-act i{display:block;width:13px;height:13px;font-size:13px;line-height:1}
 .slh-act:hover{color:#F2F2F4;border-color:#34343A}
 /* The one moment the setup list is finished. Said once, then never again. */
+/* TikTok posting options. Required UX, not decoration: TikTok's content-sharing
+   guidelines make the creator pick a privacy status with nothing pre-selected,
+   declare commercial content themselves, and see the music declaration before
+   posting. The design file has no slot for any of it, so it is built here and
+   attached to the connections modal. */
+.dctk{width:100%;flex:1 1 100%;min-width:0;box-sizing:border-box;margin:14px 0 0;padding:14px;border:1px solid #26262A;border-radius:12px;background:#121214;font-size:12.5px;color:#BCBCC3}
+.dctk h4{margin:0 0 3px;font:600 13px Outfit,Inter,sans-serif;color:#F2F2F4}
+.dctk .dctk-sub{margin:0 0 12px;font-size:11.5px;color:#8B8B93}
+.dctk label.dctk-field{display:block;margin-bottom:11px}
+.dctk label.dctk-field>span{display:block;margin-bottom:5px;font-size:11.5px;color:#A2A2AA}
+.dctk select{width:100%;height:38px;padding:0 10px;border:1px solid #2C2C33;border-radius:9px;background:#0D0D0F;color:#F2F2F4;font:inherit;font-size:12.5px}
+.dctk select:disabled{opacity:.5;cursor:not-allowed}
+.dctk fieldset{margin:0 0 12px;padding:0;border:0}
+.dctk legend{padding:0;margin-bottom:6px;font-size:11.5px;color:#A2A2AA}
+.dctk .dctk-check{display:flex;align-items:flex-start;gap:8px;padding:5px 0;cursor:pointer;line-height:1.45}
+.dctk .dctk-check input{margin:2px 0 0;flex:none;accent-color:#D9B478}
+.dctk .dctk-check input:disabled{opacity:.45}
+.dctk .dctk-check.is-off{opacity:.5;cursor:not-allowed}
+.dctk .dctk-sublist{margin:2px 0 0 24px;padding-left:11px;border-left:1px solid #26262A}
+.dctk .dctk-note{margin:12px 0 0;padding-top:11px;border-top:1px solid #1E1E22;font-size:11px;line-height:1.55;color:#8B8B93}
+.dctk .dctk-err{margin:10px 0 0;font-size:11.5px;color:#E3928C}
+.dctk .dctk-save{margin-top:12px;width:100%;height:40px;border:0;border-radius:10px;background:linear-gradient(180deg,#F0D6A6,#D9B478);color:#1E1608;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
+.dctk .dctk-save:disabled{opacity:.5;cursor:not-allowed}
 .dcw-veil{position:fixed;inset:0;z-index:120;display:grid;place-items:center;padding:24px;background:rgba(4,4,6,.72);backdrop-filter:blur(10px);opacity:0;animation:dcwIn .26s ease forwards}
 .dcw-veil.out{animation:dcwOut .18s ease forwards}
 @keyframes dcwIn{to{opacity:1}}
@@ -4196,6 +4219,127 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       jobMusicEl.querySelector('button').setAttribute('aria-checked',String(vals.jobMusicOn));
     }
 
+    /* TikTok's posting options, attached to the connections modal.
+       Required UX rather than a nicety: the guidelines make the creator choose
+       a privacy status with nothing pre-selected, declare commercial content
+       themselves, and see the music declaration before posting. None of it
+       exists in the Studio shell -- only the old ?classic=1 page ever had a
+       privacy select -- so it is built here and inserted into the modal.
+       Rebuilt only when its SHAPE changes (which account, what the creator's
+       settings allow), never on every paint: a paint mid-edit would throw away
+       a half-made choice. */
+    let tkEl=null,tkBusy=false;
+    function tkDeclaration(branded){
+      return branded
+        ? "By posting, you agree to TikTok's Branded Content Policy and Music Usage Confirmation."
+        : "By posting, you agree to TikTok's Music Usage Confirmation.";
+    }
+    function paintTikTokOptions(vals){
+      const open=Boolean(vals.connOpen)&&vals.connKey==='tiktok';
+      if(!open){if(tkEl)tkEl.remove();tkEl=null;return}
+
+      const provider=((DATA&&DATA.social&&DATA.social.providers)||{}).tiktok||{};
+      const account=(provider.accounts||[])[0]||{};
+      const info=account.creatorInfo||null;
+      const set=((DATA&&DATA.publishingSettings)||{}).tiktok||{};
+      const LABELS={SELF_ONLY:'Only me',MUTUAL_FOLLOW_FRIENDS:'Friends',FOLLOWER_OF_CREATOR:'Followers',PUBLIC_TO_EVERYONE:'Everyone'};
+      /* Only what this account actually offers. Anything else is refused by the
+         API anyway, and offering it invites a failure at post time. */
+      const options=(info&&Array.isArray(info.privacy_level_options)&&info.privacy_level_options.length)
+        ? info.privacy_level_options : [];
+      const shape=[account.id||'',options.join(','),info?'i':'n',
+        info&&info.comment_disabled?1:0,info&&info.duet_disabled?1:0,info&&info.stitch_disabled?1:0].join('|');
+
+      if(!tkEl||tkEl.dataset.shape!==shape){
+        if(tkEl)tkEl.remove();
+        tkEl=document.createElement('div');
+        tkEl.className='dctk';
+        tkEl.dataset.shape=shape;
+        const off=(flag,label)=>flag?` disabled title="${esc(account.name||'This account')} has turned ${label} off for new posts"`:'';
+        tkEl.innerHTML=`<h4>Posting options</h4>
+          <p class="dctk-sub">TikTok asks that you choose these yourself. Nothing is preselected.</p>
+          ${info?'':'<p class="dctk-err">Run Test connection first — TikTok requires the latest options for this account before anything can be scheduled.</p>'}
+          <label class="dctk-field"><span>Who can see your posts</span>
+            <select data-tk="privacy"${info?'':' disabled'}>
+              <option value="">Choose an audience…</option>
+              ${(options.length?options:Object.keys(LABELS)).map(o=>`<option value="${esc(o)}">${esc(LABELS[o]||o)}</option>`).join('')}
+            </select></label>
+          <fieldset><legend>Interaction</legend>
+            <label class="dctk-check${info&&info.comment_disabled?' is-off':''}"><input type="checkbox" data-tk="allowComments"${off(info&&info.comment_disabled,'comments')}><span>Allow comments</span></label>
+            <label class="dctk-check${info&&info.duet_disabled?' is-off':''}"><input type="checkbox" data-tk="allowDuet"${off(info&&info.duet_disabled,'Duet')}><span>Allow Duet</span></label>
+            <label class="dctk-check${info&&info.stitch_disabled?' is-off':''}"><input type="checkbox" data-tk="allowStitch"${off(info&&info.stitch_disabled,'Stitch')}><span>Allow Stitch</span></label>
+          </fieldset>
+          <fieldset><legend>Content disclosure</legend>
+            <label class="dctk-check"><input type="checkbox" data-tk="commercialContent"><span>This content promotes a brand, product or service</span></label>
+            <div class="dctk-sublist" data-tk-sub hidden>
+              <label class="dctk-check"><input type="checkbox" data-tk="yourBrand"><span>Your brand &mdash; you are promoting yourself or your own business</span></label>
+              <label class="dctk-check"><input type="checkbox" data-tk="brandedContent"><span>Branded content &mdash; you are promoting another brand as a paid partnership</span></label>
+            </div>
+          </fieldset>
+          <p class="dctk-note" data-tk-note></p>
+          <p class="dctk-err" data-tk-err hidden></p>
+          <button type="button" class="dctk-save">Save posting options</button>`;
+
+        const q=k=>tkEl.querySelector(`[data-tk="${k}"]`);
+        q('privacy').value=String(set.privacy||'');
+        q('allowComments').checked=set.allowComments!==false;
+        q('allowDuet').checked=Boolean(set.allowDuet);
+        q('allowStitch').checked=Boolean(set.allowStitch);
+        q('commercialContent').checked=Boolean(set.commercialContent);
+        q('yourBrand').checked=Boolean(set.yourBrand);
+        q('brandedContent').checked=Boolean(set.brandedContent);
+
+        const sync=()=>{
+          const commercial=q('commercialContent').checked;
+          const branded=commercial&&q('brandedContent').checked;
+          tkEl.querySelector('[data-tk-sub]').hidden=!commercial;
+          if(!commercial){q('yourBrand').checked=false;q('brandedContent').checked=false}
+          tkEl.querySelector('[data-tk-note]').textContent=tkDeclaration(branded);
+          /* Surfaced before the save, not after a server rejection: TikTok will
+             not accept branded content on a private post. */
+          const clash=branded&&q('privacy').value==='SELF_ONLY';
+          const err=tkEl.querySelector('[data-tk-err]');
+          err.hidden=!clash;
+          if(clash)err.textContent='Branded content cannot be posted to "Only me". Choose a wider audience.';
+        };
+        tkEl.addEventListener('change',sync);
+        sync();
+
+        tkEl.querySelector('.dctk-save').onclick=()=>{
+          if(tkBusy)return;
+          const current=(DATA&&DATA.publishingSettings)||{};
+          const next={...current,tiktok:{...(current.tiktok||{}),
+            privacy:q('privacy').value,
+            allowComments:q('allowComments').checked,
+            allowDuet:q('allowDuet').checked,
+            allowStitch:q('allowStitch').checked,
+            commercialContent:q('commercialContent').checked,
+            yourBrand:q('yourBrand').checked,
+            brandedContent:q('brandedContent').checked}};
+          tkBusy=true;
+          const btn=tkEl.querySelector('.dctk-save');
+          btn.disabled=true;btn.textContent='Saving…';
+          studioDo(()=>api('/api/publishing-settings',{method:'POST',body:JSON.stringify(next)}),
+            'Posting options saved',
+            msg=>{const err=tkEl&&tkEl.querySelector('[data-tk-err]');if(err){err.hidden=false;err.textContent=msg}})
+            .finally(()=>{tkBusy=false;if(tkEl){const b=tkEl.querySelector('.dctk-save');if(b){b.disabled=false;b.textContent='Save posting options'}}});
+        };
+      }
+
+      /* Anchored against the modal's own action button, the way the apply-to-all
+         chip anchors against Save clip -- the design gives these no ids. */
+      const label=String(vals.connBtnLabel||'');
+      const btn=[...document.querySelectorAll('#studio button')]
+        .find(b=>(b.textContent||'').trim()===label);
+      /* One level up from the button: its own parent is the modal's action ROW,
+         a 326px flex line, and a panel dropped in there is squeezed to the width
+         of a button. The row's parent is the modal body, which is where this
+         belongs -- above the actions, not beside them. */
+      const row=btn&&btn.parentElement;
+      const host=row&&row.parentElement;
+      if(host&&tkEl.parentElement!==host)host.insertBefore(tkEl,row);
+    }
+
     function paintLiveWork(vals){
       alive(liveEls.home);alive(liveEls.bar);
       const onHome=StudioAdapter.ui.screen==='home';
@@ -4728,6 +4872,7 @@ function paintStudio(){
   const vals=StudioAdapter.bindings(DATA);
   STUDIO.render(vals);
   paintSetupCelebration(vals);
+  paintTikTokOptions(vals);
   paintLiveWork(vals);
   paintApplyLecture(vals);
   paintPreviewPic(vals);

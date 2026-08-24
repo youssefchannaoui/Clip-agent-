@@ -397,7 +397,28 @@ function validateFor(next, userId) {
     if (!selectedAccount(provider, item.accountId, userId)) throw new SocialError(`Choose a connected ${provider} account.`);
   }
   if (!['private', 'unlisted', 'public'].includes(next.youtube?.privacy)) throw new SocialError('Choose a valid YouTube privacy setting.');
-  if (!['SELF_ONLY', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'PUBLIC_TO_EVERYONE'].includes(next.tiktok?.privacy)) throw new SocialError('Choose a valid TikTok privacy setting.');
+  // Required only once TikTok is switched on. Demanding it unconditionally
+  // would make every unrelated save fail, because nothing is pre-selected.
+  const tiktokPrivacy = String(next.tiktok?.privacy || '');
+  if (tiktokPrivacy && !['SELF_ONLY', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'PUBLIC_TO_EVERYONE'].includes(tiktokPrivacy)) {
+    throw new SocialError('Choose a valid TikTok privacy setting.');
+  }
+  if (next.tiktok?.enabled && !tiktokPrivacy) {
+    throw new SocialError('Choose who can see your TikTok posts before enabling it.');
+  }
+  // A sub-option without the disclosure it belongs to would send a declaration
+  // the creator never made.
+  if (!next.tiktok?.commercialContent && (next.tiktok?.yourBrand || next.tiktok?.brandedContent)) {
+    throw new SocialError('Turn on the commercial content disclosure before choosing what it promotes.');
+  }
+  if (next.tiktok?.commercialContent && !next.tiktok?.yourBrand && !next.tiktok?.brandedContent) {
+    throw new SocialError('Say whether the content promotes your own brand, a third party, or both.');
+  }
+  // TikTok refuses branded content on a private post, so the two settings
+  // cannot be chosen independently.
+  if (next.tiktok?.brandedContent && tiktokPrivacy === 'SELF_ONLY') {
+    throw new SocialError('Branded content cannot be posted to "Only me". Choose a wider audience, or turn branded content off.');
+  }
   const tiktokConnection = connection(userId, 'tiktok');
   const creatorInfo = tiktokConnection?.creatorInfo;
   const creatorOptions = creatorInfo?.privacy_level_options;
@@ -825,7 +846,10 @@ async function startTikTok(clip, target, file, userId) {
   if (creator.max_video_post_duration_sec && duration > creator.max_video_post_duration_sec) {
     throw new SocialError(`TikTok allows up to ${creator.max_video_post_duration_sec}s for this account, but this clip is ${Math.ceil(duration)}s.`, { provider: 'tiktok' });
   }
-  const privacy = target.settings.privacy || 'SELF_ONLY';
+  // No fallback: posting under a privacy level nobody chose is the thing the
+  // guidelines exist to prevent, so an unset one stops the publish instead.
+  const privacy = String(target.settings.privacy || '');
+  if (!privacy) throw new SocialError('This clip has no TikTok privacy level set. Choose one in Channels before posting.', { provider: 'tiktok' });
   if (Array.isArray(creator.privacy_level_options) && !creator.privacy_level_options.includes(privacy)) {
     throw new SocialError(`TikTok does not currently allow the selected privacy level (${privacy}) for this account.`, { provider: 'tiktok' });
   }
@@ -849,8 +873,15 @@ async function startTikTok(clip, target, file, userId) {
         disable_duet: Boolean(creator.duet_disabled) || target.settings.allowDuet !== true,
         disable_stitch: Boolean(creator.stitch_disabled) || target.settings.allowStitch !== true,
         video_cover_timestamp_ms: Math.min(1000, Math.max(0, Number(clip.durationMs || 0) - 1)),
-        brand_content_toggle: false,
-        brand_organic_toggle: false,
+        // The creator's own disclosure, not a constant. brand_organic_toggle is
+        // "promotes your own brand"; brand_content_toggle is "promotes a third
+        // party", which TikTok treats as branded content and refuses to post
+        // privately.
+        brand_content_toggle: Boolean(target.settings.brandedContent),
+        brand_organic_toggle: Boolean(target.settings.yourBrand),
+        // Not collected: TikTok's content-sharing guidelines do not require an
+        // AI-generated declaration through this API, and asserting one either
+        // way on the creator's behalf would be worse than omitting it.
         is_aigc: false,
       },
       source_info: { source: 'FILE_UPLOAD', video_size: stat.size, chunk_size: chunks.chunkSize, total_chunk_count: chunks.count },

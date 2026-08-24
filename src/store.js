@@ -47,7 +47,15 @@ export function settingDefaults() {
       youtube: { enabled: false, accountId: '', privacy: 'private', categoryId: '22', notifySubscribers: true, madeForKids: false },
       instagram: { enabled: false, accountId: '', shareToFeed: true },
       facebook: { enabled: false, accountId: '' },
-      tiktok: { enabled: false, accountId: '', privacy: 'SELF_ONLY', allowComments: true, allowDuet: false, allowStitch: false },
+      // privacy starts EMPTY on purpose. TikTok's content-sharing guidelines
+      // require the creator to select a privacy status themselves, with no
+      // default -- a pre-filled 'SELF_ONLY' is a choice the product made for
+      // them. Enabling TikTok without choosing one is refused in
+      // validatePublishingSettings.
+      tiktok: { enabled: false, accountId: '', privacy: '', allowComments: true, allowDuet: false, allowStitch: false,
+        // Commercial content disclosure. Off by default, as the guidelines
+        // require; the two sub-options only mean anything when it is on.
+        commercialContent: false, yourBrand: false, brandedContent: false },
     },
     selectedTemplateId: config.defaultTemplateId,
   };

@@ -141,6 +141,40 @@ recording, or the recording may have to be done twice.
 
 ---
 
+## Content-sharing compliance (added before the demo recording)
+
+TikTok's content-sharing guidelines put requirements on the posting UX, not just
+on the API call. Checked against the guidelines rather than from memory, four
+were unmet:
+
+- **Commercial content disclosure**, off by default, with "your brand" and
+  "branded content" beneath it. The payload previously sent
+  `brand_content_toggle: false` as a **constant** -- a declaration the creator
+  never made.
+- **"By posting, you agree to TikTok's Music Usage Confirmation."** Absent
+  entirely, which matters more here than for most apps: every DeenClipped clip
+  mixes in a nasheed.
+- **Branded Content Policy** wording, shown once branded content is selected.
+- **Privacy chosen, never defaulted.** The setting defaulted to `SELF_ONLY` and
+  the publish path fell back to it again. Both defaults are gone: the settings
+  start empty, enabling TikTok without choosing is refused, and a publish with
+  no privacy set stops rather than guessing.
+
+One thing deliberately NOT added: an AI-generated-content declaration. It is not
+in the guidelines, and asserting one either way on a creator's behalf is worse
+than omitting it. `is_aigc` stays false with a comment saying why.
+
+Also fixed by the same work: **the Studio shell had no TikTok posting UI at
+all.** Only the old `?classic=1` page ever had a privacy select, so in the
+shipped product a creator could not choose an audience -- everything silently
+went out as `SELF_ONLY`. The panel is built in `index.html` and attached to the
+connections modal, because the Studio's markup is generated from the design file
+and has no slot for it.
+
+Interlock worth keeping: TikTok refuses branded content on a private post, so
+that combination is blocked in the UI before the save and again in
+`validatePublishingSettings`.
+
 ## Remaining steps, in order
 
 1. **Record the demo video** (above). Under 50MB, mp4 or mov.
