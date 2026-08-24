@@ -79,11 +79,25 @@ Two reasons, both load-bearing:
 So `/owner` is standalone: its own HTML, CSS and JS, and its own palette copied
 by value from `marketing.css` so a design pull cannot restyle it by accident.
 
-**Not yet done:** there is no link to `/owner` from inside the studio — reaching
-it means typing the URL. Adding a nav entry means editing the 305KB design file
-and re-importing, which is exactly the class of change CLAUDE.md says to do
-carefully and look at, so it was left for a session where the result can be
-checked on screen.
+### Getting to it from the studio
+
+There is an **Owner** item at the bottom of the SET UP group in the studio rail,
+shown only to accounts whose role is `owner` or `admin`.
+
+It is added from `studio-adapter.js`, not from the design file. The adapter is
+the half `import-design.mjs` deliberately never overwrites, so the item survives
+a design pull; an entry added to `design/studio-dashboard.dc.html` would not.
+
+**Hiding the link is presentation, not access control.** The gate is server
+side, where every `/owner` route answers 404 to a signed-in non-operator. If
+this check were the only thing between a creator and the books it would be worth
+nothing.
+
+One trap that the test suite caught and a browser did not: `DATA` in
+studio-adapter.js is a **parameter**, not a module global. `isOperator()` read
+it from the outer scope, which works in a browser (where `DATA` happens to be
+global) and throws `ReferenceError` everywhere else — 139 tests went red. It
+takes `DATA` as an argument now, matching every other helper in that file.
 
 ---
 

@@ -1168,6 +1168,38 @@
     };
   }
 
+  /**
+   * The operator's own entry in the rail.
+   *
+   * Two things worth being clear about:
+   *
+   * It is presentation, not access control. Hiding a link hides a link -- the
+   * gate is server side, where every /owner route answers 404 to a signed-in
+   * non-operator. If this check were ever the only thing standing between a
+   * creator and the books, it would be worth nothing.
+   *
+   * It lives here rather than in the design file on purpose. The template is
+   * regenerated wholesale from design/studio-dashboard.dc.html, so a nav item
+   * added there survives exactly until someone edits the design; the adapter is
+   * the half the import deliberately never touches.
+   *
+   * It leaves the studio rather than switching screens, because /owner is its
+   * own page with its own shell.
+   */
+  function isOperator(DATA) {
+    var role = String((DATA && DATA.user && DATA.user.role) || '').toLowerCase();
+    return role === 'owner' || role === 'admin';
+  }
+
+  function ownerNavItem() {
+    // Built through navItem so it inherits the rail's exact metrics, collapsed
+    // tooltip and hover behaviour. The key is one no screen uses, so it never
+    // draws itself as the active item.
+    var item = navItem('__owner', 'Owner', 'ph ph-coins', '');
+    item.click = function (e) { stop(e); global.location.href = '/owner'; };
+    return item;
+  }
+
   var TITLES = {
     home: 'Home', queue: 'Review queue', library: 'Lecture library', schedule: 'Schedule',
     templates: 'Templates', music: 'Nasheed library', language: 'Arabic & terms',
@@ -2614,7 +2646,7 @@
         navItem('templates', 'Templates', 'ph ph-text-aa', ''),
         navItem('music', 'Nasheed library', 'ph ph-music-notes', ''),
         navItem('performance', 'Performance', 'ph ph-chart-line-up', ''),
-      ],
+      ].concat(isOperator(DATA) ? [ownerNavItem()] : []),
 
       workerCardStyle: 'margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding: ' + (open ? '11px' : '9px 6px') + '; border: 1px solid #1E1E22; border-radius: 10px; background: #121214;',
       workerTextStyle: open ? 'white-space: nowrap;' : 'display: none;',
