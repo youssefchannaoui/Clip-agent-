@@ -1293,6 +1293,33 @@
     // disconnected would otherwise light up Post now and then fail at the API.
     var activeCount = providers.filter(function (p) { return p.enabled && p.connected; }).length;
 
+    // ── the five setup steps, worked out ONCE ──
+    // These used to be spelled out four separate times -- for the label, for
+    // whether to show the list, for the celebration, and for the rows -- so
+    // they could disagree, and the last step disagreed with all of it.
+    //
+    // "Give a clip a time" asked whether a slot was still in the FUTURE, off a
+    // list that already drops anything posted. Both halves expire: the slot
+    // arrives, or the clip goes out. So the step un-ticked itself hours later
+    // and the whole checklist came back to tell a working account it was not
+    // set up yet -- and it came back again after every single post. Scheduling
+    // is something you did, not a state you are in. Publishing is more than
+    // scheduling, never less, so a posted clip counts too.
+    var setupSteps = [
+      { title: 'Upload a nasheed', note: 'Every clip mixes one in, so nothing finishes without it.',
+        done: tracks.length > 0, go: 'music' },
+      { title: 'Add your first lecture', note: 'Paste a link you may use, or upload an MP4.',
+        done: projects.length > 0, go: 'home' },
+      { title: 'Approve a clip', note: 'Nothing is published until you say so.',
+        done: clips.some(function (c) { return decision(c) === 'approved'; }), go: 'queue' },
+      { title: 'Connect somewhere to post', note: 'Without this, approved clips sit in their slots.',
+        done: connectedCount > 0, go: 'connections' },
+      { title: 'Give a clip a time', note: 'Press a free slot in the week, or Slot it.',
+        done: clips.some(function (c) { return Boolean(c.scheduledAt || c.postedAt); }), go: 'schedule' },
+    ];
+    var setupDoneCount = setupSteps.filter(function (s) { return s.done; }).length;
+    var setupAllDone = setupDoneCount === setupSteps.length;
+
     // A raw link is not a title. Lectures submitted before the title was stored
     // properly still carry a URL in that field, and the worker only replaces it
     // when the job finishes -- so without this they read as
@@ -2998,46 +3025,22 @@
         + ' transition: border-color .14s ease, background .14s ease;',
       openSetup: function (e) { stop(e); setUI({ screen: 'home' }); },
 
-      startDoneLabel: (function () {
-        var t = (tracks.length > 0 ? 1 : 0)
-          + (projects.length > 0 ? 1 : 0)
-          + (clips.filter(function (c) { return decision(c) === 'approved'; }).length > 0 ? 1 : 0)
-          + (connectedCount > 0 ? 1 : 0)
-          + (scheduled.filter(function (c) { return Number(c.scheduledAt) > Date.now(); }).length > 0 ? 1 : 0);
-        return t + ' of 5 done';
-      }()),
+      startDoneLabel: setupDoneCount + ' of ' + setupSteps.length + ' done',
       // It disappears when it is finished, rather than becoming furniture.
-      startListOn: !(tracks.length > 0
-        && projects.length > 0
-        && clips.filter(function (c) { return decision(c) === 'approved'; }).length > 0
-        && connectedCount > 0
-        && scheduled.filter(function (c) { return Number(c.scheduledAt) > Date.now(); }).length > 0),
+      startListOn: !setupAllDone,
 
       // The moment the fifth step lands. Derived from the same account data as
       // the list itself, so it cannot congratulate anyone for work they have
       // not done -- and it goes back to false if a step is undone, which is why
       // the page, not this value, remembers that it has already been said.
-      setupComplete: tracks.length > 0
-        && projects.length > 0
-        && clips.filter(function (c) { return decision(c) === 'approved'; }).length > 0
-        && connectedCount > 0
-        && scheduled.filter(function (c) { return Number(c.scheduledAt) > Date.now(); }).length > 0,
+      setupComplete: setupAllDone,
 
       // ── the starter list ──
       // Proved from the account's own data, never a stored "dismissed" flag: a
       // checklist that ticks itself because you visited a screen teaches the
       // wrong thing. Each item names the one action that finishes it.
       startSteps: (function () {
-        var futureSlots = scheduled.filter(function (c) { return Number(c.scheduledAt) > Date.now(); }).length;
-        var approvedCount = clips.filter(function (c) { return decision(c) === 'approved'; }).length;
-        var items = [
-          { title: 'Upload a nasheed', note: 'Every clip mixes one in, so nothing finishes without it.', done: tracks.length > 0, go: 'music' },
-          { title: 'Add your first lecture', note: 'Paste a link you may use, or upload an MP4.', done: projects.length > 0, go: 'home' },
-          { title: 'Approve a clip', note: 'Nothing is published until you say so.', done: approvedCount > 0, go: 'queue' },
-          { title: 'Connect somewhere to post', note: 'Without this, approved clips sit in their slots.', done: connectedCount > 0, go: 'connections' },
-          { title: 'Give a clip a time', note: 'Press a free slot in the week, or Slot it.', done: futureSlots > 0, go: 'schedule' },
-        ];
-        return items.map(function (item, i) {
+        return setupSteps.map(function (item, i) {
           return {
             title: item.title,
             note: item.note,

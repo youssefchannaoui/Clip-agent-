@@ -2916,12 +2916,31 @@ test('the setup celebration cannot fire before all five steps are genuinely done
   const withoutConnection = StudioAdapter.bindings({ ...done, social: { providers: {} } });
   assert.equal(withoutConnection.setupComplete, false, 'nowhere to post');
 
-  // A slot in the past is not a scheduled post.
+  // A clip that was never given a time is the one that holds the step back.
+  const neverSlotted = StudioAdapter.bindings({
+    ...done,
+    clips: [{ id: 'c', projectId: 'p', status: 'approved' }],
+  });
+  assert.equal(neverSlotted.setupComplete, false, 'no clip has been given a time');
+
+  // A lapsed slot DOES count, and this assertion used to say the opposite.
+  // "Give a clip a time" is an action someone performed, not a state that
+  // expires: reading it as expiring un-ticked the step hours later and brought
+  // the whole checklist back to tell a working account it was not set up.
   const pastSlotOnly = StudioAdapter.bindings({
     ...done,
     clips: [{ id: 'c', projectId: 'p', status: 'approved', scheduledAt: Date.now() - 86400000 }],
   });
-  assert.equal(pastSlotOnly.setupComplete, false, 'a lapsed slot does not count');
+  assert.equal(pastSlotOnly.setupComplete, true, 'a slot that has come and gone was still a slot');
+
+  // And the case that made it worst: succeeding. A posted clip leaves the
+  // scheduled list entirely, so the step used to un-tick after every post.
+  const posted = StudioAdapter.bindings({
+    ...done,
+    clips: [{ id: 'c', projectId: 'p', status: 'posted', scheduledAt: Date.now() - 86400000, postedAt: Date.now() - 3600000 }],
+  });
+  assert.equal(posted.setupComplete, true, 'publishing is more than scheduling, never less');
+  assert.equal(posted.startListOn, false, 'and the checklist does not come back after a post');
 
   // And it must agree with the list it is celebrating: the list hides itself
   // at exactly the moment the celebration is allowed to fire.

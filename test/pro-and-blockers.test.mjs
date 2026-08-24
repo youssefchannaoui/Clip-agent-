@@ -173,8 +173,12 @@ test('a tour is remembered per screen, not once for the whole product', () => {
 
 test('the starter list is proved from account data, not a dismissed flag', () => {
   const adapter = read('src/public/studio-adapter.js');
-  const at = adapter.indexOf('startSteps:');
-  assert.ok(at > 0, 'a new account gets a starter list');
+  assert.ok(adapter.indexOf('startSteps:') > 0, 'a new account gets a starter list');
+  // The five conditions live in setupSteps, worked out once, because spelling
+  // them out per-binding let them drift apart -- which is how the last step
+  // ended up disagreeing with the other four.
+  const at = adapter.indexOf('var setupSteps');
+  assert.ok(at > 0, 'the steps are derived in one place');
   const body = adapter.slice(at, at + 2200);
   // Each item must be answered by real state, so it cannot tick itself just
   // because someone visited the screen.
