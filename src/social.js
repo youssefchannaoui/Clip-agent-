@@ -6,6 +6,7 @@ import { state, save, log, publishingSettings, setPublishingSettings, ownerOfRec
 import { connectionFor, setConnection, removeConnection, ownerOf } from './tenancy.js';
 
 const PROVIDERS = ['youtube', 'instagram', 'facebook', 'tiktok'];
+const META_SCOPES = 'pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish';
 const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -179,13 +180,28 @@ export function oauthStartUrl(provider, userId) {
     return `${config.googleAuthBase}/o/oauth2/v2/auth?${query}`;
   }
   if (provider === 'meta') {
+    // Facebook Login for Business names its permissions in a saved CONFIGURATION
+    // and takes its id here, where classic Login took a scope list.
+    //
+    // This is not a preference. On a Login-for-Business app the app-level "Valid
+    // OAuth Redirect URIs" field silently refuses to save -- it answers "Changes
+    // saved" and is empty again on reload, three times running -- so a
+    // scope-based dialog has no registered redirect_uri and Facebook rejects it
+    // with "Can't load URL: the domain of this URL isn't included in the app's
+    // domains". That message sends you to App Domains, which was correct all
+    // along; the redirect URI was the missing half, and it cannot be supplied
+    // except through a configuration.
+    //
+    // The scope fallback stays for an app that still has classic Login (and so
+    // has no configuration to point at), which is the shape the sandbox took.
     const query = new URLSearchParams({
       client_id: config.metaAppId,
       redirect_uri: redirectUri('meta'),
       response_type: 'code',
-      scope: 'pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish',
       state: stateText,
     });
+    if (config.metaLoginConfigId) query.set('config_id', config.metaLoginConfigId);
+    else query.set('scope', META_SCOPES);
     return `${config.metaDialogBase}/${config.metaGraphVersion}/dialog/oauth?${query}`;
   }
   const query = new URLSearchParams({

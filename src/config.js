@@ -148,6 +148,7 @@ export const config = {
 
   metaAppId: process.env.META_APP_ID || '',
   metaAppSecret: process.env.META_APP_SECRET || '',
+  metaLoginConfigId: process.env.META_LOGIN_CONFIG_ID || '',
   metaRedirectUri: process.env.META_REDIRECT_URI || '',
   metaGraphVersion: process.env.META_GRAPH_VERSION || 'v23.0',
   metaGraphBase: (process.env.META_GRAPH_BASE || 'https://graph.facebook.com').replace(/\/+$/, ''),

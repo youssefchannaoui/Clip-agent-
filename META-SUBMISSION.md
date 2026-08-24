@@ -57,33 +57,53 @@ Two of these fought back and are worth knowing about:
   ~70% and centred on the `#0E0E11` background, so the default crop captures all
   of it. Regenerate it the same way if it is ever replaced.
 
-## `config_id` versus `scope` — the thing most likely to break
+## `config_id`, and the error that lied about App Domains
 
-`src/social.js` builds the login URL with a `scope` parameter:
+**Settled 24 Aug 2026 by trying it.** Facebook Login for Business does not take
+a scope list. It takes a **`config_id`** naming a saved configuration.
 
-    https://www.facebook.com/v23.0/dialog/oauth?client_id=…&scope=pages_show_list,…
+| | |
+|---|---|
+| Configuration name | DeenClipped publishing |
+| **Configuration ID** | **1086882974287802** |
+| Access token type | **User access token** (cannot be changed later) |
+| Permissions | `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `instagram_basic`, `instagram_content_publish` |
 
-Facebook Login for Business normally expects a **`config_id`** naming a saved
-configuration instead. Meta's own docs say `config_id` "has replaced `scope`
-(which should not be used)", but also that for **user** access tokens `scope`
-"can still be included". We take user access tokens, so the current code should
-work — but this is the first thing to suspect if the connect flow starts
-failing, and the fix is to create a configuration under
-**Facebook Login for Business → Configurations** and pass its id.
+`META_LOGIN_CONFIG_ID` on Render carries it. With it set, `oauthStartUrl` sends
+`config_id`; with it unset it falls back to `scope`, which is what a classic
+Login app needs.
 
-No configuration exists on this app today.
+### The app-level redirect URI field does not save. At all.
 
-### One unexplained error, recorded so it is not a surprise
+**Facebook Login for Business → Settings → Valid OAuth Redirect URIs** accepts
+`https://deenclipped.online/auth/meta/callback`, answers **"Changes saved"**, and
+is empty again on reload. Three attempts, spread across adding the app domain,
+the Website platform, all five permissions, and finally the configuration
+itself. It never persisted once.
 
-Loading the OAuth dialog by hand returned:
+That is what produced:
 
 > Can't load URL — The domain of this URL isn't included in the app's domains.
 
-This was minutes after `deenclipped.online` was saved as an app domain and
-verified present on reload, and it appeared on the *cancel* redirect rather
-than the grant path. Most likely propagation delay. If the real connect flow
-hits it, check App domains and the Website platform Site URL agree, and that
-the redirect URI matches `redirectUri('meta')` exactly.
+The message points at App Domains, which was correct the whole time. The
+missing half was the redirect URI, and on this app type it cannot be supplied
+through that field — only through a configuration. Do not spend time on App
+Domains when you see this error on a Login-for-Business app.
+
+### Two permission traps found the same way
+
+- **The Instagram permissions are not in the Instagram use case.** The
+  `INSTAGRAM_BUSINESS` use case offers `instagram_business_basic`,
+  `instagram_business_content_publish` and friends -- the *Instagram Login* API,
+  which is a different API from the one this app uses. Ours are behind
+  **Instagram API → API setup with Facebook login**, which has an "Add required
+  content permissions" button. Until that is pressed, `instagram_basic` and
+  `instagram_content_publish` do not appear anywhere and the configuration
+  cannot include them.
+- **That setup page misspells one of them.** It lists
+  `instagram_content_publishing`. The real permission, on the Permissions and
+  features page and in the configuration picker, is **`instagram_content_publish`**
+  -- which is what the code already sent. Do not "fix" the code to match that page.
 
 ## The secret
 
