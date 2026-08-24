@@ -140,16 +140,44 @@ served (206), and a full re-render with zero `AccessDenied` /
 `InvalidAccessKeyId` / `SignatureDoesNotMatch` in the worker log -- which is
 the only check that exercises the worker's own copy of the credentials.
 
-### 5. Provider secrets
+### 5. Provider secrets — Google DONE 24 Aug 2026, TikTok outstanding
 
-`GOOGLE_CLIENT_SECRET`, `TIKTOK_CLIENT_SECRET`, `YOUTUBE_DATA_API_KEY` — rotate
-in each provider console, then update Render.
+**Blocker met first:** Google Cloud now enforces two-step verification on the
+account (from 14 Aug 2026). The console is unreachable until 2SV is on.
 
-Google and TikTok both let you hold two client secrets briefly. Add the new one,
-update Render, verify a connect flow, then delete the old.
+**One OAuth client serves both flows.** `GOOGLE_CLIENT_SECRET` and
+`GOOGLE_SIGNIN_CLIENT_SECRET` held the *same* value: sign-in and publishing both
+resolve to client `881648803263-suqp...`, which carries both redirect URIs
+(`/auth/youtube/callback` and `/auth/google/callback`). Both env vars must be
+updated together -- and each is only exercised by its own flow, so updating one
+leaves the other broken while everything looks healthy.
 
-Careful with TikTok: the app is mid-submission. Rotating the client secret is
-fine, but do it *before* you record the demo video, not after.
+Rotated by adding a second secret (Google's no-downtime path), updating both
+Render vars, verifying, then **disabling** the old `****98Hf` rather than
+deleting it. Disabled cannot authenticate, and Enable is one click if anything
+turns out to depend on it. Delete it once you are satisfied.
+
+**Verification matters here, because the cheap test lies.** `youtubeToken()`
+returns the cached access token whenever it has more than five minutes left, so
+a connection test passes without ever using the client secret. What actually
+proves it is a fresh code exchange. Both appeared in the activity log:
+
+```
+Signed in ... with Google.          -> GOOGLE_SIGNIN_CLIENT_SECRET
+Connected YouTube channel "...".    -> GOOGLE_CLIENT_SECRET
+```
+
+**`YOUTUBE_DATA_API_KEY`** replaced with `deenclipped-youtube-2026-08-24`,
+restricted to YouTube Data API v3, old `API key 1` deleted (restorable for 30
+days). A dead key here does **not** surface as an error: `/api/source-info`
+falls back to HTML scraping and still returns a duration. Check the
+`extractor` field -- `youtube-data-api` means the key worked, anything else
+means it fell back. Results are cached for 10 minutes, so test with a video you
+have not already looked up.
+
+**TikTok is still outstanding.** `TIKTOK_CLIENT_SECRET` was in the leaked set.
+The app is mid-submission and the note above says rotate before recording the
+demo video, not after -- confirm where that stands first.
 
 ### 6. Stripe test key
 
