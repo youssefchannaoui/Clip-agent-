@@ -4241,8 +4241,24 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         ? "By posting, you agree to TikTok's Branded Content Policy and Music Usage Confirmation."
         : "By posting, you agree to TikTok's Music Usage Confirmation.";
     }
-    function paintTikTokOptions(vals){
-      const open=Boolean(vals.connOpen)&&vals.connKey==='tiktok';
+    function paintTikTokOptions(){
+      /* Attached to the connections dialog, which is the one users can actually
+         open. It was originally hung off the per-provider modal that
+         UI.connProvider drives -- and nothing in the Studio ever sets that, so
+         the panel rendered correctly and was unreachable. Proving a thing draws
+         is not proving anyone can get to it. */
+      /* Looked up by id rather than through connEls: that binding lives in a
+         different closure, and reaching for it here threw ReferenceError on
+         every repaint -- silently, because the paint pass swallows it.
+
+         Deliberately NOT gated on the dialog being open. onOpenConnections
+         paints first and unhides second, so a check for the hidden class runs
+         while it is still hidden and removes the panel every time. The panel is
+         a child of the dialog anyway, so it is hidden exactly when the dialog
+         is -- the open state is not this function's business. */
+      const connList=$('#studioConnList');
+      const providerNow=(((DATA||{}).social||{}).providers||{}).tiktok||{};
+      const open=Boolean(connList)&&Boolean(providerNow.connected);
       if(!open){if(tkEl)tkEl.remove();tkEl=null;return}
 
       const provider=((DATA&&DATA.social&&DATA.social.providers)||{}).tiktok||{};
@@ -4335,16 +4351,11 @@ function studioWanted(){return window.STUDIO_SHELL===true}
 
       /* Anchored against the modal's own action button, the way the apply-to-all
          chip anchors against Save clip -- the design gives these no ids. */
-      const label=String(vals.connBtnLabel||'');
-      const btn=[...document.querySelectorAll('#studio button')]
-        .find(b=>(b.textContent||'').trim()===label);
-      /* One level up from the button: its own parent is the modal's action ROW,
-         a 326px flex line, and a panel dropped in there is squeezed to the width
-         of a button. The row's parent is the modal body, which is where this
-         belongs -- above the actions, not beside them. */
-      const row=btn&&btn.parentElement;
-      const host=row&&row.parentElement;
-      if(host&&tkEl.parentElement!==host)host.insertBefore(tkEl,row);
+      /* Placed AFTER the row list rather than inside it: paintConnections
+         rebuilds that list's innerHTML wholesale on every repaint, which would
+         throw the panel away mid-edit. */
+      const host=connList&&connList.parentElement;
+      if(host&&tkEl.parentElement!==host)host.insertBefore(tkEl,connList.nextSibling);
     }
 
     function paintLiveWork(vals){
@@ -4510,6 +4521,7 @@ function renderStudio(){
       $$('[data-conn-disconnect]').forEach(b=>b.onclick=()=>{
         const p=rows[Number(b.dataset.connDisconnect)];StudioAdapter.ui.connProvider=p.key;
         StudioAdapter.bindings(DATA).disconnect({preventDefault(){}})});
+      paintTikTokOptions();
     }
     StudioAdapter.onOpenConnections=()=>{paintConnections();connEls.root.classList.remove('hide')};
     /* /api/clip-settings validates all three fields together, so a partial patch
@@ -4879,7 +4891,7 @@ function paintStudio(){
   const vals=StudioAdapter.bindings(DATA);
   STUDIO.render(vals);
   paintSetupCelebration(vals);
-  paintTikTokOptions(vals);
+  paintTikTokOptions();
   paintLiveWork(vals);
   paintApplyLecture(vals);
   paintPreviewPic(vals);

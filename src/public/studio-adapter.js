@@ -4046,9 +4046,6 @@
 
       // ── Connections modal ──
       connOpen: Boolean(conn),
-      // Which provider's modal is open. The page needs this to attach
-      // TikTok's posting-options panel, which the design has no slot for.
-      connKey: conn ? conn.key : '',
       connName: conn ? conn.title : '',
       connHandle: conn ? (conn.account ? conn.account.name : conn.configured ? 'No account linked' : 'Not configured') : '',
       connIcon: conn ? conn.icon : '',
