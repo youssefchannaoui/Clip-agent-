@@ -289,6 +289,26 @@
        { label: 'Amount', num: true }, { label: 'Per month', num: true }, { label: 'Next due' }, { label: '' }],
       rows, { empty: 'No costs tracked yet.' }));
 
+    const oneOff = f.moneyOut.oneOff || { rows: [], totalMinor: 0, monthlyAverageMinor: 0, days: 90 };
+    const spendRows = (oneOff.rows || []).slice(0, 60).map(item => el('tr', {}, [
+      el('td', { text: date(item.paidAt) }),
+      el('td', { class: 'wrap' }, [
+        el('div', { text: item.name }),
+        item.notes ? el('div', { class: 'ow-tile-foot', text: item.notes }) : null,
+      ]),
+      el('td', { text: item.vendor || '—' }),
+      el('td', {}, el('span', { class: 'ow-pill', text: item.source })),
+      el('td', { class: 'num', text: money(item.amountMinor, item.currency) }),
+    ]));
+    replace($('spendTable'), table(
+      [{ label: 'Paid' }, { label: 'What' }, { label: 'Vendor' }, { label: 'Source' }, { label: 'Amount', num: true }],
+      spendRows, { empty: 'No one-off payments recorded yet.' }));
+    replace($('spendHint'), [el('span', {
+      text: oneOff.rows.length
+        ? `${money(oneOff.totalMinor)} over ${oneOff.days} days — about ${money(oneOff.monthlyAverageMinor)} a month, from what was actually paid.`
+        : '',
+    })]);
+
     const cats = Object.entries(f.moneyOut.byCategory || {}).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
     const catPeak = Math.max(1, ...cats.map(c => c[1]));
     replace($('outCategories'), cats.length

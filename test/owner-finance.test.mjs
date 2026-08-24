@@ -238,3 +238,55 @@ test('costs in two currencies are not silently added together', async () => {
   assert.equal(single.moneyOut.mixedCurrency, '', 'one currency, no warning');
   owner.removeCost(ownerUser, aud.id);
 });
+
+test('a payment carrying an id already seen is dropped, not counted twice', async () => {
+  const first = owner.recordSpend(ownerUser, {
+    name: 'Anthropic credits', vendor: 'Anthropic', amount: 5.50, currency: 'aud',
+    externalId: 'receipt-2408-2810-0973', source: 'gmail',
+  });
+  assert.equal(first.amountMinor, 550);
+  const again = owner.recordSpend(ownerUser, {
+    name: 'Anthropic credits', vendor: 'Anthropic', amount: 5.50, currency: 'aud',
+    externalId: 'receipt-2408-2810-0973', source: 'gmail',
+  });
+  assert.equal(again.duplicate, true, 'the second write is refused');
+  const log = owner.spend(ownerUser, { days: 30 });
+  assert.equal(log.rows.filter(row => row.externalId === 'receipt-2408-2810-0973').length, 1);
+  owner.removeSpend(ownerUser, first.id);
+});
+
+test('a batch of payments posts in one request and reports what it skipped', async () => {
+  const response = await fetch(`${base}/api/owner/spend`, {
+    method: 'POST',
+    headers: { Cookie: ownerCookie, 'Content-Type': 'application/json', Origin: base },
+    body: JSON.stringify({ entries: [
+      { name: 'Top-up A', amount: 5.5, externalId: 'batch-a', source: 'gmail' },
+      { name: 'Top-up B', amount: 5.5, externalId: 'batch-b', source: 'gmail' },
+      { name: 'Top-up A again', amount: 5.5, externalId: 'batch-a', source: 'gmail' },
+    ] }),
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.recorded, 2);
+  assert.equal(body.skipped, 1, 'the repeat inside the same batch is skipped too');
+});
+
+test('variable spend is averaged from what was paid, not guessed', async () => {
+  const before = owner.spend(ownerUser, { days: 30 }).totalMinor;
+  owner.recordSpend(ownerUser, { name: 'Usage', amount: 30, externalId: 'avg-1', paidAt: Date.now() - 5 * DAY });
+  const log = owner.spend(ownerUser, { days: 30 });
+  assert.equal(log.totalMinor, before + 3000);
+  // 30 days of window, so the monthly average is the window total.
+  assert.equal(log.monthlyAverageMinor, Math.round(log.totalMinor / 30 * 30));
+});
+
+test('a creator cannot record spend', async () => {
+  const response = await fetch(`${base}/api/owner/spend`, {
+    method: 'POST',
+    headers: { Cookie: creatorCookie, 'Content-Type': 'application/json', Origin: base },
+    body: JSON.stringify({ name: 'Injected', amount: 1 }),
+  });
+  assert.equal(response.status, 404);
+  const read = await fetch(`${base}/api/owner/spend`, { headers: { Cookie: creatorCookie } });
+  assert.equal(read.status, 404);
+});

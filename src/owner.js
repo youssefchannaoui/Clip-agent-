@@ -213,6 +213,87 @@ export function removeCost(user, id) {
 }
 
 /**
+ * One-off spend, as distinct from a subscription.
+ *
+ * The ledger models things that recur on a cadence. It cannot model an
+ * Anthropic credit top-up that happens twelve times one month and four the
+ * next -- averaging those into a monthly figure throws away the only data
+ * that would tell you the trend, and quietly turns a variable cost into a
+ * fixed one on the page.
+ *
+ * `externalId` is the important field. It is the receipt number, or the id of
+ * the mail the charge was read from, and a second write carrying an id already
+ * present is dropped. That is what makes an automated feed safe to re-run:
+ * the Stripe side already learned this lesson, where two event types for one
+ * invoice would have doubled the revenue.
+ */
+export function recordSpend(user, entry = {}) {
+  requireOperator(user);
+  if (!Array.isArray(state.ownerSpend)) state.ownerSpend = [];
+
+  const name = String(entry.name || '').trim().slice(0, 160);
+  if (!name) throw Object.assign(new Error('A payment needs a name.'), { statusCode: 400 });
+  const amountMinor = Math.max(0, Math.round(Number(entry.amountMinor ?? (Number(entry.amount || 0) * 100)) || 0));
+  if (!amountMinor) throw Object.assign(new Error('A payment needs an amount.'), { statusCode: 400 });
+
+  const externalId = String(entry.externalId || '').slice(0, 200);
+  if (externalId && state.ownerSpend.some(item => item?.externalId === externalId)) {
+    return { duplicate: true, externalId };
+  }
+
+  const record = {
+    id: `spend_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`,
+    name,
+    vendor: String(entry.vendor || '').trim().slice(0, 120),
+    category: COST_CATEGORIES.includes(String(entry.category)) ? String(entry.category) : 'other',
+    amountMinor,
+    currency: String(entry.currency || defaultCurrency()).toLowerCase().slice(0, 3),
+    paidAt: Number(entry.paidAt || 0) > 0 ? Math.round(Number(entry.paidAt)) : now(),
+    // Where the figure came from, so a number nobody recognises can be traced
+    // back to a receipt rather than argued about.
+    source: String(entry.source || 'manual').slice(0, 40),
+    externalId,
+    notes: String(entry.notes || '').slice(0, 500),
+    createdAt: now(),
+  };
+  state.ownerSpend.unshift(record);
+  state.ownerSpend = state.ownerSpend.slice(0, 5000);
+  save();
+  return record;
+}
+
+export function removeSpend(user, id) {
+  requireOperator(user);
+  if (!Array.isArray(state.ownerSpend)) state.ownerSpend = [];
+  const index = state.ownerSpend.findIndex(item => item.id === String(id));
+  if (index === -1) throw Object.assign(new Error('That payment no longer exists.'), { statusCode: 404 });
+  const [removed] = state.ownerSpend.splice(index, 1);
+  save();
+  log(`Owner payment removed: ${removed.name}.`, 'info', user.id);
+  return removed;
+}
+
+export function spend(user, { days = 90 } = {}) {
+  requireOperator(user);
+  const since = now() - days * DAY_MS;
+  const rows = (Array.isArray(state.ownerSpend) ? state.ownerSpend : [])
+    .filter(item => Number(item.paidAt || 0) >= since)
+    .sort((a, b) => b.paidAt - a.paidAt);
+  const totalMinor = rows.reduce((sum, item) => sum + item.amountMinor, 0);
+  const byVendor = {};
+  for (const item of rows) {
+    const key = item.vendor || item.name;
+    byVendor[key] = (byVendor[key] || 0) + item.amountMinor;
+  }
+  return {
+    days, rows, totalMinor, byVendor,
+    // A per-month figure derived from what was actually paid, rather than a
+    // number somebody guessed once and never revisited.
+    monthlyAverageMinor: rows.length ? Math.round(totalMinor / days * 30) : 0,
+  };
+}
+
+/**
  * Money in, from Stripe.
  *
  * Balance transactions rather than charges, because they are the only place
@@ -416,6 +497,9 @@ export async function finance(user, { days = 180 } = {}) {
       unpricedNames: unpriced.map(entry => entry.name),
       byCurrency,
       mixedCurrency,
+      // Variable spend is reported beside the subscriptions, never folded into
+      // them: a top-up that happened twelve times last month is not a fixture.
+      oneOff: spend(user, { days: 90 }),
       byCategory: activeLedger.reduce((acc, entry) => {
         acc[entry.category] = (acc[entry.category] || 0) + entry.monthlyMinor;
         return acc;

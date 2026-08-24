@@ -920,6 +920,32 @@ async function route(req, res, url) {
     try { requireOperator(currentUser); return json(res, 200, { cost: owner.upsertCost(currentUser, body) }); }
     catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
   }
+  if (method === 'GET' && pathname === '/api/owner/spend') {
+    const days = Math.min(365, Math.max(7, Number(url.searchParams.get('days')) || 90));
+    try { requireOperator(currentUser); return json(res, 200, owner.spend(currentUser, { days })); }
+    catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+  }
+  if (method === 'POST' && pathname === '/api/owner/spend') {
+    const body = await readBody(req);
+    try {
+      requireOperator(currentUser);
+      // Accepts one payment or a batch, because the thing that writes here is
+      // a sync over a mailbox, and a sync that can only post one row at a time
+      // is a sync nobody runs twice.
+      const entries = Array.isArray(body.entries) ? body.entries : [body];
+      const results = entries.map(entry => owner.recordSpend(currentUser, entry));
+      return json(res, 200, {
+        recorded: results.filter(item => !item.duplicate).length,
+        skipped: results.filter(item => item.duplicate).length,
+        results,
+      });
+    } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+  }
+  const ownerSpendDelete = pathname.match(/^\/api\/owner\/spend\/([\w-]+)$/);
+  if (method === 'DELETE' && ownerSpendDelete) {
+    try { requireOperator(currentUser); return json(res, 200, { removed: owner.removeSpend(currentUser, ownerSpendDelete[1]) }); }
+    catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+  }
   const ownerCostDelete = pathname.match(/^\/api\/owner\/costs\/([\w-]+)$/);
   if (method === 'DELETE' && ownerCostDelete) {
     try { requireOperator(currentUser); return json(res, 200, { removed: owner.removeCost(currentUser, ownerCostDelete[1]) }); }
