@@ -166,3 +166,73 @@ What they pin, and why each one is a bug that would otherwise be silent:
   the existing processed-event guard does not catch the pair, and the money
   would have doubled.
 - A missing Stripe key answers 200 and names the gap, rather than 500ing.
+
+---
+
+## Automating the money-out side from Gmail
+
+Asked for on 24 Aug 2026: billing mail should turn into ledger entries by
+itself. The write half is built; the read half needs a decision.
+
+### What already exists
+
+`POST /api/owner/spend` takes one payment or a batch, and **drops any entry
+whose `externalId` it has already seen** — inside a single batch as well as
+across calls. `externalId` is meant to hold the receipt number, or the Gmail
+message id. That is the whole reason a feed can be re-run: pointing a sync at
+"the last 90 days" every night must not book the same charge ninety times.
+
+This is the same defect the Stripe side already had, where `invoice.paid` and
+`invoice.payment_succeeded` carry different event ids for one invoice and would
+have doubled the revenue.
+
+### The read half, and the decision in it
+
+Three ways in, and the third is the only real automation:
+
+1. **Paste / manual.** Works today. Not what was asked for.
+2. **Claude reads the mailbox during a session and posts a batch.** This is how
+   the first twelve Anthropic charges were loaded. Accurate, no new
+   credentials, but only happens while somebody is running a session.
+3. **The server polls Gmail.** Real automation, and it needs `gmail.readonly`.
+
+**`gmail.readonly` is a Google *restricted* scope.** For a published app,
+Google requires a CASA security assessment — paid, and repeated annually.
+
+The way around that is not a trick: an OAuth client left in **Testing** mode may
+use restricted scopes for up to 100 test users without verification. This app
+has exactly one operator, so that fits.
+
+**It must be a second, separate OAuth client.** The existing one is already
+carrying the YouTube scopes and their compliance work; adding a restricted scope
+to it would drag the whole app back through verification and put the YouTube
+integration at risk. That is the decision: create a new Google Cloud OAuth
+client, used only for reading this one mailbox.
+
+### How it should behave once built
+
+**Parsed charges must land as pending, not as costs.** A parser that writes
+straight into the books will eventually read a marketing email as a $500 bill,
+and a wrong number in a ledger is worse than a missing one — the whole design of
+this page is that it refuses to state figures it cannot stand behind. So:
+
+- A sync writes candidates with vendor, amount, currency, date and the message id.
+- The dashboard shows them for one-click accept or dismiss.
+- Accepting a recurring vendor updates that cost's amount and next due date.
+- Accepting a one-off writes it to the spend log.
+- A vendor confirmed twice can be marked trusted, and skip review after that.
+
+### Vendors and what identifies them
+
+Established by reading the real mailbox on 24 Aug 2026:
+
+| Vendor | Sender | Shape |
+|---|---|---|
+| Anthropic | `invoice+statements@mail.anthropic.com` | `Receipt number 2408-2810-0973`, `Total A$5.50` |
+| Render | `invoice+statements+acct_…@stripe.com` | Stripe-hosted receipt, USD |
+| Lemon Squeezy (SocialKit) | `hello@lemonsqueezy-mail.com` | `Order #: 192843343`, AUD inc GST |
+| Hetzner | `noreply@hetzner.com` | Invoice on the 14th, USD |
+| GoDaddy | `email@e.godaddy.com` | Yearly renewal |
+
+Anthropic and Lemon Squeezy already bill in AUD. Render and Hetzner bill in USD,
+which is why the ledger warns rather than converts.

@@ -290,3 +290,23 @@ test('a creator cannot record spend', async () => {
   const read = await fetch(`${base}/api/owner/spend`, { headers: { Cookie: creatorCookie } });
   assert.equal(read.status, 404);
 });
+
+test('profit subtracts variable spend as well as subscriptions', async () => {
+  // A subscription and a usage charge of the same size must move profit
+  // identically. Counting only the first is how the largest cost on this
+  // deployment would have stayed out of the profit line entirely.
+  const before = (await owner.finance(ownerUser)).profit.monthlyNetMinor;
+
+  const sub = owner.upsertCost(ownerUser, { name: 'Sub 30', amount: 30, cadence: 'monthly' });
+  const withSub = (await owner.finance(ownerUser)).profit.monthlyNetMinor;
+  assert.equal(before - withSub, 3000, 'a subscription reduces profit by its monthly cost');
+  owner.removeCost(ownerUser, sub.id);
+
+  const usage = owner.recordSpend(ownerUser, { name: 'Usage 30', amount: 30, externalId: 'profit-usage-1' });
+  const withUsage = (await owner.finance(ownerUser)).finance || null;
+  const after = (await owner.finance(ownerUser));
+  assert.ok(after.moneyOut.totalMonthlyOutMinor > after.moneyOut.monthlyBurnMinor,
+    'variable spend is part of what leaves the account');
+  assert.ok(after.profit.monthlyNetMinor < before, 'and it reduces profit');
+  owner.removeSpend(ownerUser, usage.id);
+});

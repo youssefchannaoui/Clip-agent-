@@ -103,10 +103,9 @@
       tile('Net in, this month', money(f.moneyIn.thisMonthNetMinor), {
         foot: `${money(f.moneyIn.thisMonthGrossMinor)} gross, after Stripe fees`,
       }),
-      tile('Monthly burn', burnKnown ? money(f.moneyOut.monthlyBurnMinor) : `${money(f.moneyOut.monthlyBurnMinor)}+`, {
-        foot: burnKnown
-          ? `${f.moneyOut.entries} active cost${f.moneyOut.entries === 1 ? '' : 's'}`
-          : `${f.moneyOut.unpricedCount} cost${f.moneyOut.unpricedCount === 1 ? '' : 's'} still need an amount`,
+      tile('Monthly out', burnKnown ? money(f.moneyOut.totalMonthlyOutMinor) : `${money(f.moneyOut.totalMonthlyOutMinor)}+`, {
+        foot: `${money(f.moneyOut.monthlyBurnMinor)} subscriptions + ${money(f.moneyOut.oneOff?.monthlyAverageMinor || 0)} usage`
+          + (burnKnown ? '' : ` · ${f.moneyOut.unpricedCount} still need an amount`),
         tone: burnKnown ? '' : 'unknown',
       }),
       tile('Profit, this month', money(profit), {
@@ -249,11 +248,14 @@
     if (!f) return;
 
     replace($('outTiles'), [
-      tile('Monthly burn', money(f.moneyOut.monthlyBurnMinor), {
-        foot: f.moneyOut.unpricedCount ? `Understated: ${f.moneyOut.unpricedCount} without an amount` : 'All costs priced',
+      tile('Subscriptions', money(f.moneyOut.monthlyBurnMinor), {
+        foot: f.moneyOut.unpricedCount ? `Understated: ${f.moneyOut.unpricedCount} without an amount` : 'Per month, all priced',
         tone: f.moneyOut.unpricedCount ? 'unknown' : '',
       }),
-      tile('Yearly burn', money(f.moneyOut.yearlyBurnMinor), { foot: 'Monthly x 12' }),
+      tile('Usage and one-offs', money(f.moneyOut.oneOff?.monthlyAverageMinor || 0), {
+        foot: `Averaged from ${(f.moneyOut.oneOff?.rows || []).length} payment(s) over ${f.moneyOut.oneOff?.days || 90} days`,
+      }),
+      tile('Total out, per month', money(f.moneyOut.totalMonthlyOutMinor), { foot: 'What profit is measured against' }),
       tile('Due in 60 days', money(f.moneyOut.dueNext60DaysTotalMinor), { foot: `${(f.moneyOut.dueNext60Days || []).length} payment(s) scheduled` }),
       tile('Tracked costs', num(f.moneyOut.entries), { foot: 'Active entries in the ledger' }),
     ]);

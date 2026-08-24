@@ -448,6 +448,11 @@ export async function finance(user, { days = 180 } = {}) {
       + 'The burn and profit totals add them together without converting, so they are not meaningful until every cost uses one currency.'
     : '';
 
+  // Everything that leaves the account in a month: the subscriptions, plus what
+  // the variable charges have actually averaged.
+  const oneOffLog = spend(user, { days: 90 });
+  const totalOutMinor = burnMinor + oneOffLog.monthlyAverageMinor;
+
   const horizon = now() + 60 * DAY_MS;
   const upcoming = activeLedger
     .filter(entry => entry.nextDueAt && entry.nextDueAt <= horizon)
@@ -499,7 +504,9 @@ export async function finance(user, { days = 180 } = {}) {
       mixedCurrency,
       // Variable spend is reported beside the subscriptions, never folded into
       // them: a top-up that happened twelve times last month is not a fixture.
-      oneOff: spend(user, { days: 90 }),
+      oneOff: oneOffLog,
+      // What actually leaves the account each month, and what profit uses.
+      totalMonthlyOutMinor: totalOutMinor,
       byCategory: activeLedger.reduce((acc, entry) => {
         acc[entry.category] = (acc[entry.category] || 0) + entry.monthlyMinor;
         return acc;
@@ -507,11 +514,14 @@ export async function finance(user, { days = 180 } = {}) {
       dueNext60Days: upcoming,
       dueNext60DaysTotalMinor: upcoming.reduce((sum, item) => sum + item.amountMinor, 0),
     },
-    // Net, not gross, minus burn. Anything else overstates what the business
-    // keeps -- and the fee is the part that is easiest to forget.
+    // Net, not gross, minus BOTH kinds of outgoing. Anything else overstates
+    // what the business keeps -- the Stripe fee is the part that is easiest to
+    // forget, and variable spend is the part that is easiest to file somewhere
+    // that never reaches the profit line. Subscriptions alone would have hidden
+    // the largest single cost this deployment has.
     profit: {
-      monthlyNetMinor: thisMonth.netMinor - burnMinor,
-      marginPercent: thisMonth.netMinor ? Math.round(((thisMonth.netMinor - burnMinor) / thisMonth.netMinor) * 1000) / 10 : null,
+      monthlyNetMinor: thisMonth.netMinor - totalOutMinor,
+      marginPercent: thisMonth.netMinor ? Math.round(((thisMonth.netMinor - totalOutMinor) / thisMonth.netMinor) * 1000) / 10 : null,
       // Stated so the number is never read as more certain than it is.
       completeness: [
         unpriced.length
