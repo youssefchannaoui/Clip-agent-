@@ -2055,7 +2055,14 @@ function visualEmpty(title,note,iconName='sparkles',action='') {return `<div cla
 
 const when=ms=>ms?new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}).format(new Date(ms)):'—';
 const age=ms=>{if(!ms)return'';const d=Date.now()-ms;if(d<60000)return'now';if(d<3600000)return`${Math.floor(d/60000)}m ago`;if(d<86400000)return`${Math.floor(d/3600000)}h ago`;return`${Math.floor(d/86400000)}d ago`};
-function toast(message,type=''){const box=$('#toasts');if(!box)return;const n=document.createElement('div');n.className=`toast ${type}`;n.textContent=message;box.append(n);setTimeout(()=>n.remove(),3600)}
+function toast(message,type=''){const box=$('#toasts');if(!box)return;const text=String(message);
+/* One repeated message is one problem, not seven. A failing action retried a few
+   times used to stack the same sentence down the whole screen, which reads as
+   something going badly wrong rather than one thing being wrong once -- so an
+   identical message still showing just has its timer restarted. */
+const seen=[...box.children].find(n=>n.textContent===text);
+if(seen){clearTimeout(Number(seen.dataset.toastTimer)||0);seen.dataset.toastTimer=String(setTimeout(()=>seen.remove(),3600));return}
+const n=document.createElement('div');n.className=`toast ${type}`;n.textContent=text;box.append(n);n.dataset.toastTimer=String(setTimeout(()=>n.remove(),3600))}
 let API_SEQUENCE=0;
 /* The global activity bar: a 2px gold shimmer at the very top whenever any
    request has been in flight longer than 250ms. One honest signal for every

@@ -261,12 +261,41 @@ async function connectTikTok(code, userId) {
     headers: { Authorization: `Bearer ${token.access_token}` },
   }, 'TikTok');
   const user = profile?.data?.user || {};
-  const connection = {
+  // Named `entry`, not `connection`: the module-level connection() lookup is
+  // needed a few lines below, and a local of the same name shadows it.
+  const entry = {
     provider: 'tiktok', accountId: token.open_id || user.open_id || '', name: user.display_name || 'TikTok account', avatar: user.avatar_url || '',
     scopes: token.scope || '', token: encrypt({ ...token, expiresAt: Date.now() + Number(token.expires_in || 86400) * 1000 }), connectedAt: Date.now(), creatorInfo: null,
   };
-  setConnection(state.socialConnections, userId, 'tiktok', connection);
-  save(); log(`Connected TikTok account "${connection.name}".`, 'info', userId);
+  setConnection(state.socialConnections, userId, 'tiktok', entry);
+  save();
+
+  /*
+   * Fetch the creator's options as part of connecting, not as a chore afterwards.
+   *
+   * Publishing settings refuse to enable TikTok without a recent creator_info --
+   * TikTok requires the current privacy and interaction options to be shown, and
+   * a stale copy is worse than none. But connecting used to store creatorInfo as
+   * null, so a freshly linked account landed in a state the validator rejects,
+   * and the only way out was pressing "Test connection" by hand. Linking an
+   * account and immediately being told to go and test it is not a step anyone
+   * should have to be taught.
+   *
+   * Deliberately not fatal. If this call fails -- a scope the creator declined,
+   * a sandbox account that is not a target user -- the connection itself is
+   * still real and worth keeping, and the existing gate will ask for a manual
+   * test. The reason is recorded so it is visible rather than mysterious.
+   */
+  try {
+    await queryTikTokCreator(token.access_token, userId);
+    const fresh = connection(userId, 'tiktok');
+    if (fresh) { fresh.lastTestAt = Date.now(); fresh.lastTestError = null; save(); }
+    log(`Connected TikTok account "${entry.name}" and loaded its posting options.`, 'info', userId);
+  } catch (error) {
+    const fresh = connection(userId, 'tiktok');
+    if (fresh) { fresh.lastTestError = error.message; save(); }
+    log(`Connected TikTok account "${entry.name}", but its posting options could not be read: ${error.message}`, 'warn', userId);
+  }
 }
 
 export async function completeOAuth(provider, callbackUrl) {

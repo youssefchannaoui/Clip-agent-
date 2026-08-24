@@ -150,3 +150,48 @@ test('an OAuth2 error is reported as itself, not as a 401 one request later', as
   assert.ok(!calls.some(u => u.includes('/user/info/')),
     'a missing access token stops the flow instead of being sent as "Bearer undefined"');
 });
+
+test('connecting loads the creator options, so linking is not followed by a chore', async () => {
+  // Publishing settings refuse to enable TikTok without a recent creator_info.
+  // Connecting used to store null, so a freshly linked account was immediately
+  // in a state the validator rejects and the only way out was pressing "Test
+  // connection" by hand.
+  const realFetch = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (url, options) => {
+    const u = String(url);
+    seen.push(u);
+    if (u.includes('/oauth/token/')) {
+      return new Response(JSON.stringify({ access_token: 'tok', open_id: 'open-1', scope: 'user.info.basic,video.publish', expires_in: 86400 }),
+        { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (u.includes('/user/info/')) {
+      return new Response(JSON.stringify({ data: { user: { open_id: 'open-1', display_name: 'Test creator' } } }),
+        { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (u.includes('/creator_info/query/')) {
+      return new Response(JSON.stringify({ data: { privacy_level_options: ['SELF_ONLY', 'PUBLIC_TO_EVERYONE'], comment_disabled: false } }),
+        { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const url = new URL('https://app.test/auth/tiktok/callback?code=abc&state=' + encodeURIComponent(social.oauthStartUrl('tiktok', USER).split('state=')[1]));
+    await social.completeOAuth('tiktok', url);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+
+  assert.ok(seen.some(u => u.includes('/creator_info/query/')),
+    'the creator options are fetched as part of connecting');
+
+  const conn = store.state.socialConnections[USER].tiktok;
+  assert.ok(conn.creatorInfo, 'and stored on the connection');
+  assert.deepEqual(conn.creatorInfo.privacy_level_options, ['SELF_ONLY', 'PUBLIC_TO_EVERYONE']);
+  assert.ok(Number(conn.lastTestAt) > 0, 'with a test timestamp, so the enable gate is already satisfied');
+
+  // The whole point: enabling TikTok now passes without a manual test first.
+  const next = base();
+  next.tiktok.accountId = conn.accountId;
+  assert.doesNotThrow(() => social.validatePublishingSettings(next, USER));
+});
