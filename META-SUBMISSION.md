@@ -105,61 +105,75 @@ Domains when you see this error on a Login-for-Business app.
   features page and in the configuration picker, is **`instagram_content_publish`**
   -- which is what the code already sent. Do not "fix" the code to match that page.
 
-## BLOCKED 24 Aug 2026: the app's settings stopped saving
+## RESOLVED 24 Aug 2026: the login dialog works
 
-**Connecting Facebook or Instagram does not work yet, and the cause is on
-Meta's side, not in this repo.**
+The dialog now loads and offers "Continue as ...", showing the DeenClipped icon
+and linking this app's own Privacy Policy and Terms.
 
-Every write to **App settings → Basic** and to **Facebook Login for Business →
-Settings** now reports "Changes saved" and is gone on reload. Proven with a
-control: setting **Namespace** to `deenclippedapp`, clicking the real
-**Save Changes** button, reloading -- empty. That field has no validation and
-nothing to do with OAuth, so this is not a rejected value, it is a silent
-write failure across the whole app-settings surface.
+**The cause was mundane and cost hours: the Save Changes button on
+Facebook Login for Business → Settings was never actually being pressed.** It
+is a `div[role="button"]`, and a synthetic click on it does nothing -- no
+network request, no error, and the "Changes saved" toast that appears when you
+press Enter in the redirect-URI field belongs to that field's own widget, not
+to the form. So the chip appeared, the toast said saved, and the value was gone
+on reload. A real click at the button's coordinates saves it and it persists.
 
-What that breaks: `Valid OAuth Redirect URIs` cannot be populated, so the login
-dialog answers
+Anything that reads this later: on this console, **do not trust the toast**.
+Reload and re-read the field.
+
+### One self-inflicted wrong turn, recorded so it is not repeated
+
+A control test concluded that "all app-settings writes are silently failing".
+That was wrong, and it was wrong because the test was broken two ways: it set
+the value by assigning to `input.value`, which React never sees, and the value
+it used contained a digit, which Namespace rejects ("Can only contain lowercase
+letters, dashes, and underscores"). Typing a valid value with real keystrokes
+and pressing the real button saved fine.
+
+On the strength of that bad conclusion the app was detached from the
+Yccosmeticcustoms business portfolio to test a hypothesis. That changed
+nothing, and the app has been **re-attached**; the redirect URI was re-checked
+afterwards and survives the re-attach.
+
+### `config_id`
+
+Facebook Login for Business names its permissions in a saved configuration and
+takes its id where classic Login took a scope list.
+
+| | |
+|---|---|
+| Configuration name | DeenClipped publishing |
+| **Configuration ID** | **1086882974287802** |
+| Access token type | **User access token** (cannot be changed later) |
+| Permissions | `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `instagram_basic`, `instagram_content_publish` |
+
+`META_LOGIN_CONFIG_ID` on Render carries it. With it set, `oauthStartUrl` sends
+`config_id`; unset, it falls back to `scope` for a classic-Login app.
+
+Note that `config_id` alone did **not** fix the dialog -- the redirect URI was
+the missing half. Both are needed.
+
+### Two permission traps
+
+- **The Instagram permissions are not in the Instagram use case.** The
+  `INSTAGRAM_BUSINESS` use case offers `instagram_business_basic` and friends --
+  the *Instagram Login* API, a different API from the one this app uses. Ours
+  are behind **Instagram API → API setup with Facebook login**, which has an
+  "Add required content permissions" button. Until that is pressed,
+  `instagram_basic` and `instagram_content_publish` exist nowhere and the
+  configuration cannot include them.
+- **That setup page misspells one of them.** It lists
+  `instagram_content_publishing`. The real permission, on the Permissions and
+  features page and in the configuration picker, is **`instagram_content_publish`**
+  -- which is what the code already sent. Do not "fix" the code to match it.
+
+### The App Domains error message is a red herring
 
 > Can't load URL — The domain of this URL isn't included in the app's domains.
 
-which sends you to App Domains. App Domains is correct (`deenclipped.online`,
-verified after reload) and is **not** the problem. The same error appears for
-`https://deenclipped.online/` -- the exact Site URL -- so it is not about the
-callback path either.
-
-### What was ruled out, and how
-
-| Suspicion | Test | Result |
-|---|---|---|
-| App Domains missing | Reloaded Basic settings, read the field | Present, correct |
-| Callback path not allowed | Used the exact Site URL as `redirect_uri` | Same error |
-| `scope` instead of `config_id` | Created a configuration, sent `config_id` | Same error |
-| App itself rejected | Sent no `redirect_uri` at all | Different error: "No redirect URI in the params" -- so the app and config_id are accepted, and `redirect_uri` is required |
-| A value Meta dislikes | Saved `Namespace`, an unrelated free-text field | Also did not persist |
-
-That last row is the finding. Nothing app-specific is wrong; the settings
-simply are not being written.
-
-### The leading hypothesis, untested
-
-Writes were working earlier in the same session -- privacy policy URL, terms
-URL, category, icon and the apex app domain all saved and survived a reload.
-They stopped some time after the app was **attached to the Yccosmeticcustoms
-business portfolio**. Adding `www.deenclipped.online` after the attach failed,
-where adding the apex before it had worked.
-
-The obvious next test is to **detach the app from the business portfolio and
-retry the redirect URI**. That was deliberately not done unilaterally: the
-portfolio is required for App Review later, and detaching is not a clean
-undo. It is the owner's call.
-
-If detaching does not fix it, this is a Meta console bug and the route is
-Support, or setting `app_domains` through the Graph API with an app access
-token.
-
-### Meanwhile
-
-Nothing here blocks the TikTok demo video, which needs no Meta app.
+App Domains was correct throughout. This message appears when the **redirect
+URI** is not registered. Chasing App Domains on a Login-for-Business app wastes
+time; check the Valid OAuth Redirect URIs list, and confirm it by reloading.
 
 ## The secret
 
