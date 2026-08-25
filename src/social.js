@@ -985,11 +985,27 @@ async function pollInstagram(target, userId) {
   const status = await jsonRequest(`${config.metaGraphBase}/${config.metaGraphVersion}/${encodeURIComponent(containerId)}?fields=status_code,status&access_token=${encodeURIComponent(accessToken)}`, {}, 'Instagram');
   if (status?.status_code === 'ERROR' || status?.status_code === 'EXPIRED') throw new SocialError(`Instagram could not prepare the Reel: ${status.status || status.status_code}`, { provider: 'instagram' });
   if (status?.status_code !== 'FINISHED') return { pending: true, externalId: containerId, providerState: { ...target.providerState, platformStatus: status?.status_code || status?.status || 'IN_PROGRESS' } };
+  // media_publish CREATES the post, so the attempt is recorded before it is
+  // made rather than after it returns. If the answer is lost on the way back --
+  // a timeout, a dropped connection -- the Reel may well be live while this
+  // side believes nothing happened, and without this the next attempt has no
+  // way to know it is the second one. It does not make the call idempotent; it
+  // makes the ambiguity visible instead of silent.
+  const alreadyAttempted = Boolean(target.providerState?.publishAttemptedAt);
+  target.providerState = { ...target.providerState, stage: 'publishing', publishAttemptedAt: Date.now() };
+  save();
   const body = new URLSearchParams({ creation_id: containerId, access_token: accessToken });
   const published = await jsonRequest(`${config.metaGraphBase}/${config.metaGraphVersion}/${encodeURIComponent(account.instagramId)}/media_publish`, {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body,
   }, 'Instagram');
-  if (!published?.id) throw new SocialError('Instagram did not return a published media ID.', { retryable: true, provider: 'instagram' });
+  if (!published?.id) {
+    throw new SocialError(
+      alreadyAttempted
+        ? 'Instagram did not return a published media ID, and this clip has been sent to media_publish before. Check the Instagram account for the Reel before retrying, so it is not posted twice.'
+        : 'Instagram did not return a published media ID.',
+      { retryable: !alreadyAttempted, provider: 'instagram' },
+    );
+  }
   const publishedId = String(published.id);
   let postUrl = '';
   try {
