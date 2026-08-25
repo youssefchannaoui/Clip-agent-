@@ -15,7 +15,17 @@ from typing import Any, Callable
 
 
 class ImportProviderError(RuntimeError):
-    pass
+    """A provider could not deliver the file.
+
+    `retryable` says whether asking the same provider again could plausibly
+    give a different answer. A timeout or a 5xx is the provider's day going
+    badly; a 401 or a 404 is an answer, and asking four more times only makes
+    someone wait four times longer for it.
+    """
+
+    def __init__(self, message: str, retryable: bool = False) -> None:
+        super().__init__(message)
+        self.retryable = retryable
 
 
 def validate_youtube_url(value: str) -> str:
@@ -398,6 +408,12 @@ class YtDlpImportProvider(ManagedImportProvider):
         return ImportedSource(destination, info_holder.get("title", ""))
 
 
+# Consecutive transient poll failures tolerated before giving up on a SocialKit
+# job. The overall deadline still governs, so this cannot extend a wait -- it
+# only stops one bad answer discarding a download already in progress.
+_SOCIALKIT_POLL_STUMBLES = 5
+
+
 class SocialKitImportProvider(ManagedImportProvider):
     """Hosted YouTube import via SocialKit's async (v2) download job API.
 
@@ -432,11 +448,18 @@ class SocialKitImportProvider(ManagedImportProvider):
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", "replace")[:300]
-            raise ImportProviderError(f"SocialKit request failed with HTTP {exc.code}: {detail}") from exc
+            # 5xx is their side falling over and may well pass next time; 4xx is
+            # an answer about this request and will not change.
+            raise ImportProviderError(
+                f"SocialKit request failed with HTTP {exc.code}: {detail}",
+                retryable=exc.code >= 500,
+            ) from exc
         except (TimeoutError, socket.timeout) as exc:
-            raise ImportProviderError("SocialKit request timed out.") from exc
+            raise ImportProviderError("SocialKit request timed out.", retryable=True) from exc
+        except urllib.error.URLError as exc:
+            raise ImportProviderError(f"SocialKit could not be reached: {exc.reason}", retryable=True) from exc
         except (ValueError, json.JSONDecodeError) as exc:
-            raise ImportProviderError("SocialKit returned invalid JSON.") from exc
+            raise ImportProviderError("SocialKit returned invalid JSON.", retryable=True) from exc
 
     def import_video(self, source: dict, destination: Path, cancelled: Callable[[], bool]) -> ImportedSource:
         if not self.api_key:
@@ -459,13 +482,32 @@ class SocialKitImportProvider(ManagedImportProvider):
         status_query = urllib.parse.urlencode({"access_key": self.api_key})
         deadline = time.monotonic() + self.timeout
         info: dict = {}
+        # A thirty-minute wait is around 360 polls. One of them failing used to
+        # abandon the whole download -- a single blip out of 360 threw away work
+        # SocialKit had already done, and surfaced as a plain failure the job
+        # log could not explain. Transient answers are tolerated in a row; a
+        # 4xx still stops immediately, because it is an answer.
+        stumbles = 0
+        first = True
         while True:
             if cancelled():
                 raise ImportProviderError("Job cancelled.")
             if time.monotonic() > deadline:
                 raise ImportProviderError("SocialKit download timed out. Upload the original MP4 or retry later.")
-            time.sleep(self.poll_seconds)
-            polled = self._call(f"{self.base}/v2/downloads/{job_id}?{status_query}")
+            # Poll before sleeping. Sleeping first added the poll interval to
+            # every single import, including ones already finished.
+            if first:
+                first = False
+            else:
+                time.sleep(self.poll_seconds)
+            try:
+                polled = self._call(f"{self.base}/v2/downloads/{job_id}?{status_query}")
+            except ImportProviderError as exc:
+                stumbles += 1
+                if not getattr(exc, "retryable", False) or stumbles > _SOCIALKIT_POLL_STUMBLES:
+                    raise
+                continue
+            stumbles = 0
             info = polled.get("data") if isinstance(polled, dict) else None
             if not isinstance(info, dict):
                 raise ImportProviderError("SocialKit returned an unexpected job status.")
