@@ -124,6 +124,22 @@ _heartbeat_stop = threading.Event()
 # to a rate a person can actually read.
 RENDER_PROGRESS_SECONDS = 2.0
 
+# The first pass transcribes; it must never default to translating.
+#
+# Whisper's `translate` task returns English whatever was spoken, so an Arabic
+# lecture would come back as English and three things would break at once: the
+# Arabic line that belongs on screen above the translation would be gone, the
+# ayah matcher would search the Quran with English and match nothing -- taking
+# the medallion and the verse translation with it -- and the second, genuinely
+# translating pass would never run, because it only fires when the first pass
+# was `transcribe`.
+#
+# The default said `translate` in both places that read it. The web app happens
+# to send `transcribe` on every job, so this never fired; it was a trap waiting
+# for a code path that forgot to.
+DEFAULT_WHISPER_TASK = "transcribe"
+DEFAULT_WHISPER_MODEL = "small"
+
 # Clients to try when YouTube refuses the media URL. None is yt-dlp's own
 # default and usually works; the rest are the ones that historically keep
 # working when it does not. Mirrors YOUTUBE_CLIENTS in import_providers.py.
@@ -458,7 +474,7 @@ def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, durat
     settings = job["settings"]
     device = settings.get("device") or "auto"
     compute_type = settings.get("computeType") or "int8"
-    model_name = settings.get("model") or "small"
+    model_name = settings.get("model") or DEFAULT_WHISPER_MODEL
     progress(
         "Loading transcription model", 13,
         model=model_name, device=device, computeType=compute_type,
@@ -474,7 +490,7 @@ def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, durat
         "vad_parameters": {"min_silence_duration_ms": 450},
         "word_timestamps": True,
         "condition_on_previous_text": True,
-        "task": settings.get("task") or "translate",
+        "task": settings.get("task") or DEFAULT_WHISPER_TASK,
     }
     language = str(settings.get("language") or "").strip()
     if language:
@@ -3153,8 +3169,10 @@ def transcript_cache_path(job: dict[str, Any], start: float, end: float) -> Path
     settings = job.get("settings", {})
     key = "_".join([
         source_key,
-        str(settings.get("model") or "small"),
-        str(settings.get("task") or "translate"),
+        # The same defaults the transcriber uses. When these two disagreed, a
+        # cache entry was filed under a task the run had not performed.
+        str(settings.get("model") or DEFAULT_WHISPER_MODEL),
+        str(settings.get("task") or DEFAULT_WHISPER_TASK),
         str(settings.get("language") or "auto"),
         f"{start:.2f}", f"{end:.2f}",
     ])
