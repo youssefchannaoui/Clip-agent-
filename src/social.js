@@ -1106,8 +1106,21 @@ async function startTikTok(clip, target, file, userId) {
       if (!boundary) break;
       const start = Math.max(offset, boundary.start);
       const length = boundary.end - start + 1;
+      // allocUnsafe hands back uninitialised heap, which is the right trade for
+      // a 64MB chunk ONLY while every byte of it is then overwritten. The
+      // return of readSync was being thrown away, so a short read -- the file
+      // truncated or replaced under us mid-upload -- left the tail of the
+      // buffer as whatever memory happened to be there and PUT it to TikTok as
+      // part of the video. Corrupt output at best, and at worst a stranger's
+      // bytes leaving this machine.
       const buffer = Buffer.allocUnsafe(length);
-      fs.readSync(fd, buffer, 0, length, start);
+      const read = fs.readSync(fd, buffer, 0, length, start);
+      if (read !== length) {
+        throw new SocialError(
+          `The clip file changed while it was uploading: expected ${length} bytes at ${start}, read ${read}.`,
+          { retryable: true, provider: 'tiktok' },
+        );
+      }
       let res;
       try {
         res = await fetch(uploadUrl, {
