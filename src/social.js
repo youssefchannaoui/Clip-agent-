@@ -636,16 +636,49 @@ export function publicMediaUrl(clipId) {
   return `${baseUrl()}/media/social/${encodeURIComponent(clipId)}.mp4?exp=${exp}&sig=${encodeURIComponent(sig)}`;
 }
 
+/**
+ * Take a refreshed token only if it actually contains one.
+ *
+ * Both refresh paths did `{ ...token, ...refreshed }` and then set expiresAt to
+ * an hour out unconditionally. A 200 that carries no access_token -- an empty
+ * body, a shape nobody expected -- therefore left the OLD, expired token in
+ * place, stamped it as fresh for another hour, and SAVED it. Every publish for
+ * that hour then failed with 401 and the refresh was never retried, because the
+ * expiry it was judged against was the one this function had just invented. It
+ * healed itself an hour later, which is precisely what makes it read as random.
+ */
+function mergeRefreshedToken(previous, refreshed, provider, defaultLifetimeSec) {
+  const access = String(refreshed?.access_token || '').trim();
+  if (!access) {
+    throw new SocialError(
+      `${provider} did not return a new access token when refreshing. Reconnect the account.`,
+      { provider: provider.toLowerCase() },
+    );
+  }
+  return {
+    ...previous,
+    ...refreshed,
+    access_token: access,
+    // Providers rotate refresh tokens; keeping the old one when none came back
+    // is what lets the next refresh work at all.
+    refresh_token: refreshed.refresh_token || previous.refresh_token,
+    expiresAt: Date.now() + Number(refreshed.expires_in || defaultLifetimeSec) * 1000,
+  };
+}
+
 async function youtubeToken(userId) {
   const conn = connection(userId, 'youtube');
   if (!conn?.token) throw new SocialError('YouTube is not connected.');
   let token = decrypt(conn.token);
   if (Number(token.expiresAt || 0) > Date.now() + 5 * 60_000) return token.access_token;
+  if (!token.refresh_token) {
+    throw new SocialError('This YouTube connection has no refresh token, so it cannot be renewed. Reconnect the channel.', { provider: 'youtube' });
+  }
   const refreshed = await jsonRequest(config.googleTokenUrl, {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ client_id: config.googleClientId, client_secret: config.googleClientSecret, refresh_token: token.refresh_token, grant_type: 'refresh_token' }),
   }, 'YouTube');
-  token = { ...token, ...refreshed, refresh_token: refreshed.refresh_token || token.refresh_token, expiresAt: Date.now() + Number(refreshed.expires_in || 3600) * 1000 };
+  token = mergeRefreshedToken(token, refreshed, 'YouTube', 3600);
   conn.token = encrypt(token); save();
   return token.access_token;
 }
@@ -655,11 +688,14 @@ async function tiktokToken(userId) {
   if (!conn?.token) throw new SocialError('TikTok is not connected.');
   let token = decrypt(conn.token);
   if (Number(token.expiresAt || 0) > Date.now() + 5 * 60_000) return token.access_token;
+  if (!token.refresh_token) {
+    throw new SocialError('This TikTok connection has no refresh token, so it cannot be renewed. Reconnect the account.', { provider: 'tiktok' });
+  }
   const refreshed = await jsonRequest(`${config.tiktokApiBase}/v2/oauth/token/`, {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cache-Control': 'no-cache' },
     body: new URLSearchParams({ client_key: config.tiktokClientKey, client_secret: config.tiktokClientSecret, grant_type: 'refresh_token', refresh_token: token.refresh_token }),
   }, 'TikTok');
-  token = { ...token, ...refreshed, refresh_token: refreshed.refresh_token || token.refresh_token, expiresAt: Date.now() + Number(refreshed.expires_in || 86400) * 1000 };
+  token = mergeRefreshedToken(token, refreshed, 'TikTok', 86400);
   conn.token = encrypt(token); save();
   return token.access_token;
 }
@@ -1180,5 +1216,5 @@ export function targetPublic(target) {
   };
 }
 
-export const __test = { tiktokChunks, captionText, selectedAccount };
+export const __test = { tiktokChunks, captionText, selectedAccount, mergeRefreshedToken };
 export { SocialError };

@@ -14,7 +14,13 @@ const DEFAULTS = Object.freeze({
   description: 'A reusable DeenClipped video style.',
   width: 1080,
   height: 1920,
-  fitMode: 'contain',
+  // 'contain' letterboxes: a 16:9 lecture in a 9:16 frame left roughly 65% of
+  // every Reel as black bars, checked on a real render. It also made
+  // blurStrength below a setting that does nothing -- the blurred backdrop is
+  // only built when fitMode is 'blur', so a default of 28 sat there inert.
+  // 'blur' fills the frame and still shows the whole speaker; 'crop' fills it
+  // by cutting into the sides instead.
+  fitMode: 'blur',
   smartFramingEnabled: true,
   smartFramingBias: 'auto',
   // Push the framed subject across the frame, as a percentage, to clear room
