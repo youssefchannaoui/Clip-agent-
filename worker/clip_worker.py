@@ -799,7 +799,12 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any]) ->
     base_url = str(
         settings.get("ollamaUrl") or os.getenv("OLLAMA_URL") or "http://ollama:11434"
     ).rstrip("/")
-    model = str(settings.get("ollamaModel") or "qwen3:4b")
+    # Reads the environment like ollamaUrl on the line above does. It did not,
+    # so OLLAMA_MODEL in docker-compose.yml was silently ignored and the box
+    # kept loading whatever the web service asked for -- which is how a 2.5G
+    # model went on being loaded on a 3.7G machine after someone had already
+    # "changed" it in compose.
+    model = str(settings.get("ollamaModel") or os.getenv("OLLAMA_MODEL") or "qwen3:1.7b")
     if not candidates:
         return candidates
     if not base_url:

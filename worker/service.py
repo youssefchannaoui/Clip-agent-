@@ -739,7 +739,14 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "DeenClippedWorker/1.0"
 
     def log_message(self, fmt: str, *args: Any) -> None:
-        print(json.dumps({"type": "http", "message": fmt % args}), flush=True)
+        message = fmt % args
+        # The probes run every few seconds forever. They drowned the log: 3066
+        # lines with essentially every one a 200 on /health or /readiness, so a
+        # real failure was unfindable without knowing its exact wording. A probe
+        # that FAILS is still worth a line, so only the successes are dropped.
+        if ("/health" in message or "/readiness" in message) and " 200 " in message:
+            return
+        print(json.dumps({"type": "http", "message": message}), flush=True)
 
     def send_json(self, status: int, payload: dict[str, Any]) -> None:
         raw = json.dumps(payload).encode()

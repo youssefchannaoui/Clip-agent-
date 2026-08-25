@@ -13,7 +13,9 @@ services:
       WHISPER_DEVICE: cpu
       WHISPER_COMPUTE_TYPE: int8
       WHISPER_MODEL: small
-      FFMPEG_THREADS: "4"
+      # Two, because the box has two cores. Four oversubscribed them and made
+      # ffmpeg contend with itself while Whisper wanted the same cores.
+      FFMPEG_THREADS: "2"
       # Where the yt-dlp PO-token plugin finds its token server (the
       # bgutil-provider service below). Unset means no tokens, which is how
       # every import from this datacenter IP came to die on YouTube's
@@ -23,6 +25,8 @@ services:
       # for weeks -- model loaded, health checks green -- and no job ever
       # called it; every title was the transcript-head fallback.
       OLLAMA_URL: http://ollama:11434
+      # Sized to the box, not to preference. See the ollama memory note below.
+      OLLAMA_MODEL: qwen3:1.7b
     volumes:
       - deenclipped-worker-data:/var/lib/deenclipped
     ports:
@@ -30,7 +34,11 @@ services:
     deploy:
       resources:
         limits:
-          memory: 10G
+          # The box has 3.7G. A 10G limit here was not a limit, it was a wish:
+          # nothing was ever capped, so the kernel's global OOM killer did the
+          # capping instead and took whatever it liked -- 42 times, all of them
+          # llama-server, some of them mid-job.
+          memory: 2G
 
   # Local clip ranking and titling. Without this, refine_with_ollama() returns
   # its candidates untouched and every clip is named from a raw transcript
@@ -51,9 +59,11 @@ services:
     deploy:
       resources:
         limits:
-          # qwen3:4b at int4 sits near 3G. Capped so a model pull can never
-          # squeeze transcription or ffmpeg off the box.
-          memory: 5G
+          # qwen3:1.7b is 1.4G on disk and sits near 1.8G loaded. qwen3:4b was
+          # 2.5G on disk and measured at 2.4-3.0G RSS, which does not fit beside
+          # Whisper and ffmpeg on a 3.7G box -- that is what the OOM kills were.
+          # Raise this and OLLAMA_MODEL together if the box ever grows.
+          memory: 2G
 
   # Mints YouTube proof-of-origin tokens for yt-dlp. Hetzner's address ranges
   # get YouTube's bot wall -- playability LOGIN_REQUIRED, "Sign in to confirm
@@ -71,7 +81,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 512M
 
 volumes:
   deenclipped-worker-data:

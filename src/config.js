@@ -80,7 +80,12 @@ export const config = {
   musicVolumePercent: Math.max(1, Math.min(50, Math.round(number(process.env.MUSIC_VOLUME_PERCENT, 13)))),
 
   ollamaUrl: (process.env.OLLAMA_URL || '').replace(/\/+$/, ''),
-  ollamaModel: process.env.OLLAMA_MODEL || 'qwen3:4b',
+  // Sized to the worker box, which has 3.7G of RAM. qwen3:4b measured
+  // 2.4-3.0G resident there and was OOM-killed 42 times, taking the whole
+  // machine with it because the kills were global, not per-container. This
+  // value is sent to the worker in the job settings and wins over the worker's
+  // own default, so raising the box means raising it here too.
+  ollamaModel: process.env.OLLAMA_MODEL || 'qwen3:1.7b',
 
   socialTokenKey: process.env.SOCIAL_TOKEN_KEY || '',
   socialPublishEnabled: boolean(process.env.SOCIAL_PUBLISH_ENABLED, true),
