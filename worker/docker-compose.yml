@@ -50,6 +50,17 @@ services:
   ollama:
     image: ollama/ollama:latest
     restart: unless-stopped
+    environment:
+      # Unload the model a minute after the last scoring call instead of
+      # Ollama's default five. Scoring sits between transcription and
+      # rendering, so with the default the 1.8G model was still resident while
+      # ffmpeg was rendering -- on a 3.8G box that is the difference between
+      # rendering in RAM and rendering out of swap. Reloading costs 0.34s
+      # measured, which is nothing next to a render.
+      OLLAMA_KEEP_ALIVE: 60s
+      # One model in memory at a time. The default is 3, and three of these
+      # would not fit even with the limit below.
+      OLLAMA_MAX_LOADED_MODELS: "1"
     volumes:
       - deenclipped-ollama:/root/.ollama
     # Never published beyond the compose network -- the model must not be
