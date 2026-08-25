@@ -199,6 +199,11 @@ Habits the tests now enforce, and why:
 - Branch `deenclipped-v2-2` auto-deploys the web service to Render on push.
 - The worker is **manual**: on the Hetzner box (135.181.149.182),
   `cd /opt/deenclipped && git pull && docker compose -f worker/docker-compose.yml up -d --build`.
+- **Follow it with `docker builder prune -f`.** Each `--build` leaves its layer
+  cache behind, and they accumulate invisibly: eight rebuilds in one session
+  grew the cache to **25.7GB** and took the disk to 69%, which reads exactly
+  like a box running out of room for customer data. Pruning took it back to
+  35%. Check `df -h /` before concluding the box needs a bigger disk.
 - Confirm a worker deploy with `docker exec worker-deenclipped-worker-1 ls /app/worker`
   and check for the file you expect. A clean build log does not prove the new
   code landed — Docker will happily rebuild an identical image from cache.

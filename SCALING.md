@@ -19,6 +19,18 @@ server itself.
 
 Transcription is not the bottleneck people assume it is. Import is: see below.
 
+## Before concluding the disk is full
+
+Each `docker compose ... --build` leaves its layer cache behind. Eight rebuilds
+in one session grew it to **25.7GB** and put the disk at 69% -- which reads
+exactly like a box running out of room for customer data, and is not.
+
+```
+docker builder prune -f
+```
+
+took it straight back to 35%. Run that before sizing a bigger disk.
+
 ## To grow
 
 1. Resize the server in the Hetzner console.
