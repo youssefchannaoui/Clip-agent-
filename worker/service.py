@@ -291,6 +291,11 @@ class Processor:
         # same bytes twice. Keyed by job so a crashed job cannot leak into the
         # next one; cleaned in process()'s finally.
         self.partial_uploads: dict[str, dict[str, dict[str, Any]]] = {}
+        # Jobs past the disk check and not yet finished. The check has to know
+        # about them: it looks at free space once, at the start, so with more
+        # than one job running each could see room and they could still fill the
+        # disk between them.
+        self.in_flight: set[str] = set()
 
     def start(self) -> None:
         for job_id in self.store.recover():
@@ -582,6 +587,22 @@ class Processor:
             clips.append(cached if cached else self.upload_clip(job_id, clip))
         return {"project": project, "clips": clips}
 
+    def disk_shortfall(self) -> int:
+        """Bytes short of what the jobs now running could still need, or 0.
+
+        Free space was compared against a flat floor once per job. At one job
+        at a time that was enough; capacity.py now sizes concurrency from the
+        machine, and four jobs each seeing 12G free could each admit itself and
+        then want 4G of source between them. Every job already admitted is
+        counted as though it has yet to download its whole allowance, which is
+        the pessimistic reading and the right one for a disk.
+        """
+        with self.lock:
+            admitted = len(self.in_flight)
+        needed = MIN_FREE_BYTES + MAX_DOWNLOAD_BYTES * admitted
+        free = shutil.disk_usage(TEMP_DIR).free
+        return max(0, needed - free)
+
     def process(self, job_id: str) -> None:
         payload = self.store.payload(job_id)
         work = TEMP_DIR / job_id
@@ -589,8 +610,14 @@ class Processor:
             shutil.rmtree(work)
         work.mkdir(parents=True)
         try:
-            if shutil.disk_usage(TEMP_DIR).free < MIN_FREE_BYTES:
-                raise RuntimeError("The worker does not have enough free temporary disk space.")
+            shortfall = self.disk_shortfall()
+            if shortfall:
+                raise RuntimeError(
+                    "The worker does not have enough free temporary disk space: "
+                    f"{shortfall // (1024 ** 2)} MB short of what the jobs already running may need."
+                )
+            with self.lock:
+                self.in_flight.add(job_id)
             self.progress(job_id, "importing", 3)
             source = work / "source.mp4"
             # Falls through to the local downloader when a managed provider is
@@ -682,6 +709,11 @@ class Processor:
             except Exception as report_exc:  # noqa: BLE001
                 print(f"[worker] job {job_id} failed and the failure could not be recorded: {clean_error(report_exc)}", file=sys.stderr, flush=True)
         finally:
+            # Released here rather than on the success path, because a job that
+            # failed has stopped consuming disk just as surely as one that
+            # finished -- and leaving it counted would starve every job after it.
+            with self.lock:
+                self.in_flight.discard(job_id)
             self.partial_uploads.pop(job_id, None)
             shutil.rmtree(work, ignore_errors=True)
             self.store.scrub_network(job_id)
