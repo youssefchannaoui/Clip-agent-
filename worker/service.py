@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
 
+import capacity
 from import_providers import ImportedSource, ImportProviderError, download_https, import_with_fallback, provider_for
 from object_storage import ObjectStorage
 
@@ -26,7 +27,12 @@ DATA_DIR = Path(os.getenv("WORKER_DATA_DIR", "/var/lib/deenclipped")).resolve()
 JOBS_DIR = DATA_DIR / "jobs"
 TEMP_DIR = Path(os.getenv("WORKER_TEMP_DIR", str(DATA_DIR / "tmp"))).resolve()
 PORT = int(os.getenv("WORKER_PORT", "8080"))
-MAX_CONCURRENT = max(1, int(os.getenv("WORKER_MAX_CONCURRENT_JOBS", "1")))
+# What this machine can carry, read from the machine rather than assumed. Every
+# value here was a fixed default before, so buying a bigger server or adding a
+# GPU changed nothing at all until five environment variables were hand-edited.
+# An explicit variable still wins; see worker/capacity.py.
+CAPACITY = capacity.plan()
+MAX_CONCURRENT = CAPACITY["maxConcurrentJobs"]
 MAX_DOWNLOAD_BYTES = max(50, int(os.getenv("WORKER_MAX_DOWNLOAD_MB", "4096"))) * 1024 * 1024
 MIN_FREE_BYTES = max(1, int(os.getenv("WORKER_MIN_FREE_GB", "10"))) * 1024**3
 # The app treats five minutes of an unchanged status signature as a hung job, so
@@ -424,10 +430,10 @@ class Processor:
     def run_clip_worker(self, job_id: str, job_file: Path, result_path: Path) -> dict[str, Any]:
         env = {
             **os.environ,
-            "WHISPER_DEVICE": os.getenv("WHISPER_DEVICE", "cpu"),
-            "WHISPER_COMPUTE_TYPE": os.getenv("WHISPER_COMPUTE_TYPE", "int8"),
-            "WHISPER_MODEL": os.getenv("WHISPER_MODEL", "small"),
-            "FFMPEG_THREADS": os.getenv("FFMPEG_THREADS", "4"),
+            "WHISPER_DEVICE": CAPACITY["device"],
+            "WHISPER_COMPUTE_TYPE": CAPACITY["computeType"],
+            "WHISPER_MODEL": CAPACITY["model"],
+            "FFMPEG_THREADS": str(CAPACITY["ffmpegThreads"]),
         }
         child = subprocess.Popen(
             [sys.executable, str(ROOT / "worker" / "clip_worker.py"), str(job_file)],
@@ -620,10 +626,10 @@ class Processor:
                 "template": payload.get("template") or {}, "musicTracks": tracks,
                 "settings": {
                     **(payload.get("settings") or {}),
-                    "device": os.getenv("WHISPER_DEVICE", "cpu"),
-                    "computeType": os.getenv("WHISPER_COMPUTE_TYPE", "int8"),
-                    "model": os.getenv("WHISPER_MODEL", "small"),
-                    "ffmpegThreads": max(1, int(os.getenv("FFMPEG_THREADS", "4"))),
+                    "device": CAPACITY["device"],
+                    "computeType": CAPACITY["computeType"],
+                    "model": CAPACITY["model"],
+                    "ffmpegThreads": CAPACITY["ffmpegThreads"],
                 },
                 "sourceCacheKey": cache_key,
                 "transcriptCacheDir": str(TRANSCRIPT_CACHE_DIR),
@@ -820,7 +826,9 @@ def main() -> int:
     stop = lambda *_: threading.Thread(target=server.shutdown, daemon=True).start()
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
-    print(json.dumps({"type": "startup", "port": PORT, "concurrency": MAX_CONCURRENT}), flush=True)
+    # The whole hardware decision, once, at startup. Without it nobody can tell
+    # a machine that chose one job from a machine that was told to.
+    print(json.dumps({"type": "startup", "port": PORT, "capacity": CAPACITY}), flush=True)
     server.serve_forever()
     return 0
 
