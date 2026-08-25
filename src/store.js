@@ -162,6 +162,7 @@ let revCounter = 0;
 export function stateRev() { return `${bootId}-${revCounter}`; }
 let writing = false;
 let dirty = false;
+let retryTimer = null;
 
 export function save() {
   revCounter += 1;
@@ -170,8 +171,30 @@ export function save() {
   fs.mkdirSync(path.dirname(stateFile), { recursive: true });
   const tmp = `${stateFile}.tmp`;
   fs.writeFile(tmp, JSON.stringify(state, null, 2), error => {
-    if (!error) { try { fs.renameSync(tmp, stateFile); } catch {} }
+    let failed = Boolean(error);
+    if (!error) {
+      try { fs.renameSync(tmp, stateFile); }
+      catch (renameError) { failed = true; error = renameError; }
+    }
     writing = false;
+    if (failed) {
+      // Swallowed before, both of them. A write that fails -- ENOSPC is the
+      // realistic one, and this box runs at 59% -- meant the rename was skipped
+      // and nothing else happened: no log, no retry, and an in-memory state
+      // carrying changes that were never on disk. The next restart lost them,
+      // and nothing anywhere had said so.
+      console.error(`[error] Saving state failed: ${error?.message || error}`);
+      fs.rm(tmp, { force: true }, () => {});
+      // Marked dirty so the change is not abandoned, but retried on a timer
+      // rather than immediately: a full disk fails instantly, and re-entering
+      // save() from here would spin the event loop rather than wait for room.
+      dirty = true;
+      if (!retryTimer) {
+        retryTimer = setTimeout(() => { retryTimer = null; if (dirty) { dirty = false; save(); } }, 5_000);
+        retryTimer.unref?.();
+      }
+      return;
+    }
     if (dirty) { dirty = false; save(); }
   });
 }
