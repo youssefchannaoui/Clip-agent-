@@ -1,6 +1,7 @@
 """Managed source import adapters used by the external DeenClipped worker."""
 from __future__ import annotations
 
+import http.client
 import ipaddress
 import json
 import os
@@ -9,6 +10,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -87,8 +89,16 @@ def download_https(
     cancelled: Callable[[], bool] = lambda: False,
 ) -> None:
     request = urllib.request.Request(url, headers={"User-Agent": "DeenClipped-Worker/1.0"})
+    # Written beside the destination and moved into place only once the whole
+    # file is proven present. A dropped connection used to leave a short file
+    # sitting at the destination and RETURN SUCCESSFULLY -- read() answers b""
+    # at a broken socket exactly as it does at the end of a file, and nothing
+    # compared the bytes written against Content-Length. The pipeline then
+    # transcribed a truncated lecture, and source_cache_store filed it, so every
+    # later job for that URL was served the same short video.
+    scratch = destination.with_name(f".{destination.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.part")
     try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response, destination.open("wb") as output:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response, scratch.open("wb") as output:
             length = int(response.headers.get("Content-Length") or 0)
             if length and length > max_bytes:
                 raise ImportProviderError("The imported video exceeds the configured download limit.")
@@ -108,8 +118,26 @@ def download_https(
                 if total > max_bytes:
                     raise ImportProviderError("The imported video exceeds the configured download limit.")
                 output.write(chunk)
+        if length and total != length:
+            raise ImportProviderError(
+                f"The download ended early: {total} bytes of {length}.", retryable=True,
+            )
+        if not total:
+            raise ImportProviderError("The download produced an empty file.", retryable=True)
+        scratch.replace(destination)
     except urllib.error.HTTPError as exc:
-        raise ImportProviderError(f"Video download failed with HTTP {exc.code}.") from exc
+        raise ImportProviderError(f"Video download failed with HTTP {exc.code}.", retryable=exc.code >= 500) from exc
+    except ImportProviderError:
+        raise
+    except (TimeoutError, socket.timeout, urllib.error.URLError, OSError, http.client.HTTPException) as exc:
+        # These used to escape as themselves. import_with_fallback only catches
+        # ImportProviderError, so a network blip mid-download walked straight
+        # past the whole fallback chain and failed the job outright, with no
+        # other provider tried and nothing readable in the trail.
+        raise ImportProviderError(f"The download did not complete: {exc}", retryable=True) from exc
+    finally:
+        if scratch.exists():
+            scratch.unlink(missing_ok=True)
 
 
 @dataclass
