@@ -69,29 +69,40 @@ Every value can still be forced from the environment, and an explicit setting
 always wins: `WHISPER_DEVICE`, `WHISPER_COMPUTE_TYPE`, `WHISPER_MODEL`,
 `WORKER_MAX_CONCURRENT_JOBS`, `FFMPEG_THREADS`.
 
-## The thing a bigger box does NOT fix
+## Imports: what is actually true
 
-**This server's IP is blocked by YouTube.** Probed 25 Aug 2026 against a video
-that certainly exists:
+Tested 25 Aug 2026, both halves of the chain.
+
+**SocialKit works.** A probe through the real provider fetched a video in
+**7.6 seconds**. It is the primary provider, it is healthy, and it is not the
+problem.
+
+**The local yt-dlp fallback is IP-blocked.** Probed against a video that
+certainly exists:
 
 ```
 visionos player response playability status: LOGIN_REQUIRED
-web player response playability status: LOGIN_REQUIRED
 ERROR: Sign in to confirm you're not a bot
 ```
 
-The PO-token provider is healthy and correctly wired -- `bgutil:http-1.3.1
-(external)`, versions matched -- and it is not enough against a hard IP block.
-So SocialKit is currently the only working YouTube path, and it is the thing
-that has been timing out. Uploads bypass YouTube entirely and always work.
+The PO-token provider is wired correctly -- `bgutil:http-1.3.1 (external)`,
+healthy, versions matched -- and is not enough against a hard block on this
+address range. That matters only when SocialKit cannot serve a video, because
+the fallback is the second provider, not the first.
 
-The three ways through, in the order I would try them:
+**The two failed jobs, explained.** One was
+`This video is unavailable`, and SocialKit returns exactly the same from its
+own clean address in six seconds -- that video is genuinely gone, and failing
+was correct. The other was `SocialKit download timed out`, which is what one
+bad poll out of roughly 360 used to do to a thirty-minute wait; transient poll
+failures are tolerated now.
 
-1. Confirm whether SocialKit's plan is what is timing out.
-2. `VIDEO_IMPORT_PROXY` -- already supported, needs a proxy that is not a
-   datacenter range.
-3. `VIDEO_IMPORT_COOKIES` -- a cookies.txt from a signed-in account. Free, but
-   it is an account credential and Google bans accounts used this way from
-   datacenter IPs, so not on the main account.
+So there is no import emergency. If SocialKit's reliability on long videos
+becomes the limit, the levers are its plan, then `VIDEO_IMPORT_PROXY` (already
+supported), then `VIDEO_IMPORT_COOKIES` -- and uploading an MP4 bypasses
+YouTube entirely and always works.
 
-No amount of CPU changes any of this.
+## The thing a bigger box does NOT fix
+
+A bigger box does not fix an import: the download happens on SocialKit's
+infrastructure, and the fallback's problem is this address, not this CPU.
