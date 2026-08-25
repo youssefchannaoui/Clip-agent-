@@ -19,6 +19,7 @@ import html
 import importlib.util
 import inspect
 import json
+import uuid
 import math
 import os
 import pathlib
@@ -3204,7 +3205,15 @@ def transcript_cache_store(job: dict[str, Any], start: float, end: float, segmen
         return
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(segments, ensure_ascii=False), encoding="utf-8")
+        # Written beside the target and renamed, because two jobs can transcribe
+        # the same window at once -- the same lecture clipped twice, or a
+        # re-render alongside the original. A direct write let their bytes
+        # interleave into JSON that parses as nothing, and while the reader
+        # survives that (it returns None and re-transcribes), the broken file
+        # stays on disk and every later job pays for it again.
+        scratch = path.with_name(f".{path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}")
+        scratch.write_text(json.dumps(segments, ensure_ascii=False), encoding="utf-8")
+        scratch.replace(path)
     except OSError:
         pass
 

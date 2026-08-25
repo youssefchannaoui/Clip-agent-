@@ -14,6 +14,7 @@ import sys
 import threading
 import time
 import urllib.request
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
@@ -82,12 +83,21 @@ def source_cache_store(key: str | None, file: Path) -> None:
     cached = SOURCE_CACHE_DIR / f"{key}.mp4"
     if cached.exists():
         return
-    tmp = SOURCE_CACHE_DIR / f".{key}.tmp"
+    # The scratch name carries the pid and a random suffix, not just the key.
+    #
+    # It used to be f".{key}.tmp", which two jobs caching the same source pick
+    # at the same instant. os.link makes that name a hardlink to the caller's
+    # OWN source file, so the second job's fallback copy -- reached because the
+    # link raised FileExistsError -- opened that name for writing and truncated
+    # the first job's in-flight source through it. Harmless while one job ran at
+    # a time; capacity.py now sizes concurrency from the machine.
+    tmp = SOURCE_CACHE_DIR / f".{key}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp"
     try:
         try:
             os.link(file, tmp)  # same volume: instant, no extra disk
         except OSError:
             shutil.copy2(file, tmp)
+        # Atomic, and last writer wins harmlessly: both are the same bytes.
         tmp.replace(cached)
     except OSError:
         tmp.unlink(missing_ok=True)
