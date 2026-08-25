@@ -297,12 +297,54 @@ class Processor:
         # disk between them.
         self.in_flight: set[str] = set()
 
+    def queue_pulse(self) -> None:
+        """Prove a queued job is waiting rather than dead.
+
+        The app cancels a job whose stage|progress|heartbeatAt has not moved
+        inside its stall budget, and nothing beat while a job sat in this queue
+        -- heartbeats began only once the import started. So a job that waited
+        longer than the budget was cancelled as "the worker stopped responding"
+        while the worker was healthy and working steadily through the queue in
+        front of it.
+
+        That is a fault that only appears once there IS a queue, which is to
+        say once more than one person is using the product, which is the worst
+        possible time to start cancelling healthy work. capacity.py now sizes
+        concurrency from the machine, but five jobs behind one slot still wait
+        hours, and they must be allowed to.
+
+        The position travels too, so the wait can be shown as a place in a line
+        rather than as a job that appears to be doing nothing.
+        """
+        while not self.stop.is_set():
+            try:
+                waiting = []
+                for status_path in sorted(JOBS_DIR.glob("*/status.json")):
+                    try:
+                        status = json.loads(status_path.read_text(encoding="utf-8"))
+                    except (OSError, ValueError):
+                        continue
+                    if str(status.get("status") or "") == "queued":
+                        waiting.append((float(status.get("createdAt") or 0), str(status.get("id") or "")))
+                waiting.sort()
+                for position, (_, job_id) in enumerate(waiting, start=1):
+                    if not job_id:
+                        continue
+                    try:
+                        self.store.update(job_id, heartbeatAt=now_ms(), queuePosition=position, queueLength=len(waiting))
+                    except Exception:  # noqa: BLE001 - a beat that fails must not end the thread
+                        continue
+            except Exception:  # noqa: BLE001 - same
+                pass
+            self.stop.wait(IMPORT_HEARTBEAT_SECONDS)
+
     def start(self) -> None:
         for job_id in self.store.recover():
             self.queue.put(job_id)
         self.cleanup_abandoned()
         for thread in self.threads:
             thread.start()
+        threading.Thread(target=self.queue_pulse, name="queue-pulse", daemon=True).start()
 
     def submit(self, job_id: str) -> None:
         self.queue.put(job_id)
