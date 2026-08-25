@@ -909,6 +909,20 @@ async function route(req, res, url) {
     try { requireOperator(currentUser); return json(res, 200, await owner.finance(currentUser, { days })); }
     catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
   }
+  if (method === 'GET' && pathname === '/api/owner/health') {
+    // Clamped for the same reason as finance: the window decides how much
+    // state is walked, and an unbounded one is a request that holds the loop.
+    const days = Math.min(90, Math.max(1, Number(url.searchParams.get('days')) || 7));
+    try {
+      requireOperator(currentUser);
+      const health = owner.pipelineHealth(currentUser, { days });
+      // The worker's own view sits beside the app's. They can disagree -- the
+      // app records a job it never managed to hand over -- and that difference
+      // is itself the diagnosis, so neither is allowed to stand in for the other.
+      const worker = await workerClient.health().catch(error => ({ error: error.message }));
+      return json(res, 200, { ...health, worker });
+    } catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+  }
   if (method === 'GET' && pathname === '/api/owner/costs') {
     try {
       requireOperator(currentUser);

@@ -549,3 +549,78 @@ export async function finance(user, { days = 180 } = {}) {
     recentRevenue: localEvents.slice(0, 40),
   };
 }
+
+/**
+ * What has actually been going wrong, counted.
+ *
+ * Failures were recorded per project and never added up, so the only way to
+ * learn a job had failed was for someone to hit it. That is the whole reason
+ * bugs here feel random rather than merely present: nothing was watching, so
+ * every one arrived as a surprise, and a fault affecting every import for two
+ * days looked exactly like a fault affecting one person once.
+ *
+ * Grouped by `errorCode` rather than by message, because messages carry ids,
+ * byte counts and provider prose and no two are ever equal -- a hundred
+ * instances of one bug would list as a hundred separate lines.
+ */
+export function pipelineHealth(user, { days = 7, limit = 25 } = {}) {
+  requireOperator(user);
+  const span = Math.max(1, Math.min(90, Math.round(Number(days) || 7)));
+  const since = now() - span * DAY_MS;
+  const projects = (state.projects || []).filter(p => Number(p.updatedAt || p.createdAt || 0) >= since);
+
+  const byStatus = {};
+  const byCode = new Map();
+  const byProvider = {};
+  const failures = [];
+
+  for (const project of projects) {
+    const status = String(project.status || 'unknown');
+    byStatus[status] = (byStatus[status] || 0) + 1;
+
+    // Only successes say anything about which provider is carrying the load.
+    // Counting failures here would credit a provider for the job it lost.
+    if (status === 'completed') {
+      const provider = String(project.importProvider || 'unknown');
+      byProvider[provider] = (byProvider[provider] || 0) + 1;
+    }
+
+    if (status !== 'failed') continue;
+    const code = String(project.errorCode || 'unclassified');
+    const seen = byCode.get(code) || { code, count: 0, lastAt: 0, sample: '' };
+    seen.count += 1;
+    const at = Number(project.updatedAt || project.createdAt || 0);
+    if (at >= seen.lastAt) {
+      seen.lastAt = at;
+      seen.sample = String(project.error || '').slice(0, 240);
+    }
+    byCode.set(code, seen);
+    failures.push({
+      id: String(project.id || ''),
+      title: String(project.title || '').slice(0, 120),
+      code,
+      error: String(project.error || '').slice(0, 240),
+      at,
+      importProvider: project.importProvider || null,
+    });
+  }
+
+  failures.sort((a, b) => b.at - a.at);
+  const finished = (byStatus.completed || 0) + (byStatus.failed || 0);
+
+  return {
+    days: span,
+    totals: {
+      projects: projects.length,
+      completed: byStatus.completed || 0,
+      failed: byStatus.failed || 0,
+      // Of jobs that reached an ending. Counting the queued and the running as
+      // successes would read as a healthy rate every time the queue was busy.
+      failureRate: finished ? Math.round(((byStatus.failed || 0) / finished) * 100) : 0,
+    },
+    byStatus,
+    topFailures: [...byCode.values()].sort((a, b) => b.count - a.count || b.lastAt - a.lastAt),
+    importProviders: byProvider,
+    recent: failures.slice(0, Math.max(1, Math.min(100, Math.round(Number(limit) || 25)))),
+  };
+}
