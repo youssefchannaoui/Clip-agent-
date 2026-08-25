@@ -537,28 +537,39 @@
       }),
     ]);
 
+    // table() wants rows that are already <tr> nodes -- it appends them
+    // straight into a tbody. Handing it arrays of strings threw
+    // "parameter 1 is not of type 'Node'" and left all three tables blank
+    // while the tiles above them read 2 failed, which is a worse state than
+    // an error: the page looked answered and said nothing.
+    const codeRows = (health.topFailures || []).map(row => el('tr', {}, [
+      el('td', {}, el('span', { class: 'ow-pill', dataset: { tone: 'bad' }, text: row.code })),
+      el('td', { class: 'num', text: String(row.count) }),
+      el('td', { class: 'wrap', text: row.sample || '—' }),
+    ]));
     replace($('healthCodes'), table(
       [{ label: 'Code' }, { label: 'Times', num: true }, { label: 'Most recent message' }],
-      (health.topFailures || []).map(row => [row.code, String(row.count), row.sample || '']),
-      { empty: 'Nothing has failed in this window.' },
-    ));
+      codeRows, { empty: 'Nothing has failed in this window.' }));
 
+    const providerRows = Object.entries(health.importProviders || {})
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => el('tr', {}, [
+        el('td', { text: name }),
+        el('td', { class: 'num', text: String(count) }),
+      ]));
     replace($('healthProviders'), table(
       [{ label: 'Importer' }, { label: 'Jobs completed', num: true }],
-      Object.entries(health.importProviders || {}).sort((a, b) => b[1] - a[1]).map(([name, count]) => [name, String(count)]),
-      { empty: 'No completed imports in this window.' },
-    ));
+      providerRows, { empty: 'No completed imports in this window.' }));
 
+    const recentRows = (health.recent || []).map(row => el('tr', {}, [
+      el('td', { text: row.at ? date(row.at) : '—' }),
+      el('td', { class: 'wrap', text: row.title || row.id || '—' }),
+      el('td', {}, el('span', { class: 'ow-pill', dataset: { tone: 'bad' }, text: row.code })),
+      el('td', { class: 'wrap', text: row.error || '—' }),
+    ]));
     replace($('healthRecent'), table(
       [{ label: 'When' }, { label: 'Lecture' }, { label: 'Code' }, { label: 'Message' }],
-      (health.recent || []).map(row => [
-        row.at ? new Date(row.at).toLocaleString() : '',
-        row.title || row.id,
-        row.code,
-        row.error || '',
-      ]),
-      { empty: 'No failures to show.' },
-    ));
+      recentRows, { empty: 'No failures to show.' }));
   }
 
   function activate(name) {
