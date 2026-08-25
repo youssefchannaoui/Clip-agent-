@@ -899,18 +899,62 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any]) ->
         rows = inner.get("clips") if isinstance(inner, dict) else None
         if not isinstance(rows, list):
             raise ValueError("Local model did not return a clips list")
+        # One malformed row must not spoil the batch.
+        #
+        # This loop had no per-row guard, so a model that answered
+        # {"index": "?"} or {"score": "high"} raised out of the whole function.
+        # The rows already applied kept their blended scores while the rest kept
+        # raw heuristic ones, and the two are not on the same scale -- so the
+        # ranking that chose which clips a customer saw was a mix of two
+        # different measures, silently, whenever the model hiccuped once.
+        #
+        # Each index is also applied at most once. The blend is not idempotent:
+        # a model repeating an index dragged that candidate's score toward the
+        # AI value again on every repeat.
+        applied: set[int] = set()
+        skipped = 0
         for row in rows:
-            index = int(row.get("index", -1))
-            if index < 0 or index >= len(shortlist):
+            if not isinstance(row, dict):
+                skipped += 1
+                continue
+            try:
+                index = int(row.get("index", -1))
+            except (TypeError, ValueError):
+                skipped += 1
+                continue
+            if index < 0 or index >= len(shortlist) or index in applied:
+                skipped += 1
                 continue
             candidate = shortlist[index]
-            ai_score = max(0, min(100, int(round(float(row.get("score", candidate.score))))))
+            try:
+                ai_score = max(0, min(100, int(round(float(row.get("score", candidate.score))))))
+            except (TypeError, ValueError):
+                skipped += 1
+                continue
+            applied.add(index)
             candidate.score = int(round(candidate.score * 0.45 + ai_score * 0.55))
             candidate.ai_title = str(row.get("title") or "").strip()[:90]
             candidate.ai_description = str(row.get("description") or "").strip()[:480]
             candidate.ai_reason = str(row.get("reason") or "").strip()[:180]
             if candidate.ai_reason:
                 candidate.reasons = ([candidate.ai_reason] + candidate.reasons)[:4]
+        # Ranking a half-scored shortlist compares two different measures, so
+        # say when that happened rather than quietly shipping the mixture.
+        if applied and len(applied) < len(shortlist):
+            emit(
+                "warning",
+                warning=(
+                    f"AI scoring returned usable answers for {len(applied)} of {len(shortlist)} candidates; "
+                    "the rest kept their built-in scores."
+                ),
+                code="ollama_partial_scoring",
+            )
+        if not applied:
+            emit(
+                "warning",
+                warning="AI scoring returned nothing usable, so clips were chosen by the built-in scoring.",
+                code="ollama_no_usable_rows",
+            )
         return candidates
     except Exception as exc:
         emit("warning", warning=f"Local Ollama scoring was unavailable; using built-in scoring instead: {exc}")
