@@ -38,7 +38,13 @@ services:
           # nothing was ever capped, so the kernel's global OOM killer did the
           # capping instead and took whatever it liked -- 42 times, all of them
           # llama-server, some of them mid-job.
-          memory: 2G
+          #
+          # This is also the number worker/capacity.py sizes itself against --
+          # it reads the cgroup, not the host -- so it decides concurrency, the
+          # Whisper model and the ffmpeg thread count. On a bigger machine raise
+          # WORKER_MEMORY_LIMIT in worker/.env and everything downstream follows
+          # on its own. See SCALING.md.
+          memory: ${WORKER_MEMORY_LIMIT:-2G}
 
   # Local clip ranking and titling. Without this, refine_with_ollama() returns
   # its candidates untouched and every clip is named from a raw transcript
@@ -74,7 +80,7 @@ services:
           # 2.5G on disk and measured at 2.4-3.0G RSS, which does not fit beside
           # Whisper and ffmpeg on a 3.7G box -- that is what the OOM kills were.
           # Raise this and OLLAMA_MODEL together if the box ever grows.
-          memory: 2G
+          memory: ${OLLAMA_MEMORY_LIMIT:-2G}
 
   # Mints YouTube proof-of-origin tokens for yt-dlp. Hetzner's address ranges
   # get YouTube's bot wall -- playability LOGIN_REQUIRED, "Sign in to confirm
