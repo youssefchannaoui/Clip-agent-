@@ -192,10 +192,43 @@ _BLOCK_SIGNS = (
     "unable to download video data", "please sign in", "http error 429",
 )
 
+# A failure that says nothing about the video. A timeout, a dropped connection
+# or a 5xx is a statement about one provider's day, not about whether the file
+# can be fetched -- so the next provider deserves its turn. A real job died on
+# "SocialKit download timed out" with the local downloader untried.
+_TRANSPORT_SIGNS = (
+    "timed out", "timeout", "connection reset", "connection refused",
+    "temporarily unavailable", "http error 5", "bad gateway", "service unavailable",
+)
+
+# A verdict about the video itself, which every provider will reach alike.
+# Trying again only makes someone wait longer for the same answer.
+#
+# "unavailable" is deliberately NOT here. It reads like a verdict and is not
+# one: YouTube serves "This video is unavailable" to blocked datacenter ranges,
+# so from a provider downloading on its own IP it describes their address. A
+# real job was lost to that string. "private", "removed" and "members-only" are
+# answers about the video and do not change with the asker.
+_FINAL_SIGNS = (
+    "is private", "private video", "has been removed", "was deleted",
+    "account associated with this video has been terminated",
+    "members-only", "age-restricted", "sign in to confirm your age",
+)
+
 
 def _looks_blocked(message: str) -> bool:
     lowered = str(message).lower()
     return any(sign in lowered for sign in _BLOCK_SIGNS)
+
+
+def _looks_transient(message: str) -> bool:
+    lowered = str(message).lower()
+    return any(sign in lowered for sign in _TRANSPORT_SIGNS)
+
+
+def _looks_final(message: str) -> bool:
+    lowered = str(message).lower()
+    return any(sign in lowered for sign in _FINAL_SIGNS)
 
 
 def youtube_network_options() -> dict[str, Any]:
@@ -652,9 +685,26 @@ def import_with_fallback(source: dict, destination: Path, cancelled: Callable[[]
                 raise
             failures.append(f"{provider.name}: {message[:220]}")
             last = index == len(providers) - 1
-            # A video that is private, deleted or age-gated fails the same way
-            # everywhere; only a block is worth another provider's turn.
-            if last or not _looks_blocked(message):
+            # Whether anything left in the chain can still learn something the
+            # failed provider could not.
+            #
+            # The original rule was "only a block is worth another turn", on the
+            # reasoning that a private or deleted video fails the same way
+            # everywhere. True of a verdict; the trouble is that a managed
+            # provider cannot deliver one. It downloads on someone else's IP, so
+            # "This video is unavailable" from it describes their address, not
+            # the video -- YouTube serves that exact string to blocked
+            # datacenter ranges, and this box answers that wall with PO tokens
+            # and client rotation the managed provider never had.
+            #
+            # Two real jobs died here, one on that string and one on a plain
+            # timeout, with the local downloader sitting unused one line below.
+            # So: give the local downloader its turn unless the message is a
+            # verdict about the video (_FINAL_SIGNS). It runs on our own
+            # hardware, costs one attempt, and is the only provider whose
+            # "unavailable" is worth believing.
+            local_left = any(p.name == YtDlpImportProvider.name for p in providers[index + 1:])
+            if last or _looks_final(message) or not (local_left or _looks_blocked(message) or _looks_transient(message)):
                 # Uploads never reach here (their chain is one provider and
                 # raises above), so "upload it instead" is always the honest
                 # way through for whoever reads this -- operator or, after the
