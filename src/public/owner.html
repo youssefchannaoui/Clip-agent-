@@ -66,6 +66,7 @@
   <button type="button" role="tab" class="ow-tab" data-tab="out">Money out</button>
   <button type="button" role="tab" class="ow-tab" data-tab="users">Users</button>
   <button type="button" role="tab" class="ow-tab" data-tab="activity">Activity</button>
+  <button type="button" role="tab" class="ow-tab" data-tab="health">Health</button>
 </nav>
 
 <main class="ow-main">
@@ -123,6 +124,24 @@
     <article class="ow-card">
       <header class="ow-card-h"><h2>Monthly spend by category</h2></header>
       <div id="outCategories"></div>
+    </article>
+  </section>
+
+  <section class="ow-panel" id="panel-health" role="tabpanel">
+    <div class="ow-tiles" id="healthTiles"></div>
+    <div class="ow-grid-2">
+      <article class="ow-card">
+        <header class="ow-card-h"><h2>What is failing</h2></header>
+        <div class="ow-scroll"><table class="ow-table" id="healthCodes"></table></div>
+      </article>
+      <article class="ow-card">
+        <header class="ow-card-h"><h2>Which importer is carrying the work</h2></header>
+        <div class="ow-scroll"><table class="ow-table" id="healthProviders"></table></div>
+      </article>
+    </div>
+    <article class="ow-card">
+      <header class="ow-card-h"><h2>Recent failures</h2></header>
+      <div class="ow-scroll"><table class="ow-table" id="healthRecent"></table></div>
     </article>
   </section>
 

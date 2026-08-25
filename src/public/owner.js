@@ -507,7 +507,58 @@
     }
 
     banner(notes.join('  ·  '), financeRes.status === 'rejected' ? 'error' : 'warn');
-    renderOverview(); renderIn(); renderOut(); renderUsers(); renderActivity();
+    renderOverview(); renderIn(); renderOut(); renderUsers(); renderActivity(); loadHealth();
+  }
+
+  // Fetched on its own rather than folded into load(): the worker half can be
+  // slow or unreachable, and the books must not wait on it to draw.
+  async function loadHealth() {
+    let health;
+    try {
+      const response = await fetch('/api/owner/health?days=7', { credentials: 'same-origin' });
+      if (!response.ok) throw new Error(String(response.status));
+      health = await response.json();
+    } catch {
+      replace($('healthTiles'), el('p', { class: 'ow-empty', text: 'Could not read pipeline health.' }));
+      return;
+    }
+
+    const totals = health.totals || {};
+    const worker = health.worker || {};
+    replace($('healthTiles'), [
+      tile('Jobs finished', String((totals.completed || 0) + (totals.failed || 0)), { foot: `last ${health.days} days` }),
+      tile('Failed', String(totals.failed || 0), {
+        foot: `${totals.failureRate || 0}% of finished jobs`,
+        tone: (totals.failed || 0) ? 'neg' : '',
+      }),
+      tile('Worker', worker.error ? 'Unreachable' : 'Reachable', {
+        foot: worker.error ? String(worker.error).slice(0, 60) : 'answered its health check',
+        tone: worker.error ? 'neg' : 'pos',
+      }),
+    ]);
+
+    replace($('healthCodes'), table(
+      [{ label: 'Code' }, { label: 'Times', num: true }, { label: 'Most recent message' }],
+      (health.topFailures || []).map(row => [row.code, String(row.count), row.sample || '']),
+      { empty: 'Nothing has failed in this window.' },
+    ));
+
+    replace($('healthProviders'), table(
+      [{ label: 'Importer' }, { label: 'Jobs completed', num: true }],
+      Object.entries(health.importProviders || {}).sort((a, b) => b[1] - a[1]).map(([name, count]) => [name, String(count)]),
+      { empty: 'No completed imports in this window.' },
+    ));
+
+    replace($('healthRecent'), table(
+      [{ label: 'When' }, { label: 'Lecture' }, { label: 'Code' }, { label: 'Message' }],
+      (health.recent || []).map(row => [
+        row.at ? new Date(row.at).toLocaleString() : '',
+        row.title || row.id,
+        row.code,
+        row.error || '',
+      ]),
+      { empty: 'No failures to show.' },
+    ));
   }
 
   function activate(name) {
@@ -542,7 +593,7 @@
     });
 
     const initial = location.hash.slice(1);
-    activate(['overview', 'in', 'out', 'users', 'activity'].includes(initial) ? initial : 'overview');
+    activate(['overview', 'in', 'out', 'users', 'activity', 'health'].includes(initial) ? initial : 'overview');
     load();
   }
 
