@@ -401,7 +401,20 @@ async function processTarget(clip, target) {
   } catch (error) {
     target.attempts = Number(target.attempts || 0) + 1;
     target.error = error.message; target.updatedAt = Date.now();
-    const retryable = error.retryable !== false && target.attempts < config.socialMaxAttempts;
+    // `retryable === true`, not `!== false`.
+    //
+    // The old test read an absent flag as permission to retry, and an absent
+    // flag is what every error that is not a SocialError has. So a TypeError
+    // in our own code -- a real bug, which no amount of waiting fixes -- was
+    // retried up to socialMaxAttempts on a backoff that reaches six hours,
+    // logging a warning each time and never a failure. The bug stayed hidden
+    // and the clip stayed stuck.
+    //
+    // Nothing legitimate is lost: jsonRequest already wraps every network and
+    // 5xx failure in a SocialError that says retryable: true, so genuine
+    // transients are labelled. Anything that reaches here unlabelled is a
+    // surprise, and a surprise should be surfaced rather than slept on.
+    const retryable = error.retryable === true && target.attempts < config.socialMaxAttempts;
     if (retryable) {
       target.status = 'retrying'; target.stage = `Retrying ${target.provider}`; target.nextTryAt = Date.now() + social.retryDelay(target.attempts);
       log(`${target.provider} publishing will retry for "${clip.title}" (${target.attempts}/${config.socialMaxAttempts}): ${error.message}`, 'warn', ownerOf(clip));

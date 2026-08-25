@@ -133,15 +133,42 @@ async function cacheRemotePublishClip(clip) {
   const temporary = `${file}.part`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10 * 60_000);
+  // Transient failures are labelled, because the publisher only retries what
+  // says it is retryable. Fetching the stored clip is object storage and a
+  // network hop: a 503 or a dropped connection here says nothing about the
+  // clip, and a scheduled post must not be lost permanently to one bad minute.
+  const transient = (message) => Object.assign(new Error(message), { retryable: true });
   try {
-    const response = await fetch(url, { signal: controller.signal });
-    if (!response.ok || !response.body) throw new Error(`Stored clip download returned HTTP ${response.status}.`);
+    let response;
+    try {
+      response = await fetch(url, { signal: controller.signal });
+    } catch (error) {
+      throw transient(`The stored clip could not be fetched: ${error.message}`);
+    }
+    if (!response.ok || !response.body) {
+      const status = response.status;
+      // 4xx is an answer about this object; 5xx and the throttles are a bad
+      // moment on the way to it.
+      const worthRetrying = status === 408 || status === 429 || status >= 500;
+      const failure = new Error(`Stored clip download returned HTTP ${status}.`);
+      if (worthRetrying) failure.retryable = true;
+      throw failure;
+    }
     trustedRemoteMediaUrl(response.url || url);
     const length = Number(response.headers.get('content-length') || 0);
     if (length > 256 * 1024 * 1024) throw new Error('This finished clip is too large for the publishing relay. Download it or shorten the clip.');
     let received = 0;
     const limiter = new TransformStream({ transform(chunk, stream) { received += chunk.byteLength; if (received > 256 * 1024 * 1024) throw new Error('This finished clip exceeds the publishing relay limit.'); stream.enqueue(chunk); } });
-    await pipeline(Readable.fromWeb(response.body.pipeThrough(limiter)), fs.createWriteStream(temporary));
+    try {
+      await pipeline(Readable.fromWeb(response.body.pipeThrough(limiter)), fs.createWriteStream(temporary));
+    } catch (error) {
+      // A stream that broke mid-download, or a disk that filled. Both are
+      // worth another go; neither says the clip is unpublishable.
+      if (error?.retryable === undefined && !/exceeds the publishing relay limit/.test(String(error?.message || ''))) {
+        throw transient(`The stored clip download did not complete: ${error.message}`);
+      }
+      throw error;
+    }
     fs.renameSync(temporary, file);
     return file;
   } finally {
