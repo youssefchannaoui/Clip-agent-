@@ -705,6 +705,10 @@ function recordRevenue({ kind, userId = '', amountMinor = 0, currency = '', desc
   state.revenueEvents = state.revenueEvents.slice(0, 5000);
 }
 
+// Comfortably past Stripe's retry schedule, which runs for about three days.
+// Anything inside this window must still be recognised as already handled.
+const STRIPE_DEDUPE_WINDOW_MS = 10 * 24 * 60 * 60_000;
+
 export function handleWebhookEvent(event) {
   ensureBillingState();
   const eventId = String(event?.id || '');
@@ -775,7 +779,22 @@ export function handleWebhookEvent(event) {
       break;
   }
   state.processedStripeEvents.unshift({ id: eventId, type: String(event.type || ''), objectId: String(object.id || ''), processedAt: now() });
-  state.processedStripeEvents = state.processedStripeEvents.slice(0, 1000);
+  // Trimmed by AGE, not by count.
+  //
+  // A flat cap of 1000 is the wrong axis: Stripe retries a failed delivery over
+  // a window measured in days, so what decides whether a replay is still
+  // recognised is how long ago it arrived, not how many events came after it.
+  // At a thousand events inside that window -- a busy few days, which is the
+  // point of going public -- the oldest fell off the list and a retry of it
+  // would have been processed a second time. For a top-up that is tokens
+  // granted twice.
+  //
+  // The window is well past Stripe's own retry schedule, and the count cap
+  // stays only as a backstop against unbounded growth.
+  const dedupeFloor = now() - STRIPE_DEDUPE_WINDOW_MS;
+  state.processedStripeEvents = state.processedStripeEvents
+    .filter(item => Number(item?.processedAt || 0) >= dedupeFloor)
+    .slice(0, 20000);
   save();
   return { ok: true };
 }

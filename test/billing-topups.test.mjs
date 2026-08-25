@@ -116,6 +116,38 @@ test('subscription renewal and cancellation preserve top-up tokens', () => {
   assert.equal(creator.billing.bonusTokens, 77);
 });
 
+test('a busy few days cannot push an event out of the dedupe list', () => {
+  // The list used to be trimmed to the newest 1000 entries, which is the wrong
+  // axis: Stripe retries a failed delivery over about three days, so what
+  // decides whether a replay is recognised is how long ago it arrived, not how
+  // many events came after it. A thousand events inside the retry window --
+  // which is what going public looks like -- pushed the oldest off, and a retry
+  // of it credited the tokens a second time.
+  const original = billing.handleWebhookEvent(checkoutEvent({ id: 'evt_old', sessionId: 'cs_old' }));
+  assert.equal(original.ok, true);
+  const afterFirst = creator.billing.bonusTokens;
+
+  for (let n = 0; n < 1200; n += 1) {
+    state.processedStripeEvents.unshift({ id: `evt_filler_${n}`, type: 'noise', objectId: '', processedAt: Date.now() });
+  }
+
+  const replay = billing.handleWebhookEvent(checkoutEvent({ id: 'evt_old', sessionId: 'cs_old' }));
+  assert.equal(replay.duplicate, true, 'the original must still be recognised');
+  assert.equal(creator.billing.bonusTokens, afterFirst, 'and must not credit twice');
+});
+
+test('an event older than the retry window is allowed to fall off', () => {
+  // The list is a dedupe ledger, not an archive: it must not grow forever.
+  state.processedStripeEvents = [
+    { id: 'evt_ancient', type: 'x', objectId: '', processedAt: Date.now() - 60 * 24 * 60 * 60_000 },
+  ];
+  billing.handleWebhookEvent(checkoutEvent({ id: 'evt_recent', sessionId: 'cs_recent' }));
+  assert.ok(
+    !state.processedStripeEvents.some(item => item.id === 'evt_ancient'),
+    'sixty days is well past any retry Stripe will make',
+  );
+});
+
 test('unknown top-up pack is rejected before checkout and unsigned webhooks fail', async () => {
   await assert.rejects(() => billing.createTopupCheckoutSession(creator, 'not-a-pack'), /valid token pack/i);
   assert.throws(() => billing.verifyStripeSignature('{}', ''), /Missing Stripe signature/i);
