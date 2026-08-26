@@ -1162,6 +1162,26 @@ test('a finished lecture reads as ready, not stuck processing', () => {
   assert.equal(vals.liveDock, false, 'a finished lecture must not stay pinned in the live dock');
 });
 
+test('a failed or cancelled lecture never reads as READY on home', () => {
+  // Home collapsed lecState's three answers into processing-or-not, so the two
+  // states a customer most needs to see -- failed and cancelled -- were both
+  // labelled READY in green. The only hint was the "0 clips" beside it, which
+  // reads as "no clips yet" rather than "this did not work".
+  Object.assign(StudioAdapter.ui, { screen: 'home' });
+  const chipFor = status => StudioAdapter.bindings({
+    projects: [{ id: 'p', title: 'L', status, clipCount: 0, submittedAt: Date.now() }],
+    clips: [], tracks: [],
+  }).lectures[0];
+
+  assert.equal(chipFor('failed').chip, 'Failed');
+  assert.equal(chipFor('cancelled').chip, 'Cancelled');
+  assert.equal(chipFor('done').chip, 'Ready');
+  assert.equal(chipFor('processing').chip, 'Processing');
+  // Green is the signal a customer scans for; a failure must not borrow it.
+  assert.match(chipFor('failed').chipStyle, /#E27C7C/, 'a failure is not green');
+  assert.doesNotMatch(chipFor('cancelled').chipStyle, /#7FD1A6/);
+});
+
 test('the pipeline rail follows the worker phase, in order', () => {
   Object.assign(StudioAdapter.ui, { screen: 'queue' });
   const at = phase => {

@@ -24,6 +24,8 @@
     bellOpen: false,
     query: '',
     activityAll: false,
+    // Which activity row is open in the detail view, by its stable id.
+    activityDetail: null,
     // Review queue
     filter: 'review',
     libFilter: 'all',
@@ -624,6 +626,49 @@
     try { global.localStorage.setItem(SEEN_KEY, String(seenMemory)); } catch (err) { /* private mode */ }
   }
 
+  // Dismissed rows, remembered the same way and for the same reason: there is
+  // no read/dismissed field on the server. Dismissing hides a row from the
+  // bell; it never deletes the project, clip or log entry behind it, because
+  // the failure itself is still a real thing that happened and still shows on
+  // the screen that owns it.
+  var DISMISS_KEY = 'deenStudioActivityDismissed';
+  // Capped so a long-lived account cannot grow this without bound. Oldest go
+  // first: a row dismissed months ago is not coming back to the top of a feed
+  // sorted by time.
+  var DISMISS_CAP = 400;
+  var dismissMemory = [];
+  function dismissedIds() {
+    try {
+      var raw = global.localStorage.getItem(DISMISS_KEY);
+      var stored = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(stored)) stored = [];
+      return stored.concat(dismissMemory);
+    } catch (err) { return dismissMemory.slice(); }
+  }
+  function writeDismissed(list) {
+    var trimmed = list.slice(-DISMISS_CAP);
+    dismissMemory = trimmed;
+    try { global.localStorage.setItem(DISMISS_KEY, JSON.stringify(trimmed)); } catch (err) { /* private mode */ }
+  }
+  function dismissIds(ids) {
+    var seen = {};
+    var next = dismissedIds().concat(ids).filter(function (id) {
+      if (!id || seen[id]) return false;
+      seen[id] = 1;
+      return true;
+    });
+    writeDismissed(next);
+  }
+  function restoreDismissed() { writeDismissed([]); }
+
+  // A row's identity has to survive a repaint, because the feed is rebuilt from
+  // account data on every paint -- an index would renumber the moment anything
+  // above it changed, and dismissing one row would silently hide a different
+  // one later. Built from what the row is ABOUT plus when it happened.
+  function activityId(kind, key, at) {
+    return kind + ':' + String(key || '').slice(0, 80) + ':' + String(Number(at) || 0);
+  }
+
   // Both range handles share one track. Kept out of the bindings so the two
   // inputs cannot drift apart and re-create the stacked-slider look.
   var RANGE_INPUT_STYLE = 'position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);'
@@ -653,6 +698,208 @@
     if (hour < 15) return 'Midday';
     if (hour < 19) return 'Evening';
     return 'Late';
+  }
+
+  // Which screen a row sends you to, named the way the rail names it.
+  var SCREEN_LABEL = {
+    library: 'Open lecture library',
+    queue: 'Open review queue',
+    schedule: 'Open schedule',
+    music: 'Open nasheed library',
+    templates: 'Open templates',
+    home: 'Open home',
+  };
+
+  // What a failure actually MEANS, and what to do about it.
+  //
+  // The feed could only ever say what broke. That is fine for whoever wrote the
+  // code and useless to everyone else: "403" sends people to check a plan that
+  // is fine, and the sentence naming the fix was the part shortError() cut off.
+  //
+  // Matched on the message rather than only on errorCode, because one code
+  // covers several different failures -- youtube_import_blocked is both the
+  // bot-wall and a private video, and those have opposite answers. First match
+  // wins, so the specific patterns are listed before the broad ones.
+  var EXPLAIN = [
+    {
+      match: /sign in to confirm|not a bot|cookies-from-browser/i,
+      title: 'YouTube blocked our server, not you',
+      cause: 'YouTube demanded proof that a person rather than a machine was asking for the download, and a server cannot answer that. The same video plays normally in your own browser.',
+      fixes: [
+        'Download the video in your browser, then use Upload MP4 or MOV.',
+        'Press Retry once — these blocks come and go through the day.',
+        'Never paste browser cookies anywhere. This product will never ask for them.',
+      ],
+    },
+    {
+      match: /private video|members-only|age-restricted|has been removed|video is unavailable|account associated/i,
+      title: 'This video is not available to download',
+      cause: 'The video is private, members-only, age-restricted or deleted. Nobody could have fetched it — the wording says "refused", which sounds like our fault, but no route would have worked.',
+      fixes: [
+        'Open the link in a private window while signed out to confirm it is restricted.',
+        'Ask the channel owner for the original file.',
+        'Play your own copy, save it, and use Upload MP4.',
+        'Do not keep retrying — the answer will not change.',
+      ],
+    },
+    {
+      match: /403|refused to hand this video over|forbidden/i,
+      title: 'YouTube refused this particular video',
+      cause: 'YouTube would not release this video\'s file to us at all. Your account, plan and tokens are all fine — other lectures normally still import.',
+      fixes: [
+        'Download the video yourself and use Upload MP4 or MOV.',
+        'Try a different lecture to confirm your account is fine.',
+        'Check whether the video is public, and not age-restricted or region-locked.',
+        'Press Retry once, then stop.',
+      ],
+    },
+    {
+      match: /playlist/i,
+      title: 'That link is a playlist, not one video',
+      cause: 'Copying from the address bar while watching inside a playlist quietly attaches the whole playlist to the link.',
+      fixes: [
+        'Use the video\'s own Share button instead of the address bar.',
+        'Or delete everything from "&list=" onwards in the link.',
+        'Submit each video separately.',
+      ],
+    },
+    {
+      match: /ended early|did not complete|empty file|connection reset|download timed out/i,
+      title: 'The download broke off partway',
+      cause: 'The transfer started and then stopped before the whole file arrived. This is a network hiccup between servers — nothing is wrong with your video.',
+      fixes: [
+        'Press Retry. This one genuinely does often work the second time.',
+        'If it breaks twice, download it yourself and use Upload MP4.',
+      ],
+    },
+    {
+      match: /not enough (?:free )?(?:temporary )?disk|no space left|ENOSPC/i,
+      title: 'The server ran out of room',
+      cause: 'The machine that processes lectures had no space left to work in. This is ours to fix, not yours.',
+      fixes: [
+        'Wait a few minutes and press Retry — space is freed as jobs finish.',
+        'Tell the site owner if it keeps happening.',
+      ],
+      ownerOnly: true,
+    },
+    {
+      match: /worker (?:is )?unavailable|stopped responding|exceeded the job timeout|unreachable/i,
+      title: 'The processing server did not answer',
+      cause: 'The machine that transcribes and renders was unreachable or stopped mid-job. Your lecture and your tokens are untouched.',
+      fixes: [
+        'Press Retry — the job restarts safely from the beginning.',
+        'Tell the site owner if several lectures fail this way at once.',
+      ],
+      ownerOnly: true,
+    },
+    {
+      match: /not enough tokens|token balance|allowance/i,
+      title: 'Not enough tokens for this lecture',
+      cause: 'Tokens are charged by the length of the source video. This one needs more than the account currently has.',
+      fixes: [
+        'Buy a top-up from the Token shop.',
+        'Clip a shorter section of the lecture instead.',
+        'Wait for your plan to renew.',
+      ],
+    },
+    {
+      match: /did not find any speech|no speech/i,
+      title: 'No speech was found in the audio',
+      cause: 'The transcriber listened to the whole file and heard nothing it could turn into words — usually a video with no audio track, music only, or a silent recording.',
+      fixes: [
+        'Play the file and check you can hear talking.',
+        'Upload a version with the speech track included.',
+      ],
+    },
+    {
+      match: /nasheed|music track|musicEnabled/i,
+      title: 'A nasheed is needed first',
+      cause: 'Every clip mixes one in, so a lecture cannot finish rendering without at least one uploaded.',
+      fixes: [
+        'Upload a nasheed in the Nasheed library.',
+        'Upload two or more before turning on automatic posting, so they can rotate.',
+      ],
+    },
+    {
+      match: /reconnect|no access token|not connected|revoked|refresh token/i,
+      title: 'The connected account needs reconnecting',
+      cause: 'The permission this account gave us has expired or been withdrawn, so we can no longer post on its behalf. Nothing was published.',
+      fixes: [
+        'Open Platforms and reconnect the account.',
+        'Approve every permission on the consent screen — a skipped one causes exactly this.',
+        'Then press Retry on the clip.',
+      ],
+    },
+    {
+      match: /quran captions need the ayah corpus/i,
+      title: 'Quran captions fell back to ordinary ones',
+      cause: 'The verse-matching data was not available, so recited scripture was captioned as plain speech instead of as the ayah with its translation. The clip is fine — it just does not carry the medallion.',
+      fixes: [
+        'Re-render the clip once the site owner has restored the corpus.',
+        'Tell the site owner this happened.',
+      ],
+      ownerOnly: true,
+    },
+    {
+      match: /AI clip scoring is not configured|built-in scoring|returned nothing usable/i,
+      title: 'Clips were chosen without the AI',
+      cause: 'The local ranking model was unavailable, so clips were picked by the built-in scoring and titled from the transcript rather than written. The clips are real and usable — the titles are just plainer.',
+      fixes: [
+        'Edit the titles by hand in the review queue.',
+        'Re-run More clips later to get AI titles.',
+        'Tell the site owner if every job says this.',
+      ],
+      ownerOnly: true,
+    },
+    {
+      match: /usable answers for \d+ of/i,
+      title: 'Only some clips were AI-scored',
+      cause: 'The ranking model answered for part of the batch. The rest kept their built-in scores, so the ordering mixes two measures and may not be the strongest first.',
+      fixes: [
+        'Review the whole queue rather than trusting the order.',
+        'Re-run More clips for a cleaner ranking.',
+      ],
+    },
+  ];
+
+  // Falls back on the error code when no message pattern matches, then on a
+  // generic answer that is still more use than the raw text alone.
+  var EXPLAIN_BY_CODE = {
+    youtube_import_blocked: {
+      title: 'YouTube would not release this video',
+      cause: 'The download was refused. This is about the video, not your account.',
+      fixes: ['Download it yourself and use Upload MP4 or MOV.', 'Try another lecture to confirm your account is fine.'],
+    },
+    vizard_import_failed: {
+      title: 'The clipping service could not take this video',
+      cause: 'The outside service that produced the clips refused this source.',
+      fixes: ['Press Retry once.', 'Upload the MP4 directly instead.'],
+    },
+    worker_unavailable_exhausted: {
+      title: 'The processing server stayed unreachable',
+      cause: 'We retried for several minutes and it never came back. Your tokens were not spent.',
+      fixes: ['Press Retry once it is back.', 'Tell the site owner.'],
+      ownerOnly: true,
+    },
+  };
+
+  var EXPLAIN_FALLBACK = {
+    title: 'This job could not finish',
+    cause: 'Something in the pipeline stopped before the clips were ready. The original message is below — it is written for diagnosis rather than for reading.',
+    fixes: [
+      'Press Retry once; a good share of these are temporary.',
+      'Upload the MP4 directly, which skips the import entirely.',
+      'Copy the message below if you report it.',
+    ],
+  };
+
+  function explainFailure(row) {
+    var text = String((row && (row.full || row.meta || row.text)) || '');
+    for (var i = 0; i < EXPLAIN.length; i += 1) {
+      if (EXPLAIN[i].match.test(text)) return EXPLAIN[i];
+    }
+    if (row && row.code && EXPLAIN_BY_CODE[row.code]) return EXPLAIN_BY_CODE[row.code];
+    return EXPLAIN_FALLBACK;
   }
 
   // Worker errors carry URLs and stack noise; the feed needs one readable line.
@@ -2594,24 +2841,55 @@
     // Anything that failed and needs a person. Nothing in the design surfaces
     // these on their own, so they lead the activity feed — a failed lecture or a
     // rejected upload going unmentioned is worse than any styling problem.
+    // Each row carries its own error CODE and the FULL untruncated message.
+    // The list line stays short because a feed of paragraphs is unreadable, but
+    // the detail view needs the whole thing -- truncating at 150 characters was
+    // cutting the sentence that named the fix, which is the only part that was
+    // any use to whoever read it.
     var failures = [];
     projects.forEach(function (pr) {
       if (pr.status === 'failed' || pr.error) {
-        failures.push({ text: projectTitle[pr.id] + ' needs attention', meta: shortError(pr.error || pr.stage), at: pr.completedAt || pr.submittedAt, screen: 'library' });
+        failures.push({
+          id: activityId('project', pr.id, pr.completedAt || pr.submittedAt),
+          text: projectTitle[pr.id] + ' needs attention',
+          meta: shortError(pr.error || pr.stage),
+          full: pr.error || pr.stage || '', code: pr.errorCode || '',
+          at: pr.completedAt || pr.submittedAt, screen: 'library',
+        });
       }
       if (pr.moreJob && pr.moreJob.status === 'failed') {
-        failures.push({ text: 'More clips failed · ' + projectTitle[pr.id], meta: shortError(pr.moreJob.error || pr.moreJob.stage), at: pr.moreJob.completedAt || pr.moreJob.createdAt, screen: 'library' });
+        failures.push({
+          id: activityId('more', pr.id, pr.moreJob.completedAt || pr.moreJob.createdAt),
+          text: 'More clips failed · ' + projectTitle[pr.id],
+          meta: shortError(pr.moreJob.error || pr.moreJob.stage),
+          full: pr.moreJob.error || pr.moreJob.stage || '', code: pr.moreJob.errorCode || '',
+          at: pr.moreJob.completedAt || pr.moreJob.createdAt, screen: 'library',
+        });
       }
     });
     (DATA.rerenderJobs || []).forEach(function (j) {
       if (j.status !== 'failed') return;
       var c = clips.filter(function (x) { return x.id === j.clipId; })[0];
-      failures.push({ text: 'Edit failed · ' + ((c && c.title) || 'Clip'), meta: shortError(j.error || j.stage), at: j.completedAt || j.createdAt, screen: 'queue' });
+      failures.push({
+        id: activityId('rerender', j.id || j.clipId, j.completedAt || j.createdAt),
+        text: 'Edit failed · ' + ((c && c.title) || 'Clip'),
+        meta: shortError(j.error || j.stage),
+        full: j.error || j.stage || '', code: j.errorCode || '',
+        at: j.completedAt || j.createdAt, screen: 'queue',
+      });
     });
     clips.forEach(function (c) {
       var bad = (c.targets || []).filter(function (t) { return t.status === 'failed'; });
       if (c.status !== 'publish_failed' && !bad.length) return;
-      failures.push({ text: 'Publish failed · ' + (c.title || 'Clip'), meta: shortError((bad[0] && (bad[0].error || bad[0].stage)) || c.error), at: (bad[0] && bad[0].updatedAt) || c.postedAt, screen: 'schedule' });
+      var target = bad[0] || {};
+      failures.push({
+        id: activityId('publish', c.id, target.updatedAt || c.postedAt),
+        text: 'Publish failed · ' + (c.title || 'Clip'),
+        meta: shortError(target.error || target.stage || c.error),
+        full: target.error || c.error || '', code: '',
+        provider: target.provider || '',
+        at: target.updatedAt || c.postedAt, screen: 'schedule',
+      });
     });
     failures.sort(function (a, b) { return Number(b.at || 0) - Number(a.at || 0); });
 
@@ -2672,6 +2950,68 @@
     var perfClips = PERF_WINDOW ? clips.filter(function (c) { return perfAt(c) >= PERF_WINDOW; }) : clips;
     var perfProjects = PERF_WINDOW ? projects.filter(function (p) { return perfAt(p) >= PERF_WINDOW; }) : projects;
 
+    // ── the activity feed, built once ──
+    // Rows were previously mapped inline inside the bindings, which meant the
+    // dismiss handler and the open handler could not both refer to the same
+    // object, and nothing had an identity that survived a repaint.
+    var dismissed = {};
+    dismissedIds().forEach(function (id) { dismissed[id] = 1; });
+
+    var failureRows = failures.map(function (f) {
+      return {
+        id: f.id,
+        text: f.text,
+        meta: f.meta + (f.at ? ' · ' + since(f.at) : ''),
+        full: f.full, code: f.code, at: f.at, screen: f.screen, provider: f.provider || '',
+        tag: 'Failed',
+        icon: 'ph-fill ph-warning-circle',
+        rowStyle: 'display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px; border-bottom: 1px solid #1A1A1E; cursor: pointer; background: rgba(227,146,140,.07);',
+        iconStyle: 'font-size: 15px; flex: none; margin-top: 1px; color: #E3928C',
+        tagStyle: 'flex: none; padding: 2px 7px; border-radius: 20px; font-size: 9.5px; font-weight: 700; background: rgba(227,146,140,.16); color: #E3928C;',
+      };
+    });
+
+    var logRows = (UI.activityAll ? log : log.slice(0, 6)).map(function (entry) {
+      var urgent = entry.level === 'error' || entry.level === 'warn';
+      var color = entry.level === 'error' ? '#E3928C' : entry.level === 'warn' ? '#E6B770' : '#7FD1A6';
+      var message = entry.message || entry.text || '';
+      var at = entry.at || entry.createdAt;
+      return {
+        id: activityId('log', message, at),
+        text: message,
+        meta: since(at),
+        full: message, code: '', at: at, screen: '', provider: '',
+        tag: entry.level === 'error' ? 'Issue' : entry.level === 'warn' ? 'Check' : '',
+        icon: entry.level === 'error' ? 'ph-fill ph-warning-circle' : entry.level === 'warn' ? 'ph-fill ph-warning' : 'ph-fill ph-check-circle',
+        rowStyle: 'display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px; border-bottom: 1px solid #1A1A1E; cursor: pointer; transition: background .14s ease; background: ' + (urgent ? 'rgba(217,180,120,.045)' : 'transparent'),
+        iconStyle: 'font-size: 15px; flex: none; margin-top: 1px; color: ' + color,
+        tagStyle: 'flex: none; padding: 2px 7px; border-radius: 20px; font-size: 9.5px; font-weight: 600; letter-spacing: .02em; background: #1D1D21; color: #8B8B93;',
+      };
+    });
+
+    var activityRows = failureRows.concat(logRows)
+      .filter(function (row) { return !dismissed[row.id]; })
+      .map(function (row) {
+        return Object.assign({}, row, {
+          open: function (e) { stop(e); setUI({ activityDetail: row.id }); },
+          dismiss: function (e) {
+            // Without this the click also reaches the row and opens the detail
+            // for the thing that was just dismissed.
+            stop(e);
+            dismissIds([row.id]);
+            refresh();
+          },
+          dismissStyle: 'flex: none; display: grid; place-items: center; width: 20px; height: 20px; margin-left: auto;'
+            + ' border: 0; border-radius: 6px; background: transparent; color: #6E6E76; font-family: inherit;'
+            + ' font-size: 12px; cursor: pointer; transition: background .14s ease, color .14s ease;',
+        });
+      });
+
+    // NOT named `detail`: that name is already the open project in this scope,
+    // and shadowing it silently turned "More clips" into a no-op.
+    var activityRow = activityRows.filter(function (row) { return row.id === UI.activityDetail; })[0] || null;
+    var activityWhy = activityRow ? explainFailure(activityRow) : { title: '', cause: '', fixes: [] };
+
     var vals = {
       // ── shell: rail ──
       railOpen: open,
@@ -2718,31 +3058,53 @@
       // Drives the unread dot. Anything that failed always counts as unread.
       activityUnread: unreadCount,
       moreActivity: function (e) { stop(e); setUI({ activityAll: !UI.activityAll }); },
-      activity: failures.map(function (f) {
-        return {
-          text: f.text,
-          meta: f.meta + (f.at ? ' · ' + since(f.at) : ''),
-          tag: 'Failed',
-          icon: 'ph-fill ph-warning-circle',
-          rowStyle: 'display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px; border-bottom: 1px solid #1A1A1E; cursor: pointer; background: rgba(227,146,140,.07);',
-          iconStyle: 'font-size: 15px; flex: none; margin-top: 1px; color: #E3928C',
-          tagStyle: 'margin-left: auto; flex: none; padding: 2px 7px; border-radius: 20px; font-size: 9.5px; font-weight: 700; background: rgba(227,146,140,.16); color: #E3928C;',
-          open: function (e) { stop(e); setUI({ screen: f.screen, bellOpen: false }); },
-        };
-      }).concat((UI.activityAll ? log : log.slice(0, 6)).map(function (entry) {
-        var urgent = entry.level === 'error' || entry.level === 'warn';
-        var color = entry.level === 'error' ? '#E3928C' : entry.level === 'warn' ? '#E6B770' : '#7FD1A6';
-        return {
-          text: entry.message || entry.text || '',
-          meta: since(entry.at || entry.createdAt),
-          tag: entry.level === 'error' ? 'Issue' : entry.level === 'warn' ? 'Check' : '',
-          icon: entry.level === 'error' ? 'ph-fill ph-warning-circle' : entry.level === 'warn' ? 'ph-fill ph-warning' : 'ph-fill ph-check-circle',
-          rowStyle: 'display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px; border-bottom: 1px solid #1A1A1E; transition: background .14s ease; background: ' + (urgent ? 'rgba(217,180,120,.045)' : 'transparent'),
-          iconStyle: 'font-size: 15px; flex: none; margin-top: 1px; color: ' + color,
-          tagStyle: 'margin-left: auto; flex: none; padding: 2px 7px; border-radius: 20px; font-size: 9.5px; font-weight: 600; letter-spacing: .02em; background: #1D1D21; color: #8B8B93;',
-          open: function () {},
-        };
-      })),
+      // Every row is built once, with its identity, so dismissing and opening
+      // both act on the same thing the person clicked.
+      activity: activityRows,
+      activityHasRows: activityRows.length > 0,
+      // Dismissing every row at once. Only ever the rows currently on screen:
+      // "clear all" that also swallowed something that arrives a second later
+      // would be a lie.
+      clearAllActivity: function (e) {
+        stop(e);
+        dismissIds(activityRows.map(function (row) { return row.id; }));
+        markSeen();
+        setUI({ activityDetail: null });
+      },
+      // Dismissing is reversible, because it is one click next to a row someone
+      // is reading for the first time and the underlying failure has not gone
+      // anywhere.
+      restoreActivity: function (e) { stop(e); restoreDismissed(); refresh(); },
+      hasDismissed: dismissedIds().length > 0,
+
+      // ── the detail view ──
+      // A row in a dropdown can only ever say what happened. This says why it
+      // happened and what to do about it, which is the part someone who did not
+      // write the code actually needs.
+      activityDetailOpen: Boolean(activityRow),
+      activityDetailTitle: activityRow ? activityRow.text : '',
+      activityDetailWhen: activityRow && activityRow.at ? since(activityRow.at) : '',
+      activityDetailHeading: activityRow ? activityWhy.title : '',
+      activityDetailCause: activityRow ? activityWhy.cause : '',
+      activityDetailFixes: activityRow ? activityWhy.fixes.map(function (fix, index) {
+        return { n: String(index + 1), text: fix };
+      }) : [],
+      // The untruncated original. Kept visible but secondary: it is what to
+      // quote in a support message, not what to read first.
+      activityDetailRaw: activityRow ? (activityRow.full || activityRow.meta || '') : '',
+      activityDetailHasRaw: Boolean(activityRow && (activityRow.full || activityRow.meta)),
+      activityDetailCode: activityRow && activityRow.code ? activityRow.code : '',
+      activityDetailGoLabel: activityRow ? (SCREEN_LABEL[activityRow.screen] || 'Open') : '',
+      activityDetailGo: function (e) {
+        stop(e);
+        if (activityRow) setUI({ screen: activityRow.screen, bellOpen: false, activityDetail: null });
+      },
+      activityDetailDismiss: function (e) {
+        stop(e);
+        if (activityRow) dismissIds([activityRow.id]);
+        setUI({ activityDetail: null });
+      },
+      closeActivityDetail: function (e) { stop(e); setUI({ activityDetail: null }); },
 
       menuOpen: UI.menuOpen,
       caretIcon: UI.menuOpen ? 'ph ph-caret-up' : 'ph ph-caret-down',
@@ -2777,14 +3139,21 @@
         // Through lecState, not a second opinion. Home and the Lecture library
         // read the same records; when this had its own test they disagreed --
         // PROCESSING here, Ready there, on one page load.
-        var processing = lecState(p) === 'processing';
+        // All three of lecState's answers, not a boolean. Collapsing them to
+        // processing-or-not meant a failed or cancelled lecture -- the two a
+        // customer most needs to notice -- was labelled READY, in green, with
+        // the "0 clips" that was the only hint anything had gone wrong.
+        var state = lecState(p);
+        var processing = state === 'processing';
         return {
           title: p.title || p.sourceTitle || 'Untitled lecture',
           meta: humanDuration(p.durationSec || p.sourceDurationSec) + ' · ' + since(p.submittedAt),
           clips: plural(p.clipCount || 0, 'clip'),
-          chip: processing ? 'Processing' : 'Ready',
+          chip: processing ? 'Processing' : state === 'ready' ? 'Ready' : p.status === 'cancelled' ? 'Cancelled' : 'Failed',
           chipStyle: 'padding: 2px 7px; border-radius: 20px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; border: 1px solid ' +
-            (processing ? 'rgba(230,183,112,.4); background: rgba(10,10,12,.8); color: #E6B770;' : 'rgba(127,209,166,.35); background: rgba(10,10,12,.8); color: #7FD1A6;'),
+            (processing ? 'rgba(230,183,112,.4); background: rgba(10,10,12,.8); color: #E6B770;'
+              : state === 'ready' ? 'rgba(127,209,166,.35); background: rgba(10,10,12,.8); color: #7FD1A6;'
+              : 'rgba(226,124,124,.4); background: rgba(10,10,12,.8); color: #E27C7C;'),
           thumbStyle: 'position: relative; aspect-ratio: 16 / 10; background: ' + thumb(p.sourceThumbUrl) + ';',
           open: function (e) { stop(e); setUI({ screen: 'detail', openProject: p.id, menuOpen: false, bellOpen: false }); },
         };

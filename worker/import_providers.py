@@ -441,6 +441,35 @@ class YtDlpImportProvider(ManagedImportProvider):
 # only stops one bad answer discarding a download already in progress.
 _SOCIALKIT_POLL_STUMBLES = 5
 
+# How long a hosted provider may sit in "queued"/"processing" without ever
+# reaching "ready" before the chain gives up on it. This is NOT the download
+# budget -- it is the patience for a provider that has not started delivering.
+# It defaulted to the full 30-minute import timeout, so a vendor outage cost
+# every customer half an hour of a motionless 3% before the fallback was even
+# tried. Eight minutes is generous for a long video and four times faster to
+# the truth when the vendor is simply down.
+_SOCIALKIT_STALL_SECONDS = max(60, int(os.getenv("SOCIALKIT_STALL_SEC", "480")))
+
+
+def _human_elapsed(seconds: float) -> str:
+    seconds = int(max(0, seconds))
+    if seconds < 60:
+        return f"{seconds}s"
+    return f"{seconds // 60}m {seconds % 60:02d}s"
+
+
+def _notify(cancelled: Callable[..., bool], note: str) -> bool:
+    """Report a phase note through the cancellation callback.
+
+    The callback doubles as the import heartbeat. Older callers -- and every
+    test that passes a bare ``lambda: False`` -- take no arguments, so the note
+    is offered and quietly dropped rather than made a requirement.
+    """
+    try:
+        return bool(cancelled(note=note))
+    except TypeError:
+        return bool(cancelled())
+
 
 class SocialKitImportProvider(ManagedImportProvider):
     """Hosted YouTube import via SocialKit's async (v2) download job API.
@@ -509,6 +538,8 @@ class SocialKitImportProvider(ManagedImportProvider):
 
         status_query = urllib.parse.urlencode({"access_key": self.api_key})
         deadline = time.monotonic() + self.timeout
+        submitted_at = time.monotonic()
+        stall_deadline = submitted_at + _SOCIALKIT_STALL_SECONDS
         info: dict = {}
         # A thirty-minute wait is around 360 polls. One of them failing used to
         # abandon the whole download -- a single blip out of 360 threw away work
@@ -520,8 +551,22 @@ class SocialKitImportProvider(ManagedImportProvider):
         while True:
             if cancelled():
                 raise ImportProviderError("Job cancelled.")
+            waited = time.monotonic() - submitted_at
             if time.monotonic() > deadline:
-                raise ImportProviderError("SocialKit download timed out. Upload the original MP4 or retry later.")
+                raise ImportProviderError(
+                    f"SocialKit download timed out after {_human_elapsed(waited)}. "
+                    "Upload the original MP4 or retry later.",
+                    retryable=True,
+                )
+            if time.monotonic() > stall_deadline:
+                # Retryable on purpose: a provider stuck before it ever starts
+                # is the case the local downloader exists to rescue.
+                raise ImportProviderError(
+                    f"SocialKit accepted the job but never started delivering it "
+                    f"({_human_elapsed(waited)} with no progress). The import service "
+                    "looks unavailable -- uploading the MP4 will still work.",
+                    retryable=True,
+                )
             # Poll before sleeping. Sleeping first added the poll interval to
             # every single import, including ones already finished.
             if first:
@@ -540,6 +585,7 @@ class SocialKitImportProvider(ManagedImportProvider):
             if not isinstance(info, dict):
                 raise ImportProviderError("SocialKit returned an unexpected job status.")
             state = str(info.get("status") or "").lower()
+            _notify(cancelled, f"Import service: {state or 'waiting'} ({_human_elapsed(waited)})")
             if state == "ready":
                 break
             if state in {"failed", "error", "cancelled", "canceled", "expired"}:

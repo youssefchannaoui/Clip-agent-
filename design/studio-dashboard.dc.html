@@ -140,17 +140,24 @@
               <span style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;">Activity</span>
               <span style="padding: 1px 7px; border-radius: 20px; background: rgba(217,180,120,.14); color: #F0D6A6; font-size: 10.5px; font-weight: 600;">2 need you</span>
               <a href="#" onClick="{{ markRead }}" style="margin-left: auto; font-size: 11px;">Mark all read</a>
+              <a href="#" onClick="{{ clearAllActivity }}" style="font-size: 11px; color: #8B8B93;">Clear all</a>
             </div>
             <sc-for list="{{ activity }}" as="act" hint-placeholder-count="6">
-              <div style="{{ act.rowStyle }}">
+              <div onClick="{{ act.open }}" style="{{ act.rowStyle }}" style-hover="background: #17171A;">
                 <i class="{{ act.icon }}" style="{{ act.iconStyle }}"></i>
-                <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+                <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1;">
                   <span style="font-size: 12px; color: #E9E9ED; line-height: 1.4; text-wrap: pretty;">{{ act.text }}</span>
                   <span style="font-size: 10.5px; color: #6E6E76;">{{ act.meta }}</span>
                 </span>
                 <span style="{{ act.tagStyle }}">{{ act.tag }}</span>
+                <button onClick="{{ act.dismiss }}" title="Dismiss" style="{{ act.dismissStyle }}" style-hover="background: #23232A; color: #E9E9ED;">
+                  <i class="ph ph-x" style="font-size: 11px;"></i>
+                </button>
               </div>
             </sc-for>
+            <sc-if value="{{ hasDismissed }}" hint-placeholder-val="{{ false }}">
+              <a href="#" onClick="{{ restoreActivity }}" style="padding: 9px; text-align: center; font-size: 11px; color: #6E6E76; border-top: 1px solid #1E1E22;">Bring dismissed ones back</a>
+            </sc-if>
             <sc-if value="{{ moreActivity }}" hint-placeholder-val="{{ true }}">
               <a href="#" onClick="{{ showAllActivity }}" style="padding: 10px; text-align: center; font-size: 11.5px; border-top: 1px solid #1E1E22;">Show everything</a>
             </sc-if>
@@ -1888,6 +1895,49 @@
     </div>
   </sc-if>
 
+  <sc-if value="{{ activityDetailOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeActivityDetail }}" style="position: fixed; inset: 0; z-index: 95; display: grid; place-items: center; padding: 24px; background: rgba(6,6,8,.76); backdrop-filter: blur(8px);">
+      <div style="width: 100%; max-width: 520px; max-height: 82vh; overflow: auto; display: flex; flex-direction: column; gap: 14px; padding: 20px; border: 1px solid #26262A; border-radius: 14px; background: linear-gradient(160deg, #16161A, #101013); box-shadow: 0 34px 90px rgba(0,0,0,.7); animation: dcPop .16s cubic-bezier(.2,.8,.2,1);">
+
+        <div style="display: flex; align-items: flex-start; gap: 11px;">
+          <i class="ph-fill ph-warning-circle" style="font-size: 19px; flex: none; margin-top: 2px; color: #E3928C;"></i>
+          <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1;">
+            <strong style="font-family: Outfit, Inter, sans-serif; font-size: 15px; font-weight: 600; letter-spacing: -.02em; line-height: 1.35;">{{ activityDetailHeading }}</strong>
+            <span style="font-size: 11.5px; color: #8B8B93; line-height: 1.5;">{{ activityDetailTitle }}<span style="color: #4E4E56;"> · </span>{{ activityDetailWhen }}</span>
+          </span>
+          <button onClick="{{ closeActivityDetail }}" title="Close" style="flex: none; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 1px solid #26262A; border-radius: 7px; background: #121214; color: #8B8B93; font-family: inherit; cursor: pointer;" style-hover="border-color: #34343A; color: #F2F2F4;">
+            <i class="ph ph-x" style="display: block; width: 13px; height: 13px; font-size: 13px; line-height: 1;"></i>
+          </button>
+        </div>
+
+        <p style="margin: 0; font-size: 13px; line-height: 1.62; color: #D3D3D9; text-wrap: pretty;">{{ activityDetailCause }}</p>
+
+        <div style="display: flex; flex-direction: column; gap: 9px; padding: 14px; border: 1px solid #23232A; border-radius: 11px; background: rgba(217,180,120,.045);">
+          <strong style="font-family: Outfit, Inter, sans-serif; font-size: 12px; font-weight: 600; letter-spacing: .01em; color: #F0D6A6;">What to do</strong>
+          <sc-for list="{{ activityDetailFixes }}" as="fix" hint-placeholder-count="3">
+            <span style="display: flex; align-items: flex-start; gap: 10px;">
+              <span style="display: grid; place-items: center; width: 18px; height: 18px; flex: none; margin-top: 1px; border-radius: 50%; border: 1px solid rgba(217,180,120,.4); background: rgba(217,180,120,.12); color: #F0D6A6; font: 600 10px Outfit, Inter, sans-serif;">{{ fix.n }}</span>
+              <span style="font-size: 12.5px; line-height: 1.55; color: #E9E9ED; text-wrap: pretty;">{{ fix.text }}</span>
+            </span>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ activityDetailHasRaw }}" hint-placeholder-val="{{ true }}">
+          <details style="border: 1px solid #1E1E22; border-radius: 10px; background: #0E0E11;">
+            <summary style="padding: 10px 13px; font-size: 11.5px; color: #8B8B93; cursor: pointer;">The original message</summary>
+            <p style="margin: 0; padding: 0 13px 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.6; color: #9A9AA2; word-break: break-word; white-space: pre-wrap;">{{ activityDetailRaw }}</p>
+          </details>
+        </sc-if>
+
+        <div style="display: flex; align-items: center; gap: 9px; flex-wrap: wrap;">
+          <button onClick="{{ activityDetailGo }}" style="padding: 9px 15px; border: 1px solid rgba(217,180,120,.45); border-radius: 9px; background: rgba(217,180,120,.12); color: #F0D6A6; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;" style-hover="background: rgba(217,180,120,.2);">{{ activityDetailGoLabel }}</button>
+          <button onClick="{{ activityDetailDismiss }}" style="padding: 9px 15px; border: 1px solid #26262A; border-radius: 9px; background: #121214; color: #BCBCC3; font-family: inherit; font-size: 12.5px; cursor: pointer;" style-hover="border-color: #34343A; color: #F2F2F4;">Dismiss this</button>
+          <span style="margin-left: auto; font-size: 10.5px; color: #4E4E56;">{{ activityDetailCode }}</span>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
   <sc-if value="{{ playerOpen }}" hint-placeholder-val="{{ false }}">
     <div onClick="{{ closePlayer }}" style="position: fixed; inset: 0; z-index: 93; display: grid; place-items: center; padding: 24px; background: rgba(6,6,8,.78); backdrop-filter: blur(8px);">
       <div style="width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid #26262A; border-radius: 14px; background: #101013; box-shadow: 0 34px 90px rgba(0,0,0,.7); animation: dcPop .16s cubic-bezier(.2,.8,.2,1);">
@@ -2769,9 +2819,12 @@ class Component extends DCLogic {
       const urgent = a.kind === 'issue' || a.kind === 'gate';
       return {
         text: a.text, meta: a.meta, tag: a.tag, icon: k.icon,
-        rowStyle: 'display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px; border-bottom: 1px solid #1A1A1E; transition: background .14s ease; background: ' + (urgent ? 'rgba(217,180,120,.045)' : 'transparent'),
+        open: e => { if (e) e.preventDefault(); this.setState({ activityDetailOpen: true }); },
+        dismiss: e => { if (e) { e.preventDefault(); e.stopPropagation(); } this.toast('Dismissed'); },
+        dismissStyle: 'flex: none; display: grid; place-items: center; width: 20px; height: 20px; margin-left: auto; border: 0; border-radius: 6px; background: transparent; color: #6E6E76; font-family: inherit; font-size: 12px; cursor: pointer; transition: background .14s ease, color .14s ease;',
+        rowStyle: 'display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px; border-bottom: 1px solid #1A1A1E; cursor: pointer; transition: background .14s ease; background: ' + (urgent ? 'rgba(217,180,120,.045)' : 'transparent'),
         iconStyle: 'font-size: 15px; flex: none; margin-top: 1px; color: ' + k.color,
-        tagStyle: 'margin-left: auto; flex: none; padding: 2px 7px; border-radius: 20px; font-size: 9.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; border: 1px solid ' +
+        tagStyle: 'flex: none; padding: 2px 7px; border-radius: 20px; font-size: 9.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; border: 1px solid ' +
           (urgent ? 'rgba(217,180,120,.34); background: rgba(217,180,120,.1); color: #F0D6A6;' : '#26262A; background: #17171A; color: #8B8B93;')
       };
     });
@@ -3383,6 +3436,27 @@ class Component extends DCLogic {
       bellOpen: this.state.bellOpen,
       moreActivity: !this.state.activityAll,
       toggleBell: e => { e.preventDefault(); this.setState(s => ({ bellOpen: !s.bellOpen, menuOpen: false })); },
+      clearAllActivity: e => { e.preventDefault(); this.setState({ bellOpen: false }); this.toast('Activity cleared'); },
+      restoreActivity: e => { e.preventDefault(); this.toast('Dismissed activity restored'); },
+      hasDismissed: true,
+      activityHasRows: true,
+      activityDetailOpen: this.state.activityDetailOpen || false,
+      activityDetailTitle: 'The Veil of Means needs attention',
+      activityDetailWhen: '9h ago',
+      activityDetailHeading: 'YouTube refused this particular video',
+      activityDetailCause: "YouTube would not release this video's file to us at all. Your account, plan and tokens are all fine — other lectures normally still import.",
+      activityDetailFixes: [
+        { n: '1', text: 'Download the video yourself and use Upload MP4 or MOV.' },
+        { n: '2', text: 'Try a different lecture to confirm your account is fine.' },
+        { n: '3', text: 'Check whether the video is public, and not age-restricted or region-locked.' },
+      ],
+      activityDetailRaw: 'youtube_import_blocked: YouTube refused to hand this video over (403) — both to the import service and directly.',
+      activityDetailHasRaw: true,
+      activityDetailCode: 'youtube_import_blocked',
+      activityDetailGoLabel: 'Open lecture library',
+      activityDetailGo: e => { e.preventDefault(); this.setState({ activityDetailOpen: false }); },
+      activityDetailDismiss: e => { e.preventDefault(); this.setState({ activityDetailOpen: false }); },
+      closeActivityDetail: e => { e.preventDefault(); this.setState({ activityDetailOpen: false }); },
       pageTitle: titles[screen],
       isTokens: screen === 'tokens',
       accountEmail: 'youssef@deenclipped.online',

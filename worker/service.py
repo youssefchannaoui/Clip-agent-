@@ -398,17 +398,31 @@ class Processor:
         # freshly started worker it was throttled away for the first 15 seconds
         # of the import -- the one moment liveness most needs proving.
         last = None
+        last_note = ""
         started = time.monotonic()
 
-        def pulse(done_bytes: int = 0, total_bytes: int = 0) -> bool:
-            nonlocal last
+        def pulse(done_bytes: int = 0, total_bytes: int = 0, note: str = "") -> bool:
+            nonlocal last, last_note
             now = time.monotonic()
-            if last is None or now - last >= IMPORT_HEARTBEAT_SECONDS:
+            # A changed phase is written immediately rather than waiting for the
+            # next beat. The throttle exists to stop a fast download rewriting
+            # the status file hundreds of times a second -- not to withhold the
+            # one line that tells the customer what the wait is actually for.
+            moved = note and note != last_note
+            if last is None or now - last >= IMPORT_HEARTBEAT_SECONDS or moved:
                 last = now
                 # Turn bytes into something the customer can read. The import
                 # occupies 3-8% of the job, so the download maps onto that band
                 # rather than pretending to be the whole thing.
                 fields: dict[str, Any] = {"heartbeatAt": now_ms()}
+                if note:
+                    # "phase" has been in the job payload all along and
+                    # nothing ever wrote to it, so an import that was
+                    # waiting on a third party was indistinguishable
+                    # from one that had died. A provider that knows why
+                    # it is waiting says so here.
+                    fields["phase"] = note[:120]
+                    last_note = note
                 if done_bytes:
                     # The raw counts travel too, so the app can say "142 MB of
                     # 380 MB" rather than only a percentage. A percentage alone
