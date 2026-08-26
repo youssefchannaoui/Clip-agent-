@@ -4508,6 +4508,7 @@ function renderStudio(){
        and rewrote layout, so the browser was forced into a synchronous reflow
        over a hundred times a second. That is what "laggy" was. */
     let paintQueued=false;
+    StudioAdapter.paintLocal=()=>{try{paintStudio()}catch(e){}};
     StudioAdapter.setRefresh(()=>{
       if(paintQueued)return;
       paintQueued=true;
@@ -4625,7 +4626,7 @@ function renderStudio(){
             toast('Automatic re-render could not start: '+e.message,'bad');
           }
         }
-      },4000);
+      },10000);
     }
     /* The fast half of the feedback loop: a ~6s window around the playhead,
        rendered through the REAL pipeline on the worker's quick lane. The full
@@ -4638,6 +4639,13 @@ function renderStudio(){
         delete previewRenderTimers[id];
         const clip=(DATA&&DATA.clips||[]).find(c=>c.id===id);
         if(!clip)return;
+        /* A preview already in flight means this one would only join a queue
+           and render a stale style. Wait for it instead: re-arm and let the
+           freshest style win when the lane is clear. My own audit queued five
+           renders in two minutes of slider-touching before this guard. */
+        if(clip.rerender&&clip.rerender.preview&&['queued','processing'].includes(clip.rerender.status)){
+          schedulePreviewRender(id);return;
+        }
         const span=Math.max(1,(Number(clip.durationMs)||0)/1000||(Number(clip.endSec)-Number(clip.startSec))||10);
         const at=Math.max(0,Math.min(span-1,Number(StudioAdapter.ui.edTime)||0));
         const a=Math.max(0,at-1.5),b=Math.min(span,a+6);
@@ -4648,7 +4656,7 @@ function renderStudio(){
           paintStudio();
           await refresh();
         }catch(e){/* the full render's error path already speaks */}
-      },1200);
+      },2500);
     }
     StudioAdapter.onClipStyle=(id,patch)=>{if(!id||!patch||!Object.keys(patch).length)return Promise.resolve();
       return studioDo(async()=>{

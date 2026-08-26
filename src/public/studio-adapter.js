@@ -3927,7 +3927,11 @@
       // True only while the fallback is on screen; the host labels the frame
       // so the uncaptioned source can never be mistaken for the clip.
       edSourceFallback: edSourceFallback,
-      edSourceNote: (edClip && edClip.stylePreview && edClip.stylePreview.url)
+      // One line on the frame, never a stack: while a render job is speaking
+      // (edRenderNotice), this stays quiet -- two banners covered the video.
+      edSourceNote: (edClipRecord && edClipRecord.rerender && (edClipRecord.rerender.status === 'queued' || edClipRecord.rerender.status === 'processing'))
+        ? ''
+        : (edClip && edClip.stylePreview && edClip.stylePreview.url)
         ? 'Preview of your changes (short window) — the full clip is re-rendering'
         : edSourceFallback
         ? 'Uncaptioned source — this clip has no rendered file yet'
