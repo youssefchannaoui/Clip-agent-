@@ -3908,15 +3908,25 @@
       // Served through the app's own path rather than the storage URL so the
       // render version can bust the cache: a fresh draft must replace what is
       // on screen, and a signed bucket URL cannot carry an extra query.
-      edVideoUrl: !edClip ? '' : (edSourceFallback
+      // A fresh style preview outranks the stored render: it is the same
+      // pipeline's pixels for the changes the person JUST made, rendered as a
+      // short window on the quick lane. It never replaces the clip -- the full
+      // re-render clears it when it lands, and the frame is labelled while it
+      // shows. Same-pipeline pixels, so the one-origin invariant holds.
+      edVideoUrl: !edClip ? '' : (edClip.stylePreview && edClip.stylePreview.url
+        ? edClip.stylePreview.url + (edClip.stylePreview.url.indexOf('?') > -1 ? '&' : '?') + 'sp=' + encodeURIComponent(String(edClip.stylePreview.at || ''))
+        : edSourceFallback
         ? '/api/clips/' + encodeURIComponent(edClip.id) + '/source-preview'
         : '/api/clips/' + encodeURIComponent(edClip.id) + '/video?rv='
           + encodeURIComponent(String(edClip.renderVersion || 1) + '.' + String(edClip.renderQuality || 'final'))),
+      edPreviewActive: Boolean(edClip && edClip.stylePreview && edClip.stylePreview.url),
       edExportUrl: edClip ? edClip.videoUrl || '' : '',
       // True only while the fallback is on screen; the host labels the frame
       // so the uncaptioned source can never be mistaken for the clip.
       edSourceFallback: edSourceFallback,
-      edSourceNote: edSourceFallback
+      edSourceNote: (edClip && edClip.stylePreview && edClip.stylePreview.url)
+        ? 'Preview of your changes (short window) — the full clip is re-rendering'
+        : edSourceFallback
         ? 'Uncaptioned source — this clip has no rendered file yet'
         : '',
       edIsDraft: Boolean(edClip && edClip.renderQuality === 'draft' && !edSourceFallback),
@@ -3971,7 +3981,18 @@
         }).length
         : 0,
 
-      edDirtyLabel: UI.edDirty ? 'Unsaved changes' : 'All changes saved',
+      // The header tells the truth about the invisible work: while a re-render
+      // or preview runs, "All changes saved" alone reads as "and nothing is
+      // happening", which is exactly what made edits feel broken.
+      edDirtyLabel: (function () {
+        var job = edClip && edClip.rerender;
+        if (job && (job.status === 'queued' || job.status === 'processing')) {
+          var pct = Number(job.progress || 0);
+          return (job.preview ? 'Rendering preview' : 'Updating clip')
+            + (pct > 0 ? ' · ' + Math.round(pct) + '%' : '…');
+        }
+        return UI.edDirty ? 'Unsaved changes' : 'All changes saved';
+      })(),
       edDirtyDot: 'width: 7px; height: 7px; border-radius: 50%; background: ' + (UI.edDirty ? '#E6B770' : '#7FD1A6') + ';',
       edSaving: UI.edSaving,
       edSaveIcon: UI.edSaving ? 'ph ph-circle-notch' : 'ph ph-floppy-disk',

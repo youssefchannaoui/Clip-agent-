@@ -1454,6 +1454,16 @@ function importRerenderResultObject(jobRecord, result) {
   if (!rendered?.renderVerified || !musicSatisfied(rendered)) throw new Error('The re-render did not pass verification.');
   const original = clipById(jobRecord.clipId);
   if (!original) throw new Error('The original clip was removed before the re-render completed.');
+  if (jobRecord.preview) {
+    // A preview replaces NOTHING: it parks on its own slot for the editor to
+    // play, and the fixed output id means each new preview overwrites the
+    // last in storage rather than collecting a graveyard of window files.
+    original.stylePreview = { url: rendered.clipUrl || '', at: Date.now() };
+    original.updatedAt = Date.now();
+    jobRecord.status = 'done'; jobRecord.stage = 'Preview ready'; jobRecord.progress = 100; jobRecord.completedAt = Date.now();
+    save();
+    return;
+  }
   const newer = state.rerenderJobs.find(item => item.clipId === jobRecord.clipId && !item.asVariant && item.createdAt > jobRecord.createdAt && ['queued', 'processing', 'done'].includes(item.status));
   if (!jobRecord.asVariant && newer) {
     jobRecord.status = 'superseded';
@@ -1479,6 +1489,7 @@ function importRerenderResultObject(jobRecord, result) {
     log(`Created a re-post variant of "${original.title}" with template "${rendered.templateName}".`, 'info', ownerOfRecord(original));
   } else {
     if (original.status === 'posted') throw new Error('Posted videos cannot be replaced. Create a re-post variant instead.');
+    original.stylePreview = null;
     const oldFiles = [original.clipFile, original.thumbFile];
     const oldObjects = [original.clipObjectKey, original.thumbObjectKey];
     const preserved = {
@@ -1671,14 +1682,15 @@ export function withImportNetwork(source) {
 // it was hardcoded to outrank everything, and production runs one worker slot:
 // one account keeping a re-render queued could hold a paying customer's lecture
 // behind it indefinitely. Level with a submitted lecture, ahead of nothing.
-export function queueClipRerender(clipId, templateId, { asVariant = false, priority = 1, quality = '' } = {}) {
+export function queueClipRerender(clipId, templateId, { asVariant = false, priority = 1, quality = '', preview = null } = {}) {
   const clip = clipById(clipId);
   if (!clip) throw new Error('That clip does not exist.');
   if (clip.status === 'posted' && !asVariant) throw new Error('A posted video cannot be changed. Create a re-post variant instead.');
   // Unapproved clips keep the fast draft loop -- an editor tweak should not
   // cost a full 1080p render nobody has approved yet. Anything approved or
   // beyond renders final, and approve itself asks for final explicitly.
-  const renderQuality = quality || (['approved', 'scheduled', 'posted'].includes(clip.status) || asVariant ? 'final' : 'draft');
+  const renderQuality = preview ? 'draft'
+    : quality || (['approved', 'scheduled', 'posted'].includes(clip.status) || asVariant ? 'final' : 'draft');
   const project = projectById(clip.projectId);
   // Guarded because the lines below dereference it directly. A clip whose
   // lecture was deleted otherwise threw a raw TypeError at the user.
@@ -1727,7 +1739,8 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
   fs.mkdirSync(dir, { recursive: true });
   const resultPath = path.join(dir, 'result.json');
   const outputDir = path.join(clipsDir, project.id, 'rerenders');
-  const outputClipId = asVariant ? `${clip.id}-variant-${Date.now().toString(36)}` : `${clip.id}-render-${Date.now().toString(36)}`;
+  const outputClipId = preview ? `${clip.id}-preview`
+    : asVariant ? `${clip.id}-variant-${Date.now().toString(36)}` : `${clip.id}-render-${Date.now().toString(36)}`;
   // The stored source object is the already-trimmed window; a URL re-import is
   // the whole video. Without the window, a clip's startSec (relative to the
   // trim) cuts the wrong moment of the full download.
@@ -1746,22 +1759,26 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
     // without a nasheed still could not be re-rendered, it just failed one
     // step later with "No worker-accessible nasheed track was supplied."
     settings: { ...sharedSettings(owner, { musicEnabled: !waivesMusic }), renderQuality },
+    ...(preview ? { lane: 'quick' } : {}),
     clip: {
       id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
       transcriptEdited: Boolean(clip.transcriptEdited),
       startSec: clip.startSec, endSec: clip.endSec, score: clip.score, scoreReasons: clip.scoreReasons,
       reviewRequired: clip.reviewRequired,
+      ...(preview ? { cutsSec: [[preview.startSec, preview.endSec]] } : {}),
     }, callbackUrl: '',
   } : {
     mode: 'rerender', id: rerenderId, projectId: project.id, clipIdOverride: outputClipId,
     sourceFile, outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
     background: jobBackground(project, owner),
     template, musicTracks: tracks, settings: { ...sharedSettings(owner, { musicEnabled: !waivesMusic }), renderQuality }, transcriptSegments,
+    ...(preview ? { lane: 'quick' } : {}),
     clip: {
       id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
       transcriptEdited: Boolean(clip.transcriptEdited),
       startSec: clip.startSec, endSec: clip.endSec, score: clip.score, scoreReasons: clip.scoreReasons,
       reviewRequired: clip.reviewRequired,
+      ...(preview ? { cutsSec: [[preview.startSec, preview.endSec]] } : {}),
     },
   };
   const file = path.join(dir, 'job.json');
@@ -1771,7 +1788,8 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
     // 0 = someone is watching (the editor); 1 = a deliberate single action;
     // 2 = batch sweeps. The queue serves the person at the screen first.
     priority: Math.max(0, Math.min(2, Number(priority) || 0)),
-    asVariant: Boolean(asVariant), status: 'queued', stage: 'Waiting to re-render', progress: 0, engine: project.engine === 'remote' ? 'remote' : 'self-hosted',
+    preview: Boolean(preview),
+    asVariant: Boolean(asVariant), status: 'queued', stage: preview ? 'Rendering a preview window' : 'Waiting to re-render', progress: 0, engine: project.engine === 'remote' ? 'remote' : 'self-hosted',
     createdAt: Date.now(), jobFile: file, resultPath,
   }, ownerOf(clip));
   // A newer request replaces any still-queued render for the same clip --
@@ -1779,7 +1797,8 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
   // up behind each other. A job already processing is left to finish; the
   // import-time supersede check discards its result if this one lands after.
   for (const stale of state.rerenderJobs) {
-    if (stale.clipId === clip.id && !stale.asVariant && !asVariant && stale.status === 'queued') {
+    if (stale.clipId === clip.id && !stale.asVariant && !asVariant && stale.status === 'queued'
+        && Boolean(stale.preview) === Boolean(preview)) {
       stale.status = 'superseded'; stale.stage = 'Replaced by a newer edit'; stale.completedAt = Date.now();
     }
   }

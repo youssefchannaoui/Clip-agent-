@@ -391,7 +391,12 @@ function streamFile(req, res, file, { downloadName = '', contentType = '', cache
   res.writeHead(200, { ...headers, 'Content-Length': stat.size }); return fs.createReadStream(file).pipe(res);
 }
 
-function latestRerender(clipId) { return state.rerenderJobs.find(job => job.clipId === clipId) || null; }
+function latestRerender(clipId) {
+  // The full render outranks a preview window in the status line -- the
+  // preview's whole life is seconds, and it has its own chip in the editor.
+  const jobs = state.rerenderJobs.filter(job => job.clipId === clipId);
+  return jobs.find(job => !job.preview && ['queued', 'processing'].includes(job.status)) || jobs[0] || null;
+}
 function publicClip(clip, { detail = false } = {}) {
   // Resolved as the clip's owner sees it. Without the user, the account's own
   // template edits are invisible here, so "outdated" compared against the
@@ -428,7 +433,8 @@ function publicClip(clip, { detail = false } = {}) {
     renderedWidth: clip.renderedWidth || null, renderedHeight: clip.renderedHeight || null,
     variantOf: clip.variantOf || null, addedAt: clip.addedAt,
     targets: (clip.targets || []).map(social.targetPublic),
-    rerender: rerender ? { id: rerender.id, status: rerender.status, stage: rerender.stage, progress: rerender.progress, error: rerender.error || null, asVariant: rerender.asVariant } : null,
+    rerender: rerender ? { id: rerender.id, status: rerender.status, stage: rerender.stage, progress: rerender.progress, error: rerender.error || null, asVariant: rerender.asVariant, preview: Boolean(rerender.preview) } : null,
+    stylePreview: clip.stylePreview || null,
     videoUrl: clip.clipUrl || `/api/clips/${encodeURIComponent(clip.id)}/video`, thumbUrl: clip.thumbUrl || `/api/clips/${encodeURIComponent(clip.id)}/thumb`,
   };
 }
@@ -1532,7 +1538,12 @@ async function route(req, res, url) {
       if (wanted) assertTemplateAllowed(templates.templateById(wanted, currentUser));
       // Priority 1, level with a submitted lecture. At 0 a free re-render
       // outranked every paying customer's job on a single worker slot.
-      return json(res, 202, { ok: true, job: agent.engine.queueClipRerender(id, wanted, { asVariant: Boolean(body.asVariant), priority: 1 }) });
+      // A preview window renders ~6s around the playhead on the worker's quick
+      // lane -- the editor's fast feedback loop, never a replacement render.
+      const previewWindow = body.preview && Number.isFinite(Number(body.preview.startSec)) && Number.isFinite(Number(body.preview.endSec))
+        ? { startSec: Math.max(0, Number(body.preview.startSec)), endSec: Math.max(0, Number(body.preview.endSec)) }
+        : null;
+      return json(res, 202, { ok: true, job: agent.engine.queueClipRerender(id, wanted, { asVariant: Boolean(body.asVariant), priority: previewWindow ? 0 : 1, preview: previewWindow }) });
     }
     catch (error) { return json(res, 400, { error: error.message }); }
   }

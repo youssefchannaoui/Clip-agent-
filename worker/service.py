@@ -310,10 +310,16 @@ class Processor:
         self.store = store
         self.storage = ObjectStorage()
         self.queue: queue.Queue[str] = queue.Queue()
+        # The quick lane: preview-window renders only. A caption nudge's
+        # six-second preview must not wait behind a fifty-minute lecture on
+        # the single main slot -- the whole point of a preview is that it
+        # arrives while the thought is still in the editor's head.
+        self.quick_queue: queue.Queue[str] = queue.Queue()
         self.running: dict[str, subprocess.Popen] = {}
         self.lock = threading.RLock()
         self.stop = threading.Event()
         self.threads = [threading.Thread(target=self.loop, name=f"job-{index}", daemon=True) for index in range(MAX_CONCURRENT)]
+        self.threads.append(threading.Thread(target=self.loop_quick, name="job-quick", daemon=True))
         # Clips uploaded early, per job, so upload_result does not send the
         # same bytes twice. Keyed by job so a crashed job cannot leak into the
         # next one; cleaned in process()'s finally.
@@ -386,7 +392,11 @@ class Processor:
         threading.Thread(target=announce_boot, name="boot-announce", daemon=True).start()
 
     def submit(self, job_id: str) -> None:
-        self.queue.put(job_id)
+        try:
+            lane = str(self.store.payload(job_id).get("lane") or "")
+        except (OSError, ValueError):
+            lane = ""
+        (self.quick_queue if lane == "quick" else self.queue).put(job_id)
 
     def cancelled(self, job_id: str) -> bool:
         # read() returns None for a job whose status file has gone or been
@@ -812,6 +822,30 @@ class Processor:
             self.partial_uploads.pop(job_id, None)
             shutil.rmtree(work, ignore_errors=True)
             self.store.scrub_network(job_id)
+
+    def loop_quick(self) -> None:
+        while not self.stop.is_set():
+            try:
+                job_id = self.quick_queue.get(timeout=1)
+            except queue.Empty:
+                continue
+            status = self.store.read(job_id)
+            # This is the only consumer thread at MAX_CONCURRENT=1. Anything that
+            # escapes process() would end it permanently, leaving a worker that
+            # accepts jobs forever and runs none -- so one bad job must never be
+            # able to take the loop down with it.
+            try:
+                if status and status.get("status") == "queued" and not status.get("cancelRequested"):
+                    self.process(job_id)
+            except Exception as exc:  # noqa: BLE001 - the loop must outlive any job
+                try:
+                    self.store.update(job_id, status="failed", stage="failed", error=clean_error(exc))
+                except Exception:  # noqa: BLE001 - a failing status write must not end the loop either
+                    pass
+                print(f"[worker] job {job_id} crashed the processor: {clean_error(exc)}", file=sys.stderr, flush=True)
+            finally:
+                self.quick_queue.task_done()
+
 
     def loop(self) -> None:
         while not self.stop.is_set():
