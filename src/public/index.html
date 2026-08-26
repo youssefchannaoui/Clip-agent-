@@ -2134,7 +2134,7 @@ async function hydrateEditorClip(){
 async function refresh({quiet=true}={}){try{
   const r=await api('/api/state'+(DATA&&DATA.rev?`?rev=${encodeURIComponent(DATA.rev)}`:''));
   if(r&&r.unchanged){return}
-  fireClipNotifs(DATA,r);
+  window.fireClipNotifs&&window.fireClipNotifs(DATA,r);
   DATA=r;
   await hydrateEditorClip();
   renderAll()}catch(e){if(!quiet)toast(e.message,'bad')}}
@@ -4738,8 +4738,10 @@ StudioAdapter.onToggleDesktopNotifs=async()=>{try{
   new Notification('DeenClipped',{body:'Notifications are on. You will hear when clips are ready, posted, or a lecture fails.'});
   renderAll();
 }catch(e){toast(e.message,'bad')}};
-let notifSeen=null;
-function fireClipNotifs(prev,next){try{
+/* Pinned to window: this block and the refresh loop that calls it live in
+   different script scopes, and a bare function declaration here is invisible
+   there -- the call failed silently inside refresh's own try/catch. */
+window.fireClipNotifs=function(prev,next){try{
   if(localStorage.getItem('deenDesktopNotifs')!=='on'||typeof Notification==='undefined'||Notification.permission!=='granted')return;
   if(!prev){/* first load: baseline only, never replay history */return}
   const show=(title,body)=>{const n=new Notification(title,{body});n.onclick=()=>{window.focus();n.close()}};
@@ -4753,7 +4755,7 @@ function fireClipNotifs(prev,next){try{
   for(const c of next.clips||[]){for(const t of c.targets||[]){
     if(t.status==='posted'&&!prevPosted.has(c.id+':'+t.provider))show('Clip published',`"${c.title||'Your clip'}" is live on ${t.provider}.`);
   }}
-}catch(e){}}
+}catch(e){}};
 StudioAdapter.onProbeSource=async url=>{try{
       const r=await api('/api/source-info',{method:'POST',body:JSON.stringify({urls:url})});
       const src=(r.sources||[])[0];
@@ -4990,7 +4992,7 @@ async function watchPublishing(id,timeoutMs=15*60_000){
   const started=Date.now();
   while(Date.now()-started<timeoutMs){
     await new Promise(resolve=>setTimeout(resolve,1500));
-    try{const fresh=await api('/api/state');fireClipNotifs(DATA,fresh);DATA=fresh;renderAll()}catch{continue}
+    try{const fresh=await api('/api/state');window.fireClipNotifs&&window.fireClipNotifs(DATA,fresh);DATA=fresh;renderAll()}catch{continue}
     const clip=clipById(id);
     if(!clip)break;
     const targets=clip.targets||[];
