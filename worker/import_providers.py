@@ -442,13 +442,21 @@ class YtDlpImportProvider(ManagedImportProvider):
 _SOCIALKIT_POLL_STUMBLES = 5
 
 # How long a hosted provider may sit in "queued"/"processing" without ever
-# reaching "ready" before the chain gives up on it. This is NOT the download
-# budget -- it is the patience for a provider that has not started delivering.
-# It defaulted to the full 30-minute import timeout, so a vendor outage cost
-# every customer half an hour of a motionless 3% before the fallback was even
-# tried. Eight minutes is generous for a long video and four times faster to
-# the truth when the vendor is simply down.
-_SOCIALKIT_STALL_SECONDS = max(60, int(os.getenv("SOCIALKIT_STALL_SEC", "480")))
+# reaching "ready" before the chain gives up on it.
+#
+# This started at 480s on the theory that a vendor sitting in "processing" was
+# a vendor that was down. Measured, that was wrong and would have been worse
+# than the bug: a 53-minute lecture takes SocialKit well over half an hour to
+# fetch the first time, and 480s would have converted every long first import
+# from slow into failed. The customer's own job proves the range -- 1805s and
+# still not finished.
+#
+# So this is a stuck-detector, not an impatience timer, and it sits just under
+# the import timeout. Failing early buys nothing anyway: the only thing after
+# it in the chain is the local downloader, which YouTube blocks from this box.
+# What actually fixes the experience is saying what the wait is for, which the
+# phase note now does.
+_SOCIALKIT_STALL_SECONDS = max(60, int(os.getenv("SOCIALKIT_STALL_SEC", "1500")))
 
 
 def _human_elapsed(seconds: float) -> str:
@@ -563,8 +571,10 @@ class SocialKitImportProvider(ManagedImportProvider):
                 # is the case the local downloader exists to rescue.
                 raise ImportProviderError(
                     f"SocialKit accepted the job but never started delivering it "
-                    f"({_human_elapsed(waited)} with no progress). The import service "
-                    "looks unavailable -- uploading the MP4 will still work.",
+                    f"({_human_elapsed(waited)} with no progress). It usually keeps "
+                    "fetching in the background and caches the result, so the same "
+                    "link often imports in seconds on a later try -- or upload the "
+                    "MP4 to skip the service entirely.",
                     retryable=True,
                 )
             # Poll before sleeping. Sleeping first added the poll interval to

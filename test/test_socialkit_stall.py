@@ -52,8 +52,9 @@ class SocialKitStallTests(unittest.TestCase):
                 Path("/tmp/unused.mp4"),
                 lambda **_: False,
             )
-        # Bounded by the stall window, not the 1800s import timeout.
-        self.assertLess(self.clock[0], self.provider.timeout / 2)
+        # Bounded by the stall window, and it does end rather than running to
+        # the hard import timeout.
+        self.assertLess(self.clock[0], self.provider.timeout)
         self.assertLessEqual(self.clock[0], ip._SOCIALKIT_STALL_SECONDS + self.provider.poll_seconds)
         # Retryable: the local downloader must still get its turn.
         self.assertTrue(getattr(caught.exception, "retryable", False))
@@ -91,6 +92,24 @@ class SocialKitStallTests(unittest.TestCase):
                 lambda: False,
             )
 
+
+    def test_the_stall_window_leaves_room_for_a_slow_first_fetch(self):
+        """The bound is a stuck-detector, not an impatience timer.
+
+        Measured on 26 Aug 2026: SocialKit needs well over half an hour to fetch
+        a 53-minute lecture the first time -- the customer's own job ran 1805s
+        without finishing. An earlier version of this file set the window to
+        480s, which would have turned every slow first import of a long lecture
+        into a failure. That is worse than the bug it was written for, so the
+        floor is pinned here rather than left to whoever next edits the default.
+        """
+        self.assertGreaterEqual(
+            ip._SOCIALKIT_STALL_SECONDS, 1200,
+            "a long lecture's first fetch must not be mistaken for a stuck vendor",
+        )
+        # Still short of the hard import timeout, or it would never fire.
+        budget = max(60, int(__import__("os").getenv("VIDEO_IMPORT_TIMEOUT_MS", "1800000")) // 1000)
+        self.assertLess(ip._SOCIALKIT_STALL_SECONDS, budget)
 
 if __name__ == "__main__":
     unittest.main()
