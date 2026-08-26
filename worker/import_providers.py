@@ -288,7 +288,20 @@ def youtube_network_options() -> dict[str, Any]:
     # called once per download attempt, so a random pick per call spreads the
     # traffic across every address on the plan and retries land on a different
     # exit than the one that was just refused.
-    pool = [p.strip() for p in os.getenv("VIDEO_IMPORT_PROXIES", "").split(",") if p.strip()]
+    # A pool FILE outranks the env pool: the nightly maintenance job replaces
+    # burned addresses through Webshare's API and rewrites the file, and a
+    # per-call read here means the fresh pool is live on the next download
+    # attempt -- no container restart, no window where a job must use a dead
+    # exit because the fix is waiting on a redeploy.
+    pool: list[str] = []
+    pool_file = os.getenv("VIDEO_IMPORT_PROXY_FILE", "").strip()
+    if pool_file:
+        try:
+            pool = [line.strip() for line in Path(pool_file).read_text(encoding="utf-8").splitlines() if line.strip()]
+        except OSError:
+            pool = []
+    if not pool:
+        pool = [p.strip() for p in os.getenv("VIDEO_IMPORT_PROXIES", "").split(",") if p.strip()]
     proxy = random.choice(pool) if pool else os.getenv("VIDEO_IMPORT_PROXY", "").strip()
     if proxy:
         options["proxy"] = proxy

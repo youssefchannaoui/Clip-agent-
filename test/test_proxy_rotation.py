@@ -18,7 +18,7 @@ import import_providers as ip
 
 class ProxyRotationTests(unittest.TestCase):
     def setUp(self):
-        self.saved = {k: os.environ.get(k) for k in ("VIDEO_IMPORT_PROXIES", "VIDEO_IMPORT_PROXY")}
+        self.saved = {k: os.environ.get(k) for k in ("VIDEO_IMPORT_PROXIES", "VIDEO_IMPORT_PROXY", "VIDEO_IMPORT_PROXY_FILE")}
 
     def tearDown(self):
         for key, value in self.saved.items():
@@ -47,6 +47,24 @@ class ProxyRotationTests(unittest.TestCase):
         os.environ["VIDEO_IMPORT_PROXIES"] = "http://u:p@pool.example:1"
         os.environ["VIDEO_IMPORT_PROXY"] = "http://u:p@old.example:1"
         self.assertEqual(ip.youtube_network_options()["proxy"], "http://u:p@pool.example:1")
+
+
+    def test_a_pool_file_outranks_the_env_and_needs_no_restart(self):
+        import tempfile, os as _os
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as handle:
+            handle.write("http://u:p@10.9.9.1:1\n\nhttp://u:p@10.9.9.2:2\n")
+            path = handle.name
+        try:
+            _os.environ["VIDEO_IMPORT_PROXY_FILE"] = path
+            _os.environ["VIDEO_IMPORT_PROXIES"] = "http://u:p@stale.example:1"
+            chosen = {ip.youtube_network_options()["proxy"] for _ in range(40)}
+            self.assertTrue(all(c.startswith("http://u:p@10.9.9.") for c in chosen),
+                            "the file is the live pool; the env is last night's")
+            # A vanished file falls back to the env rather than to no proxy.
+            _os.remove(path)
+            self.assertEqual(ip.youtube_network_options()["proxy"], "http://u:p@stale.example:1")
+        finally:
+            _os.environ.pop("VIDEO_IMPORT_PROXY_FILE", None)
 
     def test_no_proxy_configured_means_no_proxy_option(self):
         os.environ.pop("VIDEO_IMPORT_PROXIES", None)
