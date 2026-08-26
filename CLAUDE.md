@@ -104,7 +104,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **618 JS + 358 Python**
+- `npm test` and `npm run check` must pass. Currently **618 JS + 366 Python**
   (7 Python skipped). Update these numbers when they change — they were wrong by
   more than a factor of two, which makes them useless as a tripwire.
 - **The 7 skips are `SpeakerTrackingTests`**, which need a test video that is not
@@ -236,10 +236,13 @@ Habits the tests now enforce, and why:
 
 - **YouTube API quota reply** is drafted in Gmail, unsent. Google asked for a
   recalculated quota breakdown; deadline ~20 Aug.
-- **Render pipeline cannot cut or composite** — no `concat`, `trim`, `atrim` or
-  `select`, and the only `overlay=` is the blur background. This blocks Media,
-  AI Tools, Split, Trim, filler-word removal and silence removal. One
-  dependency, not several separate gaps.
+- **Render pipeline learned to cut on 26 Aug 2026 (v3.2.0)** — a candidate can
+  carry KEEP ranges (`clip.cutsSec`, clip-local, via re-render), rendered as a
+  pre-cut trim/concat plate that the untouched pipeline then treats as an
+  ordinary source; captions are retimed word-by-word (`retime_for_cuts`).
+  Split/Trim/silence-removal UI is NOT yet wired — controls stay hidden per
+  invariant 8 until they can reach this. Compositing beyond the blur
+  background (overlays, Media, AI Tools) remains absent.
 - **Worker P2 (framing) and P3 (Arabic)** are written and unit-tested but no
   one has ever looked at a rendered frame. See `WORKER-HANDOVER.md`.
 - **Speaker framing was inert in production until 17 Aug**, not merely

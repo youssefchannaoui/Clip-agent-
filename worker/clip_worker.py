@@ -633,6 +633,11 @@ class Candidate:
     ai_title: str = ""
     ai_description: str = ""
     ai_reason: str = ""
+    # KEEP ranges in media time, ordered, non-overlapping -- or None for the
+    # whole span. This is how the editor's Trim/Split/silence-removal arrive:
+    # not as a different kind of render, but as an ordinary candidate that
+    # keeps less of the source.
+    cuts: list | None = None
 
     @property
     def duration(self) -> float:
@@ -2883,6 +2888,122 @@ def quality_report(candidate: Candidate, template: dict[str, Any]) -> dict[str, 
     }
 
 
+def normalise_cuts(cuts: Any, start: float, end: float) -> list[tuple[float, float]] | None:
+    """Validated KEEP ranges inside [start, end], or None when they keep everything.
+
+    The editor speaks in ranges to keep, because "keep" survives every edit
+    the same way: a trim is one range, a split-and-delete is two, silence
+    removal is many. Overlaps merge, order is imposed, and slivers under a
+    tenth of a second are dropped -- ffmpeg renders them as a flash of one
+    frame, which reads as a glitch, not an edit.
+    """
+    if not cuts:
+        return None
+    spans: list[tuple[float, float]] = []
+    for item in cuts:
+        try:
+            a, b = float(item[0]), float(item[1])
+        except (TypeError, ValueError, IndexError, KeyError):
+            continue
+        a, b = max(start, min(a, b)), min(end, max(a, b))
+        if b - a >= 0.1:
+            spans.append((a, b))
+    spans.sort()
+    merged: list[tuple[float, float]] = []
+    for a, b in spans:
+        if merged and a <= merged[-1][1] + 0.01:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+        else:
+            merged.append((a, b))
+    if not merged:
+        return None
+    if len(merged) == 1 and merged[0][0] <= start + 0.01 and merged[0][1] >= end - 0.01:
+        return None
+    return merged
+
+
+def retime_for_cuts(candidate: Candidate, keeps: list[tuple[float, float]]) -> Candidate:
+    """The candidate as it exists on the CUT timeline: start 0, gaps closed.
+
+    Every transcript segment and word is either dropped (it lived in a removed
+    gap) or moved left by the total removed time before it. Words are judged
+    by their midpoint, so a word straddling a cut goes to whichever side holds
+    most of it rather than surviving twice or vanishing twice.
+    """
+    def remap(t: float) -> float | None:
+        offset = 0.0
+        for a, b in keeps:
+            if t < a:
+                return None
+            if t <= b:
+                return offset + (t - a)
+            offset += b - a
+        return None
+
+    def remap_clamped(t: float) -> float:
+        offset = 0.0
+        for a, b in keeps:
+            if t < a:
+                return offset
+            if t <= b:
+                return offset + (t - a)
+            offset += b - a
+        return offset
+
+    total = sum(b - a for a, b in keeps)
+    segments: list[dict[str, Any]] = []
+    for segment in candidate.segments:
+        seg_a, seg_b = float(segment.get("start", 0)), float(segment.get("end", 0))
+        kept_overlap = sum(max(0.0, min(seg_b, b) - max(seg_a, a)) for a, b in keeps)
+        if kept_overlap < 0.05:
+            continue
+        copy = dict(segment)
+        copy["start"] = remap_clamped(seg_a)
+        copy["end"] = remap_clamped(seg_b)
+        words = []
+        for word in (segment.get("words") or []):
+            mid = (float(word.get("start", 0)) + float(word.get("end", 0))) / 2
+            if remap(mid) is None:
+                continue
+            words.append({**word,
+                          "start": remap_clamped(float(word.get("start", 0))),
+                          "end": remap_clamped(float(word.get("end", 0)))})
+        copy["words"] = words
+        if copy["end"] - copy["start"] >= 0.05:
+            segments.append(copy)
+    from dataclasses import replace
+    return replace(candidate, start=0.0, end=total, segments=segments, cuts=None)
+
+
+def render_cut_plate(ffmpeg: str, source: Path, keeps: list[tuple[float, float]],
+                     destination: Path, threads: str) -> None:
+    """One continuous file holding only the kept ranges, video and audio both.
+
+    A separate pass on purpose: the main render graph carries framing, mattes,
+    backgrounds and caption burning, and threading trim/concat through every
+    one of those variants is how a graph becomes unmaintainable. The plate is
+    a near-lossless intermediate (crf 14) that the untouched pipeline then
+    treats as an ordinary source starting at zero -- ONE timeline origin, the
+    same invariant the editor preview lives by.
+    """
+    parts = []
+    for i, (a, b) in enumerate(keeps):
+        parts.append(f"[0:v]trim=start={a:.3f}:end={b:.3f},setpts=PTS-STARTPTS[v{i}]")
+        parts.append(f"[0:a]atrim=start={a:.3f}:end={b:.3f},asetpts=PTS-STARTPTS[a{i}]")
+    joins = "".join(f"[v{i}][a{i}]" for i in range(len(keeps)))
+    graph = ";".join(parts) + f";{joins}concat=n={len(keeps)}:v=1:a=1[vcut][acut]"
+    run([
+        ffmpeg, "-y", "-i", str(source),
+        "-filter_complex", graph,
+        "-map", "[vcut]", "-map", "[acut]",
+        "-c:v", "libx264", "-threads", threads, "-preset", "veryfast", "-crf", "14",
+        "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "256k",
+        str(destination),
+    ], timeout=30 * 60)
+    if not destination.exists() or destination.stat().st_size < 1024:
+        raise RuntimeError("Cutting the clip produced no usable video.")
+
+
 def render_clip(
     job: dict[str, Any], candidate: Candidate, index: int, source: Path,
     track: dict[str, Any] | None, output_dir: Path,
@@ -2898,6 +3019,16 @@ def render_clip(
     clip_file = output_dir / f"{clip_id}.mp4"
     thumb_file = output_dir / f"{clip_id}.jpg"
     ass_file = output_dir / f"{clip_id}.ass"
+    # Cuts happen before anything else looks at the source: the plate becomes
+    # an ordinary continuous file starting at zero, so framing, mattes,
+    # backgrounds and captions all run exactly as they always have.
+    cut_plate: Path | None = None
+    keeps = normalise_cuts(candidate.cuts, candidate.start, candidate.end)
+    if keeps:
+        cut_plate = output_dir / f"{clip_id}-cut.mp4"
+        render_cut_plate(ffmpeg, source, keeps, cut_plate, ffmpeg_threads)
+        source = cut_plate
+        candidate = retime_for_cuts(candidate, keeps)
     matched_ayahs = write_ass(candidate, template, ass_file)
 
     volume = max(0.01, min(0.5, float(settings.get("musicVolumePercent", 13)) / 100.0))
@@ -3033,6 +3164,8 @@ def render_clip(
         # nothing once the alpha has been baked in.
         if matte_file is not None:
             matte_file.unlink(missing_ok=True)
+        if cut_plate is not None:
+            cut_plate.unlink(missing_ok=True)
 
     info = ffprobe_json(ffprobe, clip_file)
     streams = info.get("streams", [])
@@ -3394,6 +3527,15 @@ def process_rerender(job: dict[str, Any], job_file: Path) -> None:
         segments = [{"start": start, "end": end, "text": str(clip.get("transcript") or clip.get("description") or "Reminder"), "words": []}]
     text = " ".join(str(segment.get("text") or "").strip() for segment in segments).strip()
     score = int(clip.get("score") or 70)
+    # The editor speaks clip-local seconds; the candidate lives in media time.
+    # The conversion happens exactly once, here, on the way in -- the same
+    # discipline applyMediaTimebase enforces on the way out.
+    cuts_media = None
+    raw_cuts = clip.get("cutsSec")
+    if isinstance(raw_cuts, list) and raw_cuts:
+        cuts_media = [[start + float(pair[0]), start + float(pair[1])]
+                      for pair in raw_cuts
+                      if isinstance(pair, (list, tuple)) and len(pair) >= 2]
     candidate = Candidate(
         start=start,
         end=end,
@@ -3403,6 +3545,7 @@ def process_rerender(job: dict[str, Any], job_file: Path) -> None:
         reasons=list(clip.get("scoreReasons") or []),
         quote_risk=bool(clip.get("reviewRequired")),
         ai_title=str(clip.get("title") or ""),
+        cuts=cuts_media,
     )
     seed = int(hashlib.sha256(str(job.get("clipIdOverride") or job["id"]).encode()).hexdigest()[:12], 16)
     track = tracks[seed % len(tracks)] if tracks else None
