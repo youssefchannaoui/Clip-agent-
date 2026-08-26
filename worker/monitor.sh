@@ -39,11 +39,19 @@ check() { # check <name> <failing:0|1> <fail-body> <ok-body>
 }
 
 # 1. The public site, from outside its own datacenter.
+#
+# Three tries spread over ~30s, because a Render deploy's switchover can span
+# a single retry -- the first live alert this monitor ever sent was our own
+# double deploy, caught in the seconds between old instance and new. A real
+# outage lasts minutes; a deploy lasts seconds. Only the former should ring.
 site_fail=0
-curl -fsS -m 20 https://deenclipped.online/healthz >/dev/null 2>&1 || {
-  sleep 5
-  curl -fsS -m 20 https://deenclipped.online/healthz >/dev/null 2>&1 || site_fail=1
-}
+if ! curl -fsS -m 20 https://deenclipped.online/healthz >/dev/null 2>&1; then
+  sleep 15
+  if ! curl -fsS -m 20 https://deenclipped.online/healthz >/dev/null 2>&1; then
+    sleep 15
+    curl -fsS -m 20 https://deenclipped.online/healthz >/dev/null 2>&1 || site_fail=1
+  fi
+fi
 check "site" "$site_fail" \
   "deenclipped.online is not answering its health check from the worker box." \
   "deenclipped.online is answering again"
