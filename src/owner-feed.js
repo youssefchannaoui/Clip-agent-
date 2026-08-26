@@ -139,11 +139,26 @@ export function composePulse(now = Date.now()) {
   return lines.join('\n');
 }
 
+/**
+ * Says so when a new version of the web app comes up. Render provides the
+ * commit sha at runtime; the message doubles as the explanation for any
+ * seconds-long site blip at the same moment -- that is the switchover, not an
+ * outage. Fires on every boot on purpose: a restart the owner did not cause
+ * is exactly the kind of thing this feed exists to surface, and the hourly
+ * cap keeps a crash-loop from flooding.
+ */
+export function announceBoot() {
+  const sha = String(process.env.RENDER_GIT_COMMIT || '').slice(0, 7);
+  const version = sha ? ` (version ${sha})` : '';
+  return feed(`Update live: the web app just started${version}. A brief site blip around this moment was the switchover, not an outage.`, 'rocket');
+}
+
 let pulseTimer = null;
 let lastPulseDay = '';
 
 export function start() {
   if (!String(config.activityNtfyTopic || '').trim()) return;
+  announceBoot().catch(() => {});
   const tick = () => {
     const zone = config.timezone || 'Australia/Perth';
     const parts = new Intl.DateTimeFormat('en-AU', { timeZone: zone, hour: 'numeric', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());

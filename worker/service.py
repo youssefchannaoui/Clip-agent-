@@ -13,6 +13,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -34,6 +35,27 @@ PORT = int(os.getenv("WORKER_PORT", "8080"))
 # An explicit variable still wins; see worker/capacity.py.
 CAPACITY = capacity.plan()
 MAX_CONCURRENT = CAPACITY["maxConcurrentJobs"]
+
+
+def announce_boot() -> None:
+    topic = os.getenv("ACTIVITY_NTFY_TOPIC", "").strip()
+    if not topic:
+        return
+    body = (
+        f"Update live: the worker just started -- {CAPACITY['cores']} core(s), "
+        f"model {CAPACITY['model']}, {MAX_CONCURRENT} job(s) at a time. "
+        "A processing pause around this moment was the deploy switching over."
+    )
+    try:
+        request = urllib.request.Request(
+            f"https://ntfy.sh/{urllib.parse.quote(topic, safe='')}",
+            data=body.encode("utf-8"),
+            headers={"Title": "DeenClipped", "Tags": "rocket"},
+            method="POST",
+        )
+        urllib.request.urlopen(request, timeout=10).close()
+    except Exception:
+        pass
 MAX_DOWNLOAD_BYTES = max(50, int(os.getenv("WORKER_MAX_DOWNLOAD_MB", "4096"))) * 1024 * 1024
 MIN_FREE_BYTES = max(1, int(os.getenv("WORKER_MIN_FREE_GB", "10"))) * 1024**3
 # The app treats five minutes of an unchanged status signature as a hung job, so
@@ -352,6 +374,11 @@ class Processor:
         for thread in self.threads:
             thread.start()
         threading.Thread(target=self.queue_pulse, name="queue-pulse", daemon=True).start()
+        # Tell the owner's feed the worker came up. Pairs with the web app's
+        # own boot announcement: any processing gap around this moment was the
+        # deploy switching over, not an outage. Fire-and-forget off-thread --
+        # a slow or absent ntfy must never delay startup.
+        threading.Thread(target=announce_boot, name="boot-announce", daemon=True).start()
 
     def submit(self, job_id: str) -> None:
         self.queue.put(job_id)

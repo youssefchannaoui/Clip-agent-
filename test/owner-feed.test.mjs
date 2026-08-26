@@ -85,3 +85,14 @@ test('the daily pulse reads the true business state', () => {
   assert.match(pulse, /Webshare proxy: USD 6\.00 due/, 'a bill due within the week is named');
   assert.doesNotMatch(pulse, /Hetzner/, 'a bill three weeks out is not "coming up"');
 });
+
+
+test('a deploy announces itself, so a blip at the same moment explains itself', async () => {
+  process.env.RENDER_GIT_COMMIT = 'abc1234def5678';
+  await feed.announceBoot();
+  delete process.env.RENDER_GIT_COMMIT;
+  assert.equal(pushed.length, 1);
+  assert.match(pushed[0].body, /Update live/);
+  assert.match(pushed[0].body, /abc1234/, 'the short version is named');
+  assert.match(pushed[0].body, /switchover, not an outage/, 'the blip explanation rides along');
+});
