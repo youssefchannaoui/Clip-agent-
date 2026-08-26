@@ -1819,6 +1819,22 @@ export async function pump() {
   if (pumping) return;
   pumping = true;
   try {
+    // The quick lane's app-side half. A preview window exists to arrive while
+    // the thought is still in the editor's head; the concurrency cap below is
+    // for real renders, and a preview waiting behind the very re-render it
+    // was meant to preempt is how "queued - 0%" sat on the customer's screen.
+    // The worker runs these on its own dedicated slot, so they cost the main
+    // lane nothing.
+    for (const item of state.rerenderJobs) {
+      if (!item.preview || item.status !== 'queued' || running.has(item.id)) continue;
+      if (Number(item.nextRetryAt || 0) > Date.now()) continue;
+      if (item.engine === 'remote') {
+        runRemoteAux(projectById(clipById(item.clipId)?.projectId), item, 'rerender')
+          .catch(error => { item.status = 'failed'; item.error = error.message; save(); });
+      } else {
+        runRerender(item).catch(error => { item.status = 'failed'; item.error = error.message; save(); });
+      }
+    }
     while (running.size < config.maxConcurrentJobs) {
       const candidates = [
         ...state.projects.filter(item => item.engine === 'remote' && item.status === 'queued' && Number(item.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote', item, at: item.submittedAt })),
@@ -1826,8 +1842,8 @@ export async function pump() {
         ...state.projects.filter(item => item.engine === 'vizard' && item.status === 'queued').map(item => ({ type: 'vizard', item, at: item.submittedAt })),
         ...state.projects.filter(item => item.moreJob?.engine === 'remote' && item.moreJob.status === 'queued' && Number(item.moreJob.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote-more', item: item.moreJob, project: item, at: item.moreJob.createdAt })),
         ...state.projects.filter(item => item.moreJob?.engine !== 'remote' && item.moreJob?.status === 'queued').map(item => ({ type: 'more', item: item.moreJob, project: item, at: item.moreJob.createdAt })),
-        ...state.rerenderJobs.filter(item => item.engine === 'remote' && item.status === 'queued' && Number(item.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote-rerender', item, project: projectById(clipById(item.clipId)?.projectId), at: item.createdAt })),
-        ...state.rerenderJobs.filter(item => item.engine !== 'remote' && item.status === 'queued').map(item => ({ type: 'rerender', item, at: item.createdAt })),
+        ...state.rerenderJobs.filter(item => !item.preview && item.engine === 'remote' && item.status === 'queued' && Number(item.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote-rerender', item, project: projectById(clipById(item.clipId)?.projectId), at: item.createdAt })),
+        ...state.rerenderJobs.filter(item => !item.preview && item.engine !== 'remote' && item.status === 'queued').map(item => ({ type: 'rerender', item, at: item.createdAt })),
       ].sort((a, b) => ((a.item.priority ?? 1) - (b.item.priority ?? 1)) || (a.at - b.at));
       const next = candidates[0];
       if (!next) break;
