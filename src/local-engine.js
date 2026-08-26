@@ -55,6 +55,11 @@ const IMPORT_STALL_TIMEOUT_MS = config.videoImportTimeoutMs + 5 * 60_000;
  * it by the stall budget cancelled healthy jobs, which meant a long lecture
  * could never survive its own download.
  */
+// How long to wait before automatically retrying a job whose import timed out.
+// Long enough for the import service to have finished the fetch it kept running
+// after we gave up; short enough that the customer sees motion, not a grave.
+const IMPORT_RETRY_DELAY_MS = Math.max(60_000, Number(process.env.IMPORT_RETRY_DELAY_MS || 5 * 60_000));
+
 export function stallBudgetFor(stage) {
   return PRE_WORKER_STAGES.has(String(stage || '').toLowerCase())
     ? IMPORT_STALL_TIMEOUT_MS
@@ -923,6 +928,30 @@ export function acceptRemoteUpdate(projectId, update) {
   if (update.status === 'completed' && update.result && project.status !== 'done') {
     importResultObject(project, update.result, 'remote-worker');
   } else if (update.status === 'failed') {
+    // A slow first fetch is not a dead job. The import service keeps fetching
+    // after our budget runs out and caches the result, so one automatic retry
+    // a few minutes later usually imports in seconds. Once, not forever: a
+    // second identical failure means something else is wrong, and it fails
+    // with the classified error below like any other.
+    const slowImport = /never started delivering|SocialKit download timed out/i.test(String(update.error || ''));
+    if (slowImport && Number(project.importRetries || 0) < 1) {
+      project.importRetries = Number(project.importRetries || 0) + 1;
+      // Fresh worker job id, same reason as manual retry: the worker keys jobs
+      // by id and would hand back the old failure otherwise.
+      project.workerJobId = `${project.id}-retry-${Date.now().toString(36)}`;
+      project.status = 'queued';
+      project.stage = 'Import was slow — retrying while the import service finishes fetching';
+      project.error = null; project.errorCode = null;
+      project.nextRetryAt = Date.now() + IMPORT_RETRY_DELAY_MS;
+      project.updatedAt = Date.now(); save();
+      log(`"${project.title}" hit the import service's slow first fetch; retrying automatically in ${Math.round(IMPORT_RETRY_DELAY_MS / 60_000)} minutes.`, 'warn', ownerOf(project));
+      // unref: a pending five-minute timer must not hold the process open --
+      // it hung the test runner, and would do the same to a graceful shutdown.
+      // The pump also runs on every state change, so losing the timer at exit
+      // costs nothing.
+      setTimeout(() => pump().catch(() => {}), IMPORT_RETRY_DELAY_MS + 1000).unref();
+      return project;
+    }
     project.status = 'failed'; releaseProjectHold(project); project.stage = 'failed'; project.progress = Number(update.progress || project.progress || 0);
     // Keep the classified code, not a hardcoded one. Overwriting it with
     // 'processing_failed' threw away `youtube_import_blocked`, which is the one

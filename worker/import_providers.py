@@ -6,6 +6,7 @@ import ipaddress
 import json
 import os
 import socket
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -736,6 +737,61 @@ def provider_for(source: dict, storage) -> ManagedImportProvider:
     if source.get("type") == "object_storage":
         return DirectUploadProvider(storage)
     return _named_provider(os.getenv("VIDEO_IMPORT_PROVIDER", "ffmpegapi").lower(), storage, primary=True)
+
+
+# URLs whose fetch has already been requested, so a queued job is warmed once,
+# not every time something looks at it. Values are monotonic deadlines.
+_PREWARMED: dict[str, float] = {}
+_PREWARM_TTL_SECONDS = 2 * 60 * 60
+_PREWARM_LOCK = threading.Lock()
+
+
+def prewarm_hosted_import(source: dict) -> None:
+    """Ask the hosted provider to start fetching a URL, without waiting.
+
+    Measured 26 Aug 2026: SocialKit needs 30+ minutes to fetch a 53-minute
+    lecture the first time, keeps fetching after we stop polling, and then
+    serves the same URL from cache in about 6 seconds. So the clock on that
+    first fetch should start when the job is QUEUED, not when a worker slot
+    finally opens -- on a one-slot box the queue wait is exactly the head
+    start a long lecture needs.
+
+    Fire-and-forget by design: this runs off the request thread, submits the
+    download job, and never polls. Any failure here is ignored, because the
+    real import will report it properly when its turn comes.
+    """
+    if (source or {}).get("type") == "object_storage":
+        return
+    try:
+        url = validate_youtube_url(str((source or {}).get("url") or ""))
+    except Exception:
+        return
+    provider = SocialKitImportProvider(primary=True)
+    if not provider.api_key:
+        return
+    now = time.monotonic()
+    with _PREWARM_LOCK:
+        for key in [k for k, until in _PREWARMED.items() if until <= now]:
+            _PREWARMED.pop(key, None)
+        if url in _PREWARMED:
+            return
+        _PREWARMED[url] = now + _PREWARM_TTL_SECONDS
+
+    def fire() -> None:
+        params = {"access_key": provider.api_key, "url": url, "quality": provider.quality}
+        if provider.max_duration:
+            params["max_duration"] = str(provider.max_duration)
+        try:
+            provider._call(
+                f"{provider.base}/v2/youtube/download?{urllib.parse.urlencode(params)}",
+                method="POST",
+            )
+        except Exception:
+            # The warm-up is opportunistic. The import itself will surface
+            # whatever is actually wrong.
+            pass
+
+    threading.Thread(target=fire, name="import-prewarm", daemon=True).start()
 
 
 def provider_chain(source: dict, storage) -> list[ManagedImportProvider]:

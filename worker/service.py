@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import capacity
-from import_providers import ImportedSource, ImportProviderError, download_https, import_with_fallback, provider_for
+from import_providers import ImportedSource, ImportProviderError, download_https, import_with_fallback, prewarm_hosted_import, provider_for
 from object_storage import ObjectStorage
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -341,6 +341,13 @@ class Processor:
     def start(self) -> None:
         for job_id in self.store.recover():
             self.queue.put(job_id)
+            # A recovered job with no readable payload will fail properly in
+            # process(); it must not take startup down with it here.
+            try:
+                recovered = self.store.payload(job_id)
+            except (OSError, ValueError):
+                continue
+            prewarm_hosted_import(recovered.get("source") or {})
         self.cleanup_abandoned()
         for thread in self.threads:
             thread.start()
@@ -898,6 +905,10 @@ class Handler(BaseHTTPRequestHandler):
                 status, created = STORE.create(payload)
                 if created:
                     PROCESSOR.submit(str(status["id"]))
+                    # The import service takes 30+ minutes on a long lecture's
+                    # first fetch and caches the result, so its clock starts
+                    # now -- while this job waits for a slot, the fetch runs.
+                    prewarm_hosted_import(payload.get("source") or {})
                 return self.send_json(202 if created else 200, status)
             except (ValueError, OSError) as exc:
                 return self.send_json(400, {"error": clean_error(exc), "code": "invalid_job"})
