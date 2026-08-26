@@ -194,6 +194,23 @@ Habits the tests now enforce, and why:
 - Password hashing runs async. Sync hashing on a pre-auth route stalls every
   other customer for the duration.
 
+## Import path (switched 26 Aug 2026)
+
+- **YouTube imports run through the box's own yt-dlp behind a Webshare static
+  residential proxy** — `VIDEO_IMPORT_PROVIDER=ytdlp` and `VIDEO_IMPORT_PROXY`
+  in `worker/.env` on the Hetzner box (credential lives only there, never in
+  the repo). Measured on the switch day: the 53-minute lecture SocialKit could
+  not deliver in 30+ minutes imported in 56s at 216 Mbit/s, full 1080p.
+- SocialKit stays in the chain as automatic fallback (`SOCIALKIT_API_KEY` in
+  worker/.env) until the subscription is cancelled; the queue-time pre-warm
+  and the app's one-shot auto-retry both exist for that fallback path.
+- The Webshare plan is Static Residential, 20 IPs, 250GB/month. A full-quality
+  lecture is ~1.5GB, so ~160 first-time imports/month fit; re-imports of a
+  URL the box has seen use the worker's source cache, not bandwidth.
+- If imports start failing with bot-wall wording again, first try another IP
+  from the list (`https://dashboard.webshare.io` → Proxy → List) — one flagged
+  exit does not mean the plan is dead.
+
 ## Deploys
 
 - Branch `deenclipped-v2-2` auto-deploys the web service to Render on push.
