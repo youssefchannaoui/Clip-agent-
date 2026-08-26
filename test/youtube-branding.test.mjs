@@ -48,7 +48,7 @@ test('no icon anywhere is a play triangle inside a rounded rectangle', () => {
 test("YouTube's icon is drawn in their colours, not the dashboard's", () => {
   // ph-youtube-logo is a redrawn shape and inherits currentColor, so it
   // rendered gold. Both the shape and the colour were violations.
-  const rule = /#studio i\.ph-youtube-logo\{[\s\S]*?\}/.exec(shell)[0];
+  const rule = /(?<!#studio )i\.ph-youtube-logo\{[\s\S]*?\}/.exec(shell)[0];
   assert.match(rule, /%23FF0000/, 'YouTube red');
   assert.match(rule, /%23FFFFFF/, 'white play triangle');
   assert.match(rule, /color:transparent/, 'the redrawn glyph is suppressed');
@@ -58,9 +58,20 @@ test("the icon never renders below YouTube's 20px minimum", () => {
   // The floor is what matters, not a particular number: the mark is set at a
   // fixed size because 1em resolves to 17px in the "Posting to" row and 13px
   // in the schedule list, both under YouTube's minimum.
-  const rule = /#studio i\.ph-youtube-logo\{[\s\S]*?\}/.exec(shell)[0];
+  const rule = /(?<!#studio )i\.ph-youtube-logo\{[\s\S]*?\}/.exec(shell)[0];
   const px = (prop) => Number((new RegExp(prop + ':(\\d+)px').exec(rule) || [])[1] || 0);
   for (const prop of ['min-width', 'min-height', 'width', 'height']) {
     assert.ok(px(prop) >= 20, `${prop} must be at least 20px, got ${px(prop)}px`);
   }
+});
+
+test('the substitution is page-wide, because the connections dialog is not inside #studio', () => {
+  // Scoping the official-mark rule to #studio left the Publishing connections
+  // dialog -- the successor of the exact screen in Google's screenshot -- with
+  // the 19px redrawn glyph in a tile. Found 26 Aug while capturing the proof
+  // screenshots Google asked for: the picture would have proven the violation.
+  assert.doesNotMatch(shell, /#studio i\.ph-youtube-logo/,
+    'the mark rule must not be scoped to #studio');
+  assert.doesNotMatch(shell, /#studio :has\(> i\.ph-youtube-logo\)/,
+    'nor the tile-suppression rule');
 });

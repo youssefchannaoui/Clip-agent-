@@ -274,8 +274,14 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
    The glyph is suppressed and the official mark drawn in its place, so every
    binding that asks for a YouTube icon gets a compliant one without each call
    site having to know. */
-#studio i.ph-youtube-logo::before{content:"";}
-#studio i.ph-youtube-logo{
+/* Page-wide, not #studio-wide. The connections dialog lives outside the
+   #studio subtree, so its YouTube row kept the 19px Phosphor glyph in a tile
+   -- the exact finding in Google's screenshot -- while every surface inside
+   #studio was compliant. Scoping the substitution to the whole page is what
+   the promise below actually requires: no call site, present or future, has
+   to know. */
+i.ph-youtube-logo::before{content:"";}
+i.ph-youtube-logo{
   display:inline-block;
   /* 20px is YouTube's stated minimum height; 1em would be 17px in the
      "Posting to" row and 13px in the schedule list. */
@@ -291,7 +297,7 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
    the YouTube mark reads as a second, squarer YouTube button. The tile chrome
    is removed wherever it directly wraps the mark; the other platforms keep
    theirs, since only YouTube's guidelines are at stake here. */
-#studio :has(> i.ph-youtube-logo){
+:has(> i.ph-youtube-logo){
   background:transparent !important;
   border-color:transparent !important;
   box-shadow:none !important;
