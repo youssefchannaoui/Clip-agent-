@@ -806,6 +806,36 @@ def select_candidates(candidates: list[Candidate], limit: int) -> list[Candidate
     return sorted(selected, key=lambda item: (-item.score, item.start))
 
 
+def ollama_clip_rows(inner: Any) -> list | None:
+    """The clips list, from any of the shapes the model actually produces.
+
+    The prompt asks for {"clips": [...]} and the parser accepted exactly that.
+    A real production call answered with valid JSON in a different shape and
+    the whole batch fell back to built-in scoring -- over formatting, not
+    content. Models drift between four shapes for this ask, all of them
+    unambiguous, so all of them are read:
+
+      {"clips": [row, ...]}   what was asked for
+      [row, ...]              the wrapper dropped
+      {"clips": {row}}        a single row, unwrapped from its list
+      {row}                   a single row, no wrapper at all
+
+    None means the answer genuinely was not clip rows.
+    """
+    if isinstance(inner, dict):
+        rows = inner.get("clips")
+        if isinstance(rows, list):
+            return rows
+        if isinstance(rows, dict):
+            return [rows]
+        if "index" in inner:
+            return [inner]
+        return None
+    if isinstance(inner, list):
+        return inner
+    return None
+
+
 def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any]) -> list[Candidate]:
     # The worker's own sidecar is the default. The URL used to come only from
     # the web service's config, which was never set -- so the Ollama container
@@ -849,8 +879,9 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any]) ->
     prompt = (
         "You rank candidate short clips from Islamic lectures and write the title and caption "
         "each will be posted with on TikTok, Instagram Reels and YouTube Shorts.\n"
-        "Return JSON only: a key named clips, one entry per candidate, each with "
-        "index, score (0-100), title, description, and one short reason.\n"
+        "Return JSON only, in exactly this shape: "
+        '{"clips": [{"index": 0, "score": 87, "title": "...", "description": "...", "reason": "..."}, ...]} '
+        "-- one entry per candidate, the clips key and the list are both required.\n"
         "\n"
         "TITLES. A title is the hook that decides whether someone taps, not a summary. "
         "6-10 words. Address the viewer as you. Open a specific curiosity gap or name a "
@@ -884,7 +915,14 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any]) ->
         "prompt": prompt,
         "stream": False,
         "format": "json",
-        "options": {"temperature": 0.1},
+        # qwen3 is a thinking model: without this it spends its budget inside a
+        # think block that format=json then fights, and the production failure
+        # was a 194-token answer to a 24-candidate ask. Ollama has accepted the
+        # flag since 0.9; the box runs 0.32.
+        "think": False,
+        # 24 rows with titles and captions need ~3k tokens; the default budget
+        # is whatever the model felt like stopping at.
+        "options": {"temperature": 0.1, "num_predict": 4096},
     }).encode("utf-8")
     request = urllib.request.Request(
         base_url + "/api/generate",
@@ -896,9 +934,9 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any]) ->
         with urllib.request.urlopen(request, timeout=180) as response:
             outer = json.loads(response.read().decode("utf-8"))
         inner = json.loads(str(outer.get("response") or "{}"))
-        rows = inner.get("clips") if isinstance(inner, dict) else None
-        if not isinstance(rows, list):
-            raise ValueError("Local model did not return a clips list")
+        rows = ollama_clip_rows(inner)
+        if rows is None:
+            raise ValueError(f"Local model did not return clip rows (got {type(inner).__name__})")
         # One malformed row must not spoil the batch.
         #
         # This loop had no per-row guard, so a model that answered
