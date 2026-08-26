@@ -73,6 +73,7 @@ RUN python -m pip install --upgrade pip setuptools wheel \
     && python -m pip install --upgrade --force-reinstall --no-deps \
        "opencv-python-headless>=4.10.0.84,<5.0.0"
 
+COPY package.json /app/package.json
 COPY worker /app/worker
 # Bundled faces (see worker/fonts/NOTICE.md): the KFGQPC HAFS mushaf face --
 # the one Quran apps use, whose U+06DD is the ornamented verse medallion --

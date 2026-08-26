@@ -93,6 +93,7 @@ test('a deploy announces itself, so a blip at the same moment explains itself', 
   delete process.env.RENDER_GIT_COMMIT;
   assert.equal(pushed.length, 1);
   assert.match(pushed[0].body, /Update live/);
-  assert.match(pushed[0].body, /abc1234/, 'the short version is named');
+  assert.match(pushed[0].body, /v\d+\.\d+\.\d+/, 'a human version number, not just a sha');
+  assert.match(pushed[0].body, /abc1234/, 'the build sha rides along');
   assert.match(pushed[0].body, /switchover, not an outage/, 'the blip explanation rides along');
 });

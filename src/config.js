@@ -22,7 +22,17 @@ const boolean = (value, fallback) => {
   return /^(1|true|yes|on)$/i.test(String(value));
 };
 
+// The one version number, read from package.json so there is exactly one
+// place to bump. Release rule: patch for fixes, minor for features -- and the
+// number's whole job is to appear in the update announcements on the owner's
+// feed, so "what changed?" has an answer that two people can say to each other.
+let appVersion = '0.0.0';
+try {
+  appVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version || appVersion;
+} catch { /* a missing manifest must not stop boot; the announcement just goes unversioned */ }
+
 export const config = {
+  appVersion,
   root,
   dataDir: process.env.DATA_DIR || path.join(root, 'data'),
   port: number(process.env.PORT, 3000),

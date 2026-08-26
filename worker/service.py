@@ -41,9 +41,14 @@ def announce_boot() -> None:
     topic = os.getenv("ACTIVITY_NTFY_TOPIC", "").strip()
     if not topic:
         return
+    try:
+        version = json.loads(pathlib.Path("/app/package.json").read_text())["version"]
+    except Exception:
+        version = "unknown"
     body = (
-        f"Update live: the worker just started -- {CAPACITY['cores']} core(s), "
-        f"model {CAPACITY['model']}, {MAX_CONCURRENT} job(s) at a time. "
+        f"Update live: DeenClipped worker v{version} just started -- "
+        f"{CAPACITY['cores']} core(s), model {CAPACITY['model']}, "
+        f"{MAX_CONCURRENT} job(s) at a time. "
         "A processing pause around this moment was the deploy switching over."
     )
     try:

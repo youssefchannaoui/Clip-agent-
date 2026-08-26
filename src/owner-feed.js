@@ -149,8 +149,8 @@ export function composePulse(now = Date.now()) {
  */
 export function announceBoot() {
   const sha = String(process.env.RENDER_GIT_COMMIT || '').slice(0, 7);
-  const version = sha ? ` (version ${sha})` : '';
-  return feed(`Update live: the web app just started${version}. A brief site blip around this moment was the switchover, not an outage.`, 'rocket');
+  const build = sha ? ` (build ${sha})` : '';
+  return feed(`Update live: DeenClipped v${config.appVersion}${build} just started on the web. A brief site blip around this moment was the switchover, not an outage.`, 'rocket');
 }
 
 let pulseTimer = null;
