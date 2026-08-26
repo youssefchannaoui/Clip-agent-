@@ -1485,10 +1485,13 @@
   var TITLES = {
     home: 'Home', queue: 'Review queue', library: 'Lecture library', schedule: 'Schedule',
     templates: 'Templates', music: 'Nasheed library', language: 'Arabic & terms',
-    performance: 'Performance', editor: 'Clip editor', tokens: 'Tokens & billing',
+    performance: 'Performance', editor: 'Clip editor \u00b7 BETA', tokens: 'Tokens & billing',
   };
 
   function sublineFor(screen, ctx) {
+    // Honest label while the editor is rough: preview and edit feedback can
+    // be slow, and saying so beats looking broken. Remove when it earns it.
+    if (screen === 'editor') return 'Beta \u2014 previews and edits can take a while; your changes are always saved';
     var empty = ctx.projects.length === 0;
     switch (screen) {
       case 'home':
