@@ -5001,6 +5001,28 @@ function paintSetupCelebration(vals){
   if(go)go.focus();
 }
 
+function paintEditorBetaNotice(){
+  /* One pop-up, first editor open only. Its text describes what the editor
+     ACTUALLY does today -- the live-draft version of this dialog shipped with
+     behaviour that did not survive contact with a real user and was reverted;
+     a notice that oversells is worse than none. */
+  try{
+    if(StudioAdapter.ui.screen!=='editor'){const old=document.getElementById('edBetaPop');if(old)old.remove();return}
+    if(localStorage.getItem('deenEditorBetaSeen')==='1')return;
+    if(document.getElementById('edBetaPop'))return;
+    const pop=document.createElement('div');
+    pop.id='edBetaPop';
+    pop.style.cssText='position:fixed;inset:0;z-index:400;display:grid;place-items:center;background:rgba(8,8,10,.62)';
+    pop.innerHTML='<div style="max-width:400px;margin:16px;padding:22px 22px 18px;border-radius:14px;background:#141416;border:1px solid #2A2A2E;box-shadow:0 30px 80px rgba(0,0,0,.55)">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span style="padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.08em;background:rgba(217,180,120,.16);color:#F0D6A6;border:1px solid rgba(217,180,120,.4)">BETA</span><strong style="font-size:15px;color:#F6F6F8">The editor is in beta</strong></div>'
+      +'<p style="margin:0 0 10px;font-size:12.5px;line-height:1.6;color:#BCBCC3">Your edits save the moment you make them — but the video preview has to <strong style="color:#E9E9ED">re-render to show changes</strong>, and that can take a few minutes. The banner on the frame and the header tell you where it is up to.</p>'
+      +'<p style="margin:0 0 14px;font-size:12.5px;line-height:1.6;color:#BCBCC3">Rough edges are possible while we improve this. Nothing you do here is ever lost.</p>'
+      +'<button id="edBetaOk" style="width:100%;padding:10px;border:0;border-radius:9px;background:#D9B478;color:#141109;font-weight:600;font-size:13px;cursor:pointer">Got it</button></div>';
+    document.body.appendChild(pop);
+    const btn=document.getElementById('edBetaOk');
+    if(btn)btn.onclick=()=>{try{localStorage.setItem('deenEditorBetaSeen','1')}catch(e){};pop.remove()};
+  }catch(e){}
+}
 function paintStudio(){
   if(!DATA||!STUDIO)return;
   const vals=StudioAdapter.bindings(DATA);
@@ -5024,6 +5046,7 @@ function paintStudio(){
   paintTourEntry(vals);
   paintJobPanelScroll();
   paintEditorMissing();
+  paintEditorBetaNotice();
   paintPreviewPlayer(vals);
   paintHighlight(vals);
   paintJobType(vals);
