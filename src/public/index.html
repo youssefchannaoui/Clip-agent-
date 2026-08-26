@@ -2596,26 +2596,6 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       /* The clip's window inside whatever source is playing. */
       edVideoNode.dataset.offset=String(Number(vals.edStartSec)||0);
       edVideoNode.dataset.span=String(Number(vals.edDurationSec)||0);
-      /* LIVE DRAFT fit simulation: while drafting, the frame shows the clean
-         source, so the template's fit mode is applied here -- contain, cover,
-         or contain over a blurred copy of the same frame, which is what the
-         render's blur background looks like. Cleared the moment draft mode
-         ends so the rendered file answers for itself again. */
-      const fitSim=vals.edDraftMode?String(vals.edFitSim||'contain'):'';
-      let blurBack=edVideoNode.parentElement&&edVideoNode.parentElement.querySelector(':scope > [data-host-blursim]');
-      if(fitSim==='blur'){
-        if(!blurBack&&edVideoNode.parentElement){
-          blurBack=document.createElement('div');
-          blurBack.setAttribute('data-host-blursim','');
-          blurBack.style.cssText='position:absolute;inset:0;z-index:0;background-size:cover;background-position:center;filter:blur(26px) brightness(.6);transform:scale(1.15);pointer-events:none';
-          edVideoNode.parentElement.insertBefore(blurBack,edVideoNode);
-        }
-        if(blurBack&&vals.edPoster)blurBack.style.backgroundImage='url("'+vals.edPoster.replace(/"/g,'%22')+'")';
-        edVideoNode.style.objectFit='contain';
-      }else{
-        if(blurBack)blurBack.remove();
-        edVideoNode.style.objectFit=fitSim==='crop'||fitSim==='fill'?'cover':fitSim==='contain'?'contain':'';
-      }
       if(edVideoNode.dataset.src!==vals.edVideoUrl){
         edVideoNode.dataset.src=vals.edVideoUrl;
         /* The password only means anything to this server. A rendered clip
@@ -4670,12 +4650,11 @@ function renderStudio(){
         }catch(e){/* the full render's error path already speaks */}
       },1200);
     }
-    /* Style tweaks persist immediately (nothing is ever lost) but render
-       NOTHING: the live draft in the frame is the feedback loop now, and the
-       render costs minutes of worker time -- it fires when Save says so. */
     StudioAdapter.onClipStyle=(id,patch)=>{if(!id||!patch||!Object.keys(patch).length)return Promise.resolve();
       return studioDo(async()=>{
-        await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({styleOverrides:patch})})})};
+        await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({styleOverrides:patch})});
+        schedulePreviewRender(id);
+        scheduleAutoRender(id)})};
     /* The old always-on behaviour, kept but made deliberate: push this clip's
        tweaks onto the style, so every clip using it picks them up. */
     /* Saves this clip first, then copies its look onto the rest of the lecture.
@@ -4798,8 +4777,7 @@ function renderStudio(){
          that cannot start (source cleaned up) downgrades to a plain save. */
       if(r?.clip?.stylePending){
         try{await api(`/api/clips/${encodeURIComponent(id)}/rerender`,{method:'POST',body:JSON.stringify({templateId:r.clip.templateId||'',asVariant:r.clip.status==='posted'})});
-          schedulePreviewRender(id);
-          StudioAdapter.showToast('Saved — rendering your changes')}
+          StudioAdapter.showToast('Saved — new render queued')}
         catch(e){StudioAdapter.showToast(`Saved. Render not started: ${e.message}`)}
       }
       StudioAdapter.clipSaved()},'Clip saved',()=>{StudioAdapter.ui.edSaving=false});
@@ -5023,24 +5001,6 @@ function paintSetupCelebration(vals){
   if(go)go.focus();
 }
 
-function paintEditorBetaNotice(){
-  try{
-    if(StudioAdapter.ui.screen!=='editor'){const old=document.getElementById('edBetaPop');if(old)old.remove();return}
-    if(localStorage.getItem('deenEditorBetaSeen')==='1')return;
-    if(document.getElementById('edBetaPop'))return;
-    const pop=document.createElement('div');
-    pop.id='edBetaPop';
-    pop.style.cssText='position:fixed;inset:0;z-index:400;display:grid;place-items:center;background:rgba(8,8,10,.62)';
-    pop.innerHTML='<div style="max-width:400px;margin:16px;padding:22px 22px 18px;border-radius:14px;background:#141416;border:1px solid #2A2A2E;box-shadow:0 30px 80px rgba(0,0,0,.55)">'
-      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span style="padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.08em;background:rgba(217,180,120,.16);color:#F0D6A6;border:1px solid rgba(217,180,120,.4)">BETA</span><strong style="font-size:15px;color:#F6F6F8">The editor is in beta</strong></div>'
-      +'<p style="margin:0 0 10px;font-size:12.5px;line-height:1.6;color:#BCBCC3">While you edit, the frame shows a <strong style="color:#E9E9ED">live draft</strong> — your caption and framing changes appear instantly, drawn by the editor.</p>'
-      +'<p style="margin:0 0 14px;font-size:12.5px;line-height:1.6;color:#BCBCC3">Press <strong style="color:#E9E9ED">Save clip</strong> and the real video re-renders with your changes — that takes a few minutes and the header shows its progress. Rough edges are possible; nothing you do here is ever lost.</p>'
-      +'<button id="edBetaOk" style="width:100%;padding:10px;border:0;border-radius:9px;background:#D9B478;color:#141109;font-weight:600;font-size:13px;cursor:pointer">Got it</button></div>';
-    document.body.appendChild(pop);
-    const btn=document.getElementById('edBetaOk');
-    if(btn)btn.onclick=()=>{try{localStorage.setItem('deenEditorBetaSeen','1')}catch(e){};pop.remove()};
-  }catch(e){}
-}
 function paintStudio(){
   if(!DATA||!STUDIO)return;
   const vals=StudioAdapter.bindings(DATA);
@@ -5064,7 +5024,6 @@ function paintStudio(){
   paintTourEntry(vals);
   paintJobPanelScroll();
   paintEditorMissing();
-  paintEditorBetaNotice();
   paintPreviewPlayer(vals);
   paintHighlight(vals);
   paintJobType(vals);
