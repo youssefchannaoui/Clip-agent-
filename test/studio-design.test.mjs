@@ -1162,6 +1162,72 @@ test('a finished lecture reads as ready, not stuck processing', () => {
   assert.equal(vals.liveDock, false, 'a finished lecture must not stay pinned in the live dock');
 });
 
+test('dismissing a notification also clears the badge behind it', () => {
+  // The badge counted failures straight off the data, so clearing every row
+  // left "1 need you" over an empty list -- a notification that cannot be got
+  // rid of, which is what dismissing exists to prevent.
+  Object.assign(StudioAdapter.ui, { screen: 'home', bellOpen: true, activityAll: true, activityDetail: null });
+  const data = {
+    projects: [{ id: 'p', title: 'L', status: 'failed', error: 'This video is unavailable.',
+                 submittedAt: Date.now(), updatedAt: Date.now() }],
+    clips: [], tracks: [],
+  };
+
+  const before = StudioAdapter.bindings(data);
+  assert.equal(before.activity.length, 1);
+  assert.equal(before.activityUnread, 1, 'a fresh failure lights the bell');
+
+  before.activity[0].dismiss({ stopPropagation() {}, preventDefault() {} });
+  const after = StudioAdapter.bindings(data);
+  assert.equal(after.activity.length, 0, 'the row is gone');
+  assert.equal(after.activityUnread, 0, 'and so is the badge that pointed at it');
+  // The header's own count is a second opinion that used to disagree: it read
+  // failures straight off the data, so the popover said "1 need you" over an
+  // empty list.
+  assert.match(after.activityNeedsYou, /^0 need you/, 'the header agrees with the list');
+  assert.equal(after.hasDismissed, true, 'but it can still be brought back');
+
+  after.restoreActivity({ stopPropagation() {}, preventDefault() {} });
+  const restored = StudioAdapter.bindings(data);
+  assert.equal(restored.activity.length, 1, 'restoring returns the row');
+  assert.equal(restored.activityUnread, 1, 'and the badge with it');
+
+  restored.clearAllActivity({ stopPropagation() {}, preventDefault() {} });
+  Object.assign(StudioAdapter.ui, { bellOpen: false, activityAll: false, activityDetail: null });
+});
+
+test('a failure explains itself, and a vendor outage is not blamed on the video', () => {
+  // The bell used to show a truncated raw error and nothing else, so a customer
+  // had no way to tell "this video is private" from "our supplier is down" --
+  // two failures whose only sensible responses are opposites.
+  Object.assign(StudioAdapter.ui, { screen: 'home', bellOpen: true, activityAll: true, activityDetail: null });
+  const openFirst = error => {
+    const data = {
+      projects: [{ id: 'p', title: 'L', status: 'failed', error, submittedAt: Date.now(), updatedAt: Date.now() }],
+      clips: [], tracks: [],
+    };
+    const row = StudioAdapter.bindings(data).activity[0];
+    assert.ok(row, 'a failed lecture reaches the bell');
+    Object.assign(StudioAdapter.ui, { activityDetail: row.id });
+    return StudioAdapter.bindings(data);
+  };
+
+  const outage = openFirst('SocialKit accepted the job but never started delivering it (8m 00s with no progress).');
+  assert.match(outage.activityDetailHeading, /import service is not responding/i);
+  assert.match(outage.activityDetailCause, /outage on their side/i);
+  assert.match(JSON.stringify(outage.activityDetailFixes), /Upload MP4/i,
+    'the one path that still works must be the first thing offered');
+
+  // The neighbouring cause must not be swallowed by the new pattern.
+  const blocked = openFirst('Sign in to confirm you are not a bot.');
+  assert.match(blocked.activityDetailHeading, /YouTube blocked our server/i);
+
+  const gone = openFirst('This video is unavailable.');
+  assert.match(gone.activityDetailHeading, /not available to download/i);
+
+  Object.assign(StudioAdapter.ui, { bellOpen: false, activityAll: false, activityDetail: null });
+});
+
 test('a failed or cancelled lecture never reads as READY on home', () => {
   // Home collapsed lecState's three answers into processing-or-not, so the two
   // states a customer most needs to see -- failed and cancelled -- were both

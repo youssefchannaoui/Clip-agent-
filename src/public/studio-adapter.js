@@ -722,6 +722,21 @@
   // wins, so the specific patterns are listed before the broad ones.
   var EXPLAIN = [
     {
+      // The import service accepting a job and then never delivering it is a
+      // different failure from YouTube refusing one, and it needs a different
+      // answer: nothing about the video or the link is wrong, retrying the same
+      // way will not help while the outage lasts, and uploading bypasses the
+      // service entirely.
+      match: /never started delivering|import service looks unavailable|import service: (queued|processing)/i,
+      title: 'Our import service is not responding',
+      cause: 'The service that fetches videos from YouTube accepted this job and then stopped responding. This is an outage on their side — the video, the link and your account are all fine.',
+      fixes: [
+        'Use Upload MP4 or MOV instead. That path does not touch the import service and is working normally.',
+        'Retry the link later — outages usually clear within a few hours.',
+        'Do not re-paste the link repeatedly; each attempt waits on the same service.',
+      ],
+    },
+    {
       match: /sign in to confirm|not a bot|cookies-from-browser/i,
       title: 'YouTube blocked our server, not you',
       cause: 'YouTube demanded proof that a person rather than a machine was asking for the download, and a server cannot answer that. The same video plays normally in your own browser.',
@@ -2904,12 +2919,6 @@
     }
 
     var seenAt = lastSeen();
-    var unreadCount = failures.length + log.filter(function (e) {
-      // The surviving sign-in row is context, not news -- it must not light
-      // the bell's unread dot.
-      if (/^Signed in /.test(String(e.message || e.text || ''))) return false;
-      return Number(e.at || e.createdAt || 0) > seenAt;
-    }).length;
 
     var weekAgo = Date.now() - 7 * DAY_MS;
     var postedThisWeek = clips.filter(function (c) { return c.postedAt && new Date(c.postedAt).getTime() >= weekAgo; });
@@ -2917,15 +2926,6 @@
     var medianScore = allScores.length ? allScores[Math.floor(allScores.length / 2)] : 0;
     var postTimes = DATA.postTimes || [];
     var todayCount = scheduled.filter(function (c) { return startOfDay(c.scheduledAt) === today; }).length;
-
-    // Blockers name a real gap and send you to the screen that fixes it.
-    var seenAt = lastSeen();
-    var unreadCount = failures.length + log.filter(function (e) {
-      // The surviving sign-in row is context, not news -- it must not light
-      // the bell's unread dot.
-      if (/^Signed in /.test(String(e.message || e.text || ''))) return false;
-      return Number(e.at || e.createdAt || 0) > seenAt;
-    }).length;
 
     // Blockers name a real gap and send you to the screen that fixes it.
     var blocker = '', blockerScreen = 'music', blockerCta = 'Upload nasheed', blockerOpensConnections = false;
@@ -2956,6 +2956,23 @@
     // object, and nothing had an identity that survived a repaint.
     var dismissed = {};
     dismissedIds().forEach(function (id) { dismissed[id] = 1; });
+
+    // Counted after dismissals, not before. A badge that kept counting rows the
+    // person had already cleared is the notification that will not go away --
+    // the exact thing dismissing exists to end. Counted off the full log rather
+    // than the collapsed six, so the number does not change with the list.
+    // Shared with the header's "N need you", which counted raw failures and so
+    // kept accusing the customer of unfinished business they had just cleared.
+    var liveFailures = failures.filter(function (f) { return !dismissed[f.id]; });
+    var unreadCount = liveFailures.length
+      + log.filter(function (e) {
+          // The surviving sign-in row is context, not news.
+          var message = String(e.message || e.text || '');
+          if (/^Signed in /.test(message)) return false;
+          var at = e.at || e.createdAt;
+          if (dismissed[activityId('log', message, at)]) return false;
+          return Number(at || 0) > seenAt;
+        }).length;
 
     var failureRows = failures.map(function (f) {
       return {
@@ -4212,7 +4229,9 @@
         : 'Paste a lecture to start',
       // Failures need a person more urgently than unreviewed clips do, so the
       // badge counts both rather than quietly ignoring the failures.
-      activityNeedsYou: (failures.length + needsCount) + ' need you',
+      // Dismissed failures are excluded; clips awaiting review are not, because
+      // dismissing a notification does not review a clip.
+      activityNeedsYou: (liveFailures.length + needsCount) + ' need you',
       activityTotal: (failures.length + log.length) + ' in total',
       emptySampleNote: 'Sample of what a lecture produces',
       emptySampleCaption: 'This is what one lecture produces',
