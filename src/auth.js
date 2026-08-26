@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import * as ownerFeed from './owner-feed.js';
 import * as mailer from './mailer.js';
 import { config } from './config.js';
 import { state, save, log } from './store.js';
@@ -349,6 +350,7 @@ export async function emailLogin(email, password, name = '') {
     };
     user.passwordHash = await hashPassword(pass);
     state.authUsers.push(user);
+    ownerFeed.signedUp(user, 'email').catch(() => {});
   } else {
     if (!user.passwordHash) throw new Error('This email is already connected with Google or Apple. Use that sign-in method.');
     if (!(await verifyPassword(pass, user.passwordHash))) throw new Error('Email or password is wrong.');
@@ -514,6 +516,7 @@ export function upsertUser(provider, claims, rawUser = null) {
   if (!user) {
     user = { id: `user_${now().toString(36)}_${token(5)}`, email, name: '', picture: '', role: state.authUsers.length ? 'creator' : 'owner', providers: {}, createdAt: now() };
     state.authUsers.push(user);
+    ownerFeed.signedUp(user, provider).catch(() => {});
   }
   const appleName = rawUser?.name ? [rawUser.name.firstName, rawUser.name.lastName].filter(Boolean).join(' ') : '';
   user.email = user.email || email;

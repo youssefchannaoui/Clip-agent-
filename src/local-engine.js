@@ -7,6 +7,7 @@ import { pipeline } from 'node:stream/promises';
 import { config } from './config.js';
 import * as alerts from './alerts.js';
 import * as mailer from './mailer.js';
+import * as ownerFeed from './owner-feed.js';
 import { state, save, log, clipSettings, musicSettings, ownerOfRecord, musicSatisfied, importNetworkSettings } from './store.js';
 import { sanitiseTemplate, selectedTemplate, templateById, templateForClip } from './templates.js';
 import { withOwner, ownerOf } from './tenancy.js';
@@ -606,6 +607,7 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
 
   const dir = path.join(jobsDir, projectId);
   fs.mkdirSync(dir, { recursive: true });
+  ownerFeed.jobStarted(project, ownerOfRecord(project)?.email).catch(() => {});
   const job = useRemote ? {
     id: projectId, projectId, title: String(title || '').trim() || sourceMeta?.title || '',
     source: options.sourceKind === 'object_storage'
@@ -935,6 +937,9 @@ export function acceptRemoteUpdate(projectId, update) {
     importResultObject(project, update.result, 'remote-worker');
     // Closes any open jobs-failing alert and resets the failure window.
     alerts.jobSucceeded().catch(() => {});
+    ownerFeed.jobFinished(project, ownerOfRecord(project)?.email,
+      state.clips.filter(item => item.projectId === project.id).length,
+      Date.now() - Number(project.submittedAt || Date.now())).catch(() => {});
     // The pipeline takes ~20 minutes and people leave. Without a nudge they
     // do not come back, and clips nobody reviews are clips nobody posts.
     // Silently inert until email is configured, like everything mailer sends.
@@ -980,6 +985,7 @@ export function acceptRemoteUpdate(projectId, update) {
     // above already declined to rescue this one, and cancellations take the
     // cancelled branch below.
     alerts.jobFailed(project.title || project.id, update.error).catch(() => {});
+    ownerFeed.jobFailed(project, ownerOfRecord(project)?.email, update.error).catch(() => {});
     // Keep the classified code, not a hardcoded one. Overwriting it with
     // 'processing_failed' threw away `youtube_import_blocked`, which is the one
     // failure with a specific fix the customer can act on — upload the MP4 —

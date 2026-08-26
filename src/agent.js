@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import * as ownerFeed from './owner-feed.js';
 import path from 'node:path';
 import { config } from './config.js';
 import { state, save, log, automationSettings, publishingSettings, ownerOfRecord, musicSatisfied, isAyahEcho } from './store.js';
@@ -395,6 +396,7 @@ async function processTarget(clip, target) {
       target.nextTryAt = Date.now() + config.socialPollIntervalMs; target.updatedAt = Date.now(); target.error = null;
     } else {
       target.status = 'posted'; target.postId = result?.postId || target.externalId || '';
+      ownerFeed.clipPosted(clip.title, target.provider, ownerOfRecord(clip)?.email).catch(() => {});
       target.postUrl = result?.postUrl || ''; target.stage = 'Published'; target.nextTryAt = null; target.updatedAt = Date.now(); target.error = null; delete target.processingStartedAt;
       log(`Published "${clip.title}" to ${target.provider}${target.accountName ? ` (${target.accountName})` : ''}.`, 'info', ownerOf(clip));
     }

@@ -20,6 +20,7 @@ import { wordsForClip, silenceSpans } from './captions.js';
 import * as agent from './agent.js';
 import * as backup from './backup.js';
 import * as alerts from './alerts.js';
+import * as ownerFeed from './owner-feed.js';
 import { fallbackThumb } from './local-engine.js';
 import * as social from './social.js';
 import { formatLocal } from './slots.js';
@@ -1923,6 +1924,7 @@ server.listen(config.port, () => {
   // same reason as the sweep below: importing this module in a test must not
   // ship a real state file to a real bucket.
   backup.start();
+  ownerFeed.start();
   // Nothing ever told anyone the worker had stopped answering. Every render
   // fails while the product looks fine, and the first report is a customer's.
   if (config.processingMode === 'remote') {

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import * as auth from './auth.js';
 import { config } from './config.js';
+import * as ownerFeed from './owner-feed.js';
 import { state, save, log } from './store.js';
 
 const now = () => Date.now();
@@ -732,6 +733,7 @@ export function handleWebhookEvent(event) {
             description: topups()[packageId]?.name || packageId,
             stripeId: String(object.id || ''), eventId,
           });
+          if (packageId) ownerFeed.revenue('topup', user, object.amount_total, object.currency, topups()[packageId]?.name || packageId).catch(() => {});
           if (packageId) grantTopup(user, packageId, {
             sessionId: object.id,
             eventId,
@@ -743,6 +745,7 @@ export function handleWebhookEvent(event) {
           userBilling.plan = object.metadata?.plan || userBilling.plan || 'free';
           userBilling.status = 'checkout_complete';
           save();
+          ownerFeed.subscriptionStarted(user, userBilling.plan).catch(() => {});
         }
       }
       break;
@@ -751,9 +754,12 @@ export function handleWebhookEvent(event) {
     case 'customer.subscription.updated':
       updateFromSubscription(object);
       break;
-    case 'customer.subscription.deleted':
+    case 'customer.subscription.deleted': {
+      const gone = userBySubscription(typeof object.id === 'string' ? object.id : '');
       clearSubscription(object);
+      ownerFeed.subscriptionEnded(gone).catch(() => {});
       break;
+    }
     case 'invoice.paid':
     case 'invoice.payment_succeeded': {
       const subscriptionId = typeof object.subscription === 'string' ? object.subscription : object.subscription?.id;
@@ -768,11 +774,14 @@ export function handleWebhookEvent(event) {
         description: object.lines?.data?.[0]?.description || 'Subscription invoice',
         stripeId: String(object.id || ''), eventId,
       });
+      ownerFeed.revenue('invoice', user, object.amount_paid, object.currency,
+        object.lines?.data?.[0]?.description || 'Subscription invoice').catch(() => {});
       break;
     }
     case 'invoice.payment_failed': {
       const user = userByCustomer(typeof object.customer === 'string' ? object.customer : object.customer?.id);
       if (user && !isUnlimited(user)) { const billing = ensureUserBilling(user); billing.status = 'past_due'; save(); }
+      ownerFeed.paymentFailed(user).catch(() => {});
       break;
     }
     default:

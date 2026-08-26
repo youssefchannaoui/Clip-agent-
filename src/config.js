@@ -126,6 +126,10 @@ export const config = {
   // Email needs a provider key the deployment did not have, which left every
   // alert silently unsent -- the exact "limiter not crossed by a route" shape.
   alertNtfyTopic: String(process.env.ALERT_NTFY_TOPIC || '').trim(),
+  // The business FEED (signups, jobs, sales, daily pulse) -- a separate topic
+  // from the alarms above, so routine activity never trains the owner to
+  // swipe away the channel that carries real fires.
+  activityNtfyTopic: String(process.env.ACTIVITY_NTFY_TOPIC || '').trim(),
   operatorEmails: String(process.env.OPERATOR_EMAILS ?? 'youssefchannaoui05@gmail.com')
     .split(',').map(entry => entry.trim().toLowerCase()).filter(Boolean),
   adminName: process.env.ADMIN_NAME || 'DeenClipped Admin',
