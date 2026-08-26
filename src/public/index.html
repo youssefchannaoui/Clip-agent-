@@ -2475,6 +2475,55 @@ function studioWanted(){return window.STUDIO_SHELL===true}
            60fps to move a caption that changes every few seconds is waste, and
            100ms is below what anyone perceives as lag. */
         let lastPaint=0;
+        /* The playback hot path. paintStudio() rebuilds every screen's
+           bindings and repatches the whole tree -- measured at 5-17ms -- and it
+           used to run every 100ms of playback. Ten forced multi-millisecond
+           main-thread tasks per second alongside video decode is exactly what
+           "the editor is laggy" felt like. During playback only three things
+           actually move per frame: the playhead line, the progress fill and
+           the clock. They are now written directly, every frame, for well
+           under a millisecond; the full repaint runs only when the active
+           caption block changes (a few times per clip) or as a once-a-second
+           safety net for anything else that watches the clock. */
+        let edFastRefs=null,edLastBlock=-2;
+        const edFindFast=()=>{
+          /* The line is a SPAN in the generated tree -- checked against the
+             live DOM before shipping, because a div-only query found zero. */
+          const line=[...document.querySelectorAll('#studio span,#studio div')].find(n=>{
+            const st=n.getAttribute('style')||'';
+            return st.indexOf('width: 2px')>-1&&st.indexOf('#F0D6A6')>-1&&st.indexOf('position: absolute')>-1;
+          })||null;
+          const frame=edVideoNode&&edVideoNode.parentElement;
+          const icon=frame&&frame.querySelector('i[class*="ph-play"],i[class*="ph-pause"]');
+          const bar=icon&&icon.parentElement;
+          const track=bar&&[...bar.children].find(n=>n!==icon&&n.children.length===1);
+          const fill=(track&&track.firstElementChild)||null;
+          const label=(bar&&[...bar.querySelectorAll('span,div')].find(n=>!n.children.length&&/\d+:\d\d\s*\/\s*\d+:\d\d/.test(n.textContent||'')))||null;
+          return {line,fill,label};
+        };
+        const edClock=s=>{s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+        const edFastPaint=(t,span)=>{
+          if(!edFastRefs||(edFastRefs.line&&!edFastRefs.line.isConnected))edFastRefs=edFindFast();
+          const pct=(span?Math.max(0,Math.min(1,t/span)):0)*100;
+          if(edFastRefs.line)edFastRefs.line.style.left=pct.toFixed(2)+'%';
+          if(edFastRefs.fill)edFastRefs.fill.style.width=pct.toFixed(2)+'%';
+          if(edFastRefs.label){
+            const want=edClock(t)+' / '+edClock(span);
+            if(edFastRefs.label.textContent!==want)edFastRefs.label.textContent=want;
+          }
+        };
+        /* Which caption block the playhead is inside, from the hydrated
+           segments -- WITHOUT building the full bindings object. Times here are
+           clip-local, the same clock as t below. */
+        const edActiveBlock=t=>{
+          const segs=(clipDetailCache&&clipDetailCache.captionSegments)||[];
+          for(let i=0;i<segs.length;i++){
+            const a=Number(segs[i].start??segs[i].startSec??0);
+            const b=Number(segs[i].end??segs[i].endSec??a);
+            if(t>=a&&t<b)return i;
+          }
+          return -1;
+        };
         const follow=()=>{
           edVideoTick=null;
           if(!edVideoNode||!edVideoNode.isConnected)return;
@@ -2494,8 +2543,11 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           }
           StudioAdapter.ui.edTime=t;
           StudioAdapter.ui.edPlayhead=span?t/span:0;
+          edFastPaint(t,span);
+          const block=edActiveBlock(t);
           const now=Date.now();
-          if(now-lastPaint>=100){lastPaint=now;paintStudio()}
+          if(block!==edLastBlock){edLastBlock=block;lastPaint=now;paintStudio();edFastRefs=null}
+          else if(now-lastPaint>=1000){lastPaint=now;paintStudio();edFastRefs=null}
           edVideoTick=requestAnimationFrame(follow);
         };
         edVideoNode.addEventListener('play',()=>{lastPaint=0;if(!edVideoTick)edVideoTick=requestAnimationFrame(follow)});
