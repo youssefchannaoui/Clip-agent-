@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import * as ownerFeed from './owner-feed.js';
+import * as mailer from './mailer.js';
 import path from 'node:path';
 import { config } from './config.js';
 import { state, save, log, automationSettings, publishingSettings, ownerOfRecord, musicSatisfied, isAyahEcho } from './store.js';
@@ -22,6 +23,29 @@ function removeDataFile(file) {
 }
 function activeTarget(target) { return ['scheduled', 'retrying', 'publishing', 'processing'].includes(target.status); }
 function finishedTarget(target) { return ['posted', 'failed', 'blocked'].includes(target.status); }
+
+// One email per clip, when its LAST platform finishes -- not one per platform.
+// A clip posting to four channels in the same slot must not send four emails
+// in the same minute, and a partial failure belongs in the same message as
+// the successes so the user sees the whole picture at once.
+function maybeEmailPostSummary(clip) {
+  const targets = clip.targets || [];
+  if (!targets.length || !targets.every(finishedTarget)) return;
+  if (clip.postSummaryEmailedAt) return;
+  if (!targets.some(target => target.status === 'posted')) return; // total failure is the schedule's story, not a celebration email
+  clip.postSummaryEmailedAt = Date.now();
+  const owner = ownerOfRecord(clip);
+  if (!owner?.email) return;
+  mailer.send({
+    to: owner.email,
+    ...mailer.postSummaryMessage({
+      clipTitle: clip.title,
+      targets,
+      scheduleUrl: `${config.publicBaseUrl || 'https://deenclipped.online'}/app#schedule`,
+    }),
+  }).catch(() => {});
+}
+
 
 export async function submitVideo(url, title = '', userId = '', options = {}) { return engine.submitVideo(url, title, userId, options); }
 export async function sourceInfo(url) { return engine.sourceInfo(url); }
@@ -366,6 +390,7 @@ async function processTarget(clip, target) {
   if (target.nextTryAt && target.nextTryAt > now) return;
   if (target.processingStartedAt && now - target.processingStartedAt > config.socialProcessingTimeoutMs) {
     target.status = 'failed'; target.stage = `${target.provider} processing timed out`; target.error = `${target.provider} did not finish processing within the allowed time.`; target.nextTryAt = null;
+    maybeEmailPostSummary(clip);
     forgetDeadUpload(target);
     updateClipPublishingStatus(clip); save(); return;
   }
@@ -398,6 +423,7 @@ async function processTarget(clip, target) {
       target.status = 'posted'; target.postId = result?.postId || target.externalId || '';
       ownerFeed.clipPosted(clip.title, target.provider, ownerOfRecord(clip)?.email).catch(() => {});
       target.postUrl = result?.postUrl || ''; target.stage = 'Published'; target.nextTryAt = null; target.updatedAt = Date.now(); target.error = null; delete target.processingStartedAt;
+      maybeEmailPostSummary(clip);
       log(`Published "${clip.title}" to ${target.provider}${target.accountName ? ` (${target.accountName})` : ''}.`, 'info', ownerOf(clip));
     }
   } catch (error) {
@@ -422,6 +448,7 @@ async function processTarget(clip, target) {
       log(`${target.provider} publishing will retry for "${clip.title}" (${target.attempts}/${config.socialMaxAttempts}): ${error.message}`, 'warn', ownerOf(clip));
     } else {
       target.status = 'failed'; target.stage = `${target.provider} failed`; target.nextTryAt = null; delete target.processingStartedAt;
+      maybeEmailPostSummary(clip);
       forgetDeadUpload(target);
       log(`${target.provider} publishing failed for "${clip.title}": ${error.message}`, 'error', ownerOf(clip));
     }

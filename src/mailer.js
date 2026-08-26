@@ -93,6 +93,40 @@ export function clipsReadyMessage({ title, clipCount, reviewUrl }) {
   };
 }
 
+const PLATFORM_LABELS = { youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook' };
+
+export function postSummaryMessage({ clipTitle, targets, scheduleUrl }) {
+  const label = key => PLATFORM_LABELS[key] || key;
+  const posted = (targets || []).filter(target => target.status === 'posted');
+  const missed = (targets || []).filter(target => target.status !== 'posted');
+  const lines = posted.map(target => `- ${label(target.provider)}: ${target.postUrl || 'live'}`);
+  if (missed.length) lines.push(`Did not go out: ${missed.map(target => label(target.provider)).join(', ')} — open your schedule to retry.`);
+  const where = posted.map(target => label(target.provider)).join(', ');
+  return {
+    subject: `Your clip is live on ${where || 'your channels'} — ${String(clipTitle || 'Untitled').slice(0, 60)}`,
+    text: `"${clipTitle}" has been published.\n\n${lines.join('\n')}\n\nSee everything you have posted: ${scheduleUrl}`,
+    html: shell(
+      `Your clip is live on ${where || 'your channels'}`,
+      `"${String(clipTitle || 'Untitled')}" has been published.<br><br>${posted.map(target => `${label(target.provider)}: <a href="${target.postUrl || scheduleUrl}" style="color:#D9B478">${target.postUrl || 'view'}</a>`).join('<br>')}${missed.length ? `<br><br>Did not go out: ${missed.map(target => label(target.provider)).join(', ')} — you can retry from your schedule.` : ''}`,
+      'Open your schedule',
+      scheduleUrl,
+    ),
+  };
+}
+
+export function lectureFailedMessage({ title, reason, dashboardUrl }) {
+  return {
+    subject: `We could not process "${String(title || 'your lecture').slice(0, 60)}"`,
+    text: `Your lecture "${title}" could not be processed.\n\nWhat happened: ${reason}\n\nOpen your dashboard for the full explanation and the exact fixes -- most of the time it is retrying once, or uploading the MP4 instead of the link:\n${dashboardUrl}\n\nNothing was charged for work that did not finish.`,
+    html: shell(
+      'This lecture could not be processed',
+      `"${String(title || 'Your lecture')}" hit a problem: ${String(reason || '')}<br><br>Your dashboard has the full explanation and the exact fixes — most of the time it is retrying once, or uploading the MP4 instead of the link. Nothing was charged for work that did not finish.`,
+      'See what to do',
+      dashboardUrl,
+    ),
+  };
+}
+
 export function verificationMessage(link) {
   return {
     subject: 'Confirm your DeenClipped address',

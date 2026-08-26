@@ -157,6 +157,10 @@
             </sc-for>
             <sc-if value="{{ hasDismissed }}" hint-placeholder-val="{{ false }}">
               <a href="#" onClick="{{ restoreActivity }}" style="padding: 9px; text-align: center; font-size: 11px; color: #6E6E76; border-top: 1px solid #1E1E22;">Bring dismissed ones back</a>
+              <div style="display: flex; align-items: center; gap: 8px; padding: 9px 13px; border-top: 1px solid #1E1E22;">
+                <span style="font-size: 11px; color: #8B8B93; flex: 1;">Desktop notifications</span>
+                <button onClick="{{ toggleDesktopNotifs }}" style="{{ desktopNotifsStyle }}"><i style="{{ desktopNotifsKnobStyle }}"></i></button>
+              </div>
             </sc-if>
             <sc-if value="{{ moreActivity }}" hint-placeholder-val="{{ true }}">
               <a href="#" onClick="{{ showAllActivity }}" style="padding: 10px; text-align: center; font-size: 11.5px; border-top: 1px solid #1E1E22;">Show everything</a>

@@ -2134,6 +2134,7 @@ async function hydrateEditorClip(){
 async function refresh({quiet=true}={}){try{
   const r=await api('/api/state'+(DATA&&DATA.rev?`?rev=${encodeURIComponent(DATA.rev)}`:''));
   if(r&&r.unchanged){return}
+  fireClipNotifs(DATA,r);
   DATA=r;
   await hydrateEditorClip();
   renderAll()}catch(e){if(!quiet)toast(e.message,'bad')}}
@@ -4723,7 +4724,37 @@ function renderStudio(){
     StudioAdapter.onTestConnection=name=>studioDo(()=>api(`/api/social/${encodeURIComponent(name)}/test`,{method:'POST',body:JSON.stringify({})}),'Connection looks healthy');
     /* Resolve the pasted link first, so the range picker and the token estimate
        are based on the real source duration rather than a guess. */
-    StudioAdapter.onProbeSource=async url=>{try{
+    /* Browser pop-ups for clip updates, while any tab of the app is open.
+   The permission prompt must ride a user click, so it lives here on the
+   toggle. What fires: clips ready, clip posted, lecture failed -- the three
+   moments a user who tabbed away actually wants back for. */
+StudioAdapter.onToggleDesktopNotifs=async()=>{try{
+  const on=localStorage.getItem('deenDesktopNotifs')==='on';
+  if(on){localStorage.setItem('deenDesktopNotifs','off');toast('Desktop notifications off');renderAll();return}
+  if(typeof Notification==='undefined'){toast('This browser does not support notifications','bad');return}
+  const perm=await Notification.requestPermission();
+  if(perm!=='granted'){toast('The browser blocked notifications — allow them in site settings','bad');return}
+  localStorage.setItem('deenDesktopNotifs','on');
+  new Notification('DeenClipped',{body:'Notifications are on. You will hear when clips are ready, posted, or a lecture fails.'});
+  renderAll();
+}catch(e){toast(e.message,'bad')}};
+let notifSeen=null;
+function fireClipNotifs(prev,next){try{
+  if(localStorage.getItem('deenDesktopNotifs')!=='on'||typeof Notification==='undefined'||Notification.permission!=='granted')return;
+  if(!prev){/* first load: baseline only, never replay history */return}
+  const show=(title,body)=>{const n=new Notification(title,{body});n.onclick=()=>{window.focus();n.close()}};
+  const prevP=Object.fromEntries((prev.projects||[]).map(p=>[p.id,p.status]));
+  for(const p of next.projects||[]){
+    const was=prevP[p.id];
+    if(was&&was!==p.status&&p.status==='done')show('Your clips are ready',`"${p.title||'Your lecture'}" finished — ${p.clipCount||''} clips are waiting for review.`);
+    if(was&&was!==p.status&&p.status==='failed')show('A lecture could not be processed',`"${p.title||'Your lecture'}" hit a problem — open DeenClipped to see the fix.`);
+  }
+  const prevPosted=new Set((prev.clips||[]).flatMap(c=>(c.targets||[]).filter(t=>t.status==='posted').map(t=>c.id+':'+t.provider)));
+  for(const c of next.clips||[]){for(const t of c.targets||[]){
+    if(t.status==='posted'&&!prevPosted.has(c.id+':'+t.provider))show('Clip published',`"${c.title||'Your clip'}" is live on ${t.provider}.`);
+  }}
+}catch(e){}}
+StudioAdapter.onProbeSource=async url=>{try{
       const r=await api('/api/source-info',{method:'POST',body:JSON.stringify({urls:url})});
       const src=(r.sources||[])[0];
       if(!src||src.error)throw new Error(src?.error||'That link could not be read.');
@@ -4959,7 +4990,7 @@ async function watchPublishing(id,timeoutMs=15*60_000){
   const started=Date.now();
   while(Date.now()-started<timeoutMs){
     await new Promise(resolve=>setTimeout(resolve,1500));
-    try{DATA=await api('/api/state');renderAll()}catch{continue}
+    try{const fresh=await api('/api/state');fireClipNotifs(DATA,fresh);DATA=fresh;renderAll()}catch{continue}
     const clip=clipById(id);
     if(!clip)break;
     const targets=clip.targets||[];

@@ -26,7 +26,14 @@ globalThis.fetch = async (url, options = {}) => {
   }
   return new Response('{}', { status: 200 });
 };
-test.after(() => { globalThis.fetch = realFetch; fs.rmSync(dataDir, { recursive: true, force: true }); });
+test.after(async () => {
+  globalThis.fetch = realFetch;
+  // The last test's acceptRemoteUpdate leaves an async save in flight; deleting
+  // the directory under its rename made the FILE flake in parallel runs while
+  // every test in it passed. Let the write land before pulling the floor.
+  await new Promise(resolve => setTimeout(resolve, 50));
+  fs.rmSync(dataDir, { recursive: true, force: true });
+});
 
 config.emailApiKey = 'test-key';
 config.emailFrom = 'DeenClipped <hello@deenclipped.online>';
@@ -60,4 +67,44 @@ test('a completion with email unconfigured stays silent and does not throw', asy
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(mails.length, 1, 'no new mail, no crash');
   config.emailApiKey = 'test-key';
+});
+
+
+test('a clip emails once when its LAST platform finishes, successes and misses together', async () => {
+  const mailer = await import('../src/mailer.js');
+  const message = mailer.postSummaryMessage({
+    clipTitle: 'The verse that stops the scroll',
+    targets: [
+      { provider: 'youtube', status: 'posted', postUrl: 'https://youtu.be/abc' },
+      { provider: 'tiktok', status: 'posted', postUrl: 'https://tiktok.com/x' },
+      { provider: 'instagram', status: 'failed' },
+    ],
+    scheduleUrl: 'https://deenclipped.online/app#schedule',
+  });
+  assert.match(message.subject, /live on YouTube, TikTok/);
+  assert.match(message.text, /youtu\.be\/abc/);
+  assert.match(message.text, /Did not go out: Instagram/, 'the miss rides in the same message as the wins');
+});
+
+test('a failed lecture email names the problem and points at the fix, not just the grave', async () => {
+  const mailer = await import('../src/mailer.js');
+  const message = mailer.lectureFailedMessage({
+    title: 'Friday khutbah',
+    reason: 'YouTube refused this download.',
+    dashboardUrl: 'https://deenclipped.online/app',
+  });
+  assert.match(message.subject, /could not process/i);
+  assert.match(message.text, /YouTube refused/);
+  assert.match(message.text, /Nothing was charged/, 'the money worry is answered unprompted');
+  assert.match(message.text, /deenclipped\.online\/app/);
+});
+
+test('a final failure emails the owner with the classified reason', async () => {
+  state.projects.push({ id: 'pr3', userId: 'u1', title: 'Failing lecture', status: 'processing', engine: 'remote', submittedAt: Date.now() });
+  const before = mails.length;
+  engine.acceptRemoteUpdate('pr3', { status: 'failed', error: 'socialkit: This video is unavailable', progress: 3 });
+  await new Promise(resolve => setImmediate(resolve));
+  const failMail = mails.slice(before).find(mail => /could not process/i.test(mail.subject));
+  assert.ok(failMail, 'the failure email went out');
+  assert.equal(failMail.to, 'creator@example.com');
 });

@@ -993,6 +993,20 @@ export function acceptRemoteUpdate(projectId, update) {
     const classified = customerSafeProjectError(update.error || 'The external worker failed.');
     project.error = classified.message;
     project.errorCode = classified.code; project.updatedAt = Date.now(); save();
+    // The user who left during processing deserves to hear about failure as
+    // much as success -- silence reads as "still working" until they give up.
+    // After classification, so the email carries the customer-safe message.
+    const failOwner = ownerOfRecord(project);
+    if (failOwner?.email) {
+      mailer.send({
+        to: failOwner.email,
+        ...mailer.lectureFailedMessage({
+          title: project.title || project.sourceTitle || 'Your lecture',
+          reason: classified.message,
+          dashboardUrl: `${config.publicBaseUrl || 'https://deenclipped.online'}/app`,
+        }),
+      }).catch(() => {});
+    }
   } else if (update.status === 'cancelled') {
     // Cancelled from the worker's side counts the same as cancelling here: no
     // clips are produced, so nothing should stay charged against the account.

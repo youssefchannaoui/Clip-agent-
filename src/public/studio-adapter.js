@@ -3152,6 +3152,21 @@
       // anywhere.
       restoreActivity: function (e) { stop(e); restoreDismissed(); refresh(); },
       hasDismissed: dismissedIds().length > 0,
+      // Browser pop-ups while the tab is open somewhere. The permission ask
+      // must ride a click, so the actual request lives in the page handler;
+      // this only reports state and forwards the click.
+      desktopNotifsStyle: (function () {
+        var on = false;
+        try { on = localStorage.getItem('deenDesktopNotifs') === 'on' && typeof Notification !== 'undefined' && Notification.permission === 'granted'; } catch (e) {}
+        return 'position: relative; width: 34px; height: 19px; flex: none; border-radius: 20px; cursor: pointer; border: 1px solid '
+          + (on ? 'rgba(127,209,166,.5); background: rgba(127,209,166,.16);' : '#26262A; background: #17171A;');
+      })(),
+      desktopNotifsKnobStyle: (function () {
+        var on = false;
+        try { on = localStorage.getItem('deenDesktopNotifs') === 'on' && typeof Notification !== 'undefined' && Notification.permission === 'granted'; } catch (e) {}
+        return 'position: absolute; top: 2px; left: ' + (on ? '17px' : '2px') + '; width: 13px; height: 13px; border-radius: 50%; background: ' + (on ? '#7FD1A6' : '#6E6E76') + ';';
+      })(),
+      toggleDesktopNotifs: function (e) { stop(e); global.StudioAdapter.onToggleDesktopNotifs(); },
 
       // ── the detail view ──
       // A row in a dropdown can only ever say what happened. This says why it
@@ -5156,6 +5171,7 @@
     },
     onSignOut: function () {},
     onProbeSource: function () {},
+    onToggleDesktopNotifs: function () {},
     onGenerate: function () {},
     onUploadNasheedPrompt: function () {},
     onApplyTemplateToClip: function () {},
