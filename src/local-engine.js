@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { config } from './config.js';
+import * as alerts from './alerts.js';
 import { state, save, log, clipSettings, musicSettings, ownerOfRecord, musicSatisfied, importNetworkSettings } from './store.js';
 import { sanitiseTemplate, selectedTemplate, templateById, templateForClip } from './templates.js';
 import { withOwner, ownerOf } from './tenancy.js';
@@ -931,6 +932,8 @@ export function acceptRemoteUpdate(projectId, update) {
   }
   if (update.status === 'completed' && update.result && project.status !== 'done') {
     importResultObject(project, update.result, 'remote-worker');
+    // Closes any open jobs-failing alert and resets the failure window.
+    alerts.jobSucceeded().catch(() => {});
   } else if (update.status === 'failed') {
     // A slow first fetch is not a dead job. The import service keeps fetching
     // after our budget runs out and caches the result, so one automatic retry
@@ -957,6 +960,10 @@ export function acceptRemoteUpdate(projectId, update) {
       return project;
     }
     project.status = 'failed'; releaseProjectHold(project); project.stage = 'failed'; project.progress = Number(update.progress || project.progress || 0);
+    // Only final failures count toward the outage alert -- the auto-retry
+    // above already declined to rescue this one, and cancellations take the
+    // cancelled branch below.
+    alerts.jobFailed(project.title || project.id, update.error).catch(() => {});
     // Keep the classified code, not a hardcoded one. Overwriting it with
     // 'processing_failed' threw away `youtube_import_blocked`, which is the one
     // failure with a specific fix the customer can act on — upload the MP4 —

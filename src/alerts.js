@@ -29,19 +29,36 @@ export function active() {
   return [...open.entries()].map(([key, value]) => ({ key, since: value.since, detail: value.detail }));
 }
 
-async function notify(subject, body) {
-  if (!mailer.configured()) return false;
-  const to = recipients();
-  if (!to.length) return false;
-  let sent = false;
-  for (const address of to) {
-    const ok = await mailer.send({
-      to: address,
-      subject,
-      text: body,
-      html: `<p style="font:14px/1.6 -apple-system,Segoe UI,sans-serif">${body.replace(/\n/g, '<br>')}</p>`,
+// Push, no account required: ntfy.sh turns any topic string into a channel a
+// phone can subscribe to. This exists because the email path below needs a
+// provider key the deployment never had, so every alert was silently unsent.
+async function pushNtfy(subject, body) {
+  if (!config.alertNtfyTopic) return false;
+  try {
+    const response = await fetch(`https://ntfy.sh/${encodeURIComponent(config.alertNtfyTopic)}`, {
+      method: 'POST',
+      headers: { Title: subject, Priority: 'high', Tags: 'rotating_light' },
+      body,
+      signal: AbortSignal.timeout(10_000),
     });
-    sent = sent || ok;
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function notify(subject, body) {
+  let sent = await pushNtfy(subject, body);
+  if (mailer.configured()) {
+    for (const address of recipients()) {
+      const ok = await mailer.send({
+        to: address,
+        subject,
+        text: body,
+        html: `<p style="font:14px/1.6 -apple-system,Segoe UI,sans-serif">${body.replace(/\n/g, '<br>')}</p>`,
+      });
+      sent = sent || ok;
+    }
   }
   return sent;
 }
@@ -81,5 +98,28 @@ export async function report(key, failing, detail = '') {
     `${key} has been failing for about ${hours} hour(s).\n\n${detail}`);
 }
 
+// One failed lecture is a customer problem; a cluster of them is an outage.
+// Cancellations and the app's own auto-retries never reach here -- only jobs
+// that ended failed for the customer.
+const JOB_FAILURE_WINDOW_MS = 60 * 60_000;
+const JOB_FAILURE_THRESHOLD = 3;
+const recentJobFailures = [];
+
+export async function jobFailed(title, reason) {
+  const now = Date.now();
+  recentJobFailures.push(now);
+  while (recentJobFailures.length && recentJobFailures[0] < now - JOB_FAILURE_WINDOW_MS) recentJobFailures.shift();
+  if (recentJobFailures.length < JOB_FAILURE_THRESHOLD) return;
+  await report('jobs', true,
+    `${recentJobFailures.length} lectures have failed in the last hour.\n` +
+    `Latest: "${title}" -- ${String(reason || '').slice(0, 300)}`);
+}
+
+export async function jobSucceeded() {
+  // A success both proves the pipeline works and closes an open failure alert.
+  recentJobFailures.length = 0;
+  await report('jobs', false);
+}
+
 /** Tests only. */
-export function reset() { open.clear(); }
+export function reset() { open.clear(); recentJobFailures.length = 0; }

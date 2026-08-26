@@ -20,8 +20,15 @@ const { config } = await import('../src/config.js');
 // reassigned, and going through the real mailer means these also prove the
 // alert actually turns into a request a provider would accept.
 const sent = [];
+const pushed = [];
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (url, options = {}) => {
+  // Two transports, two shapes: ntfy takes plain text with a Title header,
+  // the email providers take JSON.
+  if (String(url).includes('ntfy.sh')) {
+    pushed.push({ topic: String(url).split('/').pop(), title: options.headers?.Title, body: options.body });
+    return new Response('{}', { status: 200 });
+  }
   const body = JSON.parse(options.body);
   sent.push({ to: body.to?.[0] ?? body.To, subject: body.subject ?? body.Subject, text: body.text ?? body.TextBody });
   return new Response(JSON.stringify({ id: 'test' }), { status: 200 });
@@ -32,7 +39,7 @@ config.emailApiKey = 'test-key';
 config.emailFrom = 'DeenClipped <hello@deenclipped.online>';
 assert.equal(mailer.configured(), true);
 
-test.beforeEach(() => { sent.length = 0; alerts.reset(); });
+test.beforeEach(() => { sent.length = 0; pushed.length = 0; alerts.reset(); });
 
 test('a new problem alerts once, and staying broken does not alert again', async () => {
   await alerts.report('worker', true, 'connection refused');
@@ -86,4 +93,41 @@ test('with no email configured the problem is still recorded, not lost', async (
     assert.equal(sent.length, 0, 'nothing can be sent');
     assert.equal(alerts.active().length, 1, 'but the condition is still tracked and logged');
   } finally { config.emailApiKey = key; }
+});
+
+
+test('alerts also reach the push channel, which needs no email provider at all', async () => {
+  // Production ran for weeks with the email transport unconfigured, so every
+  // alert was composed and then silently dropped. The push channel is one env
+  // var with no account behind it -- the transport that cannot be forgotten.
+  config.alertNtfyTopic = 'test-topic';
+  await alerts.report('worker', true, 'not answering');
+  assert.equal(pushed.length, 1);
+  assert.equal(pushed[0].topic, 'test-topic');
+  assert.match(pushed[0].title, /problem: worker/);
+  assert.match(pushed[0].body, /not answering/);
+  config.alertNtfyTopic = '';
+});
+
+test('one failed lecture is quiet; a cluster inside an hour is an outage', async () => {
+  await alerts.jobFailed('Lecture A', 'import blew up');
+  await alerts.jobFailed('Lecture B', 'import blew up');
+  assert.equal(sent.length, 0, 'two failures could be two bad links');
+  await alerts.jobFailed('Lecture C', 'import blew up');
+  assert.equal(sent.length, 1, 'three in an hour is a pattern');
+  assert.match(sent[0].subject, /problem: jobs/);
+  assert.match(sent[0].text, /3 lectures/);
+  assert.match(sent[0].text, /Lecture C/);
+});
+
+test('a success closes the failure window and the open alert', async () => {
+  await alerts.jobFailed('A', 'x');
+  await alerts.jobFailed('B', 'x');
+  await alerts.jobFailed('C', 'x');
+  assert.equal(sent.length, 1);
+  await alerts.jobSucceeded();
+  assert.match(sent[1].subject, /recovered: jobs/);
+  // The window restarts from zero: the next failure is one, not four.
+  await alerts.jobFailed('D', 'x');
+  assert.equal(sent.length, 2, 'one failure after recovery stays quiet');
 });

@@ -121,6 +121,11 @@ export const config = {
   // admin-password fallback, which made the bootstrap owner unreachable and
   // left no living account able to open an operator page. The default is the
   // operator's own address so a fresh deploy is administrable at all.
+  // A push channel that needs no account: any string here becomes a topic on
+  // ntfy.sh, and every alert is POSTed to it alongside (or instead of) email.
+  // Email needs a provider key the deployment did not have, which left every
+  // alert silently unsent -- the exact "limiter not crossed by a route" shape.
+  alertNtfyTopic: String(process.env.ALERT_NTFY_TOPIC || '').trim(),
   operatorEmails: String(process.env.OPERATOR_EMAILS ?? 'youssefchannaoui05@gmail.com')
     .split(',').map(entry => entry.trim().toLowerCase()).filter(Boolean),
   adminName: process.env.ADMIN_NAME || 'DeenClipped Admin',
