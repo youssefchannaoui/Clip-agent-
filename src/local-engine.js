@@ -6,6 +6,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { config } from './config.js';
 import * as alerts from './alerts.js';
+import * as mailer from './mailer.js';
 import { state, save, log, clipSettings, musicSettings, ownerOfRecord, musicSatisfied, importNetworkSettings } from './store.js';
 import { sanitiseTemplate, selectedTemplate, templateById, templateForClip } from './templates.js';
 import { withOwner, ownerOf } from './tenancy.js';
@@ -934,6 +935,21 @@ export function acceptRemoteUpdate(projectId, update) {
     importResultObject(project, update.result, 'remote-worker');
     // Closes any open jobs-failing alert and resets the failure window.
     alerts.jobSucceeded().catch(() => {});
+    // The pipeline takes ~20 minutes and people leave. Without a nudge they
+    // do not come back, and clips nobody reviews are clips nobody posts.
+    // Silently inert until email is configured, like everything mailer sends.
+    const owner = ownerOfRecord(project);
+    if (owner?.email) {
+      const clipCount = state.clips.filter(item => item.projectId === project.id).length;
+      mailer.send({
+        to: owner.email,
+        ...mailer.clipsReadyMessage({
+          title: project.title || project.sourceTitle || 'Your lecture',
+          clipCount,
+          reviewUrl: `${config.publicBaseUrl || 'https://deenclipped.online'}/app#review`,
+        }),
+      }).catch(() => {});
+    }
   } else if (update.status === 'failed') {
     // A slow first fetch is not a dead job. The import service keeps fetching
     // after our budget runs out and caches the result, so one automatic retry

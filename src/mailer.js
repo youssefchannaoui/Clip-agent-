@@ -78,6 +78,21 @@ const shell = (title, body, action, actionUrl) => `<!doctype html><html><body st
   <p style="margin:24px 0 0;font-size:12px;line-height:1.6;color:#6E6E76">If you did not ask for this, you can ignore it and nothing will change.</p>
 </div></body></html>`;
 
+export function clipsReadyMessage({ title, clipCount, reviewUrl }) {
+  const count = Number(clipCount) || 0;
+  const clips = count === 1 ? '1 clip' : `${count} clips`;
+  return {
+    subject: `${clips} ready to review — ${String(title || 'your lecture').slice(0, 60)}`,
+    text: `Your lecture "${title}" has finished processing.\n\n${clips} are waiting in your review queue. Nothing posts until you approve it:\n\n${reviewUrl}`,
+    html: shell(
+      `${clips} ready to review`,
+      `"${String(title || 'Your lecture')}" has finished processing. Nothing posts until you approve it — every clip is waiting for your yes.`,
+      'Open the review queue',
+      reviewUrl,
+    ),
+  };
+}
+
 export function verificationMessage(link) {
   return {
     subject: 'Confirm your DeenClipped address',
