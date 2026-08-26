@@ -6,6 +6,7 @@ import ipaddress
 import json
 import os
 import socket
+import random
 import threading
 import time
 import urllib.error
@@ -280,7 +281,15 @@ def youtube_network_options() -> dict[str, Any]:
     cookies are an account credential, so both are opt-in.
     """
     options: dict[str, Any] = {}
-    proxy = os.getenv("VIDEO_IMPORT_PROXY", "").strip()
+    # A pool, not a single address. One residential exit that moves 1.5GB at
+    # full line speed gets flagged by YouTube within the hour -- measured on
+    # switch day: the first IP served a 53-minute lecture at 216 Mbit/s and was
+    # bot-walled by the time the next customer job arrived. This function is
+    # called once per download attempt, so a random pick per call spreads the
+    # traffic across every address on the plan and retries land on a different
+    # exit than the one that was just refused.
+    pool = [p.strip() for p in os.getenv("VIDEO_IMPORT_PROXIES", "").split(",") if p.strip()]
+    proxy = random.choice(pool) if pool else os.getenv("VIDEO_IMPORT_PROXY", "").strip()
     if proxy:
         options["proxy"] = proxy
     cookies = os.getenv("VIDEO_IMPORT_COOKIES", "").strip()

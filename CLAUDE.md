@@ -104,7 +104,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **602 JS + 349 Python**
+- `npm test` and `npm run check` must pass. Currently **602 JS + 353 Python**
   (7 Python skipped). Update these numbers when they change — they were wrong by
   more than a factor of two, which makes them useless as a tripwire.
 - **The 7 skips are `SpeakerTrackingTests`**, which need a test video that is not
@@ -196,20 +196,25 @@ Habits the tests now enforce, and why:
 
 ## Import path (switched 26 Aug 2026)
 
-- **YouTube imports run through the box's own yt-dlp behind a Webshare static
-  residential proxy** — `VIDEO_IMPORT_PROVIDER=ytdlp` and `VIDEO_IMPORT_PROXY`
-  in `worker/.env` on the Hetzner box (credential lives only there, never in
-  the repo). Measured on the switch day: the 53-minute lecture SocialKit could
-  not deliver in 30+ minutes imported in 56s at 216 Mbit/s, full 1080p.
-- SocialKit stays in the chain as automatic fallback (`SOCIALKIT_API_KEY` in
-  worker/.env) until the subscription is cancelled; the queue-time pre-warm
-  and the app's one-shot auto-retry both exist for that fallback path.
+- **YouTube imports run through the box's own yt-dlp behind a rotating pool of
+  Webshare static residential proxies** — `VIDEO_IMPORT_PROVIDER=ytdlp` and
+  `VIDEO_IMPORT_PROXIES` (all 20 addresses, comma-separated) in `worker/.env`
+  on the Hetzner box (credentials live only there, never in the repo).
+  Measured on switch day: the 53-minute lecture SocialKit could not deliver in
+  30+ minutes imported in 56s at 216 Mbit/s, full 1080p.
+- **One exit is not enough.** The first single-IP setup was bot-walled within
+  the hour of moving that 1.5GB — a burned exit reads as "Sign in to confirm
+  you're not a bot" through a proxy that verified fine. Every download attempt
+  now picks a random pool address, so retries land on a fresh exit; if the
+  wall appears again, check how many pool IPs still pass before concluding
+  the approach is dead.
+- **SocialKit was removed on 26 Aug 2026** at Youssef's instruction (keys
+  deleted from worker/.env; subscription to be cancelled). The chain is ytdlp
+  only. The queue-time pre-warm and the app's one-shot import auto-retry are
+  no-ops without a hosted provider but stay tested in case one returns.
 - The Webshare plan is Static Residential, 20 IPs, 250GB/month. A full-quality
   lecture is ~1.5GB, so ~160 first-time imports/month fit; re-imports of a
   URL the box has seen use the worker's source cache, not bandwidth.
-- If imports start failing with bot-wall wording again, first try another IP
-  from the list (`https://dashboard.webshare.io` → Proxy → List) — one flagged
-  exit does not mean the plan is dead.
 
 ## Deploys
 
