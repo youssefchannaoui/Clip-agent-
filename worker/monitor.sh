@@ -53,7 +53,13 @@ if ! curl -fsS -m 20 https://deenclipped.online/healthz >/dev/null 2>&1; then
   fi
 fi
 check "site" "$site_fail" \
-  "deenclipped.online is not answering its health check from the worker box." \
+  "deenclipped.online is not answering its health check from the worker box.
+
+What to do:
+1. Open dashboard.render.com -> deenclipped-ai. A deploy in progress explains a short gap; wait for it.
+2. Check the Events and Logs tabs for a crash on boot.
+3. If Render itself is down, status.render.com will say so. Customers just wait it out.
+4. Nothing obvious? Ask Claude to investigate the Render logs." \
   "deenclipped.online is answering again"
 
 # 2. This box's disk. 85% is the alarm line: the build cache once took it to
@@ -61,12 +67,22 @@ check "site" "$site_fail" \
 disk_pct=$(df / | awk 'NR==2 {gsub("%",""); print $5}')
 disk_fail=0; [ "${disk_pct:-0}" -ge 85 ] && disk_fail=1
 check "disk" "$disk_fail" \
-  "The worker box disk is at ${disk_pct}%. Run: docker builder prune -f, then df -h /" \
+  "The worker box disk is at ${disk_pct}%.
+
+What to do:
+1. SSH to the box and run: docker builder prune -f   (build cache is almost always the culprit -- it once ate 25GB)
+2. Then: df -h /   to confirm the number dropped.
+3. Still high? du -sh /var/lib/docker /var/lib/deenclipped shows what is actually big; ask Claude before deleting anything." \
   "The worker box disk is back to ${disk_pct}%"
 
 # 3. The worker container itself.
 worker_state=$(docker inspect -f '{{.State.Health.Status}}' worker-deenclipped-worker-1 2>/dev/null || echo missing)
 worker_fail=0; [ "$worker_state" != "healthy" ] && worker_fail=1
 check "worker-container" "$worker_fail" \
-  "The worker container is '$worker_state'. Jobs cannot process. On the box: docker compose -f /opt/deenclipped/worker/docker-compose.yml up -d" \
+  "The worker container is '$worker_state'. Jobs cannot process until it is back.
+
+What to do:
+1. SSH to the box: cd /opt/deenclipped && docker compose -f worker/docker-compose.yml up -d
+2. If it will not stay up: docker logs worker-deenclipped-worker-1 --tail 50 shows why.
+3. Queued jobs resume by themselves once it is healthy -- nothing is lost." \
   "The worker container is healthy again"

@@ -21,6 +21,35 @@ const REMINDER_MS = 12 * 60 * 60_000;
 
 const open = new Map();
 
+// Every alarm carries its own repair manual. The owner reads these on a phone
+// at an inconvenient hour, so each is the exact next action, not a diagnosis
+// -- and ordered so the first step is the one that most often fixes it.
+const PLAYBOOK = {
+  worker: [
+    'Open the Hetzner console (console.hetzner.cloud) and check the server is running; reboot it from there if it is frozen.',
+    'If the box is up, SSH in and run: cd /opt/deenclipped && docker compose -f worker/docker-compose.yml up -d',
+    'Still down? docker logs worker-deenclipped-worker-1 --tail 50 shows why it will not start.',
+    'Customers can keep working: uploads and the dashboard are unaffected; only processing waits.',
+  ],
+  jobs: [
+    'Open the Owner tab -> Health to see which step is failing and for whom.',
+    'If the failures are imports: the proxy pool may be thin -- check the latest pool message on this channel, and replace burned addresses at dashboard.webshare.io.',
+    'Press Retry on one failed lecture and watch it: one shared cause usually explains all of them.',
+    'If nothing obvious, screenshot the Health tab and ask Claude to dig in.',
+  ],
+  backups: [
+    'Check Cloudflare R2 (dash.cloudflare.com -> R2) is reachable and the bucket still exists.',
+    'The last good backup is still safe -- this alert means NEW copies are failing, not that data is lost.',
+    'If R2 looks fine, ask Claude to run a manual backup and read the error.',
+  ],
+};
+
+function withPlaybook(key, body) {
+  const steps = PLAYBOOK[key];
+  if (!steps) return body;
+  return `${body}\n\nWhat to do:\n${steps.map((step, index) => `${index + 1}. ${step}`).join('\n')}`;
+}
+
 export function recipients() {
   return (config.operatorEmails || []).filter(Boolean);
 }
@@ -85,7 +114,8 @@ export async function report(key, failing, detail = '') {
     open.set(key, { since: Date.now(), detail, lastSent: Date.now() });
     log(`ALERT: ${key} -- ${detail}`, 'error');
     const sent = await notify(`DeenClipped problem: ${key}`,
-      `${key} is failing.\n\n${detail}\n\nThis is the first notice. You will get one more only if it is still failing in 12 hours, and one when it recovers.`);
+      withPlaybook(key, `${key} is failing.\n\n${detail}`)
+      + '\n\nThis is the first notice. You will get one more only if it is still failing in 12 hours, and one when it recovers.');
     if (!sent) log(`No alert email was sent for ${key}: email is not configured (EMAIL_API_KEY / EMAIL_FROM).`, 'warn');
     return;
   }
@@ -95,7 +125,7 @@ export async function report(key, failing, detail = '') {
   existing.lastSent = Date.now();
   const hours = Math.round((Date.now() - existing.since) / 3_600_000);
   await notify(`DeenClipped still failing: ${key}`,
-    `${key} has been failing for about ${hours} hour(s).\n\n${detail}`);
+    withPlaybook(key, `${key} has been failing for about ${hours} hour(s).\n\n${detail}`));
 }
 
 // One failed lecture is a customer problem; a cluster of them is an outage.

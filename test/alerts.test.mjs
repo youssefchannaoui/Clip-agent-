@@ -131,3 +131,19 @@ test('a success closes the failure window and the open alert', async () => {
   await alerts.jobFailed('D', 'x');
   assert.equal(sent.length, 2, 'one failure after recovery stays quiet');
 });
+
+
+test('every failure alert carries its repair manual; recoveries stay short', async () => {
+  // The owner reads these on a phone at an inconvenient hour. "worker is
+  // failing" without the next action is a fright, not an alert.
+  await alerts.report('worker', true, 'not answering');
+  assert.match(sent[0].text, /What to do:/);
+  assert.match(sent[0].text, /docker compose/, 'the exact command, not a vague suggestion');
+  await alerts.report('worker', false);
+  assert.doesNotMatch(sent[1].text, /What to do:/, 'good news needs no manual');
+
+  alerts.reset(); sent.length = 0;
+  await alerts.jobFailed('A', 'x'); await alerts.jobFailed('B', 'x'); await alerts.jobFailed('C', 'x');
+  assert.match(sent[0].text, /What to do:/);
+  assert.match(sent[0].text, /Owner tab/, 'points at the screen that diagnoses it');
+});
