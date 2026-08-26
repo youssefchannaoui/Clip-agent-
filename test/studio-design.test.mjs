@@ -976,15 +976,21 @@ test('download sizes are reported in units that match the file on disk', () => {
 
 test('an ETA is rendered in human units, and absent when unknown', () => {
   const at = Date.now();
-  const withEta = sec => StudioAdapter.bindings({
-    projects: [{ id: 'p', title: 'Talk', status: 'processing', stage: 'Transcribing', progress: 40, etaSec: sec, submittedAt: at }],
+  const etaFor = extra => StudioAdapter.bindings({
+    projects: [Object.assign({ id: 'p', title: 'Talk', status: 'processing', submittedAt: at }, extra)],
     clips: [], tracks: [],
   }).liveAll[0].eta;
-  assert.equal(withEta(20), 'about a minute left');
-  assert.equal(withEta(420), '7 min left');
-  assert.equal(withEta(5400), '1h 30m left');
-  assert.equal(withEta(null), '', 'an unknown ETA shows nothing rather than "NaN"');
-  assert.equal(withEta(undefined), '');
+  // Minutes: an hour-long lecture mid-transcription.
+  assert.match(etaFor({ stage: 'Transcribing', phase: 'transcribe', progress: 36, durationSec: 3600, clipsRequested: 3 }),
+    /^\d+ min left$/);
+  // Hours: a three-hour lecture with a big clip order, honestly.
+  assert.match(etaFor({ stage: 'importing', phase: 'importing', progress: 3, durationSec: 10800, clipsRequested: 10 }),
+    /^\d+ min left$|^\dh( \d+m)? left$/);
+  // About a minute: the last clip nearly done.
+  assert.equal(etaFor({ stage: 'Rendering clip 3 of 3', phase: 'render', progress: 97, durationSec: 3600,
+    clipsRequested: 3, currentClip: 3, totalClips: 3, clipPercent: 95 }), 'about a minute left');
+  // Unknown length: nothing rather than "NaN" or a fiction.
+  assert.equal(etaFor({ stage: 'importing', phase: 'importing', progress: 3, durationSec: 0 }), '');
 });
 
 test('the queue expander appears only when more than one thing is running', () => {
@@ -1160,6 +1166,45 @@ test('a finished lecture reads as ready, not stuck processing', () => {
   assert.equal(vals.libTabs.find(t => t.label === 'Ready').count, 1);
   assert.equal(vals.libTabs.find(t => t.label === 'Processing').count, 0);
   assert.equal(vals.liveDock, false, 'a finished lecture must not stay pinned in the live dock');
+});
+
+test('the ETA is a stage model, and cannot balloon while the bar holds still', () => {
+  // The old estimator extrapolated the whole job from the global percentage's
+  // speed. The import holds 3% for minutes, so a customer watched "5 min left"
+  // grow into "2h left" on a healthy job -- the exact number that makes someone
+  // close the tab. The model reads source length, clip count and stage instead,
+  // so a still bar changes nothing.
+  Object.assign(StudioAdapter.ui, { screen: 'queue' });
+  const rowFor = extra => StudioAdapter.bindings({
+    projects: [Object.assign({
+      id: 'p', title: 'L', status: 'processing', engine: 'remote',
+      durationSec: 3600, clipsRequested: 3, submittedAt: Date.now(),
+    }, extra)],
+    clips: [], tracks: [],
+  }).liveAll[0];
+
+  // Importing at a motionless 3%: the answer is the whole pipeline's cost for
+  // an hour-long lecture -- bounded, not a 2-hour hallucination.
+  const importing = rowFor({ stage: 'importing', phase: 'importing', progress: 3 });
+  assert.match(importing.text, /min left/, 'an ETA is shown');
+  assert.doesNotMatch(importing.text, /h left|h \d+m left/, 'never hours for one lecture');
+  // Ten minutes later, same 3%: the model does not learn despair from a clock.
+  const later = rowFor({ stage: 'importing', phase: 'importing', progress: 3 });
+  assert.equal(later.text, importing.text, 'a still bar does not grow the number');
+
+  // Rendering clip 2 of 3 at 50%: half a clip and the tail remain.
+  const rendering = rowFor({ stage: 'Rendering clip 2 of 3', phase: 'render', progress: 85,
+    currentClip: 2, totalClips: 3, clipPercent: 50 });
+  assert.match(rendering.text, /50% of this step/, 'the step percentage is visible');
+  assert.match(rendering.text, /[1-5] min left/, 'minutes, not a guess');
+
+  // Transcribing mid-band shows movement inside the step.
+  const transcribing = rowFor({ stage: 'Transcribing', phase: 'transcribe', progress: 36 });
+  assert.match(transcribing.text, /\d+% of this step/);
+
+  // No known duration -> no invented countdown.
+  const unknown = rowFor({ stage: 'importing', phase: 'importing', progress: 3, durationSec: 0 });
+  assert.doesNotMatch(unknown.text, /left/, 'no number is better than a fiction');
 });
 
 test('dismissing a notification also clears the badge behind it', () => {

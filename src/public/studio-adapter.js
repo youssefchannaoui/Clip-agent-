@@ -2681,18 +2681,73 @@
     // fast the percentage is actually moving (rate over the last few minutes
     // of samples). Honest by construction -- a stalled job shows no ETA
     // rather than a fantasy one.
-    var etaSamples = global.__dcEtaSamples || (global.__dcEtaSamples = {});
-    function estimateEta(key, progress, serverEta) {
-      if (serverEta !== null && serverEta !== undefined && isFinite(serverEta)) return serverEta;
-      var now = Date.now();
-      var s = etaSamples[key] || (etaSamples[key] = []);
-      if (!s.length || s[s.length - 1].p !== progress) s.push({ t: now, p: progress });
-      while (s.length > 30 || (s.length && now - s[0].t > 5 * 60_000)) s.shift();
-      if (s.length < 2) return null;
-      var dt = (now - s[0].t) / 1000;
-      var dp = progress - s[0].p;
-      if (dp <= 0.5 || dt < 5) return null;
-      return Math.max(5, (100 - progress) * dt / dp);
+    // A stage model, not a trend line. The old estimator extrapolated the
+    // whole job from how fast the global percentage moved -- and the import
+    // holds 3% for minutes, so "5 min left" grew into "2h left" while the job
+    // was perfectly healthy. Nothing here extrapolates: each stage's cost
+    // comes from the source length and clip count at rates measured on the
+    // production box (26 Aug 2026: import ~3% of source realtime through the
+    // proxy pool, transcribe ~16% (faster-whisper small/int8), scoring ~75s,
+    // rendering ~110s per clip), and what remains is the unfinished part of
+    // the current stage plus every stage still ahead. The number can only
+    // fall between stage changes.
+    var STAGE_BANDS = { import: [3, 8], transcribe: [8, 65], score: [65, 75], render: [75, 98] };
+    function phaseOf(pr) {
+      var phase = String(pr.phase || '').toLowerCase();
+      if (phase.indexOf('import') === 0) return 'import';
+      if (phase === 'transcribe' || phase === 'score' || phase === 'render') return phase;
+      var stage = String(pr.stage || '');
+      if (/import/i.test(stage)) return 'import';
+      if (/transcrib/i.test(stage)) return 'transcribe';
+      if (/scor|finding/i.test(stage)) return 'score';
+      if (/render/i.test(stage)) return 'render';
+      return '';
+    }
+    function bandFraction(pr, name) {
+      var band = STAGE_BANDS[name];
+      var p = Number(pr.progress || 0);
+      return Math.max(0, Math.min(1, (p - band[0]) / (band[1] - band[0])));
+    }
+    function pipelineEta(pr) {
+      var srcSec = pr.sourceEndSec
+        ? Math.max(0, Number(pr.sourceEndSec) - Number(pr.sourceStartSec || 0))
+        : Number(pr.durationSec || pr.sourceDurationSec || 0);
+      if (!srcSec) return { etaSec: null, stagePct: null };
+      var clipsPlanned = Number(pr.clipsRequested || pr.totalClips || 0) || Math.max(3, Math.min(10, Math.round(srcSec / 480)));
+      var cost = {
+        import: Math.max(30, srcSec * 0.03),
+        transcribe: Math.max(20, srcSec * 0.16),
+        score: 75,
+        render: clipsPlanned * 110,
+      };
+      var order = ['import', 'transcribe', 'score', 'render'];
+      var name = phaseOf(pr);
+      if (!name) return { etaSec: null, stagePct: null };
+      var frac;
+      if (name === 'import' && pr.bytesTotal && pr.bytesDone) {
+        frac = Math.max(0, Math.min(1, Number(pr.bytesDone) / Number(pr.bytesTotal)));
+      } else if (name === 'render' && Number(pr.totalClips) > 0) {
+        // Clips render in order; only the running one has a measured percent.
+        var done = Math.max(0, Number(pr.currentClip || 1) - 1) + Math.max(0, Math.min(100, Number(pr.clipPercent || 0))) / 100;
+        frac = Math.max(0, Math.min(1, done / Number(pr.totalClips)));
+      } else {
+        frac = bandFraction(pr, name);
+      }
+      var remaining = cost[name] * (1 - frac);
+      // The worker measures the import's own remaining time from bytes; when it
+      // says so, believe it over the model -- for that stage only.
+      if (name === 'import' && pr.etaSec !== null && pr.etaSec !== undefined && isFinite(pr.etaSec)) {
+        remaining = Number(pr.etaSec);
+      }
+      for (var i = order.indexOf(name) + 1; i < order.length; i++) remaining += cost[order[i]];
+      remaining += 20; // upload + finalise tail
+      return { etaSec: Math.max(10, remaining), stagePct: Math.round(frac * 100) };
+    }
+    // For jobs with no known source length (edits, more-clips), a flat model of
+    // their own remaining stages -- still never a trend line.
+    function flatEta(totalSec, progress) {
+      var p = Math.max(0, Math.min(100, Number(progress) || 0));
+      return Math.max(10, totalSec * (1 - p / 100));
     }
     var jobsLive = [];
     projects.forEach(function (pr) {
@@ -2705,16 +2760,16 @@
           : pr.status === 'queued' && pr.queueAhead === 0
             ? 'Next in line'
             : null;
-        jobsLive.push({ kind: 'project', id: pr.id, queued: pr.status === 'queued', boosted: pr.priority === 0, title: projectTitle[pr.id], stage: queuedStage || pr.stage || pr.status, progress: Number(pr.progress || 0), etaSec: estimateEta('p:' + pr.id, Number(pr.progress || 0), pr.etaSec), bytesDone: pr.bytesDone, bytesTotal: pr.bytesTotal, at: pr.startedAt || pr.submittedAt, project: pr });
+        jobsLive.push({ kind: 'project', id: pr.id, queued: pr.status === 'queued', boosted: pr.priority === 0, title: projectTitle[pr.id], stage: queuedStage || pr.stage || pr.status, progress: Number(pr.progress || 0), eta: pipelineEta(pr), bytesDone: pr.bytesDone, bytesTotal: pr.bytesTotal, at: pr.startedAt || pr.submittedAt, project: pr });
       }
       if (pr.moreJob && ['queued', 'processing'].indexOf(pr.moreJob.status) > -1) {
-        jobsLive.push({ kind: 'more', id: pr.id, queued: pr.moreJob.status === 'queued', boosted: pr.moreJob.priority === 0, title: 'More clips · ' + projectTitle[pr.id], stage: pr.moreJob.stage || pr.moreJob.status, progress: Number(pr.moreJob.progress || 0), etaSec: estimateEta('m:' + pr.id, Number(pr.moreJob.progress || 0), null), at: pr.moreJob.startedAt || pr.moreJob.createdAt });
+        jobsLive.push({ kind: 'more', id: pr.id, queued: pr.moreJob.status === 'queued', boosted: pr.moreJob.priority === 0, title: 'More clips · ' + projectTitle[pr.id], stage: pr.moreJob.stage || pr.moreJob.status, progress: Number(pr.moreJob.progress || 0), etaSec: flatEta(480, pr.moreJob.progress), at: pr.moreJob.startedAt || pr.moreJob.createdAt });
       }
     });
     (DATA.rerenderJobs || []).forEach(function (j) {
       if (['queued', 'processing'].indexOf(j.status) > -1) {
         var c = clips.filter(function (x) { return x.id === j.clipId; })[0];
-        jobsLive.push({ kind: 'render', id: j.id, queued: j.status === 'queued', boosted: j.priority === 0, title: 'Editing ' + ((c && c.title) || 'clip'), stage: j.stage || j.status, progress: Number(j.progress || 0), etaSec: estimateEta('r:' + j.id, Number(j.progress || 0), null), at: j.startedAt || j.createdAt });
+        jobsLive.push({ kind: 'render', id: j.id, queued: j.status === 'queued', boosted: j.priority === 0, title: 'Editing ' + ((c && c.title) || 'clip'), stage: j.stage || j.status, progress: Number(j.progress || 0), etaSec: flatEta(150, j.progress), at: j.startedAt || j.createdAt });
       }
     });
     clips.forEach(function (c) {
@@ -2810,13 +2865,17 @@
 
     function liveRow(j) {
       var pct = (j.progress === null || !isFinite(j.progress)) ? null : Math.max(0, Math.min(100, Math.round(j.progress)));
-      var eta = etaLabel(j.etaSec);
+      var model = j.eta || { etaSec: j.etaSec, stagePct: null };
+      var eta = etaLabel(model.etaSec);
+      // How far through THIS step, so a stage that holds the global bar still
+      // for minutes -- the import, a long transcription -- still visibly moves.
+      var stepPct = (model.stagePct === null || model.stagePct === undefined) ? '' : model.stagePct + '% of this step';
       // Only the import moves bytes, so this is absent for the rest of the
       // pipeline rather than showing a frozen figure from an earlier phase.
       var transfer = transferLabel(j.bytesDone, j.bytesTotal);
       // Stage, then size, then time remaining: what it is doing, how far in, how
       // much longer.
-      var detail = j.stage + (transfer ? ' · ' + transfer : '') + (eta ? ' · ' + eta : '');
+      var detail = j.stage + (stepPct ? ' · ' + stepPct : '') + (transfer ? ' · ' + transfer : '') + (eta ? ' · ' + eta : '');
       var clips = clipBreakdown(j.project, j.stage);
       return {
         label: j.title,

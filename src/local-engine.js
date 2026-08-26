@@ -892,6 +892,10 @@ export function acceptRemoteUpdate(projectId, update) {
   // A warning the worker raised about how the clips were made. Logged once, to
   // the owning account, rather than repeated on every poll.
   if (update.etaSec !== undefined) project.etaSec = update.etaSec === null ? null : Math.max(0, Math.round(Number(update.etaSec)));
+  // The stable stage identifier. The local worker path carried it and this one
+  // dropped it, so the dashboard's stage model had words to parse instead of a
+  // name to switch on -- and production is this path.
+  if (update.phase !== undefined) project.phase = String(update.phase || '');
   applyClipBreakdown(project, update);
   // Download size, so the import can say how much of the file has landed rather
   // than only a percentage of a band the customer cannot see.
