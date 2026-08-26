@@ -2657,6 +2657,18 @@
     function endTour() { markTourSeen(UI.screen); setUI({ tourStep: -1 }); }
     // Set by the host only when the rendered file fails to play.
     var edSourceFallback = Boolean(UI.edSourceFallback);
+    // LIVE DRAFT mode: there are unsaved (or un-rendered) style changes, so
+    // the frame switches to the clean source and draws the captions and
+    // framing itself -- instantly, as the person drags -- under a label that
+    // says exactly what it is. Save is what renders. This is not the banned
+    // imitation: that one wore the render's clothes; this one is dressed as a
+    // draft and hands the frame back the moment real pixels exist (the
+    // stylePreview window or the finished render, whichever lands first).
+    var edClipForDraft = clips.filter(function (c) { return c.id === UI.edClipId; })[0] || null;
+    var edDraftMode = Boolean(edClipForDraft
+      && (edClipForDraft.stylePending || UI.edDirty)
+      && !edSourceFallback
+      && !(edClipForDraft.stylePreview && edClipForDraft.stylePreview.url));
 
     var job = UI.job;
     // A nasheed under Quran recitation is not a style choice, so the Quran
@@ -3682,7 +3694,22 @@
       // those questions are answered by the render underneath it.
       edCapOverlayStyle: 'z-index: 8; ' + captionPlacementStyle(tpl, edCapDragY)
         + ' box-sizing: border-box; border-radius: 10px; pointer-events: auto; cursor: grab;'
-        + (UI.dragKind === 'caption'
+        + (edDraftMode
+          // The draft draws the caption the way the render will: the
+          // template's font, size, colour and transform, live under the drag.
+          // Text and look answer here because there is no burned caption
+          // underneath to answer for them.
+          ? ' font-family: ' + (tpl.captionFont || 'DejaVu Sans') + ', sans-serif;'
+            + ' font-size: ' + Math.max(9, Math.round(Number(tpl.captionFontSize || 62) / 3.1)) + 'px;'
+            + ' color: ' + (tpl.captionColor || '#FFFFFF') + ';'
+            + ' font-weight: 600; line-height: 1.3; text-align: center;'
+            + ' text-shadow: 0 1px 3px rgba(0,0,0,.85), 0 0 ' + Math.max(1, Math.round(Number(tpl.captionOutlineWidth || 5) / 2)) + 'px rgba(0,0,0,.9);'
+            + (tpl.captionUppercase ? ' text-transform: uppercase;' : '')
+            + (UI.dragKind === 'caption'
+              ? ' outline: 1.5px solid rgba(240,214,166,.95); outline-offset: 4px; background: rgba(217,180,120,.10);'
+              : ' outline: 1px dashed rgba(240,214,166,.28); outline-offset: 4px; background: transparent;')
+            + ' border: 0; min-height: 40px;'
+          : UI.dragKind === 'caption'
           ? ' border: 1.5px solid rgba(240,214,166,.95); background: rgba(217,180,120,.16); box-shadow: 0 0 0 3px rgba(240,214,166,.12); min-height: 46px;'
           : ' border: 1px dashed rgba(240,214,166,.34); background: transparent; min-height: 40px;'),
       // The translation line under an ayah, styled the way the render's own
@@ -3918,10 +3945,13 @@
       // shows. Same-pipeline pixels, so the one-origin invariant holds.
       edVideoUrl: !edClip ? '' : (edClip.stylePreview && edClip.stylePreview.url
         ? edClip.stylePreview.url + (edClip.stylePreview.url.indexOf('?') > -1 ? '&' : '?') + 'sp=' + encodeURIComponent(String(edClip.stylePreview.at || ''))
-        : edSourceFallback
+        : (edSourceFallback || edDraftMode)
         ? '/api/clips/' + encodeURIComponent(edClip.id) + '/source-preview'
         : '/api/clips/' + encodeURIComponent(edClip.id) + '/video?rv='
           + encodeURIComponent(String(edClip.renderVersion || 1) + '.' + String(edClip.renderQuality || 'final'))),
+      edDraftMode: edDraftMode,
+      // What the painter simulates while drafting: the template's fit.
+      edFitSim: edDraftMode ? String(tpl.fitMode || 'contain') : '',
       edPreviewActive: Boolean(edClip && edClip.stylePreview && edClip.stylePreview.url),
       edExportUrl: edClip ? edClip.videoUrl || '' : '',
       // True only while the fallback is on screen; the host labels the frame
@@ -3929,6 +3959,8 @@
       edSourceFallback: edSourceFallback,
       edSourceNote: (edClip && edClip.stylePreview && edClip.stylePreview.url)
         ? 'Preview of your changes (short window) — the full clip is re-rendering'
+        : edDraftMode
+        ? 'LIVE DRAFT — your changes show instantly here. Save renders the real clip.'
         : edSourceFallback
         ? 'Uncaptioned source — this clip has no rendered file yet'
         : '',
@@ -3937,7 +3969,7 @@
       // its timeline equals the clip's, so there is no offset arithmetic on
       // this path at all. Only the clean-source fallback plays the whole
       // lecture and needs the clip's start subtracted.
-      edStartSec: (edClip && edSourceFallback) ? Number(edClip.startSec) || 0 : 0,
+      edStartSec: (edClip && (edSourceFallback || edDraftMode)) ? Number(edClip.startSec) || 0 : 0,
       edPoster: edClip ? edClip.thumbUrl || '' : '',
       edPlaying: Boolean(UI.edPlaying),
       edPlayIcon: UI.edPlaying ? 'ph ph-pause' : 'ph ph-play',
