@@ -2188,7 +2188,10 @@
     function saveClipStyle(patch) {
       UI.edStyleDraft = Object.assign({}, UI.edStyleDraft, patch);
       UI.edDirty = true;
-      refresh();
+      // Local paint, not refresh(): the server fetch skips repainting when
+      // nothing changed remotely, which is exactly the case mid-slider -- the
+      // approximate echo must move the instant the control does.
+      paintNow();
       if (UI.edStyleTimer) global.clearTimeout(UI.edStyleTimer);
       UI.edStyleTimer = global.setTimeout(function () {
         UI.edStyleTimer = null;
@@ -3693,18 +3696,43 @@
       edCapIsAyah: Boolean(edAyahPhrase),
       edCapTranslation: edAyahPhrase ? edAyahPhrase.gloss : '',
       edCapWords: (function () {
-        // While the person is TYPING, the box echoes their draft -- in the
-        // ghost's own dashed styling, claiming nothing about fonts or colours
-        // -- because an edit field whose words appear nowhere reads as dead.
-        // The moment the draft is committed or abandoned this returns to
-        // empty: the render's own captions answer for the clip, and a second
-        // styled set drawn in CSS is the imitation this path exists to stop.
+        // The APPROXIMATE layer (item 5 of Goal to Start, set by Youssef:
+        // "previews should just show"). While an edit is UNSAVED the box
+        // echoes the current block's words -- the typed draft while typing,
+        // the block's own words while a slider moves -- so size, spacing,
+        // line-height, case and alignment changes show the instant they are
+        // made. The echo keeps the ghost's face and colour (geometry only,
+        // labelled approximate by the painter); Save renders the truth and
+        // the box returns to empty. Scripture is never echoed: an
+        // approximation of an ayah on screen is not acceptable (invariant 7),
+        // so ayah moments stay the render's alone.
         if (UI.edBlockDraft !== null && UI.edBlockDraft !== undefined && selectedBlock) {
           return String(UI.edBlockDraft).split(/\s+/).filter(Boolean).map(function (word) {
             return { text: word, style: '' };
           });
         }
+        var echoBlock = overlayBlock || selectedBlock;
+        if (UI.edDirty && echoBlock && !echoBlock.ayah) {
+          return String(echoBlock.sourceText || echoBlock.text || '').split(/\s+/).filter(Boolean).map(function (word) {
+            return { text: word, style: '' };
+          });
+        }
         return [];
+      }()),
+      // The echo's geometry: the draft's size, tracking, line-height and
+      // case, sized against the frame exactly as captionFaceStyle sizes the
+      // render's text -- but in the ghost's own face and colour, claiming
+      // nothing the renderer could disagree with.
+      edCapEchoStyle: (function () {
+        var width = Math.max(1, Number(tpl.width) || 1080);
+        var size = (Number(tpl.captionFontSize) || 96) * assFactor(tpl.captionFont);
+        var tracking = Math.max(-4, Math.min(40, Number(tpl.captionLetterSpacing) || 0));
+        var lineHeight = Math.max(0.6, Math.min(2, Number(tpl.captionLineHeight) || 0.88));
+        return 'display: block; width: 100%; pointer-events: none;'
+          + ' font-size: ' + ((size / width) * 100).toFixed(2) + 'cqw;'
+          + ' line-height: ' + lineHeight + ';'
+          + (tracking ? ' letter-spacing: ' + (tracking / Math.max(1, Number(tpl.captionFontSize) || 96)).toFixed(3) + 'em;' : '')
+          + (tpl.captionUppercase ? ' text-transform: uppercase;' : '');
       }()),
       edProgress: edTime / edDuration,
       // This element IS the preview frame and establishes the containing block

@@ -3019,8 +3019,29 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           : '';
         if(span.dataset.words!==ghost){span.dataset.words=ghost;span.innerHTML=ghost}
         span.style.cssText='display:flex;align-items:center;justify-content:center;width:100%;height:100%;pointer-events:none';
+        delete span.dataset.echo;
+        const staleTag=box.querySelector(':scope > [data-host-approx]');
+        if(staleTag)staleTag.remove();
         return;
       }
+      /* The approximate layer's geometry: size, tracking, line-height and
+         case from the DRAFT style, so the words move the instant a slider
+         does. Face and colour stay the ghost's own. */
+      const echoCss=(vals.edCapEchoStyle||'display:block;width:100%;pointer-events:none')
+        +';color:rgba(240,214,166,.92);font-family:Outfit,Inter,sans-serif;font-weight:600;text-shadow:0 1px 6px rgba(0,0,0,.55)';
+      if(span.dataset.echo!==echoCss){span.dataset.echo=echoCss;span.style.cssText=echoCss}
+      /* Said on the box, so the echo is never mistaken for the render. */
+      let tag=box.querySelector(':scope > [data-host-approx]');
+      if(!vals.edCapIsAyah){
+        if(!tag){
+          tag=document.createElement('span');
+          tag.setAttribute('data-host-approx','');
+          tag.style.cssText='position:absolute;top:-17px;right:0;font:700 8.5px Outfit,Inter,sans-serif;'
+            +'letter-spacing:.1em;text-transform:uppercase;color:rgba(240,214,166,.75);pointer-events:none';
+          tag.textContent='approximate \u00b7 Save renders';
+          box.appendChild(tag);
+        }
+      }else if(tag)tag.remove();
       if(span.dataset.words!==want){
         span.dataset.words=want;span.innerHTML=want;
         /* The render's phrase fade (ayah_events \fad 550ms), previewed: each

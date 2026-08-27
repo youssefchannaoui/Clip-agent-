@@ -84,12 +84,17 @@ These were each a real bug and each has a test named after it.
    source survives only when a render does not exist, and must stay labelled
    as the uncaptioned source. Never reintroduce a drawn imitation of a file
    that exists.
-   **One deliberate exception (27 Aug 2026):** while the person is actively
-   TYPING a caption edit, the drag ghost echoes the draft words in the
-   ghost's own dashed styling — no font, colour or timing claim — and
-   returns to empty the moment the draft ends (`edCapWords` in
-   studio-adapter.js). An edit field whose words appear nowhere reads as
-   dead. The echo is the ghost's, never the render's; do not style it.
+   **One deliberate exception (27 Aug 2026, widened same day by Youssef —
+   "previews should just show"):** while an edit is UNSAVED, the drag ghost
+   echoes the current block's words with the draft's GEOMETRY — size,
+   tracking, line-height, case and alignment, sized by the same maths
+   captionFaceStyle uses — but always in the ghost's own face and colour,
+   with an "approximate · Save renders" label on the box. It returns to
+   empty on Save (`edCapWords`/`edCapEchoStyle` in studio-adapter.js).
+   Geometry may be claimed because the renderer computes it from the same
+   numbers; face, colour and timing may NOT — that mismatch is the second
+   rendering engine this invariant exists to prevent. Scripture is never
+   echoed: an approximate ayah on screen is unacceptable (invariant 7).
 5. **Clip-local vs media time.** `applyMediaTimebase()` — a clean plate offsets
    by `startSec`, an export does not. Getting this wrong makes the editor look
    completely dead, not slightly off.

@@ -1626,6 +1626,24 @@ test('editing one block rebuilds the whole transcript around it', () => {
   assert.equal(saved.transcript, 'Whoever wakes up safe. He has been given the world.');
 });
 
+test('an unsaved edit echoes the block words with the draft geometry', () => {
+  // Item 5 of Goal to Start: a slider must visibly move the caption the
+  // instant it moves. While edits are unsaved the ghost echoes the current
+  // block's words, sized by the draft style; saved and idle it is empty.
+  Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'cap1', edBlock: 0, edBlockDraft: null, edDirty: false, edStyleDraft: null, edTime: 0 });
+  let vals = StudioAdapter.bindings(CAPTION_STATE);
+  assert.equal(vals.edCapWords.length, 0, 'idle: the render answers for the words');
+  StudioAdapter.ui.edDirty = true;
+  vals = StudioAdapter.bindings(CAPTION_STATE);
+  assert.ok(vals.edCapWords.length > 0, 'dirty: the block words are echoed');
+  assert.equal(vals.edCapWords.map(w => w.text).join(' '), 'Whoever wakes up safe.');
+  assert.match(vals.edCapEchoStyle, /font-size: [\d.]+cqw/, 'the echo carries the draft size');
+  assert.match(vals.edCapEchoStyle, /line-height: [\d.]+/, 'and the draft line-height');
+  StudioAdapter.ui.edDirty = false;
+  vals = StudioAdapter.bindings(CAPTION_STATE);
+  assert.equal(vals.edCapWords.length, 0, 'saved: the echo ends');
+});
+
 test('a clip with no persisted timings still yields editable blocks', () => {
   // Clips rendered before the worker persisted segments must not lose the editor.
   Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'old', edBlock: 0, edBlockDraft: null });
