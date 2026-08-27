@@ -3333,3 +3333,47 @@ test('a failed lecture offers Retry; a healthy one does not', () => {
   StudioAdapter.onPickOption = prev;
   assert.ok(!offered.includes('Retry this lecture'), 'a lecture that worked has nothing to retry');
 });
+
+// ── saying what happened with the money ─────────────────────────────────────
+// The server computed trial state, renewal dates, low-token and payment-failed
+// notices on every request and shipped them to a browser that read none of it.
+
+const billingState = current => ({ ...SAMPLE_STATE, billing: { current, notices: current.__notices || [] } });
+
+test('an ended free trial is announced and cannot be dismissed away', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'home', blockerDismissed: true, bellOpen: false, menuOpen: false, railOpen: true });
+  const vals = StudioAdapter.bindings(billingState({
+    plan: 'free', remaining: 0, unlimited: false, freeTrial: { expired: true, daysLeft: 0, endsAt: 1 },
+    __notices: [{ kind: 'free_ended', title: 'Your free trial has ended', message: 'Choose a plan to keep making clips.', action: 'Choose plan', blocking: true }],
+  }));
+  assert.equal(vals.blockersOn, true,
+    'this is the reason nothing works — dismissing it would leave the account silently dead');
+  assert.match(vals.blockerText, /free trial has ended/i);
+  assert.equal(vals.blockerCta, 'Choose plan');
+});
+
+test('a failed payment is visible instead of silent', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'tokens', bellOpen: false, menuOpen: false, railOpen: true });
+  const vals = StudioAdapter.bindings(billingState({
+    plan: 'monthly', status: 'past_due', remaining: 120, unlimited: false, periodEndsInDays: 12,
+  }));
+  assert.match(vals.planNote, /payment failed/i, 'a declined card produced no in-app signal at all');
+});
+
+test('a trial explains why the wallet is small', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'tokens', bellOpen: false, menuOpen: false, railOpen: true });
+  const vals = StudioAdapter.bindings(billingState({
+    plan: 'yearly', status: 'trialing', remaining: 40, unlimited: false,
+    trial: { active: true, daysLeft: 2 },
+  }));
+  assert.match(vals.planNote, /Trial/i);
+  assert.match(vals.planNote, /full allowance/i,
+    'someone who just bought 6000 tokens and sees 40 needs to be told why');
+});
+
+test('the owner is not told their unlimited plan renews in 0 days', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'tokens', bellOpen: false, menuOpen: false, railOpen: true });
+  const vals = StudioAdapter.bindings(billingState({ plan: 'admin', unlimited: true, periodEndsInDays: 0 }));
+  assert.match(vals.planNote, /no limit and no renewal/i);
+  assert.ok(!/Renews in 0/.test(vals.planNote));
+});

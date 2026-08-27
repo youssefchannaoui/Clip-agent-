@@ -3110,7 +3110,21 @@
 
     // Blockers name a real gap and send you to the screen that fixes it.
     var blocker = '', blockerScreen = 'music', blockerCta = 'Upload nasheed', blockerOpensConnections = false;
-    if (tracks.length === 0) { blocker = 'No nasheed uploaded — every clip mixes one in, so processing cannot finish without at least one.'; blockerScreen = 'music'; }
+    // The server has been computing these on every request and shipping them to
+    // the browser, where nothing read them: trial days left, the free window
+    // closing, a declined card, a nearly-empty wallet. A customer whose payment
+    // failed saw no sign of it anywhere, and with the trial capped at 40 tokens
+    // someone on a 6000-token yearly plan would see 40 with no explanation.
+    // Billing comes first because it is the only gap that stops the account
+    // rather than the workflow.
+    var notices = (DATA.billing && DATA.billing.notices) || [];
+    var moneyNotice = notices.filter(function (n) { return n && n.blocking; })[0] || notices[0] || null;
+    if (moneyNotice) {
+      blocker = moneyNotice.title + ' — ' + moneyNotice.message;
+      blockerCta = moneyNotice.action || 'See plans';
+      blockerScreen = 'tokens';
+    }
+    else if (tracks.length === 0) { blocker = 'No nasheed uploaded — every clip mixes one in, so processing cannot finish without at least one.'; blockerScreen = 'music'; }
     else if (tracks.length < 2) { blocker = 'Only one nasheed uploaded — rotation needs two or more before automatic posting can run.'; blockerScreen = 'music'; }
     else if (connectedCount === 0) {
       blocker = 'No publishing account connected — approved clips will queue up with nowhere to go.';
@@ -3519,12 +3533,15 @@
         };
       }),
 
-      blockersOn: Boolean(blocker) && !UI.blockerDismissed && (function () {
+      // A blocking money notice cannot be dismissed away. The nasheed nag is
+      // advice; "your free trial has ended" is the reason nothing works, and
+      // hiding it would leave the account silently unable to do anything.
+      blockersOn: Boolean(blocker) && (moneyNotice && moneyNotice.blocking ? true : !UI.blockerDismissed && (function () {
         // Dismissal outlives the tab, keyed by the message: the nasheed nag
         // came back on every page load however many times it was dismissed.
         // A DIFFERENT blocker (new gap, new wording) still shows.
         try { return global.localStorage.getItem('deenBlockerDismissed') !== blocker; } catch (e) { return true; }
-      }()),
+      }())),
       blockerText: blocker || '',
       blockerCta: blockerCta,
       resolveBlocker: function (e) {
@@ -5344,9 +5361,25 @@
         { icon: 'ph-fill ph-hourglass', label: 'Reserved for running jobs', cost: String(current.reserved || 0) },
         { icon: 'ph-fill ph-gift', label: 'Top-up tokens', cost: String(current.bonusTokens || 0) },
       ],
-      planNote: current.periodEndsInDays != null
-        ? 'Renews in ' + plural(current.periodEndsInDays, 'day')
-        : 'No renewal date on this plan.',
+      // Said in the order a person needs it: what is wrong, then what is
+      // temporary, then the ordinary renewal date. "Renews in 0 days" used to
+      // show on an unlimited owner account, which is true of nothing.
+      planNote: (function () {
+        var status = String(current.status || '').toLowerCase();
+        if (current.unlimited) return 'Owner account — no limit and no renewal.';
+        if (status === 'past_due' || status === 'unpaid') {
+          return 'Your last payment failed. Update your card under Manage billing or the plan will stop.';
+        }
+        var free = current.freeTrial || {};
+        if (free.expired && (current.plan || 'free') === 'free') return 'Your free trial has ended. Choose a plan to keep going.';
+        if (free.endsAt && !free.expired) return plural(free.daysLeft || 0, 'free day') + ' left, then a plan is needed.';
+        if (current.trial && current.trial.active) {
+          return 'Trial — ' + plural(current.trial.daysLeft || 0, 'day') + ' left. Your full allowance starts on the first paid day.';
+        }
+        return current.periodEndsInDays != null
+          ? 'Renews in ' + plural(current.periodEndsInDays, 'day')
+          : 'No renewal date on this plan.';
+      }()),
       changeCard: function (e) { stop(e); global.StudioAdapter.onBillingPortal(); },
       openInvoices: function (e) { stop(e); global.StudioAdapter.onBillingPortal(); },
 

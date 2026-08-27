@@ -4961,6 +4961,24 @@ StudioAdapter.onProbeSource=async url=>{try{
     StudioAdapter.onBuyTokens=pack=>studioDo(async()=>{
       const r=await api('/api/billing/topup-checkout',{method:'POST',body:JSON.stringify({package:pack})});
       if(r&&r.url)location.href=r.url});
+    /* Coming back from Stripe. The success_url has always been /app?billing=…
+       and nothing ever read it, so paying dropped you on an ordinary dashboard
+       with no acknowledgement that anything had happened — the one moment a
+       customer most needs to be told it worked. The parameter is cleared from
+       the URL so a bookmark or a refresh cannot replay the message. */
+    (function(){
+      const q=new URLSearchParams(location.search),billing=q.get('billing');
+      if(!billing&&!q.get('reset'))return;
+      const said={
+        success:['You are subscribed. Your tokens are available now.','good'],
+        'topup-success':['Top-up added. Those tokens never expire.','good'],
+        cancelled:['Checkout cancelled — nothing was charged.',''],
+        portal:['Billing settings saved.','good'],
+      }[billing]||(q.get('reset')?['Password changed. You are signed in.','good']:null);
+      q.delete('billing');q.delete('reset');q.delete('session_id');
+      history.replaceState({},'',location.pathname+(q.toString()?'?'+q:'')+location.hash);
+      if(said)setTimeout(()=>{toast(said[0],said[1]);refresh()},400);
+    })();
     /* The account menu's two dead entries, given something to do. */
     StudioAdapter.onContactSupport=()=>{
       const s=DATA&&DATA.support&&DATA.support.email;
