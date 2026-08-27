@@ -2200,6 +2200,16 @@
     // stack serves both screens, so it is cleared whenever the target changes
     // (template screen <-> a clip, or one clip to another): replaying a
     // template step onto a clip would write the wrong record.
+    // Paint locally, immediately. refresh() asks the SERVER for news and
+    // repaints only when the rev moved -- correct for data changes, silently
+    // wrong for pure-UI ones: typing a caption or dragging the ghost only
+    // repainted when unrelated server churn happened to bump the rev, which
+    // is why the drag tracked during render storms and froze on quiet days.
+    function paintNow() {
+      if (global.StudioAdapter && typeof global.StudioAdapter.paintLocal === 'function') global.StudioAdapter.paintLocal();
+      else refresh();
+    }
+
     function saveStyle(patch) {
       var ctx = (UI.screen === 'editor' && UI.edClipId)
         ? 'clip:' + UI.edClipId
@@ -2317,8 +2327,11 @@
           // the position under the cursor -- the caption visibly snapping back
           // to where the server last knew it. The style is written once, on
           // release, and until then the overlay follows this.
-          UI.dragPreview = { kind: kind, x: x, y: UI.dragAt };
-          refresh();
+          // The ghost shows the SNAPPED position: what you see during the
+          // drag is exactly what release commits, so letting go never moves
+          // the caption. The raw position still drives the guides.
+          UI.dragPreview = { kind: kind, x: x, y: (kind === 'caption' && hit) ? hit.at : UI.dragAt };
+          paintNow();
         }
         function up() {
           var x = lastX; var y = lastY;
@@ -2355,7 +2368,10 @@
       { at: SAFE_BOTTOM, name: 'Safe bottom' },
     ];
     var SNAP_LINES = SNAP_POINTS.map(function (p) { return p.at; });
-    var SNAP_WITHIN = 0.035;
+    // 2% of the frame: a magnet you feel only when genuinely close to a
+    // line. At 3.5% a release could relocate the caption ~67px on the render
+    // -- read as "it jumped somewhere random".
+    var SNAP_WITHIN = 0.02;
 
     // The snap the given position has caught, if any. Named, so the preview can
     // say which line it landed on instead of only drawing it.
@@ -3666,7 +3682,7 @@
           ? UI.edBlockDraft
           : overlayBlock.text)
         : '',
-      setCapText: function (e) { UI.edBlockDraft = e.target.value; UI.edDirty = true; refresh(); },
+      setCapText: function (e) { UI.edBlockDraft = e.target.value; UI.edDirty = true; paintNow(); },
       edSelText: selectedBlock ? selectedBlock.text : '',
       edSelRange: selectedBlock ? selectedBlock.time : '',
       edCapBlocks: edCaptionBlocks,
