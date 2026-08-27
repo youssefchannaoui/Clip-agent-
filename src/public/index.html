@@ -36,6 +36,10 @@
 </style>
 <!-- Studio dashboard, generated from the Claude Design project. See design/README.md. -->
 <link rel="stylesheet" href="/studio-styles.generated.css">
+<!-- Loaded after the generated bundle and kept out of it on purpose: a design
+     re-import rewrites that file wholesale, and mobile support must not be
+     something that vanishes the next time the design changes. -->
+<link rel="stylesheet" href="/studio-responsive.css">
 <style>
 /* The Studio shell owns the viewport; the legacy dashboard keeps page scrolling.
    The mount point stays a plain block on purpose: the design's own root element is

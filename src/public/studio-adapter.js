@@ -4554,6 +4554,23 @@
         : 'No accounts connected',
       cardLabel: current.stripeCustomerId ? 'Card on file · manage in billing' : 'No card on file',
       spendSummary: (current.used || 0) + ' spent this period · top-up tokens never expire',
+      // What the balance actually buys, from the balance. The design shipped
+      // "≈ 20 hours of lecture processing, or about 62 rendered clips" as a
+      // literal, so the same sentence appeared under 6000 tokens and under 2.
+      balanceMeans: (function () {
+        if (current.unlimited) return 'No limit on this account — process as much as the worker can take.';
+        var left = Math.max(0, Number(current.remaining || 0));
+        var rate = Number((DATA.billing && DATA.billing.tokenRatePerMinute) || 1) || 1;
+        var minutes = Math.floor(left / rate);
+        if (!minutes) return 'Nothing left to spend. A top-up or a plan adds more.';
+        var hours = Math.floor(minutes / 60);
+        var length = hours >= 1
+          ? '≈ ' + plural(hours, 'hour') + ' of lecture'
+          : '≈ ' + plural(minutes, 'minute') + ' of lecture';
+        // Clips come from the lecture, not from the wallet: a clip is free to
+        // render, the source minutes it was cut from are what cost.
+        return length + ' — that is what your tokens buy, charged on the range you select.';
+      }()),
       // Real bytes, measured from the files on disk (engine storageBytes).
       // These tiles used to dress record counts up as a storage figure.
       storageSummary: plural(projects.length, 'lecture') + ' · ' + plural(clips.length, 'clip')

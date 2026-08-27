@@ -50,6 +50,9 @@ const STUDIO_ASSETS = {
   '/studio-runtime.js': { file: studioAsset('studio-runtime.js'), type: JS_TYPE },
   '/studio-adapter.js': { file: studioAsset('studio-adapter.js'), type: JS_TYPE },
   '/studio-styles.generated.css': { file: studioAsset('studio-styles.generated.css'), type: 'text/css; charset=utf-8' },
+  // Hand-written, and kept out of the generated bundle so a design re-import
+  // cannot silently delete the app's only mobile layout.
+  '/studio-responsive.css': { file: studioAsset('studio-responsive.css'), type: 'text/css; charset=utf-8' },
   // The browser-tab identity. /favicon.ico is served as PNG -- every modern
   // browser accepts it, and agents that request the path blindly stop 404ing.
   '/favicon.svg': { file: studioAsset('favicon.svg'), type: 'image/svg+xml' },

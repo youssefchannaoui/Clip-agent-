@@ -45,7 +45,8 @@
     "Nasheed · Tala al-Badru": "edTrackName",
     "Soft choral hum": "edTrackNote",
     "of 42:11 — drag the top handle for the start, the bottom for the end.": "jobRangeHint",
-    "He has the whole of the dunya": "capPreviewText"
+    "He has the whole of the dunya": "capPreviewText",
+    "≈ 20 hours of lecture processing, or about 62 rendered clips at your current settings.": "balanceMeans"
   },
   "styleOverrides": {
     "position: relative; aspect-ratio: 16 / 9; border-radius: 11px; overflow: hidden; border: 1px solid #26262A; background: #17171A url('src/public/marketing-assets/reel-kaaba-a.webp') center/cover no-repeat;": "jobPosterStyle",

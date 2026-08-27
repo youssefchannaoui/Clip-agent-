@@ -2,10 +2,18 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "deenclipped-local",
-      "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "AUTH_REQUIRED=false PORT=3140 PUBLIC_BASE_URL=http://localhost:3140 GOOGLE_SIGNIN_CLIENT_ID=local-preview GOOGLE_SIGNIN_CLIENT_SECRET=local-preview APPLE_SIGNIN_CLIENT_ID=local-preview APPLE_SIGNIN_TEAM_ID=local APPLE_SIGNIN_KEY_ID=local APPLE_SIGNIN_PRIVATE_KEY=local node src/server.js"],
-      "port": 3140
+      "name": "mobile-check",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATA_DIR=/tmp/dc-mobile-data",
+        "PORT=3411",
+        "AUTH_REQUIRED=false",
+        "BACKUP_ENABLED=false",
+        "PROCESSING_MODE=local",
+        "node",
+        "src/server.js"
+      ],
+      "port": 3411
     }
   ]
 }

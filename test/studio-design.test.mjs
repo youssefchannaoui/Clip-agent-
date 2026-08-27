@@ -3377,3 +3377,49 @@ test('the owner is not told their unlimited plan renews in 0 days', () => {
   assert.match(vals.planNote, /no limit and no renewal/i);
   assert.ok(!/Renews in 0/.test(vals.planNote));
 });
+
+// ── mobile ─────────────────────────────────────────────────────────────────
+// The generated stylesheet had exactly one media query in it and it was
+// prefers-reduced-motion — not a single width breakpoint, while the marketing
+// site that sells the product has three.
+
+test('the app ships a mobile stylesheet, kept out of the generated bundle', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'src/public/studio-responsive.css'), 'utf8');
+  const widthQueries = (css.match(/@media[^{]*max-width/g) || []).length;
+  assert.ok(widthQueries >= 3, `expected several breakpoints, found ${widthQueries}`);
+
+  const host = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  assert.match(host, /studio-responsive\.css/, 'the page must load it');
+  assert.ok(host.indexOf('studio-responsive.css') > host.indexOf('studio-styles.generated.css'),
+    'it has to come after the generated bundle to win the cascade');
+
+  const server = fs.readFileSync(path.join(ROOT, 'src/server.js'), 'utf8');
+  assert.match(server, /'\/studio-responsive\.css'/,
+    'static assets are on an explicit allowlist; an unlisted file 404s');
+});
+
+test('mobile rules cannot touch the desktop layout', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'src/public/studio-responsive.css'), 'utf8');
+  // Every declaration must sit inside a max-width query. A stray top-level rule
+  // is how a mobile fix silently becomes a desktop regression.
+  const outside = css.replace(/@media[^{]*\{(?:[^{}]*\{[^{}]*\}\s*)*\}/g, '');
+  assert.ok(!/\{[^}]*:[^}]*\}/.test(outside),
+    `every rule must live inside a media query; found loose rules: ${outside.replace(/\/\*[\s\S]*?\*\//g, '').trim().slice(0, 200)}`);
+});
+
+test('the hooks the mobile CSS targets exist in the generated template', () => {
+  const tpl = fs.readFileSync(path.join(ROOT, 'src/public/studio-template.generated.js'), 'utf8');
+  // Hashed class names are regenerated on every design import, so the mobile
+  // rules hang off ids added to the design source instead. If an id is renamed
+  // there, the layout silently reverts — this is the tripwire for that.
+  for (const id of ['dcTopbar', 'dcSearchBox', 'dcSetupChip', 'dcTokenChip', 'dcAccountBtn', 'dcAccountEmail', 'dcBlocker', 'dcHeroFloaters']) {
+    assert.match(tpl, new RegExp(id), `${id} is gone from the template; the mobile rule targeting it is now dead`);
+  }
+});
+
+test('the balance line is computed, not the designer’s placeholder', () => {
+  const vals = renderScreen('tokens').vals;
+  assert.ok(vals.balanceMeans, 'the line under the balance must be bound');
+  assert.ok(!/20 hours of lecture processing, or about 62/.test(vals.balanceMeans),
+    'the same sentence used to show under 6000 tokens and under 2');
+});
