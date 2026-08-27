@@ -172,6 +172,18 @@ These were each a real bug and each has a test named after it.
   without happening. Confirm a live prompt echo (type Return, see a fresh
   prompt) before every command batch, and verify `git pull` output names the
   expected commits.
+- **The Hetzner console also strips SHIFT from symbol keys** (27 Aug 2026): a
+  pipe arrives as a backslash, an underscore as a hyphen, `#` as 3, `*` as 8,
+  `$` as 4. Anything beyond plain words typed into it is a hazard — one probe
+  line left the shell inside an open backtick. Console commands must be
+  letters, digits, dots, slashes, hyphens and spaces only: `git pull` then
+  `bash worker/deploy.sh` (which exists for exactly this reason).
+- **A caption complaint on a clip is not always our caption.** The "clipped
+  typewriter captions" on the prism clip were the SOURCE video's own burned-in
+  subtitles, cropped at both edges by the 16:9→9:16 crop — DeenClipped's own
+  word-mode caption rendered correctly above them. A centred libass caption
+  can never be cut mid-word at the LEFT edge; that shape means baked-in source
+  text. Check a frame for it before touching write_ass.
 
 ## Security posture (audited 24 Aug 2026)
 
