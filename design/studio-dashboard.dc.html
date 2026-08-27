@@ -1261,7 +1261,7 @@
       </div>
 
       <div style="flex: 1; min-height: 0; display: flex; flex-wrap: wrap; align-items: stretch; overflow: auto;">
-        <div style="flex: 1 1 380px; min-width: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 22px; background: radial-gradient(circle at 50% 0%, rgba(217,180,120,.05), transparent 60%);">
+        <div style="flex: 1 1 380px; min-width: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 10px; background: radial-gradient(circle at 50% 0%, rgba(217,180,120,.05), transparent 60%);">
           <div ref="{{ edRef }}" style="{{ edThumbStyle }}">
             <span style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(9,9,10,.35), transparent 38%, rgba(9,9,10,.6));"></span>
             <sc-if value="{{ edSafe }}" hint-placeholder-val="{{ true }}">
@@ -1282,11 +1282,6 @@
               <span style="font-size: 9.5px; color: #E9E9ED;">{{ edTimeLabel }}</span>
             </span>
           </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <button onClick="{{ toggleSafe }}" style="{{ edSafeBtnStyle }}"><i class="ph ph-frame-corners" style="font-size: 13px;"></i>Social safe zones</button>
-            <span style="font-size: 11px; color: #6E6E76;">Shorts · Reels · TikTok overlap</span>
-          </div>
-          <span style="font-size: 11px; color: #6E6E76;">{{ edSiblings }}</span>
         </div>
 
         <aside style="flex: 0 0 316px; max-width: 316px; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 16px; border-left: 1px solid #1E1E22; background: #0E0E11;">
@@ -1413,6 +1408,8 @@
         <div style="display: flex; align-items: center; gap: 10px;">
           <span style="font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">Timeline</span>
           <span style="font-size: 11px; color: #8B8B93;">{{ edTimeLabel }}</span>
+          <button onClick="{{ toggleSafe }}" style="{{ edSafeBtnStyle }}"><i class="ph ph-frame-corners" style="font-size: 13px;"></i>Social safe zones</button>
+          <span style="font-size: 11px; color: #6E6E76;">{{ edSiblings }}</span>
           <span style="margin-left: auto; display: flex; align-items: center; gap: 7px; font-size: 11px; color: #6E6E76;"><i class="ph ph-cursor-click" style="font-size: 13px;"></i>Click a caption block to edit its words</span>
         </div>
         <div onClick="{{ seek }}" style="position: relative; display: flex; flex-direction: column; gap: 5px; cursor: crosshair;">
