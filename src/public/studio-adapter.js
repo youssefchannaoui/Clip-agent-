@@ -179,6 +179,17 @@
     return u ? '#17171A url("' + cssUrl(u) + '") center/cover no-repeat' : '#17171A';
   }
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
+  // A percentage is a true answer that means nothing to the person moving the
+  // slider. "Centred" is what they are actually choosing.
+  function cropLabel(value, low, mid, high) {
+    var n = Number(value);
+    if (!Number.isFinite(n)) n = 0.5;
+    var pct = Math.round(Math.max(0, Math.min(1, n)) * 100);
+    if (pct <= 12) return low;
+    if (pct >= 88) return high;
+    if (pct >= 45 && pct <= 55) return mid;
+    return pct + '%';
+  }
   // Bytes for humans. Below a megabyte the honest answer is "almost nothing".
   function fmtBytes(bytes) {
     if (!bytes) return '0 MB';
@@ -1631,6 +1642,19 @@
         style: (c.templateName || '') + (c.renderQuality === 'draft' ? ((c.templateName ? ' \u00b7 ' : '') + 'draft') : ''),
         lecTitle: projectTitle[c.projectId] || '',
         score: c.score || '—',
+        // The worker has always explained itself -- "complete ending", "question
+        // hook", "clear speaking pace" -- and stored the reasons on the clip,
+        // and the server has always sent them. Nothing rendered them, so the
+        // score arrived as a bare number out of 100 with no working shown,
+        // which is exactly how a number stops being believed.
+        scoreWhy: (function () {
+          var reasons = Array.isArray(c.scoreReasons) ? c.scoreReasons.filter(Boolean) : [];
+          if (!reasons.length) return '';
+          return reasons.slice(0, 3).join(' · ');
+        })(),
+        scoreWhyStyle: (Array.isArray(c.scoreReasons) && c.scoreReasons.filter(Boolean).length)
+          ? 'font-size: 10.5px; line-height: 1.45; color: #6E6E76; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;'
+          : 'display: none;',
         flagged: gate && Boolean(c.reviewRequired),
         thumbStyle: 'position: relative; aspect-ratio: 9 / 16; overflow: hidden; background: ' + thumb(c.thumbUrl) + ';',
         cardStyle: 'display: flex; flex-direction: column; border: 1px solid ' +
@@ -4113,6 +4137,25 @@
       edZoom: Math.round((Number(tpl.smartFramingZoom) || 1) * 100),
       edZoomLabel: Math.round((Number(tpl.smartFramingZoom) || 1) * 100) + '%',
       setZoom: function (e) { saveStyle({ smartFramingZoom: Number(e.target.value) / 100 }); },
+
+      // Overriding where the crop sits. Audit item: "users must be able to
+      // override AI framing" — and until now they could not, because the only
+      // controls that existed lived in the classic shell nothing links to, and
+      // those wrote 0-100 into a field the schema clamps to [0,1], so any
+      // non-zero setting pinned the crop hard against the right or bottom edge.
+      // The percentages here are display only; the value written is 0-1.
+      edCropRowStyle: String(tpl.fitMode || '') === 'crop'
+        ? 'display: flex; flex-direction: column; gap: 5px;'
+        : 'display: none;',
+      edCropX: Math.round((Number(tpl.cropPositionX) >= 0 ? Number(tpl.cropPositionX) : 0.5) * 100),
+      edCropY: Math.round((Number(tpl.cropPositionY) >= 0 ? Number(tpl.cropPositionY) : 0.5) * 100),
+      edCropXLabel: cropLabel(tpl.cropPositionX, 'Left', 'Centred', 'Right'),
+      edCropYLabel: cropLabel(tpl.cropPositionY, 'Top', 'Middle', 'Bottom'),
+      setCropX: function (e) { saveStyle({ cropPositionX: Math.max(0, Math.min(1, Number(e.target.value) / 100)) }); },
+      setCropY: function (e) { saveStyle({ cropPositionY: Math.max(0, Math.min(1, Number(e.target.value) / 100)) }); },
+      edCropNote: tpl.smartFramingEnabled
+        ? 'Only used where the speaker cannot be found — face tracking wins when it succeeds.'
+        : 'Where the 9:16 window sits over the wider source.',
 
       edWmTrack: sliderTrack(),
       edWmKnob: sliderKnob(Number(tpl.watermarkOpacity) > 0),

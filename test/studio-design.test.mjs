@@ -3494,3 +3494,55 @@ test('a saved trim reopens where it was left', () => {
   assert.match(vals.edTrimStartStyle, /left: 10\.00%/);
   assert.match(vals.edTrimLabel, /Keeping 0:48/);
 });
+
+// ── showing the working ────────────────────────────────────────────────────
+
+test('a clip says why it scored what it did', () => {
+  const scored = {
+    ...SAMPLE_STATE,
+    clips: [{ id: 'c1', title: 'A clip', status: 'waiting', score: 92, durationMs: 40000, projectId: 'p1', targets: [],
+      scoreReasons: ['complete ending', 'question hook', 'clear speaking pace'] }],
+  };
+  const vals = renderScreen('queue');
+  const withReasons = StudioAdapter.bindings(scored);
+  const card = withReasons.queueClips ? withReasons.queueClips[0] : null;
+  assert.ok(card, 'expected a clip card');
+  assert.match(card.scoreWhy, /complete ending/,
+    'the worker has always explained itself and nothing rendered it');
+  assert.ok(!/display: none/.test(card.scoreWhyStyle));
+  assert.ok(vals);
+});
+
+test('a clip with no stored reasons shows no empty line', () => {
+  const bare = {
+    ...SAMPLE_STATE,
+    clips: [{ id: 'c1', title: 'A clip', status: 'waiting', score: 70, durationMs: 40000, projectId: 'p1', targets: [] }],
+  };
+  const card = StudioAdapter.bindings(bare).queueClips[0];
+  assert.equal(card.scoreWhy, '');
+  assert.match(card.scoreWhyStyle, /display: none/);
+});
+
+test('the crop override writes 0-1, not a percentage', () => {
+  // The classic shell wrote 0-100 into a field the schema clamps to [0,1], so
+  // any non-zero setting pinned the crop against the right or bottom edge.
+  const written = [];
+  const vals = openTrim();
+  const prev = StudioAdapter.onClipStyle;
+  StudioAdapter.onClipStyle = (id, patch) => written.push(patch);
+  vals.setCropX({ target: { value: '75' } });
+  StudioAdapter.onClipStyle = prev;
+  const patch = written.find(p => 'cropPositionX' in p) || StudioAdapter.ui.edStyleDraft || {};
+  assert.ok(patch.cropPositionX <= 1, `expected 0-1, got ${patch.cropPositionX}`);
+  assert.ok(Math.abs(patch.cropPositionX - 0.75) < 0.001);
+});
+
+test('the crop controls follow the fit mode', () => {
+  // There is no crop window to move unless the frame is actually cropped.
+  const cropped = openTrim({ edStyleDraft: { fitMode: 'crop' } });
+  assert.ok(!/display: none/.test(cropped.edCropRowStyle),
+    'a cropped frame must offer the override — audit #45');
+  const blurred = openTrim({ edStyleDraft: { fitMode: 'blur' } });
+  assert.match(blurred.edCropRowStyle, /display: none/,
+    'blur shows the whole source, so there is nothing to reposition');
+});

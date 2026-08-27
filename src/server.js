@@ -963,7 +963,26 @@ async function route(req, res, url) {
     return html(res, 200, importNetworkPage({}));
   }
 
-  if (!pathname.startsWith('/api/')) return json(res, 404, { error: 'Not found.' });
+  if (method === 'GET' && pathname === '/robots.txt') {
+    const body = Buffer.from(marketing.robots({ base: publicBase(req) }));
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'public, max-age=86400' });
+    return res.end(body);
+  }
+  if (method === 'GET' && pathname === '/sitemap.xml') {
+    const body = Buffer.from(marketing.sitemap({ base: publicBase(req) }));
+    res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'public, max-age=86400' });
+    return res.end(body);
+  }
+
+  // A person who mistyped an address, or followed an old link, was handed
+  // {"error":"Not found."} on a white page with no way back. API callers still
+  // get JSON; browsers get a page.
+  if (!pathname.startsWith('/api/')) {
+    if (method === 'GET' && String(req.headers.accept || '').includes('text/html')) {
+      return html(res, 404, marketing.notFound(marketingContext(req)));
+    }
+    return json(res, 404, { error: 'Not found.' });
+  }
   if (auth.enabled() && !currentUser) return json(res, 401, { error: 'Sign in to continue.', loginRequired: true });
   if (!auth.enabled() && !auth.sessionUser(req) && !authed(req, url)) return json(res, 401, { error: 'Wrong password.' });
 

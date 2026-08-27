@@ -599,6 +599,7 @@
                 <a href="#" onClick="{{ clip.openLecture }}" style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8B8B93; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" style-hover="color: #F0D6A6;">
                   <i class="ph ph-film-script" style="font-size: 12px; flex: none;"></i>{{ clip.lecTitle }}
                 </a>
+                <span style="{{ clip.scoreWhyStyle }}" title="Why the worker scored this clip the way it did">{{ clip.scoreWhy }}</span>
                 <div style="display: flex; align-items: center; gap: 7px; margin-top: 2px;">
                   <button onClick="{{ clip.approve }}" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 6px; border: 1px solid rgba(217,180,120,.4); border-radius: 7px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; transition: background .14s ease, border-color .14s ease;" style-hover="background: rgba(217,180,120,.14); border-color: rgba(217,180,120,.66);" style-active="background: rgba(217,180,120,.22);"><i class="ph ph-check" style="font-size: 13px;"></i>{{ clip.primaryLabel }}</button>
                   <button onClick="{{ clip.edit }}" title="Open in editor" style="display: grid; place-items: center; width: 30px; height: 29px; border: 1px solid #26262A; border-radius: 7px; background: #17171A; color: #BCBCC3; cursor: pointer; transition: color .14s ease, border-color .14s ease;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-crop" style="font-size: 14px;"></i></button>
@@ -1343,6 +1344,13 @@
               <div style="display: flex; flex-direction: column; gap: 5px;">
                 <span style="display: flex; align-items: center; font-size: 11.5px; color: #BCBCC3;">Zoom<strong style="margin-left: auto; font-weight: 500; color: #F0D6A6;">{{ edZoomLabel }}</strong></span>
                 <input type="range" min="100" max="160" value="{{ edZoom }}" onChange="{{ setZoom }}" style="width: 100%; accent-color: #D9B478; cursor: pointer;">
+              </div>
+              <div style="{{ edCropRowStyle }}">
+                <span style="display: flex; align-items: center; font-size: 11.5px; color: #BCBCC3;">Crop across<strong style="margin-left: auto; font-weight: 500; color: #F0D6A6;">{{ edCropXLabel }}</strong></span>
+                <input type="range" min="0" max="100" value="{{ edCropX }}" onChange="{{ setCropX }}" aria-label="Crop position across the frame" style="width: 100%; accent-color: #D9B478; cursor: pointer;">
+                <span style="display: flex; align-items: center; font-size: 11.5px; color: #BCBCC3;">Crop down<strong style="margin-left: auto; font-weight: 500; color: #F0D6A6;">{{ edCropYLabel }}</strong></span>
+                <input type="range" min="0" max="100" value="{{ edCropY }}" onChange="{{ setCropY }}" aria-label="Crop position down the frame" style="width: 100%; accent-color: #D9B478; cursor: pointer;">
+                <span style="font-size: 10.5px; color: #6E6E76; line-height: 1.45;">{{ edCropNote }}</span>
               </div>
               <div onClick="{{ toggleFace }}" style="display: flex; align-items: center; gap: 9px; cursor: pointer;">
                 <i class="ph ph-user-focus" style="font-size: 15px; color: #8B8B93;"></i>

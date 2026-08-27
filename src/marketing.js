@@ -331,3 +331,48 @@ export function terms({ base, currentUser }) {
     .replace('YouTube source-file import is not represented as an official YouTube API capability and remains unavailable where YouTube does not permit access.', 'YouTube URL import is not an official YouTube Data API download capability and remains subject to source availability, provider access and platform restrictions.');
   return layout({ base, currentUser, title: 'Terms of Service — DeenClipped', description: 'Terms of Service for DeenClipped.', canonicalPath: '/terms', body: disclosedBody });
 }
+
+/**
+ * The page a wrong URL lands on.
+ *
+ * A bare JSON 404 was being served to people, not just to API callers: a
+ * mistyped address, an old link from a message, an expired share — all of them
+ * got `{"error":"Not found."}` on a white page and no way back into the
+ * product they were trying to reach.
+ */
+export function notFound({ base, currentUser }) {
+  const body = `<main><section class="page-hero wrap"><span class="eyebrow"><i></i>404</span><h1>That page isn’t here.</h1><p>The link may be old, or the address slightly off. Nothing has gone wrong with your account.</p><div class="pricing-trust" style="margin-top:22px"><a class="button primary" href="${currentUser ? '/app' : '/'}">${currentUser ? 'Back to the studio' : 'Back to the homepage'}</a><a class="button" href="/contact">Tell support</a></div></section></main>`;
+  return layout({ base, currentUser, title: 'Page not found — DeenClipped', description: 'That DeenClipped page could not be found.', canonicalPath: '/404', body });
+}
+
+/**
+ * robots.txt and sitemap.xml, built from the routes that actually exist.
+ *
+ * Everything behind sign-in is disallowed: the app, the owner dashboard, the
+ * auth endpoints and the API. There is nothing there for a crawler, and a
+ * crawler following a sign-out link is its own small outage.
+ */
+export function robots({ base }) {
+  return [
+    'User-agent: *',
+    'Allow: /$',
+    'Disallow: /app',
+    'Disallow: /owner',
+    'Disallow: /api/',
+    'Disallow: /auth/',
+    'Disallow: /login',
+    'Disallow: /reset',
+    'Disallow: /plans',
+    '',
+    `Sitemap: ${String(base || '').replace(/\/+$/, '')}/sitemap.xml`,
+    '',
+  ].join('\n');
+}
+
+export const PUBLIC_PAGES = ['/', '/features', '/pricing', '/contact', '/privacy', '/terms'];
+
+export function sitemap({ base }) {
+  const root = String(base || '').replace(/\/+$/, '');
+  const urls = PUBLIC_PAGES.map(p => `  <url><loc>${root}${p === '/' ? '/' : p}</loc><changefreq>weekly</changefreq></url>`).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
+}
