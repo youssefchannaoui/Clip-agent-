@@ -575,7 +575,12 @@ export function pipelineHealth(user, { days = 7, limit = 25 } = {}) {
   const failures = [];
 
   for (const project of projects) {
-    const status = String(project.status || 'unknown');
+    const raw = String(project.status || 'unknown');
+    // The engine finishes a lecture as 'done'; this census once counted only
+    // 'completed', so every success was invisible -- the failure rate pinned
+    // at 100% and the importer table said "no completed imports" while
+    // imports completed daily. The owner read his own dashboard and despaired.
+    const status = raw === 'done' ? 'completed' : raw;
     byStatus[status] = (byStatus[status] || 0) + 1;
 
     // Only successes say anything about which provider is carrying the load.

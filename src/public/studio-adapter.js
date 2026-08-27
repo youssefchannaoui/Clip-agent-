@@ -3029,6 +3029,12 @@
       });
     });
     failures.sort(function (a, b) { return Number(b.at || 0) - Number(a.at || 0); });
+    // Red is a call to action, not a history book: 45 stale rows greeted
+    // every open of the bell as if the product were on fire TODAY, when
+    // nearly all of them were import failures from an era already fixed.
+    // The feed keeps a week; the owner Health page keeps the full history.
+    var feedFloor = Date.now() - 7 * DAY_MS;
+    failures = failures.filter(function (f) { return Number(f.at || 0) >= feedFloor; });
 
     var overdueRow = null;
     if (overdue.length) {
@@ -3326,7 +3332,11 @@
 
       slots: scheduled.slice(0, 3).map(function (c, i) {
         var target = (c.targets && c.targets[0]) || {};
-        var platform = target.platform || '';
+        // provider, not platform: targets store the destination under
+        // `provider`, and reading the wrong key made this panel say
+        // "Not connected" for every scheduled post while four accounts sat
+        // connected -- three screens, three different answers.
+        var platform = target.platform || target.provider || '';
         return {
           time: timeOf(c.scheduledAt),
           title: c.title || '',
@@ -4408,7 +4418,9 @@
       accountName: (DATA.user && (DATA.user.name || DATA.user.email)) || '',
       greeting: 'Studio' + (firstName ? ' · Salām, ' + firstName : ''),
       connSummary: connectedCount
-        ? plural(connectedCount, 'account') + ' connected' + (needsReconnect.length ? ' · ' + needsReconnect.join(', ') + ' needs reconnecting' : '')
+        ? plural(connectedCount, 'account') + ' connected'
+          + (activeCount < connectedCount ? ' · posting to ' + activeCount : '')
+          + (needsReconnect.length ? ' · ' + needsReconnect.join(', ') + ' needs reconnecting' : '')
         : 'No accounts connected',
       cardLabel: current.stripeCustomerId ? 'Card on file · manage in billing' : 'No card on file',
       spendSummary: (current.used || 0) + ' spent this period · top-up tokens never expire',

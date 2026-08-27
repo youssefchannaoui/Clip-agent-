@@ -1644,6 +1644,40 @@ test('an unsaved edit echoes the block words with the draft geometry', () => {
   assert.equal(vals.edCapWords.length, 0, 'saved: the echo ends');
 });
 
+test('the posting-today panel names the platform its targets carry', () => {
+  // Targets store the destination under `provider`; this panel read
+  // `platform` and said "Not connected" for every scheduled post while four
+  // accounts sat connected. Three screens gave three different answers.
+  const vals = StudioAdapter.bindings({
+    projects: [], tracks: [],
+    clips: [{
+      id: 'sch1', projectId: 'p1', title: 'Scheduled clip', status: 'scheduled',
+      score: 80, durationMs: 30000, scheduledAt: Date.now() + 3600e3,
+      targets: [{ provider: 'youtube', status: 'scheduled' }],
+    }],
+  });
+  assert.equal(vals.slots.length, 1);
+  assert.equal(vals.slots[0].dest, 'YouTube', 'the provider names the destination');
+});
+
+test('the activity feed keeps a week, not a history book', () => {
+  // 45 stale failure rows greeted every open of the bell as if the product
+  // were on fire today. Older than a week, they leave the feed (the owner
+  // Health page keeps the full history).
+  const DAY = 24 * 3600e3;
+  const vals = StudioAdapter.bindings({
+    tracks: [], clips: [],
+    projects: [
+      { id: 'fresh', title: 'Fresh failure', status: 'failed', error: 'x', submittedAt: Date.now() - DAY },
+      { id: 'stale', title: 'Ancient failure', status: 'failed', error: 'y', submittedAt: Date.now() - 30 * DAY },
+    ],
+  });
+  const texts = (vals.activityRows || vals.activity || []).map(r => r.text || '').join('|');
+  assert.match(texts, /Fresh failure/, 'this week still shows');
+  assert.ok(!/Ancient failure/.test(texts), 'last month does not');
+  assert.equal(vals.activityUnread, 1, 'and only the fresh one counts');
+});
+
 test('a fresh wizard always opens on the lecture kind', () => {
   // The kind used to inherit the account's selected template, so an account
   // whose default style was the Quran one opened every new lecture pre-set
