@@ -127,6 +127,19 @@ export function lectureFailedMessage({ title, reason, dashboardUrl }) {
   };
 }
 
+export function passwordResetMessage(link) {
+  return {
+    subject: 'Reset your DeenClipped password',
+    text: `Someone asked to reset the password for this DeenClipped account:\n\n${link}\n\nThe link works once and expires in one hour. If that was not you, ignore this — your password has not changed.`,
+    html: shell(
+      'Reset your password',
+      'This link works once and expires in one hour. If you did not ask for it, ignore this message — nothing has changed.',
+      'Choose a new password',
+      link,
+    ),
+  };
+}
+
 export function verificationMessage(link) {
   return {
     subject: 'Confirm your DeenClipped address',

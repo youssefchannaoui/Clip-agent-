@@ -703,6 +703,45 @@ async function route(req, res, url) {
     const session = auth.createSession(confirmed, { provider: 'email' });
     return redirectWithCookies(res, billing.postLoginRedirect(confirmed, '/app'), auth.cookieHeaders(session));
   }
+  // Password reset. Until this existed, one forgotten password was a permanent
+  // lockout: there was no route, no link and no token anywhere in the app.
+  if (method === 'GET' && pathname === '/reset') {
+    const raw = url.searchParams.get('token') || '';
+    // A dead token is said so on arrival rather than after the person has typed
+    // a new password and pressed save.
+    if (raw && !auth.peekPasswordReset(raw)) {
+      return html(res, 200, auth.resetPage({ error: 'That reset link has expired or has already been used. Ask for a new one below.' }));
+    }
+    return html(res, 200, auth.resetPage({
+      token: raw,
+      info: url.searchParams.get('sent') ? 'Check your inbox, including spam. The link works once and expires in an hour.' : '',
+    }));
+  }
+  if (method === 'POST' && pathname === '/auth/forgot') {
+    const body = await formBody(req);
+    // Throttled on the address so the form cannot be used to bomb an inbox,
+    // and on the caller so it cannot be walked across many addresses at speed.
+    const target = String(body.email || '').trim().toLowerCase().slice(0, 200);
+    const gate = throttle.rateLimit(`forgot:${target || clientIp(req)}`, 3, 60 * 60_000);
+    const ipGate = throttle.rateLimit(`forgot-ip:${clientIp(req)}`, 15, 60 * 60_000);
+    if (gate.allowed && ipGate.allowed) {
+      await auth.requestPasswordReset(target, config.publicBaseUrl || `https://${req.headers.host || ''}`);
+    }
+    // The same answer either way, whether the address exists, has no password,
+    // or was rate limited. Anything else turns this form into a way to find out
+    // who has an account here.
+    return redirect(res, '/reset?sent=1');
+  }
+  if (method === 'POST' && pathname === '/auth/reset') {
+    const body = await formBody(req);
+    try {
+      const user = await auth.completePasswordReset(body.token, body.password);
+      const session = auth.createSession(user, { provider: 'password' });
+      return redirectWithCookies(res, '/app?reset=1', auth.cookieHeaders(session));
+    } catch (error) {
+      return html(res, 200, auth.resetPage({ token: String(body.token || ''), error: error.message }));
+    }
+  }
   if (method === 'POST' && pathname === '/auth/resend-verification') {
     if (!currentUser) return json(res, 401, { error: 'Sign in first.' });
     const gate = throttle.rateLimit(`verify:${currentUser.id}`, 5, 60 * 60_000);

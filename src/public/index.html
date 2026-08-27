@@ -2101,7 +2101,17 @@ async function api(url,options={}){
   __apiStart();
   try{
     const r=await fetch(url,{...options,headers:{'Content-Type':'application/json','x-app-password':PW,...(options.headers||{})}});let b={};try{b=await r.json()}catch{}
-    if(!r.ok)throw new Error(b.error||`Request failed (${r.status})`);
+    if(!r.ok){
+      /* An unverified address blocks both ways of getting work in, and the
+         resend route that fixes it had no caller anywhere. The error carries
+         its own escape hatch now, because the alternative is an email the
+         person cannot find from inside the app. */
+      const e=new Error(b.error||`Request failed (${r.status})`);
+      if(b.needsVerification)e.needsVerification=true;
+      if(b.needsPlan)e.needsPlan=true;
+      if(b.needsTokens)e.needsTokens=true;
+      throw e;
+    }
     if(method!=='GET')window.dispatchEvent(new CustomEvent('deen:api-end',{detail:{id:requestId,url,method,ok:true,result:b}}));
     __apiEnd();
     return b;
@@ -4156,8 +4166,23 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        inside renderStudio: the background upload and delete handlers live in
        a top-level painter, and with studioDo scoped to renderStudio their
        clicks died on a ReferenceError -- picking a file simply did nothing. */
+    /* Some refusals have exactly one sensible next move, and leaving the user
+       to find it themselves is what made these errors dead ends. A toast that
+       says what happened AND does something about it is the difference between
+       being stuck and being one click from unstuck. */
+    const recoverFrom=async e=>{
+      if(e&&e.needsVerification){
+        if(!confirm('Your email address is not confirmed yet, so imports are blocked.\n\nSend the confirmation link again?'))return;
+        try{await api('/auth/resend-verification',{method:'POST',body:'{}'});toast('Sent. Check your inbox, including spam.','good')}
+        catch(err){toast(err.message,'bad')}
+        return;
+      }
+      if(e&&(e.needsPlan||e.needsTokens)){
+        if(confirm(e.message+'\n\nOpen plans and top-ups now?'))StudioAdapter.ui.screen='tokens',renderAll();
+      }
+    };
     const studioDo=async(fn,ok,onFail)=>{try{await fn();await refresh();StudioAdapter.settled();if(ok)toast(ok,'good')}
-      catch(e){toast(e.message,'bad');StudioAdapter.settled();if(onFail)onFail(e.message);renderAll()}};
+      catch(e){toast(e.message,'bad');StudioAdapter.settled();if(onFail)onFail(e.message);renderAll();recoverFrom(e)}};
 
     function paintJobBackground(vals){
       alive(jobBgEl);
