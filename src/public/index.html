@@ -4887,8 +4887,13 @@ StudioAdapter.onProbeSource=async url=>{try{
       /* 'auto' means "let Whisper detect" and travels as ''. */
       const lang=StudioAdapter.ui.jobLang||(quranJob?'ar':'en');
       body.language=lang==='auto'?'':lang;
-      body.backgroundMode=quranJob?(StudioAdapter.ui.jobBgMode||'own'):'own';
-      body.backgroundId=quranJob?(StudioAdapter.ui.jobBgId||''):'';
+      /* The step offers scenery on every kind, and the engine renders it for
+         every kind -- but this line used to force 'own' for lectures, so a
+         lecture's scenery choice was silently discarded at submit. A control
+         that cannot reach the job must not be shown (invariant 8); the fix
+         is to let it reach the job. */
+      body.backgroundMode=StudioAdapter.ui.jobBgMode||'own';
+      body.backgroundId=StudioAdapter.ui.jobBgId||'';
       body.introSeconds=StudioAdapter.ui.jobBgIntro||3;
       const r=await api('/api/videos',{method:'POST',body:JSON.stringify(body)});
       /* /api/videos answers 200 even when it refused the source — the reason is
@@ -4961,7 +4966,7 @@ StudioAdapter.onProbeSource=async url=>{try{
       await api('/api/videos',{method:'POST',body:JSON.stringify({objectKey:presignKey(presign),fileName:file.name,title:file.name,
         templateId:StudioAdapter.ui.jobTplId||'',
         language:(l=>l==='auto'?'':l)(StudioAdapter.ui.jobLang||((StudioAdapter.ui.jobTplId||'')==='quran-recitation'?'ar':'en')),
-        backgroundMode:(StudioAdapter.ui.jobTplId||'')==='quran-recitation'?(StudioAdapter.ui.jobBgMode||'own'):'own',
+        backgroundMode:StudioAdapter.ui.jobBgMode||'own',
         backgroundId:StudioAdapter.ui.jobBgId||'',introSeconds:StudioAdapter.ui.jobBgIntro||3})})},'Upload queued');
     document.body.classList.add('studio-active');
   }

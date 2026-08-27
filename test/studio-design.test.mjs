@@ -1644,6 +1644,37 @@ test('an unsaved edit echoes the block words with the draft geometry', () => {
   assert.equal(vals.edCapWords.length, 0, 'saved: the echo ends');
 });
 
+test('a fresh wizard always opens on the lecture kind', () => {
+  // The kind used to inherit the account's selected template, so an account
+  // whose default style was the Quran one opened every new lecture pre-set
+  // to scripture-only captions -- a lazy Continue then produced clips whose
+  // lecture speech was silently uncaptioned (invariant 7).
+  const QURAN_DEFAULT_STATE = {
+    projects: [], clips: [], tracks: [],
+    templates: [
+      { id: 'quran-recitation', name: 'Quran Recitation', captionMode: 'quran', version: 1 },
+      { id: 'clean-line', name: 'Clean Line', captionMode: 'phrase', version: 1 },
+    ],
+    selectedTemplate: { id: 'quran-recitation', name: 'Quran Recitation', captionMode: 'quran', version: 1 },
+  };
+  StudioAdapter.bindings(QURAN_DEFAULT_STATE); // paints, so openJob knows the template list
+  StudioAdapter.openJob({ url: 'https://youtu.be/lect1', title: 'A lecture', durationSec: 600 });
+  assert.equal(StudioAdapter.ui.jobTplId, 'clean-line', 'the wizard picked the first lecture style');
+  const vals = StudioAdapter.bindings(QURAN_DEFAULT_STATE);
+  assert.equal(vals.jobTypeQuran, false, 'the kind card shows lecture, not Quran');
+  StudioAdapter.ui.job = null; StudioAdapter.ui.jobTplId = null;
+});
+
+test('a lecture submission carries the chosen scenery, not a forced own', () => {
+  // The picture step offers scenery on every kind and the engine renders it
+  // for every kind, but the submit used to force backgroundMode 'own' for
+  // lectures -- the choice was silently discarded (invariant 8).
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const call = /StudioAdapter\.onGenerate\s*=[\s\S]*?'Lecture queued'/.exec(html)[0];
+  assert.match(call, /body\.backgroundMode=StudioAdapter\.ui\.jobBgMode/, 'the chosen mode travels');
+  assert.ok(!/backgroundMode=quranJob\?/.test(call), 'no kind gate discards it');
+});
+
 test('a clip with no persisted timings still yields editable blocks', () => {
   // Clips rendered before the worker persisted segments must not lose the editor.
   Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'old', edBlock: 0, edBlockDraft: null });

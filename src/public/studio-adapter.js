@@ -1519,8 +1519,13 @@
 
   // ── the binding table ─────────────────────────────────────────────────────
 
+  // The last state bindings painted with, for adapter entry points that run
+  // outside a paint (openJob needs the template list to pick a default).
+  var LAST_DATA = null;
+
   function bindings(DATA) {
     DATA = DATA || {};
+    LAST_DATA = DATA;
     var projects = DATA.projects || [];
     var clips = DATA.clips || [];
     var tracks = DATA.tracks || [];
@@ -5315,6 +5320,20 @@
       UI.jobStep = 1;
       UI.generating = false;
       UI.jobUrl = '';
+      // The kind ALWAYS opens on "Islamic lecture" (Goal item 06). It used
+      // to inherit the account's selected template, so an account whose
+      // default style was the Quran one opened every new lecture pre-set to
+      // scripture-only captions -- and a lazy Continue produced clips whose
+      // lecture speech was silently uncaptioned (invariant 7). Set
+      // explicitly, because the server's own fallback is that same selected
+      // template. Quran stays one deliberate click away.
+      var offered = (LAST_DATA && LAST_DATA.templates) || [];
+      for (var i = 0; i < offered.length; i += 1) {
+        if (offered[i].captionMode !== 'quran' && !(offered[i].pro && !planAllowsProTemplates(LAST_DATA))) {
+          UI.jobTplId = offered[i].id;
+          break;
+        }
+      }
       refresh();
     },
     jobDone: function () { UI.job = null; UI.generating = false; refresh(); },
