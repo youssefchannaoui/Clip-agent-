@@ -102,6 +102,7 @@
     // editor and the review queue never looked the same.
     edSourceFallback: false,
     edBlockDraft: null,
+    capTextStepAt: 0,
     edDirty: false,
     edSaving: false,
     edSafe: true,
@@ -2288,8 +2289,40 @@
       if (!step) return;
       from.length -= 1;
       to.push(step);
+      // A caption edit is not a style patch, so it cannot go through saveStyle.
+      // It used to not go anywhere at all: undo covered sliders and colours and
+      // silently ignored the words, which is the half of the editor people
+      // actually retype.
+      if (step.kind === 'text') {
+        UI.edBlockDraft = step[which].draft;
+        UI.edDirty = true;
+        UI.capTextStepAt = 0;
+        paintNow();
+        return;
+      }
       UI.tplReplaying = true;
       try { saveStyle(Object.assign({}, step[which])); } finally { UI.tplReplaying = false; }
+    }
+
+    // Typing produces one undo step per burst, not one per keystroke. Fifty
+    // steps to walk back a single word is the same as having no undo.
+    var TEXT_STEP_GAP_MS = 1200;
+    function recordTextStep(block, before, after) {
+      if (!block || before === after) return;
+      var ctx = 'clip:' + UI.edClipId;
+      if (UI.tplHistCtx !== ctx) { UI.tplHistCtx = ctx; UI.tplPast = []; UI.tplFuture = []; }
+      var last = UI.tplPast[UI.tplPast.length - 1];
+      var continues = last && last.kind === 'text' && last.blockId === block.id
+        && (Date.now() - (UI.capTextStepAt || 0)) < TEXT_STEP_GAP_MS;
+      if (continues) { last.redo.draft = after; }
+      else {
+        UI.tplPast = UI.tplPast.concat([{
+          kind: 'text', blockId: block.id,
+          undo: { draft: before }, redo: { draft: after },
+        }]).slice(-50);
+        UI.tplFuture = [];
+      }
+      UI.capTextStepAt = Date.now();
     }
 
     // Drags an overlay inside the preview frame it lives in. Pointer events are
@@ -3788,8 +3821,24 @@
           ? UI.edBlockDraft
           : overlayBlock.text)
         : '',
-      setCapText: function (e) { UI.edBlockDraft = e.target.value; UI.edDirty = true; paintNow(); },
-      edSelText: selectedBlock ? selectedBlock.text : '',
+      setCapText: function (e) {
+        var before = (UI.edBlockDraft !== null && UI.edBlockDraft !== undefined)
+          ? UI.edBlockDraft
+          : (selectedBlock ? selectedBlock.text : '');
+        recordTextStep(selectedBlock, before, e.target.value);
+        UI.edBlockDraft = e.target.value;
+        UI.edDirty = true;
+        paintNow();
+      },
+      // The draft, not the stored text. Bound to selectedBlock.text this box
+      // visibly snapped back to the old words the moment it lost focus -- the
+      // edit was saved, but the user watched it disappear and reasonably
+      // concluded the product had eaten it. The runtime skips the focused
+      // element, so the revert only ever showed up on blur, which is precisely
+      // when nobody is looking for a bug.
+      edSelText: selectedBlock
+        ? (UI.edBlockDraft !== null && UI.edBlockDraft !== undefined ? UI.edBlockDraft : selectedBlock.text)
+        : '',
       edSelRange: selectedBlock ? selectedBlock.time : '',
       edCapBlocks: edCaptionBlocks,
       // The same helpers the Templates preview uses, so the caption a clip
@@ -4981,7 +5030,7 @@
       // in every case.
       undoEdit: function (e) {
         stop(e);
-        if (UI.tplPast.length) return replayStyle(UI.tplPast, UI.tplFuture, 'undo');
+        if (UI.tplPast.length) { UI.capTextStepAt = 0; return replayStyle(UI.tplPast, UI.tplFuture, 'undo'); }
         // The editor has no "discard the shared template" fallback: with no
         // steps recorded there is nothing to go back to, and saying so beats
         // resetting a template the user is not even looking at.

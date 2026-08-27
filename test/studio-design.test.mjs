@@ -3186,3 +3186,70 @@ test('the setup celebration cannot fire before all five steps are genuinely done
   assert.equal(all.setupComplete, true, 'all five done');
   assert.equal(all.startListOn, false, 'the checklist stands down at the same moment');
 });
+
+// ── the vanishing edit ──────────────────────────────────────────────────────
+// Three bugs made a typed caption look like it had been thrown away. The edit
+// was usually saved; the user watched it disappear anyway and concluded the
+// product loses work.
+
+const EDIT_STATE = {
+  ...SAMPLE_STATE,
+  clips: [{
+    id: 'c1', title: 'Whoever wakes safe', status: 'waiting', score: 92,
+    durationMs: 38000, projectId: 'p1', targets: [],
+    captionSegments: [
+      { start: 0, end: 2, text: 'first line here' },
+      { start: 2, end: 4, text: 'second line here' },
+    ],
+  }],
+};
+
+const openEditor = (patch = {}) => {
+  Object.assign(StudioAdapter.ui, {
+    screen: 'editor', edClipId: 'c1', edBlock: 0, edBlockDraft: null,
+    edDirty: false, tplPast: [], tplFuture: [], tplHistCtx: null, capTextStepAt: 0,
+    bellOpen: false, menuOpen: false, railOpen: true,
+  }, patch);
+  return StudioAdapter.bindings(EDIT_STATE);
+};
+
+test('the caption box shows the draft, not the stored words', () => {
+  const vals = openEditor({ edBlockDraft: 'my corrected words' });
+  assert.equal(vals.edSelText, 'my corrected words',
+    'bound to the stored text, this box visibly reverted the moment it lost focus');
+});
+
+test('with no draft the caption box still shows the real text', () => {
+  const vals = openEditor();
+  assert.equal(vals.edSelText, 'first line here');
+});
+
+test('typing a caption is undoable', () => {
+  const vals = openEditor();
+  vals.setCapText({ target: { value: 'first line HERE' } });
+  assert.equal(StudioAdapter.ui.edBlockDraft, 'first line HERE');
+  assert.equal(StudioAdapter.ui.tplPast.length, 1, 'a caption edit must record a step');
+  assert.equal(StudioAdapter.ui.tplPast[0].kind, 'text');
+
+  StudioAdapter.bindings(EDIT_STATE).undoEdit({ preventDefault() {}, stopPropagation() {} });
+  assert.equal(StudioAdapter.ui.edBlockDraft, 'first line here', 'undo must put the original words back');
+});
+
+test('a burst of typing is one undo step, not one per keystroke', () => {
+  const vals = openEditor();
+  for (const value of ['f', 'fi', 'fix', 'fixe', 'fixed']) {
+    vals.setCapText({ target: { value } });
+  }
+  assert.equal(StudioAdapter.ui.tplPast.length, 1,
+    'fifty steps to walk back one word is the same as having no undo');
+  assert.equal(StudioAdapter.ui.tplPast[0].redo.draft, 'fixed');
+  assert.equal(StudioAdapter.ui.tplPast[0].undo.draft, 'first line here');
+});
+
+test('undoing a caption does not lose the unsaved flag', () => {
+  const vals = openEditor();
+  vals.setCapText({ target: { value: 'changed' } });
+  StudioAdapter.bindings(EDIT_STATE).undoEdit({ preventDefault() {}, stopPropagation() {} });
+  assert.equal(StudioAdapter.ui.edDirty, true,
+    'the clip still differs from what is rendered, so Save must stay offered');
+});
