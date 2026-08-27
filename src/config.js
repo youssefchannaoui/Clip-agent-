@@ -217,7 +217,7 @@ export const config = {
   topupPrice100Label: process.env.TOPUP_PRICE_100_LABEL || 'A$6.99',
   topupPrice300Label: process.env.TOPUP_PRICE_300_LABEL || 'A$17.99',
   topupPrice750Label: process.env.TOPUP_PRICE_750_LABEL || 'A$39.99',
-  stripeTrialDays: Math.max(0, Math.round(number(process.env.STRIPE_TRIAL_DAYS, 7))),
+  stripeTrialDays: Math.max(0, Math.round(number(process.env.STRIPE_TRIAL_DAYS, 3))),
   tokensFree: Math.max(0, Math.round(number(process.env.TOKENS_FREE, 40))),
   tokensWeekly: Math.max(1, Math.round(number(process.env.TOKENS_WEEKLY, 120))),
   tokensMonthly: Math.max(1, Math.round(number(process.env.TOKENS_MONTHLY, 650))),
@@ -226,7 +226,7 @@ export const config = {
   // costs proxy bandwidth and storage. Uncapped, a yearly trial grants its
   // whole 6000-minute allowance for free, which is more bandwidth than the
   // proxy plan sells in a month. 0 disables the cap.
-  tokensTrial: Math.max(0, Math.round(number(process.env.TOKENS_TRIAL, 75))),
+  tokensTrial: Math.max(0, Math.round(number(process.env.TOKENS_TRIAL, 40))),
   tokensPerMinute: Math.max(0.1, number(process.env.TOKENS_PER_MINUTE, 1)),
   minimumTokensToStart: Math.max(1, Math.round(number(process.env.MINIMUM_TOKENS_TO_START, 10))),
   tiktokRedirectUri: process.env.TIKTOK_REDIRECT_URI || '',

@@ -96,12 +96,33 @@ function allowance(planId) {
  * `current_period_start`, which resets `tokensUsed` in updateFromSubscription,
  * so the customer's first paid day starts on a clean full allowance.
  */
-function walletAllowance(billing = {}) {
+function walletAllowance(billing = {}, user = null) {
   const planId = billing.plan || 'free';
   const full = allowance(planId);
+  // The free plan IS the trial: a fixed number of tokens inside a fixed number
+  // of days. Once the window closes the allowance is nothing, not a smaller
+  // something -- otherwise cancelling and re-subscribing mints a fresh free
+  // wallet on every lap.
+  if (planId === 'free') return freeWindow(user, billing).expired ? 0 : full;
   const cap = Math.max(0, Number(config.tokensTrial || 0));
-  if (!cap || planId === 'free') return full;
+  if (!cap) return full;
   return trialState(billing).active ? Math.min(cap, full) : full;
+}
+
+/**
+ * How long a free account may keep working.
+ *
+ * Free used to be unlimited in time -- 40 tokens that never expired, so an
+ * account could sit on the free plan forever and simply never pay. The window
+ * starts when the account is created and does not restart, so a lapsed
+ * subscriber cannot fall back into it either.
+ */
+function freeWindow(user, billing = {}) {
+  const days = Math.max(0, Number(config.stripeTrialDays || 0));
+  const startedAt = Number(user?.createdAt || billing.periodStart || 0);
+  if (!days || !startedAt) return { endsAt: null, daysLeft: null, expired: false };
+  const endsAt = startedAt + days * DAY_MS;
+  return { endsAt, daysLeft: daysRemaining(endsAt), expired: now() >= endsAt };
 }
 
 export function tokenRate() {
@@ -235,7 +256,7 @@ export function publicBilling(user) {
   const billing = ensureUserBilling(user);
   const unlimited = isUnlimited(user);
   const currentPlan = billing.plan || 'free';
-  const allow = unlimited ? Infinity : walletAllowance(billing);
+  const allow = unlimited ? Infinity : walletAllowance(billing, user);
   const used = Number(billing.tokensUsed || 0);
   const reserved = Number(billing.tokensReserved || 0);
   const bonusTokens = Math.max(0, Number(billing.bonusTokens || 0));
@@ -243,7 +264,30 @@ export function publicBilling(user) {
   const baseRemaining = unlimited ? null : Math.max(0, allow - used - reserved);
   const remaining = unlimited ? null : baseRemaining + bonusTokens;
   const periodEndsInDays = billing.periodEnd ? daysRemaining(billing.periodEnd) : null;
+  const free = unlimited ? { expired: false, daysLeft: null, endsAt: null } : freeWindow(user, billing);
   const notices = [];
+  // The free window is the one wall a new account actually hits, so it is
+  // announced before it arrives and stated plainly once it has.
+  if (!unlimited && currentPlan === 'free' && free.endsAt) {
+    if (free.expired) {
+      notices.push({
+        id: `free-ended-${free.endsAt}`,
+        kind: 'free_ended',
+        title: 'Your free trial has ended',
+        message: `Your ${config.stripeTrialDays} free days are up. Choose a plan to keep importing lectures and making clips.`,
+        action: 'Choose plan',
+        blocking: true,
+      });
+    } else {
+      notices.push({
+        id: `free-ending-${free.endsAt}`,
+        kind: 'free_ending',
+        title: free.daysLeft <= 1 ? 'Free trial ends today' : `${free.daysLeft} free days left`,
+        message: `You have ${Math.round(remaining || 0)} tokens and ${free.daysLeft} day${free.daysLeft === 1 ? '' : 's'} of free use. After that a plan is needed to keep going.`,
+        action: 'See plans',
+      });
+    }
+  }
   if (trial.active && trial.daysLeft <= 2) {
     notices.push({
       id: `trial-ending-${billing.trialEnd}`,
@@ -313,6 +357,7 @@ export function publicBilling(user) {
       periodEnd: billing.periodEnd || null,
       periodEndsInDays,
       trial,
+      freeTrial: unlimited ? { endsAt: null, daysLeft: null, expired: false } : freeWindow(user, billing),
       stripeCustomerId: billing.stripeCustomerId || '',
       stripeSubscriptionId: billing.stripeSubscriptionId || '',
     },
@@ -331,7 +376,20 @@ export function assertCanSpend(user, tokens, action = 'start this job') {
   const needed = Math.max(1, Math.ceil(Number(tokens || 0)));
   const remaining = Number(info.current.remaining || 0);
   if (remaining < needed) {
-    throw new Error(`Not enough tokens to ${action}. You have ${remaining} tokens left and this needs about ${needed}. Upgrade or wait for your plan to renew.`);
+    // Two different walls, two different sentences. "You have 0 tokens" is
+    // useless advice to someone whose free days simply ran out -- waiting for a
+    // renewal that will never come is exactly the wrong next move.
+    const free = info.current?.freeTrial;
+    if (free?.expired && (info.current?.plan || 'free') === 'free') {
+      const error = new Error(`Your ${config.stripeTrialDays}-day free trial has ended. Choose a plan to keep making clips.`);
+      error.statusCode = 402;
+      error.needsPlan = true;
+      throw error;
+    }
+    const error = new Error(`Not enough tokens to ${action}. You have ${remaining} tokens left and this needs about ${needed}. Buy a top-up, or upgrade your plan.`);
+    error.statusCode = 402;
+    error.needsTokens = true;
+    throw error;
   }
   return true;
 }
@@ -371,7 +429,7 @@ export function reserveTokens(userId, tokens, meta = {}) {
   const amount = Math.max(0, Math.ceil(Number(tokens || 0)));
   if (!amount) return { reserved: 0, unlimited: false };
   const billing = ensureUserBilling(user);
-  const planAllowance = walletAllowance(billing);
+  const planAllowance = walletAllowance(billing, user);
   const used = Math.max(0, Number(billing.tokensUsed || 0));
   const reserved = Math.max(0, Number(billing.tokensReserved || 0));
   const available = Math.max(0, planAllowance - used - reserved) + Math.max(0, Number(billing.bonusTokens || 0));
@@ -407,7 +465,7 @@ export function chargeTokens(userId, tokens, reason = 'usage', meta = {}, { allo
   if (!user || isUnlimited(user)) return { charged: 0, unlimited: true, shortfall: 0 };
   const billing = ensureUserBilling(user);
   const owed = Math.max(1, Math.ceil(Number(tokens || 0)));
-  const planAllowance = walletAllowance(billing);
+  const planAllowance = walletAllowance(billing, user);
   const usedBefore = Math.max(0, Number(billing.tokensUsed || 0));
   const reserved = Math.max(0, Number(billing.tokensReserved || 0));
   const baseAvailable = Math.max(0, planAllowance - usedBefore - reserved);
@@ -547,12 +605,64 @@ function appBase() {
   return (config.publicBaseUrl || '').replace(/\/+$/, '') || `http://localhost:${config.port}`;
 }
 
+/**
+ * The subscription Stripe currently believes in, or null.
+ *
+ * The stored id is checked rather than trusted, for the same reason
+ * ensureStripeCustomer checks the customer: an id can outlive the object it
+ * points at, and acting on a dead one is how an account ends up paying for two
+ * subscriptions at once.
+ */
+async function liveSubscription(user) {
+  const billing = ensureUserBilling(user);
+  const id = billing.stripeSubscriptionId || '';
+  if (!id) return null;
+  const found = await stripeGet(`/subscriptions/${encodeURIComponent(id)}`).catch(() => null);
+  if (!found?.id) return null;
+  return ['active', 'trialing', 'past_due', 'unpaid'].includes(String(found.status || '')) ? found : null;
+}
+
+/**
+ * Move an existing subscriber to a different plan.
+ *
+ * Checkout used to be the only path, and checkout only ever creates. A
+ * customer moving from weekly to monthly got a SECOND subscription while the
+ * first kept billing, and the app overwrote the stored id so only the newer one
+ * was ever visible here. Two charges a month, one of them invisible.
+ *
+ * Switching edits the existing subscription in place. Stripe prorates, so the
+ * customer pays the difference rather than the whole price again, and there is
+ * only ever one subscription per account.
+ */
+async function switchSubscriptionPlan(user, subscription, plan) {
+  const item = subscription.items?.data?.[0];
+  if (!item?.id) throw new Error('That subscription has no billable item to move.');
+  const updated = await stripeRequest(`/subscriptions/${encodeURIComponent(subscription.id)}`, {
+    'items[0][id]': item.id,
+    'items[0][price]': plan.priceId,
+    proration_behavior: 'create_prorations',
+    'metadata[userId]': user.id,
+    'metadata[plan]': plan.id,
+  });
+  updateFromSubscription(updated);
+  log(`Switched ${user.email || user.id} to ${plan.name} in place; no second subscription created.`, 'info', user.id);
+  return { switched: true, plan: plan.id, planName: plan.name };
+}
+
 export async function createCheckoutSession(user, planId) {
   ensureBillingState();
   if (!user) throw new Error('Sign in to continue.');
   const plan = plans()[planId];
   if (!plan || !PLAN_ORDER.includes(plan.id)) throw new Error('Choose weekly, monthly, or yearly.');
   if (!plan.priceId) throw new Error(`${plan.name} does not have a Stripe price ID configured yet.`);
+
+  const billing = ensureUserBilling(user);
+  const existing = await liveSubscription(user);
+  if (existing) {
+    if (billing.plan === plan.id) throw new Error(`You are already on ${plan.name}.`);
+    return switchSubscriptionPlan(user, existing, plan);
+  }
+
   const customer = await ensureStripeCustomer(user);
   const params = {
     mode: 'subscription',
@@ -567,7 +677,13 @@ export async function createCheckoutSession(user, planId) {
     'subscription_data[metadata][plan]': plan.id,
     allow_promotion_codes: 'true',
   };
-  if (config.stripeTrialDays > 0) params['subscription_data[trial_period_days]'] = String(config.stripeTrialDays);
+  // One trial per account, ever. This used to be applied on every checkout, so
+  // cancelling and re-subscribing -- or upgrading, before switching existed --
+  // handed out another free week each time.
+  const hadTrial = Boolean(billing.trialStart || billing.trialEnd);
+  if (config.stripeTrialDays > 0 && !hadTrial) {
+    params['subscription_data[trial_period_days]'] = String(config.stripeTrialDays);
+  }
   const session = await stripeRequest('/checkout/sessions', params);
   return { id: session.id, url: session.url };
 }
@@ -625,7 +741,7 @@ export function grantTopup(user, packageId, references = {}) {
     },
     createdAt: now(),
     type: 'tokens_added',
-    remaining: Math.max(0, walletAllowance(billing) - Number(billing.tokensUsed || 0) - Number(billing.tokensReserved || 0)) + billing.bonusTokens,
+    remaining: Math.max(0, walletAllowance(billing, user) - Number(billing.tokensUsed || 0) - Number(billing.tokensReserved || 0)) + billing.bonusTokens,
     message: `${pack.tokens} top-up tokens added to your wallet.`,
   };
   state.billingEvents.unshift(event);
