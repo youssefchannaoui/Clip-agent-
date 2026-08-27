@@ -84,6 +84,12 @@ These were each a real bug and each has a test named after it.
    source survives only when a render does not exist, and must stay labelled
    as the uncaptioned source. Never reintroduce a drawn imitation of a file
    that exists.
+   **One deliberate exception (27 Aug 2026):** while the person is actively
+   TYPING a caption edit, the drag ghost echoes the draft words in the
+   ghost's own dashed styling — no font, colour or timing claim — and
+   returns to empty the moment the draft ends (`edCapWords` in
+   studio-adapter.js). An edit field whose words appear nowhere reads as
+   dead. The echo is the ghost's, never the render's; do not style it.
 5. **Clip-local vs media time.** `applyMediaTimebase()` — a clean plate offsets
    by `startSec`, an export does not. Getting this wrong makes the editor look
    completely dead, not slightly off.
