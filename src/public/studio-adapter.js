@@ -3663,9 +3663,17 @@
       edCapIsAyah: Boolean(edAyahPhrase),
       edCapTranslation: edAyahPhrase ? edAyahPhrase.gloss : '',
       edCapWords: (function () {
-        // Nothing. The render already carries its captions; a second set drawn
-        // in CSS is the imitation this whole path exists to stop. The box is a
-        // positioning control now, not a preview -- see edCapOverlayStyle.
+        // While the person is TYPING, the box echoes their draft -- in the
+        // ghost's own dashed styling, claiming nothing about fonts or colours
+        // -- because an edit field whose words appear nowhere reads as dead.
+        // The moment the draft is committed or abandoned this returns to
+        // empty: the render's own captions answer for the clip, and a second
+        // styled set drawn in CSS is the imitation this path exists to stop.
+        if (UI.edBlockDraft !== null && UI.edBlockDraft !== undefined && selectedBlock) {
+          return String(UI.edBlockDraft).split(/\s+/).filter(Boolean).map(function (word) {
+            return { text: word, style: '' };
+          });
+        }
         return [];
       }()),
       edProgress: edTime / edDuration,
