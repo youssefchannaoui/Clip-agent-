@@ -110,7 +110,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **618 JS + 366 Python**
+- `npm test` and `npm run check` must pass. Currently **622 JS + 368 Python**
   (7 Python skipped). Update these numbers when they change — they were wrong by
   more than a factor of two, which makes them useless as a tripwire.
 - **The 7 skips are `SpeakerTrackingTests`**, which need a test video that is not
@@ -225,6 +225,12 @@ Habits the tests now enforce, and why:
 ## Deploys
 
 - Branch `deenclipped-v2-2` auto-deploys the web service to Render on push.
+- **Rendered media is served from `media.deenclipped.online`** (custom domain
+  on the R2 bucket `deenclipped-media-us`, bound 27 Aug 2026). The r2.dev
+  public URL is a rate-limited dev endpoint -- it returned five straight GET
+  503s in one editor session -- and must never be handed to a player again.
+  `MEDIA_PUBLIC_BASE` on Render rewrites stored r2.dev URLs at the exits;
+  `OBJECT_STORAGE_PUBLIC_URL` in worker/.env on the box stamps new uploads.
 - The worker is **manual**: on the Hetzner box (135.181.149.182),
   `cd /opt/deenclipped && git pull && docker compose -f worker/docker-compose.yml up -d --build`.
 - **Follow it with `docker builder prune -f`.** Each `--build` leaves its layer
