@@ -610,6 +610,23 @@ class PhraseWrapGuardTests(unittest.TestCase):
             self.assertIn("{\\q0}", line)
 
 
+class SpokenArabicWrapGuardTests(unittest.TestCase):
+    def test_spoken_arabic_lines_carry_the_wrap_override(self):
+        """A misdetected-language transcript put a long Urdu line clean off
+        both edges of a real frame: spoken_events sizes its chunks by word
+        count, not glyph width, so it needs the same \q0 escape hatch the
+        phrase captions carry."""
+        events = worker.spoken_events(
+            "\u0644\u0627 \u0625\u0644\u0647 \u0625\u0644\u0627 \u0627\u0644\u0644\u0647 " * 6,
+            "There is no god but Allah, said six times over for length",
+            start=0.0, end=8.0, arabic_font="Amiri", arabic_size=120,
+            latin_font="Outfit", translation_size=46, fade_tag="",
+        )
+        self.assertTrue(events, "expected at least one spoken-Arabic event")
+        for line in events:
+            self.assertIn("{\\q0}", line)
+
+
 class CaptionFontTests(unittest.TestCase):
     """Every font the picker offers has to exist in the worker image.
 

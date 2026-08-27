@@ -412,6 +412,12 @@
       // choice is actually being made.
       rows.push(Object.assign({ label: 'Captions from' },
         value(tpl.captionMode === 'quran' ? 'The Quran corpus' : 'What was said', '', 4)));
+      // Said here because a wrong guess is invisible until the clips arrive
+      // captioned in the wrong script.
+      var jobLangNames = { en: 'English', ar: 'Arabic', ur: 'Urdu', auto: 'Auto-detect' };
+      var jobLangPick = UI.jobLang || (tpl.captionMode === 'quran' ? 'ar' : 'en');
+      rows.push(Object.assign({ label: 'Spoken language' },
+        value(jobLangNames[jobLangPick] || 'Auto-detect', '', 1)));
       rows.push(Object.assign({ label: 'Underneath' },
         value(tpl.captionMode === 'quran' ? 'Nothing \u2014 recitation' : 'Nasheed, ducked', '', 6)));
     }
@@ -4330,7 +4336,7 @@
       // and left behind it pinned activeTemplate everywhere -- the Templates
       // screen preview stopped following the selection because a stale job
       // choice silently outranked it.
-      closeJob: function (e) { stop(e); setUI({ job: null, jobTplId: null, jobStep: 1, volumeDraft: null }); },
+      closeJob: function (e) { stop(e); setUI({ job: null, jobTplId: null, jobStep: 1, jobLang: null, volumeDraft: null }); },
       runGenerate: function (e) {
         stop(e);
         if (!job || UI.generating) return;

@@ -1402,8 +1402,12 @@ def spoken_events(arabic: str, english: str, *, start: float, end: float,
             g_taken += g_size
             if piece:
                 line += "\\N{\\fn" + latin_font + "\\fs" + str(translation_size) + "}" + ass_escape(" ".join(piece))
+        # \\q0, as the phrase captions carry: these chunks are sized by word
+        # count, not glyph width, and a misdetected-language transcript put a
+        # long Urdu line clean off both edges of a real frame. Wrapping to a
+        # second line beats losing the words at the ends.
         events.append(
-            f"Dialogue: 2,{ass_time(chunk_start)},{ass_time(chunk_end)},Caption,,0,0,0,,{fade_tag}" + line
+            f"Dialogue: 2,{ass_time(chunk_start)},{ass_time(chunk_end)},Caption,,0,0,0,,{fade_tag}" + "{\\q0}" + line
         )
     return events
 

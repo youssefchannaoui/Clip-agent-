@@ -1113,6 +1113,7 @@ async function route(req, res, url) {
           templateId: String(body.templateId || ''),
           musicEnabled: body.musicEnabled !== false,
           musicTrackId: String(body.musicTrackId || ''),
+          language: String(body.language || ''),
           backgroundMode: body.backgroundMode, backgroundId: body.backgroundId, introSeconds: body.introSeconds,
           sourceKind: 'object_storage', originalFileName: body.fileName || '', displayUrl: `Uploaded file · ${body.fileName || 'video'}`,
           sourceMeta: { title: body.title || body.fileName || '', durationSec: Number(body.durationSec || 0) || null, thumbnail: '' },
@@ -1133,7 +1134,7 @@ async function route(req, res, url) {
     const sourceMeta = Array.isArray(body.sourceMeta) ? body.sourceMeta : [];
     const results = [];
     for (const source of urls) {
-      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '', currentUser.id, { sourceRange, sourceMeta, idempotencyKey: body.idempotencyKey, musicEnabled: body.musicEnabled !== false, musicTrackId: String(body.musicTrackId || ''), templateId: String(body.templateId || ''), backgroundMode: body.backgroundMode, backgroundId: body.backgroundId, introSeconds: body.introSeconds }) }); }
+      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '', currentUser.id, { sourceRange, sourceMeta, idempotencyKey: body.idempotencyKey, musicEnabled: body.musicEnabled !== false, musicTrackId: String(body.musicTrackId || ''), templateId: String(body.templateId || ''), backgroundMode: body.backgroundMode, backgroundId: body.backgroundId, introSeconds: body.introSeconds, language: String(body.language || '') }) }); }
       catch (error) { results.push({ url: source, error: error.message }); }
     }
     return json(res, 200, { results, sourceRange });
@@ -1153,6 +1154,7 @@ async function route(req, res, url) {
       const durationSec = Math.max(0, Math.round(Number(req.headers['x-source-duration-seconds'] || 0)));
       const projectId = await agent.submitVideo(upload.filePath, upload.title, currentUser.id, {
         backgroundMode: String(req.headers['x-background-mode'] || ''), backgroundId: String(req.headers['x-background-id'] || ''), introSeconds: Number(req.headers['x-intro-seconds'] || 0),
+        language: String(req.headers['x-source-language'] || ''),
         sourceRange: { startSec: sourceStartSeconds, endSec: sourceEndSeconds },
         sourceMeta: { title: upload.title, durationSec: durationSec || null, thumbnail: '' },
         sourceKind: 'upload', originalFileName: upload.fileName, uploadedInputFile: upload.filePath,

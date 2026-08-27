@@ -195,12 +195,24 @@ async function cacheRemotePublishClip(clip) {
 // has to be explicit: an empty musicTracks list alone is ambiguous between "the
 // user switched the nasheed off" and "the upload went missing", and those two
 // must not render the same.
+// The spoken languages a job may pin. Whisper guesses the language from the
+// opening seconds, and Islamic lectures open with Arabic greetings -- a
+// 10-minute English Mufti Menk lecture came back transcribed in Urdu on two
+// of its three clips, and the wrong guess also triggered a second full
+// translate pass. An explicit choice from the wizard wins; anything else
+// falls back to the configured default (empty = let Whisper detect).
+const JOB_LANGUAGES = new Set(['en', 'ar', 'ur']);
+export function jobLanguage(options = {}) {
+  const picked = String(options.language || '').trim().toLowerCase();
+  return JOB_LANGUAGES.has(picked) ? picked : config.aiLanguage;
+}
+
 function sharedSettings(user, options = {}) {
   return {
     ...clipSettings(user), ...musicSettings(user),
     musicEnabled: options.musicEnabled !== false,
     model: config.aiModel, device: config.aiDevice, computeType: config.aiComputeType,
-    task: config.aiTask, language: config.aiLanguage, maxSourceMinutes: config.maxSourceMinutes,
+    task: config.aiTask, language: jobLanguage(options), maxSourceMinutes: config.maxSourceMinutes,
     keepSourceFiles: config.keepSourceFiles, ollamaUrl: config.ollamaUrl, ollamaModel: config.ollamaModel,
   };
 }
@@ -590,6 +602,9 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     submittedAt: Date.now(), clipCount: 0, templateIdUsed: template.id, templateNameUsed: template.name,
     templateVersionUsed: template.version || 1, templateSnapshot: template,
     musicRequired: options.musicEnabled !== false, musicEnabled: options.musicEnabled !== false, error: null,
+    // Persisted so a later "more clips" run transcribes in the same language
+    // the person chose, rather than re-guessing from the greetings.
+    language: jobLanguage(options) || null,
     sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
     sourceTitle: sourceMeta?.title || null, sourceDurationSec: sourceMeta?.durationSec || null,
     // Falls back to the URL's own poster: the dashboard did not send sourceMeta,
@@ -1620,14 +1635,14 @@ export function queueMoreClips(projectId, requestedCount = 8) {
       : {}),
     background: jobBackground(project, owner, { remote: true }),
     transcript: { objectKey: project.transcriptObjectKey }, existingRanges,
-    template, musicTracks: remoteMusicTracks(tracks, owner.id), settings: { ...sharedSettings(owner), clipsPerVideo: count, renderQuality: 'draft' },
+    template, musicTracks: remoteMusicTracks(tracks, owner.id), settings: { ...sharedSettings(owner, { language: project.language }), clipsPerVideo: count, renderQuality: 'draft' },
     callbackUrl: '',
   } : {
     mode: 'more_clips', id: moreId, projectId: project.id, projectTitle: project.title, requestedCount: count,
     background: jobBackground(project, owner),
     sourceFile: project.sourceFile, transcriptFile: project.transcriptFile, transcriptSegments, existingRanges,
     outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
-    template, musicTracks: tracks, settings: { ...sharedSettings(owner), clipsPerVideo: count, renderQuality: 'draft' },
+    template, musicTracks: tracks, settings: { ...sharedSettings(owner, { language: project.language }), clipsPerVideo: count, renderQuality: 'draft' },
   };
   const file = path.join(dir, 'job.json');
   fs.writeFileSync(file, JSON.stringify(payload, null, 2));

@@ -3818,8 +3818,8 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          The choice explains itself before a word of the description is read.
          Pure CSS, class-driven so hover/selected/mobile live in the
          stylesheet; the paint only toggles .on. */
-      if(jobTypeEl.dataset.built!=='4'){
-        jobTypeEl.dataset.built='5';
+      if(jobTypeEl.dataset.built!=='6'){
+        jobTypeEl.dataset.built='6';
         jobTypeEl.style.cssText='display:block;margin:14px 0 12px';
         jobTypeEl.innerHTML='<div class="jt-row">'
           +'<button type="button" class="jt-card" data-kind="lecture">'
@@ -3833,13 +3833,33 @@ function studioWanted(){return window.STUDIO_SHELL===true}
             +'<span class="jt-mini"><span class="mq bgt-anim" style="animation-name:bgtL1">\u0627\u0644\u0644\u0651\u064E\u0647\u064F \u0646\u064F\u0648\u0631\u064F</span><span class="mt bgt-anim" style="animation-name:bgtL2"></span></span>'
             +'<span class="jt-body"><span class="t">Quran recitation</span><span class="d">Captions the ayah from the Quran itself, with its translation.</span></span>'
             +'</button>'
+          +'</div>'
+          /* The spoken language, pinned rather than guessed: Whisper decides
+             the language from the opening seconds, and Islamic lectures open
+             with Arabic greetings -- an English lecture came back captioned
+             in Urdu. Defaults follow the kind (lecture=English, Quran=Arabic)
+             and one click overrides it. */
+          +'<div id="jobLangRow" style="display:flex;align-items:center;gap:7px;margin-top:12px;flex-wrap:wrap">'
+            +'<span style="font-size:11px;color:#6E6E76;margin-right:2px">Spoken language</span>'
+            +[['en','English'],['ar','Arabic'],['ur','Urdu'],['auto','Auto-detect']].map(([v,l])=>
+              `<button type="button" data-lang="${v}" style="padding:5px 11px;border:1px solid #26262A;border-radius:999px;background:#121214;color:#BCBCC3;font:600 11.5px Outfit,Inter,sans-serif;cursor:pointer">${l}</button>`).join('')
           +'</div>';
-        for(const b of jobTypeEl.querySelectorAll('button')){
+        for(const b of jobTypeEl.querySelectorAll('button[data-kind]')){
           b.onclick=e=>{e.preventDefault();StudioAdapter.bindings(DATA).pickJobType(b.dataset.kind)};
+        }
+        for(const b of jobTypeEl.querySelectorAll('button[data-lang]')){
+          b.onclick=e=>{e.preventDefault();StudioAdapter.ui.jobLang=b.dataset.lang;paintStudio()};
         }
       }
       for(const b of jobTypeEl.querySelectorAll('button[data-kind]')){
         b.classList.toggle('on',(b.dataset.kind==='quran')===Boolean(vals.jobTypeQuran));
+      }
+      const effLang=StudioAdapter.ui.jobLang||(vals.jobTypeQuran?'ar':'en');
+      for(const b of jobTypeEl.querySelectorAll('button[data-lang]')){
+        const on=b.dataset.lang===effLang;
+        b.style.borderColor=on?'rgba(217,180,120,.55)':'#26262A';
+        b.style.color=on?'#F0D6A6':'#BCBCC3';
+        b.style.background=on?'rgba(217,180,120,.10)':'#121214';
       }
       if(entered(jobTypeEl,'kind'))stagger(jobTypeEl,'.jt-card');
     }
@@ -4843,6 +4863,9 @@ StudioAdapter.onProbeSource=async url=>{try{
       /* The Quran flow's background choice, from the panel's own controls.
          A lecture job always renders on its own footage. */
       const quranJob=(StudioAdapter.ui.jobTplId||'')==='quran-recitation';
+      /* 'auto' means "let Whisper detect" and travels as ''. */
+      const lang=StudioAdapter.ui.jobLang||(quranJob?'ar':'en');
+      body.language=lang==='auto'?'':lang;
       body.backgroundMode=quranJob?(StudioAdapter.ui.jobBgMode||'own'):'own';
       body.backgroundId=quranJob?(StudioAdapter.ui.jobBgId||''):'';
       body.introSeconds=StudioAdapter.ui.jobBgIntro||3;
@@ -4916,6 +4939,7 @@ StudioAdapter.onProbeSource=async url=>{try{
       if(!put.ok)throw new Error('Upload failed — the storage service rejected the file.');
       await api('/api/videos',{method:'POST',body:JSON.stringify({objectKey:presignKey(presign),fileName:file.name,title:file.name,
         templateId:StudioAdapter.ui.jobTplId||'',
+        language:(l=>l==='auto'?'':l)(StudioAdapter.ui.jobLang||((StudioAdapter.ui.jobTplId||'')==='quran-recitation'?'ar':'en')),
         backgroundMode:(StudioAdapter.ui.jobTplId||'')==='quran-recitation'?(StudioAdapter.ui.jobBgMode||'own'):'own',
         backgroundId:StudioAdapter.ui.jobBgId||'',introSeconds:StudioAdapter.ui.jobBgIntro||3})})},'Upload queued');
     document.body.classList.add('studio-active');
