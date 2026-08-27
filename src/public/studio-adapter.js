@@ -3757,7 +3757,7 @@
           return 'The preview could not be updated: ' + (job.error || 'unknown error') + ' — Save retries it.';
         }
         if (edClipRecord.stylePending || edClipRecord.templateOutdated) {
-          return 'Preview is one render behind — it updates a few seconds after you stop editing.';
+          return 'Changes saved — press Save clip to render them onto the video.';
         }
         return '';
       }()),
@@ -4046,9 +4046,10 @@
           return (job.preview ? 'Rendering preview' : 'Updating clip')
             + (pct > 0 ? ' · ' + Math.round(pct) + '%' : '…');
         }
-        return UI.edDirty ? 'Unsaved changes' : 'All changes saved';
+        if (UI.edDirty || (edClip && edClip.stylePending)) return 'Save clip to render your changes';
+        return 'All changes saved';
       })(),
-      edDirtyDot: 'width: 7px; height: 7px; border-radius: 50%; background: ' + (UI.edDirty ? '#E6B770' : '#7FD1A6') + ';',
+      edDirtyDot: 'width: 7px; height: 7px; border-radius: 50%; background: ' + ((UI.edDirty || (edClip && edClip.stylePending)) ? '#E6B770' : '#7FD1A6') + ';',
       edSaving: UI.edSaving,
       edSaveIcon: UI.edSaving ? 'ph ph-circle-notch' : 'ph ph-floppy-disk',
       edSaveIconStyle: 'font-size: 15px;' + (UI.edSaving ? ' animation: dcSpin 1.1s linear infinite;' : ''),

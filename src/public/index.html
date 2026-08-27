@@ -4619,66 +4619,16 @@ function renderStudio(){
        user decides when to spend a token redoing the video. */
     /* Returns the promise so a caller that has to know the write landed -- Save
        to all clips, which reads the overrides back off the server -- can wait. */
-    /* Edits re-render themselves: once the tweaks settle for a few seconds,
-       the render is queued automatically -- no Save required. Server-side,
-       a newer request supersedes any still-queued one for the same clip, so
-       a burst of tweaks costs one render, and the burned video converges on
-       the preview without the user managing renders at all. */
-    const autoRenderTimers={};
-    function scheduleAutoRender(id){
-      if(autoRenderTimers[id])clearTimeout(autoRenderTimers[id]);
-      autoRenderTimers[id]=setTimeout(async()=>{
-        delete autoRenderTimers[id];
-        const clip=(DATA&&DATA.clips||[]).find(c=>c.id===id);
-        if(!clip||!clip.stylePending)return;
-        try{
-          await api(`/api/clips/${encodeURIComponent(id)}/rerender`,{method:'POST',
-            body:JSON.stringify({templateId:clip.templateId||'',asVariant:clip.status==='posted'})});
-          await refresh();
-        }catch(e){
-          /* Once per distinct reason, so a settle-loop cannot spam. */
-          if(window.__lastAutoRenderErr!==e.message){
-            window.__lastAutoRenderErr=e.message;
-            toast('Automatic re-render could not start: '+e.message,'bad');
-          }
-        }
-      },10000);
-    }
-    /* The fast half of the feedback loop: a ~6s window around the playhead,
-       rendered through the REAL pipeline on the worker's quick lane. The full
-       draft still renders behind it; this exists so a blur toggle or a caption
-       nudge shows real pixels in ~15-30s instead of after the whole clip. */
-    const previewRenderTimers={};
-    function schedulePreviewRender(id){
-      if(previewRenderTimers[id])clearTimeout(previewRenderTimers[id]);
-      previewRenderTimers[id]=setTimeout(async()=>{
-        delete previewRenderTimers[id];
-        const clip=(DATA&&DATA.clips||[]).find(c=>c.id===id);
-        if(!clip)return;
-        /* A preview already in flight means this one would only join a queue
-           and render a stale style. Wait for it instead: re-arm and let the
-           freshest style win when the lane is clear. My own audit queued five
-           renders in two minutes of slider-touching before this guard. */
-        if(clip.rerender&&clip.rerender.preview&&['queued','processing'].includes(clip.rerender.status)){
-          schedulePreviewRender(id);return;
-        }
-        const span=Math.max(1,(Number(clip.durationMs)||0)/1000||(Number(clip.endSec)-Number(clip.startSec))||10);
-        const at=Math.max(0,Math.min(span-1,Number(StudioAdapter.ui.edTime)||0));
-        const a=Math.max(0,at-1.5),b=Math.min(span,a+6);
-        try{
-          await api(`/api/clips/${encodeURIComponent(id)}/rerender`,{method:'POST',
-            body:JSON.stringify({templateId:clip.templateId||'',preview:{startSec:a,endSec:b}})});
-          StudioAdapter.ui.edPreviewPending=Date.now();
-          paintStudio();
-          await refresh();
-        }catch(e){/* the full render's error path already speaks */}
-      },2500);
-    }
+    /* Renders start ONLY on Save (set 27 Aug 2026, by Youssef: "remove
+       rendering unless saved"). Style and caption edits persist instantly as
+       overrides, but no render job is queued until the Save button is
+       pressed -- onSaveClip is the single place a render begins. The
+       automatic 10s full render and the 2.5s preview window this block used
+       to schedule queued five renders in two minutes of slider-touching and
+       still felt broken, because on a busy worker nothing appeared for
+       minutes anyway. One deliberate render per Save is honest and cheap. */
     StudioAdapter.onClipStyle=(id,patch)=>{if(!id||!patch||!Object.keys(patch).length)return Promise.resolve();
-      return studioDo(async()=>{
-        await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({styleOverrides:patch})});
-        schedulePreviewRender(id);
-        scheduleAutoRender(id)})};
+      return studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({styleOverrides:patch})}))};
     /* The old always-on behaviour, kept but made deliberate: push this clip's
        tweaks onto the style, so every clip using it picks them up. */
     /* Saves this clip first, then copies its look onto the rest of the lecture.
