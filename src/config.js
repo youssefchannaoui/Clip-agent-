@@ -125,6 +125,7 @@ export const config = {
   // guards that refused to start on a "short session secret" were protecting a
   // value no code path reads. Keeping them would have gone on telling the
   // operator that rotating it hardened something.
+  supportEmail: process.env.SUPPORT_EMAIL || 'support@deenclipped.online',
   adminEmail: process.env.ADMIN_EMAIL || 'admin@deenclipped.local',
   // Accounts that get operator (admin) access when they sign in, whatever
   // provider they arrive through. Exists because production disables the

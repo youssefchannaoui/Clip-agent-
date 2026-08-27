@@ -200,6 +200,60 @@ export function destroySession(req) {
   save();
 }
 
+/**
+ * Sign out every device this account is signed in on.
+ *
+ * Sessions last 30 days and 25 may exist at once, so a laptop left on a train
+ * stayed signed in for a month with nothing the owner could do about it.
+ */
+export function destroyAllSessions(user) {
+  ensureAuthState();
+  if (!user) return 0;
+  const before = (state.authSessions || []).length;
+  state.authSessions = (state.authSessions || []).filter(item => item.userId !== user.id);
+  save();
+  const removed = before - state.authSessions.length;
+  log(`${user.email || user.id} signed out of ${removed} device(s).`, 'info', user.id);
+  return removed;
+}
+
+/**
+ * Erase an account and everything belonging to it.
+ *
+ * The Privacy Policy already promises this within 30 days by email -- a
+ * promise resting on one person's inbox. Deleting the user row alone would
+ * leave the OAuth refresh tokens behind, which is the part that actually
+ * matters: those keep working against YouTube and Meta long after the account
+ * that authorised them is gone.
+ */
+export function deleteAccount(user) {
+  ensureAuthState();
+  if (!user) throw new Error('Sign in to continue.');
+  if (String(user.role || '').toLowerCase() === 'owner') {
+    throw Object.assign(new Error('The owner account cannot be deleted from here.'), { statusCode: 400 });
+  }
+  const id = user.id;
+  const email = user.email || id;
+  const scrub = key => {
+    if (!Array.isArray(state[key])) return;
+    state[key] = state[key].filter(item => (item?.userId || item?.ownerId) !== id);
+  };
+  // Everything keyed to the person, including the credentials that outlive
+  // them if forgotten.
+  ['projects', 'clips', 'tracks', 'backgrounds', 'templates', 'publishJobs',
+    'authSessions', 'authVerifications', 'authResets',
+    'billingEvents', 'revenueEvents'].forEach(scrub);
+  // These two are keyed by user id rather than being arrays of records, so the
+  // filter above skips them silently -- and socialConnections is precisely the
+  // one that must not be missed.
+  if (state.socialConnections && typeof state.socialConnections === 'object') delete state.socialConnections[id];
+  if (state.userSettings && typeof state.userSettings === 'object') delete state.userSettings[id];
+  state.authUsers = (state.authUsers || []).filter(item => item.id !== id);
+  save();
+  log(`Account deleted at the owner's request: ${email}. All records, sessions and connected accounts removed.`, 'warn', id);
+  return true;
+}
+
 // 220,000 was below current guidance for PBKDF2-SHA256. Stored hashes carry
 // their own iteration count, so every existing password still verifies at the
 // number it was made with and is quietly re-hashed at the new one on the next

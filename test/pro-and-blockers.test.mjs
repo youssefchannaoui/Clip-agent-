@@ -196,7 +196,9 @@ test('the plans screen says what Pro adds and what free already includes', () =>
   const adapter = read('src/public/studio-adapter.js');
   const at = adapter.indexOf('planCards:');
   assert.ok(at > 0);
-  const body = adapter.slice(at, at + 1800);
+  // A source-window check, so it is sensitive to comments and formatting that
+  // have nothing to do with what it asserts. Sized generously for that reason.
+  const body = adapter.slice(at, at + 3400);
   assert.match(body, /freeIncludes/, 'the free card lists what it already does');
   assert.match(body, /proFeatures/, 'the paid card names the two things it adds');
   // Read from the server's own lists so a badge and a plan card can never

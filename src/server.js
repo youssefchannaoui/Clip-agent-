@@ -94,6 +94,16 @@ function redirectWithCookies(res, location, cookies = []) {
   if (cookies.length) headers['Set-Cookie'] = cookies;
   res.writeHead(302, headers); res.end();
 }
+
+// For the fetch-driven equivalents of the redirect flows: signing out
+// everywhere has to clear this browser's cookie too, or the tab that asked for
+// it is the one device still holding a session.
+function jsonWithCookies(res, status, value, cookies = []) {
+  const body = Buffer.from(JSON.stringify(value));
+  const headers = { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-store' };
+  if (cookies.length) headers['Set-Cookie'] = cookies;
+  res.writeHead(status, headers); res.end(body);
+}
 /**
  * The client address, as far as it can be trusted.
  *
@@ -462,6 +472,11 @@ function appState(user = null) {
   const clipsForUser = ownedBy(state.clips, user.id).filter(clip => projectIdsForUser.has(clip.projectId));
   return {
     engine: config.processingMode === 'remote' ? 'remote-worker' : 'self-hosted', user: auth.userPublic(user), auth: auth.publicConfig(), readiness, clipSettings: clipSettings(user), musicSettings: musicSettings(user), automationSettings: automationSettings(user),
+    version: config.appVersion,
+    // Five different errors instruct the user to "tell the site owner". Until
+    // now the app gave them no way to do that: the only support address lived
+    // on the marketing site, behind a link out of the product.
+    support: { email: config.supportEmail },
     selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(),
     backgrounds: backgrounds.listBackgrounds(user).map(entry => ({
       id: entry.id, name: entry.name, durationSec: entry.durationSec, shared: Boolean(entry.shared),
@@ -749,6 +764,11 @@ async function route(req, res, url) {
     const sent = await auth.sendVerification(currentUser, config.publicBaseUrl || `https://${req.headers.host || ''}`);
     return json(res, 200, { ok: true, sent });
   }
+  if (method === 'POST' && pathname === '/auth/logout-everywhere') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in first.' });
+    const count = auth.destroyAllSessions(currentUser);
+    return jsonWithCookies(res, 200, { ok: true, signedOut: count }, auth.cookieHeaders('', { clear: true }));
+  }
   if (method === 'POST' && pathname === '/auth/logout') {
     auth.destroySession(req);
     return redirectWithCookies(res, '/', auth.cookieHeaders('', { clear: true }));
@@ -949,6 +969,16 @@ async function route(req, res, url) {
     const rev = stateRev();
     if (url.searchParams.get('rev') === rev) return json(res, 200, { unchanged: true, rev });
     return json(res, 200, { ...appState(currentUser), rev });
+  }
+  // The Privacy Policy has always promised erasure within 30 days by email --
+  // a promise resting on one person's inbox. It is a button now.
+  if (method === 'DELETE' && pathname === '/api/account') {
+    try {
+      auth.deleteAccount(currentUser);
+      return jsonWithCookies(res, 200, { ok: true }, auth.cookieHeaders('', { clear: true }));
+    } catch (error) {
+      return json(res, error.statusCode || 400, { error: error.message });
+    }
   }
   if (method === 'GET' && pathname === '/api/billing') return json(res, 200, billing.publicBilling(currentUser));
   if (method === 'POST' && pathname === '/api/billing/estimate') {

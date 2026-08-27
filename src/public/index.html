@@ -4961,6 +4961,35 @@ StudioAdapter.onProbeSource=async url=>{try{
     StudioAdapter.onBuyTokens=pack=>studioDo(async()=>{
       const r=await api('/api/billing/topup-checkout',{method:'POST',body:JSON.stringify({package:pack})});
       if(r&&r.url)location.href=r.url});
+    /* The account menu's two dead entries, given something to do. */
+    StudioAdapter.onContactSupport=()=>{
+      const s=DATA&&DATA.support&&DATA.support.email;
+      if(!s){toast('Support address is not configured yet.','bad');return}
+      const body=encodeURIComponent(`\n\n---\nAccount: ${(DATA.user&&DATA.user.email)||'unknown'}\nVersion: ${(DATA.version)||''}\n(leave the lines above — they help us find your account)`);
+      location.href=`mailto:${s}?subject=${encodeURIComponent('DeenClipped help')}&body=${body}`;
+    };
+    StudioAdapter.onAccountSettings=()=>{
+      const b=(DATA&&DATA.billing&&DATA.billing.current)||{};
+      const email=(DATA&&DATA.user&&DATA.user.email)||'your account';
+      const plan=b.unlimited?'Owner (unlimited)':(b.plan||'free');
+      const choice=prompt(
+        `Account — ${email}\nPlan: ${plan}\n\nType a number:\n`
+        +`1  Manage or cancel your subscription\n`
+        +`2  Sign out of every device\n`
+        +`3  Contact support\n`
+        +`4  Delete my account and all my data\n`,'1');
+      if(choice==='1')StudioAdapter.onBillingPortal();
+      else if(choice==='2')studioDo(()=>api('/auth/logout-everywhere',{method:'POST',body:'{}'}),'Signed out everywhere — sign in again to continue')
+        .then(()=>setTimeout(()=>location.href='/login',900));
+      else if(choice==='3')StudioAdapter.onContactSupport();
+      else if(choice==='4'){
+        if(!confirm('Delete your account?\n\nEvery lecture, clip, transcript and connected account is removed permanently. Subscriptions are NOT cancelled automatically — cancel first if you have one.\n\nThis cannot be undone.'))return;
+        const typed=prompt('Type DELETE to confirm.');
+        if(String(typed||'').trim().toUpperCase()!=='DELETE'){toast('Not deleted.');return}
+        studioDo(()=>api('/api/account',{method:'DELETE'}),'Account deleted')
+          .then(()=>setTimeout(()=>location.href='/',900));
+      }
+    };
     /* Handing over the file. Downloads are triggered one at a time with a gap:
        browsers silently drop a burst of simultaneous downloads from one page,
        so eight clips at once would deliver two and look broken. */

@@ -4752,8 +4752,12 @@
       showAllActivity: function (e) { stop(e); setUI({ activityAll: true, bellOpen: true }); },
 
       // ── Account menu ──
-      accountSettings: function (e) { stop(e); setUI({ screen: 'tokens', menuOpen: false }); },
-      helpGuides: function (e) { stop(e); global.open('https://deenclipped.online/features', '_blank', 'noopener'); },
+      // These two were an <a href="#"> with no handler and a link to the
+      // marketing page. Clicking "Account settings" left you on whatever
+      // screen you were already on, and "Help & guides" sold you the product
+      // you had already bought.
+      accountSettings: function (e) { stop(e); global.StudioAdapter.onAccountSettings(); },
+      helpGuides: function (e) { stop(e); global.StudioAdapter.onContactSupport(); },
       signOut: function (e) { stop(e); global.StudioAdapter.onSignOut(); },
 
       // ── Connections modal ──
@@ -5262,7 +5266,14 @@
         return p.interval === UI.planPeriod || p.id === 'free';
       }).map(function (p) {
         var isCurrent = String(p.id || '').toLowerCase() === String(current.plan || '').toLowerCase();
-        var unavailable = p.enabled === false;
+        // Free has no price id, so it can never be "chosen" -- the server
+        // refuses it with "Choose weekly, monthly, or yearly." The card
+        // nonetheless rendered an enabled Choose button to every paying
+        // customer, which is the only thing on the screen that looks like a
+        // downgrade. Downgrading means cancelling, and cancelling lives in the
+        // portal, so the card says that instead of throwing.
+        var isFreeCard = p.id === 'free';
+        var unavailable = p.enabled === false || (isFreeCard && !isCurrent);
         return {
           name: p.name || p.id || '',
           price: p.priceLabel || (p.id === 'free' ? 'Free' : 'Price not set'),
@@ -5290,13 +5301,14 @@
             (isCurrent ? 'rgba(217,180,120,.16); color: #F0D6A6;' : 'rgba(127,209,166,.14); color: #7FD1A6;'),
           cardStyle: 'display: flex; flex-direction: column; gap: 9px; padding: 14px; border-radius: 12px; border: 1px solid ' +
             (isCurrent ? 'rgba(217,180,120,.45); background: rgba(217,180,120,.05);' : '#1E1E22; background: #121214;'),
-          cta: isCurrent ? 'Current' : unavailable ? 'Not available' : 'Choose',
+          cta: isCurrent ? 'Current' : isFreeCard ? 'Cancel to return here' : unavailable ? 'Not available' : 'Choose',
           btnStyle: 'padding: 8px 12px; border-radius: 8px; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: ' +
             (isCurrent || unavailable ? 'default' : 'pointer') + '; border: 1px solid ' +
             (isCurrent || unavailable ? '#26262A; background: #17171A; color: #6E6E76;' : 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;'),
           choose: function (e) {
             stop(e);
             if (isCurrent) return;
+            if (isFreeCard) { toast('To go back to Free, cancel your plan under Manage billing.'); return; }
             if (unavailable) { toast(p.name + ' is not configured for checkout yet.'); return; }
             global.StudioAdapter.onChoosePlan(p.id);
           },
@@ -5493,6 +5505,9 @@
     onRestore: function () {},
     onMoreClips: function () {},
     onRetryProject: function () {},
+    onAccountSettings: function () {},
+    onContactSupport: function () {},
+    onDownloadClips: function () {},
     // Sends any pending clip-style edit immediately instead of waiting out the
     // debounce. "Save to all clips" reads the overrides back off the server to
     // copy them, so without this the siblings would be given the look from
