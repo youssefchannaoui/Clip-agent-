@@ -504,9 +504,35 @@ export function stripeConfigured() {
   return Boolean(config.stripeSecretKey);
 }
 
+/**
+ * The Stripe customer for this account, creating one if the stored id is no
+ * longer real.
+ *
+ * A stored id used to be trusted on sight, which broke the day the test key
+ * was swapped for the live one: every account carried a `cus_…` minted in test
+ * mode, live Stripe answered "No such customer", and checkout returned 400 for
+ * all of them. Nobody could pay, and the only symptom was an error message
+ * naming an id the customer has never heard of.
+ *
+ * A stored id is therefore checked before it is used. The check costs one GET
+ * and only runs when an id exists; a missing or deleted customer is forgotten
+ * and replaced rather than reported. Recreating is safe -- the id is a pointer
+ * to a billing profile, not to money, and a fresh one simply starts empty.
+ */
 async function ensureStripeCustomer(user) {
   const billing = ensureUserBilling(user);
-  if (billing.stripeCustomerId) return billing.stripeCustomerId;
+  const stored = billing.stripeCustomerId || '';
+  if (stored) {
+    const existing = await stripeGet(`/customers/${encodeURIComponent(stored)}`).catch(() => null);
+    if (existing?.id && !existing.deleted) return existing.id;
+    log(`Stripe customer ${stored} no longer exists; issuing a new one for ${user.email || user.id}.`, 'warn', user.id);
+    billing.stripeCustomerId = '';
+    // The subscription pointer belonged to that customer, so it cannot outlive
+    // it. Leaving it behind would send the portal after a subscription that
+    // does not exist either.
+    billing.stripeSubscriptionId = '';
+    billing.stripePriceId = '';
+  }
   const customer = await stripeRequest('/customers', {
     email: user.email || '',
     name: user.name || user.email || 'DeenClipped creator',
