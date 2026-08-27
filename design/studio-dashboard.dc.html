@@ -574,6 +574,7 @@
             <span style="font-size: 12.5px; font-weight: 600; color: #F0D6A6;">{{ selCount }}</span>
             <button onClick="{{ selApprove }}" style="display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border: 1px solid rgba(217,180,120,.45); border-radius: 8px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(217,180,120,.14);"><i class="ph ph-check" style="font-size: 13px;"></i>Approve all</button>
             <button onClick="{{ selReject }}" style="display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border: 1px solid #3A2A2A; border-radius: 8px; background: transparent; color: #E3928C; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(227,146,140,.12);"><i class="ph ph-trash" style="font-size: 13px;"></i>Reject & delete</button>
+            <button onClick="{{ selDownload }}" style="display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border: 1px solid #2A2A31; border-radius: 8px; background: transparent; color: #E9E9ED; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(255,255,255,.06);"><i class="ph ph-download-simple" style="font-size: 13px;"></i>Download</button>
             <button onClick="{{ selClear }}" style="margin-left: auto; padding: 7px 12px; border: 1px solid #26262A; border-radius: 8px; background: transparent; color: #8B8B93; font-family: inherit; font-size: 12px; cursor: pointer;" style-hover="color: #F2F2F4;">Clear</button>
           </div>
         </sc-if>
@@ -1400,10 +1401,12 @@
 
           <sc-if value="{{ isExport }}" hint-placeholder-val="{{ false }}">
             <div style="display: flex; flex-direction: column; gap: 11px;">
-              <span style="display: flex; align-items: center; font-size: 12px; color: #BCBCC3;">Resolution<strong style="margin-left: auto; font-weight: 500; color: #E9E9ED;">1080 × 1920</strong></span>
+              <span style="display: flex; align-items: center; font-size: 12px; color: #BCBCC3;">Resolution<strong style="margin-left: auto; font-weight: 500; color: #E9E9ED;">{{ edResolution }}</strong></span>
               <span style="display: flex; align-items: center; font-size: 12px; color: #BCBCC3;">Frame rate<strong style="margin-left: auto; font-weight: 500; color: #E9E9ED;">30 fps</strong></span>
               <span style="display: flex; align-items: center; font-size: 12px; color: #BCBCC3;">Audio<strong style="margin-left: auto; font-weight: 500; color: #E9E9ED;">AAC 192 kbps</strong></span>
               <span style="display: flex; align-items: center; font-size: 12px; color: #BCBCC3;">Verification<strong style="margin-left: auto; font-weight: 500; color: #7FD1A6;">FFprobe on export</strong></span>
+              <button onClick="{{ downloadClip }}" style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 3px; padding: 10px 12px; border: 1px solid #2A2A31; border-radius: 9px; background: #17171B; color: #E9E9ED; font-size: 12px; font-weight: 600; cursor: pointer;"><i class="ph ph-download-simple" style="font-size: 15px;"></i>Download MP4</button>
+              <span style="font-size: 11px; color: #6E6E76; line-height: 1.5;">{{ edDownloadHint }}</span>
               <span style="font-size: 11px; color: #6E6E76; line-height: 1.5;">Re-rendering this clip costs 1 token. Saving to all clips of the lecture re-renders each of them.</span>
             </div>
           </sc-if>

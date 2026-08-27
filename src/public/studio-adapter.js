@@ -3445,6 +3445,15 @@
         setUI({ selClips: {} });
         global.StudioAdapter.onBulkClips(ids, 'delete');
       },
+      // Downloading keeps the selection. Approving and rejecting are decisions
+      // that empty the tray; taking a copy of the files is not one, and having
+      // to re-tick eight clips to then approve them would be its own small
+      // punishment for saving your own work.
+      selDownload: function (e) {
+        stop(e);
+        var ids = clips.filter(function (c) { return UI.selClips[c.id]; }).map(function (c) { return c.id; });
+        global.StudioAdapter.onDownloadClips(ids);
+      },
       selClear: function (e) { stop(e); setUI({ selClips: {} }); },
       // The library's bulk delete, same shape.
       libAnySel: projects.some(function (p) { return UI.selLecs[p.id]; }),
@@ -4095,6 +4104,22 @@
           + encodeURIComponent(String(edClip.renderVersion || 1) + '.' + String(edClip.renderQuality || 'final'))),
       edPreviewActive: Boolean(edClip && edClip.stylePreview && edClip.stylePreview.url),
       edExportUrl: edClip ? edClip.videoUrl || '' : '',
+      // Read from the template rather than printed as a literal: the tab used
+      // to say "1080 × 1920" whatever the clip actually was, which is a lie
+      // waiting for the first person to pick a different output shape.
+      edResolution: (function () {
+        var w = Math.round(Number(tpl && tpl.width) || 1080);
+        var h = Math.round(Number(tpl && tpl.height) || 1920);
+        return w + ' × ' + h;
+      })(),
+      edDownloadHint: edClip && edClip.status === 'draft'
+        ? 'This is the draft render. Approving the clip renders it at full quality.'
+        : 'Saves the rendered MP4, captions burned in, ready to post anywhere.',
+      downloadClip: function (e) {
+        stop(e);
+        if (!edClip) return;
+        global.StudioAdapter.onDownloadClips([edClip.id]);
+      },
       // True only while the fallback is on screen; the host labels the frame
       // so the uncaptioned source can never be mistaken for the clip.
       edSourceFallback: edSourceFallback,

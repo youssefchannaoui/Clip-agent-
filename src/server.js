@@ -1527,6 +1527,28 @@ async function route(req, res, url) {
     const id = decodeURIComponent(clipVideo[1]); const kind = clipVideo[2];
     let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
     const remoteUrl = mediaUrl(kind === 'thumb' ? clip?.thumbUrl : clip?.clipUrl);
+    const downloadName = `${(clip?.title || 'deenclipped').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 70) || 'deenclipped'}.mp4`;
+    // A download has to arrive as a file, not as a video that happens to open
+    // in a tab. Redirecting to the CDN gives the browser no filename and no
+    // disposition, so it plays instead of saving -- which is indistinguishable
+    // from the download being broken. The bytes are relayed instead, which
+    // costs egress on a rare action and gets the customer their MP4.
+    if (kind === 'download' && remoteUrl) {
+      try {
+        const upstream = await fetch(remoteUrl);
+        if (!upstream.ok || !upstream.body) throw new Error(`storage returned ${upstream.status}`);
+        res.writeHead(200, {
+          'Content-Type': 'video/mp4',
+          'Content-Disposition': `attachment; filename="${downloadName}"`,
+          'Cache-Control': 'private, no-store',
+          ...(upstream.headers.get('content-length') ? { 'Content-Length': upstream.headers.get('content-length') } : {}),
+        });
+        const { Readable } = await import('node:stream');
+        return Readable.fromWeb(upstream.body).pipe(res);
+      } catch (error) {
+        return json(res, 502, { error: `That clip could not be fetched for download: ${error.message}` });
+      }
+    }
     if (remoteUrl) {
       // Thumbnail redirects may be cached briefly: they are painted as CSS
       // backgrounds on every poll repaint, and a no-store redirect to a dead
@@ -1550,8 +1572,7 @@ async function route(req, res, url) {
       return json(res, 404, { error: kind === 'thumb' ? 'No thumbnail rendered.' : 'Rendered file not found.' });
     }
     if (kind === 'thumb') return streamFile(req, res, file, { contentType: 'image/jpeg' });
-    const filename = `${(clip?.title || 'deenclipped').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 70) || 'deenclipped'}.mp4`;
-    return streamFile(req, res, file, kind === 'download' ? { downloadName: filename } : {});
+    return streamFile(req, res, file, kind === 'download' ? { downloadName } : {});
   }
 
   const rerenderClip = pathname.match(/^\/api\/clips\/([^/]+)\/rerender$/);

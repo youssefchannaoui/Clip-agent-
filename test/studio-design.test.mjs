@@ -3253,3 +3253,36 @@ test('undoing a caption does not lose the unsaved flag', () => {
   assert.equal(StudioAdapter.ui.edDirty, true,
     'the clip still differs from what is rendered, so Save must stay offered');
 });
+
+// ── getting the file out ────────────────────────────────────────────────────
+// A customer's only route to their own MP4 used to be publishing it to a
+// connected platform. The download route was built, tested, and called by
+// nothing in the shell people actually use.
+
+test('the editor offers a real download, not a settings readout', () => {
+  const vals = openEditor({ edTool: 'export' });
+  assert.equal(typeof vals.downloadClip, 'function', 'the Export tab must hand over the file');
+  const { missing } = render(STUDIO_TEMPLATE, vals);
+  assert.ok(!missing.includes('downloadClip'), `download button is dead: ${JSON.stringify(missing)}`);
+});
+
+test('the resolution line is read from the template, never printed as a literal', () => {
+  const vals = openEditor({ edTool: 'export' });
+  assert.match(vals.edResolution, /^\d+ × \d+$/);
+});
+
+test('selecting clips offers a download that keeps the selection', () => {
+  Object.assign(StudioAdapter.ui, {
+    screen: 'queue', selClips: { c1: true }, bellOpen: false, menuOpen: false, railOpen: true,
+  });
+  const vals = StudioAdapter.bindings(EDIT_STATE);
+  assert.equal(typeof vals.selDownload, 'function');
+  const asked = [];
+  const prev = StudioAdapter.onDownloadClips;
+  StudioAdapter.onDownloadClips = ids => asked.push(...ids);
+  vals.selDownload({ preventDefault() {}, stopPropagation() {} });
+  StudioAdapter.onDownloadClips = prev;
+  assert.deepEqual(asked, ['c1']);
+  assert.deepEqual(StudioAdapter.ui.selClips, { c1: true },
+    'taking a copy of your own files is not a decision that should empty the tray');
+});
