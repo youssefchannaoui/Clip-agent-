@@ -1014,7 +1014,11 @@ test('a source the server refuses is reported, not silently swallowed', () => {
   StudioAdapter.jobFailed('Music is required on every clip. Upload at least one nasheed first.');
   const vals = StudioAdapter.bindings(SAMPLE_STATE);
   assert.ok(StudioAdapter.ui.job, 'the panel stays open so the reason is visible');
-  assert.equal(vals.genBusy, false, 'the button is usable again');
+  // genBusy gates the message row, NOT the button. Asserting it false here is
+  // what kept the reason unrenderable: jobFailed clears `generating` in the
+  // same call that sets the text, so the row unmounted before it could show.
+  assert.equal(vals.genBusy, true, 'the row carrying the reason has to be mounted');
+  assert.equal(vals.genLabel, 'Generate clips', 'and the button is usable again');
   assert.match(vals.genProgressLabel, /Upload at least one nasheed/);
 });
 
@@ -3285,4 +3289,47 @@ test('selecting clips offers a download that keeps the selection', () => {
   assert.deepEqual(asked, ['c1']);
   assert.deepEqual(StudioAdapter.ui.selClips, { c1: true },
     'taking a copy of your own files is not a decision that should empty the tray');
+});
+
+// ── upload silence and the retry that was promised ──────────────────────────
+
+test('an upload in flight reports a real percentage', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'home', generating: false, jobError: '' });
+  StudioAdapter.setUploadProgress(37, 370 * 1024 * 1024, 1000 * 1024 * 1024);
+  const vals = StudioAdapter.bindings(SAMPLE_STATE);
+  assert.match(vals.genProgressLabel, /Uploading 37%/, 'a multi-GB upload used to move in total silence');
+  assert.match(vals.genProgressLabel, /of 1000 MB|of 1\.0 GB/, 'and it should say how much of how much');
+  assert.match(vals.genBarStyle, /width: 37%/, 'the bar must track the bytes, not sweep meaninglessly');
+  assert.equal(vals.genBusy, true, 'the panel has to be mounted for any of this to be visible');
+  StudioAdapter.setUploadProgress(null);
+  assert.equal(StudioAdapter.bindings(SAMPLE_STATE).genProgressLabel, '');
+});
+
+test('a refused source shows its reason instead of unmounting the panel', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'home', generating: false, jobError: '' });
+  StudioAdapter.jobFailed('That link is a playlist, not a video.');
+  const vals = StudioAdapter.bindings(SAMPLE_STATE);
+  assert.equal(vals.genBusy, true,
+    'the error was bound to a node that had already unmounted, so nobody ever saw it');
+  assert.match(vals.genProgressLabel, /playlist/);
+  StudioAdapter.ui.jobError = '';
+});
+
+test('a failed lecture offers Retry; a healthy one does not', () => {
+  const failedState = {
+    ...SAMPLE_STATE,
+    projects: [{ id: 'pF', title: 'Broken import', status: 'failed', clipCount: 0, durationSec: 600, submittedAt: Date.now() }],
+  };
+  Object.assign(StudioAdapter.ui, { screen: 'library', bellOpen: false, menuOpen: false, railOpen: true });
+  const offered = [];
+  const prev = StudioAdapter.onPickOption;
+  StudioAdapter.onPickOption = (title, options) => offered.push(...options);
+  StudioAdapter.bindings(failedState).libraryItems[0].more({ preventDefault() {}, stopPropagation() {} });
+  assert.ok(offered.includes('Retry this lecture'),
+    `the app tells people to "press Retry"; it must exist. Got ${JSON.stringify(offered)}`);
+
+  offered.length = 0;
+  StudioAdapter.bindings(SAMPLE_STATE).libraryItems[0].more({ preventDefault() {}, stopPropagation() {} });
+  StudioAdapter.onPickOption = prev;
+  assert.ok(!offered.includes('Retry this lecture'), 'a lecture that worked has nothing to retry');
 });

@@ -103,6 +103,10 @@
     edSourceFallback: false,
     edBlockDraft: null,
     capTextStepAt: 0,
+    // null means no upload in flight; 0-100 while bytes are moving.
+    uploadPct: null,
+    uploadSent: 0,
+    uploadTotal: 0,
     edDirty: false,
     edSaving: false,
     edSafe: true,
@@ -1769,12 +1773,18 @@
         },
         more: function (e) {
           stop(e);
-          global.StudioAdapter.onPickOption('This lecture',
-            ['Cut 4 more clips', 'Cut 8 more clips', 'Delete this lecture', 'Cancel'], function (choice) {
-              var n = choice === 'Cut 4 more clips' ? 4 : choice === 'Cut 8 more clips' ? 8 : 0;
-              if (n) global.StudioAdapter.onMoreClips(p.id, n);
-              else if (choice === 'Delete this lecture') global.StudioAdapter.onDeleteProject(p.id, p.title || 'this lecture');
-            });
+          // Retry is offered on exactly the lectures it can help. The route has
+          // always existed; its only button lived in a shell nothing links to,
+          // while the failure messages went on telling people to "press Retry".
+          var failed = String(p.status || '') === 'failed';
+          var options = failed ? ['Retry this lecture'] : [];
+          options = options.concat(['Cut 4 more clips', 'Cut 8 more clips', 'Delete this lecture', 'Cancel']);
+          global.StudioAdapter.onPickOption('This lecture', options, function (choice) {
+            var n = choice === 'Cut 4 more clips' ? 4 : choice === 'Cut 8 more clips' ? 8 : 0;
+            if (choice === 'Retry this lecture') global.StudioAdapter.onRetryProject(p.id, p.title || 'this lecture');
+            else if (n) global.StudioAdapter.onMoreClips(p.id, n);
+            else if (choice === 'Delete this lecture') global.StudioAdapter.onDeleteProject(p.id, p.title || 'this lecture');
+          });
         },
       };
     });
@@ -4494,14 +4504,24 @@
             musicTrackId: (jobMusicOn && UI.jobTrackId) || '',
           });
       },
-      genBusy: UI.generating,
+      // The panel stays mounted while an error is showing. It used to render
+      // only while `generating` was true, and jobFailed() clears that flag in
+      // the same call that sets the message -- so the reason for a failure was
+      // bound to a node that had already unmounted, and the comment claiming it
+      // "sits next to the button" described something nobody could ever see.
+      genBusy: UI.generating || Boolean(UI.jobError) || UI.uploadPct !== null,
       genLabel: UI.generating ? 'Starting…' : 'Generate clips',
       genIcon: UI.generating ? 'ph ph-circle-notch' : 'ph-fill ph-sparkle',
       genIconStyle: 'font-size: 15px;' + (UI.generating ? ' animation: dcSpin 1.1s linear infinite;' : ''),
-      genBarStyle: UI.generating
+      // A real percentage while bytes move, a sweep while the server thinks.
+      genBarStyle: UI.uploadPct !== null
+        ? 'position: absolute; left: 0; bottom: 0; height: 2px; width: ' + Math.max(2, Math.min(100, UI.uploadPct)) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6); transition: width .2s ease;'
+        : UI.generating
         ? 'position: absolute; left: 0; bottom: 0; height: 2px; width: 40%; background: linear-gradient(90deg, #D9B478, #F0D6A6); animation: dcSweep 1.1s ease-in-out infinite;'
         : 'display: none;',
-      genProgressLabel: UI.generating ? 'Queuing the lecture…' : (UI.jobError || ''),
+      genProgressLabel: UI.uploadPct !== null
+        ? 'Uploading ' + UI.uploadPct + '%' + (UI.uploadTotal ? ' · ' + fmtBytes(UI.uploadSent) + ' of ' + fmtBytes(UI.uploadTotal) : '')
+        : UI.generating ? 'Queuing the lecture…' : (UI.jobError || ''),
 
       // ── Values the design hardcoded ──
       // These were literal text in the .dc.html. design/text-overrides.json turns
@@ -5446,7 +5466,20 @@
     // reason sits next to the button that caused it.
     jobFailed: function (message) {
       UI.generating = false;
+      UI.uploadPct = null;
       UI.jobError = String(message || 'That source was refused.');
+      refresh();
+    },
+    // Called by the host on every upload progress event. Passing null ends it,
+    // whether the upload finished or threw.
+    setUploadProgress: function (pct, sent, total) {
+      if (pct === null || pct === undefined) {
+        UI.uploadPct = null; UI.uploadSent = 0; UI.uploadTotal = 0;
+      } else {
+        UI.uploadPct = Math.max(0, Math.min(100, Math.round(pct)));
+        UI.uploadSent = Number(sent) || 0;
+        UI.uploadTotal = Number(total) || 0;
+      }
       refresh();
     },
     onConnect: function () {},
@@ -5459,6 +5492,7 @@
     onScheduleClip: function () {},
     onRestore: function () {},
     onMoreClips: function () {},
+    onRetryProject: function () {},
     // Sends any pending clip-style edit immediately instead of waiting out the
     // debounce. "Save to all clips" reads the overrides back off the server to
     // copy them, so without this the siblings would be given the look from

@@ -98,7 +98,11 @@ test('an MP4 upload checks for a nasheed before it sends the file', () => {
   const host = read('src/public/index.html');
   const at = host.indexOf('StudioAdapter.onUploadFile=');
   assert.ok(at > 0);
-  const body = host.slice(at, at + 900);
+  // The whole handler, not a fixed byte window. This used to slice 900
+  // characters, so adding upload-progress reporting pushed templateId past the
+  // end and failed a test about something the change never touched.
+  const nextHook = host.indexOf('StudioAdapter.on', at + 20);
+  const body = host.slice(at, nextHook > at ? nextHook : at + 2000);
   const guard = body.indexOf('Upload a nasheed first');
   const presign = body.indexOf('/api/uploads/presign');
   assert.ok(guard > 0 && guard < presign,
