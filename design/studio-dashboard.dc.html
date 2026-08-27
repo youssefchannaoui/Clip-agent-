@@ -850,6 +850,7 @@
           <i class="ph ph-caret-down" style="font-size: 12px; color: #6E6E76;"></i>
         </label>
         <span style="display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; color: #8B8B93;"><span style="{{ tplDirtyDotStyle }}"></span>{{ tplDirtyLabel }}</span>
+        <button id="dcSaveAsStyle" onClick="{{ saveAsStyle }}" title="Save this look as a new style you can reuse" style="display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid #2A2A31; border-radius: 8px; background: #17171B; color: #E9E9ED; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;"><i class="ph ph-bookmark-simple" style="font-size: 13px;"></i>Save as new style</button>
         <div style="display: flex; align-items: center; gap: 7px; margin-left: auto;">
           <button onClick="{{ resetTpl }}" title="Reset positions" style="display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #8B8B93; cursor: pointer;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-crosshair" style="font-size: 15px;"></i></button>
           <button onClick="{{ undoEdit }}" title="Undo" style="display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #8B8B93; cursor: pointer;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-arrow-counter-clockwise" style="font-size: 15px;"></i></button>
@@ -1303,7 +1304,7 @@
               <div style="display: flex; flex-direction: column; gap: 6px;">
                 <span style="display: flex; align-items: center; font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">Selected caption<span style="margin-left: auto; font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 10.5px; color: #8B8B93;">{{ edSelRange }}</span></span>
                 <textarea value="{{ edSelText }}" onChange="{{ setCapText }}" rows="3" style="width: 100%; padding: 10px; border: 1px solid #26262A; border-radius: 9px; background: #121214; color: #F2F2F4; font-family: inherit; font-size: 12.5px; line-height: 1.5; resize: vertical; outline: none;"></textarea>
-                <span style="font-size: 10.5px; color: #6E6E76;">Edit the words — timing stays locked to the transcript. Drag the caption in the preview to reposition it; it snaps to thirds and halves.</span>
+                <span style="font-size: 10.5px; color: #6E6E76;">Edit the words — timing stays locked to the transcript. Drag the caption in the preview to reposition it; it snaps to thirds and halves. <a onClick="{{ goTemplates }}" href="#" style="color: #C9A87A; text-decoration: none; font-weight: 600;">Colours, outline and font live in Templates →</a></span>
               </div>
               <div style="display: flex; flex-direction: column; gap: 7px;">
                 <span style="font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76;">Style</span>
@@ -1440,7 +1441,16 @@
             <span style="position: absolute; inset: 0; background: repeating-linear-gradient(90deg, rgba(240,214,166,.5) 0 2px, transparent 2px 6px); mask-image: linear-gradient(180deg, transparent 30%, #000 55%, transparent 92%); opacity: .6;"></span>
             <span style="position: absolute; left: 8px; top: 6px; font-size: 9.5px; color: #C9BCA0;">Video · speech waveform</span>
           </div>
+          <div id="dcTrimLane" style="{{ edTrimLaneStyle }}">
+            <span style="{{ edTrimKeepStyle }}"></span>
+            <span onMouseDown="{{ dragTrimStart }}" title="Drag to move the start" style="{{ edTrimStartStyle }}"></span>
+            <span onMouseDown="{{ dragTrimEnd }}" title="Drag to move the end" style="{{ edTrimEndStyle }}"></span>
+          </div>
           <span style="{{ edPlayStyle }}"><span style="{{ edPlayHeadStyle }}"></span></span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; padding-top: 2px;">
+          <span style="font-size: 10.5px; color: #6E6E76;">{{ edTrimLabel }}</span>
+          <button onClick="{{ resetTrim }}" style="{{ edTrimResetStyle }}">Use the whole clip</button>
         </div>
       </div>
 

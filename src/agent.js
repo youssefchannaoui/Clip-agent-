@@ -192,6 +192,48 @@ export function updateClip(id, fields = {}) {
       clip.updatedAt = Date.now();
     }
   }
+  /**
+   * The trim. Clip-local seconds, as ranges to KEEP.
+   *
+   * The render pipeline learned to cut in v3.2.0 and nothing has ever asked it
+   * to: the only writer of cutsSec was the internal preview lane, so a finished
+   * and tested cut engine sat behind no control at all.
+   *
+   * Kept as a list of ranges rather than a start/end pair because that is the
+   * shape the worker already takes, and because delete-a-section is the same
+   * primitive with a gap in the middle -- a split is two ranges, a deletion is
+   * the complement. Clamped and ordered here so the worker never has to defend
+   * itself against a backwards range.
+   */
+  if (Array.isArray(fields.cutsSec)) {
+    const span = Math.max(0, Number(clip.endSec || 0) - Number(clip.startSec || 0));
+    const ranges = fields.cutsSec
+      .map(pair => (Array.isArray(pair) ? [Number(pair[0]), Number(pair[1])] : null))
+      .filter(pair => pair && Number.isFinite(pair[0]) && Number.isFinite(pair[1]))
+      .map(([from, to]) => [
+        Math.max(0, Math.min(span, Math.min(from, to))),
+        Math.max(0, Math.min(span, Math.max(from, to))),
+      ])
+      // A range shorter than a quarter second is a mis-drag, not an edit, and
+      // ffmpeg's concat of it produces a frame or two of noise.
+      .filter(([from, to]) => to - from >= 0.25)
+      .sort((a, b) => a[0] - b[0]);
+    const next = JSON.stringify(ranges);
+    const nowHeld = JSON.stringify(clip.cutsSec || []);
+    if (next !== nowHeld) {
+      // Keeping the whole clip is expressed by having no cuts at all, not by
+      // one range covering everything: the worker skips the pre-cut plate
+      // entirely when the list is empty, which is one less thing to go wrong.
+      if (!ranges.length || (ranges.length === 1 && ranges[0][0] <= 0.05 && ranges[0][1] >= span - 0.05)) {
+        delete clip.cutsSec;
+      } else {
+        clip.cutsSec = ranges;
+      }
+      clip.stylePending = true;
+      clip.updatedAt = Date.now();
+    }
+  }
+
   // An explicit reset drops every override and goes back to the plain template.
   if (fields.clearStyleOverrides) {
     delete clip.styleOverrides;

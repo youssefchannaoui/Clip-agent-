@@ -102,6 +102,8 @@
     // editor and the review queue never looked the same.
     edSourceFallback: false,
     edBlockDraft: null,
+    // The unsaved trim, as {from,to} in clip-local seconds. null = untouched.
+    edTrim: null,
     capTextStepAt: 0,
     // null means no upload in flight; 0-100 while bytes are moving.
     uploadPct: null,
@@ -1664,7 +1666,7 @@
         // Approve / edit / reject is the card's action row; `third` is reject.
         third: function (e) { stop(e); reject(c.id); },
         thirdIcon: 'ph ph-x',
-        edit: function (e) { stop(e); setUI({ screen: 'editor', edClipId: c.id, edStyleDraft: null, edBlockDraft: null, edBlock: 0, edTime: 0, edPlayhead: 0 }); },
+        edit: function (e) { stop(e); setUI({ screen: 'editor', edClipId: c.id, edStyleDraft: null, edBlockDraft: null, edTrim: null, edBlock: 0, edTime: 0, edPlayhead: 0 }); },
         openLecture: function (e) { stop(e); setUI({ screen: 'detail', openProject: c.projectId }); },
       };
     }
@@ -2362,6 +2364,44 @@
     // affordances -- the grabbing cursor, the dashed outline and the snap
     // guides -- which is the difference between this reading as a draggable
     // object and as text that happens to move.
+    /**
+     * Drag one end of the trim.
+     *
+     * Measured against the lane the handles live in, which is the same box the
+     * playhead and the caption blocks are positioned inside -- so the handle
+     * lands exactly where the ruler says it does. Nothing is written to the
+     * server here: the trim is part of the unsaved edit, and Save is what
+     * renders it, in keeping with render-on-save.
+     */
+    function startTrimDrag(e, edge, duration, current) {
+      stop(e);
+      var handle = e.dcTarget || (this && this.nodeType === 1 ? this : null) || e.currentTarget;
+      var lane = handle && handle.parentElement;
+      if (!lane) return;
+      var box = lane.getBoundingClientRect();
+      if (!box.width) return;
+      var next = { from: current.from, to: current.to };
+      // A clip shorter than a second is not a clip. The two handles may not
+      // cross, and may not meet.
+      var MIN = 1;
+      var move = function (ev) {
+        var at = ((ev.clientX - box.left) / box.width) * duration;
+        if (edge === 'from') next.from = Math.max(0, Math.min(next.to - MIN, at));
+        else next.to = Math.min(duration, Math.max(next.from + MIN, at));
+        UI.edTrim = { from: next.from, to: next.to };
+        UI.edDirty = true;
+        paintNow();
+      };
+      var up = function () {
+        global.removeEventListener('mousemove', move);
+        global.removeEventListener('mouseup', up);
+        paintNow();
+      };
+      global.addEventListener('mousemove', move);
+      global.addEventListener('mouseup', up);
+      move(e);
+    }
+
     function makeDrag(kind, apply) {
       return function (e) {
         // dcTarget is the element the binding sits on. currentTarget is the
@@ -2545,6 +2585,16 @@
     // so a zero would divide the whole editor by zero; 1 is the floor.
     var edDuration = Math.max(1, edClip ? (edClip.durationMs || 0) / 1000 : 1);
     var edTime = Math.max(0, Math.min(edDuration, Number(UI.edTime) || 0));
+    // The trim being edited, or the clip's saved one, or the whole clip. Held
+    // as a single kept range: split and delete-a-section are the same primitive
+    // with more ranges, and the worker already takes a list.
+    var edTrim = (function () {
+      if (UI.edTrim) return UI.edTrim;
+      var saved = edClip && Array.isArray(edClip.cutsSec) && edClip.cutsSec.length ? edClip.cutsSec : null;
+      if (!saved) return { from: 0, to: edDuration };
+      return { from: Math.max(0, Number(saved[0][0]) || 0), to: Math.min(edDuration, Number(saved[saved.length - 1][1]) || edDuration) };
+    })();
+    var edTrimmed = edTrim.from > 0.05 || edTrim.to < edDuration - 0.05;
     // Which block is being spoken *now*. This is what the preview overlay shows,
     // so the caption on screen follows the video instead of showing whichever
     // block was last clicked. Blocks without timings (the flat-transcript
@@ -3843,7 +3893,7 @@
       // instead lets the overlays resolve against <main> and cover the tool rail.
       edThumbStyle: 'position: relative; container-type: inline-size; width: 100%; max-width: 268px; aspect-ratio: 9 / 16; border-radius: 13px; overflow: hidden; border: 1px solid #26262A; background: ' +
         thumb(edClip && edClip.thumbUrl) + '; box-shadow: 0 26px 60px rgba(0,0,0,.5);',
-      closeEditor: function (e) { stop(e); setUI({ screen: 'queue', edClipId: null, edStyleDraft: null, edBlockDraft: null }); },
+      closeEditor: function (e) { stop(e); setUI({ screen: 'queue', edClipId: null, edStyleDraft: null, edBlockDraft: null, edTrim: null }); },
 
       // The SELECTED CAPTION box edits the chosen block, not the whole clip.
       // It was bound to the entire transcript and stayed empty because nothing
@@ -4098,6 +4148,45 @@
       // in the timeline is an empty circle taking a lane's worth of height while
       // the actual playhead -- the absolutely positioned line inside it -- spans
       // the track anyway. Made into a transparent overlay so only the line shows.
+      // ── Trim ────────────────────────────────────────────────────────────
+      // The render pipeline learned to cut in v3.2.0 and no control ever asked
+      // it to. These are clip-local seconds against the same denominator the
+      // playhead and the caption blocks use, because a trim that disagreed with
+      // the ruler by even a little would be worse than no trim at all.
+      edTrimLaneStyle: 'position: absolute; inset: 0; pointer-events: none;',
+      edTrimKeepStyle: (function () {
+        var a = (edTrim.from / edDuration) * 100;
+        var b = (edTrim.to / edDuration) * 100;
+        return 'position: absolute; top: 0; bottom: 0; left: 0; right: 0;'
+          + ' background: linear-gradient(90deg, rgba(8,8,10,.72) 0 ' + a.toFixed(2) + '%,'
+          + ' transparent ' + a.toFixed(2) + '% ' + b.toFixed(2) + '%,'
+          + ' rgba(8,8,10,.72) ' + b.toFixed(2) + '% 100%);'
+          + ' border-radius: 7px; pointer-events: none;'
+          + (edTrimmed ? '' : ' opacity: 0;');
+      })(),
+      edTrimStartStyle: 'position: absolute; top: -3px; bottom: -3px; left: ' + ((edTrim.from / edDuration) * 100).toFixed(2)
+        + '%; width: 10px; margin-left: -5px; border-radius: 4px; cursor: ew-resize; pointer-events: auto;'
+        + ' background: linear-gradient(180deg, #F0D6A6, #D9B478); box-shadow: 0 0 0 1px rgba(8,8,10,.6);',
+      edTrimEndStyle: 'position: absolute; top: -3px; bottom: -3px; left: ' + ((edTrim.to / edDuration) * 100).toFixed(2)
+        + '%; width: 10px; margin-left: -5px; border-radius: 4px; cursor: ew-resize; pointer-events: auto;'
+        + ' background: linear-gradient(180deg, #F0D6A6, #D9B478); box-shadow: 0 0 0 1px rgba(8,8,10,.6);',
+      edTrimLabel: edTrimmed
+        ? 'Keeping ' + secsToClock(edTrim.to - edTrim.from) + ' of ' + secsToClock(edDuration)
+          + ' · ' + secsToClock(edTrim.from) + ' to ' + secsToClock(edTrim.to) + ' · Save to render the cut'
+        : 'Drag either handle to trim. The whole clip is kept.',
+      edTrimResetStyle: 'padding: 4px 10px; border: 1px solid #26262A; border-radius: 7px; background: transparent;'
+        + ' color: ' + (edTrimmed ? '#F0D6A6' : '#4A4A52') + '; font-family: inherit; font-size: 10.5px; font-weight: 600;'
+        + ' cursor: ' + (edTrimmed ? 'pointer' : 'default') + ';',
+      dragTrimStart: function (e) { startTrimDrag(e, 'from', edDuration, edTrim); },
+      dragTrimEnd: function (e) { startTrimDrag(e, 'to', edDuration, edTrim); },
+      resetTrim: function (e) {
+        stop(e);
+        if (!edTrimmed) return;
+        UI.edTrim = null;
+        UI.edDirty = true;
+        paintNow();
+      },
+
       edPlayStyle: 'position: absolute; inset: 0; pointer-events: none;',
       edPlayHeadStyle: 'position: absolute; top: 0; bottom: 0; left: ' + ((edTime / edDuration) * 100).toFixed(2) + '%; width: 2px; background: #F0D6A6;',
       edProgressStyle: 'height: 3px; border-radius: 3px; width: ' + ((edTime / edDuration) * 100).toFixed(2) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
@@ -4248,7 +4337,16 @@
           return (i === UI.edBlock && UI.edBlockDraft !== null && UI.edBlockDraft !== undefined)
             ? UI.edBlockDraft : b.sourceText;
         }).join(' ').trim();
-        global.StudioAdapter.onSaveClip(edClip.id, { transcript: text || edClip.transcript });
+        // The trim travels with the save, in keeping with render-on-save: the
+        // handles move instantly, and Save is what puts the cut on the video.
+        // An untouched trim sends nothing rather than a range covering the
+        // whole clip, so a clip with no cut keeps no cut.
+        var payload = { transcript: text || edClip.transcript };
+        if (UI.edTrim) {
+          payload.cutsSec = edTrimmed ? [[edTrim.from, edTrim.to]] : [];
+          UI.edTrim = null;
+        }
+        global.StudioAdapter.onSaveClip(edClip.id, payload);
       },
 
       // ── Source range panel ──
@@ -4864,6 +4962,21 @@
         var clash = templates.filter(function (o) { return o.name === activeTemplate.name; }).length > 1;
         return clash && i > -1 ? activeTemplate.name + ' (' + (i + 1) + ')' : activeTemplate.name;
       })(),
+      // POST /api/templates has always existed and Studio never called it, so
+      // the only way to get a style of your own was to edit a built-in and let
+      // the server fork it behind your back under a name it chose. Naming your
+      // own work is the difference between a saved style and an accident.
+      // The editor's caption panel deliberately carries only per-clip fitting
+      // — position, tracking, line height. Colour, outline and font belong to
+      // the template, so one clip cannot drift away from its siblings. That is
+      // a good rule that read as missing features, because nothing on the
+      // screen said where those controls had gone.
+      goTemplates: function (e) { stop(e); setUI({ screen: 'templates' }); },
+      saveAsStyle: function (e) {
+        stop(e);
+        if (!activeTemplate) { toast('Pick a style to base it on first.'); return; }
+        global.StudioAdapter.onSaveAsStyle(activeTemplate.name || 'My style');
+      },
       setActiveTpl: function (e) {
         var label = String(e.target.value).replace(/ \u00b7 Pro$/, '');
         var picked = templates.filter(function (t, i) {
@@ -5487,7 +5600,7 @@
     onBulkClips: function () {},
     onBulkProjects: function () {},
     onSaveClip: function () {},
-    clipSaved: function () { UI.edSaving = false; UI.edDirty = false; UI.edCaption = null; UI.edBlockDraft = null; refresh(); },
+    clipSaved: function () { UI.edSaving = false; UI.edDirty = false; UI.edCaption = null; UI.edBlockDraft = null; UI.edTrim = null; refresh(); },
     // Called by the host once /api/source-info resolves, so the range picker can
     // open against the real duration.
     openJob: function (source) {

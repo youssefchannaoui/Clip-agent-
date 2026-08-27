@@ -4983,6 +4983,22 @@ StudioAdapter.onProbeSource=async url=>{try{
       history.replaceState({},'',location.pathname+(q.toString()?'?'+q:'')+location.hash);
       if(said)setTimeout(()=>{toast(said[0],said[1]);refresh()},400);
     })();
+    /* Saving a look under a name you chose. Until now the only way to end up
+       with your own style was to edit a built-in and have the server fork it
+       silently under a name it picked. */
+    StudioAdapter.onSaveAsStyle=basedOn=>{
+      const suggested=/^My /.test(basedOn)?basedOn:`My ${basedOn}`;
+      const name=prompt('Name this style:',suggested);
+      if(!name||!name.trim())return;
+      const current=DATA&&DATA.templates&&DATA.templates.find(t=>t.id===(DATA.selectedTemplate||{}).id);
+      const base=current||(DATA&&DATA.selectedTemplate)||null;
+      if(!base){toast('No style to copy.','bad');return}
+      studioDo(async()=>{
+        const r=await api('/api/templates',{method:'POST',
+          body:JSON.stringify({template:{...base,id:'',builtIn:false,name:name.trim()},select:true})});
+        return r;
+      },`Saved as “${name.trim()}” and selected`);
+    };
     /* The account menu's two dead entries, given something to do. */
     StudioAdapter.onContactSupport=()=>{
       const s=DATA&&DATA.support&&DATA.support.email;

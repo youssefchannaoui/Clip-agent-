@@ -1788,7 +1788,12 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
       transcriptEdited: Boolean(clip.transcriptEdited),
       startSec: clip.startSec, endSec: clip.endSec, score: clip.score, scoreReasons: clip.scoreReasons,
       reviewRequired: clip.reviewRequired,
-      ...(preview ? { cutsSec: [[preview.startSec, preview.endSec]] } : {}),
+      // A preview window wins for the duration of the preview -- it is a
+      // deliberate look at one moment. Otherwise the clip's own trim applies,
+      // which is what makes the cut engine reachable from the editor at all.
+      ...(preview
+        ? { cutsSec: [[preview.startSec, preview.endSec]] }
+        : (Array.isArray(clip.cutsSec) && clip.cutsSec.length ? { cutsSec: clip.cutsSec } : {})),
     }, callbackUrl: '',
   } : {
     mode: 'rerender', id: rerenderId, projectId: project.id, clipIdOverride: outputClipId,
@@ -1801,7 +1806,12 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
       transcriptEdited: Boolean(clip.transcriptEdited),
       startSec: clip.startSec, endSec: clip.endSec, score: clip.score, scoreReasons: clip.scoreReasons,
       reviewRequired: clip.reviewRequired,
-      ...(preview ? { cutsSec: [[preview.startSec, preview.endSec]] } : {}),
+      // A preview window wins for the duration of the preview -- it is a
+      // deliberate look at one moment. Otherwise the clip's own trim applies,
+      // which is what makes the cut engine reachable from the editor at all.
+      ...(preview
+        ? { cutsSec: [[preview.startSec, preview.endSec]] }
+        : (Array.isArray(clip.cutsSec) && clip.cutsSec.length ? { cutsSec: clip.cutsSec } : {})),
     },
   };
   const file = path.join(dir, 'job.json');

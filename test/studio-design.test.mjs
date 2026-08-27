@@ -3423,3 +3423,74 @@ test('the balance line is computed, not the designer’s placeholder', () => {
   assert.ok(!/20 hours of lecture processing, or about 62/.test(vals.balanceMeans),
     'the same sentence used to show under 6000 tokens and under 2');
 });
+
+// ── trim ───────────────────────────────────────────────────────────────────
+// The render pipeline learned to cut in v3.2.0 and nothing ever asked it to:
+// the only writer of cutsSec was the internal preview lane, so a finished and
+// tested cut engine sat behind no control at all.
+
+const TRIM_STATE = {
+  ...SAMPLE_STATE,
+  clips: [{
+    id: 'c1', title: 'A clip', status: 'waiting', score: 92, durationMs: 60000,
+    projectId: 'p1', targets: [], startSec: 10, endSec: 70,
+    captionSegments: [{ start: 0, end: 3, text: 'first' }, { start: 3, end: 6, text: 'second' }],
+  }],
+};
+
+const openTrim = (patch = {}) => {
+  Object.assign(StudioAdapter.ui, {
+    screen: 'editor', edClipId: 'c1', edBlock: 0, edBlockDraft: null, edTrim: null,
+    edDirty: false, edSaving: false, edTime: 0, bellOpen: false, menuOpen: false, railOpen: true,
+  }, patch);
+  return StudioAdapter.bindings(TRIM_STATE);
+};
+
+test('an untrimmed clip says so and offers handles at both ends', () => {
+  const vals = openTrim();
+  assert.match(vals.edTrimLabel, /whole clip is kept/i);
+  assert.match(vals.edTrimStartStyle, /left: 0\.00%/);
+  assert.match(vals.edTrimEndStyle, /left: 100\.00%/);
+  assert.equal(typeof vals.dragTrimStart, 'function');
+  assert.equal(typeof vals.dragTrimEnd, 'function');
+});
+
+test('a trim reads in the same geometry as the playhead (invariant 4)', () => {
+  const vals = openTrim({ edTrim: { from: 15, to: 45 }, edTime: 15 });
+  // 15s of a 60s clip is 25%. The handle and the playhead must agree exactly,
+  // because a trim that disagreed with the ruler is worse than no trim.
+  assert.match(vals.edTrimStartStyle, /left: 25\.00%/);
+  assert.match(vals.edPlayHeadStyle, /left: 25\.00%/);
+  assert.match(vals.edTrimEndStyle, /left: 75\.00%/);
+});
+
+test('a trim states what survives, and offers a way back', () => {
+  const vals = openTrim({ edTrim: { from: 15, to: 45 } });
+  assert.match(vals.edTrimLabel, /Keeping 0:30 of 1:00/);
+  assert.match(vals.edTrimLabel, /Save to render/i, 'the cut is not on the video until Save');
+  vals.resetTrim({ preventDefault() {}, stopPropagation() {} });
+  assert.equal(StudioAdapter.ui.edTrim, null);
+});
+
+test('saving sends the kept range, and an untouched clip sends no cuts at all', () => {
+  const sent = [];
+  const prev = StudioAdapter.onSaveClip;
+  StudioAdapter.onSaveClip = (id, payload) => sent.push(payload);
+
+  openTrim({ edTrim: { from: 12, to: 48 } }).saveEdit({ preventDefault() {}, stopPropagation() {} });
+  assert.deepEqual(sent[0].cutsSec, [[12, 48]]);
+
+  sent.length = 0;
+  openTrim().saveEdit({ preventDefault() {}, stopPropagation() {} });
+  StudioAdapter.onSaveClip = prev;
+  assert.ok(!('cutsSec' in sent[0]),
+    'a clip nobody trimmed must not acquire a cut just by being saved');
+});
+
+test('a saved trim reopens where it was left', () => {
+  const withCut = { ...TRIM_STATE, clips: [{ ...TRIM_STATE.clips[0], cutsSec: [[6, 54]] }] };
+  Object.assign(StudioAdapter.ui, { screen: 'editor', edClipId: 'c1', edTrim: null, bellOpen: false, menuOpen: false, railOpen: true });
+  const vals = StudioAdapter.bindings(withCut);
+  assert.match(vals.edTrimStartStyle, /left: 10\.00%/);
+  assert.match(vals.edTrimLabel, /Keeping 0:48/);
+});
