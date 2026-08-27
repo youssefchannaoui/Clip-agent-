@@ -1421,7 +1421,7 @@
           </div>
           <div style="position: relative; height: 30px; border-radius: 7px; background: #121214; border: 1px solid #1E1E22;">
             <sc-for list="{{ edCapBlocks }}" as="blk" hint-placeholder-count="6">
-              <div onClick="{{ blk.select }}" style="{{ blk.style }}">{{ blk.text }}</div>
+              <div onClick="{{ blk.select }}" style="{{ blk.style }}" title="{{ blk.hover }}">{{ blk.text }}</div>
             </sc-for>
           </div>
           <div style="position: relative; height: 26px; border-radius: 7px; background: #121214; border: 1px solid #1E1E22; overflow: hidden;">

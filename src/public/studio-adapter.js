@@ -2517,6 +2517,11 @@
         // repeated once per block -- and marked the clip edited. Every later
         // re-render then had no real timings to caption against.
         sourceText: block.text,
+        // The lane sizes a block by its seconds, so most show two or three
+        // letters -- unreadable as labels. The full words ride the native
+        // tooltip instead of widening the block and breaking the timeline.
+        hover: (timed ? secsToClock(block.start) + ' \u2013 ' + secsToClock(block.end) + '  ' : '')
+          + String((verse ? verse.arabic : block.text) || ''),
         ayah: verse || null,
         translation: verse ? verse.translation : '',
         // A block with real timings can say when it is; a fallback one cannot.

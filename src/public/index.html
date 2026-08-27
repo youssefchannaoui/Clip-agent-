@@ -416,6 +416,16 @@ a{color:var(--blue-soft)}
   .side-scroll::-webkit-scrollbar-thumb{background:var(--line-lit);border-radius:999px}
 }
 
+/* The editor's tool panel (generated class sb8) scrolls when the viewport
+   is short, but macOS overlay scrollbars are invisible until touched -- so
+   the controls below the fold read as missing, not scrollable. A thin
+   always-visible thumb says "there is more". Re-check the class name after
+   a design re-import. */
+.sb8{scrollbar-width:thin;scrollbar-color:var(--line-lit) transparent}
+.sb8::-webkit-scrollbar{width:7px}
+.sb8::-webkit-scrollbar-track{background:transparent}
+.sb8::-webkit-scrollbar-thumb{background:var(--line-lit);border-radius:999px}
+
 /* ---------- gate / connect ---------- */
 .center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
 .card-lock{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
@@ -2637,15 +2647,24 @@ function studioWanted(){return window.STUDIO_SHELL===true}
     function paintEditorSourceNote(vals,frame){
       const note=vals.edSourceNote||'';
       if(!note||!frame){if(edSrcNoteEl){edSrcNoteEl.remove();edSrcNoteEl=null}return}
-      if(!edSrcNoteEl||!edSrcNoteEl.isConnected||edSrcNoteEl.parentElement!==frame){
+      /* Under the frame, not on it: painted over the video it covered the
+         top fifth of the canvas -- exactly where a top-aligned caption
+         renders. The frame clips children (overflow:hidden), so the strip
+         lives on the frame's parent, sized and placed to the frame. */
+      const host=frame.parentElement||frame;
+      if(host!==frame&&getComputedStyle(host).position==='static')host.style.position='relative';
+      if(!edSrcNoteEl||!edSrcNoteEl.isConnected||edSrcNoteEl.parentElement!==host){
         if(edSrcNoteEl)edSrcNoteEl.remove();
         edSrcNoteEl=document.createElement('div');
         edSrcNoteEl.setAttribute('data-host-owned','');
-        edSrcNoteEl.style.cssText='position:absolute;left:8px;right:8px;top:8px;z-index:9;padding:5px 8px;'
+        edSrcNoteEl.style.cssText='position:absolute;z-index:9;padding:5px 8px;'
           +'border-radius:8px;border:1px solid rgba(230,183,112,.4);background:rgba(10,10,12,.86);'
           +'color:#E6B770;font:600 10px Outfit,Inter,sans-serif;text-align:center;pointer-events:none';
-        frame.appendChild(edSrcNoteEl);
+        host.appendChild(edSrcNoteEl);
       }
+      edSrcNoteEl.style.left=frame.offsetLeft+'px';
+      edSrcNoteEl.style.width=frame.offsetWidth+'px';
+      edSrcNoteEl.style.top=(frame.offsetTop+frame.offsetHeight+6)+'px';
       if(edSrcNoteEl.textContent!==note)edSrcNoteEl.textContent=note;
     }
 
@@ -2962,16 +2981,24 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          happens. Host-owned so the patcher never pairs against it. */
       const frame=box.offsetParent;
       if(frame){
-        let note=frame.querySelector(':scope > [data-host-notice]');
+        /* Under the frame, not on it -- covering the canvas top hid exactly
+           the region a top caption renders in. The frame clips children, so
+           the strip hangs from the frame's parent, matched to the frame. */
+        const noteHost=frame.parentElement||frame;
+        if(noteHost!==frame&&getComputedStyle(noteHost).position==='static')noteHost.style.position='relative';
+        let note=noteHost.querySelector(':scope > [data-host-notice]');
         if(vals.edRenderNotice){
           if(!note){
             note=document.createElement('div');
             note.setAttribute('data-host-notice','');
-            note.style.cssText='position:absolute;left:0;right:0;top:0;z-index:9;padding:7px 10px;'
-              +'background:linear-gradient(180deg,rgba(9,9,10,.92),rgba(9,9,10,.55) 80%,transparent);'
+            note.style.cssText='position:absolute;z-index:9;padding:5px 10px;border-radius:8px;'
+              +'background:rgba(9,9,10,.9);border:1px solid rgba(240,214,166,.28);'
               +'color:#F0D6A6;font:500 10.5px Outfit,Inter,sans-serif;line-height:1.35;text-align:center;pointer-events:none';
-            frame.appendChild(note);
+            noteHost.appendChild(note);
           }
+          note.style.left=frame.offsetLeft+'px';
+          note.style.width=frame.offsetWidth+'px';
+          note.style.top=(frame.offsetTop+frame.offsetHeight+6)+'px';
           if(note.textContent!==vals.edRenderNotice)note.textContent=vals.edRenderNotice;
         }else if(note)note.remove();
       }
