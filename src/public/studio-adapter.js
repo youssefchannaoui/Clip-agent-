@@ -2985,7 +2985,11 @@
     // any use to whoever read it.
     var failures = [];
     projects.forEach(function (pr) {
-      if (pr.status === 'failed' || pr.error) {
+      // status failed ONLY. `|| pr.error` also surfaced every lecture that
+      // failed once and later succeeded -- the error field survives the
+      // recovery -- so lectures happily full of clips sat in the bell as
+      // 'needs attention' forever. A done lecture is not a call to action.
+      if (pr.status === 'failed') {
         failures.push({
           id: activityId('project', pr.id, pr.completedAt || pr.submittedAt),
           text: projectTitle[pr.id] + ' needs attention',
@@ -3007,6 +3011,9 @@
     (DATA.rerenderJobs || []).forEach(function (j) {
       if (j.status !== 'failed') return;
       var c = clips.filter(function (x) { return x.id === j.clipId; })[0];
+      // Only the clip's current job: once a newer render succeeded, the old
+      // failure is history, not a task -- it sat in the bell regardless.
+      if (c && c.rerender && c.rerender.id && c.rerender.id !== j.id) return;
       failures.push({
         id: activityId('rerender', j.id || j.clipId, j.completedAt || j.createdAt),
         text: 'Edit failed · ' + ((c && c.title) || 'Clip'),

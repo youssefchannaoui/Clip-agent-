@@ -1660,6 +1660,20 @@ test('the posting-today panel names the platform its targets carry', () => {
   assert.equal(vals.slots[0].dest, 'YouTube', 'the provider names the destination');
 });
 
+test('a lecture that failed once and later succeeded leaves the bell', () => {
+  // The error field survives recovery, so every lecture that failed on the
+  // old import path and then imported fine sat as 'needs attention' forever.
+  const vals = StudioAdapter.bindings({
+    tracks: [], clips: [],
+    projects: [
+      { id: 'rec', title: 'Recovered lecture', status: 'done', error: 'old import error', clipCount: 3, submittedAt: Date.now() },
+    ],
+  });
+  const texts = (vals.activityRows || vals.activity || []).map(r => r.text || '').join('|');
+  assert.ok(!/Recovered lecture/.test(texts), 'a done lecture is not a call to action');
+  assert.equal(vals.activityUnread, 0);
+});
+
 test('the activity feed keeps a week, not a history book', () => {
   // 45 stale failure rows greeted every open of the bell as if the product
   // were on fire today. Older than a week, they leave the feed (the owner
