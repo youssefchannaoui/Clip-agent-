@@ -53,6 +53,9 @@ const STUDIO_ASSETS = {
   // Hand-written, and kept out of the generated bundle so a design re-import
   // cannot silently delete the app's only mobile layout.
   '/studio-responsive.css': { file: studioAsset('studio-responsive.css'), type: 'text/css; charset=utf-8' },
+  // Signed-out page enhancements. A file rather than an inline block because
+  // the CSP hashes inline scripts from index.html only.
+  '/auth-enhance.js': { file: studioAsset('auth-enhance.js'), type: JS_TYPE },
   // The browser-tab identity. /favicon.ico is served as PNG -- every modern
   // browser accepts it, and agents that request the path blindly stop 404ing.
   '/favicon.svg': { file: studioAsset('favicon.svg'), type: 'image/svg+xml' },

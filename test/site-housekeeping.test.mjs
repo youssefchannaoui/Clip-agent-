@@ -75,3 +75,39 @@ test('every page the sitemap advertises actually answers', async () => {
     assert.equal(res.status, 200, `${page} is in the sitemap but returned ${res.status}`);
   }
 });
+
+// ── signed-out page basics ──────────────────────────────────────────────────
+
+test('the sign-in page can be skipped straight into, for keyboard and screen readers', async () => {
+  const page = await fetch(`${base}/login`).then(r => r.text());
+  assert.match(page, /class="dc-skip"/, 'a skip link must be the first thing focus lands on');
+  assert.match(page, /href="#dc-signin"/);
+  assert.match(page, /id="dc-signin"/, 'and it must point at something that exists');
+});
+
+test('the password field can be revealed, from a file rather than an inline block', async () => {
+  // The CSP hashes inline scripts from index.html only, so an inline block on
+  // the sign-in page would be blocked at runtime while looking correct in source.
+  const page = await fetch(`${base}/login`).then(r => r.text());
+  assert.match(page, /<script src="\/auth-enhance\.js"/);
+  assert.ok(!/<script(?![^>]*\bsrc=)/.test(page.split('</head>')[1] || ''),
+    'no inline script may be added to this page');
+
+  const script = await fetch(`${base}/auth-enhance.js`);
+  assert.equal(script.status, 200, 'unlisted static files 404');
+  assert.match(script.headers.get('content-type') || '', /javascript/);
+  const body = await script.text();
+  assert.match(body, /input\[type="password"\]/);
+  assert.match(body, /aria-pressed/, 'the toggle must say its state, not just look different');
+});
+
+test('the reset page gets the same reveal', async () => {
+  const page = await fetch(`${base}/reset`).then(r => r.text());
+  assert.match(page, /<script src="\/auth-enhance\.js"/);
+});
+
+test('the footer year is computed, not a number that goes stale', async () => {
+  const home = await fetch(`${base}/`, { headers: { accept: 'text/html' } }).then(r => r.text());
+  assert.ok(home.includes(`© ${new Date().getFullYear()} DeenClipped`),
+    'a hardcoded year is a small lie that grows by one every January');
+});
