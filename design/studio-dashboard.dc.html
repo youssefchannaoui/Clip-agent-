@@ -985,6 +985,9 @@
                         </sc-for>
                       </div>
                     </sc-if>
+                    <sc-if value="{{ post.failReason }}" hint-placeholder-val="{{ '' }}">
+                      <p style="margin: 0; display: flex; align-items: baseline; gap: 6px; font-size: 11.5px; color: #E08770; line-height: 1.45;"><i class="ph-fill ph-warning-circle" style="font-size: 12px; position: relative; top: 1px;"></i>{{ post.failReason }}</p>
+                    </sc-if>
                   </div>
                   <div style="display: flex; align-items: center; gap: 7px; flex: none;">
                     <button onClick="{{ post.postNow }}" style="{{ post.postStyle }}" style-hover="background: rgba(217,180,120,.14);"><i class="ph ph-paper-plane-tilt" style="font-size: 13px;"></i>{{ post.postLabel }}</button>
@@ -1083,6 +1086,9 @@
                           <span style="{{ chk.style }}"><i class="{{ chk.icon }}" style="font-size: 12px;"></i>{{ chk.label }} missing</span>
                         </sc-for>
                       </div>
+                    </sc-if>
+                    <sc-if value="{{ post.failReason }}" hint-placeholder-val="{{ '' }}">
+                      <p style="margin: 0; display: flex; align-items: baseline; gap: 6px; font-size: 11.5px; color: #E08770; line-height: 1.45;"><i class="ph-fill ph-warning-circle" style="font-size: 12px; position: relative; top: 1px;"></i>{{ post.failReason }}</p>
                     </sc-if>
                   </div>
                   <div style="display: flex; align-items: center; gap: 7px; flex: none;">

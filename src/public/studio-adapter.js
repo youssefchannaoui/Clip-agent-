@@ -1793,7 +1793,13 @@
             ];
             var failing = checks.filter(function (k) { return !k.ok; });
             var ready = failing.length === 0;
+            // Why the last attempt failed, said ON the row. The reason lived
+            // only in the activity feed, so the schedule showed "missed its
+            // slot" with 4/4 checks green and no way to learn that the file
+            // was too large for the publishing relay.
+            var failedTarget = (c.targets || []).filter(function (t) { return t.status === 'failed' && t.error; })[0];
             return {
+              failReason: failedTarget ? String(failedTarget.error) : '',
               time: timeOf(c.scheduledAt),
               dest: PLATFORM_NAMES[platform] || 'No account',
               icon: platform === 'youtube' ? 'ph ph-youtube-logo' : platform === 'instagram' ? 'ph ph-instagram-logo' : platform === 'tiktok' ? 'ph ph-tiktok-logo' : 'ph ph-share-network',
