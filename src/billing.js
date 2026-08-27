@@ -83,6 +83,27 @@ function allowance(planId) {
   return Math.max(0, Number(plan.tokens || 0));
 }
 
+/**
+ * What this account may actually spend right now.
+ *
+ * A trial is free machine time, not a free plan: each token is a source minute
+ * that burns proxy bandwidth on import and storage on render. Granted at the
+ * plan's face value, one seven-day yearly trial hands out 6000 minutes — more
+ * bandwidth than the proxy plan sells in a month — and then cancels. So while
+ * the subscription is `trialing`, the ceiling is TOKENS_TRIAL.
+ *
+ * The cap lifts by itself: converting to a paid period moves
+ * `current_period_start`, which resets `tokensUsed` in updateFromSubscription,
+ * so the customer's first paid day starts on a clean full allowance.
+ */
+function walletAllowance(billing = {}) {
+  const planId = billing.plan || 'free';
+  const full = allowance(planId);
+  const cap = Math.max(0, Number(config.tokensTrial || 0));
+  if (!cap || planId === 'free') return full;
+  return trialState(billing).active ? Math.min(cap, full) : full;
+}
+
 export function tokenRate() {
   return Math.max(0.1, Number(config.tokensPerMinute || 1));
 }
@@ -214,7 +235,7 @@ export function publicBilling(user) {
   const billing = ensureUserBilling(user);
   const unlimited = isUnlimited(user);
   const currentPlan = billing.plan || 'free';
-  const allow = unlimited ? Infinity : allowance(currentPlan);
+  const allow = unlimited ? Infinity : walletAllowance(billing);
   const used = Number(billing.tokensUsed || 0);
   const reserved = Number(billing.tokensReserved || 0);
   const bonusTokens = Math.max(0, Number(billing.bonusTokens || 0));
@@ -258,14 +279,18 @@ export function publicBilling(user) {
     portalConfigured: Boolean(config.stripeSecretKey),
     tokenRatePerMinute: tokenRate(),
     trialDays: config.stripeTrialDays,
+    trialTokens: Math.max(0, Number(config.tokensTrial || 0)),
     terms: [
       `${tokenRate()} token per source video minute`,
       'Tokens are charged after the source duration is known',
       'Template updates and rerenders are free',
-      `${config.stripeTrialDays || 7}-day trial on paid plans`,
+      config.tokensTrial
+        ? `${config.stripeTrialDays || 7}-day trial on paid plans, with ${config.tokensTrial} tokens to try it`
+        : `${config.stripeTrialDays || 7}-day trial on paid plans`,
+      config.tokensTrial ? 'Your full plan allowance starts on the first paid day' : '',
       'Unused trial access does not roll into another trial',
       'Purchased top-up tokens do not expire when a subscription renews',
-    ],
+    ].filter(Boolean),
     proFeatures: PRO_FEATURES,
     // The dashboard needs to distinguish "no tokens" from "address not
     // confirmed yet" -- they are refused the same way and mean different things.
@@ -346,7 +371,7 @@ export function reserveTokens(userId, tokens, meta = {}) {
   const amount = Math.max(0, Math.ceil(Number(tokens || 0)));
   if (!amount) return { reserved: 0, unlimited: false };
   const billing = ensureUserBilling(user);
-  const planAllowance = allowance(billing.plan || 'free');
+  const planAllowance = walletAllowance(billing);
   const used = Math.max(0, Number(billing.tokensUsed || 0));
   const reserved = Math.max(0, Number(billing.tokensReserved || 0));
   const available = Math.max(0, planAllowance - used - reserved) + Math.max(0, Number(billing.bonusTokens || 0));
@@ -382,7 +407,7 @@ export function chargeTokens(userId, tokens, reason = 'usage', meta = {}, { allo
   if (!user || isUnlimited(user)) return { charged: 0, unlimited: true, shortfall: 0 };
   const billing = ensureUserBilling(user);
   const owed = Math.max(1, Math.ceil(Number(tokens || 0)));
-  const planAllowance = allowance(billing.plan || 'free');
+  const planAllowance = walletAllowance(billing);
   const usedBefore = Math.max(0, Number(billing.tokensUsed || 0));
   const reserved = Math.max(0, Number(billing.tokensReserved || 0));
   const baseAvailable = Math.max(0, planAllowance - usedBefore - reserved);
@@ -574,7 +599,7 @@ export function grantTopup(user, packageId, references = {}) {
     },
     createdAt: now(),
     type: 'tokens_added',
-    remaining: Math.max(0, allowance(billing.plan || 'free') - Number(billing.tokensUsed || 0) - Number(billing.tokensReserved || 0)) + billing.bonusTokens,
+    remaining: Math.max(0, walletAllowance(billing) - Number(billing.tokensUsed || 0) - Number(billing.tokensReserved || 0)) + billing.bonusTokens,
     message: `${pack.tokens} top-up tokens added to your wallet.`,
   };
   state.billingEvents.unshift(event);
@@ -846,6 +871,15 @@ export function plansPage(user, { error = '', info = '', returnTo = '/' } = {}) 
   const bill = publicBilling(user);
   const cur = bill.current || {};
   const trialDays = Math.max(0, Number(bill.trialDays || 0));
+  const trialTokens = Math.max(0, Number(bill.trialTokens || 0));
+  // Say the trial's real size on the card. A plan that advertises 6000 tokens
+  // and hands a trial 75 is a surprise the customer finds after paying nothing
+  // and getting stuck.
+  const trialLine = !trialDays
+    ? 'Starts immediately'
+    : trialTokens
+      ? `${trialDays}-day trial with ${trialTokens} tokens, then your full allowance`
+      : `${trialDays}-day trial when shown at checkout`;
   const returnValue = esc(safeReturn(returnTo));
   const planCards = PLAN_ORDER.map(id => bill.plans?.[id]).filter(Boolean).map(plan => {
     const configured = Boolean(plan.priceId);
@@ -857,7 +891,7 @@ export function plansPage(user, { error = '', info = '', returnTo = '/' } = {}) 
       <div class="money">${esc(plan.priceLabel || 'Set price')}<small> / ${esc(plan.interval)}</small></div>
       <p>${esc(plan.description)}</p>
       <div class="tokens"><b>${esc(plan.tokens)}</b><span>tokens included every ${esc(plan.interval)}</span></div>
-      <ul><li>${esc(tokenRate())} token per selected source minute</li><li>Review, editor, templates and publishing</li><li>Template-only rerenders stay free</li><li>${trialDays ? `${trialDays}-day trial when shown at checkout` : 'Starts immediately'}</li></ul>
+      <ul><li>${esc(tokenRate())} token per selected source minute</li><li>Review, editor, templates and publishing</li><li>Template-only rerenders stay free</li><li>${esc(trialLine)}</li></ul>
       <form method="post" action="/billing/checkout"><input type="hidden" name="plan" value="${esc(plan.id)}"><input type="hidden" name="returnTo" value="${returnValue}"><button type="submit" ${configured && !current ? '' : 'disabled'}>${esc(cta)}</button></form>
     </article>`;
   }).join('');

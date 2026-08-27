@@ -222,6 +222,11 @@ export const config = {
   tokensWeekly: Math.max(1, Math.round(number(process.env.TOKENS_WEEKLY, 120))),
   tokensMonthly: Math.max(1, Math.round(number(process.env.TOKENS_MONTHLY, 650))),
   tokensYearly: Math.max(1, Math.round(number(process.env.TOKENS_YEARLY, 9000))),
+  // A trial hands out real machine time: every token is a source minute that
+  // costs proxy bandwidth and storage. Uncapped, a yearly trial grants its
+  // whole 6000-minute allowance for free, which is more bandwidth than the
+  // proxy plan sells in a month. 0 disables the cap.
+  tokensTrial: Math.max(0, Math.round(number(process.env.TOKENS_TRIAL, 75))),
   tokensPerMinute: Math.max(0.1, number(process.env.TOKENS_PER_MINUTE, 1)),
   minimumTokensToStart: Math.max(1, Math.round(number(process.env.MINIMUM_TOKENS_TO_START, 10))),
   tiktokRedirectUri: process.env.TIKTOK_REDIRECT_URI || '',
