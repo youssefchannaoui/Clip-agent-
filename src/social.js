@@ -555,8 +555,18 @@ function validateFor(next, userId) {
   if (next.enabled && !config.socialPublishEnabled) throw new SocialError('Automatic social publishing is disabled by SOCIAL_PUBLISH_ENABLED.');
   const enabledProviders = PROVIDERS.filter(provider => next[provider]?.enabled);
   if (next.enabled && !enabledProviders.length) throw new SocialError('Enable at least one connected publishing destination.');
+  // Strict checks apply to what this save is asserting: a provider being
+  // switched on, or one whose account is being repointed. A provider that was
+  // already on and is untouched must not block the save -- Instagram and
+  // Facebook both sat enabled-without-accounts, and every attempt to switch
+  // one of them OFF was rejected because the validator re-tried the other.
+  // The publish path skips unpostable providers itself.
+  const current = publishingSettings(userId);
   for (const provider of enabledProviders) {
     const item = next[provider] || {};
+    const was = current[provider] || {};
+    const asserting = !was.enabled || String(item.accountId || '') !== String(was.accountId || '');
+    if (!asserting) continue;
     if (!status.providers[provider].configured) throw new SocialError(`${provider} developer credentials are not configured.`);
     if (!selectedAccount(provider, item.accountId, userId)) throw new SocialError(`Choose a connected ${provider} account.`);
   }
@@ -601,15 +611,23 @@ export function enabledTargetsForClip(clip) {
   // polling steps later cannot drift onto a different account's credentials.
   const userId = ownerOf(clip);
   if (!userId) throw new SocialError('This clip has no owner, so it cannot be published.');
-  const settings = validateFor(publishingSettings(ownerOfRecord(clip)), userId);
-  if (!settings.enabled) return [];
+  // Read lightly, never through validateFor: that validator throws on the
+  // first misconfigured provider, and one Instagram connection missing its
+  // account pick silently blocked EVERY approval from scheduling anything --
+  // including perfectly healthy YouTube posts. A provider that cannot post
+  // is skipped and named in the log; the others carry on.
+  const settings = publishingSettings(ownerOfRecord(clip));
+  if (!settings.enabled || !config.socialPublishEnabled) return [];
   const targets = [];
   for (const provider of PROVIDERS) {
     const item = settings[provider];
     if (!item?.enabled) continue;
     if (provider === 'tiktok' && (clip.approvedBy !== 'manual' || !clip.tiktokConsentAt)) continue; // TikTok requires explicit consent for each post.
     const account = selectedAccount(provider, item.accountId, userId);
-    if (!account) continue;
+    if (!account) {
+      log(`${provider} is switched on but has no account selected, so "${clip.title || clip.id}" will not post there. Pick the account in Connections.`, 'warn', userId);
+      continue;
+    }
     targets.push({
       userId,
       provider, accountId: item.accountId, accountName: provider === 'facebook' ? account.pageName : provider === 'instagram' ? account.instagramName : account.name,

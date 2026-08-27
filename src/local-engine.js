@@ -124,10 +124,18 @@ function removeDataFile(file) {
   if (resolved.startsWith(allowedRoot)) fs.rmSync(resolved, { force: true });
 }
 
-function trustedRemoteMediaUrl(value) {
+export function trustedRemoteMediaUrl(value) {
   const url = new URL(String(value || ''));
-  const configuredBase = config.objectStoragePublicUrl || config.objectStorageEndpoint;
-  if (!configuredBase || url.protocol !== 'https:' || url.origin !== new URL(configuredBase).origin) {
+  // Every origin rendered media legitimately lives on: the bucket's public
+  // URL, the S3 endpoint, and the CDN domain in front of the same bucket.
+  // Old clips carry the first, new clips the last -- the publish path sees
+  // both, and refusing the CDN host broke every post the day media moved
+  // off the rate-limited r2.dev URL.
+  const trusted = [config.objectStoragePublicUrl, config.objectStorageEndpoint, config.mediaPublicBase]
+    .filter(Boolean)
+    .map(base => { try { return new URL(base).origin; } catch { return ''; } })
+    .filter(Boolean);
+  if (!trusted.length || url.protocol !== 'https:' || !trusted.includes(url.origin)) {
     throw new Error('The rendered clip URL is outside the configured media storage host.');
   }
   return url.toString();

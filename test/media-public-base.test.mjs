@@ -77,3 +77,18 @@ test('non-R2 URLs pass through untouched', async () => {
   const res = await fetch(`${base}/api/clips/clip-m1/video`, { redirect: 'manual' });
   assert.equal(res.headers.get('location'), 'https://cdn.elsewhere.com/v.mp4');
 });
+
+test('the publisher trusts the CDN origin alongside the storage origin', async () => {
+  // The day media moved to the custom domain, every publish failed with "The
+  // rendered clip URL is outside the configured media storage host": the
+  // allowlist knew only the old bucket URL. Both generations of stored URL
+  // must pass, and unrelated hosts must still be refused.
+  const { trustedRemoteMediaUrl } = await import('../src/local-engine.js');
+  assert.equal(
+    trustedRemoteMediaUrl('https://media.example.com/clips/a/b.mp4'),
+    'https://media.example.com/clips/a/b.mp4', 'the CDN origin passes');
+  assert.throws(() => trustedRemoteMediaUrl('https://evil.example.net/clips/a/b.mp4'),
+    /outside the configured media storage host/, 'unrelated hosts are refused');
+  assert.throws(() => trustedRemoteMediaUrl('http://media.example.com/clips/a/b.mp4'),
+    /outside the configured media storage host/, 'plain http is refused even on the right host');
+});

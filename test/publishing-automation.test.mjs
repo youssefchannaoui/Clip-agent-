@@ -69,3 +69,46 @@ test('a strong clip is automatically scheduled and then posted to YouTube', asyn
   assert.equal(clip.targets[0].postId, 'posted-video-id');
   assert.equal(clip.targets[0].postUrl, 'https://youtu.be/posted-video-id');
 });
+
+test('one misconfigured platform never blocks the others from scheduling', async () => {
+  // Instagram sat enabled with no account selected, and every approval bounced
+  // back to waiting: setTargets validated ALL platforms and threw on the first
+  // broken one, so a half-connected Meta login silently stopped healthy
+  // YouTube posts for two days. A broken platform is skipped and logged; the
+  // healthy ones post.
+  const settings = store.publishingSettings(USER);
+  store.setPublishingSettings(USER, {
+    ...settings,
+    enabled: true,
+    instagram: { ...(settings.instagram || {}), enabled: true, accountId: 'ig-account-that-does-not-exist' },
+  });
+  const clip = {
+    id: 'clip_igblock', projectId: 'p_igblock', userId: USER, ownedBy: USER,
+    title: 'Healthy despite Instagram', status: 'approved', approvedBy: 'manual', approvedAt: Date.now(),
+    score: 90, musicVerified: true, renderVerified: true, renderQuality: 'final',
+    templateId: 'deenclipped-gold', durationMs: 30000, transcript: 'words', targets: [],
+  };
+  store.state.clips.push(clip);
+  const scheduled = agent.scheduleApprovedClip(clip);
+  assert.equal(scheduled.status, 'scheduled', 'the clip schedules despite the broken platform');
+  const providers = scheduled.targets.map(t => t.provider);
+  assert.ok(providers.includes('youtube'), 'the healthy platform is targeted');
+  assert.ok(!providers.includes('instagram'), 'the broken platform is skipped, not fatal');
+});
+
+test('a save that only disables a platform is never rejected by another broken one', () => {
+  // With Instagram AND Facebook both enabled-without-accounts, switching
+  // either off was refused because the validator re-checked the other. The
+  // account was wedged: no save could pass. Disabling must always be allowed.
+  const settings = store.publishingSettings(USER);
+  store.setPublishingSettings(USER, {
+    ...settings,
+    enabled: true,
+    instagram: { ...(settings.instagram || {}), enabled: true, accountId: 'missing-ig' },
+    facebook: { ...(settings.facebook || {}), enabled: true, accountId: 'missing-fb' },
+  });
+  const wedged = store.publishingSettings(USER);
+  const next = { ...wedged, instagram: { ...wedged.instagram, enabled: false } };
+  // validatePublishingSettings throws SocialError when refused.
+  assert.doesNotThrow(() => social.validatePublishingSettings(next, { id: USER }));
+});
