@@ -182,7 +182,10 @@
   // Clip lengths are seconds-scale, so m:ss reads naturally.
   function secsToClock(s) {
     if (!s && s !== 0) return '';
-    var m = Math.floor(s / 60), r = Math.round(s % 60);
+    // Round the total first: rounding the remainder alone turned 59.6s into
+    // "0:60" on clip cards.
+    var total = Math.round(s);
+    var m = Math.floor(total / 60), r = total % 60;
     return m + ':' + (r < 10 ? '0' : '') + r;
   }
   // Lecture lengths are hours-scale, where m:ss would render 3720s as "62:00"
@@ -1497,7 +1500,7 @@
   function sublineFor(screen, ctx) {
     // Honest label while the editor is rough: preview and edit feedback can
     // be slow, and saying so beats looking broken. Remove when it earns it.
-    if (screen === 'editor') return 'Beta \u2014 previews and edits can take a while; your changes are always saved';
+    if (screen === 'editor') return 'Beta \u2014 sliders preview instantly; Save renders your changes onto the video';
     var empty = ctx.projects.length === 0;
     switch (screen) {
       case 'home':
@@ -3047,7 +3050,7 @@
     if (overdue.length) {
       overdueRow = {
         day: 'Overdue',
-        countLabel: plural(overdue.length, 'post') + ' missed its slot',
+        countLabel: plural(overdue.length, 'post') + (overdue.length === 1 ? ' missed its slot' : ' missed their slots'),
         canAdd: false,
         items: overdue.map(scheduleItem),
       };
@@ -3464,7 +3467,12 @@
         };
       }),
 
-      blockersOn: Boolean(blocker) && !UI.blockerDismissed,
+      blockersOn: Boolean(blocker) && !UI.blockerDismissed && (function () {
+        // Dismissal outlives the tab, keyed by the message: the nasheed nag
+        // came back on every page load however many times it was dismissed.
+        // A DIFFERENT blocker (new gap, new wording) still shows.
+        try { return global.localStorage.getItem('deenBlockerDismissed') !== blocker; } catch (e) { return true; }
+      }()),
       blockerText: blocker || '',
       blockerCta: blockerCta,
       resolveBlocker: function (e) {
@@ -3473,7 +3481,11 @@
         if (blockerOpensConnections) { global.StudioAdapter.onOpenConnections(); return; }
         setUI({ screen: blockerScreen });
       },
-      dismissBlocker: function (e) { stop(e); setUI({ blockerDismissed: true }); },
+      dismissBlocker: function (e) {
+        stop(e);
+        try { global.localStorage.setItem('deenBlockerDismissed', blocker); } catch (err) { /* memory-only fallback */ }
+        setUI({ blockerDismissed: true });
+      },
 
       // ── Lecture library ──
       libTabs: [

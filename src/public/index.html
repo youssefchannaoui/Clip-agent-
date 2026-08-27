@@ -4227,8 +4227,13 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           const card=(b)=>{
             const on=ui.jobBgId===b.id;
             const del=(b.deletable!==undefined?b.deletable:b.own);
+            /* A background without a poster frame rendered as a blank card --
+               the shared Nature drone looked broken. A film icon says "video,
+               no preview yet" instead of saying nothing. */
+            const posterCss=b.posterUrl?`background-image:url('${esc(withPw(b.posterUrl))}')`:'display:flex;align-items:center;justify-content:center';
+            const posterBody=b.posterUrl?'':'<i class="ph ph-film-strip" style="font-size:20px;color:#4A4A52"></i>';
             return `<button type="button" class="bgt-card${on?' on':''}" data-bg-id="${esc(b.id)}" title="${esc(b.name)} \u00B7 ${Math.round(b.durationSec)}s">`
-              +`<span class="bgt-thumb" style="background-image:url('${esc(withPw(b.posterUrl||''))}')">`
+              +`<span class="bgt-thumb" style="${posterCss}">${posterBody}`
               +(b.shared?'<span class="bgt-badge">DeenClipped</span>':'')
               +(del?`<span role="button" class="bgt-del" data-bg-del="${esc(b.id)}" title="Delete">\u00D7</span>`:'')
               +'</span>'

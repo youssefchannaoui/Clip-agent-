@@ -1644,6 +1644,16 @@ test('an unsaved edit echoes the block words with the draft geometry', () => {
   assert.equal(vals.edCapWords.length, 0, 'saved: the echo ends');
 });
 
+test('a sixty-second clip reads as one minute, not sixty seconds', () => {
+  // Math.round on the remainder alone turned 59.6s into "0:60" on cards.
+  const vals = StudioAdapter.bindings({
+    projects: [], tracks: [],
+    clips: [{ id: 'd60', projectId: 'p1', title: 'Minute', status: 'waiting', score: 50, durationMs: 59600, targets: [] }],
+  });
+  const row = (vals.needsRows || vals.queue || vals.perfBoard || []).map(r => r.duration || '').join('|');
+  assert.ok(!/0:60/.test(JSON.stringify(vals)), 'no surface renders 0:60');
+});
+
 test('the posting-today panel names the platform its targets carry', () => {
   // Targets store the destination under `provider`; this panel read
   // `platform` and said "Not connected" for every scheduled post while four
