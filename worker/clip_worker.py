@@ -3164,6 +3164,13 @@ def render_clip(
         "-map", "[vout]", "-map", "[aout]",
         "-c:v", "libx264", "-threads", ffmpeg_threads,
         "-preset", "ultrafast" if draft else "veryfast", "-crf", "24" if draft else "19",
+        # A hard bitrate ceiling, because CRF alone has none: on grainy
+        # monochrome footage crf19 produced a 453MB, 68 Mbit/s file for a
+        # 52-second clip -- too large for the publishing relay, so every
+        # final render of a grainy clip silently failed to post. 8 Mbit/s is
+        # YouTube's own 1080p30 recommendation; the longest allowed clip
+        # (180s) lands near 180MB, comfortably under the relay's 256MB cap.
+        "-maxrate", "4M" if draft else "8M", "-bufsize", "8M" if draft else "16M",
         "-pix_fmt", "yuv420p", "-r", "30", "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart", "-shortest", str(clip_file),
     ]

@@ -58,6 +58,9 @@ check_code "ayahs stored on the clip"        "matched_ayahs"     /app/worker/cli
 # defaults to its sidecar; this catches the default being lost again.
 check_code "worker calls its own clip AI"   "http://ollama:11434" /app/worker/clip_worker.py
 check_code "viral titling prompt"           "TRANSCRIPT DATA"     /app/worker/clip_worker.py
+# CRF alone has no ceiling: a grainy 52s clip rendered at 453MB and silently
+# failed to publish. The ceiling is the difference between posting and not.
+check_code "render bitrate ceiling"         "maxrate"             /app/worker/clip_worker.py
 
 echo
 
