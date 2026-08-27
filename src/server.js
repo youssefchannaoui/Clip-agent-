@@ -572,10 +572,25 @@ async function route(req, res, url) {
   if (method === 'POST' && pathname === '/api/billing/webhook') {
     try {
       const raw = await readRawBody(req, 5_000_000);
-      const event = billing.verifyStripeSignature(raw, req.headers['stripe-signature'] || '');
+      const signature = req.headers['stripe-signature'] || '';
+      const event = billing.verifyStripeSignature(raw, signature);
       billing.handleWebhookEvent(event);
+      alerts.report('billing', false).catch(() => {});
       return json(res, 200, { received: true });
     } catch (error) {
+      // A rejected webhook used to return 400 and tell nobody. If the signing
+      // secret is ever wrong, the money reaches Stripe, the app never hears
+      // about it, and the customer sits there with no tokens until they
+      // complain -- the exact silent failure the alerts exist to prevent.
+      //
+      // Only a request that actually carried a signature raises the alarm.
+      // A public endpoint is scanned constantly, and unsigned junk is noise,
+      // not a billing outage.
+      if (req.headers['stripe-signature']) {
+        alerts.report('billing', true,
+          `A Stripe webhook was refused: ${error.message}\n` +
+          'A payment may have completed without the customer receiving tokens.').catch(() => {});
+      }
       return json(res, 400, { error: error.message });
     }
   }

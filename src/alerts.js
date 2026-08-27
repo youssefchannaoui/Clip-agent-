@@ -37,6 +37,13 @@ const PLAYBOOK = {
     'Press Retry on one failed lecture and watch it: one shared cause usually explains all of them.',
     'If nothing obvious, screenshot the Health tab and ask Claude to dig in.',
   ],
+  billing: [
+    'A customer may have paid without their tokens landing. Stripe keeps the money; the app never heard about it.',
+    'Open dashboard.stripe.com -> Developers -> Webhooks -> deenclipped-billing -> Event deliveries and look for 400 responses.',
+    'The usual cause is STRIPE_WEBHOOK_SECRET on Render not matching the signing secret on that page. Copy it again and redeploy.',
+    'Stripe retries for about three days, so fixing the secret inside that window delivers the missed events by itself -- nothing is lost.',
+    'If a delivery is already past retrying, resend it by hand from the same Event deliveries page.',
+  ],
   backups: [
     'Check Cloudflare R2 (dash.cloudflare.com -> R2) is reachable and the bucket still exists.',
     'The last good backup is still safe -- this alert means NEW copies are failing, not that data is lost.',
