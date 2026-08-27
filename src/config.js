@@ -227,6 +227,12 @@ export const config = {
   tiktokRedirectUri: process.env.TIKTOK_REDIRECT_URI || '',
   tiktokAuthBase: (process.env.TIKTOK_AUTH_BASE || 'https://www.tiktok.com').replace(/\/+$/, ''),
   tiktokApiBase: (process.env.TIKTOK_API_BASE || 'https://open.tiktokapis.com').replace(/\/+$/, ''),
+  // Public CDN base for rendered media. R2's pub-*.r2.dev endpoint is a
+  // development URL: Cloudflare rate-limits it (we measured five straight GET
+  // 503s in one editor session) and it sends no CORS headers. When this is
+  // set to a custom domain bound to the same bucket, every stored r2.dev URL
+  // is rewritten to it at the moment it leaves the server.
+  mediaPublicBase: (process.env.MEDIA_PUBLIC_BASE || '').replace(/\/+$/, ''),
 };
 
 for (const dir of [

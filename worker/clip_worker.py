@@ -2168,9 +2168,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                                 wrap_caption(" ".join(gap), 28),
                                 font=font, arabic_font=arabic_font, uppercase=uppercase,
                             )
+                            # Same \q0 guard as the phrase captions: a flat
+                            # character count must never be what keeps words
+                            # inside the frame.
                             events.append(
                                 f"Dialogue: 2,{ass_time(gap_start)},{ass_time(gap_end)},"
-                                f"Caption,,0,0,0,,{fade_tag}{line}"
+                                f"Caption,,0,0,0,,{fade_tag}{{\\q0}}{line}"
                             )
 
                         cursor = 0
@@ -2337,7 +2340,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 wrap_caption(str(segment["text"]), 28),
                 font=font, arabic_font=arabic_font, uppercase=uppercase,
             )
-            events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}{text}")
+            # \q0: wrap_caption breaks at a flat 28 characters, which assumes
+            # the template's own face. When fontconfig resolves the family to
+            # a wider fallback -- a worker image built without the bundled
+            # fonts drew Outfit as a typewriter face ~1.7x wider -- those
+            # breaks overflow the frame and the caption is cut mid-glyph at
+            # both edges (seen in a real render). WrapStyle 2 would let it;
+            # \q0 lets libass take a second line instead. The manual \N
+            # breaks still hold when they fit.
+            events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}{{\\q0}}{text}")
 
     # Arabic speech, with the English under it in the translation style. The
     # Arabic is drawn as a whole line rather than word by word: a single word

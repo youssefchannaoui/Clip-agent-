@@ -61,6 +61,22 @@ check_code "viral titling prompt"           "TRANSCRIPT DATA"     /app/worker/cl
 
 echo
 
+# ── the faces the captions are set in ─────────────────────────────────────────
+# The ASS styles ask for these families by name. When fontconfig cannot
+# resolve one it silently substitutes -- a worker image built before the
+# fonts were bundled drew Outfit as a typewriter face ~1.7x wider, and the
+# pre-broken caption lines ran off both edges of a real customer render.
+# A build log cannot catch this; only the running image's font list can.
+for family in "Outfit" "Montserrat" "Amiri" "KFGQPC HAFS Uthmanic Script"; do
+  if docker exec "$CONTAINER" fc-list 2>/dev/null | grep -qi "$family"; then
+    ok "font: $family"
+  else
+    bad "font: $family" "captions will render in a fallback face"
+  fi
+done
+
+echo
+
 # ── what ffmpeg in the image can actually do ──────────────────────────────────
 # The filters are built as strings, so a missing one fails at render time, on a
 # real customer job, not here.

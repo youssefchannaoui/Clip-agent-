@@ -572,6 +572,44 @@ class LetterSpacingTests(unittest.TestCase):
         self.assertEqual(ayah_style.split(",")[13].strip(), "0")
 
 
+class PhraseWrapGuardTests(unittest.TestCase):
+    """Phrase captions must never trust wrap_caption's flat character count.
+
+    wrap_caption breaks at 28 characters assuming the template's own face. A
+    worker image built without the bundled fonts resolved Outfit to a
+    typewriter fallback ~1.7x wider, and the pre-broken lines ran off both
+    edges of a real customer render (seen on a frame, not inferred). The \q0
+    override lets libass take a second line when a break underjudges, which
+    the cards mode already relies on in production.
+    """
+
+    def _ass_for(self, mode_template):
+        text = ("Behind every refraction of light, behind every event, behind "
+                "every coincidence is the reality of Allah acting upon the world")
+        segments = [{"start": 0.0, "end": 20.0, "text": text}]
+        candidate = worker.Candidate(0, 20.0, text, segments, 90, [], False)
+        out = pathlib.Path(tempfile.mkdtemp()) / "wrap.ass"
+        worker.write_ass(candidate, mode_template, out)
+        return out.read_text(encoding="utf-8")
+
+    def test_phrase_captions_carry_the_wrap_override(self):
+        # captionMode word with no word timings falls back to phrase captions
+        # -- the exact path a re-render takes, which is where the overflow
+        # shipped.
+        ass = self._ass_for({"width": 1080, "height": 1920, "captionMode": "word"})
+        dialogues = [l for l in ass.splitlines() if l.startswith("Dialogue:") and ",Caption," in l]
+        self.assertTrue(dialogues, "expected a phrase caption event")
+        for line in dialogues:
+            self.assertIn("{\\q0}", line)
+
+    def test_explicit_phrase_mode_is_guarded_too(self):
+        ass = self._ass_for({"width": 1080, "height": 1920, "captionMode": "phrase"})
+        dialogues = [l for l in ass.splitlines() if l.startswith("Dialogue:") and ",Caption," in l]
+        self.assertTrue(dialogues, "expected a phrase caption event")
+        for line in dialogues:
+            self.assertIn("{\\q0}", line)
+
+
 class CaptionFontTests(unittest.TestCase):
     """Every font the picker offers has to exist in the worker image.
 

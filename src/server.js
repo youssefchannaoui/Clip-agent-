@@ -73,6 +73,19 @@ function json(res, status, value) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
   res.end(body);
 }
+// Rendered media lives in R2. Its pub-*.r2.dev public endpoint is a dev URL
+// that Cloudflare rate-limits (measured: consecutive GET 503s mid-session),
+// so when MEDIA_PUBLIC_BASE names a custom domain on the same bucket, every
+// r2.dev URL is swapped to it here -- one choke point, stored records untouched.
+function mediaUrl(url) {
+  if (!url || !config.mediaPublicBase) return url || '';
+  try {
+    const parsed = new URL(url);
+    if (parsed.host.endsWith('.r2.dev')) return config.mediaPublicBase + parsed.pathname + parsed.search;
+  } catch { /* not a URL: leave it alone */ }
+  return url;
+}
+
 function redirect(res, location) { res.writeHead(302, { Location: location, 'Cache-Control': 'no-store' }); res.end(); }
 function temporaryRedirect(res, location) { res.writeHead(307, { Location: location, 'Cache-Control': 'private, no-store' }); res.end(); }
 
@@ -434,8 +447,8 @@ function publicClip(clip, { detail = false } = {}) {
     variantOf: clip.variantOf || null, addedAt: clip.addedAt,
     targets: (clip.targets || []).map(social.targetPublic),
     rerender: rerender ? { id: rerender.id, status: rerender.status, stage: rerender.stage, progress: rerender.progress, error: rerender.error || null, asVariant: rerender.asVariant, preview: Boolean(rerender.preview) } : null,
-    stylePreview: clip.stylePreview || null,
-    videoUrl: clip.clipUrl || `/api/clips/${encodeURIComponent(clip.id)}/video`, thumbUrl: clip.thumbUrl || `/api/clips/${encodeURIComponent(clip.id)}/thumb`,
+    stylePreview: clip.stylePreview ? { ...clip.stylePreview, url: mediaUrl(clip.stylePreview.url) } : null,
+    videoUrl: mediaUrl(clip.clipUrl) || `/api/clips/${encodeURIComponent(clip.id)}/video`, thumbUrl: mediaUrl(clip.thumbUrl) || `/api/clips/${encodeURIComponent(clip.id)}/thumb`,
   };
 }
 
@@ -805,7 +818,7 @@ async function route(req, res, url) {
     try { allowed = social.verifyMediaSignature(clipId, url.searchParams.get('exp'), url.searchParams.get('sig')); } catch {}
     if (!allowed) return json(res, 403, { error: 'This media link is invalid or expired.' });
     const remoteClip = state.clips.find(item => item.id === clipId);
-    if (remoteClip?.clipUrl) return temporaryRedirect(res, remoteClip.clipUrl);
+    if (remoteClip?.clipUrl) return temporaryRedirect(res, mediaUrl(remoteClip.clipUrl));
     const file = agent.engine.clipFilePath(clipId, 'video');
     return streamFile(req, res, file, { cacheControl: 'public, max-age=3600, immutable' });
   }
@@ -1496,7 +1509,7 @@ async function route(req, res, url) {
   if (method === 'GET' && clipVideo) {
     const id = decodeURIComponent(clipVideo[1]); const kind = clipVideo[2];
     let clip; try { clip = assertCanAccessClip(currentUser, id); } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
-    const remoteUrl = kind === 'thumb' ? clip?.thumbUrl : clip?.clipUrl;
+    const remoteUrl = mediaUrl(kind === 'thumb' ? clip?.thumbUrl : clip?.clipUrl);
     if (remoteUrl) {
       // Thumbnail redirects may be cached briefly: they are painted as CSS
       // backgrounds on every poll repaint, and a no-store redirect to a dead
