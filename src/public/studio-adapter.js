@@ -2309,6 +2309,17 @@
         if (e.preventDefault) e.preventDefault();
         var box = frame.getBoundingClientRect();
         if (!box.height || !box.width) return;
+        // The overlay is CENTRED on the cursor while dragging, but the style
+        // it commits anchors the caption's EDGE, because MarginV measures
+        // edge-to-edge the way libass does. Committing the centre as if it
+        // were the edge moved the box by half its own height the moment it
+        // was released -- a 17px hop on a real drag. The box's half-height,
+        // as a fraction of the frame, converts one anchor into the other.
+        var halfFrac = 0;
+        if (from && from.getBoundingClientRect) {
+          var self = from.getBoundingClientRect();
+          if (self.height) halfFrac = (self.height / 2) / box.height;
+        }
 
         UI.dragKind = kind;
         var lastX = null; var lastY = null;
@@ -2343,7 +2354,7 @@
           global.removeEventListener('mousemove', move);
           global.removeEventListener('mouseup', up);
           // One write, with the position the pointer actually finished on.
-          if (x !== null && y !== null) apply(x, y); else refresh();
+          if (x !== null && y !== null) apply(x, y, halfFrac); else refresh();
         }
         global.addEventListener('mousemove', move);
         global.addEventListener('mouseup', up);
@@ -2392,7 +2403,7 @@
 
     // Vertical position is a real margin in device pixels from the bottom of a
     // 1920-tall frame; horizontal snaps to the alignments the renderer has.
-    var dragCaptionFrom = makeDrag('caption', function (x, y) {
+    var dragCaptionFrom = makeDrag('caption', function (x, y, halfFrac) {
       var height = Number(tpl.height || 1920);
       // Clamped to the safe box: a caption outside it is covered by the
       // platform's own chrome, so letting it go there only produces clips with
@@ -2422,7 +2433,9 @@
         return;
       }
       var top = snappedY < 0.5;
-      var fromEdge = top ? snappedY : 1 - snappedY;
+      // snappedY is the box's CENTRE (the point the ghost held under the
+      // cursor); MarginV wants the near EDGE. Half the box converts them.
+      var fromEdge = (top ? snappedY : 1 - snappedY) - (halfFrac || 0);
       saveStyle({
         captionHorizontal: align,
         captionPosition: top ? 'top' : 'bottom',
