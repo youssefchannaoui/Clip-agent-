@@ -2539,7 +2539,13 @@
     // clicked one otherwise. Without this the panel edits block 0 forever while
     // the video runs past it.
     var selectedBlock = edCaptionBlocks[UI.edBlock] || null;
-    var overlayBlock = edLiveIndex >= 0 ? edCaptionBlocks[edLiveIndex] : selectedBlock;
+    // While the person is TYPING, the ghost shows the caption being edited --
+    // not whichever block the paused playhead happens to sit in. The draft
+    // only ever displayed when those two were the same block, so edits to any
+    // other caption were invisible in the preview and the box looked dead.
+    var overlayBlock = (UI.edBlockDraft !== null && UI.edBlockDraft !== undefined && selectedBlock)
+      ? selectedBlock
+      : edLiveIndex >= 0 ? edCaptionBlocks[edLiveIndex] : selectedBlock;
 
     // The phrase of the ayah under the playhead, split exactly the way the
     // export splits it: at most five words, spans shared in proportion to
