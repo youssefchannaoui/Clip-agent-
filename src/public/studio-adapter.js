@@ -1889,10 +1889,19 @@
           (st === 'approved' ? 'rgba(127,209,166,.34)' : st === 'rejected' ? '#2A2024' : '#1E1E22') +
           '; border-radius: 11px; overflow: hidden; background: #121214; opacity: ' + (st === 'rejected' ? '.5' : '1') +
           '; animation: dcRise .26s cubic-bezier(.2,.8,.2,1) ' + Math.min(i * 0.03, 0.4) + 's both; box-shadow: 0 8px 22px rgba(0,0,0,.26);',
-        stateChip: st === 'approved' ? 'Approved' : st === 'rejected' ? 'Rejected' : '',
+        // An approval the allocator could not place. The decision held -- the
+        // clip is approved -- but nothing will go out until the reason is
+        // dealt with, and the card is where that has to be readable.
+        blockedNote: (st === 'approved' && c.scheduleError) ? c.scheduleError : '',
+        blockedStyle: (st === 'approved' && c.scheduleError)
+          ? 'display: flex; align-items: flex-start; gap: 6px; font-size: 10.5px; line-height: 1.45; color: #E6B980;'
+          : 'display: none;',
+        stateChip: st === 'approved' ? (c.scheduleError ? 'Not scheduled' : 'Approved') : st === 'rejected' ? 'Rejected' : '',
         stateChipStyle: st
           ? 'position: absolute; top: 8px; right: 38px; padding: 2px 8px; border-radius: 20px; font-size: 9.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; border: 1px solid ' +
-            (st === 'rejected' ? '#3A2A2A; background: rgba(10,10,12,.85); color: #E3928C;' : 'rgba(127,209,166,.35); background: rgba(10,10,12,.85); color: #7FD1A6;')
+            (st === 'rejected' ? '#3A2A2A; background: rgba(10,10,12,.85); color: #E3928C;'
+              : (st === 'approved' && c.scheduleError) ? 'rgba(230,185,128,.4); background: rgba(10,10,12,.85); color: #E6B980;'
+                : 'rgba(127,209,166,.35); background: rgba(10,10,12,.85); color: #7FD1A6;')
           : 'display: none;',
         selStyle: 'position: absolute; top: 8px; right: 8px; z-index: 3; display: grid; place-items: center; '
           + 'width: 22px; height: 22px; border-radius: 7px; cursor: pointer; transition: background .12s ease; border: 1px solid '
@@ -2071,6 +2080,11 @@
             // slot" with 4/4 checks green and no way to learn that the file
             // was too large for the publishing relay.
             var failedTarget = (c.targets || []).filter(function (t) { return t.status === 'failed' && t.error; })[0];
+            // Posted somewhere, refused somewhere else: the destination that
+            // refused is the one thing still worth pressing.
+            var retryTarget = c.postedAt
+              ? (c.targets || []).filter(function (t) { return t.status !== 'posted'; })[0] || null
+              : null;
             return {
               failReason: failedTarget ? String(failedTarget.error) : '',
               time: timeOf(c.scheduledAt),
@@ -2104,17 +2118,25 @@
               cardStyle: 'display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid ' +
                 (ready ? '#1E1E22' : '#2A2024') + '; border-radius: 10px; background: #121214;',
               // Nothing posts unchecked: the button says why instead of failing.
-              postLabel: c.postedAt ? 'Posted'
+              // A clip that posted to one channel and was refused by another is
+              // posted -- and the only thing left to press is the retry for the
+              // one that refused. "Post now" there re-ran the whole set and
+              // left the row looking untouched.
+              postLabel: (c.postedAt && retryTarget) ? ('Retry ' + (PLATFORM_NAMES[retryTarget.provider] || retryTarget.provider))
+                : c.postedAt ? 'Posted'
                 : !ready ? 'Fix first'
                 : !publishingOn ? 'Publishing off'
                 : !activeCount ? 'No channel on'
                 : 'Post now',
-              postStyle: 'display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: ' + (ready && !c.postedAt ? 'pointer' : 'not-allowed') + '; border: 1px solid ' +
-                (ready && !c.postedAt && publishingOn && activeCount
-                  ? 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;'
-                  : '#26262A; background: #17171A; color: #6E6E76;'),
+              postStyle: 'display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: ' + ((retryTarget || (ready && !c.postedAt)) ? 'pointer' : 'not-allowed') + '; border: 1px solid ' +
+                (retryTarget
+                  ? 'rgba(230,183,112,.42); background: rgba(230,183,112,.1); color: #E6B770;'
+                  : ready && !c.postedAt && publishingOn && activeCount
+                    ? 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;'
+                    : '#26262A; background: #17171A; color: #6E6E76;'),
               postNow: function (e) {
                 stop(e);
+                if (retryTarget) { global.StudioAdapter.onPostNow(c.id); return; }
                 if (c.postedAt) { toast('This clip has already posted.'); return; }
                 if (!ready) { toast(failing[0].label + ' has not passed yet.'); return; }
                 // Posting with publishing off cycled the clip ready -> scheduled

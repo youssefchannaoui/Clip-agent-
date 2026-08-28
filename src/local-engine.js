@@ -637,10 +637,12 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
       ? { type: 'object_storage', objectKey: assertStorageObjectKey(value), title: options.originalFileName || sourceMeta?.title || '' }
       : withImportNetwork({ type: 'youtube', url: parseYouTubeUrl(value).canonicalUrl }),
     template, musicTracks: remoteMusicTracks(tracks, user.id),
-    // The review queue's copy: quarter-resolution drafts, judged fast and
-    // re-rendered at full quality only on approve. The audio chain and the
-    // music gate are identical to a final render.
-    settings: { ...sharedSettings(user, options), renderQuality: 'draft' },
+    // Full quality from the first render. Clips used to arrive as
+    // quarter-resolution drafts and get re-rendered on approve, which put a
+    // second render of every approved clip through a single-slot worker and
+    // made approving look like it had started some new job. What the review
+    // queue plays is now the file that posts.
+    settings: { ...sharedSettings(user, options), renderQuality: 'final' },
     background: background ? { mode: backgroundMode, introSeconds, name: background.name, url: signedBackgroundUrl(background, user.id) } : null,
     requestedClipCount: clipSettings(user).clipsPerVideo,
     sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
@@ -649,7 +651,7 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     id: projectId, url: value, title: String(title || '').trim(), sourceDir: sourcesDir,
     outputDir: path.join(clipsDir, projectId), resultPath: resultFile(projectId),
     ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath, template, musicTracks: tracks,
-    settings: { ...sharedSettings(user, options), renderQuality: 'draft' }, sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
+    settings: { ...sharedSettings(user, options), renderQuality: 'final' }, sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
     background: background ? { mode: backgroundMode, introSeconds, name: background.name, path: background.path } : null,
     sourceTitle: sourceMeta?.title || null, sourceDurationSec: sourceMeta?.durationSec || null,
     // Falls back to the URL's own poster: the dashboard did not send sourceMeta,
@@ -919,6 +921,10 @@ export function queueAhead(projectId) {
 export function acceptRemoteUpdate(projectId, update) {
   const project = projectById(projectId);
   if (!project || project.engine !== 'remote') return null;
+  // Cancelled is a decision, and a poll already in flight when it was made must
+  // not undo it. Without this a cancelled lecture came back as `processing` on
+  // the very next poll and went on holding the only worker slot.
+  if (project.status === 'cancelled') return project;
   // A warning the worker raised about how the clips were made. Logged once, to
   // the owning account, rather than repeated on every poll.
   if (update.etaSec !== undefined) project.etaSec = update.etaSec === null ? null : Math.max(0, Math.round(Number(update.etaSec)));
@@ -1065,6 +1071,11 @@ async function runRemoteProject(project) {
     let lastMovementAt = Date.now();
     let lastSignature = '';
     while (Date.now() - started < config.workerJobTimeoutMs) {
+      // Cancelled from the app: stop polling and let go of the slot now,
+      // rather than waiting for a worker that may never confirm it. This is
+      // what left the next upload sitting on "Next in line" with nothing in
+      // front of it -- the queue was empty and the slot was not.
+      if (projectById(project.id)?.status === 'cancelled') return;
       const update = await workerClient.getJob(workerJobId);
       acceptRemoteUpdate(project.id, update);
       if (['completed', 'failed', 'cancelled'].includes(update.status)) return;
@@ -1646,14 +1657,14 @@ export function queueMoreClips(projectId, requestedCount = 8) {
       : {}),
     background: jobBackground(project, owner, { remote: true }),
     transcript: { objectKey: project.transcriptObjectKey }, existingRanges,
-    template, musicTracks: remoteMusicTracks(tracks, owner.id), settings: { ...sharedSettings(owner, { language: project.language }), clipsPerVideo: count, renderQuality: 'draft' },
+    template, musicTracks: remoteMusicTracks(tracks, owner.id), settings: { ...sharedSettings(owner, { language: project.language }), clipsPerVideo: count, renderQuality: 'final' },
     callbackUrl: '',
   } : {
     mode: 'more_clips', id: moreId, projectId: project.id, projectTitle: project.title, requestedCount: count,
     background: jobBackground(project, owner),
     sourceFile: project.sourceFile, transcriptFile: project.transcriptFile, transcriptSegments, existingRanges,
     outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
-    template, musicTracks: tracks, settings: { ...sharedSettings(owner, { language: project.language }), clipsPerVideo: count, renderQuality: 'draft' },
+    template, musicTracks: tracks, settings: { ...sharedSettings(owner, { language: project.language }), clipsPerVideo: count, renderQuality: 'final' },
   };
   const file = path.join(dir, 'job.json');
   fs.writeFileSync(file, JSON.stringify(payload, null, 2));
@@ -1715,8 +1726,9 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
   // Unapproved clips keep the fast draft loop -- an editor tweak should not
   // cost a full 1080p render nobody has approved yet. Anything approved or
   // beyond renders final, and approve itself asks for final explicitly.
-  const renderQuality = preview ? 'draft'
-    : quality || (['approved', 'scheduled', 'posted'].includes(clip.status) || asVariant ? 'final' : 'draft');
+  // Only an editor preview window is ever a draft now; every real render is
+  // the file that could be posted.
+  const renderQuality = preview ? 'draft' : (quality || 'final');
   const project = projectById(clip.projectId);
   // Guarded because the lines below dereference it directly. A clip whose
   // lecture was deleted otherwise threw a raw TypeError at the user.
@@ -2061,6 +2073,7 @@ export function cancelWork(kind, id) {
       if (typeof run?.kill === 'function') run.kill('SIGTERM'); else if (run) run.cancelled = true;
     }
     job.status = 'cancelled'; job.stage = 'Cancelled'; job.completedAt = Date.now(); save();
+    pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
     return job;
   }
   const project = projectById(kind === 'more' ? id : id);
@@ -2075,6 +2088,7 @@ export function cancelWork(kind, id) {
     }
     job.status = 'cancelled'; job.stage = 'Cancelled'; job.completedAt = Date.now();
     releaseMoreHold(project, job); save();
+    pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
     return job;
   }
   if (!['queued', 'processing'].includes(project.status)) throw new Error('That lecture has already finished.');
@@ -2082,6 +2096,9 @@ export function cancelWork(kind, id) {
   // cancelProject stops the run and releases the hold but leaves a queued
   // record queued -- the pump would simply start it again.
   project.status = 'cancelled'; project.stage = 'cancelled'; project.error = null; save();
+  // Start whatever was behind it straight away. Nothing used to, so the queue
+  // only moved on the next unrelated event.
+  pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
   return project;
 }
 
@@ -2112,6 +2129,11 @@ export function cancelProject(projectId) {
   }
   if (typeof current?.kill === 'function') current.kill('SIGTERM');
   else if (current) current.cancelled = true;
+  // The slot is free the moment the work is called off. A remote run holds its
+  // place through a polling loop that only ended when the WORKER agreed the job
+  // was over, so a cancel the worker never confirmed kept the single slot for
+  // minutes and the next lecture never started.
+  running.delete(projectId);
   const project = projectById(projectId);
   // Cancelling stops the work, so the tokens held against it must go back. This
   // was missing, and because a free account never rolls over, every cancelled

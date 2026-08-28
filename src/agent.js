@@ -50,18 +50,28 @@ function maybeEmailPostSummary(clip) {
 export async function submitVideo(url, title = '', userId = '', options = {}) { return engine.submitVideo(url, title, userId, options); }
 export async function sourceInfo(url) { return engine.sourceInfo(url); }
 
+// Statuses that mean the decision has already been made. Approving one of
+// these again is what a second tap on a stale card is -- the card was showing
+// the state it had -- so it answers yes, not an error message.
+const DECIDED = ['approved', 'scheduled', 'publishing', 'retrying', 'ready', 'posted'];
+
 export function approveClip(id) {
   const clip = clipById(id);
   if (!clip) throw new Error('That clip no longer exists.');
+  if (DECIDED.includes(clip.status)) return clip;
+  if (clip.status === 'rejected') throw new Error('This clip was rejected. Restore it first, then approve it.');
+  if (clip.status !== 'waiting') throw new Error(`This clip is still ${clip.status === 'processing' ? 'rendering' : clip.status}, so there is nothing to approve yet.`);
   if (!musicSatisfied(clip) || !clip.renderVerified || !clip.templateId) throw new Error('This clip did not pass mandatory music/template verification.');
-  if (clip.status !== 'waiting') throw new Error('Only clips waiting for review can be approved.');
   clip.status = 'approved'; clip.approvedAt = Date.now(); clip.approvedBy = 'manual';
+  clip.scheduleError = null;
   const publishing = publishingSettings(ownerOfRecord(clip));
   if (publishing.enabled && publishing.tiktok?.enabled) clip.tiktokConsentAt = Date.now();
   save();
-  // Approval is the promotion: the review copy was a quarter-resolution
-  // draft, so the full 1080p render starts now, ahead of the batch sweeps.
-  // The publish gate holds until it lands, so approval itself never blocks.
+  // Legacy only. Clips are rendered at full quality from the start now, so
+  // approving one queues nothing -- that churn ("why is it re-rendering when I
+  // approve?") is exactly what this stopped doing. A clip rendered before that
+  // change still holds a quarter-resolution draft that must never be posted,
+  // and this is its one promotion.
   if (clip.renderQuality === 'draft') {
     try { engine.queueClipRerender(clip.id, clip.templateId || '', { priority: 1, quality: 'final' }); }
     catch (error) { log(`The full-quality render of "${clip.title}" could not start: ${error.message}`, 'warn', ownerOf(clip)); }
@@ -317,7 +327,7 @@ export function scheduleApprovedClip(clip, { at = null, day = null } = {}) {
   clip.scheduledAt = clip.scheduledAt || nextSlot(taken, opts);
   setTargets(clip);
   for (const target of clip.targets || []) target.nextTryAt = clip.scheduledAt;
-  clip.status = 'scheduled'; save();
+  clip.status = 'scheduled'; clip.scheduleError = null; clip.scheduleErrorAt = null; save();
   const destinationText = clip.targets?.length ? ` to ${clip.targets.map(target => target.provider).join(', ')}` : ' for local export';
   log(`Scheduled "${clip.title}"${destinationText}${clip.approvedBy === 'automation' ? ' automatically' : ''}.`, 'info', ownerOf(clip));
   return clip;
@@ -397,23 +407,35 @@ function applyAutomationForOwner(ownerId, ownerClips) {
   }
 }
 
-function updateClipPublishingStatus(clip) {
+export function refreshPublishingStatus(clip) {
   const targets = clip.targets || [];
   if (!targets.length) return;
-  if (targets.every(target => target.status === 'posted')) {
-    const firstCompletion = clip.status !== 'posted';
-    clip.status = 'posted'; clip.postedAt = clip.postedAt || Date.now(); clip.scheduledAt = null;
-    if (firstCompletion) log(`"${clip.title}" posted successfully to ${targets.map(target => target.provider).join(', ')}.`, 'info', ownerOf(clip));
-    return;
-  }
   if (targets.some(activeTarget)) {
     clip.status = targets.some(target => ['publishing', 'processing'].includes(target.status)) ? 'publishing' : 'scheduled';
     return;
   }
-  if (targets.every(finishedTarget)) {
-    clip.status = targets.some(target => target.status === 'failed') ? 'publish_failed' : 'ready';
-    clip.readyAt = clip.readyAt || Date.now();
+  if (!targets.every(finishedTarget)) return;
+  const posted = targets.filter(target => target.status === 'posted');
+  if (posted.length) {
+    // A clip that went out somewhere HAS been published. It used to be filed as
+    // `publish_failed` whenever any one destination refused, so a clip that was
+    // live on YouTube still read as unposted, sat in the schedule as work to
+    // do, and offered "Post now" -- which retried the destination that had
+    // already refused and left the row exactly where it was. The failed
+    // destination is now the row's problem, not the whole clip's; it stays on
+    // the target, where the schedule and the activity feed both read it.
+    const firstCompletion = clip.status !== 'posted';
+    clip.status = 'posted'; clip.postedAt = clip.postedAt || Date.now(); clip.scheduledAt = null;
+    if (firstCompletion) log(`"${clip.title}" posted to ${posted.map(target => target.provider).join(', ')}.`, 'info', ownerOf(clip));
+    return;
   }
+  clip.status = targets.some(target => target.status === 'failed') ? 'publish_failed' : 'ready';
+  clip.readyAt = clip.readyAt || Date.now();
+}
+
+/** Destinations that have not posted yet -- what a retry is actually for. */
+export function unpostedTargets(clip) {
+  return (clip?.targets || []).filter(target => target.status !== 'posted');
 }
 
 // Instagram and TikTok hand back an id to poll. Once the platform has said
@@ -434,7 +456,7 @@ async function processTarget(clip, target) {
     target.status = 'failed'; target.stage = `${target.provider} processing timed out`; target.error = `${target.provider} did not finish processing within the allowed time.`; target.nextTryAt = null;
     maybeEmailPostSummary(clip);
     forgetDeadUpload(target);
-    updateClipPublishingStatus(clip); save(); return;
+    refreshPublishingStatus(clip); save(); return;
   }
   target.updatedAt = now;
   try {
@@ -495,7 +517,7 @@ async function processTarget(clip, target) {
       log(`${target.provider} publishing failed for "${clip.title}": ${error.message}`, 'error', ownerOf(clip));
     }
   }
-  updateClipPublishingStatus(clip); save();
+  refreshPublishingStatus(clip); save();
 }
 
 async function publishClip(clip) {
@@ -511,7 +533,7 @@ async function publishClip(clip) {
     for (const target of clip.targets || []) {
       if (activeTarget(target)) await processTarget(clip, target);
     }
-    updateClipPublishingStatus(clip); save();
+    refreshPublishingStatus(clip); save();
   } finally { publishing.delete(clip.id); }
 }
 
@@ -524,7 +546,21 @@ export async function publishNow(id) {
   if (clip.renderQuality === 'draft') {
     throw new Error('The full-quality render is still queued for this clip. It publishes as soon as that finishes.');
   }
-  if (['posted', 'publishing'].includes(clip.status)) throw new Error(`This clip is already ${clip.status}.`);
+  if (clip.status === 'publishing') throw new Error('This clip is already publishing.');
+  const outstanding = unpostedTargets(clip);
+  if (clip.status === 'posted') {
+    // Partly out: everything that posted stays posted, and this retries only
+    // what refused. Refusing the whole press because the clip is "already
+    // posted" left a failed destination with no way back.
+    if (!outstanding.length) throw new Error('This clip has already posted to every destination.');
+    for (const target of outstanding) {
+      if (target.status === 'failed') { target.status = 'retrying'; target.error = null; }
+      target.nextTryAt = Date.now();
+    }
+    save();
+    await publishClip(clip);
+    return clip;
+  }
   if (clip.status === 'waiting') {
     clip.status = 'approved'; clip.approvedAt = Date.now(); clip.approvedBy = 'manual';
     const publishing = publishingSettings(ownerOfRecord(clip));
@@ -569,7 +605,10 @@ export function retryPublishing(id, provider = '') {
     target.status = target.externalId && ['instagram', 'tiktok'].includes(target.provider) && target.providerState?.stage !== 'uploading' ? 'processing' : 'retrying';
     target.error = null; target.nextTryAt = Date.now();
   }
-  clip.status = 'scheduled'; clip.scheduledAt = Date.now(); save();
+  // A clip that already posted somewhere must not be dragged back into the
+  // schedule as though nothing had gone out.
+  if (clip.status !== 'posted') { clip.status = 'scheduled'; clip.scheduledAt = Date.now(); }
+  save();
   publishClip(clip).catch(error => log(error.message, 'error'));
   return clip;
 }
@@ -583,8 +622,17 @@ export async function tick() {
       if (clip.status === 'approved') {
         try { scheduleApprovedClip(clip); }
         catch (error) {
-          clip.status = 'waiting'; clip.approvedBy = null; clip.approvedAt = null;
-          log(`Could not automatically schedule "${clip.title}": ${error.message}`, 'warn', ownerOf(clip));
+          // The approval STANDS. This used to push the clip back to `waiting`
+          // and null the approval, so a clip with nowhere to post simply
+          // refused to approve: press the button, watch it come back
+          // unapproved, with the reason buried in a log nobody reads. The
+          // decision is the person's; only the scheduling failed, and that is
+          // now written on the clip where the screen can say it.
+          if (clip.scheduleError !== error.message) {
+            log(`Could not automatically schedule "${clip.title}": ${error.message}`, 'warn', ownerOf(clip));
+          }
+          clip.scheduleError = error.message;
+          clip.scheduleErrorAt = Date.now();
         }
       }
       if (clip.renderQuality === 'draft' && clip.status === 'scheduled') continue;

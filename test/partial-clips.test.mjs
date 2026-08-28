@@ -126,7 +126,7 @@ test('a queued lecture can be cancelled, and a boost moves it to the front', () 
   assert.throws(() => engine.prioritizeWork('project', 'qc1'), /queued/i);
 });
 
-test('review renders are drafts; approve promotes to a final render; drafts never publish', async () => {
+test('a render is final from the start, so approving queues nothing', async () => {
   const agent = await import('../src/agent.js');
   const src = path.join(dataDir, 'draft-source.mp4');
   fs.writeFileSync(src, 'x');
@@ -134,19 +134,42 @@ test('review renders are drafts; approve promotes to a final render; drafts neve
     sourceFile: src, templateSnapshot: { id: 'clean-bold', name: 'Clean Bold', version: 1, builtIn: true } });
   state.clips.push({ id: 'dc1', projectId: 'dp1', userId: 'user_admin', title: 'C', status: 'waiting',
     templateId: 'clean-bold', startSec: 0, endSec: 30, durationMs: 30000,
-    renderQuality: 'draft', renderVerified: true, musicEnabled: false, musicVerified: true });
+    renderQuality: 'final', renderVerified: true, musicEnabled: false, musicVerified: true });
 
-  // An edit on an unapproved draft re-renders as a draft; approve asks for final.
-  const editJob = engine.queueClipRerender('dc1', 'clean-bold', {});
   const readJob = (record) => JSON.parse(fs.readFileSync(record.jobFile, 'utf8'));
-  assert.equal(readJob(editJob).settings.renderQuality, 'draft', 'editor loop stays fast');
+  // Every real render is the file that could be posted; only an editor preview
+  // window is still a throwaway draft.
+  assert.equal(readJob(engine.queueClipRerender('dc1', 'clean-bold', {})).settings.renderQuality, 'final');
 
+  const before = state.rerenderJobs.length;
   const approved = agent.approveClip('dc1');
   assert.ok(['approved', 'scheduled'].includes(approved.status), 'approved (tick may schedule it at once)');
-  const finalJob = state.rerenderJobs.find((job) => job.clipId === 'dc1' && job.status !== 'superseded');
-  assert.equal(readJob(finalJob).settings.renderQuality, 'final', 'approve queues the full render');
+  assert.equal(state.rerenderJobs.length, before, 'approving started no new render');
+});
 
-  // Nothing publishes a draft file.
-  state.clips.find((c) => c.id === 'dc1').targets = [{ platform: 'youtube', status: 'pending' }];
-  await assert.rejects(() => agent.publishNow('dc1'), /full-quality render/i);
+test('approving twice is not an error, and a rejected clip says so', async () => {
+  const agent = await import('../src/agent.js');
+  // The card the second tap came from was showing the state it had. Answering
+  // "only clips waiting for review can be approved" made a working approval
+  // read as a broken button.
+  const again = agent.approveClip('dc1');
+  assert.ok(['approved', 'scheduled'].includes(again.status));
+
+  state.clips.push({ id: 'dc-rej', projectId: 'dp1', userId: 'user_admin', title: 'R', status: 'rejected',
+    templateId: 'clean-bold', renderQuality: 'final', renderVerified: true, musicEnabled: false, musicVerified: true });
+  assert.throws(() => agent.approveClip('dc-rej'), /rejected/i);
+});
+
+test('a clip rendered before the change still gets its one promotion', async () => {
+  const agent = await import('../src/agent.js');
+  state.clips.push({ id: 'dc-legacy', projectId: 'dp1', userId: 'user_admin', title: 'Old', status: 'waiting',
+    templateId: 'clean-bold', startSec: 0, endSec: 30, durationMs: 30000,
+    renderQuality: 'draft', renderVerified: true, musicEnabled: false, musicVerified: true });
+  agent.approveClip('dc-legacy');
+  const promotion = state.rerenderJobs.find((job) => job.clipId === 'dc-legacy' && job.status !== 'superseded');
+  assert.equal(JSON.parse(fs.readFileSync(promotion.jobFile, 'utf8')).settings.renderQuality, 'final');
+
+  // And a quarter-resolution file never leaves the house in the meantime.
+  state.clips.find((c) => c.id === 'dc-legacy').targets = [{ platform: 'youtube', status: 'pending' }];
+  await assert.rejects(() => agent.publishNow('dc-legacy'), /full-quality render/i);
 });

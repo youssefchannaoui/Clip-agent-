@@ -44,6 +44,11 @@
       wrap.style.cssText = 'position:relative;display:block';
       field.parentNode.insertBefore(wrap, field);
       wrap.appendChild(field);
+      // Wrapping the field takes it out of the form's grid, where it had been
+      // full-width for free -- an unstated width left the password box visibly
+      // narrower than the email box above it, with the eye floating past its edge.
+      field.style.width = '100%';
+      field.style.boxSizing = 'border-box';
       field.style.paddingRight = '44px';
 
       var button = document.createElement('button');

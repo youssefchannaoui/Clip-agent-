@@ -115,7 +115,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **785 JS + 389 Python**
+- `npm test` and `npm run check` must pass. Currently **795 JS + 389 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -329,6 +329,44 @@ saying coming soon in the new update."
 - The phone rule in `studio-responsive.css` hides every child of the editor.
   The notice is a child, so it carries `:not(#dcEditorSoon)` — without it the
   phone gets a blank screen.
+
+## What is allowed to re-render, and what an approval means (v3.20.0)
+
+Youssef, 28 Aug 2026: "why is it rerendering when i approve? ... ONLY IF
+TEMPLATE WAS CHANGED AND SAVED WHILE NOT APPROVED ALL CLIPS RE RENDER, OTHER
+THAN THAT IT SHOULD NEVER RE RENDER."
+
+- **Clips render at full quality from the first render.** The review copy used
+  to be a quarter-resolution draft that approve promoted to 1080x1920, so
+  approving visibly started a job on a single-slot worker. What the queue plays
+  is now the file that posts. For any clip that gets approved this is LESS
+  total work, not more -- one final render instead of a draft plus a final.
+  Only an editor preview window is still a draft.
+  A clip rendered before this change still holds a draft and still gets its one
+  promotion on approve (`renderQuality === 'draft'` in `approveClip`); nothing
+  new can enter that state.
+- **A template save re-renders only clips still `waiting`.** Approved,
+  scheduled and posted clips keep the render they were signed off on. The sweep
+  used to take everything unposted.
+- **An approval survives a scheduling failure.** `tick()` used to push the clip
+  back to `waiting` and null the approval when `scheduleApprovedClip` threw
+  (usually: publishing on, no destination enabled), so the button looked broken
+  and the reason went to a log. The decision now stands, `clip.scheduleError`
+  carries the reason, and the review card prints it.
+- **Approving twice is an answer, not an error.** A second tap on a stale card
+  returns the clip; only `rejected` and genuinely unrendered states refuse, and
+  they say which state they are in.
+- **Cancelling gives the worker slot back immediately.** A remote run held its
+  slot until the WORKER agreed the job was over, so a cancel it never confirmed
+  kept the only slot for minutes and the next upload sat on "Next in line" with
+  nothing in front of it. `cancelProject` now drops the run from `running`, the
+  poll loop exits when the app has cancelled, `acceptRemoteUpdate` refuses to
+  revive a cancelled project, and every cancel path kicks `pump()`.
+- **A clip that posted anywhere is `posted`.** One destination refusing used to
+  file the whole clip as `publish_failed`: a clip live on YouTube read as
+  unposted, sat in the schedule as work, and offered "Post now", which re-ran
+  the destination that had already refused. The failure now belongs to the
+  destination -- the row says "Retry TikTok" and retries only that leg.
 
 ## Posting: the app is not the limit, the platform reviews are (28 Aug 2026)
 

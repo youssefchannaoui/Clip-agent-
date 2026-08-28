@@ -337,7 +337,12 @@ function queueTemplateForEveryUnpostedClip(template, user, reason = 'template up
   // customer saving a template queued a re-render of every other customer's
   // work onto their own template.
   for (const clip of ownedBy(state.clips, user?.id)) {
-    if (clip.status === 'posted' || clip.variantOf) { skipped += 1; continue; }
+    if (clip.variantOf) { skipped += 1; continue; }
+    // Approved is a decision about a particular render, so a later template
+    // change must not reach back and replace it -- a clip that was approved,
+    // scheduled, or already out stays exactly as it was signed off. Saving a
+    // template re-renders what nobody has decided on yet, and nothing else.
+    if (clip.status !== 'waiting') { skipped += 1; continue; }
     // Saving from the clip editor applies to that lecture, per the design; the
     // Templates screen still applies to everything unposted.
     if (projectId && clip.projectId !== projectId) { skipped += 1; continue; }
@@ -454,6 +459,10 @@ function publicClip(clip, { detail = false } = {}) {
     score: clip.score, scoreReasons: clip.scoreReasons || [], quality: clip.quality || null,
     reviewRequired: Boolean(clip.reviewRequired), startSec: clip.startSec, endSec: clip.endSec, durationMs: clip.durationMs,
     status: clip.status, approvedBy: clip.approvedBy || null,
+    // Approved but the allocator could not place it -- nowhere enabled to post,
+    // usually. The approval stands and this says why nothing is scheduled,
+    // instead of the clip quietly reappearing in the review queue.
+    scheduleError: clip.status === 'approved' ? (clip.scheduleError || null) : null,
     scheduledAt: clip.scheduledAt, scheduledLabel: clip.scheduledAt ? formatLocal(clip.scheduledAt) : null,
     readyAt: clip.readyAt || null, postedAt: clip.postedAt,
     musicName: clip.musicName, musicVerified: Boolean(clip.musicVerified),
@@ -1442,8 +1451,10 @@ async function route(req, res, url) {
     let queued = 0; let skipped = 0; const errors = [];
     for (const clip of ownedBy(state.clips, currentUser.id)) {
       if (clip.variantOf) { skipped += 1; continue; }
+      // Same rule as saving a template: only clips still awaiting a decision.
+      if (clip.status !== 'waiting') { skipped += 1; continue; }
       try {
-        agent.engine.queueClipRerender(clip.id, template.id, { asVariant: clip.status === 'posted', priority: 2 });
+        agent.engine.queueClipRerender(clip.id, template.id, { asVariant: false, priority: 2 });
         queued += 1;
       } catch (error) {
         skipped += 1; errors.push({ clipId: clip.id, error: error.message });

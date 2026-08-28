@@ -240,6 +240,16 @@
   }
 }
 
+/* ── Wide-inset screens on a phone ───────────────────────── */
+/*
+ * Tokens and Owner carry a 40px desktop inset so their content is not shoved
+ * against the rail. On a 390px phone that inset spends a fifth of the screen
+ * on empty margin, so it comes back to the same 14px every other page uses.
+ */
+@media (max-width: 820px) {
+  #dcOwnerScreen { padding: 14px 14px 28px !important; }
+}
+
 /* ── Narrow phone ─────────────────────────────────────────────────────── */
 @media (max-width: 480px) {
   /* Card grids that ask for 190-232px per column produce a single cramped
