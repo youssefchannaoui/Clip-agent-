@@ -1539,26 +1539,71 @@ const BILLING_STATE = {
   },
 };
 
-test('the billing period tabs change the prices, not just the highlight', () => {
+test('every plan is on screen at once, so they can be compared', () => {
+  // The period tabs read as styling and behaved as a filter: planCards was
+  // filtered by the selected interval, so a customer saw exactly ONE paid plan
+  // and had nothing to weigh it against. Youssef, 28 Aug 2026: "the buttons for
+  // monthly and yearly and etc idk how much I like it".
   Object.assign(StudioAdapter.ui, { screen: 'tokens' });
-  const at = period => {
-    StudioAdapter.ui.planPeriod = period;
-    return StudioAdapter.bindings(BILLING_STATE).planCards.map(c => `${c.name} ${c.price} ${c.tokens}`);
-  };
+  const cards = StudioAdapter.bindings(BILLING_STATE).planCards;
+  const described = cards.map(c => `${c.name} ${c.price} ${c.tokens}`);
   // `tokens` is the count alone: the markup writes the word after it, and
   // pluralising in the binding too produced "150 tokens tokens" on every card.
-  assert.ok(at('week').some(c => c.includes('Weekly £4 150')));
-  assert.ok(at('month').some(c => c.includes('Monthly £14 600')));
-  assert.ok(at('year').some(c => c.includes('Annual £140 8000')));
-  assert.ok(!at('week').some(c => c.includes('Monthly')), 'a period shows only its own plans');
+  assert.ok(described.some(c => c.includes('Weekly £4 150')), described.join(' | '));
+  assert.ok(described.some(c => c.includes('Monthly £14 600')), described.join(' | '));
+  assert.ok(described.some(c => c.includes('Annual £140 8000')), described.join(' | '));
+  assert.ok(described.some(c => c.includes('Free')), described.join(' | '));
 });
 
-test('the free plan stays visible on every period', () => {
+test('the plans read as a ladder, cheapest first', () => {
+  // Free carries no interval, so ranking on interval alone put the cheapest
+  // option last — after the yearly one.
   Object.assign(StudioAdapter.ui, { screen: 'tokens' });
-  for (const period of ['week', 'month', 'year']) {
-    StudioAdapter.ui.planPeriod = period;
-    assert.ok(StudioAdapter.bindings(BILLING_STATE).planCards.some(c => c.name === 'Free'), period);
-  }
+  const names = StudioAdapter.bindings(BILLING_STATE).planCards.map(c => c.name);
+  assert.deepEqual(names, ['Free', 'Weekly', 'Monthly', 'Annual']);
+});
+
+test('the balance bar is the real fraction, not a fixed width', () => {
+  // The design shipped this bar as a hoisted class with a literal width: 41%,
+  // so every customer saw the same gauge whatever they had left — an invented
+  // number on the one screen where the numbers are the entire point.
+  Object.assign(StudioAdapter.ui, { screen: 'tokens' });
+  const withUsage = { ...BILLING_STATE, billing: { ...BILLING_STATE.billing,
+    current: { plan: 'monthly', status: 'active', allowance: 500, remaining: 125 } } };
+  assert.match(StudioAdapter.bindings(withUsage).tokenBarStyle, /width: 25%/);
+
+  const empty = { ...BILLING_STATE, billing: { ...BILLING_STATE.billing,
+    current: { plan: 'monthly', status: 'active', allowance: 500, remaining: 0 } } };
+  assert.match(StudioAdapter.bindings(empty).tokenBarStyle, /width: 2%/,
+    'an empty balance still needs a visible sliver, or the bar reads as broken');
+
+  const owner = { ...BILLING_STATE, billing: { ...BILLING_STATE.billing, current: { unlimited: true } } };
+  assert.match(StudioAdapter.bindings(owner).tokenBarStyle, /width: 100%/);
+});
+
+test('a subscriber is told how to change or cancel, on the screen', () => {
+  // "I don't like how they control their subscriptions" — the only control was
+  // a "Change" link beside a card number at the very bottom of the page.
+  Object.assign(StudioAdapter.ui, { screen: 'tokens' });
+  const subscribed = { ...BILLING_STATE, billing: { ...BILLING_STATE.billing,
+    current: { plan: 'monthly', status: 'active', allowance: 500, remaining: 186,
+      periodEndsInDays: 11, stripeSubscriptionId: 'sub_123' } } };
+  const b = StudioAdapter.bindings(subscribed);
+  assert.equal(b.planTitle, 'Monthly');
+  assert.match(b.planPriceLine, /£14 per month/);
+  assert.equal(b.planState, 'Active');
+  assert.match(b.manageLabel, /cancel/i, 'the word someone is looking for has to appear');
+  assert.equal(typeof b.manageBilling, 'function');
+  assert.match(b.manageHint, /Stripe/, 'and say where it goes before it goes there');
+});
+
+test('the plan state names a failed payment rather than burying it', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'tokens' });
+  const late = { ...BILLING_STATE, billing: { ...BILLING_STATE.billing,
+    current: { plan: 'monthly', status: 'past_due', allowance: 500, remaining: 10 } } };
+  const b = StudioAdapter.bindings(late);
+  assert.match(b.planState, /payment failed/i);
+  assert.match(b.planStateStyle, /E08770/, 'in the colour the rest of the app uses for trouble');
 });
 
 test('token packs render and can be bought on their own', () => {

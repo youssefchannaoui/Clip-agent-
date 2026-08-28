@@ -1398,6 +1398,15 @@
 
 
   // Platforms spell themselves; naive capitalisation gives "Tiktok".
+  // Free, then the commitment ladder. The period tabs used to impose this order
+  // by showing one plan at a time; with every plan on screen the cards have to
+  // carry it themselves. Free has no interval, so ranking on interval alone
+  // sorted it to the end -- the cheapest option last, after the yearly one.
+  var INTERVAL_ORDER = { week: 1, month: 2, year: 3 };
+  function planRank(plan) {
+    if (String(plan && plan.id) === 'free') return 0;
+    return INTERVAL_ORDER[plan && plan.interval] || 9;
+  }
   var PLATFORM_NAMES = { youtube: 'YouTube', instagram: 'Instagram', tiktok: 'TikTok', facebook: 'Facebook' };
   var PLATFORM_ICONS = {
     youtube: 'ph ph-youtube-logo', instagram: 'ph ph-instagram-logo',
@@ -1614,6 +1623,22 @@
     });
     var social = DATA.social || {};
     var current = (DATA.billing && DATA.billing.current) || {};
+    // One word for the state of the subscription, and the colour that goes
+    // with it. A failed payment is the case worth shouting about: the plan
+    // keeps working for a few days and then stops, and the only warning used
+    // to be a sentence of grey body text.
+    var billingStatus = String(current.status || '').toLowerCase();
+    var planStateWord = 'Active';
+    var planStateTone = 'good';
+    if (current.unlimited) { planStateWord = 'Unlimited'; }
+    else if (billingStatus === 'past_due' || billingStatus === 'unpaid') { planStateWord = 'Payment failed'; planStateTone = 'bad'; }
+    else if (billingStatus === 'canceled' || billingStatus === 'cancelled') { planStateWord = 'Cancelled'; planStateTone = 'warn'; }
+    else if (current.trial && current.trial.active) { planStateWord = 'Trial'; planStateTone = 'warn'; }
+    else if ((current.plan || 'free') === 'free') {
+      var freeWin = current.freeTrial || {};
+      planStateWord = freeWin.expired ? 'Trial ended' : 'Free';
+      planStateTone = freeWin.expired ? 'bad' : 'warn';
+    }
 
     var pending = awaitingReview(clips);
     var needsCount = pending.length;
@@ -5512,15 +5537,49 @@
       // The period tabs filter the real plan list by its own `interval`, so the
       // prices and token counts change with the period instead of the tabs
       // merely highlighting.
-      planPeriods: PERIODS.map(function (p) {
-        return {
-          label: p.label,
-          style: tabStyle(UI.planPeriod === p.key),
-          select: function (e) { stop(e); setUI({ planPeriod: p.key }); },
-        };
-      }),
-      planCards: planList.filter(function (p) {
-        return p.interval === UI.planPeriod || p.id === 'free';
+      // The period tabs are gone. They read as a filter and behaved as one:
+      // planCards was filtered by the selected interval, so a customer could
+      // only ever see ONE paid plan and had nothing to compare it against.
+      // Every plan is on screen now and each card states its own interval.
+      //
+      // What replaces them is the thing that was actually missing -- somewhere
+      // to see and control the subscription. Changing plan, cancelling and
+      // updating a card all live in Stripe's portal; the screen said so only
+      // in a "Change" link beside a card number at the very bottom.
+      planTitle: (function () {
+        if (current.unlimited) return 'Owner';
+        var named = planList.filter(function (p) { return String(p.id) === String(current.plan); })[0];
+        return (named && named.name) || 'Free';
+      })(),
+      planPriceLine: (function () {
+        if (current.unlimited) return 'no limit, no renewal';
+        var named = planList.filter(function (p) { return String(p.id) === String(current.plan); })[0];
+        if (!named || named.id === 'free') return 'no charge';
+        return (named.priceLabel || '') + (named.interval ? ' per ' + named.interval : '');
+      })(),
+      planState: planStateWord,
+      planStateStyle: 'padding: 2px 9px; border-radius: 20px; font-size: 9.5px; font-weight: 700; letter-spacing: .04em; border: 1px solid ' +
+        (planStateTone === 'bad' ? 'rgba(224,135,112,.4); background: rgba(224,135,112,.12); color: #E08770;'
+          : planStateTone === 'warn' ? 'rgba(230,183,112,.4); background: rgba(230,183,112,.12); color: #E6B770;'
+            : 'rgba(127,209,166,.34); background: rgba(127,209,166,.12); color: #7FD1A6;'),
+      // A real fraction. The design shipped this bar as a hoisted class with a
+      // literal width: 41%, so every customer saw the same gauge no matter how
+      // many tokens they had left -- an invented number on the one screen where
+      // numbers are the whole point.
+      tokenBarStyle: 'position: absolute; inset: 0 auto 0 0; border-radius: 20px; background: linear-gradient(90deg, #D9B478, #F0D6A6); width: ' +
+        (current.unlimited || !current.allowance
+          ? '100%'
+          : Math.max(2, Math.min(100, Math.round((Number(current.remaining) || 0) / Number(current.allowance) * 100))) + '%'),
+      manageLabel: current.stripeSubscriptionId ? 'Change or cancel plan' : 'Manage billing',
+      manageStyle: 'display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border-radius: 9px; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; border: 1px solid rgba(217,180,120,.42); background: rgba(217,180,120,.14); color: #F0D6A6;',
+      billingGhostStyle: 'display: inline-flex; align-items: center; gap: 7px; padding: 9px 13px; border-radius: 9px; font-family: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; border: 1px solid #26262A; background: #17171A; color: #BCBCC3;',
+      cardLabel: 'Payment method',
+      manageBilling: function (e) { stop(e); global.StudioAdapter.onBillingPortal(); },
+      manageHint: current.stripeSubscriptionId
+        ? 'Changing plan, cancelling and card details all open your secure Stripe billing page.'
+        : 'Opens your secure Stripe billing page. Nothing is charged from here.',
+      planCards: planList.slice().sort(function (a, b) {
+        return planRank(a) - planRank(b);
       }).map(function (p) {
         var isCurrent = String(p.id || '').toLowerCase() === String(current.plan || '').toLowerCase();
         // Free has no price id, so it can never be "chosen" -- the server
