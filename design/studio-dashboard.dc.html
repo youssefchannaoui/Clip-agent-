@@ -1694,15 +1694,7 @@
         </sc-for>
       </div>
 
-      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; padding: 13px 16px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
-        <i class="ph ph-credit-card" style="font-size: 17px; color: #8B8B93;"></i>
-        <span style="font-size: 12.5px; color: #BCBCC3;">Visa ending 4242 · expires 04/29</span>
-        <a href="#" onClick="{{ changeCard }}" style="font-size: 12px;">Change</a>
-        <span style="margin-left: auto; display: flex; gap: 14px; font-size: 12px;">
-          <a href="#" onClick="{{ openInvoices }}">Invoices</a>
-          <a href="#" onClick="{{ openInvoices }}">Purchase history</a>
-        </span>
-      </div>
+      <div id="dcBillingPanel" style="margin-top: 16px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214; overflow: hidden;"><div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 16px;"><i class="ph ph-seal-check" style="font-size: 17px; color: #8B8B93;"></i><span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;"><strong style="font-size: 13px; color: #F2F2F4;">{{ subTitle }}</strong><span style="font-size: 11.5px; color: #8B8B93;">{{ subDetail }}</span></span><span style="margin-left: auto; display: flex; align-items: center; gap: 10px;"><button onClick="{{ subAction }}" style="{{ subActionStyle }}">{{ subActionLabel }}</button></span></div><div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 13px 16px; border-top: 1px solid #1E1E22;"><i class="ph ph-credit-card" style="font-size: 17px; color: #8B8B93;"></i><span style="font-size: 12.5px; color: #BCBCC3;">Visa ending 4242 · expires 04/29</span><a href="#" onClick="{{ changeCard }}" style="font-size: 12px;">Change</a><span style="margin-left: auto; display: flex; gap: 14px; font-size: 12px;"><a href="#" onClick="{{ openInvoices }}">Invoices</a><a href="#" onClick="{{ openInvoices }}">Purchase history</a></span></div><div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 11px 16px; border-top: 1px solid #1E1E22; background: #0E0E10;"><span style="font-size: 11px; color: #6E6E76; line-height: 1.5;">{{ billingLegalNote }}</span><span style="margin-left: auto; display: flex; gap: 14px; font-size: 11.5px;"><a href="/terms" target="_blank" rel="noopener">Terms</a><a href="/privacy" target="_blank" rel="noopener">Privacy</a></span></div></div>
     </div>
   </sc-if>
   </main>

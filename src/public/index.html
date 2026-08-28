@@ -5134,6 +5134,21 @@ StudioAdapter.onProbeSource=async url=>{try{
     StudioAdapter.onBillingPortal=()=>studioDo(async()=>{
       const r=await api('/api/billing/portal',{method:'POST',body:JSON.stringify({})});
       if(r&&r.url)location.href=r.url});
+    /* Cancel and resume. Confirmed before sending, because the button sits
+       beside "Change" and a mis-click here ends someone's plan. The wording
+       states the part people get wrong -- it keeps working until the date. */
+    StudioAdapter.onCancelSubscription=()=>{
+      if(!confirm('Cancel your subscription?\n\nIt stays fully usable until the end of the period you have already paid for, then the account moves to Free. You can resume any time before then.'))return;
+      /* studioDo refreshes and settles on its own; the toast is raised inside
+         because only the response knows the date access actually stops. */
+      studioDo(async()=>{
+        const r=await api('/api/billing/cancel',{method:'POST',body:JSON.stringify({})});
+        toast(r&&r.cancelAt
+          ?'Cancelled. Everything keeps working until '+new Date(r.cancelAt).toLocaleDateString()+'.'
+          :'Cancelled. Everything keeps working until the end of the paid period.','good')});};
+    StudioAdapter.onResumeSubscription=()=>studioDo(
+      async()=>{await api('/api/billing/resume',{method:'POST',body:JSON.stringify({})})},
+      'Subscription resumed. Billing continues as normal.');
     /* Nasheeds go to /api/music as base64, not through the video presign path.
        Uploading them as videos is what made a fresh account unusable. */
     /* The job panel's "Upload…" chip. A file dialog is host work -- the

@@ -1028,6 +1028,14 @@ async function route(req, res, url) {
     try { return json(res, 200, await billing.createTopupCheckoutSession(currentUser, String(body.package || ''))); }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
+  // Cancelling is a write against Stripe, so it goes through the same POST
+  // shape as checkout rather than being a link the browser follows.
+  if (method === 'POST' && (pathname === '/api/billing/cancel' || pathname === '/api/billing/resume')) {
+    try {
+      return json(res, 200, await billing.setCancelAtPeriodEnd(currentUser, pathname.endsWith('/cancel')));
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+
   if (method === 'POST' && pathname === '/api/billing/portal') {
     try { return json(res, 200, await billing.createPortalSession(currentUser)); }
     catch (error) { return json(res, 400, { error: error.message }); }

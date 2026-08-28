@@ -1558,6 +1558,21 @@
     return item;
   }
 
+  /**
+   * A billing date a person can read.
+   *
+   * Day-month-year with the month spelled: "3/9" is the 3rd of September to
+   * this customer and the 9th of March to a US card statement, and this string
+   * sits next to the sentence telling them when their access stops.
+   */
+  function billingDate(ms) {
+    var n = Number(ms || 0);
+    if (!n) return '';
+    try {
+      return new Date(n).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+    } catch (err) { return new Date(n).toDateString(); }
+  }
+
   var TITLES = {
     home: 'Home', queue: 'Review queue', library: 'Lecture library', schedule: 'Schedule',
     templates: 'Templates', music: 'Nasheed library', language: 'Arabic & terms',
@@ -5623,6 +5638,53 @@
           ? 'Renews in ' + plural(current.periodEndsInDays, 'day')
           : 'No renewal date on this plan.';
       }()),
+      // ── Subscription: cancel, resume, and the terms that govern both ──
+      // Wording is driven by what the account actually is, because the three
+      // states read very differently to the person in them: winding down (the
+      // date access stops), paying (the date it renews), and free (nothing to
+      // cancel).
+      subTitle: (function () {
+        if (current.unlimited) return 'Owner account';
+        if (current.cancelAtPeriodEnd) return 'Subscription ending';
+        if (planLabel && String(current.plan || '') !== 'free') return planLabel + ' plan';
+        return 'Free plan';
+      })(),
+      subDetail: (function () {
+        if (current.unlimited) return 'No limit and no renewal — nothing to cancel.';
+        if (current.cancelAtPeriodEnd) {
+          // The whole point of cancelling this way: it stays usable. Say so
+          // plainly, with the date, or the customer assumes they lost it today.
+          return current.cancelAt
+            ? 'Cancelled. Everything keeps working until ' + billingDate(current.cancelAt) + ', then this account moves to Free.'
+            : 'Cancelled. Everything keeps working until the end of the paid period, then this account moves to Free.';
+        }
+        if (String(current.plan || '') !== 'free') {
+          return current.periodEnd
+            ? 'Renews on ' + billingDate(current.periodEnd) + '. Cancelling keeps your access until then.'
+            : 'Cancelling keeps your access until the end of the paid period.';
+        }
+        return 'No subscription on this account.';
+      })(),
+      subActionLabel: current.cancelAtPeriodEnd ? 'Resume subscription' : 'Cancel subscription',
+      subActionStyle: (function () {
+        // Nothing to act on for a free or owner account, so the control is not
+        // drawn at all rather than drawn dead (invariant 8: no dead controls).
+        var hasSub = !current.unlimited && String(current.plan || '') !== 'free';
+        if (!hasSub) return 'display: none;';
+        var resuming = current.cancelAtPeriodEnd;
+        return 'padding: 8px 13px; border-radius: 8px; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; border: 1px solid ' +
+          (resuming
+            ? 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;'
+            : 'rgba(226,122,122,.34); background: rgba(226,122,122,.08); color: #E27A7A;');
+      })(),
+      subAction: function (e) {
+        stop(e);
+        if (current.cancelAtPeriodEnd) { global.StudioAdapter.onResumeSubscription(); return; }
+        global.StudioAdapter.onCancelSubscription();
+      },
+      billingLegalNote: 'Cancelling stops the next charge; access continues to the end of the period you have paid for. '
+        + 'Tokens already spent are not refunded, and top-up tokens you have bought stay on the account.',
+
       changeCard: function (e) { stop(e); global.StudioAdapter.onBillingPortal(); },
       openInvoices: function (e) { stop(e); global.StudioAdapter.onBillingPortal(); },
 
@@ -5818,6 +5880,8 @@
       global.setTimeout(function () { UI.toast = null; refresh(); }, 2600);
     },
     onBillingPortal: function () {},
+    onCancelSubscription: function () {},
+    onResumeSubscription: function () {},
     onToast: function () {},
     // The host clears optimistic decisions once fresh state has landed.
     // Both decisions are persisted now, so the refreshed state is the truth and
