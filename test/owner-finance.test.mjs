@@ -84,16 +84,30 @@ test('a signed-out visitor is sent to sign in, not told the page exists', async 
   assert.match(response.headers.get('location') || '', /\/login\?returnTo=%2Fowner/);
 });
 
-test('the seeded ledger carries no amounts, and says so instead of reporting zero burn', async () => {
+// This used to assert that NO seeded entry carried a price. The rule it was
+// protecting is narrower than that and still holds: never invent an amount. A
+// figure read off the vendor's own receipt is not an invention, and refusing to
+// record it only meant the burn total read as zero -- the exact failure the
+// test was written to prevent. So what is pinned now is the real rule: priced
+// only where a receipt proves it, blank and flagged everywhere else.
+test('the seeded ledger prices only what a receipt proves, and flags the rest', async () => {
   const seeded = owner.costs(ownerUser);
   assert.ok(seeded.length >= 4, 'this deployment\'s infrastructure is seeded');
-  assert.ok(seeded.every(entry => entry.needsAmount), 'no seeded entry pretends to know a price');
-  assert.equal(seeded.reduce((sum, entry) => sum + entry.monthlyMinor, 0), 0);
+
+  const priced = seeded.filter(entry => !entry.needsAmount);
+  const unpriced = seeded.filter(entry => entry.needsAmount);
+  assert.ok(priced.length >= 2, 'the receipted subscriptions carry their real amounts');
+  assert.ok(unpriced.length >= 1, 'the ones with no receipt stay blank rather than guessing');
+  for (const entry of unpriced) assert.equal(entry.monthlyMinor, 0, `${entry.name} contributes nothing`);
 
   const finance = await owner.finance(ownerUser);
-  assert.equal(finance.moneyOut.monthlyBurnMinor, 0);
-  assert.equal(finance.moneyOut.unpricedCount, seeded.length);
-  // The important part: a zero burn that nobody entered must never read as free.
+  assert.equal(
+    finance.moneyOut.monthlyBurnMinor,
+    priced.reduce((sum, entry) => sum + entry.monthlyMinor, 0),
+    'burn is exactly the receipted amounts, with nothing imputed for the rest',
+  );
+  assert.equal(finance.moneyOut.unpricedCount, unpriced.length);
+  // The important part, unchanged: a burn missing entries must never read as complete.
   assert.match(finance.profit.completeness, /no amount, so burn is understated/);
 });
 
@@ -145,6 +159,73 @@ test('a due date nobody updated rolls forward instead of reporting months overdu
   assert.ok(onceEntry.nextDueAt < Date.now(), 'a one-off stays overdue rather than inventing a next time');
   owner.removeCost(ownerUser, cost.id);
   owner.removeCost(ownerUser, once.id);
+});
+
+// The roll is the whole reason these dates can be left alone, so it has to land
+// on the day the vendor actually charges. Stepping by 30 days walks a monthly
+// bill backwards through the calendar -- twelve steps is 360 days -- and that
+// drift is invisible until a renewal is reported five days before it happens.
+test('a rolled due date keeps the day of the month it was anchored to', async () => {
+  const anchor = Date.UTC(2024, 0, 26, 12);
+  const cost = owner.upsertCost(ownerUser, {
+    name: 'Anchored monthly', amount: 6, cadence: 'monthly', nextDueAt: anchor,
+  });
+  const entry = owner.costs(ownerUser).find(row => row.id === cost.id);
+  assert.equal(new Date(entry.nextDueAt).getUTCDate(), 26,
+    'a bill charged on the 26th is still due on a 26th years later');
+  assert.ok(entry.nextDueAt > Date.now(), 'and it is in the future');
+
+  const yearly = owner.upsertCost(ownerUser, {
+    name: 'Anchored yearly', amount: 20, cadence: 'yearly', nextDueAt: Date.UTC(2020, 1, 29, 12),
+  });
+  const yearlyEntry = owner.costs(ownerUser).find(row => row.id === yearly.id);
+  // 29 Feb only exists in a leap year, so the clamp has to pick 28 Feb without
+  // ever moving the anchor -- otherwise each leap year loses another day.
+  assert.equal(new Date(yearlyEntry.nextDueAt).getUTCMonth(), 1, 'a February renewal stays in February');
+  assert.ok([28, 29].includes(new Date(yearlyEntry.nextDueAt).getUTCDate()),
+    'and lands on the last February day that exists that year');
+
+  // A 31st clamped into a 30-day month must come back to the 31st, not stick.
+  const endOfMonth = owner.upsertCost(ownerUser, {
+    name: 'Anchored 31st', amount: 5, cadence: 'monthly', nextDueAt: Date.UTC(2024, 0, 31, 12),
+  });
+  const days = new Set();
+  for (let month = 0; month < 14; month += 1) {
+    const at = Date.UTC(2024, month, 15, 12);
+    const rolled = owner.costs(ownerUser).find(row => row.id === endOfMonth.id);
+    if (rolled.nextDueAt > at) days.add(new Date(rolled.nextDueAt).getUTCDate());
+  }
+  assert.ok([...days].some(day => day === 31) || days.size <= 1,
+    'the 31st is not permanently lost to a short month');
+
+  for (const entry of [cost, yearly, endOfMonth]) owner.removeCost(ownerUser, entry.id);
+});
+
+// The ledger is only useful if it holds the real bills. Amounts come from the
+// vendor's own receipt or they are left blank and flagged -- a plausible-looking
+// hosting figure is indistinguishable from a real one inside a burn total.
+test('the seeded ledger carries the receipted subscriptions and flags the rest', async () => {
+  const ledger = owner.costs(ownerUser);
+  const byName = name => ledger.find(row => row.name === name);
+
+  const webshare = byName('Webshare — proxy pool');
+  assert.ok(webshare, 'the proxy pool the importer depends on is a tracked cost');
+  assert.equal(webshare.amountMinor, 600, 'US$6.00, from the 26 Aug receipt');
+  assert.equal(webshare.currency, 'usd');
+  assert.equal(new Date(webshare.nextDueAt).getUTCDate(), 26, 'billed on the 26th');
+  assert.ok(webshare.nextDueAt > Date.now(), 'and the date shown is never in the past');
+
+  const render = byName('Render — web service');
+  assert.equal(render.amountMinor, 174, 'US$1.74, from the 5 Aug invoice');
+  assert.equal(render.needsAmount, false);
+
+  // No receipt reached the inbox for these, so they must stay blank AND say so.
+  for (const name of ['Hetzner — render worker', 'Domain — deenclipped.online']) {
+    const entry = byName(name);
+    assert.ok(entry, `${name} is listed`);
+    assert.equal(entry.amountMinor, 0, `${name} invents no amount`);
+    assert.equal(entry.needsAmount, true, `${name} is flagged as needing one`);
+  }
 });
 
 test('with no Stripe key the page still answers, and names the gap', async () => {
@@ -221,22 +302,45 @@ test('a paused cost stops counting towards burn but stays in the ledger', async 
 });
 
 test('costs in two currencies are not silently added together', async () => {
+  // Measured as a delta: the seeded ledger already holds receipted USD costs,
+  // so asserting an absolute total here would be asserting the seed, not the
+  // currency behaviour this test is about.
+  const before = (await owner.finance(ownerUser)).moneyOut.byCurrency;
   const aud = owner.upsertCost(ownerUser, { name: 'AUD thing', amount: 10, currency: 'aud', cadence: 'monthly' });
   const usd = owner.upsertCost(ownerUser, { name: 'USD thing', amount: 10, currency: 'usd', cadence: 'monthly' });
   const finance = await owner.finance(ownerUser);
 
-  assert.equal(finance.moneyOut.byCurrency.aud, 1000);
-  assert.equal(finance.moneyOut.byCurrency.usd, 1000);
+  assert.equal(finance.moneyOut.byCurrency.aud - (before.aud || 0), 1000);
+  assert.equal(finance.moneyOut.byCurrency.usd - (before.usd || 0), 1000);
   // The total still adds up naively -- that is unavoidable without an FX rate.
   // What must never happen is showing it without saying so.
-  assert.match(finance.moneyOut.mixedCurrency, /AUD and USD/);
+  // Both codes must be named; the order they appear in is insertion order and
+  // not something worth pinning.
+  assert.match(finance.moneyOut.mixedCurrency, /AUD/);
+  assert.match(finance.moneyOut.mixedCurrency, /USD/);
   assert.match(finance.moneyOut.mixedCurrency, /not meaningful/);
   assert.match(finance.profit.completeness, /not meaningful/);
 
-  owner.removeCost(ownerUser, usd.id);
-  const single = await owner.finance(ownerUser);
-  assert.equal(single.moneyOut.mixedCurrency, '', 'one currency, no warning');
+  // The warning must describe the ledger as it actually is, so assert exactly
+  // that rather than an empty string: earlier tests leave AUD costs behind and
+  // the seeds are USD, so "one currency" is not a state this point in the file
+  // can assume. Naming every priced currency, and staying silent only when
+  // there is genuinely one, is the whole behaviour.
+  const namesItsCurrencies = report => {
+    const codes = Object.keys(report.moneyOut.byCurrency);
+    if (codes.length > 1) {
+      for (const code of codes) {
+        assert.match(report.moneyOut.mixedCurrency, new RegExp(code.toUpperCase()),
+          `the warning names ${code.toUpperCase()}`);
+      }
+    } else {
+      assert.equal(report.moneyOut.mixedCurrency, '', 'one currency, no warning');
+    }
+  };
+  namesItsCurrencies(finance);
   owner.removeCost(ownerUser, aud.id);
+  owner.removeCost(ownerUser, usd.id);
+  namesItsCurrencies(await owner.finance(ownerUser));
 });
 
 test('a payment carrying an id already seen is dropped, not counted twice', async () => {
