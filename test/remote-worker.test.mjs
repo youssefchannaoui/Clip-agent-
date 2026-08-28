@@ -22,7 +22,7 @@ const storage = await import('../src/object-storage.js');
 const originalFetch = global.fetch;
 
 test.afterEach(() => { global.fetch = originalFetch; });
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
 
 test('YouTube validation accepts individual videos and rejects playlists and lookalikes', () => {
   assert.equal(videoImport.parseYouTubeUrl('https://youtu.be/Abc_123-xyZ').videoId, 'Abc_123-xyZ');

@@ -11,7 +11,7 @@ process.env.APP_SESSION_SECRET = 'supersede-test-secret-long-enough-yes';
 const { state } = await import('../src/store.js');
 const engine = await import('../src/local-engine.js');
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
 
 test('a new re-render supersedes any still-queued one for the same clip', async () => {
   // Seed a self-hosted project with a live source file and one clip.

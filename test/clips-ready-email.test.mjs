@@ -32,7 +32,7 @@ test.after(async () => {
   // the directory under its rename made the FILE flake in parallel runs while
   // every test in it passed. Let the write land before pulling the floor.
   await new Promise(resolve => setTimeout(resolve, 50));
-  fs.rmSync(dataDir, { recursive: true, force: true });
+  fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 config.emailApiKey = 'test-key';

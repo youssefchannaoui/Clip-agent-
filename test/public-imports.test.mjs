@@ -16,7 +16,7 @@ const auth = await import('../src/auth.js');
 const engine = await import('../src/local-engine.js');
 const uploads = await import('../src/uploads.js');
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
 
 test('Google account sign-in always sends the production callback URL', () => {
   const start = new URL(auth.oauthStart('google', { headers: { host: 'wrong-host.test', 'x-forwarded-proto': 'http' } }, '/app'));

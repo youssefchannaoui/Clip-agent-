@@ -14,7 +14,7 @@ process.env.APP_SESSION_SECRET = 'backgrounds-test-secret-long-enough';
 const backgrounds = await import('../src/backgrounds.js');
 const backgroundsDir = path.join(dataDir, 'backgrounds');
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
 
 function seed(entries) {
   fs.mkdirSync(backgroundsDir, { recursive: true });

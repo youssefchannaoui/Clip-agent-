@@ -39,7 +39,7 @@ for (let attempt = 0; attempt < 60; attempt += 1) {
 
 test.after(async () => {
   await new Promise(resolve => server.close(resolve));
-  fs.rmSync(dataDir, { recursive: true, force: true });
+  fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 // ── the refusal has to say what to do ───────────────────────────────────────

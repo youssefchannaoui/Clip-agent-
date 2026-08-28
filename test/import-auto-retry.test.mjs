@@ -11,7 +11,7 @@ process.env.APP_SESSION_SECRET = 'auto-retry-test-secret-long-enough';
 const { state } = await import('../src/store.js');
 const engine = await import('../src/local-engine.js');
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
 
 // Measured 26 Aug 2026: the import service takes 30+ minutes on a long
 // lecture's first fetch, keeps fetching after our budget runs out, and then

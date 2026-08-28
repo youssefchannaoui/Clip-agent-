@@ -63,7 +63,7 @@ globalThis.fetch = async (url, options = {}) => {
 
 test.after(() => {
   globalThis.fetch = realFetch;
-  fs.rmSync(dataDir, { recursive: true, force: true });
+  fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 function makeUser(id, billingFields = {}, createdAt = Date.now()) {

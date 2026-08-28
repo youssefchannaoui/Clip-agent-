@@ -20,7 +20,7 @@ const store = await import('../src/store.js');
 const marketing = fs.readFileSync(path.join(process.cwd(), 'src/marketing.js'), 'utf8');
 const engine = fs.readFileSync(path.join(process.cwd(), 'src/local-engine.js'), 'utf8');
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
 
 const DAY = 24 * 60 * 60 * 1000;
 

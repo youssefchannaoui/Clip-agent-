@@ -115,7 +115,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **745 JS + 384 Python**
+- `npm test` and `npm run check` must pass. Currently **747 JS + 384 Python**
   (7 Python skipped). Update these numbers when they change — they were wrong by
   more than a factor of two, which makes them useless as a tripwire.
 - **The 7 skips are `SpeakerTrackingTests`**, which need a test video that is not
@@ -337,10 +337,70 @@ platform rule each. Keep them apart when triaging the next report.
   (`[data-dc-dest-account]`) — platform and outcome are what carry the meaning
   — and the card wraps its actions onto their own line.
 
+## Working from a phone (28 Aug 2026)
+
+Youssef works from Claude Code on his phone when he is out, so sessions start
+with no laptop, no local state and no earlier conversation.
+
+- **This file is the handover.** Nothing else travels. Conversation history
+  does not, and neither does any per-machine memory — a note saved on the Mac
+  is invisible to every other session. If a fact will matter next week, it
+  belongs in this file, in the repo.
+- **CI is the verification of last resort.** `.github/workflows/ci.yml` runs
+  `npm run check` and `npm test` on Ubuntu with Node 22 and Python 3.12. The
+  repo has **no npm dependencies and the Python tests use only the stdlib**, so
+  a clean checkout runs the whole suite anywhere — that is what makes a phone
+  session viable at all. Keep it that way; a dependency added carelessly
+  removes it.
+- **A Mac cannot see a case-only path mistake.** `DESIGN/…` opened fine locally
+  and threw ENOENT on Linux CI, so the suite was green here and red there —
+  the worst failure to hit from a phone, because it cannot be reproduced on the
+  machine that wrote it. `test/case-sensitive-paths.test.mjs` compares every
+  repo path a test names against the real directory listing.
+- **Never leave the branch red.** A phone session that cannot trust the tick
+  has no way to check anything.
+- What a phone session **cannot** do: the Hetzner worker deploy (browser
+  console), Stripe dashboard work, platform submissions, and looking at the
+  rendered UI. Say so rather than claiming a visual change is verified.
+
+## Releasing
+
+- **`package.json` version is the single source**, announced by both apps. Bump
+  it — patch for a fix, minor for a feature — in the same commit as the change.
+- Update the test counts in **Verification standard** above whenever they move.
+- Pushing `deenclipped-v2-2` deploys the web app to Render automatically. The
+  **worker is manual** and nothing about a push tells you otherwise: `worker/`
+  changes sit unrun on the box until someone runs the deploy in the Deploys
+  section above. A worker change that is committed, green and pushed is still
+  not live.
+
 ## Open items
 
-- **YouTube API quota reply** is drafted in Gmail, unsent. Google asked for a
-  recalculated quota breakdown; deadline ~20 Aug.
+### Waiting on Youssef (nothing in the repo unblocks these)
+
+1. **YouTube API compliance/quota reply** — drafted in Gmail, unsent. Until the
+   project passes the audit, Google forces every upload to private whatever the
+   app asks for, so this is what "posts are private" really depends on.
+2. **TikTok app review** — record the demo and submit (`TIKTOK-SUBMISSION.md`).
+   Until then an unreviewed app may only post to a TikTok account that is
+   itself private; setting the account private is the way to post today.
+3. **Worker deploy on Hetzner** — the section-download saving (v3.12.0) is not
+   live until it runs.
+4. **Stripe identity document**, task `astask_1U94FLKKpFy0S4hepCXWS9HY`.
+   Payments work; payouts are paused until it is uploaded.
+5. **Hetzner CPX41 rescale.** Once done: worker retune (4 jobs, whisper medium,
+   `qwen3:4b`), ETA recalibration, an end-to-end run with before/after numbers.
+6. **Reconnect YouTube** — the stored token is expired and posts are missing
+   their slots.
+7. **A stranger test** — someone who has never seen the product signs up and
+   uses it. Claude cannot create an account, so this one needs a real person.
+
+### Known gaps in the product
+
+- **One account per platform.** `publishingSettings[provider].accountId` is a
+  single id, so a clip cannot go to two YouTube channels. Posting to several
+  accounts needs the settings shape to become a list and the target builder to
+  fan out over it.
 - **Render pipeline learned to cut on 26 Aug 2026 (v3.2.0)** — a candidate can
   carry KEEP ranges (`clip.cutsSec`, clip-local, via re-render), rendered as a
   pre-cut trim/concat plate that the untouched pipeline then treats as an

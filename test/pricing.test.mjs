@@ -10,7 +10,7 @@ process.env.APP_SESSION_SECRET = 'pricing-test-secret-long-enough';
 
 const { config } = await import('../src/config.js');
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
 
 const money = label => Number(String(label).replace(/[^0-9.]/g, ''));
 const perToken = (label, tokens) => money(label) / tokens;

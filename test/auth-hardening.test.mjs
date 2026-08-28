@@ -16,7 +16,7 @@ const store = await import('../src/store.js');
 const auth = await import('../src/auth.js');
 const { state } = store;
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
 
 test('typing a listed operator address into the password form does not make an operator', async () => {
   auth.ownerUser();

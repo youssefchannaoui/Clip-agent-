@@ -15,7 +15,7 @@ process.env.APP_SESSION_SECRET = 'clip-trim-test-secret-long-enough';
 const agent = await import('../src/agent.js');
 const { state } = await import('../src/store.js');
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
 
 let seq = 0;
 function makeClip(fields = {}) {

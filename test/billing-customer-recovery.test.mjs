@@ -19,7 +19,7 @@ process.env.PUBLIC_BASE_URL = 'https://deenclipped.online';
 const billing = await import('../src/billing.js');
 const { state } = await import('../src/store.js');
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
 
 // Intercept at the network, so these also prove the calls are shaped the way
 // Stripe's API actually takes them.

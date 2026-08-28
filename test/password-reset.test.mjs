@@ -42,7 +42,7 @@ for (let attempt = 0; attempt < 60; attempt += 1) {
 test.after(async () => {
   globalThis.fetch = realFetch;
   await new Promise(resolve => server.close(resolve));
-  fs.rmSync(dataDir, { recursive: true, force: true });
+  fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 // Origin included deliberately: /auth/* POSTs are CSRF-guarded, so a request

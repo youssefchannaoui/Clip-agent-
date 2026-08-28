@@ -11,7 +11,7 @@ process.env.APP_SESSION_SECRET = 'reservation-test-secret-long-enough';
 const billing = await import('../src/billing.js');
 const { state } = await import('../src/store.js');
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
 
 function makeUser(id, plan = 'free') {
   const user = { id, email: `${id}@test`, name: id, role: 'creator', providers: {}, createdAt: Date.now(), billing: { plan, status: 'free', plansSeenAt: Date.now() } };

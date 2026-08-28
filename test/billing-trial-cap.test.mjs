@@ -16,7 +16,7 @@ process.env.STRIPE_PRICE_MONTHLY = 'price_test_monthly';
 const billing = await import('../src/billing.js');
 const { state } = await import('../src/store.js');
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
 
 const DAY = 24 * 60 * 60 * 1000;
 

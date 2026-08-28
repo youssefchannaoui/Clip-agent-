@@ -23,7 +23,7 @@ const { server } = await import('../src/server.js');
 await new Promise(resolve => (server.listening ? resolve() : server.once('listening', resolve)));
 const base = `http://127.0.0.1:${server.address().port}`;
 
-test.after(() => { server.close(); fs.rmSync(dataDir, { recursive: true, force: true }); });
+test.after(() => { server.close(); fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); });
 
 test('the operator page is reachable: signed out means login, not the 404 catch-all', async () => {
   const response = await fetch(`${base}/admin/import-network`, { redirect: 'manual' });
