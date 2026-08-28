@@ -48,11 +48,14 @@ except ImportError:  # pragma: no cover - the module ships beside this one
     MATTE_FPS = 30
 
 try:
-    from import_providers import youtube_network_options
+    from import_providers import proxy_pool, youtube_network_options
 except Exception:  # pragma: no cover - clip_worker must still run standalone
     def youtube_network_options() -> dict[str, Any]:
         """No proxy or cookies available; the download is attempted as-is."""
         return {}
+
+    def proxy_pool() -> list[str]:
+        return []
 
 try:
     import cv2  # type: ignore
@@ -3322,7 +3325,12 @@ def capabilities() -> dict[str, Any]:
         # Whether the box has a way past an IP block. Reported, never the values
         # themselves -- a proxy URL carries credentials and a cookie file is an
         # account session.
-        "importProxy": bool(os.getenv("VIDEO_IMPORT_PROXY", "").strip()),
+        # Reported from what the downloader ACTUALLY reads. This checked only
+        # the singular VIDEO_IMPORT_PROXY, so a box running a 16-address
+        # Webshare pool reported "importProxy": false -- and the one time that
+        # readout matters is when imports start failing and someone has to
+        # decide whether the exits are burned or never existed.
+        "importProxy": bool(proxy_pool()),
         # Whether yt-dlp can mint YouTube proof-of-origin tokens: the plugin in
         # the image and the token server's URL configured. Both or it is off --
         # the plugin without the server mints nothing, silently.

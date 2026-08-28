@@ -74,3 +74,67 @@ class ProxyRotationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProxyReportingTests(unittest.TestCase):
+    """The health readout must answer from the same place the downloader picks.
+
+    The box ran a 16-address Webshare pool and reported `"importProxy": false`,
+    because the capability check read the singular VIDEO_IMPORT_PROXY while the
+    downloader chose from VIDEO_IMPORT_PROXY_FILE / VIDEO_IMPORT_PROXIES. The
+    one moment that readout matters is when imports start failing and someone
+    has to decide whether the exits are burned or were never configured --
+    which is exactly when it was lying.
+    """
+
+    def setUp(self):
+        self.saved = {k: os.environ.get(k) for k in
+                      ("VIDEO_IMPORT_PROXIES", "VIDEO_IMPORT_PROXY", "VIDEO_IMPORT_PROXY_FILE")}
+        for key in self.saved:
+            os.environ.pop(key, None)
+
+    def tearDown(self):
+        for key, value in self.saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def test_an_env_pool_counts_as_having_a_proxy(self):
+        os.environ["VIDEO_IMPORT_PROXIES"] = "http://u:p@10.0.0.1:1,http://u:p@10.0.0.2:2"
+        self.assertEqual(len(ip.proxy_pool()), 2)
+
+    def test_a_pool_file_outranks_the_env_pool(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as handle:
+            handle.write("http://u:p@10.9.9.1:1\n\nhttp://u:p@10.9.9.2:2\nhttp://u:p@10.9.9.3:3\n")
+            path = handle.name
+        try:
+            os.environ["VIDEO_IMPORT_PROXY_FILE"] = path
+            os.environ["VIDEO_IMPORT_PROXIES"] = "http://u:p@stale.example:1"
+            self.assertEqual(len(ip.proxy_pool()), 3, "the maintenance job's file is the fresher truth")
+        finally:
+            os.unlink(path)
+
+    def test_no_pool_is_an_empty_list_rather_than_a_crash(self):
+        self.assertEqual(ip.proxy_pool(), [])
+
+    def test_the_capability_readout_sees_the_pool(self):
+        import importlib
+        import sys as _sys
+        from pathlib import Path as _Path
+        _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "worker"))
+        clip_worker = importlib.import_module("clip_worker")
+
+        # capabilities() is memoised for the life of the process, which is right
+        # in production and means the cache has to be cleared between the two
+        # halves of this test rather than the second answer trusted.
+        def asked_fresh():
+            clip_worker._CAPABILITIES = None
+            return clip_worker.capabilities()["importProxy"]
+
+        os.environ["VIDEO_IMPORT_PROXIES"] = "http://u:p@10.0.0.1:1,http://u:p@10.0.0.2:2"
+        self.assertTrue(asked_fresh(), "a live pool must not be reported as no proxy at all")
+        os.environ.pop("VIDEO_IMPORT_PROXIES", None)
+        self.assertFalse(asked_fresh())
+        clip_worker._CAPABILITIES = None
