@@ -1550,11 +1550,15 @@
   }
 
   function ownerNavItem() {
-    // Built through navItem so it inherits the rail's exact metrics, collapsed
-    // tooltip and hover behaviour. The key is one no screen uses, so it never
-    // draws itself as the active item.
-    var item = navItem('__owner', 'Owner', 'ph ph-coins', '');
-    item.click = function (e) { stop(e); global.location.href = '/owner'; };
+    // A studio screen now, not a navigation away: the /owner page swap threw
+    // the whole shell out and reloaded, which read as the app restarting.
+    // The money ledger still lives on /owner, linked from inside the tab.
+    var item = navItem('analytics', 'Owner', 'ph ph-coins', '');
+    var inner = item.click;
+    item.click = function (e) {
+      inner(e);
+      global.StudioAdapter.onLoadAnalytics(UI.anaDays || 30);
+    };
     return item;
   }
 
@@ -1573,10 +1577,18 @@
     } catch (err) { return new Date(n).toDateString(); }
   }
 
+  /** A {name: count} map as sorted table rows, largest first, capped for the screen. */
+  function topPairs(map) {
+    return Object.keys(map || {}).map(function (k) { return { name: k, count: String(map[k]) }; })
+      .sort(function (a, b) { return Number(b.count) - Number(a.count); })
+      .slice(0, 12);
+  }
+
   var TITLES = {
     home: 'Home', queue: 'Review queue', library: 'Lecture library', schedule: 'Schedule',
     templates: 'Templates', music: 'Nasheed library', language: 'Arabic & terms',
     performance: 'Performance', editor: 'Clip editor \u00b7 BETA', tokens: 'Tokens & billing',
+    analytics: 'Owner analytics',
   };
 
   function sublineFor(screen, ctx) {
@@ -5523,6 +5535,80 @@
       }),
       perfPatterns: [],
 
+      // ── Owner analytics ──
+      // The numbers arrive from /api/owner/webmetrics on demand (the host
+      // caches them across state refreshes); until they land the screen says
+      // so instead of drawing zeros that would read as "no traffic".
+      isAnalytics: UI.screen === 'analytics',
+      anaSubline: (function () {
+        var ana = DATA.webmetrics;
+        if (UI.screen !== 'analytics') return '';
+        if (!ana) return 'Loading the numbers\u2026';
+        return 'Counted on this server \u2014 no third-party trackers, no cookies.';
+      })(),
+      anaRanges: [7, 30, 90].map(function (d) {
+        return {
+          label: d + ' days',
+          style: tabStyle((UI.anaDays || 30) === d),
+          select: function (e) {
+            stop(e);
+            setUI({ anaDays: d });
+            global.StudioAdapter.onLoadAnalytics(d);
+          },
+        };
+      }),
+      anaTiles: (function () {
+        var ana = DATA.webmetrics;
+        if (!ana) return [];
+        var t = ana.totals || {};
+        var r = ana.rates || {};
+        var money = '';
+        if (t.revenueMinor) {
+          money = (t.revenueMinor / 100).toFixed(2);
+          money = t.revenueCurrency && t.revenueCurrency !== 'mixed'
+            ? t.revenueCurrency.toUpperCase() + ' ' + money
+            : money + (t.revenueCurrency === 'mixed' ? ' (mixed currencies)' : '');
+        }
+        var pct = function (v) { return v === null || v === undefined ? '\u2014' : v + '%'; };
+        return [
+          { label: 'Page views', value: String(t.views || 0), note: (t.views7 || 0) + ' in the last 7 days' },
+          { label: 'Unique visitors', value: String(t.uniques || 0), note: (t.uniques7 || 0) + ' in the last 7 days' },
+          { label: 'Signups', value: String(t.signups || 0), note: pct(r.visitToSignup) + ' of visitors' },
+          { label: 'Checkouts started', value: String(t.checkoutsStarted || 0), note: pct(r.signupToCheckout) + ' of signups' },
+          { label: 'Paid conversions', value: String(t.paidConversions || 0), note: pct(r.visitToPaid) + ' of visitors' },
+          { label: 'Revenue', value: money || '0', note: (t.topups || 0) + ' top-up' + (t.topups === 1 ? '' : 's') + ' in the window' },
+          { label: 'Clips posted', value: String(t.postsPublished || 0), note: 'published to connected channels' },
+        ];
+      })(),
+      anaBars: (function () {
+        var ana = DATA.webmetrics;
+        var days = (ana && ana.days) || [];
+        var max = 1;
+        days.forEach(function (d) { if (d.views > max) max = d.views; });
+        return days.map(function (d) {
+          var h = Math.max(d.views ? 4 : 2, Math.round((d.views / max) * 100));
+          return {
+            tip: d.day + ': ' + d.views + ' view' + (d.views === 1 ? '' : 's') + ', ' + d.uniques + ' unique',
+            style: 'flex: 1; min-width: 2px; height: ' + h + '%; border-radius: 3px 3px 0 0; background: ' +
+              (d.views ? 'linear-gradient(180deg, #F0D6A6, #D9B478)' : '#1E1E22') + ';',
+          };
+        });
+      })(),
+      anaBarsNote: (function () {
+        var ana = DATA.webmetrics;
+        if (!ana) return '';
+        return ana.captureSince
+          ? 'Page views count from ' + ana.captureSince + '. Signups, revenue and posts include earlier history \u2014 they come from the app\u2019s own records.'
+          : 'No page views recorded yet \u2014 they start counting from the first visit after this deploy.';
+      })(),
+      anaPages: topPairs(DATA.webmetrics && DATA.webmetrics.byPath),
+      anaPagesEmpty: topPairs(DATA.webmetrics && DATA.webmetrics.byPath).length === 0,
+      anaReferrers: topPairs(DATA.webmetrics && DATA.webmetrics.referrers),
+      anaReferrersEmpty: topPairs(DATA.webmetrics && DATA.webmetrics.referrers).length === 0,
+      anaUtm: topPairs(DATA.webmetrics && DATA.webmetrics.utm),
+      anaUtmEmpty: topPairs(DATA.webmetrics && DATA.webmetrics.utm).length === 0,
+      anaFootnote: 'Visitors are one daily-rotating hash each \u2014 no addresses stored, nothing sent anywhere.',
+
       // ── Tokens & billing ──
       // The period tabs filter the real plan list by its own `interval`, so the
       // prices and token counts change with the period instead of the tabs
@@ -5880,6 +5966,7 @@
       global.setTimeout(function () { UI.toast = null; refresh(); }, 2600);
     },
     onBillingPortal: function () {},
+    onLoadAnalytics: function () {},
     onCancelSubscription: function () {},
     onResumeSubscription: function () {},
     onToast: function () {},
