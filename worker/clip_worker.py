@@ -499,8 +499,23 @@ def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, durat
     language = str(settings.get("language") or "").strip()
     if language:
         kwargs["language"] = language
+    else:
+        # Auto-detect means BOTH, switching as it hears them (Youssef, 28 Aug
+        # 2026: "auto detect should do BOTH ARABIC AND ENLISH AND SHOULD SWITCH
+        # WHEN DETECT"). Whisper's own default detects one language from the
+        # first 30 seconds and applies it to the whole lecture, so an English
+        # talk containing recitation transcribed the Arabic as Latin nonsense
+        # -- and nothing downstream could recognise it as Arabic, because by
+        # then it was not. `multilingual` detects per segment instead.
+        kwargs["multilingual"] = True
 
-    segments, info = model.transcribe(str(audio_file), **kwargs)
+    try:
+        segments, info = model.transcribe(str(audio_file), **kwargs)
+    except TypeError:
+        # An older faster-whisper without per-segment detection. One language
+        # for the file is worse, but it is not a failed job.
+        kwargs.pop("multilingual", None)
+        segments, info = model.transcribe(str(audio_file), **kwargs)
     output: list[dict[str, Any]] = []
     transcription_started = time.time()
     last_percent = 15
@@ -546,8 +561,13 @@ def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, durat
     # goes on screen above the translation, and they are also what the ayah
     # matcher searches the Quran with.
     spoken = str(getattr(info, "language", "") or "").lower()
+    # What was actually transcribed decides, not what was detected first. A
+    # lecture Whisper called English because its opening minute was English
+    # still needs the translation pass the moment any Arabic is recited in it
+    # -- that English line is what goes under the Arabic (invariant 7).
+    heard_arabic = any(contains_arabic(item.get("text")) for item in output)
     wants_english = (
-        spoken and not spoken.startswith("en")
+        (heard_arabic or (spoken and not spoken.startswith("en")))
         and str(kwargs.get("task") or "") == "transcribe"
         and settings.get("translateCaptions") is not False
     )
@@ -574,8 +594,17 @@ def translate_audio(model: Any, audio_file: Path, kwargs: dict[str, Any]) -> lis
         options["vad_parameters"] = kwargs["vad_parameters"]
     if kwargs.get("language"):
         options["language"] = kwargs["language"]
+    elif kwargs.get("multilingual"):
+        # Same courtesy on the way back: a mixed lecture is translated segment
+        # by segment, not as whichever language its first half happened to be.
+        options["multilingual"] = True
     lines: list[dict[str, Any]] = []
-    for segment in model.transcribe(str(audio_file), **options)[0]:
+    try:
+        translated = model.transcribe(str(audio_file), **options)[0]
+    except TypeError:
+        options.pop("multilingual", None)
+        translated = model.transcribe(str(audio_file), **options)[0]
+    for segment in translated:
         text = str(segment.text or "").strip()
         if text:
             lines.append({"start": float(segment.start), "end": float(segment.end), "text": text})
@@ -1276,7 +1305,12 @@ def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: floa
             if piece:
                 text += "\\N{\\fn" + latin_font + "\\fs" + str(translation_size) + "}" + ass_escape(piece)
 
-        events.append(f"Dialogue: 2,{ass_time(chunk_start)},{ass_time(chunk_end)},Ayah,,0,0,0,,{fade_tag}{text}")
+        # \q0, as the bilingual phrase captions already carry. WrapStyle 2 is
+        # "break only where I say", and nothing said where -- so a translation
+        # longer than the frame ran off BOTH edges, cut mid-word at each end.
+        # Smart wrapping breaks it at the style's own margins; a line that
+        # already fits is untouched.
+        events.append(f"Dialogue: 2,{ass_time(chunk_start)},{ass_time(chunk_end)},Ayah,,0,0,0,,{fade_tag}" + "{\\q0}" + text)
     return events
 
 

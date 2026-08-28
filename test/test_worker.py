@@ -627,6 +627,27 @@ class SpokenArabicWrapGuardTests(unittest.TestCase):
             self.assertIn("{\\q0}", line)
 
 
+class AyahTranslationWrapTests(unittest.TestCase):
+    def test_the_translation_under_an_ayah_wraps_instead_of_running_off(self):
+        """Seen on a real frame, 28 Aug 2026: "make sure trnalation on the
+        bottom doesnt get cut of the edges". WrapStyle 2 breaks only where the
+        text says to, and the translation line said nothing -- so a verse
+        translation longer than the frame was cut mid-word at BOTH edges."""
+        events = worker.ayah_events(
+            {
+                "arabic": "\u0646\u062d\u0646 \u062e\u0644\u0642\u0646\u0627\u0643\u0645 \u0641\u0644\u0648\u0644\u0627 \u062a\u0635\u062f\u0642\u0648\u0646",
+                "translation": ("It is We Who have created you: why will ye not witness "
+                                "the Truth, a translation long enough to leave the frame"),
+            },
+            ornament="\u06dd", start=0.0, end=6.0,
+            latin_font="Outfit", translation_size=46, show_translation=True,
+            ayah_size=120, mark_size=90, ayah_font="Amiri",
+        )
+        self.assertTrue(events, "expected at least one ayah event")
+        for line in events:
+            self.assertIn("{\\q0}", line)
+
+
 class CaptionFontTests(unittest.TestCase):
     """Every font the picker offers has to exist in the worker image.
 

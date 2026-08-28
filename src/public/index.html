@@ -3918,6 +3918,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
             +'<span style="font-size:11px;color:#6E6E76;margin-right:2px">Spoken language</span>'
             +[['en','English'],['ar','Arabic'],['ur','Urdu'],['auto','Auto-detect']].map(([v,l])=>
               `<button type="button" data-lang="${v}" style="padding:5px 11px;border:1px solid #26262A;border-radius:999px;background:#121214;color:#BCBCC3;font:600 11.5px Outfit,Inter,sans-serif;cursor:pointer">${l}</button>`).join('')
+            +'<span id="jobLangNote" style="flex:1 1 100%;font-size:11px;line-height:1.5;color:#6E6E76"></span>'
           +'</div>';
         for(const b of jobTypeEl.querySelectorAll('button[data-kind]')){
           b.onclick=e=>{e.preventDefault();StudioAdapter.bindings(DATA).pickJobType(b.dataset.kind)};
@@ -3930,6 +3931,12 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         b.classList.toggle('on',(b.dataset.kind==='quran')===Boolean(vals.jobTypeQuran));
       }
       const effLang=StudioAdapter.ui.jobLang||(vals.jobTypeQuran?'ar':'en');
+      /* Auto no longer means "guess once from the opening seconds". It follows
+         the speech, so a lecture that recites mid-sentence switches with it. */
+      const langNote=jobTypeEl.querySelector('#jobLangNote');
+      if(langNote)langNote.textContent=effLang==='auto'
+        ? 'Follows the speech as it changes — Arabic passages are captioned in Arabic with the English underneath.'
+        : 'Every caption is read as this language, whatever else is spoken.';
       for(const b of jobTypeEl.querySelectorAll('button[data-lang]')){
         const on=b.dataset.lang===effLang;
         b.style.borderColor=on?'rgba(217,180,120,.55)':'#26262A';

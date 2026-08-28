@@ -108,14 +108,29 @@ These were each a real bug and each has a test named after it.
    Quran template captions scripture and NOTHING else -- an aside or a
    half-heard word in the lecture face under a verse is what made those clips
    look wrong.
-8. **No dead controls.** A control that cannot reach an export must not be
+   **Extended 28 Aug 2026: auto-detect means BOTH, switching per segment.**
+   Whisper's default detects one language from the opening seconds and applies
+   it to the whole lecture, so an English talk containing recitation had its
+   Arabic transcribed as Latin nonsense -- and after that nothing downstream
+   could tell it was Arabic, because it was not: no Arabic face, no ayah match,
+   no translation line. With no language chosen the first pass now runs
+   `multilingual=True`, and the translate pass fires whenever any Arabic was
+   actually transcribed rather than only when the whole file was detected as
+   non-English. Choosing a language still pins it, exactly as before. An older
+   faster-whisper that rejects the flag falls back rather than failing the job.
+8. **A caption line that can overflow carries `{\q0}`.** `WrapStyle: 2` breaks
+   only where the text says to, so any line built by word count rather than
+   glyph width can run off both edges -- seen on real frames three times now
+   (phrase captions, spoken-Arabic lines, and the ayah translation). All three
+   carry the override; anything new that emits a Dialogue line must too.
+9. **No dead controls.** A control that cannot reach an export must not be
    shown. `hookEnabled` is hard-disabled in `sanitiseTemplate()`.
 
 ---
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **795 JS + 389 Python**
+- `npm test` and `npm run check` must pass. Currently **795 JS + 395 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
