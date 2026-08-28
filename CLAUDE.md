@@ -339,8 +339,26 @@ platform rule each. Keep them apart when triaging the next report.
 
 ## Open items
 
-- **YouTube API quota reply** is drafted in Gmail, unsent. Google asked for a
-  recalculated quota breakdown; deadline ~20 Aug.
+- **YouTube API compliance review** (project 881648803263) is at its last open
+  question, drafted in Gmail and unsent; deadline ~8 Sept 2026 (7 business days
+  from Google's 27 Aug message).
+  **The answer is that we need no extra quota at all.** The quota methodology
+  changed in 2026: `videos.insert` costs 1 unit against a dedicated **100
+  calls/day** bucket, not 1,600 units out of the general pool. Our 11 Aug reply
+  used the old 1,600 figure, concluded we could perform zero uploads a day, and
+  asked for 20,000/day; Google has now twice written to correct that arithmetic.
+  Real usage is ~5 `videos.insert`/day against a limit of 100, so the reply
+  withdraws the request. Asking for quota nobody needs is what has kept this
+  review open — the audit, not the quota, is what forces uploads private.
+  The three endpoints, verified against the code rather than assumed:
+  `channels.list` (`part=snippet&mine=true` on connect, `part=id,snippet` on
+  connection test), `videos.list` (`part=snippet,contentDetails`, API key, once
+  per submitted URL, with an HTML fallback), and `videos.insert`
+  (`part=snippet,status`, resumable — the chunk PUTs are not extra insert calls).
+  The ToS Violations Report V.1 items were answered 21 Aug and the Policy
+  III.F.2a,b screenshots 26 Aug; a stale draft still sitting in Gmail repeats
+  that 26 Aug reply in a **detached thread and without its attachments** — do
+  not send it.
 - **Render pipeline learned to cut on 26 Aug 2026 (v3.2.0)** — a candidate can
   carry KEEP ranges (`clip.cutsSec`, clip-local, via re-render), rendered as a
   pre-cut trim/concat plate that the untouched pipeline then treats as an
