@@ -56,12 +56,20 @@ const creatorCookie = cookieFor(creator);
 const DAY = 24 * 60 * 60 * 1000;
 
 test('every owner surface is 404 for a creator, and reachable for the operator', async () => {
-  const reads = ['/owner', '/owner.js', '/owner.css', '/api/owner/finance', '/api/owner/costs'];
+  const reads = ['/api/owner/finance', '/api/owner/costs', '/api/owner/webmetrics'];
   for (const pathname of reads) {
     const denied = await fetch(`${base}${pathname}`, { headers: { Cookie: creatorCookie }, redirect: 'manual' });
     assert.equal(denied.status, 404, `${pathname} hides from a creator`);
     const allowed = await fetch(`${base}${pathname}`, { headers: { Cookie: ownerCookie }, redirect: 'manual' });
     assert.equal(allowed.status, 200, `${pathname} opens for the operator`);
+  }
+
+  // The standalone /owner page was replaced by the Owner tab inside the
+  // studio (28 Aug 2026). Gone means gone for the operator too: a page that
+  // still answered would be a second, unmaintained copy of the books.
+  for (const gone of ['/owner', '/owner.js', '/owner.css']) {
+    const response = await fetch(`${base}${gone}`, { headers: { Cookie: ownerCookie, accept: 'text/html' }, redirect: 'manual' });
+    assert.equal(response.status, 404, `${gone} no longer exists for anyone`);
   }
 
   // Writes too: a read-only gate on a surface that also accepts writes is not a gate.
@@ -78,10 +86,11 @@ test('every owner surface is 404 for a creator, and reachable for the operator',
   assert.ok(owner.costs(ownerUser).some(entry => entry.id === 'cost_seed_1'), 'and the cost is still there');
 });
 
-test('a signed-out visitor is sent to sign in, not told the page exists', async () => {
+test('a signed-out visitor learns nothing from the retired /owner path', async () => {
+  // It used to redirect to sign-in. Now the route is gone for everyone, which
+  // leaks even less: signed out, signed in and operator all see the same 404.
   const response = await fetch(`${base}/owner`, { redirect: 'manual' });
-  assert.equal(response.status, 302);
-  assert.match(response.headers.get('location') || '', /\/login\?returnTo=%2Fowner/);
+  assert.equal(response.status, 404);
 });
 
 // This used to assert that NO seeded entry carried a price. The rule it was

@@ -2167,7 +2167,7 @@ async function refresh({quiet=true}={}){try{
   if(r&&r.unchanged){return}
   window.fireClipNotifs&&window.fireClipNotifs(DATA,r);
   DATA=r;
-  if(window.DC_WEBMETRICS)DATA.webmetrics=window.DC_WEBMETRICS;
+  if(window.DC_OWNER){DATA.ownerData=window.DC_OWNER;DATA.webmetrics=window.DC_OWNER.webmetrics||null}
   await hydrateEditorClip();
   renderAll()}catch(e){if(!quiet)toast(e.message,'bad')}}
 /* Opening a clip must hydrate immediately, not on the next poll. */
@@ -5132,16 +5132,45 @@ StudioAdapter.onProbeSource=async url=>{try{
        survive because they were PATCHed within 450ms; words did not. */
     addEventListener('beforeunload',e=>{
       try{if(window.StudioAdapter&&StudioAdapter.ui&&StudioAdapter.ui.edDirty){e.preventDefault();e.returnValue=''}}catch(err){}});
-    /* Owner analytics: fetched when the tab opens or the range changes,
-       cached so the regular state poll does not blank the screen. */
-    let anaLoading=false;
-    StudioAdapter.onLoadAnalytics=async(days)=>{
-      if(anaLoading)return;anaLoading=true;
+    /* The owner screen: four owner-gated reads. Finance, accounts and web
+       metrics load together; worker health loads apart so a slow box never
+       blocks the books. Everything is cached across state polls because
+       /api/state replaces DATA wholesale. */
+    let ownerLoading=false;
+    StudioAdapter.onLoadOwner=async(days)=>{
+      if(ownerLoading)return;ownerLoading=true;
+      window.DC_OWNER=window.DC_OWNER||{};
       try{
-        const r=await api('/api/owner/webmetrics?days='+encodeURIComponent(days||30));
-        window.DC_WEBMETRICS=r;if(DATA)DATA.webmetrics=r;renderAll();
-      }catch(e){toast(e.message,'bad')}
-      finally{anaLoading=false}};
+        const d=Number(days)||180;
+        const [fin,acc,web]=await Promise.allSettled([
+          api('/api/owner/finance?days='+d),
+          api('/api/admin/analytics'),
+          api('/api/owner/webmetrics?days='+Math.min(90,d)),
+        ]);
+        if(fin.status==='fulfilled')window.DC_OWNER.finance=fin.value;else toast(fin.reason.message,'bad');
+        if(acc.status==='fulfilled')window.DC_OWNER.analytics=acc.value;
+        if(web.status==='fulfilled')window.DC_OWNER.webmetrics=web.value;
+        if(DATA){DATA.ownerData=window.DC_OWNER;DATA.webmetrics=window.DC_OWNER.webmetrics||null}
+        renderAll();
+      }finally{ownerLoading=false}
+      /* Health after the books have painted, never instead of them. */
+      try{
+        window.DC_OWNER.health=await api('/api/owner/health?days=7');
+      }catch(e){window.DC_OWNER.health={error:e.message}}
+      if(DATA)DATA.ownerData=window.DC_OWNER;
+      renderAll();};
+    StudioAdapter.onSaveOwnerCost=(payload)=>studioDo(async()=>{
+      await api('/api/owner/costs',{method:'POST',body:JSON.stringify(payload)});
+      StudioAdapter.ui.owEditor=null;
+      window.DC_OWNER.finance=await api('/api/owner/finance?days='+(StudioAdapter.ui.ownerDays||180));
+      if(DATA)DATA.ownerData=window.DC_OWNER;
+    },'Cost saved.');
+    StudioAdapter.onDeleteOwnerCost=(id)=>studioDo(async()=>{
+      await api('/api/owner/costs/'+encodeURIComponent(id),{method:'DELETE'});
+      StudioAdapter.ui.owEditor=null;
+      window.DC_OWNER.finance=await api('/api/owner/finance?days='+(StudioAdapter.ui.ownerDays||180));
+      if(DATA)DATA.ownerData=window.DC_OWNER;
+    },'Cost removed.');
     StudioAdapter.onBillingPortal=()=>studioDo(async()=>{
       const r=await api('/api/billing/portal',{method:'POST',body:JSON.stringify({})});
       if(r&&r.url)location.href=r.url});

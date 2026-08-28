@@ -40,9 +40,6 @@ import * as workerClient from './worker-client.js';
 const page = path.join(config.root, 'src', 'public', 'index.html');
 const activityFixPage = path.join(config.root, 'src', 'public', 'activity-fix.js');
 const premiumDashboardPage = path.join(config.root, 'src', 'public', 'premium-dashboard.js');
-const ownerPage = path.join(config.root, 'src', 'public', 'owner.html');
-const ownerScript = path.join(config.root, 'src', 'public', 'owner.js');
-const ownerStyles = path.join(config.root, 'src', 'public', 'owner.css');
 const marketingCssPage = path.join(config.root, 'src', 'public', 'marketing.css');
 const studioAsset = name => path.join(config.root, 'src', 'public', name);
 const JS_TYPE = 'text/javascript; charset=utf-8';
@@ -847,30 +844,12 @@ async function route(req, res, url) {
     return serveAppShell(req, res, url, currentUser);
   }
 
-  /**
-   * The owner's own surface, deliberately outside the studio.
-   *
-   * Not a tab inside /app for two reasons. The studio's markup is generated
-   * from design/studio-dashboard.dc.html, so anything hand-added there is
-   * erased by the next `npm run design:import`. And this is the operator's
-   * books -- it has no business sharing a shell with the page paying customers
-   * use, where a mistake in one is a mistake in the other.
-   *
-   * Gated like every other operator surface: 404, not 403, so it is
-   * indistinguishable from a route that does not exist. The script and
-   * stylesheet are gated the same way rather than left on 'self', because the
-   * shape of an admin page is itself worth not publishing.
-   */
-  const ownerAsset = { '/owner': [ownerPage, 'text/html; charset=utf-8'], '/owner.js': [ownerScript, 'text/javascript; charset=utf-8'], '/owner.css': [ownerStyles, 'text/css; charset=utf-8'] }[pathname];
-  if (method === 'GET' && ownerAsset) {
-    if (auth.enabled() && !currentUser) return redirect(res, `/login?returnTo=${encodeURIComponent('/owner')}`);
-    try { requireOperator(currentUser); } catch { return json(res, 404, { error: 'Not found.' }); }
-    const [file, type] = ownerAsset;
-    if (!fs.existsSync(file)) return json(res, 404, { error: 'Owner dashboard asset not found.' });
-    const body = fs.readFileSync(file);
-    res.writeHead(200, { 'Content-Type': type, 'Content-Length': body.length, 'Cache-Control': 'no-store' });
-    return res.end(body);
-  }
+  // The owner surface lives INSIDE the studio now (the Owner tab), at
+  // Youssef's instruction on 28 Aug 2026 — the /owner page swap read as the
+  // app restarting. The old standalone page is gone entirely; its data
+  // endpoints below are unchanged and stay operator-gated. /owner stays in
+  // robots.txt's disallow list only because a shorter list is not worth a
+  // resubmitted robots file.
   if (method === 'GET' && pathname === '/activity-fix.js') {
     if (!fs.existsSync(activityFixPage)) return json(res, 404, { error: 'Activity UI script not found.' });
     const body = fs.readFileSync(activityFixPage);

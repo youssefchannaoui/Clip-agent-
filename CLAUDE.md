@@ -465,10 +465,16 @@ phone work back to `deenclipped-v2-2` rather than leaving two truths.
   Signups, revenue and posts are DERIVED at read time from authUsers,
   revenueEvents and clips, so they predate capture; pageviews start at the
   deploy that added this.
-- **The Owner rail item opens an in-studio Analytics screen** (`analytics`),
-  fed by owner-gated `/api/owner/webmetrics`; the money ledger stays on
-  `/owner`, linked from the tab. The numbers are cached by the host across
-  state polls because `/api/state` replaces DATA wholesale.
+- **The whole owner surface is the in-studio Owner screen** (`owner`) as of
+  v3.17.0, at Youssef's instruction: seven client-side sub-tabs (Overview,
+  Traffic, Money in, Money out, Users, Activity, Health) with the cost ledger
+  editable in place. The standalone `/owner` page and its three assets were
+  DELETED — the route 404s for everyone, and a test pins that. Data comes
+  from `/api/owner/finance`, `/api/admin/analytics`, `/api/owner/webmetrics`
+  and `/api/owner/health` (health fetched apart, so a slow worker never
+  blocks the books), cached by the host across state polls because
+  `/api/state` replaces DATA wholesale. `/owner` stays in robots.txt's
+  disallow list only because trimming the list is not worth it.
 - **A pending cancellation is visible.** Stripe keeps a cancelled-at-period-end
   subscription `active`, so `cancel_at_period_end` is captured from the
   webhook, exposed as `current.cancelAtPeriodEnd`/`cancelAt`, shown as an

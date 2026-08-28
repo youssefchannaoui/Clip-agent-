@@ -1562,11 +1562,11 @@
     // A studio screen now, not a navigation away: the /owner page swap threw
     // the whole shell out and reloaded, which read as the app restarting.
     // The money ledger still lives on /owner, linked from inside the tab.
-    var item = navItem('analytics', 'Owner', 'ph ph-coins', '');
+    var item = navItem('owner', 'Owner', 'ph ph-coins', '');
     var inner = item.click;
     item.click = function (e) {
       inner(e);
-      global.StudioAdapter.onLoadAnalytics(UI.anaDays || 30);
+      global.StudioAdapter.onLoadOwner(UI.ownerDays || 180);
     };
     return item;
   }
@@ -1593,11 +1593,95 @@
       .slice(0, 12);
   }
 
+  /* ── Owner-screen helpers ─────────────────────────────────────────── */
+
+  /** Minor units in, human money out; junk currency codes fall back plainly. */
+  function owMoney(minor, currency) {
+    var amount = Number(minor || 0) / 100;
+    var code = String(currency || (global.DC_OWNER && global.DC_OWNER.finance && global.DC_OWNER.finance.currency) || 'aud').toUpperCase();
+    try {
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency: code, maximumFractionDigits: 2 }).format(amount);
+    } catch (err) { return code + ' ' + amount.toFixed(2); }
+  }
+
+  function owDate(ms) {
+    if (!ms) return '\u2014';
+    var d = new Date(Number(ms));
+    if (!isFinite(d.getTime())) return '\u2014';
+    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function owRelDays(days) {
+    if (days === null || days === undefined) return '';
+    if (days < 0) return Math.abs(days) + 'd overdue';
+    if (days === 0) return 'today';
+    if (days === 1) return 'tomorrow';
+    return 'in ' + days + 'd';
+  }
+
+  function owPill(tone) {
+    var colours = {
+      good: 'rgba(127,209,166,.34);background:rgba(127,209,166,.12);color:#7FD1A6;',
+      warn: 'rgba(230,183,112,.4);background:rgba(230,183,112,.12);color:#E6B770;',
+      bad: 'rgba(224,135,112,.4);background:rgba(224,135,112,.12);color:#E08770;',
+      gold: 'rgba(217,180,120,.42);background:rgba(217,180,120,.12);color:#F0D6A6;',
+    };
+    return 'display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:600;border:1px solid ' +
+      (colours[tone] || '#26262A;background:#17171A;color:#A2A2AA;');
+  }
+
+  /** A KPI tile: value colour carries the judgement, note carries the caveat. */
+  function owTile(label, value, note, tone) {
+    var colour = tone === 'pos' ? '#7FD1A6' : tone === 'neg' ? '#E08770' : tone === 'unknown' ? '#E6B770' : '#F2F2F4';
+    return {
+      label: label, value: value, note: note || '',
+      valueStyle: 'font-family: Outfit, Inter, sans-serif; font-size: 24px; font-weight: 600; letter-spacing: -.03em; line-height: 1.1; color: ' + colour + ';',
+    };
+  }
+
+  /** {name: number} -> proportional bar rows, largest first. */
+  function owBars(map, valueLabel) {
+    var entries = Object.keys(map || {}).map(function (k) { return [k, Number(map[k]) || 0]; })
+      .filter(function (e) { return e[1] > 0; })
+      .sort(function (a, b) { return b[1] - a[1]; });
+    var peak = entries.length ? entries[0][1] : 1;
+    return entries.map(function (e) {
+      return { name: e[0], val: valueLabel(e[1]),
+        barStyle: 'display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,#D9B478,#F0D6A6);width:' + Math.max(4, Math.round(e[1] / peak * 100)) + '%;' };
+    });
+  }
+
+  /** The picker pills in the cost editor (cadence, category, active). */
+  function pickerStyle(on) {
+    return 'padding: 6px 11px; border-radius: 18px; font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; text-transform: capitalize; border: 1px solid ' +
+      (on ? 'rgba(217,180,120,.42); background: rgba(217,180,120,.12); color: #F0D6A6;' : '#26262A; background: #121214; color: #A2A2AA;');
+  }
+
+  function owBlankCost() {
+    return { id: '', name: '', vendor: '', amount: '', currency: 'aud', cadence: 'monthly', category: 'other', due: '', notes: '', active: true, error: '' };
+  }
+
+  function owEditorPatch(patch) {
+    var next = {};
+    var current = UI.owEditor || owBlankCost();
+    Object.keys(current).forEach(function (k) { next[k] = current[k]; });
+    Object.keys(patch).forEach(function (k) { next[k] = patch[k]; });
+    setUI({ owEditor: next });
+  }
+
+  /** An input setter that keeps typing out of the render loop until blur. */
+  function owEditorSet(field) {
+    return function (e) {
+      var patch = {}; patch[field] = e.target.value;
+      owEditorPatch(patch);
+    };
+  }
+
   var TITLES = {
     home: 'Home', queue: 'Review queue', library: 'Lecture library', schedule: 'Schedule',
     templates: 'Templates', music: 'Nasheed library', language: 'Arabic & terms',
     performance: 'Performance', editor: 'Clip editor \u00b7 BETA', tokens: 'Tokens & billing',
-    analytics: 'Owner analytics',
+    owner: 'Owner',
   };
 
   function sublineFor(screen, ctx) {
@@ -1649,6 +1733,20 @@
       return true;
     });
     var social = DATA.social || {};
+
+    // Owner-screen source data, shaped once per render.
+    var ownerData = DATA.ownerData || {};
+    var owFinance = ownerData.finance || null;
+    var owAnalytics = ownerData.analytics || null;
+    var owBurnKnown = Boolean(owFinance && owFinance.moneyOut.unpricedCount === 0);
+    var owNotes = [];
+    if (owFinance) {
+      if (owFinance.stripe && owFinance.stripe.mode === 'test') owNotes.push('Stripe is in test mode, so every revenue figure here is sandbox data, not real money.');
+      if (owFinance.stripe && !owFinance.stripe.configured) owNotes.push('No Stripe key is configured on this deployment, so revenue cannot be read.');
+      else if (owFinance.stripe && !owFinance.stripe.revenueAvailable) owNotes.push('Stripe revenue could not be read: ' + owFinance.stripe.revenueReason);
+      (owFinance.stripe && owFinance.stripe.problems || []).forEach(function (problem) { owNotes.push(problem); });
+      if (owFinance.profit && owFinance.profit.completeness) owNotes.push(owFinance.profit.completeness);
+    }
     var current = (DATA.billing && DATA.billing.current) || {};
     // One word for the state of the subscription, and the colour that goes
     // with it. A failed payment is the case worth shouting about: the plan
@@ -5051,7 +5149,13 @@
       // from exactly one place, and that place is off-screen, is not reachable.
       goMusic: function (e) { stop(e); setUI({ screen: 'music', menuOpen: false }); },
       goPerformance: function (e) { stop(e); setUI({ screen: 'performance', menuOpen: false }); },
-      goOwner: function (e) { stop(e); setUI({ menuOpen: false }); global.StudioAdapter.onOpenOwner(); },
+      // The profile menu's Owner entry opens the tab like the rail does —
+      // the /owner page it used to navigate to no longer exists.
+      goOwner: function (e) {
+        stop(e);
+        setUI({ screen: 'owner', menuOpen: false });
+        global.StudioAdapter.onLoadOwner(UI.ownerDays || 180);
+      },
       ownerMenuStyle: isOperator(DATA)
         ? 'display: none; align-items: center; gap: 9px; padding: 8px 9px; border-radius: 8px; color: #E9E9ED; font-size: 12.5px;'
         : 'display: none !important;',
@@ -5564,28 +5668,310 @@
       }),
       perfPatterns: [],
 
-      // ── Owner analytics ──
-      // The numbers arrive from /api/owner/webmetrics on demand (the host
-      // caches them across state refreshes); until they land the screen says
-      // so instead of drawing zeros that would read as "no traffic".
-      isAnalytics: UI.screen === 'analytics',
-      anaSubline: (function () {
-        var ana = DATA.webmetrics;
-        if (UI.screen !== 'analytics') return '';
-        if (!ana) return 'Loading the numbers\u2026';
-        return 'Counted on this server \u2014 no third-party trackers, no cookies.';
+      // (owner derivations are hoisted just below; see the owner block)
+      // ── Owner ─────────────────────────────────────────────────────────
+      // The whole owner surface as a studio screen: sub-tabs are client
+      // state, so nothing here ever navigates or reloads. Data arrives from
+      // four owner-gated endpoints when the tab opens (the host caches it
+      // across state polls); each figure renders "not set" or an empty note
+      // rather than a zero nobody entered.
+      isOwner: UI.screen === 'owner',
+      owSubline: (function () {
+        var od = DATA.ownerData;
+        if (UI.screen !== 'owner') return '';
+        if (!od || !od.finance) return 'Loading the books\u2026';
+        return 'Updated ' + new Date(od.finance.generatedAt || Date.now()).toLocaleTimeString()
+          + ' \u00b7 window ' + (UI.ownerDays || 180) + ' days';
       })(),
-      anaRanges: [7, 30, 90].map(function (d) {
+      owBadge: (function () {
+        var f = DATA.ownerData && DATA.ownerData.finance;
+        if (!f || !f.stripe) return 'Owner';
+        return { live: 'Stripe live', test: 'Stripe test mode', none: 'Stripe not configured' }[f.stripe.mode] || 'Stripe';
+      })(),
+      owBadgeStyle: (function () {
+        var f = DATA.ownerData && DATA.ownerData.finance;
+        var mode = f && f.stripe ? f.stripe.mode : '';
+        return 'padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; border: 1px solid ' +
+          (mode === 'live' ? 'rgba(127,209,166,.34); background: rgba(127,209,166,.1); color: #7FD1A6;'
+            : mode === 'test' ? 'rgba(230,183,112,.4); background: rgba(230,183,112,.1); color: #E6B770;'
+              : '#26262A; background: #17171A; color: #8B8B93;');
+      })(),
+      owBanner: owNotes.join('  \u00b7  '),
+      owBannerShow: owNotes.length > 0,
+      owTabs: [['overview', 'Overview'], ['traffic', 'Traffic'], ['in', 'Money in'], ['out', 'Money out'], ['users', 'Users'], ['activity', 'Activity'], ['health', 'Health']]
+        .map(function (t) {
+          return {
+            label: t[1],
+            style: tabStyle((UI.ownerTab || 'overview') === t[0]),
+            select: function (e) { stop(e); setUI({ ownerTab: t[0] }); },
+          };
+        }),
+      owRanges: [30, 90, 180, 365].map(function (d) {
         return {
-          label: d + ' days',
-          style: tabStyle((UI.anaDays || 30) === d),
-          select: function (e) {
+          label: d + 'd',
+          style: tabStyle((UI.ownerDays || 180) === d),
+          select: function (e) { stop(e); setUI({ ownerDays: d }); global.StudioAdapter.onLoadOwner(d); },
+        };
+      }),
+      owRefresh: function (e) { stop(e); global.StudioAdapter.onLoadOwner(UI.ownerDays || 180); },
+      owShowOverview: (UI.ownerTab || 'overview') === 'overview',
+      owShowTraffic: UI.ownerTab === 'traffic',
+      owShowIn: UI.ownerTab === 'in',
+      owShowOut: UI.ownerTab === 'out',
+      owShowUsers: UI.ownerTab === 'users',
+      owShowActivity: UI.ownerTab === 'activity',
+      owShowHealth: UI.ownerTab === 'health',
+
+      owTiles: owFinance ? [
+        owTile('Recurring revenue (MRR)', owFinance.moneyIn.mrrMinor ? owMoney(owFinance.moneyIn.mrrMinor) : 'none active',
+          owFinance.moneyIn.activeSubscriptions ? plural(owFinance.moneyIn.activeSubscriptions, 'active subscription') : 'No active Stripe subscriptions',
+          owFinance.moneyIn.mrrMinor ? 'pos' : 'unknown'),
+        owTile('Net in, this month', owMoney(owFinance.moneyIn.thisMonthNetMinor), owMoney(owFinance.moneyIn.thisMonthGrossMinor) + ' gross, after Stripe fees', ''),
+        owTile('Monthly out', owMoney(owFinance.moneyOut.totalMonthlyOutMinor) + (owBurnKnown ? '' : '+'),
+          owMoney(owFinance.moneyOut.monthlyBurnMinor) + ' subscriptions + ' + owMoney(owFinance.moneyOut.oneOff && owFinance.moneyOut.oneOff.monthlyAverageMinor || 0) + ' usage'
+            + (owBurnKnown ? '' : ' \u00b7 ' + owFinance.moneyOut.unpricedCount + ' still need an amount'),
+          owBurnKnown ? '' : 'unknown'),
+        owTile('Profit, this month', owMoney(owFinance.profit.monthlyNetMinor),
+          owBurnKnown ? (owFinance.profit.marginPercent === null ? 'No revenue this month' : owFinance.profit.marginPercent + '% margin') : 'Understated \u2014 costs are missing amounts',
+          owFinance.profit.monthlyNetMinor > 0 ? 'pos' : owFinance.profit.monthlyNetMinor < 0 ? 'neg' : ''),
+        owTile('Accounts', String(owAnalytics ? owAnalytics.overview.users : '\u2014'),
+          owAnalytics ? owAnalytics.overview.newUsers30d + ' new in 30d \u00b7 ' + owAnalytics.overview.activeUsers7d + ' active in 7d' : 'Loading\u2026', ''),
+        owTile('Paying accounts', String(owAnalytics ? owAnalytics.overview.paidUsers : '\u2014'),
+          owAnalytics ? owAnalytics.overview.freeUsers + ' free \u00b7 ' + owAnalytics.overview.trialUsers + ' trialing' : 'Loading\u2026',
+          owAnalytics && owAnalytics.overview.paidUsers > 0 ? 'pos' : 'unknown'),
+      ] : [],
+      owMonths: (function () {
+        if (!owFinance) return [];
+        var months = owFinance.months || [];
+        var burn = owFinance.moneyOut.monthlyBurnMinor || 0;
+        var peak = Math.max(1, burn);
+        months.forEach(function (m) { if (m.netMinor > peak) peak = m.netMinor; });
+        return months.map(function (m) {
+          var inH = Math.max(2, Math.round(Math.max(0, m.netMinor) / peak * 124));
+          var outH = Math.max(2, Math.round(burn / peak * 124));
+          var monthLabel = m.month.slice(5);
+          return {
+            label: monthLabel,
+            tip: m.month + ': ' + owMoney(m.netMinor) + ' net in; current burn ' + owMoney(burn),
+            inStyle: 'display: block; width: 14px; height: ' + inH + 'px; border-radius: 3px 3px 0 0; background: linear-gradient(180deg, #F0D6A6, #D9B478);',
+            outStyle: 'display: block; width: 14px; height: ' + outH + 'px; border-radius: 3px 3px 0 0; background: #3A3A42;',
+          };
+        });
+      })(),
+      owChartNote: 'Gold is net in per month. Grey is TODAY\u2019S burn repeated \u2014 historic burn was never recorded, and drawing it as history would be a lie in a chart.',
+      owUpcoming: (owFinance && owFinance.moneyOut.dueNext60Days || []).map(function (item) {
+        return {
+          name: item.name, vendor: item.vendor || '',
+          whenLabel: owRelDays(item.daysAway),
+          whenStyle: owPill(item.daysAway < 0 ? 'bad' : item.daysAway <= 7 ? 'warn' : 'good'),
+          dateLabel: owDate(item.dueAt),
+          amount: item.needsAmount ? 'not set' : owMoney(item.amountMinor, item.currency),
+        };
+      }),
+      owUpcomingEmpty: !owFinance || (owFinance.moneyOut.dueNext60Days || []).length === 0,
+      owUpcomingTotal: owFinance && (owFinance.moneyOut.dueNext60Days || []).length
+        ? owMoney(owFinance.moneyOut.dueNext60DaysTotalMinor) + ' due across the next 60 days.' : '',
+
+      owInTiles: owFinance ? [
+        owTile('Gross in', owMoney(owFinance.moneyIn.grossMinor), 'over the last ' + owFinance.moneyIn.windowDays + ' days', ''),
+        owTile('Stripe fees', owMoney(owFinance.moneyIn.feeMinor),
+          owFinance.moneyIn.grossMinor ? Math.round(owFinance.moneyIn.feeMinor / owFinance.moneyIn.grossMinor * 1000) / 10 + '% of gross' : '',
+          owFinance.moneyIn.feeMinor ? 'neg' : ''),
+        owTile('Net in', owMoney(owFinance.moneyIn.netMinor), 'What actually landed', owFinance.moneyIn.netMinor ? 'pos' : ''),
+        owTile('Refunded', owMoney(owFinance.moneyIn.refundMinor), '', owFinance.moneyIn.refundMinor ? 'neg' : ''),
+        owTile('MRR', owFinance.moneyIn.mrrMinor ? owMoney(owFinance.moneyIn.mrrMinor) : 'none', 'From active subscriptions', owFinance.moneyIn.mrrMinor ? 'pos' : 'unknown'),
+        owTile('ARR', owFinance.moneyIn.arrMinor ? owMoney(owFinance.moneyIn.arrMinor) : 'none', 'MRR \u00d7 12', owFinance.moneyIn.arrMinor ? 'pos' : 'unknown'),
+      ] : [],
+      owInMonths: (owFinance && owFinance.months || []).map(function (m) {
+        return { month: m.month, gross: owMoney(m.grossMinor), fees: owMoney(m.feeMinor), net: owMoney(m.netMinor),
+          refunds: m.refundMinor ? owMoney(m.refundMinor) : '\u2014', count: String(m.count || 0) };
+      }),
+      owInMonthsEmpty: !owFinance || (owFinance.months || []).length === 0,
+      owInSource: owFinance ? (owFinance.moneyIn.source === 'stripe'
+        ? 'Read live from Stripe balance transactions, so fees are real.'
+        : 'Stripe could not be read, so these are the ' + (owFinance.moneyIn.localEventCount || 0) + ' payments recorded locally \u2014 fees are not known on this path.') : '',
+      owInPlans: owBars(owFinance && owFinance.moneyIn.planCounts, function (v) { return v + ' active'; }),
+      owInPlansEmpty: !owFinance || Object.keys(owFinance.moneyIn.planCounts || {}).length === 0,
+      owInRecent: (owFinance && owFinance.recentRevenue || []).map(function (ev) {
+        return { date: owDate(ev.createdAt),
+          kindLabel: ev.kind, kindStyle: owPill(ev.kind === 'topup' ? 'gold' : 'good'),
+          desc: ev.description || '\u2014', amount: owMoney(ev.amountMinor, ev.currency) };
+      }),
+      owInRecentEmpty: !owFinance || (owFinance.recentRevenue || []).length === 0,
+
+      owOutTiles: owFinance ? [
+        owTile('Subscriptions', owMoney(owFinance.moneyOut.monthlyBurnMinor),
+          owFinance.moneyOut.unpricedCount ? 'Understated: ' + owFinance.moneyOut.unpricedCount + ' without an amount' : 'Per month, all priced',
+          owFinance.moneyOut.unpricedCount ? 'unknown' : ''),
+        owTile('Usage and one-offs', owMoney(owFinance.moneyOut.oneOff && owFinance.moneyOut.oneOff.monthlyAverageMinor || 0),
+          'Averaged from what was actually paid', ''),
+        owTile('Total out, per month', owMoney(owFinance.moneyOut.totalMonthlyOutMinor), 'What profit is measured against', ''),
+        owTile('Due in 60 days', owMoney(owFinance.moneyOut.dueNext60DaysTotalMinor), (owFinance.moneyOut.dueNext60Days || []).length + ' payment(s) scheduled', ''),
+        owTile('Tracked costs', String(owFinance.moneyOut.entries || 0), 'Active entries in the ledger', ''),
+      ] : [],
+      owOutNote: owFinance ? (owFinance.moneyOut.unpricedCount
+        ? (owFinance.moneyOut.unpricedNames || []).join(', ') + ' \u2014 tracked but with no amount, because a guessed hosting bill would make the profit figure fiction. Set them once and every total becomes real.'
+        : 'Every active cost has an amount, so burn and profit are complete.') : '',
+      owAddCost: function (e) { stop(e); setUI({ owEditor: owBlankCost() }); },
+      owEditorOpen: Boolean(UI.owEditor),
+      owEditorTitle: UI.owEditor && UI.owEditor.id ? 'Edit cost' : 'Add a cost',
+      owCostName: UI.owEditor ? UI.owEditor.name : '',
+      setOwCostName: owEditorSet('name'),
+      owCostVendor: UI.owEditor ? UI.owEditor.vendor : '',
+      setOwCostVendor: owEditorSet('vendor'),
+      owCostAmount: UI.owEditor ? UI.owEditor.amount : '',
+      setOwCostAmount: owEditorSet('amount'),
+      owCostCurrency: UI.owEditor ? UI.owEditor.currency : '',
+      setOwCostCurrency: owEditorSet('currency'),
+      owCostDue: UI.owEditor ? UI.owEditor.due : '',
+      setOwCostDue: owEditorSet('due'),
+      owCostNotes: UI.owEditor ? UI.owEditor.notes : '',
+      setOwCostNotes: owEditorSet('notes'),
+      owCadences: ['weekly', 'monthly', 'quarterly', 'yearly', 'once'].map(function (c) {
+        return { label: c, style: pickerStyle(UI.owEditor && UI.owEditor.cadence === c),
+          select: function (e) { stop(e); owEditorPatch({ cadence: c }); } };
+      }),
+      owCategories: ['hosting', 'storage', 'domain', 'ai', 'tooling', 'marketing', 'other'].map(function (c) {
+        return { label: c, style: pickerStyle(UI.owEditor && UI.owEditor.category === c),
+          select: function (e) { stop(e); owEditorPatch({ category: c }); } };
+      }),
+      owToggleActive: function (e) { stop(e); owEditorPatch({ active: !(UI.owEditor && UI.owEditor.active) }); },
+      owActiveLabel: UI.owEditor && UI.owEditor.active ? 'Active' : 'Paused',
+      owActiveStyle: pickerStyle(Boolean(UI.owEditor && UI.owEditor.active)),
+      owEditorError: UI.owEditor && UI.owEditor.error || '',
+      owEditorErrorShow: Boolean(UI.owEditor && UI.owEditor.error),
+      owSaveCost: function (e) {
+        stop(e);
+        var d = UI.owEditor;
+        if (!d) return;
+        if (!String(d.name || '').trim()) { owEditorPatch({ error: 'A cost needs a name.' }); return; }
+        global.StudioAdapter.onSaveOwnerCost({
+          id: d.id || undefined, name: d.name, vendor: d.vendor,
+          amount: Number(d.amount || 0), currency: d.currency || 'aud',
+          cadence: d.cadence, category: d.category,
+          // Parsed as UTC midday, so a date typed in Australia does not land
+          // on the previous day for the server.
+          nextDueAt: d.due ? Date.parse(d.due + 'T12:00:00Z') : null,
+          notes: d.notes, active: d.active,
+        });
+      },
+      owCancelCost: function (e) { stop(e); setUI({ owEditor: null }); },
+      owDeleteCost: function (e) {
+        stop(e);
+        if (UI.owEditor && UI.owEditor.id) global.StudioAdapter.onDeleteOwnerCost(UI.owEditor.id);
+      },
+      owDeleteStyle: UI.owEditor && UI.owEditor.id
+        ? 'margin-left: auto; padding: 8px 12px; border-radius: 8px; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid rgba(226,122,122,.34); background: rgba(226,122,122,.08); color: #E27A7A;'
+        : 'display: none;',
+      owCosts: (owFinance && owFinance.costs || []).map(function (cost) {
+        return {
+          name: cost.name, notes: cost.notes || '', vendor: cost.vendor || '\u2014',
+          category: cost.category, cadence: cost.cadence,
+          amountText: cost.needsAmount ? 'not set' : owMoney(cost.amountMinor, cost.currency),
+          amountStyle: cost.needsAmount ? owPill('warn') : 'font-variant-numeric: tabular-nums; color: #F2F2F4;',
+          perMonth: cost.monthlyMinor ? owMoney(cost.monthlyMinor, cost.currency) : '\u2014',
+          dueText: cost.nextDueAt ? owDate(cost.nextDueAt) : 'no date',
+          dueStyle: cost.nextDueAt ? 'color: #BCBCC3;' : owPill('warn'),
+          edit: function (e) {
             stop(e);
-            setUI({ anaDays: d });
-            global.StudioAdapter.onLoadAnalytics(d);
+            setUI({ owEditor: {
+              id: cost.id, name: cost.name, vendor: cost.vendor || '',
+              amount: cost.amountMinor ? (cost.amountMinor / 100).toFixed(2) : '',
+              currency: cost.currency || 'aud', cadence: cost.cadence, category: cost.category,
+              due: cost.nextDueAt ? new Date(cost.nextDueAt).toISOString().slice(0, 10) : '',
+              notes: cost.notes || '', active: cost.active !== false, error: '',
+            } });
           },
         };
       }),
+      owCostsEmpty: !owFinance || (owFinance.costs || []).length === 0,
+      owSpend: (owFinance && owFinance.moneyOut.oneOff && owFinance.moneyOut.oneOff.rows || []).slice(0, 60).map(function (item) {
+        return { paid: owDate(item.paidAt), name: item.name, notes: item.notes || '',
+          source: item.source || '', amount: owMoney(item.amountMinor, item.currency) };
+      }),
+      owSpendEmpty: !owFinance || !(owFinance.moneyOut.oneOff && (owFinance.moneyOut.oneOff.rows || []).length),
+      owSpendHint: (function () {
+        var oneOff = owFinance && owFinance.moneyOut.oneOff;
+        if (!oneOff || !(oneOff.rows || []).length) return '';
+        return owMoney(oneOff.totalMinor) + ' across ' + (oneOff.coveredDays || 0) + ' days of payments \u2014 about ' + owMoney(oneOff.monthlyAverageMinor) + ' a month, from what was actually paid.';
+      })(),
+      owCats: owBars(owFinance && owFinance.moneyOut.byCategory, function (v) { return owMoney(v); }),
+      owCatsEmpty: !owFinance || Object.keys(owFinance.moneyOut.byCategory || {}).filter(function (k) { return owFinance.moneyOut.byCategory[k] > 0; }).length === 0,
+
+      owUserTiles: owAnalytics ? [
+        owTile('Total accounts', String(owAnalytics.overview.users), '', ''),
+        owTile('Active, 7 days', String(owAnalytics.overview.activeUsers7d), owAnalytics.overview.newUsers30d + ' joined in 30 days', ''),
+        owTile('Projects', String(owAnalytics.overview.projects), owAnalytics.overview.processingProjects + ' processing \u00b7 ' + owAnalytics.overview.failedProjects + ' failed', ''),
+        owTile('Clips', String(owAnalytics.overview.clips), owAnalytics.overview.postedClips + ' posted \u00b7 ' + owAnalytics.overview.readyClips + ' ready', ''),
+        owTile('Tokens used, 30d', String(owAnalytics.overview.tokensUsed30d), owAnalytics.overview.tokensSold30d + ' sold', ''),
+        owTile('Unspent top-ups', String(owAnalytics.overview.purchasedTopupBalance), 'Paid for and not yet used', ''),
+      ] : [],
+      owUserFilterVal: UI.ownerUserFilter || '',
+      setOwUserFilter: function (e) { UI.ownerUserFilter = e.target.value; refresh(); },
+      owUsers: (function () {
+        if (!owAnalytics) return [];
+        var filter = String(UI.ownerUserFilter || '').trim().toLowerCase();
+        return (owAnalytics.users || []).filter(function (u) {
+          return !filter || (u.name + ' ' + u.email + ' ' + u.plan + ' ' + u.role).toLowerCase().indexOf(filter) !== -1;
+        }).map(function (u) {
+          return {
+            name: u.name, email: u.email || 'no email',
+            planLabel: u.plan,
+            planStyle: owPill(['weekly', 'monthly', 'yearly'].indexOf(u.plan) !== -1 ? 'good' : u.plan === 'admin' ? 'gold' : ''),
+            status: u.billingStatus || '',
+            left: u.remainingTokens === null ? 'unlimited' : String(u.remainingTokens),
+            used: String(u.tokensUsed || 0), projects: String(u.projects || 0),
+            clips: String(u.clips || 0), posted: String(u.posted || 0),
+            lastSeen: owDate(u.lastLoginAt), providers: (u.providers || []).join(', ') || '\u2014',
+          };
+        });
+      })(),
+      owUsersEmpty: !owAnalytics || (owAnalytics.users || []).length === 0,
+
+      owActivity: (owAnalytics && owAnalytics.recentActivity || []).map(function (ev) {
+        return { when: owDate(ev.createdAt), typeLabel: ev.type,
+          typeStyle: owPill(ev.type === 'tokens_added' ? 'good' : ''),
+          tokens: String(ev.amount || 0), detail: ev.message || '\u2014' };
+      }),
+      owActivityEmpty: !owAnalytics || (owAnalytics.recentActivity || []).length === 0,
+      owSocial: owBars(owAnalytics && owAnalytics.social, function (v) { return v + ' account(s)'; }),
+      owSocialEmpty: !owAnalytics || Object.keys(owAnalytics.social || {}).length === 0,
+
+      owHealthTiles: (function () {
+        var h = DATA.ownerData && DATA.ownerData.health;
+        if (!h) return [owTile('Pipeline', 'Loading\u2026', 'Asking the worker', '')];
+        if (h.error) return [owTile('Pipeline', 'Unreachable', String(h.error).slice(0, 60), 'neg')];
+        var totals = h.totals || {}; var worker = h.worker || {};
+        return [
+          owTile('Jobs finished', String((totals.completed || 0) + (totals.failed || 0)), 'last ' + h.days + ' days', ''),
+          owTile('Failed', String(totals.failed || 0), (totals.failureRate || 0) + '% of finished jobs', totals.failed ? 'neg' : ''),
+          owTile('Worker', worker.error ? 'Unreachable' : 'Reachable',
+            worker.error ? String(worker.error).slice(0, 60) : 'answered its health check', worker.error ? 'neg' : 'pos'),
+        ];
+      })(),
+      owHealthCodes: (function () {
+        var h = DATA.ownerData && DATA.ownerData.health;
+        return (h && h.topFailures || []).map(function (row) {
+          return { code: row.code, codeStyle: owPill('bad'), times: String(row.count || 0), sample: row.sample || '\u2014' };
+        });
+      })(),
+      owHealthCodesEmpty: !(DATA.ownerData && DATA.ownerData.health && (DATA.ownerData.health.topFailures || []).length),
+      owHealthProviders: (function () {
+        var h = DATA.ownerData && DATA.ownerData.health;
+        var providers = h && h.importProviders || {};
+        return Object.keys(providers).sort(function (a, b) { return providers[b] - providers[a]; })
+          .map(function (name) { return { name: name, count: String(providers[name]) }; });
+      })(),
+      owHealthProvidersEmpty: !(DATA.ownerData && DATA.ownerData.health && Object.keys(DATA.ownerData.health.importProviders || {}).length),
+      owHealthRecent: (function () {
+        var h = DATA.ownerData && DATA.ownerData.health;
+        return (h && h.recent || []).map(function (row) {
+          return { when: row.at ? owDate(row.at) : '\u2014', title: row.title || row.id || '\u2014',
+            code: row.code, codeStyle: owPill('bad'), message: row.error || '\u2014' };
+        });
+      })(),
+      owHealthRecentEmpty: !(DATA.ownerData && DATA.ownerData.health && (DATA.ownerData.health.recent || []).length),
+
       anaTiles: (function () {
         var ana = DATA.webmetrics;
         if (!ana) return [];
@@ -5958,7 +6344,6 @@
     onMoreClips: function () {},
     onRetryProject: function () {},
     onAccountSettings: function () {},
-    onOpenOwner: function () { global.location.href = '/owner'; },
     onContactSupport: function () {},
     onDownloadClips: function () {},
     // Sends any pending clip-style edit immediately instead of waiting out the
@@ -5994,7 +6379,9 @@
       global.setTimeout(function () { UI.toast = null; refresh(); }, 2600);
     },
     onBillingPortal: function () {},
-    onLoadAnalytics: function () {},
+    onLoadOwner: function () {},
+    onSaveOwnerCost: function () {},
+    onDeleteOwnerCost: function () {},
     onResumeSubscription: function () {},
     onToast: function () {},
     // The host clears optimistic decisions once fresh state has landed.

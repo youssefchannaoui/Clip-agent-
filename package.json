@@ -1,6 +1,6 @@
 {
   "name": "deenclipped-ai",
-  "version": "3.16.0",
+  "version": "3.17.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -11,7 +11,7 @@
     "design:pull": "node scripts/design-pull.mjs",
     "design:import": "node scripts/import-design.mjs",
     "design:check": "node scripts/import-design.mjs --check",
-    "check": "node --check src/server.js && node --check src/config.js && node --check src/worker-client.js && node --check src/object-storage.js && node --check src/video-import.js && node --check src/uploads.js && node --check src/auth.js && node --check src/billing.js && node --check src/admin.js && node --check src/owner.js && node --check src/marketing.js && node --check src/public/premium-dashboard.js && node --check src/public/owner.js && node --check src/public/studio-runtime.js && node --check src/public/studio-adapter.js && node --check src/public/studio-template.generated.js && node --check src/agent.js && node --check src/social.js && node --check src/vizard.js && node --check src/local-engine.js && node scripts/check-ui.mjs && python3 -m py_compile worker/clip_worker.py worker/service.py worker/import_providers.py worker/object_storage.py worker/healthcheck.py worker/capacity.py",
+    "check": "node --check src/server.js && node --check src/config.js && node --check src/worker-client.js && node --check src/object-storage.js && node --check src/video-import.js && node --check src/uploads.js && node --check src/auth.js && node --check src/billing.js && node --check src/admin.js && node --check src/owner.js && node --check src/marketing.js && node --check src/public/premium-dashboard.js && node --check src/public/studio-runtime.js && node --check src/public/studio-adapter.js && node --check src/public/studio-template.generated.js && node --check src/agent.js && node --check src/social.js && node --check src/vizard.js && node --check src/local-engine.js && node scripts/check-ui.mjs && python3 -m py_compile worker/clip_worker.py worker/service.py worker/import_providers.py worker/object_storage.py worker/healthcheck.py worker/capacity.py",
     "doctor": "python3 worker/clip_worker.py --doctor",
     "worker:start": "python3 worker/service.py",
     "test": "node --test && python3 -m unittest discover -s test -p 'test_*.py'"
