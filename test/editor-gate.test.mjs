@@ -110,7 +110,7 @@ test('turning the editor back on is a deletion, not an untangling', () => {
   // The gate is deliberately not in the design export: re-importing the design
   // regenerates hashed class names, and that churn should not be the price of
   // shipping the editor.
-  const design = fs.readFileSync(path.join(ROOT, 'DESIGN/studio-dashboard.dc.html'), 'utf8');
+  const design = fs.readFileSync(path.join(ROOT, 'design/studio-dashboard.dc.html'), 'utf8');
   assert.ok(!design.includes('dcEditorSoon'),
     'the notice belongs to the gate, not to the design');
   const generated = fs.readFileSync(path.join(ROOT, 'src/public/studio-template.generated.js'), 'utf8');
