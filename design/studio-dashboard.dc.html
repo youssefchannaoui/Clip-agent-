@@ -1649,7 +1649,7 @@
           </sc-for>
         </div>
       </div>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); gap: 13px;">
+      <div id="dcPlanGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); gap: 13px;">
         <sc-for list="{{ planCards }}" as="plan" hint-placeholder-count="3">
           <article style="{{ plan.cardStyle }}">
             <sc-if value="{{ plan.hasTag }}" hint-placeholder-val="{{ true }}">
@@ -1675,7 +1675,7 @@
         <h2 style="margin: 0; font-family: Outfit, Inter, sans-serif; font-size: 18px; font-weight: 600; letter-spacing: -.03em;">Top up</h2>
         <span style="font-size: 12px; color: #6E6E76;">One-off top-ups on any plan · no subscription needed</span>
       </div>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 13px;">
+      <div id="dcPackGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 13px;">
         <sc-for list="{{ packs }}" as="pack" hint-placeholder-count="4">
           <article style="{{ pack.cardStyle }}">
             <sc-if value="{{ pack.popular }}" hint-placeholder-val="{{ false }}">
