@@ -23,4 +23,24 @@ jobs:
           python-version: '3.12'
       - run: npm ci
       - run: npm run check
-      - run: npm test
+
+      # Tee'd so the handover check can describe the run that actually happened
+      # rather than re-running the suite to count it. pipefail keeps a failing
+      # test a failing step.
+      - name: Test
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee test.log
+
+      # CLAUDE.md is the only thing that reaches a session started on a phone,
+      # and its test counts are a tripwire. A count kept accurate by remembering
+      # to keep it accurate drifts; this fails when the file and the suite
+      # disagree.
+      - name: The handover must describe this suite
+        run: node scripts/check-handover.mjs --log test.log
+
+      # Both apps announce the version, so a change that ships without a bump
+      # reports itself as the previous release.
+      - name: Shipping code means bumping the version
+        if: github.event_name == 'push'
+        run: node scripts/check-version-bump.mjs

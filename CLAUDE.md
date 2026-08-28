@@ -115,9 +115,12 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **747 JS + 384 Python**
-  (7 Python skipped). Update these numbers when they change — they were wrong by
-  more than a factor of two, which makes them useless as a tripwire.
+- `npm test` and `npm run check` must pass. Currently **757 JS + 384 Python**
+  (7 Python skipped). These numbers were once wrong by more than a factor of
+  two, which made them worse than absent — they still read as authoritative.
+  **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
+  output), so this line cannot quietly drift again; a shrinking count is
+  reported as tests having VANISHED rather than as a number to update.
 - **The 7 skips are `SpeakerTrackingTests`**, which need a test video that is not
   in the repo. So the framing code is unexercised in CI *and*, per the open items
   below, has never been checked visually either. Treat it as untested.
@@ -367,6 +370,10 @@ with no laptop, no local state and no earlier conversation.
 
 - **`package.json` version is the single source**, announced by both apps. Bump
   it — patch for a fix, minor for a feature — in the same commit as the change.
+  **CI enforces this too** (`scripts/check-version-bump.mjs`): a push touching
+  `src/` or `worker/` without a bump fails. Docs, tests and workflows may land
+  without a release, deliberately — a rule that fires on everything gets worked
+  around, and then it protects nothing.
 - Update the test counts in **Verification standard** above whenever they move.
 - Pushing `deenclipped-v2-2` deploys the web app to Render automatically. The
   **worker is manual** and nothing about a push tells you otherwise: `worker/`
