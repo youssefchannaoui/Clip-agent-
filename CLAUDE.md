@@ -265,6 +265,17 @@ Habits the tests now enforce, and why:
   No `force_keyframes_at_cuts`: it re-encodes the whole stretch for a
   frame-exact cut, and the ffmpeg trim it replaces was never frame-exact
   either (both land on the keyframe at or before the second asked for).
+  **Proven on the box, 28 Aug 2026, not merely tested.** A live download of a
+  1579s lecture: 120.0s asked for, 120.0s delivered, 66.7MB instead of ~878MB.
+  Two 8s windows at 300s and 1200s came back 8.01s and 8.02s with DIFFERENT
+  first frames, which is what proves the start offset is applied rather than
+  silently ignored. **yt-dlp returns NO `section_start` or `section_end` on a
+  successful section** — reading them, as the first version did, called every
+  honoured range a full download, and clip_worker would then have trimmed the
+  already-trimmed file again and cut a 120s source to ONE SECOND. Detection
+  comes from the range callback having run; clip_worker still checks the claim
+  against the file's measured length and falls back to trimming if it is more
+  than 30s longer than the window.
 
 ## Deploys
 
