@@ -275,8 +275,18 @@ Habits the tests now enforce, and why:
   503s in one editor session -- and must never be handed to a player again.
   `MEDIA_PUBLIC_BASE` on Render rewrites stored r2.dev URLs at the exits;
   `OBJECT_STORAGE_PUBLIC_URL` in worker/.env on the box stamps new uploads.
-- The worker is **manual**: on the Hetzner box (135.181.149.182),
-  `cd /opt/deenclipped && git pull && docker compose -f worker/docker-compose.yml up -d --build`.
+- The worker is **manual**, but no longer console-only. The box takes SSH:
+  `ssh -i ~/.ssh/deenclipped_worker root@135.181.149.182`, then
+  `cd /opt/deenclipped && git pull && bash worker/deploy.sh`. **The key is
+  `deenclipped_worker`** — the similarly named `~/.ssh/deenclipped` beside it
+  is rejected by the box, which reads as "SSH is not set up" if you stop at the
+  first Permission denied. Running an agent's shell on the box needs a Bash
+  permission rule the operator adds; it cannot be self-granted, and should not
+  be.
+- Verified 28 Aug 2026: the box had been sitting on `72fea1a` — every worker
+  change since v3.3.x, including the section downloads, had been committed,
+  pushed, green and not running. Check `git log --oneline -1` on the box before
+  assuming a worker behaviour exists in production.
 - **Follow it with `docker builder prune -f`.** Each `--build` leaves its layer
   cache behind, and they accumulate invisibly: eight rebuilds in one session
   grew the cache to **25.7GB** and took the disk to 69%, which reads exactly
