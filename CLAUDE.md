@@ -130,7 +130,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **795 JS + 395 Python**
+- `npm test` and `npm run check` must pass. Currently **797 JS + 395 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -552,6 +552,16 @@ phone work back to `deenclipped-v2-2` rather than leaving two truths.
   tables inside the `auto-fit, minmax(280px, 1fr)` grids must NOT carry the
   wide tables' `min-width: 420px` — a ~375px column clips the right-aligned
   count column clean off, which reads as "the numbers are missing".
+- **v3.23.0: the Owner screen is live and its tiles are dials.** It refreshes
+  itself every 30s, but only while it is the screen on display AND the tab is
+  visible AND no cost is being edited -- a background tab polling four
+  endpoints forever is exactly the "no anythign that will lag the server" being
+  guarded against; health (a worker round trip) goes every fourth tick. Each
+  Traffic KPI is a `<select>` over twelve metrics (`ANA_METRICS` in the
+  adapter), so six slots cover everything without twelve boxes on screen, and
+  the visitors chart reads By day or By hour from a 48-hour series
+  (`hourly` in metrics.js: two counters per hour, inside the day bucket, so
+  retention and the privacy promise are unchanged).
 - **A pending cancellation is visible.** Stripe keeps a cancelled-at-period-end
   subscription `active`, so `cancel_at_period_end` is captured from the
   webhook, exposed as `current.cancelAtPeriodEnd`/`cancelAt`, shown as an

@@ -1606,6 +1606,65 @@
 
   /* ── Owner-screen helpers ─────────────────────────────────────────── */
 
+  // What a Traffic tile can be set to show. Twelve numbers worth watching, six
+  // slots: the screen stays quiet and every slot is the owner's choice.
+  var ANA_METRICS = [
+    { key: 'uniques', label: 'Unique visitors' },
+    { key: 'views', label: 'Page views' },
+    { key: 'live', label: 'Live now' },
+    { key: 'signups', label: 'New signups' },
+    { key: 'checkouts', label: 'Started checkout' },
+    { key: 'paid', label: 'New paying' },
+    { key: 'revenue', label: 'Revenue' },
+    { key: 'posts', label: 'Clips posted' },
+    { key: 'visitToSignup', label: 'Visit \u2192 signup' },
+    { key: 'signupToCheckout', label: 'Signup \u2192 checkout' },
+    { key: 'visitToPaid', label: 'Visit \u2192 paid' },
+    { key: 'bots', label: 'Crawler hits' },
+  ];
+  var ANA_DEFAULT_TILES = ['uniques', 'views', 'live', 'visitToSignup', 'revenue', 'posts'];
+
+  /** The six chosen metrics, healed against anything stale or unknown. */
+  function anaTilePicks() {
+    var picked = Array.isArray(UI.anaTiles) ? UI.anaTiles : [];
+    return ANA_DEFAULT_TILES.map(function (fallback, index) {
+      var key = picked[index];
+      return ANA_METRICS.some(function (m) { return m.key === key; }) ? key : fallback;
+    });
+  }
+
+  /** One metric, resolved against a webmetrics payload. */
+  function anaMetric(key, ana) {
+    var t = (ana && ana.totals) || {};
+    var r = (ana && ana.rates) || {};
+    var label = (ANA_METRICS.filter(function (m) { return m.key === key; })[0] || {}).label || key;
+    var pct = function (v) { return v === null || v === undefined ? '\u2014' : v + '%'; };
+    var money = function () {
+      if (!t.revenueMinor) return '0';
+      var amount = (t.revenueMinor / 100).toFixed(2);
+      return t.revenueCurrency && t.revenueCurrency !== 'mixed'
+        ? t.revenueCurrency.toUpperCase() + ' ' + amount
+        : amount + (t.revenueCurrency === 'mixed' ? ' (mixed currencies)' : '');
+    };
+    var table = {
+      uniques: [String(t.uniques || 0), (t.uniques7 || 0) + ' in the last 7 days', ''],
+      views: [String(t.views || 0), (t.views7 || 0) + ' in the last 7 days', ''],
+      live: [String((ana && ana.liveNow) || 0), 'in the last 5 minutes', 'live'],
+      signups: [String(t.signups || 0), 'accounts created in the window', ''],
+      checkouts: [String(t.checkoutsStarted || 0), 'reached Stripe checkout', ''],
+      paid: [String(t.paidConversions || 0), 'subscriptions started', 'pos'],
+      revenue: [money(), (t.topups || 0) + ' top-up' + (t.topups === 1 ? '' : 's') + ' in the window', ''],
+      posts: [String(t.postsPublished || 0), 'published to connected channels', ''],
+      visitToSignup: [pct(r.visitToSignup), plural(t.signups || 0, 'signup'), 'pos'],
+      signupToCheckout: [pct(r.signupToCheckout), 'of signups reached checkout', 'pos'],
+      visitToPaid: [pct(r.visitToPaid), plural(t.paidConversions || 0, 'paying customer'), 'pos'],
+      bots: [String((ana && ana.botHits) || 0), 'filtered out of every number here', 'unknown'],
+    };
+    var row = table[key] || ['\u2014', '', ''];
+    return { key: key, label: label, value: row[0], note: row[1], tone: row[2] };
+  }
+
+
   /** Minor units in, human money out; junk currency codes fall back plainly. */
   function owMoney(minor, currency) {
     var amount = Number(minor || 0) / 100;
@@ -6033,28 +6092,37 @@
       })(),
       owHealthRecentEmpty: !(DATA.ownerData && DATA.ownerData.health && (DATA.ownerData.health.recent || []).length),
 
+      // Every tile is a dropdown. Six slots, twelve things worth watching:
+      // pick per slot rather than putting twelve boxes on screen, which is
+      // what "so it doesnt look clouded" asked for.
+      anaMetricOptions: ANA_METRICS.map(function (m) { return { key: m.key, label: m.label }; }),
       anaTiles: (function () {
         var ana = DATA.webmetrics;
         if (!ana) return [];
-        var t = ana.totals || {};
-        var r = ana.rates || {};
-        var money = '';
-        if (t.revenueMinor) {
-          money = (t.revenueMinor / 100).toFixed(2);
-          money = t.revenueCurrency && t.revenueCurrency !== 'mixed'
-            ? t.revenueCurrency.toUpperCase() + ' ' + money
-            : money + (t.revenueCurrency === 'mixed' ? ' (mixed currencies)' : '');
-        }
-        var pct = function (v) { return v === null || v === undefined ? '\u2014' : v + '%'; };
-        return owKpis([
-          owTile('Unique visitors', String(t.uniques || 0), (t.uniques7 || 0) + ' in the last 7 days', ''),
-          owTile('Page views', String(t.views || 0), (t.views7 || 0) + ' in the last 7 days', ''),
-          owTile('Live now', String(ana.liveNow || 0), 'last 5 minutes', 'live'),
-          owTile('Visit \u2192 signup', pct(r.visitToSignup), plural(t.signups || 0, 'signup'), 'pos'),
-          owTile('Revenue', money || '0', (t.topups || 0) + ' top-up' + (t.topups === 1 ? '' : 's') + ' in the window', ''),
-          owTile('Clips posted', String(t.postsPublished || 0), 'published to connected channels', ''),
-        ]);
+        var chosen = anaTilePicks();
+        return owKpis(chosen.map(function (key, index) {
+          var metric = anaMetric(key, ana);
+          var tile = owTile(metric.label, metric.value, metric.note, metric.tone);
+          tile.metric = metric.key;
+          tile.choose = function (event) {
+            var value = event && event.target ? event.target.value : '';
+            var next = anaTilePicks().slice();
+            next[index] = value;
+            setUI({ anaTiles: next, ownerAnimAt: Date.now() });
+          };
+          return tile;
+        }));
       })(),
+      anaGrainLabel: (UI.anaGrain === 'hour' ? 'Visitors by hour' : 'Visitors by day'),
+      anaGrains: ['day', 'hour'].map(function (grain) {
+        var on = (UI.anaGrain === 'hour' ? 'hour' : 'day') === grain;
+        return {
+          label: grain === 'hour' ? 'By hour' : 'By day',
+          style: 'background: none; border: 0; padding: 0; font-family: inherit; font-size: 11px; font-weight: 600; cursor: pointer; color: '
+            + (on ? '#F0D6A6;' : '#6E6E76;'),
+          select: function (e) { stop(e); setUI({ anaGrain: grain, ownerAnimAt: Date.now() }); },
+        };
+      }),
       anaLiveShow: Boolean(UI.screen === 'owner' && UI.ownerTab === 'traffic' && DATA.webmetrics),
       anaLiveLabel: (DATA.webmetrics && DATA.webmetrics.liveNow || 0) + ' live right now',
       anaFunnel: (function () {
@@ -6096,13 +6164,18 @@
       })(),
       anaBars: (function () {
         var ana = DATA.webmetrics;
-        var days = (ana && ana.days) || [];
+        // By hour reads the same series a different way: 48 columns of two
+        // numbers each, so "when do people actually turn up" is answerable
+        // without exporting anything.
+        var byHour = UI.anaGrain === 'hour';
+        var rows = (ana && (byHour ? ana.hourly : ana.days)) || [];
         var max = 1;
-        days.forEach(function (d) { if (d.views > max) max = d.views; });
-        return days.map(function (d) {
+        rows.forEach(function (d) { if (d.views > max) max = d.views; });
+        return rows.map(function (d) {
           var h = Math.max(d.views ? 4 : 2, Math.round((d.views / max) * 100));
+          var when = byHour ? (d.day + ' ' + d.hour + ' UTC') : d.day;
           return {
-            tip: d.day + ': ' + d.views + ' view' + (d.views === 1 ? '' : 's') + ', ' + d.uniques + ' unique',
+            tip: when + ': ' + d.views + ' view' + (d.views === 1 ? '' : 's') + ', ' + d.uniques + ' unique',
             style: 'flex: 1; min-width: 2px; height: ' + h + '%; border-radius: 3px 3px 0 0; background: ' +
               (d.views ? 'linear-gradient(180deg, #F0D6A6, #D9B478)' : '#1E1E22') + ';',
           };

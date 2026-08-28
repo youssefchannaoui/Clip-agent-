@@ -185,3 +185,24 @@ test('live-now counts the last five minutes and drops with time', async () => {
   assert.ok(summary.liveNow >= 1, 'the visitors from these tests are live right now');
   assert.ok(Number.isInteger(summary.liveNow));
 });
+
+// ── depth: the same day read by the hour (v3.23.0) ──────────────────────────
+
+test('a day is also readable as 48 hours of shape', async () => {
+  await fetch(`${base}/features`, {
+    headers: { accept: 'text/html', 'x-forwarded-for': '203.0.113.201', 'user-agent': 'hourly-tester' },
+  });
+  const summary = metrics.summary({ days: 7 });
+  assert.equal(summary.hourly.length, 48, 'two days of hours, so a night crossing midnight still reads');
+  const now = summary.hourly[summary.hourly.length - 1];
+  assert.ok(now.views >= 1, 'the visit just made lands in the current hour');
+  assert.match(now.hour, /^\d{2}:00$/);
+  const total = summary.hourly.reduce((sum, row) => sum + row.views, 0);
+  assert.ok(total <= summary.totals.views, 'hours can never exceed the window they came from');
+});
+
+test('the hours are counts, not another copy of the visitor', async () => {
+  metrics.flush();
+  const persisted = JSON.stringify(state.webMetrics);
+  assert.ok(!persisted.includes('hourly-tester'), 'the hour buckets hold numbers only');
+});

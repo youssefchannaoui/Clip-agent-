@@ -104,8 +104,16 @@ function dayBucket(day) {
   bucket.devices ||= {}; bucket.languages ||= {}; bucket.campaigns ||= {};
   bucket.entries ||= {}; bucket.missing ||= {};
   bucket.direct ||= 0; bucket.botHits ||= 0;
+  // Two numbers per hour of the day, so a day can be read as a shape rather
+  // than a single total. 24 keys per day bucket, dropped with the day.
+  bucket.hours ||= {};
   if (!Array.isArray(bucket.uniqueIds)) bucket.uniqueIds = [];
   return bucket;
+}
+
+/** The UTC hour of an instant, 0-23, as the key its day bucket files it under. */
+function utcHour(ms = Date.now()) {
+  return String(new Date(ms).getUTCHours()).padStart(2, '0');
 }
 
 /**
@@ -194,6 +202,10 @@ export function pageview({ path, ip = '', userAgent = '', referrer = '', ownHost
     const locale = String(language || '').split(',')[0].trim().toLowerCase().slice(0, 12);
     if (locale) bump(bucket.languages, locale, 24);
   }
+  const hour = (bucket.hours[utcHour()] ||= { views: 0, uniques: 0 });
+  hour.views += 1;
+  if (firstToday) hour.uniques += 1;
+
   liveVisitors.set(id, Date.now());
   if (liveVisitors.size > 10_000) pruneLive();
 
@@ -285,6 +297,20 @@ export function summary({ days = 30 } = {}) {
     botHits += bucket.botHits || 0;
   }
 
+  // The last 48 hours as one series, so "by hour" is a shape and not a guess
+  // from a daily total. Read across day boundaries because the interesting
+  // question -- when do people actually turn up -- crosses midnight.
+  const hourly = [];
+  for (let back = 47; back >= 0; back -= 1) {
+    const at = today - back * 60 * 60 * 1000;
+    const bucket = metrics.days[utcDay(at)];
+    const slot = bucket?.hours?.[String(new Date(at).getUTCHours()).padStart(2, '0')];
+    hourly.push({
+      at, hour: String(new Date(at).getUTCHours()).padStart(2, '0') + ':00',
+      day: utcDay(at), views: slot?.views || 0, uniques: slot?.uniques || 0,
+    });
+  }
+
   // Channel grouping happens here, at read time, so the stored data stays
   // plain referrer hosts and a regrouping never needs a migration.
   const channels = { search: 0, social: 0, referral: 0, direct };
@@ -323,6 +349,7 @@ export function summary({ days = 30 } = {}) {
     windowDays: window,
     captureSince: Object.keys(metrics.days).sort()[0] || null,
     days: rows,
+    hourly,
     totals: {
       views, uniques,
       views7: sumLast(rows, 'views', Math.min(7, window)),

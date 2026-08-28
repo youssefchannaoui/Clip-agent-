@@ -5111,7 +5111,32 @@ StudioAdapter.onProbeSource=async url=>{try{
        blocks the books. Everything is cached across state polls because
        /api/state replaces DATA wholesale. */
     let ownerLoading=false;
-    StudioAdapter.onLoadOwner=async(days)=>{
+    /* The owner screen is a live screen (Youssef, 28 Aug 2026: "owners should
+       be FULLY LIVE refreshing every like 60 seconds or less no anythign that
+       will lag the server"). One timer, 30s, and it only does anything while
+       the Owner screen is the one on screen AND the tab is actually being
+       looked at -- a background tab polling four endpoints forever is exactly
+       the "lag the server" being warned about. Health is a worker round trip,
+       so it goes every fourth tick rather than every tick. `quiet` skips the
+       toast: a refresh nobody asked for must not shout when it fails. */
+    let ownerTick=0;
+    setInterval(()=>{
+      if(document.hidden)return;
+      if(StudioAdapter.ui.screen!=='owner')return;
+      if(ownerLoading)return;
+      /* Never mid-edit: a re-render while a cost is being typed redraws the
+         field under the caret. */
+      if(StudioAdapter.ui.owEditor)return;
+      ownerTick+=1;
+      StudioAdapter.onLoadOwner(StudioAdapter.ui.ownerDays||180,{quiet:true,health:ownerTick%4===0});
+    },30000);
+    /* Coming back to the tab should not mean waiting up to 30s for numbers
+       that are already stale. */
+    document.addEventListener('visibilitychange',()=>{
+      if(document.hidden||StudioAdapter.ui.screen!=='owner'||ownerLoading||StudioAdapter.ui.owEditor)return;
+      StudioAdapter.onLoadOwner(StudioAdapter.ui.ownerDays||180,{quiet:true,health:false});
+    });
+    StudioAdapter.onLoadOwner=async(days,opts={})=>{
       if(ownerLoading)return;ownerLoading=true;
       window.DC_OWNER=window.DC_OWNER||{};
       try{
@@ -5121,13 +5146,14 @@ StudioAdapter.onProbeSource=async url=>{try{
           api('/api/admin/analytics'),
           api('/api/owner/webmetrics?days='+Math.min(90,d)),
         ]);
-        if(fin.status==='fulfilled')window.DC_OWNER.finance=fin.value;else toast(fin.reason.message,'bad');
+        if(fin.status==='fulfilled')window.DC_OWNER.finance=fin.value;else if(!opts.quiet)toast(fin.reason.message,'bad');
         if(acc.status==='fulfilled')window.DC_OWNER.analytics=acc.value;
         if(web.status==='fulfilled')window.DC_OWNER.webmetrics=web.value;
         if(DATA){DATA.ownerData=window.DC_OWNER;DATA.webmetrics=window.DC_OWNER.webmetrics||null}
         renderAll();
       }finally{ownerLoading=false}
       /* Health after the books have painted, never instead of them. */
+      if(opts.health===false)return;
       try{
         window.DC_OWNER.health=await api('/api/owner/health?days=7');
       }catch(e){window.DC_OWNER.health={error:e.message}}
