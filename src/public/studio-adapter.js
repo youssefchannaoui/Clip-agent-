@@ -5554,12 +5554,12 @@
             .filter(function (l) { return l.text; }),
           hasTag: Boolean(isCurrent || p.badge),
           tag: isCurrent ? 'Current plan' : (p.badge || ''),
-          tagStyle: 'padding: 2px 8px; border-radius: 20px; font-size: 9.5px; font-weight: 700; background: ' +
+          tagStyle: 'align-self: flex-start; padding: 2px 8px; border-radius: 20px; font-size: 9.5px; font-weight: 700; background: ' +
             (isCurrent ? 'rgba(217,180,120,.16); color: #F0D6A6;' : 'rgba(127,209,166,.14); color: #7FD1A6;'),
           cardStyle: 'display: flex; flex-direction: column; gap: 9px; padding: 14px; border-radius: 12px; border: 1px solid ' +
             (isCurrent ? 'rgba(217,180,120,.45); background: rgba(217,180,120,.05);' : '#1E1E22; background: #121214;'),
           cta: isCurrent ? 'Current' : isFreeCard ? 'Cancel to return here' : unavailable ? 'Not available' : 'Choose',
-          btnStyle: 'padding: 8px 12px; border-radius: 8px; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: ' +
+          btnStyle: 'margin-top: auto; padding: 10px 12px; border-radius: 8px; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: ' +
             (isCurrent || unavailable ? 'default' : 'pointer') + '; border: 1px solid ' +
             (isCurrent || unavailable ? '#26262A; background: #17171A; color: #6E6E76;' : 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;'),
           choose: function (e) {
@@ -5577,7 +5577,10 @@
         var unavailable = pk.enabled === false;
         return {
           name: pk.name || pk.id,
-          tokens: plural(pk.tokens || 0, 'token'),
+          // The markup writes "tokens" in its own span right after this, so
+          // pluralising here rendered "100 tokens tokens" on every pack. The
+          // plan cards were fixed for this and the packs were missed.
+          tokens: String(pk.tokens || 0),
           price: pk.priceLabel || 'Price not set',
           per: 'one-off',
           rate: pk.tokens ? 'about ' + Math.round(pk.tokens / Math.max(1, tokenRate)) + ' source minutes' : '',
@@ -5586,7 +5589,7 @@
           cardStyle: 'display: flex; flex-direction: column; gap: 8px; padding: 13px; border-radius: 12px; border: 1px solid ' +
             (pk.badge === 'Most popular' ? 'rgba(217,180,120,.45); background: rgba(217,180,120,.05);' : '#1E1E22; background: #121214;'),
           cta: unavailable ? 'Not available' : 'Buy tokens',
-          btnStyle: 'padding: 8px 12px; border-radius: 8px; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: ' +
+          btnStyle: 'margin-top: auto; padding: 10px 12px; border-radius: 8px; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: ' +
             (unavailable ? 'default' : 'pointer') + '; border: 1px solid ' +
             (unavailable ? '#26262A; background: #17171A; color: #6E6E76;' : 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;'),
           buy: function (e) {

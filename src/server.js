@@ -53,6 +53,9 @@ const STUDIO_ASSETS = {
   // Hand-written, and kept out of the generated bundle so a design re-import
   // cannot silently delete the app's only mobile layout.
   '/studio-responsive.css': { file: studioAsset('studio-responsive.css'), type: 'text/css; charset=utf-8' },
+  // Motion and hover for the Tokens & billing screen. Kept out of the design
+  // export because it hangs off ids rather than the export's hashed classes.
+  '/studio-tokens.css': { file: studioAsset('studio-tokens.css'), type: 'text/css; charset=utf-8' },
   // The editor's "coming soon" gate. Two files and one <link> so that turning
   // the editor on again is a deletion rather than an untangling.
   '/studio-editor-gate.css': { file: studioAsset('studio-editor-gate.css'), type: 'text/css; charset=utf-8' },

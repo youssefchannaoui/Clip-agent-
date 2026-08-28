@@ -54,32 +54,100 @@ function requireOperator(user) {
  * and a seeded guess would be indistinguishable from a real figure once it is
  * sitting in a total.
  */
+/**
+ * An amount is only ever seeded here when a receipt says it.
+ *
+ * The three that carry figures were read off the vendor's own emailed receipt
+ * and the anchor date is the day that receipt was paid, so nextDue rolls them
+ * forward from a real billing day rather than from a guess. The rest carry no
+ * amount on purpose (see this module's header): an invented hosting bill is
+ * indistinguishable from a real one once it is inside a burn total.
+ */
+const seedDay = (y, m, d) => Date.UTC(y, m - 1, d, 12);
+
 const SEED_COSTS = [
   { name: 'Render — web service', vendor: 'Render', category: 'hosting', cadence: 'monthly',
-    notes: 'deenclipped-ai, starter plan, Oregon, plus a 10GB disk.' },
+    amountMinor: 174, currency: 'usd', nextDueAt: seedDay(2026, 8, 5),
+    notes: 'deenclipped-ai, Oregon, plus a 10GB disk. The account is on the free Hobby plan and pays for usage only, so this varies: the 5 Aug 2026 invoice was US$1.74 (servers $1.56, disks $0.18). Hobby includes 5GB of bandwidth a month and that has been exhausted twice, so overage is the number to watch.' },
+  { name: 'Webshare — proxy pool', vendor: 'Webshare', category: 'tooling', cadence: 'monthly',
+    amountMinor: 600, currency: 'usd', nextDueAt: seedDay(2026, 8, 26),
+    notes: 'The 20 static residential IPs that YouTube imports download through (VIDEO_IMPORT_PROXIES). US$6.00 charged 26 Aug 2026. Plan covers 250GB a month; a full-quality lecture is ~1.5GB.' },
   { name: 'Hetzner — render worker', vendor: 'Hetzner', category: 'hosting', cadence: 'monthly',
-    notes: 'The box at 135.181.149.182 that runs the ffmpeg worker and self-hosted Ollama.' },
+    notes: 'The box at 135.181.149.182 that runs the ffmpeg worker and self-hosted Ollama. Account opened 5 Aug 2026 and no invoice has arrived in the inbox yet, so the amount is still unset.' },
+  { name: 'Anthropic — Claude Pro', vendor: 'Anthropic', category: 'ai', cadence: 'monthly',
+    nextDueAt: seedDay(2026, 8, 11),
+    notes: 'Re-subscribed 11 Aug 2026 after a cancellation that lapsed on the 11th, so the billing day is the 11th. The welcome email does not state the amount, so it needs setting. Separate from the pay-as-you-go API credit top-ups, which are variable spend rather than a subscription.' },
   { name: 'Cloudflare R2 — media storage', vendor: 'Cloudflare', category: 'storage', cadence: 'monthly',
-    notes: 'Bucket deenclipped-media-us. Usage-based, so this is an average rather than a fixed bill.' },
+    notes: 'Bucket deenclipped-media-us, served over media.deenclipped.online. Usage-based, so this is an average rather than a fixed bill. No invoice found in the inbox, which is consistent with sitting inside the free tier.' },
   { name: 'Domain — deenclipped.online', vendor: 'Registrar', category: 'domain', cadence: 'yearly',
-    notes: 'Renewal. Set the due date to the actual renewal date.' },
+    notes: 'Renewal. No registration receipt was found in the inbox, so both the amount and the renewal date need setting from the registrar.' },
 ];
+
+/** One ledger row from a seed, with the seed's own figures kept if it has any. */
+function seedEntry(seed, index) {
+  return {
+    id: `cost_seed_${index + 1}`,
+    amountMinor: 0,
+    currency: defaultCurrency(),
+    nextDueAt: null,
+    // The seed spreads LAST so a seed that carries a receipt-backed amount,
+    // currency or billing day keeps it. Spreading it first is what made every
+    // seeded row land at zero.
+    ...seed,
+    active: true,
+    createdAt: now(),
+    updatedAt: now(),
+  };
+}
+
+/**
+ * The revision of SEED_COSTS this deployment has been brought up to.
+ *
+ * Seeding runs once, so a deployment seeded before the receipts were read
+ * would keep four empty rows forever and never learn about Webshare or Claude
+ * Pro. Bumping this replays the new seed data over rows the owner has not
+ * touched -- an entry whose amount or due date they have already set is left
+ * exactly as they left it, because their figure is better than ours.
+ */
+const COST_SEED_REVISION = 2;
 
 function ensureCostState() {
   if (!Array.isArray(state.ownerCosts)) {
-    state.ownerCosts = SEED_COSTS.map((seed, index) => ({
-      id: `cost_seed_${index + 1}`,
-      ...seed,
-      amountMinor: 0,
-      currency: defaultCurrency(),
-      nextDueAt: null,
-      active: true,
-      createdAt: now(),
-      updatedAt: now(),
-    }));
+    state.ownerCosts = SEED_COSTS.map(seedEntry);
     state.ownerCostsSeededAt = now();
+    state.ownerCostsRevision = COST_SEED_REVISION;
     save();
-    log('Owner cost ledger seeded with this deployment\'s infrastructure. Amounts need setting.', 'info');
+    log('Owner cost ledger seeded with this deployment\'s infrastructure.', 'info');
+    return state.ownerCosts;
+  }
+  if (Number(state.ownerCostsRevision || 0) < COST_SEED_REVISION) {
+    let added = 0;
+    let filled = 0;
+    for (const [index, seed] of SEED_COSTS.entries()) {
+      const existing = state.ownerCosts.find(entry => String(entry.name) === seed.name);
+      if (!existing) {
+        state.ownerCosts.push(seedEntry(seed, index));
+        added += 1;
+        continue;
+      }
+      // Only ever write into a row the owner has left blank.
+      const untouchedAmount = !Math.round(Number(existing.amountMinor) || 0);
+      const untouchedDue = !Number(existing.nextDueAt || 0);
+      let changed = false;
+      if (untouchedAmount && seed.amountMinor) {
+        existing.amountMinor = seed.amountMinor;
+        if (seed.currency) existing.currency = seed.currency;
+        changed = true;
+      }
+      if (untouchedDue && seed.nextDueAt) { existing.nextDueAt = seed.nextDueAt; changed = true; }
+      if (untouchedAmount && untouchedDue && seed.notes) existing.notes = seed.notes;
+      if (changed) { existing.updatedAt = now(); filled += 1; }
+    }
+    state.ownerCostsRevision = COST_SEED_REVISION;
+    save();
+    if (added || filled) {
+      log(`Owner cost ledger updated from receipts: ${added} added, ${filled} filled in.`, 'info');
+    }
   }
   return state.ownerCosts;
 }
@@ -118,13 +186,15 @@ function monthlyMinor(entry) {
   }
 }
 
-function cadenceStepMs(cadence) {
+/** How many calendar months one cadence advances; 0 means it never rolls. */
+function cadenceMonths(cadence) {
   switch (String(cadence || 'monthly')) {
-    case 'weekly': return 7 * DAY_MS;
-    case 'quarterly': return 91 * DAY_MS;
-    case 'yearly': return 365 * DAY_MS;
-    case 'once': return 0;
-    default: return 30 * DAY_MS;
+    case 'quarterly': return 3;
+    case 'yearly': return 12;
+    // Weekly is not a month count -- nextDue handles it on the day scale --
+    // and a one-off is due once and then never again.
+    case 'weekly': case 'once': return 0;
+    default: return 1;
   }
 }
 
@@ -135,15 +205,48 @@ function cadenceStepMs(cadence) {
  * months ago: a due date nobody updated is the normal state of a ledger, and
  * showing "overdue since May" for a subscription that has been quietly
  * charging monthly is noise that trains you to ignore the page.
+ *
+ * The roll is by CALENDAR months, not by a fixed number of days. Stepping a
+ * monthly bill by 30 days walks it backwards through the calendar -- twelve
+ * steps is 360 days, so a card charged on the 26th drifts to the 21st inside a
+ * year and keeps going -- and 365-day years ignore leap days the same way.
+ * Vendors charge on a date, not on a multiple of 86400 seconds, so the anchor
+ * day-of-month is what has to survive. A day that does not exist in the target
+ * month (the 31st of a 30-day month) clamps to that month's last day, which is
+ * what card issuers do, and clamping never mutates the anchor -- each step is
+ * computed from the ORIGINAL date, so a 31st that clamps to Feb 28 returns to
+ * the 31st in March rather than sticking at 28 forever.
  */
 function nextDue(entry, from = now()) {
   const due = Number(entry?.nextDueAt || 0);
   if (!due) return null;
-  const step = cadenceStepMs(entry.cadence);
+  const cadence = String(entry?.cadence || 'monthly');
+  if (cadence === 'once') return due;
+  if (cadence === 'weekly') {
+    const week = 7 * DAY_MS;
+    if (due >= from) return due;
+    // Whole weeks are exact, so jump straight there instead of looping.
+    return due + Math.ceil((from - due) / week) * week;
+  }
+  const step = cadenceMonths(cadence);
   if (!step) return due;
+  const anchor = new Date(due);
+  const day = anchor.getUTCDate();
   let next = due;
+  let months = 0;
   let guard = 0;
-  while (next < from && guard < 500) { next += step; guard += 1; }
+  while (next < from && guard < 600) {
+    months += step;
+    guard += 1;
+    const target = new Date(Date.UTC(
+      anchor.getUTCFullYear(), anchor.getUTCMonth() + months, 1,
+      anchor.getUTCHours(), anchor.getUTCMinutes(), anchor.getUTCSeconds(), anchor.getUTCMilliseconds(),
+    ));
+    // Day 0 of the following month is the last day of this one.
+    const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+    target.setUTCDate(Math.min(day, lastDay));
+    next = target.getTime();
+  }
   return next;
 }
 

@@ -115,7 +115,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **757 JS + 384 Python**
+- `npm test` and `npm run check` must pass. Currently **761 JS + 384 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -362,9 +362,23 @@ with no laptop, no local state and no earlier conversation.
   repo path a test names against the real directory listing.
 - **Never leave the branch red.** A phone session that cannot trust the tick
   has no way to check anything.
+- **Show him the desktop, every time** (his instruction, 28 Aug 2026: "I need
+  screenshots of desktop images of what's new I want that EVERY TIME HERE").
+  He is on a phone; he cannot open the app at 1280px to see what changed. So
+  any update that alters something visible ships WITH desktop screenshots of
+  it in the reply — not a description of it, and not only the phone width.
+  Settle animations first (see Verification standard) or the capture lands
+  mid-transition. If a change genuinely has no visible surface, say that
+  instead of quietly sending nothing.
 - What a phone session **cannot** do: the Hetzner worker deploy (browser
-  console), Stripe dashboard work, platform submissions, and looking at the
-  rendered UI. Say so rather than claiming a visual change is verified.
+  console), Stripe dashboard work, and platform submissions. It also cannot
+  screenshot the app — so when the work happens there, say plainly that the
+  visual check is outstanding rather than letting silence imply it was done.
+- **Work started on a phone lands on its own branch.** Two independent
+  sessions fixed the same `DESIGN/` case bug on 28 Aug without either seeing
+  the other, and the phone branch sat unmerged for hours with a real owner
+  ledger on it. Merge it back to `deenclipped-v2-2` rather than leaving two
+  truths, and check for overlap before starting anything large.
 
 ## Releasing
 
@@ -385,9 +399,10 @@ with no laptop, no local state and no earlier conversation.
 
 ### Waiting on Youssef (nothing in the repo unblocks these)
 
-1. **YouTube API compliance/quota reply** — drafted in Gmail, unsent. Until the
-   project passes the audit, Google forces every upload to private whatever the
-   app asks for, so this is what "posts are private" really depends on.
+1. **Send the YouTube compliance reply** — drafted in Gmail, unsent, deadline
+   ~8 Sept 2026. Details below; the short version is that it withdraws the
+   quota request rather than repeating it. The AUDIT, not the quota, is what
+   forces uploads private.
 2. **TikTok app review** — record the demo and submit (`TIKTOK-SUBMISSION.md`).
    Until then an unreviewed app may only post to a TikTok account that is
    itself private; setting the account private is the way to post today.
@@ -408,6 +423,27 @@ with no laptop, no local state and no earlier conversation.
   single id, so a clip cannot go to two YouTube channels. Posting to several
   accounts needs the settings shape to become a list and the target builder to
   fan out over it.
+
+- **YouTube API compliance review** (project 881648803263) is at its last open
+  question, drafted in Gmail and unsent; deadline ~8 Sept 2026 (7 business days
+  from Google's 27 Aug message).
+  **The answer is that we need no extra quota at all.** The quota methodology
+  changed in 2026: `videos.insert` costs 1 unit against a dedicated **100
+  calls/day** bucket, not 1,600 units out of the general pool. Our 11 Aug reply
+  used the old 1,600 figure, concluded we could perform zero uploads a day, and
+  asked for 20,000/day; Google has now twice written to correct that arithmetic.
+  Real usage is ~5 `videos.insert`/day against a limit of 100, so the reply
+  withdraws the request. Asking for quota nobody needs is what has kept this
+  review open — the audit, not the quota, is what forces uploads private.
+  The three endpoints, verified against the code rather than assumed:
+  `channels.list` (`part=snippet&mine=true` on connect, `part=id,snippet` on
+  connection test), `videos.list` (`part=snippet,contentDetails`, API key, once
+  per submitted URL, with an HTML fallback), and `videos.insert`
+  (`part=snippet,status`, resumable — the chunk PUTs are not extra insert calls).
+  The ToS Violations Report V.1 items were answered 21 Aug and the Policy
+  III.F.2a,b screenshots 26 Aug; a stale draft still sitting in Gmail repeats
+  that 26 Aug reply in a **detached thread and without its attachments** — do
+  not send it.
 - **Render pipeline learned to cut on 26 Aug 2026 (v3.2.0)** — a candidate can
   carry KEEP ranges (`clip.cutsSec`, clip-local, via re-render), rendered as a
   pre-cut trim/concat plate that the untouched pipeline then treats as an
