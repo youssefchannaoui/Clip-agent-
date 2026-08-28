@@ -115,7 +115,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **726 JS + 369 Python**
+- `npm test` and `npm run check` must pass. Currently **734 JS + 384 Python**
   (7 Python skipped). Update these numbers when they change — they were wrong by
   more than a factor of two, which makes them useless as a tripwire.
 - **The 7 skips are `SpeakerTrackingTests`**, which need a test video that is not
@@ -238,6 +238,30 @@ Habits the tests now enforce, and why:
 - The Webshare plan is Static Residential, 20 IPs, 250GB/month. A full-quality
   lecture is ~1.5GB, so ~160 first-time imports/month fit; re-imports of a
   URL the box has seen use the worker's source cache, not bandwidth.
+- **Only the selected stretch is downloaded (27 Aug 2026).** `yt-dlp` is given
+  `download_ranges`, so picking three minutes of a 90-minute lecture costs
+  three minutes of bandwidth instead of 1.5GB. Four things hold it together
+  and each was a bug waiting to happen:
+  1. **`copy_or_download` in clip_worker.py is NOT the production downloader.**
+     `service.py` imports via `import_providers.py` and hands clip_worker a
+     local path as `job["url"]`, so the yt-dlp code in clip_worker only runs
+     for the local engine. A first attempt implemented all of this there and
+     would have shipped a no-op.
+  2. **A sectioned file must never be trimmed again.** It already starts at
+     10:00; cutting it at 10:00 a second time renders the wrong moment with
+     the right captions. `sourceAlreadyWindowed` travels on the job and
+     suppresses both the main trim and `apply_source_window`.
+  3. **The source cache is keyed by the window too.** It was keyed on the URL
+     alone, which would have served one job's section to a job that asked for
+     a different part of the same lecture. `sourceCacheKey` (which the
+     transcript cache also hangs off) follows the bytes, not the URL.
+  4. **Never claim a section the downloader did not confirm.** An extractor
+     that ignores ranges returns the whole video; `windowed` is set from
+     `info["section_start"]`, not from having asked. A failed section attempt
+     falls back to a full download — saving bandwidth must never cost an import.
+  No `force_keyframes_at_cuts`: it re-encodes the whole stretch for a
+  frame-exact cut, and the ffmpeg trim it replaces was never frame-exact
+  either (both land on the keyframe at or before the second asked for).
 
 ## Deploys
 
@@ -260,6 +284,27 @@ Habits the tests now enforce, and why:
   code landed — Docker will happily rebuild an identical image from cache.
 
 ---
+
+## The editor is gated for launch (27 Aug 2026, Youssef's call)
+
+It opens from the queue and draws itself, blurred, behind a "coming soon"
+notice. Youssef's words: "the editor for opening will be coming soon so they
+can click and open editor then it's a blurred-ish background with a prompt
+saying coming soon in the new update."
+
+- It is `src/public/studio-editor-gate.css` + `src/public/editor-gate.js`,
+  linked from `index.html` and allowlisted in `server.js`. **Shipping the
+  editor is deleting those two files and their two lines** — nothing was added
+  to the design export, so no re-import and no regenerated class names.
+- **Blur is not a lock.** `pointer-events: none` stops the mouse; only `inert`
+  stops tabbing, and a Save button that can be tabbed to writes an edit onto a
+  clip nobody meant to edit. The gate sets both, re-applying after every render.
+- Two things contradicted the gate and are silenced while it is up: the
+  `#edBetaPop` first-run popup ("your edits save the moment you make them")
+  and the topbar's beta subtitle. Both come back with the editor.
+- The phone rule in `studio-responsive.css` hides every child of the editor.
+  The notice is a child, so it carries `:not(#dcEditorSoon)` — without it the
+  phone gets a blank screen.
 
 ## Open items
 

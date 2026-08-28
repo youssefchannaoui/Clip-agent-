@@ -801,7 +801,10 @@ function importResultObject(project, result, engine = 'self-hosted') {
   }
   project.title = result.project?.title || project.title;
   project.durationSec = result.project?.durationSec || null;
-  project.sourceFullDurationSec = result.project?.sourceFullDurationSec || null;
+  // Kept when the worker reports none. It only fetched the selected stretch, so
+  // it could not measure the lecture — and the length we already had is better
+  // than replacing it with a blank.
+  project.sourceFullDurationSec = result.project?.sourceFullDurationSec || project.sourceFullDurationSec || null;
   project.sourceStartSec = result.project?.sourceStartSec ?? project.sourceStartSec ?? 0;
   project.sourceEndSec = result.project?.sourceEndSec ?? project.sourceEndSec ?? null;
   project.sourceFile = result.project?.sourceFile || null;

@@ -79,9 +79,16 @@ SOURCE_CACHE_TTL_SECONDS = max(3600, int(os.getenv("WORKER_SOURCE_CACHE_HOURS", 
 SOURCE_CACHE_MAX_BYTES = max(1, int(os.getenv("WORKER_SOURCE_CACHE_GB", "15"))) * 1024 ** 3
 
 
-def source_cache_key(source: dict) -> str | None:
+def source_cache_key(source: dict, window: tuple[float, float | None] | None = None) -> str | None:
     """A stable identity for the bytes a source resolves to, or None when the
-    source has no stable identity worth caching."""
+    source has no stable identity worth caching.
+
+    `window` is part of the identity, not a detail of it. The downloader now
+    fetches only the selected stretch, so two jobs on the same URL can hold
+    genuinely different bytes -- and handing minute 40 to a job that asked for
+    minute 5 would render the wrong moment with the right captions, which is
+    the one failure this cache must never cause.
+    """
     if not isinstance(source, dict):
         return None
     if source.get("objectKey"):
@@ -90,7 +97,26 @@ def source_cache_key(source: dict) -> str | None:
         raw = f"url:{source['url']}"
     else:
         return None
+    if window is not None:
+        start, end = window
+        raw += f"#window:{float(start):.3f}-{'end' if end is None else format(float(end), '.3f')}"
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def window_of(payload: dict) -> tuple[float, float | None] | None:
+    """The stretch of source this job selected, or None for the whole video."""
+    try:
+        start = max(0.0, float(payload.get("sourceStartSec") or 0.0))
+    except (TypeError, ValueError):
+        start = 0.0
+    try:
+        raw_end = payload.get("sourceEndSec")
+        end = float(raw_end) if raw_end is not None else None
+    except (TypeError, ValueError):
+        end = None
+    if start > 0.05 or (end is not None and end > start):
+        return (start, end)
+    return None
 
 
 def source_cache_lookup(key: str | None) -> Path | None:
@@ -729,20 +755,37 @@ class Processor:
             # blocked: its error arrives as a quoted string from a service the
             # operator cannot see or retry, which reads as though this box had
             # failed when nothing here was ever involved.
-            cache_key = source_cache_key(payload.get("source") or {})
-            cached = source_cache_lookup(cache_key)
+            source_payload = dict(payload.get("source") or {})
+            # The selected stretch travels with the source so the downloader can
+            # fetch only that much. Everything except yt-dlp ignores it.
+            window = window_of(payload)
+            if window is not None:
+                source_payload["windowStartSec"], source_payload["windowEndSec"] = window
+            windowed_key = source_cache_key(source_payload, window) if window is not None else None
+            whole_key = source_cache_key(source_payload)
+            # The exact stretch first; failing that, a whole copy this box already
+            # holds, which costs a trim but no bandwidth at all.
+            cached, cache_is_window = source_cache_lookup(windowed_key), True
+            if cached is None:
+                cached, cache_is_window = source_cache_lookup(whole_key), False
             if cached is not None:
                 try:
                     os.link(cached, source)
                 except OSError:
                     shutil.copy2(cached, source)
-                imported = ImportedSource(file=source, provider="cache", title=str(payload.get("title") or ""))
+                imported = ImportedSource(
+                    file=source, provider="cache", title=str(payload.get("title") or ""),
+                    windowed=cache_is_window,
+                )
                 self.progress(job_id, "importing", 6)
             else:
                 imported = import_with_fallback(
-                    payload.get("source") or {}, source, self.import_pulse(job_id), self.storage
+                    source_payload, source, self.import_pulse(job_id), self.storage
                 )
-                source_cache_store(cache_key, source)
+                # Stored under the identity of what actually arrived. A section
+                # filed under the plain URL would be served to the next job that
+                # wanted a different part of the same lecture.
+                source_cache_store(windowed_key if imported.windowed else whole_key, source)
             if source.stat().st_size > MAX_DOWNLOAD_BYTES:
                 raise RuntimeError("The source exceeds the worker download limit.")
             # Which provider actually served it, in the job record. The chain
@@ -773,10 +816,20 @@ class Processor:
                     "model": CAPACITY["model"],
                     "ffmpegThreads": CAPACITY["ffmpegThreads"],
                 },
-                "sourceCacheKey": cache_key,
+                # The identity of the bytes on disk, which is what the transcript
+                # cache hangs off. A section and the whole lecture are different
+                # bytes and must not share a transcript.
+                "sourceCacheKey": windowed_key if imported.windowed else whole_key,
                 "transcriptCacheDir": str(TRANSCRIPT_CACHE_DIR),
                 "sourceStartSec": payload.get("sourceStartSec") or 0,
                 "sourceEndSec": payload.get("sourceEndSec"),
+                # The file may already BE that stretch. The window still travels
+                # -- the app shows it and later re-imports need it -- but this
+                # says whether ffmpeg still has a cut to make. Trimming a file
+                # that already starts at 10:00 as though it started at 0:00 is
+                # the "right captions, wrong moment" failure.
+                "sourceAlreadyWindowed": bool(imported.windowed),
+                "sourceFullDurationHintSec": imported.source_duration_sec,
                 "sourceTitle": payload.get("title") or imported.title,
                 "background": job_background,
             }

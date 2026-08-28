@@ -53,6 +53,10 @@ const STUDIO_ASSETS = {
   // Hand-written, and kept out of the generated bundle so a design re-import
   // cannot silently delete the app's only mobile layout.
   '/studio-responsive.css': { file: studioAsset('studio-responsive.css'), type: 'text/css; charset=utf-8' },
+  // The editor's "coming soon" gate. Two files and one <link> so that turning
+  // the editor on again is a deletion rather than an untangling.
+  '/studio-editor-gate.css': { file: studioAsset('studio-editor-gate.css'), type: 'text/css; charset=utf-8' },
+  '/editor-gate.js': { file: studioAsset('editor-gate.js'), type: JS_TYPE },
   // Signed-out page enhancements. A file rather than an inline block because
   // the CSP hashes inline scripts from index.html only.
   '/auth-enhance.js': { file: studioAsset('auth-enhance.js'), type: JS_TYPE },

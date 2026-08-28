@@ -40,6 +40,10 @@
      re-import rewrites that file wholesale, and mobile support must not be
      something that vanishes the next time the design changes. -->
 <link rel="stylesheet" href="/studio-responsive.css">
+<!-- The clip editor is held back for launch: it opens, blurred, behind a
+     "coming soon" notice. Deleting these two lines and the two files they name
+     turns it back on. -->
+<link rel="stylesheet" href="/studio-editor-gate.css">
 <style>
 /* The Studio shell owns the viewport; the legacy dashboard keeps page scrolling.
    The mount point stays a plain block on purpose: the design's own root element is
@@ -2042,6 +2046,7 @@ select:focus{outline:none;border-color:var(--blue)}
 <script src="/studio-template.generated.js"></script>
 <script src="/studio-runtime.js"></script>
 <script src="/studio-adapter.js"></script>
+<script src="/editor-gate.js"></script>
 
 <script>
 'use strict';

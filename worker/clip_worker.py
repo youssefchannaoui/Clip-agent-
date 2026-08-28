@@ -3463,6 +3463,11 @@ def apply_source_window(job: dict[str, Any], source_file: Path) -> Path:
     clip timestamps are relative to the window. Cutting the full file with
     window-relative timestamps renders the wrong moment with the right captions.
     """
+    if job.get("sourceAlreadyWindowed"):
+        # The downloader fetched only the selected stretch, so this file already
+        # IS the window. Cutting `start` seconds off a file that already starts
+        # there is exactly the failure the rest of this docstring describes.
+        return source_file
     start = max(0.0, float(job.get("sourceStartSec") or 0.0))
     end = float(job.get("sourceEndSec") or 0.0)
     if start <= 0 and end <= 0:
@@ -3688,16 +3693,40 @@ def process(job_file: Path) -> None:
     requested_start = max(0.0, float(job.get("sourceStartSec") or 0.0))
     requested_end_raw = job.get("sourceEndSec")
     requested_end = float(requested_end_raw) if requested_end_raw is not None else None
-    wants_window = requested_start > 0.05 or (requested_end is not None and requested_end > requested_start)
+    # Already the selected stretch when the downloader fetched only that much,
+    # which leaves nothing here to cut. The window still has to be reported --
+    # the app shows it, and a later re-import from the URL is trimmed with it.
+    already_windowed = bool(job.get("sourceAlreadyWindowed"))
+    wants_window = (requested_start > 0.05 or (requested_end is not None and requested_end > requested_start)) \
+        and not already_windowed
     raw_source_file = job_dir / "downloaded_source.mp4" if wants_window else source_file
     raw_source_file, detected_title = copy_or_download(job, raw_source_file)
-    full_duration = media_duration(job["ffprobe"], raw_source_file)
-    if full_duration <= 0:
+    arrived_duration = media_duration(job["ffprobe"], raw_source_file)
+    if arrived_duration <= 0:
         raise RuntimeError("The downloaded source could not be read as video.")
+    # What the file measures is the selection, not the lecture, when only the
+    # selection was fetched; the whole length then comes from the downloader.
+    full_duration = arrived_duration
+    known_full_duration: float | None = arrived_duration
+    if already_windowed:
+        hint = job.get("sourceFullDurationHintSec")
+        try:
+            known_full_duration = float(hint) if hint else None
+        except (TypeError, ValueError):
+            known_full_duration = None
+        # Without the hint -- a cached section, an extractor that reported no
+        # duration -- the lecture is only known to be AT LEAST this long. That
+        # is a bound, not a runtime, so it guards the limit but is not reported
+        # as fact: a wrong length on the project page is worse than none.
+        full_duration = known_full_duration or (requested_start + arrived_duration)
     if full_duration > float(job["settings"].get("maxSourceMinutes", 180)) * 60:
         raise RuntimeError("The source is longer than the configured processing limit.")
-    selected_start = min(requested_start, max(0.0, full_duration - 1.0))
-    selected_end = full_duration if requested_end is None else min(max(selected_start + 0.5, requested_end), full_duration)
+    if already_windowed:
+        selected_start = requested_start
+        selected_end = requested_start + arrived_duration
+    else:
+        selected_start = min(requested_start, max(0.0, full_duration - 1.0))
+        selected_end = full_duration if requested_end is None else min(max(selected_start + 0.5, requested_end), full_duration)
     if selected_end <= selected_start:
         raise RuntimeError("The selected source range is empty.")
     if wants_window:
@@ -3800,7 +3829,7 @@ def process(job_file: Path) -> None:
             "id": job["id"],
             "title": detected_title,
             "durationSec": duration,
-            "sourceFullDurationSec": full_duration,
+            "sourceFullDurationSec": known_full_duration,
             "sourceStartSec": selected_start,
             "sourceEndSec": selected_end,
             "templateId": job["template"]["id"],

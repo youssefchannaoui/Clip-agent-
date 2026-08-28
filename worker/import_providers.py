@@ -142,6 +142,16 @@ def download_https(
             scratch.unlink(missing_ok=True)
 
 
+def _float_or(value, fallback):
+    """A number, or the fallback. Windows arrive from JSON and may be null."""
+    try:
+        if value is None:
+            return fallback
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
 @dataclass
 class ImportedSource:
     file: Path
@@ -151,6 +161,14 @@ class ImportedSource:
     # fail on every job while ytdlp quietly carries it, and nothing surfaces
     # that until it is the job record's business to.
     provider: str = ""
+    # True when this file is ALREADY the selected stretch rather than the whole
+    # video. Whoever receives it must then not trim it again: cutting a file
+    # that starts at 10:00 as though it started at 0:00 renders the wrong
+    # moment with the right captions.
+    windowed: bool = False
+    # The whole video's length, when the downloader happened to learn it. A
+    # sectioned file cannot be measured for this, and the app shows the number.
+    source_duration_sec: float | None = None
 
 
 class ManagedImportProvider:
@@ -406,6 +424,10 @@ class YtDlpImportProvider(ManagedImportProvider):
             "merge_output_format": "mp4",
             "outtmpl": outtmpl + ".%(ext)s",
             "quiet": True,
+            # A section attempt that fails can leave a complete-looking file
+            # behind, and yt-dlp skips a download whose file already exists --
+            # the full retry would "succeed" by handing back the broken piece.
+            "overwrites": True,
             "no_warnings": True,
             "noplaylist": True,
             "socket_timeout": self.timeout,
@@ -413,41 +435,86 @@ class YtDlpImportProvider(ManagedImportProvider):
             "retries": 3,
         }
 
+        # Fetch only the stretch the customer selected. A 90-minute lecture is
+        # ~1.5GB through the proxy pool, and someone who picked three minutes of
+        # it was paying for all of it -- in bandwidth off a 250GB monthly plan,
+        # in disk on the box, and in the minutes before their job could start.
+        #
+        # No force_keyframes_at_cuts: that re-encodes the whole stretch to make
+        # the cut frame-exact, and the ffmpeg trim it replaces never was either
+        # (both land on the keyframe at or before the requested second, because
+        # both copy the stream). Paying minutes of transcode for precision the
+        # old path did not have would be a strange trade.
+        want_start = max(0.0, _float_or(source.get("windowStartSec"), 0.0))
+        want_end = _float_or(source.get("windowEndSec"), None)
+        wants_section = want_start > 0.05 or (want_end is not None and want_end > want_start)
+        learned: dict[str, float | None] = {}
+
+        def section_ranges(info_dict: dict, _ydl) -> list[dict]:
+            # yt-dlp overwrites info["duration"] with the SECTION's length once
+            # a range is chosen, so this callback is the one moment the whole
+            # video's length is still on the table. The app shows that number.
+            learned["durationSec"] = _float_or(info_dict.get("duration"), None)
+            end = want_end if want_end is not None else learned.get("durationSec")
+            if not end or end <= want_start:
+                return [{}]  # yt-dlp's own "the whole video"
+            return [{"start_time": want_start, "end_time": float(end)}]
+
+        # Two passes at most: the selected stretch, then -- only if that came to
+        # nothing -- the whole video. Saving bandwidth is an optimisation, and an
+        # optimisation that can cost someone their import is not one.
+        plans: list[dict] = ([{"download_ranges": section_ranges}] if wants_section else []) + [{}]
+
         produced = None
+        windowed = False
         failures: list[str] = []
-        for attempt, client in enumerate(YOUTUBE_CLIENTS):
-            if cancelled():
-                raise ImportProviderError("Job cancelled.")
-            options = dict(ydl_opts)
-            options.update(job_network_options(source, destination.parent))
-            if client:
-                # Merged, not assigned: youtube_network_options() may already
-                # carry the PO-token server in extractor_args, and replacing
-                # the dict wholesale would silently drop it -- the exact
-                # rotation that runs when the box is blocked is the one that
-                # needs the token most.
-                extractor = dict(options.get("extractor_args") or {})
-                extractor["youtube"] = {"player_client": [client]}
-                options["extractor_args"] = extractor
-            try:
-                with yt_dlp.YoutubeDL(options) as ydl:
-                    info = ydl.extract_info(youtube_url, download=True)
-                    info_holder["title"] = info.get("title", "") if isinstance(info, dict) else ""
-                    produced = Path(ydl.prepare_filename(info))
-                    if produced.suffix != ".mp4":
-                        produced = produced.with_suffix(".mp4")
+        for plan in plans:
+            section_pass = bool(plan)
+            for attempt, client in enumerate(YOUTUBE_CLIENTS):
+                if cancelled():
+                    raise ImportProviderError("Job cancelled.")
+                options = dict(ydl_opts)
+                options.update(plan)
+                options.update(job_network_options(source, destination.parent))
+                if client:
+                    # Merged, not assigned: youtube_network_options() may already
+                    # carry the PO-token server in extractor_args, and replacing
+                    # the dict wholesale would silently drop it -- the exact
+                    # rotation that runs when the box is blocked is the one that
+                    # needs the token most.
+                    extractor = dict(options.get("extractor_args") or {})
+                    extractor["youtube"] = {"player_client": [client]}
+                    options["extractor_args"] = extractor
+                try:
+                    with yt_dlp.YoutubeDL(options) as ydl:
+                        info = ydl.extract_info(youtube_url, download=True)
+                        info_holder["title"] = info.get("title", "") if isinstance(info, dict) else ""
+                        produced = Path(ydl.prepare_filename(info))
+                        if produced.suffix != ".mp4":
+                            produced = produced.with_suffix(".mp4")
+                        # Ask the downloader what it did rather than assume the
+                        # request was honoured. An extractor that ignores ranges
+                        # hands back the whole lecture, and calling that the
+                        # window is how the wrong ten minutes gets rendered.
+                        windowed = section_pass and isinstance(info, dict) and (
+                            info.get("section_start") is not None or info.get("section_end") is not None
+                        )
+                    break
+                except yt_dlp.utils.DownloadError as exc:
+                    message = str(exc)
+                    if "cancelled" in message.lower():
+                        raise ImportProviderError("Job cancelled.") from exc
+                    failures.append(f"{'section' if section_pass else 'full'}/{client or 'default'}: {message[:200]}")
+                    # Only a block is worth trying another client for. A private or
+                    # deleted video fails the same way on every one of them, and
+                    # walking the whole list just makes the user wait longer for the
+                    # same answer.
+                    if not _looks_blocked(message) or attempt == len(YOUTUBE_CLIENTS) - 1:
+                        if section_pass:
+                            break  # give the plain full download its turn
+                        raise ImportProviderError(_download_failure(failures)) from exc
+            if produced is not None:
                 break
-            except yt_dlp.utils.DownloadError as exc:
-                message = str(exc)
-                if "cancelled" in message.lower():
-                    raise ImportProviderError("Job cancelled.") from exc
-                failures.append(f"{client or 'default'}: {message[:200]}")
-                # Only a block is worth trying another client for. A private or
-                # deleted video fails the same way on every one of them, and
-                # walking the whole list just makes the user wait longer for the
-                # same answer.
-                if not _looks_blocked(message) or attempt == len(YOUTUBE_CLIENTS) - 1:
-                    raise ImportProviderError(_download_failure(failures)) from exc
 
         if produced is None or not produced.is_file():
             raise ImportProviderError("yt-dlp did not produce an output file.")
@@ -456,7 +523,10 @@ class YtDlpImportProvider(ManagedImportProvider):
             raise ImportProviderError("The imported video exceeds the configured download limit.")
         if produced != destination:
             produced.replace(destination)
-        return ImportedSource(destination, info_holder.get("title", ""))
+        return ImportedSource(
+            destination, info_holder.get("title", ""),
+            windowed=windowed, source_duration_sec=learned.get("durationSec"),
+        )
 
 
 # Consecutive transient poll failures tolerated before giving up on a SocialKit
