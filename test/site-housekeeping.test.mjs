@@ -117,3 +117,59 @@ test('the footer year is computed, not a number that goes stale', async () => {
   assert.ok(home.includes(`© ${new Date().getFullYear()} DeenClipped`),
     'a hardcoded year is a small lie that grows by one every January');
 });
+
+// ── Structured data ──────────────────────────────────────────────────────────
+// The rule for all of it: every schema restates something the page already
+// says. Schema that promises more than the page delivers is how rich results
+// get revoked, so these tests compare the JSON-LD against the rendered page
+// and the live config rather than against copies of the expected values.
+
+function ldBlocks(html) {
+  return [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)]
+    .map(match => JSON.parse(match[1]));
+}
+
+test('the landing page carries valid JSON-LD for the org, site, app and FAQ', async () => {
+  const home = await fetch(`${base}/`, { headers: { accept: 'text/html' } }).then(r => r.text());
+  const types = ldBlocks(home).map(schema => schema['@type']);
+  assert.deepEqual(
+    [...types].sort(),
+    ['FAQPage', 'Organization', 'SoftwareApplication', 'WebSite'],
+    'four schemas, each once',
+  );
+});
+
+test('the offers in the schema are the prices the pricing page shows', async () => {
+  const home = await fetch(`${base}/`, { headers: { accept: 'text/html' } }).then(r => r.text());
+  const app = ldBlocks(home).find(schema => schema['@type'] === 'SoftwareApplication');
+  assert.ok(app.offers?.length >= 2, 'the paid plans are offered');
+  const monthly = app.offers.find(offer => offer.name === 'Monthly plan');
+  // The config label is the same source the pricing page renders from, so
+  // matching it means matching the page.
+  const { config } = await import('../src/config.js');
+  const label = String(config.planPriceMonthlyLabel || '');
+  assert.ok(label.includes(monthly.price), `schema price ${monthly.price} must appear in the label "${label}"`);
+  assert.equal(monthly.priceCurrency, 'AUD', 'an A$ label is Australian dollars');
+  for (const offer of app.offers) {
+    assert.match(String(offer.price), /^[0-9]+(\.[0-9]{1,2})?$/, 'a price is a number, never "A$9"');
+  }
+});
+
+test('the FAQ schema asks exactly the questions the visitor can see', async () => {
+  const home = await fetch(`${base}/`, { headers: { accept: 'text/html' } }).then(r => r.text());
+  const faq = ldBlocks(home).find(schema => schema['@type'] === 'FAQPage');
+  const schemaQuestions = faq.mainEntity.map(item => item.name);
+  const visibleQuestions = [...home.matchAll(/<summary>([^<]+)<\/summary>/g)].map(match => match[1]);
+  assert.deepEqual(schemaQuestions, visibleQuestions,
+    'marked-up questions must be the visible ones — drift here is a rich-results policy violation');
+  for (const item of faq.mainEntity) {
+    assert.ok(item.acceptedAnswer?.text?.length > 20, `"${item.name}" carries its answer`);
+  }
+});
+
+test('pages that are not the product pitch carry the base schemas only', async () => {
+  const contact = await fetch(`${base}/contact`, { headers: { accept: 'text/html' } }).then(r => r.text());
+  const types = ldBlocks(contact).map(schema => schema['@type']).sort();
+  assert.deepEqual(types, ['Organization', 'WebSite'],
+    'no FAQ or offers claimed on pages that do not show them');
+});

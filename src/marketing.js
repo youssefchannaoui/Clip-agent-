@@ -54,10 +54,13 @@ function navActions(currentUser) {
   return `<div class="nav-actions"><a class="button text-button" href="/login?returnTo=/app">Sign in</a><a class="button primary compact" href="/login?returnTo=/app">Get started ${icon('arrow')}</a></div>`;
 }
 
-function layout({ base, currentUser, title, description, canonicalPath = '/', body }) {
+function layout({ base, currentUser, title, description, canonicalPath = '/', body, jsonLd = [] }) {
   const canonical = `${String(base || 'https://deenclipped.online').replace(/\/+$/, '')}${canonicalPath === '/' ? '' : canonicalPath}`;
   const safeTitle = escapeHtml(title);
   const safeDescription = escapeHtml(description);
+  // "</script>" inside a JSON string would end the block early; \u003c cannot.
+  const schemaBlocks = jsonLd.map(schema =>
+    `<script type="application/ld+json">${JSON.stringify(schema).replace(/</g, '\\u003c')}</script>`).join('\n  ');
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -74,10 +77,13 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:site_name" content="DeenClipped">
+  <meta property="og:locale" content="en_AU">
+  <meta property="og:image:alt" content="DeenClipped — lectures turned into captioned short clips">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="canonical" href="${canonical}">
+  ${schemaBlocks}
   <link rel="stylesheet" href="/marketing.css">
 </head>
 <body>
@@ -161,14 +167,95 @@ function tokenShop(currentUser = null) {
   return `<section class="token-shop reveal" id="token-shop"><div class="pricing-section-head"><span class="section-label">Token shop</span><h2>Add tokens without changing your plan.</h2><p>One-time top-ups work with free, weekly, monthly and yearly accounts. Purchased tokens stay available through subscription renewals until you use them.</p></div><div class="topup-grid">${packs.map(pack => `<article class="topup-card ${pack.popular ? 'popular' : ''}">${pack.popular ? '<span class="popular-label">Most popular</span>' : ''}<span class="plan-kicker">One-time purchase</span><h3>${escapeHtml(pack.name)}</h3><strong>+${escapeHtml(pack.tokens)}</strong><small>tokens</small><div class="topup-price">${escapeHtml(pack.price)}</div>${pack.enabled ? `<a class="button ${pack.popular ? 'primary' : 'secondary'} full" href="${accountUrl}">Open token shop</a>` : '<span class="button secondary full disabled" aria-disabled="true">Stripe price not configured</span>'}</article>`).join('')}</div><p class="token-shop-note">Stripe Checkout handles payment securely. DeenClipped never stores raw card details, and tokens are credited only after a verified successful Stripe webhook.</p></section>`;
 }
 
+/**
+ * One array drives both the FAQ the visitor reads and the FAQPage schema the
+ * crawler reads. Google's policy for FAQ rich results is that the marked-up
+ * questions match the visible ones -- keeping them as a single source is the
+ * only arrangement under which they cannot drift apart.
+ */
+export const FAQ_ITEMS = [
+  { q: 'What does DeenClipped do?',
+    a: 'DeenClipped turns long lectures and videos into short-form clips, lets you review and edit every result, then helps publish or schedule approved clips.' },
+  { q: 'Can I paste a YouTube link?',
+    a: 'Yes. You can begin with a supported video link or upload a video directly. DeenClipped then reads the source and lets you choose the processing range.' },
+  { q: 'Does publishing go to my own channel?',
+    a: "Yes. Each DeenClipped user connects their own supported social accounts, and publishing uses that user's saved connection." },
+  { q: 'Can I review clips before posting?',
+    a: 'Yes. The workflow is review-first. You can approve, edit, regenerate, shorten, lengthen or remove clips before they are posted.' },
+  { q: 'How are tokens calculated?',
+    a: 'One token represents one selected source-video minute. You see the estimated usage before confirming a generation.' },
+];
+
 function faqBlock() {
+  const items = FAQ_ITEMS.map(item =>
+    `<details><summary>${escapeHtml(item.q)}</summary><p>${escapeHtml(item.a)}</p></details>`).join('\n    ');
   return `<div class="faq reveal">
-    <details><summary>What does DeenClipped do?</summary><p>DeenClipped turns long lectures and videos into short-form clips, lets you review and edit every result, then helps publish or schedule approved clips.</p></details>
-    <details><summary>Can I paste a YouTube link?</summary><p>Yes. You can begin with a supported video link or upload a video directly. DeenClipped then reads the source and lets you choose the processing range.</p></details>
-    <details><summary>Does publishing go to my own channel?</summary><p>Yes. Each DeenClipped user connects their own supported social accounts, and publishing uses that user's saved connection.</p></details>
-    <details><summary>Can I review clips before posting?</summary><p>Yes. The workflow is review-first. You can approve, edit, regenerate, shorten, lengthen or remove clips before they are posted.</p></details>
-    <details><summary>How are tokens calculated?</summary><p>One token represents one selected source-video minute. You see the estimated usage before confirming a generation.</p></details>
+    ${items}
   </div>`;
+}
+
+/* ── Structured data ─────────────────────────────────────────────────────────
+ *
+ * JSON-LD, one block per schema. Everything in here restates something the
+ * page already says -- names, prices, questions -- because invented schema is
+ * the one thing that can get rich results revoked. Prices are parsed from the
+ * SAME config labels the pricing page renders, so the two cannot disagree.
+ */
+
+function siteBase(base) { return String(base || 'https://deenclipped.online').replace(/\/+$/, ''); }
+
+/** "A$29" -> { price: "29", currency: "AUD" }; null when unparseable rather than guessed. */
+function parsePriceLabel(label) {
+  const text = String(label || '').trim();
+  const match = text.match(/^(A\$|\$|£|€)\s*([0-9]+(?:\.[0-9]{1,2})?)$/);
+  if (!match) return null;
+  const currency = { 'A$': 'AUD', $: 'USD', '£': 'GBP', '€': 'EUR' }[match[1]];
+  return currency ? { price: match[2], currency } : null;
+}
+
+function organizationSchema(base) {
+  return {
+    '@context': 'https://schema.org', '@type': 'Organization',
+    name: 'DeenClipped', url: siteBase(base),
+    logo: `${siteBase(base)}/og-image.jpg`,
+    email: 'support@deenclipped.online',
+  };
+}
+
+function webSiteSchema(base) {
+  return { '@context': 'https://schema.org', '@type': 'WebSite', name: 'DeenClipped', url: siteBase(base) };
+}
+
+function softwareSchema(base) {
+  const monthly = parsePriceLabel(config.planPriceMonthlyLabel);
+  const offers = [
+    { name: 'Free', parsed: monthly ? { price: '0', currency: monthly.currency } : null },
+    { name: 'Weekly', parsed: parsePriceLabel(config.planPriceWeeklyLabel) },
+    { name: 'Monthly', parsed: monthly },
+    { name: 'Yearly', parsed: parsePriceLabel(config.planPriceYearlyLabel) },
+  ].filter(item => item.parsed).map(item => ({
+    '@type': 'Offer', name: `${item.name} plan`,
+    price: item.parsed.price, priceCurrency: item.parsed.currency,
+    url: `${siteBase(base)}/pricing`,
+  }));
+  const schema = {
+    '@context': 'https://schema.org', '@type': 'SoftwareApplication',
+    name: 'DeenClipped', url: siteBase(base),
+    applicationCategory: 'MultimediaApplication', operatingSystem: 'Web browser',
+    description: 'Turns long lectures and videos into review-ready short clips with captions, then publishes or schedules them to your own connected channels.',
+  };
+  if (offers.length) schema.offers = offers;
+  return schema;
+}
+
+function faqSchema() {
+  return {
+    '@context': 'https://schema.org', '@type': 'FAQPage',
+    mainEntity: FAQ_ITEMS.map(item => ({
+      '@type': 'Question', name: item.q,
+      acceptedAnswer: { '@type': 'Answer', text: item.a },
+    })),
+  };
 }
 
 export function home({ base, currentUser }) {
@@ -282,7 +369,8 @@ export function home({ base, currentUser }) {
 
     <section class="section final-section"><div class="wrap final-cta reveal"><div><span class="section-label">Start creating</span><h2>Turn the next lecture into clips worth watching.</h2><p>Bring in a source, choose the range and build a review-ready set of short clips in one connected workspace.</p></div><a class="button primary" href="/login?returnTo=/app">Open DeenClipped ${icon('arrow')}</a></div></section>
   </main>`;
-  return layout({ base, currentUser, title: 'DeenClipped — Turn Islamic lectures into ready-to-post clips', description: 'Turn Islamic lectures into ready-to-post clips with captions and nasheed — the worker transcribes, scores the moments and renders; you review before anything publishes.', canonicalPath: '/', body });
+  return layout({ base, currentUser, title: 'DeenClipped — Turn Islamic lectures into ready-to-post clips', description: 'Turn Islamic lectures into ready-to-post clips with captions and nasheed — the worker transcribes, scores the moments and renders; you review before anything publishes.', canonicalPath: '/', body,
+    jsonLd: [organizationSchema(base), webSiteSchema(base), softwareSchema(base), faqSchema()] });
 }
 
 export function features({ base, currentUser }) {
@@ -305,17 +393,20 @@ export function features({ base, currentUser }) {
       <div class="final-cta reveal"><div><span class="section-label">See it together</span><h2>Open one workspace instead of five separate tools.</h2><p>Start from the source video and continue through generation, review, editing and publishing.</p></div><a class="button primary" href="/login?returnTo=/app">Open DeenClipped ${icon('arrow')}</a></div>
     </div></section>
   </main>`;
-  return layout({ base, currentUser, title: 'Features — DeenClipped', description: 'Explore DeenClipped AI clipping, captions, templates, review, editing, scheduling and social publishing features.', canonicalPath: '/features', body });
+  return layout({ base, currentUser, title: 'Features — DeenClipped', description: 'Explore DeenClipped AI clipping, captions, templates, review, editing, scheduling and social publishing features.', canonicalPath: '/features', body,
+    jsonLd: [organizationSchema(base), webSiteSchema(base)] });
 }
 
 export function pricing({ base, currentUser }) {
   const body = `<main><section class="page-hero pricing-hero wrap"><span class="eyebrow"><i></i>Affordable creator pricing</span><h1>Choose a plan. Add tokens only when you need them.</h1><p>Pay for the selected source time you process. Subscription allowances refresh normally, while one-time top-up tokens remain in your wallet until used.</p><div class="pricing-trust"><span>Free starter access</span><span>Secure Stripe Checkout</span><span>No raw card storage</span></div></section><section class="page-content"><div class="wrap"><div class="pricing-section-head"><span class="section-label">Subscriptions</span><h2>Built for different publishing rhythms.</h2><p>Prices remain configuration-driven until the final Stripe products are confirmed.</p></div>${pricingCards(currentUser)}${tokenShop(currentUser)}<div class="pricing-explainer"><div><span class="section-label">How tokens work</span><h2>Clear before you render.</h2><p>DeenClipped reads the source duration, lets you select a start and end time, then estimates usage from that selected range. Subscription allowance is used before purchased top-ups.</p>${checkItem(`${config.tokensPerMinute} token per source minute`,'Usage follows the selected source window.')}${checkItem('Editing stays fair','Reviewing, template changes and ordinary template rerenders do not unnecessarily consume tokens.')}${checkItem('Top-ups persist','Purchased tokens do not disappear when a subscription renews or is cancelled.')}</div><div class="product-frame"><img src="/marketing-assets/workflow-premium.webp" alt="DeenClipped token and workflow overview"></div></div></div></section></main>`;
-  return layout({ base, currentUser, title: 'Pricing & Token Shop — DeenClipped', description: 'Compare DeenClipped free, weekly, monthly and yearly plans and optional one-time token packs.', canonicalPath: '/pricing', body });
+  return layout({ base, currentUser, title: 'Pricing & Token Shop — DeenClipped', description: 'Compare DeenClipped free, weekly, monthly and yearly plans and optional one-time token packs.', canonicalPath: '/pricing', body,
+    jsonLd: [organizationSchema(base), webSiteSchema(base), softwareSchema(base)] });
 }
 
 export function contact({ base, currentUser }) {
   const body = `<main><section class="page-hero wrap"><span class="eyebrow"><i></i>Contact</span><h1>Talk to DeenClipped.</h1><p>Questions about your account, publishing connections, billing or the clipping workflow can be sent directly to support.</p></section><section class="page-content"><div class="wrap"><div class="contact-card"><span class="contact-icon">${logoMark()}</span><h2>Support</h2><p>Email <a href="mailto:support@deenclipped.online">support@deenclipped.online</a></p><p>Include the email attached to your account and a short description of what happened.</p><a class="button primary" href="mailto:support@deenclipped.online">Email support</a></div></div></section></main>`;
-  return layout({ base, currentUser, title: 'Contact — DeenClipped', description: 'Contact DeenClipped support.', canonicalPath: '/contact', body });
+  return layout({ base, currentUser, title: 'Contact — DeenClipped', description: 'Contact DeenClipped support.', canonicalPath: '/contact', body,
+    jsonLd: [organizationSchema(base), webSiteSchema(base)] });
 }
 
 export function privacy({ base, currentUser }) {
