@@ -44,7 +44,11 @@ export function settingDefaults() {
     },
     publishingSettings: {
       enabled: false,
-      youtube: { enabled: false, accountId: '', privacy: 'private', categoryId: '22', notifySubscribers: true, madeForKids: false },
+      // Public, and not a setting. Youssef, 28 Aug 2026: "publishing to all
+      // should be AUTOMATICLY Public no settings needed IT MUST BE PUBLIC
+      // STRAIGHAWAY". The field stays in the shape so old records still load;
+      // nothing writes anything else to it.
+      youtube: { enabled: false, accountId: '', privacy: 'public', categoryId: '22', notifySubscribers: true, madeForKids: false },
       instagram: { enabled: false, accountId: '', shareToFeed: true },
       facebook: { enabled: false, accountId: '' },
       // privacy starts EMPTY on purpose. TikTok's content-sharing guidelines
@@ -316,7 +320,10 @@ export function publishingSettings(user) {
   const current = readSetting(user, 'publishingSettings') || {};
   return {
     ...fresh, ...current,
-    youtube: { ...fresh.youtube, ...(current.youtube || {}) },
+    // Read-time correction rather than a migration pass: an account that stored
+    // `private` back when the app had a control for it publishes publicly from
+    // the next upload, without anyone having to go and find the setting.
+    youtube: { ...fresh.youtube, ...(current.youtube || {}), privacy: 'public' },
     instagram: { ...fresh.instagram, ...(current.instagram || {}) },
     facebook: { ...fresh.facebook, ...(current.facebook || {}) },
     tiktok: { ...fresh.tiktok, ...(current.tiktok || {}) },

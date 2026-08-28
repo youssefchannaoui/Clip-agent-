@@ -81,42 +81,36 @@ test('other platforms are left exactly as they were', () => {
   assert.equal(social.platformDetail({}, 'YouTube', 'Service Unavailable'), 'Service Unavailable');
 });
 
-// ── YouTube can be published publicly ───────────────────────────────────────
+// ── YouTube publishes publicly, and it is not a setting ────────────────────
 
-test('the Studio can set a YouTube privacy other than private', async () => {
+test('an upload asks YouTube for public, whatever is stored', async () => {
+  // Youssef, 28 Aug 2026: "IT MUST BE PUBLIC STRAIGHAWAY no settings to
+  // chnage". The stored field survives for old records; nothing reads it.
+  const source = fs.readFileSync(path.join(ROOT, 'src/social.js'), 'utf8');
+  assert.match(source, /privacyStatus: 'public'/, 'the upload names public itself');
+  assert.doesNotMatch(source, /privacyStatus: target\.settings\.privacy/,
+    'and never takes it from a setting again');
+});
+
+test('a stored private is corrected on the way out', async () => {
   const state = await fetch(`${base}/api/state`).then(r => r.json());
-  const settings = state.publishingSettings || {};
   const res = await fetch(`${base}/api/publishing-settings`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ...settings, youtube: { ...(settings.youtube || {}), privacy: 'public' } }),
+    body: JSON.stringify({ ...state.publishingSettings, youtube: { ...state.publishingSettings.youtube, privacy: 'private' } }),
   });
   assert.equal(res.status, 200, await res.text());
   const after = await fetch(`${base}/api/state`).then(r => r.json());
   assert.equal(after.publishingSettings.youtube.privacy, 'public',
-    'the choice has to survive the round trip, or the panel is decoration');
+    'an account that stored private back when there was a control still posts publicly');
 });
 
-test('a privacy YouTube does not recognise is refused', async () => {
-  const state = await fetch(`${base}/api/state`).then(r => r.json());
-  const res = await fetch(`${base}/api/publishing-settings`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ...state.publishingSettings, youtube: { ...state.publishingSettings.youtube, privacy: 'everyone' } }),
-  });
-  assert.ok(res.status >= 400, 'an unknown privacy would be rejected by YouTube at upload time instead');
-});
-
-test('the Studio shell has a YouTube privacy control, not just the old page', () => {
-  // The control existed only on ?classic=1, which no customer reaches, so in
-  // the shipped product nobody could change it.
+test('the connections dialog offers no YouTube privacy control at all', () => {
   const host = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
-  assert.match(host, /paintYouTubeOptions/, 'the panel must be built');
-  assert.ok((host.match(/paintYouTubeOptions\(\)/g) || []).length >= 2,
-    'and painted wherever the connections dialog is painted — a panel nothing calls is unreachable');
-  assert.match(host, /data-yt="privacy"/);
+  assert.doesNotMatch(host, /data-yt="privacy"/, 'the picker is gone');
+  assert.doesNotMatch(host, /paintYouTubeOptions/, 'and so is the panel that held it');
   assert.match(host, /compliance audit/i,
-    'and it has to say that Google can override this, or a private upload reads as the app ignoring the choice');
+    'but the dialog still says Google can hold uploads private on its own, or a private video reads as the app ignoring this');
 });
 
 // ── the schedule names every destination ────────────────────────────────────

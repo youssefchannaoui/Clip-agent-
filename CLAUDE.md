@@ -373,15 +373,20 @@ THAN THAT IT SHOULD NEVER RE RENDER."
 Two "bugs" reported together turned out to be one app bug each plus one
 platform rule each. Keep them apart when triaging the next report.
 
-- **YouTube uploads arrived private.** The app's fault: `store.js` defaults
-  `youtube.privacy` to `private`, and the Studio shell had no control to change
-  it — only `?classic=1` ever had one, and no customer reaches that page. There
-  is now a YouTube panel in the connections dialog (`paintYouTubeOptions` in
-  `index.html`, built the same way as the TikTok one and for the same reason).
-  **But Google also locks uploads from an API project that has not passed the
-  compliance audit to private**, whatever the request asks for. The panel says
-  so when anything other than Private is chosen; without that line a private
-  upload reads as the app ignoring the choice.
+- **YouTube uploads arrived private.** Fixed twice. The app used to default
+  `youtube.privacy` to `private` with no control to change it; a panel was
+  added, and then **the whole idea was removed on 28 Aug** at Youssef's
+  instruction ("IT MUST BE PUBLIC STRAIGHAWAY no settings to chnage"). The
+  upload now names `privacyStatus: 'public'` itself, `publishingSettings()`
+  rewrites any stored value to `public` on read, and the connections dialog has
+  no privacy control at all. **But Google also locks uploads from an API
+  project that has not passed the compliance audit to private**, whatever the
+  request asks for — the dialog says so in one line, because without it a
+  private video reads as the app ignoring the instruction. **TikTok is the one
+  exception and must stay one:** its content-sharing guidelines require the
+  creator to choose a privacy level themselves with nothing preselected, so
+  that panel remains, and removing it would fail the very review that is
+  blocking TikTok posting.
 - **TikTok returned 403 with a link to the content-sharing guidelines.**
   TikTok refuses in two parts: a `code` that says which rule, and a `message`
   that is often only that link. `jsonRequest` preferred the message, so the

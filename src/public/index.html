@@ -254,18 +254,39 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 .studio-conn-head span { display: block; margin-top: 2px; font-size: 11.5px; color: #8B8B93; }
 .studio-conn-x { margin-left: auto; width: 28px; height: 28px; flex: none; border: 1px solid #26262A; border-radius: 8px; background: #17171A; color: #A2A2AA; font-size: 17px; line-height: 1; cursor: pointer; }
 .studio-conn-x:hover { color: #F2F2F4; border-color: #34343A; }
-.studio-conn-row { display: flex; align-items: center; gap: 11px; padding: 11px; border: 1px solid #1E1E22; border-radius: 11px; background: #0E0E11; }
-.studio-conn-row i { font-size: 19px; color: #BCBCC3; }
-.studio-conn-row .who { min-width: 0; flex: 1; }
-.studio-conn-row .who b { display: block; font-size: 12.5px; font-weight: 600; }
-.studio-conn-row .who span { display: block; font-size: 11px; color: #8B8B93; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.studio-conn-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; }
-.studio-conn-actions { display: flex; gap: 6px; flex: none; }
-.studio-conn-actions button { padding: 5px 10px; border-radius: 7px; font-family: inherit; font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid #26262A; background: #17171A; color: #A2A2AA; }
-.studio-conn-actions button.primary { border-color: rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6; }
-.studio-conn-actions button.danger:hover { border-color: #3A2A2A; color: #E3928C; }
-.studio-conn-actions button[disabled] { opacity: .45; cursor: not-allowed; }
-.studio-conn-foot { margin: 0; font-size: 11px; color: #6E6E76; line-height: 1.45; }
+/* One card per destination, laid out as a grid so the mark, the name, the
+   state and the switch each keep their own column instead of five things
+   competing for one flex line. The actions sit on their own row as quiet text,
+   because Connect and Disconnect are rare and were shouting. */
+.studio-conn-row {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr) auto auto;
+  grid-template-areas: 'mark who state switch' '. actions actions actions';
+  align-items: center; column-gap: 11px; row-gap: 7px;
+  padding: 12px 13px; border: 1px solid #1E1E22; border-radius: 12px; background: #0E0E11;
+  transition: border-color .16s ease, background .16s ease;
+}
+.studio-conn-row:hover { border-color: #26262A; background: #101013; }
+.studio-conn-mark { grid-area: mark; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; border: 1px solid #26262A; background: #17171A; }
+.studio-conn-mark i { font-size: 17px; }
+.studio-conn-row .who { grid-area: who; min-width: 0; }
+.studio-conn-row .who b { display: block; font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600; letter-spacing: -.01em; }
+.studio-conn-row .who span { display: block; margin-top: 1px; font-size: 11px; color: #8B8B93; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studio-conn-state { grid-area: state; display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; border: 1px solid #26262A; color: #8B8B93; white-space: nowrap; }
+.studio-conn-state.on { border-color: rgba(127,209,166,.34); color: #7FD1A6; }
+.studio-conn-state.idle { border-color: rgba(230,183,112,.3); color: #E6B770; }
+.studio-conn-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: currentColor; }
+.studio-conn-actions { grid-area: actions; display: flex; justify-content: flex-end; gap: 14px; }
+.studio-conn-actions button { padding: 0; border: 0; background: none; font-family: inherit; font-size: 11.5px; font-weight: 600; color: #8B8B93; cursor: pointer; transition: color .14s ease; }
+.studio-conn-actions button:hover { color: #F2F2F4; }
+.studio-conn-actions button.primary { color: #F0D6A6; }
+.studio-conn-actions button.danger:hover { color: #E3928C; }
+.studio-conn-actions button[disabled] { opacity: .4; cursor: not-allowed; }
+.studio-conn-foot { margin: 0; font-size: 11px; color: #6E6E76; line-height: 1.5; }
+/* Publishing is public and there is nothing to set, so the dialog says so once
+   -- including the one thing the app cannot deliver on its own. */
+.studio-conn-public { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 10px 12px; border: 1px solid rgba(127,209,166,.22); border-radius: 11px; background: rgba(127,209,166,.05); font-size: 11.5px; line-height: 1.5; color: #A9CBB8; }
+.studio-conn-public i { font-size: 14px; color: #7FD1A6; flex: none; margin-top: 1px; }
+#studioConnList { display: flex; flex-direction: column; gap: 9px; }
 /* Connecting an account does not switch it on — publishingSettings.<key>.enabled
    is a separate flag that defaults to false. Without this switch the modal said
    "Connected — not switched on" and offered no way to change it. */
@@ -705,24 +726,32 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
    declare commercial content themselves, and see the music declaration before
    posting. The design file has no slot for any of it, so it is built here and
    attached to the connections modal. */
-.dctk{width:100%;flex:1 1 100%;min-width:0;box-sizing:border-box;margin:14px 0 0;padding:14px;border:1px solid #26262A;border-radius:12px;background:#121214;font-size:12.5px;color:#BCBCC3}
-.dctk h4{margin:0 0 3px;font:600 13px Outfit,Inter,sans-serif;color:#F2F2F4}
-.dctk .dctk-sub{margin:0 0 12px;font-size:11.5px;color:#8B8B93}
-.dctk label.dctk-field{display:block;margin-bottom:11px}
-.dctk label.dctk-field>span{display:block;margin-bottom:5px;font-size:11.5px;color:#A2A2AA}
-.dctk select{width:100%;height:38px;padding:0 10px;border:1px solid #2C2C33;border-radius:9px;background:#0D0D0F;color:#F2F2F4;font:inherit;font-size:12.5px}
+/* The one settings panel left in the dialog. TikTok's own guidelines require
+   the creator to choose these -- nothing may be preselected -- so it stays,
+   and it is finished to the same standard as the connection rows rather than
+   reading like a raw form pasted underneath them. */
+.dctk{width:100%;flex:1 1 100%;min-width:0;box-sizing:border-box;margin:0;padding:15px 16px;border:1px solid #1E1E22;border-radius:12px;background:#0E0E11;font-size:12.5px;color:#BCBCC3}
+.dctk h4{margin:0 0 3px;font:600 13px Outfit,Inter,sans-serif;letter-spacing:-.01em;color:#F2F2F4}
+.dctk .dctk-sub{margin:0 0 13px;font-size:11.5px;line-height:1.5;color:#8B8B93}
+.dctk label.dctk-field{display:block;margin-bottom:13px}
+.dctk label.dctk-field>span{display:block;margin-bottom:6px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#8B8B93}
+.dctk select{width:100%;height:38px;padding:0 11px;border:1px solid #26262A;border-radius:9px;background:#121214;color:#F2F2F4;font:inherit;font-size:12.5px;transition:border-color .14s ease}
+.dctk select:hover{border-color:#34343A}
+.dctk select:focus{outline:0;border-color:rgba(217,180,120,.5)}
 .dctk select:disabled{opacity:.5;cursor:not-allowed}
-.dctk fieldset{margin:0 0 12px;padding:0;border:0}
-.dctk legend{padding:0;margin-bottom:6px;font-size:11.5px;color:#A2A2AA}
-.dctk .dctk-check{display:flex;align-items:flex-start;gap:8px;padding:5px 0;cursor:pointer;line-height:1.45}
-.dctk .dctk-check input{margin:2px 0 0;flex:none;accent-color:#D9B478}
+.dctk fieldset{margin:0 0 13px;padding:0;border:0}
+.dctk legend{padding:0;margin-bottom:7px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#8B8B93}
+.dctk .dctk-check{display:flex;align-items:flex-start;gap:9px;padding:7px 9px;margin-bottom:4px;border:1px solid transparent;border-radius:9px;cursor:pointer;line-height:1.45;transition:background .14s ease,border-color .14s ease}
+.dctk .dctk-check:hover{background:#121214;border-color:#1E1E22}
+.dctk .dctk-check input{margin:1px 0 0;flex:none;width:15px;height:15px;accent-color:#D9B478}
 .dctk .dctk-check input:disabled{opacity:.45}
 .dctk .dctk-check.is-off{opacity:.5;cursor:not-allowed}
-.dctk .dctk-sublist{margin:2px 0 0 24px;padding-left:11px;border-left:1px solid #26262A}
-.dctk .dctk-note{margin:12px 0 0;padding-top:11px;border-top:1px solid #1E1E22;font-size:11px;line-height:1.55;color:#8B8B93}
-.dctk .dctk-err{margin:10px 0 0;font-size:11.5px;color:#E3928C}
-.dctk .dctk-save{margin-top:12px;width:100%;height:40px;border:0;border-radius:10px;background:linear-gradient(180deg,#F0D6A6,#D9B478);color:#1E1608;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
-.dctk .dctk-save:disabled{opacity:.5;cursor:not-allowed}
+.dctk .dctk-sublist{margin:2px 0 0 22px;padding-left:12px;border-left:1px solid #1E1E22}
+.dctk .dctk-note{margin:13px 0 0;padding-top:12px;border-top:1px solid #1E1E22;font-size:11px;line-height:1.55;color:#8B8B93}
+.dctk .dctk-err{margin:10px 0 0;padding:9px 11px;border:1px solid rgba(227,146,140,.3);border-radius:9px;background:rgba(227,146,140,.06);font-size:11.5px;line-height:1.5;color:#E3928C}
+.dctk .dctk-save{margin-top:13px;width:100%;height:40px;border:0;border-radius:10px;background:linear-gradient(180deg,#F0D6A6,#D9B478);color:#1E1608;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;transition:filter .14s ease}
+.dctk .dctk-save:hover{filter:brightness(1.06)}
+.dctk .dctk-save:disabled{opacity:.5;cursor:not-allowed;filter:none}
 .dcw-veil{position:fixed;inset:0;z-index:120;display:grid;place-items:center;padding:24px;background:rgba(4,4,6,.72);backdrop-filter:blur(10px);opacity:0;animation:dcwIn .26s ease forwards}
 .dcw-veil.out{animation:dcwOut .18s ease forwards}
 @keyframes dcwIn{to{opacity:1}}
@@ -1518,6 +1547,7 @@ select:focus{outline:none;border-color:var(--blue)}
       <button type="button" class="studio-conn-x" data-conn-close aria-label="Close">&times;</button>
     </div>
     <div id="studioConnList"></div>
+    <p class="studio-conn-public"><i class="ph-fill ph-globe-hemisphere-west"></i><span>Every approved clip publishes publicly. There is nothing to choose &mdash; though YouTube can still hold an upload private on its own until the API project passes its compliance audit, whatever this app asks for.</span></p>
     <p class="studio-conn-foot">Instagram and Facebook share one Meta connection &mdash; connecting or disconnecting either affects both.</p>
   </div>
 </div>
@@ -4524,75 +4554,6 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        default ('private', store.js) was the only value a video could ever be
        uploaded with -- every clip went out private and nothing on screen said
        so, or offered a way to change it. */
-    let ytEl=null,ytBusy=false;
-    function paintYouTubeOptions(){
-      const connList=$('#studioConnList');
-      const provider=(((DATA||{}).social||{}).providers||{}).youtube||{};
-      if(!connList||!provider.connected){if(ytEl)ytEl.remove();ytEl=null;return}
-
-      const account=(provider.accounts||[])[0]||{};
-      const set=((DATA&&DATA.publishingSettings)||{}).youtube||{};
-      const shape=account.id||'-';
-      if(!ytEl||ytEl.dataset.shape!==shape){
-        if(ytEl)ytEl.remove();
-        ytEl=document.createElement('div');
-        ytEl.className='dctk';
-        ytEl.dataset.shape=shape;
-        ytEl.innerHTML=`<h4>YouTube posting options</h4>
-          <p class="dctk-sub">Used for new uploads. Videos already on the channel are never changed.</p>
-          <label class="dctk-field"><span>Who can see your uploads</span>
-            <select data-yt="privacy">
-              <option value="public">Everyone &mdash; public</option>
-              <option value="unlisted">Anyone with the link &mdash; unlisted</option>
-              <option value="private">Only you &mdash; private</option>
-            </select></label>
-          <fieldset><legend>On upload</legend>
-            <label class="dctk-check"><input type="checkbox" data-yt="notifySubscribers"><span>Notify subscribers</span></label>
-            <label class="dctk-check"><input type="checkbox" data-yt="madeForKids"><span>Made for kids</span></label>
-          </fieldset>
-          <p class="dctk-note" data-yt-note></p>
-          <p class="dctk-err" data-yt-err hidden></p>
-          <button type="button" class="dctk-save">Save YouTube options</button>`;
-
-        const q=k=>ytEl.querySelector(`[data-yt="${k}"]`);
-        /* 'private' is the stored default, so an account that has never had a
-           choice made shows the truth rather than a flattering guess. */
-        q('privacy').value=['public','unlisted','private'].includes(set.privacy)?set.privacy:'private';
-        q('notifySubscribers').checked=set.notifySubscribers!==false;
-        q('madeForKids').checked=Boolean(set.madeForKids);
-
-        const sync=()=>{
-          /* Said here because the setting alone cannot deliver it: Google locks
-             uploads from an API project that has not passed its compliance
-             audit to private, whatever the request asks for. Without this note
-             the only reading of a private video is that the app ignored the
-             choice. */
-          ytEl.querySelector('[data-yt-note]').textContent=q('privacy').value==='private'
-            ? 'Uploads stay private until you change this.'
-            : 'If uploads still arrive private, it is Google holding them: an API project that has not passed YouTube’s compliance audit cannot publish publicly, whatever is chosen here.';
-        };
-        ytEl.addEventListener('change',sync);
-        sync();
-
-        ytEl.querySelector('.dctk-save').onclick=()=>{
-          if(ytBusy)return;
-          const current=(DATA&&DATA.publishingSettings)||{};
-          const next={...current,youtube:{...(current.youtube||{}),
-            privacy:q('privacy').value,
-            notifySubscribers:q('notifySubscribers').checked,
-            madeForKids:q('madeForKids').checked}};
-          ytBusy=true;
-          const btn=ytEl.querySelector('.dctk-save');
-          btn.disabled=true;btn.textContent='Saving…';
-          studioDo(()=>api('/api/publishing-settings',{method:'POST',body:JSON.stringify(next)}),
-            'YouTube options saved',
-            msg=>{const err=ytEl&&ytEl.querySelector('[data-yt-err]');if(err){err.hidden=false;err.textContent=msg}})
-            .finally(()=>{ytBusy=false;if(ytEl){const b=ytEl.querySelector('.dctk-save');if(b){b.disabled=false;b.textContent='Save YouTube options'}}});
-        };
-      }
-      const host=connList.parentElement;
-      if(host&&ytEl.parentElement!==host)host.insertBefore(ytEl,connList.nextSibling);
-    }
 
     function paintLiveWork(vals){
       alive(liveEls.home);alive(liveEls.bar);
@@ -4733,14 +4694,19 @@ function renderStudio(){
         const colour=(r.heroDotStyle.match(/background: (#[0-9A-Fa-f]{6})/)||[])[1]||'#6E6E76';
         const off=/Not configured/.test(r.note);
         const linked=!off&&!/Connect to publish/.test(r.note);
-        /* One line, not two: when a platform has no API keys the handle and the
-           note said the same thing twice and truncated each other. */
-        const detail=off?'Not set up on the server yet':linked?`${r.handle} · ${r.note}`:'No account linked';
+        /* The pill beside the name says what state this is in, so the line
+           under it is just the account. It used to repeat the state as words
+           as well, and the two together truncated mid-sentence. */
+        const detail=off?'Not set up on the server yet':linked?r.handle:'No account linked';
         const on=/^Active$/.test(r.note);
+        /* Three states worth telling apart at a glance: publishing, connected
+           but switched off, and not connected at all. */
+        const stateClass=on?'on':linked?'idle':'';
+        const stateWord=off?'Unavailable':on?'Publishing':linked?'Paused':'Not connected';
         return `<div class="studio-conn-row">
-          <i class="${esc(r.icon)}"></i>
-          <span class="studio-conn-dot" style="background:${esc(colour)}"></span>
+          <span class="studio-conn-mark"><i class="${esc(r.icon)}" style="color:${esc(colour)}"></i></span>
           <span class="who"><b>${esc(r.name)}</b><span>${esc(detail)}</span></span>
+          <span class="studio-conn-state ${stateClass}">${linked?'<span class="studio-conn-dot"></span>':''}${esc(stateWord)}</span>
           <button type="button" class="studio-conn-switch" role="switch" aria-checked="${on}"
             aria-label="Publish to ${esc(r.name)}" title="${linked?(on?'Switched on — approved clips can post here':'Switched off — connected, but nothing will post'):'Connect an account first'}"
             data-conn-toggle="${i}" ${linked?'':'disabled'}><i></i></button>
@@ -4759,7 +4725,6 @@ function renderStudio(){
         const p=rows[Number(b.dataset.connDisconnect)];StudioAdapter.ui.connProvider=p.key;
         StudioAdapter.bindings(DATA).disconnect({preventDefault(){}})});
       paintTikTokOptions();
-      paintYouTubeOptions();
     }
     StudioAdapter.onOpenConnections=()=>{paintConnections();connEls.root.classList.remove('hide')};
     /* /api/clip-settings validates all three fields together, so a partial patch
@@ -5331,7 +5296,6 @@ function paintStudio(){
   STUDIO.render(vals);
   paintSetupCelebration(vals);
   paintTikTokOptions();
-  paintYouTubeOptions();
   paintLiveWork(vals);
   paintApplyLecture(vals);
   paintPreviewPic(vals);

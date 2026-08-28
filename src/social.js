@@ -607,7 +607,9 @@ function validateFor(next, userId) {
     if (!status.providers[provider].configured) throw new SocialError(`${provider} developer credentials are not configured.`);
     if (!selectedAccount(provider, item.accountId, userId)) throw new SocialError(`Choose a connected ${provider} account.`);
   }
-  if (!['private', 'unlisted', 'public'].includes(next.youtube?.privacy)) throw new SocialError('Choose a valid YouTube privacy setting.');
+  // YouTube uploads are public, full stop, so there is nothing here to accept
+  // or refuse -- an old stored value is simply corrected on the way through.
+  if (next.youtube) next.youtube.privacy = 'public';
   // Required only once TikTok is switched on. Demanding it unconditionally
   // would make every unrelated save fail, because nothing is pre-selected.
   const tiktokPrivacy = String(next.tiktok?.privacy || '');
@@ -861,7 +863,13 @@ async function uploadYouTube(clip, target, file, userId) {
         ...(hashtags.length ? { tags: hashtags } : {}),
       },
       status: {
-        privacyStatus: target.settings.privacy || 'private',
+        // Always public. There is no privacy control in the app and no stored
+        // value is consulted: a clip the person approved is a clip they meant
+        // to publish. (Google can still hold an upload private on its own --
+        // an API project that has not passed the compliance audit cannot
+        // publish publicly, whatever this asks for. That is Google's gate, not
+        // a setting anyone here can change.)
+        privacyStatus: 'public',
         selfDeclaredMadeForKids: Boolean(target.settings.madeForKids),
       },
     };
