@@ -470,6 +470,15 @@ class YtDlpImportProvider(ManagedImportProvider):
             end = want_end if want_end is not None else learned.get("durationSec")
             if not end or end <= want_start:
                 return [{}]  # yt-dlp's own "the whole video"
+            # That this callback ran AND returned a real range is the only
+            # reliable signal the download was sectioned. Measured against a
+            # live download on 28 Aug 2026: the range was honoured exactly --
+            # 120.0s of a 1579s video, 66.7MB instead of ~878MB -- and the
+            # returned info carried NO section_start or section_end. Reading
+            # them, as this used to, called every successful section a full
+            # download; clip_worker would then have trimmed the already-trimmed
+            # file a second time and cut a 120s source down to one second.
+            learned["asked"] = True
             return [{"start_time": want_start, "end_time": float(end)}]
 
         # Two passes at most: the selected stretch, then -- only if that came to
@@ -504,13 +513,13 @@ class YtDlpImportProvider(ManagedImportProvider):
                         produced = Path(ydl.prepare_filename(info))
                         if produced.suffix != ".mp4":
                             produced = produced.with_suffix(".mp4")
-                        # Ask the downloader what it did rather than assume the
-                        # request was honoured. An extractor that ignores ranges
-                        # hands back the whole lecture, and calling that the
-                        # window is how the wrong ten minutes gets rendered.
-                        windowed = section_pass and isinstance(info, dict) and (
-                            info.get("section_start") is not None or info.get("section_end") is not None
-                        )
+                        # Claimed only when a range was actually requested on
+                        # this attempt. It is still a claim, not a measurement:
+                        # an extractor that ignores ranges returns the whole
+                        # lecture and looks identical from here, so the caller
+                        # checks the file's real duration against the window
+                        # before trusting it (process() in clip_worker.py).
+                        windowed = bool(section_pass and learned.get("asked"))
                     break
                 except yt_dlp.utils.DownloadError as exc:
                     message = str(exc)

@@ -131,13 +131,26 @@ class SectionDownloadTests(unittest.TestCase):
                           "asking for a 'section' that is the whole video adds only a way to fail")
         self.assertFalse(imported.windowed)
 
-    def test_a_section_is_never_claimed_unless_the_downloader_confirms_it(self):
-        # An extractor that ignores ranges hands back the whole lecture. Calling
-        # that the window is how the wrong ten minutes gets rendered.
-        FakeYoutubeDL.script = [{"title": "Lecture"}]  # no section_start/section_end
+    def test_a_section_is_claimed_from_the_range_actually_requested(self):
+        # Measured against a live download on 28 Aug 2026: yt-dlp honoured the
+        # range exactly -- 120.0s of a 1579s video -- and the info it returned
+        # carried NO section_start or section_end. This used to read those keys,
+        # so every successful section was recorded as a full download, and
+        # clip_worker would have trimmed the already-trimmed file a second time
+        # and cut a 120s source down to one second.
+        FakeYoutubeDL.script = [{"title": "Lecture"}]  # exactly what yt-dlp returns
         imported = self.run_import({"url": URL, "windowStartSec": 600, "windowEndSec": 900})
-        self.assertIsNotNone(self.sections_asked_for(), "it was asked for")
-        self.assertFalse(imported.windowed, "but it was not delivered, so it must not be claimed")
+        self.assertIsNotNone(self.sections_asked_for(), "the range was requested")
+        self.assertTrue(imported.windowed,
+                        "a range that was requested and downloaded without objection is the window")
+
+    def test_the_whole_video_is_never_claimed_as_a_window(self):
+        # The callback returns yt-dlp's own "whole video" section when the
+        # window is unusable, and nothing may call that a section.
+        FakeYoutubeDL.script = [{"title": "Lecture"}]
+        imported = self.run_import({"url": URL, "windowStartSec": 9999, "windowEndSec": None})
+        self.assertEqual(self.sections_asked_for(), [{}])
+        self.assertFalse(imported.windowed)
 
     def test_a_refused_section_falls_back_to_the_whole_video(self):
         # Saving bandwidth is an optimisation. An optimisation that costs

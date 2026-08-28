@@ -3704,6 +3704,10 @@ def process(job_file: Path) -> None:
     # Already the selected stretch when the downloader fetched only that much,
     # which leaves nothing here to cut. The window still has to be reported --
     # the app shows it, and a later re-import from the URL is trimmed with it.
+    # The flag is a CLAIM, not a measurement: the downloader was asked for a
+    # range and raised no objection. An extractor that ignores ranges returns
+    # the whole lecture and is indistinguishable at that point, so the claim is
+    # checked against the file's real length below before anything acts on it.
     already_windowed = bool(job.get("sourceAlreadyWindowed"))
     wants_window = (requested_start > 0.05 or (requested_end is not None and requested_end > requested_start)) \
         and not already_windowed
@@ -3712,6 +3716,24 @@ def process(job_file: Path) -> None:
     arrived_duration = media_duration(job["ffprobe"], raw_source_file)
     if arrived_duration <= 0:
         raise RuntimeError("The downloaded source could not be read as video.")
+
+    # Check the claim. A sectioned file is about as long as the window asked
+    # for; a whole lecture wearing the flag is many times longer, and treating
+    # that as the window renders a stretch nobody selected. Falling back here
+    # costs one ffmpeg trim and is always safe -- the file simply gets cut the
+    # way it always was.
+    if already_windowed and requested_end is not None:
+        asked_for = requested_end - requested_start
+        if arrived_duration > asked_for + 30:
+            emit("warning", code="section_ignored",
+                 message="The downloader returned more than the selected range, so it was trimmed here instead.")
+            already_windowed = False
+            wants_window = True
+            if raw_source_file.resolve() == source_file.resolve():
+                # The trim reads and writes different paths, so the full file
+                # has to move aside before it can be cut into place.
+                raw_source_file = job_dir / "downloaded_source.mp4"
+                shutil.move(str(source_file), str(raw_source_file))
     # What the file measures is the selection, not the lecture, when only the
     # selection was fetched; the whole length then comes from the downloader.
     full_duration = arrived_duration
