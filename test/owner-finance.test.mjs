@@ -161,6 +161,69 @@ test('a due date nobody updated rolls forward instead of reporting months overdu
   owner.removeCost(ownerUser, once.id);
 });
 
+// Every other test here starts from an empty DATA_DIR, which takes the fresh
+// seed path. The deployment that matters took the other one: it was seeded
+// months ago and is carrying four rows with no amounts, so unless the revision
+// replays over them it learns nothing and the page keeps reporting zero burn.
+test('a ledger seeded before the receipts were read is brought up to date', async () => {
+  const savedLedger = state.ownerCosts;
+  const savedRevision = state.ownerCostsRevision;
+  try {
+    // Exactly the shape the old seeding produced.
+    state.ownerCosts = [
+      { id: 'cost_seed_1', name: 'Render — web service', vendor: 'Render', category: 'hosting', cadence: 'monthly', amountMinor: 0, currency: 'aud', nextDueAt: null, active: true },
+      { id: 'cost_seed_2', name: 'Hetzner — render worker', vendor: 'Hetzner', category: 'hosting', cadence: 'monthly', amountMinor: 0, currency: 'aud', nextDueAt: null, active: true },
+      { id: 'cost_seed_3', name: 'Cloudflare R2 — media storage', vendor: 'Cloudflare', category: 'storage', cadence: 'monthly', amountMinor: 0, currency: 'aud', nextDueAt: null, active: true },
+      { id: 'cost_seed_4', name: 'Domain — deenclipped.online', vendor: 'Registrar', category: 'domain', cadence: 'yearly', amountMinor: 0, currency: 'aud', nextDueAt: null, active: true },
+    ];
+    delete state.ownerCostsRevision;
+
+    const ledger = owner.costs(ownerUser);
+    const byName = name => ledger.find(row => row.name === name);
+
+    // Filled in place: same row, now carrying the invoice's figure.
+    const render = byName('Render — web service');
+    assert.equal(render.id, 'cost_seed_1', 'the existing row is updated, not duplicated');
+    assert.equal(render.amountMinor, 174);
+    assert.equal(render.currency, 'usd');
+    assert.ok(render.nextDueAt > Date.now(), 'and its date is live, not the anchor in the past');
+
+    // Vendors the old seed never knew about have to arrive.
+    assert.equal(byName('Webshare — proxy pool')?.amountMinor, 600);
+    assert.ok(byName('Anthropic — Claude Pro'), 'Claude Pro is added');
+    assert.equal(byName('Anthropic — Claude Pro').needsAmount, true, 'with no amount invented for it');
+
+    // And the ones with no receipt stay exactly as they were.
+    for (const name of ['Hetzner — render worker', 'Cloudflare R2 — media storage', 'Domain — deenclipped.online']) {
+      assert.equal(byName(name).amountMinor, 0, `${name} is left blank`);
+    }
+    assert.equal(ledger.filter(row => row.name === 'Render — web service').length, 1, 'no row is duplicated');
+  } finally {
+    state.ownerCosts = savedLedger;
+    state.ownerCostsRevision = savedRevision;
+  }
+});
+
+// A figure the owner typed is better than ours and must survive the replay.
+test('the seed replay never overwrites an amount the owner set themselves', async () => {
+  const savedLedger = state.ownerCosts;
+  const savedRevision = state.ownerCostsRevision;
+  try {
+    state.ownerCosts = [
+      { id: 'cost_seed_1', name: 'Render — web service', vendor: 'Render', category: 'hosting', cadence: 'monthly', amountMinor: 4200, currency: 'aud', nextDueAt: Date.UTC(2026, 0, 9, 12), active: true },
+    ];
+    delete state.ownerCostsRevision;
+
+    const render = owner.costs(ownerUser).find(row => row.name === 'Render — web service');
+    assert.equal(render.amountMinor, 4200, 'their amount stands');
+    assert.equal(render.currency, 'aud', 'and so does their currency');
+    assert.equal(new Date(render.nextDueAt).getUTCDate(), 9, 'and their billing day');
+  } finally {
+    state.ownerCosts = savedLedger;
+    state.ownerCostsRevision = savedRevision;
+  }
+});
+
 // The roll is the whole reason these dates can be left alone, so it has to land
 // on the day the vendor actually charges. Stepping by 30 days walks a monthly
 // bill backwards through the calendar -- twelve steps is 360 days -- and that
