@@ -400,6 +400,43 @@ with no laptop, no local state and no earlier conversation.
   the other, and the phone branch sat unmerged for hours with a real owner
   ledger on it. Merge it back to `deenclipped-v2-2` rather than leaving two
   truths, and check for overlap before starting anything large.
+- **Finish both halves.** See *Finishing a piece of work* below: a push ships
+  the web app and nothing else. If a session cannot reach the box, it has to
+  say the worker is still on the old code rather than let the push imply
+  otherwise.
+
+## Finishing a piece of work — BOTH halves, every time
+
+Youssef, 28 Aug 2026: "so it always pushes github and hetzner once its done
+also cause it may be a mix up". The mix-up is real and has happened twice: the
+box sat on `72fea1a` for weeks with every worker change pushed, green and not
+running, and a phone branch sat unmerged with an owner ledger on it.
+
+**A push is half a deploy.** Render takes the web app off `deenclipped-v2-2`
+automatically. NOTHING takes the worker. Run this checklist to the end before
+saying a thing is done:
+
+1. `npm run check` and `npm test` green locally.
+2. Bump `package.json` if `src/` or `worker/` changed (CI fails otherwise), and
+   update the test counts in **Verification standard**.
+3. Commit and push.
+4. **If `worker/` changed, deploy the box** — it does not happen on its own:
+   ```
+   ssh -i ~/.ssh/deenclipped_worker root@135.181.149.182
+   cd /opt/deenclipped && git pull && bash worker/deploy.sh
+   ```
+   Then prove it landed, because a clean build log does not:
+   `git log --oneline -1` on the box names the commit you pushed, and
+   `docker exec worker-deenclipped-worker-1 grep -c <something new> /app/worker/<file>`
+   finds your change inside the running container.
+5. Confirm CI went green (`gh run list --branch deenclipped-v2-2 --limit 2`).
+   A red branch is worse than no branch when the next session is on a phone.
+6. Screenshot anything visible at desktop width and put it in the reply.
+
+**Before starting anything large, check for the other session.**
+`git fetch && git log --oneline origin/deenclipped-v2-2..origin/<their-branch>`.
+Two sessions independently fixed the same `DESIGN/` case bug on 28 Aug. Merge
+phone work back to `deenclipped-v2-2` rather than leaving two truths.
 
 ## Releasing
 
