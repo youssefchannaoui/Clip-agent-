@@ -1450,11 +1450,27 @@
 
   // ── navigation ────────────────────────────────────────────────────────────
 
+  // Short names for the phone tab bar. A 375px screen divided by five leaves
+  // about 70px a tab, and "Lecture library" simply does not fit -- it rendered
+  // as "Lecture lib...", which is a label that has stopped being one.
+  var NAV_SHORT = {
+    home: 'Home', library: 'Library', queue: 'Review', schedule: 'Schedule',
+    templates: 'Styles', music: 'Nasheed', performance: 'Stats', owner: 'Owner',
+  };
+  // Five is the most a phone tab bar can carry. Nasheed, Performance and Owner
+  // come off it rather than being squeezed: two of them ran clean off the right
+  // edge of the screen, which is worse than not being in the bar at all. They
+  // stay reachable from the account menu.
+  var NAV_PRIMARY = { home: 1, library: 1, queue: 1, schedule: 1, templates: 1 };
+
   function navItem(key, label, icon, count) {
     var on = UI.screen === key;
     var open = UI.railOpen && (global.innerWidth || 1280) > 820;
     return {
       label: label,
+      short: NAV_SHORT[key] || label,
+      // Read only by the phone stylesheet; on a wide screen every item shows.
+      mobileClass: NAV_PRIMARY[key] ? 'dc-nav-primary' : 'dc-nav-secondary',
       icon: icon,
       count: count || '',
       click: function (e) { stop(e); setUI({ screen: key, menuOpen: false, bellOpen: false }); },
@@ -4932,6 +4948,15 @@
       // screen you were already on, and "Help & guides" sold you the product
       // you had already bought.
       accountSettings: function (e) { stop(e); global.StudioAdapter.onAccountSettings(); },
+      // The three destinations that come off the phone tab bar. Hidden on
+      // desktop, where they are already in the rail; a screen you can reach
+      // from exactly one place, and that place is off-screen, is not reachable.
+      goMusic: function (e) { stop(e); setUI({ screen: 'music', menuOpen: false }); },
+      goPerformance: function (e) { stop(e); setUI({ screen: 'performance', menuOpen: false }); },
+      goOwner: function (e) { stop(e); setUI({ menuOpen: false }); global.StudioAdapter.onOpenOwner(); },
+      ownerMenuStyle: isOperator(DATA)
+        ? 'display: none; align-items: center; gap: 9px; padding: 8px 9px; border-radius: 8px; color: #E9E9ED; font-size: 12.5px;'
+        : 'display: none !important;',
       helpGuides: function (e) { stop(e); global.StudioAdapter.onContactSupport(); },
       signOut: function (e) { stop(e); global.StudioAdapter.onSignOut(); },
 
@@ -5712,6 +5737,7 @@
     onMoreClips: function () {},
     onRetryProject: function () {},
     onAccountSettings: function () {},
+    onOpenOwner: function () { global.location.href = '/owner'; },
     onContactSupport: function () {},
     onDownloadClips: function () {},
     // Sends any pending clip-style edit immediately instead of waiting out the

@@ -3546,3 +3546,57 @@ test('the crop controls follow the fit mode', () => {
   assert.match(blurred.edCropRowStyle, /display: none/,
     'blur shows the whole source, so there is nothing to reposition');
 });
+
+// ── the phone tab bar ──────────────────────────────────────────────────────
+// The left rail took 67-140px of the only dimension a phone is short of, and
+// everything beside it was crushed: three-word buttons wrapping to three lines,
+// a failure message reading one word per line with a button printed over it.
+
+test('every nav item carries a short name and knows if it belongs in the tab bar', () => {
+  const vals = renderScreen('home').vals;
+  const items = [].concat(vals.navHome, vals.navProduce, vals.navSetup);
+  assert.ok(items.length >= 6);
+  for (const item of items) {
+    assert.ok(item.short, `${item.label} has no short name for the tab bar`);
+    assert.ok(item.short.length <= 9,
+      `"${item.short}" will not fit a fifth of a 375px screen`);
+    assert.match(item.mobileClass, /dc-nav-(primary|secondary)/);
+  }
+});
+
+test('exactly five destinations are primary — the most a tab bar can carry', () => {
+  const vals = renderScreen('home').vals;
+  const items = [].concat(vals.navHome, vals.navProduce, vals.navSetup);
+  const primary = items.filter(i => i.mobileClass === 'dc-nav-primary');
+  assert.equal(primary.length, 5,
+    `expected 5 tabs, got ${primary.length}: ${primary.map(p => p.short).join(', ')}`);
+  assert.deepEqual(primary.map(p => p.short), ['Home', 'Library', 'Review', 'Schedule', 'Styles']);
+});
+
+test('what comes off the tab bar is still reachable from the account menu', () => {
+  const vals = renderScreen('home').vals;
+  for (const hook of ['goMusic', 'goPerformance', 'goOwner']) {
+    assert.equal(typeof vals[hook], 'function',
+      `${hook} is missing — a screen reachable from exactly one place, and that place hidden, is not reachable`);
+  }
+  const { missing } = render(STUDIO_TEMPLATE, vals);
+  for (const hook of ['goMusic', 'goPerformance', 'goOwner']) {
+    assert.ok(!missing.includes(hook), `${hook} is a dead control: ${JSON.stringify(missing)}`);
+  }
+});
+
+test('the mobile rules never widen a column container into a second column', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'src/public/studio-responsive.css'), 'utf8');
+  // flex-basis:100% on a column container sizes the HEIGHT, and with wrapping
+  // on it breaks into a second column and throws children out sideways. That
+  // put a plan card's button 147px outside the card it belongs to.
+  const risky = css.match(/^[^\n@}]*(flex-wrap: wrap|flex: 1 1 100%)/gm) || [];
+  const rules = css.split('}').filter(block => /flex-wrap: wrap|flex: 1 1 100%/.test(block));
+  for (const rule of rules) {
+    const selector = rule.split('{')[0];
+    if (!/\[style\*=/.test(selector)) continue;
+    assert.match(selector, /:not\(\[style\*="flex-direction: column"\]\)/,
+      `a style-attribute selector that wraps must exclude column containers:\n${selector.trim()}`);
+  }
+  assert.ok(risky.length >= 0);
+});

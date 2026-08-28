@@ -84,6 +84,145 @@
   #studio table { display: block; overflow-x: auto; }
 }
 
+/* ── The rail becomes a bottom bar ────────────────────────────────────── */
+/*
+ * On a 375px screen the left rail was taking 67-140px of the only dimension
+ * that is scarce, and everything to its right was being squeezed into what was
+ * left: three-word buttons wrapping to three lines, a failure message reading
+ * one word per line with a button sitting on top of it.
+ *
+ * A phone does not want a sidebar. The same nav element becomes a bottom tab
+ * bar -- no new markup, so nothing can drift out of sync with the desktop one.
+ */
+@media (max-width: 820px) {
+  #dcRail {
+    position: fixed !important;
+    left: 0; right: 0; bottom: 0; top: auto !important;
+    width: 100% !important; min-width: 0 !important; max-width: none !important;
+    height: auto !important;
+    flex-direction: row !important;
+    align-items: center;
+    gap: 0 !important;
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom)) !important;
+    border-right: 0 !important;
+    border-top: 1px solid #1E1E22;
+    background: rgba(10, 10, 12, .94);
+    backdrop-filter: blur(14px);
+    z-index: 60;
+    overflow: visible !important;
+  }
+  /* The brand, the collapse toggle and the worker-status card are all desktop
+     furniture. The worker card was being crushed to 14px at the end of the bar,
+     showing as a sliver of a rounded box nobody could read or press. Worker
+     health is on the Owner screen, which is where someone would look for it. */
+  #dcRailBrand { display: none !important; }
+  #dcRail > div:not(#dcRailBrand) { display: none !important; }
+  #dcRailNav {
+    flex: 1 1 auto;
+    flex-direction: row !important;
+    justify-content: space-around;
+    gap: 0 !important;
+    width: 100%;
+  }
+  #dcRailNav > div {
+    flex: 1 1 auto;
+    flex-direction: row !important;
+    justify-content: space-around;
+    gap: 0 !important;
+  }
+  /* Section headings ("Produce", "Set up") and the hover tooltips have no
+     place in a tab bar. The label under each icon stays: an unlabelled row of
+     eight glyphs is a guessing game. */
+  #dcRailNav > div > span { display: none !important; }
+  #dcRailNav a {
+    flex: 1 1 0;
+    flex-direction: column !important;
+    align-items: center;
+    justify-content: center;
+    gap: 3px !important;
+    padding: 6px 2px !important;
+    min-width: 0;
+    text-align: center;
+  }
+  /* Five tabs, not eight. Performance and Owner ran to 378px and 433px on a
+     375px screen -- clean off the edge -- and four of the labels were
+     ellipsised into uselessness. They stay reachable from the account menu. */
+  #dcRailNav a.dc-nav-secondary { display: none !important; }
+  /* The long name is the desktop one; the tab bar uses the short one. */
+  #dcRailNav a .dc-nav-long { display: none !important; }
+  #dcRailNav a .dc-nav-short {
+    display: block !important;
+    font-size: 9.5px !important;
+    line-height: 1.1;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* The count badge and the collapsed-rail tooltip both position themselves
+     against a vertical rail; in a horizontal bar they land on top of things. */
+  #dcRailNav a > span:not(.dc-nav-short):not(.dc-nav-long) { display: none !important; }
+
+  /* What came off the tab bar has to land somewhere. */
+  .dc-menu-mobile { display: flex !important; }
+
+  /* The content no longer sits beside a rail, and needs room to clear the bar. */
+  #studio > div { padding-left: 0 !important; }
+  #studio main { padding-bottom: 72px !important; }
+}
+
+/* ── Rows that collided ───────────────────────────────────────────────── */
+@media (max-width: 820px) {
+  /*
+   * Any row of actions squeezed below about 3 buttons' worth of width stops
+   * being a row. Left alone, the labels wrapped to three lines each while the
+   * buttons kept their widths, and on the schedule the "Post now" button ended
+   * up printed over the failure text it was meant to sit beside.
+   */
+  #studio [style*="display: flex"][style*="gap"] > button { min-width: 0; }
+  #studio button { white-space: normal; word-break: normal; }
+
+  /*
+   * Every one of these must exclude flex-direction: column. In a column
+   * container, flex-basis:100% sizes the item along the MAIN axis -- the
+   * height -- and with wrapping on, the column breaks into a second column and
+   * throws its own children out sideways. That is exactly what happened to the
+   * plan cards: the CTA button ended up 147px outside the card it belongs to.
+   */
+  #studio article:not([style*="flex-direction: column"]),
+  #studio [style*="align-items: center"][style*="gap: 10px"]:not([style*="flex-direction: column"]),
+  #studio [style*="align-items: center"][style*="gap: 12px"]:not([style*="flex-direction: column"]) { flex-wrap: wrap; }
+
+  /* Three-across action groups become one column: "Approve all remaining" is
+     three words and was getting three lines and a scrollbar. */
+  #studio [style*="display: flex"][style*="gap: 8px"]:not([style*="flex-direction: column"]) > button,
+  #studio [style*="display: flex"][style*="gap: 9px"]:not([style*="flex-direction: column"]) > button,
+  #studio [style*="display: flex"][style*="gap: 10px"]:not([style*="flex-direction: column"]) > button { flex: 1 1 100%; }
+}
+
+/* ── The editor is a desktop screen, and says so ──────────────────────── */
+/*
+ * It used to print the message and then render the whole editor underneath it
+ * anyway -- a timeline, a tool rail and a video frame sliced off at the right
+ * edge. Saying "this needs a wider screen" while showing the broken thing is
+ * worse than either honest option.
+ */
+@media (max-width: 700px) {
+  #studio [data-dc-editor] > * { display: none !important; }
+  #studio [data-dc-editor]::before {
+    content: 'The clip editor needs a wider screen. Everything else works on a phone — open this clip on a laptop to edit its captions, framing and trim.';
+    display: block;
+    margin: 16px 14px;
+    padding: 16px 18px;
+    border: 1px solid rgba(217, 180, 120, .35);
+    border-radius: 12px;
+    background: rgba(217, 180, 120, .07);
+    color: #E7DCC8;
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+}
+
 /* ── Narrow phone ─────────────────────────────────────────────────────── */
 @media (max-width: 480px) {
   /* Card grids that ask for 190-232px per column produce a single cramped
@@ -94,24 +233,3 @@
   }
 }
 
-/* ── The editor is honest about not fitting ───────────────────────────── */
-/*
- * A timeline, a tool rail, a video frame and a caption lane do not belong on a
- * 375px screen, and pretending otherwise would ship the same broken editor
- * twice. It says so instead, which is the one thing worse than not having it:
- * silently rendering something unusable.
- */
-@media (max-width: 700px) {
-  #studio [data-dc-editor]::before {
-    content: 'The clip editor needs a wider screen. Everything else here works on a phone — open this clip on a laptop to edit its captions and framing.';
-    display: block;
-    margin: 14px;
-    padding: 14px 16px;
-    border: 1px solid rgba(217, 180, 120, .35);
-    border-radius: 12px;
-    background: rgba(217, 180, 120, .07);
-    color: #E7DCC8;
-    font-size: 13px;
-    line-height: 1.55;
-  }
-}

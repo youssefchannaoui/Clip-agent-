@@ -99,6 +99,12 @@ test('the password field can be revealed, from a file rather than an inline bloc
   const body = await script.text();
   assert.match(body, /input\[type="password"\]/);
   assert.match(body, /aria-pressed/, 'the toggle must say its state, not just look different');
+  // The visible label is an icon now, so the accessible name is the only thing
+  // carrying the meaning for anyone not looking at it.
+  assert.match(body, /aria-label', shown \? 'Show password' : 'Hide password'/,
+    'the label has to change with the state');
+  assert.match(body, /<svg/, 'an icon, not a word — it takes less room beside the field');
+  assert.match(body, /aria-hidden="true"/, 'and the svg itself must not be announced twice');
 });
 
 test('the reset page gets the same reveal', async () => {
