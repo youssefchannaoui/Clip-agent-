@@ -115,7 +115,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **764 JS + 389 Python**
+- `npm test` and `npm run check` must pass. Currently **779 JS + 389 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -415,6 +415,33 @@ with no laptop, no local state and no earlier conversation.
   changes sit unrun on the box until someone runs the deploy in the Deploys
   section above. A worker change that is committed, green and pushed is still
   not live.
+
+## Analytics & the owner tab (v3.16.0)
+
+- **First-party web metrics** live in `src/metrics.js`, hooked once in
+  server.js: pageviews on an allowlist of public paths, daily uniques via a
+  daily-rotating salted hash, referrer hosts and UTM pairs, all aggregated per
+  UTC day in `state.webMetrics` with 90-day retention and capped maps. No raw
+  IP or user agent ever persists — a test asserts it against the state bytes.
+  **Signed-in operators are excluded**, so the owner's own visits never show
+  and local AUTH_REQUIRED=false records nothing (everyone is the admin).
+  Signups, revenue and posts are DERIVED at read time from authUsers,
+  revenueEvents and clips, so they predate capture; pageviews start at the
+  deploy that added this.
+- **The Owner rail item opens an in-studio Analytics screen** (`analytics`),
+  fed by owner-gated `/api/owner/webmetrics`; the money ledger stays on
+  `/owner`, linked from the tab. The numbers are cached by the host across
+  state polls because `/api/state` replaces DATA wholesale.
+- **A pending cancellation is visible.** Stripe keeps a cancelled-at-period-end
+  subscription `active`, so `cancel_at_period_end` is captured from the
+  webhook, exposed as `current.cancelAtPeriodEnd`/`cancelAt`, shown as an
+  "Ending soon" pill with the spelled-out end date, and a Resume button (drawn
+  only then) hits `/api/billing/resume`. Cancelling itself goes through the
+  Stripe portal, per Youssef's call on the v3.15.0 rebuild.
+- **Marketing pages carry JSON-LD** (Organization, WebSite, SoftwareApplication
+  with offers parsed from the SAME config price labels the page renders, and a
+  FAQPage built from the array that renders the visible FAQ). Tests compare
+  schema against the rendered page, so they cannot drift.
 
 ## Open items
 

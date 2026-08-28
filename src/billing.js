@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import * as auth from './auth.js';
 import { config } from './config.js';
 import * as ownerFeed from './owner-feed.js';
+import * as metrics from './metrics.js';
 import { state, save, log } from './store.js';
 
 const now = () => Date.now();
@@ -356,6 +357,10 @@ export function publicBilling(user) {
       periodStart: billing.periodStart || null,
       periodEnd: billing.periodEnd || null,
       periodEndsInDays,
+      cancelAtPeriodEnd: Boolean(billing.cancelAtPeriodEnd),
+      // Stripe's own cancel_at when it sent one, else the period end -- which is
+      // when access actually stops either way.
+      cancelAt: billing.cancelAtPeriodEnd ? (billing.cancelAt || billing.periodEnd || null) : null,
       trial,
       freeTrial: unlimited ? { endsAt: null, daysLeft: null, expired: false } : freeWindow(user, billing),
       stripeCustomerId: billing.stripeCustomerId || '',
@@ -650,6 +655,7 @@ async function switchSubscriptionPlan(user, subscription, plan) {
 }
 
 export async function createCheckoutSession(user, planId) {
+  metrics.event('checkout_started');
   ensureBillingState();
   if (!user) throw new Error('Sign in to continue.');
   const plan = plans()[planId];
@@ -752,6 +758,50 @@ export function grantTopup(user, packageId, references = {}) {
   return { granted: pack.tokens, balance: billing.bonusTokens, event };
 }
 
+/**
+ * Cancel at the end of the paid period, or take that cancellation back.
+ *
+ * Never an immediate cancel. They have paid through the period, the tokens for
+ * it are already theirs, and cutting access on the day they cancel would be
+ * taking back something sold. Stripe keeps the subscription live and sends
+ * `customer.subscription.deleted` when the period actually ends, which is what
+ * flips the account to free -- so the wind-down needs no scheduling here.
+ *
+ * The local flag is written from Stripe's response rather than from the
+ * argument, and without waiting for the webhook: the customer is looking at
+ * the screen right now, and a cancel that appears to do nothing is one they
+ * will either do again or charge back.
+ */
+export async function setCancelAtPeriodEnd(user, cancel = true) {
+  ensureBillingState();
+  if (!user) throw new Error('Sign in to continue.');
+  if (isUnlimited(user)) throw new Error('This account has no subscription to cancel.');
+  const billing = ensureUserBilling(user);
+  const subscriptionId = String(billing.stripeSubscriptionId || '');
+  if (!subscriptionId) throw new Error('There is no active subscription on this account.');
+  const subscription = await stripeRequest(`/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    cancel_at_period_end: cancel ? 'true' : 'false',
+  });
+  billing.cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
+  billing.cancelAt = secondsToMs(subscription.cancel_at) || null;
+  if (secondsToMs(subscription.current_period_end)) {
+    billing.periodEnd = secondsToMs(subscription.current_period_end);
+  }
+  user.updatedAt = now();
+  save();
+  log(
+    billing.cancelAtPeriodEnd
+      ? `Subscription for ${user.email || user.id} will end at the close of the paid period.`
+      : `Subscription for ${user.email || user.id} was resumed before it ended.`,
+    'info', user.id,
+  );
+  return {
+    cancelAtPeriodEnd: billing.cancelAtPeriodEnd,
+    cancelAt: billing.cancelAtPeriodEnd ? (billing.cancelAt || billing.periodEnd || null) : null,
+    periodEnd: billing.periodEnd || null,
+  };
+}
+
 export async function createPortalSession(user) {
   ensureBillingState();
   if (!user) throw new Error('Sign in to continue.');
@@ -814,6 +864,12 @@ function updateFromSubscription(subscription = {}) {
   billing.stripePriceId = subscription.items?.data?.[0]?.price?.id || billing.stripePriceId || '';
   billing.periodStart = nextPeriodStart;
   billing.periodEnd = secondsToMs(subscription.current_period_end) || (nextPeriodStart + periodMs(plan));
+  // A cancellation that has not taken effect yet. Stripe keeps the
+  // subscription active and sends `deleted` at period end, so this flag is the
+  // ONLY signal that it is winding down -- without it a cancelled customer sees
+  // "Current plan" with no end date and reasonably concludes it did not work.
+  billing.cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
+  billing.cancelAt = secondsToMs(subscription.cancel_at) || null;
   billing.trialStart = secondsToMs(subscription.trial_start) || billing.trialStart || null;
   billing.trialEnd = secondsToMs(subscription.trial_end) || billing.trialEnd || null;
   if (nextPeriodStart && nextPeriodStart !== oldPeriodStart) {
@@ -836,6 +892,9 @@ function clearSubscription(subscription = {}) {
   billing.periodStart = now();
   billing.periodEnd = null;
   billing.tokensUsed = 0;
+  // It has happened; it is no longer pending.
+  billing.cancelAtPeriodEnd = false;
+  billing.cancelAt = null;
   save();
   log(`Billing cancelled for ${user.email || user.id}; reverted to free tokens.`, 'info', user.id);
   return user;

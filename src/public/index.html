@@ -2167,6 +2167,7 @@ async function refresh({quiet=true}={}){try{
   if(r&&r.unchanged){return}
   window.fireClipNotifs&&window.fireClipNotifs(DATA,r);
   DATA=r;
+  if(window.DC_WEBMETRICS)DATA.webmetrics=window.DC_WEBMETRICS;
   await hydrateEditorClip();
   renderAll()}catch(e){if(!quiet)toast(e.message,'bad')}}
 /* Opening a clip must hydrate immediately, not on the next poll. */
@@ -5131,9 +5132,25 @@ StudioAdapter.onProbeSource=async url=>{try{
        survive because they were PATCHed within 450ms; words did not. */
     addEventListener('beforeunload',e=>{
       try{if(window.StudioAdapter&&StudioAdapter.ui&&StudioAdapter.ui.edDirty){e.preventDefault();e.returnValue=''}}catch(err){}});
+    /* Owner analytics: fetched when the tab opens or the range changes,
+       cached so the regular state poll does not blank the screen. */
+    let anaLoading=false;
+    StudioAdapter.onLoadAnalytics=async(days)=>{
+      if(anaLoading)return;anaLoading=true;
+      try{
+        const r=await api('/api/owner/webmetrics?days='+encodeURIComponent(days||30));
+        window.DC_WEBMETRICS=r;if(DATA)DATA.webmetrics=r;renderAll();
+      }catch(e){toast(e.message,'bad')}
+      finally{anaLoading=false}};
     StudioAdapter.onBillingPortal=()=>studioDo(async()=>{
       const r=await api('/api/billing/portal',{method:'POST',body:JSON.stringify({})});
       if(r&&r.url)location.href=r.url});
+    /* Cancel and resume. Confirmed before sending, because the button sits
+       beside "Change" and a mis-click here ends someone's plan. The wording
+       states the part people get wrong -- it keeps working until the date. */
+    StudioAdapter.onResumeSubscription=()=>studioDo(
+      async()=>{await api('/api/billing/resume',{method:'POST',body:JSON.stringify({})})},
+      'Subscription resumed. Billing continues as normal.');
     /* Nasheeds go to /api/music as base64, not through the video presign path.
        Uploading them as videos is what made a fresh account unusable. */
     /* The job panel's "Upload…" chip. A file dialog is host work -- the

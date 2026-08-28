@@ -1607,6 +1607,46 @@
     </div>
   </sc-if>
 
+    <sc-if value="{{ isAnalytics }}" hint-placeholder-val="{{ false }}">
+    <div id="dcAnalyticsScreen" style="display: flex; flex-direction: column; gap: 16px; padding: 4px 2px 24px;">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
+        <span style="font-size: 13px; color: #8B8B93;">{{ anaSubline }}</span>
+        <span style="margin-left: auto; display: flex; gap: 7px;">
+          <sc-for list="{{ anaRanges }}" as="r" hint-placeholder-count="3">
+            <button onClick="{{ r.select }}" style="{{ r.style }}">{{ r.label }}</button>
+          </sc-for>
+        </span>
+      </div>
+      <div id="dcAnaTiles" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 12px;">
+        <sc-for list="{{ anaTiles }}" as="tile" hint-placeholder-count="6">
+          <section style="border: 1px solid #1E1E22; border-radius: 12px; background: #121214; padding: 13px 14px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #8B8B93;">{{ tile.label }}</span>
+            <strong style="font-family: Outfit, Inter, sans-serif; font-size: 26px; font-weight: 600; letter-spacing: -.03em; line-height: 1; color: #F2F2F4;">{{ tile.value }}</strong>
+            <span style="font-size: 11px; color: #6E6E76;">{{ tile.note }}</span>
+          </section>
+        </sc-for>
+      </div>
+      <section style="border: 1px solid #1E1E22; border-radius: 12px; background: #121214; padding: 14px 14px 10px; display: flex; flex-direction: column; gap: 10px;">
+        <span style="font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #8B8B93;">Visitors by day</span>
+        <div style="display: flex; align-items: flex-end; gap: 3px; height: 120px;">
+          <sc-for list="{{ anaBars }}" as="bar" hint-placeholder-count="14">
+            <span title="{{ bar.tip }}" style="{{ bar.style }}"></span>
+          </sc-for>
+        </div>
+        <span style="font-size: 11px; color: #6E6E76;">{{ anaBarsNote }}</span>
+      </section>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px;">
+        <section style="border: 1px solid #1E1E22; border-radius: 12px; background: #121214; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0;"><span style="font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #8B8B93;">Top pages</span><sc-if value="{{ anaPagesEmpty }}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; color: #6E6E76;">Nothing recorded in this range yet.</span></sc-if><table style="width: 100%; border-collapse: collapse;"><sc-for list="{{ anaPages }}" as="row" hint-placeholder-count="3"><tr><td style="padding: 7px 10px; font-size: 12px; color: #BCBCC3; border-bottom: 1px solid #17171A;">{{ row.name }}</td><td style="padding: 7px 10px; font-size: 12px; color: #BCBCC3; border-bottom: 1px solid #17171A; text-align: right; font-variant-numeric: tabular-nums; color: #F2F2F4;">{{ row.count }}</td></tr></sc-for></table></section>
+        <section style="border: 1px solid #1E1E22; border-radius: 12px; background: #121214; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0;"><span style="font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #8B8B93;">Referrers</span><sc-if value="{{ anaReferrersEmpty }}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; color: #6E6E76;">Nothing recorded in this range yet.</span></sc-if><table style="width: 100%; border-collapse: collapse;"><sc-for list="{{ anaReferrers }}" as="row" hint-placeholder-count="3"><tr><td style="padding: 7px 10px; font-size: 12px; color: #BCBCC3; border-bottom: 1px solid #17171A;">{{ row.name }}</td><td style="padding: 7px 10px; font-size: 12px; color: #BCBCC3; border-bottom: 1px solid #17171A; text-align: right; font-variant-numeric: tabular-nums; color: #F2F2F4;">{{ row.count }}</td></tr></sc-for></table></section>
+        <section style="border: 1px solid #1E1E22; border-radius: 12px; background: #121214; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0;"><span style="font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #8B8B93;">Campaigns (UTM)</span><sc-if value="{{ anaUtmEmpty }}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; color: #6E6E76;">Nothing recorded in this range yet.</span></sc-if><table style="width: 100%; border-collapse: collapse;"><sc-for list="{{ anaUtm }}" as="row" hint-placeholder-count="3"><tr><td style="padding: 7px 10px; font-size: 12px; color: #BCBCC3; border-bottom: 1px solid #17171A;">{{ row.name }}</td><td style="padding: 7px 10px; font-size: 12px; color: #BCBCC3; border-bottom: 1px solid #17171A; text-align: right; font-variant-numeric: tabular-nums; color: #F2F2F4;">{{ row.count }}</td></tr></sc-for></table></section>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214; padding: 12px 16px;">
+        <span style="font-size: 12px; color: #8B8B93;">{{ anaFootnote }}</span>
+        <a href="/owner" style="margin-left: auto; font-size: 12.5px;">Money ledger &amp; costs</a>
+      </div>
+    </div>
+  </sc-if>
+
   <sc-if value="{{ isTokens }}" hint-placeholder-val="{{ false }}">
     <div style="flex: 1; min-height: 0; overflow: auto; padding: 26px 40px 44px; animation: dcScreen .24s cubic-bezier(.2,.8,.2,1);">
       <a href="#" onClick="{{ goBack }}" style="display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: #8B8B93;" style-hover="color: #F0D6A6;"><i class="ph ph-arrow-left" style="font-size: 14px;"></i>Back to studio</a>
@@ -1639,6 +1679,7 @@
 
           <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px;">
             <button onClick="{{ manageBilling }}" style="{{ manageStyle }}" style-hover="background: rgba(217,180,120,.2);"><i class="ph ph-sliders-horizontal" style="font-size: 14px;"></i>{{ manageLabel }}</button>
+              <button onClick="{{ resumeSub }}" style="{{ resumeSubStyle }}" style-hover="background: rgba(127,209,166,.16);"><i class="ph ph-arrow-counter-clockwise" style="font-size: 14px;"></i>Resume subscription</button>
             <button onClick="{{ changeCard }}" style="{{ billingGhostStyle }}" style-hover="border-color: #34343A; color: #F2F2F4;"><i class="ph ph-credit-card" style="font-size: 14px;"></i>{{ cardLabel }}</button>
             <button onClick="{{ openInvoices }}" style="{{ billingGhostStyle }}" style-hover="border-color: #34343A; color: #F2F2F4;"><i class="ph ph-receipt" style="font-size: 14px;"></i>Invoices</button>
           </div>
@@ -1706,6 +1747,7 @@
           </article>
         </sc-for>
       </div>
+
     </div>
   </sc-if>
   </main>
