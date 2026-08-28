@@ -30,6 +30,7 @@ import * as billing from './billing.js';
 import * as marketing from './marketing.js';
 import * as admin from './admin.js';
 import * as owner from './owner.js';
+import * as metrics from './metrics.js';
 import { startYouTubeRetention } from './youtube-retention.js';
 import { saveVideoUpload, removeUploadedFile } from './uploads.js';
 import * as objectStorage from './object-storage.js';
@@ -624,6 +625,20 @@ async function route(req, res, url) {
   }
 
   const currentUser = userRecordForRequest(req);
+
+  // First-party analytics: count public page GETs. The module allowlists
+  // paths, skips operators, and keeps only aggregates -- see metrics.js.
+  if (method === 'GET') {
+    try {
+      metrics.pageview({
+        path: pathname, ip: clientIp(req),
+        userAgent: String(req.headers['user-agent'] || ''),
+        referrer: String(req.headers.referer || ''),
+        ownHost: String(req.headers.host || '').replace(/:\d+$/, ''),
+        query: url.searchParams, viewerRole: currentUser?.role || '',
+      });
+    } catch { /* analytics must never take a page down */ }
+  }
   if (method === 'GET' && pathname === '/login') {
     if (currentUser && auth.enabled()) return redirect(res, billing.postLoginRedirect(currentUser, url.searchParams.get('returnTo') || '/app'));
     return html(res, 200, auth.loginPage({ error: url.searchParams.get('error') || '', info: url.searchParams.get('info') || '', returnTo: url.searchParams.get('returnTo') || '/app' }));
@@ -1043,6 +1058,12 @@ async function route(req, res, url) {
 
   if (method === 'GET' && pathname === '/api/admin/analytics') {
     try { requireOperator(currentUser); return json(res, 200, admin.analytics(currentUser)); }
+    catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+  }
+
+  if (method === 'GET' && pathname === '/api/owner/webmetrics') {
+    const days = Number(url.searchParams.get('days') || 30);
+    try { requireOperator(currentUser); return json(res, 200, metrics.summary({ days })); }
     catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
   }
 

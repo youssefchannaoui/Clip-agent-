@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import * as auth from './auth.js';
 import { config } from './config.js';
 import * as ownerFeed from './owner-feed.js';
+import * as metrics from './metrics.js';
 import { state, save, log } from './store.js';
 
 const now = () => Date.now();
@@ -654,6 +655,7 @@ async function switchSubscriptionPlan(user, subscription, plan) {
 }
 
 export async function createCheckoutSession(user, planId) {
+  metrics.event('checkout_started');
   ensureBillingState();
   if (!user) throw new Error('Sign in to continue.');
   const plan = plans()[planId];
