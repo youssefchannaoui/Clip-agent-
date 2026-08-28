@@ -589,10 +589,10 @@
         body: 'Publishing, scheduling, automation, the editor and unlimited clips per lecture are all on the free plan. Paying adds the full caption-style catalogue and lets you remove the watermark.' },
     ],
     performance: [
-      { anchor: 'perf-tiles', title: 'What you have produced',
-        body: 'Counts for the range you pick above: clips cut, clips you approved, clips that posted, and lectures added.' },
+      { anchor: 'perf-tiles', title: 'What happened to your work',
+        body: 'Everything on this screen answers to the range you pick above: what was cut, what you kept, what actually posted, what a destination refused, and the source minutes it all cost.' },
       { anchor: 'perf-board', title: 'Scored, not measured',
-        body: 'Clips are ranked by the score the worker gave each one when it cut them. DeenClipped does not collect views or watch time from any platform, so nothing here is audience data.' },
+        body: 'Clips are ranked by the score the worker gave each one when it cut them. DeenClipped does not collect views or watch time from any platform, so nothing here is audience data -- an invented number would be worse than an absent one.' },
     ],
   };
 
@@ -5752,27 +5752,160 @@
           select: function (e) { stop(e); setUI({ perfRange: label }); },
         };
       }),
-      perfTiles: [
-        { icon: 'ph-fill ph-stack', label: 'Clips generated', value: String(perfClips.length) },
-        { icon: 'ph-fill ph-check-circle', label: 'Approved', value: String(perfClips.filter(function (c) { return decision(c) === 'approved'; }).length) },
-        { icon: 'ph-fill ph-paper-plane-tilt', label: 'Posted', value: String(perfClips.filter(function (c) { return c.postedAt; }).length) },
-        { icon: 'ph-fill ph-film-script', label: 'Lectures', value: String(perfProjects.length) },
-      ].map(function (t) {
-        return { icon: t.icon, label: t.label, value: t.value, delta: '', deltaIcon: '', deltaStyle: 'display: none;' };
-      }),
-      perfBoard: perfClips.slice().sort(function (a, b) { return (b.score || 0) - (a.score || 0); }).slice(0, 5).map(function (c, i) {
+      perfTiles: (function () {
+        var made = perfClips.length;
+        var kept = perfClips.filter(function (c) { return decision(c) === 'approved'; }).length;
+        var posted = perfClips.filter(function (c) { return c.postedAt; }).length;
+        var refused = perfClips.filter(function (c) { return decision(c) === 'rejected'; }).length;
+        var failed = 0;
+        perfClips.forEach(function (c) {
+          (c.targets || []).forEach(function (t) { if (t.status === 'failed') failed += 1; });
+        });
+        // Source minutes are what a token buys, so this is the honest cost of
+        // the window -- not a guess from clip count.
+        var minutes = 0;
+        perfProjects.forEach(function (p) {
+          var span = Number(p.sourceEndSec || 0) - Number(p.sourceStartSec || 0);
+          if (!(span > 0)) span = Number(p.sourceDurationSec || 0);
+          minutes += Math.max(0, span) / 60;
+        });
+        return owKpis([
+          owTile('Clips made', String(made), plural(perfProjects.length, 'lecture') + ' in this window', ''),
+          owTile('Kept', String(kept), made ? Math.round((kept / made) * 100) + '% of what was made' : 'nothing to review yet', 'pos'),
+          owTile('Posted', String(posted), kept ? Math.round((posted / kept) * 100) + '% of what you kept' : 'nothing approved yet', ''),
+          // Turning a weak clip down is the review queue working, not a
+          // failure, so it is not painted as one.
+          owTile('Discarded', String(refused), 'clips you turned down', ''),
+          owTile('Failed posts', String(failed), failed ? 'destinations that refused' : 'nothing was refused', failed ? 'neg' : 'pos'),
+          owTile('Source minutes', String(Math.round(minutes)), 'what these lectures cost in tokens', ''),
+        ]);
+      })(),
+      // Generated -> kept -> scheduled -> posted, which is the only question a
+      // creator can act on today. The old screen ranked by score and then
+      // showed three columns of "-" for views, saves and watch time: numbers
+      // no platform has ever handed this app.
+      perfFunnel: (function () {
+        var made = perfClips.length;
+        var kept = perfClips.filter(function (c) { return decision(c) === 'approved'; }).length;
+        var slotted = perfClips.filter(function (c) { return c.scheduledAt || c.postedAt; }).length;
+        var posted = perfClips.filter(function (c) { return c.postedAt; }).length;
+        var vStyle = function (colour) {
+          return 'font-family: Outfit, Inter, sans-serif; font-size: 25px; font-weight: 600; letter-spacing: -.03em; line-height: 1.05; color: ' + colour + ';';
+        };
+        var share = function (part, whole) { return whole ? Math.round((part / whole) * 100) + '% of made' : '\u2014'; };
+        return [
+          { name: 'Made', value: String(made), rate: 'cut from your lectures', notFirst: false, valueStyle: vStyle('#F2F2F4') },
+          { name: 'Kept', value: String(kept), rate: share(kept, made), notFirst: true, valueStyle: vStyle('#F2F2F4') },
+          { name: 'Given a slot', value: String(slotted), rate: share(slotted, made), notFirst: true, valueStyle: vStyle('#F2F2F4') },
+          { name: 'Posted', value: String(posted), rate: share(posted, made), notFirst: true, valueStyle: vStyle('#F0D6A6') },
+        ];
+      })(),
+      perfFunnelNote: (function () {
+        var made = perfClips.length;
+        if (!made) return 'Nothing was made in this window, so there is nothing to follow through.';
+        var waiting = perfClips.filter(function (c) { return decision(c) === null; }).length;
+        return waiting
+          ? plural(waiting, 'clip') + ' still waiting on you in the review queue.'
+          : 'Every clip in this window has been decided on.';
+      })(),
+      perfDests: (function () {
+        var tally = {};
+        perfClips.forEach(function (c) {
+          (c.targets || []).forEach(function (t) {
+            var key = PLATFORM_NAMES[t.provider] || t.provider || 'Unknown';
+            var row = (tally[key] = tally[key] || { posted: 0, failed: 0 });
+            if (t.status === 'posted') row.posted += 1;
+            else if (t.status === 'failed') row.failed += 1;
+          });
+        });
+        var max = 1;
+        Object.keys(tally).forEach(function (k) { if (tally[k].posted + tally[k].failed > max) max = tally[k].posted + tally[k].failed; });
+        return Object.keys(tally).sort(function (a, b) {
+          return (tally[b].posted + tally[b].failed) - (tally[a].posted + tally[a].failed);
+        }).map(function (name) {
+          var row = tally[name];
+          var total = row.posted + row.failed;
+          return {
+            name: name,
+            value: row.failed ? row.posted + ' \u00b7 ' + row.failed + ' failed' : String(row.posted),
+            barStyle: 'position: absolute; inset: 0 auto 0 0; width: ' + Math.max(3, Math.round((total / max) * 100)) + '%; border-radius: 20px; background: '
+              + (row.failed ? 'linear-gradient(90deg, #C77E6E, #E6B770)' : 'linear-gradient(90deg, #D9B478, #F0D6A6)') + ';',
+          };
+        });
+      })(),
+      perfDestsEmpty: !perfClips.some(function (c) { return (c.targets || []).length; }),
+      perfSlots: (function () {
+        // The posting windows this account actually used, by hour, so a slot
+        // that never delivers is visible as an empty one.
+        var tally = {};
+        perfClips.forEach(function (c) {
+          if (!c.postedAt) return;
+          var hour = new Date(c.postedAt).getHours();
+          var key = String(hour).padStart(2, '0') + ':00';
+          tally[key] = (tally[key] || 0) + 1;
+        });
+        var max = 1;
+        Object.keys(tally).forEach(function (k) { if (tally[k] > max) max = tally[k]; });
+        return Object.keys(tally).sort().map(function (name) {
+          return {
+            name: name,
+            value: String(tally[name]),
+            barStyle: 'position: absolute; inset: 0 auto 0 0; width: ' + Math.max(3, Math.round((tally[name] / max) * 100)) + '%; border-radius: 20px; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
+          };
+        });
+      })(),
+      perfSlotsEmpty: !perfClips.some(function (c) { return c.postedAt; }),
+      perfLectures: (function () {
+        var byProject = {};
+        perfClips.forEach(function (c) {
+          var row = (byProject[c.projectId] = byProject[c.projectId] || { clips: 0, kept: 0, posted: 0, score: 0 });
+          row.clips += 1;
+          if (decision(c) === 'approved') row.kept += 1;
+          if (c.postedAt) row.posted += 1;
+          row.score += Number(c.score || 0);
+        });
+        return Object.keys(byProject).map(function (id) {
+          var row = byProject[id];
+          return {
+            id: id,
+            name: projectTitle[id] || 'Lecture',
+            clips: String(row.clips),
+            kept: String(row.kept),
+            posted: String(row.posted),
+            score: row.clips ? String(Math.round(row.score / row.clips)) : '\u2014',
+            sort: row.clips ? row.score / row.clips : 0,
+            open: function (e) { stop(e); setUI({ screen: 'detail', openProject: id }); },
+          };
+        }).sort(function (a, b) { return b.sort - a.sort; }).slice(0, 8);
+      })(),
+      perfLecturesEmpty: !perfClips.length,
+      perfBoardNote: 'Ranked by the score each clip was cut with.',
+      perfBoardEmpty: !perfClips.length,
+      perfBoard: perfClips.slice().sort(function (a, b) { return (b.score || 0) - (a.score || 0); }).slice(0, 6).map(function (c, i) {
+        var st = decision(c);
+        var went = (c.targets || []).filter(function (t) { return t.status === 'posted'; })
+          .map(function (t) { return PLATFORM_NAMES[t.provider] || t.provider; });
         return {
           rank: String(i + 1),
           caption: c.title || '',
           lecTitle: projectTitle[c.projectId] || '',
           duration: secsToClock((c.durationMs || 0) / 1000),
+          // Where it actually went, rather than three columns of platform
+          // numbers no platform has ever sent this app.
+          where: went.length ? 'on ' + went.join(', ')
+            : st === 'approved' ? 'waiting for its slot'
+              : st === 'rejected' ? 'discarded' : 'awaiting review',
+          state: st === 'approved' ? (c.postedAt ? 'Posted' : 'Approved') : st === 'rejected' ? 'Discarded' : 'In review',
+          stateStyle: 'flex: none; padding: 2px 8px; border-radius: 20px; font-size: 9.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; border: 1px solid '
+            + (c.postedAt ? 'rgba(127,209,166,.35); color: #7FD1A6;'
+              : st === 'approved' ? 'rgba(217,180,120,.35); color: #F0D6A6;'
+                : st === 'rejected' ? '#3A2A2A; color: #E3928C;' : '#26262A; color: #8B8B93;'),
+          score: String(Math.round(Number(c.score || 0))),
           thumbStyle: 'width: 30px; height: 42px; flex: none; border-radius: 6px; border: 1px solid #26262A; background: ' + thumb(c.thumbUrl) + ';',
-          barStyle: 'height: 4px; border-radius: 4px; width: ' + Math.max(4, Math.min(100, Number(c.score || 0))) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
-          views: '—', saves: '—', watch: '—',
           more: function (e) { stop(e); global.StudioAdapter.onMoreClips(c.projectId, 4); },
         };
       }),
-      perfPatterns: [],
+      perfFootNote: 'Everything here comes from your own account. Platform view counts are not shown because no connected platform sends them to DeenClipped \u2014 an invented number is worse than an absent one.',
 
       // (owner derivations are hoisted just below; see the owner block)
       // ── Owner ─────────────────────────────────────────────────────────

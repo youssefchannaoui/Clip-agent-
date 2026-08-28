@@ -573,6 +573,29 @@ phone work back to `deenclipped-v2-2` rather than leaving two truths.
   FAQPage built from the array that renders the visible FAQ). Tests compare
   schema against the rendered page, so they cannot drift.
 
+## Performance was rebuilt around what is actually known (v3.24.0)
+
+Youssef, 28 Aug 2026: "performance needs a FULL REDO". It deserved it: half
+the screen was dead. Three columns -- views, saves, watched -- printed "—" for
+every clip, because no connected platform sends this app audience data, and
+`perfPatterns` was an empty array rendering an empty column beside them. That
+is invariant 8 (no dead controls) broken in the open.
+
+What it shows now, all of it derived from the account's own records:
+a divided KPI row (made, kept, posted, discarded, failed posts, source
+minutes), a made → kept → given a slot → posted funnel, where clips went by
+destination with failures called out, when they post by hour, which lectures
+are worth clipping (clips, kept, posted, average score), and the strongest
+clips with their real state and destination. The footnote says plainly why
+there are no view counts.
+
+**The flex-shrink trap caught this screen too.** The root is a flex column
+with `min-height: 0`, so a child that does not say `flex: none` is shrinkable
+-- and with a long page below it the KPI row was squeezed to a height of ZERO
+while still reading correctly in `innerText`. Every direct child of a scrolling
+flex-column screen needs `flex: none` (the Owner screen's `.dcow-s
+{ flex-shrink: 0 }` is the same fix by another route).
+
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)

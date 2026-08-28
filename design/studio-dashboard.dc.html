@@ -1491,63 +1491,84 @@
 
 
   <sc-if value="{{ isPerf }}" hint-placeholder-val="{{ false }}">
-    <div style="flex: 1; min-height: 0; overflow: auto; padding: 20px 40px 44px; animation: dcScreen .24s cubic-bezier(.2,.8,.2,1);">
-      <div data-tour="perf-tiles" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); gap: 13px;">
-        <sc-for list="{{ perfTiles }}" as="t" hint-placeholder-count="4">
-          <section style="display: flex; flex-direction: column; gap: 7px; padding: 15px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
-            <span style="display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: #8B8B93;"><i class="{{ t.icon }}" style="font-size: 14px; color: #6E6E76;"></i>{{ t.label }}</span>
-            <strong style="font-family: Outfit, Inter, sans-serif; font-size: 26px; font-weight: 600; letter-spacing: -.035em; line-height: 1;">{{ t.value }}</strong>
-            <span style="{{ t.deltaStyle }}"><i class="{{ t.deltaIcon }}" style="font-size: 11px;"></i> {{ t.delta }} vs last week</span>
-          </section>
-        </sc-for>
+    <div style="flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 20px; padding: 26px 40px 44px; animation: dcScreen .24s cubic-bezier(.2,.8,.2,1);">
+
+      <div style="flex: none; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+        <span style="font-size: 12px; color: #8B8B93;">{{ perfRangeNote }}</span>
+        <div data-tour="perf-board" style="display: flex; gap: 16px; margin-left: auto;">
+          <sc-for list="{{ perfRanges }}" as="r" hint-placeholder-count="3"><button onClick="{{ r.select }}" style="{{ r.style }}">{{ r.label }}</button></sc-for>
+        </div>
       </div>
 
-      <div style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 18px; margin-top: 18px;">
-        <section style="flex: 1 1 460px; min-width: 0; display: flex; flex-direction: column; gap: 11px;">
-          <div style="display: flex; align-items: baseline; gap: 10px;">
-            <h2 style="margin: 0; font-family: Outfit, Inter, sans-serif; font-size: 15px; font-weight: 600; letter-spacing: -.02em;">Your best clips</h2>
-            <span style="font-size: 12px; color: #6E6E76;">Ranked by the score each clip was cut with · watch, views and saves fill in when platform analytics connect</span>
-            <div data-tour="perf-board" style="display: flex; gap: 6px; margin-left: auto;">
-              <sc-for list="{{ perfRanges }}" as="r" hint-placeholder-count="3">
-                <button onClick="{{ r.select }}" style="{{ r.style }}">{{ r.label }}</button>
-              </sc-for>
-            </div>
-          </div>
-          <sc-for list="{{ perfBoard }}" as="row" hint-placeholder-count="6">
-            <article style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #1E1E22; border-radius: 10px; background: #121214;">
-              <span style="font-family: Outfit, Inter, sans-serif; font-size: 12px; font-weight: 700; color: #4A4A52; flex: none;">{{ row.rank }}</span>
-              <span style="{{ row.thumbStyle }}"></span>
-              <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1;">
-                <span style="font-size: 12px; color: #E9E9ED; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ row.caption }}</span>
-                <span style="position: relative; height: 4px; border-radius: 20px; background: #1D1D21; overflow: hidden;"><span style="{{ row.barStyle }}"></span></span>
-                <span style="font-size: 10.5px; color: #6E6E76; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ row.lecTitle }} · {{ row.duration }}</span>
-              </span>
-              <span style="display: flex; gap: 14px; flex: none;">
-                <span style="display: flex; flex-direction: column; align-items: flex-end;"><strong style="font-size: 12.5px; font-weight: 600; color: #F0D6A6;">{{ row.watch }}</strong><span style="font-size: 9.5px; color: #6E6E76;">watched</span></span>
-                <span style="display: flex; flex-direction: column; align-items: flex-end;"><strong style="font-size: 12.5px; font-weight: 500;">{{ row.views }}</strong><span style="font-size: 9.5px; color: #6E6E76;">views</span></span>
-                <span style="display: flex; flex-direction: column; align-items: flex-end;"><strong style="font-size: 12.5px; font-weight: 500;">{{ row.saves }}</strong><span style="font-size: 9.5px; color: #6E6E76;">saves</span></span>
-                <button onClick="{{ row.more }}" title="Make more like this" style="display: grid; place-items: center; width: 29px; height: 28px; border: 1px solid #26262A; border-radius: 7px; background: #17171A; color: #BCBCC3; cursor: pointer; transition: color .14s ease, border-color .14s ease;" style-hover="color: #F0D6A6; border-color: rgba(217,180,120,.45);"><i class="ph ph-sparkle" style="font-size: 14px;"></i></button>
-              </span>
-            </article>
-          </sc-for>
-        </section>
-
-        <section style="flex: 1 1 320px; max-width: 420px; min-width: 0; display: grid; grid-template-columns: 1fr; gap: 13px;">
-          <sc-for list="{{ perfPatterns }}" as="p" hint-placeholder-count="4">
-            <div style="display: flex; flex-direction: column; gap: 9px; padding: 15px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
-              <span style="display: flex; align-items: center; gap: 8px; font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;"><i class="{{ p.icon }}" style="font-size: 15px; color: #D9B478;"></i>{{ p.title }}</span>
-              <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="4">
-                <span style="display: flex; align-items: center; gap: 10px; font-size: 11.5px; color: #BCBCC3;">
-                  <span style="width: 108px; flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ r.label }}</span>
-                  <span style="position: relative; flex: 1; height: 5px; border-radius: 20px; background: #1D1D21; overflow: hidden;"><span style="{{ r.barStyle }}"></span></span>
-                  <span style="width: 24px; flex: none; text-align: right; font-size: 10.5px; color: #8B8B93;">{{ r.value }}</span>
-                </span>
-              </sc-for>
-              <span style="font-size: 11px; color: #F0D6A6; line-height: 1.5; margin-top: 2px;">{{ p.note }}</span>
-            </div>
-          </sc-for>
-        </section>
+      <div data-tour="perf-tiles" style="flex: none; display: flex; align-items: stretch; overflow-x: auto;">
+        <sc-for list="{{ perfTiles }}" as="tile" hint-placeholder-count="6"><div style="{{ tile.cellStyle }}"><span style="font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6E6E76;">{{ tile.label }}</span><strong style="{{ tile.valueStyle }}">{{ tile.value }}</strong><span style="font-size: 11px; color: #6E6E76; line-height: 1.45;">{{ tile.note }}</span></div></sc-for>
       </div>
+
+      <div style="flex: none; height: 1px; background: rgba(242,242,244,.07);"></div>
+
+      <div style="flex: none; display: flex; flex-direction: column; gap: 13px;">
+        <span style="font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6E6E76;">What happened to what you made</span>
+        <div style="display: flex; align-items: flex-start; gap: 26px; flex-wrap: wrap;">
+          <sc-for list="{{ perfFunnel }}" as="step" hint-placeholder-count="4"><sc-if value="{{ step.notFirst }}"><span style="align-self: center; color: #6E6E76; font-size: 17px;">→</span></sc-if><div style="display: flex; flex-direction: column; gap: 4px;"><span style="font-size: 11.5px; color: #A2A2AA;">{{ step.name }}</span><strong style="{{ step.valueStyle }}">{{ step.value }}</strong><span style="font-size: 11px; color: #6E6E76;">{{ step.rate }}</span></div></sc-for>
+        </div>
+        <span style="font-size: 11px; color: #6E6E76; line-height: 1.5;">{{ perfFunnelNote }}</span>
+      </div>
+
+      <div style="flex: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 40px;">
+        <div style="flex: none; display: flex; flex-direction: column; gap: 11px;">
+          <span style="font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6E6E76;">Where it went</span>
+          <sc-if value="{{ perfDestsEmpty }}"><span style="font-size: 12px; color: #6E6E76;">Nothing has been sent to a channel yet.</span></sc-if>
+          <sc-for list="{{ perfDests }}" as="row" hint-placeholder-count="3"><div style="display: flex; align-items: center; gap: 11px;"><span style="width: 84px; flex: none; font-size: 12px; color: #BCBCC3;">{{ row.name }}</span><span style="position: relative; flex: 1; height: 5px; border-radius: 20px; background: #1A1A1E; overflow: hidden;"><span class="dcow-fill" style="{{ row.barStyle }}"></span></span><span style="width: 70px; flex: none; text-align: right; font-size: 11.5px; color: #F2F2F4; font-variant-numeric: tabular-nums;">{{ row.value }}</span></div></sc-for>
+        </div>
+
+        <div style="flex: none; display: flex; flex-direction: column; gap: 11px;">
+          <span style="font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6E6E76;">When it posts</span>
+          <sc-if value="{{ perfSlotsEmpty }}"><span style="font-size: 12px; color: #6E6E76;">No posts have gone out in this window.</span></sc-if>
+          <sc-for list="{{ perfSlots }}" as="row" hint-placeholder-count="4"><div style="display: flex; align-items: center; gap: 11px;"><span style="width: 84px; flex: none; font-size: 12px; color: #BCBCC3;">{{ row.name }}</span><span style="position: relative; flex: 1; height: 5px; border-radius: 20px; background: #1A1A1E; overflow: hidden;"><span class="dcow-fill" style="{{ row.barStyle }}"></span></span><span style="width: 70px; flex: none; text-align: right; font-size: 11.5px; color: #F2F2F4; font-variant-numeric: tabular-nums;">{{ row.value }}</span></div></sc-for>
+        </div>
+      </div>
+
+      <div style="flex: none; height: 1px; background: rgba(242,242,244,.07);"></div>
+
+      <div style="flex: none; display: flex; flex-direction: column; gap: 11px;">
+        <span style="font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6E6E76;">Which lectures are worth clipping</span>
+        <sc-if value="{{ perfLecturesEmpty }}"><span style="font-size: 12px; color: #6E6E76;">Nothing has finished processing in this window yet.</span></sc-if>
+        <div style="overflow-x: auto;">
+          <table style="width: 100%; border-collapse: collapse; min-width: 420px;">
+            <tr>
+              <th style="text-align: left; padding: 0 2px 8px; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #6E6E76; border-bottom: 1px solid rgba(242,242,244,.07);">Lecture</th>
+              <th style="text-align: right; padding: 0 2px 8px; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #6E6E76; border-bottom: 1px solid rgba(242,242,244,.07);">Clips</th>
+              <th style="text-align: right; padding: 0 2px 8px; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #6E6E76; border-bottom: 1px solid rgba(242,242,244,.07);">Kept</th>
+              <th style="text-align: right; padding: 0 2px 8px; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #6E6E76; border-bottom: 1px solid rgba(242,242,244,.07);">Posted</th>
+              <th style="text-align: right; padding: 0 2px 8px; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #6E6E76; border-bottom: 1px solid rgba(242,242,244,.07);">Avg score</th>
+            </tr>
+            <sc-for list="{{ perfLectures }}" as="row" hint-placeholder-count="4"><tr class="dcow-hov"><td style="padding: 10px 2px; font-size: 12.5px; color: #E9E9ED; border-bottom: 1px solid rgba(242,242,244,.045);"><button onClick="{{ row.open }}" style="background: none; border: 0; padding: 0; font-family: inherit; font-size: 12.5px; color: inherit; text-align: left; cursor: pointer;" style-hover="color: #F0D6A6;">{{ row.name }}</button></td><td style="padding: 10px 2px; text-align: right; font-size: 12.5px; color: #BCBCC3; font-variant-numeric: tabular-nums; border-bottom: 1px solid rgba(242,242,244,.045);">{{ row.clips }}</td><td style="padding: 10px 2px; text-align: right; font-size: 12.5px; color: #BCBCC3; font-variant-numeric: tabular-nums; border-bottom: 1px solid rgba(242,242,244,.045);">{{ row.kept }}</td><td style="padding: 10px 2px; text-align: right; font-size: 12.5px; color: #BCBCC3; font-variant-numeric: tabular-nums; border-bottom: 1px solid rgba(242,242,244,.045);">{{ row.posted }}</td><td style="padding: 10px 2px; text-align: right; font-size: 12.5px; color: #F0D6A6; font-variant-numeric: tabular-nums; border-bottom: 1px solid rgba(242,242,244,.045);">{{ row.score }}</td></tr></sc-for>
+          </table>
+        </div>
+      </div>
+
+      <div style="flex: none; height: 1px; background: rgba(242,242,244,.07);"></div>
+
+      <div style="flex: none; display: flex; flex-direction: column; gap: 11px;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <span style="font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6E6E76;">Your strongest clips</span>
+          <span style="font-size: 11px; color: #6E6E76;">{{ perfBoardNote }}</span>
+        </div>
+        <sc-if value="{{ perfBoardEmpty }}"><span style="font-size: 12px; color: #6E6E76;">No clips in this window.</span></sc-if>
+        <sc-for list="{{ perfBoard }}" as="row" hint-placeholder-count="5"><article class="dcow-hov" style="display: flex; align-items: center; gap: 13px; padding: 9px 2px; border-bottom: 1px solid rgba(242,242,244,.045);">
+          <span style="font-family: Outfit, Inter, sans-serif; font-size: 12px; font-weight: 700; color: #4A4A52; flex: none; width: 14px;">{{ row.rank }}</span>
+          <span style="{{ row.thumbStyle }}"></span>
+          <span style="display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1;">
+            <span style="font-size: 12.5px; color: #E9E9ED; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ row.caption }}</span>
+            <span style="font-size: 10.5px; color: #6E6E76; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ row.lecTitle }} · {{ row.duration }} · {{ row.where }}</span>
+          </span>
+          <span style="{{ row.stateStyle }}">{{ row.state }}</span>
+          <span style="display: flex; flex-direction: column; align-items: flex-end; flex: none; width: 54px;"><strong style="font-size: 13px; font-weight: 600; color: #F0D6A6; font-variant-numeric: tabular-nums;">{{ row.score }}</strong><span style="font-size: 9.5px; color: #6E6E76;">score</span></span>
+          <button onClick="{{ row.more }}" title="Make more like this" style="display: grid; place-items: center; width: 29px; height: 28px; flex: none; border: 1px solid #26262A; border-radius: 7px; background: #17171A; color: #BCBCC3; cursor: pointer; transition: color .14s ease, border-color .14s ease;" style-hover="color: #F0D6A6; border-color: rgba(217,180,120,.45);"><i class="ph ph-sparkle" style="font-size: 14px;"></i></button>
+        </article></sc-for>
+      </div>
+
+      <span style="font-size: 11px; color: #6E6E76; line-height: 1.5;">{{ perfFootNote }}</span>
     </div>
   </sc-if>
 
