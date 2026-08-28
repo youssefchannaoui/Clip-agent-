@@ -36,7 +36,7 @@ html, body { margin: 0; background: #09090A; }
 .s1{display: grid; place-items: center; width: 32px; height: 32px; flex: none}
 .s2{font-family: Outfit, Inter, sans-serif; font-size: 14.5px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; color: #F2F2F4}
 .s3{color: #D9B478}
-.s4{font-size: 10.5px; color: #8B8B93; letter-spacing: .06em; text-transform: uppercase}
+.s4{font-size: 10px; color: #8B8B93; letter-spacing: .2em; text-transform: uppercase}
 .s5:hover{border-color: #34343A !important;color: #F2F2F4 !important}
 .s6{font-size: 15px}
 .s7{display: flex; flex-direction: column; gap: 14px}

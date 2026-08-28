@@ -596,6 +596,25 @@ while still reading correctly in `innerText`. Every direct child of a scrolling
 flex-column screen needs `flex: none` (the Owner screen's `.dcow-s
 { flex-shrink: 0 }` is the same fix by another route).
 
+## The channel's design language, carried into the studio (v3.25.0)
+
+Youssef sent the DeenClipped YouTube banner on 28 Aug: "see how cool the
+deisgn is, empliment it sutbley in the webiste dashboard, not the titles but
+the diesgn". Three devices came across, and nothing else:
+
+- the **hairline rule** between the arch mark and the wordmark
+  (`brandRuleStyle`, and it disappears with the wordmark when the rail
+  collapses),
+- the banner's **widely spaced subtitle**, so STUDIO sits at .2em like
+  "Qur'an · Reminders · Islamic Talks" does,
+- the **mihrab lattice** at the rail's empty lower half (`railMotifStyle`, an
+  inline SVG data URI at ~16% stroke alpha under a fade mask). It is
+  `#dcRailMotif` and the phone sheet hides it: there is no lower half in a
+  bottom tab bar, so it would paint over the tabs.
+
+Subtle is the whole point: the mark, the two-tone wordmark and the gold were
+already shared, and nothing about a screen's content or layout changed.
+
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)

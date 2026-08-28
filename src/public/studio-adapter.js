@@ -3619,9 +3619,23 @@
     var vals = {
       // ── shell: rail ──
       railOpen: open,
-      railStyle: 'align-self: stretch; height: 100%; min-height: 0; ' + (open ? 'overflow-y: auto; overflow-x: hidden; ' : 'overflow: visible; ') + 'display: flex; flex-direction: column; gap: 18px; width: ' + (open ? '228px' : '68px') + '; padding: 16px 12px; border-right: 1px solid #1E1E22; background: linear-gradient(180deg, #101013, #0B0B0D); transition: width .18s ease;',
+      railStyle: 'position: relative; align-self: stretch; height: 100%; min-height: 0; ' + (open ? 'overflow-y: auto; overflow-x: hidden; ' : 'overflow: visible; ') + 'display: flex; flex-direction: column; gap: 18px; width: ' + (open ? '228px' : '68px') + '; padding: 16px 12px; border-right: 1px solid #1E1E22; background: linear-gradient(180deg, #101013, #0B0B0D); transition: width .18s ease;',
       brandRowStyle: 'display: flex; align-items: center; gap: 10px; padding: ' + (open ? '4px 6px' : '4px 0') + '; ' + (open ? '' : 'flex-direction: column;'),
       brandTextStyle: open ? 'display: flex; flex-direction: column; line-height: 1.2; min-width: 0;' : 'display: none;',
+      // The channel banner's own device: a hairline between the arch and the
+      // wordmark. Only when the rail is open -- collapsed, there is no wordmark
+      // to divide from.
+      brandRuleStyle: open
+        ? 'width: 1px; height: 20px; flex: none; margin: 0 1px; background: linear-gradient(180deg, rgba(217,180,120,0), rgba(217,180,120,.42), rgba(217,180,120,0));'
+        : 'display: none;',
+      // The rail's lower half is empty on every screen. The banner fills its
+      // outer edges with a faint mihrab lattice; this is the same motif, at the
+      // one place in the app where it cannot crowd anything.
+      railMotifStyle: open
+        ? 'position: absolute; left: 0; right: 0; bottom: 0; height: 190px; pointer-events: none; opacity: .5; background-repeat: repeat-x; background-position: center bottom; background-size: 104px 104px; background-image: url("data:image/svg+xml,'
+          + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="104" height="104" viewBox="0 0 104 104"><g fill="none" stroke="rgba(217,180,120,0.16)" stroke-width="1.1"><path d="M52 10C32 10 20 24 20 44v58h64V44c0-20-12-34-32-34Z"/><path d="M52 30C41 30 34 38 34 49v53h36V49c0-11-7-19-18-19Z"/><path d="M52 50c-6 0-9 4-9 9v43h18V59c0-5-3-9-9-9Z"/></g></svg>')
+          + '"); -webkit-mask-image: linear-gradient(180deg, transparent, #000 78%); mask-image: linear-gradient(180deg, transparent, #000 78%);'
+        : 'display: none;',
       railToggleStyle: ((global.innerWidth || 1280) <= 820 ? 'display: none; ' : 'display: grid; ') + 'place-items: center; width: 26px; height: 26px; flex: none; ' + (open ? 'margin-left: auto; ' : '') + 'border: 1px solid #26262A; border-radius: 7px; background: #121214; color: #8B8B93; cursor: pointer; transition: border-color .14s ease, color .14s ease;',
       railToggleIcon: open ? 'ph ph-caret-left' : 'ph ph-caret-right',
       railToggleTitle: open ? 'Collapse sidebar' : 'Expand sidebar',

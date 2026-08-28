@@ -116,6 +116,10 @@
      showing as a sliver of a rounded box nobody could read or press. Worker
      health is on the Owner screen, which is where someone would look for it. */
   #dcRailBrand { display: none !important; }
+  /* The banner's arch lattice lives in the rail's empty lower half. There is
+     no lower half in a bottom tab bar -- it would paint straight over the
+     tabs. */
+  #dcRailMotif { display: none !important; }
   #dcRail > div:not(#dcRailBrand) { display: none !important; }
   #dcRailNav {
     flex: 1 1 auto;
