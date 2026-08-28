@@ -1559,10 +1559,21 @@
   }
 
   function ownerNavItem() {
-    // A studio screen now, not a navigation away: the /owner page swap threw
-    // the whole shell out and reloaded, which read as the app restarting.
-    // The money ledger still lives on /owner, linked from inside the tab.
+    // A studio screen, not a navigation away — and SEPARATED from the rest of
+    // the rail (Youssef, 28 Aug: "side bar should be separated to rest...
+    // I'm saying OWNER"). The other items share one grammar; this one is the
+    // operator's own door: pushed apart by a gap and dressed in its own gold
+    // ring, so it never reads as just another studio screen.
     var item = navItem('owner', 'Owner', 'ph ph-coins', '');
+    var on = UI.screen === 'owner';
+    var open = UI.railOpen && (global.innerWidth || 1280) > 820;
+    item.style = 'position: relative; display: flex; align-items: center; gap: 10px; margin-top: 18px; ' +
+      'padding: ' + (open ? '10px 12px' : '11px 0') + '; ' + (open ? '' : 'justify-content: center; ') +
+      'border-radius: 10px; font-weight: 600; cursor: pointer; white-space: nowrap; ' +
+      'transition: background .14s ease, color .14s ease, border-color .14s ease; border: 1px solid ' +
+      (on
+        ? 'rgba(217,180,120,.5); background: rgba(217,180,120,.12) !important; color: #F0D6A6 !important;'
+        : 'rgba(217,180,120,.26); background: rgba(217,180,120,.05); color: #E7CD9E;');
     var inner = item.click;
     item.click = function (e) {
       inner(e);
@@ -1632,11 +1643,25 @@
 
   /** A KPI tile: value colour carries the judgement, note carries the caveat. */
   function owTile(label, value, note, tone) {
-    var colour = tone === 'pos' ? '#7FD1A6' : tone === 'neg' ? '#E08770' : tone === 'unknown' ? '#E6B770' : '#F2F2F4';
+    var colour = tone === 'pos' ? '#7FD1A6' : tone === 'neg' ? '#E08770' : tone === 'unknown' ? '#E6B770' : tone === 'live' ? '#7FD1A6' : '#F2F2F4';
     return {
       label: label, value: value, note: note || '',
-      valueStyle: 'font-family: Outfit, Inter, sans-serif; font-size: 24px; font-weight: 600; letter-spacing: -.03em; line-height: 1.1; color: ' + colour + ';',
+      valueStyle: 'font-family: Outfit, Inter, sans-serif; font-size: 27px; font-weight: 600; letter-spacing: -.035em; line-height: 1.05; color: ' + colour + ';',
     };
+  }
+
+  /**
+   * The open KPI row: no boxes — cells divided by hairlines. The divider is
+   * per-cell (border-left on every cell but the first), which is why the
+   * style has to be assigned here, where the index is known.
+   */
+  function owKpis(tiles) {
+    return tiles.map(function (tile, index) {
+      tile.cellStyle = (index ? 'border-left: 1px solid rgba(242,242,244,.07); ' : '') +
+        'flex: 1; min-width: 148px; display: flex; flex-direction: column; gap: 7px; padding: 2px 22px;' +
+        (index ? '' : ' padding-left: 2px;');
+      return tile;
+    });
   }
 
   /** {name: number} -> proportional bar rows, largest first. */
@@ -5698,22 +5723,36 @@
       })(),
       owBanner: owNotes.join('  \u00b7  '),
       owBannerShow: owNotes.length > 0,
+      // Open tabs: plain text with a gold ink bar under the active one — no
+      // pills, no boxes ("tabs that don't look boxy", 28 Aug).
       owTabs: [['overview', 'Overview'], ['traffic', 'Traffic'], ['in', 'Money in'], ['out', 'Money out'], ['users', 'Users'], ['activity', 'Activity'], ['health', 'Health']]
         .map(function (t) {
+          var on = (UI.ownerTab || 'overview') === t[0];
           return {
             label: t[1],
-            style: tabStyle((UI.ownerTab || 'overview') === t[0]),
-            select: function (e) { stop(e); setUI({ ownerTab: t[0] }); },
+            style: 'position: relative; background: none; border: none; padding: 0 0 9px; font-family: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; transition: color .14s ease; ' +
+              (on ? 'font-weight: 600; color: #F0D6A6;' : 'font-weight: 500; color: #A2A2AA;'),
+            ink: on
+              ? 'position: absolute; left: 0; right: 0; bottom: 0; height: 2.5px; border-radius: 3px; background: linear-gradient(90deg, #D9B478, #F0D6A6);'
+              : 'display: none;',
+            select: function (e) { stop(e); setUI({ ownerTab: t[0], ownerAnimAt: Date.now() }); },
           };
         }),
       owRanges: [30, 90, 180, 365].map(function (d) {
+        var on = (UI.ownerDays || 180) === d;
         return {
           label: d + 'd',
-          style: tabStyle((UI.ownerDays || 180) === d),
-          select: function (e) { stop(e); setUI({ ownerDays: d }); global.StudioAdapter.onLoadOwner(d); },
+          style: 'background: none; border: none; padding: 0; font-family: inherit; font-size: 12px; cursor: pointer; transition: color .14s ease; ' +
+            (on ? 'font-weight: 700; color: #F0D6A6;' : 'font-weight: 400; color: #6E6E76;'),
+          select: function (e) { stop(e); setUI({ ownerDays: d, ownerAnimAt: Date.now() }); global.StudioAdapter.onLoadOwner(d); },
         };
       }),
-      owRefresh: function (e) { stop(e); global.StudioAdapter.onLoadOwner(UI.ownerDays || 180); },
+      owRefresh: function (e) { stop(e); setUI({ ownerAnimAt: Date.now() }); global.StudioAdapter.onLoadOwner(UI.ownerDays || 180); },
+      // Entry animations replay on a tab or range change and then stand down:
+      // the studio re-renders wholesale on every state poll, and a screen that
+      // re-animated every few seconds would be unbearable. The class is only
+      // emitted inside a short window after a deliberate navigation.
+      owAnimClass: (Date.now() - (UI.ownerAnimAt || 0) < 900) ? 'dcow-rise' : '',
       owShowOverview: (UI.ownerTab || 'overview') === 'overview',
       owShowTraffic: UI.ownerTab === 'traffic',
       owShowIn: UI.ownerTab === 'in',
@@ -5722,8 +5761,8 @@
       owShowActivity: UI.ownerTab === 'activity',
       owShowHealth: UI.ownerTab === 'health',
 
-      owTiles: owFinance ? [
-        owTile('Recurring revenue (MRR)', owFinance.moneyIn.mrrMinor ? owMoney(owFinance.moneyIn.mrrMinor) : 'none active',
+      owTiles: owKpis(owFinance ? [
+        owTile('MRR', owFinance.moneyIn.mrrMinor ? owMoney(owFinance.moneyIn.mrrMinor) : 'none active',
           owFinance.moneyIn.activeSubscriptions ? plural(owFinance.moneyIn.activeSubscriptions, 'active subscription') : 'No active Stripe subscriptions',
           owFinance.moneyIn.mrrMinor ? 'pos' : 'unknown'),
         owTile('Net in, this month', owMoney(owFinance.moneyIn.thisMonthNetMinor), owMoney(owFinance.moneyIn.thisMonthGrossMinor) + ' gross, after Stripe fees', ''),
@@ -5739,7 +5778,7 @@
         owTile('Paying accounts', String(owAnalytics ? owAnalytics.overview.paidUsers : '\u2014'),
           owAnalytics ? owAnalytics.overview.freeUsers + ' free \u00b7 ' + owAnalytics.overview.trialUsers + ' trialing' : 'Loading\u2026',
           owAnalytics && owAnalytics.overview.paidUsers > 0 ? 'pos' : 'unknown'),
-      ] : [],
+      ] : []),
       owMonths: (function () {
         if (!owFinance) return [];
         var months = owFinance.months || [];
@@ -5772,7 +5811,7 @@
       owUpcomingTotal: owFinance && (owFinance.moneyOut.dueNext60Days || []).length
         ? owMoney(owFinance.moneyOut.dueNext60DaysTotalMinor) + ' due across the next 60 days.' : '',
 
-      owInTiles: owFinance ? [
+      owInTiles: owKpis(owFinance ? [
         owTile('Gross in', owMoney(owFinance.moneyIn.grossMinor), 'over the last ' + owFinance.moneyIn.windowDays + ' days', ''),
         owTile('Stripe fees', owMoney(owFinance.moneyIn.feeMinor),
           owFinance.moneyIn.grossMinor ? Math.round(owFinance.moneyIn.feeMinor / owFinance.moneyIn.grossMinor * 1000) / 10 + '% of gross' : '',
@@ -5781,7 +5820,7 @@
         owTile('Refunded', owMoney(owFinance.moneyIn.refundMinor), '', owFinance.moneyIn.refundMinor ? 'neg' : ''),
         owTile('MRR', owFinance.moneyIn.mrrMinor ? owMoney(owFinance.moneyIn.mrrMinor) : 'none', 'From active subscriptions', owFinance.moneyIn.mrrMinor ? 'pos' : 'unknown'),
         owTile('ARR', owFinance.moneyIn.arrMinor ? owMoney(owFinance.moneyIn.arrMinor) : 'none', 'MRR \u00d7 12', owFinance.moneyIn.arrMinor ? 'pos' : 'unknown'),
-      ] : [],
+      ] : []),
       owInMonths: (owFinance && owFinance.months || []).map(function (m) {
         return { month: m.month, gross: owMoney(m.grossMinor), fees: owMoney(m.feeMinor), net: owMoney(m.netMinor),
           refunds: m.refundMinor ? owMoney(m.refundMinor) : '\u2014', count: String(m.count || 0) };
@@ -5799,7 +5838,7 @@
       }),
       owInRecentEmpty: !owFinance || (owFinance.recentRevenue || []).length === 0,
 
-      owOutTiles: owFinance ? [
+      owOutTiles: owKpis(owFinance ? [
         owTile('Subscriptions', owMoney(owFinance.moneyOut.monthlyBurnMinor),
           owFinance.moneyOut.unpricedCount ? 'Understated: ' + owFinance.moneyOut.unpricedCount + ' without an amount' : 'Per month, all priced',
           owFinance.moneyOut.unpricedCount ? 'unknown' : ''),
@@ -5808,7 +5847,7 @@
         owTile('Total out, per month', owMoney(owFinance.moneyOut.totalMonthlyOutMinor), 'What profit is measured against', ''),
         owTile('Due in 60 days', owMoney(owFinance.moneyOut.dueNext60DaysTotalMinor), (owFinance.moneyOut.dueNext60Days || []).length + ' payment(s) scheduled', ''),
         owTile('Tracked costs', String(owFinance.moneyOut.entries || 0), 'Active entries in the ledger', ''),
-      ] : [],
+      ] : []),
       owOutNote: owFinance ? (owFinance.moneyOut.unpricedCount
         ? (owFinance.moneyOut.unpricedNames || []).join(', ') + ' \u2014 tracked but with no amount, because a guessed hosting bill would make the profit figure fiction. Set them once and every total becomes real.'
         : 'Every active cost has an amount, so burn and profit are complete.') : '',
@@ -5898,14 +5937,14 @@
       owCats: owBars(owFinance && owFinance.moneyOut.byCategory, function (v) { return owMoney(v); }),
       owCatsEmpty: !owFinance || Object.keys(owFinance.moneyOut.byCategory || {}).filter(function (k) { return owFinance.moneyOut.byCategory[k] > 0; }).length === 0,
 
-      owUserTiles: owAnalytics ? [
+      owUserTiles: owKpis(owAnalytics ? [
         owTile('Total accounts', String(owAnalytics.overview.users), '', ''),
         owTile('Active, 7 days', String(owAnalytics.overview.activeUsers7d), owAnalytics.overview.newUsers30d + ' joined in 30 days', ''),
         owTile('Projects', String(owAnalytics.overview.projects), owAnalytics.overview.processingProjects + ' processing \u00b7 ' + owAnalytics.overview.failedProjects + ' failed', ''),
         owTile('Clips', String(owAnalytics.overview.clips), owAnalytics.overview.postedClips + ' posted \u00b7 ' + owAnalytics.overview.readyClips + ' ready', ''),
         owTile('Tokens used, 30d', String(owAnalytics.overview.tokensUsed30d), owAnalytics.overview.tokensSold30d + ' sold', ''),
         owTile('Unspent top-ups', String(owAnalytics.overview.purchasedTopupBalance), 'Paid for and not yet used', ''),
-      ] : [],
+      ] : []),
       owUserFilterVal: UI.ownerUserFilter || '',
       setOwUserFilter: function (e) { UI.ownerUserFilter = e.target.value; refresh(); },
       owUsers: (function () {
@@ -5937,7 +5976,7 @@
       owSocial: owBars(owAnalytics && owAnalytics.social, function (v) { return v + ' account(s)'; }),
       owSocialEmpty: !owAnalytics || Object.keys(owAnalytics.social || {}).length === 0,
 
-      owHealthTiles: (function () {
+      owHealthTiles: owKpis((function () {
         var h = DATA.ownerData && DATA.ownerData.health;
         if (!h) return [owTile('Pipeline', 'Loading\u2026', 'Asking the worker', '')];
         if (h.error) return [owTile('Pipeline', 'Unreachable', String(h.error).slice(0, 60), 'neg')];
@@ -5948,7 +5987,7 @@
           owTile('Worker', worker.error ? 'Unreachable' : 'Reachable',
             worker.error ? String(worker.error).slice(0, 60) : 'answered its health check', worker.error ? 'neg' : 'pos'),
         ];
-      })(),
+      })()),
       owHealthCodes: (function () {
         var h = DATA.ownerData && DATA.ownerData.health;
         return (h && h.topFailures || []).map(function (row) {
@@ -5985,15 +6024,53 @@
             : money + (t.revenueCurrency === 'mixed' ? ' (mixed currencies)' : '');
         }
         var pct = function (v) { return v === null || v === undefined ? '\u2014' : v + '%'; };
+        return owKpis([
+          owTile('Unique visitors', String(t.uniques || 0), (t.uniques7 || 0) + ' in the last 7 days', ''),
+          owTile('Page views', String(t.views || 0), (t.views7 || 0) + ' in the last 7 days', ''),
+          owTile('Live now', String(ana.liveNow || 0), 'last 5 minutes', 'live'),
+          owTile('Visit \u2192 signup', pct(r.visitToSignup), plural(t.signups || 0, 'signup'), 'pos'),
+          owTile('Revenue', money || '0', (t.topups || 0) + ' top-up' + (t.topups === 1 ? '' : 's') + ' in the window', ''),
+          owTile('Clips posted', String(t.postsPublished || 0), 'published to connected channels', ''),
+        ]);
+      })(),
+      anaLiveShow: Boolean(UI.screen === 'owner' && UI.ownerTab === 'traffic' && DATA.webmetrics),
+      anaLiveLabel: (DATA.webmetrics && DATA.webmetrics.liveNow || 0) + ' live right now',
+      anaFunnel: (function () {
+        var ana = DATA.webmetrics;
+        if (!ana) return [];
+        var t = ana.totals || {}; var r = ana.rates || {};
+        var pct = function (v) { return v === null || v === undefined ? '\u2014' : v + '%'; };
+        var vStyle = function (colour) {
+          return 'font-family: Outfit, Inter, sans-serif; font-size: 25px; font-weight: 600; letter-spacing: -.03em; line-height: 1.05; color: ' + colour + ';';
+        };
         return [
-          { label: 'Page views', value: String(t.views || 0), note: (t.views7 || 0) + ' in the last 7 days' },
-          { label: 'Unique visitors', value: String(t.uniques || 0), note: (t.uniques7 || 0) + ' in the last 7 days' },
-          { label: 'Signups', value: String(t.signups || 0), note: pct(r.visitToSignup) + ' of visitors' },
-          { label: 'Checkouts started', value: String(t.checkoutsStarted || 0), note: pct(r.signupToCheckout) + ' of signups' },
-          { label: 'Paid conversions', value: String(t.paidConversions || 0), note: pct(r.visitToPaid) + ' of visitors' },
-          { label: 'Revenue', value: money || '0', note: (t.topups || 0) + ' top-up' + (t.topups === 1 ? '' : 's') + ' in the window' },
-          { label: 'Clips posted', value: String(t.postsPublished || 0), note: 'published to connected channels' },
+          { name: 'Visited', value: String(t.uniques || 0), rate: 'unique visitors', notFirst: false, valueStyle: vStyle('#F2F2F4') },
+          { name: 'Signed up', value: String(t.signups || 0), rate: pct(r.visitToSignup) + ' of visitors', notFirst: true, valueStyle: vStyle('#F2F2F4') },
+          { name: 'Started checkout', value: String(t.checkoutsStarted || 0), rate: pct(r.signupToCheckout) + ' of signups', notFirst: true, valueStyle: vStyle('#F2F2F4') },
+          { name: 'Paid', value: String(t.paidConversions || 0), rate: pct(r.visitToPaid) + ' of visitors', notFirst: true, valueStyle: vStyle('#F0D6A6') },
         ];
+      })(),
+      anaChannels: (function () {
+        var ch = DATA.webmetrics && DATA.webmetrics.channels;
+        if (!ch) return [];
+        return owBars({ Search: ch.search, Social: ch.social, Direct: ch.direct, Referral: ch.referral },
+          function (v) { return String(v); });
+      })(),
+      anaChannelsEmpty: (function () {
+        var ch = DATA.webmetrics && DATA.webmetrics.channels;
+        return !ch || (ch.search + ch.social + ch.direct + ch.referral) === 0;
+      })(),
+      anaCampaigns: topPairs(DATA.webmetrics && DATA.webmetrics.campaigns),
+      anaCampaignsEmpty: topPairs(DATA.webmetrics && DATA.webmetrics.campaigns).length === 0,
+      anaDevices: owBars(DATA.webmetrics && DATA.webmetrics.devices, function (v) { return String(v); }),
+      anaDevicesEmpty: Object.keys(DATA.webmetrics && DATA.webmetrics.devices || {}).length === 0,
+      anaLanguages: owBars(DATA.webmetrics && DATA.webmetrics.languages, function (v) { return String(v); }),
+      anaLanguagesEmpty: Object.keys(DATA.webmetrics && DATA.webmetrics.languages || {}).length === 0,
+      anaMissing: topPairs(DATA.webmetrics && DATA.webmetrics.missing),
+      anaMissingEmpty: topPairs(DATA.webmetrics && DATA.webmetrics.missing).length === 0,
+      anaBotsNote: (function () {
+        var bots = DATA.webmetrics && DATA.webmetrics.botHits || 0;
+        return bots ? bots + ' crawler hit' + (bots === 1 ? '' : 's') + ' filtered out of every number here.' : '';
       })(),
       anaBars: (function () {
         var ana = DATA.webmetrics;

@@ -54,6 +54,9 @@ const STUDIO_ASSETS = {
   // Motion and hover for the Tokens & billing screen. Kept out of the design
   // export because it hangs off ids rather than the export's hashed classes.
   '/studio-tokens.css': { file: studioAsset('studio-tokens.css'), type: 'text/css; charset=utf-8' },
+  // Motion and hover for the Owner screen, same arrangement for the same
+  // reason: its dcow- hooks are hand-authored, not the export's hashed classes.
+  '/studio-owner.css': { file: studioAsset('studio-owner.css'), type: 'text/css; charset=utf-8' },
   // The editor's "coming soon" gate. Two files and one <link> so that turning
   // the editor on again is a deletion rather than an untangling.
   '/studio-editor-gate.css': { file: studioAsset('studio-editor-gate.css'), type: 'text/css; charset=utf-8' },

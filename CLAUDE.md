@@ -475,6 +475,25 @@ phone work back to `deenclipped-v2-2` rather than leaving two truths.
   blocks the books), cached by the host across state polls because
   `/api/state` replaces DATA wholesale. `/owner` stays in robots.txt's
   disallow list only because trimming the list is not worth it.
+- **v3.19.0 rebuilt the screen in an open look, per Youssef** ("tabs … that
+  dont look boxy and ai … some without boxes, add animations all round", and
+  the rail correction "side bar should be seprated … im SAYING OWNER"): the
+  Owner rail item sits apart under the nav groups in its own gold ring
+  (`ownerNavItem()`), the screen uses text tabs with a gold ink bar, hairline
+  dividers and divided KPI rows instead of cards, and Traffic gained live-now,
+  funnel, channels, campaigns, devices, languages and broken-links from the
+  v3.18 capture. Motion lives in `src/public/studio-owner.css` (hand-written,
+  linked from index.html, allowlisted in server.js — same arrangement as
+  studio-tokens.css). The entry animation is GATED: `owAnimClass` emits
+  `dcow-rise` only within 900ms of a deliberate act (`ownerAnimAt` stamped by
+  nav/tab/range/refresh), or every state poll would replay it. Two layout
+  traps fixed here, do not regress them: the screen root carries
+  `flex: 1; min-height: 0; overflow: auto` like every sibling screen (without
+  it nothing scrolls and flex compresses the sections into each other —
+  `.dcow-s { flex-shrink: 0 }` in studio-owner.css is the other half), and
+  tables inside the `auto-fit, minmax(280px, 1fr)` grids must NOT carry the
+  wide tables' `min-width: 420px` — a ~375px column clips the right-aligned
+  count column clean off, which reads as "the numbers are missing".
 - **A pending cancellation is visible.** Stripe keeps a cancelled-at-period-end
   subscription `active`, so `cancel_at_period_end` is captured from the
   webhook, exposed as `current.cancelAtPeriodEnd`/`cancelAt`, shown as an

@@ -1,0 +1,104 @@
+/* Owner screen motion. Loaded by index.html alongside studio-tokens.css and
+   scoped to #dcOwnerScreen, so nothing here can leak into customer screens.
+
+   The host re-renders the whole shell on every state poll, so entry animation
+   must never key off mere presence in the DOM -- it would replay every few
+   seconds. The adapter's owAnimClass binding emits `dcow-rise` only within
+   900ms of a deliberate act (opening Owner, switching sub-tab or range,
+   Refresh); outside that window sections render static. Fills are
+   `backwards`, never `both`/`forwards` -- a forwards fill pins the final
+   transform and eats hover transforms (see studio-tokens.css). */
+
+@keyframes dcowRise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes dcowGrowX {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes dcowGrowY {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+@keyframes dcowInk {
+  from { opacity: 0; transform: scaleX(.35); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+@keyframes dcowPulse {
+  0% { box-shadow: 0 0 0 0 rgba(122, 220, 160, .45); }
+  70% { box-shadow: 0 0 0 6px rgba(122, 220, 160, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(122, 220, 160, 0); }
+}
+
+/* The screen root scrolls (like every sibling screen); its sections must
+   never flex-shrink to fit, or the tabs' content compresses and overpaints
+   instead of scrolling -- the bug this rule was added for. */
+#dcOwnerScreen .dcow-s { flex-shrink: 0; }
+
+#dcOwnerScreen .dcow-rise {
+  animation: dcowRise .55s cubic-bezier(.2, .7, .3, 1) backwards;
+}
+/* Staggered arrival, top of the screen first. */
+#dcOwnerScreen .dcow-d1.dcow-rise { animation-delay: .05s; }
+#dcOwnerScreen .dcow-d2.dcow-rise { animation-delay: .12s; }
+#dcOwnerScreen .dcow-d3.dcow-rise { animation-delay: .19s; }
+#dcOwnerScreen .dcow-d4.dcow-rise { animation-delay: .26s; }
+#dcOwnerScreen .dcow-d5.dcow-rise { animation-delay: .33s; }
+#dcOwnerScreen .dcow-d6.dcow-rise { animation-delay: .40s; }
+
+/* Bars grow along their inline width%, columns up from the baseline. Delays
+   sit just after the owning section's rise so the growth happens while the
+   section is visible; deeper sections push their bars later to match. */
+#dcOwnerScreen .dcow-rise .dcow-fill {
+  transform-origin: left center;
+  animation: dcowGrowX .8s cubic-bezier(.2, .7, .3, 1) .2s backwards;
+}
+#dcOwnerScreen .dcow-rise .dcow-col {
+  transform-origin: center bottom;
+  animation: dcowGrowY .7s cubic-bezier(.2, .7, .3, 1) .2s backwards;
+}
+#dcOwnerScreen .dcow-d3.dcow-rise .dcow-fill,
+#dcOwnerScreen .dcow-d3.dcow-rise .dcow-col { animation-delay: .34s; }
+#dcOwnerScreen .dcow-d4.dcow-rise .dcow-fill,
+#dcOwnerScreen .dcow-d4.dcow-rise .dcow-col { animation-delay: .4s; }
+#dcOwnerScreen .dcow-d5.dcow-rise .dcow-fill,
+#dcOwnerScreen .dcow-d5.dcow-rise .dcow-col { animation-delay: .46s; }
+#dcOwnerScreen .dcow-d6.dcow-rise .dcow-fill,
+#dcOwnerScreen .dcow-d6.dcow-rise .dcow-col { animation-delay: .52s; }
+
+/* The active tab's underline. Inside the gated tabs section, so it slides
+   only on a real tab change, not on every poll. */
+#dcOwnerScreen .dcow-rise .dcow-ink {
+  transform-origin: left center;
+  animation: dcowInk .3s cubic-bezier(.2, .7, .3, 1) backwards;
+}
+
+/* The live-now dot breathes on its own clock -- infinite, so the screenshot
+   settle helper must skip it (finish() throws on infinite animations). */
+#dcOwnerScreen .dcow-live {
+  animation: dcowPulse 2.4s ease-out infinite;
+}
+
+/* Hover life. Rows tint; tiles, buttons and funnel steps lift. The inline
+   styles on these elements set neither transform nor background, so the
+   stylesheet wins here (inline style beats stylesheet -- a repo lesson). */
+#dcOwnerScreen .dcow-hov { transition: background-color .15s ease; }
+#dcOwnerScreen .dcow-hov:hover { background-color: rgba(242, 242, 244, .03); }
+#dcOwnerScreen .dcow-lift { transition: transform .18s cubic-bezier(.2, .7, .3, 1), opacity .18s ease; }
+#dcOwnerScreen .dcow-lift:hover { transform: translateY(-2px); }
+
+@media (prefers-reduced-motion: reduce) {
+  #dcOwnerScreen .dcow-rise,
+  #dcOwnerScreen .dcow-rise .dcow-fill,
+  #dcOwnerScreen .dcow-rise .dcow-col,
+  #dcOwnerScreen .dcow-rise .dcow-ink,
+  #dcOwnerScreen .dcow-live {
+    animation: none;
+  }
+  #dcOwnerScreen .dcow-hov,
+  #dcOwnerScreen .dcow-lift {
+    transition: none;
+  }
+  #dcOwnerScreen .dcow-lift:hover { transform: none; }
+}

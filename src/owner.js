@@ -642,7 +642,7 @@ export async function finance(user, { days = 180 } = {}) {
       // Stated so the number is never read as more certain than it is.
       completeness: [
         unpriced.length
-          ? `${unpriced.length} cost${unpriced.length === 1 ? '' : 's'} still have no amount, so burn is understated.`
+          ? `${unpriced.length} cost${unpriced.length === 1 ? '' : 's'} still ${unpriced.length === 1 ? 'has' : 'have'} no amount, so burn is understated.`
           : '',
         mixedCurrency,
       ].filter(Boolean).join(' '),
