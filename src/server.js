@@ -633,6 +633,7 @@ async function route(req, res, url) {
         referrer: String(req.headers.referer || ''),
         ownHost: String(req.headers.host || '').replace(/:\d+$/, ''),
         query: url.searchParams, viewerRole: currentUser?.role || '',
+        language: String(req.headers['accept-language'] || ''),
       });
     } catch { /* analytics must never take a page down */ }
   }
@@ -983,6 +984,9 @@ async function route(req, res, url) {
   // get JSON; browsers get a page.
   if (!pathname.startsWith('/api/')) {
     if (method === 'GET' && String(req.headers.accept || '').includes('text/html')) {
+      // The broken-links card on the owner screen: a person or a crawler
+      // followed a dead link to here. Counted before the page is served.
+      try { metrics.missing(pathname); } catch { /* analytics never breaks a 404 */ }
       return html(res, 404, marketing.notFound(marketingContext(req)));
     }
     return json(res, 404, { error: 'Not found.' });

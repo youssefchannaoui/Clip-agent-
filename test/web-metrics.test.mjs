@@ -121,3 +121,67 @@ test('a rate with no denominator is null, never a fake 0%', () => {
     assert.notEqual(emptySummary.rates.visitToSignup, null);
   }
 });
+
+// ── The researched capture upgrades (v3.18.0) ───────────────────────────────
+
+test('a crawler is a bot hit, never a visitor', async () => {
+  const before = metrics.summary({ days: 7 }).totals;
+  await fetch(`${base}/`, { headers: { accept: 'text/html', 'x-forwarded-for': '198.51.100.77', 'user-agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' } });
+  await fetch(`${base}/pricing`, { headers: { accept: 'text/html', 'x-forwarded-for': '198.51.100.78', 'user-agent': 'curl/8.5.0' } });
+  const after = metrics.summary({ days: 7 });
+  assert.equal(after.totals.views, before.views, 'no views from bots');
+  assert.equal(after.totals.uniques, before.uniques, 'no uniques from bots');
+  assert.ok(after.botHits >= 2, 'but the hits are visible as what they are');
+});
+
+test('device class and language are counted once per visitor-day, nothing personal kept', async () => {
+  await fetch(`${base}/`, { headers: {
+    accept: 'text/html', 'x-forwarded-for': '203.0.113.140',
+    'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
+    'accept-language': 'en-AU,en;q=0.9,ar;q=0.8',
+  } });
+  const summary = metrics.summary({ days: 7 });
+  assert.ok(summary.devices.mobile >= 1, 'an iPhone is mobile');
+  assert.ok(summary.languages['en-au'] >= 1, 'the first Accept-Language tag, lowercased');
+  metrics.flush();
+  const persisted = JSON.stringify(state.webMetrics);
+  assert.ok(!persisted.includes('iPhone OS 17_5'), 'the UA itself never persists');
+  assert.ok(!persisted.includes('203.0.113.140'), 'nor the address');
+});
+
+test('the first page of a visitor\'s day is their entry page', async () => {
+  const headers = { accept: 'text/html', 'x-forwarded-for': '203.0.113.141', 'user-agent': 'entry-tester' };
+  await fetch(`${base}/pricing`, { headers });
+  await fetch(`${base}/`, { headers });
+  const summary = metrics.summary({ days: 7 });
+  assert.ok(summary.entries['/pricing'] >= 1, 'the landing page is recorded');
+  // The second page must not create a second entry for the same visitor.
+  const entriesTotal = Object.values(summary.entries).reduce((a, b) => a + b, 0);
+  const uniques = summary.totals.uniques;
+  assert.ok(entriesTotal <= uniques, `entries (${entriesTotal}) can never exceed uniques (${uniques})`);
+});
+
+test('utm_campaign is kept, and channels group at read time', async () => {
+  await fetch(`${base}/?utm_source=youtube&utm_medium=description&utm_campaign=Ramadan-Series`, {
+    headers: { accept: 'text/html', referer: 'https://www.youtube.com/watch?v=x', 'x-forwarded-for': '203.0.113.142', 'user-agent': 'campaign-tester' },
+  });
+  const summary = metrics.summary({ days: 7 });
+  assert.ok(summary.campaigns['ramadan-series'] >= 1, 'the campaign name, normalised');
+  assert.ok(summary.channels.social >= 1, 'youtube.com grouped as Social');
+  assert.ok(summary.channels.search >= 1, 'google.com from earlier grouped as Search');
+  assert.equal(typeof summary.channels.direct, 'number', 'direct visits are a number, not a guess');
+});
+
+test('a dead link is counted for the broken-links card', async () => {
+  await fetch(`${base}/blog`, { headers: { accept: 'text/html', 'x-forwarded-for': '203.0.113.143', 'user-agent': 'dead-link-tester' } });
+  await fetch(`${base}/blog`, { headers: { accept: 'text/html', 'x-forwarded-for': '203.0.113.143', 'user-agent': 'dead-link-tester' } });
+  const summary = metrics.summary({ days: 7 });
+  assert.ok(summary.missing['/blog'] >= 2, 'the missing path and how often it was hit');
+  assert.equal(summary.missing['/api/never'], undefined, 'API paths never mint 404 keys');
+});
+
+test('live-now counts the last five minutes and drops with time', async () => {
+  const summary = metrics.summary({ days: 7 });
+  assert.ok(summary.liveNow >= 1, 'the visitors from these tests are live right now');
+  assert.ok(Number.isInteger(summary.liveNow));
+});

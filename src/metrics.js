@@ -30,6 +30,48 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const RETENTION_DAYS = 90;
 const MAP_CAP = 50; // distinct referrer hosts / utm pairs kept per day
 const UNIQUES_CAP = 50_000; // per-day id list; beyond this uniques undercount
+const MISSING_CAP = 30; // distinct 404 paths kept per day
+const LIVE_WINDOW_MS = 5 * 60 * 1000; // "live now" is the last five minutes
+
+/**
+ * Crawlers are not visitors. Counting Googlebot's daily sweep as traffic is
+ * how a site with no readers shows forty uniques — every analytics product
+ * filters these, and ours does it before hashing, so a bot never even enters
+ * the unique-id set.
+ */
+const BOT_UA = /bot|crawl|spider|slurp|bingpreview|headlesschrome|lighthouse|pingdom|uptimerobot|facebookexternalhit|whatsapp|telegrambot|discordbot|twitterbot|linkedinbot|embedly|quora link preview|curl\/|wget\/|python-requests|python-urllib|aiohttp|axios\/|go-http-client|okhttp|java\/|libwww/i;
+
+/**
+ * Referrer hosts grouped the way every analytics product groups them, so the
+ * screen can answer "search or social?" without the owner memorising hosts.
+ * Applied at read time — the stored data stays plain hosts.
+ */
+const SEARCH_HOSTS = /(^|\.)google\.[a-z.]+$|(^|\.)bing\.com$|(^|\.)duckduckgo\.com$|(^|\.)yahoo\.com$|(^|\.)baidu\.com$|(^|\.)yandex\.[a-z]+$|(^|\.)ecosia\.org$|(^|\.)search\.brave\.com$|(^|\.)startpage\.com$/;
+const SOCIAL_HOSTS = /(^|\.)youtube\.com$|^youtu\.be$|(^|\.)facebook\.com$|^fb\.me$|(^|\.)instagram\.com$|^t\.co$|(^|\.)twitter\.com$|^x\.com$|(^|\.)reddit\.com$|(^|\.)tiktok\.com$|(^|\.)linkedin\.com$|(^|\.)whatsapp\.com$|(^|\.)t\.me$|(^|\.)telegram\.org$|(^|\.)pinterest\.[a-z.]+$|(^|\.)snapchat\.com$|(^|\.)threads\.net$/;
+
+/** Coarse device class from the UA — the class is counted, the UA never kept. */
+function deviceClass(userAgent) {
+  const ua = String(userAgent || '');
+  if (/ipad|tablet|silk/i.test(ua)) return 'tablet';
+  if (/mobi|iphone|android/i.test(ua)) return 'mobile';
+  return 'desktop';
+}
+
+// Live-now: visitor-hash -> last-seen ms, in memory only. Never persisted —
+// five minutes of ephemeral presence is not worth a disk write, and a restart
+// honestly showing zero for five minutes beats inventing continuity.
+const liveVisitors = new Map();
+
+function pruneLive(now = Date.now()) {
+  for (const [id, at] of liveVisitors) {
+    if (now - at > LIVE_WINDOW_MS) liveVisitors.delete(id);
+  }
+}
+
+export function liveNow() {
+  pruneLive();
+  return liveVisitors.size;
+}
 
 /**
  * The public paths worth counting. Everything else is a 404, an asset, or an
@@ -59,6 +101,9 @@ function dayBucket(day) {
   const bucket = metrics.days[day];
   // Older builds of a bucket may lack a field added later; heal in place.
   bucket.views ||= {}; bucket.referrers ||= {}; bucket.utm ||= {}; bucket.events ||= {};
+  bucket.devices ||= {}; bucket.languages ||= {}; bucket.campaigns ||= {};
+  bucket.entries ||= {}; bucket.missing ||= {};
+  bucket.direct ||= 0; bucket.botHits ||= 0;
   if (!Array.isArray(bucket.uniqueIds)) bucket.uniqueIds = [];
   return bucket;
 }
@@ -124,27 +169,59 @@ export function flush() {
  * not traffic, and Shopify-style tools exclude the shop owner for the same
  * reason.
  */
-export function pageview({ path, ip = '', userAgent = '', referrer = '', ownHost = '', query = null, viewerRole = '' }) {
+export function pageview({ path, ip = '', userAgent = '', referrer = '', ownHost = '', query = null, viewerRole = '', language = '' }) {
   if (!TRACKED_PATHS.has(path)) return;
   if (['owner', 'admin'].includes(String(viewerRole || '').toLowerCase())) return;
   const day = utcDay();
   const bucket = dayBucket(day);
+
+  // A crawler is recorded as the one number it is — a bot hit — and nothing
+  // else: no view, no unique, no referrer. The count exists so a traffic dip
+  // can be told apart from a filter change.
+  if (BOT_UA.test(String(userAgent))) { bucket.botHits += 1; scheduleFlush(); return; }
+
   bump(bucket.views, path, TRACKED_PATHS.size + 1);
 
   const id = visitorId(ip, String(userAgent).slice(0, 200), day);
-  if (!bucket.uniqueIds.includes(id)) {
+  const firstToday = !bucket.uniqueIds.includes(id);
+  if (firstToday) {
     if (bucket.uniqueIds.length < UNIQUES_CAP) bucket.uniqueIds.push(id);
     bucket.uniques = (bucket.uniques || 0) + (bucket.uniqueIds.length <= UNIQUES_CAP ? 1 : 0);
+    // The first page of the day is the entry page — Shopify's "landing page",
+    // derivable server-side because the daily id set already knows firstness.
+    bump(bucket.entries, path, TRACKED_PATHS.size + 1);
+    bump(bucket.devices, deviceClass(userAgent), 4);
+    const locale = String(language || '').split(',')[0].trim().toLowerCase().slice(0, 12);
+    if (locale) bump(bucket.languages, locale, 24);
   }
+  liveVisitors.set(id, Date.now());
+  if (liveVisitors.size > 10_000) pruneLive();
 
   const host = referrerHost(referrer, ownHost);
   if (host) bump(bucket.referrers, host);
+  // Direct visits are the channel maths' missing half: without this count,
+  // "no referrer" is indistinguishable from "referrer map capped".
+  else if (firstToday) bucket.direct += 1;
 
   const source = String(query?.get?.('utm_source') || '').slice(0, 60).toLowerCase();
   if (source) {
     const medium = String(query?.get?.('utm_medium') || '').slice(0, 40).toLowerCase();
     bump(bucket.utm, medium ? `${source} / ${medium}` : source);
+    const campaign = String(query?.get?.('utm_campaign') || '').slice(0, 60).toLowerCase();
+    if (campaign) bump(bucket.campaigns, campaign);
   }
+  scheduleFlush();
+}
+
+/**
+ * One 404 that a person (or a crawler following a dead link) actually hit.
+ * Capped hard: the value is the top few broken links, not a scanner log.
+ */
+export function missing(path) {
+  const key = String(path || '').slice(0, 80);
+  if (!key || key.startsWith('/api/')) return;
+  const bucket = dayBucket(utcDay());
+  bump(bucket.missing, key, MISSING_CAP);
   scheduleFlush();
 }
 
@@ -190,6 +267,8 @@ export function summary({ days = 30 } = {}) {
   }
 
   const byPath = {}; const referrers = {}; const utm = {}; const events = {};
+  const devices = {}; const languages = {}; const campaigns = {}; const entries = {}; const missingPages = {};
+  let direct = 0; let botHits = 0;
   const cutoff = utcDay(today - (window - 1) * DAY_MS);
   for (const [day, bucket] of Object.entries(metrics.days)) {
     if (day < cutoff) continue;
@@ -197,6 +276,22 @@ export function summary({ days = 30 } = {}) {
     for (const [k, v] of Object.entries(bucket.referrers)) referrers[k] = (referrers[k] || 0) + v;
     for (const [k, v] of Object.entries(bucket.utm)) utm[k] = (utm[k] || 0) + v;
     for (const [k, v] of Object.entries(bucket.events)) events[k] = (events[k] || 0) + v;
+    for (const [k, v] of Object.entries(bucket.devices || {})) devices[k] = (devices[k] || 0) + v;
+    for (const [k, v] of Object.entries(bucket.languages || {})) languages[k] = (languages[k] || 0) + v;
+    for (const [k, v] of Object.entries(bucket.campaigns || {})) campaigns[k] = (campaigns[k] || 0) + v;
+    for (const [k, v] of Object.entries(bucket.entries || {})) entries[k] = (entries[k] || 0) + v;
+    for (const [k, v] of Object.entries(bucket.missing || {})) missingPages[k] = (missingPages[k] || 0) + v;
+    direct += bucket.direct || 0;
+    botHits += bucket.botHits || 0;
+  }
+
+  // Channel grouping happens here, at read time, so the stored data stays
+  // plain referrer hosts and a regrouping never needs a migration.
+  const channels = { search: 0, social: 0, referral: 0, direct };
+  for (const [host, count] of Object.entries(referrers)) {
+    if (SEARCH_HOSTS.test(host)) channels.search += count;
+    else if (SOCIAL_HOSTS.test(host)) channels.social += count;
+    else channels.referral += count;
   }
 
   const inWindow = ms => Number(ms || 0) && utcDay(Number(ms)) >= cutoff;
@@ -244,6 +339,9 @@ export function summary({ days = 30 } = {}) {
       visitToPaid: rate(paidConversions, uniques),
     },
     byPath, referrers, utm, events,
+    channels, devices, languages, campaigns, entries,
+    missing: missingPages, botHits,
+    liveNow: liveNow(),
     signupsByDay,
   };
 }
