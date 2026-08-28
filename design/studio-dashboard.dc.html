@@ -985,12 +985,12 @@
             <div style="display: flex; flex-direction: column; gap: 8px; padding: 13px 15px; border: 1px solid rgba(214,138,110,.3); border-radius: 12px; background: rgba(214,138,110,.05);">
               <span style="display: flex; align-items: center; gap: 8px; font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600; color: #E0A188;"><i class="ph ph-warning-circle" style="font-size: 15px;"></i>{{ schedOverdueLabel }}</span>
               <sc-for list="{{ schedOverdueItems }}" as="post" hint-placeholder-count="1">
-                <article style="{{ post.cardStyle }}">
+                <article style="{{ post.cardStyle }}" data-dc-sched-card>
                   <span style="{{ post.thumbStyle }}"></span>
                   <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1;">
                     <div style="display: flex; align-items: center; gap: 9px; flex-wrap: wrap;">
                       <strong style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;">{{ post.time }}</strong>
-                      <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: #8B8B93;"><i class="{{ post.icon }}" style="font-size: 13px;"></i>{{ post.dest }}</span>
+                      <sc-for list="{{ post.dests }}" as="dst" hint-placeholder-count="2"><span style="{{ dst.style }}"><i class="{{ dst.icon }}" style="font-size: 13px;"></i>{{ dst.name }}<span data-dc-dest-account>{{ dst.who }}</span>{{ dst.state }}</span></sc-for>
                       <span style="{{ post.statusStyle }}">{{ post.statusLabel }}</span>
                     </div>
                     <p style="margin: 0; font-size: 12px; color: #E9E9ED; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ post.caption }}</p>
@@ -1002,7 +1002,7 @@
                       </div>
                     </sc-if>
                     <sc-if value="{{ post.failReason }}" hint-placeholder-val="{{ '' }}">
-                      <p style="margin: 0; display: flex; align-items: baseline; gap: 6px; font-size: 11.5px; color: #E08770; line-height: 1.45;"><i class="ph-fill ph-warning-circle" style="font-size: 12px; position: relative; top: 1px;"></i>{{ post.failReason }}</p>
+                      <p style="margin: 0; display: flex; align-items: baseline; gap: 6px; font-size: 11.5px; color: #E08770; line-height: 1.45; overflow-wrap: anywhere; min-width: 0;"><i class="ph-fill ph-warning-circle" style="font-size: 12px; position: relative; top: 1px;"></i>{{ post.failReason }}</p>
                     </sc-if>
                   </div>
                   <div style="display: flex; align-items: center; gap: 7px; flex: none;">
@@ -1087,12 +1087,12 @@
             <div style="display: flex; flex-direction: column; gap: 10px;">
               <span style="font-size: 12px; color: #6E6E76;">{{ schedDayCount }}</span>
               <sc-for list="{{ schedDayItems }}" as="post" hint-placeholder-count="2">
-                <article style="{{ post.cardStyle }}">
+                <article style="{{ post.cardStyle }}" data-dc-sched-card>
                   <span style="{{ post.thumbStyle }}"></span>
                   <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1;">
                     <div style="display: flex; align-items: center; gap: 9px; flex-wrap: wrap;">
                       <strong style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;">{{ post.time }}</strong>
-                      <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: #8B8B93;"><i class="{{ post.icon }}" style="font-size: 13px;"></i>{{ post.dest }}</span>
+                      <sc-for list="{{ post.dests }}" as="dst" hint-placeholder-count="2"><span style="{{ dst.style }}"><i class="{{ dst.icon }}" style="font-size: 13px;"></i>{{ dst.name }}<span data-dc-dest-account>{{ dst.who }}</span>{{ dst.state }}</span></sc-for>
                       <span style="{{ post.statusStyle }}">{{ post.statusLabel }}</span>
                     </div>
                     <p style="margin: 0; font-size: 12px; color: #E9E9ED; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ post.caption }}</p>
@@ -1104,7 +1104,7 @@
                       </div>
                     </sc-if>
                     <sc-if value="{{ post.failReason }}" hint-placeholder-val="{{ '' }}">
-                      <p style="margin: 0; display: flex; align-items: baseline; gap: 6px; font-size: 11.5px; color: #E08770; line-height: 1.45;"><i class="ph-fill ph-warning-circle" style="font-size: 12px; position: relative; top: 1px;"></i>{{ post.failReason }}</p>
+                      <p style="margin: 0; display: flex; align-items: baseline; gap: 6px; font-size: 11.5px; color: #E08770; line-height: 1.45; overflow-wrap: anywhere; min-width: 0;"><i class="ph-fill ph-warning-circle" style="font-size: 12px; position: relative; top: 1px;"></i>{{ post.failReason }}</p>
                     </sc-if>
                   </div>
                   <div style="display: flex; align-items: center; gap: 7px; flex: none;">

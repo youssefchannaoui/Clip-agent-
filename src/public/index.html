@@ -4513,6 +4513,82 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(host&&tkEl.parentElement!==host)host.insertBefore(tkEl,connList.nextSibling);
     }
 
+    /* YouTube's posting options, built the same way and for the same reason:
+       the Studio shell had no privacy control for YouTube at all. Only the old
+       ?classic=1 page ever had one, so in the shipped product the stored
+       default ('private', store.js) was the only value a video could ever be
+       uploaded with -- every clip went out private and nothing on screen said
+       so, or offered a way to change it. */
+    let ytEl=null,ytBusy=false;
+    function paintYouTubeOptions(){
+      const connList=$('#studioConnList');
+      const provider=(((DATA||{}).social||{}).providers||{}).youtube||{};
+      if(!connList||!provider.connected){if(ytEl)ytEl.remove();ytEl=null;return}
+
+      const account=(provider.accounts||[])[0]||{};
+      const set=((DATA&&DATA.publishingSettings)||{}).youtube||{};
+      const shape=account.id||'-';
+      if(!ytEl||ytEl.dataset.shape!==shape){
+        if(ytEl)ytEl.remove();
+        ytEl=document.createElement('div');
+        ytEl.className='dctk';
+        ytEl.dataset.shape=shape;
+        ytEl.innerHTML=`<h4>YouTube posting options</h4>
+          <p class="dctk-sub">Used for new uploads. Videos already on the channel are never changed.</p>
+          <label class="dctk-field"><span>Who can see your uploads</span>
+            <select data-yt="privacy">
+              <option value="public">Everyone &mdash; public</option>
+              <option value="unlisted">Anyone with the link &mdash; unlisted</option>
+              <option value="private">Only you &mdash; private</option>
+            </select></label>
+          <fieldset><legend>On upload</legend>
+            <label class="dctk-check"><input type="checkbox" data-yt="notifySubscribers"><span>Notify subscribers</span></label>
+            <label class="dctk-check"><input type="checkbox" data-yt="madeForKids"><span>Made for kids</span></label>
+          </fieldset>
+          <p class="dctk-note" data-yt-note></p>
+          <p class="dctk-err" data-yt-err hidden></p>
+          <button type="button" class="dctk-save">Save YouTube options</button>`;
+
+        const q=k=>ytEl.querySelector(`[data-yt="${k}"]`);
+        /* 'private' is the stored default, so an account that has never had a
+           choice made shows the truth rather than a flattering guess. */
+        q('privacy').value=['public','unlisted','private'].includes(set.privacy)?set.privacy:'private';
+        q('notifySubscribers').checked=set.notifySubscribers!==false;
+        q('madeForKids').checked=Boolean(set.madeForKids);
+
+        const sync=()=>{
+          /* Said here because the setting alone cannot deliver it: Google locks
+             uploads from an API project that has not passed its compliance
+             audit to private, whatever the request asks for. Without this note
+             the only reading of a private video is that the app ignored the
+             choice. */
+          ytEl.querySelector('[data-yt-note]').textContent=q('privacy').value==='private'
+            ? 'Uploads stay private until you change this.'
+            : 'If uploads still arrive private, it is Google holding them: an API project that has not passed YouTube’s compliance audit cannot publish publicly, whatever is chosen here.';
+        };
+        ytEl.addEventListener('change',sync);
+        sync();
+
+        ytEl.querySelector('.dctk-save').onclick=()=>{
+          if(ytBusy)return;
+          const current=(DATA&&DATA.publishingSettings)||{};
+          const next={...current,youtube:{...(current.youtube||{}),
+            privacy:q('privacy').value,
+            notifySubscribers:q('notifySubscribers').checked,
+            madeForKids:q('madeForKids').checked}};
+          ytBusy=true;
+          const btn=ytEl.querySelector('.dctk-save');
+          btn.disabled=true;btn.textContent='Saving…';
+          studioDo(()=>api('/api/publishing-settings',{method:'POST',body:JSON.stringify(next)}),
+            'YouTube options saved',
+            msg=>{const err=ytEl&&ytEl.querySelector('[data-yt-err]');if(err){err.hidden=false;err.textContent=msg}})
+            .finally(()=>{ytBusy=false;if(ytEl){const b=ytEl.querySelector('.dctk-save');if(b){b.disabled=false;b.textContent='Save YouTube options'}}});
+        };
+      }
+      const host=connList.parentElement;
+      if(host&&ytEl.parentElement!==host)host.insertBefore(ytEl,connList.nextSibling);
+    }
+
     function paintLiveWork(vals){
       alive(liveEls.home);alive(liveEls.bar);
       const onHome=StudioAdapter.ui.screen==='home';
@@ -4678,6 +4754,7 @@ function renderStudio(){
         const p=rows[Number(b.dataset.connDisconnect)];StudioAdapter.ui.connProvider=p.key;
         StudioAdapter.bindings(DATA).disconnect({preventDefault(){}})});
       paintTikTokOptions();
+      paintYouTubeOptions();
     }
     StudioAdapter.onOpenConnections=()=>{paintConnections();connEls.root.classList.remove('hide')};
     /* /api/clip-settings validates all three fields together, so a partial patch
@@ -5204,6 +5281,7 @@ function paintStudio(){
   STUDIO.render(vals);
   paintSetupCelebration(vals);
   paintTikTokOptions();
+  paintYouTubeOptions();
   paintLiveWork(vals);
   paintApplyLecture(vals);
   paintPreviewPic(vals);

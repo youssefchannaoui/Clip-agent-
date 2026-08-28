@@ -115,7 +115,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **734 JS + 384 Python**
+- `npm test` and `npm run check` must pass. Currently **745 JS + 384 Python**
   (7 Python skipped). Update these numbers when they change — they were wrong by
   more than a factor of two, which makes them useless as a tripwire.
 - **The 7 skips are `SpeakerTrackingTests`**, which need a test video that is not
@@ -305,6 +305,37 @@ saying coming soon in the new update."
 - The phone rule in `studio-responsive.css` hides every child of the editor.
   The notice is a child, so it carries `:not(#dcEditorSoon)` — without it the
   phone gets a blank screen.
+
+## Posting: the app is not the limit, the platform reviews are (28 Aug 2026)
+
+Two "bugs" reported together turned out to be one app bug each plus one
+platform rule each. Keep them apart when triaging the next report.
+
+- **YouTube uploads arrived private.** The app's fault: `store.js` defaults
+  `youtube.privacy` to `private`, and the Studio shell had no control to change
+  it — only `?classic=1` ever had one, and no customer reaches that page. There
+  is now a YouTube panel in the connections dialog (`paintYouTubeOptions` in
+  `index.html`, built the same way as the TikTok one and for the same reason).
+  **But Google also locks uploads from an API project that has not passed the
+  compliance audit to private**, whatever the request asks for. The panel says
+  so when anything other than Private is chosen; without that line a private
+  upload reads as the app ignoring the choice.
+- **TikTok returned 403 with a link to the content-sharing guidelines.**
+  TikTok refuses in two parts: a `code` that says which rule, and a `message`
+  that is often only that link. `jsonRequest` preferred the message, so the
+  code was dropped and the error was undiagnosable. `platformDetail()` now
+  keeps the code and translates the known ones. The likeliest cause of this
+  particular 403 is `unaudited_client_can_only_post_to_private_accounts`: an
+  app TikTok has not reviewed may only post to a TikTok account that is itself
+  private. See `TIKTOK-SUBMISSION.md` — the demo recording and submission are
+  still outstanding.
+- **The schedule showed `targets[0]` and stopped.** A clip going to three
+  places said "YouTube", and a clip whose TikTok post failed while YouTube
+  went out looked entirely fine on the row. Every destination is now listed
+  with its own state and colour (`destinations()` in studio-adapter.js,
+  `post.dests` in the design). On a phone the account name is dropped
+  (`[data-dc-dest-account]`) — platform and outcome are what carry the meaning
+  — and the card wraps its actions onto their own line.
 
 ## Open items
 

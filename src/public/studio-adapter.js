@@ -1399,6 +1399,39 @@
 
   // Platforms spell themselves; naive capitalisation gives "Tiktok".
   var PLATFORM_NAMES = { youtube: 'YouTube', instagram: 'Instagram', tiktok: 'TikTok', facebook: 'Facebook' };
+  var PLATFORM_ICONS = {
+    youtube: 'ph ph-youtube-logo', instagram: 'ph ph-instagram-logo',
+    tiktok: 'ph ph-tiktok-logo', facebook: 'ph ph-facebook-logo',
+  };
+  // A schedule row used to name targets[0] and nothing else, so a clip going to
+  // three places said "YouTube" and a clip whose YouTube post had failed while
+  // TikTok went out looked, on the row, entirely fine. Each destination now
+  // carries its own state and says it in its own colour.
+  var TARGET_STATES = {
+    posted: { word: 'posted', colour: '#7FD1A6' },
+    publishing: { word: 'posting now', colour: '#E4C489' },
+    retrying: { word: 'retrying', colour: '#E6B770' },
+    failed: { word: 'failed', colour: '#E08770' },
+    scheduled: { word: 'waiting', colour: '#8B8B93' },
+    cancelled: { word: 'cancelled', colour: '#6E6E76' },
+  };
+  function destinations(clip) {
+    return (clip.targets || []).map(function (t) {
+      var platform = t.platform || t.provider || '';
+      var state = TARGET_STATES[t.status] || TARGET_STATES.scheduled;
+      // The account, when there is more than one place a platform could mean.
+      return {
+        name: PLATFORM_NAMES[platform] || platform || 'Unknown',
+        // Its own part, so a phone can drop the account without losing which
+        // platform it was or what happened there. Three of these at 375px read
+        // as three wrapped paragraphs when they are one string.
+        who: t.accountName ? ' · ' + t.accountName : '',
+        state: ' — ' + state.word,
+        icon: PLATFORM_ICONS[platform] || 'ph ph-share-network',
+        style: 'display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: ' + state.colour + ';',
+      };
+    });
+  }
   // The names the existing dashboard shows, which say which surface is posted to.
   var PLATFORM_TITLES = { youtube: 'YouTube Shorts', instagram: 'Instagram Reels', tiktok: 'TikTok', facebook: 'Facebook Reels' };
   // Instagram and Facebook are one Meta connection: connecting, testing or
@@ -1863,7 +1896,16 @@
               failReason: failedTarget ? String(failedTarget.error) : '',
               time: timeOf(c.scheduledAt),
               dest: PLATFORM_NAMES[platform] || 'No account',
-              icon: platform === 'youtube' ? 'ph ph-youtube-logo' : platform === 'instagram' ? 'ph ph-instagram-logo' : platform === 'tiktok' ? 'ph ph-tiktok-logo' : 'ph ph-share-network',
+              icon: PLATFORM_ICONS[platform] || 'ph ph-share-network',
+              // Every place this clip is going, each with its own state. A row
+              // with no destinations says so rather than showing an empty gap:
+              // "nowhere yet" is the most useful thing a schedule can tell you
+              // about a clip that is about to go nowhere.
+              dests: destinations(c).length ? destinations(c) : [{
+                name: 'No account connected', who: '', state: '',
+                icon: 'ph ph-warning-circle',
+                style: 'display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: #E6B770;',
+              }],
               caption: c.title || '',
               score: c.score || '',
               duration: secsToClock((c.durationMs || 0) / 1000),

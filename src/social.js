@@ -136,19 +136,56 @@ async function parseResponse(res) {
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
   return { data, text };
 }
+// TikTok refuses in two parts: a machine-readable `code` that says what to do,
+// and a `message` that is frequently nothing but a link to the guidelines. The
+// message won the || chain below, so a refusal arrived as
+//   "TikTok returned 403: Please review our integration guidelines at ..."
+// -- a sentence with no fault and no fix in it. The code is what carries both,
+// so it is kept, and the ones with a real answer are answered here.
+const TIKTOK_GUIDANCE = {
+  unaudited_client_can_only_post_to_private_accounts:
+    'TikTok has not finished reviewing this app yet, and an unreviewed app may only post to a TikTok account that is set to private. '
+    + 'Switch the account to private to keep posting now, or complete the app review to post from a public one.',
+  privacy_level_option_mismatch:
+    'The audience chosen for TikTok is not one this account currently allows. Run Test connection in Channels, then pick from the audiences it offers.',
+  reached_active_user_cap:
+    'TikTok limits how many people an unreviewed app may post for. Completing the app review lifts the cap.',
+  spam_risk_too_many_posts: 'TikTok has capped posting on this account for today. It clears on its own — try again tomorrow.',
+  spam_risk_user_banned_from_posting: 'TikTok has blocked posting on this account. Only TikTok can lift that.',
+  spam_risk: 'TikTok is rate-limiting this account. Leave a longer gap between posts.',
+  access_token_invalid: 'The TikTok connection has expired. Disconnect and reconnect TikTok in Channels.',
+  scope_not_authorized: 'This TikTok connection was granted without the posting permission. Disconnect and reconnect it, accepting every permission asked for.',
+  file_format_check_failed: 'TikTok rejected the video file format.',
+  duration_check_failed: 'The clip is longer than TikTok accepts for this account.',
+  frame_rate_check_failed: 'TikTok rejected the video frame rate.',
+  picture_size_check_failed: 'TikTok rejected the video dimensions.',
+};
+
+// The refusal in plain English where there is one, and always the code -- an
+// unmapped code is still the only searchable thing in the message.
+export function platformDetail(data, provider, fallback) {
+  const code = String(data?.error?.code || '').trim();
+  const known = provider === 'TikTok' && code ? TIKTOK_GUIDANCE[code] : '';
+  const base = known || data?.error?.message || data?.error_description || data?.message || code || fallback;
+  const detail = String(base ?? '');
+  return code && code !== 'ok' && !detail.includes(code) ? `${detail} [${code}]` : detail;
+}
+
 async function jsonRequest(url, options = {}, provider = '') {
   let res;
   try { res = await fetch(url, { ...options, signal: options.signal || AbortSignal.timeout(120_000) }); }
   catch (error) { throw new SocialError(`${provider || 'Platform'} could not be reached: ${error.message}`, { retryable: true, provider }); }
   const { data, text } = await parseResponse(res);
   if (!res.ok) {
-    const detail = data?.error?.message || data?.error_description || data?.message || data?.error?.code || text || res.statusText;
+    const detail = platformDetail(data, provider, text || res.statusText);
     throw new SocialError(`${provider || 'Platform'} returned ${res.status}: ${String(detail).slice(0, 500)}`, {
       retryable: RETRYABLE_STATUS.has(res.status), status: res.status, provider,
     });
   }
   if (data?.error && data.error.code && data.error.code !== 'ok') {
-    throw new SocialError(`${provider || 'Platform'} error: ${data.error.message || data.error.code}`, { provider });
+    // TikTok also refuses with HTTP 200 and the code in the body, so this path
+    // needs the same translation as the one above.
+    throw new SocialError(`${provider || 'Platform'} error: ${platformDetail(data, provider, data.error.code).slice(0, 500)}`, { provider });
   }
   // OAuth2 endpoints answer 200 with {"error":"invalid_client","error_description":...},
   // where `error` is a STRING and has no .code -- so the check above sails past
