@@ -30,6 +30,7 @@ import * as billing from './billing.js';
 import * as marketing from './marketing.js';
 import * as admin from './admin.js';
 import * as owner from './owner.js';
+import * as deenai from './deenai.js';
 import * as metrics from './metrics.js';
 import { startYouTubeRetention } from './youtube-retention.js';
 import { saveVideoUpload, removeUploadedFile } from './uploads.js';
@@ -1540,6 +1541,33 @@ async function route(req, res, url) {
     setAutomationSettings(currentUser, clean); log(`Automation ${clean.enabled ? 'enabled' : 'paused'}: score ${clean.minimumScore}+, quality ${clean.minimumQuality}+, up to ${clean.maxPerProject} per source.`, 'info', currentUser.id);
     agent.tick().catch(() => {});
     return json(res, 200, { ok: true, settings: automationSettings(currentUser) });
+  }
+
+  // ── DeenAI ──────────────────────────────────────────────────────────────
+  // The tab is visible to everyone; the substance is Pro. A locked account
+  // gets demo cards marked as such -- the shape of the feature with none of
+  // its access -- and the ask endpoint refuses outright. The gate lives here,
+  // server-side: a client flag would be a suggestion, not a gate.
+  if (method === 'GET' && pathname === '/api/deenai') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
+    if (!deenai.deenaiAccess(currentUser)) {
+      return json(res, 200, { pro: false, demo: true, insights: deenai.demoInsights() });
+    }
+    return json(res, 200, { pro: true, demo: false, insights: deenai.insights(currentUser) });
+  }
+  if (method === 'POST' && pathname === '/api/deenai/ask') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
+    if (!deenai.deenaiAccess(currentUser)) {
+      return json(res, 403, { error: 'DeenAI is a Pro feature. Upgrade to ask it anything.' });
+    }
+    let body;
+    try { body = await readBody(req, 64 * 1024); } catch (error) { return json(res, 400, { error: error.message }); }
+    try {
+      const answer = await deenai.ask(currentUser, body?.question);
+      return json(res, 200, { answer });
+    } catch (error) {
+      return json(res, error.statusCode || (error.code === 'worker_unavailable' ? 503 : 500), { error: error.message });
+    }
   }
 
   if (method === 'GET' && pathname === '/api/music') return json(res, 200, { tracks: audio.listNasheeds(currentUser), settings: musicSettings(currentUser) });

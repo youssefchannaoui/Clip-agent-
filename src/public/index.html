@@ -2200,6 +2200,7 @@ async function refresh({quiet=true}={}){try{
   window.fireClipNotifs&&window.fireClipNotifs(DATA,r);
   DATA=r;
   if(window.DC_OWNER){DATA.ownerData=window.DC_OWNER;DATA.webmetrics=window.DC_OWNER.webmetrics||null}
+  if(window.DC_DEENAI)DATA.deenai=window.DC_DEENAI;
   await hydrateEditorClip();
   renderAll()}catch(e){if(!quiet)toast(e.message,'bad')}}
 /* Opening a clip must hydrate immediately, not on the next poll. */
@@ -5295,6 +5296,33 @@ StudioAdapter.onProbeSource=async url=>{try{
       }catch(e){window.DC_OWNER.health={error:e.message}}
       if(DATA)DATA.ownerData=window.DC_OWNER;
       renderAll();};
+    /* DeenAI. The cards come from /api/deenai when the tab opens (cached on
+       window.DC_DEENAI so a state poll's wholesale DATA replacement keeps
+       them); the ask goes to the worker's Ollama and can take tens of
+       seconds, so the busy flag drives the button rather than a spinner
+       nobody wired. Both errors surface as toasts — a silent dead button on
+       a Pro feature would read as the feature being fake. */
+    let deenaiLoading=false;
+    StudioAdapter.onLoadDeenai=async()=>{
+      if(deenaiLoading)return;deenaiLoading=true;
+      try{
+        window.DC_DEENAI=await api('/api/deenai');
+        if(DATA)DATA.deenai=window.DC_DEENAI;
+        renderAll();
+      }catch(e){toast(e.message,'bad')}
+      finally{deenaiLoading=false}
+    };
+    StudioAdapter.onAskDeenAI=async()=>{
+      const q=String(StudioAdapter.ui.aiQ||'').trim();
+      if(!q){toast('Type a question first.');return}
+      if(StudioAdapter.ui.aiBusy)return;
+      StudioAdapter.ui.aiBusy=true;StudioAdapter.ui.aiAnswer='';renderAll();
+      try{
+        const r=await api('/api/deenai/ask',{method:'POST',body:JSON.stringify({question:q})});
+        StudioAdapter.ui.aiAnswer=String(r.answer||'');
+      }catch(e){toast(e.message,'bad')}
+      finally{StudioAdapter.ui.aiBusy=false;renderAll()}
+    };
     StudioAdapter.onSaveOwnerCost=(payload)=>studioDo(async()=>{
       await api('/api/owner/costs',{method:'POST',body:JSON.stringify(payload)});
       StudioAdapter.ui.owEditor=null;

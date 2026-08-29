@@ -119,6 +119,11 @@
     // read as broken); M / the sound chip unmutes, which IS a gesture.
     deckMuted: true,
     deckRate: 1,
+    // DeenAI's ask box. The answer is held here, not in DATA: it belongs to
+    // this sitting, and a state poll must not wipe a reply mid-read.
+    aiQ: '',
+    aiAnswer: '',
+    aiBusy: false,
     // Approving is a round trip. Until /api/state comes back the card would snap
     // back to "needs review", so the decision is held here and layered over the
     // server's view until the refresh lands.
@@ -1705,6 +1710,20 @@
     return item;
   }
 
+  function deenaiNavItem() {
+    // Everyone sees the tab — the demo is the shop window — so it is not
+    // gated here. What IS gated is the data: the host fetch behind
+    // onLoadDeenai returns demo cards for a free account, and the server
+    // refuses /api/deenai/ask outright. Presentation never guards anything.
+    var item = navItem('deenai', 'DeenAI', 'ph ph-sparkle', '');
+    var inner = item.click;
+    item.click = function (e) {
+      inner(e);
+      global.StudioAdapter.onLoadDeenai();
+    };
+    return item;
+  }
+
   /**
    * A billing date a person can read.
    *
@@ -1921,7 +1940,7 @@
     home: 'Home', queue: 'Review queue', library: 'Lecture library', schedule: 'Schedule',
     templates: 'Templates', music: 'Nasheed library', language: 'Arabic & terms',
     performance: 'Performance', editor: 'Clip editor \u00b7 BETA', tokens: 'Tokens & billing',
-    owner: 'Owner',
+    owner: 'Owner', deenai: 'DeenAI',
   };
 
   function sublineFor(screen, ctx) {
@@ -1942,6 +1961,7 @@
       case 'templates': return 'Set once — every clip renders with it, still editable per clip';
       case 'schedule': return 'Up to four posts a day · every clip is checked before it goes out';
       case 'music': return plural(ctx.tracks.length, 'nasheed') + ' · shuffled automatically';
+      case 'deenai': return 'Growth advice from your own numbers — nothing leaves this server';
       case 'tokens': return ctx.planLabel;
       default: return '';
     }
@@ -3784,6 +3804,34 @@
     var activityRow = activityRows.filter(function (row) { return row.id === UI.activityDetail; })[0] || null;
     var activityWhy = activityRow ? explainFailure(activityRow) : { title: '', cause: '', fixes: [] };
 
+    // ── DeenAI ──
+    // Whether this account HAS DeenAI comes from the plan features already in
+    // /api/state, so the lock is honest on first paint; /api/deenai (fetched
+    // when the tab opens) only supplies the cards. For a locked account those
+    // cards arrive marked demo:true and are labelled as such on screen.
+    var aiOn = Boolean(current.features && current.features.deenai);
+    var aiData = DATA.deenai || null;
+    var aiCardsRaw = (aiData && aiData.insights) || [];
+    var AI_TONES = {
+      gold: { border: 'rgba(217,180,120,.4)', icon: '#F0D6A6' },
+      good: { border: 'rgba(127,209,166,.3)', icon: '#7FD1A6' },
+      warn: { border: 'rgba(224,135,112,.35)', icon: '#E08770' },
+      '': { border: '#1E1E22', icon: '#BCBCC3' },
+    };
+    function aiCardRow(card) {
+      var tone = AI_TONES[card.tone] || AI_TONES[''];
+      return {
+        style: 'display: flex; flex-direction: column; gap: 9px; padding: 15px 16px; border: 1px solid ' + tone.border + '; border-radius: 12px; background: #121214;',
+        icon: card.icon || 'ph ph-sparkle',
+        iconStyle: 'font-size: 15px; flex: none; color: ' + tone.icon + ';',
+        title: String(card.title || ''),
+        demoStyle: card.demo
+          ? 'margin-left: auto; flex: none; padding: 1px 7px; border-radius: 20px; border: 1px solid #2C2C32; background: #17171A; font-size: 8.5px; font-weight: 700; letter-spacing: .12em; color: #6E6E76;'
+          : 'display: none;',
+        body: String(card.body || ''),
+      };
+    }
+
     var vals = {
       // ── shell: rail ──
       railOpen: open,
@@ -3832,6 +3880,7 @@
         navItem('templates', 'Templates', 'ph ph-text-aa', ''),
         navItem('music', 'Nasheed library', 'ph ph-music-notes', ''),
         navItem('performance', 'Performance', 'ph ph-chart-line-up', ''),
+        deenaiNavItem(),
       ].concat(isOperator(DATA) ? [ownerNavItem()] : []),
 
       workerCardStyle: 'margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding: ' + (open ? '11px' : '9px 6px') + '; border: 1px solid #1E1E22; border-radius: 10px; background: #121214;',
@@ -3937,7 +3986,33 @@
       isPerf: UI.screen === 'performance',
       isEditor: UI.screen === 'editor',
       isTokens: UI.screen === 'tokens',
+      isDeenai: UI.screen === 'deenai',
       isEmptyStudio: projects.length === 0,
+
+      // ── DeenAI ──
+      aiLocked: !aiOn,
+      aiUnlocked: aiOn,
+      aiSub: aiOn
+        ? 'Reads your own clips, scores and posting record'
+        : 'A Pro feature — free accounts can look, not use',
+      aiNote: aiOn && aiData ? plural(aiCardsRaw.length, 'insight') + ' from your own records' : '',
+      aiCards: aiCardsRaw.map(aiCardRow),
+      aiEmpty: Boolean(aiOn && aiData && aiCardsRaw.length === 0),
+      aiQ: UI.aiQ,
+      aiSetQ: function (e) { UI.aiQ = e.target.value; refresh(); },
+      aiAsk: function (e) { stop(e); global.StudioAdapter.onAskDeenAI(); },
+      aiAskStyle: 'display: inline-flex; align-items: center; gap: 7px; padding: 9px 16px; border: 1px solid rgba(217,180,120,.5); border-radius: 8px; '
+        + (UI.aiBusy
+          ? 'background: rgba(217,180,120,.06); color: #A08A63; cursor: default;'
+          : 'background: rgba(217,180,120,.12); color: #F0D6A6; cursor: pointer;')
+        + ' font-family: inherit; font-size: 12.5px; font-weight: 600; transition: background .14s ease;',
+      aiAskLabel: UI.aiBusy ? 'Thinking…' : 'Ask DeenAI',
+      aiAskNote: UI.aiBusy
+        ? 'Running on DeenClipped’s own box — usually under half a minute.'
+        : 'Answers use your numbers, never your transcripts.',
+      aiHasAnswer: Boolean(UI.aiAnswer),
+      aiAnswer: UI.aiAnswer,
+      aiUpgrade: function (e) { stop(e); setUI({ screen: 'tokens' }); },
 
       // ── Home ──
       needsCount: needsCount,
@@ -6997,6 +7072,8 @@
     },
     onBillingPortal: function () {},
     onLoadOwner: function () {},
+    onLoadDeenai: function () {},
+    onAskDeenAI: function () {},
     onSaveOwnerCost: function () {},
     onDeleteOwnerCost: function () {},
     onResumeSubscription: function () {},

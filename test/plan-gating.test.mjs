@@ -62,8 +62,8 @@ test('a custom template is never Pro', () => {
 const billing = await import('../src/billing.js');
 const src = url => fs.readFileSync(new URL(url, import.meta.url), 'utf8');
 
-test('the Pro list is exactly the watermark and the templates', () => {
-  assert.deepEqual(Object.keys(billing.PRO_FEATURES).sort(), ['templates', 'watermark']);
+test('the Pro list is exactly the watermark, the templates and DeenAI', () => {
+  assert.deepEqual(Object.keys(billing.PRO_FEATURES).sort(), ['deenai', 'templates', 'watermark']);
 });
 
 test('a free account is told what it already has', () => {
@@ -73,7 +73,7 @@ test('a free account is told what it already has', () => {
   }
 });
 
-test('every plan gate in the app is one of the two Pro features', () => {
+test('every plan gate in the app is one of the listed Pro features', () => {
   // isPaid() is the only way to gate on a plan. Each call site is named here
   // with what it guards; a new one fails this test until it is either removed
   // or argued for in PRO_FEATURES.
@@ -81,6 +81,7 @@ test('every plan gate in the app is one of the two Pro features', () => {
     ['src/server.js', ['assertWatermarkAllowed', 'assertTemplateAllowed']],
     ['src/local-engine.js', ['enforceWatermarkPlan', 'enforceTemplatePlan']],
     ['src/billing.js', ['planFeatures']],
+    ['src/deenai.js', ['deenaiAccess']],
   ]);
   for (const [file, guards] of allowed) {
     const text = src(`../${file}`);

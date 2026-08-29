@@ -224,6 +224,7 @@ export function ensureUserBilling(user) {
 export const PRO_FEATURES = Object.freeze({
   watermark: 'Remove the DeenClipped watermark, or put your own name there instead',
   templates: 'Every template in the catalogue, not only the default style',
+  deenai: 'DeenAI — growth insights from your own numbers, and answers on tap',
 });
 
 export const FREE_INCLUDES = Object.freeze([
@@ -237,7 +238,7 @@ export const FREE_INCLUDES = Object.freeze([
 /** Which Pro features this account has. Everything else is core. */
 export function planFeatures(user) {
   const paid = isPaid(user);
-  return { watermark: paid, templates: paid };
+  return { watermark: paid, templates: paid, deenai: paid || isUnlimited(user) };
 }
 
 // "Pro" for feature gates: any plan that is not free. The admin plan counts --

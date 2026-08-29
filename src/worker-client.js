@@ -48,3 +48,6 @@ export const readiness = () => request('/readiness');
 export const createJob = job => request('/jobs', { method: 'POST', body: job });
 export const getJob = id => request(`/jobs/${encodeURIComponent(id)}`);
 export const cancelJob = id => request(`/jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} });
+// DeenAI's Ask. A longer window than the default: qwen on a 2-core box thinks
+// in tens of seconds, and aborting at 30 made every long answer a failure.
+export const advise = payload => request('/ai/advise', { method: 'POST', body: payload, timeoutMs: 90_000 });

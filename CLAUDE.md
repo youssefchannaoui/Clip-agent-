@@ -150,7 +150,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **834 JS + 398 Python**
+- `npm test` and `npm run check` must pass. Currently **840 JS + 407 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -664,6 +664,49 @@ Youssef, on the queue: "improve this, add cool features expand and wow me".
   anywhere; they are regular-weight now, with small text labels under all
   three buttons. If an icon is missing, check WHICH WEIGHT before blaming the
   CDN.
+
+## DeenAI — the Pro growth assistant (v3.32.0, 29 Aug 2026)
+
+Youssef: "add a ai helper deenAi ... for the top subscribers ONLY pros and
+demos can demo and view it but it gives no access to them ... deen ai should
+be a tab btw".
+
+- **Two halves, deliberately different in kind.** INSIGHTS (`src/deenai.js`)
+  are computed server-side from the account's own records with the arithmetic
+  in the card body — no model involved, so a card can never hallucinate a
+  number, and a card whose data is too thin (a lecture with two clips has no
+  keep rate) is omitted rather than padded. ASK is the worker box's own
+  Ollama (`advise_with_ollama` in worker/service.py, `POST /ai/advise` behind
+  the same HMAC as jobs): the same privacy posture as transcripts — nothing
+  leaves a server the product already runs. `askContext()` hands the model
+  numbers and kept titles ONLY, never transcripts; a test feeds a transcript
+  in and asserts it never reaches the payload.
+- **The gate is `deenaiAccess()` in src/deenai.js — the ONE `isPaid` call**,
+  named in test/plan-gating.test.mjs's allowlist. `PRO_FEATURES` gained
+  `deenai`, so the exact-list tests in plan-gating and pro-and-blockers both
+  changed with it — that pair is the alarm that a Pro feature shipped without
+  its gate or its badge.
+- **Everyone sees the tab; only Pro gets data.** A free account's
+  `GET /api/deenai` returns `demoInsights()` — four static cards each marked
+  `demo: true`, drawn with a DEMO chip and a lock banner — and
+  `POST /api/deenai/ask` answers 403. The lock state comes from
+  `billing.current.features.deenai` already in /api/state, so the screen is
+  honest on first paint without waiting for the fetch.
+- **The ask is fenced against prompt injection** (invariant 2 applied here):
+  the question is typed by a customer, so it travels between BEGIN
+  UNTRUSTED/END UNTRUSTED with the defence stated in the system prompt before
+  the data. The Python test drives a hostile question through and asserts the
+  fence — using `rindex`, because the SAFETY paragraph MENTIONS the markers
+  before the real fence opens, and `index` finds the mention.
+- **A deployment without a worker refuses honestly**: `config.processingMode
+  !== 'remote'` answers the ask 503 with a sentence, and a box without
+  OLLAMA_URL does the same from the worker side — never a 75-second hang.
+  qwen3 thinks by default; the request sends `"think": False` and strips a
+  leaked `<think>` block belt-and-braces.
+- The host caches `/api/deenai` on `window.DC_DEENAI` and reattaches it on
+  every state poll (the same move as DC_OWNER), because `/api/state` replaces
+  DATA wholesale. The answer itself lives in UI state (`aiAnswer`), not DATA,
+  so a poll cannot wipe a reply mid-read.
 
 ## How every reply ends (29 Aug 2026)
 

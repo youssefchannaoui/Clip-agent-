@@ -11,16 +11,17 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 // Every badge this product shows has to correspond to a gate the server
 // actually enforces. A badge on anything else is a promise the code breaks.
 
-test('only the watermark and templates are Pro, and both are enforced server-side', () => {
+test('only the watermark, templates and DeenAI are Pro, and each is enforced server-side', () => {
   const billing = read('src/billing.js');
   const features = billing.match(/export const PRO_FEATURES = Object\.freeze\(\{([\s\S]*?)\}\);/)[1];
   const keys = [...features.matchAll(/^\s*(\w+):/gm)].map(m => m[1]).sort();
-  assert.deepEqual(keys, ['templates', 'watermark'],
-    'adding a third Pro feature means adding its gate and its badge too');
+  assert.deepEqual(keys, ['deenai', 'templates', 'watermark'],
+    'adding a Pro feature means adding its gate and its badge too');
 
   const server = read('src/server.js');
   assert.match(server, /Removing the DeenClipped watermark is a Pro feature/);
   assert.match(server, /is a Pro template/);
+  assert.match(server, /DeenAI is a Pro feature/);
 });
 
 test('scheduling, publishing and automation stay free', () => {
