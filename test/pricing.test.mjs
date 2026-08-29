@@ -99,13 +99,25 @@ test('the plans page groups by tier, with each period priced correctly', () => {
   assert.match(page, />Pro</);
   assert.match(page, />Studio</);
 
-  // Each period button says the period it charges for. Deriving that label by
-  // stripping "ly" made every WEEKLY button read "a year".
-  for (const [amount, label] of [['A$9', 'a week'], ['A$29', 'a month'], ['A$290', 'a year'],
-                                 ['A$19', 'a week'], ['A$59', 'a month'], ['A$590', 'a year']]) {
-    assert.ok(page.includes(`<b>${amount}</b><small>${label}</small>`),
-      `${amount} should be charged ${label}`);
+  // ONE switch for the whole page, not three buttons inside every card.
+  assert.equal((page.match(/name="dcperiod"/g) || []).length, 3, 'weekly, monthly, yearly');
+  assert.match(page, /id="per-monthly" class="dcperiod" checked/, 'monthly is the default view');
+  assert.equal((page.match(/class="period-switch"/g) || []).length, 1, 'one switch, above the grid');
+  // It is CSS, not script: this page's CSP admits no inline script, and a
+  // radio needs none.
+  assert.doesNotMatch(page.slice(page.indexOf('</style>')), /<script/, 'no script on the plans page');
+
+  // Each period's price says the period it charges for. Deriving that label by
+  // stripping "ly" once made every WEEKLY price read "a year".
+  for (const [cls, amount, each] of [['per-weekly', 'A$9', 'week'], ['per-monthly', 'A$29', 'month'],
+                                     ['per-yearly', 'A$290', 'year'], ['per-weekly', 'A$19', 'week'],
+                                     ['per-monthly', 'A$59', 'month'], ['per-yearly', 'A$590', 'year']]) {
+    assert.ok(page.includes(`<div class="money ${cls}">${amount}<small> / ${each}</small></div>`),
+      `${amount} should be charged per ${each}`);
   }
+  // And each period carries its own token count and its own checkout form.
+  assert.match(page, /<div class="tokens per-yearly"><b>22,000<\/b><span>tokens every year<\/span><\/div>/);
+  assert.equal((page.match(/name="plan" value="studio_/g) || []).length, 3, 'a form per period');
   // Studio names what it adds, not what Pro already had.
   assert.match(page, /Everything in Pro, plus:/);
   assert.match(page, /Everything in Basic, plus:/);

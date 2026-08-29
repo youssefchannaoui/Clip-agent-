@@ -788,6 +788,13 @@ which gives you that ai plus multiple channel uploads".
   nothing to compare it against.
 - Each column lists what it ADDS over the one before it, from the server's
   lists. Repeating one flat list three times hides the difference being sold.
+- **One switch moves the whole page, on BOTH surfaces** (v3.34.1). The public
+  /plans page first shipped with three price buttons stacked inside every card
+  -- Youssef: "that is not a nice look for billing should be one button chnaging
+  ALL". It is one price and one button per card now, with a single segmented
+  switch above the grid. That switch is **CSS, not script**: three sibling
+  radios and `:checked ~` selectors, because this page's CSP admits no inline
+  script and a radio needs none. A test asserts the page carries no script tag.
 - **Studio has no Stripe prices yet.** The column renders and says "Opening
   soon" rather than offering a button that cannot charge anyone;
   `STRIPE_PRICE_STUDIO_{WEEKLY,MONTHLY,YEARLY}` on Render arm it.
