@@ -1681,7 +1681,15 @@
       revenue: [money(), (t.topups || 0) + ' top-up' + (t.topups === 1 ? '' : 's') + ' in the window', ''],
       posts: [String(t.postsPublished || 0), 'published to connected channels', ''],
       visitToSignup: [pct(r.visitToSignup), plural(t.signups || 0, 'signup'), 'pos'],
-      signupToCheckout: [pct(r.signupToCheckout), 'of signups reached checkout', 'pos'],
+      signupToCheckout: [
+        // Same reason as the funnel step: this can exceed 100%, and a bare
+        // "6000%" beside "of signups reached checkout" reads as a broken tile.
+        (r.signupToCheckout !== null && r.signupToCheckout !== undefined && r.signupToCheckout > 100)
+          ? '>100%' : pct(r.signupToCheckout),
+        (r.signupToCheckout > 100)
+          ? 'checkouts include people who signed up earlier'
+          : 'of signups reached checkout',
+        'pos'],
       visitToPaid: [pct(r.visitToPaid), plural(t.paidConversions || 0, 'paying customer'), 'pos'],
       bots: [String((ana && ana.botHits) || 0), 'filtered out of every number here', 'unknown'],
     };
@@ -3653,15 +3661,28 @@
       brandRuleStyle: open
         ? 'width: 1px; height: 20px; flex: none; margin: 0 1px; background: linear-gradient(180deg, rgba(217,180,120,0), rgba(217,180,120,.42), rgba(217,180,120,0));'
         : 'display: none;',
-      // The rail's lower half is empty on every screen. The banner fills its
-      // outer edges with a faint mihrab lattice; this is the same motif, at the
-      // one place in the app where it cannot crowd anything.
-      railMotifStyle: open
-        ? 'position: absolute; left: 0; right: 0; bottom: 0; height: 190px; pointer-events: none; opacity: .5; background-repeat: repeat-x; background-position: center bottom; background-size: 104px 104px; background-image: url("data:image/svg+xml,'
-          + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="104" height="104" viewBox="0 0 104 104"><g fill="none" stroke="rgba(217,180,120,0.16)" stroke-width="1.1"><path d="M52 10C32 10 20 24 20 44v58h64V44c0-20-12-34-32-34Z"/><path d="M52 30C41 30 34 38 34 49v53h36V49c0-11-7-19-18-19Z"/><path d="M52 50c-6 0-9 4-9 9v43h18V59c0-5-3-9-9-9Z"/></g></svg>')
-          + '"); -webkit-mask-image: linear-gradient(180deg, transparent, #000 78%); mask-image: linear-gradient(180deg, transparent, #000 78%);'
-        : 'display: none;',
-      railToggleStyle: ((global.innerWidth || 1280) <= 820 ? 'display: none; ' : 'display: grid; ') + 'place-items: center; width: 26px; height: 26px; flex: none; ' + (open ? 'margin-left: auto; ' : '') + 'border: 1px solid #26262A; border-radius: 7px; background: #121214; color: #8B8B93; cursor: pointer; transition: border-color .14s ease, color .14s ease;',
+      // The mihrab lattice that used to fill the rail's lower half is GONE
+      // (29 Aug 2026): "bottom left remove that ugly silloeut". It was one of
+      // the three banner devices carried in at v3.25.0; the hairline rule and
+      // the spaced STUDIO subtitle stay, this one did not earn its place.
+      // Kept as an empty binding because the template still names it -- a
+      // missing binding is a render error, not a blank element.
+      railMotifStyle: 'display: none;',
+      // At the BOTTOM of the rail now, not beside the wordmark: "make it the
+      // collpas ebutton instead the top one". The rail is position:relative,
+      // so this anchors to it and stays centred at either width -- 228px open,
+      // 68px collapsed -- without the template moving.
+      railToggleStyle: ((global.innerWidth || 1280) <= 820 ? 'display: none; ' : 'display: grid; ')
+        + 'position: absolute; left: 0; right: 0; bottom: 14px; margin: 0 auto; '
+        // A small z-index because it now floats OVER the rail's content rather
+        // than sitting in the brand row's flow; without one, anything the nav
+        // grows into that space would take the clicks. (A dialog scrim at
+        // z-index 200 still covers it, which is correct -- the tour and the
+        // modals are meant to block the app underneath.)
+        + 'z-index: 5; '
+        + 'place-items: center; width: 26px; height: 26px; flex: none; '
+        + 'border: 1px solid #26262A; border-radius: 7px; background: #121214; color: #8B8B93; '
+        + 'cursor: pointer; transition: border-color .14s ease, color .14s ease, background-color .14s ease;',
       railToggleIcon: open ? 'ph ph-caret-left' : 'ph ph-caret-right',
       railToggleTitle: open ? 'Collapse sidebar' : 'Expand sidebar',
       toggleRail: function (e) { stop(e); setUI({ railOpen: !UI.railOpen }); },
@@ -6309,14 +6330,23 @@
         if (!ana) return [];
         var t = ana.totals || {}; var r = ana.rates || {};
         var pct = function (v) { return v === null || v === undefined ? '\u2014' : v + '%'; };
+        // A funnel step can legitimately exceed 100%: checkout_started is not
+        // gated on signing up IN THIS WINDOW, so someone who signed up last
+        // month and checks out today counts in the numerator and not the
+        // denominator. "6000% of signups" is arithmetically true and reads as
+        // broken, so past 100 the step says what happened instead.
+        var step = function (v, normal, over) {
+          if (v === null || v === undefined) return '\u2014';
+          return v > 100 ? over : v + '% ' + normal;
+        };
         var vStyle = function (colour) {
           return 'font-family: Outfit, Inter, sans-serif; font-size: 25px; font-weight: 600; letter-spacing: -.03em; line-height: 1.05; color: ' + colour + ';';
         };
         return [
           { name: 'Visited', value: String(t.uniques || 0), rate: 'unique visitors', notFirst: false, valueStyle: vStyle('#F2F2F4') },
-          { name: 'Signed up', value: String(t.signups || 0), rate: pct(r.visitToSignup) + ' of visitors', notFirst: true, valueStyle: vStyle('#F2F2F4') },
-          { name: 'Started checkout', value: String(t.checkoutsStarted || 0), rate: pct(r.signupToCheckout) + ' of signups', notFirst: true, valueStyle: vStyle('#F2F2F4') },
-          { name: 'Paid', value: String(t.paidConversions || 0), rate: pct(r.visitToPaid) + ' of visitors', notFirst: true, valueStyle: vStyle('#F0D6A6') },
+          { name: 'Signed up', value: String(t.signups || 0), rate: step(r.visitToSignup, 'of visitors', 'more signups than visitors counted'), notFirst: true, valueStyle: vStyle('#F2F2F4') },
+          { name: 'Started checkout', value: String(t.checkoutsStarted || 0), rate: step(r.signupToCheckout, 'of signups', 'more checkouts than signups this window'), notFirst: true, valueStyle: vStyle('#F2F2F4') },
+          { name: 'Paid', value: String(t.paidConversions || 0), rate: step(r.visitToPaid, 'of visitors', 'more paid than visitors counted'), notFirst: true, valueStyle: vStyle('#F0D6A6') },
         ];
       })(),
       anaChannels: (function () {

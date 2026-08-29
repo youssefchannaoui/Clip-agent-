@@ -111,3 +111,24 @@
     transform: none;
   }
 }
+
+/* An empty box in the rail must not paint itself (29 Aug 2026).
+
+   The rail's footer card renders its border, background and padding even when
+   nothing inside it has anything to show, which leaves a 203x24 bordered
+   rectangle sitting under the nav -- reported as "that random tab", and fair
+   enough: it looks like a control that does nothing.
+
+   :empty is exactly the condition (no children, no text), so the card returns
+   the moment it has something to say. Fixing it in the design export instead
+   would mean regenerating every class name in the app for one blank div. */
+#dcRail > div:empty { display: none !important; }
+
+/* The collapse button now sits at the bottom of the rail. Give it the same
+   hover the rest of the app has, since it no longer inherits the brand row's. */
+#dcRail > #dcRailBrand > button:hover,
+#dcRail button[title$="sidebar"]:hover {
+  color: #F0D6A6;
+  border-color: rgba(217, 180, 120, .45);
+  background: #17171A;
+}

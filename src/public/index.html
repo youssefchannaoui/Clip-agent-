@@ -5130,6 +5130,56 @@ StudioAdapter.onProbeSource=async url=>{try{
       ownerTick+=1;
       StudioAdapter.onLoadOwner(StudioAdapter.ui.ownerDays||180,{quiet:true,health:ownerTick%4===0});
     },30000);
+    /* A styled tooltip for the Owner chart, without touching the design export.
+
+       The bars already carry their numbers in a `title`, but the browser's own
+       tooltip takes about a second to appear, cannot be styled, and looks like
+       an accident on a dark screen. Putting `data-tip` in the markup instead
+       would mean regenerating every class name in the app for one attribute,
+       so the host moves it at hover time: one delegated listener, one floating
+       element, and the native title stashed on the node so nothing is lost if
+       this never runs.
+
+       Positioned in fixed coordinates and clamped to the viewport, so a bar at
+       either end of a 48-column chart still shows its tip on screen. */
+    (function(){
+      let tip=null;
+      const show=(el,text)=>{
+        if(!tip){
+          tip=document.createElement('div');
+          tip.id='dcowTip';
+          tip.style.cssText='position:fixed;z-index:400;pointer-events:none;opacity:0;'
+            +'transition:opacity .12s ease;padding:6px 9px;border-radius:8px;'
+            +'border:1px solid rgba(217,180,120,.35);background:#121214;color:#F2F2F4;'
+            +'font:500 11.5px/1.35 Inter,system-ui,sans-serif;white-space:nowrap;'
+            +'box-shadow:0 6px 20px rgba(0,0,0,.5);';
+          document.body.appendChild(tip);
+        }
+        tip.textContent=text;
+        const r=el.getBoundingClientRect();
+        tip.style.opacity='1';
+        const w=tip.offsetWidth;
+        let x=r.left+r.width/2-w/2;
+        x=Math.max(8,Math.min(x,innerWidth-w-8));
+        tip.style.left=x+'px';
+        tip.style.top=Math.max(8,r.top-tip.offsetHeight-8)+'px';
+      };
+      const hide=()=>{ if(tip)tip.style.opacity='0'; };
+      document.addEventListener('mouseover',e=>{
+        const el=e.target&&e.target.closest&&e.target.closest('.dcow-col');
+        if(!el){hide();return;}
+        /* Move the title out of the browser's reach the first time, so the two
+           tooltips never appear together. */
+        if(el.hasAttribute('title')){el.dataset.tip=el.getAttribute('title');el.removeAttribute('title');}
+        if(el.dataset.tip)show(el,el.dataset.tip);
+      });
+      document.addEventListener('mouseout',e=>{
+        if(e.target&&e.target.closest&&e.target.closest('.dcow-col'))hide();
+      });
+      /* A re-render replaces the bars under the pointer; a tip left hanging
+         would point at a column that no longer exists. */
+      addEventListener('scroll',hide,true);
+    })();
     /* Coming back to the tab should not mean waiting up to 30s for numbers
        that are already stale. */
     document.addEventListener('visibilitychange',()=>{

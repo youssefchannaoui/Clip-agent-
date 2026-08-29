@@ -133,10 +133,16 @@ These were each a real bug and each has a test named after it.
    frame of the group, and the symptom reads as "the highlight is out of sync"
    when the timing is in fact exact. `{\q0}` took it to x 254..989, zero cut
    rows, and left every line that already fitted byte-identical.
-   **The two stack modes are deliberately NOT given the override.** They place
-   each line at an explicit `\pos`, so a wrap there would collide with the line
-   below rather than fix anything; they need measured line-breaking instead,
-   and that is unwritten. Their `captionStackMaxWords` default is 4, not 6.
+   **The two stack modes are deliberately NOT given the override, and do not
+   need it.** They place each line at an explicit `\pos`, so a wrap there would
+   collide with the line below rather than fix anything -- but they already
+   break by WIDTH, not by count: `too_wide()` in the stack builder estimates
+   0.46 em per character against the usable width and is deliberately
+   pessimistic (rendered lines measure nearer 0.33), so it breaks sooner than
+   it must. Measured 29 Aug 2026 on real frames, four deliberately long lines
+   including single 30-character words, both modes: ZERO rows cut at either
+   edge. An earlier note here called that line-breaking "unwritten"; that was
+   wrong, and this corrects it.
 9. **No dead controls.** A control that cannot reach an export must not be
    shown. `hookEnabled` is hard-disabled in `sanitiseTemplate()`.
 
@@ -538,6 +544,41 @@ EFFECTS ON ALL GRAPHICS AND ETC".
 - Values still come from the native `title` on each bar. A styled tooltip would
   need `data-tip` in the markup, which means the design export and regenerated
   class names -- deliberately not done for this.
+
+## The rail's bottom, and a tooltip without a re-import (v3.29.0, 29 Aug 2026)
+
+Youssef: "bottom left remove that ugly silloeut and that rnadom tab or make it
+the collpas ebutton instead the top one".
+
+- **The mihrab lattice is GONE.** It was one of the three banner devices carried
+  in at v3.25.0; the hairline rule and the spaced STUDIO subtitle stay, this one
+  did not earn its place. `railMotifStyle` is kept as an empty binding because
+  the template still names it -- a missing binding is a render error.
+- **The "random tab" was an EMPTY BOX.** The rail's footer card paints its
+  border, background and padding with nothing inside it, leaving a 203x24
+  rectangle under the nav that looks like a control that does nothing.
+  `#dcRail > div:empty { display: none }` in studio-tokens.css: the card returns
+  the moment it has something to say, and fixing it in the design export would
+  have regenerated every class name in the app for one blank div.
+- **The collapse button moved to the bottom of the rail**, absolutely positioned
+  against it (the rail is already `position: relative`), so it stays centred at
+  228px open and 68px collapsed without the template moving. Verified with a
+  real mouse click, not a scripted one: 228 -> 68 and back.
+- **A dialog scrim will block any click test.** The first-run tour lays a
+  `position: fixed; inset: 0; z-index: 200` span over the whole viewport, and
+  Playwright then reports the button as covered -- which reads as a broken
+  control and is not one. Dismiss the tour before testing clicks. Two separate
+  investigations here were spent on that before it was recognised.
+- **The chart tooltip is styled now, and it cost no re-import.** The bars carry
+  their numbers in a `title`; the host moves that to `data-tip` on first hover
+  and draws its own card (`#dcowTip` in index.html), clamped to the viewport so
+  a bar at either end still shows on screen. Putting `data-tip` in the markup
+  would have meant regenerating every class name for one attribute.
+- **A funnel step may legitimately exceed 100%** -- `checkout_started` is not
+  gated on signing up in the same window, so someone who signed up last month
+  and checks out today counts in the numerator only. "6000% of signups" is true
+  and reads as broken, so past 100 the step says "more checkouts than signups
+  this window" instead. Capping it would have hidden real data.
 
 ## How every reply ends (29 Aug 2026)
 
