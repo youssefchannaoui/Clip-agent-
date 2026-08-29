@@ -150,7 +150,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **827 JS + 398 Python**
+- `npm test` and `npm run check` must pass. Currently **834 JS + 398 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -613,6 +613,49 @@ error all ate the same this was never updated".
 - `explainFailure` is exposed on `StudioAdapter` so the guidance is tested by
   CALLING it. Asserting that a table contains a regex proves nothing about
   which entry WINS, and a wrong winner was the entire bug.
+
+## The review deck reviews with the eyes and the keyboard (v3.31.0, 29 Aug 2026)
+
+Youssef, on the queue: "improve this, add cool features expand and wow me".
+
+- **The deck plays the RENDERED clip in place** -- the same bytes that post,
+  invariant 4 applied to the queue. The reviewer was deciding on a still frame
+  with a title drawn over it; pacing, caption timing and sound are the things
+  being judged, and a still shows none of them. The host mounts the video from
+  the card's `data-clip` attribute (`paintDeckVideo` in index.html); while a
+  render exists the card stops drawing the title over it -- the render carries
+  its own captions, and painting more words on top is the second-rendering-
+  engine mistake by another door. The title moves below the card. A clip with
+  no render keeps the old thumbnail-and-text card.
+- **Muted autoplay, deliberately.** The deck can render without a user gesture,
+  and autoplay with sound is silently refused by the browser -- it would read
+  as broken. M or the sound chip unmutes; both are gestures. Click the video to
+  pause/resume, chip in the hints row cycles 1x / 1.5x / 2x.
+- **One verb per key**: A approve, X reject, S / → skip, ← previous,
+  Space play/pause, M sound. The host owns the window and the <video>, but a
+  decision made by key goes through `StudioAdapter.deckAct` -- the optimistic
+  ledger, a repaint, then the API -- the identical road the buttons take, so
+  the deck advances instantly either way. Keys are inert over the grid, any
+  modal, a focused field, and the tour (its veil blocks clicks; the keyboard
+  must not slip behind it).
+- **The score explains itself on the deck**: the worker's own reasons
+  ("complete ending · question hook") sit under the title, where the
+  decision is made. A progress bar and a session tally (from UI.pending, which
+  already was that ledger) top the card; a filmstrip of the waiting stack
+  underneath jumps anywhere out of order; zero left on the decide tab is a
+  "Queue clear" card pointing at the schedule, not an empty stream.
+- **The delegated open-the-player click skips `[data-deck-card]`** -- the deck
+  is now its own player, and a click there is pause/resume, not a second
+  player over the first.
+- Traps that cost time here, written down: the approve gate refuses seeded
+  clips without `musicVerified`/`renderVerified`/`templateId` (the 400 reads
+  as a dead button); the queue arms its OWN tour whose veil sits over
+  everything (skip it before testing clicks); and a `pkill -f` pattern that
+  appears in the same command line kills the command's own shell -- run pkill
+  in its own Bash call, always.
+- The deck tests run the machinery: `test/review-deck.test.mjs` vm-loads the
+  adapter, computes bindings from real clip rows, and calls deckAct, asserting
+  the ledger, the advance, the strip jump and the clear state.
 
 ## How every reply ends (29 Aug 2026)
 

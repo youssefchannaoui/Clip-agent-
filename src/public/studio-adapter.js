@@ -114,6 +114,11 @@
     edSafe: true,
     deckMode: false,
     deckIdx: 0,
+    // The deck's in-place player. Muted by default because the deck can render
+    // without a user gesture (autoplay with sound would simply be blocked and
+    // read as broken); M / the sound chip unmutes, which IS a gesture.
+    deckMuted: true,
+    deckRate: 1,
     // Approving is a round trip. Until /api/state comes back the card would snap
     // back to "needs review", so the decision is held here and layered over the
     // server's view until the refresh lands.
@@ -249,6 +254,12 @@
   // and then moves approved -> scheduled -> publishing -> posted. `ready` is a
   // terminal "done, ready to download" state, not a review state.
   var SETTLED = { approved: 1, scheduled: 1, publishing: 1, retrying: 1, posted: 1, ready: 1 };
+  // What the deck is showing right now -- written on every bindings run, read
+  // by deckAct() below so the host's keyboard lands on the same clip the
+  // buttons would. Never rendered; purely the seam between key and card.
+  var deckNowId = null;
+  var deckNowCount = 0;
+
   function decision(c) {
     if (UI.pending[c.id]) return UI.pending[c.id];
     if (c.status === 'rejected') return 'rejected';
@@ -2069,6 +2080,7 @@
     function clipCard(c, i) {
       var st = decision(c);
       return {
+        id: c.id,
         caption: c.title || '',
         duration: secsToClock((c.durationMs || 0) / 1000),
         style: (c.templateName || '') + (c.renderQuality === 'draft' ? ((c.templateName ? ' \u00b7 ' : '') + 'draft') : ''),
@@ -2152,16 +2164,27 @@
     }
 
     var q = (UI.query || '').trim().toLowerCase();
-    var queueClips = clips.filter(function (c) {
+    var queueRaw = clips.filter(function (c) {
       if (q && ((c.title || '') + ' ' + (projectTitle[c.projectId] || '')).toLowerCase().indexOf(q) === -1) return false;
       var st = decision(c);
       if (UI.filter === 'review') return st === null;
       if (UI.filter === 'flagged') return gate && c.reviewRequired && st === null;
       if (UI.filter === 'approved') return st === 'approved';
       return true;
-    }).sort(function (a, b) { return (b.score || 0) - (a.score || 0); }).map(clipCard);
+    }).sort(function (a, b) { return (b.score || 0) - (a.score || 0); });
+    var queueClips = queueRaw.map(clipCard);
 
-    var deckClip = queueClips[Math.min(UI.deckIdx, Math.max(0, queueClips.length - 1))] || null;
+    var deckAt = Math.min(UI.deckIdx, Math.max(0, queueClips.length - 1));
+    var deckClip = queueClips[deckAt] || null;
+    // The raw record behind the card: the host mounts the RENDERED clip's
+    // <video> into the deck from this (invariant: the queue plays the same
+    // bytes that post, never a drawn imitation).
+    var deckRaw = queueRaw[deckAt] || null;
+    // The keyboard seam. Key handling lives in the host (it owns the window),
+    // but a decision must go through the same path as the buttons -- pending,
+    // repaint, then the API -- so the deck advances instantly either way.
+    deckNowId = deckRaw ? deckRaw.id : null;
+    deckNowCount = queueClips.length;
 
     // The lecture currently being processed drives the pipeline rail.
     var active = projects.filter(function (p) { return lecState(p) === 'processing'; })[0] || null;
@@ -4061,12 +4084,88 @@
       deckPos: queueClips.length
         ? Math.min(UI.deckIdx + 1, queueClips.length) + ' of ' + queueClips.length
         : '0 of 0',
-      deckClip: deckClip || { caption: '', score: '', duration: '', lecTitle: '', thumbStyle: 'display:none;', flagged: false, style: '' },
+      deckClip: deckClip || { id: '', caption: '', score: '', duration: '', lecTitle: '', thumbStyle: 'display:none;', flagged: false, style: '' },
       deckApprove: function (e) { stop(e); if (deckClip) deckClip.approve(e); },
       deckReject: function (e) { stop(e); if (deckClip) deckClip.reject(e); },
       deckEdit: function (e) { stop(e); if (deckClip) deckClip.edit(e); },
       deckSkip: function (e) { stop(e); setUI({ deckIdx: Math.min(UI.deckIdx + 1, Math.max(0, queueClips.length - 1)) }); },
       deckBack: function (e) { stop(e); setUI({ deckIdx: Math.max(0, UI.deckIdx - 1) }); },
+      // How far through the waiting stack this position is -- the strip above
+      // the card, so working the queue feels like progress rather than a
+      // bottomless pile.
+      deckProgStyle: 'position: absolute; inset: 0 auto 0 0; border-radius: 20px; background: linear-gradient(90deg, #D9B478, #F0D6A6); transition: width .25s ease; width: '
+        + (queueClips.length ? Math.round(Math.min(UI.deckIdx + 1, queueClips.length) / queueClips.length * 100) : 0) + '%;',
+      // Decisions made since the screen was opened. UI.pending is exactly that
+      // ledger -- it holds this session's optimistic decisions until the server
+      // state catches up -- so the tally costs nothing to keep.
+      deckTally: (function () {
+        var a = 0; var r = 0;
+        Object.keys(UI.pending).forEach(function (k) {
+          if (UI.pending[k] === 'approved') a += 1;
+          else if (UI.pending[k] === 'rejected') r += 1;
+        });
+        if (!a && !r) return '';
+        var parts = [];
+        if (a) parts.push(a + ' approved');
+        if (r) parts.push(r + ' rejected');
+        return parts.join(' \u00b7 ');
+      })(),
+      // The worker's own reasons for the score, on the deck where the decision
+      // is actually made. The grid has carried them for a while; the deck --
+      // the surface built for deciding -- never did.
+      deckWhy: (deckClip && deckClip.scoreWhy) || '',
+      deckWhyStyle: (deckClip && deckClip.scoreWhy)
+        ? 'display: flex; align-items: flex-start; gap: 5px; margin-top: 2px; font-size: 10.5px; line-height: 1.5; color: #8B8B93; text-align: left; max-width: 100%;'
+        : 'display: none;',
+      // While the render plays in place, the card stops drawing text over it:
+      // the rendered clip already carries its own captions, and painting more
+      // words on top is the second-rendering-engine mistake by another door.
+      // The title moves below the card either way.
+      deckShowMeta: !(deckRaw && deckRaw.videoUrl),
+      deckShadeStyle: (deckRaw && deckRaw.videoUrl)
+        ? 'position: absolute; inset: 0 0 auto 0; height: 30%; z-index: 1; background: linear-gradient(180deg, rgba(9,9,10,.55), transparent); pointer-events: none;'
+        : 'position: absolute; inset: 0; background: linear-gradient(180deg, rgba(9,9,10,.45), transparent 34%, rgba(9,9,10,.88));',
+      deckSoundStyle: (deckRaw && deckRaw.videoUrl)
+        ? 'position: absolute; top: 10px; right: 10px; z-index: 4; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid rgba(255,255,255,.22); border-radius: 50%; background: rgba(10,10,12,.72); color: '
+          + (UI.deckMuted ? '#BCBCC3' : '#F0D6A6') + '; cursor: pointer; transition: color .14s ease, border-color .14s ease;'
+        : 'display: none;',
+      deckSoundIcon: UI.deckMuted ? 'ph ph-speaker-simple-slash' : 'ph ph-speaker-simple-high',
+      deckSoundTitle: UI.deckMuted ? 'Sound on (M)' : 'Mute (M)',
+      deckToggleSound: function (e) { stop(e); setUI({ deckMuted: !UI.deckMuted }); },
+      deckRateLabel: (UI.deckRate === 1 ? '1' : UI.deckRate === 1.5 ? '1.5' : '2') + '\u00d7',
+      deckCycleRate: function (e) { stop(e); setUI({ deckRate: UI.deckRate === 1 ? 1.5 : UI.deckRate === 1.5 ? 2 : 1 }); },
+      // The next few waiting clips, one thumb each, so the queue can be walked
+      // out of order -- a low scorer worth checking early, a flagged one saved
+      // for last. The window slides with the position.
+      deckStrip: (function () {
+        if (queueClips.length < 2) return [];
+        var span = Math.min(8, queueClips.length);
+        var startAt = Math.max(0, Math.min(deckAt - 3, queueClips.length - span));
+        return queueRaw.slice(startAt, startAt + span).map(function (c, i) {
+          var at = startAt + i;
+          var current = at === deckAt;
+          return {
+            score: c.score || '\u2014',
+            title: (c.title || 'Clip') + ' \u00b7 ' + (c.score || '?'),
+            jump: function (e) { stop(e); setUI({ deckIdx: at }); },
+            style: 'position: relative; width: ' + (current ? 44 : 38) + 'px; height: ' + (current ? 78 : 68) + 'px; padding: 0; overflow: hidden; cursor: pointer; border-radius: 8px; transition: opacity .14s ease, border-color .14s ease; border: 1px solid '
+              + (current ? '#D9B478' : '#26262A') + '; opacity: ' + (current ? 1 : .55) + '; background: ' + thumb(c.thumbUrl) + ';',
+            scoreStyle: 'position: absolute; left: 0; right: 0; bottom: 0; padding: 1px 0 2px; font-size: 8.5px; font-weight: 700; color: ' + (current ? '#F0D6A6' : '#BCBCC3') + '; background: linear-gradient(180deg, transparent, rgba(9,9,10,.9));',
+          };
+        });
+      })(),
+      // Zero left to decide is an achievement, not an empty stream. Only on the
+      // decide tab, and only when the studio has clips at all -- an empty
+      // studio keeps its own get-started state.
+      deckClear: queueClips.length === 0 && UI.filter === 'review' && clips.length > 0,
+      deckClearMsg: (function () {
+        var a = 0;
+        Object.keys(UI.pending).forEach(function (k) { if (UI.pending[k] === 'approved') a += 1; });
+        var approvedNow = clips.filter(function (c) { return decision(c) === 'approved'; }).length;
+        return (a ? 'Every clip has a decision \u2014 ' + a + ' approved this session. ' : 'Every clip has a decision. ')
+          + (approvedNow ? 'Approved clips take the next free posting slots on the schedule.' : 'New clips land here as lectures finish processing.');
+      })(),
+      deckGoSchedule: function (e) { stop(e); setUI({ screen: 'schedule' }); },
 
       // Pipeline rail, driven by whichever lecture is actually being worked on.
       progress: Math.round(active ? active.progress || 0 : 0),
@@ -6728,6 +6827,27 @@
     // that a table contains a regex proves nothing about which entry answers a
     // given error -- and the bug this fixes was exactly a wrong entry winning.
     explainFailure: explainFailure,
+    // The review deck's keyboard, one verb per key. The host owns the window
+    // (and the <video>, so Space stays there), but a decision made by key must
+    // travel the same road as the buttons: the optimistic ledger first, then a
+    // repaint, then the API -- or the deck would sit on a decided clip until
+    // the server answered. Returns false when there is nothing to act on, so
+    // the host can let unclaimed keys fall through.
+    deckAct: function (kind) {
+      if (kind === 'approve' || kind === 'reject') {
+        if (!deckNowId) return false;
+        UI.pending[deckNowId] = kind === 'approve' ? 'approved' : 'rejected';
+        refresh();
+        if (kind === 'approve') global.StudioAdapter.onApprove(deckNowId);
+        else global.StudioAdapter.onReject(deckNowId);
+        return true;
+      }
+      if (kind === 'skip') { setUI({ deckIdx: Math.min(UI.deckIdx + 1, Math.max(0, deckNowCount - 1)) }); return true; }
+      if (kind === 'back') { setUI({ deckIdx: Math.max(0, UI.deckIdx - 1) }); return true; }
+      if (kind === 'sound') { setUI({ deckMuted: !UI.deckMuted }); return true; }
+      if (kind === 'rate') { setUI({ deckRate: UI.deckRate === 1 ? 1.5 : UI.deckRate === 1.5 ? 2 : 1 }); return true; }
+      return false;
+    },
     setRefresh: function (fn) { refresh = fn || function () {}; },
     // The host registers the editor's <video> here and reports playback back.
     // The adapter cannot create the element itself -- the design compiles to a

@@ -3126,6 +3126,10 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(StudioAdapter.ui.screen==='editor')return;
       const tile=e.target.closest&&e.target.closest('#studio [style*="aspect-ratio: 9 / 16"]');
       if(!tile)return;
+      /* The deck card plays the render in place now; a click on it is a
+         pause/resume on THAT player, handled where the video is mounted.
+         Opening the modal player on top would be two players over one clip. */
+      if(e.target.closest('[data-deck-card]'))return;
       const style=tile.getAttribute('style')||'';
       const m=style.match(/url\("?([^")]+)"?\)/);
       if(!m)return;
@@ -3243,6 +3247,88 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       }
       wireClipTransport(frame);
     }
+
+    /* ── the review deck plays the render in place ─────────────────────────
+       The deck used to decide on a still frame: a thumbnail, a caption drawn
+       over it, and a modal two clicks away. The reviewer is judging pacing,
+       caption timing and sound -- none of which a still can show -- so the
+       card now carries the RENDERED clip itself, the same bytes that post
+       (the editor invariant, applied to the queue): no CSS captions over it,
+       no offset arithmetic, loop on, muted until asked.
+
+       Muted-autoplay is deliberate: the deck can render without a user
+       gesture, and autoplay with sound would be silently refused and read as
+       broken. M or the sound chip unmutes -- both are gestures. */
+    let deckVideoNode=null;
+    function paintDeckVideo(vals){
+      const wanted=StudioAdapter.ui.screen==='queue'&&vals.deckMode&&vals.deckHas;
+      const card=wanted?document.querySelector('#studio [data-deck-card]'):null;
+      const clip=card?(DATA.clips||[]).find(c=>c.id===card.getAttribute('data-clip')):null;
+      if(!card||!clip||!clip.videoUrl){
+        if(deckVideoNode){deckVideoNode.pause();deckVideoNode.remove();deckVideoNode=null}
+        return;
+      }
+      if(!deckVideoNode||!deckVideoNode.isConnected){
+        deckVideoNode=document.createElement('video');
+        deckVideoNode.setAttribute('data-host-owned','');
+        deckVideoNode.playsInline=true;
+        deckVideoNode.loop=true;
+        deckVideoNode.controls=false;
+        /* Above the thumb (child 0) and the shade, below the chips and the
+           sound button -- the design gives those z-index 3+. */
+        deckVideoNode.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:1;background:#000;object-fit:contain';
+        deckVideoNode.addEventListener('click',e=>{
+          e.preventDefault();e.stopPropagation();
+          if(deckVideoNode.paused)deckVideoNode.play().catch(()=>{});
+          else deckVideoNode.pause();
+        });
+        card.insertBefore(deckVideoNode,card.children[1]||null);
+      }
+      if(deckVideoNode.dataset.src!==clip.videoUrl){
+        deckVideoNode.dataset.src=clip.videoUrl;
+        deckVideoNode.src=/^https?:/i.test(clip.videoUrl)?clip.videoUrl:withPw(clip.videoUrl);
+        if(clip.thumbUrl)deckVideoNode.poster=/^https?:/i.test(clip.thumbUrl)?clip.thumbUrl:withPw(clip.thumbUrl);
+        deckVideoNode.muted=true;
+        const pr=deckVideoNode.play();if(pr&&pr.catch)pr.catch(()=>{});
+      }
+      /* The adapter owns the knobs; the element obeys them on every paint. */
+      deckVideoNode.muted=Boolean(StudioAdapter.ui.deckMuted);
+      deckVideoNode.playbackRate=Number(StudioAdapter.ui.deckRate)||1;
+    }
+
+    /* ── the deck's keyboard ───────────────────────────────────────────────
+       One verb per key, and only while the deck is actually the thing on
+       screen: never over the grid, a modal, the tour, or a field being typed
+       in. Decisions go through StudioAdapter.deckAct so a key and a button
+       take the identical path. Space stays here because the host owns the
+       <video>. */
+    document.addEventListener('keydown',e=>{
+      if(e.metaKey||e.ctrlKey||e.altKey)return;
+      const t=e.target;
+      if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;
+      if(typeof STUDIO==='undefined'||!STUDIO||!DATA)return;
+      const ui=StudioAdapter.ui;
+      if(ui.screen!=='queue'||!ui.deckMode)return;
+      if(ui.playerClip||ui.job||ui.sheet||ui.connProvider)return;
+      /* The tour's veil blocks clicks; the keyboard must not slip behind it
+         and decide clips mid-walkthrough. Same condition tourOn is built from. */
+      if(Number(ui.tourStep)>=0)return;
+      const k=e.key.toLowerCase();
+      let took=false;
+      if(k==='a')took=StudioAdapter.deckAct('approve');
+      else if(k==='x')took=StudioAdapter.deckAct('reject');
+      else if(k==='s'||k==='arrowright')took=StudioAdapter.deckAct('skip');
+      else if(k==='arrowleft')took=StudioAdapter.deckAct('back');
+      else if(k==='m')took=StudioAdapter.deckAct('sound');
+      else if(k===' '){
+        if(deckVideoNode){
+          if(deckVideoNode.paused)deckVideoNode.play().catch(()=>{});
+          else deckVideoNode.pause();
+          took=true;
+        }
+      }
+      if(took){e.preventDefault();e.stopPropagation()}
+    });
 
     /* The end-of-ayah ornament (U+06DD + Arabic-Indic digits) at its own,
        larger size -- write_ass scales it by 1.45 over the ayah text, and the
@@ -5387,6 +5473,7 @@ function paintStudio(){
   paintEditorRuler(vals);
   paintEditorCaption(vals);
   paintPlayerVideo(vals);
+  paintDeckVideo(vals);
   paintEditorVideo(vals);
   paintEditorPlayer(vals);
   paintEditorLayout(vals);
