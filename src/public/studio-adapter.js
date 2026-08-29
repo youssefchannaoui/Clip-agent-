@@ -6214,6 +6214,13 @@
           owTile('Failed', String(totals.failed || 0), (totals.failureRate || 0) + '% of finished jobs', totals.failed ? 'neg' : ''),
           owTile('Worker', worker.error ? 'Unreachable' : 'Reachable',
             worker.error ? String(worker.error).slice(0, 60) : 'answered its health check', worker.error ? 'neg' : 'pos'),
+          // The one number that has cost this project weeks: which release the
+          // box is actually running. A worker behind the app means every
+          // worker change since then -- captions, language detection, the
+          // section downloads -- is committed, green, pushed and NOT live.
+          owTile('Deployed', (h.deploy && h.deploy.workerVersion) ? 'v' + h.deploy.workerVersion : 'Unknown',
+            (h.deploy && h.deploy.note) || 'The box has not reported a version.',
+            (h.deploy && h.deploy.behind === false) ? 'pos' : 'neg'),
         ];
       })()),
       owHealthCodes: (function () {

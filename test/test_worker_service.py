@@ -821,3 +821,29 @@ class PartialClipUploadTests(unittest.TestCase):
         processor, _ = self._processor_with_counting_storage()
         with self.assertRaises(RuntimeError):
             processor.upload_clip("job_p", {"id": "ghost", "clipFile": "/nope.mp4", "thumbFile": "/nope.jpg"})
+
+
+class WorkerVersionTests(unittest.TestCase):
+    """/health has to say which release this box is running.
+
+    Twice now the worker has sat on old code for weeks -- committed, green,
+    pushed, not deployed -- and no screen could say so. The app compares this
+    against its own version; a worker that reports nothing is itself the
+    answer, because it predates the build that started reporting one.
+    """
+
+    def setUp(self):
+        self.service = importlib.import_module("service")
+
+    def test_health_reports_the_running_release(self):
+        caps = self.service.worker_capabilities()
+        self.assertIn("version", caps)
+        self.assertRegex(str(caps["version"]), r"^\d+\.\d+\.\d+$|^unknown$")
+
+    def test_the_version_matches_the_repo_it_was_built_from(self):
+        import json as _json
+        import pathlib as _pathlib
+        expected = _json.loads(
+            (_pathlib.Path(__file__).resolve().parent.parent / "package.json").read_text()
+        )["version"]
+        self.assertEqual(self.service.worker_version(), expected)

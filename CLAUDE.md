@@ -130,7 +130,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **797 JS + 395 Python**
+- `npm test` and `npm run check` must pass. Currently **801 JS + 397 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -150,6 +150,17 @@ These were each a real bug and each has a test named after it.
   layout bug that was not there. Before capturing, settle them:
   `document.getAnimations().forEach(a => { if (a.effect.getTiming().iterations !== Infinity) a.finish() })`
   (skip the infinite ones -- `finish()` throws on those), then screenshot.
+- **A caption question CAN be settled without the box.** `apt-get install -y
+  ffmpeg` gives a build with libass, and that is the whole rig: call the real
+  `write_ass`/`ayah_events`, render one frame over black
+  (`ffmpeg -f lavfi -i color=c=black:s=1080x1920:d=6 -vf "subtitles=x.ass" ...`,
+  seeking PAST the fade -- at t=0 every event is fully transparent and the
+  frame comes out empty), then measure the ink by decoding the PNG to gray8
+  and scanning rows for the leftmost and rightmost lit pixel. That is how the
+  overflow fix was proven: unfixed, ink spanned x 0..1079 with 114 rows
+  touching an edge; fixed, x 185..915 and zero. Amiri and Outfit are not in a
+  fresh container, so the substituted face is WIDER -- which makes a passing
+  wrap test conservative rather than optimistic. Say which face rendered.
 - **Chrome will not decode video in a hidden automation tab.** readyState stays
   0 even for a blob URL holding every byte, so "the preview is black" in an
   agent screenshot is usually the harness, not the app. Verify video paths by
@@ -313,6 +324,13 @@ Habits the tests now enforce, and why:
   change since v3.3.x, including the section downloads, had been committed,
   pushed, green and not running. Check `git log --oneline -1` on the box before
   assuming a worker behaviour exists in production.
+- **The app now says this itself (v3.26.0).** The worker reports its release in
+  `/health` (`worker_version()` in service.py) and `/api/owner/health` compares
+  it with `config.appVersion`; **Owner → Health → Deployed** shows the running
+  version and, when it differs, "Worker changes since then are not live". A
+  worker too old to report a version reads as behind, which is the honest
+  answer — that is exactly what a box predating this build is. Nobody has to
+  remember to check any more, but the deploy itself is still manual.
 - **Follow it with `docker builder prune -f`.** Each `--build` leaves its layer
   cache behind, and they accumulate invisibly: eight rebuilds in one session
   grew the cache to **25.7GB** and took the disk to 69%, which reads exactly

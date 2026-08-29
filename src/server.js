@@ -1080,7 +1080,22 @@ async function route(req, res, url) {
       // app records a job it never managed to hand over -- and that difference
       // is itself the diagnosis, so neither is allowed to stand in for the other.
       const worker = await workerClient.health().catch(error => ({ error: error.message }));
-      return json(res, 200, { ...health, worker });
+      // Which release the box is ACTUALLY running, against this one. A worker
+      // left on old code -- committed, green, pushed, not deployed -- has cost
+      // this project weeks twice, and nothing on any screen could say so. A
+      // worker that reports no version at all is itself the answer: it predates
+      // the build that started reporting one.
+      const workerVersion = String(worker?.capabilities?.version || '');
+      const deploy = {
+        appVersion: config.appVersion,
+        workerVersion: workerVersion || null,
+        behind: Boolean(config.appVersion) && workerVersion !== config.appVersion,
+        note: !worker || worker.error ? 'The worker could not be reached, so its version is unknown.'
+          : !workerVersion ? 'This worker predates version reporting, so it is running code older than v3.26.0. Deploy the box.'
+            : workerVersion === config.appVersion ? 'The box is running this release.'
+              : `The box is running v${workerVersion}; this app is v${config.appVersion}. Worker changes since then are not live.`,
+      };
+      return json(res, 200, { ...health, worker, deploy });
     } catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
   }
   if (method === 'GET' && pathname === '/api/owner/costs') {

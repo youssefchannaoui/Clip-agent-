@@ -73,6 +73,18 @@ test('YouTube OAuth, connection check and resumable upload complete', async () =
   assert.equal(result.postUrl, 'https://youtu.be/youtube-video-1');
   assert.equal(target.providerState.stage, 'completed');
   assert.ok(calls.some(call => call.url.includes('uploadType=resumable')));
+
+  // On the wire, not in the source. The target above deliberately still stores
+  // `privacy: 'private'` -- an account that saved that back when the app had a
+  // control -- and the request must ask for public anyway. Youssef, 28 Aug
+  // 2026: "IT MUST BE PUBLIC STRAIGHAWAY no settings to chnage".
+  const metadata = calls.find(call => call.url.includes('/upload/youtube/v3/videos') && call.method === 'POST');
+  assert.ok(metadata, 'the metadata request is what carries the privacy status');
+  const sent = JSON.parse(metadata.body);
+  assert.equal(sent.status.privacyStatus, 'public',
+    'a stored private must not reach YouTube');
+  assert.ok(metadata.url.includes('part=snippet,status'),
+    'and status has to be in the parts, or YouTube ignores it entirely');
 });
 
 test('YouTube OAuth requests only the documented channel and upload scopes', () => {

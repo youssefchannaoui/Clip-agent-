@@ -37,14 +37,29 @@ CAPACITY = capacity.plan()
 MAX_CONCURRENT = CAPACITY["maxConcurrentJobs"]
 
 
+def worker_version() -> str:
+    """The release this box is actually running.
+
+    The single most expensive recurring mistake in this project is a worker
+    left on old code: committed, green, pushed, and not deployed, for weeks at
+    a time, with nothing on any screen able to say so. /health reports it now,
+    so the app can compare it against its own version and stop the operator
+    having to remember.
+    """
+    for candidate in (pathlib.Path("/app/package.json"),
+                      pathlib.Path(__file__).resolve().parent.parent / "package.json"):
+        try:
+            return str(json.loads(candidate.read_text())["version"])
+        except Exception:
+            continue
+    return "unknown"
+
+
 def announce_boot() -> None:
     topic = os.getenv("ACTIVITY_NTFY_TOPIC", "").strip()
     if not topic:
         return
-    try:
-        version = json.loads(pathlib.Path("/app/package.json").read_text())["version"]
-    except Exception:
-        version = "unknown"
+    version = worker_version()
     body = (
         f"Update live: DeenClipped worker v{version} just started -- "
         f"{CAPACITY['cores']} core(s), model {CAPACITY['model']}, "
@@ -204,9 +219,11 @@ def worker_capabilities() -> dict[str, Any]:
     """
     try:
         import clip_worker
-        return {**clip_worker.capabilities(), "downloadProgress": "bytesDone" in _service_source()}
+        return {**clip_worker.capabilities(), "downloadProgress": "bytesDone" in _service_source(),
+                "version": worker_version()}
     except Exception as exc:  # pragma: no cover - diagnostic path
-        return {"error": clean_error(exc)}
+        # Even a broken worker says which build is broken.
+        return {"error": clean_error(exc), "version": worker_version()}
 
 
 def _service_source() -> str:
