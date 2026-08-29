@@ -339,7 +339,10 @@ Habits the tests now enforce, and why:
   on the Mac; or **`WORKER_SSH_PASSWORD`** = the box's root password, which is
   the one a PHONE session can arm, since the key file is out of reach there.
   The key is preferred and wins when both are set; adding it later leaves the
-  password unused. (`WORKER_HOST`/`WORKER_USER` optional.) Without either, the
+  password unused. **The password path is unverified** — nothing in this
+  container can reach port 22 to test it, and a key-provisioned box usually
+  ships `PasswordAuthentication no`, in which case only the key works. Use the
+  key when the Mac is at hand. (`WORKER_HOST`/`WORKER_USER` optional.) Without either, the
   run fails at the first step and prints exactly this, rather than reporting
   green having done nothing — dispatched twice on 29 Aug 2026 to confirm that
   is precisely what happens.

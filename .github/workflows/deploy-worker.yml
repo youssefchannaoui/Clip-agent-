@@ -19,6 +19,12 @@
 #                        reach: the Hetzner Cloud console can set one on the
 #                        server, and it pastes straight into the secret.
 #                        Adding WORKER_SSH_KEY later leaves this one unused.
+#                        CAVEAT, unverified from here: a box provisioned with
+#                        an SSH key usually has `PasswordAuthentication no`, and
+#                        then this path cannot work until that is flipped in
+#                        /etc/ssh/sshd_config -- which needs the box. If the run
+#                        fails on "Permission denied (publickey)" with a
+#                        password armed, that is what happened; use the key.
 #
 # WORKER_HOST and WORKER_USER are optional overrides; without them this uses
 # the box in CLAUDE.md.
