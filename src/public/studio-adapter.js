@@ -3865,6 +3865,11 @@
       studio: { icon: 'ph-fill ph-sparkle', accent: '#F0D6A6', ring: 'rgba(217,180,120,.6)' },
     };
     var TIER_TAG = { basic: '', pro: 'Most popular', studio: 'For channels at scale' };
+    function periodJustMoved() {
+      return Boolean(UI.billingFrom) && UI.billingFrom !== billingPeriod
+        && (Date.now() - (UI.tokensAnimAt || 0) < 900);
+    }
+
     // The plan record for whatever id this account actually carries. A
     // subscriber who signed up before tiers has 'monthly', which is no longer a
     // key in the grid -- looked up naively their plan displayed as "Free" while
@@ -6965,16 +6970,17 @@
       })(),
       // Which way the prices should come in from, so the movement matches the
       // direction the switch itself travelled.
-      tierSlideClass: (function () {
-        if (!UI.billingFrom || UI.billingFrom === billingPeriod) return '';
-        if (Date.now() - (UI.tokensAnimAt || 0) >= 900) return '';
-        return periodIndex(billingPeriod) > periodIndex(UI.billingFrom) ? 'dcslide-next' : 'dcslide-prev';
-      })(),
+      tierSlideClass: periodJustMoved()
+        ? (periodIndex(billingPeriod) > periodIndex(UI.billingFrom) ? 'dcslide-next' : 'dcslide-prev')
+        : '',
       // Gated like the Owner screen's: the studio re-renders on every state
       // poll, so an ungated entry animation would replay every few seconds.
       // Only a deliberate act -- opening the screen or moving the switch --
       // stamps tokensAnimAt.
-      tierAnimClass: (Date.now() - (UI.tokensAnimAt || 0) < 900) ? 'dctier-in' : '',
+      // The entry rise and the sideways slide are the same element's animation,
+      // so only one may be on at a time: pressing the switch slides, arriving
+      // on the screen rises.
+      tierAnimClass: (Date.now() - (UI.tokensAnimAt || 0) < 900 && !periodJustMoved()) ? 'dctier-in' : '',
       tierCards: tierCards,
 
       packs: topupList.map(function (pk) {

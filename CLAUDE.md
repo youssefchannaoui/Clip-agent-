@@ -822,6 +822,27 @@ which gives you that ai plus multiple channel uploads".
   The prices slide in from the side the switch travelled
   (`dcslide-next`/`dcslide-prev`, from `UI.billingFrom`), staggered 45ms across
   the three columns.
+- **The whole card travels, and there is only one animation system (v3.35.2).**
+  studio-tokens.css already owned an entry animation, hover and the
+  reduced-motion escape for these cards from v3.23; a second set was added
+  beside it and the two fought. Now the older block keeps hover and the button
+  states, and only the gate and the sideways travel are declared on top of it.
+  Three traps, each measured rather than reasoned about:
+  1. **`backwards`, never `both`** -- the same lesson the v3.23 block had
+     already written down. A forwards fill leaves the last keyframe beating
+     ordinary declarations for the element's life, which silently kills the
+     hover transform. Confirmed by hovering after the animation: resting
+     `none`, hovered `translateY(-3px)`.
+  2. **`animation:` is a SHORTHAND and resets `animation-delay`.** The stagger
+     was set earlier in the file and thrown away by the later shorthand, so all
+     three cards moved in lockstep -- measured at an identical 9.9px mid-slide.
+     Re-declared after the shorthands: 9.9 / 26 / 38px.
+  3. **The old entry animation was ungated**, so it replayed on every state
+     poll. Switched off and replaced by the two gated classes; a background
+     re-render now reports ZERO running animations.
+  On /plans the same effect needs a different trick: re-pointing a rule at the
+  same `animation-name` does not restart it, so the three checked states use
+  three identically-defined keyframes (`dcSlideA/B/C`) to force the restart.
 - **`ph-seedling` is not in @phosphor-icons/web 2.1.1.** Basic's mark was an
   empty ring beside Pro's lightning and Studio's sparkle for a release. unpkg
   is not reachable from the build container to check a glyph name, so the rule

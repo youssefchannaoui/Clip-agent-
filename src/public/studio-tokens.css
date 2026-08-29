@@ -140,50 +140,45 @@
 }
 
 
-/* ── Plans grid: motion, and room to breathe ────────────────────────────────
-   The entry animation is GATED by tierAnimClass in the adapter -- the studio
-   re-renders on every state poll, so an ungated one replays every few seconds
-   and reads as a flicker rather than an arrival. Hover and the price swap are
-   ungated: both are responses to something the person just did. */
+/* ── Plans grid: the card travels ───────────────────────────────────────────
+ *
+ * This sits ON TOP of the #dcPlanGrid > article rules above, which already own
+ * hover, the button states and the reduced-motion escape. Only what is new is
+ * declared here: the gate, and the sideways travel.
+ *
+ * `backwards`, never `both` -- the same trap the block above recorded after
+ * measuring it. A forwards fill leaves the final keyframe winning over ordinary
+ * declarations for the life of the element, which silently kills the hover
+ * transform. Every end state below is identical to the resting style, so
+ * `backwards` loses nothing.
+ */
 @keyframes dcTierIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
-@keyframes dcTierPrice { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
-
-#dcPlanGrid .dctier {
-  transition: transform .2s cubic-bezier(.2,.8,.2,1), border-color .2s ease, box-shadow .2s ease;
-}
-#dcPlanGrid .dctier.dctier-in { animation: dcTierIn .5s cubic-bezier(.2,.8,.2,1) both; }
-#dcPlanGrid .dctier.dctier-in:nth-child(2) { animation-delay: .08s; }
-#dcPlanGrid .dctier.dctier-in:nth-child(3) { animation-delay: .16s; }
-#dcPlanGrid .dctier:hover {
-  transform: translateY(-5px);
-  border-color: rgba(217,180,120,.45) !important;
-  box-shadow: 0 30px 64px rgba(0,0,0,.5);
-}
-/* The price and token line are the two things the switch changes, so they are
-   what should move when it is pressed -- and they come in from the side the
-   switch travelled, so the motion says which way you went. */
 @keyframes dcPillSlide { from { transform: translateX(var(--dcx, 0)); } to { transform: none; } }
-@keyframes dcSlideNext { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: none; } }
-@keyframes dcSlidePrev { from { opacity: 0; transform: translateX(-26px); } to { opacity: 1; transform: none; } }
+@keyframes dcSlideNext { from { opacity: 0; transform: translateX(38px); } to { opacity: 1; transform: none; } }
+@keyframes dcSlidePrev { from { opacity: 0; transform: translateX(-38px); } to { opacity: 1; transform: none; } }
 
-#dcPlanGrid .dctier > div:nth-of-type(2),
-#dcPlanGrid .dctier > span:nth-of-type(3) { animation: dcTierPrice .3s cubic-bezier(.2,.8,.2,1) both; }
-#dcPlanGrid .dctier.dcslide-next > div:nth-of-type(2),
-#dcPlanGrid .dctier.dcslide-next > span:nth-of-type(3) { animation: dcSlideNext .34s cubic-bezier(.2,.8,.2,1) both; }
-#dcPlanGrid .dctier.dcslide-prev > div:nth-of-type(2),
-#dcPlanGrid .dctier.dcslide-prev > span:nth-of-type(3) { animation: dcSlidePrev .34s cubic-bezier(.2,.8,.2,1) both; }
-/* Staggered across the three columns, so the row reads left to right. */
-#dcPlanGrid .dctier:nth-child(2) > div:nth-of-type(2),
-#dcPlanGrid .dctier:nth-child(2) > span:nth-of-type(3) { animation-delay: .045s; }
-#dcPlanGrid .dctier:nth-child(3) > div:nth-of-type(2),
-#dcPlanGrid .dctier:nth-child(3) > span:nth-of-type(3) { animation-delay: .09s; }
-#dcPlanGrid .dctier button { transition: transform .16s ease, filter .16s ease, box-shadow .16s ease; }
-#dcPlanGrid .dctier button:hover { transform: translateY(-2px); filter: brightness(1.07); }
+/* The studio re-renders through innerHTML on every state poll, so an ungated
+   animation replays every few seconds on its own. dcTokenRise above is exactly
+   that: switched off here and replaced by the two gated states, which the
+   adapter only stamps when a person arrives on the screen or moves the switch. */
+#dcPlanGrid > article { animation: none; }
+#dcPlanGrid > article.dctier-in { animation: dcTierIn 440ms cubic-bezier(.2,.8,.2,1) backwards; }
+
+/* Pressing the switch moves the WHOLE card, in the direction the switch went,
+   staggered across the three columns so the row reads left to right. */
+#dcPlanGrid > article.dcslide-next { animation: dcSlideNext 360ms cubic-bezier(.2,.8,.2,1) backwards; }
+#dcPlanGrid > article.dcslide-prev { animation: dcSlidePrev 360ms cubic-bezier(.2,.8,.2,1) backwards; }
+
+/* Re-declared here, AFTER the shorthands above. `animation: none` and
+   `animation: <name> ...` are shorthands, so each one resets animation-delay
+   to 0 and silently threw away the stagger set further up this file -- all
+   three cards moved in lockstep, measured. */
+#dcPlanGrid > article:nth-child(2) { animation-delay: 55ms; }
+#dcPlanGrid > article:nth-child(3) { animation-delay: 110ms; }
 
 @media (prefers-reduced-motion: reduce) {
-  #dcPlanGrid .dctier, #dcPlanGrid .dctier.dctier-in,
-  #dcPlanGrid .dctier > div:nth-of-type(2),
-  #dcPlanGrid .dctier > span:nth-of-type(3),
-  #dcPlanGrid .dctier > span:first-child { animation: none !important; transition: none !important; }
-  #dcPlanGrid .dctier:hover { transform: none; }
+  #dcPlanGrid > article.dctier-in,
+  #dcPlanGrid > article.dcslide-next,
+  #dcPlanGrid > article.dcslide-prev,
+  #dcPlanGrid > article > span:first-child { animation: none !important; }
 }
