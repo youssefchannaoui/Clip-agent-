@@ -160,15 +160,30 @@
   box-shadow: 0 30px 64px rgba(0,0,0,.5);
 }
 /* The price and token line are the two things the switch changes, so they are
-   what should move when it is pressed. */
-#dcPlanGrid .dctier > div:nth-of-type(2) strong,
+   what should move when it is pressed -- and they come in from the side the
+   switch travelled, so the motion says which way you went. */
+@keyframes dcPillSlide { from { transform: translateX(var(--dcx, 0)); } to { transform: none; } }
+@keyframes dcSlideNext { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: none; } }
+@keyframes dcSlidePrev { from { opacity: 0; transform: translateX(-26px); } to { opacity: 1; transform: none; } }
+
+#dcPlanGrid .dctier > div:nth-of-type(2),
 #dcPlanGrid .dctier > span:nth-of-type(3) { animation: dcTierPrice .3s cubic-bezier(.2,.8,.2,1) both; }
+#dcPlanGrid .dctier.dcslide-next > div:nth-of-type(2),
+#dcPlanGrid .dctier.dcslide-next > span:nth-of-type(3) { animation: dcSlideNext .34s cubic-bezier(.2,.8,.2,1) both; }
+#dcPlanGrid .dctier.dcslide-prev > div:nth-of-type(2),
+#dcPlanGrid .dctier.dcslide-prev > span:nth-of-type(3) { animation: dcSlidePrev .34s cubic-bezier(.2,.8,.2,1) both; }
+/* Staggered across the three columns, so the row reads left to right. */
+#dcPlanGrid .dctier:nth-child(2) > div:nth-of-type(2),
+#dcPlanGrid .dctier:nth-child(2) > span:nth-of-type(3) { animation-delay: .045s; }
+#dcPlanGrid .dctier:nth-child(3) > div:nth-of-type(2),
+#dcPlanGrid .dctier:nth-child(3) > span:nth-of-type(3) { animation-delay: .09s; }
 #dcPlanGrid .dctier button { transition: transform .16s ease, filter .16s ease, box-shadow .16s ease; }
 #dcPlanGrid .dctier button:hover { transform: translateY(-2px); filter: brightness(1.07); }
 
 @media (prefers-reduced-motion: reduce) {
   #dcPlanGrid .dctier, #dcPlanGrid .dctier.dctier-in,
-  #dcPlanGrid .dctier > div:nth-of-type(2) strong,
-  #dcPlanGrid .dctier > span:nth-of-type(3) { animation: none !important; transition: none !important; }
+  #dcPlanGrid .dctier > div:nth-of-type(2),
+  #dcPlanGrid .dctier > span:nth-of-type(3),
+  #dcPlanGrid .dctier > span:first-child { animation: none !important; transition: none !important; }
   #dcPlanGrid .dctier:hover { transform: none; }
 }

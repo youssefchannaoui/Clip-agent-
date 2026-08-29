@@ -674,7 +674,7 @@ html, body { margin: 0; background: #09090A; }
 .shr{font-size: 11px; color: #6E6E76; line-height: 1.5; margin-top: 2px}
 .shs{display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin: 34px 0 6px}
 .sht{margin: 0; font-family: Outfit, Inter, sans-serif; font-size: 20px; font-weight: 600; letter-spacing: -.03em}
-.shu{display: inline-flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid #26262A; border-radius: 22px; background: #121214}
+.shu{position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid #26262A; border-radius: 22px; background: #121214}
 .shv{font-size: 11.5px; color: #6E6E76}
 .shw{margin-left: auto; font-size: 12px; color: #6E6E76}
 .shx{display: grid; grid-template-columns: repeat(auto-fit, minmax(272px, 1fr)); gap: 22px; align-items: stretch}

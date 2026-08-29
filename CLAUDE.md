@@ -811,6 +811,22 @@ which gives you that ai plus multiple channel uploads".
   opening the screen or moving the switch stamps `tokensAnimAt`. Verified by
   re-rendering after the gate expires and asserting nothing animates.
   Every rule has a `prefers-reduced-motion` escape.
+- **The switch's highlight slides, and it is built twice on purpose (v3.35.1).**
+  On /plans it is a `::before` PSEUDO-ELEMENT that survives every state change,
+  so a plain `transition: transform` moves it between three stops. In the studio
+  it cannot be: the app re-renders through innerHTML, so that node is brand new
+  on every paint and a transition has no previous position to move from. There
+  it is an ANIMATION instead, with the distance it travelled passed in as
+  `--dcx` and consumed by `@keyframes dcPillSlide`. Same effect, opposite
+  mechanism, and the reason is the render model — not a style preference.
+  The prices slide in from the side the switch travelled
+  (`dcslide-next`/`dcslide-prev`, from `UI.billingFrom`), staggered 45ms across
+  the three columns.
+- **`ph-seedling` is not in @phosphor-icons/web 2.1.1.** Basic's mark was an
+  empty ring beside Pro's lightning and Studio's sparkle for a release. unpkg
+  is not reachable from the build container to check a glyph name, so the rule
+  is: use only glyphs seen rendering in the live app. Basic uses
+  `ph-fill ph-house`, which is what the rail's Home item uses.
 - **A tagline is a promise.** Studio's said "approve on autopilot" for one
   release after auto-approve was dropped from it. Corrected to "jump the
   queue"; if a feature moves, its sales copy moves with it.

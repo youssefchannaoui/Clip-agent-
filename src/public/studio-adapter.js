@@ -1750,6 +1750,11 @@
 
   // What a Traffic tile can be set to show. Twelve numbers worth watching, six
   // slots: the screen stays quiet and every slot is the owner's choice.
+  function periodIndex(id) {
+    for (var i = 0; i < BILLING_PERIODS.length; i++) if (BILLING_PERIODS[i].id === id) return i;
+    return 1;
+  }
+
   // The billing periods the pricing grid toggles between.
   var BILLING_PERIODS = [
     { id: 'weekly', label: 'Weekly' },
@@ -3852,7 +3857,10 @@
     var featureLabels = (DATA.billing && DATA.billing.featureLabels) || {};
     var currentPlanId = String(current.plan || 'free');
     var TIER_LOOK = {
-      basic: { icon: 'ph ph-seedling', accent: '#BCBCC3', ring: '#1E1E22' },
+      // ph-seedling is NOT in @phosphor-icons/web 2.1.1's regular set -- it
+      // drew an empty ring next to Pro's lightning and Studio's sparkle. Only
+      // glyphs seen rendering in the live app are used here now.
+      basic: { icon: 'ph-fill ph-house', accent: '#BCBCC3', ring: '#26262A' },
       pro: { icon: 'ph-fill ph-lightning', accent: '#F0D6A6', ring: 'rgba(217,180,120,.45)' },
       studio: { icon: 'ph-fill ph-sparkle', accent: '#F0D6A6', ring: 'rgba(217,180,120,.6)' },
     };
@@ -6927,12 +6935,41 @@
         var on = period.id === billingPeriod;
         return {
           label: period.label,
-          select: function (e) { stop(e); setUI({ billingPeriod: period.id, tokensAnimAt: Date.now() }); },
-          style: 'padding: 6px 14px; border: 0; border-radius: 20px; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .14s ease, color .14s ease; '
-            + (on ? 'background: rgba(217,180,120,.16); color: #F0D6A6;' : 'background: transparent; color: #8B8B93;'),
+          select: function (e) {
+            stop(e);
+            // The period we are LEAVING. Everything below slides from it:
+            // the pill from where it was, the prices from the side the
+            // switch travelled.
+            setUI({ billingPeriod: period.id, billingFrom: billingPeriod, tokensAnimAt: Date.now() });
+          },
+          // No background of its own: the pill behind them carries the
+          // highlight, which is what lets it slide between the three.
+          style: 'position: relative; z-index: 1; width: 78px; padding: 6px 0; border: 0; border-radius: 20px; background: transparent; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: color .16s ease; color: '
+            + (on ? '#F0D6A6;' : '#8B8B93;'),
         };
       }),
       periodNote: billingPeriod === 'yearly' ? 'Two months free on every yearly plan' : '',
+      // The highlight is its own element so it can travel. A CSS transition
+      // would not fire: the studio re-renders through innerHTML, so this node
+      // is BRAND NEW every time and has no previous position to move from.
+      // An animation does fire on a fresh node, so the distance it came from
+      // travels with it as a custom property.
+      periodPillStyle: (function () {
+        var STEP = 80; // 78px button + the 2px gap
+        var to = periodIndex(billingPeriod);
+        var from = periodIndex(UI.billingFrom);
+        var moved = UI.billingFrom && UI.billingFrom !== billingPeriod && (Date.now() - (UI.tokensAnimAt || 0) < 900);
+        return 'position: absolute; top: 3px; left: ' + (3 + to * STEP) + 'px; width: 78px; height: calc(100% - 6px); '
+          + 'border-radius: 20px; background: rgba(217,180,120,.16); pointer-events: none; '
+          + (moved ? '--dcx: ' + ((from - to) * STEP) + 'px; animation: dcPillSlide .3s cubic-bezier(.2,.8,.2,1) both;' : '');
+      })(),
+      // Which way the prices should come in from, so the movement matches the
+      // direction the switch itself travelled.
+      tierSlideClass: (function () {
+        if (!UI.billingFrom || UI.billingFrom === billingPeriod) return '';
+        if (Date.now() - (UI.tokensAnimAt || 0) >= 900) return '';
+        return periodIndex(billingPeriod) > periodIndex(UI.billingFrom) ? 'dcslide-next' : 'dcslide-prev';
+      })(),
       // Gated like the Owner screen's: the studio re-renders on every state
       // poll, so an ungated entry animation would replay every few seconds.
       // Only a deliberate act -- opening the screen or moving the switch --
