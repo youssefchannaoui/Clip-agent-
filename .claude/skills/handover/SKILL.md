@@ -42,6 +42,10 @@ Then, as far as this session can reach:
   NOT deploy it. Say which commit the box is on if you can establish it
   (Owner → Health → Deployed, or a successful `deploy-worker.yml` run), and if
   you cannot, say plainly that it is unknown and therefore assumed behind.
+  **A handover REPORTS this; it never deploys.** If the box is behind, the next
+  immediate action is `/deploy-worker` — run it there and then if this session
+  has a route to the box, and if it does not, name the session or the person who
+  does. Reporting a stale box twice and never fixing it is how weeks went by.
 
 ## Then write it
 

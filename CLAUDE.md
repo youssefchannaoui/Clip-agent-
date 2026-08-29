@@ -508,6 +508,13 @@ exact handover".
   bullets max, overwritten each time — never a stacked log, because this file
   already holds the durable history.
 - It must name **who** each blocker is on, and must never carry a credential.
+- **It reports the box, it does not deploy it.** That is `/deploy-worker`
+  (`.claude/skills/deploy-worker/SKILL.md`), which carries all three routes to
+  the box — SSH from the Mac, a `deploy-worker.yml` dispatch, or the Hetzner
+  console with its shifted-symbol and dead-console traps — and refuses to call
+  a deploy done without reading the version out of the RUNNING container. When
+  a handover finds the box behind, that skill is the next action, run there and
+  then if the session can reach the box and named as someone else's if not.
 
 ## Working from a phone (28 Aug 2026)
 
