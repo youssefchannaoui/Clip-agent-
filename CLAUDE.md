@@ -120,9 +120,23 @@ These were each a real bug and each has a test named after it.
    faster-whisper that rejects the flag falls back rather than failing the job.
 8. **A caption line that can overflow carries `{\q0}`.** `WrapStyle: 2` breaks
    only where the text says to, so any line built by word count rather than
-   glyph width can run off both edges -- seen on real frames three times now
-   (phrase captions, spoken-Arabic lines, and the ayah translation). All three
-   carry the override; anything new that emits a Dialogue line must too.
+   glyph width can run off both edges -- seen on real frames FIVE times now
+   (phrase captions, spoken-Arabic lines, the ayah translation, and -- found
+   29 Aug 2026 by measuring rather than by a complaint -- word and karaoke
+   modes). All five carry the override; anything new that emits a Dialogue
+   line must too.
+   **Word mode was the worst of them and looked like a timing bug.** The group
+   is `captionMaxWords` words long, default SIX, and at font 62 an ordinary
+   line ("Indeed the prayer prevents immorality and") spanned x 0..985 with 10
+   rows cut at the left edge -- so the highlighted first word was off the frame
+   entirely. Word mode redraws the SAME group once per word, so that is every
+   frame of the group, and the symptom reads as "the highlight is out of sync"
+   when the timing is in fact exact. `{\q0}` took it to x 254..989, zero cut
+   rows, and left every line that already fitted byte-identical.
+   **The two stack modes are deliberately NOT given the override.** They place
+   each line at an explicit `\pos`, so a wrap there would collide with the line
+   below rather than fix anything; they need measured line-breaking instead,
+   and that is unwritten. Their `captionStackMaxWords` default is 4, not 6.
 9. **No dead controls.** A control that cannot reach an export must not be
    shown. `hookEnabled` is hard-disabled in `sanitiseTemplate()`.
 
@@ -130,7 +144,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **807 JS + 397 Python**
+- `npm test` and `npm run check` must pass. Currently **807 JS + 398 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test

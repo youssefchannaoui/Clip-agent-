@@ -2349,8 +2349,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 parts.append(f"{{\\kf{centiseconds}}}{face}{ass_escape(value)}")
             if inside_ayah((start + end) / 2) or inside_arabic((start + end) / 2):
                 continue
+            # \q0, for the same reason the phrase and ayah lines carry it: this
+            # group is `captionMaxWords` words long -- a COUNT, not a width --
+            # and WrapStyle 2 will not take a second line on its own. Six
+            # ordinary words can exceed the frame, and then the line is cut at
+            # the edges with the first word off-screen entirely. Measured on a
+            # real frame; see the word-mode note below.
             events.append(
-                f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}" + " ".join(parts)
+                f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}"
+                + "{\\q0}" + " ".join(parts)
             )
     elif mode == "word" and words:
         for group in chunked(words, max_words):
@@ -2368,7 +2375,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 end = max(start + 0.08, float(active["end"]))
                 if inside_ayah((start + end) / 2) or inside_arabic((start + end) / 2):
                     continue
-                events.append(f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}{' '.join(text_parts)}")
+                # \q0, as above. Word mode redraws the SAME group for every
+                # word in it, so an overflowing group is not one bad frame --
+                # it is every frame of that group, with the highlight sitting
+                # on a word the viewer cannot see. A group that already fits is
+                # laid out identically with the override, so nothing that
+                # renders correctly today changes.
+                events.append(
+                    f"Dialogue: 2,{ass_time(start)},{ass_time(end)},Caption,,0,0,0,,{fade_tag}"
+                    + "{\\q0}" + " ".join(text_parts)
+                )
     else:
         for segment in candidate.segments:
             start = max(0.0, float(segment["start"]) - candidate.start)

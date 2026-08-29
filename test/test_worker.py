@@ -647,6 +647,40 @@ class AyahTranslationWrapTests(unittest.TestCase):
         for line in events:
             self.assertIn("{\\q0}", line)
 
+    def test_a_word_mode_caption_line_wraps_instead_of_running_off(self):
+        """Same invariant, the mode it was missing from. Word and karaoke
+        captions group words by captionMaxWords -- a COUNT, not a width -- and
+        WrapStyle 2 will not take a second line on its own. Measured on a real
+        frame at the shipped default of 6: "Indeed the prayer prevents
+        immorality and" spanned x 0..985 with 10 rows cut at the left edge, so
+        the highlighted first word was off-screen entirely. Word mode redraws
+        the same group for every word in it, so that is every frame of the
+        group, not one."""
+        words = "Indeed the prayer prevents immorality and".split()
+        segments = [{
+            "start": 0.0, "end": float(len(words)) * 0.5,
+            "text": " ".join(words),
+            "words": [{"word": w, "start": i * 0.5, "end": i * 0.5 + 0.5}
+                      for i, w in enumerate(words)],
+        }]
+        candidate = worker.Candidate(
+            start=0.0, end=12.0, text=" ".join(words), segments=segments,
+            score=9, reasons=[], quote_risk=False,
+        )
+        for mode in ("word", "karaoke"):
+            with tempfile.TemporaryDirectory() as folder:
+                ass = pathlib.Path(folder) / "c.ass"
+                worker.write_ass(candidate, {
+                    "width": 1080, "height": 1920, "captionFont": "DejaVu Sans",
+                    "captionFontSize": 62, "captionMode": mode,
+                    "captionFadeMs": 0, "captionMaxWords": 6,
+                }, ass)
+                lines = [line for line in ass.read_text(encoding="utf-8").splitlines()
+                         if line.startswith("Dialogue:") and ",Caption," in line]
+                self.assertTrue(lines, f"{mode} produced no caption events")
+                for line in lines:
+                    self.assertIn("{\\q0}", line, f"{mode} caption may overflow the frame")
+
 
 class CaptionFontTests(unittest.TestCase):
     """Every font the picker offers has to exist in the worker image.
