@@ -167,7 +167,7 @@ export function topups() {
       enabled: Boolean(config.stripePriceTopup300),
     },
     boost750: {
-      id: 'boost750', name: 'Studio boost', tokens: 750,
+      id: 'boost750', name: 'Campaign boost', tokens: 750,
       priceId: config.stripePriceTopup750, priceLabel: config.topupPrice750Label,
       badge: 'Best value', description: 'A larger one-time token pack for long lectures and campaigns.',
       enabled: Boolean(config.stripePriceTopup750),

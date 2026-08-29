@@ -171,3 +171,37 @@ test('a platform error code cannot run off the edge of the card', () => {
   assert.ok(/overflow-wrap:\s*anywhere/.test(tpl) || /overflow-wrap:\s*anywhere/.test(css),
     'the failure line must be allowed to break a long code');
 });
+
+// ── the token shop must not compete with the subscription ───────────────────
+
+test('no top-up shares its name or its price with a subscription tier', async () => {
+  // The 750 pack was called "Studio boost" at A$59.99 — the same price as
+  // Studio monthly, which carries 1,200 tokens and every Studio feature. Same
+  // money, 60% fewer tokens, and a name that reads as part of the Studio plan.
+  // Anyone comparing the two sees the app charging the same for less.
+  const billing = fs.readFileSync(path.join(ROOT, 'src/billing.js'), 'utf8');
+  const marketing = fs.readFileSync(path.join(ROOT, 'src/marketing.js'), 'utf8');
+  for (const [label, source] of [['billing.js', billing], ['marketing.js', marketing]]) {
+    assert.ok(!/name: 'Studio boost'/.test(source),
+      `${label}: a top-up must not be named after a subscription tier`);
+  }
+});
+
+test('a token pack always costs more per token than subscribing', () => {
+  // Top-ups are convenience, and convenience is the dearer option. If a pack
+  // ever undercuts a plan per token, the plan stops being worth buying.
+  const config = fs.readFileSync(path.join(ROOT, 'src/config.js'), 'utf8');
+  const money = (name) => {
+    const line = config.match(new RegExp(`${name}: process\\.env\\.[A-Z_0-9]+ \\|\\| 'A\\$([0-9.]+)'`));
+    return line ? Number(line[1]) : null;
+  };
+  const tokens = (name) => {
+    const line = config.match(new RegExp(`${name}: Math\\.max\\(1, Math\\.round\\(number\\(process\\.env\\.[A-Z_0-9]+, ([0-9]+)\\)`));
+    return line ? Number(line[1]) : null;
+  };
+  const packRate = money('topupPrice750Label') / 750;
+  const studioMonthlyRate = money('planPriceStudioMonthlyLabel') / tokens('tokensStudioMonthly');
+  assert.ok(packRate > studioMonthlyRate,
+    `the 750 pack (A$${packRate.toFixed(4)}/token) must cost more per token than Studio monthly `
+    + `(A$${studioMonthlyRate.toFixed(4)}/token), or nobody should ever subscribe`);
+});
