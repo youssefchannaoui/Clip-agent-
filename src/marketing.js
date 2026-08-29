@@ -1,4 +1,5 @@
 import { config } from './config.js';
+import * as billing from './billing.js';
 
 function escapeHtml(value = '') {
   return String(value)
@@ -146,15 +147,68 @@ function reelCard([src, alt], className = '') {
   return `<figure class="reel-card ${className}"><img src="/marketing-assets/${src}" alt="${alt}" loading="lazy"><span class="reel-badge">9:16</span></figure>`;
 }
 
+/**
+ * The public pricing grid: three TIERS, one billing period at a time.
+ *
+ * This advertised Free/Weekly/Monthly/Yearly until v3.36 -- four cards for one
+ * paid tier sold three ways, and no mention of Studio at all. The marketing
+ * site was selling a product the app no longer had.
+ *
+ * The period switch is CSS: three radios and `:checked ~` selectors, because
+ * these pages carry no script of their own and a radio needs none. The ids are
+ * prefixed so they cannot collide with the switch on /plans.
+ */
 function pricingCards(currentUser = null) {
   const accountUrl = currentUser ? '/plans' : '/login?returnTo=/plans';
-  const plans = [
-    { id: 'free', kicker: 'Start', name: 'Free', price: 'A$0', tokens: config.tokensFree, interval: 'starter tokens', copy: 'Explore the complete workflow before choosing a paid plan.', enabled: true },
-    { id: 'weekly', kicker: 'Flexible', name: 'Weekly', price: config.planPriceWeeklyLabel, tokens: config.tokensWeekly, interval: 'tokens/week', copy: 'For occasional lectures, events and short campaigns.', enabled: Boolean(config.stripePriceWeekly) },
-    { id: 'monthly', kicker: 'Consistent', name: 'Monthly', price: config.planPriceMonthlyLabel, tokens: config.tokensMonthly, interval: 'tokens/month', copy: 'For creators building a dependable short-form schedule.', enabled: Boolean(config.stripePriceMonthly), popular: true },
-    { id: 'yearly', kicker: 'Best value', name: 'Yearly', price: config.planPriceYearlyLabel, tokens: config.tokensYearly, interval: 'tokens/year', copy: 'For higher-volume clipping across the full year.', enabled: Boolean(config.stripePriceYearly) },
-  ];
-  return `<div class="pricing-grid">${plans.map(plan => `<article class="price-card ${plan.popular ? 'popular' : ''}">${plan.popular ? '<span class="popular-label">Most popular</span>' : ''}<span class="plan-kicker">${escapeHtml(plan.kicker)}</span><h3>${escapeHtml(plan.name)}</h3><div class="plan-price-label">${escapeHtml(plan.price)}</div><div class="price">${escapeHtml(plan.tokens)} <small>${escapeHtml(plan.interval)}</small></div><p>${escapeHtml(plan.copy)}</p><ul><li>Selected source-time processing</li><li>Review, editor and templates included</li><li>Ordinary template rerenders are free</li></ul>${plan.enabled ? `<a class="button ${plan.popular ? 'primary' : 'secondary'} full" href="${accountUrl}">${plan.id === 'free' ? 'Start free' : `Choose ${escapeHtml(plan.name.toLowerCase())}`}</a>` : '<span class="button secondary full disabled" aria-disabled="true">Stripe price not configured</span>'}</article>`).join('')}</div>`;
+  const tierNames = { pro: 'Pro', studio: 'Studio' };
+  const money = { pro: [config.planPriceWeeklyLabel, config.planPriceMonthlyLabel, config.planPriceYearlyLabel],
+    studio: [config.planPriceStudioWeeklyLabel, config.planPriceStudioMonthlyLabel, config.planPriceStudioYearlyLabel] };
+  const allowance = { pro: [config.tokensWeekly, config.tokensMonthly, config.tokensYearly],
+    studio: [config.tokensStudioWeekly, config.tokensStudioMonthly, config.tokensStudioYearly] };
+  const configured = { pro: [config.stripePriceWeekly, config.stripePriceMonthly, config.stripePriceYearly],
+    studio: [config.stripePriceStudioWeekly, config.stripePriceStudioMonthly, config.stripePriceStudioYearly] };
+  const periods = ['weekly', 'monthly', 'yearly'];
+  const each = { weekly: 'week', monthly: 'month', yearly: 'year' };
+
+  const paidCard = tier => {
+    const rows = periods.map((period, index) => {
+      const live = Boolean(configured[tier][index]);
+      return `<div class="mk-per-${period}">
+        <div class="plan-price-label">${escapeHtml(live ? money[tier][index] : 'Opening soon')}</div>
+        <div class="price">${escapeHtml(Number(allowance[tier][index]).toLocaleString())} <small>tokens/${escapeHtml(each[period])}</small></div>
+      </div>`;
+    }).join('');
+    const anyLive = configured[tier].some(Boolean);
+    const adds = tier === 'studio' ? Object.values(billing.STUDIO_FEATURES) : Object.values(billing.PRO_FEATURES);
+    return `<article class="price-card ${tier === 'pro' ? 'popular' : ''}">
+      ${tier === 'pro' ? '<span class="popular-label">Most popular</span>' : '<span class="popular-label subtle">At scale</span>'}
+      <span class="plan-kicker">${tier === 'pro' ? 'Consistent' : 'For channels at scale'}</span>
+      <h3>${escapeHtml(tierNames[tier])}</h3>
+      ${rows}
+      <p>${escapeHtml(billing.TIERS[tier].tagline)}</p>
+      <ul><li>Everything in ${tier === 'studio' ? 'Pro' : 'Basic'}, plus:</li>${adds.map(line => `<li>${escapeHtml(line)}</li>`).join('')}</ul>
+      ${anyLive
+        ? `<a class="button ${tier === 'pro' ? 'primary' : 'secondary'} full" href="${accountUrl}">Choose ${escapeHtml(tierNames[tier])}</a>`
+        : '<span class="button secondary full disabled" aria-disabled="true">Opening soon</span>'}
+    </article>`;
+  };
+
+  const basic = `<article class="price-card">
+    <span class="plan-kicker">Start</span>
+    <h3>Basic</h3>
+    <div class="plan-price-label">Free</div>
+    <div class="price">${escapeHtml(Number(config.tokensFree).toLocaleString())} <small>tokens for ${escapeHtml(String(config.stripeTrialDays))} days</small></div>
+    <p>${escapeHtml(billing.TIERS.basic.tagline)}</p>
+    <ul>${billing.FREE_INCLUDES.slice(0, 4).map(line => `<li>${escapeHtml(line)}</li>`).join('')}</ul>
+    <a class="button secondary full" href="${accountUrl}">Start free</a>
+  </article>`;
+
+  return `<input type="radio" name="mkperiod" id="mk-weekly" class="mkperiod">`
+    + `<input type="radio" name="mkperiod" id="mk-monthly" class="mkperiod" checked>`
+    + `<input type="radio" name="mkperiod" id="mk-yearly" class="mkperiod">`
+    + `<div class="period-switch"><label for="mk-weekly">Weekly</label><label for="mk-monthly">Monthly</label><label for="mk-yearly">Yearly</label></div>`
+    + `<p class="period-note">Two months free on every yearly plan</p>`
+    + `<div class="pricing-grid">${basic}${paidCard('pro')}${paidCard('studio')}</div>`;
 }
 
 function tokenShop(currentUser = null) {
@@ -228,11 +282,17 @@ function webSiteSchema(base) {
 
 function softwareSchema(base) {
   const monthly = parsePriceLabel(config.planPriceMonthlyLabel);
+  // One offer per price the page actually shows: six paid, plus the free tier.
+  // Listing three when the grid renders six is the kind of drift the tests
+  // comparing schema against the rendered page exist to catch.
   const offers = [
-    { name: 'Free', parsed: monthly ? { price: '0', currency: monthly.currency } : null },
-    { name: 'Weekly', parsed: parsePriceLabel(config.planPriceWeeklyLabel) },
-    { name: 'Monthly', parsed: monthly },
-    { name: 'Yearly', parsed: parsePriceLabel(config.planPriceYearlyLabel) },
+    { name: 'Basic', parsed: monthly ? { price: '0', currency: monthly.currency } : null },
+    { name: 'Pro weekly', parsed: parsePriceLabel(config.planPriceWeeklyLabel) },
+    { name: 'Pro monthly', parsed: monthly },
+    { name: 'Pro yearly', parsed: parsePriceLabel(config.planPriceYearlyLabel) },
+    { name: 'Studio weekly', parsed: parsePriceLabel(config.planPriceStudioWeeklyLabel) },
+    { name: 'Studio monthly', parsed: parsePriceLabel(config.planPriceStudioMonthlyLabel) },
+    { name: 'Studio yearly', parsed: parsePriceLabel(config.planPriceStudioYearlyLabel) },
   ].filter(item => item.parsed).map(item => ({
     '@type': 'Offer', name: `${item.name} plan`,
     price: item.parsed.price, priceCurrency: item.parsed.currency,

@@ -852,6 +852,28 @@ which gives you that ai plus multiple channel uploads".
   release after auto-approve was dropped from it. Corrected to "jump the
   queue"; if a feature moves, its sales copy moves with it.
 
+## The public site was still selling the old plans (v3.36.0, 29 Aug 2026)
+
+Youssef: "now do the same with the website one".
+
+- **deenclipped.online did not know Studio existed.** `src/marketing.js` had its
+  own `pricingCards()` -- rendered on BOTH the homepage's pricing section and
+  `/pricing` -- still advertising Free / Weekly / Monthly / Yearly: four cards
+  for one paid tier sold three ways. Two pricing surfaces had been updated and
+  the one an unsigned-in visitor actually sees had not.
+- It is the same three tiers, the same one-switch-moves-everything gesture and
+  the same whole-card slide as /plans and the studio. The switch is CSS again
+  (`#mk-*` radios), prefixed so it cannot collide with /plans' `#per-*` on a
+  page that ever renders both.
+- **The stagger needs `!important` here.** The rule that sets the animation is
+  an ID selector (`#mk-monthly:checked~…`), so it outranks a plain
+  `.price-card:nth-child(2)` on specificity and its shorthand resets the delay
+  to 0 -- measured, all three cards moving together at an identical 27.9px.
+- **The JSON-LD offers moved with the page.** They listed three plans; the grid
+  now sells six paid prices, and `test/site-housekeeping.test.mjs` compares the
+  schema against what the page renders, so leaving it would have been a silent
+  lie to search engines as well as a failing test.
+
 ## The notifications toggle was hidden behind having dismissed something
 
 The desktop-notifications switch lived INSIDE the `hasDismissed` branch of the

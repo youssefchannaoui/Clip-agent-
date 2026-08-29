@@ -143,7 +143,12 @@ test('the offers in the schema are the prices the pricing page shows', async () 
   const home = await fetch(`${base}/`, { headers: { accept: 'text/html' } }).then(r => r.text());
   const app = ldBlocks(home).find(schema => schema['@type'] === 'SoftwareApplication');
   assert.ok(app.offers?.length >= 2, 'the paid plans are offered');
-  const monthly = app.offers.find(offer => offer.name === 'Monthly plan');
+  // Named by TIER and period since v3.36 -- the grid sells Basic, Pro and
+  // Studio, and the schema has to describe the same six paid prices rather
+  // than the three the page used to show.
+  const monthly = app.offers.find(offer => offer.name === 'Pro monthly plan');
+  assert.ok(app.offers.some(offer => offer.name === 'Studio monthly plan'),
+    'Studio is on the page, so it belongs in the schema');
   // The config label is the same source the pricing page renders from, so
   // matching it means matching the page.
   const { config } = await import('../src/config.js');
