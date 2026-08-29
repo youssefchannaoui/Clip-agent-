@@ -1,6 +1,6 @@
 import { config } from './config.js';
 import * as mailer from './mailer.js';
-import { log } from './store.js';
+import { log, state, save } from './store.js';
 
 /**
  * Tell the operator when something is broken.
@@ -19,7 +19,54 @@ import { log } from './store.js';
 // not go silent forever but never becomes noise either.
 const REMINDER_MS = 12 * 60 * 60_000;
 
-const open = new Map();
+/**
+ * The open conditions, PERSISTED.
+ *
+ * This was an in-memory Map, and that quietly broke the promise the first
+ * notice makes. Render restarts the service on every deploy, so the map came
+ * back empty and the next failing check read as a brand new condition: another
+ * "this is the first notice" mail, every deploy, for a condition that had never
+ * stopped failing. Eight deploys in a day turned one broken webhook secret into
+ * a mailbox full of first notices -- which is exactly how an alert channel
+ * becomes one nobody reads, and then the real one is missed too.
+ *
+ * It lives in state now, so `since` and `lastSent` survive a restart and 12
+ * hours means 12 hours.
+ */
+function ledger() {
+  if (!state.alertsOpen || typeof state.alertsOpen !== 'object') state.alertsOpen = {};
+  return state.alertsOpen;
+}
+
+const open = {
+  get(key) {
+    const row = ledger()[key];
+    return row && typeof row === 'object' ? row : undefined;
+  },
+  set(key, value) {
+    ledger()[key] = value;
+    save();
+  },
+  delete(key) {
+    if (!(key in ledger())) return;
+    delete ledger()[key];
+    save();
+  },
+  entries() {
+    return Object.entries(ledger());
+  },
+  clear() {
+    state.alertsOpen = {};
+    save();
+  },
+};
+
+// A row read back from state is a plain object, so a mutation to it is only
+// remembered if something saves. Every path that touches one goes through here.
+function touch(key, row) {
+  ledger()[key] = row;
+  save();
+}
 
 // Every alarm carries its own repair manual. The owner reads these on a phone
 // at an inconvenient hour, so each is the exact next action, not a diagnosis
@@ -106,6 +153,15 @@ async function notify(subject, body) {
  */
 export async function report(key, failing, detail = '') {
   const existing = open.get(key);
+  // A row now comes back from JSON, so its numbers are whatever was on disk.
+  // A row written by a build that predates this ledger has neither timestamp,
+  // and `Date.now() - undefined` is NaN -- which compares false against the
+  // reminder window and would send on EVERY check. Fail towards sending once,
+  // never towards sending always.
+  if (existing) {
+    if (!Number.isFinite(existing.since)) existing.since = Date.now();
+    if (!Number.isFinite(existing.lastSent)) existing.lastSent = 0;
+  }
 
   if (!failing) {
     if (!existing) return;
@@ -128,8 +184,10 @@ export async function report(key, failing, detail = '') {
   }
 
   existing.detail = detail;
+  touch(key, existing);
   if (Date.now() - existing.lastSent < REMINDER_MS) return;
   existing.lastSent = Date.now();
+  touch(key, existing);
   const hours = Math.round((Date.now() - existing.since) / 3_600_000);
   await notify(`DeenClipped still failing: ${key}`,
     withPlaybook(key, `${key} has been failing for about ${hours} hour(s).\n\n${detail}`));

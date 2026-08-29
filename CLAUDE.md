@@ -130,7 +130,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **801 JS + 397 Python**
+- `npm test` and `npm run check` must pass. Currently **807 JS + 397 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -425,6 +425,37 @@ THAN THAT IT SHOULD NEVER RE RENDER."
   unposted, sat in the schedule as work, and offered "Post now", which re-ran
   the destination that had already refused. The failure now belongs to the
   destination -- the row says "Retry TikTok" and retries only that leg.
+
+## Alerts must survive a restart (v3.27.0, 29 Aug 2026)
+
+Youssef, on a run of billing alarms: "Getting a lot of these emails."
+
+- **The open-condition ledger was an in-memory `Map`.** Render restarts the
+  service on every deploy, so it came back empty and the next failing check read
+  as a brand new condition -- another "this is the first notice", every deploy,
+  for a webhook secret that had never stopped being wrong. Eight deploys in one
+  day is eight first notices. It lives in `state.alertsOpen` now, so `since` and
+  `lastSent` outlive a restart and the 12-hour promise the mail makes is true.
+  An alert channel that cries wolf is one nobody reads, and then the real one
+  is missed too -- which is the entire reason `alerts.js` exists.
+- **A row read back from JSON has whatever numbers were on disk.** A row written
+  by an older build has no `since`/`lastSent`, and `Date.now() - undefined` is
+  NaN, which compares FALSE against the window -- so the naive read would have
+  sent on every single delivery Stripe retried. Both fields are coerced on read,
+  failing towards sending once rather than towards sending always.
+- **The underlying billing failure was NOT ours.** "Invalid Stripe signature"
+  means the HMAC did not match with a well-formed, in-window timestamp: the
+  signing secret on Render is not the one belonging to that endpoint. Note the
+  three distinct messages in `verifyStripeSignature` -- Missing / Expired /
+  Invalid -- they narrow it before anyone opens a dashboard.
+- **`STRIPE_WEBHOOK_SECRET` is trimmed now**, as is `STRIPE_SECRET_KEY`. A
+  credential pasted into Render's variable field picks up a trailing newline
+  routinely, and the resulting failure is indistinguishable from the wrong
+  secret entirely. The alert now carries `webhookSecretNote()`: length, whether
+  it begins `whsec_`, and whether it had whitespace -- never the value, because
+  an alert mail is not a secure channel.
+- Stripe retries for ~3 days, so fixing the secret inside that window redelivers
+  everything missed. Nothing is lost unless a delivery ages out.
 
 ## Posting: the app is not the limit, the platform reviews are (28 Aug 2026)
 

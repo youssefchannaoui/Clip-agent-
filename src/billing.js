@@ -810,6 +810,30 @@ export async function createPortalSession(user) {
   return { id: session.id, url: session.url };
 }
 
+/**
+ * What the configured signing secret LOOKS like -- never what it is.
+ *
+ * "Invalid Stripe signature" has two ordinary causes and the message cannot
+ * tell them apart: the secret belongs to a different endpoint, or it picked up
+ * whitespace on its way into Render's variable field. Both are one glance to
+ * rule out and neither is visible from a phone at 3am, so the alert now carries
+ * the shape of the value. Length, prefix and whitespace only: none of that is
+ * secret material, and an alert mail is not a secure channel.
+ */
+export function webhookSecretNote() {
+  const raw = String(process.env.STRIPE_WEBHOOK_SECRET || '');
+  const value = raw.trim();
+  if (!value) return 'STRIPE_WEBHOOK_SECRET is not set on Render at all.';
+  const notes = [`${value.length} characters`];
+  if (!value.startsWith('whsec_')) {
+    notes.push('does NOT begin with whsec_, so it is probably not a signing secret at all');
+  }
+  if (raw !== value) {
+    notes.push('had stray whitespace around it, which this build trims -- that alone may have been the fault');
+  }
+  return `The configured STRIPE_WEBHOOK_SECRET is ${notes.join('; ')}.`;
+}
+
 export function verifyStripeSignature(rawBody, signatureHeader) {
   if (!config.stripeWebhookSecret) {
     throw new Error('Stripe webhooks are not configured. Add STRIPE_WEBHOOK_SECRET in Render.');

@@ -95,3 +95,69 @@ test('the alarm is raised once, not on every retry Stripe sends', async () => {
   const billingAlerts = sent.filter(item => /billing/i.test(item.title));
   assert.equal(billingAlerts.length, 1, 'Stripe retries for days; one alert is the useful number');
 });
+
+test('a restart does not restart the notices -- the ledger survives it', async () => {
+  // The reported symptom: "getting a lot of these emails". The open-condition
+  // map was in memory, and Render restarts the service on every deploy, so a
+  // condition that had never stopped failing read as brand new each time and
+  // sent another "this is the first notice". Eight deploys in a day turned one
+  // wrong secret into a mailbox full of first notices.
+  //
+  // A restart is exactly this: the module's own memory is gone, the state file
+  // is not. So seed the ledger as a previous process would have left it.
+  const store = await import('../src/store.js');
+  alerts.reset();
+  sent.length = 0;
+  const hourAgo = Date.now() - 60 * 60_000;
+  store.state.alertsOpen = {
+    billing: { since: hourAgo, detail: 'Invalid Stripe signature.', lastSent: hourAgo },
+  };
+
+  const stamp = Math.floor(Date.now() / 1000);
+  await post({ 'stripe-signature': `t=${stamp},v1=${'0'.repeat(64)}` });
+  await settle();
+
+  const billingAlerts = sent.filter(item => /billing/i.test(item.title));
+  assert.equal(billingAlerts.length, 0,
+    'a condition already open an hour ago is not a first notice again after a deploy');
+});
+
+test('after the reminder window it does speak up again', async () => {
+  // The other half: persisting the ledger must not silence a real outage
+  // forever. Thirteen hours is past the 12-hour window.
+  const store = await import('../src/store.js');
+  alerts.reset();
+  sent.length = 0;
+  const longAgo = Date.now() - 13 * 60 * 60_000;
+  store.state.alertsOpen = {
+    billing: { since: longAgo, detail: 'Invalid Stripe signature.', lastSent: longAgo },
+  };
+
+  const stamp = Math.floor(Date.now() / 1000);
+  await post({ 'stripe-signature': `t=${stamp},v1=${'0'.repeat(64)}` });
+  await settle();
+
+  const billingAlerts = sent.filter(item => /billing/i.test(item.title));
+  assert.equal(billingAlerts.length, 1, 'a still-broken condition is worth one reminder a day');
+  assert.match(billingAlerts[0].title, /still failing/,
+    'and it must read as a reminder, not as news');
+});
+
+test('a ledger row written before this existed does not send on every check', async () => {
+  // A row from an older build has no timestamps. `Date.now() - undefined` is
+  // NaN, which compares false against the window -- so the naive read would
+  // have sent on EVERY delivery Stripe retried. Once, then quiet.
+  const store = await import('../src/store.js');
+  alerts.reset();
+  sent.length = 0;
+  store.state.alertsOpen = { billing: { detail: 'from an older build' } };
+
+  const stamp = Math.floor(Date.now() / 1000);
+  for (let i = 0; i < 3; i += 1) {
+    await post({ 'stripe-signature': `t=${stamp},v1=${'0'.repeat(64)}` });
+    await settle();
+  }
+
+  const billingAlerts = sent.filter(item => /billing/i.test(item.title));
+  assert.equal(billingAlerts.length, 1, 'fail towards sending once, never towards sending always');
+});

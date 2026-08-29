@@ -627,7 +627,8 @@ async function route(req, res, url) {
       if (req.headers['stripe-signature']) {
         alerts.report('billing', true,
           `A Stripe webhook was refused: ${error.message}\n` +
-          'A payment may have completed without the customer receiving tokens.').catch(() => {});
+          'A payment may have completed without the customer receiving tokens.\n' +
+          billing.webhookSecretNote()).catch(() => {});
       }
       return json(res, 400, { error: error.message });
     }

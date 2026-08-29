@@ -183,8 +183,14 @@ export const config = {
   tiktokClientSecret: process.env.TIKTOK_CLIENT_SECRET || '',
 
   stripeEnabled: boolean(process.env.STRIPE_ENABLED, Boolean(process.env.STRIPE_SECRET_KEY)),
-  stripeSecretKey: process.env.STRIPE_SECRET_KEY || '',
-  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
+  // Trimmed, both of them. A secret pasted into Render's variable field picks
+  // up a trailing newline or space more often than anyone admits, and neither
+  // failure says so: the webhook secret produces "Invalid Stripe signature" on
+  // every delivery -- indistinguishable from having copied the wrong endpoint's
+  // secret -- and the API key produces a 401 the app reports as Stripe being
+  // down. Whitespace around a credential is never meaningful.
+  stripeSecretKey: String(process.env.STRIPE_SECRET_KEY || '').trim(),
+  stripeWebhookSecret: String(process.env.STRIPE_WEBHOOK_SECRET || '').trim(),
   stripePriceWeekly: process.env.STRIPE_PRICE_WEEKLY || '',
   stripePriceMonthly: process.env.STRIPE_PRICE_MONTHLY || '',
   stripePriceYearly: process.env.STRIPE_PRICE_YEARLY || '',
