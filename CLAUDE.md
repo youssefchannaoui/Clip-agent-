@@ -713,6 +713,16 @@ be a tab btw".
   OLLAMA_URL does the same from the worker side — never a 75-second hang.
   qwen3 thinks by default; the request sends `"think": False` and strips a
   leaked `<think>` block belt-and-braces.
+- **Proven against the real box, 30 Aug 2026.** A signed `POST /ai/advise` on
+  the Hetzner worker answered **HTTP 200 in 4.8s** from qwen3:4b, and the
+  answer used the context it was handed rather than generic filler — it named
+  the clip titles in the payload. This had been carried as untested because the
+  session that built it could not reach the box; it is no longer. The test is
+  reproducible from any session with SSH: sign
+  `<ts>\nPOST\n/ai/advise\n<body>` with `WORKER_SHARED_SECRET` (HMAC-SHA256,
+  hex) into `x-deenclipped-timestamp` / `x-deenclipped-signature`, and post to
+  `127.0.0.1:8080` from ON the box. Still unexercised: the app→worker leg, which
+  needs a signed-in Studio account.
 - The host caches `/api/deenai` on `window.DC_DEENAI` and reattaches it on
   every state poll (the same move as DC_OWNER), because `/api/state` replaces
   DATA wholesale. The answer itself lives in UI state (`aiAnswer`), not DATA,
