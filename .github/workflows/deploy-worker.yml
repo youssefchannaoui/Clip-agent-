@@ -8,14 +8,23 @@
 # branch touches worker/, and it can be triggered by hand (or by an agent that
 # cannot SSH but can dispatch a workflow) at any time.
 #
-# ARMING IT, once: add a repository secret WORKER_SSH_KEY holding the PRIVATE
-# key that opens the box -- the contents of ~/.ssh/deenclipped_worker, whole
-# file, including the BEGIN and END lines. Settings -> Secrets and variables ->
-# Actions -> New repository secret. WORKER_HOST and WORKER_USER are optional
-# overrides; without them this uses the box in CLAUDE.md.
+# ARMING IT, once. Settings -> Secrets and variables -> Actions -> New
+# repository secret. EITHER of these works, and the key is preferred:
 #
-# Nothing here echoes the key, and the run fails loudly rather than quietly if
-# the secret is missing -- a deploy that silently did nothing is the exact
+#   WORKER_SSH_KEY       the PRIVATE key that opens the box -- the contents of
+#                        ~/.ssh/deenclipped_worker, whole file, BEGIN and END
+#                        lines included. It lives on the Mac.
+#   WORKER_SSH_PASSWORD  the box's root password. The fallback that can be
+#                        armed from a PHONE, where the key file is out of
+#                        reach: the Hetzner Cloud console can set one on the
+#                        server, and it pastes straight into the secret.
+#                        Adding WORKER_SSH_KEY later leaves this one unused.
+#
+# WORKER_HOST and WORKER_USER are optional overrides; without them this uses
+# the box in CLAUDE.md.
+#
+# Nothing here echoes either credential, and the run fails loudly rather than
+# quietly if neither is set -- a deploy that silently did nothing is the exact
 # failure this workflow exists to end.
 name: Deploy worker
 
@@ -26,11 +35,14 @@ on:
         description: Why this deploy is being run
         required: false
         default: manual
+  # Only worker/ code. Editing this file changes how the deploy runs, not what
+  # is running on the box, so it must not trigger a deploy of its own -- an
+  # unarmed run going red on every edit to the deploy script is noise, and the
+  # red that matters here is "a worker change landed and did not reach the box".
   push:
     branches: [deenclipped-v2-2]
     paths:
       - 'worker/**'
-      - '.github/workflows/deploy-worker.yml'
 
 permissions:
   contents: read
@@ -48,37 +60,71 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check the deploy key is armed
+      - name: Check a credential is armed
         env:
           KEY: ${{ secrets.WORKER_SSH_KEY }}
+          PASSWORD: ${{ secrets.WORKER_SSH_PASSWORD }}
         run: |
-          if [ -z "${KEY:-}" ]; then
-            echo "::error::WORKER_SSH_KEY is not set, so this deploy cannot reach the box."
-            echo "Add the contents of ~/.ssh/deenclipped_worker as a repository secret named"
-            echo "WORKER_SSH_KEY (Settings -> Secrets and variables -> Actions), then run this again."
+          if [ -n "${KEY:-}" ]; then
+            echo "Deploy key present."
+          elif [ -n "${PASSWORD:-}" ]; then
+            echo "Deploy password present."
+          else
+            echo "::error::Neither WORKER_SSH_KEY nor WORKER_SSH_PASSWORD is set, so this deploy cannot reach the box."
+            echo "Add ONE of these as a repository secret (Settings -> Secrets and variables -> Actions), then run this again:"
+            echo "  WORKER_SSH_KEY       the contents of ~/.ssh/deenclipped_worker (it lives on the Mac)"
+            echo "  WORKER_SSH_PASSWORD  the box's root password (this one can be armed from a phone)"
             exit 1
           fi
-          echo "Deploy key present."
 
       - name: Open the connection
         env:
           KEY: ${{ secrets.WORKER_SSH_KEY }}
           HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
-          printf '%s\n' "$KEY" > ~/.ssh/worker_key
-          chmod 600 ~/.ssh/worker_key
           # Pin the host key on first contact rather than disabling checking.
           ssh-keyscan -T 20 "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
           echo "Known host recorded."
+
+          # One helper, so the two steps below do not each re-derive how to
+          # authenticate. Neither branch ever puts a credential on a command
+          # line: the key is a file, the password is read from SSHPASS.
+          if [ -n "${KEY:-}" ]; then
+            printf '%s\n' "$KEY" > ~/.ssh/worker_key
+            chmod 600 ~/.ssh/worker_key
+            cat > "$RUNNER_TEMP/rssh" <<'HELPER'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec ssh -i ~/.ssh/worker_key -o BatchMode=yes -o ConnectTimeout=25 \
+            "$USER_NAME@$HOST" "$@"
+          HELPER
+            echo "Authenticating with the deploy key."
+          else
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq sshpass
+            # BatchMode would disable password auth outright, so it is absent
+            # here on purpose; the other two options stop ssh falling back to
+            # an interactive prompt that would hang the run instead.
+            cat > "$RUNNER_TEMP/rssh" <<'HELPER'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec sshpass -e ssh -o ConnectTimeout=25 \
+            -o PreferredAuthentications=password -o PubkeyAuthentication=no \
+            "$USER_NAME@$HOST" "$@"
+          HELPER
+            echo "Authenticating with the deploy password."
+          fi
+          chmod 700 "$RUNNER_TEMP/rssh"
 
       - name: Pull and rebuild on the box
         env:
           HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
           USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
+          SSHPASS: ${{ secrets.WORKER_SSH_PASSWORD }}
         run: |
-          ssh -i ~/.ssh/worker_key -o BatchMode=yes -o ConnectTimeout=25 \
-            "$USER_NAME@$HOST" 'bash -s' <<'REMOTE'
+          "$RUNNER_TEMP/rssh" 'bash -s' <<'REMOTE'
           set -euo pipefail
           cd /opt/deenclipped
           echo "--- before ---"
@@ -96,6 +142,7 @@ jobs:
         env:
           HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
           USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
+          SSHPASS: ${{ secrets.WORKER_SSH_PASSWORD }}
         run: |
           # A clean build log proves nothing -- Docker will happily rebuild an
           # identical image from cache. The only trustworthy check reads the
@@ -103,8 +150,7 @@ jobs:
           # commit's package.json.
           expected=$(node -p "require('./package.json').version")
           echo "This commit is v$expected"
-          running=$(ssh -i ~/.ssh/worker_key -o BatchMode=yes -o ConnectTimeout=25 \
-            "$USER_NAME@$HOST" \
+          running=$("$RUNNER_TEMP/rssh" \
             "docker exec worker-deenclipped-worker-1 python3 -c \"import json;print(json.load(open('/app/package.json'))['version'])\"" \
             | tr -d '\r\n[:space:]')
           echo "The box is running v$running"
@@ -114,6 +160,6 @@ jobs:
           fi
           echo "Deployed and verified: the running worker is v$running."
 
-      - name: Clean up the key
+      - name: Clean up the credential
         if: always()
-        run: rm -f ~/.ssh/worker_key
+        run: rm -f ~/.ssh/worker_key "$RUNNER_TEMP/rssh"

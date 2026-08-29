@@ -331,10 +331,21 @@ Habits the tests now enforce, and why:
   can still deploy, by dispatching the workflow. It **proves** the landing the
   way this file has always demanded: it reads `package.json` out of the RUNNING
   container (`docker exec … worker-deenclipped-worker-1`) and fails the run if
-  that version is not this commit's. It needs one secret, once:
-  **`WORKER_SSH_KEY`** = the whole of `~/.ssh/deenclipped_worker`
-  (`WORKER_HOST`/`WORKER_USER` optional). Without it the run fails loudly and
-  says so, rather than reporting green having done nothing.
+  that version is not this commit's.
+  **It is NOT ARMED YET, and until it is, nothing about it has run on the box.**
+  It needs one repository secret, once — Settings → Secrets and variables →
+  Actions — and either of two will do:
+  **`WORKER_SSH_KEY`** = the whole of `~/.ssh/deenclipped_worker`, which lives
+  on the Mac; or **`WORKER_SSH_PASSWORD`** = the box's root password, which is
+  the one a PHONE session can arm, since the key file is out of reach there.
+  The key is preferred and wins when both are set; adding it later leaves the
+  password unused. (`WORKER_HOST`/`WORKER_USER` optional.) Without either, the
+  run fails at the first step and prints exactly this, rather than reporting
+  green having done nothing — dispatched twice on 29 Aug 2026 to confirm that
+  is precisely what happens.
+  The push trigger watches `worker/**` only, deliberately: editing the deploy
+  script changes how a deploy runs, not what is running on the box, so it must
+  not manufacture a red run of its own.
 - **The app now says this itself (v3.26.0).** The worker reports its release in
   `/health` (`worker_version()` in service.py) and `/api/owner/health` compares
   it with `config.appVersion`; **Owner → Health → Deployed** shows the running
