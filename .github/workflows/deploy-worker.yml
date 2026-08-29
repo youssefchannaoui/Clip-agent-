@@ -98,8 +98,40 @@ jobs:
           # authenticate. Neither branch ever puts a credential on a command
           # line: the key is a file, the password is read from SSHPASS.
           if [ -n "${KEY:-}" ]; then
-            printf '%s\n' "$KEY" > ~/.ssh/worker_key
+            # A key does not always survive the trip into a secret box intact,
+            # and when it does not, ssh says "error in libcrypto" and then
+            # "Permission denied" -- which reads as the WRONG KEY rather than a
+            # damaged one, and sends you looking in the wrong place. Seen for
+            # real on 29 Aug. So repair what can be repaired and refuse clearly
+            # what cannot:
+            #   - CR characters, from a paste that picked up Windows endings.
+            #     One CR per line is enough to make the whole key unparseable.
+            #   - A missing final newline, which OpenSSH requires.
+            #   - A base64 blob, for anyone who wrapped the key to get it past
+            #     a form that mangles multi-line text (base64 <key> | pbcopy).
+            if printf '%s' "$KEY" | grep -q 'BEGIN .*PRIVATE KEY'; then
+              printf '%s\n' "$KEY" | tr -d '\r' > ~/.ssh/worker_key
+            else
+              printf '%s' "$KEY" | tr -d '\r\n \t' | base64 -d > ~/.ssh/worker_key 2>/dev/null || {
+                echo "::error::WORKER_SSH_KEY is neither a private key nor base64 of one."
+                echo "It must be the whole of ~/.ssh/deenclipped_worker -- the file WITHOUT"
+                echo ".pub, BEGIN and END lines included -- or: base64 < ~/.ssh/deenclipped_worker"
+                exit 1
+              }
+            fi
+            if [ -n "$(tail -c1 ~/.ssh/worker_key)" ]; then printf '\n' >> ~/.ssh/worker_key; fi
             chmod 600 ~/.ssh/worker_key
+            # Prove it parses BEFORE offering it, so a damaged key is named as
+            # damaged instead of arriving as a permission denial. -P '' rather
+            # than no -P: a passphrase-protected key would otherwise sit here
+            # waiting for input that never comes.
+            if ! ssh-keygen -y -P '' -f ~/.ssh/worker_key >/dev/null 2>&1; then
+              echo "::error::The key in WORKER_SSH_KEY will not parse."
+              echo "Either it is damaged, it is a .pub file, or it has a passphrase."
+              echo "Re-add it with:  base64 < ~/.ssh/deenclipped_worker | pbcopy"
+              exit 1
+            fi
+            echo "Key parsed cleanly."
             cat > "$RUNNER_TEMP/rssh" <<'HELPER'
           #!/usr/bin/env bash
           set -euo pipefail
