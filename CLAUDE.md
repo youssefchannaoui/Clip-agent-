@@ -150,7 +150,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **818 JS + 398 Python**
+- `npm test` and `npm run check` must pass. Currently **827 JS + 398 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -590,6 +590,29 @@ the collpas ebutton instead the top one".
   and checks out today counts in the numerator only. "6000% of signups" is true
   and reads as broken, so past 100 the step says "more checkouts than signups
   this window" instead. Capping it would have hidden real data.
+
+## A publish failure is not an import failure (v3.30.0, 29 Aug 2026)
+
+Youssef, on the failure dialog: "shoul dbe more infromation depeidng on the
+error all ate the same this was never updated".
+
+- **One table was answering two different questions.** Every entry in `EXPLAIN`
+  is about getting a lecture IN -- download refusals, the clipping service,
+  disk, tokens -- and `explainFailure` matched on the error TEXT alone. So
+  `/403|forbidden/` caught TikTok's publish refusal and answered it with
+  "Download the video yourself and use Upload MP4 or MOV": advice about
+  fetching a video that had already been made, rendered and approved.
+- `EXPLAIN_PUBLISH` is consulted FIRST for any row that names a destination
+  (`row.provider`, or text starting "Publish failed"), so an import guide can
+  never answer a publish question again. Seven entries: TikTok's unaudited-app
+  refusal, rate limits, daily upload caps, expired connections, duplicates,
+  size/length rejections, and rights/policy flags.
+- **The generic publish answer still beats the old one**: it names the
+  destination, says the clip is rendered and fine, and points at Connections --
+  rather than sending someone to re-download a lecture.
+- `explainFailure` is exposed on `StudioAdapter` so the guidance is tested by
+  CALLING it. Asserting that a table contains a regex proves nothing about
+  which entry WINS, and a wrong winner was the entire bug.
 
 ## How every reply ends (29 Aug 2026)
 

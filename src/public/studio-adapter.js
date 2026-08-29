@@ -925,6 +925,95 @@
     },
   };
 
+  /**
+   * Publish failures, which are a different animal from import failures.
+   *
+   * Everything in EXPLAIN above is about getting a lecture IN: download
+   * refusals, the clipping service, disk, tokens. A destination refusing to
+   * take a finished clip has nothing to do with any of that -- but the tables
+   * were never separated, so `/403|forbidden/` matched TikTok's publish
+   * refusal and answered it with "Download the video yourself and use Upload
+   * MP4", which is advice about a video that had already been made. Reported
+   * as "all are the same, this was never updated", and that is exactly what it
+   * was.
+   *
+   * These are consulted FIRST for any row that names a destination, so an
+   * import guide can never answer a publish question again.
+   */
+  var EXPLAIN_PUBLISH = [
+    {
+      match: /unaudited_client_can_only_post_to_private_accounts|has not finished reviewing/i,
+      title: 'TikTok has not reviewed this app yet',
+      cause: 'Until TikTok approves the app, it will only deliver posts to a TikTok account that is itself set to private. Nothing is wrong with the clip, the connection or your account — TikTok is refusing the destination, not the video.',
+      fixes: [
+        'Set that TikTok account to private and the clip posts immediately.',
+        'Or finish the TikTok app review, after which public posting is allowed.',
+        'Retrying without changing one of those two things will fail the same way.',
+        'YouTube is unaffected — clips going there have already posted.',
+      ],
+    },
+    {
+      match: /spam_risk|too_many_(?:posts|pending)|rate.?limit|reached the (?:daily|hourly) limit/i,
+      title: 'The platform is rate-limiting this account',
+      cause: 'The destination accepted the app but says this account has posted too much too quickly. It is a temporary cap, not a rejection of the clip.',
+      fixes: [
+        'Leave it a few hours and press Retry — the window rolls forward.',
+        'Space the posting windows further apart if this keeps happening.',
+        'Do not press Retry repeatedly; each attempt counts against the same cap.',
+      ],
+    },
+    {
+      match: /quota|uploadLimitExceeded|exceeded the number of videos/i,
+      title: 'The daily upload limit has been reached',
+      cause: 'The platform caps how many videos an account may upload in a day, separately from anything this app controls. The clip is fine and still rendered.',
+      fixes: [
+        'Retry after the limit resets — for YouTube that is midnight Pacific time.',
+        'A brand new channel has a much lower cap until it is verified.',
+        'Nothing was charged for this attempt.',
+      ],
+    },
+    {
+      match: /reconnect|no access token|not connected|revoked|refresh token|invalid_grant|unauthor/i,
+      title: 'The connection to this account has expired',
+      cause: 'The permission this app was given has lapsed or been withdrawn, so the platform no longer recognises it. This happens on its own after a password change, or if access was removed from the account\'s security settings.',
+      fixes: [
+        'Open Connections and reconnect that account.',
+        'Then press Retry — the clip is still rendered and ready to go.',
+        'Every clip waiting on that account will keep failing until it is reconnected.',
+      ],
+    },
+    {
+      match: /duplicate|already (?:been )?uploaded|identical video/i,
+      title: 'The platform thinks this is a duplicate',
+      cause: 'The destination has seen this exact video before and refused a second copy. Usually it means an earlier attempt actually succeeded.',
+      fixes: [
+        'Check the channel — the clip is very likely already live.',
+        'If it is there, dismiss this rather than retrying.',
+        'If it is not, change the title or re-render before trying again.',
+      ],
+    },
+    {
+      match: /too long|duration|exceeds the maximum|file (?:is )?too large|size limit/i,
+      title: 'The clip is outside what this platform accepts',
+      cause: 'The destination rejected the file on its length or its size rather than on its content.',
+      fixes: [
+        'Shorten the clip in the review queue and re-render it.',
+        'Check that platform\'s current limit — they change without notice.',
+        'The other destinations may have accepted it already.',
+      ],
+    },
+    {
+      match: /copyright|content id|claim|community guidelines|policy/i,
+      title: 'The platform flagged the content itself',
+      cause: 'This is a moderation or rights decision by the destination, not a technical failure. It will not resolve by retrying.',
+      fixes: [
+        'Open the platform\'s own studio to read the specific claim.',
+        'The nasheed bed is the usual cause of a music claim — try another track.',
+        'Do not retry until something about the clip has changed.',
+      ],
+    },
+  ];
+
   var EXPLAIN_FALLBACK = {
     title: 'This job could not finish',
     cause: 'Something in the pipeline stopped before the clips were ready. The original message is below — it is written for diagnosis rather than for reading.',
@@ -937,6 +1026,29 @@
 
   function explainFailure(row) {
     var text = String((row && (row.full || row.meta || row.text)) || '');
+    // A publish failure never gets an import answer. The row names a
+    // destination, or its text starts with "Publish failed" -- either is
+    // enough, and both are set where these rows are built.
+    var publishing = Boolean(row && (row.provider || /^publish failed/i.test(String(row.text || ''))));
+    if (publishing) {
+      for (var p = 0; p < EXPLAIN_PUBLISH.length; p += 1) {
+        if (EXPLAIN_PUBLISH[p].match.test(text)) return EXPLAIN_PUBLISH[p];
+      }
+      // Still better than the import table: it names the destination, says
+      // plainly that the clip itself is fine, and does not send anyone off to
+      // re-download a video that has already been made.
+      var where = (PLATFORM_NAMES[row.provider] || row.provider || 'The destination');
+      return {
+        title: where + ' would not accept this clip',
+        cause: 'The clip is rendered and ready — ' + where + ' refused to publish it. The exact wording it gave is below; it is written for developers rather than for reading.',
+        fixes: [
+          'Press Retry once: a fair share of these are momentary.',
+          'Check that account is still connected under Connections.',
+          'Any other destination for this clip is unaffected and may already have posted.',
+          'If it keeps refusing, the message below is what to quote when asking.',
+        ],
+      };
+    }
     for (var i = 0; i < EXPLAIN.length; i += 1) {
       if (EXPLAIN[i].match.test(text)) return EXPLAIN[i];
     }
@@ -6612,6 +6724,10 @@
   global.StudioAdapter = {
     bindings: bindings,
     ui: UI,
+    // Exposed so the failure guidance can be tested by CALLING it. Asserting
+    // that a table contains a regex proves nothing about which entry answers a
+    // given error -- and the bug this fixes was exactly a wrong entry winning.
+    explainFailure: explainFailure,
     setRefresh: function (fn) { refresh = fn || function () {}; },
     // The host registers the editor's <video> here and reports playback back.
     // The adapter cannot create the element itself -- the design compiles to a
