@@ -102,3 +102,72 @@
   }
   #dcOwnerScreen .dcow-lift:hover { transform: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   Hover, everywhere something is readable (29 Aug 2026)
+
+   Youssef: "ALL HOVERING EFFECTS ON ALL GRAPHICS AND ETC". Rows and tiles
+   already had `dcow-hov` and `dcow-lift`; the CHART COLUMNS had nothing, which
+   is the one place it was most missed -- 48 identical bars, each carrying its
+   own numbers in a title, and no sign that pointing at one would tell you
+   anything.
+
+   All of it hangs off classes the template already emits, so no design
+   re-import and no regenerated class names. Transforms and colours only, never
+   width/height/top, so a hover cannot reflow the section under the cursor.
+   --------------------------------------------------------------------------- */
+
+/* Chart columns. The bar widens and warms; its neighbours dim, so the one
+   being read separates itself from the wall. */
+#dcOwnerScreen .dcow-col {
+  transition: filter .16s ease, transform .16s ease, opacity .16s ease;
+  transform-origin: bottom center;
+}
+#dcOwnerScreen .dcow-col:hover {
+  filter: brightness(1.35) saturate(1.1);
+  transform: scaleX(1.9);
+  opacity: 1;
+}
+/* :has is what lets the siblings react to the hovered one. Unsupported, the
+   bar still lifts -- the dimming is the enhancement, not the effect. */
+#dcOwnerScreen .dcow-s:has(.dcow-col:hover) .dcow-col:not(:hover) { opacity: .5; }
+
+/* Rows. The existing tint was 3% white, which reads as nothing on a dark
+   ground; gold at 7% plus a left rule carries the eye across a long line to
+   its right-aligned count. */
+/* Both selectors on purpose: `dcow-hov` is on the lists that carry it, and the
+   bare row rule catches every Owner table that does not -- the Traffic tables
+   have no such class, and "all hovering effects" must not depend on remembering
+   to add one. */
+#dcOwnerScreen .dcow-hov,
+#dcOwnerScreen tbody tr { transition: background-color .16s ease, box-shadow .16s ease; }
+#dcOwnerScreen .dcow-hov:hover,
+#dcOwnerScreen tbody tr:hover {
+  background-color: rgba(217, 180, 120, .07);
+  box-shadow: inset 2px 0 0 rgba(217, 180, 120, .55);
+}
+/* A meter inside a hovered row brightens with it. */
+#dcOwnerScreen .dcow-hov:hover [style*="linear-gradient"],
+#dcOwnerScreen tbody tr:hover [style*="linear-gradient"] { filter: brightness(1.25); }
+
+/* The KPI dials already lift; warming them too is what signals the label
+   above is a dropdown you can change. */
+#dcOwnerScreen .dcow-lift:hover { background-color: rgba(217, 180, 120, .05); border-radius: 10px; }
+#dcOwnerScreen .dcow-lift select { transition: color .16s ease, border-color .16s ease; cursor: pointer; }
+#dcOwnerScreen .dcow-lift:hover select,
+#dcOwnerScreen select:hover { color: #F0D6A6; border-color: rgba(217, 180, 120, .5); }
+
+/* Every control, in one rule, so a new button is covered by default rather
+   than by somebody remembering. */
+#dcOwnerScreen button {
+  transition: color .16s ease, background-color .16s ease, border-color .16s ease, transform .16s ease;
+}
+#dcOwnerScreen button:hover:not(:disabled) { color: #F0D6A6; border-color: rgba(217, 180, 120, .45); }
+#dcOwnerScreen button:active:not(:disabled) { transform: translateY(1px); }
+
+/* Reduced motion keeps every colour change and drops every movement -- the
+   colours are what make the numbers readable, the movement is decoration. */
+@media (prefers-reduced-motion: reduce) {
+  #dcOwnerScreen .dcow-col:hover,
+  #dcOwnerScreen button:active:not(:disabled) { transform: none; }
+}

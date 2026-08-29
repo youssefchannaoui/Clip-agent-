@@ -1610,6 +1610,10 @@
   // slots: the screen stays quiet and every slot is the owner's choice.
   var ANA_METRICS = [
     { key: 'uniques', label: 'Unique visitors' },
+    { key: 'newVisitors', label: 'New visitors' },
+    { key: 'returningVisitors', label: 'Returning visitors' },
+    { key: 'returning', label: 'Returning rate' },
+    { key: 'viewsPerVisitor', label: 'Pages per visitor' },
     { key: 'views', label: 'Page views' },
     { key: 'live', label: 'Live now' },
     { key: 'signups', label: 'New signups' },
@@ -1634,6 +1638,18 @@
   }
 
   /** One metric, resolved against a webmetrics payload. */
+  /**
+   * A note that never overstates. New/returning only exists from the deploy
+   * that added the seen-flag, so before that both counters are zero -- and a
+   * bare "0 first visits" would read as nobody arriving rather than as us not
+   * having been counting.
+   */
+  function anaFirstSeenNote(ana, phrase) {
+    var t = (ana && ana.totals) || {};
+    if ((t.newVisitors || 0) + (t.returningVisitors || 0) > 0) return phrase;
+    return 'not counted before this release';
+  }
+
   function anaMetric(key, ana) {
     var t = (ana && ana.totals) || {};
     var r = (ana && ana.rates) || {};
@@ -1648,6 +1664,15 @@
     };
     var table = {
       uniques: [String(t.uniques || 0), (t.uniques7 || 0) + ' in the last 7 days', ''],
+      // "People who never opened it before" -- the thing that could not be
+      // answered until the seen-flag existed. Days captured before it read as
+      // zero on both counters, so the note says when counting began rather
+      // than letting an empty history look like nobody is new.
+      newVisitors: [String(t.newVisitors || 0), anaFirstSeenNote(ana, 'first visit ever'), 'pos'],
+      returningVisitors: [String(t.returningVisitors || 0), anaFirstSeenNote(ana, 'had been before'), ''],
+      returning: [pct(r.returning), 'of visitors we could classify', 'pos'],
+      viewsPerVisitor: [t.uniques ? (Math.round((t.views / t.uniques) * 10) / 10).toFixed(1) : '\u2014',
+        'pages read per unique visitor', ''],
       views: [String(t.views || 0), (t.views7 || 0) + ' in the last 7 days', ''],
       live: [String((ana && ana.liveNow) || 0), 'in the last 5 minutes', 'live'],
       signups: [String(t.signups || 0), 'accounts created in the window', ''],

@@ -104,6 +104,7 @@ function dayBucket(day) {
   bucket.devices ||= {}; bucket.languages ||= {}; bucket.campaigns ||= {};
   bucket.entries ||= {}; bucket.missing ||= {};
   bucket.direct ||= 0; bucket.botHits ||= 0;
+  bucket.newVisitors ||= 0; bucket.returningVisitors ||= 0;
   // Two numbers per hour of the day, so a day can be read as a shape rather
   // than a single total. 24 keys per day bucket, dropped with the day.
   bucket.hours ||= {};
@@ -177,16 +178,16 @@ export function flush() {
  * not traffic, and Shopify-style tools exclude the shop owner for the same
  * reason.
  */
-export function pageview({ path, ip = '', userAgent = '', referrer = '', ownHost = '', query = null, viewerRole = '', language = '' }) {
-  if (!TRACKED_PATHS.has(path)) return;
-  if (['owner', 'admin'].includes(String(viewerRole || '').toLowerCase())) return;
+export function pageview({ path, ip = '', userAgent = '', referrer = '', ownHost = '', query = null, viewerRole = '', language = '', seenBefore = false }) {
+  if (!TRACKED_PATHS.has(path)) return false;
+  if (['owner', 'admin'].includes(String(viewerRole || '').toLowerCase())) return false;
   const day = utcDay();
   const bucket = dayBucket(day);
 
   // A crawler is recorded as the one number it is — a bot hit — and nothing
   // else: no view, no unique, no referrer. The count exists so a traffic dip
   // can be told apart from a filter change.
-  if (BOT_UA.test(String(userAgent))) { bucket.botHits += 1; scheduleFlush(); return; }
+  if (BOT_UA.test(String(userAgent))) { bucket.botHits += 1; scheduleFlush(); return false; }
 
   bump(bucket.views, path, TRACKED_PATHS.size + 1);
 
@@ -201,6 +202,19 @@ export function pageview({ path, ip = '', userAgent = '', referrer = '', ownHost
     bump(bucket.devices, deviceClass(userAgent), 4);
     const locale = String(language || '').split(',')[0].trim().toLowerCase().slice(0, 12);
     if (locale) bump(bucket.languages, locale, 24);
+    // NEW vs RETURNING -- "has this browser ever opened the site before?"
+    //
+    // It cannot come from the visitor id: that hash is salted with a DAY salt
+    // on purpose, so yesterday's visitor is unrecognisable today. That is the
+    // privacy property, not an oversight, and widening the salt to find
+    // returners would trade it away.
+    //
+    // So the answer lives in the visitor's own browser instead: a bare flag,
+    // no identifier in it, nothing derived from it, and nothing about it
+    // stored here but these two counters. The server still keeps no address,
+    // no user agent and no cross-day id.
+    if (seenBefore) bucket.returningVisitors = (bucket.returningVisitors || 0) + 1;
+    else bucket.newVisitors = (bucket.newVisitors || 0) + 1;
   }
   const hour = (bucket.hours[utcHour()] ||= { views: 0, uniques: 0 });
   hour.views += 1;
@@ -223,6 +237,11 @@ export function pageview({ path, ip = '', userAgent = '', referrer = '', ownHost
     if (campaign) bump(bucket.campaigns, campaign);
   }
   scheduleFlush();
+  // Tell the caller to mark this browser as seen. Only ever true for a real
+  // (non-bot, non-operator) visitor on a tracked page who did not carry the
+  // flag already, so the header is set once per browser rather than on every
+  // response.
+  return !seenBefore;
 }
 
 /**
@@ -275,6 +294,8 @@ export function summary({ days = 30 } = {}) {
       day,
       views: bucket ? Object.values(bucket.views).reduce((a, b) => a + b, 0) : 0,
       uniques: bucket?.uniques || 0,
+      newVisitors: bucket?.newVisitors || 0,
+      returningVisitors: bucket?.returningVisitors || 0,
     });
   }
 
@@ -343,6 +364,10 @@ export function summary({ days = 30 } = {}) {
 
   const views = sumLast(rows, 'views', window);
   const uniques = sumLast(rows, 'uniques', window);
+  // Days before this was captured have neither counter, so they read as zero
+  // rather than as "everyone was new" -- an honest gap beats a flattering one.
+  const newVisitors = sumLast(rows, 'newVisitors', window);
+  const returningVisitors = sumLast(rows, 'returningVisitors', window);
   const rate = (num, den) => (den > 0 ? Math.round((num / den) * 1000) / 10 : null);
 
   return {
@@ -352,6 +377,7 @@ export function summary({ days = 30 } = {}) {
     hourly,
     totals: {
       views, uniques,
+      newVisitors, returningVisitors,
       views7: sumLast(rows, 'views', Math.min(7, window)),
       uniques7: sumLast(rows, 'uniques', Math.min(7, window)),
       signups, postsPublished,
@@ -364,6 +390,10 @@ export function summary({ days = 30 } = {}) {
       visitToSignup: rate(signups, uniques),
       signupToCheckout: rate(events.checkout_started || 0, signups),
       visitToPaid: rate(paidConversions, uniques),
+      // Of the visitors we could classify -- not of all uniques, or the days
+      // before capture would drag it towards zero and read as "nobody comes
+      // back" when the truth is "we were not counting yet".
+      returning: rate(returningVisitors, newVisitors + returningVisitors),
     },
     byPath, referrers, utm, events,
     channels, devices, languages, campaigns, entries,

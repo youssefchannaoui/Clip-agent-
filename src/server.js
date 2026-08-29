@@ -640,14 +640,29 @@ async function route(req, res, url) {
   // paths, skips operators, and keeps only aggregates -- see metrics.js.
   if (method === 'GET') {
     try {
-      metrics.pageview({
+      // "Has this browser been here before?" cannot come from the visitor
+      // hash -- that is salted per DAY so yesterday is unrecognisable, which
+      // is the privacy property. So the flag lives in the visitor's browser:
+      // a bare 1, no identifier, HttpOnly so no script can read it, Lax so it
+      // is not sent from other sites.
+      const seenBefore = /(?:^|;\s*)dc_seen=1(?:;|$)/.test(String(req.headers.cookie || ''));
+      if (metrics.pageview({
         path: pathname, ip: clientIp(req),
         userAgent: String(req.headers['user-agent'] || ''),
         referrer: String(req.headers.referer || ''),
         ownHost: String(req.headers.host || '').replace(/:\d+$/, ''),
         query: url.searchParams, viewerRole: currentUser?.role || '',
         language: String(req.headers['accept-language'] || ''),
-      });
+        seenBefore,
+      })) {
+        const secure = config.publicBaseUrl.startsWith('https://') ? '; Secure' : '';
+        // Appended, never assigned: a bare setHeader here would drop the
+        // session cookie on any response that sets one, and silently signing
+        // people out to count them is not a trade worth making.
+        const prior = res.getHeader('Set-Cookie');
+        const seenCookie = `dc_seen=1; Max-Age=63072000; Path=/; SameSite=Lax; HttpOnly${secure}`;
+        res.setHeader('Set-Cookie', prior ? [].concat(prior, seenCookie) : [seenCookie]);
+      }
     } catch { /* analytics must never take a page down */ }
   }
   if (method === 'GET' && pathname === '/login') {

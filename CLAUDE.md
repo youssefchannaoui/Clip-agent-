@@ -144,7 +144,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **807 JS + 398 Python**
+- `npm test` and `npm run check` must pass. Currently **812 JS + 398 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -506,6 +506,38 @@ platform rule each. Keep them apart when triaging the next report.
   `post.dests` in the design). On a phone the account name is dropped
   (`[data-dc-dest-account]`) — platform and outcome are what carry the meaning
   — and the card wraps its actions onto their own line.
+
+## New vs returning, and hover everywhere (v3.28.0, 29 Aug 2026)
+
+Youssef: "idk if theres new users? like people who never opned ... ALL HOVERING
+EFFECTS ON ALL GRAPHICS AND ETC".
+
+- **"Has this browser ever been here?" could not be answered from what was
+  stored, and that was deliberate.** The visitor id is salted with a DAY salt,
+  so yesterday's visitor is unrecognisable today -- the privacy property, not
+  an oversight. Widening the salt to find returners would have traded it away.
+  So the answer lives in the visitor's own browser instead: `dc_seen=1`,
+  HttpOnly, SameSite=Lax, two years, **a bare 1 with no identifier in it**. The
+  server still keeps no address, no user agent and no cross-day id, and a test
+  asserts that against the state bytes.
+- The cookie is **appended**, never assigned. A bare `setHeader('Set-Cookie')`
+  there would drop the session cookie on any response that sets one, and
+  silently signing people out to count them is not a trade worth making.
+- **A bot is never marked.** Marking one would make the next real visitor from
+  that address read as returning.
+- New/returning only exist from this deploy, so earlier days are zero on both.
+  The tile note says "not counted before this release" rather than showing a
+  bare 0 that reads as nobody arriving, and the returning RATE is of visitors
+  we could classify -- not of all uniques, which would drag it to zero.
+- **Hover is CSS on classes the template already emits**, so no design
+  re-import and no regenerated class names. The chart columns had nothing at
+  all: now the hovered bar widens (measured 33.9px -> 64.3px) and warms while
+  its neighbours drop to 50% opacity. Rows carry both `.dcow-hov` AND a bare
+  `tbody tr` rule, because the Traffic tables have no such class and "all
+  hovering effects" must not depend on remembering to add one.
+- Values still come from the native `title` on each bar. A styled tooltip would
+  need `data-tip` in the markup, which means the design export and regenerated
+  class names -- deliberately not done for this.
 
 ## How every reply ends (29 Aug 2026)
 
