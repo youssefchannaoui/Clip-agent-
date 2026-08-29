@@ -128,8 +128,16 @@ jobs:
         env:
           HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
           USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
-          SSHPASS: ${{ secrets.WORKER_SSH_PASSWORD }}
+          RAW_PASSWORD: ${{ secrets.WORKER_SSH_PASSWORD }}
         run: |
+          # Strip CR/LF only. A password pasted into GitHub's secret box can
+          # carry a trailing newline, and sshpass would then offer the password
+          # PLUS that newline -- refused, and indistinguishable from the box
+          # having password login switched off. That false negative would send
+          # someone down entirely the wrong road. Spaces are left alone: a
+          # newline can never be part of a password typed into a form, a space
+          # can.
+          export SSHPASS="$(printf '%s' "${RAW_PASSWORD:-}" | tr -d '\r\n')"
           "$RUNNER_TEMP/rssh" 'bash -s' <<'REMOTE'
           set -euo pipefail
           cd /opt/deenclipped
@@ -148,8 +156,9 @@ jobs:
         env:
           HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
           USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
-          SSHPASS: ${{ secrets.WORKER_SSH_PASSWORD }}
+          RAW_PASSWORD: ${{ secrets.WORKER_SSH_PASSWORD }}
         run: |
+          export SSHPASS="$(printf '%s' "${RAW_PASSWORD:-}" | tr -d '\r\n')"
           # A clean build log proves nothing -- Docker will happily rebuild an
           # identical image from cache. The only trustworthy check reads the
           # version out of the RUNNING container and compares it with this
