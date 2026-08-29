@@ -1,0 +1,119 @@
+# Deploy the worker to the Hetzner box.
+#
+# The worker half of this project is manual, and that has cost it weeks twice:
+# every worker change committed, green, pushed -- and not running, because
+# nobody SSHed in. Render takes the web app on push; nothing took the box.
+#
+# This is what takes the box. It runs automatically when a push to the deploy
+# branch touches worker/, and it can be triggered by hand (or by an agent that
+# cannot SSH but can dispatch a workflow) at any time.
+#
+# ARMING IT, once: add a repository secret WORKER_SSH_KEY holding the PRIVATE
+# key that opens the box -- the contents of ~/.ssh/deenclipped_worker, whole
+# file, including the BEGIN and END lines. Settings -> Secrets and variables ->
+# Actions -> New repository secret. WORKER_HOST and WORKER_USER are optional
+# overrides; without them this uses the box in CLAUDE.md.
+#
+# Nothing here echoes the key, and the run fails loudly rather than quietly if
+# the secret is missing -- a deploy that silently did nothing is the exact
+# failure this workflow exists to end.
+name: Deploy worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Why this deploy is being run
+        required: false
+        default: manual
+  push:
+    branches: [deenclipped-v2-2]
+    paths:
+      - 'worker/**'
+      - '.github/workflows/deploy-worker.yml'
+
+permissions:
+  contents: read
+
+# One deploy at a time. Two overlapping `docker compose up --build` runs on a
+# single-slot box is how a half-built image ends up serving.
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the deploy key is armed
+        env:
+          KEY: ${{ secrets.WORKER_SSH_KEY }}
+        run: |
+          if [ -z "${KEY:-}" ]; then
+            echo "::error::WORKER_SSH_KEY is not set, so this deploy cannot reach the box."
+            echo "Add the contents of ~/.ssh/deenclipped_worker as a repository secret named"
+            echo "WORKER_SSH_KEY (Settings -> Secrets and variables -> Actions), then run this again."
+            exit 1
+          fi
+          echo "Deploy key present."
+
+      - name: Open the connection
+        env:
+          KEY: ${{ secrets.WORKER_SSH_KEY }}
+          HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/worker_key
+          chmod 600 ~/.ssh/worker_key
+          # Pin the host key on first contact rather than disabling checking.
+          ssh-keyscan -T 20 "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          echo "Known host recorded."
+
+      - name: Pull and rebuild on the box
+        env:
+          HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
+          USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
+        run: |
+          ssh -i ~/.ssh/worker_key -o BatchMode=yes -o ConnectTimeout=25 \
+            "$USER_NAME@$HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/deenclipped
+          echo "--- before ---"
+          git log --oneline -1
+          git fetch --all --prune
+          git checkout deenclipped-v2-2
+          git pull --ff-only
+          echo "--- after ---"
+          git log --oneline -1
+          df -h / | tail -1
+          bash worker/deploy.sh
+          REMOTE
+
+      - name: Prove the running container holds this commit
+        env:
+          HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
+          USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
+        run: |
+          # A clean build log proves nothing -- Docker will happily rebuild an
+          # identical image from cache. The only trustworthy check reads the
+          # version out of the RUNNING container and compares it with this
+          # commit's package.json.
+          expected=$(node -p "require('./package.json').version")
+          echo "This commit is v$expected"
+          running=$(ssh -i ~/.ssh/worker_key -o BatchMode=yes -o ConnectTimeout=25 \
+            "$USER_NAME@$HOST" \
+            "docker exec worker-deenclipped-worker-1 python3 -c \"import json;print(json.load(open('/app/package.json'))['version'])\"" \
+            | tr -d '\r\n[:space:]')
+          echo "The box is running v$running"
+          if [ "$running" != "$expected" ]; then
+            echo "::error::The container is on v$running but this commit is v$expected -- the deploy did not land."
+            exit 1
+          fi
+          echo "Deployed and verified: the running worker is v$running."
+
+      - name: Clean up the key
+        if: always()
+        run: rm -f ~/.ssh/worker_key

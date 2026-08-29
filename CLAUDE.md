@@ -324,6 +324,17 @@ Habits the tests now enforce, and why:
   change since v3.3.x, including the section downloads, had been committed,
   pushed, green and not running. Check `git log --oneline -1` on the box before
   assuming a worker behaviour exists in production.
+- **The deploy is a workflow now (v3.27.0), not only a console.**
+  `.github/workflows/deploy-worker.yml` pulls, rebuilds and verifies the box
+  over SSH: automatically on any push to `deenclipped-v2-2` that touches
+  `worker/`, and on `workflow_dispatch` — which means an agent that cannot SSH
+  can still deploy, by dispatching the workflow. It **proves** the landing the
+  way this file has always demanded: it reads `package.json` out of the RUNNING
+  container (`docker exec … worker-deenclipped-worker-1`) and fails the run if
+  that version is not this commit's. It needs one secret, once:
+  **`WORKER_SSH_KEY`** = the whole of `~/.ssh/deenclipped_worker`
+  (`WORKER_HOST`/`WORKER_USER` optional). Without it the run fails loudly and
+  says so, rather than reporting green having done nothing.
 - **The app now says this itself (v3.26.0).** The worker reports its release in
   `/health` (`worker_version()` in service.py) and `/api/owner/health` compares
   it with `config.appVersion`; **Owner → Health → Deployed** shows the running
