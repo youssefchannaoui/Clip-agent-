@@ -124,13 +124,25 @@
    would mean regenerating every class name in the app for one blank div. */
 #dcRail > div:empty { display: none !important; }
 
-/* The collapse button now sits at the bottom of the rail. Give it the same
-   hover the rest of the app has, since it no longer inherits the brand row's. */
-#dcRail > #dcRailBrand > button:hover,
+/* The collapse control is the rail's last ROW now, not a bordered square
+   floating in the empty half. It reads as a nav item one shade quieter, so it
+   takes the same hover -- and a hairline above it, drawn here rather than as
+   another element in the design export. */
+#dcRail button[title$="sidebar"] {
+  position: relative;
+}
+#dcRail button[title$="sidebar"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -9px;
+  height: 1px;
+  background: #1E1E22;
+}
 #dcRail button[title$="sidebar"]:hover {
-  color: #F0D6A6;
-  border-color: rgba(217, 180, 120, .45);
-  background: #17171A;
+  color: #F0D6A6 !important;
+  background: #17171A !important;
 }
 
 /* The review deck's keyboard hints are for machines that have a keyboard.

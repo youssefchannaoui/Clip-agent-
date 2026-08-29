@@ -3968,17 +3968,31 @@
       // collpas ebutton instead the top one". The rail is position:relative,
       // so this anchors to it and stays centred at either width -- 228px open,
       // 68px collapsed -- without the template moving.
-      railToggleStyle: ((global.innerWidth || 1280) <= 820 ? 'display: none; ' : 'display: grid; ')
-        + 'position: absolute; left: 0; right: 0; bottom: 14px; margin: 0 auto; '
-        // A small z-index because it now floats OVER the rail's content rather
-        // than sitting in the brand row's flow; without one, anything the nav
-        // grows into that space would take the clicks. (A dialog scrim at
-        // z-index 200 still covers it, which is correct -- the tour and the
-        // modals are meant to block the app underneath.)
-        + 'z-index: 5; '
-        + 'place-items: center; width: 26px; height: 26px; flex: none; '
-        + 'border: 1px solid #26262A; border-radius: 7px; background: #121214; color: #8B8B93; '
-        + 'cursor: pointer; transition: border-color .14s ease, color .14s ease, background-color .14s ease;',
+      // A 26px bordered square floating in the rail's empty lower half read as
+      // a stray artefact rather than a control -- Youssef: "improve that
+      // collpas ebutton looks dumb". It is the rail's last ROW now: the same
+      // padding, radius, gap and hover as a nav item, one shade quieter, with
+      // the word for what it does when there is room for it. Still pinned to
+      // the bottom (the rail is position:relative) so the nav above it does
+      // not move.
+      railToggleStyle: ((global.innerWidth || 1280) <= 820 ? 'display: none; ' : 'display: flex; ')
+        + 'position: absolute; left: 12px; right: 12px; bottom: 12px; '
+        // A small z-index because it floats OVER the rail's content rather than
+        // sitting in the brand row's flow; without one, anything the nav grows
+        // into that space would take the clicks. (A dialog scrim at z-index 200
+        // still covers it, which is correct -- the tour and the modals are
+        // meant to block the app underneath.)
+        + 'z-index: 5; align-items: center; '
+        + (open ? 'gap: 10px; padding: 9px 10px; ' : 'justify-content: center; padding: 9px 0; ')
+        + 'border: 0; border-radius: 8px; background: transparent; color: #6E6E76; '
+        + 'font-family: inherit; font-size: 11.5px; font-weight: 500; text-align: left; '
+        + 'cursor: pointer; transition: background .14s ease, color .14s ease;',
+      railToggleLabel: open ? 'Collapse' : '',
+      railToggleLabelStyle: open ? 'white-space: nowrap;' : 'display: none;',
+      // The plain caret, unchanged: it is the glyph that was visibly rendering
+      // in the live app, and ph-seedling already cost a release by being a
+      // name that reads fine and draws nothing. The word beside it carries the
+      // meaning now anyway.
       railToggleIcon: open ? 'ph ph-caret-left' : 'ph ph-caret-right',
       railToggleTitle: open ? 'Collapse sidebar' : 'Expand sidebar',
       toggleRail: function (e) { stop(e); setUI({ railOpen: !UI.railOpen }); },

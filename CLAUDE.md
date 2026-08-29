@@ -575,6 +575,16 @@ the collpas ebutton instead the top one".
   against it (the rail is already `position: relative`), so it stays centred at
   228px open and 68px collapsed without the template moving. Verified with a
   real mouse click, not a scripted one: 228 -> 68 and back.
+  **Restyled v3.37.1** ("improve that collpas ebutton looks dumb"): a 26px
+  bordered square floating in the rail's empty lower half read as a stray
+  artefact rather than a control. It is the rail's last ROW now -- same padding,
+  radius, gap and hover as a nav item, one shade quieter, with the word
+  "Collapse" beside the caret when there is room, and a hairline above it drawn
+  as a `::before` in studio-tokens.css rather than another element in the
+  export. Still absolutely positioned, so the nav above it does not move.
+  The caret is deliberately the SAME glyph as before: it is the one seen
+  rendering in the live app, and `ph-seedling` already cost a release by being
+  a name that reads fine and draws nothing.
 - **A dialog scrim will block any click test.** The first-run tour lays a
   `position: fixed; inset: 0; z-index: 200` span over the whole viewport, and
   Playwright then reports the button as covered -- which reads as a broken
