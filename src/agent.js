@@ -3,10 +3,11 @@ import * as ownerFeed from './owner-feed.js';
 import * as mailer from './mailer.js';
 import path from 'node:path';
 import { config } from './config.js';
+import * as billing from './billing.js';
 import { state, save, log, automationSettings, publishingSettings, ownerOfRecord, musicSatisfied, isAyahEcho } from './store.js';
 import { ownedBy, ownerOf } from './tenancy.js';
 import { sanitiseClipStyle } from './templates.js';
-import { nextSlot, startOfZonedDay } from './slots.js';
+import { nextSlot, startOfZonedDay, postTimesFor as slotTimes } from './slots.js';
 import * as engine from './local-engine.js';
 import * as social from './social.js';
 
@@ -314,17 +315,22 @@ export function scheduleApprovedClip(clip, { at = null, day = null } = {}) {
   if (clip.status !== 'approved') return clip;
   const taken = ownedBy(state.clips, ownerOf(clip)).map(item => item.scheduledAt).filter(Boolean);
   const exact = Number(at), whole = Number(day);
+  // How many windows a day this account may fill. Everyone gets the configured
+  // POST_TIMES; Studio gets more, inserted between them rather than spread over
+  // the clock, so the account keeps publishing in the part of the day it chose.
+  const owner = ownerOfRecord(clip);
+  const windows = billing.paysForAtLeast(owner, 'studio') ? slotTimes(config.postSlotsStudio) : null;
   let opts;
   if (Number.isFinite(exact) && exact > 0) {
     // nextSlot keeps a 15-minute lead so nothing is scheduled a breath from
     // now. Applied to an instant that IS the slot, that lead pushes the slot
     // you pressed just out of reach and quietly hands back the next one -- so
     // here the lead guards the floor instead, and the slot itself is exact.
-    opts = { from: Math.max(Date.now() + LEAD_MS, exact), leadMinutes: 0 };
+    opts = { from: Math.max(Date.now() + LEAD_MS, exact), leadMinutes: 0, times: windows };
   } else if (Number.isFinite(whole) && whole > 0) {
-    opts = { from: Math.max(Date.now(), startOfZonedDay(whole)) };
+    opts = { from: Math.max(Date.now(), startOfZonedDay(whole)), times: windows };
   }
-  clip.scheduledAt = clip.scheduledAt || nextSlot(taken, opts);
+  clip.scheduledAt = clip.scheduledAt || nextSlot(taken, opts || { times: windows });
   setTargets(clip);
   for (const target of clip.targets || []) target.nextTryAt = clip.scheduledAt;
   clip.status = 'scheduled'; clip.scheduleError = null; clip.scheduleErrorAt = null; save();

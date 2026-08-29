@@ -1527,11 +1527,17 @@ const BILLING_STATE = {
   billing: {
     current: { plan: 'free' }, tokenRatePerMinute: 1,
     plans: {
-      free: { id: 'free', name: 'Free', interval: 'one-time', tokens: 40 },
-      weekly: { id: 'weekly', name: 'Weekly', interval: 'week', tokens: 150, priceLabel: '£4', enabled: true },
-      monthly: { id: 'monthly', name: 'Monthly', interval: 'month', tokens: 600, priceLabel: '£14', enabled: true },
-      yearly: { id: 'yearly', name: 'Annual', interval: 'year', tokens: 8000, priceLabel: '£140', enabled: true },
+      free: { id: 'free', tier: 'basic', name: 'Basic', interval: 'one-time', tokens: 40, description: 'Try it', enabled: true },
+      pro_weekly: { id: 'pro_weekly', tier: 'pro', name: 'Pro Weekly', interval: 'weekly', tokens: 150, priceLabel: '£4', enabled: true, description: 'Pro' },
+      pro_monthly: { id: 'pro_monthly', tier: 'pro', name: 'Pro Monthly', interval: 'monthly', tokens: 600, priceLabel: '£14', enabled: true, description: 'Pro' },
+      pro_yearly: { id: 'pro_yearly', tier: 'pro', name: 'Pro Yearly', interval: 'yearly', tokens: 8000, priceLabel: '£140', enabled: true, description: 'Pro' },
+      studio_weekly: { id: 'studio_weekly', tier: 'studio', name: 'Studio Weekly', interval: 'weekly', tokens: 300, priceLabel: '£9', enabled: true, description: 'Studio' },
+      studio_monthly: { id: 'studio_monthly', tier: 'studio', name: 'Studio Monthly', interval: 'monthly', tokens: 1600, priceLabel: '£29', enabled: true, description: 'Studio' },
+      studio_yearly: { id: 'studio_yearly', tier: 'studio', name: 'Studio Yearly', interval: 'yearly', tokens: 22000, priceLabel: '£290', enabled: true, description: 'Studio' },
     },
+    trialDays: 3,
+    freeIncludes: ['Publishing and scheduling', 'The editor'],
+    tierAdds: { basic: [], pro: ['Remove the watermark', 'Every template'], studio: ['Ask DeenAI', 'Jump the render queue'] },
     topups: {
       boost100: { id: 'boost100', name: 'Quick boost', tokens: 100, priceLabel: '£5', enabled: true },
       boost300: { id: 'boost300', name: 'Creator boost', tokens: 300, priceLabel: '£12', enabled: true, badge: 'Most popular' },
@@ -1539,28 +1545,48 @@ const BILLING_STATE = {
   },
 };
 
-test('every plan is on screen at once, so they can be compared', () => {
-  // The period tabs read as styling and behaved as a filter: planCards was
-  // filtered by the selected interval, so a customer saw exactly ONE paid plan
-  // and had nothing to weigh it against. Youssef, 28 Aug 2026: "the buttons for
-  // monthly and yearly and etc idk how much I like it".
-  Object.assign(StudioAdapter.ui, { screen: 'tokens' });
-  const cards = StudioAdapter.bindings(BILLING_STATE).planCards;
-  const described = cards.map(c => `${c.name} ${c.price} ${c.tokens}`);
-  // `tokens` is the count alone: the markup writes the word after it, and
-  // pluralising in the binding too produced "150 tokens tokens" on every card.
-  assert.ok(described.some(c => c.includes('Weekly £4 150')), described.join(' | '));
-  assert.ok(described.some(c => c.includes('Monthly £14 600')), described.join(' | '));
-  assert.ok(described.some(c => c.includes('Annual £140 8000')), described.join(' | '));
-  assert.ok(described.some(c => c.includes('Free')), described.join(' | '));
+test('all three tiers are on screen at once, whatever the period', () => {
+  // The period buttons must never act as a FILTER. They did once -- planCards
+  // was filtered by interval, so a customer saw one paid plan and had nothing
+  // to weigh it against (Youssef, 28 Aug 2026: "the buttons for monthly and
+  // yearly and etc idk how much I like it"). The toggle changes the price
+  // basis; the three tiers stay side by side at every setting.
+  for (const period of ['weekly', 'monthly', 'yearly']) {
+    Object.assign(StudioAdapter.ui, { screen: 'tokens', billingPeriod: period });
+    const cards = StudioAdapter.bindings(BILLING_STATE).tierCards;
+    assert.deepEqual(cards.map(c => c.name), ['Basic', 'Pro', 'Studio'], period);
+  }
+
+  Object.assign(StudioAdapter.ui, { screen: 'tokens', billingPeriod: 'monthly' });
+  const monthly = StudioAdapter.bindings(BILLING_STATE).tierCards;
+  assert.deepEqual(monthly.map(c => c.price), ['Free', '£14', '£29']);
+  assert.deepEqual(monthly.map(c => c.tokens), ['40 tokens', '600 tokens', '1,600 tokens']);
+
+  Object.assign(StudioAdapter.ui, { screen: 'tokens', billingPeriod: 'yearly' });
+  const yearly = StudioAdapter.bindings(BILLING_STATE).tierCards;
+  assert.deepEqual(yearly.map(c => c.price), ['Free', '£140', '£290'], 'the toggle changes the price, not the tiers');
 });
 
-test('the plans read as a ladder, cheapest first', () => {
-  // Free carries no interval, so ranking on interval alone put the cheapest
-  // option last — after the yearly one.
-  Object.assign(StudioAdapter.ui, { screen: 'tokens' });
-  const names = StudioAdapter.bindings(BILLING_STATE).planCards.map(c => c.name);
-  assert.deepEqual(names, ['Free', 'Weekly', 'Monthly', 'Annual']);
+test('each tier lists what it ADDS, not the same list three times', () => {
+  Object.assign(StudioAdapter.ui, { screen: 'tokens', billingPeriod: 'monthly' });
+  const [basic, pro, studio] = StudioAdapter.bindings(BILLING_STATE).tierCards;
+  assert.match(basic.linesLabel, /Included/);
+  assert.match(pro.linesLabel, /Everything in Basic/);
+  assert.match(studio.linesLabel, /Everything in Pro/);
+  assert.deepEqual(pro.lines.map(l => l.text), ['Remove the watermark', 'Every template']);
+  assert.deepEqual(studio.lines.map(l => l.text), ['Ask DeenAI', 'Jump the render queue'],
+    'Studio must not repeat Pro\'s lines -- that hides the difference being sold');
+});
+
+test('a subscriber on one of the three original plan ids is still marked current', () => {
+  // Every customer who subscribed before tiers carries 'monthly', not
+  // 'pro_monthly'. If the grid did not recognise it they would see Pro offered
+  // to them as though they were not already paying for it.
+  Object.assign(StudioAdapter.ui, { screen: 'tokens', billingPeriod: 'monthly' });
+  const legacy = { ...BILLING_STATE, billing: { ...BILLING_STATE.billing, current: { plan: 'monthly', status: 'active' } } };
+  const [, pro] = StudioAdapter.bindings(legacy).tierCards;
+  assert.equal(pro.cta, 'Your plan');
+  assert.equal(pro.tag, 'Your plan');
 });
 
 test('the balance bar is the real fraction, not a fixed width', () => {
@@ -1589,8 +1615,10 @@ test('a subscriber is told how to change or cancel, on the screen', () => {
     current: { plan: 'monthly', status: 'active', allowance: 500, remaining: 186,
       periodEndsInDays: 11, stripeSubscriptionId: 'sub_123' } } };
   const b = StudioAdapter.bindings(subscribed);
-  assert.equal(b.planTitle, 'Monthly');
-  assert.match(b.planPriceLine, /£14 per month/);
+  // 'monthly' is the pre-tier id this subscriber still carries; it has to
+  // resolve to the plan they are actually paying for, not fall through to Basic.
+  assert.equal(b.planTitle, 'Pro Monthly');
+  assert.match(b.planPriceLine, /£14 per monthly/);
   assert.equal(b.planState, 'Active');
   assert.match(b.manageLabel, /cancel/i, 'the word someone is looking for has to appear');
   assert.equal(typeof b.manageBilling, 'function');
@@ -1617,14 +1645,21 @@ test('token packs render and can be bought on their own', () => {
   assert.equal(bought, 'boost100');
 });
 
-test('a plan with no Stripe price says so rather than failing at checkout', () => {
-  Object.assign(StudioAdapter.ui, { screen: 'tokens', planPeriod: 'month' });
-  const vals = StudioAdapter.bindings({
+test('a tier with no Stripe price says so rather than failing at checkout', () => {
+  // Studio ships before its prices exist in Stripe, so the column has to be
+  // honest rather than offering a button that cannot charge anyone.
+  Object.assign(StudioAdapter.ui, { screen: 'tokens', billingPeriod: 'monthly' });
+  const unpriced = {
     ...BILLING_STATE,
-    billing: { ...BILLING_STATE.billing, plans: { monthly: { id: 'monthly', name: 'Monthly', interval: 'month', tokens: 600, enabled: false } } },
-  });
-  const card = vals.planCards.find(c => c.name === 'Monthly');
-  assert.equal(card.cta, 'Not available');
+    billing: {
+      ...BILLING_STATE.billing,
+      plans: { ...BILLING_STATE.billing.plans, studio_monthly: { id: 'studio_monthly', tier: 'studio', name: 'Studio Monthly', tokens: 1600, enabled: false } },
+    },
+  };
+  const studio = StudioAdapter.bindings(unpriced).tierCards[2];
+  assert.equal(studio.cta, 'Opening soon');
+  assert.match(studio.foot, /Not open for checkout/);
+  assert.doesNotMatch(studio.btnStyle, /cursor: pointer/);
 });
 
 test('the connection dot is supplied under the name the Home row binds', () => {

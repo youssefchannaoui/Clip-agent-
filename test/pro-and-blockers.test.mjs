@@ -11,17 +11,28 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 // Every badge this product shows has to correspond to a gate the server
 // actually enforces. A badge on anything else is a promise the code breaks.
 
-test('only the watermark, templates and DeenAI are Pro, and each is enforced server-side', () => {
+test('every feature the table sells is enforced server-side, tier by tier', () => {
   const billing = read('src/billing.js');
-  const features = billing.match(/export const PRO_FEATURES = Object\.freeze\(\{([\s\S]*?)\}\);/)[1];
-  const keys = [...features.matchAll(/^\s*(\w+):/gm)].map(m => m[1]).sort();
-  assert.deepEqual(keys, ['deenai', 'templates', 'watermark'],
-    'adding a Pro feature means adding its gate and its badge too');
+  const table = billing.match(/export const FEATURES = Object\.freeze\(\{([\s\S]*?)\n\}\);/)[1];
+  const rows = [...table.matchAll(/^  (\w+): Object\.freeze\(\{ tier: '(\w+)'/gm)].map(m => [m[1], m[2]]);
+  assert.deepEqual(rows.map(([key]) => key).sort(),
+    ['deenai', 'deenaiAsk', 'extraSlots', 'priorityRender', 'templates', 'watermark'],
+    'adding a feature means adding its gate and its place in the pricing grid too');
+  assert.deepEqual(Object.fromEntries(rows), {
+    watermark: 'pro', templates: 'pro', deenai: 'pro',
+    deenaiAsk: 'studio', priorityRender: 'studio', extraSlots: 'studio',
+  }, 'the tier each feature belongs to is a pricing promise, not an implementation detail');
 
+  // Each one refused by the server, not merely hidden by the interface.
   const server = read('src/server.js');
   assert.match(server, /Removing the DeenClipped watermark is a Pro feature/);
   assert.match(server, /is a Pro template/);
   assert.match(server, /DeenAI is a Pro feature/);
+  assert.match(server, /Asking DeenAI is a Studio feature/);
+  // The two Studio features that are not a route: both read the PAID tier, so
+  // the operator's own work never preempts a customer's.
+  assert.match(read('src/local-engine.js'), /paysForAtLeast\(owner, 'studio'\)/);
+  assert.match(read('src/agent.js'), /paysForAtLeast\(owner, 'studio'\)/);
 });
 
 test('scheduling, publishing and automation stay free', () => {
@@ -193,20 +204,24 @@ test('the starter list is proved from account data, not a dismissed flag', () =>
   assert.match(adapter, /startListOn:/, 'and it goes away once finished');
 });
 
-test('the plans screen says what Pro adds and what free already includes', () => {
+test('each tier card says what it adds, from the server\'s own lists', () => {
   const adapter = read('src/public/studio-adapter.js');
-  const at = adapter.indexOf('planCards:');
-  assert.ok(at > 0);
-  // A source-window check, so it is sensitive to comments and formatting that
-  // have nothing to do with what it asserts. Sized generously for that reason.
+  const at = adapter.indexOf('var tierCards =');
+  assert.ok(at > 0, 'the pricing grid still builds its cards here');
   const body = adapter.slice(at, at + 3400);
-  assert.match(body, /freeIncludes/, 'the free card lists what it already does');
-  assert.match(body, /proFeatures/, 'the paid card names the two things it adds');
-  // Read from the server's own lists so a badge and a plan card can never
-  // disagree with the gate that enforces them.
+  assert.match(body, /freeIncludes/, 'the Basic column lists what it already does');
+  assert.match(body, /tierAdds/, 'the paid columns name what they add');
+
+  // Read from the server's own lists so a card and the gate that enforces it
+  // can never disagree -- and those lists are DERIVED from the one feature
+  // table rather than written out a second time.
   const billing = read('src/billing.js');
   assert.match(billing, /proFeatures: PRO_FEATURES/);
   assert.match(billing, /freeIncludes: FREE_INCLUDES/);
+  assert.match(billing, /pro: Object\.values\(PRO_FEATURES\)/);
+  assert.match(billing, /studio: Object\.values\(STUDIO_FEATURES\)/);
+  assert.match(billing, /export const PRO_FEATURES = Object\.freeze\(Object\.fromEntries\(/,
+    'the Pro list is computed from FEATURES, not maintained beside it');
 });
 
 // ── no dead controls (CLAUDE.md invariant 8) ───────────────────────────────

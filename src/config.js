@@ -191,9 +191,17 @@ export const config = {
   // down. Whitespace around a credential is never meaningful.
   stripeSecretKey: String(process.env.STRIPE_SECRET_KEY || '').trim(),
   stripeWebhookSecret: String(process.env.STRIPE_WEBHOOK_SECRET || '').trim(),
+  // Pro's three billing periods. The env names have no tier in them because
+  // these three existed before Studio did and are live in Stripe -- renaming
+  // them would silently unconfigure the plan every current subscriber is on.
   stripePriceWeekly: process.env.STRIPE_PRICE_WEEKLY || '',
   stripePriceMonthly: process.env.STRIPE_PRICE_MONTHLY || '',
   stripePriceYearly: process.env.STRIPE_PRICE_YEARLY || '',
+  // Studio's three. Absent, the Studio column still renders and says it is not
+  // open yet rather than offering a button that cannot charge anyone.
+  stripePriceStudioWeekly: process.env.STRIPE_PRICE_STUDIO_WEEKLY || '',
+  stripePriceStudioMonthly: process.env.STRIPE_PRICE_STUDIO_MONTHLY || '',
+  stripePriceStudioYearly: process.env.STRIPE_PRICE_STUDIO_YEARLY || '',
   stripePriceTopup100: process.env.STRIPE_PRICE_TOPUP_100 || '',
   stripePriceTopup300: process.env.STRIPE_PRICE_TOPUP_300 || '',
   stripePriceTopup750: process.env.STRIPE_PRICE_TOPUP_750 || '',
@@ -210,9 +218,15 @@ export const config = {
   //   weekly    A$9   / 120   = A$0.075 per token
   //   monthly   A$29  / 650   = A$0.045 per token
   //   yearly    A$290 / 9000  = A$0.032 per token   (two months free)
+  //   studio wk A$19  / 300   = A$0.063 per token
+  //   studio mo A$59  / 1600  = A$0.037 per token
+  //   studio yr A$590 / 22000 = A$0.027 per token   (two months free)
   planPriceWeeklyLabel: process.env.PLAN_PRICE_WEEKLY_LABEL || 'A$9',
   planPriceMonthlyLabel: process.env.PLAN_PRICE_MONTHLY_LABEL || 'A$29',
   planPriceYearlyLabel: process.env.PLAN_PRICE_YEARLY_LABEL || 'A$290',
+  planPriceStudioWeeklyLabel: process.env.PLAN_PRICE_STUDIO_WEEKLY_LABEL || 'A$19',
+  planPriceStudioMonthlyLabel: process.env.PLAN_PRICE_STUDIO_MONTHLY_LABEL || 'A$59',
+  planPriceStudioYearlyLabel: process.env.PLAN_PRICE_STUDIO_YEARLY_LABEL || 'A$590',
   // Top-ups are for running out mid-month, so every pack costs MORE per token
   // than the monthly plan. They used to cost less -- the 750 pack worked out at
   // A$0.033 against the plan's A$0.045 -- which rewarded cancelling the
@@ -229,6 +243,13 @@ export const config = {
   tokensWeekly: Math.max(1, Math.round(number(process.env.TOKENS_WEEKLY, 120))),
   tokensMonthly: Math.max(1, Math.round(number(process.env.TOKENS_MONTHLY, 650))),
   tokensYearly: Math.max(1, Math.round(number(process.env.TOKENS_YEARLY, 9000))),
+  tokensStudioWeekly: Math.max(1, Math.round(number(process.env.TOKENS_STUDIO_WEEKLY, 300))),
+  tokensStudioMonthly: Math.max(1, Math.round(number(process.env.TOKENS_STUDIO_MONTHLY, 1600))),
+  tokensStudioYearly: Math.max(1, Math.round(number(process.env.TOKENS_STUDIO_YEARLY, 22000))),
+  // Studio's extra posting windows. Everyone gets POST_TIMES; Studio may fill
+  // this many slots a day instead. A number, not a second list of times: the
+  // schedule spreads them across the day itself.
+  postSlotsStudio: Math.max(1, Math.round(number(process.env.POST_SLOTS_STUDIO, 8))),
   // A trial hands out real machine time: every token is a source minute that
   // costs proxy bandwidth and storage. Uncapped, a yearly trial grants its
   // whole 6000-minute allowance for free, which is more bandwidth than the

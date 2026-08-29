@@ -62,8 +62,53 @@ test('a custom template is never Pro', () => {
 const billing = await import('../src/billing.js');
 const src = url => fs.readFileSync(new URL(url, import.meta.url), 'utf8');
 
-test('the Pro list is exactly the watermark, the templates and DeenAI', () => {
+test('the feature table is exactly what each tier is sold on', () => {
+  // One table, asserted whole. Every entry here is something a customer is
+  // told they get; a key added without a gate, or gated without being sold,
+  // fails on this line.
+  assert.deepEqual(Object.keys(billing.FEATURES).sort(),
+    ['deenai', 'deenaiAsk', 'extraSlots', 'priorityRender', 'templates', 'watermark']);
   assert.deepEqual(Object.keys(billing.PRO_FEATURES).sort(), ['deenai', 'templates', 'watermark']);
+  assert.deepEqual(Object.keys(billing.STUDIO_FEATURES).sort(), ['deenaiAsk', 'extraSlots', 'priorityRender']);
+});
+
+test('the tiers are cumulative, and Basic is sold nothing', () => {
+  const basic = billing.featuresForTier('basic');
+  const pro = billing.featuresForTier('pro');
+  const studio = billing.featuresForTier('studio');
+  assert.ok(Object.values(basic).every(on => on === false), 'Basic is the trial, not a feature set');
+  for (const key of Object.keys(billing.FEATURES)) {
+    assert.ok(!pro[key] || studio[key], `Studio must include everything Pro has (${key})`);
+  }
+  assert.equal(pro.deenai, true, 'Pro keeps the insights it shipped with');
+  assert.equal(pro.deenaiAsk, false, 'asking is what Studio adds');
+  assert.equal(studio.deenaiAsk, true);
+});
+
+test('the three original plan ids still mean Pro at that period', () => {
+  // They are in Stripe's metadata and on every current subscriber's record.
+  // Dropping them would move paying customers onto the free plan.
+  assert.equal(billing.normalisePlanId('monthly'), 'pro_monthly');
+  assert.equal(billing.normalisePlanId('weekly'), 'pro_weekly');
+  assert.equal(billing.normalisePlanId('yearly'), 'pro_yearly');
+  assert.equal(billing.normalisePlanId('studio_yearly'), 'studio_yearly');
+  assert.equal(billing.normalisePlanId('free'), 'free');
+  const grid = billing.plans();
+  for (const id of billing.PLAN_ORDER) assert.ok(grid[id], `${id} is missing from the grid`);
+  assert.equal(billing.PLAN_ORDER.length, 6, 'three tiers is two paid tiers times three periods');
+});
+
+test('a paid tier and the operator role are different questions', () => {
+  // The operator has every feature and must never be locked out of their own
+  // product -- but their imports must not preempt a paying customer's on the
+  // one worker slot, which is what paidTierOf exists to separate.
+  const operator = { id: 'op', role: 'owner', billing: { plan: 'free' } };
+  assert.equal(billing.tierOf(operator), 'studio');
+  assert.equal(billing.paidTierOf(operator), 'basic');
+  assert.equal(billing.paysForAtLeast(operator, 'studio'), false);
+  const customer = { id: 'c', role: 'creator', billing: { plan: 'studio_monthly' } };
+  assert.equal(billing.paidTierOf(customer), 'studio');
+  assert.equal(billing.paysForAtLeast(customer, 'studio'), true);
 });
 
 test('a free account is told what it already has', () => {
@@ -73,15 +118,17 @@ test('a free account is told what it already has', () => {
   }
 });
 
-test('every plan gate in the app is one of the listed Pro features', () => {
+test('every plan gate in the app is one of the listed features', () => {
   // isPaid() is the only way to gate on a plan. Each call site is named here
   // with what it guards; a new one fails this test until it is either removed
   // or argued for in PRO_FEATURES.
   const allowed = new Map([
     ['src/server.js', ['assertWatermarkAllowed', 'assertTemplateAllowed']],
     ['src/local-engine.js', ['enforceWatermarkPlan', 'enforceTemplatePlan']],
-    ['src/billing.js', ['planFeatures']],
-    ['src/deenai.js', ['deenaiAccess']],
+    // planFeatures derives from the FEATURES table now rather than asking
+    // isPaid, so billing.js should hold NO plan gate of its own -- kept in the
+    // map at zero so a new one there still fails this test.
+    ['src/billing.js', []],
   ]);
   for (const [file, guards] of allowed) {
     const text = src(`../${file}`);
@@ -89,6 +136,20 @@ test('every plan gate in the app is one of the listed Pro features', () => {
     const calls = (text.match(/(?<!function )(?:billing\.)?isPaid\(/g) || []).length;
     assert.equal(calls, guards.length,
       `${file} has ${calls} plan gates but ${guards.length} are accounted for: ${guards.join(', ')}`);
+  }
+
+  // Tier comparisons are the newer gate primitive and are allowlisted the same
+  // way: a new call site fails this until it is argued for here.
+  const tierGates = new Map([
+    ['src/deenai.js', ['deenaiAccess', 'deenaiAskAccess']],
+    ['src/agent.js', ['scheduleApprovedClip picks the tier\'s posting windows']],
+    ['src/local-engine.js', ['queuePriority ranks the render queue']],
+  ]);
+  for (const [file, guards] of tierGates) {
+    const text = src(`../${file}`);
+    const calls = (text.match(/billing\.(?:atLeast|paysForAtLeast)\(/g) || []).length;
+    assert.equal(calls, guards.length,
+      `${file} has ${calls} tier gates but ${guards.length} are accounted for: ${guards.join(', ')}`);
   }
   // And nowhere else reaches for it at all.
   for (const file of ['src/social.js', 'src/agent.js', 'src/slots.js', 'src/backgrounds.js', 'src/uploads.js']) {

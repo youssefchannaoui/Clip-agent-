@@ -902,11 +902,32 @@ function enforcePlan(template, ownerId) {
   return enforceWatermarkPlan(enforceTemplatePlan(template, ownerId), ownerId);
 }
 
+/**
+ * Where a queued job sits in line.
+ *
+ * An explicit priority still wins -- 0 is the preview boost the pump already
+ * serves first. Everything else is ranked by TIER: a Studio account goes ahead
+ * of Basic and Pro on the same clock. The single worker slot is the scarcest
+ * thing this product owns, and jumping it is what the tier buys.
+ *
+ * Read at pump time rather than stamped at submit, so upgrading moves the job
+ * you are already waiting on rather than only the next one.
+ */
+export function queuePriority(item, project = null) {
+  const explicit = Number(item?.priority);
+  if (Number.isFinite(explicit)) return explicit;
+  const record = project || item;
+  const owner = ownerOfRecord({ userId: record?.userId || '' });
+  // paysForAtLeast, not atLeast: the operator has every feature, but their own
+  // imports must not preempt a paying customer's on the one worker slot.
+  return owner && billing.paysForAtLeast(owner, 'studio') ? 0.5 : 1;
+}
+
 export function queueAhead(projectId) {
   const target = projectById(projectId);
   if (!target || target.status !== 'queued') return 0;
   let ahead = 0;
-  const rank = project => [Number(project.priority ?? 1), Number(project.submittedAt || 0)];
+  const rank = project => [queuePriority(project), Number(project.submittedAt || 0)];
   const mine = rank(target);
   for (const project of state.projects) {
     if (project.id === target.id) continue;
@@ -1892,7 +1913,7 @@ export async function pump() {
         ...state.projects.filter(item => item.moreJob?.engine !== 'remote' && item.moreJob?.status === 'queued').map(item => ({ type: 'more', item: item.moreJob, project: item, at: item.moreJob.createdAt })),
         ...state.rerenderJobs.filter(item => !item.preview && item.engine === 'remote' && item.status === 'queued' && Number(item.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote-rerender', item, project: projectById(clipById(item.clipId)?.projectId), at: item.createdAt })),
         ...state.rerenderJobs.filter(item => !item.preview && item.engine !== 'remote' && item.status === 'queued').map(item => ({ type: 'rerender', item, at: item.createdAt })),
-      ].sort((a, b) => ((a.item.priority ?? 1) - (b.item.priority ?? 1)) || (a.at - b.at));
+      ].sort((a, b) => (queuePriority(a.item, a.project) - queuePriority(b.item, b.project)) || (a.at - b.at));
       const next = candidates[0];
       if (!next) break;
       if (next.type === 'remote') runRemoteProject(next.item).catch(error => { next.item.status = 'failed'; next.item.error = error.message; save(); });

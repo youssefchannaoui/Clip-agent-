@@ -99,7 +99,9 @@ test('an existing subscriber is moved, never sold a second subscription', async 
     `no checkout session may be created; calls were ${JSON.stringify(calls)}`);
   assert.ok(calls.includes('POST /subscriptions/sub_existing'), 'the existing subscription is edited');
   assert.equal(liveSubs.size, 1, 'exactly one subscription may exist for this account');
-  assert.equal(user.billing.plan, 'monthly');
+  // Stored canonically, though 'monthly' is what went in: the legacy id is
+  // still accepted at the door and normalised once inside.
+  assert.equal(user.billing.plan, 'pro_monthly');
   assert.equal(user.billing.stripeSubscriptionId, 'sub_existing', 'still the same subscription');
 });
 
@@ -137,7 +139,7 @@ test('picking the plan you are already on is refused, not double-sold', async ()
     plan: 'monthly', status: 'active',
     stripeCustomerId: 'cus_live1', stripeSubscriptionId: 'sub_same',
   });
-  await assert.rejects(() => billing.createCheckoutSession(user, 'monthly'), /already on Monthly/);
+  await assert.rejects(() => billing.createCheckoutSession(user, 'monthly'), /already on Pro Monthly/);
 });
 
 test('the free trial is granted once per account, ever', async () => {

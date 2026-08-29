@@ -147,6 +147,14 @@
               <a href="#" onClick="{{ markRead }}" style="margin-left: auto; font-size: 11px;">Mark all read</a>
               <a href="#" onClick="{{ clearAllActivity }}" style="font-size: 11px; color: #8B8B93;">Clear all</a>
             </div>
+            <div style="display: flex; align-items: center; gap: 9px; padding: 10px 13px; border-bottom: 1px solid #1E1E22; background: #101013;">
+              <i class="ph ph-bell-ringing" style="font-size: 13px; color: #C9A87A;"></i>
+              <span style="display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0;">
+                <span style="font-size: 11.5px; color: #E9E9ED;">Desktop notifications</span>
+                <span style="font-size: 10px; color: #6E6E76;">{{ desktopNotifsNote }}</span>
+              </span>
+              <button onClick="{{ toggleDesktopNotifs }}" style="{{ desktopNotifsStyle }}"><i style="{{ desktopNotifsKnobStyle }}"></i></button>
+            </div>
             <sc-for list="{{ activity }}" as="act" hint-placeholder-count="6">
               <div onClick="{{ act.open }}" style="{{ act.rowStyle }}" style-hover="background: #17171A;">
                 <i class="{{ act.icon }}" style="{{ act.iconStyle }}"></i>
@@ -162,10 +170,6 @@
             </sc-for>
             <sc-if value="{{ hasDismissed }}" hint-placeholder-val="{{ false }}">
               <a href="#" onClick="{{ restoreActivity }}" style="padding: 9px; text-align: center; font-size: 11px; color: #6E6E76; border-top: 1px solid #1E1E22;">Bring dismissed ones back</a>
-              <div style="display: flex; align-items: center; gap: 8px; padding: 9px 13px; border-top: 1px solid #1E1E22;">
-                <span style="font-size: 11px; color: #8B8B93; flex: 1;">Desktop notifications</span>
-                <button onClick="{{ toggleDesktopNotifs }}" style="{{ desktopNotifsStyle }}"><i style="{{ desktopNotifsKnobStyle }}"></i></button>
-              </div>
             </sc-if>
             <sc-if value="{{ moreActivity }}" hint-placeholder-val="{{ true }}">
               <a href="#" onClick="{{ showAllActivity }}" style="padding: 10px; text-align: center; font-size: 11.5px; border-top: 1px solid #1E1E22;">Show everything</a>
@@ -1719,10 +1723,13 @@
             <span style="margin-left: auto; font-size: 10.5px; color: #6E6E76;">{{ aiAskNote }}</span>
           </div>
         </sc-if>
-        <sc-if value="{{ aiLocked }}" hint-placeholder-val="{{ false }}">
+        <sc-if value="{{ aiAskGate }}" hint-placeholder-val="{{ false }}">
           <div style="display: flex; flex-direction: column; gap: 10px;">
             <div style="display: flex; align-items: center; gap: 9px; padding: 14px; border: 1px dashed #26262A; border-radius: 12px; background: #0E0E11; color: #6E6E76; font-size: 13px;"><i class="ph ph-lock-simple" style="font-size: 14px;"></i>“Why are my clips not getting approved?” · “What should I clip next?” · “How do I grow on TikTok?”</div>
-            <button onClick="{{ aiUpgrade }}" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid rgba(217,180,120,.5); border-radius: 8px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(217,180,120,.12);"><i class="ph-fill ph-crown-simple" style="font-size: 13px;"></i>Unlock with Pro</button>
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+              <button onClick="{{ aiUpgrade }}" style="display: inline-flex; align-items: center; gap: 7px; padding: 9px 15px; border: 1px solid rgba(217,180,120,.5); border-radius: 8px; background: rgba(217,180,120,.12); color: #F0D6A6; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(217,180,120,.2);"><i class="ph-fill ph-crown-simple" style="font-size: 13px;"></i>{{ aiGateCta }}</button>
+              <span style="font-size: 11.5px; color: #8B8B93; line-height: 1.5; flex: 1 1 260px;">{{ aiGateNote }}</span>
+            </div>
           </div>
         </sc-if>
       </div>
@@ -1850,28 +1857,40 @@
         </section>
       </div>
 
-      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 30px 0 14px;">
-        <h2 data-tour="tokens-plans" style="margin: 0; font-family: Outfit, Inter, sans-serif; font-size: 18px; font-weight: 600; letter-spacing: -.03em;">Plans</h2>
-        <span style="font-size: 12px; color: #6E6E76;">{{ planNote }}</span>
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin: 34px 0 6px;">
+        <h2 data-tour="tokens-plans" style="margin: 0; font-family: Outfit, Inter, sans-serif; font-size: 20px; font-weight: 600; letter-spacing: -.03em;">Plans</h2>
+        <span style="display: inline-flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid #26262A; border-radius: 22px; background: #121214;">
+          <sc-for list="{{ billingPeriods }}" as="period" hint-placeholder-count="3">
+            <button onClick="{{ period.select }}" style="{{ period.style }}">{{ period.label }}</button>
+          </sc-for>
+        </span>
+        <span style="font-size: 11.5px; color: #6E6E76;">{{ periodNote }}</span>
+        <span style="margin-left: auto; font-size: 12px; color: #6E6E76;">{{ planNote }}</span>
       </div>
-      <div id="dcPlanGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); gap: 13px;">
-        <sc-for list="{{ planCards }}" as="plan" hint-placeholder-count="3">
-          <article style="{{ plan.cardStyle }}">
-            <sc-if value="{{ plan.hasTag }}" hint-placeholder-val="{{ true }}">
-              <span style="{{ plan.tagStyle }}">{{ plan.tag }}</span>
-            </sc-if>
-            <span style="font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #8B8B93;">{{ plan.name }}</span>
-            <div style="display: flex; align-items: baseline; gap: 7px; margin-top: 12px;">
-              <strong style="font-family: Outfit, Inter, sans-serif; font-size: 28px; font-weight: 600; letter-spacing: -.04em; line-height: 1;">{{ plan.price }}</strong>
-              <span style="font-size: 11.5px; color: #8B8B93;">{{ plan.per }}</span>
+
+      <div id="dcPlanGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(272px, 1fr)); gap: 16px; align-items: stretch;">
+        <sc-for list="{{ tierCards }}" as="tier" hint-placeholder-count="3">
+          <article style="{{ tier.cardStyle }}">
+            <span style="{{ tier.tagStyle }}">{{ tier.tag }}</span>
+            <div style="display: flex; align-items: center; gap: 9px;">
+              <span style="{{ tier.markStyle }}"><i class="{{ tier.icon }}" style="{{ tier.iconStyle }}"></i></span>
+              <strong style="font-family: Outfit, Inter, sans-serif; font-size: 17px; font-weight: 600; letter-spacing: -.02em; color: #F2F2F4;">{{ tier.name }}</strong>
             </div>
-            <span style="margin-top: 9px; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: #F0D6A6;"><i class="ph-fill ph-coins" style="font-size: 14px;"></i>{{ plan.tokens }} tokens</span>
-            <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 13px;">
-              <sc-for list="{{ plan.lines }}" as="line" hint-placeholder-count="4">
-                <span style="display: flex; gap: 7px; font-size: 11.5px; color: #BCBCC3; line-height: 1.45;"><i class="ph-fill ph-check-circle" style="font-size: 13px; flex: none; color: #7FD1A6; margin-top: 1px;"></i>{{ line.text }}</span>
+            <span style="font-size: 11.5px; color: #8B8B93; line-height: 1.5; min-height: 34px;">{{ tier.tagline }}</span>
+            <div style="display: flex; align-items: baseline; gap: 7px; margin-top: 4px;">
+              <strong style="{{ tier.priceStyle }}">{{ tier.price }}</strong>
+              <span style="font-size: 12px; color: #8B8B93;">{{ tier.per }}</span>
+            </div>
+            <span style="display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: #F0D6A6;"><i class="ph-fill ph-coins" style="font-size: 15px;"></i>{{ tier.tokens }}</span>
+            <span style="height: 1px; background: rgba(242,242,244,.07); margin: 4px 0;"></span>
+            <span style="font-size: 9.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6E6E76;">{{ tier.linesLabel }}</span>
+            <div style="display: flex; flex-direction: column; gap: 7px;">
+              <sc-for list="{{ tier.lines }}" as="line" hint-placeholder-count="4">
+                <span style="display: flex; gap: 8px; font-size: 12px; color: #BCBCC3; line-height: 1.5;"><i class="{{ line.icon }}" style="{{ line.iconStyle }}"></i>{{ line.text }}</span>
               </sc-for>
             </div>
-            <button onClick="{{ plan.choose }}" style="{{ plan.btnStyle }}" style-hover="background: rgba(217,180,120,.12);">{{ plan.cta }}</button>
+            <button onClick="{{ tier.choose }}" style="{{ tier.btnStyle }}">{{ tier.cta }}</button>
+            <span style="{{ tier.footStyle }}">{{ tier.foot }}</span>
           </article>
         </sc-for>
       </div>

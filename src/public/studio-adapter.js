@@ -1750,6 +1750,13 @@
 
   // What a Traffic tile can be set to show. Twelve numbers worth watching, six
   // slots: the screen stays quiet and every slot is the owner's choice.
+  // The billing periods the pricing grid toggles between.
+  var BILLING_PERIODS = [
+    { id: 'weekly', label: 'Weekly' },
+    { id: 'monthly', label: 'Monthly' },
+    { id: 'yearly', label: 'Yearly' },
+  ];
+
   var ANA_METRICS = [
     { key: 'uniques', label: 'Unique visitors' },
     { key: 'newVisitors', label: 'New visitors' },
@@ -3810,6 +3817,10 @@
     // when the tab opens) only supplies the numbers. For a locked account they
     // arrive marked demo:true and are labelled as such on screen.
     var aiOn = Boolean(current.features && current.features.deenai);
+    // Three states, not two: Basic sees a demo, Pro sees its own numbers with
+    // the ask held back, Studio sees everything. Collapsing Pro into either
+    // neighbour is what would make the middle tier feel like a mistake.
+    var aiAskOn = Boolean(current.features && current.features.deenaiAsk);
     var aiData = DATA.deenai || null;
     var aiAllCards = (aiData && aiData.insights) || [];
     // The first card is the headline and gets the room; the rest are rows. The
@@ -3833,6 +3844,86 @@
     // Three openers worth typing, and they FILL the box rather than only
     // reading as suggestions -- a chip that does nothing is a dead control.
     var AI_PROMPTS = ['What should I clip next?', 'How do I grow on TikTok?', 'Which lecture is worth more clips?'];
+
+    // ── the three tiers, at the chosen period ──
+    var billingPeriod = BILLING_PERIODS.some(function (p) { return p.id === UI.billingPeriod; })
+      ? UI.billingPeriod : 'monthly';
+    var planGrid = (DATA.billing && DATA.billing.plans) || {};
+    var featureLabels = (DATA.billing && DATA.billing.featureLabels) || {};
+    var currentPlanId = String(current.plan || 'free');
+    var TIER_LOOK = {
+      basic: { icon: 'ph ph-seedling', accent: '#BCBCC3', ring: '#1E1E22' },
+      pro: { icon: 'ph-fill ph-lightning', accent: '#F0D6A6', ring: 'rgba(217,180,120,.45)' },
+      studio: { icon: 'ph-fill ph-sparkle', accent: '#F0D6A6', ring: 'rgba(217,180,120,.6)' },
+    };
+    var TIER_TAG = { basic: '', pro: 'Most popular', studio: 'For channels at scale' };
+    // The plan record for whatever id this account actually carries. A
+    // subscriber who signed up before tiers has 'monthly', which is no longer a
+    // key in the grid -- looked up naively their plan displayed as "Free" while
+    // they were being charged.
+    var LEGACY_PLANS = { weekly: 'pro_weekly', monthly: 'pro_monthly', yearly: 'pro_yearly' };
+    function currentPlanRecord() {
+      var wanted = LEGACY_PLANS[currentPlanId] || currentPlanId;
+      return planList.filter(function (p) { return String(p.id) === wanted; })[0] || null;
+    }
+
+    var tierCards = ['basic', 'pro', 'studio'].map(function (tier) {
+      var plan = tier === 'basic' ? planGrid.free : planGrid[tier + '_' + billingPeriod];
+      plan = plan || {};
+      var look = TIER_LOOK[tier];
+      var isCurrent = tier === 'basic'
+        ? (currentPlanId === 'free' || !currentPlanId)
+        : String(plan.id || '') === currentPlanId
+          // The three original ids mean Pro at that period, and a subscriber
+          // who signed up before tiers still carries one.
+          || (tier === 'pro' && currentPlanId === billingPeriod);
+      var unconfigured = tier !== 'basic' && plan.enabled === false;
+      // What each tier ADDS over the one before it: repeating Pro's list inside
+      // Studio's makes three identical columns and hides the actual difference.
+      var adds = (DATA.billing && DATA.billing.tierAdds && DATA.billing.tierAdds[tier]) || [];
+      var lines = (tier === 'basic'
+        ? (DATA.billing && DATA.billing.freeIncludes || [])
+        : adds).map(function (text) {
+        return {
+          text: text,
+          icon: 'ph-fill ph-check-circle',
+          iconStyle: 'font-size: 13px; flex: none; margin-top: 2px; color: ' + (tier === 'basic' ? '#7FD1A6' : look.accent) + ';',
+        };
+      });
+      return {
+        name: plan.name && tier !== 'basic' ? plan.name.split(' ')[0] : (tier === 'basic' ? 'Basic' : plan.name || tier),
+        tagline: plan.description || '',
+        icon: look.icon,
+        iconStyle: 'font-size: 15px; color: ' + look.accent + ';',
+        markStyle: 'display: grid; place-items: center; width: 30px; height: 30px; border-radius: 10px; border: 1px solid ' + look.ring + '; background: ' + (tier === 'basic' ? '#17171A' : 'rgba(217,180,120,.08)') + ';',
+        tag: isCurrent ? 'Your plan' : TIER_TAG[tier],
+        tagStyle: (isCurrent || TIER_TAG[tier])
+          ? 'position: absolute; top: -9px; left: 16px; padding: 2px 9px; border-radius: 20px; border: 1px solid ' + look.ring + '; background: #0E0E11; font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: ' + (isCurrent ? '#7FD1A6' : look.accent) + ';'
+          : 'display: none;',
+        price: tier === 'basic' ? 'Free' : (plan.priceLabel || 'Price not set'),
+        priceStyle: 'font-family: Outfit, Inter, sans-serif; font-size: 30px; font-weight: 600; letter-spacing: -.04em; line-height: 1; color: ' + (tier === 'basic' ? '#F2F2F4' : look.accent) + ';',
+        per: tier === 'basic' ? 'for ' + (DATA.billing && DATA.billing.trialDays || 3) + ' days' : 'per ' + billingPeriod.replace('ly', ''),
+        tokens: plan.tokens != null ? Number(plan.tokens).toLocaleString() + ' tokens' : '',
+        linesLabel: tier === 'basic' ? 'Included' : tier === 'pro' ? 'Everything in Basic, plus' : 'Everything in Pro, plus',
+        lines: lines,
+        cta: isCurrent ? 'Your plan' : tier === 'basic' ? 'Where you start' : unconfigured ? 'Opening soon' : 'Choose ' + (plan.name || '').split(' ')[0],
+        btnStyle: 'margin-top: auto; padding: 11px 12px; border-radius: 9px; font-family: inherit; font-size: 12.5px; font-weight: 600; border: 1px solid '
+          + (isCurrent || tier === 'basic' || unconfigured
+            ? '#26262A; background: #17171A; color: #6E6E76; cursor: default;'
+            : 'rgba(217,180,120,.45); background: rgba(217,180,120,.13); color: #F0D6A6; cursor: pointer;'),
+        foot: unconfigured ? 'Not open for checkout yet.' : '',
+        footStyle: unconfigured ? 'font-size: 10.5px; color: #6E6E76;' : 'display: none;',
+        cardStyle: 'position: relative; display: flex; flex-direction: column; gap: 10px; padding: 20px 18px 18px; border-radius: 14px; border: 1px solid '
+          + (isCurrent ? 'rgba(127,209,166,.4)' : tier === 'studio' ? 'rgba(217,180,120,.4)' : '#1E1E22')
+          + '; background: ' + (tier === 'basic' ? '#121214' : 'linear-gradient(180deg, rgba(217,180,120,.05), rgba(217,180,120,.01)), #121214') + ';',
+        choose: function (e) {
+          stop(e);
+          if (isCurrent || tier === 'basic') { if (tier === 'basic' && !isCurrent) toast('To go back to Basic, cancel your plan under Manage billing.'); return; }
+          if (unconfigured) { toast((plan.name || 'That plan') + ' is not open for checkout yet.'); return; }
+          global.StudioAdapter.onChoosePlan(plan.id);
+        },
+      };
+    });
 
     var vals = {
       // ── shell: rail ──
@@ -3941,6 +4032,20 @@
         return 'position: absolute; top: 2px; left: ' + (on ? '17px' : '2px') + '; width: 13px; height: 13px; border-radius: 50%; background: ' + (on ? '#7FD1A6' : '#6E6E76') + ';';
       })(),
       toggleDesktopNotifs: function (e) { stop(e); global.StudioAdapter.onToggleDesktopNotifs(); },
+      // The row sits at the TOP of the dropdown now and outside the
+      // dismissed-items branch it used to be nested in -- the one control that
+      // turns notifications on was only shown to someone who had already
+      // dismissed a notification. This line says which of the three states it
+      // is in, because "off" and "the browser refused" need different actions.
+      desktopNotifsNote: (function () {
+        try {
+          if (typeof Notification === 'undefined') return 'Not available in this browser';
+          if (Notification.permission === 'denied') return 'Blocked in your browser settings';
+          return localStorage.getItem('deenDesktopNotifs') === 'on' && Notification.permission === 'granted'
+            ? 'On — you will be told when clips are ready'
+            : 'Off — turn on to hear when clips are ready';
+        } catch (e) { return 'Off — turn on to hear when clips are ready'; }
+      })(),
 
       // ── the detail view ──
       // A row in a dropdown can only ever say what happened. This says why it
@@ -3993,15 +4098,23 @@
 
       // ── DeenAI ──
       aiLocked: !aiOn,
-      aiUnlocked: aiOn,
-      aiSub: aiOn
+      aiUnlocked: aiAskOn,
+      aiAskGate: !aiAskOn,
+      aiGateCta: aiOn ? 'Upgrade to Studio' : 'Unlock with Pro',
+      aiGateNote: aiOn
+        ? 'Your insights above are real. Asking DeenAI questions runs on our own render box, and that is what Studio buys.'
+        : 'On Pro these become your own numbers. Studio adds asking DeenAI anything.',
+      aiSub: aiAskOn
         ? 'Reads your own clips, scores and posting record — and answers back.'
-        : 'A Pro feature — free accounts can look, not use',
+        : aiOn
+          ? 'Reads your own clips, scores and posting record. Asking is a Studio feature.'
+          : 'A Pro feature — free accounts can look, not use',
       aiCount: aiData ? plural(aiAllCards.length, 'insight').toUpperCase() : '',
       aiNote: aiData ? (aiOn ? 'from your own records' : 'sample output') : '',
       aiFootnote: aiOn
         ? 'Every figure above is counted from your own clips — DeenAI never invents a number.'
         : 'On Pro these are your own numbers, counted from your own clips.',
+      aiUpgrade: function (e) { stop(e); setUI({ screen: 'tokens' }); },
 
       // the headline insight
       aiHeadShow: Boolean(aiHead),
@@ -4075,7 +4188,6 @@
         : 'Answers use your numbers, never your transcripts.',
       aiHasAnswer: Boolean(UI.aiAnswer),
       aiAnswer: UI.aiAnswer,
-      aiUpgrade: function (e) { stop(e); setUI({ screen: 'tokens' }); },
 
       // ── Home ──
       needsCount: needsCount,
@@ -6769,12 +6881,12 @@
       // in a "Change" link beside a card number at the very bottom.
       planTitle: (function () {
         if (current.unlimited) return 'Owner';
-        var named = planList.filter(function (p) { return String(p.id) === String(current.plan); })[0];
-        return (named && named.name) || 'Free';
+        var named = currentPlanRecord();
+        return (named && named.name) || 'Basic';
       })(),
       planPriceLine: (function () {
         if (current.unlimited) return 'no limit, no renewal';
-        var named = planList.filter(function (p) { return String(p.id) === String(current.plan); })[0];
+        var named = currentPlanRecord();
         if (!named || named.id === 'free') return 'no charge';
         return (named.priceLabel || '') + (named.interval ? ' per ' + named.interval : '');
       })(),
@@ -6804,60 +6916,25 @@
       manageHint: current.stripeSubscriptionId
         ? 'Changing plan, cancelling and card details all open your secure Stripe billing page.'
         : 'Opens your secure Stripe billing page. Nothing is charged from here.',
-      planCards: planList.slice().sort(function (a, b) {
-        return planRank(a) - planRank(b);
-      }).map(function (p) {
-        var isCurrent = String(p.id || '').toLowerCase() === String(current.plan || '').toLowerCase();
-        // Free has no price id, so it can never be "chosen" -- the server
-        // refuses it with "Choose weekly, monthly, or yearly." The card
-        // nonetheless rendered an enabled Choose button to every paying
-        // customer, which is the only thing on the screen that looks like a
-        // downgrade. Downgrading means cancelling, and cancelling lives in the
-        // portal, so the card says that instead of throwing.
-        var isFreeCard = p.id === 'free';
-        var unavailable = p.enabled === false || (isFreeCard && !isCurrent);
+      // ── the pricing grid ──
+      // Three TIERS across, one billing period at a time. It used to be a flat
+      // list of every plan, which with two paid tiers would be seven cards in a
+      // row and no way to see that Pro and Studio are the same product at
+      // different heights. The period is a toggle above the grid, so a customer
+      // compares tiers at one price basis instead of comparing a weekly card
+      // with a yearly one.
+      billingPeriods: BILLING_PERIODS.map(function (period) {
+        var on = period.id === billingPeriod;
         return {
-          name: p.name || p.id || '',
-          price: p.priceLabel || (p.id === 'free' ? 'Free' : 'Price not set'),
-          per: p.interval && p.interval !== 'one-time' ? 'per ' + p.interval : '',
-          // The markup already writes the word after it, so pluralising here
-          // produced "40 tokens tokens" on every card.
-          tokens: p.tokens != null ? String(p.tokens) : '',
-          // The server has computed exactly what a paid plan adds and exactly
-          // what free already includes since the plan split was built, and
-          // shipped both to the browser in publicBilling -- where nothing has
-          // ever rendered them. A free user had no screen telling them what
-          // paying changes, and the free card never said how much it already
-          // does. Both are named here, from the server's own lists, so the two
-          // can never drift from what the gates enforce.
-          lines: [{ text: p.description || '' }]
-            .concat(p.id === 'free'
-              ? (DATA.billing && DATA.billing.freeIncludes || []).map(function (t) { return { text: t }; })
-              : Object.keys(DATA.billing && DATA.billing.proFeatures || {}).map(function (k) {
-                return { text: DATA.billing.proFeatures[k] };
-              }))
-            .filter(function (l) { return l.text; }),
-          hasTag: Boolean(isCurrent || p.badge),
-          tag: isCurrent ? 'Current plan' : (p.badge || ''),
-          tagStyle: 'align-self: flex-start; padding: 2px 8px; border-radius: 20px; font-size: 9.5px; font-weight: 700; background: ' +
-            (isCurrent ? 'rgba(217,180,120,.16); color: #F0D6A6;' : 'rgba(127,209,166,.14); color: #7FD1A6;'),
-          cardStyle: 'display: flex; flex-direction: column; gap: 9px; padding: 14px; border-radius: 12px; border: 1px solid ' +
-            (isCurrent ? 'rgba(217,180,120,.45); background: rgba(217,180,120,.05);' : '#1E1E22; background: #121214;'),
-          cta: isCurrent ? 'Current' : isFreeCard ? 'Cancel to return here' : unavailable ? 'Not available' : 'Choose',
-          btnStyle: 'margin-top: auto; padding: 10px 12px; border-radius: 8px; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: ' +
-            (isCurrent || unavailable ? 'default' : 'pointer') + '; border: 1px solid ' +
-            (isCurrent || unavailable ? '#26262A; background: #17171A; color: #6E6E76;' : 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: #F0D6A6;'),
-          choose: function (e) {
-            stop(e);
-            if (isCurrent) return;
-            if (isFreeCard) { toast('To go back to Free, cancel your plan under Manage billing.'); return; }
-            if (unavailable) { toast(p.name + ' is not configured for checkout yet.'); return; }
-            global.StudioAdapter.onChoosePlan(p.id);
-          },
+          label: period.label,
+          select: function (e) { stop(e); setUI({ billingPeriod: period.id }); },
+          style: 'padding: 6px 14px; border: 0; border-radius: 20px; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .14s ease, color .14s ease; '
+            + (on ? 'background: rgba(217,180,120,.16); color: #F0D6A6;' : 'background: transparent; color: #8B8B93;'),
         };
       }),
-      // Buying tokens on their own. The endpoint has always existed; the screen
-      // simply rendered an empty list.
+      periodNote: billingPeriod === 'yearly' ? 'Two months free on every yearly plan' : '',
+      tierCards: tierCards,
+
       packs: topupList.map(function (pk) {
         var unavailable = pk.enabled === false;
         return {

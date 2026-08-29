@@ -25,9 +25,21 @@ import { config } from './config.js';
  * doing it — a shop window, not a side door.
  */
 
-/** The one plan gate for this feature, named in test/plan-gating.test.mjs. */
+/**
+ * The two plan gates for this feature, named in test/plan-gating.test.mjs.
+ *
+ * They are deliberately separate. The INSIGHTS are arithmetic over the
+ * account's own records and cost nothing to serve, so Pro keeps them. ASK
+ * spends a slot on the render box's Ollama and is what Studio is for. A single
+ * gate would have meant either giving Studio's compute away with Pro or taking
+ * back something Pro already shipped with.
+ */
 export function deenaiAccess(user) {
-  return billing.isPaid(user) || billing.isUnlimited(user);
+  return billing.atLeast(user, 'pro');
+}
+
+export function deenaiAskAccess(user) {
+  return billing.atLeast(user, 'studio');
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -269,6 +281,9 @@ export async function ask(user, question) {
   const q = String(question || '').trim();
   if (!q) throw Object.assign(new Error('Ask a question first.'), { statusCode: 400 });
   if (q.length > 500) throw Object.assign(new Error('Keep the question under 500 characters.'), { statusCode: 400 });
+  if (!deenaiAskAccess(user)) {
+    throw Object.assign(new Error('Asking DeenAI is a Studio feature. Pro shows the insights; Studio answers questions.'), { statusCode: 403 });
+  }
   if (config.processingMode !== 'remote') {
     throw Object.assign(new Error('DeenAI answers run on the render worker, which this deployment does not have connected.'), { statusCode: 503 });
   }

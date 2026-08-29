@@ -1551,14 +1551,23 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/api/deenai') {
     if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
     if (!deenai.deenaiAccess(currentUser)) {
-      return json(res, 200, { pro: false, demo: true, insights: deenai.demoInsights(), metrics: deenai.demoMetrics() });
+      return json(res, 200, { pro: false, demo: true, ask: false, insights: deenai.demoInsights(), metrics: deenai.demoMetrics() });
     }
-    return json(res, 200, { pro: true, demo: false, insights: deenai.insights(currentUser), metrics: deenai.metrics(currentUser) });
+    return json(res, 200, {
+      pro: true, demo: false, ask: deenai.deenaiAskAccess(currentUser),
+      insights: deenai.insights(currentUser), metrics: deenai.metrics(currentUser),
+    });
   }
   if (method === 'POST' && pathname === '/api/deenai/ask') {
     if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
-    if (!deenai.deenaiAccess(currentUser)) {
-      return json(res, 403, { error: 'DeenAI is a Pro feature. Upgrade to ask it anything.' });
+    // Pro reaches this route and is refused HERE rather than at the tab, so the
+    // screen can show a Studio prompt beside real insights instead of a demo.
+    if (!deenai.deenaiAskAccess(currentUser)) {
+      return json(res, 403, {
+        error: deenai.deenaiAccess(currentUser)
+          ? 'Asking DeenAI is a Studio feature. Pro shows the insights; Studio answers questions.'
+          : 'DeenAI is a Pro feature. Upgrade to see your own numbers.',
+      });
     }
     let body;
     try { body = await readBody(req, 64 * 1024); } catch (error) { return json(res, 400, { error: error.message }); }

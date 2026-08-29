@@ -10,41 +10,144 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const secondsToMs = value => Math.max(0, Number(value || 0) * 1000);
 const cleanEmail = value => String(value || '').trim().toLowerCase();
 
-export const PLAN_ORDER = ['weekly', 'monthly', 'yearly'];
-export const TOPUP_ORDER = ['boost100', 'boost300', 'boost750'];
-
-function periodMs(interval) {
-  if (interval === 'weekly') return 7 * 24 * 60 * 60 * 1000;
-  if (interval === 'yearly') return 365 * 24 * 60 * 60 * 1000;
+/**
+ * Three tiers, each sold at three billing periods.
+ *
+ * What was here before called weekly/monthly/yearly "plans", which made a
+ * BILLING PERIOD look like a product tier: there was one paid tier sold three
+ * ways. Tiers and periods are separate axes now, and the plan id carries both
+ * (`pro_monthly`, `studio_yearly`).
+ *
+ * The three original ids are still accepted everywhere and mean Pro at that
+ * period -- `normalisePlanId` maps them. Every live subscriber is on one of
+ * them, stored on their record and inside Stripe's own metadata, so dropping
+ * them would move paying customers onto the free plan on the next webhook.
+ */
+/**
+ * How long a plan's period runs.
+ *
+ * Takes a PLAN ID, which now carries its tier: 'pro_weekly', not 'weekly'.
+ * Reading it as a bare interval would quietly give every weekly subscriber a
+ * 30-day period -- the fallback, not an error.
+ */
+function periodMs(planId) {
+  const id = String(planId || '');
+  if (id === 'weekly' || id.endsWith('_weekly')) return 7 * 24 * 60 * 60 * 1000;
+  if (id === 'yearly' || id.endsWith('_yearly')) return 365 * 24 * 60 * 60 * 1000;
   return 30 * 24 * 60 * 60 * 1000;
 }
 
+export const TIER_ORDER = ['basic', 'pro', 'studio'];
+export const PERIOD_ORDER = ['weekly', 'monthly', 'yearly'];
+const TIER_RANK = { basic: 0, pro: 1, studio: 2 };
+
+export const TOPUP_ORDER = ['boost100', 'boost300', 'boost750'];
+
+export const PLAN_ORDER = [
+  'pro_weekly', 'pro_monthly', 'pro_yearly',
+  'studio_weekly', 'studio_monthly', 'studio_yearly',
+];
+
+/** The three ids that predate tiers. Each one means Pro at that period. */
+const LEGACY_PLAN_IDS = { weekly: 'pro_weekly', monthly: 'pro_monthly', yearly: 'pro_yearly' };
+
+export function normalisePlanId(planId) {
+  const id = String(planId || 'free');
+  return LEGACY_PLAN_IDS[id] || id;
+}
+
+export const TIERS = Object.freeze({
+  basic: Object.freeze({
+    id: 'basic', name: 'Basic', badge: 'Free',
+    tagline: `Try the whole studio for ${config.stripeTrialDays} days.`,
+  }),
+  pro: Object.freeze({
+    id: 'pro', name: 'Pro', badge: 'Most popular',
+    tagline: 'Everything you need to publish consistently.',
+  }),
+  studio: Object.freeze({
+    id: 'studio', name: 'Studio', badge: 'For channels at scale',
+    tagline: 'Ask DeenAI, approve on autopilot, post more every day.',
+  }),
+});
+
+const PLAN_GRID = {
+  pro: {
+    weekly: { tokens: () => config.tokensWeekly, price: () => config.stripePriceWeekly, label: () => config.planPriceWeeklyLabel },
+    monthly: { tokens: () => config.tokensMonthly, price: () => config.stripePriceMonthly, label: () => config.planPriceMonthlyLabel },
+    yearly: { tokens: () => config.tokensYearly, price: () => config.stripePriceYearly, label: () => config.planPriceYearlyLabel },
+  },
+  studio: {
+    weekly: { tokens: () => config.tokensStudioWeekly, price: () => config.stripePriceStudioWeekly, label: () => config.planPriceStudioWeeklyLabel },
+    monthly: { tokens: () => config.tokensStudioMonthly, price: () => config.stripePriceStudioMonthly, label: () => config.planPriceStudioMonthlyLabel },
+    yearly: { tokens: () => config.tokensStudioYearly, price: () => config.stripePriceStudioYearly, label: () => config.planPriceStudioYearlyLabel },
+  },
+};
+
+const PERIOD_NAMES = { weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' };
+
 export function plans() {
-  return {
+  const out = {
     free: {
-      id: 'free', name: 'Free', interval: 'one-time', badge: 'Test drive',
+      id: 'free', tier: 'basic', period: 'once', interval: 'one-time', name: 'Basic', badge: 'Free',
       tokens: config.tokensFree, priceId: '', enabled: true,
-      description: 'Try the studio before upgrading.',
-    },
-    weekly: {
-      id: 'weekly', name: 'Weekly', interval: 'week', badge: 'Start small',
-      tokens: config.tokensWeekly, priceId: config.stripePriceWeekly, priceLabel: config.planPriceWeeklyLabel,
-      enabled: Boolean(config.stripePriceWeekly),
-      description: 'Affordable access for occasional lecture clipping.',
-    },
-    monthly: {
-      id: 'monthly', name: 'Monthly', interval: 'month', badge: 'Most popular',
-      tokens: config.tokensMonthly, priceId: config.stripePriceMonthly, priceLabel: config.planPriceMonthlyLabel,
-      enabled: Boolean(config.stripePriceMonthly),
-      description: 'The best balance for creators posting consistently.',
-    },
-    yearly: {
-      id: 'yearly', name: 'Yearly', interval: 'year', badge: 'Best value',
-      tokens: config.tokensYearly, priceId: config.stripePriceYearly, priceLabel: config.planPriceYearlyLabel,
-      enabled: Boolean(config.stripePriceYearly),
-      description: 'The lowest long-term cost for regular publishing.',
+      description: `Try the studio for ${config.stripeTrialDays} days with ${config.tokensFree} tokens.`,
     },
   };
+  for (const tier of ['pro', 'studio']) {
+    for (const period of PERIOD_ORDER) {
+      const cell = PLAN_GRID[tier][period];
+      const priceId = cell.price();
+      out[`${tier}_${period}`] = {
+        id: `${tier}_${period}`, tier, period, interval: period,
+        name: `${TIERS[tier].name} ${PERIOD_NAMES[period]}`,
+        badge: period === 'monthly' ? 'Most popular' : period === 'yearly' ? 'Two months free' : 'Start small',
+        tokens: cell.tokens(), priceId, priceLabel: cell.label(),
+        enabled: Boolean(priceId),
+        description: TIERS[tier].tagline,
+      };
+    }
+  }
+  return out;
+}
+
+/**
+ * Which tier this account is on.
+ *
+ * The operator counts as Studio: the person running the product must never be
+ * locked out of a feature of it, which is what isUnlimited has always meant.
+ */
+export function tierOf(user) {
+  if (isUnlimited(user)) return 'studio';
+  return paidTierOf(user);
+}
+
+/**
+ * The tier this account actually PAYS for, ignoring the operator's unlimited
+ * flag.
+ *
+ * Feature access and queue position are not the same question. The operator
+ * must never be locked out of a feature of their own product -- but letting
+ * that same flag jump the render queue puts the owner's test import in front
+ * of a paying customer's lecture on a single-slot worker. A test caught
+ * exactly that.
+ */
+export function paidTierOf(user) {
+  if (!user) return 'basic';
+  const billing = ensureUserBilling(user);
+  const id = normalisePlanId(billing?.plan || 'free');
+  if (id === 'free' || !billing?.plan) return 'basic';
+  return id.startsWith('studio') ? 'studio' : 'pro';
+}
+
+/** Paid-tier comparison, for the things money buys rather than role does. */
+export function paysForAtLeast(user, tier) {
+  return TIER_RANK[paidTierOf(user)] >= (TIER_RANK[tier] ?? 99);
+}
+
+/** The one comparison the feature gates use. */
+export function atLeast(user, tier) {
+  return TIER_RANK[tierOf(user)] >= (TIER_RANK[tier] ?? 99);
 }
 
 export function topups() {
@@ -80,7 +183,7 @@ function planForPrice(priceId = '') {
 }
 
 function allowance(planId) {
-  const plan = plans()[planId] || plans().free;
+  const plan = plans()[normalisePlanId(planId)] || plans().free;
   return Math.max(0, Number(plan.tokens || 0));
 }
 
@@ -98,7 +201,7 @@ function allowance(planId) {
  * so the customer's first paid day starts on a clean full allowance.
  */
 function walletAllowance(billing = {}, user = null) {
-  const planId = billing.plan || 'free';
+  const planId = normalisePlanId(billing.plan || 'free');
   const full = allowance(planId);
   // The free plan IS the trial: a fixed number of tokens inside a fixed number
   // of days. Once the window closes the allowance is nothing, not a smaller
@@ -221,11 +324,42 @@ export function ensureUserBilling(user) {
  * PRO is the exhaustive list. Anything not named here is core and free, and
  * test/plan-gating.test.mjs fails if a gate appears anywhere else.
  */
-export const PRO_FEATURES = Object.freeze({
-  watermark: 'Remove the DeenClipped watermark, or put your own name there instead',
-  templates: 'Every template in the catalogue, not only the default style',
-  deenai: 'DeenAI — growth insights from your own numbers, and answers on tap',
+/**
+ * Every feature a plan can unlock, and the LOWEST tier that has it.
+ *
+ * One table, because there used to be two truths -- a list of Pro features and
+ * a separate function deciding who got them -- and a feature could be in the
+ * list without a gate, or gated without ever being advertised. `planFeatures`
+ * is derived from this, the pricing screen is derived from this, and the
+ * gate-law test asserts this table against the gates that read it.
+ */
+export const FEATURES = Object.freeze({
+  watermark: Object.freeze({ tier: 'pro', label: 'Remove the DeenClipped watermark' }),
+  templates: Object.freeze({ tier: 'pro', label: 'Every template in the catalogue, not only the default style' }),
+  deenai: Object.freeze({ tier: 'pro', label: 'DeenAI insights — growth advice counted from your own clips' }),
+  deenaiAsk: Object.freeze({ tier: 'studio', label: 'Ask DeenAI anything, answered on our own server' }),
+  // NOT auto-approve: automation with a minimum score has always been free for
+  // every account (`automationSettings`, up to 20 clips a lecture), and putting
+  // a fence around a feature people already have takes something away rather
+  // than selling something new.
+  priorityRender: Object.freeze({ tier: 'studio', label: 'Your lectures jump the render queue' }),
+  extraSlots: Object.freeze({ tier: 'studio', label: `Post up to ${config.postSlotsStudio} times a day, not four` }),
 });
+
+/** Kept as a name because the marketing pages and tests speak in these terms. */
+export const PRO_FEATURES = Object.freeze(Object.fromEntries(
+  Object.entries(FEATURES).filter(([, f]) => f.tier === 'pro').map(([key, f]) => [key, f.label]),
+));
+
+export const STUDIO_FEATURES = Object.freeze(Object.fromEntries(
+  Object.entries(FEATURES).filter(([, f]) => f.tier === 'studio').map(([key, f]) => [key, f.label]),
+));
+
+/** What a tier includes, cumulative: Studio has everything Pro has. */
+export function featuresForTier(tier) {
+  const rank = TIER_RANK[tier] ?? 0;
+  return Object.fromEntries(Object.entries(FEATURES).map(([key, f]) => [key, rank >= TIER_RANK[f.tier]]));
+}
 
 export const FREE_INCLUDES = Object.freeze([
   'Publishing straight to TikTok, YouTube and Instagram',
@@ -237,8 +371,7 @@ export const FREE_INCLUDES = Object.freeze([
 
 /** Which Pro features this account has. Everything else is core. */
 export function planFeatures(user) {
-  const paid = isPaid(user);
-  return { watermark: paid, templates: paid, deenai: paid || isUnlimited(user) };
+  return featuresForTier(tierOf(user));
 }
 
 // "Pro" for feature gates: any plan that is not free. The admin plan counts --
@@ -338,6 +471,15 @@ export function publicBilling(user) {
       'Purchased top-up tokens do not expire when a subscription renews',
     ].filter(Boolean),
     proFeatures: PRO_FEATURES,
+    // What each tier ADDS over the one below it, from the same table the gates
+    // read. The screen used to repeat one flat Pro list on every card, which
+    // with three tiers would show the same three lines three times and hide
+    // the actual difference between them.
+    tierAdds: {
+      basic: [],
+      pro: Object.values(PRO_FEATURES),
+      studio: Object.values(STUDIO_FEATURES),
+    },
     // The dashboard needs to distinguish "no tokens" from "address not
     // confirmed yet" -- they are refused the same way and mean different things.
     emailVerificationRequired: auth.verificationRequired(),
@@ -659,14 +801,18 @@ export async function createCheckoutSession(user, planId) {
   metrics.event('checkout_started');
   ensureBillingState();
   if (!user) throw new Error('Sign in to continue.');
-  const plan = plans()[planId];
-  if (!plan || !PLAN_ORDER.includes(plan.id)) throw new Error('Choose weekly, monthly, or yearly.');
+  // Normalised, because the three original ids are still in the wild: in
+  // Stripe metadata, in any link someone saved, and in every test written
+  // before tiers existed. Refusing them here would break checkout for exactly
+  // the customers who already pay.
+  const plan = plans()[normalisePlanId(planId)];
+  if (!plan || !PLAN_ORDER.includes(plan.id)) throw new Error('Choose a Pro or Studio plan.');
   if (!plan.priceId) throw new Error(`${plan.name} does not have a Stripe price ID configured yet.`);
 
   const billing = ensureUserBilling(user);
   const existing = await liveSubscription(user);
   if (existing) {
-    if (billing.plan === plan.id) throw new Error(`You are already on ${plan.name}.`);
+    if (normalisePlanId(billing.plan) === plan.id) throw new Error(`You are already on ${plan.name}.`);
     return switchSubscriptionPlan(user, existing, plan);
   }
 
@@ -1107,20 +1253,52 @@ export function plansPage(user, { error = '', info = '', returnTo = '/' } = {}) 
       ? `${trialDays}-day trial with ${trialTokens} tokens, then your full allowance`
       : `${trialDays}-day trial when shown at checkout`;
   const returnValue = esc(safeReturn(returnTo));
-  const planCards = PLAN_ORDER.map(id => bill.plans?.[id]).filter(Boolean).map(plan => {
-    const configured = Boolean(plan.priceId);
-    const current = cur.plan === plan.id && cur.status !== 'free';
-    const cta = current ? 'Current plan' : configured ? `Start ${trialDays || 7}-day trial` : 'Stripe price required';
-    return `<article class="dc-plan ${plan.id === 'monthly' ? 'featured' : ''}">
-      <div class="plan-top"><span class="badge">${esc(plan.badge || '')}</span>${plan.id === 'monthly' ? '<span class="popular">Recommended</span>' : ''}</div>
-      <h2>${esc(plan.name)}</h2>
-      <div class="money">${esc(plan.priceLabel || 'Set price')}<small> / ${esc(plan.interval)}</small></div>
-      <p>${esc(plan.description)}</p>
-      <div class="tokens"><b>${esc(plan.tokens)}</b><span>tokens included every ${esc(plan.interval)}</span></div>
-      <ul><li>${esc(tokenRate())} token per selected source minute</li><li>Review, editor, templates and publishing</li><li>Template-only rerenders stay free</li><li>${esc(trialLine)}</li></ul>
-      <form method="post" action="/billing/checkout"><input type="hidden" name="plan" value="${esc(plan.id)}"><input type="hidden" name="returnTo" value="${returnValue}"><button type="submit" ${configured && !current ? '' : 'disabled'}>${esc(cta)}</button></form>
+  // Three tier columns, each carrying its own three periods, rather than six
+  // flat cards in a row. A period is a way to PAY for a tier, not a product of
+  // its own -- laid out flat, "Pro Weekly" and "Studio Yearly" sit side by side
+  // as though a customer were choosing between them.
+  const tierColumn = tier => {
+    const periods = PERIOD_ORDER.map(period => bill.plans?.[`${tier}_${period}`]).filter(Boolean);
+    if (!periods.length) return '';
+    const monthly = periods.find(plan => plan.period === 'monthly') || periods[0];
+    const onThis = periods.some(plan => plan.id === normalisePlanId(cur.plan) && cur.status !== 'free');
+    const adds = tier === 'studio' ? Object.values(STUDIO_FEATURES) : Object.values(PRO_FEATURES);
+    const buttons = periods.map(plan => {
+      const configured = Boolean(plan.priceId);
+      const current = normalisePlanId(cur.plan) === plan.id && cur.status !== 'free';
+      // Spelled out rather than derived: 'weekly'.replace('ly','') is 'week',
+      // but the first attempt patched around that and turned every weekly
+      // button into "a year".
+      const label = { weekly: 'a week', monthly: 'a month', yearly: 'a year' }[plan.period] || plan.period;
+      const money = configured ? esc(plan.priceLabel || '') : 'soon';
+      return `<form method="post" action="/billing/checkout">
+        <input type="hidden" name="plan" value="${esc(plan.id)}">
+        <input type="hidden" name="returnTo" value="${returnValue}">
+        <button type="submit" class="${current ? 'is-current' : ''}" ${configured && !current ? '' : 'disabled'}>
+          <b>${money}</b><small>${esc(label)}</small>
+        </button>
+      </form>`;
+    }).join('');
+    return `<article class="dc-plan ${tier === 'pro' ? 'featured' : ''}">
+      <div class="plan-top"><span class="badge">${esc(TIERS[tier].badge)}</span>${onThis ? '<span class="popular">Your plan</span>' : ''}</div>
+      <h2>${esc(TIERS[tier].name)}</h2>
+      <p>${esc(TIERS[tier].tagline)}</p>
+      <div class="tokens"><b>${esc(Number(monthly.tokens).toLocaleString())}</b><span>tokens a month${periods.filter(plan => plan.period !== 'monthly').map(plan => ` · ${Number(plan.tokens).toLocaleString()} ${plan.period}`).join('')}</span></div>
+      <ul><li>Everything in ${tier === 'studio' ? 'Pro' : 'Basic'}, plus:</li>${adds.map(line => `<li>${esc(line)}</li>`).join('')}<li>${esc(trialLine)}</li></ul>
+      <div class="plan-periods">${buttons}</div>
     </article>`;
-  }).join('');
+  };
+
+  const basicCard = `<article class="dc-plan">
+    <div class="plan-top"><span class="badge">${esc(TIERS.basic.badge)}</span>${cur.status === 'free' || !cur.plan || cur.plan === 'free' ? '<span class="popular">Your plan</span>' : ''}</div>
+    <h2>${esc(TIERS.basic.name)}</h2>
+    <p>${esc(TIERS.basic.tagline)}</p>
+    <div class="tokens"><b>${esc(bill.plans?.free?.tokens ?? 0)}</b><span>tokens to try it with</span></div>
+    <ul>${FREE_INCLUDES.map(line => `<li>${esc(line)}</li>`).join('')}</ul>
+    <div class="plan-periods"><button type="button" disabled>Where you start</button></div>
+  </article>`;
+
+  const planCards = basicCard + tierColumn('pro') + tierColumn('studio');
   const topupCards = TOPUP_ORDER.map(id => bill.topups?.[id]).filter(Boolean).map(pack => {
     const configured = Boolean(pack.priceId);
     return `<article class="dc-topup ${pack.id === 'boost300' ? 'featured' : ''}">
@@ -1143,6 +1321,6 @@ export function plansPage(user, { error = '', info = '', returnTo = '/' } = {}) 
 .wallet-fact span{display:block;font-size:9.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
 .wallet-fact b{display:block;margin-top:6px;font-size:26px;font-weight:900;letter-spacing:-.04em;line-height:1.05}
 .wallet-fact i{display:block;margin-top:4px;font-size:11px;font-style:normal;color:var(--muted);line-height:1.45}
-.bar{height:6px;background:#26262b;border-radius:999px;overflow:hidden;margin-top:16px}.bar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--gold),var(--gold2));width:${pct}%}.section-title{text-align:center;max-width:720px;margin:34px auto 18px}.section-title span{font-size:10px;text-transform:uppercase;letter-spacing:.12em;font-weight:900;color:var(--gold2)}.section-title h2{font-size:26px;letter-spacing:-.035em;margin:8px 0}.section-title p{color:var(--muted);font-size:14px;margin:0}.plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.dc-plan,.dc-topup{border:1px solid var(--line);border-radius:24px;background:linear-gradient(180deg,rgba(255,255,255,.048),rgba(255,255,255,.018));padding:21px;display:flex;flex-direction:column;gap:12px;position:relative}.dc-plan.featured,.dc-topup.featured{border-color:rgba(228,188,113,.47);box-shadow:0 0 0 1px rgba(228,188,113,.10) inset,0 26px 75px rgba(228,188,113,.06)}.plan-top{display:flex;justify-content:space-between;align-items:center}.badge,.popular{min-height:24px;padding:0 9px;display:inline-flex;align-items:center;border-radius:999px;background:rgba(228,188,113,.10);color:var(--gold2);font-size:9px;font-weight:850}.popular{background:var(--gold);color:#171108}.dc-plan h2,.dc-topup h3{font-size:22px;margin:0}.money{font-size:35px;font-weight:950;letter-spacing:-.055em}.money small,.topup-price small{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:0}.dc-plan p,.dc-topup p{color:var(--muted);font-size:12.5px;line-height:1.55;margin:0}.tokens{padding:12px;border-radius:15px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06)}.tokens b,.tokens span{display:block}.tokens b{font-size:24px}.tokens span{font-size:10px;color:var(--muted);margin-top:2px}.dc-plan ul{margin:0;padding:0;list-style:none;display:grid;gap:8px;color:#d5d0c8;font-size:11.5px}.dc-plan li:before{content:'✓';color:var(--green);margin-right:8px}.dc-plan button,.dc-topup button,.free button{width:100%;height:46px;border:0;border-radius:13px;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#171108;font-weight:850;cursor:pointer;margin-top:auto}.dc-plan button:disabled,.dc-topup button:disabled{opacity:.42;cursor:not-allowed}.topups{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.topup-value b,.topup-value span{display:block}.topup-value b{font-size:38px;letter-spacing:-.055em}.topup-value span{font-size:11px;color:var(--muted)}.topup-price{font-size:20px;font-weight:850}.shop-note{text-align:center;color:var(--muted);font-size:12px;margin:16px auto 0;max-width:760px}.free{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:18px;padding:17px 20px;border:1px solid var(--line);border-radius:20px;background:rgba(255,255,255,.025)}.free strong,.free span{display:block}.free span{color:var(--muted);font-size:12px;margin-top:3px}.free button{width:auto;min-width:210px;background:#0e0e10;color:var(--text);border:1px solid var(--line)}.alerts{margin-bottom:14px}.alert{padding:12px 14px;border-radius:14px;font-size:12px;margin-bottom:8px}.alert.bad{background:rgba(239,107,122,.1);border:1px solid rgba(239,107,122,.25);color:#ffb7bf}.alert.good{background:rgba(89,212,147,.1);border:1px solid rgba(89,212,147,.25);color:#baffd5}.foot{text-align:center;color:var(--muted);font-size:11px;line-height:1.65;margin:28px auto 8px;max-width:850px}@media(max-width:900px){body{padding:16px}.plans,.topups,.wallet{grid-template-columns:1fr}.hero h1{font-size:42px}.top{height:auto;align-items:flex-start;flex-direction:column;margin-bottom:30px}.free{align-items:stretch;flex-direction:column}.free button{width:100%}}@media(max-width:560px){.account span{display:none}.hero h1{font-size:38px}.wallet-main,.wallet-rule,.dc-plan,.dc-topup{border-radius:19px}}
+.bar{height:6px;background:#26262b;border-radius:999px;overflow:hidden;margin-top:16px}.bar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--gold),var(--gold2));width:${pct}%}.section-title{text-align:center;max-width:720px;margin:34px auto 18px}.section-title span{font-size:10px;text-transform:uppercase;letter-spacing:.12em;font-weight:900;color:var(--gold2)}.section-title h2{font-size:26px;letter-spacing:-.035em;margin:8px 0}.section-title p{color:var(--muted);font-size:14px;margin:0}.plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.dc-plan,.dc-topup{border:1px solid var(--line);border-radius:24px;background:linear-gradient(180deg,rgba(255,255,255,.048),rgba(255,255,255,.018));padding:21px;display:flex;flex-direction:column;gap:12px;position:relative}.dc-plan.featured,.dc-topup.featured{border-color:rgba(228,188,113,.47);box-shadow:0 0 0 1px rgba(228,188,113,.10) inset,0 26px 75px rgba(228,188,113,.06)}.plan-top{display:flex;justify-content:space-between;align-items:center}.badge,.popular{min-height:24px;padding:0 9px;display:inline-flex;align-items:center;border-radius:999px;background:rgba(228,188,113,.10);color:var(--gold2);font-size:9px;font-weight:850}.popular{background:var(--gold);color:#171108}.dc-plan h2,.dc-topup h3{font-size:22px;margin:0}.money{font-size:35px;font-weight:950;letter-spacing:-.055em}.money small,.topup-price small{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:0}.dc-plan p,.dc-topup p{color:var(--muted);font-size:12.5px;line-height:1.55;margin:0}.tokens{padding:12px;border-radius:15px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06)}.tokens b,.tokens span{display:block}.tokens b{font-size:24px}.tokens span{font-size:10px;color:var(--muted);margin-top:2px}.dc-plan ul{margin:0;padding:0;list-style:none;display:grid;gap:8px;color:#d5d0c8;font-size:11.5px}.dc-plan li:before{content:'✓';color:var(--green);margin-right:8px}.dc-plan button,.dc-topup button,.free button{width:100%;height:46px;border:0;border-radius:13px;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#171108;font-weight:850;cursor:pointer;margin-top:auto}.plan-periods{margin-top:auto;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.plan-periods form{display:contents}.dc-plan .plan-periods button{height:auto;padding:9px 4px;margin-top:0;border-radius:12px;display:flex;flex-direction:column;gap:2px;align-items:center;line-height:1.15}.plan-periods button b{font-size:14px;font-weight:900}.plan-periods button small{font-size:9px;font-weight:700;opacity:.72}.plan-periods button.is-current{background:#0e0e10;color:var(--gold2);border:1px solid rgba(228,188,113,.45)}.dc-plan button:disabled,.dc-topup button:disabled{opacity:.42;cursor:not-allowed}.topups{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.topup-value b,.topup-value span{display:block}.topup-value b{font-size:38px;letter-spacing:-.055em}.topup-value span{font-size:11px;color:var(--muted)}.topup-price{font-size:20px;font-weight:850}.shop-note{text-align:center;color:var(--muted);font-size:12px;margin:16px auto 0;max-width:760px}.free{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:18px;padding:17px 20px;border:1px solid var(--line);border-radius:20px;background:rgba(255,255,255,.025)}.free strong,.free span{display:block}.free span{color:var(--muted);font-size:12px;margin-top:3px}.free button{width:auto;min-width:210px;background:#0e0e10;color:var(--text);border:1px solid var(--line)}.alerts{margin-bottom:14px}.alert{padding:12px 14px;border-radius:14px;font-size:12px;margin-bottom:8px}.alert.bad{background:rgba(239,107,122,.1);border:1px solid rgba(239,107,122,.25);color:#ffb7bf}.alert.good{background:rgba(89,212,147,.1);border:1px solid rgba(89,212,147,.25);color:#baffd5}.foot{text-align:center;color:var(--muted);font-size:11px;line-height:1.65;margin:28px auto 8px;max-width:850px}@media(max-width:900px){body{padding:16px}.plans,.topups,.wallet{grid-template-columns:1fr}.hero h1{font-size:42px}.top{height:auto;align-items:flex-start;flex-direction:column;margin-bottom:30px}.free{align-items:stretch;flex-direction:column}.free button{width:100%}}@media(max-width:560px){.account span{display:none}.hero h1{font-size:38px}.wallet-main,.wallet-rule,.dc-plan,.dc-topup{border-radius:19px}}
   </style></head><body><main class="wrap"><div class="top"><a class="brand" href="/"><div class="logo">DC</div><div><strong>DeenClipped</strong><span>Plans & token shop</span></div></a><div class="account"><span>${esc(user?.email || user?.name || 'Signed in')}</span><a class="ghost" href="/app">Dashboard</a><form method="post" action="/auth/logout"><button class="ghost" type="submit">Log out</button></form></div></div><div class="alerts">${error ? `<div class="alert bad">${esc(error)}</div>` : ''}${info ? `<div class="alert good">${esc(info)}</div>` : ''}</div><section class="hero"><span class="eyebrow">Simple, affordable creator pricing</span><h1>Choose a plan. Add tokens only when you need them.</h1><p>DeenClipped keeps pricing tied to selected source minutes. Your subscription refreshes normally, while one-time top-up tokens stay in your wallet until you use them.</p></section><section class="wallet"><div class="wallet-top"><strong>Your wallet</strong><span class="wallet-plan">${esc(cur.plan || 'free')} plan</span></div><div class="wallet-facts"><div class="wallet-fact"><span>Available now</span><b>${esc(remaining)}</b><i>tokens you can spend today</i></div><div class="wallet-fact"><span>Used this period</span><b>${cur.unlimited ? '\u2014' : esc(String(Math.round(Number(cur.used || 0))))}</b><i>${cur.unlimited ? 'no usage limit on this plan' : 'resets when the plan renews'}</i></div><div class="wallet-fact"><span>Top-ups</span><b>${cur.unlimited ? '\u221e' : esc(String(Math.round(Number(cur.bonusTokens || 0))))}</b><i>bought tokens, never expire</i></div><div class="wallet-fact"><span>What it costs</span><b>${esc(String(bill.tokenRatePerMinute || 1))}/min</b><i>only the range you select is charged</i></div></div><div class="bar"><i></i></div></section><div class="section-title"><span>Subscriptions</span><h2>Built for different posting rhythms.</h2><p>Start small, publish consistently, or lock in the best annual value.</p></div><section class="plans">${planCards}</section><div class="section-title"><span>Token shop</span><h2>Need more without changing your plan?</h2><p>Buy a one-time token pack. Top-up tokens are added to your current wallet and do not disappear at your next renewal.</p></div><section class="topups" id="token-shop">${topupCards}</section><p class="shop-note">Token packs are optional and available alongside free, weekly, monthly and yearly plans. Stripe shows the final total before payment.</p><section class="free"><div><strong>Not ready to subscribe?</strong><span>Continue with free starter tokens and return to Plans & tokens from the dashboard whenever you need more.</span></div><form method="post" action="/billing/continue-free"><input type="hidden" name="returnTo" value="${returnValue}"><button type="submit">Continue with free tokens</button></form></section><div class="foot">Payments are handled by Stripe. DeenClipped does not store complete card details. Prices shown are configuration-driven labels and Stripe shows the final amount before payment.</div></main></body></html>`;
 }

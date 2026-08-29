@@ -150,7 +150,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **842 JS + 407 Python**
+- `npm test` and `npm run check` must pass. Currently **848 JS + 407 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -742,6 +742,63 @@ and this is that one.
   sign-ups in one file hit it and the failure reads as a broken route; the
   suite now shares one Pro session and tests band arithmetic by calling
   `metrics()` directly.
+
+## Three tiers, sold at three periods (v3.34.0, 29 Aug 2026)
+
+Youssef: "3 types of subscriptions ... basic which is free demo 3 days 40
+tokens, pro which is most uses ... and then for the last one maybe studio
+which gives you that ai plus multiple channel uploads".
+
+- **What was there was not three plans, it was one plan sold three ways.**
+  weekly/monthly/yearly were the "plans"; a BILLING PERIOD was doing the work
+  of a product tier. Tier and period are separate axes now and the plan id
+  carries both (`pro_monthly`, `studio_yearly`), so the grid is 2 paid tiers x
+  3 periods = 6 prices where there were 3.
+- **The three original ids still work everywhere** — `normalisePlanId` maps
+  them to Pro at that period. They live in Stripe's own metadata and on every
+  current subscriber's record, so refusing them would have thrown paying
+  customers onto the free plan at the next webhook, and a saved checkout link
+  would 400. Checkout, allowances, the period length, the "current plan" name
+  and the pricing grid all normalise. A test pins each one.
+- **`FEATURES` is one table: feature -> lowest tier that has it.** PRO_FEATURES,
+  STUDIO_FEATURES, `planFeatures()` and the pricing columns are all DERIVED
+  from it, so a feature cannot be sold without a gate or gated without being
+  sold. Both law tests assert the whole table.
+- **DeenAI split rather than moved.** Pro keeps the insights it shipped with
+  two days earlier (arithmetic over the account's own records, free to serve);
+  Studio adds Ask (a slot on the box's Ollama). Taking the whole feature back
+  off Pro would have been taking something away from people who had it.
+- **Auto-approve was NOT gated, and that was a correction mid-build.** It was
+  on the agreed Studio list until the code said otherwise: `automationSettings`
+  has always been free for every account, minimum score and all, up to 20 clips
+  a lecture. Fencing it would have removed a feature people already have.
+  Studio got `priorityRender` instead — new, and takes nothing from anyone.
+- **Feature access and queue position are different questions.** `tierOf`
+  counts the operator as Studio (they must never be locked out of their own
+  product); `paidTierOf` does not. The render queue and the posting windows use
+  the PAID one, or the owner's test import would preempt a customer's lecture
+  on a single-slot worker. A test caught exactly that and it stays.
+- **Extra posting windows are inserted between the configured ones**
+  (`postTimesFor` in slots.js), never spread evenly over 24 hours: the account
+  chose which part of the day it publishes in, and 8 slots a day must not mean
+  posting at 3am. 4 -> 07:00 08:15 09:30 12:00 14:30 17:00 18:45 20:30.
+- **The period toggle is not a filter.** It changes the price basis; all three
+  tiers stay on screen at every setting. That rule has its own test because the
+  screen once filtered by interval and showed a customer one paid plan with
+  nothing to compare it against.
+- Each column lists what it ADDS over the one before it, from the server's
+  lists. Repeating one flat list three times hides the difference being sold.
+- **Studio has no Stripe prices yet.** The column renders and says "Opening
+  soon" rather than offering a button that cannot charge anyone;
+  `STRIPE_PRICE_STUDIO_{WEEKLY,MONTHLY,YEARLY}` on Render arm it.
+
+## The notifications toggle was hidden behind having dismissed something
+
+The desktop-notifications switch lived INSIDE the `hasDismissed` branch of the
+bell dropdown, so the one control that turns notifications on was shown only to
+someone who had already dismissed a notification. It is the first row of the
+dropdown now, outside that branch, and says which of its three states it is in
+-- off, on, or blocked by the browser, which need different actions.
 
 ## How every reply ends (29 Aug 2026)
 

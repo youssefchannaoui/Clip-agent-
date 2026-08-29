@@ -8,7 +8,14 @@ const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deenclipped-pricing-'));
 process.env.DATA_DIR = dataDir;
 process.env.APP_SESSION_SECRET = 'pricing-test-secret-long-enough';
 
+// Every price configured, so the page renders the buttons rather than the
+// "not open for checkout yet" state.
+for (const key of ['WEEKLY', 'MONTHLY', 'YEARLY']) {
+  process.env['STRIPE_PRICE_' + key] = 'price_' + key.toLowerCase();
+  process.env['STRIPE_PRICE_STUDIO_' + key] = 'price_studio_' + key.toLowerCase();
+}
 const { config } = await import('../src/config.js');
+const billing = await import('../src/billing.js');
 
 test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
 
@@ -80,4 +87,26 @@ test('nothing is drawn over the top of scripture', () => {
   assert.equal(template.hookEnabled, false);
   assert.equal(template.captionBackgroundOpacity, 0, 'no box behind the ayah');
   assert.ok(template.vignette <= 0.2, 'a heavy vignette reads as a filter over scripture');
+});
+
+test('the plans page groups by tier, with each period priced correctly', () => {
+  // Six flat cards put "Pro Weekly" beside "Studio Yearly" as though they were
+  // rival products. Three columns, three prices each.
+  const page = billing.plansPage(null, {});
+  const columns = page.match(/<article class="dc-plan/g) || [];
+  assert.equal(columns.length, 3, 'Basic, Pro, Studio');
+  assert.match(page, />Basic</);
+  assert.match(page, />Pro</);
+  assert.match(page, />Studio</);
+
+  // Each period button says the period it charges for. Deriving that label by
+  // stripping "ly" made every WEEKLY button read "a year".
+  for (const [amount, label] of [['A$9', 'a week'], ['A$29', 'a month'], ['A$290', 'a year'],
+                                 ['A$19', 'a week'], ['A$59', 'a month'], ['A$590', 'a year']]) {
+    assert.ok(page.includes(`<b>${amount}</b><small>${label}</small>`),
+      `${amount} should be charged ${label}`);
+  }
+  // Studio names what it adds, not what Pro already had.
+  assert.match(page, /Everything in Pro, plus:/);
+  assert.match(page, /Everything in Basic, plus:/);
 });

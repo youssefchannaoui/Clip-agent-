@@ -161,8 +161,26 @@ test('the band names the worst destination and what to do about it', () => {
 });
 
 
+test('a Pro account gets its insights but is refused the ask', async () => {
+  // The split is the whole reason Studio exists. Pro must NOT see a demo here:
+  // its numbers are real, and only the question box is held back.
+  const view = await (await fetch(`${base}/api/deenai`, { headers: { Cookie: proSession.cookie } })).json();
+  assert.equal(view.pro, true);
+  assert.equal(view.ask, false, 'Pro sees real insights with asking held back');
+  const refused = await fetch(`${base}/api/deenai/ask`, {
+    method: 'POST', headers: { Cookie: proSession.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question: 'What should I clip next?' }),
+  });
+  assert.equal(refused.status, 403);
+  assert.match((await refused.json()).error, /Studio feature/);
+});
+
 test('ask refuses an empty question, an over-long one, and a deployment with no worker', async () => {
   const cookie = proSession.cookie;
+  // Studio, so the refusals under test are about the QUESTION and the worker,
+  // not about the tier.
+  const asker = store.state.authUsers.find(u => u.id === proSession.id);
+  asker.billing = { ...(asker.billing || {}), plan: 'studio_monthly', status: 'active' };
 
   const post = body => fetch(`${base}/api/deenai/ask`, {
     method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' },
