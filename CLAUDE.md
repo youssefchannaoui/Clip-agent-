@@ -493,6 +493,22 @@ platform rule each. Keep them apart when triaging the next report.
   (`[data-dc-dest-account]`) — platform and outcome are what carry the meaning
   — and the card wraps its actions onto their own line.
 
+## Saying "hand over" (29 Aug 2026)
+
+`/handover` — `.claude/skills/handover/SKILL.md`, in the repo so EVERY session
+gets it: the phone one, the cloud one, and the CLI one on the Mac. Youssef's
+instruction: "every time i say hand over in this or other chat it should give
+exact handover".
+
+- **A handover is a measurement, not a recollection.** Sessions share no memory
+  — only git and this file. So the skill measures: branch, unpushed work, other
+  branches, the real test numbers, CI, the Render deploy, and the box's version.
+  Anything it cannot reach it reports as unknown rather than omitting.
+- Output is **Current goal / State / Blockers / Next immediate action**, ten
+  bullets max, overwritten each time — never a stacked log, because this file
+  already holds the durable history.
+- It must name **who** each blocker is on, and must never carry a credential.
+
 ## Working from a phone (28 Aug 2026)
 
 Youssef works from Claude Code on his phone when he is out, so sessions start
