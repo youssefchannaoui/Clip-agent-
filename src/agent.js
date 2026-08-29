@@ -433,6 +433,40 @@ export function refreshPublishingStatus(clip) {
   clip.readyAt = clip.readyAt || Date.now();
 }
 
+/**
+ * Heal clips that went out somewhere but were filed as if they had not.
+ *
+ * `refreshPublishingStatus` only runs when a publish attempt finishes, so the
+ * v3.20.0 rule -- a clip that posted anywhere IS posted -- reached new clips
+ * and left the existing ones exactly as they were. Four clips live on YouTube
+ * still sat under "4 posts missed their slots" with a Post now button that
+ * would have posted them to YouTube a SECOND time, because the only thing
+ * separating "retry the destination that refused" from "post the whole set"
+ * is `postedAt`, and theirs was never set.
+ *
+ * Runs once at boot, over finished clips only: every target has reached a
+ * terminal state, at least one of them posted, and the clip still reads as
+ * unposted. A clip still publishing, or one where nothing landed, is left
+ * alone -- this corrects the record, it does not decide anything new.
+ */
+export function healPartialPublishes() {
+  let healed = 0;
+  for (const clip of state.clips || []) {
+    if (clip.postedAt) continue;
+    const targets = clip.targets || [];
+    if (!targets.length) continue;
+    if (!targets.some(target => target.status === 'posted')) continue;
+    if (!targets.every(finishedTarget)) continue;
+    refreshPublishingStatus(clip);
+    if (clip.postedAt) healed += 1;
+  }
+  if (healed) {
+    save();
+    log(`Corrected ${healed} clip(s) that had posted to at least one destination but were still filed as unposted.`, 'info');
+  }
+  return healed;
+}
+
 /** Destinations that have not posted yet -- what a retry is actually for. */
 export function unpostedTargets(clip) {
   return (clip?.targets || []).filter(target => target.status !== 'posted');

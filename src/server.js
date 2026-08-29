@@ -2139,6 +2139,11 @@ if (fatal.length) {
 
 server.listen(config.port, () => {
   console.log(`DeenClipped self-hosted engine listening on http://localhost:${config.port}`);
+  // Before anything schedules or posts: correct clips that went out to one
+  // destination and were filed as if they had gone nowhere. Left alone they
+  // sit under "missed their slots" for ever, and their button says "Post now"
+  // rather than "Retry TikTok" -- which would publish to YouTube twice.
+  agent.healPartialPublishes();
   agent.start();
   // Nothing anywhere held a second copy of state.json. Started here for the
   // same reason as the sweep below: importing this module in a test must not

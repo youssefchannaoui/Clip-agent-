@@ -150,7 +150,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **812 JS + 398 Python**
+- `npm test` and `npm run check` must pass. Currently **818 JS + 398 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -445,6 +445,17 @@ THAN THAT IT SHOULD NEVER RE RENDER."
   unposted, sat in the schedule as work, and offered "Post now", which re-ran
   the destination that had already refused. The failure now belongs to the
   destination -- the row says "Retry TikTok" and retries only that leg.
+  **The rule reached new clips only, and that was missed for a day (v3.29.1).**
+  `refreshPublishingStatus` runs when a publish attempt FINISHES, so every clip
+  filed before it kept its old shape: four clips live on YouTube still sat under
+  "4 posts missed their slots" with a Post now button that would have posted
+  them to YouTube a second time. Both symptoms hang off one field -- the overdue
+  filter is `!c.postedAt` and so is the Retry-vs-Post-now label -- so healing
+  `postedAt` fixes both. `healPartialPublishes()` runs once at boot over
+  FINISHED clips only (every target terminal, at least one posted, still filed
+  unposted); anything still publishing is left alone. A behaviour change that
+  only applies going forward should always be asked of the rows already on
+  disk.
 
 ## Alerts must survive a restart (v3.27.0, 29 Aug 2026)
 
