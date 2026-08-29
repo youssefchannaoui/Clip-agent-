@@ -484,14 +484,10 @@
         </div>
 
         <sc-if value="{{ deckMode }}" hint-placeholder-val="{{ false }}">
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 13px; padding: 10px 0 20px;">
+          <div style="display: flex; flex-direction: column; align-items: center; padding: 6px 0 14px;">
             <sc-if value="{{ deckHas }}" hint-placeholder-val="{{ true }}">
-              <div style="display: flex; flex-direction: column; align-items: center; gap: 13px;">
-                <div style="display: flex; flex-direction: column; gap: 7px; width: 268px;">
-                  <div style="position: relative; width: 100%; height: 3px; border-radius: 20px; background: #1D1D21; overflow: hidden;"><span style="{{ deckProgStyle }}"></span></div>
-                  <div style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: #8B8B93;"><span>{{ deckPos }} waiting</span><span style="margin-left: auto; color: #6E6E76;">{{ deckTally }}</span></div>
-                </div>
-                <div data-deck-card="1" data-clip="{{ deckClip.id }}" style="position: relative; width: 268px; aspect-ratio: 9 / 16; border-radius: 14px; overflow: hidden; border: 1px solid #26262A; background: #17171A; box-shadow: 0 30px 70px rgba(0,0,0,.55); animation: dcRise .18s ease;">
+              <div style="display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 26px;">
+                <div data-deck-card="1" data-clip="{{ deckClip.id }}" style="position: relative; flex: none; width: 268px; aspect-ratio: 9 / 16; border-radius: 14px; overflow: hidden; border: 1px solid #26262A; background: #17171A; box-shadow: 0 30px 70px rgba(0,0,0,.55); animation: dcRise .18s ease;">
                   <span style="{{ deckClip.thumbStyle }} position: absolute; inset: 0; width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0;"></span>
                   <span style="{{ deckShadeStyle }}"></span>
                   <span style="position: absolute; top: 10px; left: 10px; z-index: 3; display: flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px; border: 1px solid rgba(217,180,120,.4); background: rgba(10,10,12,.8); color: #F0D6A6; font-size: 11px; font-weight: 700;"><i class="ph-fill ph-lightning" style="font-size: 12px;"></i>{{ deckClip.score }}</span>
@@ -504,32 +500,50 @@
                   </sc-if>
                   <span style="position: absolute; left: 12px; bottom: 14px; z-index: 3; font-size: 10.5px; color: #BCBCC3;">{{ deckClip.duration }} · {{ deckClip.style }}</span>
                 </div>
-                <div style="display: flex; flex-direction: column; align-items: center; gap: 5px; width: 300px;">
-                  <span style="font-size: 12.5px; line-height: 1.45; font-weight: 500; color: #F2F2F4; text-align: center; text-wrap: pretty; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">{{ deckClip.caption }}</span>
-                  <span style="font-size: 10.5px; color: #6E6E76; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">{{ deckClip.lecTitle }}</span>
-                  <span style="{{ deckWhyStyle }}"><i class="ph ph-sparkle" style="font-size: 11px; flex: none; margin-top: 2px; color: #C9A87A;"></i>{{ deckWhy }}</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                  <button onClick="{{ deckReject }}" title="Reject (X)" style="display: grid; place-items: center; width: 46px; height: 46px; border: 1px solid #33333A; border-radius: 50%; background: #17171A; color: #E3928C; cursor: pointer; transition: border-color .14s ease, background .14s ease;" style-hover="border-color: #4A2E2E; background: #1D1618;"><i class="ph-bold ph-x" style="font-size: 18px;"></i></button>
-                  <button onClick="{{ deckEdit }}" title="Edit" style="display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid #26262A; border-radius: 50%; background: #17171A; color: #BCBCC3; cursor: pointer; transition: color .14s ease;" style-hover="color: #F2F2F4;"><i class="ph ph-crop" style="font-size: 16px;"></i></button>
-                  <button data-tour="queue-decide" onClick="{{ deckApprove }}" title="Approve (A)" style="display: grid; place-items: center; width: 54px; height: 54px; border: 1px solid rgba(217,180,120,.55); border-radius: 50%; background: rgba(217,180,120,.13); color: #F0D6A6; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(217,180,120,.22);"><i class="ph-bold ph-check" style="font-size: 22px;"></i></button>
-                </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                  <button onClick="{{ deckBack }}" style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; border: 0; background: transparent; color: #8B8B93; font-family: inherit; font-size: 11.5px; cursor: pointer;" style-hover="color: #F2F2F4;"><i class="ph ph-arrow-left" style="font-size: 13px;"></i>Previous</button>
-                  <button onClick="{{ deckSkip }}" style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; border: 0; background: transparent; color: #8B8B93; font-family: inherit; font-size: 11.5px; cursor: pointer;" style-hover="color: #F2F2F4;">Skip for now<i class="ph ph-arrow-right" style="font-size: 13px;"></i></button>
-                </div>
-                <div style="display: flex; gap: 6px; align-items: flex-end;">
-                  <sc-for list="{{ deckStrip }}" as="s" hint-placeholder-count="6">
-                    <button onClick="{{ s.jump }}" title="{{ s.title }}" style="{{ s.style }}"><span style="{{ s.scoreStyle }}">{{ s.score }}</span></button>
-                  </sc-for>
-                </div>
-                <div id="dcDeckKeys" style="display: flex; align-items: center; gap: 9px; font-size: 10px; color: #6E6E76; flex-wrap: wrap; justify-content: center;">
-                  <span style="display: inline-flex; align-items: center; gap: 4px;"><kbd style="padding: 1px 5px; border: 1px solid #2C2C32; border-bottom-width: 2px; border-radius: 5px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 9.5px;">A</kbd>approve</span>
-                  <span style="display: inline-flex; align-items: center; gap: 4px;"><kbd style="padding: 1px 5px; border: 1px solid #2C2C32; border-bottom-width: 2px; border-radius: 5px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 9.5px;">X</kbd>reject</span>
-                  <span style="display: inline-flex; align-items: center; gap: 4px;"><kbd style="padding: 1px 5px; border: 1px solid #2C2C32; border-bottom-width: 2px; border-radius: 5px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 9.5px;">S</kbd>skip</span>
-                  <span style="display: inline-flex; align-items: center; gap: 4px;"><kbd style="padding: 1px 5px; border: 1px solid #2C2C32; border-bottom-width: 2px; border-radius: 5px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 9.5px;">␣</kbd>play</span>
-                  <span style="display: inline-flex; align-items: center; gap: 4px;"><kbd style="padding: 1px 5px; border: 1px solid #2C2C32; border-bottom-width: 2px; border-radius: 5px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 9.5px;">M</kbd>sound</span>
-                  <button onClick="{{ deckCycleRate }}" title="Playback speed" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid #2C2C32; border-radius: 20px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 10px; font-weight: 600; cursor: pointer; transition: color .14s ease, border-color .14s ease;" style-hover="color: #F0D6A6; border-color: rgba(217,180,120,.4);"><i class="ph ph-gauge" style="font-size: 11px;"></i>{{ deckRateLabel }}</button>
+                <div style="display: flex; flex-direction: column; gap: 13px; flex: 0 1 320px; min-width: 272px; padding-top: 6px;">
+                  <div style="display: flex; flex-direction: column; gap: 7px;">
+                    <div style="position: relative; width: 100%; height: 3px; border-radius: 20px; background: #1D1D21; overflow: hidden;"><span style="{{ deckProgStyle }}"></span></div>
+                    <div style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: #8B8B93;"><span>{{ deckPos }} waiting</span><span style="margin-left: auto; color: #6E6E76;">{{ deckTally }}</span></div>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 5px;">
+                    <span style="font-size: 14px; line-height: 1.45; font-weight: 600; color: #F2F2F4; text-wrap: pretty; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">{{ deckClip.caption }}</span>
+                    <span style="font-size: 10.5px; color: #6E6E76; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">{{ deckClip.lecTitle }}</span>
+                    <span style="{{ deckWhyStyle }}"><i class="ph ph-sparkle" style="font-size: 11px; flex: none; margin-top: 2px; color: #C9A87A;"></i>{{ deckWhy }}</span>
+                  </div>
+                  <div style="display: flex; align-items: flex-start; gap: 14px; padding: 2px 0;">
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
+                      <button onClick="{{ deckReject }}" title="Reject (X)" style="display: grid; place-items: center; width: 46px; height: 46px; border: 1px solid #33333A; border-radius: 50%; background: #17171A; color: #E3928C; cursor: pointer; transition: border-color .14s ease, background .14s ease;" style-hover="border-color: #4A2E2E; background: #1D1618;"><i class="ph ph-x" style="font-size: 19px;"></i></button>
+                      <span style="font-size: 9.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #8B8B93;">Reject</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
+                      <button onClick="{{ deckEdit }}" title="Open in editor" style="display: grid; place-items: center; width: 46px; height: 46px; border: 1px solid #26262A; border-radius: 50%; background: #17171A; color: #BCBCC3; cursor: pointer; transition: color .14s ease;" style-hover="color: #F2F2F4;"><i class="ph ph-crop" style="font-size: 17px;"></i></button>
+                      <span style="font-size: 9.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #8B8B93;">Edit</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
+                      <button data-tour="queue-decide" onClick="{{ deckApprove }}" title="Approve (A)" style="display: grid; place-items: center; width: 54px; height: 54px; border: 1px solid rgba(217,180,120,.55); border-radius: 50%; background: rgba(217,180,120,.13); color: #F0D6A6; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(217,180,120,.22);"><i class="ph ph-check" style="font-size: 23px;"></i></button>
+                      <span style="font-size: 9.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #F0D6A6;">Approve</span>
+                    </div>
+                    <div style="margin-left: auto; display: flex; flex-direction: column; gap: 7px; align-items: flex-end; padding-top: 4px;">
+                      <button onClick="{{ deckBack }}" style="display: flex; align-items: center; gap: 6px; padding: 4px 8px; border: 0; background: transparent; color: #8B8B93; font-family: inherit; font-size: 11px; cursor: pointer;" style-hover="color: #F2F2F4;"><i class="ph ph-arrow-left" style="font-size: 12px;"></i>Previous</button>
+                      <button onClick="{{ deckSkip }}" style="display: flex; align-items: center; gap: 6px; padding: 4px 8px; border: 0; background: transparent; color: #8B8B93; font-family: inherit; font-size: 11px; cursor: pointer;" style-hover="color: #F2F2F4;">Skip<i class="ph ph-arrow-right" style="font-size: 12px;"></i></button>
+                    </div>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid #1E1E22;">
+                    <span style="font-size: 9.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6E6E76;">Up next</span>
+                    <div style="display: flex; gap: 6px; align-items: flex-end; flex-wrap: wrap;">
+                      <sc-for list="{{ deckStrip }}" as="s" hint-placeholder-count="6">
+                        <button onClick="{{ s.jump }}" title="{{ s.title }}" style="{{ s.style }}"><span style="{{ s.scoreStyle }}">{{ s.score }}</span></button>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <div id="dcDeckKeys" style="display: flex; align-items: center; gap: 9px; font-size: 10px; color: #6E6E76; flex-wrap: wrap;">
+                    <span style="display: inline-flex; align-items: center; gap: 4px;"><kbd style="padding: 1px 5px; border: 1px solid #2C2C32; border-bottom-width: 2px; border-radius: 5px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 9.5px;">A</kbd>approve</span>
+                    <span style="display: inline-flex; align-items: center; gap: 4px;"><kbd style="padding: 1px 5px; border: 1px solid #2C2C32; border-bottom-width: 2px; border-radius: 5px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 9.5px;">X</kbd>reject</span>
+                    <span style="display: inline-flex; align-items: center; gap: 4px;"><kbd style="padding: 1px 5px; border: 1px solid #2C2C32; border-bottom-width: 2px; border-radius: 5px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 9.5px;">S</kbd>skip</span>
+                    <span style="display: inline-flex; align-items: center; gap: 4px;"><kbd style="padding: 1px 5px; border: 1px solid #2C2C32; border-bottom-width: 2px; border-radius: 5px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 9.5px;">␣</kbd>play</span>
+                    <span style="display: inline-flex; align-items: center; gap: 4px;"><kbd style="padding: 1px 5px; border: 1px solid #2C2C32; border-bottom-width: 2px; border-radius: 5px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 9.5px;">M</kbd>sound</span>
+                    <button onClick="{{ deckCycleRate }}" title="Playback speed" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid #2C2C32; border-radius: 20px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 10px; font-weight: 600; cursor: pointer; transition: color .14s ease, border-color .14s ease;" style-hover="color: #F0D6A6; border-color: rgba(217,180,120,.4);"><i class="ph ph-gauge" style="font-size: 11px;"></i>{{ deckRateLabel }}</button>
+                  </div>
                 </div>
               </div>
             </sc-if>

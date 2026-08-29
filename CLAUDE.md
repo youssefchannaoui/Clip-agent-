@@ -656,6 +656,14 @@ Youssef, on the queue: "improve this, add cool features expand and wow me".
 - The deck tests run the machinery: `test/review-deck.test.mjs` vm-loads the
   adapter, computes bindings from real clip rows, and calls deckAct, asserting
   the ledger, the advance, the strip jump and the clear state.
+- **v3.31.1, from Youssef's first look**: the deck is TWO COLUMNS at desktop
+  (card left; progress, title, reasons, labelled actions, filmstrip and keys
+  right) so nothing scrolls vertically -- measured scrollDelta 0 at 1440x950.
+  The approve/reject icons were `ph-bold`, a Phosphor weight the generated CSS
+  has NEVER imported (only regular and fill), so those two glyphs had no font
+  anywhere; they are regular-weight now, with small text labels under all
+  three buttons. If an icon is missing, check WHICH WEIGHT before blaming the
+  CDN.
 
 ## How every reply ends (29 Aug 2026)
 
