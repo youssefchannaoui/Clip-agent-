@@ -150,7 +150,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **840 JS + 407 Python**
+- `npm test` and `npm run check` must pass. Currently **842 JS + 407 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -707,6 +707,41 @@ be a tab btw".
   every state poll (the same move as DC_OWNER), because `/api/state` replaces
   DATA wholesale. The answer itself lives in UI state (`aiAnswer`), not DATA,
   so a poll cannot wipe a reply mid-read.
+
+### The screen was rebuilt out of its card grid (v3.33.0, 29 Aug 2026)
+
+Youssef, on the first version: "this can look 1000 times better". It was six
+equal boxes in a grid — the Owner-screen mistake by another door, and it made
+the one thing only DeenAI can do (the ask) the smallest thing on the screen.
+Three directions were drawn as a canvas; he chose "whichever will do best",
+and this is that one.
+
+- **The ask is the centrepiece**, at the top, with three example questions
+  that FILL the box rather than merely suggest (a chip that does nothing is
+  invariant 9 broken). The answer lands directly beneath it, not at the bottom
+  of the page.
+- **The strongest insight gets the room.** The server marks it by putting it
+  FIRST; the screen never re-ranks, or the two halves of one answer would
+  disagree about what matters. Where it carries a `figure` (a lecture's keep
+  rate) that figure is drawn large in gold beside the lecture's own name.
+- **A lecture titled in Arabic renders right-to-left in Amiri** (`rtl` on the
+  card, from a Unicode-range test server-side). That is why the card carries a
+  `kicker` — "Clip more from" — separately from the `title`: a name glued into
+  the middle of an English sentence cannot carry its own direction. Amiri is
+  already in index.html's font link, so this costs nothing.
+- **The numbers became a divided band**, the same device as Owner's KPI row:
+  approval bar, days posted, worst destination's refusals, awaiting review.
+  `metrics()` lives in the same module as the cards deliberately — a screen
+  that counts its own figures is a second source of arithmetic, and the two
+  would drift.
+- Everything else is a **row with a hairline**, two columns. Three columns
+  orphaned the last row onto a line of its own, which reads as a fault.
+- The demo view is the identical layout with DEMO chips on every figure and
+  row — a locked account sees the real shape, not a lesser one.
+- **The sign-in throttle is real and the tests must not spend it.** Five
+  sign-ups in one file hit it and the failure reads as a broken route; the
+  suite now shares one Pro session and tests band arithmetic by calling
+  `metrics()` directly.
 
 ## How every reply ends (29 Aug 2026)
 

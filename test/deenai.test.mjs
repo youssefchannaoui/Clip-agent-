@@ -76,6 +76,7 @@ test('a free account can look at the demo but cannot ask', async () => {
   assert.equal(view.demo, true);
   assert.ok(view.insights.length >= 3, 'the shop window shows real-shaped cards');
   assert.ok(view.insights.every(card => card.demo === true), 'every demo card says it is a demo');
+  assert.ok(view.metrics.length >= 3 && view.metrics.every(m => m.demo === true), 'the demo band is labelled too');
 
   const ask = await fetch(`${base}/api/deenai/ask`, {
     method: 'POST', headers: { Cookie: free.cookie, 'Content-Type': 'application/json' },
@@ -85,8 +86,11 @@ test('a free account can look at the demo but cannot ask', async () => {
   assert.match((await ask.json()).error, /Pro feature/);
 });
 
+let proSession = null;
+
 test('a paid account gets insights computed from its own clips', async () => {
   const pro = await signUp('pro@deenclipped.test', 'another long password here');
+  proSession = pro;
   const user = store.state.authUsers.find(u => u.id === pro.id);
   user.billing = { ...(user.billing || {}), plan: 'monthly', status: 'active' };
 
@@ -100,17 +104,65 @@ test('a paid account gets insights computed from its own clips', async () => {
   const view = await (await fetch(`${base}/api/deenai`, { headers: { Cookie: pro.cookie } })).json();
   assert.equal(view.pro, true);
   assert.equal(view.demo, false);
-  const lecture = view.insights.find(card => /Clip more from/.test(card.title));
-  assert.ok(lecture, 'the best-lecture card appears once a lecture has 3+ clips');
-  assert.match(lecture.title, /Patience in Hardship/);
-  assert.match(lecture.body, /kept 3 of its 4 clips/);
+  // The headline card is first, carries the lecture's OWN name, and states the
+  // keep rate as a figure the screen can draw large.
+  const lecture = view.insights[0];
+  assert.equal(lecture.kicker, 'Clip more from');
+  assert.equal(lecture.title, 'Patience in Hardship', 'the lecture name stands alone, not wrapped in a sentence');
+  assert.equal(lecture.figure, '3/4');
+  assert.equal(lecture.rtl, false);
   assert.ok(view.insights.every(card => !card.demo), 'nothing a Pro sees is marked demo');
+
+  // The band is computed in the same module as the cards, so the two halves of
+  // one answer can never disagree.
+  const waiting = view.metrics.find(m => m.key === 'waiting');
+  assert.ok(!waiting, 'this account has nothing waiting, so no waiting figure is shown');
+  assert.ok(view.metrics.every(m => !m.demo));
 });
 
-test('ask refuses an empty question, an over-long one, and a deployment with no worker', async () => {
-  const cookie = (await signUp('asker@deenclipped.test', 'a third long password')).cookie;
-  const user = store.state.authUsers.find(u => u.email === 'asker@deenclipped.test');
+test('an Arabic lecture title is flagged for right-to-left, in its own name', async () => {
+  const pro = await signUp('arabic@deenclipped.test', 'a fourth long password');
+  const user = store.state.authUsers.find(u => u.id === pro.id);
   user.billing = { ...(user.billing || {}), plan: 'monthly', status: 'active' };
+  store.state.projects.push({ id: 'proj-ar', userId: pro.id, title: 'سورة الإنسان كاملة للقارئ جعفر السعدي', status: 'done' });
+  for (let i = 0; i < 3; i++) seedClip(pro.id, { projectId: 'proj-ar', status: 'approved', score: 80 });
+
+  const view = await (await fetch(`${base}/api/deenai`, { headers: { Cookie: pro.cookie } })).json();
+  const head = view.insights[0];
+  assert.equal(head.rtl, true, 'an Arabic title must render RTL in Amiri, not left-to-right in Inter');
+  assert.equal(head.figure, '3/3');
+  assert.ok(!/Clip more from/.test(head.title), 'the kicker is separate so the name can carry its own direction');
+});
+
+test('the band names the worst destination and what to do about it', () => {
+  // Called directly: the HTTP path is covered above, and the sign-in throttle
+  // is a real protection this suite should not spend on a fifth account.
+  const user = { id: 'band-user' };
+  store.state.projects.push({ id: 'proj-band', userId: user.id, title: 'Band lecture', status: 'done' });
+  for (let i = 0; i < 3; i++) {
+    store.state.clips.push({
+      id: 'band-' + i, userId: user.id, projectId: 'proj-band', title: 'Band clip', status: 'posted',
+      postedAt: Date.now() - (i + 1) * 86400000, score: 70,
+      targets: [{ provider: 'tiktok', status: 'failed' }, { provider: 'youtube', status: 'posted' }],
+    });
+  }
+  store.state.clips.push({ id: 'band-w', userId: user.id, projectId: 'proj-band', title: 'Waiting', status: 'waiting', score: 60, targets: [] });
+
+  const rows = deenai.metrics(user);
+  const refused = rows.find(m => m.key === 'refused');
+  assert.equal(refused.label, 'TikTok refusals');
+  assert.equal(refused.value, '3');
+  assert.match(refused.note, /not 3 bad clips/);
+  const posted = rows.find(m => m.key === 'posted');
+  assert.equal(posted.value, '3', 'three distinct days');
+  assert.equal(posted.unit, 'of 14 days');
+  assert.equal(rows.find(m => m.key === 'waiting').value, '1');
+  assert.ok(rows.length <= 4, 'the band is four figures at most');
+});
+
+
+test('ask refuses an empty question, an over-long one, and a deployment with no worker', async () => {
+  const cookie = proSession.cookie;
 
   const post = body => fetch(`${base}/api/deenai/ask`, {
     method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' },

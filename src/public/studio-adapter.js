@@ -3807,30 +3807,32 @@
     // ── DeenAI ──
     // Whether this account HAS DeenAI comes from the plan features already in
     // /api/state, so the lock is honest on first paint; /api/deenai (fetched
-    // when the tab opens) only supplies the cards. For a locked account those
-    // cards arrive marked demo:true and are labelled as such on screen.
+    // when the tab opens) only supplies the numbers. For a locked account they
+    // arrive marked demo:true and are labelled as such on screen.
     var aiOn = Boolean(current.features && current.features.deenai);
     var aiData = DATA.deenai || null;
-    var aiCardsRaw = (aiData && aiData.insights) || [];
+    var aiAllCards = (aiData && aiData.insights) || [];
+    // The first card is the headline and gets the room; the rest are rows. The
+    // server decides which is first -- the screen must not re-rank, or the two
+    // halves of one answer would disagree about what matters most.
+    var aiHead = aiAllCards[0] || null;
+    var aiRows = aiAllCards.slice(1);
+    var aiMetricRows = (aiData && aiData.metrics) || [];
     var AI_TONES = {
-      gold: { border: 'rgba(217,180,120,.4)', icon: '#F0D6A6' },
-      good: { border: 'rgba(127,209,166,.3)', icon: '#7FD1A6' },
-      warn: { border: 'rgba(224,135,112,.35)', icon: '#E08770' },
-      '': { border: '#1E1E22', icon: '#BCBCC3' },
+      gold: { border: 'rgba(217,180,120,.4)', icon: '#F0D6A6', value: '#F0D6A6' },
+      good: { border: 'rgba(127,209,166,.3)', icon: '#7FD1A6', value: '#7FD1A6' },
+      warn: { border: 'rgba(224,135,112,.35)', icon: '#E08770', value: '#E6B770' },
+      '': { border: '#26262A', icon: '#BCBCC3', value: '#F2F2F4' },
     };
-    function aiCardRow(card) {
-      var tone = AI_TONES[card.tone] || AI_TONES[''];
-      return {
-        style: 'display: flex; flex-direction: column; gap: 9px; padding: 15px 16px; border: 1px solid ' + tone.border + '; border-radius: 12px; background: #121214;',
-        icon: card.icon || 'ph ph-sparkle',
-        iconStyle: 'font-size: 15px; flex: none; color: ' + tone.icon + ';',
-        title: String(card.title || ''),
-        demoStyle: card.demo
-          ? 'margin-left: auto; flex: none; padding: 1px 7px; border-radius: 20px; border: 1px solid #2C2C32; background: #17171A; font-size: 8.5px; font-weight: 700; letter-spacing: .12em; color: #6E6E76;'
-          : 'display: none;',
-        body: String(card.body || ''),
-      };
-    }
+    var aiTone = function (tone) { return AI_TONES[tone] || AI_TONES['']; };
+    var aiDemoChip = function (on) {
+      return on
+        ? 'flex: none; margin-left: 8px; padding: 1px 7px; border-radius: 20px; border: 1px solid #2C2C32; background: #17171A; font-size: 8.5px; font-weight: 700; letter-spacing: .12em; color: #6E6E76;'
+        : 'display: none;';
+    };
+    // Three openers worth typing, and they FILL the box rather than only
+    // reading as suggestions -- a chip that does nothing is a dead control.
+    var AI_PROMPTS = ['What should I clip next?', 'How do I grow on TikTok?', 'Which lecture is worth more clips?'];
 
     var vals = {
       // ── shell: rail ──
@@ -3993,20 +3995,81 @@
       aiLocked: !aiOn,
       aiUnlocked: aiOn,
       aiSub: aiOn
-        ? 'Reads your own clips, scores and posting record'
+        ? 'Reads your own clips, scores and posting record — and answers back.'
         : 'A Pro feature — free accounts can look, not use',
-      aiNote: aiOn && aiData ? plural(aiCardsRaw.length, 'insight') + ' from your own records' : '',
-      aiCards: aiCardsRaw.map(aiCardRow),
-      aiEmpty: Boolean(aiOn && aiData && aiCardsRaw.length === 0),
+      aiCount: aiData ? plural(aiAllCards.length, 'insight').toUpperCase() : '',
+      aiNote: aiData ? (aiOn ? 'from your own records' : 'sample output') : '',
+      aiFootnote: aiOn
+        ? 'Every figure above is counted from your own clips — DeenAI never invents a number.'
+        : 'On Pro these are your own numbers, counted from your own clips.',
+
+      // the headline insight
+      aiHeadShow: Boolean(aiHead),
+      aiHeadFigureShow: Boolean(aiHead && aiHead.figure),
+      aiHeadFigure: aiHead ? String(aiHead.figure || '') : '',
+      aiHeadFigureLabel: aiHead ? String(aiHead.figureLabel || '') : '',
+      aiHeadFigureNote: aiHead ? String(aiHead.figureNote || '') : '',
+      aiHeadKicker: aiHead ? String(aiHead.kicker || '') : '',
+      aiHeadKickerStyle: (aiHead && aiHead.kicker)
+        ? 'font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #8B8B93;'
+        : 'display: none;',
+      aiHeadTitle: aiHead ? String(aiHead.title || '') : '',
+      // An Arabic lecture title renders right-to-left in Amiri, the face the
+      // renderer itself uses for Arabic. Left in Inter it reads as a foreign
+      // string the app does not understand.
+      aiHeadTitleStyle: (aiHead && aiHead.rtl)
+        ? 'direction: rtl; text-align: left; font-family: Amiri, serif; font-size: 28px; line-height: 1.5; color: #F2F2F4; text-wrap: pretty;'
+        : 'font-family: Outfit, Inter, sans-serif; font-size: 22px; font-weight: 600; letter-spacing: -.02em; line-height: 1.3; color: #F2F2F4; text-wrap: pretty;',
+      aiHeadBody: aiHead ? String(aiHead.body || '') : '',
+
+      // the band of figures
+      aiMetrics: aiMetricRows.map(function (m, index) {
+        return {
+          label: String(m.label || ''),
+          value: String(m.value || ''),
+          unit: String(m.unit || ''),
+          note: String(m.note || ''),
+          demoStyle: aiDemoChip(m.demo),
+          cellStyle: 'flex: 1 1 200px; display: flex; flex-direction: column; gap: 5px; padding: 4px 26px;'
+            + (index === 0 ? ' padding-left: 4px;' : ' border-left: 1px solid rgba(242,242,244,.07);'),
+          valueStyle: 'font-family: Outfit, Inter, sans-serif; font-size: 30px; font-weight: 600; line-height: 1.1;'
+            + ' font-variant-numeric: tabular-nums; color: ' + aiTone(m.tone).value + ';',
+        };
+      }),
+
+      // everything else, as rows rather than boxes
+      aiCards: aiRows.map(function (card) {
+        var tone = aiTone(card.tone);
+        return {
+          icon: card.icon || 'ph ph-sparkle',
+          iconWrapStyle: 'flex: none; display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid '
+            + tone.border + '; border-radius: 10px; background: ' + (card.tone === 'gold' ? 'rgba(217,180,120,.07)' : '#121214') + ';',
+          iconStyle: 'font-size: 15px; color: ' + tone.icon + ';',
+          title: String(card.title || ''),
+          titleStyle: 'font-size: 13.5px; font-weight: 600; color: ' + (card.tone === 'warn' ? '#E6B770' : '#F2F2F4') + '; text-wrap: pretty;',
+          demoStyle: aiDemoChip(card.demo),
+          body: String(card.body || ''),
+        };
+      }),
+      aiEmpty: Boolean(aiOn && aiData && aiAllCards.length === 0 && aiMetricRows.length === 0),
+
+      // the ask
       aiQ: UI.aiQ,
       aiSetQ: function (e) { UI.aiQ = e.target.value; refresh(); },
+      aiPrompts: AI_PROMPTS.map(function (text) {
+        return {
+          text: text,
+          click: null,
+          pick: function (e) { stop(e); setUI({ aiQ: text }); },
+        };
+      }),
       aiAsk: function (e) { stop(e); global.StudioAdapter.onAskDeenAI(); },
-      aiAskStyle: 'display: inline-flex; align-items: center; gap: 7px; padding: 9px 16px; border: 1px solid rgba(217,180,120,.5); border-radius: 8px; '
+      aiAskStyle: 'flex: none; display: inline-flex; align-items: center; gap: 7px; margin-top: 3px; padding: 11px 18px; border: 1px solid rgba(217,180,120,.55); border-radius: 9px; '
         + (UI.aiBusy
           ? 'background: rgba(217,180,120,.06); color: #A08A63; cursor: default;'
-          : 'background: rgba(217,180,120,.12); color: #F0D6A6; cursor: pointer;')
-        + ' font-family: inherit; font-size: 12.5px; font-weight: 600; transition: background .14s ease;',
-      aiAskLabel: UI.aiBusy ? 'Thinking…' : 'Ask DeenAI',
+          : 'background: rgba(217,180,120,.14); color: #F0D6A6; cursor: pointer;')
+        + ' font-family: inherit; font-size: 13px; font-weight: 600; transition: background .14s ease;',
+      aiAskLabel: UI.aiBusy ? 'Thinking…' : 'Ask',
       aiAskNote: UI.aiBusy
         ? 'Running on DeenClipped’s own box — usually under half a minute.'
         : 'Answers use your numbers, never your transcripts.',

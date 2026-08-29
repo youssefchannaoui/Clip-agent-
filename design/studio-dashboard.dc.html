@@ -1677,15 +1677,18 @@
   </sc-if>
 
   <sc-if value="{{ isDeenai }}" hint-placeholder-val="{{ false }}">
-    <div style="flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 20px; padding: 26px 40px 44px; animation: dcScreen .24s cubic-bezier(.2,.8,.2,1);">
+    <div style="flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 24px; padding: 26px 40px 44px; animation: dcScreen .24s cubic-bezier(.2,.8,.2,1);">
 
-      <div style="flex: none; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-        <span style="display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; border: 1px solid rgba(217,180,120,.4); background: rgba(217,180,120,.1);"><i class="ph-fill ph-sparkle" style="font-size: 17px; color: #F0D6A6;"></i></span>
-        <div style="display: flex; flex-direction: column; gap: 2px;">
-          <span style="display: flex; align-items: center; gap: 9px;"><strong style="font-family: Outfit, Inter, sans-serif; font-size: 17px; font-weight: 600; letter-spacing: -.02em;">DeenAI</strong><span style="padding: 2px 8px; border-radius: 20px; border: 1px solid rgba(217,180,120,.45); background: rgba(217,180,120,.1); font-size: 9px; font-weight: 700; letter-spacing: .12em; color: #F0D6A6;">PRO</span></span>
-          <span style="font-size: 12px; color: #8B8B93;">{{ aiSub }}</span>
+      <div style="flex: none; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+        <span style="display: grid; place-items: center; width: 46px; height: 46px; border-radius: 14px; border: 1px solid rgba(217,180,120,.45); background: rgba(217,180,120,.1); box-shadow: 0 0 34px rgba(217,180,120,.14);"><i class="ph-fill ph-sparkle" style="font-size: 22px; color: #F0D6A6;"></i></span>
+        <div style="display: flex; flex-direction: column; gap: 3px;">
+          <span style="display: flex; align-items: center; gap: 10px;"><strong style="font-family: Outfit, Inter, sans-serif; font-size: 25px; font-weight: 600; letter-spacing: -.02em;">DeenAI</strong><span style="padding: 3px 9px; border-radius: 20px; border: 1px solid rgba(217,180,120,.45); background: rgba(217,180,120,.1); font-size: 9px; font-weight: 700; letter-spacing: .14em; color: #F0D6A6;">PRO</span></span>
+          <span style="font-size: 12.5px; color: #8B8B93;">{{ aiSub }}</span>
         </div>
-        <span style="margin-left: auto; font-size: 11px; color: #6E6E76;">{{ aiNote }}</span>
+        <div style="margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 3px;">
+          <span style="font-size: 10px; font-weight: 700; letter-spacing: .18em; color: #C9A87A;">{{ aiCount }}</span>
+          <span style="font-size: 11px; color: #6E6E76;">{{ aiNote }}</span>
+        </div>
       </div>
 
       <sc-if value="{{ aiLocked }}" hint-placeholder-val="{{ false }}">
@@ -1693,59 +1696,97 @@
           <i class="ph-fill ph-lock-key" style="font-size: 20px; color: #F0D6A6;"></i>
           <div style="display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 320px;">
             <strong style="font-size: 13px; font-weight: 600; color: #F2F2F4;">You are looking at a demo</strong>
-            <span style="font-size: 11.5px; color: #8B8B93; line-height: 1.5;">These cards are sample output. On Pro, DeenAI reads your own clips, scores and posting record, and answers your questions — nothing here acts until then.</span>
+            <span style="font-size: 11.5px; color: #8B8B93; line-height: 1.5;">These numbers are sample output. On Pro, DeenAI reads your own clips, scores and posting record, and answers your questions — nothing here acts until then.</span>
           </div>
           <button onClick="{{ aiUpgrade }}" style="display: inline-flex; align-items: center; gap: 7px; padding: 9px 15px; border: 1px solid rgba(217,180,120,.5); border-radius: 8px; background: rgba(217,180,120,.12); color: #F0D6A6; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(217,180,120,.2);"><i class="ph-fill ph-crown-simple" style="font-size: 14px;"></i>Unlock with Pro</button>
         </div>
       </sc-if>
 
-      <div style="flex: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px;">
-        <sc-for list="{{ aiCards }}" as="card" hint-placeholder-count="4">
-          <div style="{{ card.style }}">
-            <div style="display: flex; align-items: center; gap: 9px;">
-              <i class="{{ card.icon }}" style="{{ card.iconStyle }}"></i>
-              <strong style="font-size: 13px; font-weight: 600; color: #F2F2F4; line-height: 1.35;">{{ card.title }}</strong>
-              <span style="{{ card.demoStyle }}">DEMO</span>
-            </div>
-            <span style="font-size: 11.5px; color: #A2A2AA; line-height: 1.6;">{{ card.body }}</span>
-          </div>
-        </sc-for>
-      </div>
-      <sc-if value="{{ aiEmpty }}" hint-placeholder-val="{{ false }}">
-        <div style="flex: none; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 20px; border: 1px dashed #26262A; border-radius: 12px; background: #0E0E11;">
-          <i class="ph ph-sparkle" style="font-size: 24px; color: #6E6E76;"></i>
-          <strong style="font-family: Outfit, Inter, sans-serif; font-size: 14px; font-weight: 500;">Not enough history yet</strong>
-          <span style="font-size: 12px; color: #8B8B93; text-align: center; max-width: 50ch;">DeenAI advises from your own record — clips made, kept, posted. Run a few lectures through and the cards appear on their own.</span>
-        </div>
-      </sc-if>
-
-      <div style="flex: none; display: flex; flex-direction: column; gap: 12px; padding: 18px; border: 1px solid #1E1E22; border-radius: 14px; background: #101013; max-width: 760px;">
-        <div style="display: flex; align-items: center; gap: 9px;">
-          <i class="ph-fill ph-chat-circle-dots" style="font-size: 16px; color: #F0D6A6;"></i>
-          <strong style="font-size: 13px; font-weight: 600;">Ask DeenAI</strong>
-          <span style="font-size: 10.5px; color: #6E6E76;">answers run on DeenClipped's own server — your data never leaves it</span>
+      <div style="flex: none; display: flex; flex-direction: column; gap: 13px; padding: 20px 22px; border: 1px solid rgba(217,180,120,.32); border-radius: 16px; background: linear-gradient(180deg, rgba(217,180,120,.06), rgba(217,180,120,.015)), #101013; box-shadow: 0 24px 60px rgba(0,0,0,.35);">
+        <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+          <span style="font-size: 10px; font-weight: 700; letter-spacing: .16em; color: #C9A87A;">ASK DEENAI</span>
+          <span style="margin-left: auto; font-size: 10.5px; color: #6E6E76;">runs on DeenClipped's own server — your numbers, never your transcripts</span>
         </div>
         <sc-if value="{{ aiUnlocked }}" hint-placeholder-val="{{ true }}">
-          <div style="display: flex; flex-direction: column; gap: 10px;">
-            <textarea value="{{ aiQ }}" onChange="{{ aiSetQ }}" rows="2" placeholder="Why are my clips not getting approved? What should I clip next? How do I get more views on TikTok?" style="width: 100%; box-sizing: border-box; padding: 11px; border: 1px solid #26262A; border-radius: 10px; background: #121214; color: #F2F2F4; font-family: inherit; font-size: 12.5px; line-height: 1.55; resize: vertical; outline: none;"></textarea>
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <button onClick="{{ aiAsk }}" style="{{ aiAskStyle }}"><i class="ph-fill ph-paper-plane-tilt" style="font-size: 13px;"></i>{{ aiAskLabel }}</button>
-              <span style="font-size: 10.5px; color: #6E6E76;">{{ aiAskNote }}</span>
-            </div>
-            <sc-if value="{{ aiHasAnswer }}" hint-placeholder-val="{{ false }}">
-              <div style="display: flex; gap: 10px; padding: 13px 14px; border: 1px solid rgba(217,180,120,.25); border-radius: 11px; background: rgba(217,180,120,.05);">
-                <i class="ph-fill ph-sparkle" style="font-size: 14px; flex: none; margin-top: 2px; color: #F0D6A6;"></i>
-                <span style="font-size: 12.5px; color: #E9E9ED; line-height: 1.65; white-space: pre-wrap;">{{ aiAnswer }}</span>
-              </div>
-            </sc-if>
+          <div style="display: flex; align-items: flex-start; gap: 10px; padding: 6px 8px 6px 6px; border: 1px solid #26262A; border-radius: 12px; background: #0E0E11;">
+            <textarea value="{{ aiQ }}" onChange="{{ aiSetQ }}" rows="1" placeholder="Why are my clips not getting approved?" style="flex: 1; min-width: 0; padding: 11px 12px; border: 0; background: transparent; color: #F2F2F4; font-family: inherit; font-size: 14.5px; line-height: 1.5; resize: vertical; outline: none;"></textarea>
+            <button onClick="{{ aiAsk }}" style="{{ aiAskStyle }}"><i class="ph-fill ph-paper-plane-tilt" style="font-size: 13px;"></i>{{ aiAskLabel }}</button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <sc-for list="{{ aiPrompts }}" as="p" hint-placeholder-count="3">
+              <button onClick="{{ p.pick }}" style="padding: 6px 12px; border: 1px solid #26262A; border-radius: 20px; background: transparent; color: #A2A2AA; font-family: inherit; font-size: 11.5px; cursor: pointer; transition: color .14s ease, border-color .14s ease;" style-hover="color: #F0D6A6; border-color: rgba(217,180,120,.4);">{{ p.text }}</button>
+            </sc-for>
+            <span style="margin-left: auto; font-size: 10.5px; color: #6E6E76;">{{ aiAskNote }}</span>
           </div>
         </sc-if>
         <sc-if value="{{ aiLocked }}" hint-placeholder-val="{{ false }}">
           <div style="display: flex; flex-direction: column; gap: 10px;">
-            <div style="display: flex; align-items: center; gap: 9px; padding: 11px; border: 1px dashed #26262A; border-radius: 10px; background: #0E0E11; color: #6E6E76; font-size: 12px;"><i class="ph ph-lock-simple" style="font-size: 13px;"></i>“Why are my clips not getting approved?” · “What should I clip next?” · “How do I grow on TikTok?”</div>
+            <div style="display: flex; align-items: center; gap: 9px; padding: 14px; border: 1px dashed #26262A; border-radius: 12px; background: #0E0E11; color: #6E6E76; font-size: 13px;"><i class="ph ph-lock-simple" style="font-size: 14px;"></i>“Why are my clips not getting approved?” · “What should I clip next?” · “How do I grow on TikTok?”</div>
             <button onClick="{{ aiUpgrade }}" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid rgba(217,180,120,.5); border-radius: 8px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .14s ease;" style-hover="background: rgba(217,180,120,.12);"><i class="ph-fill ph-crown-simple" style="font-size: 13px;"></i>Unlock with Pro</button>
           </div>
         </sc-if>
+      </div>
+
+      <sc-if value="{{ aiHasAnswer }}" hint-placeholder-val="{{ false }}">
+        <div style="flex: none; display: flex; gap: 13px; padding: 16px 20px; border: 1px solid rgba(217,180,120,.2); border-radius: 14px; background: #101013;">
+          <i class="ph-fill ph-sparkle" style="font-size: 15px; flex: none; margin-top: 3px; color: #F0D6A6;"></i>
+          <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0;">
+            <span style="font-size: 9.5px; font-weight: 700; letter-spacing: .14em; color: #6E6E76;">DEENAI</span>
+            <span style="font-size: 13px; color: #E9E9ED; line-height: 1.7; white-space: pre-wrap; max-width: 92ch;">{{ aiAnswer }}</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ aiHeadShow }}" hint-placeholder-val="{{ true }}">
+        <div style="flex: none; display: flex; align-items: center; gap: 40px; padding: 22px 4px; border-top: 1px solid rgba(242,242,244,.07); border-bottom: 1px solid rgba(242,242,244,.07); flex-wrap: wrap;">
+          <sc-if value="{{ aiHeadFigureShow }}" hint-placeholder-val="{{ true }}">
+            <div style="flex: none; display: flex; flex-direction: column; gap: 2px; min-width: 170px;">
+              <strong style="font-family: Outfit, Inter, sans-serif; font-size: 58px; font-weight: 600; letter-spacing: -.03em; line-height: 1; color: #F0D6A6; font-variant-numeric: tabular-nums;">{{ aiHeadFigure }}</strong>
+              <span style="font-size: 10px; font-weight: 700; letter-spacing: .16em; color: #C9A87A; text-transform: uppercase;">{{ aiHeadFigureLabel }}</span>
+              <span style="font-size: 11px; color: #6E6E76;">{{ aiHeadFigureNote }}</span>
+            </div>
+          </sc-if>
+          <div style="flex: 1 1 380px; display: flex; flex-direction: column; gap: 7px; min-width: 0;">
+            <span style="{{ aiHeadKickerStyle }}">{{ aiHeadKicker }}</span>
+            <span style="{{ aiHeadTitleStyle }}">{{ aiHeadTitle }}</span>
+            <span style="font-size: 12.5px; color: #8B8B93; line-height: 1.6; max-width: 78ch; text-wrap: pretty;">{{ aiHeadBody }}</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="flex: none; display: flex; align-items: stretch; flex-wrap: wrap;">
+        <sc-for list="{{ aiMetrics }}" as="m" hint-placeholder-count="4">
+          <div style="{{ m.cellStyle }}">
+            <span style="font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6E6E76;">{{ m.label }}<span style="{{ m.demoStyle }}">DEMO</span></span>
+            <span style="display: flex; align-items: baseline; gap: 6px;"><strong style="{{ m.valueStyle }}">{{ m.value }}</strong><span style="font-size: 14px; font-weight: 500; color: #8B8B93;">{{ m.unit }}</span></span>
+            <span style="font-size: 11px; color: #6E6E76; line-height: 1.5;">{{ m.note }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="flex: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); gap: 0 48px; border-top: 1px solid rgba(242,242,244,.07);">
+        <sc-for list="{{ aiCards }}" as="card" hint-placeholder-count="4">
+          <div style="display: flex; gap: 14px; padding: 18px 0; border-bottom: 1px solid rgba(242,242,244,.045);">
+            <span style="{{ card.iconWrapStyle }}"><i class="{{ card.icon }}" style="{{ card.iconStyle }}"></i></span>
+            <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+              <span style="display: flex; align-items: center; gap: 8px;"><strong style="{{ card.titleStyle }}">{{ card.title }}</strong><span style="{{ card.demoStyle }}">DEMO</span></span>
+              <span style="font-size: 12px; color: #8B8B93; line-height: 1.6; text-wrap: pretty;">{{ card.body }}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{ aiEmpty }}" hint-placeholder-val="{{ false }}">
+        <div style="flex: none; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 20px; border: 1px dashed #26262A; border-radius: 12px; background: #0E0E11;">
+          <i class="ph ph-sparkle" style="font-size: 24px; color: #6E6E76;"></i>
+          <strong style="font-family: Outfit, Inter, sans-serif; font-size: 14px; font-weight: 500;">Not enough history yet</strong>
+          <span style="font-size: 12px; color: #8B8B93; text-align: center; max-width: 50ch;">DeenAI advises from your own record — clips made, kept, posted. Run a few lectures through and the numbers appear on their own.</span>
+        </div>
+      </sc-if>
+
+      <div style="flex: none; display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 11px; color: #6E6E76;">{{ aiFootnote }}</span>
+        <span style="margin-left: auto; font-size: 9.5px; font-weight: 700; letter-spacing: .18em; color: #3A3A40;">DEENAI · PRO</span>
       </div>
 
     </div>

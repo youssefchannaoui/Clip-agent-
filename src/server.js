@@ -1551,9 +1551,9 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/api/deenai') {
     if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
     if (!deenai.deenaiAccess(currentUser)) {
-      return json(res, 200, { pro: false, demo: true, insights: deenai.demoInsights() });
+      return json(res, 200, { pro: false, demo: true, insights: deenai.demoInsights(), metrics: deenai.demoMetrics() });
     }
-    return json(res, 200, { pro: true, demo: false, insights: deenai.insights(currentUser) });
+    return json(res, 200, { pro: true, demo: false, insights: deenai.insights(currentUser), metrics: deenai.metrics(currentUser) });
   }
   if (method === 'POST' && pathname === '/api/deenai/ask') {
     if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
