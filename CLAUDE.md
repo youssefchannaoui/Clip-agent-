@@ -798,6 +798,22 @@ which gives you that ai plus multiple channel uploads".
 - **Studio has no Stripe prices yet.** The column renders and says "Opening
   soon" rather than offering a button that cannot charge anyone;
   `STRIPE_PRICE_STUDIO_{WEEKLY,MONTHLY,YEARLY}` on Render arm it.
+- **Motion and spacing, v3.35.0** ("NOW ANIAMTIONS, LESS CRAMMING"). Both
+  surfaces: cards rise in with an 80ms stagger, lift on hover, and the price
+  and token line animate on every flick of the period switch -- a block that
+  goes from `display:none` cannot TRANSITION, but an animation runs the moment
+  it is shown, which is what makes the CSS-only switch feel live. Card padding
+  21 -> 28px, list gaps 8 -> 12px, body type 11.5 -> 12.5px, grid gaps
+  14 -> 22px, section titles 34 -> 56px apart.
+  **The in-app entry animation is GATED** (`tierAnimClass`, the same device as
+  the Owner screen's `owAnimClass`): the studio re-renders on every state poll,
+  so an ungated one replays every few seconds and reads as a flicker. Only
+  opening the screen or moving the switch stamps `tokensAnimAt`. Verified by
+  re-rendering after the gate expires and asserting nothing animates.
+  Every rule has a `prefers-reduced-motion` escape.
+- **A tagline is a promise.** Studio's said "approve on autopilot" for one
+  release after auto-approve was dropped from it. Corrected to "jump the
+  queue"; if a feature moves, its sales copy moves with it.
 
 ## The notifications toggle was hidden behind having dismissed something
 

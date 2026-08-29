@@ -3913,7 +3913,7 @@
             : 'rgba(217,180,120,.45); background: rgba(217,180,120,.13); color: #F0D6A6; cursor: pointer;'),
         foot: unconfigured ? 'Not open for checkout yet.' : '',
         footStyle: unconfigured ? 'font-size: 10.5px; color: #6E6E76;' : 'display: none;',
-        cardStyle: 'position: relative; display: flex; flex-direction: column; gap: 10px; padding: 20px 18px 18px; border-radius: 14px; border: 1px solid '
+        cardStyle: 'position: relative; display: flex; flex-direction: column; gap: 14px; padding: 26px 24px 24px; border-radius: 16px; border: 1px solid '
           + (isCurrent ? 'rgba(127,209,166,.4)' : tier === 'studio' ? 'rgba(217,180,120,.4)' : '#1E1E22')
           + '; background: ' + (tier === 'basic' ? '#121214' : 'linear-gradient(180deg, rgba(217,180,120,.05), rgba(217,180,120,.01)), #121214') + ';',
         choose: function (e) {
@@ -3989,7 +3989,7 @@
       currentPlan: planLabel,
       goTokens: function (e) {
         stop(e);
-        setUI({ screen: 'tokens', lastScreen: UI.screen === 'tokens' ? UI.lastScreen : UI.screen, menuOpen: false });
+        setUI({ screen: 'tokens', lastScreen: UI.screen === 'tokens' ? UI.lastScreen : UI.screen, menuOpen: false, tokensAnimAt: Date.now() });
       },
       goBack: function (e) { stop(e); setUI({ screen: UI.lastScreen || 'home' }); },
 
@@ -4114,7 +4114,7 @@
       aiFootnote: aiOn
         ? 'Every figure above is counted from your own clips — DeenAI never invents a number.'
         : 'On Pro these are your own numbers, counted from your own clips.',
-      aiUpgrade: function (e) { stop(e); setUI({ screen: 'tokens' }); },
+      aiUpgrade: function (e) { stop(e); setUI({ screen: 'tokens', tokensAnimAt: Date.now() }); },
 
       // the headline insight
       aiHeadShow: Boolean(aiHead),
@@ -6927,12 +6927,17 @@
         var on = period.id === billingPeriod;
         return {
           label: period.label,
-          select: function (e) { stop(e); setUI({ billingPeriod: period.id }); },
+          select: function (e) { stop(e); setUI({ billingPeriod: period.id, tokensAnimAt: Date.now() }); },
           style: 'padding: 6px 14px; border: 0; border-radius: 20px; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .14s ease, color .14s ease; '
             + (on ? 'background: rgba(217,180,120,.16); color: #F0D6A6;' : 'background: transparent; color: #8B8B93;'),
         };
       }),
       periodNote: billingPeriod === 'yearly' ? 'Two months free on every yearly plan' : '',
+      // Gated like the Owner screen's: the studio re-renders on every state
+      // poll, so an ungated entry animation would replay every few seconds.
+      // Only a deliberate act -- opening the screen or moving the switch --
+      // stamps tokensAnimAt.
+      tierAnimClass: (Date.now() - (UI.tokensAnimAt || 0) < 900) ? 'dctier-in' : '',
       tierCards: tierCards,
 
       packs: topupList.map(function (pk) {

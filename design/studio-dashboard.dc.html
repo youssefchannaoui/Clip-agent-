@@ -1868,9 +1868,9 @@
         <span style="margin-left: auto; font-size: 12px; color: #6E6E76;">{{ planNote }}</span>
       </div>
 
-      <div id="dcPlanGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(272px, 1fr)); gap: 16px; align-items: stretch;">
+      <div id="dcPlanGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(272px, 1fr)); gap: 22px; align-items: stretch;">
         <sc-for list="{{ tierCards }}" as="tier" hint-placeholder-count="3">
-          <article style="{{ tier.cardStyle }}">
+          <article class="dctier {{ tierAnimClass }}" style="{{ tier.cardStyle }}">
             <span style="{{ tier.tagStyle }}">{{ tier.tag }}</span>
             <div style="display: flex; align-items: center; gap: 9px;">
               <span style="{{ tier.markStyle }}"><i class="{{ tier.icon }}" style="{{ tier.iconStyle }}"></i></span>
