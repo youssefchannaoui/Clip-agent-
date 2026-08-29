@@ -507,6 +507,21 @@ platform rule each. Keep them apart when triaging the next report.
   (`[data-dc-dest-account]`) — platform and outcome are what carry the meaning
   — and the card wraps its actions onto their own line.
 
+## How every reply ends (29 Aug 2026)
+
+Youssef: "always give me small lines at the end for updates and needs fixing".
+
+- **Every reply ends with two short lists**, whatever it was about:
+  **Updates** — what changed, shipped or went live this turn.
+  **Needs fixing** — what is still open, each naming WHO it is on.
+- One short line per item. No paragraphs, no nesting. If the detail matters it
+  goes in the body above, not in these lists.
+- **Never drop "Needs fixing".** If nothing is open, the line is "nothing".
+  Silence there reads as "all clear", and that is how the box sat on old code
+  for weeks.
+- It applies to answers and questions too, not only to work — he reads these
+  on a phone and they are how he tracks what is his to do.
+
 ## Saying "hand over" (29 Aug 2026)
 
 `/handover` — `.claude/skills/handover/SKILL.md`, in the repo so EVERY session
