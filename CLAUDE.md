@@ -708,6 +708,36 @@ be a tab btw".
   DATA wholesale. The answer itself lives in UI state (`aiAnswer`), not DATA,
   so a poll cannot wipe a reply mid-read.
 
+### Ask got better answers, a spinner, and its tier badge (v3.37.0)
+
+Youssef: "the ask deenai must improve very much, loading circle when asking,
+quicker responses".
+
+- **The model was being asked to notice what this module already knew.**
+  `askContext` sent bare totals, so the answer either redid the arithmetic
+  badly or drifted into generalities about short-form video. It now carries
+  the computed INSIGHTS and the figure band as sentences, and the prompt says
+  to treat them as true and build on them. A spoken answer and the cards on
+  screen can no longer contradict each other.
+- The system prompt is a shape, not a personality: best sentence first, then
+  at most three things doable TODAY, naming the screen (Review queue, Schedule,
+  Connections), under 160 words, no headings or emoji, never invent a
+  statistic, never quote scripture from memory.
+- **Three settings make it quick, and none of them is the model.**
+  `keep_alive: 60m` is the big one -- Ollama unloads after five minutes by
+  default, so the first ask after a quiet spell paid the whole model load,
+  which on this box is most of the wait. `num_ctx: 4096` stops the server
+  re-planning the window per request, and `num_predict: 260` with a `stop`
+  list ends the answer instead of letting a small model spend its last
+  hundred tokens inventing a second question. A test pins all three.
+- **The wait looks like work.** The button showed "Thinking…" and nothing
+  else, which reads as a dead control; it now carries a spinner, and the
+  answer area shows the shape of a reply arriving. Both stop under
+  `prefers-reduced-motion`.
+- DeenAI wears a **STUDIO** tag in the rail (reusing the nav's count slot, so
+  no design re-import), in the header pill and in the footer marker. Pro still
+  gets the insights -- the subline says so -- but the tab belongs to Studio.
+
 ### The screen was rebuilt out of its card grid (v3.33.0, 29 Aug 2026)
 
 Youssef, on the first version: "this can look 1000 times better". It was six

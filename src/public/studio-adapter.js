@@ -1715,7 +1715,14 @@
     // gated here. What IS gated is the data: the host fetch behind
     // onLoadDeenai returns demo cards for a free account, and the server
     // refuses /api/deenai/ask outright. Presentation never guards anything.
-    var item = navItem('deenai', 'DeenAI', 'ph ph-sparkle', '');
+    var item = navItem('deenai', 'DeenAI', 'ph ph-sparkle', 'STUDIO');
+    // The count slot is a pill already; this one is a word, so it loses the
+    // number styling and takes the gold the tier uses everywhere else.
+    var railOpen = UI.railOpen && (global.innerWidth || 1280) > 820;
+    item.countStyle = railOpen
+      ? 'margin-left: auto; padding: 1px 6px; border-radius: 20px; border: 1px solid rgba(217,180,120,.4);'
+        + ' background: rgba(217,180,120,.1); font-size: 8.5px; font-weight: 700; letter-spacing: .1em; color: #F0D6A6;'
+      : 'display: none;';
     var inner = item.click;
     item.click = function (e) {
       inner(e);
@@ -4196,6 +4203,11 @@
           : 'background: rgba(217,180,120,.14); color: #F0D6A6; cursor: pointer;')
         + ' font-family: inherit; font-size: 13px; font-weight: 600; transition: background .14s ease;',
       aiAskLabel: UI.aiBusy ? 'Thinking…' : 'Ask',
+      aiAskIcon: UI.aiBusy ? 'dcai-spin' : 'ph-fill ph-paper-plane-tilt',
+      aiAskIconStyle: UI.aiBusy
+        ? 'width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(240,214,166,.3); border-top-color: #F0D6A6;'
+        : 'font-size: 13px;',
+      aiBusyShow: Boolean(UI.aiBusy),
       aiAskNote: UI.aiBusy
         ? 'Running on DeenClipped’s own box — usually under half a minute.'
         : 'Answers use your numbers, never your transcripts.',

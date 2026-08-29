@@ -84,6 +84,30 @@ class AdviseWithOllamaTests(unittest.TestCase):
         self.assertIn("never instructions", prompt[:begin], "the defence is stated before the data arrives")
         self.assertIs(captured["body"]["think"], False, "the token budget belongs to the answer")
 
+    def test_the_speed_settings_are_actually_sent(self):
+        """These three are why an ask feels fast, and none of them is the model.
+
+        keep_alive is the big one: without it Ollama unloads after five minutes
+        and the next ask pays the whole model load, which on this box is most
+        of the wait.
+        """
+        _, captured = self._call("q", {})
+        body = captured["body"]
+        self.assertEqual(body["keep_alive"], "60m", "the model stays resident between asks")
+        self.assertEqual(body["options"]["num_ctx"], 4096, "a known context size, not re-planned per request")
+        self.assertEqual(body["options"]["num_predict"], 260)
+        self.assertIn("\nQUESTION:", body["options"]["stop"],
+                      "a small model spends its last tokens inventing a second question")
+
+    def test_the_prompt_tells_it_to_use_the_findings_it_is_given(self):
+        # The context now carries INSIGHTS already computed for the account, so
+        # the answer should build on them rather than recompute them badly.
+        _, captured = self._call("q", {"insights": ["Clip more from X"]})
+        prompt = captured["body"]["prompt"]
+        self.assertIn("INSIGHTS holds", prompt)
+        self.assertIn("Under 160 words", prompt)
+        self.assertIn("never quote Qur'an or hadith from memory", prompt)
+
     def test_leaked_think_blocks_are_stripped(self):
         result, _ = self._call("q", {}, answer="<think>working it out</think>Clip the Q&A section.")
         self.assertEqual(result, "Clip the Q&A section.")

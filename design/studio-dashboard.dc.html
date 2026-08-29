@@ -1686,7 +1686,7 @@
       <div style="flex: none; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
         <span style="display: grid; place-items: center; width: 46px; height: 46px; border-radius: 14px; border: 1px solid rgba(217,180,120,.45); background: rgba(217,180,120,.1); box-shadow: 0 0 34px rgba(217,180,120,.14);"><i class="ph-fill ph-sparkle" style="font-size: 22px; color: #F0D6A6;"></i></span>
         <div style="display: flex; flex-direction: column; gap: 3px;">
-          <span style="display: flex; align-items: center; gap: 10px;"><strong style="font-family: Outfit, Inter, sans-serif; font-size: 25px; font-weight: 600; letter-spacing: -.02em;">DeenAI</strong><span style="padding: 3px 9px; border-radius: 20px; border: 1px solid rgba(217,180,120,.45); background: rgba(217,180,120,.1); font-size: 9px; font-weight: 700; letter-spacing: .14em; color: #F0D6A6;">PRO</span></span>
+          <span style="display: flex; align-items: center; gap: 10px;"><strong style="font-family: Outfit, Inter, sans-serif; font-size: 25px; font-weight: 600; letter-spacing: -.02em;">DeenAI</strong><span style="padding: 3px 9px; border-radius: 20px; border: 1px solid rgba(217,180,120,.45); background: rgba(217,180,120,.1); font-size: 9px; font-weight: 700; letter-spacing: .14em; color: #F0D6A6;">STUDIO</span></span>
           <span style="font-size: 12.5px; color: #8B8B93;">{{ aiSub }}</span>
         </div>
         <div style="margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 3px;">
@@ -1714,7 +1714,7 @@
         <sc-if value="{{ aiUnlocked }}" hint-placeholder-val="{{ true }}">
           <div style="display: flex; align-items: flex-start; gap: 10px; padding: 6px 8px 6px 6px; border: 1px solid #26262A; border-radius: 12px; background: #0E0E11;">
             <textarea value="{{ aiQ }}" onChange="{{ aiSetQ }}" rows="1" placeholder="Why are my clips not getting approved?" style="flex: 1; min-width: 0; padding: 11px 12px; border: 0; background: transparent; color: #F2F2F4; font-family: inherit; font-size: 14.5px; line-height: 1.5; resize: vertical; outline: none;"></textarea>
-            <button onClick="{{ aiAsk }}" style="{{ aiAskStyle }}"><i class="ph-fill ph-paper-plane-tilt" style="font-size: 13px;"></i>{{ aiAskLabel }}</button>
+            <button onClick="{{ aiAsk }}" style="{{ aiAskStyle }}"><i class="{{ aiAskIcon }}" style="{{ aiAskIconStyle }}"></i>{{ aiAskLabel }}</button>
           </div>
           <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
             <sc-for list="{{ aiPrompts }}" as="p" hint-placeholder-count="3">
@@ -1733,6 +1733,18 @@
           </div>
         </sc-if>
       </div>
+
+      <sc-if value="{{ aiBusyShow }}" hint-placeholder-val="{{ false }}">
+        <div style="flex: none; display: flex; gap: 13px; padding: 16px 20px; border: 1px solid rgba(217,180,120,.18); border-radius: 14px; background: #101013;">
+          <span id="dcAiSpin" style="flex: none; width: 15px; height: 15px; margin-top: 3px; border-radius: 50%; border: 2px solid rgba(217,180,120,.25); border-top-color: #F0D6A6;"></span>
+          <div style="display: flex; flex-direction: column; gap: 9px; min-width: 0; flex: 1;">
+            <span style="font-size: 9.5px; font-weight: 700; letter-spacing: .14em; color: #6E6E76;">DEENAI IS READING YOUR NUMBERS</span>
+            <span class="dcai-line" style="height: 9px; width: 92%; border-radius: 6px; background: #1A1A1F;"></span>
+            <span class="dcai-line" style="height: 9px; width: 78%; border-radius: 6px; background: #1A1A1F;"></span>
+            <span class="dcai-line" style="height: 9px; width: 58%; border-radius: 6px; background: #1A1A1F;"></span>
+          </div>
+        </div>
+      </sc-if>
 
       <sc-if value="{{ aiHasAnswer }}" hint-placeholder-val="{{ false }}">
         <div style="flex: none; display: flex; gap: 13px; padding: 16px 20px; border: 1px solid rgba(217,180,120,.2); border-radius: 14px; background: #101013;">
@@ -1793,7 +1805,7 @@
 
       <div style="flex: none; display: flex; align-items: center; gap: 12px;">
         <span style="font-size: 11px; color: #6E6E76;">{{ aiFootnote }}</span>
-        <span style="margin-left: auto; font-size: 9.5px; font-weight: 700; letter-spacing: .18em; color: #3A3A40;">DEENAI · PRO</span>
+        <span style="margin-left: auto; font-size: 9.5px; font-weight: 700; letter-spacing: .18em; color: #3A3A40;">DEENAI · STUDIO</span>
       </div>
 
     </div>

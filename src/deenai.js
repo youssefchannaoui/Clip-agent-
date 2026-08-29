@@ -260,18 +260,35 @@ export function demoMetrics() {
   ];
 }
 
+/**
+ * It carries the INSIGHTS and the band as well as the raw counts.
+ *
+ * The model was being asked to notice, from bare totals, what this module had
+ * already worked out two functions earlier -- so it either redid the
+ * arithmetic badly or answered in generalities about short-form video. Handing
+ * it the findings makes the answer specific to THIS account, and means a
+ * spoken answer and the cards on screen cannot contradict each other.
+ */
 export function askContext(user) {
   const clips = ownClips(user);
   const projects = ownProjects(user);
   const kept = clips.filter(c => decided(c) === 'approved');
+  const waiting = clips.filter(c => c.status === 'waiting');
+  const failures = [...failedByProvider(clips)].map(([provider, n]) => providerName(provider) + ': ' + n);
   return {
+    insights: insights(user)
+      .map(card => [card.kicker, card.title].filter(Boolean).join(' ') + ' \u2014 ' + card.body)
+      .slice(0, 4),
+    figures: metrics(user).map(m => m.label + ': ' + m.value + (m.unit ? ' ' + m.unit : '') + ' (' + m.note + ')'),
     lectures: projects.length,
     clipsTotal: clips.length,
     clipsKept: kept.length,
-    clipsWaiting: clips.filter(c => c.status === 'waiting').length,
+    clipsWaiting: waiting.length,
     clipsPosted: clips.filter(c => c.postedAt).length,
+    scriptureAwaitingReview: waiting.filter(c => c.reviewRequired).length || undefined,
     averageKeptScore: kept.length ? Math.round(kept.reduce((a, c) => a + (Number(c.score) || 0), 0) / kept.length) : null,
-    postingWindows: (config.postTimes || []).length || undefined,
+    postingWindowsPerDay: (config.postTimes || []).length || undefined,
+    failedPostsByDestination: failures.length ? failures : undefined,
     recentKeptTitles: kept.slice(-5).map(c => String(c.title || '').slice(0, 80)),
     destinations: [...new Set(clips.flatMap(c => (c.targets || []).map(t => t.provider)))],
   };
