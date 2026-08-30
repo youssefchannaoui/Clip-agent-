@@ -260,10 +260,14 @@ function checkItem(title, text) {
 }
 
 const SOURCE_VISUALS = Object.freeze({
-  lecture: ['source-hero.webp', 'A male Islamic lecturer recording a long-form talk in a professional studio'],
-  scholar: ['source-creator-man.webp', 'A male Islamic teacher speaking in a bright library studio'],
-  courtyard: ['source-mosque.webp', 'A quiet mosque courtyard at sunrise'],
-  valley: ['source-mountains.webp', 'A mountain valley at sunrise used as reflective video footage'],
+  // These are real source-video stills, deliberately selected instead of AI
+  // portraits. They make the first product demonstration feel rooted in the
+  // Islamic lecture world without suggesting that any speaker endorses the
+  // product. Each source is used once across the public marketing pages.
+  lecture: ['speaker-bilal-assaad.webp', 'Sheikh Bilal Assaad delivering a long-form lecture'],
+  scholar: ['speaker-omar-suleiman.webp', 'Dr Omar Suleiman speaking into a microphone'],
+  courtyard: ['speaker-abu-taymiyyah.webp', 'Ustadh Abu Taymiyyah delivering a lecture'],
+  valley: ['speaker-mufti-menk.webp', 'Mufti Menk speaking at a lectern'],
   reflection: ['reel-beneficial.webp', 'A male Islamic speaker in a reflective moment'],
   library: ['reel-deeds.webp', 'A male Islamic teacher speaking beside a microphone and bookshelves'],
   studio: ['reel-depart.webp', 'A male Muslim creator recording a thoughtful studio talk'],

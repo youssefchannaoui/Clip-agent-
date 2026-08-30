@@ -206,7 +206,7 @@ test('public imagery uses a distinct, male-only source library without repeated 
   const images = [...home.matchAll(/\/marketing-assets\/([^"?]+)/g), ...features.matchAll(/\/marketing-assets\/([^"?]+)/g)];
   const assets = images.map(match => match[1]);
   assert.equal(new Set(assets).size, assets.length, 'a marketing source image must never repeat across the public home or features pages');
-  for (const asset of ['source-hero.webp', 'source-creator-man.webp', 'reel-beneficial.webp', 'reel-quran.webp']) {
+  for (const asset of ['speaker-bilal-assaad.webp', 'speaker-omar-suleiman.webp', 'speaker-abu-taymiyyah.webp', 'speaker-mufti-menk.webp', 'reel-beneficial.webp', 'reel-quran.webp']) {
     assert.ok(assets.includes(asset), `${asset} should represent a distinct public source example`);
   }
 });
