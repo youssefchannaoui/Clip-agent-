@@ -1281,12 +1281,11 @@ the English translation beneath it perfectly fine.
    their slots.
 7. **A stranger test** — someone who has never seen the product signs up and
    uses it. Claude cannot create an account, so this one needs a real person.
-8. **Verify the site in Google Search Console** — `SEO-LAUNCH.md`, step 1.
-   Fifteen new landing pages are live and there is no impression or query data
-   for any of them until this is done. It is one env var on Render
-   (`GOOGLE_SITE_VERIFICATION`) and a restart; the meta tag renders itself.
-   Then submit `sitemap.xml` and request indexing on the six pages listed
-   there. Bing takes two more minutes (`BING_SITE_VERIFICATION`).
+8. **Bing Webmaster Tools** (`BING_SITE_VERIFICATION` on Render, ~2 min). Once
+   Google is verified Bing will offer to import everything, which is faster
+   than doing it twice.
+   **Google Search Console is DONE and was already verified** — see the note
+   below; the old wording here claimed otherwise and was wrong.
 9. **Links.** Rankings for anything competitive come from other sites linking
    here, and nothing in this repo can produce one. The DeenClipped YouTube
    channel description pointing at `/islamic-video-clipper` is free, in your
@@ -1648,3 +1647,36 @@ true, delete it.
 guides and the comparison page, each linked from nowhere. It walks links from
 the homepage rather than trusting the sitemap, which is the only way to catch
 that. Any new page must be linked from somewhere a crawler can walk to.
+
+## Search Console: verified all along, and the sitemap was never submitted
+
+Checked in the browser on 30 Aug 2026 rather than assumed, and the assumption
+was wrong in both directions.
+
+- **The property already existed** as `sc-domain:deenclipped.online`, a DOMAIN
+  property, which is DNS-verified and covers every subdomain. So
+  `GOOGLE_SITE_VERIFICATION` on Render is **not needed** and never was. The
+  config and the meta tag stay because they cost nothing and a URL-prefix
+  property may be wanted later, but nothing is blocked on them.
+- **No sitemap had ever been submitted** — the Sitemaps page read 0 of 0. That,
+  not verification, is why only **2 pages were indexed** against 3 clicks in 28
+  days. Submitted; Google read it immediately and reported **30 discovered
+  pages, status Success**.
+- **Seven pages requested for indexing** through URL Inspection, each confirmed
+  "Indexing requested · added to a priority crawl queue": the two clipper
+  pages, long-video-to-shorts, islamic-lecture-clipper, youtube-to-shorts,
+  how-it-works and guides. Every one reported "URL is unknown to Google"
+  beforehand, which is the honest baseline to measure the next few weeks
+  against. The daily quota is roughly 10-12, so the rest arrive via the sitemap.
+- **A link now exists**, added to the DeenClipped YouTube channel's Links
+  section (not the description, which is well written and was left alone):
+  "Clip your lectures" → `/islamic-video-clipper`. Live on the public channel.
+  Channel links are nofollow, so this is worth REFERRAL traffic from 80
+  subscribers and 13.4K views a month rather than ranking signal — say that
+  plainly rather than counting it as the backlink problem being solved.
+
+**The trap for the next session:** a Search Console toast covers the URL
+inspection box for several seconds after each request. Clicking Dismiss, then
+waiting, then clicking the box, then typing is the sequence that works; typing
+straight after a request silently goes nowhere and looks like the page ignored
+you.
