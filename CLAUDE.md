@@ -1843,3 +1843,42 @@ against the APP version and said "Worker changes since then are not live" — on
 because no `worker/` change had shipped in between. It now says how to check
 (`git log v<worker>..HEAD -- worker/`) instead of asserting staleness it cannot
 know. The test that required the words "not live" was corrected with it.
+
+## The watermark switch had nowhere to live (v3.51.0, 31 Aug 2026)
+
+Pro sells "Remove the DeenClipped watermark". The only control that could do it
+was `edWm*` — **in the clip editor, which is behind the coming-soon gate**. So
+the feature was sold and could not be used by anyone who bought it.
+
+- The switch is now on the **Templates** screen, host-rendered against the
+  export's own classes (no design re-import). Position was ALREADY there in the
+  BRAND list; a second position control was built first, immediately disagreed
+  with the existing one, and was deleted. **Two controls for one setting is
+  worse than none.**
+- **Three bugs found by driving it rather than by reading it:**
+  1. `PUT /api/templates/:id` refused, because the draft on that screen can
+     carry the id `new-template` and has never been saved. `POST /api/templates`
+     resolves a draft onto the template it came from and carries the same
+     paywall.
+  2. Basing the save on `templateDraft` wrote every unsaved draft field onto
+     the saved template and **renamed "Clean Line" to "New Template"**. It
+     patches `selectedTemplate` now — display may follow the draft, saving
+     never does.
+  3. The label did not repaint after saving, so it read "Off" beside a switch
+     that was on. The MutationObserver only fires when the panel is MISSING.
+
+### A zero-width space was removing the watermark for free
+
+`assertWatermarkAllowed` asked `trim() === ''`, and **JS `trim()` removes
+whitespace and line terminators and nothing else.** A watermark of one
+zero-width space is not empty by that test, survived the sanitiser, and rendered
+as nothing — the paid feature, taken for free. Verified, not reasoned about:
+U+200B, U+2060 (word joiner), U+00AD (soft hyphen) and **U+2800 (blank braille,
+a real glyph that draws nothing)** all walked through. U+00A0 and U+FEFF did
+not, which is why a partial fix would have looked like it worked.
+
+`templates.visibleText()` is now the single answer to "would a viewer see
+anything", used by the paywall AND the sanitiser — two different notions of
+empty is exactly how the gap opened. Blocked at the gate and at storage, because
+a subscription can lapse between saving a template and rendering with it. The
+regression test was proven red against the old check before being kept.

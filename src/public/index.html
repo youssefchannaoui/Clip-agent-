@@ -5493,6 +5493,83 @@ StudioAdapter.onProbeSource=async url=>{try{
           }
         }catch(e){/* a growth panel must never take the app down */}
       };
+
+      /* ── WATERMARK ON/OFF, on the Templates screen ─────────────────────────
+         Position was ALREADY here, in the BRAND list. The only thing missing
+         was the switch — and it lived in the clip editor, which is behind the
+         "coming soon" gate. So a Pro customer could pay for "Remove the
+         DeenClipped watermark" and have nowhere to do it: a feature sold and
+         not delivered.
+
+         So this adds the switch and NOTHING else. A second position control
+         was built first and immediately disagreed with the existing one,
+         because it read the unsaved draft while saving to the selected
+         template. Two controls for one setting is worse than none.
+
+         Reads the SAVED template, which is what the renderer uses. The paywall
+         is not enforced here — the server refuses on save, which is the only
+         place it can be trusted. This only explains why the switch is disabled
+         so a free user meets a reason instead of a dead control. */
+      const paintWatermark=()=>{
+        try{
+          const anchorBtn=document.getElementById('dcSaveAsStyle');
+          const saved=(DATA&&DATA.selectedTemplate)||null;
+          if(!anchorBtn||!saved||!saved.id){ const gone=document.getElementById('dcWatermark'); if(gone)gone.remove(); return; }
+          const paid=Boolean(DATA&&DATA.billing&&DATA.billing.current&&DATA.billing.current.features&&DATA.billing.current.features.watermark);
+          const host=anchorBtn.closest('section,div[class]')||anchorBtn.parentNode;
+          if(!host||!host.parentNode) return;
+          let box=document.getElementById('dcWatermark');
+          if(!box){ box=document.createElement('div'); box.id='dcWatermark'; host.parentNode.insertBefore(box,host.nextSibling); }
+          const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+          const on=Boolean(String(saved.watermark||'').trim())&&Number(saved.watermarkOpacity)>0;
+          box.style.cssText='flex:none;margin-top:14px;padding:16px 18px;border-radius:14px;'
+            +'display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;'
+            +'border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.02)';
+          box.innerHTML='<div><div style="font:600 10.5px/1 Inter,sans-serif;letter-spacing:.16em;'
+            +'text-transform:uppercase;color:#D9B478">Watermark</div>'
+            +'<div style="margin-top:6px;font-size:13.5px;color:#A5A0A8">'
+            +(on?('Every clip carries <b style="color:#F2F2F4">'+esc(saved.watermark)+'</b>. Position is in Brand below.')
+                :'<b style="color:#F2F2F4">Off</b> — clips export clean.')
+            +(paid?'':' Removing it is on the paid plans.')+'</div></div>'
+            +'<label style="display:inline-flex;align-items:center;gap:9px;flex:none;min-height:34px;'
+            +'cursor:'+(paid?'pointer':'not-allowed')+'">'
+            +'<input type="checkbox" id="dcWmOn"'+(on?' checked':'')+(paid?'':' disabled')
+            +' style="width:17px;height:17px;accent-color:#D9B478">'
+            +'<span style="font-size:13px;color:'+(paid?'#C9C4BD':'#75717b')+'">Show watermark</span></label>';
+
+          const toggle=document.getElementById('dcWmOn');
+          if(toggle&&!toggle.dataset.wired){
+            toggle.dataset.wired='1';
+            toggle.addEventListener('change',async()=>{
+              const patch=toggle.checked
+                ? {watermark:(String(saved.watermark||'').trim()||'DEENCLIPPED'),
+                   watermarkOpacity:Number(saved.watermarkOpacity)>0?saved.watermarkOpacity:100}
+                : {watermark:'',watermarkOpacity:0};
+              try{
+                /* POST, not PUT: the draft on this screen can carry the id
+                   "new-template" and PUT refuses an id that does not exist.
+                   And the body is the SAVED template plus the patch — basing
+                   it on the draft wrote every unsaved draft field onto the
+                   saved one and renamed "Clean Line" to "New Template". */
+                await api('/api/templates',{method:'POST',
+                  body:JSON.stringify({template:Object.assign({},saved,patch)})});
+                await refresh();
+                // Repaint from the NEW state. The observer only fires when the
+                // panel is missing, so without this the label kept describing
+                // the value before the change — it read "Off" beside a
+                // switch that was on.
+                paintWatermark();
+              }catch(e){
+                // The server owns the paywall, so its sentence is the right one.
+                toast(e.message,'bad');
+                paintWatermark();
+              }
+            });
+          }
+        }catch(e){/* a control must never take the screen down */}
+      };
+      window.dcPaintWatermark=paintWatermark;
+
       window.dcPaintInvite=paintInvite;
       /* The app re-renders through innerHTML on every state poll, so the panel
          has to be reattached rather than rendered once. Debounced into a
@@ -5518,6 +5595,10 @@ StudioAdapter.onProbeSource=async url=>{try{
           // Repaint when the grid appears without the panel, or clean up when
           // the grid goes away and the panel is orphaned.
           if((grid&&!panel)||(!grid&&panel)) queueInvite();
+          // Same shape for the watermark control on the Templates screen.
+          const styleBtn=document.getElementById('dcSaveAsStyle');
+          const wm=document.getElementById('dcWatermark');
+          if((styleBtn&&!wm)||(!styleBtn&&wm)) setTimeout(()=>{try{paintWatermark()}catch(e){}},0);
         }).observe(document.body,{childList:true,subtree:true});
       }catch(e){/* an observer must never take the app down */}
 
