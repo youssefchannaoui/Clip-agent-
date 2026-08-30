@@ -1,14 +1,45 @@
 # DeenClipped — working agreement
 
-## Ownership (set 16 Aug 2026, by Youssef)
+## Ownership (split again 31 Aug 2026, by Youssef)
 
-**Claude owns everything, layout included.** The 12 Aug split that reserved
-layout, CSS and visual design for ChatGPT was removed on 16 Aug: "you are now
-doing everything ChatGPT does — it's all Claude."
+**ChatGPT is working on the MAIN WEBSITE. Claude owns the dashboard and
+everything else.** Youssef, 31 Aug: "i have chat gpt working on the design for
+my main website".
 
 | Area | Owner |
 |---|---|
-| Everything in this repo | **Claude** |
+| The public marketing site — the look of `deenclipped.online` | **ChatGPT** |
+| The dashboard / app (`/app`, the studio, the Owner screen) | **Claude** |
+| Everything else — worker, billing, auth, SEO structure, tests | **Claude** |
+
+This is a split by SURFACE, not by file, and the two overlap: `src/marketing.js`
+and `src/public/marketing.css` render the public site AND carry SEO structure
+Claude owns. Both agents edit them. That is workable and has been worked —
+three times on 30–31 Aug — but only because of the rule below.
+
+**What each side must not do:**
+
+- ChatGPT redesigning a page must not remove a registered page, orphan one,
+  drop a canonical, or invent a testimonial. It will not get that far: the
+  tests fail first. Its 30 Aug redesign (v3.50.0) was checked against the SEO
+  work afterwards and broke nothing — schema clean, no orphans, contextual
+  links intact, and its three new images inherited the width/height stamp
+  automatically because that is computed from the files rather than typed.
+- Claude must not restyle the public site. Structure, copy and metadata are
+  Claude's; how it LOOKS is not.
+
+**Do not run both agents in the same minute.** Not a policy, a mechanical
+constraint: on 30–31 Aug Claude twice went to push and found ChatGPT's work
+already on the branch, and had to rebase and resolve by hand. Each hand-merge
+is a chance to silently undo the other side's change, which has happened on
+this repo before (see below). Nothing was lost this time; that was checking,
+not luck, and it does not scale.
+
+### The earlier history, kept because the failure mode has not changed
+
+The 12 Aug split reserved layout, CSS and visual design for ChatGPT. It was
+removed on 16 Aug — "you are now doing everything ChatGPT does — it's all
+Claude" — and has now returned in the narrower form above.
 
 ### The history that split existed for
 
