@@ -4192,7 +4192,11 @@
           iconWrapStyle: 'flex: none; display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid '
             + tone.border + '; border-radius: 10px; background: ' + (card.tone === 'gold' ? 'rgba(217,180,120,.07)' : '#121214') + ';',
           iconStyle: 'font-size: 15px; color: ' + tone.icon + ';',
-          title: String(card.title || ''),
+          // A row has no kicker slot, so the card supplies the whole line where
+          // its kicker began a sentence. Without this, "You keep the" /
+          // "shorter ones" arrived on screen as a heading reading "shorter
+          // ones", which means nothing on its own.
+          title: String(card.line || card.title || ''),
           titleStyle: 'font-size: 13.5px; font-weight: 600; color: ' + (card.tone === 'warn' ? '#E6B770' : '#F2F2F4') + '; text-wrap: pretty;',
           demoStyle: aiDemoChip(card.demo),
           body: String(card.body || ''),

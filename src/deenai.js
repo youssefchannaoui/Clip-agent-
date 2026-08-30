@@ -144,6 +144,7 @@ function tasteCard(user) {
     icon: 'ph ph-scissors', tone: 'gold',
     kicker: 'You keep the',
     title: shorter ? 'shorter ones' : 'longer ones',
+    line: shorter ? 'You keep the shorter ones' : 'You keep the longer ones',
     body: `Across ${kept.length} clips you kept and ${dropped.length} you rejected, the keepers run about `
       + `${Math.round(keptLength)}s against ${Math.round(droppedLength)}s for the ones you dropped. `
       + (shorter
@@ -218,6 +219,7 @@ function yieldCard(user) {
     icon: 'ph ph-coins', tone: 'gold',
     kicker: 'Every keeper costs you',
     title: `${Math.round(perKeeper)} source minutes`,
+    line: `Every keeper costs you about ${Math.round(perKeeper)} source minutes`,
     body: `You have processed about ${Math.round(minutes)} minutes across ${projects.length} lectures and kept ${kept.length} clips. `
       + (perKeeper > 20
         ? 'That is a lot of minutes per usable clip. Marking a tighter range — the part you would replay — usually costs less and yields more, because most of a recording is setup and repetition.'
@@ -256,6 +258,7 @@ export function insights(user) {
       // it cannot if it is glued into the middle of an English string.
       title: String(title).slice(0, 90),
       rtl: isArabic(title),
+      line: isArabic(title) ? String(title).slice(0, 90) : `Clip more from “${String(title).slice(0, 80)}”`,
       figure: best.kept + '/' + best.total,
       figureLabel: 'Clips kept',
       figureNote: 'your best keep rate',

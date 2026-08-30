@@ -181,7 +181,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **966 JS + 427 Python**
+- `npm test` and `npm run check` must pass. Currently **968 JS + 427 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -2015,3 +2015,16 @@ reader distrust every other number beside it:**
 order they were written. Only five are shown, and the two most specific things
 the product can say were falling off the end behind generic advice about hook
 length.
+
+**Only the FIRST card gets a kicker slot; every other one is a row with the
+title alone** (v3.53.1) -- so "You keep the" / "shorter ones" reached the screen
+as a heading reading "shorter ones", and "24 source minutes" beside it. A card
+now carries a `line`, the complete statement, which the row uses and the hero
+ignores. Adding a kicker slot to the row template would have meant a design
+re-import and every hashed class name in the app regenerating, for one span.
+The lecture card is the deliberate exception: its title is the lecture's OWN
+name and may be Arabic, so its `line` stays the bare name rather than being
+glued into an English sentence and rendering as scrambled bidi.
+**No assertion about the data could have caught this** -- the cards were
+correct and the screen was wrong. Found by screenshotting, which is the rule
+this file has been repeating since August.

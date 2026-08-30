@@ -356,3 +356,33 @@ test('the new cards reach Ask, so spoken advice matches the screen', () => {
   assert.match(joined, /score/i);
   assert.match(joined, /keep the/i);
 });
+
+test('a card rendered as a row still says something on its own', () => {
+  // Only the first card gets a kicker slot above its title. Every other card is
+  // a row with the title alone, so "You keep the" + "shorter ones" reached the
+  // screen as a heading reading "shorter ones". Found by screenshotting; no
+  // assertion about the data could have caught it.
+  const user = seedAccount({ kept: 8, rejected: 8, keptLen: 25, rejectedLen: 75 });
+  for (const card of deenai.insights(user)) {
+    const row = card.line || card.title || '';
+    assert.ok(row.trim().split(/\s+/).length >= 3, `"${row}" does not stand alone as a row`);
+    // A prefix kicker must not be lost AND duplicated: the row line carries it,
+    // the hero renders it separately.
+    if (card.line && card.kicker && /^(You keep|Every keeper|Clip more)/.test(card.kicker)) {
+      assert.ok(card.line.startsWith(card.kicker.split(' ')[0]), `"${card.line}" dropped its opening`);
+    }
+  }
+});
+
+test('an Arabic lecture name is never glued into an English sentence', () => {
+  // The bidi trap the card comment already warned about: a right-to-left title
+  // wrapped in English renders as a scrambled string. The row shows the bare
+  // lecture name instead, which reads correctly on its own.
+  const user = seedAccount({ kept: 8, rejected: 2 });
+  store.state.projects[0].title = 'الصبر عند الشدائد';
+  const card = deenai.insights(user).find(c => c.kicker === 'Clip more from');
+  if (card) {
+    assert.equal(card.rtl, true);
+    assert.ok(!/Clip more from/.test(card.line || ''), 'must not prefix a right-to-left title');
+  }
+});
