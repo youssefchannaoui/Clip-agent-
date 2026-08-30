@@ -1761,7 +1761,10 @@ async function route(req, res, url) {
     if (!style || typeof style !== 'object') return;
     // Emptying the text and zeroing the opacity are the same act -- a clip
     // with no visible watermark -- so the gate covers both doors.
-    const wantsNone = ('watermark' in style && String(style.watermark ?? '').trim() === '')
+    // visibleText rather than trim(). trim() removes whitespace and nothing
+    // else, so a watermark of one zero-width space walked straight through
+    // this gate and rendered as nothing — the paid feature, taken for free.
+    const wantsNone = ('watermark' in style && templates.visibleText(style.watermark) === '')
       || ('watermarkOpacity' in style && Number(style.watermarkOpacity) <= 0);
     if (!wantsNone) return;
     if (billing.isPaid(currentUser)) return;

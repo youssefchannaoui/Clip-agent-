@@ -277,3 +277,49 @@ test('every built-in survives the enum: no field silently falls back', () => {
     }
   }
 });
+
+/*
+ * The watermark paywall, and the character that walked through it.
+ *
+ * Removing the DeenClipped watermark is a Pro feature. The gate blocked an
+ * empty string and a zero opacity — but it asked `trim() === ''`, and JS
+ * `trim()` removes whitespace and line terminators and NOTHING ELSE. A
+ * watermark of one zero-width space is not empty by that test, survives the
+ * sanitiser, and renders as nothing. That is the paid feature, taken for free.
+ *
+ * Found by probing rather than by reading, which is the only way this kind of
+ * gap is ever found.
+ */
+test('a watermark made of invisible characters counts as no watermark', () => {
+  const invisible = {
+    'zero-width space': '​',
+    'word joiner': '⁠',
+    'soft hyphen': '­',
+    'blank braille': '⠀',      // a real glyph that draws nothing
+    'left-to-right mark': '‎',
+    'variation selector': '️',
+    'byte-order mark': '﻿',
+    'several together': '​⁠⠀',
+    'invisible around spaces': ' ​ ',
+  };
+  for (const [name, value] of Object.entries(invisible)) {
+    assert.equal(templates.visibleText(value), '',
+      `"${name}" renders as nothing and must count as an empty watermark`);
+  }
+});
+
+test('a real watermark is still a watermark', () => {
+  // The fix must not swallow legitimate text, including non-Latin scripts and
+  // emoji, which is where an over-eager "strip everything odd" rule breaks.
+  for (const value of ['DEENCLIPPED', 'ديـن كليبد', 'Deen  Clipped', '@deenclipped', '⚡ DeenClipped']) {
+    assert.notEqual(templates.visibleText(value), '', `"${value}" is visible text`);
+  }
+});
+
+test('the sanitiser refuses to store an invisible watermark', () => {
+  // Blocked at the gate AND at storage. A subscription can lapse between
+  // saving a template and rendering with it, so the stored value must not be
+  // an invisible string waiting to become free watermark removal later.
+  const saved = templates.sanitiseClipStyle({ watermark: '​⠀' });
+  assert.equal(saved.watermark, '', 'an invisible watermark is stored as empty, not as the character');
+});

@@ -192,6 +192,34 @@ function clamp(value, minimum, maximum, fallback) {
   return Number.isFinite(number) ? Math.min(maximum, Math.max(minimum, number)) : fallback;
 }
 
+/**
+ * Characters that take up no ink.
+ *
+ * `String.prototype.trim()` removes whitespace and line terminators and
+ * NOTHING ELSE, so a watermark of a single zero-width space passed every
+ * emptiness check in the app and rendered as nothing — which is the paid
+ * "remove the watermark" feature, taken for free. Verified rather than
+ * reasoned about: zero-width space, word joiner, soft hyphen and the blank
+ * braille pattern all survived `trim()` and the sanitiser.
+ *
+ * Covered here: C0/C1 controls, soft hyphen, the bidirectional and joiner
+ * formatting marks, zero-width everything, Hangul filler, the BLANK braille
+ * pattern (U+2800 — a real glyph that draws nothing), variation selectors and
+ * the byte-order mark.
+ */
+const NO_INK = /[\u0000-\u001F\u007F-\u009F\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u206A-\u206F\u2800\u3164\uFE00-\uFE0F\uFEFF\uFFA0\uFFF9-\uFFFB]/g;
+
+/**
+ * The part of a string a viewer would actually see.
+ *
+ * Used wherever "is this empty?" decides something that costs money. Exported
+ * because the answer has to be identical in the sanitiser and in the paywall —
+ * two different notions of empty is exactly how the gap above opened.
+ */
+export function visibleText(value) {
+  return String(value ?? '').replace(NO_INK, '').trim();
+}
+
 function cleanText(value, fallback, max = 120) {
   const text = String(value ?? '').trim();
   return (text || fallback).slice(0, max);
@@ -250,7 +278,8 @@ export function sanitiseTemplate(input = {}, { id = '', builtIn = false, userId 
   // An empty watermark is a real choice, not a missing field: TikTok rejects
   // videos carrying third-party watermarks, so "none" must be saveable. Only
   // an absent field falls back to the default.
-  output.watermark = String(source.watermark ?? '').trim() === '' && 'watermark' in (input || {})
+  // visibleText, not trim: a zero-width space is not a watermark.
+  output.watermark = visibleText(source.watermark) === '' && 'watermark' in (input || {})
     ? ''
     : cleanText(source.watermark, DEFAULTS.watermark, 60);
   output.version = Math.max(1, Math.round(Number(source.version) || 1));
@@ -334,7 +363,9 @@ export function sanitiseClipStyle(patch = {}) {
     } else if (key === 'captionFont' || key === 'captionHighlightFont' || key === 'captionArabicFont') {
       output[key] = cleanText(value, DEFAULTS[key], 80);
     } else if (key === 'watermark') {
-      output[key] = cleanText(value, DEFAULTS.watermark, 60);
+      // An all-invisible watermark is an empty one. Storing it would let the
+      // paywall be walked around with a character nobody can see.
+      output[key] = visibleText(value) === '' ? '' : cleanText(value, DEFAULTS.watermark, 60);
     }
   }
   return output;
