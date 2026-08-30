@@ -150,7 +150,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **917 JS + 427 Python**
+- `npm test` and `npm run check` must pass. Currently **943 JS + 427 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1762,3 +1762,51 @@ money and the correction needs the invoice open in Stripe. Owner-only at
 `/api/owner/integrity`. `test/finance-integrity.test.mjs` reproduces the bug
 exactly, and was **proven to fail against the old comparison** before being
 kept.
+
+## Growth: referrals, and what counts as one (v3.49.0, 30 Aug 2026)
+
+Aimed at the first 100 paid subscribers rather than at pageviews.
+
+- **An account is not a referral.** Signing up costs nothing, so paying for one
+  buys fake accounts. A referral counts when the invited person has ACTIVATED
+  -- processed a video AND approved a clip -- which is the first moment they
+  have seen what the product does and is expensive enough that faking it is not
+  worth doing. `referrals.isActivated()`.
+- **The funnel is DERIVED, not a new event stream.** `growth.js` reads
+  projects, clips, revenueEvents and accounts, all of which already exist. A
+  parallel "user did X" log would be a second source of truth that drifts from
+  the first, and the first is the one the customer can see. Nothing here
+  fingerprints or records a journey.
+- **Every reward defaults to ZERO** (`config.referralBonus*`,
+  `config.affiliate*`). The economics are not approved, and code that pays out
+  by default pays out before anybody decided to. The panel says "No reward is
+  attached to this yet" rather than implying one that is switched off.
+- **`billing.grantBonusTokens` refuses to run without a key** and refuses a key
+  it has already honoured. The settle pass runs on every owner growth read, so
+  without that it would top somebody up on every read.
+- **Renewals are excluded everywhere.** `activatedAt`/`convertedAt` are stamped
+  once and never rewritten, so a renewal, a replayed webhook or a second
+  approved clip cannot pay twice. A yearly plan is divided by 12 for MRR rather
+  than counted as twelve monthly customers.
+- **Everything ranks by PAID, never by traffic.** A channel with a thousand
+  visits and no customers is a channel to stop working on, and sorting by
+  visits hides exactly that. A test asserts one paying campaign outranks twenty
+  free signups.
+- **Abuse is FLAGGED, never auto-blocked.** One person with two accounts and
+  two colleagues on one email domain look identical, and telling them apart
+  properly means fingerprinting. `referrals.suspicious()` surfaces pairs; a
+  person decides, and nothing pays automatically.
+
+### The host-panel lifecycle trap, for the third time
+
+The invite panel is host-rendered (the same device as the chart tooltip and the
+landing table). Hooking a render function was wrong TWICE: the hook fires at
+the START of a render, so it inspects the PREVIOUS DOM and finds nothing, and
+the studio coalesces its paint into a frame that neither `setTimeout(0)` nor a
+double `requestAnimationFrame` reliably landed after. A **MutationObserver
+watching for `#dcPlanGrid`** does not need to know any of that. Use that shape
+for the next host-rendered panel rather than rediscovering this.
+
+Also: the panel is keyed off the plan grid EXISTING rather than off
+`UI.screen`, so there is one source of truth instead of two that disagree after
+a re-render.

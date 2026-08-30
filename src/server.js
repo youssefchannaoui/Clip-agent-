@@ -30,6 +30,8 @@ import * as billing from './billing.js';
 import * as marketing from './marketing.js';
 import * as seoPages from './seo-pages.js';
 import * as financeAudit from './finance-audit.js';
+import * as referrals from './referrals.js';
+import * as growth from './growth.js';
 import * as admin from './admin.js';
 import * as owner from './owner.js';
 import * as deenai from './deenai.js';
@@ -213,9 +215,74 @@ function creditLanding(req, user, isNew = true, url = null) {
       if (Object.keys(context).length) { user.arrival = context; changed = true; }
     }
 
+    // The invite, if there was one. Kept SEPARATE from first-touch landing:
+    // a referral says who sent them, the landing page says what convinced
+    // them, and collapsing the two loses whichever question you ask next.
+    if (config.referralsEnabled && !user.referredBy) {
+      const code = referralCode(req);
+      if (code && referrals.attachReferral(state, user, code)) {
+        changed = true;
+        metrics.event('referral_signup');
+        // The invited person's bonus, if one is configured. Zero by default.
+        if (config.referralBonusInvited > 0) grantReferralMinutes(user, config.referralBonusInvited, 'invited');
+      }
+    }
+
     if (changed) save();
     if (landing) metrics.attribute('signup', landing);
   } catch { /* attribution must never block a sign-up */ }
+}
+
+/**
+ * Stamp referral activation and conversion, and pay whatever is configured.
+ *
+ * Runs on the owner's growth read rather than on a hook, because both facts
+ * are DERIVED -- there is no single moment when "processed a video and
+ * approved a clip" becomes true, and hooking every path that could make it
+ * true is how one of them gets missed. The stamps are the guard: a timestamp
+ * that already exists is never rewritten, so this is safe to run as often as
+ * it likes and cannot pay twice.
+ */
+function settleReferralRewards() {
+  if (!config.referralsEnabled) return [];
+  const changes = referrals.settleReferrals(state);
+  if (!changes.length) return changes;
+  for (const change of changes) {
+    const referrer = (state.authUsers || []).find(u => String(u.id) === String(change.referrerId));
+    if (!referrer) continue;
+    const minutes = change.kind === 'activated' ? config.referralBonusActivated : config.referralBonusPaid;
+    if (minutes > 0) grantReferralMinutes(referrer, minutes, change.kind, change.userId);
+    metrics.event(change.kind === 'activated' ? 'referral_activated' : 'referral_paid');
+  }
+  save();
+  return changes;
+}
+
+function referralCode(req) {
+  const match = /(?:^|;\s*)dc_ref=([^;]*)/.exec(String(req.headers.cookie || ''));
+  if (!match) return '';
+  try { return referrals.normaliseCode(decodeURIComponent(match[1])); } catch { return ''; }
+}
+
+/**
+ * Grant bonus source minutes, idempotently.
+ *
+ * Every grant is written into a ledger keyed by reason, and a reason that has
+ * already been granted is never granted twice. Without that, a renewal or a
+ * re-run of the settle pass would top somebody up every time it ran.
+ */
+function grantReferralMinutes(user, minutes, reason, subjectId = '') {
+  if (!user || !(minutes > 0)) return false;
+  state.referralRewards ||= {};
+  const ledger = (state.referralRewards[user.id] ||= { minutes: 0, entries: [] });
+  const key = `${reason}:${subjectId || user.id}`;
+  if (ledger.entries.some(entry => entry.key === key)) return false;
+  ledger.entries.push({ key, minutes, reason, at: Date.now() });
+  ledger.minutes = (ledger.minutes || 0) + minutes;
+  // Same balance a purchased top-up writes to, so the number the customer
+  // sees is the number that spends.
+  billing.grantBonusTokens(user, minutes, `Referral bonus (${reason})`, key);
+  return true;
 }
 
 function landingPath(req) {
@@ -986,6 +1053,28 @@ async function route(req, res, url) {
   // Registry-driven SEO pages. One list drives routing, the sitemap and the
   // analytics allowlist, so a new page cannot ship routed-but-unlisted (or
   // listed-but-404) the way three hand-maintained lists allowed.
+  // /r/CODE — an invite link.
+  //
+  // Sets a cookie holding the CODE and nothing else, then sends the visitor to
+  // the page most likely to explain the product to someone a friend just told
+  // about it. The code is validated at SIGN-UP rather than here: refusing an
+  // unknown code at the door would tell a stranger which codes exist, and the
+  // only thing a bad code can do downstream is fail to find a referrer.
+  const invite = pathname.match(/^\/r\/([A-Za-z0-9]{1,16})$/);
+  if (method === 'GET' && invite) {
+    const secure = config.publicBaseUrl.startsWith('https://') ? '; Secure' : '';
+    const prior = res.getHeader('Set-Cookie');
+    // 30 days: long enough for someone to think about it over a weekend,
+    // short enough that a stale code does not follow them for a year.
+    const cookie = `dc_ref=${encodeURIComponent(referrals.normaliseCode(invite[1]))}; Max-Age=2592000; Path=/; SameSite=Lax; HttpOnly${secure}`;
+    res.writeHead(302, {
+      Location: '/islamic-video-clipper',
+      'Set-Cookie': prior ? [].concat(prior, cookie) : [cookie],
+      'Cache-Control': 'no-store',
+    });
+    return res.end();
+  }
+
   // A trailing slash on a real page is somebody else's link, typed or pasted
   // that way. 404ing it avoids a duplicate URL and loses the visitor; a 301 to
   // the canonical form avoids the duplicate AND keeps them.
@@ -1285,6 +1374,37 @@ async function route(req, res, url) {
     const days = Math.min(365, Math.max(30, Number(url.searchParams.get('days')) || 180));
     try { requireOperator(currentUser); return json(res, 200, await owner.finance(currentUser, { days })); }
     catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+  }
+  if (method === 'GET' && pathname === '/api/referral') {
+    // The signed-in customer's own invite link and what it has produced.
+    // Scoped to the caller by construction: it reads `currentUser` and never
+    // takes an id from the request.
+    if (!currentUser) return json(res, 401, { error: 'Sign in first.' });
+    if (!config.referralsEnabled) return json(res, 200, { enabled: false });
+    const code = referrals.codeFor(state, currentUser);
+    save();
+    const stats = referrals.statsFor(state, currentUser);
+    return json(res, 200, {
+      enabled: true,
+      // Falls back to the request's own origin: a relative path in a
+      // copy-this-link box is not a link, and a deployment without
+      // PUBLIC_BASE_URL set would have handed out one.
+      url: `${publicBase(req)}/r/${code}`,
+      ...stats,
+      // Stated so the page cannot imply a reward that is switched off.
+      rewards: {
+        invitedMinutes: config.referralBonusInvited,
+        activatedMinutes: config.referralBonusActivated,
+        paidMinutes: config.referralBonusPaid,
+      },
+    });
+  }
+  if (method === 'GET' && pathname === '/api/owner/growth') {
+    try {
+      requireOperator(currentUser);
+      settleReferralRewards();
+      return json(res, 200, growth.report(state, metrics.summary({ days: Math.min(365, Math.max(7, Number(url.searchParams.get('days')) || 30)) })));
+    } catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
   }
   if (method === 'GET' && pathname === '/api/owner/integrity') {
     // Owner only, and read-only by construction: auditFinance never writes.

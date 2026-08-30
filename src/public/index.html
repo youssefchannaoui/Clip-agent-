@@ -4731,6 +4731,10 @@ function studioWanted(){return window.STUDIO_SHELL===true}
     }
 let STUDIO=null;
 function renderStudio(){
+  /* The studio re-renders through innerHTML, so a host-rendered panel has to
+     be reattached after every paint. renderAll() alone was not enough: the
+     studio path returns from it early, so the hook has to sit here too. */
+  try{window.dcQueueInvite&&window.dcQueueInvite()}catch(e){}
   if(!studioWanted()||!DATA||!window.StudioRuntime||!window.StudioAdapter)return false;
   if(!STUDIO){
     STUDIO=StudioRuntime.mount($('#studio'));
@@ -5328,6 +5332,197 @@ StudioAdapter.onProbeSource=async url=>{try{
             +'</div>';
         }catch(e){/* a reporting table must never take the screen down */}
       };
+
+      /* ── FIRST 100 ─────────────────────────────────────────────────────────
+         The only screen that answers the question the business is actually
+         asking. Everything on it is ranked by PAYING CUSTOMERS, never by
+         traffic: a channel with a thousand visits and no customers is a
+         channel to stop working on, and sorting by visits hides exactly that.
+
+         Host-rendered rather than added to the design export, the same as the
+         landing table below it — putting one panel in the export would
+         regenerate every hashed class name in the app. */
+      const paintFirst100=()=>{
+        try{
+          const g=(window.DC_OWNER&&window.DC_OWNER.growth)||null;
+          const anchorSec=document.querySelector('#dcOwnerScreen .dcow-s.dcow-d5');
+          const parent=anchorSec&&anchorSec.parentNode;
+          let box=document.getElementById('dcowFirst100');
+          if(!parent||!g){ if(box)box.remove(); return; }
+          if(!box){ box=document.createElement('div'); box.id='dcowFirst100'; parent.insertBefore(box,anchorSec); }
+          const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+          /* A rate with no denominator is an em dash. "Nobody has arrived yet"
+             and "nobody converted" are different answers, and 0% reads as the
+             second one. */
+          const pct=v=>(v===null||v===undefined)?'—':(v+'%');
+          const cash=(m,c)=>m?((m/100).toFixed(2)+' '+String(c||'').toUpperCase()):'—';
+          const f=g.funnel||{};
+          const stage=(label,n,of)=>'<tr class="dcow-hov"><td class="sgl">'+esc(label)+'</td>'
+            +'<td class="sgm">'+esc(n||0)+'</td><td class="sgm">'+esc(pct(of?Math.round((n/of)*1000)/10:null))+'</td></tr>';
+          const rank=(rows,label)=>{
+            if(!rows||!rows.length) return '';
+            return '<div class="sgw"><div class="scl"><span class="s97">'+esc(label)+'</span></div>'
+              +'<div class="sdk"><table class="sh1">'
+              +'<tr><th class="sgh">Source</th><th class="sgi">Signups</th><th class="sgi">Activated</th>'
+              +'<th class="sgi">Paid</th><th class="sgi">Revenue</th></tr>'
+              +rows.slice(0,8).map(r=>'<tr class="dcow-hov"><td class="sgl">'+esc(r.key)+'</td>'
+                +'<td class="sgm">'+esc(r.signups)+'</td><td class="sgm">'+esc(r.activated)+'</td>'
+                +'<td class="sgm">'+esc(r.paid)+'</td>'
+                +'<td class="sgm">'+esc(cash(r.initialRevenueMinor,g.currency))+'</td></tr>').join('')
+              +'</table></div></div>';
+          };
+          const drop=g.biggestDropOff;
+          box.className='dcow-s';
+          box.style.cssText='flex-shrink:0;margin-bottom:20px';
+          box.innerHTML='<div class="scl"><span class="s97">First 100</span></div>'
+            +'<div class="sgw" style="margin-bottom:14px"><div class="sdk"><table class="sh1">'
+            +'<tr><th class="sgh">Paid subscribers</th><th class="sgi">New this month</th>'
+            +'<th class="sgi">MRR</th><th class="sgi">Activated</th>'
+            +'<th class="sgi">Visitor&#8594;signup</th><th class="sgi">Signup&#8594;activated</th>'
+            +'<th class="sgi">Activated&#8594;paid</th></tr>'
+            +'<tr class="dcow-hov"><td class="sgl" style="font-size:19px;color:#D9B478">'+esc(g.paidSubscribers||0)+' / 100</td>'
+            +'<td class="sgm">'+esc(g.newPaidThisMonth||0)+'</td>'
+            +'<td class="sgm">'+esc(cash(g.mrrMinor,g.currency))+'</td>'
+            +'<td class="sgm">'+esc(g.activatedUsers||0)+'</td>'
+            +'<td class="sgm">'+esc(pct(g.rates&&g.rates.visitorToSignup))+'</td>'
+            +'<td class="sgm">'+esc(pct(g.rates&&g.rates.signupToActivated))+'</td>'
+            +'<td class="sgm">'+esc(pct(g.rates&&g.rates.activatedToPaid))+'</td></tr>'
+            +'</table></div></div>'
+            +'<div class="sgw" style="margin-bottom:14px"><div class="scl"><span class="s97">Where people stop</span></div>'
+            +'<div class="sdk"><table class="sh1">'
+            +'<tr><th class="sgh">Stage</th><th class="sgi">Reached</th><th class="sgi">Of signups</th></tr>'
+            +stage('Signed up',f.signedUp,f.signedUp)
+            +stage('Imported a video',f.imported,f.signedUp)
+            +stage('Processing finished',f.processed,f.signedUp)
+            +stage('Clips came back',f.clipsMade,f.signedUp)
+            +stage('Reviewed a clip',f.reviewed,f.signedUp)
+            +stage('Approved a clip',f.approved,f.signedUp)
+            +stage('Published a clip',f.published,f.signedUp)
+            +stage('Subscribed',f.paid,f.signedUp)
+            +'</table></div>'
+            +(drop?'<p style="margin:10px 2px 0;font-size:12px;color:#D9B478">Biggest loss: '
+              +esc(drop.lost)+' of '+esc(drop.of)+' accounts '+esc(drop.from)+' but never '+esc(drop.to)+'.</p>':'')
+            +'</div>'
+            +rank(g.channels,'Acquisition channels')
+            +rank(g.landingPages,'Landing pages that produce customers')
+            +rank(g.campaigns,'Creator campaigns')
+            +rank(g.referrers,'Top referrers')
+            +'<div class="sgw"><div class="scl"><span class="s97">Referrals</span></div>'
+            +'<div class="sdk"><table class="sh1">'
+            +'<tr><th class="sgh">Invited</th><th class="sgi">Activated</th><th class="sgi">Paid</th></tr>'
+            +'<tr class="dcow-hov"><td class="sgl">'+esc(g.referrals&&g.referrals.invited||0)+'</td>'
+            +'<td class="sgm">'+esc(g.referrals&&g.referrals.activated||0)+'</td>'
+            +'<td class="sgm">'+esc(g.referrals&&g.referrals.paid||0)+'</td></tr>'
+            +'</table></div>'
+            +'<p style="margin:10px 2px 0;font-size:11px;color:#75717b;line-height:1.5">'
+            +'An account is not a referral. A referral counts once the invited person has processed a video '
+            +'and approved a clip. '+esc((g.unavailable||[])[0]||'')+'</p></div>';
+        }catch(e){/* a reporting panel must never take the screen down */}
+      };
+
+      /* ── INVITE A CREATOR, and the one next step ───────────────────────────
+         Two small surfaces, both deliberately quiet.
+
+         The invite panel is on the Tokens & billing screen and nowhere else.
+         A referral prompt on every screen is the thing people mute; one, where
+         somebody is already thinking about their allowance, is one they read.
+
+         The next-step prompt names ONE action. A user shown six things to do
+         does none of them. It appears only while there IS a next step, and
+         disappears the moment the account has been all the way through. */
+      let dcReferral=null, dcRefLoaded=false;
+      const loadReferral=async()=>{
+        if(dcRefLoaded) return dcReferral;
+        dcRefLoaded=true;
+        try{ dcReferral=await api('/api/referral'); }catch(e){ dcReferral=null; }
+        return dcReferral;
+      };
+
+      const paintInvite=async()=>{
+        try{
+          /* Keyed off the DOM rather than off UI.screen: the panel belongs
+             wherever the plan cards are, and if they are not rendered we are
+             not on that screen. One source of truth instead of two that can
+             disagree after a re-render. */
+          const grid0=document.getElementById('dcPlanGrid');
+          if(!grid0) { const gone=document.getElementById('dcInvite'); if(gone)gone.remove(); return; }
+          const r=await loadReferral();
+          if(!r||!r.enabled) return;
+          /* #dcPlanGrid is the plan cards, and it exists in the design export
+             — the panel goes after them, where somebody is already thinking
+             about their allowance. */
+          const grid=grid0;
+          const host=grid.parentNode;
+          if(!host) return;
+          let box=document.getElementById('dcInvite');
+          if(!box){ box=document.createElement('div'); box.id='dcInvite'; host.insertBefore(box, grid.nextSibling); }
+          const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+          /* Rewards are config-driven and default to zero. The panel must not
+             imply one that is switched off. */
+          const rw=r.rewards||{};
+          const promise=rw.activatedMinutes>0
+            ? 'You get '+esc(rw.activatedMinutes)+' source minutes when someone you invite processes a lecture and keeps a clip.'
+            : 'No reward is attached to this yet — it is simply a clean link to share.';
+          box.style.cssText='flex:none;margin-top:22px;padding:22px;border-radius:18px;'
+            +'border:1px solid rgba(217,180,120,.28);background:rgba(217,180,120,.045)';
+          box.innerHTML='<div style="font:600 11px/1 Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#D9B478">Invite a creator</div>'
+            +'<h3 style="margin:10px 0 6px;font:600 20px/1.2 Outfit,Inter,sans-serif;letter-spacing:-.02em">Know another creator sitting on hours of lectures?</h3>'
+            +'<p style="margin:0 0 16px;color:#A5A0A8;font-size:13.5px;line-height:1.6;max-width:62ch">'+esc(promise)+'</p>'
+            +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">'
+            +'<input id="dcInviteUrl" readonly value="'+esc(r.url)+'" '
+            +'style="flex:1;min-width:240px;padding:11px 13px;border-radius:10px;border:1px solid rgba(255,255,255,.12);'
+            +'background:rgba(255,255,255,.03);color:#F2F2F4;font:500 13px/1.4 ui-monospace,Menlo,monospace">'
+            +'<button id="dcInviteCopy" type="button" style="padding:11px 18px;border-radius:10px;border:0;cursor:pointer;'
+            +'background:#D9B478;color:#141416;font:600 13px/1 Inter,sans-serif;min-height:42px">Copy link</button></div>'
+            +'<div style="display:flex;gap:26px;flex-wrap:wrap">'
+            +['Invited|'+(r.invited||0),'Activated|'+(r.activated||0),'Subscribed|'+(r.paid||0)]
+              .map(x=>{const [l,v]=x.split('|');return '<div><div style="font:600 22px/1 Outfit,sans-serif;color:#D9B478">'+esc(v)+'</div>'
+                +'<div style="margin-top:3px;font-size:11.5px;color:#75717b">'+esc(l)+'</div></div>'}).join('')
+            +'</div>'
+            +'<p style="margin:14px 0 0;font-size:11.5px;color:#75717b;line-height:1.5">'
+            +'Activated means they processed a lecture and kept a clip — not that they made an account.</p>';
+          const btn=document.getElementById('dcInviteCopy');
+          if(btn&&!btn.dataset.wired){
+            btn.dataset.wired='1';
+            btn.addEventListener('click',async()=>{
+              const field=document.getElementById('dcInviteUrl');
+              try{ await navigator.clipboard.writeText(field.value); }
+              catch(e){ field.select(); try{document.execCommand('copy')}catch(e2){} }
+              btn.textContent='Copied'; setTimeout(()=>{btn.textContent='Copy link'},1600);
+            });
+          }
+        }catch(e){/* a growth panel must never take the app down */}
+      };
+      window.dcPaintInvite=paintInvite;
+      /* The app re-renders through innerHTML on every state poll, so the panel
+         has to be reattached rather than rendered once. Debounced into a
+         microtask so a burst of renders paints it a single time. */
+      /* Watched, not scheduled.
+         Hooking a render function was wrong twice: the hook fires at the START
+         of a render, so it inspects the previous DOM, and the studio coalesces
+         its paint into a frame that a setTimeout or even a double rAF did not
+         reliably land after. An observer does not need to know any of that —
+         it reacts to the plan grid EXISTING, whenever and however that
+         happens, and it is idempotent because paintInvite reuses its own node. */
+      let invitePending=false;
+      const queueInvite=()=>{
+        if(invitePending) return;
+        invitePending=true;
+        setTimeout(()=>{ invitePending=false; paintInvite(); },0);
+      };
+      window.dcQueueInvite=queueInvite;
+      try{
+        new MutationObserver(()=>{
+          const grid=document.getElementById('dcPlanGrid');
+          const panel=document.getElementById('dcInvite');
+          // Repaint when the grid appears without the panel, or clean up when
+          // the grid goes away and the panel is orphaned.
+          if((grid&&!panel)||(!grid&&panel)) queueInvite();
+        }).observe(document.body,{childList:true,subtree:true});
+      }catch(e){/* an observer must never take the app down */}
+
+      window.dcPaintFirst100=paintFirst100;
+
       window.dcPaintLandingTable=paintLandingTable;
 
       const hide=()=>{ if(tip)tip.style.opacity='0'; };
@@ -5357,16 +5552,19 @@ StudioAdapter.onProbeSource=async url=>{try{
       window.DC_OWNER=window.DC_OWNER||{};
       try{
         const d=Number(days)||180;
-        const [fin,acc,web]=await Promise.allSettled([
+        const [fin,acc,web,grw]=await Promise.allSettled([
           api('/api/owner/finance?days='+d),
           api('/api/admin/analytics'),
           api('/api/owner/webmetrics?days='+Math.min(90,d)),
+          api('/api/owner/growth?days='+Math.min(365,d)),
         ]);
         if(fin.status==='fulfilled')window.DC_OWNER.finance=fin.value;else if(!opts.quiet)toast(fin.reason.message,'bad');
         if(acc.status==='fulfilled')window.DC_OWNER.analytics=acc.value;
         if(web.status==='fulfilled')window.DC_OWNER.webmetrics=web.value;
+        if(grw.status==='fulfilled')window.DC_OWNER.growth=grw.value;
         if(DATA){DATA.ownerData=window.DC_OWNER;DATA.webmetrics=window.DC_OWNER.webmetrics||null}
         try{window.dcPaintLandingTable&&setTimeout(window.dcPaintLandingTable,0)}catch(e){}
+        try{window.dcPaintFirst100&&setTimeout(window.dcPaintFirst100,0)}catch(e){}
         renderAll();
       }finally{ownerLoading=false}
       /* Health after the books have painted, never instead of them. */
@@ -5601,7 +5799,7 @@ function paintStudio(){
   /* No unread activity -> hide the dot the design hardcoded on. */
   document.body.classList.toggle('studio-read',!vals.activityUnread);
 }
-function renderAll(){if(renderStudio())return;renderHeader();decorateStaticIcons();renderQueue();renderSchedule();renderAnalytics();renderMusic();renderLibrary();renderTemplateSelect();renderPublishing();renderAutomation();renderSide();decorateStaticIcons();updateClock();if(LIBRARY_PROJECT_ID&&!$('#libraryBrowser')?.classList.contains('hide'))renderProjectClips()}
+function renderAll(){try{window.dcQueueInvite&&window.dcQueueInvite()}catch(e){}if(renderStudio())return;renderHeader();decorateStaticIcons();renderQueue();renderSchedule();renderAnalytics();renderMusic();renderLibrary();renderTemplateSelect();renderPublishing();renderAutomation();renderSide();decorateStaticIcons();updateClock();if(LIBRARY_PROJECT_ID&&!$('#libraryBrowser')?.classList.contains('hide'))renderProjectClips()}
 function renderHeader(){if(!DATA)return;const ready=Boolean(DATA.readiness?.ready);$('#liveDot')?.classList.toggle('off',!ready);if($('#liveText'))$('#liveText').textContent=ready?'Self-hosted AI ready':'Setup required';if($('#tzLabel'))$('#tzLabel').textContent=DATA.timezone||'Australia/Perth';const q=(DATA.clips||[]).filter(c=>c.status==='waiting').length;const s=(DATA.clips||[]).filter(c=>['approved','scheduled','publishing','publish_failed'].includes(c.status)).length;if($('#cQueue')){$('#cQueue').textContent=q;$('#cQueue').classList.toggle('urgent',q>0)}if($('#cSched'))$('#cSched').textContent=s;const next=nextScheduledClip();if($('#cdNum'))$('#cdNum').textContent=next?countdown(next.scheduledAt):'—'}
 function nextScheduledClip(){return (DATA?.clips||[]).filter(c=>c.scheduledAt>Date.now()&&!['posted','ready'].includes(c.status)).sort((a,b)=>a.scheduledAt-b.scheduledAt)[0]}
 function countdown(at){const d=Math.max(0,Number(at)-Date.now());const h=Math.floor(d/3600000),m=Math.floor((d%3600000)/60000);return h?`${h}h ${m}m`:`${m}m`}

@@ -871,6 +871,46 @@ export async function createTopupCheckoutSession(user, packageId) {
   return { id: session.id, url: session.url };
 }
 
+/**
+ * Grant bonus tokens for a reason that is not a purchase.
+ *
+ * Referral rewards need the same balance a top-up writes to -- a separate
+ * "referral minutes" pool would be a second currency the allowance code does
+ * not know about, and the customer would see a number that did not spend.
+ *
+ * Idempotency is the CALLER's job here and deliberately so: this function is
+ * given a reason key, refuses a key it has already honoured, and records it.
+ * Doing it any other way means a re-run of a settle pass tops somebody up
+ * every time it runs.
+ */
+export function grantBonusTokens(user, tokens, reason, key) {
+  ensureBillingState();
+  const amount = Math.max(0, Math.round(Number(tokens) || 0));
+  if (!user || !amount) return { granted: 0 };
+  if (isUnlimited(user)) return { granted: 0, unlimited: true };
+  const billing = ensureUserBilling(user);
+  const grantKey = String(key || reason || '');
+  if (!grantKey) throw new Error('A bonus grant needs a key, or it will be granted again.');
+  billing.processedBonusGrants ||= [];
+  if (billing.processedBonusGrants.includes(grantKey)) {
+    return { granted: 0, duplicate: true, balance: billing.bonusTokens };
+  }
+  billing.bonusTokens = Math.max(0, Number(billing.bonusTokens || 0)) + amount;
+  billing.processedBonusGrants.unshift(grantKey);
+  billing.processedBonusGrants = billing.processedBonusGrants.slice(0, 200);
+  state.billingEvents.unshift({
+    id: `bill_${now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`,
+    userId: user.id,
+    amount,
+    reason: String(reason || 'bonus'),
+    meta: { key: grantKey },
+    createdAt: now(),
+  });
+  state.billingEvents = state.billingEvents.slice(0, 5000);
+  save();
+  return { granted: amount, balance: billing.bonusTokens };
+}
+
 export function grantTopup(user, packageId, references = {}) {
   ensureBillingState();
   if (!user || isUnlimited(user)) return { granted: 0, unlimited: Boolean(user && isUnlimited(user)) };

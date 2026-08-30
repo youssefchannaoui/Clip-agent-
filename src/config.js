@@ -46,6 +46,36 @@ export const config = {
   // and the resulting failure looks identical to the wrong token entirely.
   googleSiteVerification: String(process.env.GOOGLE_SITE_VERIFICATION || '').trim(),
   bingSiteVerification: String(process.env.BING_SITE_VERIFICATION || '').trim(),
+  /*
+   * Referral and affiliate economics, as configuration.
+   *
+   * Every default is OFF or ZERO, deliberately. The business rules are not
+   * approved, and code that pays out by default pays out before anybody
+   * decided to. Turning these on is a decision recorded in an environment
+   * variable, which is where a decision about money belongs -- not in a
+   * constant somebody changes while doing something else.
+   */
+  referralsEnabled: boolean(process.env.REFERRALS_ENABLED, true),
+  // Source minutes granted to the person who was INVITED, at signup.
+  referralBonusInvited: Math.max(0, number(process.env.REFERRAL_BONUS_INVITED, 0)),
+  // Source minutes granted to the INVITER, when the invited account activates
+  // -- processes a video and approves a clip. Never merely for signing up.
+  referralBonusActivated: Math.max(0, number(process.env.REFERRAL_BONUS_ACTIVATED, 0)),
+  // A further grant when the invited account first subscribes. Once, ever.
+  referralBonusPaid: Math.max(0, number(process.env.REFERRAL_BONUS_PAID, 0)),
+
+  // Affiliates are an application, not an open door: nobody is approved
+  // automatically and no payout runs without a person deciding.
+  affiliatesEnabled: boolean(process.env.AFFILIATES_ENABLED, false),
+  affiliateCommissionPercent: Math.min(50, Math.max(0, number(process.env.AFFILIATE_COMMISSION_PERCENT, 0))),
+  // How many months of a subscription earn commission. 0 = first payment only.
+  affiliateCommissionMonths: Math.max(0, number(process.env.AFFILIATE_COMMISSION_MONTHS, 0)),
+  // Days a commission is held before it is payable, so a refund window closes
+  // first. A commission paid before the refund window is a commission clawed
+  // back from someone who has already spent it.
+  affiliatePendingDays: Math.max(0, number(process.env.AFFILIATE_PENDING_DAYS, 45)),
+  affiliateMinimumPayoutMinor: Math.max(0, number(process.env.AFFILIATE_MIN_PAYOUT_MINOR, 5000)),
+
   timezone: process.env.TIMEZONE || 'Australia/Perth',
   postTimes: (process.env.POST_TIMES || '07:00,12:00,17:00,20:30')
     .split(',').map(value => value.trim()).filter(Boolean),
