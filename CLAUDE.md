@@ -1959,3 +1959,20 @@ overlap other codes."
 - **Nothing is on until the coupon exists.** `STRIPE_REFERRAL_COUPON` is empty
   by default, and with it empty the panel says there is no reward rather than
   promising one nobody will receive.
+
+### The invite panel latched on failure (v3.52.1)
+
+Live on production: `/api/referral` answered perfectly and the panel never
+drew. `loadReferral()` set its "already loaded" flag BEFORE the request and
+left it set whatever happened, so a single early call — before the session had
+settled — cached `null` and no later repaint could ever recover. It now latches
+only on SUCCESS, and shares one in-flight promise so a burst of repaints does
+not become a burst of requests.
+
+Second half of the same bug: a MutationObserver reacts to CHANGE. Landing
+straight on Tokens & billing means the plan grid is already there when the
+observer is installed and no mutation ever fires, so the panel also paints once
+at boot.
+
+Both only showed up on production, because locally the panel was always reached
+by navigating INTO the screen with a warm session.

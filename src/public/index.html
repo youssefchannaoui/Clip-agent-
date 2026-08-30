@@ -5430,12 +5430,22 @@ StudioAdapter.onProbeSource=async url=>{try{
          The next-step prompt names ONE action. A user shown six things to do
          does none of them. It appears only while there IS a next step, and
          disappears the moment the account has been all the way through. */
-      let dcReferral=null, dcRefLoaded=false;
+      /* Latches on SUCCESS, never on failure.
+         The first version set the "loaded" flag BEFORE the request and left it
+         set whatever happened — so one early call, before the session had
+         settled, cached null and the panel could never appear again until the
+         page was reloaded. That is exactly what it did on production: the API
+         answered correctly and the panel never drew.
+         `inFlight` stops a burst of repaints firing a burst of requests. */
+      let dcReferral=null, dcRefInFlight=null;
       const loadReferral=async()=>{
-        if(dcRefLoaded) return dcReferral;
-        dcRefLoaded=true;
-        try{ dcReferral=await api('/api/referral'); }catch(e){ dcReferral=null; }
-        return dcReferral;
+        if(dcReferral) return dcReferral;
+        if(dcRefInFlight) return dcRefInFlight;
+        dcRefInFlight=api('/api/referral')
+          .then(v=>{ dcReferral=v; return v; })
+          .catch(()=>null)
+          .finally(()=>{ dcRefInFlight=null; });
+        return dcRefInFlight;
       };
 
       const paintInvite=async()=>{
@@ -5611,6 +5621,10 @@ StudioAdapter.onProbeSource=async url=>{try{
           const wm=document.getElementById('dcWatermark');
           if((styleBtn&&!wm)||(!styleBtn&&wm)) setTimeout(()=>{try{paintWatermark()}catch(e){}},0);
         }).observe(document.body,{childList:true,subtree:true});
+        // The observer reacts to CHANGE. If the plan grid is already on the
+        // page when it is installed — a reload straight onto Tokens & billing
+        // — no mutation ever fires, so paint once now as well.
+        queueInvite();
       }catch(e){/* an observer must never take the app down */}
 
       window.dcPaintFirst100=paintFirst100;
