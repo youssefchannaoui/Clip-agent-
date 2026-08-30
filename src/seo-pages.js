@@ -59,7 +59,7 @@ export const SEO_PAGES = [
       'Turn long lectures into review-ready vertical clips. DeenClipped finds complete moments, captions them in English and Arabic, and waits for your approval.',
     intent: 'ai video clipper',
     cluster: 'core',
-    lastmod: '2026-08-30',
+    lastmod: '2026-08-31',
     links: ['/tools/ai-video-clipper', '/islamic-video-clipper', '/pricing'],
   },
   {
@@ -71,7 +71,7 @@ export const SEO_PAGES = [
       'Every part of the DeenClipped workflow: source selection, AI clip discovery, caption styles, the review queue, scheduling and connected publishing.',
     intent: 'deenclipped features',
     cluster: 'core',
-    lastmod: '2026-08-30',
+    lastmod: '2026-08-31',
     links: ['/how-it-works', '/pricing', '/tools/ai-video-clipper'],
   },
   {

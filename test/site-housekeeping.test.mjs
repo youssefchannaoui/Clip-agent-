@@ -192,7 +192,7 @@ test('the public feature catalogue covers every shipped clip template', async ()
   assert.match(page, /coming soon/i);
 });
 
-test('public imagery uses the approved high-resolution source-photo library', async () => {
+test('public imagery uses a distinct, male-only source library without repeated source files', async () => {
   const [home, features] = await Promise.all([
     fetch(`${base}/`, { headers: { accept: 'text/html' } }).then(r => r.text()),
     fetch(`${base}/features`, { headers: { accept: 'text/html' } }).then(r => r.text()),
@@ -201,9 +201,13 @@ test('public imagery uses the approved high-resolution source-photo library', as
     assert.ok(!home.includes(draft), `${draft} was a rejected draft and must not ship`);
     assert.ok(!features.includes(draft), `${draft} was a rejected draft and must not ship`);
   }
-  for (const asset of ['source-hero.webp', 'source-creator-woman.webp', 'source-creator-man.webp', 'source-mountains.webp', 'source-mosque.webp']) {
-    assert.ok(home.includes(asset), `${asset} should represent a real source or template example`);
-    assert.ok(features.includes(asset), `${asset} should carry the same visual system onto the feature page`);
+  assert.ok(!home.includes('source-creator-woman.webp'), 'public marketing should not ship the removed woman source asset');
+  assert.ok(!features.includes('source-creator-woman.webp'), 'feature marketing should not ship the removed woman source asset');
+  const images = [...home.matchAll(/\/marketing-assets\/([^"?]+)/g), ...features.matchAll(/\/marketing-assets\/([^"?]+)/g)];
+  const assets = images.map(match => match[1]);
+  assert.equal(new Set(assets).size, assets.length, 'a marketing source image must never repeat across the public home or features pages');
+  for (const asset of ['source-hero.webp', 'source-creator-man.webp', 'reel-beneficial.webp', 'reel-quran.webp']) {
+    assert.ok(assets.includes(asset), `${asset} should represent a distinct public source example`);
   }
 });
 

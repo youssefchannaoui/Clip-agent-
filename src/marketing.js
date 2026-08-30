@@ -260,15 +260,26 @@ function checkItem(title, text) {
 }
 
 const SOURCE_VISUALS = Object.freeze({
-  lecturer: ['source-hero.webp', 'A Muslim lecturer recording a long-form talk in a professional studio'],
-  educator: ['source-creator-woman.webp', 'A Muslim woman educator recording a thoughtful podcast'],
-  teacher: ['source-creator-man.webp', 'A Muslim teacher speaking in a bright library studio'],
-  mosque: ['source-mosque.webp', 'A quiet mosque courtyard at sunrise'],
-  mountains: ['source-mountains.webp', 'A mountain valley at sunrise used as reflective video footage'],
+  lecture: ['source-hero.webp', 'A male Islamic lecturer recording a long-form talk in a professional studio'],
+  scholar: ['source-creator-man.webp', 'A male Islamic teacher speaking in a bright library studio'],
+  courtyard: ['source-mosque.webp', 'A quiet mosque courtyard at sunrise'],
+  valley: ['source-mountains.webp', 'A mountain valley at sunrise used as reflective video footage'],
+  reflection: ['reel-beneficial.webp', 'A male Islamic speaker in a reflective moment'],
+  library: ['reel-deeds.webp', 'A male Islamic teacher speaking beside a microphone and bookshelves'],
+  studio: ['reel-depart.webp', 'A male Muslim creator recording a thoughtful studio talk'],
+  dua: ['reel-dua.webp', 'A male Islamic speaker delivering a talk from a lectern'],
+  sermon: ['reel-dunya.webp', 'A male Islamic speaker delivering a lecture'],
+  podium: ['reel-halal-way.webp', 'A male Islamic speaker addressing an audience from a podium'],
+  gathering: ['reel-halal.webp', 'A male Islamic speaker at a lectern'],
+  kaabaWide: ['reel-kaaba-a.webp', 'The Kaaba at night during worship'],
+  kaabaClose: ['reel-kaaba-b.webp', 'The Kaaba under the night sky'],
+  lake: ['reel-landscape.webp', 'A reflective mountain lake used as cinematic B-roll'],
+  recitation: ['reel-quran.webp', 'A male Quran teacher reciting into a microphone'],
+  winter: ['reel-winter.webp', 'A reflective outdoor winter scene'],
 });
 
 function sourceImage(key, attrs = '') {
-  const [src, alt] = SOURCE_VISUALS[key] || SOURCE_VISUALS.lecturer;
+  const [src, alt] = SOURCE_VISUALS[key] || SOURCE_VISUALS.lecture;
   return `<img src="/marketing-assets/${src}" alt="${escapeHtml(alt)}" ${attrs}>`;
 }
 
@@ -296,12 +307,12 @@ function productVisual(kind) {
     <div class="scan-line"><i></i><span>Transcribed · scored · rendered</span></div>
   </div>`;
   if (kind === 'review') return `<div class="product-scene review-scene">
-    ${clipPreview('educator', 'Small consistent steps change the direction.', 'review-clip', 'Candidate 2 of 7')}
+    <div class="review-clip code-clip"><span class="clip-preview-badge">Candidate 2 of 7</span><div class="code-clip-title"><small>32 sec · Clean Line</small><strong>Small consistent steps change the direction.</strong></div><i class="clip-progress" aria-hidden="true"><b></b></i></div>
     <div class="review-side"><div class="scene-top"><b>Ready for your decision</b><em>Score 91</em></div><p>Starts with the answer, holds one complete idea and finishes cleanly.</p><div class="caption-check"><span>${icon('captions')}</span><div><b>Captions checked</b><small>English · Clean Line</small></div></div><div class="review-actions"><button type="button" tabindex="-1">Reject</button><button type="button" tabindex="-1">Approve ${icon('check')}</button></div><small class="key-hint">A approve · X reject · S skip</small></div>
   </div>`;
   if (kind === 'style') return `<div class="product-scene style-scene">
     <div class="style-tools"><div class="scene-top"><b>Clip style</b><em>Saved locally</em></div><label>Template<strong>Clean Line</strong></label><label>Caption position<div class="position-grid"><i></i><i class="active"></i><i></i></div></label><label>Emphasis colour<span class="swatches"><i></i><i></i><i></i><i></i></span></label><div class="editor-gate-note"><span>${icon('edit')}</span><div><b>Full editor preview</b><small>Coming soon while visual checks finish</small></div></div></div>
-    ${clipPreview('teacher', 'Make the next step clear enough to act on.', 'style-clip', 'Style preview')}
+    <div class="style-clip code-clip style-preview-frame"><span class="clip-preview-badge">Style preview</span><div class="code-clip-title"><small>Clean Line · centred</small><strong>Make the next step clear enough to act on.</strong></div><i class="clip-progress" aria-hidden="true"><b></b></i></div>
   </div>`;
   if (kind === 'schedule') return `<div class="product-scene schedule-scene">
     <div class="scene-top"><b>Publishing calendar</b><em>3 destinations connected</em></div>
@@ -347,17 +358,17 @@ function journey() {
  * every name and description comes from src/templates/*.json.
  */
 const TEMPLATE_SHOWCASE = Object.freeze([
-  { name: 'Clean Line', access: 'Basic', image: 'source-creator-woman.webp', alt: SOURCE_VISUALS.educator[1], caption: 'Small steps become a steady practice.', description: 'One centred line low in the frame, designed to stay out of the lecture.' },
-  { name: 'Bold Stack', access: 'Pro', image: 'source-creator-man.webp', alt: SOURCE_VISUALS.teacher[1], caption: 'MAKE THE NEXT STEP CLEAR', description: 'Large stacked words build behind the speaker and clear as the thought moves.' },
-  { name: 'Headline', access: 'Pro', image: 'source-mountains.webp', alt: SOURCE_VISUALS.mountains[1], caption: 'THE ROAD IS BUILT ONE STEP AT A TIME', description: 'Cinematic uppercase lines with the next phrase waiting quietly behind.' },
-  { name: 'Mono Minimal', access: 'Pro', image: 'source-mosque.webp', alt: SOURCE_VISUALS.mosque[1], caption: 'return', description: 'A grainy monochrome grade with one quiet word at a time.' },
-  { name: 'Quran Recitation', access: 'Pro', image: 'source-hero.webp', alt: SOURCE_VISUALS.lecturer[1], caption: 'Matched ayah · translation beneath', description: 'Matched ayah text in a mushaf face with its translation beneath it.' },
+  { name: 'Clean Line', access: 'Basic', image: 'reel-beneficial.webp', alt: SOURCE_VISUALS.reflection[1], caption: 'Small steps become a steady practice.', description: 'One centred line low in the frame, designed to stay out of the lecture.' },
+  { name: 'Bold Stack', access: 'Pro', image: 'reel-deeds.webp', alt: SOURCE_VISUALS.library[1], caption: 'MAKE THE NEXT STEP CLEAR', description: 'Large stacked words build behind the speaker and clear as the thought moves.' },
+  { name: 'Headline', access: 'Pro', image: 'reel-depart.webp', alt: SOURCE_VISUALS.studio[1], caption: 'THE ROAD IS BUILT ONE STEP AT A TIME', description: 'Cinematic uppercase lines with the next phrase waiting quietly behind.' },
+  { name: 'Mono Minimal', access: 'Pro', image: 'reel-dua.webp', alt: SOURCE_VISUALS.dua[1], caption: 'return', description: 'A grainy monochrome grade with one quiet word at a time.' },
+  { name: 'Quran Recitation', access: 'Pro', image: 'reel-dunya.webp', alt: SOURCE_VISUALS.sermon[1], caption: 'Matched ayah · translation beneath', description: 'Matched ayah text in a mushaf face with its translation beneath it.' },
 ]);
 
-function templateCatalogue() {
+function templateCatalogue({ visual = true } = {}) {
   return `<div class="template-catalogue reveal" aria-label="DeenClipped template catalogue">
     ${TEMPLATE_SHOWCASE.map((template, index) => `<article class="template-card ${index === 0 ? 'is-basic' : ''}">
-      <div class="template-image"><img src="/marketing-assets/${template.image}" alt="${escapeHtml(template.alt)}" loading="lazy"><span>${escapeHtml(template.access)}</span><strong>${escapeHtml(template.caption)}</strong></div>
+      <div class="template-image ${visual ? '' : 'template-image-code'}">${visual ? `<img src="/marketing-assets/${template.image}" alt="${escapeHtml(template.alt)}" loading="lazy">` : ''}<span>${escapeHtml(template.access)}</span><strong>${escapeHtml(template.caption)}</strong></div>
       <div class="template-copy"><strong>${escapeHtml(template.name)}</strong><p>${escapeHtml(template.description)}</p></div>
     </article>`).join('')}
   </div>`;
@@ -569,12 +580,12 @@ export function home({ base, currentUser }) {
         <p class="purpose-line"><strong>${escapeHtml(Number(config.tokensFree).toLocaleString())} source minutes included for ${escapeHtml(String(config.stripeTrialDays))} days.</strong> No card required to begin.</p>
       </div>
       <div class="hero-live-demo" aria-label="A long lecture becoming review-ready vertical clips">
-        <div class="hero-source-photo">${sourceImage('lecturer', 'fetchpriority="high"')}<span><i></i>Source lecture · 48:26</span></div>
+        <div class="hero-source-photo">${sourceImage('lecture', 'fetchpriority="high"')}<span><i></i>Source lecture · 48:26</span></div>
         <div class="hero-scan-card"><span>${icon('spark')}</span><div><b>Finding complete moments</b><small>Transcript · context · clean endings</small><i><b></b></i></div><em>68%</em></div>
         <div class="hero-results" aria-label="Generated clip examples">
-          ${clipPreview('educator', 'Small steps become a steady practice.', 'hero-result result-one', '92 · Review')}
-          ${clipPreview('teacher', 'Make the next step clear enough to act on.', 'hero-result result-two', '88 · Review')}
-          ${clipPreview('mosque', 'Keep returning to what matters.', 'hero-result result-three', '84 · Review')}
+          ${clipPreview('scholar', 'Small steps become a steady practice.', 'hero-result result-one', '92 · Review')}
+          ${clipPreview('courtyard', 'Make the next step clear enough to act on.', 'hero-result result-two', '88 · Review')}
+          ${clipPreview('valley', 'Keep returning to what matters.', 'hero-result result-three', '84 · Review')}
         </div>
         <div class="hero-approved">${icon('shield')} Nothing publishes without your approval</div>
       </div>
@@ -595,7 +606,7 @@ export function home({ base, currentUser }) {
         <div class="section-head reveal"><span class="section-label">Built for careful creators</span><h2>Fast enough for growth. Deliberate enough for the message.</h2><p>DeenClipped handles the repetitive work while keeping the final decision, the exact rendered video and every connected destination visible to you.</p></div>
         <div class="difference-grid">
           <article class="difference-card difference-large reveal"><div class="difference-copy"><span>${icon('shield')}</span><small>Review-first</small><h3>The AI suggests. You decide.</h3><p>Every candidate waits in Review with its score, reason and finished render. Scripture carries an additional human-review gate.</p><a href="/review-safety">See the safeguards ${icon('arrow')}</a></div><div class="difference-visual">${productVisual('review')}</div></article>
-          <article class="difference-card reveal"><div class="difference-copy"><span>${icon('language')}</span><small>Language-aware</small><h3>English, Arabic and recitation are treated differently.</h3><p>Auto-detect can switch by segment. Recited ayat use a matched Quran treatment with translation beneath.</p></div>${clipPreview('mosque', 'Matched ayah · translation beneath', 'difference-clip', 'Quran review required')}</article>
+          <article class="difference-card reveal"><div class="difference-copy"><span>${icon('language')}</span><small>Language-aware</small><h3>English, Arabic and recitation are treated differently.</h3><p>Auto-detect can switch by segment. Recited ayat use a matched Quran treatment with translation beneath.</p></div>${clipPreview('podium', 'Matched ayah · translation beneath', 'difference-clip', 'Quran review required')}</article>
           <article class="difference-card reveal"><div class="difference-copy"><span>${icon('publish')}</span><small>Destination control</small><h3>One failed post does not hide the successful ones.</h3><p>Each connected destination keeps its own publish, refusal and retry state.</p></div><div class="destination-state"><span><i class="platform youtube">YT</i><b>YouTube</b><em>Posted</em></span><span><i class="platform tiktok">TT</i><b>TikTok</b><em class="attention">Needs attention</em></span><span><i class="platform instagram">IG</i><b>Instagram</b><em>Scheduled</em></span></div></article>
         </div>
       </div>
@@ -614,7 +625,7 @@ export function home({ base, currentUser }) {
 
     <section class="section templates-section" id="templates">
       <div class="wrap">
-        <div class="section-head reveal"><span class="section-label">Five real template styles</span><h2>One message. Five clear visual treatments.</h2><p>Fresh, high-resolution source photography demonstrates each shipped style. Basic starts with Clean Line; Pro unlocks the complete catalogue.</p></div>
+        <div class="section-head reveal"><span class="section-label">Five real template styles</span><h2>One message. Five clear visual treatments.</h2><p>Each treatment is shown with a different Islamic lecture source. Basic starts with Clean Line; Pro unlocks the complete catalogue.</p></div>
         ${templateCatalogue()}
         <div class="template-safety reveal"><span>${icon('shield')}</span><p><strong>Quran Recitation is deliberately different.</strong> It matches recitation to the Quran corpus, shows the ayah and translation, keeps nasheed off and always requires human review.</p></div>
       </div>
@@ -658,9 +669,9 @@ export function features({ base, currentUser }) {
 
       <section class="feature-deep-dive reveal" id="source-and-review"><div class="feature-deep-copy"><span class="section-label">Import, generate and review</span><h2>Spend tokens on the source range, not every decision afterwards.</h2><p>DeenClipped reads the duration before charging, downloads the selected stretch where the source permits it, and renders every candidate at full quality from the first pass. Cutting more clips from that processed source, ordinary re-renders and review actions do not charge the source minutes again.</p><div class="detail-list">${checkItem('Strong moments with reasons','Candidate scores include the worker’s explanation, such as a complete ending or a clear question hook.')}${checkItem('The real rendered file','The review deck plays the exact media that can be published, rather than drawing a second caption imitation in the browser.')}${checkItem('Fast keyboard decisions','Approve with A, reject with X, skip with S or the arrow keys, and control playback without leaving the deck.')}</div></div><div class="feature-scene-stack">${productVisual('discover')}${productVisual('review')}</div></section>
 
-      <section class="feature-deep-dive reverse reveal" id="captions"><div class="feature-deep-copy"><span class="section-label">Captions and faith-sensitive review</span><h2>English, Arabic and recitation are not treated as the same text.</h2><p>With auto-detect, language can switch by segment inside the same lecture. Spoken Arabic receives Arabic captions with an English line beneath it. Recitation follows a separate Quran template that matches the ayah itself rather than trusting a rough transcript.</p><div class="detail-list">${checkItem('Scripture always waits for a person','The QUOTE_RISK gate prevents Quran clips from passing through automatic publishing without human review.')}${checkItem('No approximate ayah in the editor','Scripture is excluded from draft caption echoes because an approximate verse is unacceptable.')}${checkItem('No nasheed beneath recitation','The Quran template deliberately leaves the music track off and removes distracting branding treatments.')}</div></div><div class="caption-photo-stack">${clipPreview('mosque', 'Matched ayah · translation beneath', 'feature-reel-large', 'Quran review required')}${clipPreview('educator', 'Arabic line · English translation', 'feature-reel-small', 'Multilingual')}</div></section>
+      <section class="feature-deep-dive reverse reveal" id="captions"><div class="feature-deep-copy"><span class="section-label">Captions and faith-sensitive review</span><h2>English, Arabic and recitation are not treated as the same text.</h2><p>With auto-detect, language can switch by segment inside the same lecture. Spoken Arabic receives Arabic captions with an English line beneath it. Recitation follows a separate Quran template that matches the ayah itself rather than trusting a rough transcript.</p><div class="detail-list">${checkItem('Scripture always waits for a person','The QUOTE_RISK gate prevents Quran clips from passing through automatic publishing without human review.')}${checkItem('No approximate ayah in the editor','Scripture is excluded from draft caption echoes because an approximate verse is unacceptable.')}${checkItem('No nasheed beneath recitation','The Quran template deliberately leaves the music track off and removes distracting branding treatments.')}</div></div><div class="caption-photo-stack">${clipPreview('gathering', 'Matched ayah · translation beneath', 'feature-reel-large', 'Quran review required')}${clipPreview('recitation', 'Arabic line · English translation', 'feature-reel-small', 'Multilingual')}</div></section>
 
-      <section class="template-feature-section" id="templates"><div class="section-head reveal"><span class="section-label">Template catalogue</span><h2>Five distinct looks, shown with realistic Islamic content.</h2><p>Clean Line is included with Basic. Pro and Studio unlock the complete catalogue, including the Quran-specific treatment.</p></div>${templateCatalogue()}</section>
+      <section class="template-feature-section" id="templates"><div class="section-head reveal"><span class="section-label">Template catalogue</span><h2>Five distinct looks, shown with realistic Islamic content.</h2><p>Clean Line is included with Basic. Pro and Studio unlock the complete catalogue, including the Quran-specific treatment.</p></div>${templateCatalogue({ visual: false })}</section>
 
       <section class="feature-deep-dive reveal" id="editor"><div class="feature-deep-copy"><span class="section-label">Templates, audio and editor preview</span><h2>Style changes work today. The full editor stays clearly marked as coming soon.</h2><p>Templates can be adjusted and re-rendered now, including clip-local caption and visual changes. The complete timeline, framing and drag controls are visible behind a launch gate until their visual verification is finished.</p><div class="detail-list">${checkItem('Clip-local or reusable','Keep one clip’s adjustment local, or save the look back to the shared template for future waiting clips.')}${checkItem('Full-quality review remains available','The editor gate does not remove rendered review, templates, re-renders, downloads, scheduling or publishing.')}${checkItem('Vocal-only track control','Upload, select and rotate nasheed tracks while respecting the Quran template’s music-off rule.')}</div></div><div class="editor-feature-visual">${productVisual('style')}<span class="availability-badge">Full editor preview · coming soon</span></div></section>
 
@@ -683,7 +694,7 @@ export function pricing({ base, currentUser }) {
 }
 
 export function contact({ base, currentUser }) {
-  const body = `<main><section class="page-hero wrap"><span class="eyebrow"><i></i>Direct product support</span><h1>Tell us what stopped the workflow.</h1><p>Questions about an import, rendered clip, connected destination, schedule or payment can be sent directly to DeenClipped support.</p></section><section class="page-content"><div class="wrap contact-layout"><div class="contact-card"><span class="contact-icon">${logoMark()}</span><h2>Support</h2><p>Email <a href="mailto:support@deenclipped.online">support@deenclipped.online</a></p><p>Include the email attached to your account, the project or clip name, the destination involved and the exact message you saw. Never email a password, OAuth token or payment-card number.</p><a class="button primary" href="mailto:support@deenclipped.online?subject=DeenClipped%20support%20request">Email support</a></div><div class="contact-context"><span class="section-label">Useful details</span><h2>Help us find the exact step.</h2>${checkItem('Import or processing','Include the source type, selected time range and the stage where it stopped.')}${checkItem('Captions or render','Name the template, language and whether the issue appears in the rendered review video.')}${checkItem('Publishing','Name every destination and which one posted, failed or is still waiting.')}${checkItem('Billing','Include the plan or token pack and the checkout time, but never raw card details.')}<div class="contact-reels">${clipPreview('educator', 'Caption or render', 'contact-reel')}${clipPreview('teacher', 'Import or processing', 'contact-reel')}${clipPreview('mosque', 'Publishing state', 'contact-reel')}</div></div></div></section></main>`;
+  const body = `<main><section class="page-hero wrap"><span class="eyebrow"><i></i>Direct product support</span><h1>Tell us what stopped the workflow.</h1><p>Questions about an import, rendered clip, connected destination, schedule or payment can be sent directly to DeenClipped support.</p></section><section class="page-content"><div class="wrap contact-layout"><div class="contact-card"><span class="contact-icon">${logoMark()}</span><h2>Support</h2><p>Email <a href="mailto:support@deenclipped.online">support@deenclipped.online</a></p><p>Include the email attached to your account, the project or clip name, the destination involved and the exact message you saw. Never email a password, OAuth token or payment-card number.</p><a class="button primary" href="mailto:support@deenclipped.online?subject=DeenClipped%20support%20request">Email support</a></div><div class="contact-context"><span class="section-label">Useful details</span><h2>Help us find the exact step.</h2>${checkItem('Import or processing','Include the source type, selected time range and the stage where it stopped.')}${checkItem('Captions or render','Name the template, language and whether the issue appears in the rendered review video.')}${checkItem('Publishing','Name every destination and which one posted, failed or is still waiting.')}${checkItem('Billing','Include the plan or token pack and the checkout time, but never raw card details.')}<div class="contact-reels">${clipPreview('kaabaWide', 'Caption or render', 'contact-reel')}${clipPreview('kaabaClose', 'Import or processing', 'contact-reel')}${clipPreview('lake', 'Publishing state', 'contact-reel')}</div></div></div></section></main>`;
   return layout({ base, currentUser, ...meta('/contact'), body,
     jsonLd: [organizationSchema(base), webSiteSchema(base)] });
 }
@@ -972,7 +983,7 @@ function proofBand(page) {
         <p>Free to try with 40 tokens, no card. You choose the minutes worth clipping, and every clip waits for your approval before anything publishes.</p>
         ${sourceForm()}
       </div>
-      <div class="seo-proof-media">${productVisual('discover')}${clipPreview('educator', 'A complete thought, ready for your review.', 'seo-proof-reel', '92 · Review')}</div>
+      <div class="seo-proof-media">${productVisual('discover')}</div>
     </section>`;
 }
 
