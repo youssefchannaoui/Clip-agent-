@@ -1440,7 +1440,15 @@ async function route(req, res, url) {
         note: !worker || worker.error ? 'The worker could not be reached, so its version is unknown.'
           : !workerVersion ? 'This worker predates version reporting, so it is running code older than v3.26.0. Deploy the box.'
             : workerVersion === config.appVersion ? 'The box is running this release.'
-              : `The box is running v${workerVersion}; this app is v${config.appVersion}. Worker changes since then are not live.`,
+              // Says what it KNOWS rather than what it assumes. Most releases
+              // touch src/ only, so a version gap usually means nothing: on
+              // 30 Aug the box read v3.42.0 against an app on v3.49.1 and was
+              // completely current, because no worker/ change had shipped in
+              // between. The old wording read as "deploy the box now" and
+              // would have bought a pointless rebuild.
+              : `The box reports v${workerVersion} and this app is v${config.appVersion}. `
+                + `That only matters if worker code changed in between, which most releases do not. `
+                + `Check with: git log v${workerVersion}..HEAD -- worker/`,
       };
       return json(res, 200, { ...health, worker, deploy });
     } catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }

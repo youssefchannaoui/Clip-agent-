@@ -1810,3 +1810,36 @@ for the next host-rendered panel rather than rediscovering this.
 Also: the panel is keyed off the plan grid EXISTING rather than off
 `UI.screen`, so there is one source of truth instead of two that disagree after
 a re-render.
+
+### The funnel found the thing that actually matters (30 Aug 2026)
+
+The First 100 screen was built and immediately reported something worth more
+than the screen itself:
+
+**No customer has ever completed an import.** Eight accounts, four imported,
+`importStatuses: {"failed": 5}` — every non-owner import has failed, and the
+eleven completed projects on the box are all Youssef's own.
+
+**The failures are HISTORICAL, and that distinction is the whole story.** All
+five are dated 4–18 August, and every one names a cause that has since been
+fixed: two YouTube bot walls, one "You are not subscribed to this API" from
+SocialKit, and two 403s. SocialKit was removed and the Webshare proxy pool set
+up on **26 August**. Nothing has failed since — because nobody has tried.
+
+So the honest position is not "the product is broken". It is:
+
+- the four or five people who tried it in early August met a genuinely broken
+  importer and are unlikely to come back;
+- the fix has never been proven by a real customer, only by the owner;
+- four more accounts signed up and never imported anything at all.
+
+**One real person taken end to end is worth more than any further growth
+work.** That is the next action, and no amount of SEO or referral machinery
+substitutes for it.
+
+**The deploy note was crying wolf.** Owner → Health compared the worker version
+against the APP version and said "Worker changes since then are not live" — on
+30 Aug that read v3.42.0 against v3.49.1 while the box was completely current,
+because no `worker/` change had shipped in between. It now says how to check
+(`git log v<worker>..HEAD -- worker/`) instead of asserting staleness it cannot
+know. The test that required the words "not live" was corrected with it.
