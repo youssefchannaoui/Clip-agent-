@@ -822,7 +822,11 @@ export async function createCheckoutSession(user, planId) {
   const params = {
     mode: 'subscription',
     customer,
-    success_url: `${appBase()}/app?billing=success`,
+    // The session id travels back so the return can be CONFIRMED against
+    // Stripe directly. Without it the only thing that grants a plan is the
+    // webhook, and a webhook is a thing that can be misconfigured, delayed or
+    // dropped -- in which case the customer has paid and has nothing.
+    success_url: `${appBase()}/app?billing=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${appBase()}/plans?billing=cancelled`,
     'line_items[0][price]': plan.priceId,
     'line_items[0][quantity]': '1',
@@ -905,6 +909,95 @@ export function grantTopup(user, packageId, references = {}) {
   save();
   log(`Added ${pack.tokens} top-up tokens to ${user.email || user.id}.`, 'info', user.id);
   return { granted: pack.tokens, balance: billing.bonusTokens, event };
+}
+
+/**
+ * Apply a completed Checkout session the customer has just come back from.
+ *
+ * The webhook is not a safety net, it is the ONLY net: a plan is granted by
+ * `checkout.session.completed` and made real by `customer.subscription.*`. So
+ * a signing secret that does not match -- which is exactly what has been
+ * alerting on this deployment -- means a customer pays Stripe successfully and
+ * their account stays on free. They see the charge and nothing else.
+ *
+ * This is the second net, and it reads from a different credential: the SECRET
+ * KEY, which has demonstrably been working the whole time (checkout sessions
+ * are being created with it). Stripe's own guidance is to fulfil on both the
+ * return and the webhook rather than trusting either alone.
+ *
+ * Both paths converge on the same functions -- `grantTopup` and
+ * `updateFromSubscription` -- so there is one place that grants a plan and one
+ * place that grants tokens. Both already refuse to act twice: `grantTopup`
+ * dedupes on the session id, and `recordRevenue` on the Stripe object id, so a
+ * webhook that turns up late (or a customer who reloads the success page)
+ * cannot double-grant.
+ */
+export async function confirmCheckoutSession(user, sessionId) {
+  ensureBillingState();
+  if (!user) throw new Error('Sign in to continue.');
+  const id = String(sessionId || '').trim();
+  // Shape-checked before it is spent on a network call: this is a value out of
+  // a query string, and everything else here trusts that it named a session.
+  if (!/^cs_[A-Za-z0-9_]{8,255}$/.test(id)) throw new Error('That is not a Checkout session.');
+
+  const session = await stripeGet(`/checkout/sessions/${id}`, { 'expand[]': ['subscription', 'line_items'] });
+  // stripeGet answers null rather than throwing on a deployment with no key,
+  // so that the owner dashboard still renders. Here that is a refusal.
+  if (!session) throw new Error('Stripe is not configured on this deployment.');
+  const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id || '';
+  const billing = ensureUserBilling(user);
+
+  // Fetching first is unavoidable -- only Stripe knows whose session this is --
+  // so the ownership check has to be explicit and has to refuse by default.
+  // Both checkout creators stamp metadata.userId, so the fallback only covers
+  // a session made before they did.
+  const claimed = String(session.metadata?.userId || '');
+  const ownedByMetadata = claimed && claimed === user.id;
+  const ownedByCustomer = !claimed && customerId && customerId === String(billing.stripeCustomerId || '');
+  if (!ownedByMetadata && !ownedByCustomer) throw new Error('That payment belongs to a different account.');
+
+  if (session.status !== 'complete') return { ok: true, applied: false, reason: 'incomplete' };
+
+  if (session.mode === 'payment' || session.metadata?.kind === 'token_topup') {
+    if (session.payment_status !== 'paid') return { ok: true, applied: false, reason: 'unpaid' };
+    const packageId = session.metadata?.package || topupForPrice(session.line_items?.data?.[0]?.price?.id)?.id;
+    if (!packageId) return { ok: true, applied: false, reason: 'unknown_package' };
+    billing.stripeCustomerId = customerId || billing.stripeCustomerId || '';
+    recordRevenue({
+      kind: 'topup', userId: user.id,
+      amountMinor: session.amount_total, currency: session.currency,
+      description: topups()[packageId]?.name || packageId,
+      stripeId: String(session.id || ''),
+    });
+    const result = grantTopup(user, packageId, {
+      sessionId: session.id,
+      paymentIntentId: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id,
+      customerId,
+    });
+    return { ok: true, applied: !result.duplicate, kind: 'topup', granted: result.granted, duplicate: Boolean(result.duplicate) };
+  }
+
+  // A trial subscription is `no_payment_required`, which is a perfectly good
+  // reason to switch the plan on -- refusing anything but 'paid' here would
+  // strand every trial that started while the webhook was down.
+  if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') {
+    return { ok: true, applied: false, reason: 'unpaid' };
+  }
+  billing.stripeCustomerId = customerId || billing.stripeCustomerId || '';
+  const subscription = typeof session.subscription === 'object' && session.subscription ? session.subscription : null;
+  if (subscription) {
+    // The expanded subscription carries the period, the status and the trial,
+    // so this lands the account in exactly the state the webhook pair would
+    // have left it in -- not a half-state that says "checkout_complete".
+    updateFromSubscription({ ...subscription, metadata: { userId: user.id, ...(subscription.metadata || {}) } });
+  } else {
+    billing.stripeSubscriptionId = typeof session.subscription === 'string' ? session.subscription : billing.stripeSubscriptionId || '';
+    billing.plan = normalisePlanId(session.metadata?.plan || billing.plan || 'free');
+    billing.status = 'checkout_complete';
+    user.updatedAt = now();
+    save();
+  }
+  return { ok: true, applied: true, kind: 'subscription', plan: ensureUserBilling(user).plan, status: ensureUserBilling(user).status };
 }
 
 /**

@@ -5117,7 +5117,7 @@ StudioAdapter.onProbeSource=async url=>{try{
        customer most needs to be told it worked. The parameter is cleared from
        the URL so a bookmark or a refresh cannot replay the message. */
     (function(){
-      const q=new URLSearchParams(location.search),billing=q.get('billing');
+      const q=new URLSearchParams(location.search),billing=q.get('billing'),paid=q.get('session_id');
       if(!billing&&!q.get('reset'))return;
       const said={
         success:['You are subscribed. Your tokens are available now.','good'],
@@ -5127,7 +5127,18 @@ StudioAdapter.onProbeSource=async url=>{try{
       }[billing]||(q.get('reset')?['Password changed. You are signed in.','good']:null);
       q.delete('billing');q.delete('reset');q.delete('session_id');
       history.replaceState({},'',location.pathname+(q.toString()?'?'+q:'')+location.hash);
-      if(said)setTimeout(()=>{toast(said[0],said[1]);refresh()},400);
+      /* Confirm the purchase against Stripe before refreshing. Until now the
+         ONLY thing that granted a plan was the webhook, so a signing secret
+         that did not match meant a customer paid and stayed on free. This
+         reads the session back with the secret key instead — a different
+         credential, one that has been working throughout — and the server
+         applies it through the same functions the webhook uses. It is
+         idempotent, so a webhook arriving late changes nothing, and a failure
+         here stays silent because the webhook may yet deliver. */
+      const settled=(paid&&(billing==='success'||billing==='topup-success'))
+        ?api('/api/billing/confirm',{method:'POST',body:JSON.stringify({sessionId:paid})}).catch(()=>null)
+        :Promise.resolve(null);
+      if(said)setTimeout(()=>{toast(said[0],said[1]);settled.then(()=>refresh())},400);
     })();
     /* Saving a look under a name you chose. Until now the only way to end up
        with your own style was to edit a built-in and have the server fork it

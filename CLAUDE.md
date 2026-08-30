@@ -150,7 +150,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **850 JS + 409 Python**
+- `npm test` and `npm run check` must pass. Currently **859 JS + 409 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -181,6 +181,15 @@ These were each a real bug and each has a test named after it.
   touching an edge; fixed, x 185..915 and zero. Amiri and Outfit are not in a
   fresh container, so the substituted face is WIDER -- which makes a passing
   wrap test conservative rather than optimistic. Say which face rendered.
+- **`node --test` starts the tests it already has at the module's FIRST
+  `await`.** So in a test file with top-level await, a server imported BELOW
+  the `test()` declarations comes up, the earlier tests run, the file's
+  `after` hook fires and closes it -- and the route test fails with a bare
+  "fetch failed" against a socket that was open a moment earlier. Import the
+  server and run the readiness loop ABOVE every test. Also set `PORT` before
+  the first import of anything that pulls in `config.js`: it reads the port
+  once, so a PORT set later leaves the server on 3000 and the symptom is
+  identical.
 - **Chrome will not decode video in a hidden automation tab.** readyState stays
   0 even for a blob URL holding every byte, so "the preview is black" in an
   agent screenshot is usually the harness, not the app. Verify video paths by
@@ -456,6 +465,42 @@ THAN THAT IT SHOULD NEVER RE RENDER."
   unposted); anything still publishing is left alone. A behaviour change that
   only applies going forward should always be asked of the rows already on
   disk.
+
+## A purchase must land even when the webhook does not (v3.39.0, 30 Aug 2026)
+
+The webhook was not a safety net, it was the ONLY net. A plan was granted by
+`checkout.session.completed` and made real by `customer.subscription.*`, so a
+signing secret that does not match -- exactly what has been alerting on this
+deployment since 29 Aug -- meant a customer paid Stripe successfully and their
+account stayed on free. They saw the charge and nothing else. That is the
+worst failure this product can have and it was one environment variable away
+at all times.
+
+- **The second net reads from a different credential.** `confirmCheckoutSession`
+  fetches the session with the SECRET KEY, which has demonstrably been working
+  throughout (checkout sessions are being created with it). The signing secret
+  and the API key are independent, so the net does not share the failure.
+  Stripe's own guidance is to fulfil on both the return and the webhook.
+- **Both nets converge on the same two functions**, `grantTopup` and
+  `updateFromSubscription`, so there is one place that grants a plan and one
+  that grants tokens. Both already refused to act twice -- `grantTopup` dedupes
+  on the session id, `recordRevenue` on the Stripe object id -- which is what
+  makes this safe: fixing the secret redelivers ~3 days of events and none of
+  them double-grants. A test drives exactly that order.
+- **Fetching first was unavoidable, so the ownership check is explicit.** Only
+  Stripe knows whose session an id names, and the id travels in a query string.
+  `metadata.userId` must match the signed-in account, or (for a session made
+  before the creators stamped it) the customer id stored on the account. Refuses
+  by default. The id is also shape-checked before the network call is spent.
+- **A trial is `no_payment_required`, not `paid`.** Accepting only 'paid' would
+  have stranded every trial started while the webhook was down.
+- **The customer is made whole immediately; the BOOKS catch up on redelivery.**
+  Subscription revenue is recorded from `invoice.paid`, which this path does not
+  forge -- inventing an invoice would double-count against the real one when it
+  arrives. Top-up revenue IS recorded here, because it dedupes on the session id.
+- The subscription `success_url` carries `session_id` now. It always did for
+  top-ups, and nothing read it.
+
 
 ## Alerts must survive a restart (v3.27.0, 29 Aug 2026)
 

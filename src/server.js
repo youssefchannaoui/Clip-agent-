@@ -1055,6 +1055,13 @@ async function route(req, res, url) {
     try { return json(res, 200, await billing.createTopupCheckoutSession(currentUser, String(body.package || ''))); }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
+  // The second net under a purchase. The browser calls this the moment it
+  // lands back from Stripe, so a plan arrives even when the webhook does not.
+  if (method === 'POST' && pathname === '/api/billing/confirm') {
+    const body = await readBody(req);
+    try { return json(res, 200, await billing.confirmCheckoutSession(currentUser, String(body.sessionId || ''))); }
+    catch (error) { return json(res, 400, { error: error.message }); }
+  }
   // Cancelling is a write against Stripe, so it goes through the same POST
   // shape as checkout rather than being a link the browser follows.
   if (method === 'POST' && (pathname === '/api/billing/cancel' || pathname === '/api/billing/resume')) {
