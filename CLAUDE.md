@@ -1304,8 +1304,19 @@ the English translation beneath it perfectly fine.
    itself private; setting the account private is the way to post today.
 3. **Worker deploy on Hetzner** — the section-download saving (v3.12.0) is not
    live until it runs.
-4. **Stripe identity document**, task `astask_1U94FLKKpFy0S4hepCXWS9HY`.
-   Payments work; payouts are paused until it is uploaded.
+4. **Stripe identity document — this is the most urgent open item.** Checked
+   in the dashboard on 31 Aug 2026 rather than assumed, and the earlier note
+   here ("payments work; payouts are paused") was WRONG and had been for weeks.
+   Stripe → Settings → Business → Account status shows:
+   *"Provide an identity document for an account representative (Youssef
+   Channaoui)" — **Overdue**, paused on 7 Aug 2026, **impacts payments and
+   payouts**.* Capabilities read **Paused: Cartes Bancaires**, and
+   **Paused soon: Payments**.
+   "Payments paused" is not a delayed withdrawal — it is the checkout refusing
+   money. Every piece of growth work in this repo assumes a customer can pay,
+   and that assumption has an expiry date on it. Two minutes with a passport
+   or licence at
+   `dashboard.stripe.com/acct_1U1p3tKKpFy0S4he/account/status`.
 5. **Hetzner CPX41 rescale.** Once done: worker retune (4 jobs, whisper medium,
    `qwen3:4b`), ETA recalibration, an end-to-end run with before/after numbers.
 6. **Reconnect YouTube** — the stored token is expired and posts are missing
