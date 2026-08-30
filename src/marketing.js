@@ -88,6 +88,76 @@ function navActions(currentUser) {
   return `<div class="nav-actions"><a class="button text-button" href="/login?returnTo=/app">Sign in</a><a class="button primary compact" href="/login?returnTo=/app">Start free ${icon('arrow')}</a></div>`;
 }
 
+/**
+ * Intrinsic pixel sizes of the marketing images, read from the files.
+ *
+ * Every <img> on this site was served without width or height, so the browser
+ * reserved no space for any of them and the page jumped as each one arrived --
+ * Cumulative Layout Shift on every page, on the slow connections where it
+ * matters most. Sixty-two tags across twenty-one pages is too many to keep
+ * right by hand, and a hand-typed size is a lie waiting for someone to
+ * re-export an asset, so the numbers come from the bytes.
+ */
+const IMAGE_SIZES = (() => {
+  const sizes = new Map();
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const dir = path.join(here, 'public', 'marketing-assets');
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.endsWith('.webp')) continue;
+      const head = Buffer.alloc(40);
+      const fd = fs.openSync(path.join(dir, name), 'r');
+      try { fs.readSync(fd, head, 0, 40, 0); } finally { fs.closeSync(fd); }
+      if (head.subarray(0, 4).toString() !== 'RIFF') continue;
+      const format = head.subarray(12, 16).toString();
+      let size = null;
+      if (format === 'VP8 ') {
+        size = [head.readUInt16LE(26) & 0x3fff, head.readUInt16LE(28) & 0x3fff];
+      } else if (format === 'VP8L') {
+        const bits = head.readUInt32LE(21);
+        size = [(bits & 0x3fff) + 1, ((bits >> 14) & 0x3fff) + 1];
+      } else if (format === 'VP8X') {
+        size = [
+          (head[24] | (head[25] << 8) | (head[26] << 16)) + 1,
+          (head[27] | (head[28] << 8) | (head[29] << 16)) + 1,
+        ];
+      }
+      if (size && size[0] > 0 && size[1] > 0) sizes.set(`/marketing-assets/${name}`, size);
+    }
+  } catch { /* a missing asset directory must not stop the site rendering */ }
+  return sizes;
+})();
+
+/**
+ * Stamp width, height and LCP priority onto every image in a finished page.
+ *
+ * Done here, once, on the way out, rather than at each of the sixty-two call
+ * sites: a page added tomorrow gets it without anyone remembering to. Existing
+ * attributes are never overwritten, so a deliberate size still wins.
+ */
+function stampImages(html) {
+  let first = true;
+  return html.replace(/<img\b[^>]*>/g, tag => {
+    const src = (tag.match(/src="([^"]*)"/) || [, ''])[1];
+    const size = IMAGE_SIZES.get(src);
+    let out = tag;
+    if (size && !/\swidth=/.test(out) && !/\sheight=/.test(out)) {
+      out = out.replace(/^<img/, `<img width="${size[0]}" height="${size[1]}"`);
+    }
+    // The first image is the one the browser paints for LCP, so it is fetched
+    // at high priority and never lazily -- lazy-loading the largest paint is
+    // the classic way to make a fast page score badly.
+    if (first && size) {
+      first = false;
+      out = out.replace(/\sloading="lazy"/, '');
+      if (!/fetchpriority=/.test(out)) out = out.replace(/^<img/, '<img fetchpriority="high" decoding="async"');
+    } else if (size && !/loading=/.test(out)) {
+      out = out.replace(/^<img/, '<img loading="lazy" decoding="async"');
+    }
+    return out;
+  });
+}
+
 function layout({ base, currentUser, title, description, canonicalPath = '/', body, jsonLd = [] }) {
   const canonical = `${String(base || 'https://deenclipped.online').replace(/\/+$/, '')}${canonicalPath === '/' ? '' : canonicalPath}`;
   const safeTitle = escapeHtml(title);
@@ -95,7 +165,7 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
   // "</script>" inside a JSON string would end the block early; \u003c cannot.
   const schemaBlocks = jsonLd.map(schema =>
     `<script type="application/ld+json">${JSON.stringify(schema).replace(/</g, '\\u003c')}</script>`).join('\n  ');
-  return `<!doctype html>
+  return stampImages(`<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -155,7 +225,7 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
   </footer>
   <script src="/marketing.js" defer></script>
 </body>
-</html>`;
+</html>`);
 }
 
 function sourceForm() {

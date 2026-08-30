@@ -290,6 +290,51 @@ test('search-console verification renders only when it is configured', async () 
     'nothing should be claimed while the variable is unset');
 });
 
+test('every image reserves its space before it loads', async () => {
+  // An <img> with no width/height reserves NO space, so the page jumps when
+  // the file arrives -- Cumulative Layout Shift, on every page, worst on the
+  // slow connections where it matters most. All 62 images were served this
+  // way. Measured in a real browser afterwards: with the attributes stripped,
+  // 9 of 11 markers moved and the worst shift was 114px; with them, zero.
+  //
+  // The sizes are read from the image files at import, so this cannot drift
+  // when an asset is re-exported.
+  for (const page of seo.SEO_PAGES) {
+    const { body } = await get(page.path);
+    for (const [tag] of body.matchAll(/<img\b[^>]*>/g)) {
+      const src = (tag.match(/src="([^"]*)"/) || [, ''])[1];
+      if (!src.startsWith('/marketing-assets/')) continue;
+      assert.match(tag, /\swidth="\d+"/, `${page.path}: ${src} has no width`);
+      assert.match(tag, /\sheight="\d+"/, `${page.path}: ${src} has no height`);
+    }
+  }
+});
+
+test('the largest image is fetched first and never lazily', async () => {
+  // Lazy-loading the element the browser paints for LCP is the classic way to
+  // make a fast page score badly: the loader defers the one image the metric
+  // is measuring.
+  const { body } = await get('/');
+  const first = body.match(/<img\b[^>]*src="\/marketing-assets\/[^"]*"[^>]*>/);
+  assert.ok(first, 'the homepage should have a marketing image');
+  assert.match(first[0], /fetchpriority="high"/, 'the LCP image must be high priority');
+  assert.ok(!/loading="lazy"/.test(first[0]), 'the LCP image must not be lazy');
+});
+
+test('the phone rules that fix tap targets and small text are served', async () => {
+  // A weak test, and deliberately labelled as one: CI has no browser (this
+  // repo has no npm dependencies on purpose, which is what lets a phone
+  // session run the suite), so the real verification was measuring a rendered
+  // page -- 21 tap targets under 24px and 63 strings under 12px before, zero
+  // of each after, across all 21 pages. This only catches the block being
+  // deleted wholesale.
+  const css = await fetch(`${base}/marketing.css`).then(r => r.text());
+  assert.match(css, /\.footer-col a\s*\{[^}]*min-height:\s*30px/,
+    'the footer tap-target rule is gone');
+  assert.match(css, /\.faq-item > summary\s*\{[^}]*padding-top:\s*14px/,
+    'the FAQ tap-target rule is gone');
+});
+
 test('HEAD answers like GET, because link checkers ask that way', async () => {
   // Every route matches on `method === 'GET'`, so HEAD fell through all of
   // them to the 404 -- on the HOMEPAGE included. A link validator, an uptime

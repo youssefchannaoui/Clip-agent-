@@ -150,7 +150,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **891 JS + 427 Python**
+- `npm test` and `npm run check` must pass. Currently **894 JS + 427 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1468,3 +1468,42 @@ Content-Length GET would report (RFC 9110). `res.write` and `res.end` are
 wrapped rather than the routes being changed, so a streamed file behaves too.
 `curl -I` was also what made `marketing.css` look like it was served `no-store`
 -- it is not; the GET carries `public, max-age=3600`.
+
+## Images reserved no space, and phones got 13px targets (v3.45.0, 30 Aug 2026)
+
+Two Core Web Vitals faults that had been served on every page since the site
+launched, both found by MEASURING a rendered page rather than by reading CSS.
+
+- **All 62 images were served with no width or height.** The browser reserves
+  no box, so every page jumped as the files arrived. Proven both ways in a real
+  browser: strip the attributes and 9 of 11 markers move with a worst shift of
+  114px; with them, ZERO move. A measurement that cannot fail proves nothing,
+  so it was run against the broken state first.
+  The sizes are read out of the WebP headers at import (`IMAGE_SIZES`) and
+  stamped onto the finished HTML in `layout()` (`stampImages`) -- one place, so
+  a page added tomorrow gets it, and a re-exported asset cannot make a
+  hand-typed number a lie. The first image also gets `fetchpriority="high"` and
+  loses `loading="lazy"`: lazy-loading the LCP element is the classic way to
+  make a fast page score badly.
+- **21 tap targets under 24px and 63 strings under 12px, on every page**,
+  because both live in the shared footer and hero. Footer links were 144x13.
+  Fixed with PADDING, not font size, so nothing reflowed. Sentences now have a
+  12px floor on phones; the letter-spaced uppercase micro-labels deliberately
+  do NOT -- tracking is what makes those legible, and enlarging them turns a
+  quiet typographic device into a row of shouting. Inline links inside a
+  paragraph are left alone: WCAG 2.5.8 exempts them and padding would break the
+  line box.
+  **Two rules lost on specificity and had to be matched, not out-ordered:**
+  `.price-card li` and `.compare-row > span:first-child` both beat a plain
+  descendant selector, which is why 13 plan features and 9 comparison rows
+  stayed at 10-11px after the first pass -- the two lists a customer reads to
+  decide what to pay for.
+- **There was no horizontal overflow, and an early measurement said there was.**
+  An iframe has no viewport meta, so a page written into one at 375px reports
+  the desktop layout's width. Measured in the real viewport: 0 of 21 pages
+  overflow. Check the real thing before fixing a phantom.
+- **CI has no browser and must not get one** -- this repo has no npm
+  dependencies on purpose, which is what lets a phone session run the suite. So
+  the image test asserts served HTML (real executed output) and the tap-target
+  test only catches the CSS block being deleted wholesale. It says so in the
+  test.

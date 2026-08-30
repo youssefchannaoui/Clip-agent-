@@ -282,3 +282,65 @@ svg{width:1em;height:1em;display:block;stroke:currentColor;stroke-width:1.8;stro
   .seo-section { grid-template-columns: 1fr; gap: 14px; padding: 34px 0; }
   .seo-section h2 { font-size: 26px; }
 }
+
+/* ── Phone: tap targets and legible text ────────────────────────────────────
+   Measured on a real phone-width render rather than assumed, and both of
+   these were wrong on every page because they live in the shared footer and
+   the shared hero.
+
+   1. Footer links were 144x13. A 13px-tall target is below the 24px WCAG
+      2.5.8 minimum and, on a real thumb, sits between two other links. The
+      font stays 11px; the PADDING does the work, so nothing reflows.
+   2. Several strings rendered at 9px and 10px. The phone rules shrank them a
+      second time from an already-small desktop size -- 12px to 10px to 9px --
+      and a 9px sentence is not read, it is squinted at. 12px is the floor for
+      anything carrying words; the uppercase micro-labels keep their size
+      because letter-spacing is what makes those legible, not point size. */
+@media (max-width: 620px) {
+  .footer-col a {
+    margin: 0;
+    padding: 8px 0;
+    min-height: 30px;
+    display: flex;
+    align-items: center;
+  }
+  .footer-bottom span { padding: 3px 0; }
+  .trust-strip span { font-size: 12px; padding: 8px 12px; }
+  .capability-rail span { font-size: 12px; }
+  .purpose-line { font-size: 12px; }
+  .gallery-slide span { font-size: 12px; }
+  .workflow-steps p, .workflow-steps span { font-size: 12px; }
+  /* Anything carrying a sentence goes to the 12px floor. */
+  .footer-col a,
+  .footer-bottom span,
+  .feature-page-grid article p,
+  .template-copy p,
+  .template-safety p,
+  .deenai-sources span,
+  .deenai-note,
+  .detail-item small,
+  main ul li,
+  /* The plan features. `main ul li` loses to `.price-card li` on specificity,
+     which is why thirteen of them stayed at 11px after the first pass -- the
+     list a customer reads to decide what to pay for. */
+  .price-card li { font-size: 12px; }
+  .pricing-trust span,
+  /* Matched to `.compare-row>span:first-child` on specificity, not written as
+     `.compare-row span` -- the looser selector lost to the phone rule that set
+     these to 10px, and the plan comparison is the table a customer reads to
+     decide what to pay for. */
+  .compare-row > span:first-child,
+  .token-shop-note { font-size: 12px; }
+  /* Controls, not prose: give the breadcrumb links and the FAQ disclosures a
+     real thumb target. The FAQ summary is the primary control on a landing
+     page -- it is what a reader taps to get an answer -- and it was 19px. */
+  .breadcrumbs a, .breadcrumbs [aria-current] { padding: 5px 0; display: inline-block; }
+  .faq-item > summary { padding-top: 14px; padding-bottom: 14px; }
+  /* Inline links inside a sentence are deliberately NOT padded: WCAG 2.5.8
+     exempts them, and padding them would break the line box they sit in. */
+
+  /* The letter-spaced uppercase micro-labels are NOT raised. Tracking is what
+     makes those legible, not point size, and enlarging them turns a quiet
+     typographic device into a row of shouting. They carry two or three words,
+     never a sentence. */
+}
