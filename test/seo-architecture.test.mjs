@@ -290,6 +290,26 @@ test('search-console verification renders only when it is configured', async () 
     'nothing should be claimed while the variable is unset');
 });
 
+test('HEAD answers like GET, because link checkers ask that way', async () => {
+  // Every route matches on `method === 'GET'`, so HEAD fell through all of
+  // them to the 404 -- on the HOMEPAGE included. A link validator, an uptime
+  // monitor or a social-card scraper asking with HEAD was told the site does
+  // not exist, and nothing went red about it because nothing here had ever
+  // asked that way.
+  for (const target of ['/', '/tools/ai-video-clipper', '/sitemap.xml', '/robots.txt']) {
+    const head = await fetch(`${base}${target}`, { method: 'HEAD' });
+    const get = await fetch(`${base}${target}`);
+    assert.equal(head.status, 200, `HEAD ${target} returned ${head.status}`);
+    assert.equal(head.status, get.status, `HEAD and GET disagree about ${target}`);
+    // RFC 9110: the same headers GET would send, which is what a checker reads.
+    assert.equal(head.headers.get('content-type'), get.headers.get('content-type'));
+    assert.equal(await head.text(), '', 'HEAD must send no body');
+  }
+  // And a real 404 is still a 404, not a 200 with nothing in it.
+  const missing = await fetch(`${base}/tools/nope`, { method: 'HEAD' });
+  assert.equal(missing.status, 404);
+});
+
 test('a missing page is still a 404 and is never in the sitemap', async () => {
   const { status } = await get('/tools/this-does-not-exist');
   assert.equal(status, 404, 'an unregistered path under a real section must not resolve');

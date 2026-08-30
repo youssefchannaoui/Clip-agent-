@@ -150,7 +150,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **890 JS + 427 Python**
+- `npm test` and `npm run check` must pass. Currently **891 JS + 427 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1452,3 +1452,19 @@ say which.
   (`dcPaintLandingTable` in index.html), reusing the export's own classes --
   the same device as the chart tooltip, because putting it in the design export
   would regenerate every hashed class name in the app for one table.
+
+### Every HEAD request answered 404, the homepage included (v3.44.0)
+
+Found by running `curl -I` against the live site while measuring page weight.
+Every route in server.js matches on `method === 'GET'`, so a HEAD request fell
+through all of them to the 404 handler -- `HEAD /` returned 404 on
+deenclipped.online. Link validators, uptime monitors, social-card scrapers and
+some CDNs ask with HEAD first, and every one of them was being told the site
+does not exist. Nothing went red, because nothing in the suite had ever asked
+that way.
+
+HEAD is now routed as a GET with the body dropped on the way out, keeping the
+Content-Length GET would report (RFC 9110). `res.write` and `res.end` are
+wrapped rather than the routes being changed, so a streamed file behaves too.
+`curl -I` was also what made `marketing.css` look like it was served `no-store`
+-- it is not; the GET carries `public, max-age=3600`.

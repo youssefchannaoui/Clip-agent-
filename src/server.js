@@ -2218,6 +2218,31 @@ function securityHeaders(res, { pathname }) {
 
 export const server = http.createServer((req, res) => {
   let url; try { url = new URL(req.url, `http://${req.headers.host || 'localhost'}`); } catch { return json(res, 400, { error: 'Bad request.' }); }
+
+  // HEAD is GET without a body, and it must answer with the headers GET would
+  // send (RFC 9110). Every route below matches on `method === 'GET'`, so HEAD
+  // fell through all of them to the 404 -- on the homepage included. A link
+  // checker, an uptime monitor or a social-card scraper that asks with HEAD
+  // was being told the site does not exist, and nothing here went red about
+  // it because nothing here had ever asked that way.
+  //
+  // So it is routed as a GET and the body is dropped on the way out. The
+  // Content-Length stays as GET would report it, which is what the spec asks
+  // for and what a checker reads.
+  if ((req.method || 'GET').toUpperCase() === 'HEAD') {
+    req.method = 'GET';
+    const finish = res.end.bind(res);
+    res.write = (chunk, encoding, callback) => {
+      const done = typeof chunk === 'function' ? chunk : typeof encoding === 'function' ? encoding : callback;
+      if (done) done();
+      return true;
+    };
+    res.end = (chunk, encoding, callback) => {
+      const done = typeof chunk === 'function' ? chunk : typeof encoding === 'function' ? encoding : callback;
+      return finish(done);
+    };
+  }
+
   securityHeaders(res, { pathname: url.pathname });
   if ((req.method || 'GET') === 'POST'
       && (url.pathname.startsWith('/auth/') || url.pathname.startsWith('/billing/'))
