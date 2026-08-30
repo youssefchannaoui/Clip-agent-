@@ -28,6 +28,7 @@ import { checkFfmpeg } from './ffmpeg.js';
 import * as auth from './auth.js';
 import * as billing from './billing.js';
 import * as marketing from './marketing.js';
+import * as seoPages from './seo-pages.js';
 import * as admin from './admin.js';
 import * as owner from './owner.js';
 import * as deenai from './deenai.js';
@@ -860,6 +861,17 @@ async function route(req, res, url) {
     const contentType = extension === '.webp' ? 'image/webp' : extension === '.png' ? 'image/png' : extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg' : extension === '.svg' ? 'image/svg+xml' : 'application/octet-stream';
     return streamFile(req, res, file, { contentType, cacheControl: 'public, max-age=86400' });
   }
+  // Registry-driven SEO pages. One list drives routing, the sitemap and the
+  // analytics allowlist, so a new page cannot ship routed-but-unlisted (or
+  // listed-but-404) the way three hand-maintained lists allowed.
+  if (method === 'GET' && marketing.SEO_COPY[pathname]) {
+    return html(res, 200, marketing.seoPage({
+      ...marketingContext(req),
+      page: seoPages.pageFor(pathname),
+      copy: marketing.SEO_COPY[pathname],
+    }));
+  }
+
   if (method === 'GET' && pathname === '/features') return html(res, 200, featuresPage(req));
   if (method === 'GET' && pathname === '/pricing') return html(res, 200, pricingPage(req));
   if (method === 'GET' && pathname === '/contact') return html(res, 200, contactPage(req));

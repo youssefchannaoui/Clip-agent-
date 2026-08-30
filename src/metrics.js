@@ -25,6 +25,7 @@
 
 import crypto from 'node:crypto';
 import { state, save } from './store.js';
+import { trackedPaths } from './seo-pages.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RETENTION_DAYS = 90;
@@ -77,7 +78,12 @@ export function liveNow() {
  * The public paths worth counting. Everything else is a 404, an asset, or an
  * API call — recording those would let any scanner grow the state file.
  */
-const TRACKED_PATHS = new Set(['/', '/features', '/pricing', '/contact', '/privacy', '/terms', '/login', '/plans', '/app']);
+// Derived from the SEO registry so a new public page is counted the day it
+// ships, plus the few app paths that are not SEO pages but are worth seeing in
+// the funnel. Still a closed set: a scanner spraying /wp-admin must never mint
+// a state key, which is the whole reason this allowlist exists.
+const APP_PATHS = ['/login', '/plans', '/app'];
+const TRACKED_PATHS = new Set([...trackedPaths(), ...APP_PATHS]);
 
 function utcDay(ms = Date.now()) {
   return new Date(ms).toISOString().slice(0, 10);

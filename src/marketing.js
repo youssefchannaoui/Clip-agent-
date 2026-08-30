@@ -1,5 +1,33 @@
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { config } from './config.js';
 import * as billing from './billing.js';
+
+import { SEO_PAGES, KIND, indexablePages, pageFor, breadcrumbFor } from './seo-pages.js';
+import { SEO_COPY } from './seo-copy.js';
+
+/**
+ * Cache-buster for the stylesheet, taken from the stylesheet.
+ *
+ * This was a hand-typed date. Edit the CSS twice in one day — or forget to
+ * change it at all — and every returning visitor keeps the old file, which
+ * looks exactly like a layout bug that will not reproduce for you. Reading
+ * the bytes means it cannot be forgotten and cannot be wrong. Falls back to
+ * the app version if the file is unreadable, so a packaging change degrades
+ * to the old behaviour rather than throwing at import time.
+ */
+const CSS_VERSION = (() => {
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const bytes = fs.readFileSync(path.join(here, 'public', 'marketing.css'));
+    return crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 10);
+  } catch {
+    return String(config.appVersion || '0').replace(/[^\w.]/g, '');
+  }
+})();
 
 function escapeHtml(value = '') {
   return String(value)
@@ -90,7 +118,7 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="canonical" href="${canonical}">
   ${schemaBlocks}
-  <link rel="stylesheet" href="/marketing.css?v=20260830">
+  <link rel="stylesheet" href="/marketing.css?v=${CSS_VERSION}">
 </head>
 <body>
   <header class="site-header">
@@ -98,11 +126,12 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
       <a class="brand" href="/" aria-label="DeenClipped home">${logoMark()}<span class="brand-copy"><strong>DeenClipped</strong><small>AI clip workspace</small></span></a>
       <button class="menu-button" type="button" data-menu aria-label="Open navigation"><span></span><span></span><span></span></button>
       <nav class="nav-links" aria-label="Main navigation">
-        <a href="/#how-it-works">How it works</a>
+        <a href="/how-it-works">How it works</a>
         <a href="/features">Features</a>
+        <a href="/tools/ai-video-clipper">Tools</a>
+        <a href="/islamic-video-clipper">For Islamic creators</a>
         <a href="/pricing">Pricing</a>
-        <a href="/#safety">Review & safety</a>
-        <a href="/#faq">FAQ</a>
+        <a href="/review-safety">Review & safety</a>
       </nav>
       ${navActions(currentUser)}
     </div>
@@ -112,8 +141,11 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
     <div class="wrap">
       <div class="footer-grid">
         <div class="footer-brand"><a class="brand" href="/">${logoMark()}<span class="brand-copy"><strong>DeenClipped</strong><small>AI clip workspace</small></span></a><p>Turn long lectures and videos into review-ready short clips, refine every detail, then publish to your own connected channels.</p></div>
-        <div class="footer-col"><h4>Product</h4><a href="/features">All features</a><a href="/pricing">Plans & tokens</a><a href="/#safety">Review & safety</a><a href="/app">Dashboard</a></div>
-        <div class="footer-col"><h4>Company</h4><a href="/contact">Contact</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a></div>
+        <div class="footer-col"><h4>Product</h4><a href="/features">All features</a><a href="/how-it-works">How it works</a><a href="/pricing">Plans & tokens</a><a href="/review-safety">Review & safety</a><a href="/app">Dashboard</a></div>
+        <div class="footer-col"><h4>Clip long video</h4><a href="/tools/ai-video-clipper">AI video clipper</a><a href="/tools/long-video-to-shorts">Long video to Shorts</a><a href="/tools/podcast-clip-generator">Podcast clip generator</a><a href="/tools/lecture-clip-generator">Lecture clip generator</a><a href="/tools/ai-caption-generator">AI caption generator</a></div>
+        <div class="footer-col"><h4>Publish to</h4><a href="/tools/youtube-to-shorts">YouTube to Shorts</a><a href="/tools/youtube-to-tiktok">YouTube to TikTok</a><a href="/tools/youtube-to-reels">YouTube to Reels</a></div>
+        <div class="footer-col"><h4>Islamic creators</h4><a href="/islamic-video-clipper">Islamic video clipper</a><a href="/islamic-lecture-clipper">Islamic lecture clipper</a><a href="/tools/arabic-english-captions">Arabic &amp; English captions</a><a href="/for/islamic-creators">Built for dawah content</a></div>
+        <div class="footer-col"><h4>Company</h4><a href="/about">About</a><a href="/contact">Contact</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a></div>
         <div class="footer-col"><h4>Start</h4><a href="/login?returnTo=/app">Start free</a><a href="/login?returnTo=/app">Sign in</a><a href="/pricing#token-shop">Token shop</a><a href="mailto:support@deenclipped.online">Support</a></div>
       </div>
       <div class="footer-bottom"><span>© ${new Date().getFullYear()} DeenClipped</span><span>Import · Review · Edit · Publish</span></div>
@@ -473,7 +505,7 @@ export function home({ base, currentUser }) {
 
     <section class="section final-section"><div class="wrap final-cta reveal"><div><span class="section-label">Start with the next lecture</span><h2>${escapeHtml(Number(config.tokensFree).toLocaleString())} source minutes. ${escapeHtml(String(config.stripeTrialDays))} days. A real review queue.</h2><p>Choose a range, generate the clips and decide what is worth publishing before anything reaches your channels.</p></div><a class="button primary" href="/login?returnTo=/app">Start Basic free ${icon('arrow')}</a></div></section>
   </main>`;
-  return layout({ base, currentUser, title: 'DeenClipped — Review-ready clips from Islamic lectures', description: 'Turn Islamic lectures into full-quality short clips with English, Arabic and Quran-aware captions, human review, scheduling and private AI insights.', canonicalPath: '/', body,
+  return layout({ base, currentUser, ...meta('/'), body,
     jsonLd: [organizationSchema(base), webSiteSchema(base), softwareSchema(base), faqSchema()] });
 }
 
@@ -509,26 +541,26 @@ export function features({ base, currentUser }) {
       <div class="final-cta reveal"><div><span class="section-label">Start with the whole workflow</span><h2>Basic includes generation, review, automation and publishing.</h2><p>Upgrade when you need every template, no watermark, DeenAI insights, private Ask, priority rendering or more daily posting windows.</p></div><a class="button primary" href="/pricing">Compare the plans ${icon('arrow')}</a></div>
     </div></section>
   </main>`;
-  return layout({ base, currentUser, title: 'Features — DeenClipped', description: 'Explore DeenClipped range-based import, AI clipping, rendered review, multilingual and Quran-aware captions, five templates, DeenAI, scheduling and destination-level publishing.', canonicalPath: '/features', body,
+  return layout({ base, currentUser, ...meta('/features'), body,
     jsonLd: [organizationSchema(base), webSiteSchema(base)] });
 }
 
 export function pricing({ base, currentUser }) {
   const body = `<main><section class="page-hero pricing-hero wrap"><span class="eyebrow"><i></i>Three tiers · one clear token model</span><h1>Start with the whole workflow. Upgrade for scale.</h1><p>One token represents one selected source-video minute. Subscription allowances refresh normally, while one-time top-up tokens stay in your wallet until used.</p><div class="pricing-trust"><span>${escapeHtml(config.tokensFree)} starter tokens</span><span>${escapeHtml(config.stripeTrialDays)} days of Basic access</span><span>Secure Stripe Checkout</span><span>No raw card storage</span></div></section><section class="page-content"><div class="wrap"><div class="pricing-section-head"><span class="section-label">Basic, Pro and Studio</span><h2>Choose the capability level, then the billing period.</h2><p>Basic includes the real workflow. Pro adds every template, watermark removal and calculated DeenAI insights. Studio adds private Ask, priority rendering and more posting windows.</p></div>${pricingCards(currentUser)}<section class="comparison-section"><div class="pricing-section-head"><span class="section-label">Plan comparison</span><h2>See exactly what changes.</h2><p>Core creation, review, automation and supported publishing are not hidden behind a paid tier.</p></div>${planComparison()}</section>${tokenShop(currentUser)}<div class="pricing-explainer"><div><span class="section-label">How tokens work</span><h2>Clear before you render.</h2><p>DeenClipped reads the source duration, lets you select a start and end time, then estimates usage from that selected range. Subscription allowance is used before purchased top-ups.</p>${checkItem(`${config.tokensPerMinute} token per source minute`,'Usage follows the selected source window.')}${checkItem('More clips do not repeat the source charge','Cutting more candidates from an already processed source does not spend the source minutes again.')}${checkItem('Ordinary re-renders stay fair','Review, template changes and ordinary re-renders do not unnecessarily consume tokens.')}${checkItem('Top-ups persist','Purchased tokens do not disappear when a subscription renews or is cancelled.')}</div><div class="product-frame"><img src="/marketing-assets/workflow-premium.webp" alt="DeenClipped source-minute and workflow overview"></div></div></div></section></main>`;
-  return layout({ base, currentUser, title: 'Pricing & Token Shop — DeenClipped', description: 'Compare DeenClipped Basic, Pro and Studio across weekly, monthly and yearly billing, plus optional one-time token packs.', canonicalPath: '/pricing', body,
+  return layout({ base, currentUser, ...meta('/pricing'), body,
     jsonLd: [organizationSchema(base), webSiteSchema(base), softwareSchema(base)] });
 }
 
 export function contact({ base, currentUser }) {
   const body = `<main><section class="page-hero wrap"><span class="eyebrow"><i></i>Direct product support</span><h1>Tell us what stopped the workflow.</h1><p>Questions about an import, rendered clip, connected destination, schedule or payment can be sent directly to DeenClipped support.</p></section><section class="page-content"><div class="wrap contact-layout"><div class="contact-card"><span class="contact-icon">${logoMark()}</span><h2>Support</h2><p>Email <a href="mailto:support@deenclipped.online">support@deenclipped.online</a></p><p>Include the email attached to your account, the project or clip name, the destination involved and the exact message you saw. Never email a password, OAuth token or payment-card number.</p><a class="button primary" href="mailto:support@deenclipped.online?subject=DeenClipped%20support%20request">Email support</a></div><div class="contact-context"><span class="section-label">Useful details</span><h2>Help us find the exact step.</h2>${checkItem('Import or processing','Include the source type, selected time range and the stage where it stopped.')}${checkItem('Captions or render','Name the template, language and whether the issue appears in the rendered review video.')}${checkItem('Publishing','Name every destination and which one posted, failed or is still waiting.')}${checkItem('Billing','Include the plan or token pack and the checkout time, but never raw card details.')}<div class="contact-reels">${reelCard(reels[5], 'contact-reel')}${reelCard(reels[6], 'contact-reel')}${reelCard(reels[10], 'contact-reel')}</div></div></div></section></main>`;
-  return layout({ base, currentUser, title: 'Contact — DeenClipped', description: 'Contact DeenClipped support.', canonicalPath: '/contact', body,
+  return layout({ base, currentUser, ...meta('/contact'), body,
     jsonLd: [organizationSchema(base), webSiteSchema(base)] });
 }
 
 export function privacy({ base, currentUser }) {
   const body = `<main><section class="page-hero wrap"><span class="eyebrow"><i></i>Legal</span><h1>Privacy Policy</h1><p>How DeenClipped handles account, video, billing and connected-platform information.</p></section><section class="page-content"><article class="legal"><p>Last updated: 30 August 2026</p><p>DeenClipped helps users create, review and publish short-form clips from long videos. This Privacy Policy explains what information is collected and how it is used.</p><h2>Information we collect</h2><p>When you sign in with Google, DeenClipped receives your Google account email address, profile name and profile picture from the <code>openid email profile</code> scopes, and uses them to create and identify your account. When you sign in with email, only your address and a hashed password are stored. We may also store project settings, uploaded source information, generated clips, captions, templates, schedules and publishing preferences.</p><h2>Google and YouTube user data</h2><p>If you choose to connect a YouTube channel, DeenClipped requests the minimum Google permissions needed to identify the channel and upload clips that you expressly approve or schedule. The permissions requested are <code>youtube.upload</code> and <code>youtube.readonly</code>. DeenClipped does not request YouTube watch history, Google passwords or browser cookies.</p><h3>YouTube API Data we access, store and use</h3><p>This is the complete list of information DeenClipped obtains through YouTube API Services:</p><ul><li><strong>Channel identifier, channel name and channel profile image</strong> — read once when you connect a channel (<code>channels.list</code>, part <code>snippet</code>), so the app can show you which channel is connected and address uploads to it.</li><li><strong>Granted permission list and encrypted OAuth access and refresh tokens</strong> — stored so publishing works without asking you to sign in again.</li><li><strong>Video title, duration and thumbnail image URL</strong> of a YouTube link you paste for clipping — read through the YouTube Data API (<code>videos.list</code>, parts <code>snippet</code> and <code>contentDetails</code>) so the app can show the video in your library and estimate its processing cost. That API response also contains the video's description and channel name; DeenClipped reads them in the response but does not store or display them.</li><li><strong>The video identifier of a clip DeenClipped uploaded on your behalf</strong> — kept as a record of what was published.</li></ul><p>DeenClipped does <strong>not</strong> request, store or display YouTube statistics of any kind. No view counts, like counts, comment counts, subscriber counts or analytics are retrieved: the only metadata request made is for a video's snippet and content details.</p><h3>How long YouTube API Data is kept</h3><p>Cached YouTube API Data — the video title, duration and thumbnail URL of an imported link, and the channel name and profile image of a connected channel — is automatically deleted after 30 days, in line with the YouTube API Services Developer Policies. A daily process removes anything older than that window; the data is read again from YouTube only when you next need it. Your channel identifier and the identifiers of clips DeenClipped uploaded are retained while your account and connection remain active, because they are the address publishing is sent to and the record of what was published.</p><p>When you disconnect a channel, the stored Google credential is removed immediately and DeenClipped asks Google to revoke the grant. You can also revoke DeenClipped's access at any time from your <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">Google account security settings</a>.</p><p>Google and YouTube data is used only to display and test your connected channel and to upload clips to that channel when you request publishing. It is not sold, used for advertising, used to train a general-purpose AI model or shared with data brokers. Service providers acting on our behalf may process data only as needed to host, secure and operate DeenClipped.</p><p>DeenClipped's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Services User Data Policy</a>, including its Limited Use requirements.</p><p>By connecting a channel you are also using YouTube API Services. The <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener">YouTube Terms of Service</a> and the <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Privacy Policy</a> apply to that use, and you can review or revoke DeenClipped's access to your Google account at any time at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">https://myaccount.google.com/permissions</a>.</p><h2>Meta (Facebook and Instagram) user data</h2><p>If you choose to connect Facebook or Instagram, DeenClipped requests these Meta permissions: <code>pages_show_list</code>, <code>pages_read_engagement</code>, <code>pages_manage_posts</code>, <code>instagram_basic</code> and <code>instagram_content_publish</code>. They are the minimum needed to list the Pages you manage, identify the Instagram professional account linked to a Page, and publish the clips you expressly approve or schedule.</p><h3>Meta data we access, store and use</h3><p>This is the complete list of information DeenClipped obtains through the Meta Graph API:</p><ul><li><strong>The Facebook Pages you manage</strong> — Page identifier, Page name and a Page access token, read once when you connect (<code>/me/accounts</code>), so the app can show you which Pages are available and address posts to them.</li><li><strong>The Instagram professional account linked to each Page</strong> — its identifier, username or name and profile picture URL, read in that same request, so the app can show which Instagram account a Page publishes to.</li><li><strong>Encrypted Page access tokens</strong> — stored so publishing works without asking you to sign in again.</li><li><strong>The media identifier of a post DeenClipped published on your behalf</strong> — kept as a record of what was published.</li></ul><p>DeenClipped does <strong>not</strong> request, store or display Facebook or Instagram insights or statistics of any kind — no follower counts, view counts, like counts or comment counts. It does not read your comments or direct messages, does not read posts you did not publish through DeenClipped, and does not read your Facebook profile beyond the list of Pages you manage.</p><p>Publishing sends the rendered clip and the caption you wrote to Meta. An Instagram Reel is created as a media container and then published (<code>/media</code>, then <code>/media_publish</code>); a Facebook Reel is uploaded to the Page you selected. Nothing is posted that you have not approved or scheduled.</p><p>Meta data is used only to display your connected Pages and Instagram accounts and to publish clips you request. It is not sold, used for advertising, used to train a general-purpose AI model or shared with data brokers.</p><p>When you disconnect Facebook or Instagram, the stored Page tokens are removed from DeenClipped immediately and publishing to those accounts stops. You can also remove DeenClipped’s access at any time from your <a href="https://www.facebook.com/settings?tab=business_tools" target="_blank" rel="noopener">Facebook business integrations settings</a>.</p><h2>TikTok user data</h2><p>If you choose to connect TikTok, DeenClipped requests the <code>user.info.basic</code> and <code>video.publish</code> scopes. It reads your TikTok display name, avatar and open identifier so the app can show which account is connected, and it reads your account’s current posting options (<code>creator_info</code>) — the privacy levels available to you, whether comments, Duet and Stitch are permitted, and the maximum video length — so the app offers only settings your account actually allows.</p><p>Encrypted TikTok access and refresh tokens are stored so publishing works without asking you to sign in again, together with the video identifier of anything DeenClipped published for you. DeenClipped does not request or store TikTok analytics, your follower list, comments or direct messages.</p><p>Every post carries the privacy level and the comment, Duet, Stitch and commercial-content settings you chose for that clip. DeenClipped never selects a privacy level on your behalf. Disconnecting TikTok removes the stored credential immediately, and you can revoke access at any time from your TikTok account settings.</p><h2>Security and storage</h2><p>Connected-platform tokens are encrypted at rest and separated by DeenClipped account. Access is limited to the service operations needed to provide the user-facing connection and publishing features. No internet service can guarantee absolute security, but DeenClipped uses reasonable technical and organisational safeguards appropriate to the data handled.</p><h2>Control, revocation and deletion</h2><p>You can disconnect any connected platform — YouTube, Facebook, Instagram or TikTok — from the Platforms page at any time. Disconnecting immediately removes that platform’s stored credential from your DeenClipped connection and disables future uploads to it; for YouTube, DeenClipped also asks Google to revoke the grant. You can additionally revoke access from <a href="https://myaccount.google.com/connections" target="_blank" rel="noopener">Google Account connections</a>, from your <a href="https://www.facebook.com/settings?tab=business_tools" target="_blank" rel="noopener">Facebook business integrations settings</a>, or from your TikTok account settings.</p><p>To request deletion of your account data, email <a href="mailto:support@deenclipped.online?subject=DeenClipped%20data%20deletion%20request">support@deenclipped.online</a> from the address attached to your account. Verified deletion requests, including associated Google, Meta and TikTok user data, are completed within 30 days unless retention is required by law. Published posts on third-party platforms are not deleted merely by disconnecting; they remain under your control on those platforms.</p><h2>Billing</h2><p>Payments are processed by Stripe. DeenClipped may store subscription status, plan, token balance and Stripe customer references, but does not directly store complete payment-card details.</p><h2>Source content and retention</h2><p>You are responsible for ensuring you have permission to process and publish source content. Project files and generated clips may be retained while your account is active so the service can provide editing, rerendering and publishing. You may delete individual projects in the app or request account-data deletion as described above.</p><h2>Contact</h2><p>Privacy and data-control questions can be sent to <a href="mailto:support@deenclipped.online">support@deenclipped.online</a>.</p></article></section></main>`;
   const disclosedBody = body.replace('<h2>Security and storage</h2>', '<h2>YouTube URL processing</h2><p>When you submit a public YouTube URL for clipping on deenclipped.online, the URL and requested source range are sent to DeenClipped\'s own processing server. That server uses <code>yt-dlp</code> and may route the download through Webshare\'s residential proxy network to retrieve the public source. Where the source permits it, only the selected time range is downloaded. Transcription, clip selection and rendering happen on the DeenClipped processing server.</p><p><strong>No Google credentials are sent to the import downloader or proxy network.</strong> Your Google account email, OAuth access and refresh tokens, and connected-channel information are not included in the import request. The Google connection is used only for channel identity and uploads you approve or schedule.</p><h2>DeenAI processing</h2><p>DeenAI insights are calculated from records already held in your DeenClipped workspace, such as project, approval, schedule and destination outcomes. Studio\'s Ask DeenAI feature runs on the private model hosted on the DeenClipped processing server. Its request contains compact account figures and kept clip titles; it does not send lecture transcripts to the model. DeenAI output is not used to train a general-purpose model.</p><h2>Security and storage</h2>');
-  return layout({ base, currentUser, title: 'Privacy Policy — DeenClipped', description: 'Privacy Policy for DeenClipped.', canonicalPath: '/privacy', body: disclosedBody });
+  return layout({ base, currentUser, ...meta('/privacy'), body: disclosedBody });
 }
 
 export function terms({ base, currentUser }) {
@@ -536,7 +568,7 @@ export function terms({ base, currentUser }) {
   const disclosedBody = body
     .replace('<h2>Billing and tokens</h2>', '<h2>YouTube URL processing</h2><p>DeenClipped may use a commercial video-processing provider to retrieve and clip a public YouTube URL that you submit. This is separate from the official YouTube API connection used for channel identity and publishing. Imports depend on the source being accessible to the provider and may fail because of source restrictions, rights controls, availability, quotas or platform changes.</p><h2>Billing and tokens</h2>')
     .replace('YouTube source-file import is not represented as an official YouTube API capability and remains unavailable where YouTube does not permit access.', 'YouTube URL import is not an official YouTube Data API download capability and remains subject to source availability, provider access and platform restrictions.');
-  return layout({ base, currentUser, title: 'Terms of Service — DeenClipped', description: 'Terms of Service for DeenClipped.', canonicalPath: '/terms', body: disclosedBody });
+  return layout({ base, currentUser, ...meta('/terms'), body: disclosedBody });
 }
 
 /**
@@ -559,16 +591,154 @@ export function notFound({ base, currentUser }) {
  * auth endpoints and the API. There is nothing there for a crawler, and a
  * crawler following a sign-out link is its own small outage.
  */
+
+/* ── SEO landing pages ──────────────────────────────────────────────────────
+ * One template for every registry-driven page, built from the SAME classes the
+ * hand-written pages use. A landing page that looks like a cheap blog beside a
+ * premium product page costs more trust than the ranking is worth.
+ */
+
+
+/**
+ * Title and description for a registry page, drawn from the registry.
+ *
+ * These used to be typed a second time at each layout() call, and they drifted:
+ * /contact's registry entry described the page properly while the page itself
+ * served "Contact DeenClipped support." — 28 characters, which is what Google
+ * shows under the link. Two lists, one of them wrong, and nothing to notice it.
+ */
+function meta(path) {
+  const page = pageFor(path);
+  if (!page) return {};
+  return { title: page.title, description: page.description, canonicalPath: page.path };
+}
+
+/**
+ * Re-exported so a caller needs one import for a page: the registry entry
+ * decides that a path exists, the copy decides what it says.
+ */
+export { SEO_COPY };
+
+/** Visible breadcrumbs. Schema without these on the page would be a lie. */
+function breadcrumbNav(page) {
+  const trail = breadcrumbFor(page);
+  if (trail.length < 2) return '';
+  const crumbs = trail.map((step, i) => {
+    const last = i === trail.length - 1;
+    const label = escapeHtml(step.name);
+    return last
+      ? `<span aria-current="page">${label}</span>`
+      : `<a href="${escapeHtml(step.path)}">${label}</a>`;
+  }).join('<span class="crumb-sep" aria-hidden="true">/</span>');
+  return `<nav class="breadcrumbs wrap" aria-label="Breadcrumb">${crumbs}</nav>`;
+}
+
+function breadcrumbSchema(base, page) {
+  const root = siteBase(base);
+  const trail = breadcrumbFor(page);
+  if (trail.length < 2) return null;
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: trail.map((step, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: step.name,
+      item: `${root}${step.path === '/' ? '/' : step.path}`,
+    })),
+  };
+}
+
+/** The sibling links that stop a page being a dead end. */
+function relatedLinks(page) {
+  const links = (page.links || []).map(pageFor).filter(Boolean);
+  if (!links.length) return '';
+  const items = links.map(item =>
+    `<a class="related-card" href="${escapeHtml(item.path)}"><strong>${escapeHtml(item.breadcrumb || item.intent)}</strong><span>${escapeHtml(item.description.split('.')[0])}.</span></a>`
+  ).join('');
+  return `<section class="related-links"><h2 class="section-label">Keep going</h2><div class="related-grid">${items}</div></section>`;
+}
+
+/**
+ * Render one registry page from drafted copy.
+ * `copy` is {h1, lede, sections[], faqs[], ctaLabel}.
+ */
+export function seoPage({ base, currentUser, page, copy }) {
+  // .seo-section, NOT .feature-deep-dive: that class is a two-column grid
+  // built for copy beside a product shot, and giving it one child leaves half
+  // the page empty. See the note in marketing.css.
+  const sections = (copy.sections || []).map(section => `
+      <section class="seo-section reveal">
+        <h2>${escapeHtml(section.heading)}</h2>
+        <p>${escapeHtml(section.body)}</p>
+      </section>`).join('');
+
+  const faqs = (copy.faqs || []).map(item =>
+    `<details class="faq-item"><summary>${escapeHtml(item.q)}</summary><p>${escapeHtml(item.a)}</p></details>`).join('');
+
+  const body = `<main>
+    ${breadcrumbNav(page)}
+    <section class="page-hero wrap">
+      <span class="eyebrow"><i></i>${escapeHtml(page.breadcrumb || page.intent)}</span>
+      <h1>${escapeHtml(copy.h1)}</h1>
+      <p>${escapeHtml(copy.lede)}</p>
+      <div class="hero-actions">
+        <a class="button primary" href="/login?returnTo=/app">${escapeHtml(copy.ctaLabel)} ${icon('arrow')}</a>
+        <a class="button secondary" href="/pricing">See plans and tokens</a>
+      </div>
+    </section>
+    <section class="page-content"><div class="wrap">
+      <div class="seo-body">${sections}</div>
+      ${faqs ? `<section class="faq-section"><h2>Questions</h2><div class="faq-list">${faqs}</div></section>` : ''}
+      ${relatedLinks(page)}
+      <div class="final-cta reveal">
+        <div><span class="section-label">Start free</span><h2>Basic includes the whole workflow.</h2><p>Import a source, generate clips, review every one and publish to your own connected channels. Upgrade when you need more.</p></div>
+        <a class="button primary" href="/login?returnTo=/app">${escapeHtml(copy.ctaLabel)} ${icon('arrow')}</a>
+      </div>
+    </div></section>
+  </main>`;
+
+  // FAQPage is built from the SAME array that rendered the list above. Google
+  // penalises schema describing questions a visitor cannot see, and the only
+  // way to be sure they match is to build both from one source.
+  const faqSchema = (copy.faqs || []).length ? {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: copy.faqs.map(item => ({
+      '@type': 'Question',
+      name: item.q,
+      acceptedAnswer: { '@type': 'Answer', text: item.a },
+    })),
+  } : null;
+
+  const schema = [organizationSchema(base), breadcrumbSchema(base, page), faqSchema].filter(Boolean);
+  return layout({
+    base, currentUser,
+    title: page.title,
+    description: page.description,
+    canonicalPath: page.path,
+    body,
+    jsonLd: schema,
+  });
+}
+
 export function robots({ base }) {
   return [
     'User-agent: *',
-    'Allow: /$',
-    'Disallow: /app',
+    // Every Disallow here is a PREFIX, which is easy to get wrong: plain
+    // "/app" also matches /apple-touch-icon.png, and blocking a favicon from
+    // every crawler is not what anyone meant. The app itself is /app exactly
+    // or /app/..., so say that.
+    'Disallow: /app$',
+    'Disallow: /app/',
+    'Disallow: /app?',
     'Disallow: /owner',
     'Disallow: /api/',
     'Disallow: /auth/',
     'Disallow: /login',
     'Disallow: /reset',
+    // The signed-in billing screen, which 302s to login for everyone else.
+    // The PUBLIC pricing page is /pricing and is deliberately crawlable.
     'Disallow: /plans',
     '',
     `Sitemap: ${String(base || '').replace(/\/+$/, '')}/sitemap.xml`,
@@ -576,10 +746,23 @@ export function robots({ base }) {
   ].join('\n');
 }
 
-export const PUBLIC_PAGES = ['/', '/features', '/pricing', '/contact', '/privacy', '/terms'];
+/**
+ * Kept as a named export because tests and older callers use it, but it is
+ * DERIVED now: the registry is the source of truth, so a new page cannot be
+ * added to the site and forgotten by the sitemap.
+ */
+export const PUBLIC_PAGES = indexablePages().map(page => page.path);
 
 export function sitemap({ base }) {
   const root = String(base || '').replace(/\/+$/, '');
-  const urls = PUBLIC_PAGES.map(p => `  <url><loc>${root}${p === '/' ? '/' : p}</loc><changefreq>weekly</changefreq></url>`).join('\n');
+  // No changefreq and no priority: Google ignores both and has said so for
+  // years. lastmod is the one field it reads, and only while it is honest --
+  // it is written by hand in the registry when a page's content actually
+  // changes, never stamped with the deploy date.
+  const urls = indexablePages().map(page => {
+    const loc = `${root}${page.path === '/' ? '/' : page.path}`;
+    const lastmod = page.lastmod ? `<lastmod>${page.lastmod}</lastmod>` : '';
+    return `  <url><loc>${loc}</loc>${lastmod}</url>`;
+  }).join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
 }

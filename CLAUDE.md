@@ -150,7 +150,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **862 JS + 427 Python**
+- `npm test` and `npm run check` must pass. Currently **878 JS + 427 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1358,3 +1358,53 @@ Two features, both Studio-only, in the order he asked for them.
   centre crop. It is pinned `<5.0.0` now and `verify-deploy.sh` fails on it.
   Nothing has yet confirmed framing works *with* a 4.x image; that still needs
   a real job and a look at the frame.
+
+## Organic search: one registry, fifteen new pages (v3.43.0, 30 Aug 2026)
+
+Youssef asked for an SEO implementation, not an SEO report, aimed at BOTH the
+generic AI-clipper searches and the Islamic-creator niche. The overriding KPI
+he named is paid subscriptions, not traffic.
+
+- **Three lists described the public site and none knew about the others**: the
+  route table in server.js, `PUBLIC_PAGES` for the sitemap, and `TRACKED_PATHS`
+  for analytics. Adding a page meant three edits, and missing one failed
+  SILENTLY — a page that served fine, never appeared in the sitemap and
+  recorded no visits. `src/seo-pages.js` is now the single list (21 pages) and
+  all three are derived from it. It is pure data with no imports, deliberately:
+  metrics.js and marketing.js both need it and would otherwise import in a
+  circle.
+- **The words live in `src/seo-copy.js`, apart from the machinery.** Every
+  claim is checkable against the code. Where a page says what DeenClipped does
+  NOT do — the editor is gated, there is no mobile app, no platform sends
+  audience data back — that sentence is load-bearing, not modesty: a visitor
+  who finds it out after paying is a refund and a bad review.
+- **`.feature-deep-dive` is a TWO-column grid** built for copy beside a product
+  shot. The first version of these pages borrowed it with one child, so every
+  paragraph was crammed into the left .92fr with the other half empty. It
+  rendered as a plainly broken page and no test could have caught it — this is
+  the "green suite is not verification" rule again, found by screenshotting.
+  Landing pages use `.seo-section` now: heading left, prose right, hairline
+  between.
+- **The CSS cache-buster is a content hash now, not a hand-typed date.**
+  `?v=20260830` meant a second edit on the same day served stale CSS to
+  everyone who had already loaded the page — which looks exactly like a layout
+  bug that will not reproduce for you. It cost half an hour here before it was
+  recognised. `CSS_VERSION` reads the bytes of marketing.css at import.
+- **`Disallow: /app` is a PREFIX and it also blocked `/apple-touch-icon.png`.**
+  Robots rules are literal prefixes: `$` anchors the end, `*` is the only
+  wildcard, and `?` is an ordinary character. Written as `/app$`, `/app/`,
+  `/app?` now, and a test walks every rule against every public path and asset.
+- **Metadata was typed twice and drifted.** `/contact`'s registry entry
+  described the page properly while the page itself served "Contact
+  DeenClipped support." — 28 characters, which is what Google shows under the
+  link. `meta(path)` reads the registry, so both halves cannot disagree again.
+  Titles are capped at 62 characters and descriptions at 160, because past
+  those Google truncates mid-sentence.
+- **`lastmod` is written by hand, never stamped.** A sitemap claiming all 21
+  pages changed today teaches Google to ignore the one field it actually reads.
+  A test fails if every page carries today's date.
+- `test/seo-architecture.test.mjs` (16 tests) asserts the contract end to end
+  over HTTP: every registered page resolves, is in the sitemap, is crawlable,
+  is counted by analytics, has one H1 and a unique title, is REACHABLE BY PLAIN
+  LINK from the homepage (an orphan page is indexed late or never, whatever the
+  sitemap says), and invents no statistic or rating in its schema.
