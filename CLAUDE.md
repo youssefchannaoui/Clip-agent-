@@ -1599,3 +1599,42 @@ launched, both found by MEASURING a rendered page rather than by reading CSS.
   ranking positions come from Search Console, which this app has no connection
   to; the note says so rather than leaving a gap that reads as zero traffic,
   and shows the sitemap's public page count beside it.
+
+## The SEO brief is finished (v3.47.0, 30 Aug 2026)
+
+All 51 sections of Youssef's implementation brief are done. The final report is
+an artifact; what matters for the next session is here.
+
+**The self-audit is 20/20 against PRODUCTION, not against localhost** — the
+brief's own twenty questions, scripted and re-runnable
+(`scratchpad/final-audit.mjs` pattern: fetch the live sitemap, fetch every
+page, assert). Worth re-running after any marketing change. It measures
+titles DECODED: `&amp;` is five characters on the wire and one in a search
+result, and counting the escape called two fine titles too long.
+
+**Deliberately NOT built, each for a stated reason.** Do not "finish" these
+without reading why:
+- **No `/examples` page and no VideoObject.** No repo-owned public clip exists.
+  `videoObjectFor()` is written and refuses without a real https URL, a
+  thumbnail and a duration -- a page with no VideoObject beats one with a false
+  one, and the penalty lands on the domain rather than the page.
+- **No Arabic pages.** `alternatesFor`/`langOf`/`isRtl` are built and hreflang
+  follows automatically; nothing is registered, so nothing is emitted. Correct:
+  hreflang pointing at a page that does not exist makes Google drop the cluster.
+- **No competitor price comparisons anywhere.** Prices move and a wrong number
+  about someone else's product is a legal problem as well as a credibility one.
+- **No fabricated proof.** A test fails the build on customer counts, ratings,
+  "trusted by", "go viral" or "guaranteed".
+- **`research.js` is not wired to a route**, and a test fails if it ever is
+  without someone thinking about it.
+
+**FAQ schema is kept on purpose.** Google stopped showing ordinary FAQ rich
+results, so it earns nothing in search. It stays because it is accurate,
+built from the same array that renders the visible questions, and is
+machine-readable for AI answers -- NOT as a ranking tactic. If that stops being
+true, delete it.
+
+**The crawl test earned its keep three times in one session** -- two orphan
+guides and the comparison page, each linked from nowhere. It walks links from
+the homepage rather than trusting the sitemap, which is the only way to catch
+that. Any new page must be linked from somewhere a crawler can walk to.
