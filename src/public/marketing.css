@@ -469,3 +469,16 @@ svg{width:1em;height:1em;display:block;stroke:currentColor;stroke-width:1.8;stro
   .seo-proof-media { order: -1; }
   .seo-proof-reel { right: 4px; bottom: -14px; width: 84px; }
 }
+
+/* The offer after a free tool has delivered its value — below the widget,
+   never in front of it. A tool that interrupts itself to ask for an email is
+   not a free tool. */
+.tool-followup {
+  display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: center; justify-content: space-between;
+  margin-top: 20px; padding: 18px 20px; border-radius: 14px;
+  border: 1px solid rgba(217, 180, 120, .28); background: rgba(217, 180, 120, .05);
+}
+.tool-followup strong { display: block; color: var(--text, #f2f2f4); font-size: 15px; margin-bottom: 4px; }
+.tool-followup span { color: var(--muted, #8b8b93); font-size: 13px; line-height: 1.6; max-width: 60ch; display: block; }
+.tool-followup .button { flex: none; }
+@media (max-width: 620px) { .tool-followup { padding: 16px; } .tool-followup .button { width: 100%; justify-content: center; } }

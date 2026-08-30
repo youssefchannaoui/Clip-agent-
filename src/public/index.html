@@ -5293,17 +5293,39 @@ StudioAdapter.onProbeSource=async url=>{try{
           const cls=(host&&host.className)||'sgw';
           box.className='dcow-s';
           box.style.cssText='flex-shrink:0;margin-top:18px';
+          /* A rate with no denominator is shown as an em dash, not 0%: "nobody
+             has arrived yet" and "nobody converted" are different answers and a
+             0% reads as the second. Initial revenue is the FIRST payment each
+             customer made, counted once -- renewals are real money but belong
+             in the finance figures, because counting them here would make the
+             oldest page look like it wins a customer every month. */
+          const pct=v=>(v===null||v===undefined)?'\u2014':(v+'%');
+          const cash=r=>r.initialRevenueMinor?((r.initialRevenueMinor/100).toFixed(2)+' '+String(r.currency||'').toUpperCase()):'\u2014';
+          const mix=r=>{const m=r.planMix||{};const k=Object.keys(m);return k.length?k.map(p=>p.replace(/_/g,' ')+' \u00d7'+m[p]).join(', '):'\u2014'};
           box.innerHTML='<div class="'+esc(cls)+'">'
             +'<div class="scl"><span class="s97">Pages that earn subscriptions</span></div>'
             +'<div class="sdk"><table class="sh1">'
             +'<tr><th class="sgh">Landing page</th><th class="sgi">Arrivals</th>'
-            +'<th class="sgi">Signed up</th><th class="sgi">Subscribed</th></tr>'
+            +'<th class="sgi">Signups</th><th class="sgi">Paid</th>'
+            +'<th class="sgi">Visitor&#8594;signup</th><th class="sgi">Signup&#8594;paid</th>'
+            +'<th class="sgi">Visitor&#8594;paid</th><th class="sgi">Initial revenue</th>'
+            +'<th class="sgi">Plan mix</th></tr>'
             + wanted.slice(0,12).map(r=>'<tr class="dcow-hov">'
                 +'<td class="sgl">'+esc(r.path)+'</td>'
                 +'<td class="sgm">'+esc(r.entries)+'</td>'
                 +'<td class="sgm">'+esc(r.signups)+'</td>'
-                +'<td class="sgm">'+esc(r.paid)+'</td></tr>').join('')
-            +'</table></div></div>';
+                +'<td class="sgm">'+esc(r.paid)+'</td>'
+                +'<td class="sgm">'+esc(pct(r.visitorToSignup))+'</td>'
+                +'<td class="sgm">'+esc(pct(r.signupToPaid))+'</td>'
+                +'<td class="sgm">'+esc(pct(r.visitorToPaid))+'</td>'
+                +'<td class="sgm">'+esc(cash(r))+'</td>'
+                +'<td class="sgm">'+esc(mix(r))+'</td></tr>').join('')
+            +'</table></div>'
+            +'<p style="margin:10px 2px 0;font-size:11px;color:#75717b;line-height:1.5">'
+            +'Initial revenue is each customer\u2019s first payment, counted once \u2014 renewals are in Money in, not here. '
+            +'Rankings, impressions and search queries are NOT shown: they come from Google Search Console, '
+            +'which this app has no connection to, and a zero here would be a lie rather than a measurement.</p>'
+            +'</div>';
         }catch(e){/* a reporting table must never take the screen down */}
       };
       window.dcPaintLandingTable=paintLandingTable;

@@ -458,16 +458,27 @@ export function summary({ days = 30 } = {}) {
     // whose signup landed inside it vanished from the table completely --
     // dropping exactly the row worth reading. A conversion must never be lost
     // because its visit aged out.
+    // Rates and revenue are computed HERE rather than on the screen, so the
+    // table and any other reader cannot disagree about the arithmetic.
     landingPages: [...new Set([
       ...Object.keys(entries),
       ...Object.values(attribution).flatMap(per => Object.keys(per || {})),
     ])]
-      .map(path => ({
-        path,
-        entries: entries[path] || 0,
-        signups: attribution.signup?.[path] || 0,
-        paid: attribution.paid?.[path] || 0,
-      }))
+      .map(path => {
+        const arrivals = entries[path] || 0;
+        const signups = attribution.signup?.[path] || 0;
+        const paid = attribution.paid?.[path] || 0;
+        const rate = (part, whole) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : null);
+        return {
+          path, entries: arrivals, signups, paid,
+          // null, not 0, where there is no denominator: "no data yet" and
+          // "nobody converted" are different answers and a 0% reads as the
+          // second one.
+          visitorToSignup: rate(signups, arrivals),
+          signupToPaid: rate(paid, signups),
+          visitorToPaid: rate(paid, arrivals),
+        };
+      })
       .filter(row => row.entries || row.signups || row.paid)
       .sort((a, b) => (b.paid - a.paid) || (b.signups - a.signups) || (b.entries - a.entries)),
   };

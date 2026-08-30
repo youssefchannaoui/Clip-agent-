@@ -98,20 +98,60 @@ test('no two pages compete with the same title', async () => {
   }
 });
 
-test('no two pages lead with the same phrase', async () => {
-  // Distinct full titles are not enough. Two pages both OPENING with
-  // "AI Video Clipper" are one search term split across two pages, and Google
-  // then picks one of them for you -- usually the weaker one. The homepage
-  // led with the same phrase as /tools/ai-video-clipper until this caught it.
-  const lead = title => String(title).split(/[—|:]/)[0].trim().toLowerCase();
-  const seen = new Map();
-  for (const page of seo.indexablePages()) {
-    const key = lead(page.title);
-    const previous = seen.get(key);
-    assert.equal(previous, undefined,
-      `${page.path} and ${previous} both lead with "${key}" and will compete`);
-    seen.set(key, page.path);
+/*
+ * REMOVED: "no two pages may lead with the same phrase."
+ *
+ * That rule was SEO folklore, not a search-engine requirement. Google does not
+ * penalise two pages for sharing an opening word, and enforcing it pushed
+ * titles away from the words people actually type -- which costs more than the
+ * imagined duplication ever did. Distinct TITLES are still asserted above,
+ * because two identical titles genuinely do tell Google the pages are the same.
+ *
+ * What replaces it is the check that was actually needed: whether two pages
+ * make the same ARGUMENT. Titles can differ while both pages say "you pick the
+ * minutes, cuts land on a complete thought, nothing publishes until you
+ * approve" -- and that, not a shared first word, is what a doorway page is.
+ */
+test('no two pages make the same argument in different words', async () => {
+  const copy = (await import('../src/seo-copy.js')).SEO_COPY;
+  // A page's argument is the set of claims its section headings make. Compare
+  // them semantically-ish: strip filler, keep the load-bearing words, and see
+  // how much two pages' arguments overlap.
+  const STOP = new Set(['the','a','an','and','or','but','is','are','was','were','it','its','you','your','yours',
+    'that','this','not','no','of','to','in','on','for','with','from','into','at','by','as','be','been','do','does',
+    'did','can','will','would','they','them','their','what','when','where','which','who','why','how','before','after',
+    'until','while','than','then','so','if','all','any','more','most','one','two','up','out','off','over','under']);
+  const argumentOf = page => new Set(
+    (copy[page]?.sections || [])
+      .flatMap(section => `${section.heading}`.toLowerCase().split(/[^a-z]+/))
+      .filter(word => word.length > 2 && !STOP.has(word)));
+
+  // Compared WITHIN a kind, not across all pages. /about restating what the
+  // product does is not a doorway page -- it serves a brand query and there is
+  // one of it. Two commercial pages chasing two different queries with the
+  // same five points is the thing this catches, and it is what four of these
+  // pages were doing before they were rewritten: /tools/long-video-to-shorts
+  // shared 44% of its argument with /tools/youtube-to-shorts, and
+  // /tools/ai-video-clipper 41% with /tools/lecture-clip-generator.
+  const kindOf = path => (seo.pageFor(path) || {}).kind;
+  const COMMERCIAL = new Set([seo.KIND.TOOL, seo.KIND.AUDIENCE, seo.KIND.USE_CASE]);
+  const pages = Object.keys(copy).filter(path => COMMERCIAL.has(kindOf(path)));
+  const clashes = [];
+  for (let i = 0; i < pages.length; i += 1) {
+    for (let j = i + 1; j < pages.length; j += 1) {
+      const a = argumentOf(pages[i]);
+      const b = argumentOf(pages[j]);
+      if (a.size < 4 || b.size < 4) continue;
+      let shared = 0;
+      for (const word of a) if (b.has(word)) shared += 1;
+      const overlap = shared / Math.min(a.size, b.size);
+      // 32%: measured. The four pages that had to be merged or rewritten sat
+      // at 33-44%; everything that legitimately survives sits at 29% or below.
+      if (overlap > 0.32) clashes.push(`${pages[i]} and ${pages[j]} share ${Math.round(overlap * 100)}% of their argument`);
+    }
   }
+  assert.deepEqual(clashes, [],
+    `these pages say the same things and should be merged or genuinely differentiated:\n  ${clashes.join('\n  ')}`);
 });
 
 test('every page has exactly one H1', async () => {
@@ -181,8 +221,19 @@ test('lastmod is a written date, never the deploy date', async () => {
 test('robots keeps the app private without blocking the public site', async () => {
   const body = await fetch(`${base}/robots.txt`).then(r => r.text());
   assert.match(body, /Sitemap: https:\/\/deenclipped\.online\/sitemap\.xml/);
-  for (const guarded of ['/owner', '/api/', '/auth/', '/login', '/reset', '/plans']) {
+  // Blocked from crawling: routes nothing public links to, where refusing the
+  // fetch saves crawl budget and costs nothing.
+  for (const guarded of ['/owner', '/api/', '/auth/', '/plans']) {
     assert.ok(body.includes(`Disallow: ${guarded}`), `${guarded} must not be crawled`);
+  }
+  // NOT blocked, deliberately: /login and /reset are linked from the header of
+  // every public page, so Google will meet them. robots.txt is not an indexing
+  // control -- a page it blocks can still be LISTED as a bare URL, because
+  // Google never fetched it and never saw a noindex. Letting it fetch and
+  // answering with noindex is the combination that actually keeps them out.
+  for (const noindexed of ['/login', '/reset']) {
+    assert.ok(!body.includes(`Disallow: ${noindexed}`),
+      `${noindexed} must be crawlable so its noindex header can be seen`);
   }
   // Every public SEO page must survive the Disallow list.
   const rules = body.split('\n').filter(line => line.startsWith('Disallow: '))
@@ -193,6 +244,33 @@ test('robots keeps the app private without blocking the public site', async () =
         `"Disallow: ${rule}" also blocks the public page ${page.path}`);
     }
   }
+});
+
+test('pages that must stay out of search say so in a header, not in robots', async () => {
+  // The header is the indexing control. This is the assertion that replaced
+  // "must not be crawled", which was the wrong thing to check.
+  for (const path of ['/login', '/reset']) {
+    const res = await fetch(`${base}${path}`, { redirect: 'manual' });
+    const tag = res.headers.get('x-robots-tag') || '';
+    assert.match(tag, /noindex/, `${path} must answer with noindex`);
+    // follow, so the links on the page are still worth something.
+    assert.match(tag, /follow/, `${path} should still pass link value`);
+  }
+  // And a page that SHOULD rank must never carry it.
+  for (const page of seo.indexablePages().slice(0, 8)) {
+    const res = await fetch(`${base}${page.path}`);
+    assert.ok(!/noindex/.test(res.headers.get('x-robots-tag') || ''),
+      `${page.path} must not be noindexed`);
+  }
+});
+
+test('a trailing slash keeps the visitor instead of 404ing', async () => {
+  // Somebody else's link, typed or pasted with a slash. A 404 avoids the
+  // duplicate URL and loses the person; a 301 avoids the duplicate and keeps
+  // them.
+  const res = await fetch(`${base}/pricing/`, { redirect: 'manual' });
+  assert.equal(res.status, 301);
+  assert.equal(res.headers.get('location'), '/pricing');
 });
 
 test('a prefix rule for the app does not also block the favicon', async () => {
@@ -353,6 +431,88 @@ test('HEAD answers like GET, because link checkers ask that way', async () => {
   // And a real 404 is still a 404, not a 200 with nothing in it.
   const missing = await fetch(`${base}/tools/nope`, { method: 'HEAD' });
   assert.equal(missing.status, 404);
+});
+
+test('a retired page redirects permanently and leaves the index', async () => {
+  // Two pages were merged away for making the same argument as a stronger
+  // page. 301 rather than 404: they are in the sitemap Google read on
+  // 30 Aug 2026, so they will be crawled, and a permanent redirect passes
+  // their value to the page that absorbed them.
+  for (const [from, to] of Object.entries(seo.RETIRED_PAGES)) {
+    const res = await fetch(`${base}${from}`, { redirect: 'manual' });
+    assert.equal(res.status, 301, `${from} should redirect permanently`);
+    assert.equal(res.headers.get('location'), to);
+    assert.ok(seo.pageFor(to), `${from} must point at a page that exists`);
+  }
+  const sitemap = await fetch(`${base}/sitemap.xml`).then(r => r.text());
+  for (const from of Object.keys(seo.RETIRED_PAGES)) {
+    assert.ok(!sitemap.includes(`${from}<`), `${from} must not still be advertised`);
+  }
+});
+
+test('nothing still links to a page that was merged away', async () => {
+  // A 301 works, but an internal link to a redirect wastes the hop and reads
+  // as an unmaintained site. Internal links should point at the destination.
+  for (const page of seo.SEO_PAGES) {
+    const { body } = await get(page.path);
+    for (const from of Object.keys(seo.RETIRED_PAGES)) {
+      assert.ok(!body.includes(`href="${from}"`),
+        `${page.path} still links to the retired ${from}`);
+    }
+  }
+});
+
+test('every page carries contextual links inside its prose', async () => {
+  // Before this, every internal link on the site was navigation, footer or a
+  // card at the bottom: 22 of 28 pages had no link from inside another page's
+  // body text. A link in a sentence carries more weight than a footer link and
+  // a reader mid-paragraph will actually follow it.
+  const bodyLinks = html => {
+    const main = html.slice(html.indexOf('<main'), html.indexOf('</main>'));
+    const prose = main.replace(/<section class="related-links[\s\S]*?<\/section>/g, '')
+      .replace(/<nav class="breadcrumbs[\s\S]*?<\/nav>/g, '');
+    return [...prose.matchAll(/<p>[\s\S]*?<a href="(\/[^"]*)"/g)].map(m => m[1]);
+  };
+  const copy = (await import('../src/seo-copy.js')).SEO_COPY;
+  const withLinks = [];
+  for (const path of Object.keys(copy)) {
+    const { body } = await get(path);
+    if (bodyLinks(body).length) withLinks.push(path);
+  }
+  // Not every page — a link is added only where the sentence already points
+  // at another page, and forcing one onto every page is how link blocks turn
+  // into spam. Most of them is the bar.
+  assert.ok(withLinks.length >= Object.keys(copy).length * 0.6,
+    `only ${withLinks.length} of ${Object.keys(copy).length} pages have a link in their prose`);
+});
+
+test('no page repeats one contextual anchor down the page', async () => {
+  // The same anchor used repeatedly within one page is the shape of
+  // manipulation rather than of helpfulness.
+  const copy = (await import('../src/seo-copy.js')).SEO_COPY;
+  for (const path of Object.keys(copy)) {
+    const { body } = await get(path);
+    const main = body.slice(body.indexOf('<main'), body.indexOf('</main>'));
+    const prose = main.replace(/<section class="related-links[\s\S]*?<\/section>/g, '');
+    const targets = [...prose.matchAll(/<p>[\s\S]*?<a href="(\/[^"]*)"/g)].map(m => m[1]);
+    const seen = new Set();
+    for (const t of targets) {
+      assert.ok(!seen.has(t), `${path} links to ${t} more than once in its prose`);
+      seen.add(t);
+    }
+  }
+});
+
+test('the free tools ask only after they have delivered', async () => {
+  // A free tool that interrupts itself to ask for an email is not a free tool.
+  // The offer must come after the widget, never in front of it.
+  for (const path of ['/tools/safe-zone-checker', '/tools/clip-calculator']) {
+    const { body } = await get(path);
+    const widget = body.indexOf('class="tool-widget"');
+    const followUp = body.indexOf('class="tool-followup"');
+    assert.ok(widget > 0, `${path} should have its widget`);
+    assert.ok(followUp > widget, `${path} asks before it delivers`);
+  }
 });
 
 test('a missing page is still a 404 and is never in the sitemap', async () => {

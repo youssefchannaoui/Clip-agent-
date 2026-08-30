@@ -50,7 +50,11 @@ test('robots.txt exists and keeps crawlers out of the signed-in product', async 
   const res = await fetch(`${base}/robots.txt`);
   assert.equal(res.status, 200);
   const body = await res.text();
-  for (const guarded of ['/app', '/owner', '/api/', '/auth/', '/login']) {
+  // /login is deliberately absent: it is linked from every public page, and a
+  // robots.txt block would let Google list it as a bare URL rather than keep
+  // it out. It carries `X-Robots-Tag: noindex` instead, which is the actual
+  // indexing control -- asserted in test/seo-architecture.test.mjs.
+  for (const guarded of ['/app', '/owner', '/api/', '/auth/']) {
     assert.ok(body.includes(`Disallow: ${guarded}`), `${guarded} must not be crawled`);
   }
   assert.match(body, /Sitemap: https:\/\/deenclipped\.online\/sitemap\.xml/);

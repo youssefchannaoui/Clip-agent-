@@ -16,6 +16,32 @@
 (function () {
   'use strict';
 
+
+  /* ── Did these tools produce customers? ────────────────────────────────────
+     A free tool is worth building only if it earns something, and there is no
+     way to know without measuring the funnel it sits in:
+
+       tool opened -> tool actually used -> CTA clicked -> signup -> paid
+
+     The first three are recorded here. The last two already exist: the landing
+     cookie is set on arrival, so a visitor who reaches this page, uses the
+     tool, clicks through and later subscribes is credited to it in
+     Owner -> Traffic like any other page.
+
+     One beacon per event per page load, a bare event name and nothing else --
+     no identifier, no payload, no third-party script. If the request fails,
+     nothing happens: measurement must never break a tool. */
+  var fired = {};
+  function record(event) {
+    if (fired[event]) return;
+    fired[event] = true;
+    try {
+      var body = new Blob([JSON.stringify({ event: event })], { type: 'application/json' });
+      if (navigator.sendBeacon) navigator.sendBeacon('/api/tool-event', body);
+      else fetch('/api/tool-event', { method: 'POST', body: body, keepalive: true }).catch(function () {});
+    } catch (e) { /* measurement must never break the tool */ }
+  }
+
   /* ── Safe zone checker ─────────────────────────────────────────────────────
      Draws each platform's covered area over a frame the visitor supplies, so
      they can see what is hidden rather than measuring pixels against a blog
@@ -125,7 +151,7 @@
       reader.readAsDataURL(file);
     }
 
-    input.addEventListener('change', function () { load(input.files && input.files[0]); });
+    input.addEventListener('change', function () { record('safezone_used'); load(input.files && input.files[0]); });
     Array.prototype.forEach.call(root.querySelectorAll('[data-sz-zone]'), function (box) {
       box.addEventListener('change', draw);
     });
@@ -137,6 +163,7 @@
         drop.addEventListener(name, function (e) { e.preventDefault(); drop.classList.remove('is-over'); });
       });
       drop.addEventListener('drop', function (e) {
+        record('safezone_used');
         load(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]);
       });
     }
@@ -194,6 +221,7 @@
     }
 
     Array.prototype.forEach.call(root.querySelectorAll('[data-cc]'), function (el) {
+      el.addEventListener('input', function () { record('calculator_used'); });
       el.addEventListener('input', recalc);
       el.addEventListener('change', recalc);
     });
@@ -202,9 +230,16 @@
 
   function boot() {
     var sz = document.querySelector('[data-tool="safe-zones"]');
-    if (sz) initSafeZones(sz);
+    if (sz) { record('safezone_open'); initSafeZones(sz); }
     var cc = document.querySelector('[data-tool="clip-calculator"]');
-    if (cc) initCalculator(cc);
+    if (cc) { record('calculator_open'); initCalculator(cc); }
+    // The CTA after the value has been delivered, never before it: the tool is
+    // never interrupted, and the click is only counted where a person had
+    // already got what they came for.
+    document.addEventListener('click', function (e) {
+      var link = e.target && e.target.closest && e.target.closest('a[href*="/login"], a[href="/pricing"]');
+      if (link) record('tool_cta_click');
+    });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

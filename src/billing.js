@@ -1225,6 +1225,15 @@ function recordRevenue({ kind, userId = '', amountMinor = 0, currency = '', desc
     const user = (state.authUsers || []).find(item => item?.id === userId);
     if (user?.signupLanding && !user.landingCredited) {
       user.landingCredited = true;
+      // The conversion itself, recorded once, so "which page produced paying
+      // customers" can be answered with the plan and the first amount rather
+      // than a bare count. Renewals do NOT reach here -- landingCredited is
+      // already true -- which is what keeps new-customer acquisition separate
+      // from recurring revenue.
+      user.convertedAt = now();
+      user.firstPaidAmountMinor = Math.round(Number(amountMinor) || 0);
+      user.firstPaidCurrency = String(currency || '').toLowerCase();
+      user.firstPaidPlan = String(user.billing?.plan || '');
       metrics.attribute('paid', user.signupLanding);
     }
   } catch { /* attribution must never fail a payment */ }

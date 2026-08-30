@@ -19,7 +19,7 @@ import { SEO_COPY } from './seo-copy.js';
  * the app version if the file is unreadable, so a packaging change degrades
  * to the old behaviour rather than throwing at import time.
  */
-const CSS_VERSION = (() => {
+export const CSS_VERSION = (() => {
   try {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const bytes = fs.readFileSync(path.join(here, 'public', 'marketing.css'));
@@ -236,9 +236,9 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
       <div class="footer-grid">
         <div class="footer-brand"><a class="brand" href="/">${logoMark()}<span class="brand-copy"><strong>DeenClipped</strong><small>AI clip workspace</small></span></a><p>Turn long lectures and videos into review-ready short clips, refine every detail, then publish to your own connected channels.</p></div>
         <div class="footer-col"><h4>Product</h4><a href="/features">All features</a><a href="/how-it-works">How it works</a><a href="/alternatives">How it compares</a><a href="/pricing">Plans & tokens</a><a href="/review-safety">Review & safety</a><a href="/app">Dashboard</a></div>
-        <div class="footer-col"><h4>Clip long video</h4><a href="/tools/ai-video-clipper">AI video clipper</a><a href="/tools/long-video-to-shorts">Long video to Shorts</a><a href="/tools/podcast-clip-generator">Podcast clip generator</a><a href="/tools/lecture-clip-generator">Lecture clip generator</a><a href="/tools/ai-caption-generator">AI caption generator</a></div>
+        <div class="footer-col"><h4>Clip long video</h4><a href="/tools/ai-video-clipper">AI video clipper</a><a href="/tools/podcast-clip-generator">Podcast clip generator</a><a href="/tools/lecture-clip-generator">Lecture clip generator</a><a href="/tools/ai-caption-generator">AI caption generator</a></div>
         <div class="footer-col"><h4>Publish to</h4><a href="/tools/youtube-to-shorts">YouTube to Shorts</a><a href="/tools/youtube-to-tiktok">YouTube to TikTok</a><a href="/tools/youtube-to-reels">YouTube to Reels</a></div>
-        <div class="footer-col"><h4>Islamic creators</h4><a href="/islamic-video-clipper">Islamic video clipper</a><a href="/islamic-lecture-clipper">Islamic lecture clipper</a><a href="/tools/arabic-english-captions">Arabic &amp; English captions</a><a href="/for/islamic-creators">Built for dawah content</a></div>
+        <div class="footer-col"><h4>Islamic creators</h4><a href="/islamic-video-clipper">Islamic video clipper</a><a href="/islamic-lecture-clipper">Islamic lecture clipper</a><a href="/tools/arabic-english-captions">Arabic &amp; English captions</a></div>
         <div class="footer-col"><h4>Guides &amp; tools</h4><a href="/guides">All guides</a><a href="/guides/long-video-to-shorts">Long video to Shorts</a><a href="/guides/caption-safe-zones">Caption safe zones</a><a href="/tools/safe-zone-checker">Safe zone checker</a><a href="/tools/clip-calculator">Clip calculator</a></div>
         <div class="footer-col"><h4>Company</h4><a href="/about">About</a><a href="/contact">Contact</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a></div>
         <div class="footer-col"><h4>Start</h4><a href="/login?returnTo=/app">Start free</a><a href="/login?returnTo=/app">Sign in</a><a href="/pricing#token-shop">Token shop</a><a href="mailto:support@deenclipped.online">Support</a></div>
@@ -755,6 +755,25 @@ function relatedLinks(page) {
 }
 
 /**
+ * The offer that comes AFTER the tool has done its job.
+ *
+ * Placed below the widget, never in front of it and never as a gate. A free
+ * tool that interrupts itself to ask for an email is not a free tool, and one
+ * of those would cost more trust than the signups are worth. This is the
+ * opposite: the visitor has already had the thing they came for, and this
+ * says what the product does about the same problem.
+ */
+function toolFollowUp(headline, body) {
+  return `<div class="tool-followup">
+        <div>
+          <strong>${escapeHtml(headline)}</strong>
+          <span>${escapeHtml(body)}</span>
+        </div>
+        <a class="button primary" href="/login?returnTo=/app">Clip a video free ${icon('arrow')}</a>
+      </div>`;
+}
+
+/**
  * The interactive part of a free-tool page.
  *
  * Kept beside the renderer rather than in the copy module because it is
@@ -794,6 +813,8 @@ function toolWidget(path) {
           <p class="tool-foot">Pixels inside a 1080 &times; 1920 frame, checked August 2026. Platforms move their interface without announcing it, which is why looking at a real frame beats trusting a number.</p>
         </div>
       </div>
+      ${toolFollowUp('You have seen where each platform covers the frame.',
+        'DeenClipped places captions inside that area automatically and burns them in, so you are not checking this by hand on every clip.')}
     </section>`;
   }
 
@@ -814,10 +835,82 @@ function toolWidget(path) {
         </div>
         <div class="cc-output" data-cc-out aria-live="polite"></div>
       </div>
+      ${toolFollowUp('That is the arithmetic. The work is the other half.',
+        'DeenClipped finds the moments inside those minutes, cuts them, captions them and holds every clip for your approval. Basic is free and includes 40 tokens.')}
       <p class="tool-foot">One token is one source minute. Clip count assumes about two thirds of the selected time becomes finished clips — the rest is the run-up to a moment and the tail after it. Treat it as the ceiling: you will reject some of what comes back.</p>
     </section>`;
   }
   return '';
+}
+
+/*
+ * Contextual links, inside the prose, where the sentence already points.
+ *
+ * Before this every internal link on the site was navigation, footer, or a
+ * "keep going" card at the bottom — 22 of 28 pages had no link at all from
+ * inside another page's body text. That matters twice over: a link inside a
+ * sentence carries far more weight than a boilerplate footer link, and a
+ * reader mid-paragraph who has just been told about the safe-zone checker will
+ * follow a link and will not go hunting in the footer.
+ *
+ * Curated, not automatic. Each entry is a phrase that ALREADY appears in the
+ * copy because the sentence needed it — nothing was written to create a link.
+ * Three rules keep it from becoming the thing it is meant to avoid:
+ *
+ *   1. First occurrence only, and one link per target per page. Repeating an
+ *      anchor down a page is the shape of manipulation, not of helpfulness.
+ *   2. Never link a page to itself.
+ *   3. At most three contextual links in a body. Past that a paragraph reads
+ *      like a directory rather than an argument.
+ */
+const CONTEXTUAL_LINKS = [
+  [/\bfree safe[- ]zone checker\b/i, '/tools/safe-zone-checker'],
+  [/\bsafe[- ]zone checker\b/i, '/tools/safe-zone-checker'],
+  [/\bsafe zones guide\b/i, '/guides/caption-safe-zones'],
+  [/\bcaption safe zones\b/i, '/guides/caption-safe-zones'],
+  // One phrase per target, not two: "review queue" and "human review" both
+  // pointed here and together sent 17 body links to one page, which
+  // concentrates weight without helping a reader who has already been offered
+  // the link once.
+  [/\breview queue\b/i, '/review-safety'],
+  [/\bone token per source minute\b/i, '/pricing'],
+  [/\bone token is one source minute\b/i, '/pricing'],
+  [/\bfree plan\b/i, '/pricing'],
+  [/\bmatched against the full corpus\b/i, '/islamic-video-clipper'],
+  [/\brecited Quran is matched\b/i, '/islamic-video-clipper'],
+  [/\bword-level timings?\b/i, '/tools/ai-caption-generator'],
+  [/\bburned[- ]in captions?\b/i, '/tools/ai-caption-generator'],
+  [/\bgeneral[- ]purpose clippers?\b/i, '/alternatives'],
+  [/\bthe whole pipeline\b/i, '/how-it-works'],
+  [/\brecorded lectures? (and talks )?\b/i, '/tools/lecture-clip-generator'],
+  [/\bconference (session|talk)s?\b/i, '/tools/lecture-clip-generator'],
+  [/\bgeneral (AI )?clip(ping)? tools?\b/i, '/alternatives'],
+  [/\ba general tool\b/i, '/alternatives'],
+];
+
+/**
+ * `state` is shared across every section of ONE page, not created per section.
+ *
+ * Created per section, the "one link per target" rule reset on each heading
+ * and a page linked the same destination twice — which is the repetition this
+ * is meant to prevent. Caught by test, not by reading.
+ */
+function withContextualLinks(html, currentPath, state) {
+  const linked = state.linked;
+  let out = html;
+  for (const [pattern, target] of CONTEXTUAL_LINKS) {
+    if (state.used >= 3) break;
+    if (target === currentPath || linked.has(target)) continue;
+    // Only in running text: never inside an attribute or an existing anchor.
+    const match = pattern.exec(out);
+    if (!match) continue;
+    const before = out.slice(0, match.index);
+    if ((before.split('<a ').length - 1) > (before.split('</a>').length - 1)) continue;
+    out = `${before}<a href="${target}">${match[0]}</a>${out.slice(match.index + match[0].length)}`;
+    linked.add(target);
+    state.used += 1;
+  }
+  return out;
 }
 
 /**
@@ -928,10 +1021,13 @@ export function seoPage({ base, currentUser, page, copy }) {
   // .seo-section, NOT .feature-deep-dive: that class is a two-column grid
   // built for copy beside a product shot, and giving it one child leaves half
   // the page empty. See the note in marketing.css.
+  // One state for the whole page, so the per-target and per-page caps mean
+  // what they say.
+  const linkState = { linked: new Set(), used: 0 };
   const sections = (copy.sections || []).map(section => `
       <section class="seo-section reveal">
         <h2>${escapeHtml(section.heading)}</h2>
-        <p>${escapeHtml(section.body)}</p>
+        <p>${withContextualLinks(escapeHtml(section.body), page.path, linkState)}</p>
       </section>`).join('');
 
   const faqs = (copy.faqs || []).map(item =>
@@ -1050,8 +1146,11 @@ export function robots({ base }) {
     'Disallow: /owner',
     'Disallow: /api/',
     'Disallow: /auth/',
-    'Disallow: /login',
-    'Disallow: /reset',
+        // /login and /reset are deliberately NOT disallowed. They answer with
+    // `X-Robots-Tag: noindex, follow`, and a crawler must be allowed to FETCH
+    // a page to see that header. Blocking them here would leave Google free to
+    // list them as bare URLs with no description -- which is what robots.txt
+    // actually does, and the opposite of what was wanted.
     // The signed-in billing screen, which 302s to login for everyone else.
     // The PUBLIC pricing page is /pricing and is deliberately crawlable.
     'Disallow: /plans',
@@ -1073,9 +1172,7 @@ export function robots({ base }) {
     'Disallow: /owner',
     'Disallow: /api/',
     'Disallow: /auth/',
-    'Disallow: /login',
-    'Disallow: /reset',
-    'Disallow: /plans',
+        'Disallow: /plans',
     '',
     `Sitemap: ${String(base || '').replace(/\/+$/, '')}/sitemap.xml`,
     '',

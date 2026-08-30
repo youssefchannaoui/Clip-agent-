@@ -29,6 +29,7 @@ import * as auth from './auth.js';
 import * as billing from './billing.js';
 import * as marketing from './marketing.js';
 import * as seoPages from './seo-pages.js';
+import * as financeAudit from './finance-audit.js';
 import * as admin from './admin.js';
 import * as owner from './owner.js';
 import * as deenai from './deenai.js';
@@ -136,20 +137,84 @@ function jsonWithCookies(res, status, value, cookies = []) {
  * using it as a key, so a hand-edited cookie cannot mint state.
  */
 /**
- * Credit a new account to the page it arrived from.
+ * Everything known about how this account arrived, recorded once at sign-up.
  *
- * The path is stamped on the account as well as counted, because the
- * SUBSCRIPTION arrives later through a Stripe webhook that carries no cookie
- * -- without this field there is no way back from a payment to the page that
- * earned it, which is the only question this whole feature exists to answer.
+ * FIRST-TOUCH is kept as the answer to "which page earned this customer": the
+ * landing cookie is written once and never overwritten, so the page that
+ * brought them keeps the credit rather than the last page before checkout
+ * taking it. What is added here is the CONTEXT around that first touch --
+ * campaign, referrer, the page they actually signed up on -- so a later
+ * question ("did the guides convert better than the tool pages?", "is that
+ * campaign worth the money?") can be answered from records that already exist
+ * rather than from a tracking script added afterwards.
+ *
+ * Every value is bounded and validated before it is stored:
+ *
+ * - The landing path is checked against the page REGISTRY, so a hand-edited
+ *   cookie cannot invent a page or write an unbounded key.
+ * - UTM values are truncated and stripped to a safe character set. They come
+ *   from a query string a stranger controls, and an unbounded string written
+ *   to an account record is how a state file becomes a denial-of-service.
+ * - The referrer is reduced to its HOST. A full referring URL can carry
+ *   somebody's search terms, session ids and private paths; the host answers
+ *   the question that is actually being asked and carries none of that.
+ * - Nothing here is a fingerprint. No IP, no user agent, no canvas, no device
+ *   id, and no third-party script -- the first-party cookie and the query
+ *   string the visitor arrived with are enough.
  */
-function creditLanding(req, user, isNew = true) {
+const UTM_FIELDS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
+
+function arrivalContext(req, url) {
+  const clean = value => String(value || '')
+    .slice(0, 80)
+    .toLowerCase()
+    .replace(/[^a-z0-9._/+-]/g, '');
+  const context = {};
+  for (const field of UTM_FIELDS) {
+    const value = clean(url.searchParams.get(field));
+    if (value) context[field] = value;
+  }
+  // Host only, and never our own — an internal referrer says nothing about
+  // where a customer came from.
   try {
-    if (!isNew) return;
+    const referrer = String(req.headers.referer || '');
+    if (referrer) {
+      const host = new URL(referrer).hostname.replace(/^www\./, '').slice(0, 100);
+      const own = String(req.headers.host || '').replace(/:\d+$/, '').replace(/^www\./, '');
+      if (host && host !== own) context.referrerHost = host;
+    }
+  } catch { /* an unparseable referrer is simply absent */ }
+  return context;
+}
+
+function creditLanding(req, user, isNew = true, url = null) {
+  try {
+    if (!isNew || !user) return;
     const landing = landingPath(req);
-    if (!landing || !user) return;
-    if (!user.signupLanding) { user.signupLanding = landing; save(); }
-    metrics.attribute('signup', landing);
+    let changed = false;
+
+    if (landing && !user.signupLanding) {
+      // FIRST touch. The Stripe webhook carries no cookie, so this field is
+      // the only road back from a payment to the page that earned it.
+      user.signupLanding = landing;
+      changed = true;
+    }
+    // The page the form was actually submitted from, which is often not the
+    // page they arrived on and is the one to look at when a landing page
+    // brings people who then sign up somewhere else.
+    if (url && !user.signupPage) {
+      const here = String(url.pathname || '').slice(0, 120);
+      if (here) { user.signupPage = here; changed = true; }
+    }
+    if (!user.signupAt) { user.signupAt = Date.now(); changed = true; }
+
+    if (url && !user.arrival) {
+      const context = arrivalContext(req, url);
+      if (Object.keys(context).length) { user.arrival = context; changed = true; }
+    }
+
+    if (changed) save();
+    if (landing) metrics.attribute('signup', landing);
   } catch { /* attribution must never block a sign-up */ }
 }
 
@@ -745,7 +810,7 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/auth/google/callback') {
     try {
       const result = await auth.completeGoogle(req, url.searchParams.get('code') || '', url.searchParams.get('state') || '');
-      creditLanding(req, result.user, result.user?.justCreated === true);
+      creditLanding(req, result.user, result.user?.justCreated === true, url);
       const session = auth.createSession(result.user, { provider: 'google' });
       return redirectWithCookies(res, billing.postLoginRedirect(result.user, result.returnTo || '/app'), auth.cookieHeaders(session));
     } catch (error) { return redirect(res, `/login?error=${encodeURIComponent(error.message)}`); }
@@ -754,7 +819,7 @@ async function route(req, res, url) {
     try {
       const body = await formBody(req);
       const result = await auth.completeApple(req, body);
-      creditLanding(req, result.user, result.user?.justCreated === true);
+      creditLanding(req, result.user, result.user?.justCreated === true, url);
       const session = auth.createSession(result.user, { provider: 'apple' });
       return redirectWithCookies(res, billing.postLoginRedirect(result.user, result.returnTo || '/app'), auth.cookieHeaders(session));
     } catch (error) { return redirect(res, `/login?error=${encodeURIComponent(error.message)}`); }
@@ -780,7 +845,7 @@ async function route(req, res, url) {
     try {
       const user = await auth.emailLogin(body.email || '', body.password || '', body.name || '');
       throttle.succeed(keys);
-      if (!known) creditLanding(req, user);
+      if (!known) creditLanding(req, user, true, url);
       // Fire and forget: a provider outage must not stop someone signing in.
       if (!known) auth.sendVerification(user, config.publicBaseUrl || `https://${req.headers.host || ''}`).catch(() => {});
       const session = auth.createSession(user, { provider: 'email' });
@@ -873,7 +938,15 @@ async function route(req, res, url) {
     return redirectWithCookies(res, '/', auth.cookieHeaders('', { clear: true }));
   }
   if (method === 'GET' && pathname === '/marketing.css') {
-    return streamFile(req, res, marketingCssPage, { contentType: 'text/css; charset=utf-8', cacheControl: 'public, max-age=3600' });
+    // The URL carries a content hash, so a request that names the CURRENT
+    // hash can never be stale — that is the whole point of the hash, and an
+    // hour's cache throws it away. A request with no hash or an old one gets
+    // the short cache, because it might be a link somebody wrote by hand.
+    const versioned = url.searchParams.get('v') === marketing.CSS_VERSION;
+    return streamFile(req, res, marketingCssPage, {
+      contentType: 'text/css; charset=utf-8',
+      cacheControl: versioned ? 'public, max-age=31536000, immutable' : 'public, max-age=3600',
+    });
   }
   if (method === 'GET' && pathname === '/tool-widgets.js') {
     // The free tools' behaviour. A file, not an inline block: the CSP hashes
@@ -913,6 +986,23 @@ async function route(req, res, url) {
   // Registry-driven SEO pages. One list drives routing, the sitemap and the
   // analytics allowlist, so a new page cannot ship routed-but-unlisted (or
   // listed-but-404) the way three hand-maintained lists allowed.
+  // A trailing slash on a real page is somebody else's link, typed or pasted
+  // that way. 404ing it avoids a duplicate URL and loses the visitor; a 301 to
+  // the canonical form avoids the duplicate AND keeps them.
+  if (method === 'GET' && pathname.length > 1 && pathname.endsWith('/')) {
+    const withoutSlash = pathname.replace(/\/+$/, '');
+    if (seoPages.pageFor(withoutSlash) || seoPages.RETIRED_PAGES[withoutSlash]) {
+      res.writeHead(301, { Location: withoutSlash + url.search, 'Cache-Control': 'public, max-age=86400' });
+      return res.end();
+    }
+  }
+  // A retired page keeps its value by pointing at the page that absorbed it.
+  // 301 and not 302: the move is permanent, and a temporary redirect tells
+  // Google to keep the old URL in the index and keep asking.
+  if (seoPages.RETIRED_PAGES[pathname]) {
+    res.writeHead(301, { Location: seoPages.RETIRED_PAGES[pathname], 'Cache-Control': 'public, max-age=86400' });
+    return res.end();
+  }
   if (method === 'GET' && marketing.SEO_COPY[pathname]) {
     return html(res, 200, marketing.seoPage({
       ...marketingContext(req),
@@ -967,7 +1057,15 @@ async function route(req, res, url) {
       res.writeHead(304, { ETag: etag, 'Cache-Control': 'no-cache' });
       return res.end();
     }
-    res.writeHead(200, { 'Content-Type': asset.type, 'Content-Length': body.length, 'Cache-Control': 'no-cache', ETag: etag });
+    // Icons and the social card are content that does not change; the app
+    // bundles do. A week on the former saves a conditional request from every
+    // browser tab and every social scraper, and costs nothing because a change
+    // to one is a deploy anyway.
+    const stable = /\.(png|svg|ico|jpg|jpeg|webp)$/.test(pathname);
+    res.writeHead(200, {
+      'Content-Type': asset.type, 'Content-Length': body.length,
+      'Cache-Control': stable ? 'public, max-age=604800' : 'no-cache', ETag: etag,
+    });
     return res.end(body);
   }
   const oauthCallback = pathname.match(/^\/auth\/(youtube|meta|tiktok)\/callback$/);
@@ -1063,6 +1161,28 @@ async function route(req, res, url) {
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'public, max-age=86400' });
     return res.end(body);
   }
+  if (method === 'POST' && pathname === '/api/tool-event') {
+    // The free-tool funnel: opened -> used -> clicked through. Signup and paid
+    // already come from the landing cookie, so this closes the only gap.
+    //
+    // The event name is checked against a FIXED LIST rather than stored as
+    // sent. This endpoint takes an unauthenticated POST from a stranger's
+    // browser, and an arbitrary string used as a state key is how a JSON state
+    // file becomes a denial-of-service. Nothing else in the body is read: no
+    // identifier, no payload, no third-party call.
+    const ALLOWED = new Set(['safezone_open', 'safezone_used', 'calculator_open', 'calculator_used', 'tool_cta_click']);
+    try {
+      // 2KB is generous for {"event":"…"}; the default megabyte is an
+      // invitation on an unauthenticated route.
+      const body = await readBody(req, 2048);
+      const name = String(body?.event || '');
+      if (ALLOWED.has(name)) metrics.event(name);
+    } catch { /* a malformed beacon is simply not counted */ }
+    // 204 regardless: a measurement endpoint must never tell a caller whether
+    // its guess was on the list.
+    res.writeHead(204, { 'Cache-Control': 'no-store' });
+    return res.end();
+  }
   if (method === 'GET' && pathname === '/llms.txt') {
     const body = Buffer.from(marketing.llmsTxt({ base: publicBase(req) }));
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'public, max-age=86400' });
@@ -1148,8 +1268,15 @@ async function route(req, res, url) {
 
   if (method === 'GET' && pathname === '/api/owner/webmetrics') {
     const days = Number(url.searchParams.get('days') || 30);
-    try { requireOperator(currentUser); return json(res, 200, metrics.summary({ days })); }
-    catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+    try {
+      requireOperator(currentUser);
+      const summary = metrics.summary({ days });
+      // The landing rows leave metrics.js with counts and rates; the money is
+      // joined on here, because revenue lives on the account rather than in
+      // the analytics buckets.
+      summary.landingPages = owner.landingPerformance(state, summary.landingPages || []);
+      return json(res, 200, summary);
+    } catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
   }
 
   if (method === 'GET' && pathname === '/api/owner/finance') {
@@ -1158,6 +1285,16 @@ async function route(req, res, url) {
     const days = Math.min(365, Math.max(30, Number(url.searchParams.get('days')) || 180));
     try { requireOperator(currentUser); return json(res, 200, await owner.finance(currentUser, { days })); }
     catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+  }
+  if (method === 'GET' && pathname === '/api/owner/integrity') {
+    // Owner only, and read-only by construction: auditFinance never writes.
+    // It exists because fixing the userBySubscription comparison did not fix
+    // the rows that comparison had already written.
+    try {
+      requireOperator(currentUser);
+      const known = new Set(seoPages.indexablePages().map(page => page.path));
+      return json(res, 200, financeAudit.auditFinance(state, known));
+    } catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
   }
   if (method === 'GET' && pathname === '/api/owner/health') {
     // Clamped for the same reason as finance: the window decides how much
@@ -2225,7 +2362,22 @@ function securityHeaders(res, { pathname }) {
   }
   // A credentialed API response must never be cached by a shared proxy.
   if (pathname.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
+
+  // Pages that must not appear in search results.
+  //
+  // `Disallow` in robots.txt is NOT an indexing control and Google says so:
+  // it stops the page being CRAWLED, and a page nobody may crawl can still be
+  // listed as a bare URL with no description if anything links to it. /login
+  // is linked from the header of every public page, so it is exactly the case
+  // that happens.
+  //
+  // The combination that actually works is the opposite of the instinct: let
+  // Google fetch the page, and answer with noindex. `follow` is kept so the
+  // links on it are still worth something.
+  if (NOINDEX_PATHS.has(pathname)) res.setHeader('X-Robots-Tag', 'noindex, follow');
 }
+
+const NOINDEX_PATHS = new Set(['/login', '/reset', '/plans', '/app']);
 
 export const server = http.createServer((req, res) => {
   let url; try { url = new URL(req.url, `http://${req.headers.host || 'localhost'}`); } catch { return json(res, 400, { error: 'Bad request.' }); }

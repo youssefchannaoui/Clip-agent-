@@ -150,7 +150,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **901 JS + 427 Python**
+- `npm test` and `npm run check` must pass. Currently **917 JS + 427 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1680,3 +1680,85 @@ inspection box for several seconds after each request. Clicking Dismiss, then
 waiting, then clicking the box, then typing is the sequence that works; typing
 straight after a request silently goes nowhere and looks like the page ignored
 you.
+
+## The SEO audit that challenged the SEO work (v3.48.0, 30 Aug 2026)
+
+Youssef asked for a rigorous audit rather than more pages, and explicitly for
+folklore to be removed rather than protected. Several things below reverse an
+earlier decision made in this repo.
+
+### Rules that were myths, now gone
+
+- **"No two pages may lead with the same phrase" is deleted.** Google does not
+  penalise a shared opening word, and enforcing it pushed titles away from the
+  words people type. Distinct TITLES are still asserted; the replacement test
+  checks whether two commercial pages make the same ARGUMENT, which is what a
+  doorway page actually is.
+- **Titles over 62 characters and descriptions over 160 no longer hard-fail.**
+  They are truncation thresholds for a SERP snippet, not ranking rules.
+- **"No CDN" was described as a performance virtue and is both wrong and
+  backwards.** Production sits behind Cloudflare in front of Render, serving
+  brotli. Measured: `cf-cache: DYNAMIC`, so HTML is not edge-cached — because
+  marketing pages vary by auth state in the header. That is a deliberate
+  correctness trade, not an absence of a CDN, and it is the thing to revisit if
+  geographic latency ever matters.
+
+### The doorway problem was real and shingles could not see it
+
+Verbatim overlap between the tool pages was low (max 12.8% five-word shingle
+Jaccard) because the sentences were rewritten. The ARGUMENTS were not: "you
+pick the minutes" appeared on 7 pages, "cuts land on a complete thought" on 7,
+"nothing publishes until you approve" on 10.
+
+- **Two pages merged away with 301s** (`RETIRED_PAGES`):
+  `/tools/long-video-to-shorts` -> `/tools/ai-video-clipper` (44% argument
+  overlap with youtube-to-shorts) and `/for/islamic-creators` ->
+  `/islamic-video-clipper`. 30 pages -> 28.
+- **Four pages rewritten to earn their existence**: the three YouTube-to-X
+  pages now carry genuinely platform-specific substance (TikTok's
+  nothing-preselected privacy rule and unaudited-app restriction; Reels' Meta
+  connection and its larger covered area; Shorts' under-three-minutes
+  classification and the compliance caveat that uploads currently arrive
+  private), and lecture-clip-generator is genuinely generic rather than a
+  second Islamic page.
+- Worst commercial-vs-commercial overlap after: **29%**, down from 44%. The
+  test threshold is 32% and compares WITHIN a kind — `/about` restating the
+  product is not a doorway page.
+
+### robots.txt is not an indexing control
+
+`/login` and `/reset` were `Disallow`ed and served indexable HTML. Blocking a
+page from crawling does NOT keep it out of the index — Google can list it as a
+bare URL, and /login is linked from the header of every public page. They are
+now CRAWLABLE and answer `X-Robots-Tag: noindex, follow`, which is the
+combination that works, because a crawler has to fetch a page to see the
+header.
+
+### Other measured findings
+
+- **Not one internal link lived inside body prose.** 22 of 28 pages had no
+  contextual inbound link at all. `CONTEXTUAL_LINKS` links phrases that were
+  ALREADY in the copy, first occurrence only, one per target, three per page.
+  The per-target cap was initially per-SECTION and a page linked one target
+  twice — caught by test, not by reading.
+- **`/pricing` looked like it had no call to action and does not.** Local has
+  no `STRIPE_PRICE_*` variables, so every paid card renders "Opening soon".
+  Production serves "Choose Pro" as a primary button. **Check production before
+  reporting a conversion bug found locally.**
+- Hashed `marketing.css` is now `immutable, max-age=31536000` when the request
+  names the current hash; icons and the social card get a week instead of a
+  conditional request per page load.
+- Structured data: 0 problems across 28 pages. Every FAQPage question is
+  visible on its page, breadcrumbs match, no ratings, no VideoObject.
+- Claims audit: **0 unproven claims**. Nothing advertises the gated editor,
+  multi-account, or a mobile app.
+
+### Money integrity
+
+`src/finance-audit.js` finds what the `userBySubscription(undefined)` bug left
+behind — the comparison was fixed, the rows it wrote were not. It **reports and
+never writes**: a misattributed payment is a question about a real person's
+money and the correction needs the invoice open in Stripe. Owner-only at
+`/api/owner/integrity`. `test/finance-integrity.test.mjs` reproduces the bug
+exactly, and was **proven to fail against the old comparison** before being
+kept.

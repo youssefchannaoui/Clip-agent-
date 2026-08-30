@@ -98,19 +98,7 @@ export const SEO_PAGES = [
     intent: 'ai video clipper',
     cluster: 'clipping',
     lastmod: '2026-08-30',
-    links: ['/tools/long-video-to-shorts', '/tools/podcast-clip-generator', '/tools/ai-caption-generator', '/pricing'],
-  },
-  {
-    path: '/tools/long-video-to-shorts',
-    breadcrumb: 'Long video to Shorts',
-    kind: KIND.TOOL,
-    title: 'Long Video to Shorts — Automatic Vertical Clips | DeenClipped',
-    description:
-      'Turn a long video into vertical short-form clips. Choose the stretch worth clipping, let DeenClipped find complete moments, and review each one first.',
-    intent: 'long video to shorts',
-    cluster: 'clipping',
-    lastmod: '2026-08-30',
-    links: ['/tools/ai-video-clipper', '/tools/youtube-to-shorts', '/tools/lecture-clip-generator', '/pricing'],
+    links: ['/tools/podcast-clip-generator', '/tools/ai-caption-generator', '/pricing'],
   },
   {
     path: '/tools/podcast-clip-generator',
@@ -122,7 +110,7 @@ export const SEO_PAGES = [
     intent: 'podcast clip generator',
     cluster: 'clipping',
     lastmod: '2026-08-30',
-    links: ['/tools/ai-video-clipper', '/tools/long-video-to-shorts', '/tools/ai-caption-generator', '/pricing'],
+    links: ['/tools/ai-video-clipper', '/tools/ai-caption-generator', '/pricing'],
   },
   {
     path: '/tools/lecture-clip-generator',
@@ -134,7 +122,7 @@ export const SEO_PAGES = [
     intent: 'lecture clip generator',
     cluster: 'clipping',
     lastmod: '2026-08-30',
-    links: ['/islamic-lecture-clipper', '/tools/long-video-to-shorts', '/tools/arabic-english-captions', '/pricing'],
+    links: ['/islamic-lecture-clipper', '/tools/arabic-english-captions', '/pricing'],
   },
   {
     path: '/tools/ai-caption-generator',
@@ -160,7 +148,7 @@ export const SEO_PAGES = [
     intent: 'youtube to shorts',
     cluster: 'platforms',
     lastmod: '2026-08-30',
-    links: ['/tools/youtube-to-tiktok', '/tools/youtube-to-reels', '/tools/long-video-to-shorts', '/pricing'],
+    links: ['/tools/youtube-to-tiktok', '/tools/youtube-to-reels', '/pricing'],
   },
   {
     path: '/tools/youtube-to-tiktok',
@@ -184,7 +172,7 @@ export const SEO_PAGES = [
     intent: 'youtube to reels',
     cluster: 'platforms',
     lastmod: '2026-08-30',
-    links: ['/tools/youtube-to-shorts', '/tools/youtube-to-tiktok', '/tools/long-video-to-shorts', '/pricing'],
+    links: ['/tools/youtube-to-shorts', '/tools/youtube-to-tiktok', '/pricing'],
   },
 
   // ── The niche this product can actually own ──────────────────────────────
@@ -198,7 +186,7 @@ export const SEO_PAGES = [
     intent: 'islamic video clipper',
     cluster: 'islamic',
     lastmod: '2026-08-30',
-    links: ['/islamic-lecture-clipper', '/for/islamic-creators', '/tools/arabic-english-captions', '/review-safety'],
+    links: ['/islamic-lecture-clipper', '/tools/arabic-english-captions', '/review-safety'],
   },
   {
     path: '/islamic-lecture-clipper',
@@ -210,19 +198,7 @@ export const SEO_PAGES = [
     intent: 'islamic lecture clipper',
     cluster: 'islamic',
     lastmod: '2026-08-30',
-    links: ['/islamic-video-clipper', '/for/islamic-creators', '/review-safety', '/pricing'],
-  },
-  {
-    path: '/for/islamic-creators',
-    breadcrumb: 'For Islamic creators',
-    kind: KIND.AUDIENCE,
-    title: 'DeenClipped for Islamic Creators — Tools for Dawah Content',
-    description:
-      'For creators publishing Islamic reminders and lectures: multilingual captions, Quran-aware handling, nasheed mixing and a review-first workflow.',
-    intent: 'muslim creator tools',
-    cluster: 'islamic',
-    lastmod: '2026-08-30',
-    links: ['/islamic-video-clipper', '/islamic-lecture-clipper', '/tools/arabic-english-captions', '/pricing'],
+    links: ['/islamic-video-clipper', '/review-safety', '/pricing'],
   },
   {
     path: '/tools/arabic-english-captions',
@@ -299,7 +275,7 @@ export const SEO_PAGES = [
     breadcrumb: 'Long video to Shorts',
     cluster: 'guides',
     lastmod: '2026-08-30',
-    links: ['/guides', '/tools/long-video-to-shorts', '/guides/caption-safe-zones'],
+    links: ['/guides', '/guides/caption-safe-zones'],
   },
   {
     path: '/guides/caption-safe-zones',
@@ -332,7 +308,7 @@ export const SEO_PAGES = [
     breadcrumb: 'Clipping Islamic lectures',
     cluster: 'guides',
     lastmod: '2026-08-30',
-    links: ['/islamic-lecture-clipper', '/guides', '/review-safety'],
+    links: ['/islamic-lecture-clipper', '/tools/lecture-clip-generator', '/review-safety'],
   },
   {
     path: '/guides/caption-best-practices',
@@ -369,7 +345,7 @@ export const SEO_PAGES = [
     breadcrumb: 'Clip calculator',
     cluster: 'guides',
     lastmod: '2026-08-30',
-    links: ['/pricing', '/guides/long-video-to-shorts', '/tools/long-video-to-shorts'],
+    links: ['/pricing', '/guides/long-video-to-shorts'],
   },
 
   // ── Comparison ───────────────────────────────────────────────────────────
@@ -500,3 +476,27 @@ export function alternatesFor(page) {
   if (family.length < 2) return [];
   return family.map(item => ({ path: item.path, lang: langOf(item) }));
 }
+
+/*
+ * Pages that used to exist and now redirect.
+ *
+ * Both were retired for the same reason: they made the SAME ARGUMENT as a
+ * stronger page in different words, which is what a doorway page is even when
+ * no sentence is repeated. Measured before removing them --
+ * /tools/long-video-to-shorts shared 44% of its argument with
+ * /tools/youtube-to-shorts and 33% with /tools/lecture-clip-generator, and
+ * /for/islamic-creators shared 32% with /how-it-works while covering ground
+ * /islamic-video-clipper already owned.
+ *
+ * "Long video to shorts" and "AI video clipper" are the same job described two
+ * ways; one page answering it well beats two answering it identically. The
+ * audience page was the third Islamic page arguing the same three points.
+ *
+ * 301, not 410: these URLs are in the sitemap Google read on 30 Aug 2026, so
+ * they will be crawled, and a permanent redirect passes their value to the
+ * page that absorbed them instead of throwing it away.
+ */
+export const RETIRED_PAGES = {
+  '/tools/long-video-to-shorts': '/tools/ai-video-clipper',
+  '/for/islamic-creators': '/islamic-video-clipper',
+};
