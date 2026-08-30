@@ -1101,11 +1101,26 @@ export function verifyStripeSignature(rawBody, signatureHeader) {
   return JSON.parse(rawBody || '{}');
 }
 
+/*
+ * Both of these refuse an empty id, and that guard is the whole point.
+ *
+ * Without it, `userBySubscription(undefined)` compares undefined against
+ * `user.billing?.stripeSubscriptionId`, which is ALSO undefined for every
+ * account that has a billing record but no subscription -- so the first such
+ * account matched, and an invoice carrying no subscription id had its money
+ * recorded against a stranger. Found while testing landing-page attribution:
+ * the payment was credited to the wrong person entirely, which is a worse bug
+ * than the one being looked for.
+ */
 function userByCustomer(customerId) {
-  return (state.authUsers || []).find(user => user.billing?.stripeCustomerId === customerId) || null;
+  const id = String(customerId || '');
+  if (!id) return null;
+  return (state.authUsers || []).find(user => user.billing?.stripeCustomerId === id) || null;
 }
 function userBySubscription(subscriptionId) {
-  return (state.authUsers || []).find(user => user.billing?.stripeSubscriptionId === subscriptionId) || null;
+  const id = String(subscriptionId || '');
+  if (!id) return null;
+  return (state.authUsers || []).find(user => user.billing?.stripeSubscriptionId === id) || null;
 }
 
 function subscriptionPlan(subscription = {}) {
@@ -1196,6 +1211,23 @@ function recordRevenue({ kind, userId = '', amountMinor = 0, currency = '', desc
     description, stripeId, eventId, createdAt: now(),
   });
   state.revenueEvents = state.revenueEvents.slice(0, 5000);
+
+  // Credit the page that earned it.
+  //
+  // A Stripe webhook carries no cookie, so the landing path cannot come from
+  // the request -- it comes off the account, where it was stamped at sign-up.
+  // That is the whole reason the field exists rather than the cookie alone.
+  //
+  // Counted once per account: a subscription renewing every month is not the
+  // landing page earning a new customer every month, and counting it that way
+  // would make the oldest page look like the best one.
+  try {
+    const user = (state.authUsers || []).find(item => item?.id === userId);
+    if (user?.signupLanding && !user.landingCredited) {
+      user.landingCredited = true;
+      metrics.attribute('paid', user.signupLanding);
+    }
+  } catch { /* attribution must never fail a payment */ }
 }
 
 // Comfortably past Stripe's retry schedule, which runs for about three days.

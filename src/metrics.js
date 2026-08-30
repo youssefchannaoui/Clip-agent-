@@ -102,13 +102,13 @@ function ensure() {
 function dayBucket(day) {
   const metrics = ensure();
   if (!metrics.days[day]) {
-    metrics.days[day] = { views: {}, uniques: 0, uniqueIds: [], referrers: {}, utm: {}, events: {} };
+    metrics.days[day] = { views: {}, uniques: 0, uniqueIds: [], referrers: {}, utm: {}, events: {}, attribution: {} };
   }
   const bucket = metrics.days[day];
   // Older builds of a bucket may lack a field added later; heal in place.
   bucket.views ||= {}; bucket.referrers ||= {}; bucket.utm ||= {}; bucket.events ||= {};
   bucket.devices ||= {}; bucket.languages ||= {}; bucket.campaigns ||= {};
-  bucket.entries ||= {}; bucket.missing ||= {};
+  bucket.entries ||= {}; bucket.missing ||= {}; bucket.attribution ||= {};
   bucket.direct ||= 0; bucket.botHits ||= 0;
   bucket.newVisitors ||= 0; bucket.returningVisitors ||= 0;
   // Two numbers per hour of the day, so a day can be read as a shape rather
@@ -263,6 +263,33 @@ export function missing(path) {
 }
 
 /** A named conversion step the read side cannot derive (e.g. checkout_started). */
+/**
+ * Which page a paying customer arrived on.
+ *
+ * Everything else here counts traffic; this counts MONEY, which is the only
+ * number that says whether writing landing pages was worth the effort. A page
+ * with a thousand visits and no subscription is a page to rewrite or delete,
+ * and views alone cannot tell you that.
+ *
+ * It stays inside the same privacy posture as the rest of the module. The
+ * landing path travels in a first-party cookie holding A PATH AND NOTHING
+ * ELSE -- no identifier, nothing derived from one, nothing that survives being
+ * read by anyone but this server. What lands in state is a counter per path.
+ *
+ * `path` is checked against the registry before it is used as a key, so a
+ * scanner spraying `?` at the cookie cannot mint unbounded state.
+ */
+export function attribute(kind, path) {
+  const key = String(kind || '').trim().slice(0, 16);
+  const page = String(path || '').trim();
+  if (!key || !TRACKED_PATHS.has(page)) return;
+  const bucket = dayBucket(utcDay());
+  const row = (bucket.attribution ||= {});
+  const per = (row[key] ||= {});
+  per[page] = (per[page] || 0) + 1;
+  scheduleFlush();
+}
+
 export function event(name) {
   const key = String(name || '').trim().slice(0, 40);
   if (!key) return;
@@ -307,6 +334,7 @@ export function summary({ days = 30 } = {}) {
 
   const byPath = {}; const referrers = {}; const utm = {}; const events = {};
   const devices = {}; const languages = {}; const campaigns = {}; const entries = {}; const missingPages = {};
+  const attribution = {};
   let direct = 0; let botHits = 0;
   const cutoff = utcDay(today - (window - 1) * DAY_MS);
   for (const [day, bucket] of Object.entries(metrics.days)) {
@@ -320,6 +348,10 @@ export function summary({ days = 30 } = {}) {
     for (const [k, v] of Object.entries(bucket.campaigns || {})) campaigns[k] = (campaigns[k] || 0) + v;
     for (const [k, v] of Object.entries(bucket.entries || {})) entries[k] = (entries[k] || 0) + v;
     for (const [k, v] of Object.entries(bucket.missing || {})) missingPages[k] = (missingPages[k] || 0) + v;
+    for (const [kind, per] of Object.entries(bucket.attribution || {})) {
+      const into = (attribution[kind] ||= {});
+      for (const [k, v] of Object.entries(per || {})) into[k] = (into[k] || 0) + v;
+    }
     direct += bucket.direct || 0;
     botHits += bucket.botHits || 0;
   }
@@ -406,5 +438,32 @@ export function summary({ days = 30 } = {}) {
     missing: missingPages, botHits,
     liveNow: liveNow(),
     signupsByDay,
+    // Landing pages ranked by what they EARN, not by what they attract.
+    //
+    // The join happens here rather than on the screen because the screen would
+    // then be a second place that computes it, and the two would drift -- the
+    // same reason DeenAI's metrics() lives beside its cards.
+    //
+    // A page can show paid > signup: someone who signed up last month and
+    // subscribes today counts in one column only. That is real, so it is left
+    // alone rather than capped into looking tidy.
+    // The key set is entries UNION everything attributed, not entries alone.
+    //
+    // Built from entries only, a page whose visit fell outside the window but
+    // whose signup landed inside it vanished from the table completely --
+    // dropping exactly the row worth reading. A conversion must never be lost
+    // because its visit aged out.
+    landingPages: [...new Set([
+      ...Object.keys(entries),
+      ...Object.values(attribution).flatMap(per => Object.keys(per || {})),
+    ])]
+      .map(path => ({
+        path,
+        entries: entries[path] || 0,
+        signups: attribution.signup?.[path] || 0,
+        paid: attribution.paid?.[path] || 0,
+      }))
+      .filter(row => row.entries || row.signups || row.paid)
+      .sort((a, b) => (b.paid - a.paid) || (b.signups - a.signups) || (b.entries - a.entries)),
   };
 }

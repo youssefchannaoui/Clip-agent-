@@ -129,6 +129,36 @@ function jsonWithCookies(res, status, value, cookies = []) {
  * let an attacker send a fresh fake address on every request and walk straight
  * past a per-IP limit.
  */
+/**
+ * The page this visitor first landed on, from their own browser.
+ *
+ * Returned raw; metrics.attribute() checks it against the page registry before
+ * using it as a key, so a hand-edited cookie cannot mint state.
+ */
+/**
+ * Credit a new account to the page it arrived from.
+ *
+ * The path is stamped on the account as well as counted, because the
+ * SUBSCRIPTION arrives later through a Stripe webhook that carries no cookie
+ * -- without this field there is no way back from a payment to the page that
+ * earned it, which is the only question this whole feature exists to answer.
+ */
+function creditLanding(req, user, isNew = true) {
+  try {
+    if (!isNew) return;
+    const landing = landingPath(req);
+    if (!landing || !user) return;
+    if (!user.signupLanding) { user.signupLanding = landing; save(); }
+    metrics.attribute('signup', landing);
+  } catch { /* attribution must never block a sign-up */ }
+}
+
+function landingPath(req) {
+  const match = /(?:^|;\s*)dc_land=([^;]*)/.exec(String(req.headers.cookie || ''));
+  if (!match) return '';
+  try { return decodeURIComponent(match[1]).slice(0, 120); } catch { return ''; }
+}
+
 function clientIp(req) {
   const forwarded = String(req.headers['x-forwarded-for'] || '').split(',').map(v => v.trim()).filter(Boolean);
   if (forwarded.length) return forwarded[forwarded.length - 1];
@@ -663,7 +693,17 @@ async function route(req, res, url) {
         // people out to count them is not a trade worth making.
         const prior = res.getHeader('Set-Cookie');
         const seenCookie = `dc_seen=1; Max-Age=63072000; Path=/; SameSite=Lax; HttpOnly${secure}`;
-        res.setHeader('Set-Cookie', prior ? [].concat(prior, seenCookie) : [seenCookie]);
+        const extra = [seenCookie];
+        // Which page they arrived on, so a subscription can be credited to the
+        // page that earned it. A PATH and nothing else -- no identifier, and
+        // no second value to join against. Written once and never overwritten,
+        // or the last page before checkout would take the credit that belongs
+        // to the page that brought them. 90 days covers a free trial turning
+        // into a subscription; past that the answer is not worth keeping.
+        if (!landingPath(req)) {
+          extra.push(`dc_land=${encodeURIComponent(pathname)}; Max-Age=7776000; Path=/; SameSite=Lax; HttpOnly${secure}`);
+        }
+        res.setHeader('Set-Cookie', prior ? [].concat(prior, ...extra) : extra);
       }
     } catch { /* analytics must never take a page down */ }
   }
@@ -705,6 +745,7 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/auth/google/callback') {
     try {
       const result = await auth.completeGoogle(req, url.searchParams.get('code') || '', url.searchParams.get('state') || '');
+      creditLanding(req, result.user, result.user?.justCreated === true);
       const session = auth.createSession(result.user, { provider: 'google' });
       return redirectWithCookies(res, billing.postLoginRedirect(result.user, result.returnTo || '/app'), auth.cookieHeaders(session));
     } catch (error) { return redirect(res, `/login?error=${encodeURIComponent(error.message)}`); }
@@ -713,6 +754,7 @@ async function route(req, res, url) {
     try {
       const body = await formBody(req);
       const result = await auth.completeApple(req, body);
+      creditLanding(req, result.user, result.user?.justCreated === true);
       const session = auth.createSession(result.user, { provider: 'apple' });
       return redirectWithCookies(res, billing.postLoginRedirect(result.user, result.returnTo || '/app'), auth.cookieHeaders(session));
     } catch (error) { return redirect(res, `/login?error=${encodeURIComponent(error.message)}`); }
@@ -738,6 +780,7 @@ async function route(req, res, url) {
     try {
       const user = await auth.emailLogin(body.email || '', body.password || '', body.name || '');
       throttle.succeed(keys);
+      if (!known) creditLanding(req, user);
       // Fire and forget: a provider outage must not stop someone signing in.
       if (!known) auth.sendVerification(user, config.publicBaseUrl || `https://${req.headers.host || ''}`).catch(() => {});
       const session = auth.createSession(user, { provider: 'email' });

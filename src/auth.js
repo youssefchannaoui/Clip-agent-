@@ -635,11 +635,19 @@ export function upsertUser(provider, claims, rawUser = null) {
     state.authSessions = (state.authSessions || []).filter(item => item.userId !== user.id);
     log(`Password sign-in for ${email} was replaced by ${provider} sign-in, which verified the address.${revoked ? ` ${revoked} session(s) from the password account were revoked.` : ''}`, 'warn', user.id);
   }
+  // Whether the account was CREATED here, not merely signed in. Attribution
+  // needs the difference: crediting a landing page on every subsequent login
+  // would credit it once per visit and read as runaway growth.
+  const created = !user;
   if (!user) {
     user = { id: `user_${now().toString(36)}_${token(5)}`, email, name: '', picture: '', role: state.authUsers.length ? 'creator' : 'owner', providers: {}, createdAt: now() };
     state.authUsers.push(user);
     ownerFeed.signedUp(user, provider).catch(() => {});
   }
+  // Non-enumerable on purpose: this is a fact about THIS request, not about
+  // the account, and a plain assignment would be serialised into state.json on
+  // the save() below and then read back as true forever.
+  Object.defineProperty(user, 'justCreated', { value: created, configurable: true });
   const appleName = rawUser?.name ? [rawUser.name.firstName, rawUser.name.lastName].filter(Boolean).join(' ') : '';
   user.email = user.email || email;
   user.name = claims.name || appleName || user.name || email || 'Creator';

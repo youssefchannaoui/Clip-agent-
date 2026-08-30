@@ -5262,6 +5262,52 @@ StudioAdapter.onProbeSource=async url=>{try{
         tip.style.left=x+'px';
         tip.style.top=Math.max(8,r.top-tip.offsetHeight-8)+'px';
       };
+
+      /* ── Which pages earn subscriptions ───────────────────────────────────
+         Everything else on Traffic counts visits. This counts money, and it
+         is the only table that answers whether writing a landing page was
+         worth doing -- a page with a thousand views and no subscription is a
+         page to rewrite, and views alone cannot tell you that.
+
+         Built by the host rather than the design export, the same as the
+         chart tooltip above: putting it in the export would regenerate every
+         hashed class name in the app for one table. It reuses the export's
+         own classes so it is indistinguishable from the sections beside it,
+         and it is rebuilt on every owner refresh because /api/state replaces
+         DATA wholesale. */
+      const paintLandingTable=()=>{
+        try{
+          const rows=(window.DC_OWNER&&window.DC_OWNER.webmetrics&&window.DC_OWNER.webmetrics.landingPages)||[];
+          const host=document.querySelector('#dcOwnerScreen .sgw:last-of-type')||null;
+          const anchorSec=document.querySelector('#dcOwnerScreen .dcow-s.dcow-d5')||null;
+          const parent=(anchorSec&&anchorSec.parentNode)||null;
+          let box=document.getElementById('dcowEarn');
+          const wanted=rows.filter(r=>r&&(r.signups||r.paid));
+          if(!parent||!wanted.length){ if(box)box.remove(); return; }
+          if(!box){
+            box=document.createElement('div');
+            box.id='dcowEarn';
+            parent.insertBefore(box,anchorSec.nextSibling);
+          }
+          const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+          const cls=(host&&host.className)||'sgw';
+          box.className='dcow-s';
+          box.style.cssText='flex-shrink:0;margin-top:18px';
+          box.innerHTML='<div class="'+esc(cls)+'">'
+            +'<div class="scl"><span class="s97">Pages that earn subscriptions</span></div>'
+            +'<div class="sdk"><table class="sh1">'
+            +'<tr><th class="sgh">Landing page</th><th class="sgi">Arrivals</th>'
+            +'<th class="sgi">Signed up</th><th class="sgi">Subscribed</th></tr>'
+            + wanted.slice(0,12).map(r=>'<tr class="dcow-hov">'
+                +'<td class="sgl">'+esc(r.path)+'</td>'
+                +'<td class="sgm">'+esc(r.entries)+'</td>'
+                +'<td class="sgm">'+esc(r.signups)+'</td>'
+                +'<td class="sgm">'+esc(r.paid)+'</td></tr>').join('')
+            +'</table></div></div>';
+        }catch(e){/* a reporting table must never take the screen down */}
+      };
+      window.dcPaintLandingTable=paintLandingTable;
+
       const hide=()=>{ if(tip)tip.style.opacity='0'; };
       document.addEventListener('mouseover',e=>{
         const el=e.target&&e.target.closest&&e.target.closest('.dcow-col');
@@ -5298,6 +5344,7 @@ StudioAdapter.onProbeSource=async url=>{try{
         if(acc.status==='fulfilled')window.DC_OWNER.analytics=acc.value;
         if(web.status==='fulfilled')window.DC_OWNER.webmetrics=web.value;
         if(DATA){DATA.ownerData=window.DC_OWNER;DATA.webmetrics=window.DC_OWNER.webmetrics||null}
+        try{window.dcPaintLandingTable&&setTimeout(window.dcPaintLandingTable,0)}catch(e){}
         renderAll();
       }finally{ownerLoading=false}
       /* Health after the books have painted, never instead of them. */

@@ -150,7 +150,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **878 JS + 427 Python**
+- `npm test` and `npm run check` must pass. Currently **888 JS + 427 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1408,3 +1408,37 @@ he named is paid subscriptions, not traffic.
   is counted by analytics, has one H1 and a unique title, is REACHABLE BY PLAIN
   LINK from the homepage (an orphan page is indexed late or never, whatever the
   sitemap says), and invents no statistic or rating in its schema.
+
+## Landing pages are ranked by what they EARN (v3.43.1, 30 Aug 2026)
+
+Youssef named the KPI for the SEO work himself: paid subscriptions, not
+traffic. Every other number in metrics.js counts visits, and a page with a
+thousand visits and no subscription is a page to rewrite -- views alone cannot
+say which.
+
+- **The loop is: arrive -> cookie -> sign up -> account stamped -> webhook.**
+  `dc_land` holds A PATH AND NOTHING ELSE (no identifier, HttpOnly, SameSite,
+  90 days) and is written ONCE, never overwritten -- otherwise the last page
+  before checkout takes the credit that belongs to the page that brought them.
+  `metrics.attribute()` checks the value against the page registry before using
+  it as a key, so a hand-edited cookie cannot mint state.
+- **The Stripe webhook carries no cookie.** That is why `user.signupLanding` is
+  stamped on the ACCOUNT at sign-up: it is the only road back from a payment to
+  the page that earned it. Counted once per account (`landingCredited`), or a
+  monthly renewal would look like the oldest page winning a new customer every
+  month.
+- **`userBySubscription(undefined)` matched a stranger.** Found while testing
+  this, and worse than the bug being looked for: it compared undefined against
+  every account's `stripeSubscriptionId`, ALSO undefined for anyone with a
+  billing record and no subscription, so the first such account matched and an
+  invoice with no subscription id had its money recorded against them. Both
+  lookups refuse an empty id now, and the money is filed against no account
+  rather than an arbitrary one.
+- **The table's key set is entries UNION everything attributed.** Built from
+  entry views alone, a page whose visit fell outside the window but whose
+  signup landed inside it vanished entirely -- dropping exactly the row worth
+  reading.
+- The Owner screen's "Pages that earn subscriptions" table is built by the HOST
+  (`dcPaintLandingTable` in index.html), reusing the export's own classes --
+  the same device as the chart tooltip, because putting it in the design export
+  would regenerate every hashed class name in the app for one table.
