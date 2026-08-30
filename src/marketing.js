@@ -583,13 +583,21 @@ export function home({ base, currentUser }) {
         <div class="hero-actions"><a class="button primary" href="/login?returnTo=/app">Start clipping free ${icon('arrow')}</a><a class="button secondary" href="#how-it-works">Watch the workflow</a></div>
         <p class="purpose-line"><strong>${escapeHtml(Number(config.tokensFree).toLocaleString())} source minutes included for ${escapeHtml(String(config.stripeTrialDays))} days.</strong> No card required to begin.</p>
       </div>
-      <div class="hero-live-demo" aria-label="A long lecture becoming review-ready vertical clips">
-        <div class="hero-source-photo">${sourceImage('lecture', 'fetchpriority="high"')}<span><i></i>Source lecture · 48:26</span></div>
-        <div class="hero-scan-card"><span>${icon('spark')}</span><div><b>Finding complete moments</b><small>Transcript · context · clean endings</small><i><b></b></i></div><em>68%</em></div>
-        <div class="hero-results" aria-label="Generated clip examples">
-          ${clipPreview('scholar', 'Small steps become a steady practice.', 'hero-result result-one', '92 · Review')}
-          ${clipPreview('courtyard', 'Make the next step clear enough to act on.', 'hero-result result-two', '88 · Review')}
-          ${clipPreview('valley', 'Keep returning to what matters.', 'hero-result result-three', '84 · Review')}
+      <div class="hero-live-demo" data-hero-demo aria-label="An animated DeenClipped workflow from a source lecture to a scheduled, review-approved clip">
+        <div class="hero-demo-window">
+          <div class="hero-demo-topbar"><span><i></i>Source lecture</span><b>48:26</b><em>Finding complete moments</em></div>
+          <div class="hero-demo-workspace">
+            <div class="hero-source-photo">${sourceImage('lecture', 'fetchpriority="high"')}<span><i></i>Long-form source</span><div class="hero-scan-beam" aria-hidden="true"></div><div class="hero-moment-markers" aria-hidden="true"><i></i><i></i><i></i></div></div>
+            <div class="hero-output-rail" aria-label="Review-ready clips">
+              <div class="hero-output-heading"><span>${icon('spark')} Clips found</span><small>Ready for your review</small></div>
+              <div class="hero-results">
+                ${clipPreview('scholar', 'Small steps become a steady practice.', 'hero-result result-one', 'Review')}
+                ${clipPreview('courtyard', 'Make the next step clear enough to act on.', 'hero-result result-two', 'Review')}
+                ${clipPreview('valley', 'Keep returning to what matters.', 'hero-result result-three', 'Review')}
+              </div>
+            </div>
+          </div>
+          <div class="hero-demo-footer"><span class="hero-demo-step"><i>1</i> Find moments</span><span class="hero-demo-arrow">${icon('arrow')}</span><span class="hero-demo-step"><i>2</i> You approve</span><span class="hero-demo-arrow">${icon('arrow')}</span><span class="hero-demo-step is-scheduled"><i>3</i> Schedule</span><b class="hero-schedule-chip">${icon('calendar')} Ready when you are</b></div>
         </div>
         <div class="hero-approved">${icon('shield')} Nothing publishes without your approval</div>
       </div>

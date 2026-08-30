@@ -211,6 +211,17 @@ test('public imagery uses a distinct, male-only source library without repeated 
   }
 });
 
+test('the homepage demonstrates the actual review-first workflow with purposeful motion', async () => {
+  const home = await fetch(`${base}/`, { headers: { accept: 'text/html' } }).then(r => r.text());
+  for (const detail of ['data-hero-demo', 'Finding complete moments', 'Ready for your review', 'You approve', 'Nothing publishes without your approval']) {
+    assert.ok(home.includes(detail), `the product demonstration must show ${detail}`);
+  }
+  assert.ok(!home.includes('92 · Review'), 'a decorative review score must not be presented as a real product result');
+  const css = await fetch(`${base}/marketing.css`).then(r => r.text());
+  assert.match(css, /@keyframes heroScan/, 'the homepage workflow needs a visible source-analysis state');
+  assert.match(css, /@media\(prefers-reduced-motion:reduce\)/, 'homepage motion needs a reduced-motion fallback');
+});
+
 test('privacy copy names current import and DeenAI processing without stale vendors', async () => {
   const page = await fetch(`${base}/privacy`, { headers: { accept: 'text/html' } }).then(r => r.text());
   assert.match(page, /yt-dlp/);
