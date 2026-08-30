@@ -246,7 +246,7 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
       <div class="footer-bottom"><span>© ${new Date().getFullYear()} DeenClipped</span><span>Import · Review · Edit · Publish</span></div>
     </div>
   </footer>
-  <script src="/marketing.js" defer></script>${toolScript}
+  <script src="/marketing.js?v=${CSS_VERSION}" defer></script>${toolScript}
 </body>
 </html>`);
 }
@@ -369,6 +369,35 @@ function homepageFeatureMap() {
     <div class="homepage-feature-copy"><span>${escapeHtml(number)}</span><h3>${escapeHtml(title)}</h3><p>${escapeHtml(copy)}</p><a href="/features#${kind === 'discover' || kind === 'review' ? 'source-and-review' : kind === 'style' ? 'editor' : kind === 'schedule' ? 'publishing' : kind === 'deenai' ? 'operations' : 'feature-map'}">Explore ${icon('arrow')}</a></div>
     <div class="homepage-feature-visual">${productVisual(kind)}</div>
   </article>`).join('')}</div>`;
+}
+
+function faithWorkflow() {
+  const lectureClips = [
+    ['how-lecture-clip-one.webp', '00:12', 'A clear opening'],
+    ['how-lecture-clip-two.webp', '14:38', 'One complete point'],
+    ['how-lecture-clip-three.webp', '31:06', 'A useful closing thought'],
+  ];
+  return `<div class="faith-workflow reveal" data-faith-workflow>
+    <div class="faith-workflow-tabs" role="tablist" aria-label="Choose a DeenClipped workflow">
+      <button class="active" type="button" role="tab" aria-selected="true" aria-controls="faith-workflow-lecture" data-faith-tab="lecture">Islamic lecture</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="faith-workflow-recitation" data-faith-tab="recitation">Quran recitation</button>
+    </div>
+    <article class="faith-workflow-panel active" id="faith-workflow-lecture" role="tabpanel" data-faith-panel="lecture">
+      <div class="faith-input-card"><span>${icon('link')}</span><small>1 · Start with the source</small><strong>Paste a lecture or upload your file.</strong><p>Choose the exact useful range before tokens are used.</p><b>18:04 — 42:10</b></div>
+      <div class="faith-arrow" aria-hidden="true">${icon('arrow')}</div>
+      <div class="faith-source-stage"><div class="faith-stage-bar"><span><i></i>Lecture selected</span><small>24 source minutes</small></div><img src="/marketing-assets/how-lecture-source.webp" alt="A selected Islamic lecture source" loading="lazy"><div class="faith-detection"><span>${icon('spark')}</span><div><b>Finding complete moments</b><small>Hook · complete idea · clean ending</small></div></div><div class="faith-source-track" aria-hidden="true"><i></i><b></b><b></b><b></b></div></div>
+      <div class="faith-arrow" aria-hidden="true">${icon('arrow')}</div>
+      <div class="faith-review-stage"><div class="faith-review-head"><span>${icon('clips')} Review-ready clips</span><small>3 found</small></div><div class="faith-clip-row">${lectureClips.map(([src, time, label]) => `<figure><img src="/marketing-assets/${src}" alt="A short clip from the selected lecture" loading="lazy"><span>${escapeHtml(time)}</span><figcaption>${escapeHtml(label)}</figcaption><i aria-hidden="true"></i></figure>`).join('')}</div><div class="faith-review-lock"><span>${icon('shield')}</span><p><b>You review the finished render.</b><small>Nothing publishes without approval.</small></p></div></div>
+    </article>
+    <article class="faith-workflow-panel" id="faith-workflow-recitation" role="tabpanel" data-faith-panel="recitation" hidden>
+      <div class="faith-input-card recitation-input"><span>${icon('music')}</span><small>1 · Recitation is identified</small><strong>Arabic recitation is not treated like ordinary speech.</strong><p>DeenClipped holds it for the Quran-specific treatment.</p><b>Arabic · recitation</b></div>
+      <div class="faith-arrow" aria-hidden="true">${icon('arrow')}</div>
+      <div class="faith-recitation-stage"><div class="faith-stage-bar"><span><i></i>Quran treatment</span><small>Human review required</small></div><div class="faith-ayah-card"><span>Recitation segment</span><strong>Matched ayah</strong><p>Arabic text and translation are prepared as a pair—not as an approximate caption.</p></div><div class="faith-waveform" aria-hidden="true">${Array.from({ length: 42 }, (_, index) => `<i style="--wave:${24 + ((index * 19) % 62)}%"></i>`).join('')}</div><div class="faith-recitation-note">${icon('shield')} No nasheed beneath recitation</div></div>
+      <div class="faith-arrow" aria-hidden="true">${icon('arrow')}</div>
+      <div class="faith-review-stage faith-quran-review"><div class="faith-review-head"><span>${icon('captions')} Review before publishing</span><small>Required</small></div><div class="faith-quran-preview"><span>Arabic line</span><strong>Translation beneath</strong><i></i><i></i><i></i></div><div class="faith-review-lock"><span>${icon('shield')}</span><p><b>A person has the final say.</b><small>Approve only when the ayah and treatment are right.</small></p></div></div>
+    </article>
+    <div class="faith-workflow-benefits"><div><span>${icon('clips')}</span><b>Complete moments</b><p>Candidate clips are selected for a clear hook, one full idea and a clean ending.</p></div><div><span>${icon('language')}</span><b>Faith-aware treatment</b><p>Spoken Arabic, English and Quran recitation follow different caption and review paths.</p></div><div><span>${icon('calendar')}</span><b>Approval before publishing</b><p>Post now, download or schedule only the clips you decide are ready.</p></div></div>
+  </div>`;
 }
 
 /**
@@ -604,12 +633,8 @@ export function home({ base, currentUser }) {
 
     <section class="section homepage-workflow" id="how-it-works">
       <div class="wrap">
-        <div class="section-head reveal"><span class="section-label">How it works</span><h2>A complete workflow, in the order you actually need it.</h2><p>Every step has a clear purpose: source selection, clip discovery, human review and then publishing. Nothing is hidden behind a fake dashboard or a claim you cannot check.</p></div>
-        <div class="homepage-workflow-steps reveal">
-          <article><span>01</span><div>${icon('link')}</div><h3>Paste or upload</h3><p>Start with a supported video link or your own file. Choose the specific source minutes to process.</p></article><i aria-hidden="true">${icon('arrow')}</i>
-          <article><span>02</span><div>${icon('spark')}</div><h3>Review the finished clips</h3><p>See the actual rendered video, why it was selected and whether its captions and treatment are right.</p></article><i aria-hidden="true">${icon('arrow')}</i>
-          <article><span>03</span><div>${icon('calendar')}</div><h3>Publish on your terms</h3><p>Approve, download, post now or schedule to your own connected destinations when you are ready.</p></article>
-        </div>
+        <div class="section-head reveal"><span class="section-label">How it works</span><h2>One workflow for lectures. A more careful path for recitation.</h2><p>Start with the exact source you want to share. DeenClipped finds complete moments from a lecture, while Quran recitation follows its own matched-text and human-review workflow.</p></div>
+        ${faithWorkflow()}
       </div>
     </section>
 

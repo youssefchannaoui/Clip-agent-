@@ -98,6 +98,35 @@ for (const journey of document.querySelectorAll('[data-journey]')) {
   start();
 }
 
+for (const workflow of document.querySelectorAll('[data-faith-workflow]')) {
+  const tabs = [...workflow.querySelectorAll('[data-faith-tab]')];
+  const panels = [...workflow.querySelectorAll('[data-faith-panel]')];
+  const show = key => {
+    tabs.forEach(tab => {
+      const active = tab.dataset.faithTab === key;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', String(active));
+      tab.tabIndex = active ? 0 : -1;
+    });
+    panels.forEach(panel => {
+      const active = panel.dataset.faithPanel === key;
+      panel.classList.toggle('active', active);
+      panel.hidden = !active;
+    });
+  };
+  tabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => show(tab.dataset.faithTab));
+    tab.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+      show(tabs[next].dataset.faithTab);
+      tabs[next].focus();
+    });
+  });
+  show(tabs.find(tab => tab.classList.contains('active'))?.dataset.faithTab || tabs[0]?.dataset.faithTab);
+}
+
 for (const gallery of document.querySelectorAll('[data-gallery]')) {
   const slides = [...gallery.querySelectorAll('.gallery-slide')];
   const dotsRoot = gallery.querySelector('[data-gallery-dots]');
