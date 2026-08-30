@@ -28,6 +28,15 @@ three times on 30–31 Aug — but only because of the rule below.
 - Claude must not restyle the public site. Structure, copy and metadata are
   Claude's; how it LOOKS is not.
 
+**Whoever edits `src/` bumps `package.json` in the SAME commit.** Not a style
+preference -- `scripts/check-version-bump.mjs` fails the run otherwise, and on
+30 Aug two consecutive ChatGPT commits (`b31a510`, `02acde9`) left the branch
+RED for forty minutes on exactly this. Nothing was wrong with the code; the
+tests passed. It cleared only because the next Claude commit bumped the version
+on top of it. A phone session that cannot trust the tick has no way to check
+anything, so a red branch is worse than no branch -- and a red run whose cause
+is a missing bump looks identical, at a glance, to a real failure.
+
 **Do not run both agents in the same minute.** Not a policy, a mechanical
 constraint: on 30–31 Aug Claude twice went to push and found ChatGPT's work
 already on the branch, and had to rebase and resolve by hand. Each hand-merge
