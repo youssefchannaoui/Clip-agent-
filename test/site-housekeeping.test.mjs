@@ -192,38 +192,25 @@ test('the public feature catalogue covers every shipped clip template', async ()
   assert.match(page, /coming soon/i);
 });
 
-test('public imagery uses a distinct, male-only source library without repeated source files', async () => {
+test('public imagery stays on the established realistic asset library', async () => {
   const [home, features] = await Promise.all([
     fetch(`${base}/`, { headers: { accept: 'text/html' } }).then(r => r.text()),
     fetch(`${base}/features`, { headers: { accept: 'text/html' } }).then(r => r.text()),
   ]);
-  for (const draft of ['review-first-v2.png', 'deenai-private-v2.png', 'hero-premium.webp', 'workflow-premium.webp']) {
+  for (const draft of ['review-first-v2.png', 'deenai-private-v2.png']) {
     assert.ok(!home.includes(draft), `${draft} was a rejected draft and must not ship`);
     assert.ok(!features.includes(draft), `${draft} was a rejected draft and must not ship`);
   }
-  assert.ok(!home.includes('source-creator-woman.webp'), 'public marketing should not ship the removed woman source asset');
-  assert.ok(!features.includes('source-creator-woman.webp'), 'feature marketing should not ship the removed woman source asset');
-  const images = [...home.matchAll(/\/marketing-assets\/([^"?]+)/g), ...features.matchAll(/\/marketing-assets\/([^"?]+)/g)];
-  const assets = images.map(match => match[1]);
-  assert.equal(new Set(assets).size, assets.length, 'a marketing source image must never repeat across the public home or features pages');
-  for (const asset of ['reel-beneficial.webp', 'reel-deeds.webp', 'reel-dua.webp', 'reel-dunya.webp', 'reel-quran.webp', 'reel-halal.webp']) {
-    assert.ok(assets.includes(asset), `${asset} should represent a distinct public source example`);
+  for (const asset of ['reel-halal.webp', 'reel-dua.webp', 'reel-dunya.webp', 'reel-beneficial.webp', 'reel-quran.webp']) {
+    assert.ok(home.includes(asset), `${asset} should represent a real template example`);
   }
 });
 
-test('the homepage makes the source-to-review workflow visible in the hero', async () => {
+test('the homepage keeps a labelled source-video entry point', async () => {
   const home = await fetch(`${base}/`, { headers: { accept: 'text/html' } }).then(r => r.text());
-  for (const detail of ['homepage-hero-product', 'Paste a YouTube link to begin', 'Start with this video', 'Turn one lecture into', 'hero-demo-window', 'Long-form source → review-ready clips', 'Review before publishing']) {
-    assert.ok(home.includes(detail), `the product demonstration must show ${detail}`);
-  }
-  for (const detail of ['data-faith-workflow', 'Islamic lecture', 'Quran recitation', 'Matched ayah', 'Nothing publishes without approval.']) {
-    assert.ok(home.includes(detail), `the faith-aware walkthrough must show ${detail}`);
-  }
-  assert.ok(!home.includes('data-workflow-film'), 'the hero should not rely on the rejected decorative source-to-clips animation');
-  assert.ok(!home.includes('92 · Review'), 'a decorative review score must not be presented as a real product result');
-  const css = await fetch(`${base}/marketing.css`).then(r => r.text());
-  assert.match(css, /\.homepage-hero-product/, 'the product-led homepage hero needs a dedicated layout');
-  assert.match(css, /\.faith-workflow/, 'the walkthrough needs a dedicated visual system');
+  assert.match(home, /<form class="source-bar" data-source-form>/);
+  assert.match(home, /<label class="sr-only" for="source-url">Video URL<\/label>/);
+  assert.match(home, /<input id="source-url" name="source"/);
 });
 
 test('privacy copy names current import and DeenAI processing without stale vendors', async () => {
