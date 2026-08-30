@@ -1507,3 +1507,52 @@ launched, both found by MEASURING a rendered page rather than by reading CSS.
   the image test asserts served HTML (real executed output) and the tap-target
   test only catches the CSS block being deleted wholesale. It says so in the
   test.
+
+## Guides, two real free tools, and the crawlers named (v3.46.0, 30 Aug 2026)
+
+- **Six guides and a hub, not sixty.** The brief asked for enough to establish
+  the cluster and explicitly not for a hundred generic articles. Each answers
+  one question and stops; DeenClipped is mentioned only where it genuinely
+  does the thing being described, because a guide that turns into a sales page
+  halfway through is not one, and nobody trusts the next.
+- **The hub lists its cluster, computed.** The first version named three guides
+  by hand in the registry's `links` and the other two were reachable from
+  NOWHERE. `test/seo-architecture.test.mjs` caught it — that is exactly why the
+  crawl test walks links instead of trusting the sitemap. `clusterIndex()`
+  derives the list, so a guide added tomorrow appears without anyone
+  remembering.
+- **Both free tools actually work, and that was verified by driving them.**
+  The safe-zone checker draws each platform's covered area over a frame the
+  visitor supplies; the clip calculator does arithmetic against
+  `config.tokensPerMinute` and `config.tokensFree`, read from data attributes,
+  so it cannot drift from billing. Measured in the browser: zones present
+  47,364 lit pixels and 887 with every zone off, a dropped frame paints
+  123,732, and the tool issues **zero network requests** — which is what makes
+  "nothing is uploaded" a statement of fact rather than a promise.
+- **The calculator called its own assumption "conservative" and it was not.**
+  Two thirds of selected time becoming clips is a CEILING, not a forecast. Both
+  the footnote and the page copy now say so. A tool that flatters its own
+  numbers is worse than no tool.
+- Behaviour lives in `src/public/tool-widgets.js`, loaded only by the two pages
+  that have a widget — the CSP hashes inline scripts from index.html only, so a
+  marketing page cannot carry one.
+- **The AI-search crawlers are named in robots.txt and given the IDENTICAL
+  rules.** Naming them makes "this site shows a crawler what it shows a person"
+  a stated position rather than an accident of `*`. Serving bots different
+  claims is cloaking and would put the whole domain at risk.
+- **`/llms.txt` is served and says what it is IN THE FILE**: a convention some
+  AI tools follow, not read by search engines and not a ranking signal. Built
+  from the registry, so it cannot describe a page that does not exist.
+- **Arabic is prepared, not published.** `alternatesFor`, `langOf` and `isRtl`
+  exist; hreflang, `lang` and `dir` follow automatically from a page carrying
+  `lang: 'ar'` and `translationOf`. Nothing is registered, so no hreflang is
+  emitted — which is correct: a set pointing at a page that does not exist
+  makes Google drop the whole cluster. A machine-translated religious product
+  is worse than an English one.
+- **`/examples` and VideoObject are NOT built, deliberately.** There is no
+  repo-owned public demo clip, and the brief forbids a VideoObject without a
+  real accessible video. `KIND.EXAMPLE` is reserved and the page stays
+  unregistered until Youssef publishes one clip publicly.
+- **GitHub metadata set** (description, homepage, 8 topics) after scanning the
+  tracked tree AND the history for credential shapes — it is a public repo. The
+  README opening was stale and named an import provider removed in August.

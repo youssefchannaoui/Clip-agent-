@@ -25,6 +25,19 @@ export const KIND = {
   TRUST: 'trust',
   LEGAL: 'legal',
   COMMERCE: 'commerce',
+  // A guide answers a question a person typed. It is not a landing page and
+  // must not read like one -- the answer comes first, the product second, and
+  // only where it genuinely applies.
+  GUIDE: 'guide',
+  // An interactive utility that does the thing it says on the page, for free,
+  // with no sign-up. A "free tool" that is a form leading to a sign-up is the
+  // oldest bait in this industry and is not one of these.
+  FREE_TOOL: 'free-tool',
+  // A finished clip with the reasoning behind it. NOT REGISTERED YET: an
+  // example page without a real, public, accessible video would need a
+  // fabricated VideoObject, and there is no repo-owned demo clip. The renderer
+  // and the schema exist and refuse to emit VideoObject without a real URL.
+  EXAMPLE: 'example',
 };
 
 /**
@@ -262,6 +275,103 @@ export const SEO_PAGES = [
     links: ['/how-it-works', '/review-safety', '/contact'],
   },
 
+  // ── Guides ───────────────────────────────────────────────────────────────
+  // Five, not fifty. The brief asked for enough to establish the cluster and
+  // explicitly not for a hundred generic articles, and a hub of thin posts is
+  // worse than no hub.
+  {
+    path: '/guides',
+    kind: KIND.GUIDE,
+    title: 'Guides — Clipping Long Video for Short-Form | DeenClipped',
+    description: 'Practical guides to cutting long videos into short-form clips: safe zones, dimensions, caption choices and what actually makes a clip work.',
+    intent: 'short form video guides',
+    breadcrumb: 'Guides',
+    cluster: 'guides',
+    lastmod: '2026-08-30',
+    links: ['/guides/long-video-to-shorts', '/guides/caption-safe-zones', '/tools/safe-zone-checker'],
+  },
+  {
+    path: '/guides/long-video-to-shorts',
+    kind: KIND.GUIDE,
+    title: 'How to Turn a Long Video Into Shorts | DeenClipped',
+    description: 'A practical method for cutting a long video into short-form clips: how to find the moments, where to cut, and what to fix before publishing.',
+    intent: 'how to turn a long video into shorts',
+    breadcrumb: 'Long video to Shorts',
+    cluster: 'guides',
+    lastmod: '2026-08-30',
+    links: ['/guides', '/tools/long-video-to-shorts', '/guides/caption-safe-zones'],
+  },
+  {
+    path: '/guides/caption-safe-zones',
+    kind: KIND.GUIDE,
+    title: 'Caption Safe Zones for Shorts, Reels and TikTok | DeenClipped',
+    description: 'Where each platform covers your video with its own interface, and where captions have to sit so they survive on all three without re-editing.',
+    intent: 'caption safe zones short form video',
+    breadcrumb: 'Caption safe zones',
+    cluster: 'guides',
+    lastmod: '2026-08-30',
+    links: ['/tools/safe-zone-checker', '/guides', '/guides/9-16-video-dimensions'],
+  },
+  {
+    path: '/guides/9-16-video-dimensions',
+    kind: KIND.GUIDE,
+    title: '9:16 Video Dimensions: The Numbers That Matter | DeenClipped',
+    description: 'What 9:16 means in pixels, why 1080x1920 is the number to use, and what happens to a 16:9 video when it is cropped to vertical.',
+    intent: '9 16 video dimensions',
+    breadcrumb: '9:16 dimensions',
+    cluster: 'guides',
+    lastmod: '2026-08-30',
+    links: ['/guides/caption-safe-zones', '/guides', '/tools/safe-zone-checker'],
+  },
+  {
+    path: '/guides/islamic-lecture-clips',
+    kind: KIND.GUIDE,
+    title: 'How to Clip Islamic Lectures Without Losing the Point | DeenClipped',
+    description: 'Cutting lectures and khutbahs into short clips: choosing complete moments, handling recitation and Arabic, and what to check before publishing.',
+    intent: 'how to make islamic reminder clips',
+    breadcrumb: 'Clipping Islamic lectures',
+    cluster: 'guides',
+    lastmod: '2026-08-30',
+    links: ['/islamic-lecture-clipper', '/guides', '/review-safety'],
+  },
+  {
+    path: '/guides/caption-best-practices',
+    kind: KIND.GUIDE,
+    title: 'Short-Form Caption Best Practices | DeenClipped',
+    description: 'How many words to show at once, when word-by-word helps and when it distracts, and the caption mistakes that cost you the first three seconds.',
+    intent: 'short form caption best practices',
+    breadcrumb: 'Caption best practices',
+    cluster: 'guides',
+    lastmod: '2026-08-30',
+    links: ['/tools/ai-caption-generator', '/guides/caption-safe-zones', '/guides'],
+  },
+
+  // ── Free tools ───────────────────────────────────────────────────────────
+  // Both do the thing on the page, client-side, with no account and no server
+  // cost. Neither can be used to make the pipeline do free work.
+  {
+    path: '/tools/safe-zone-checker',
+    kind: KIND.FREE_TOOL,
+    title: 'Free Safe Zone Checker for Vertical Video | DeenClipped',
+    description: 'Drop in a frame and see exactly where TikTok, Reels and Shorts cover it with their own interface. Free, runs in your browser, nothing uploaded.',
+    intent: 'safe zone checker vertical video',
+    breadcrumb: 'Safe zone checker',
+    cluster: 'guides',
+    lastmod: '2026-08-30',
+    links: ['/guides/caption-safe-zones', '/guides/9-16-video-dimensions', '/tools/ai-caption-generator'],
+  },
+  {
+    path: '/tools/clip-calculator',
+    kind: KIND.FREE_TOOL,
+    title: 'Clip Calculator — How Many Clips From One Video | DeenClipped',
+    description: 'Work out how many short clips a long video yields, how much of it is worth processing, and what that costs in DeenClipped tokens. Free, no sign-up.',
+    intent: 'how many clips from a long video',
+    breadcrumb: 'Clip calculator',
+    cluster: 'guides',
+    lastmod: '2026-08-30',
+    links: ['/pricing', '/guides/long-video-to-shorts', '/tools/long-video-to-shorts'],
+  },
+
   // ── Existing pages that stay exactly as they are ─────────────────────────
   {
     path: '/contact',
@@ -328,4 +438,46 @@ export function breadcrumbFor(page) {
   if (section && pageFor(section.path)) trail.push(section);
   trail.push({ name: page.breadcrumb || page.intent, path: page.path });
   return trail;
+}
+
+/*
+ * Localisation, prepared but not populated.
+ *
+ * Youssef's instruction and the brief agree: do NOT publish machine-translated
+ * Arabic pages to inflate the page count. A bad translation of a religious
+ * product is worse than no translation -- it is the kind of thing a native
+ * reader forwards to friends as a joke, and this product cannot afford that.
+ *
+ * So the MACHINERY exists and the CONTENT does not. When a real Arabic page is
+ * written by a person, it is added here with `lang: 'ar'` and `translationOf`
+ * pointing at its English equivalent; hreflang, the `dir` attribute and the
+ * x-default then follow automatically and nothing else has to be remembered.
+ *
+ * Everything currently registered is English, so `alternatesFor` returns an
+ * empty list and no hreflang is emitted at all -- which is correct. hreflang
+ * pointing at a page that does not exist is worse than none: Google drops the
+ * whole cluster.
+ */
+export const DEFAULT_LANG = 'en';
+
+/** The language a page is written in. */
+export const langOf = page => (page && page.lang) || DEFAULT_LANG;
+
+/** Right-to-left languages, for the `dir` attribute. */
+const RTL = new Set(['ar', 'ur', 'fa', 'he']);
+export const isRtl = lang => RTL.has(String(lang || '').slice(0, 2));
+
+/**
+ * Every language version of one page, INCLUDING itself.
+ *
+ * Returns [] for a page with no translations, because a one-entry hreflang set
+ * is noise: it tells a crawler about a cluster of one.
+ */
+export function alternatesFor(page) {
+  if (!page) return [];
+  const rootPath = page.translationOf || page.path;
+  const family = SEO_PAGES.filter(item =>
+    item.path === rootPath || item.translationOf === rootPath);
+  if (family.length < 2) return [];
+  return family.map(item => ({ path: item.path, lang: langOf(item) }));
 }

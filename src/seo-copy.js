@@ -439,4 +439,211 @@ export const SEO_COPY = {
     ctaLabel: "Start Basic free",
   },
 
+  // ── Guides ─────────────────────────────────────────────────────────────
+  // These answer the question first and mention DeenClipped only where it
+  // genuinely applies. A guide that turns into a sales page halfway through
+  // is not a guide, and nobody trusts the next one.
+  "/guides": {
+    h1: "Guides to clipping long video for short-form",
+    lede: "Practical notes on cutting long recordings into vertical clips — where to cut, where captions can safely sit, and what to check before anything publishes. Written from building the thing, not from a keyword list.",
+    sections: [
+      { heading: "Start here",
+        body: "If you have a long recording and no idea where to begin, read \"How to turn a long video into Shorts\" first. It covers the part that decides whether a clip works: finding a moment that starts and ends on its own, rather than cutting every sixty seconds and hoping. The rest of these are references you come back to — safe zones when a caption gets covered by a platform button, dimensions when an export looks wrong, caption practice when the words are right but nobody is reading them." },
+      { heading: "These are references, not a course",
+        body: "Each guide answers one question and stops. Where DeenClipped does the thing being described, it says so and links to the page that explains it; where the answer has nothing to do with DeenClipped, it just answers the question. A guide that turns into a sales page halfway through is not a guide, and you would not trust the next one." },
+      { heading: "Two free tools sit alongside them",
+        body: "The safe zone checker draws each platform’s interface over a frame you drop in, so you can see what is covered rather than reading numbers about it. The clip calculator works out how many clips a recording is likely to yield and what processing the useful part of it would cost. Both run entirely in your browser, need no account, and upload nothing." },
+    ],
+    faqs: [
+      { q: "Do I need DeenClipped to use these?",
+        a: "No. The guides describe the work, not the product. Safe zones, dimensions and caption practice apply whatever you edit with. Where DeenClipped happens to handle a step automatically the guide says so, because leaving it out would be coy, but nothing here depends on having an account." },
+      { q: "How often are the platform numbers checked?",
+        a: "Each guide that quotes a number says when it was last checked. Platforms move their interface without announcing it, so treat any specific pixel figure as a good working rule rather than a specification — and use the safe zone checker on a real frame if a caption matters." },
+    ],
+    ctaLabel: "Clip your first video free",
+  },
+
+  "/guides/long-video-to-shorts": {
+    h1: "How to turn a long video into Shorts",
+    lede: "The hard part is not the cutting. It is deciding which sixty seconds of a ninety-minute recording can stand on their own — because a clip that starts mid-sentence is not saved by good captions or a nice crop.",
+    sections: [
+      { heading: "Find the moment before you touch the timeline",
+        body: "Read the transcript, not the waveform. A strong short-form clip is almost always a complete thought: a question and its answer, a claim and the reason for it, a story with a beginning and an end. Scrub through looking for those, and mark the timestamp where the thought STARTS — usually a few seconds earlier than you think, because the sentence that sets it up is what makes the payoff land. If you cannot summarise the clip in one sentence, it is not a clip yet." },
+      { heading: "Cut on the thought, not on a duration",
+        body: "Fixed-length cutting is why most auto-generated clips feel wrong. Sixty seconds is a limit, not a target. A clip that makes its point in twenty-two seconds and stops is stronger than the same point padded to fifty-nine. Let the end of the idea decide the end of the clip, then check the first three seconds separately: that is where someone decides whether to keep watching, and a clip that opens on \"…and so what I was saying is\" has already lost." },
+      { heading: "Crop to the speaker, not to the centre",
+        body: "A 16:9 recording cropped straight down the middle to 9:16 frequently lands on an empty lectern while the speaker stands to one side. Crop to where the face actually is, and hold that framing rather than letting it drift. If the source is a two-camera edit, check the crop across a shot change — the framing that works on the wide shot usually does not work on the close-up." },
+      { heading: "Captions are not optional and they are not an afterthought",
+        body: "Most short-form is watched muted, so the captions ARE the video for a large share of viewers. Burn them in rather than relying on platform auto-captions: auto-captions are inconsistent, they are styled by the platform rather than by you, and on a lecture they mishear names and terminology constantly. Time them to the words as spoken, and keep them inside the safe zone so a platform button does not sit on top of the line." },
+      { heading: "What DeenClipped automates here",
+        body: "It transcribes your selected stretch with word-level timings, has a self-hosted model score the candidate moments and say why it picked each one, crops to the speaker with face detection, burns the captions in, and puts every clip in a review queue for you to approve or reject. It does not remove the judgement — you still decide what publishes — it removes the scrubbing." },
+    ],
+    faqs: [
+      { q: "How long should a Short be?",
+        a: "As long as the idea takes and no longer. The platform limits are the ceiling, not the goal. A complete twenty-second point outperforms the same point stretched to a minute, because watch-through matters more than duration and a padded ending is where people leave." },
+      { q: "Should I process the whole video?",
+        a: "Usually not. Most long recordings have a few minutes worth clipping and a lot of introduction, questions and repetition. Picking the stretch first saves you the review time and, in DeenClipped, the tokens: you are charged per source minute you select, not per minute of the file." },
+      { q: "Do I need to re-edit for each platform?",
+        a: "Not if you keep captions inside a conservative centred safe zone. The three platforms cover different parts of the frame with their own interface, so text that clears the most restrictive of them survives on all three. See the safe zones guide for where those edges are." },
+      { q: "Why do my auto-generated clips feel like they start in the middle?",
+        a: "Because they were cut on a timer rather than on the transcript. Any tool that slices at fixed intervals will land mid-sentence most of the time. The fix is to cut where a thought begins and ends, which requires reading the words — either yourself or with something that scores moments from the transcript." },
+    ],
+    ctaLabel: "Try it on one lecture",
+  },
+
+  "/guides/caption-safe-zones": {
+    h1: "Caption safe zones for Shorts, Reels and TikTok",
+    lede: "Every platform draws its own interface over your video — username, caption, buttons, progress bar. Text underneath that is simply gone. Here is where the edges are, and how to place captions once so they survive on all three.",
+    sections: [
+      { heading: "The one rule, if you read nothing else",
+        body: "Keep caption text inside a centred rectangle of roughly 900 x 1400 pixels within the 1080 x 1920 frame. That clears the most restrictive interface of the three platforms, which means one export works everywhere and you never re-edit per platform. Everything below is why that rectangle is where it is. Checked August 2026 — platforms move their interface without announcing it, so treat these as working rules rather than a specification." },
+      { heading: "Where each platform covers the frame",
+        body: "TikTok is the tightest: a column of buttons down the right edge and an expanding caption block along the bottom, so text within about 120px of the right edge or 300px of the bottom gets covered. Instagram Reels takes the most vertical space — roughly the top 220px and the bottom 430px carry the username, caption and controls. YouTube Shorts is the mildest of the three, with a much narrower right-edge column, though the subscribe area at the bottom-left grew in late 2025. The union of all three is what produces the centred rectangle above." },
+      { heading: "The bottom edge is the one that catches people",
+        body: "Almost every caption mistake is a line placed too low. The bottom of the frame feels like the natural home for subtitles because that is where they sit in film and television — but in short-form that band belongs to the platform. Move captions toward the middle third of the frame. It looks unusual for about a day and then looks normal, and it is what most successful short-form does." },
+      { heading: "Auto-captions make the problem worse, not better",
+        body: "All three platforms now switch their own AI captions on by default, and those appear in the bottom band regardless of what you burned in. If your own captions are also near the bottom you get two sets of words stacked on each other. Burning captions in higher up avoids the collision — and gives you control of the face, size and timing, which platform captions never do." },
+      { heading: "Check it on a real frame",
+        body: "Numbers are a starting point; a frame is the answer. Export one still from your clip and put it through the free safe zone checker on this site — it draws each platform’s covered area over your own image, in your browser, so you can see whether the line survives rather than measuring pixels by hand." },
+    ],
+    faqs: [
+      { q: "What is the safe zone for vertical video?",
+        a: "As a single working rule: a centred 900 x 1400 rectangle inside a 1080 x 1920 frame. That clears TikTok’s right-edge button column and bottom caption block, Instagram’s top and bottom bands, and YouTube Shorts’ controls, so the same export works on all three without re-editing." },
+      { q: "Can I just use the platform’s own captions?",
+        a: "You can, and for a straightforward talking-head clip they are adequate. They are a poor fit for anything with names, terminology or a second language, because they mishear those consistently and you have no control over the correction. They are also styled by the platform, so your clips look like everyone else’s." },
+      { q: "Do safe zones change?",
+        a: "Yes, and without announcement. TikTok added a button at the bottom-right in January 2026 and YouTube expanded its subscribe area in late 2025, each pushing an edge inward. This is why the conservative centred rectangle is worth using: it has margin for the next change built into it." },
+    ],
+    ctaLabel: "See where your captions land",
+  },
+
+  "/guides/9-16-video-dimensions": {
+    h1: "9:16 video dimensions: the numbers that matter",
+    lede: "9:16 is a shape, not a size. The size you want is 1080 x 1920 — and the interesting question is what happens to a 16:9 recording when you take it there.",
+    sections: [
+      { heading: "Use 1080 x 1920 and stop thinking about it",
+        body: "9:16 is the aspect ratio: nine units wide for every sixteen tall. 1080 x 1920 is the resolution every platform recommends and the one they all accept without re-encoding penalties. Going higher — 1440 x 2560, say — gains you nothing, because the platforms downscale to 1080 wide anyway and you have paid the upload and the encode for pixels nobody sees. Going lower is visibly soft on a modern phone screen." },
+      { heading: "A 16:9 source loses most of its width, not its height",
+        body: "This is the part that surprises people. A 1920 x 1080 recording taken to 1080 x 1920 keeps the full height and throws away about 72% of the width — you end up with a 608-pixel-wide column of the original frame, upscaled. That is why a straight centre crop so often lands on an empty podium: the useful part of the frame is only about a quarter of it, and the speaker is rarely dead centre. Choosing WHERE that column sits is the single biggest quality decision in the conversion." },
+      { heading: "The alternatives to cropping, and when they are right",
+        body: "You can letterbox the 16:9 frame into the middle of a 9:16 canvas and fill the space above and below — usually with a blurred copy of the video, sometimes with a title. Nothing is cropped away, which suits a screen recording, a slide, or anything where the edges of the frame carry information. The cost is that the subject is now small on a phone. Crop when a person is speaking; letterbox when the frame itself is the content." },
+      { heading: "Frame rate, bitrate and the things that do not matter",
+        body: "Keep the source frame rate rather than converting — 30 to 24 or back introduces judder for no benefit. For bitrate, anything above roughly 8 Mbps at 1080 x 1920 is invisible after the platform re-encodes it, and every platform re-encodes. H.264 in an MP4 is accepted everywhere; more modern codecs gain you nothing here because the upload is transcoded regardless." },
+    ],
+    faqs: [
+      { q: "What size is a 9:16 video?",
+        a: "1080 x 1920 pixels. That is the resolution all three major short-form platforms recommend and the one that avoids both visible softness and wasted upload." },
+      { q: "How much of a 16:9 video is lost when cropping to 9:16?",
+        a: "About 72% of the width. A 1920-pixel-wide frame becomes roughly a 608-pixel-wide column, which is then upscaled to 1080. The full height is kept. This is why where you place that column matters more than any other setting." },
+      { q: "Should I crop or add blurred bars?",
+        a: "Crop when a person is speaking and the background does not matter — it puts the subject at full size on the screen. Use blurred bars when the whole frame carries information, such as a screen recording or slides, because cropping would cut the content itself." },
+    ],
+    ctaLabel: "Convert a video to 9:16",
+  },
+
+  "/guides/islamic-lecture-clips": {
+    h1: "How to clip Islamic lectures without losing the point",
+    lede: "A lecture clip fails in ways an ordinary clip does not: a verse mis-transcribed, an answer separated from the question it answers, a ruling shown without its condition. The technique matters, and so does the care.",
+    sections: [
+      { heading: "Take the whole answer, or leave it",
+        body: "The most common fault in lecture clips is a ruling or an opinion cut away from its qualification. A speaker says something is permitted, then adds the condition — and the clip ends between the two. That is not a tight edit; it is a misrepresentation, and it is the thing people will hold against you and against the speaker. If the complete thought does not fit the length you wanted, take a different moment. There is always another moment." },
+      { heading: "Recitation needs matching, not transcribing",
+        body: "Automatic transcription hears recitation as sound and produces a phonetic approximation of it. That approximation is not the ayah, and putting it on screen as though it were is worse than showing nothing. Recited scripture should be matched against the actual text and rendered as the verse itself, with a translation line if the audience needs one — never as whatever the transcriber guessed. The same care applies to hadith and to a narrator’s name." },
+      { heading: "An English talk with Arabic in it is two languages, not one",
+        body: "Most transcription picks a single language from the opening seconds and applies it to the whole file. So an English lecture containing two minutes of Arabic comes back with that Arabic rendered as Latin nonsense — and once that has happened nothing downstream can tell it was Arabic, because it no longer is. Either transcribe with language detection that can switch mid-file, or handle the Arabic sections separately. Arabic that is not scripture is worth captioning in Arabic with an English line under it." },
+      { heading: "Say who is speaking",
+        body: "A clip travels away from wherever you posted it. Put the speaker’s name on the clip itself, and where the source is a public lecture, make it findable — the full talk, the date, the venue. This is ordinary honesty, it protects the speaker from having a two-minute excerpt attributed to them out of context, and it is the difference between a clip people share and a clip people argue about." },
+      { heading: "Have a person look at every one",
+        body: "Automation is good at finding candidate moments and bad at knowing when a moment should not be published. Anything containing scripture especially should be seen by a person on the finished frame — not on a preview, not on a transcript, but on the actual rendered clip — before it goes anywhere. In DeenClipped this is enforced rather than suggested: a clip carrying recited scripture is held for human review whatever automation is switched on." },
+    ],
+    faqs: [
+      { q: "How do I stop the Quran being mis-transcribed in my clips?",
+        a: "Do not rely on the transcript for it. Recited verses need matching against the actual text of the Quran and rendering as the verse, with a translation line where appropriate. A phonetic guess at an ayah should never appear on screen — if a match cannot be made confidently, show nothing rather than an approximation." },
+      { q: "Can I automate posting Islamic clips?",
+        a: "Partly, and with a line you should not cross. Finding candidate moments, cropping, captioning and scheduling all automate reasonably. The decision that a clip is fit to publish does not, particularly for anything containing scripture or a ruling. Keep a person on that step even when everything around it is automatic." },
+      { q: "Should I add music to a lecture clip?",
+        a: "That is your call and your audience’s. Where it is used, keep it well under the speech, and leave it off recitation entirely — a nasheed under an ayah is the sort of thing that turns a good clip into a complaint. DeenClipped mixes and ducks a nasheed by default and leaves it off its Quran template." },
+      { q: "What about clipping someone else’s lecture?",
+        a: "Ask, and where the speaker or the channel has published guidance on it, follow that. Beyond permission, credit the speaker on the clip and point at the full talk. A clip is an excerpt of someone’s work and it will be judged as though they published it themselves." },
+    ],
+    ctaLabel: "Clip a lecture free",
+  },
+
+  "/guides/caption-best-practices": {
+    h1: "Short-form caption best practices",
+    lede: "Most short-form is watched with the sound off, which makes the captions the video. These are the choices that decide whether they are read or ignored.",
+    sections: [
+      { heading: "Show a few words at a time, not a paragraph",
+        body: "Three to six words on screen at once is the range that reads at short-form pace. Much more and the eye has to scan while the video moves, which is when people stop reading and then stop watching. Much less — a single word at a time — is a style rather than a default, and it costs you the ability to see a phrase as a phrase. Break lines where the sentence breaks, not where the character count runs out." },
+      { heading: "Time to the word, not to the sentence",
+        body: "Captions that appear a beat after the words are spoken feel broken even when the viewer cannot say why. Word-level timing fixes this, and it is what makes highlight-as-spoken styles work at all. If your captions are drifting, the usual cause is that they were timed to sentence boundaries and the sentence was long." },
+      { heading: "One face, one size, high contrast",
+        body: "Pick a heavy sans-serif and keep it. Add an outline or a shadow — a caption sitting on a bright background with no separation is unreadable for exactly the frames where it matters. Do not shrink text to fit a long line; break the line instead. And check the size on an actual phone rather than in the editor, because a caption that is comfortable at 40% zoom on a laptop can be too small in the hand." },
+      { heading: "The first three seconds are the whole game",
+        body: "Whatever you do with the rest of the clip, the opening line has to make sense with no context and no sound. That usually means starting on the sentence that sets up the point rather than on the point itself, and it means never opening on a subordinate clause. If the first caption reads as the middle of something, the clip is cut a few seconds too late." },
+      { heading: "Read them before you publish",
+        body: "Automatic captions mishear names, technical terms and anything in a second language, and they do it confidently. The cost of an unread caption is a clip that says something you did not say. Read the lines on the finished frame — not in the transcript, where a mistake looks like a typo instead of like the thing a viewer will screenshot." },
+    ],
+    faqs: [
+      { q: "How many words should be on screen at once?",
+        a: "Three to six for most short-form. That is enough to read as a phrase and few enough to take in without scanning. Fewer than three can work as a deliberate style but costs you phrasing; more than six is where people stop reading." },
+      { q: "Are word-by-word captions better?",
+        a: "They are better at holding attention and worse at conveying a phrase. They suit punchy, quotable lines and suit dense explanation poorly. The bigger risk is practical: a word-by-word style redraws the whole group every frame, so if the line is too wide to fit it is cut off for the entire clip rather than momentarily." },
+      { q: "Where should captions sit on the frame?",
+        a: "In the middle third, not at the bottom. The bottom band belongs to the platform’s own interface and, increasingly, to its automatic captions. See the safe zones guide for the exact edges." },
+      { q: "Do burned-in captions hurt accessibility?",
+        a: "They are not a substitute for a caption track a screen reader can use, so where a platform accepts an upload with a separate caption file, provide one as well. On short-form platforms that do not, burned-in captions are the only thing standing between a muted viewer and nothing at all." },
+    ],
+    ctaLabel: "Caption a clip free",
+  },
+
+  // ── Free tools ─────────────────────────────────────────────────────────
+  // The interactive part is in marketing.js (markup) and
+  // src/public/tool-widgets.js (behaviour). These are the words around it.
+  "/tools/safe-zone-checker": {
+    h1: "Free safe zone checker for vertical video",
+    lede: "Drop in a frame and see exactly where TikTok, Reels and Shorts cover it with their own buttons and captions. It runs in your browser, needs no account, and nothing you add is uploaded anywhere.",
+    sections: [
+      { heading: "What it shows you",
+        body: "Each platform draws its interface over your video: a column of buttons down one side, the username and caption along the bottom, controls at the top. Anything underneath is invisible to the viewer no matter how carefully you placed it. Switch a platform on and the shaded areas are the parts it covers. Switch on \"safe on all three\" and you get the centred rectangle that clears every one of them — which is the region to keep caption text inside if you want one export to work everywhere." },
+      { heading: "Why a picture beats a number",
+        body: "You can read that TikTok covers 320 pixels at the bottom, and it still will not tell you whether YOUR caption survives, because that depends on the size you set, the line breaks you got and where the speaker’s head is. Putting a real frame under the overlay answers the actual question in about four seconds. Export one still from the clip you are working on and look." },
+      { heading: "Nothing leaves your browser",
+        body: "The image is read with the browser’s own file reader and drawn straight to a canvas. There is no upload, no request to a server, and no copy kept — closing the tab is the whole cleanup. That is not a privacy promise so much as a description of how the page is built, and you can confirm it in your browser’s network panel." },
+      { heading: "The numbers behind the overlay",
+        body: "Zone sizes are as of August 2026 and drawn against a 1080 x 1920 frame: TikTok roughly 100 top, 140 right, 320 bottom; Instagram Reels roughly 220 top, 130 right, 430 bottom; YouTube Shorts roughly 90 top, 60 right, 250 bottom. Platforms move these without announcing it — TikTok added a button at the bottom-right in January 2026 — so treat them as good working rules and check a real frame when a caption matters." },
+    ],
+    faqs: [
+      { q: "What is the safe zone for TikTok, Reels and Shorts?",
+        a: "A centred rectangle of about 900 x 1400 pixels inside a 1080 x 1920 frame clears all three. Individually, TikTok is tightest on the right edge and the bottom, Instagram Reels takes the most vertical space, and YouTube Shorts covers the least of the three." },
+      { q: "Does this upload my video?",
+        a: "No. It takes a still image, reads it in your browser and draws it on a canvas. Nothing is sent anywhere and nothing is stored. You can watch the network panel while you use it." },
+      { q: "Can I check a whole video?",
+        a: "Not here — this works on a single frame, which is enough for placement because captions sit in the same region throughout. Export a still from a moment where a caption is on screen and use that." },
+    ],
+    ctaLabel: "Let DeenClipped place them for you",
+  },
+
+  "/tools/clip-calculator": {
+    h1: "How many clips can you get from one video?",
+    lede: "Set the length of your recording, roughly how much of it is worth using, and how long your clips tend to run. It works out the minutes you would process, what that costs in tokens, and how many finished clips to expect.",
+    sections: [
+      { heading: "The arithmetic, shown rather than hidden",
+        body: "Minutes processed is simply your recording length times the share you select. Tokens are one per source minute, rounded up. Clip count assumes about two thirds of the selected time becomes finished clips — the remaining third is the run-up into a moment and the tail after it, which you cut away. That is a ceiling rather than a forecast: it assumes almost everything you selected is usable, and in practice you will reject some of what comes back. The assumption is stated here rather than buried so you can adjust it in your head." },
+      { heading: "The share worth clipping is the number that matters",
+        body: "Most people set it far too high the first time. A ninety-minute lecture with a Q&A, an introduction and some repetition might hold eight to twelve genuinely strong minutes. A tight thirty-minute talk might hold ten. Being honest about this is what makes the difference between processing everything and paying for it, and processing the part you would actually publish." },
+      { heading: "Why you should not process the whole file",
+        body: "Selecting a range is not only about cost — it is about review time. Every extra minute processed produces candidates you then have to watch and reject. In DeenClipped you set a start and end before the job runs, only that stretch is downloaded and processed, and only those minutes are charged. Cutting more clips from the same processed stretch later costs nothing further." },
+    ],
+    faqs: [
+      { q: "How many clips can I get from a one-hour video?",
+        a: "It depends almost entirely on how much of the hour is worth using. At a realistic 20% and forty-second clips, an hour works out at roughly a dozen before you reject any. Expect to publish fewer — the calculator gives you the ceiling, and the review queue is where the number comes down." },
+      { q: "What is a token?",
+        a: "One token is one minute of source video processed. You are charged for the minutes you select, not the length of the file, so choosing three minutes from a ninety-minute lecture costs three. The free plan includes 40 tokens." },
+      { q: "Does making more clips from the same video cost more?",
+        a: "No. The charge is for processing the source minutes. Once a stretch has been processed you can cut more clips from it, re-render them or change their template without spending tokens again." },
+    ],
+    ctaLabel: "Start with 40 free tokens",
+  },
+
 };

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import * as billing from './billing.js';
 
-import { SEO_PAGES, KIND, indexablePages, pageFor, breadcrumbFor } from './seo-pages.js';
+import { SEO_PAGES, KIND, indexablePages, pageFor, breadcrumbFor, alternatesFor, langOf, isRtl } from './seo-pages.js';
 import { SEO_COPY } from './seo-copy.js';
 
 /**
@@ -159,14 +159,35 @@ function stampImages(html) {
 }
 
 function layout({ base, currentUser, title, description, canonicalPath = '/', body, jsonLd = [] }) {
-  const canonical = `${String(base || 'https://deenclipped.online').replace(/\/+$/, '')}${canonicalPath === '/' ? '' : canonicalPath}`;
+  const root = String(base || 'https://deenclipped.online').replace(/\/+$/, '');
+  const canonical = `${root}${canonicalPath === '/' ? '' : canonicalPath}`;
+
+  // hreflang, emitted only when there is genuinely more than one language
+  // version of this page. A one-entry set describes a cluster of one, and a
+  // set pointing at a page that does not exist makes Google drop the cluster
+  // entirely -- so nothing is emitted today, which is the correct answer while
+  // every page is English. x-default names the English page, since that is
+  // what a reader with no matching language should land on.
+  const here = pageFor(canonicalPath);
+  const alternates = alternatesFor(here);
+  const pageLang = langOf(here);
+  // Only the two free-tool pages pull the widget script; every other page
+  // would be fetching a bundle for a control it does not have.
+  const toolScript = /^\/tools\/(safe-zone-checker|clip-calculator)$/.test(canonicalPath)
+    ? '\n  <script src="/tool-widgets.js" defer></script>' : '';
+
+  const hreflang = alternates.length ? '\n  ' + [
+    ...alternates.map(alt =>
+      `<link rel="alternate" hreflang="${alt.lang}" href="${root}${alt.path === '/' ? '' : alt.path}">`),
+    `<link rel="alternate" hreflang="x-default" href="${root}${(alternates.find(a => a.lang === 'en') || alternates[0]).path.replace(/^\/$/, '')}">`,
+  ].join('\n  ') : '';
   const safeTitle = escapeHtml(title);
   const safeDescription = escapeHtml(description);
   // "</script>" inside a JSON string would end the block early; \u003c cannot.
   const schemaBlocks = jsonLd.map(schema =>
     `<script type="application/ld+json">${JSON.stringify(schema).replace(/</g, '\\u003c')}</script>`).join('\n  ');
   return stampImages(`<!doctype html>
-<html lang="en">
+<html lang="${pageLang}"${isRtl(pageLang) ? ' dir="rtl"' : ''}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -186,7 +207,7 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <link rel="canonical" href="${canonical}">${config.googleSiteVerification ? `
+  <link rel="canonical" href="${canonical}">${hreflang}${config.googleSiteVerification ? `
   <meta name="google-site-verification" content="${escapeHtml(config.googleSiteVerification)}">` : ''}${config.bingSiteVerification ? `
   <meta name="msvalidate.01" content="${escapeHtml(config.bingSiteVerification)}">` : ''}
   ${schemaBlocks}
@@ -201,6 +222,7 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
         <a href="/how-it-works">How it works</a>
         <a href="/features">Features</a>
         <a href="/tools/ai-video-clipper">Tools</a>
+        <a href="/guides">Guides</a>
         <a href="/islamic-video-clipper">For Islamic creators</a>
         <a href="/pricing">Pricing</a>
         <a href="/review-safety">Review & safety</a>
@@ -217,13 +239,14 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
         <div class="footer-col"><h4>Clip long video</h4><a href="/tools/ai-video-clipper">AI video clipper</a><a href="/tools/long-video-to-shorts">Long video to Shorts</a><a href="/tools/podcast-clip-generator">Podcast clip generator</a><a href="/tools/lecture-clip-generator">Lecture clip generator</a><a href="/tools/ai-caption-generator">AI caption generator</a></div>
         <div class="footer-col"><h4>Publish to</h4><a href="/tools/youtube-to-shorts">YouTube to Shorts</a><a href="/tools/youtube-to-tiktok">YouTube to TikTok</a><a href="/tools/youtube-to-reels">YouTube to Reels</a></div>
         <div class="footer-col"><h4>Islamic creators</h4><a href="/islamic-video-clipper">Islamic video clipper</a><a href="/islamic-lecture-clipper">Islamic lecture clipper</a><a href="/tools/arabic-english-captions">Arabic &amp; English captions</a><a href="/for/islamic-creators">Built for dawah content</a></div>
+        <div class="footer-col"><h4>Guides &amp; tools</h4><a href="/guides">All guides</a><a href="/guides/long-video-to-shorts">Long video to Shorts</a><a href="/guides/caption-safe-zones">Caption safe zones</a><a href="/tools/safe-zone-checker">Safe zone checker</a><a href="/tools/clip-calculator">Clip calculator</a></div>
         <div class="footer-col"><h4>Company</h4><a href="/about">About</a><a href="/contact">Contact</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a></div>
         <div class="footer-col"><h4>Start</h4><a href="/login?returnTo=/app">Start free</a><a href="/login?returnTo=/app">Sign in</a><a href="/pricing#token-shop">Token shop</a><a href="mailto:support@deenclipped.online">Support</a></div>
       </div>
       <div class="footer-bottom"><span>© ${new Date().getFullYear()} DeenClipped</span><span>Import · Review · Edit · Publish</span></div>
     </div>
   </footer>
-  <script src="/marketing.js" defer></script>
+  <script src="/marketing.js" defer></script>${toolScript}
 </body>
 </html>`);
 }
@@ -732,6 +755,93 @@ function relatedLinks(page) {
 }
 
 /**
+ * The interactive part of a free-tool page.
+ *
+ * Kept beside the renderer rather than in the copy module because it is
+ * markup, not words. The behaviour lives in /tool-widgets.js: the CSP hashes
+ * inline scripts from index.html only, so a marketing page cannot carry one.
+ */
+function toolWidget(path) {
+  if (path === '/tools/safe-zone-checker') {
+    const zones = [
+      ['universal', 'Safe on all three', true],
+      ['tiktok', 'TikTok', true],
+      ['reels', 'Instagram Reels', false],
+      ['shorts', 'YouTube Shorts', false],
+    ].map(([key, label, on]) =>
+      `<label class="sz-toggle"><input type="checkbox" data-sz-zone="${key}"${on ? ' checked' : ''}> ${escapeHtml(label)}</label>`
+    ).join('');
+    return `<section class="tool-widget" data-tool="safe-zones">
+      <div class="tool-widget-body">
+        <div class="sz-stage">
+          <canvas data-sz-canvas width="270" height="480" aria-label="Vertical frame with platform safe zones drawn over it"></canvas>
+        </div>
+        <div class="tool-controls">
+          <label class="sz-drop" data-sz-drop>
+            <input type="file" accept="image/*" data-sz-file hidden>
+            <strong>Add a frame</strong>
+            <span>Drop an image here, or choose one. It is read in your browser and never uploaded.</span>
+          </label>
+          <div class="sz-toggles">${zones}</div>
+          <p class="tool-status" data-sz-status role="status"></p>
+          <table class="sz-legend">
+            <tr><th>Covered area</th><th>Top</th><th>Right</th><th>Bottom</th></tr>
+            <tr><td>TikTok</td><td>100</td><td>140</td><td>320</td></tr>
+            <tr><td>Instagram Reels</td><td>220</td><td>130</td><td>430</td></tr>
+            <tr><td>YouTube Shorts</td><td>90</td><td>60</td><td>250</td></tr>
+            <tr class="sz-legend-safe"><td>Safe on all three</td><td colspan="3">900 &times; 1400, centred</td></tr>
+          </table>
+          <p class="tool-foot">Pixels inside a 1080 &times; 1920 frame, checked August 2026. Platforms move their interface without announcing it, which is why looking at a real frame beats trusting a number.</p>
+        </div>
+      </div>
+    </section>`;
+  }
+
+  if (path === '/tools/clip-calculator') {
+    // The two figures come from config, so the calculator cannot drift away
+    // from what billing actually charges.
+    return `<section class="tool-widget" data-tool="clip-calculator"
+        data-tokens-per-minute="${escapeHtml(String(config.tokensPerMinute))}"
+        data-free-tokens="${escapeHtml(String(config.tokensFree))}">
+      <div class="tool-widget-body">
+        <div class="tool-controls cc-inputs">
+          <label class="cc-field"><span>How long is the recording?</span>
+            <input type="number" data-cc="length" value="60" min="1" max="600" step="1"> <em>minutes</em></label>
+          <label class="cc-field"><span>How much of it is worth clipping? <b data-cc-echo="useful">20%</b></span>
+            <input type="range" data-cc="useful" value="20" min="1" max="100" step="1"></label>
+          <label class="cc-field"><span>Typical clip length <b data-cc-echo="cliplen">40s</b></span>
+            <input type="range" data-cc="cliplen" value="40" min="10" max="120" step="5"></label>
+        </div>
+        <div class="cc-output" data-cc-out aria-live="polite"></div>
+      </div>
+      <p class="tool-foot">One token is one source minute. Clip count assumes about two thirds of the selected time becomes finished clips — the rest is the run-up to a moment and the tail after it. Treat it as the ceiling: you will reject some of what comes back.</p>
+    </section>`;
+  }
+  return '';
+}
+
+/**
+ * A hub page lists everything in its cluster, computed rather than typed.
+ *
+ * The first version listed three guides by hand in the registry's `links`, and
+ * the two it did not list were reachable from nowhere -- the crawl test caught
+ * it, which is exactly why that test walks links instead of trusting the
+ * sitemap. Derived from the cluster, a guide added tomorrow appears here on
+ * its own and cannot be orphaned.
+ */
+function clusterIndex(page) {
+  if (!page || page.kind !== KIND.GUIDE || page.path !== '/guides') return '';
+  const rows = SEO_PAGES
+    .filter(item => item.cluster === page.cluster && item.path !== page.path)
+    .map(item => `<a class="guide-row" href="${escapeHtml(item.path)}">
+        <strong>${escapeHtml(item.breadcrumb || item.intent)}</strong>
+        <span>${escapeHtml(item.description)}</span>
+        <em>${item.kind === KIND.FREE_TOOL ? 'Free tool' : 'Guide'}</em>
+      </a>`).join('');
+  return rows ? `<section class="guide-index">${rows}</section>` : '';
+}
+
+/**
  * Render one registry page from drafted copy.
  * `copy` is {h1, lede, sections[], faqs[], ctaLabel}.
  */
@@ -759,6 +869,8 @@ export function seoPage({ base, currentUser, page, copy }) {
         <a class="button secondary" href="/pricing">See plans and tokens</a>
       </div>
     </section>
+    ${toolWidget(page.path)}
+    ${clusterIndex(page)}
     <section class="page-content"><div class="wrap">
       <div class="seo-body">${sections}</div>
       ${faqs ? `<section class="faq-section"><h2>Questions</h2><div class="faq-list">${faqs}</div></section>` : ''}
@@ -794,6 +906,57 @@ export function seoPage({ base, currentUser, page, copy }) {
   });
 }
 
+/**
+ * /llms.txt — a plain-text map of the public site for AI assistants.
+ *
+ * Stated honestly, because the brief asked for that and because it is true:
+ * **this is not a Google ranking factor and no search engine reads it.** It is
+ * a convention some AI tools follow to find a site's own description of itself
+ * rather than inferring one from marketing copy. It costs one route and it
+ * says exactly what the pages say -- no claim here that a human visitor is not
+ * also shown, which is the line between a summary and cloaking.
+ *
+ * Built from the page registry, so it cannot describe a page that does not
+ * exist or miss one that does.
+ */
+export function llmsTxt({ base }) {
+  const root = String(base || '').replace(/\/+$/, '');
+  const group = (label, kinds) => {
+    const rows = indexablePages()
+      .filter(page => kinds.includes(page.kind))
+      .map(page => `- [${page.breadcrumb || page.intent}](${root}${page.path}): ${page.description}`);
+    return rows.length ? [`## ${label}`, '', ...rows, ''] : [];
+  };
+  return [
+    '# DeenClipped',
+    '',
+    '> AI video clipper that turns long videos and Islamic lectures into',
+    '> review-ready short-form clips with multilingual captions, Quran-aware',
+    '> rendering and publishing to the creator\'s own channels.',
+    '',
+    'Every clip waits in a review queue for a person to approve or reject.',
+    'Nothing publishes on its own. Clips containing recited scripture are',
+    'forced through human review whatever automation is switched on.',
+    '',
+    'What DeenClipped does NOT do, so it is not inferred from the marketing:',
+    'the full clip editor is behind a "coming soon" gate and is not available;',
+    'there is no mobile app; and no connected platform sends audience data',
+    'back, so there are no view counts or watch-time figures anywhere in the',
+    'product.',
+    '',
+    ...group('Tools', [KIND.TOOL]),
+    ...group('For Islamic creators', [KIND.AUDIENCE, KIND.USE_CASE]),
+    ...group('About the product', [KIND.HOME, KIND.TRUST, KIND.COMMERCE]),
+    '## Notes',
+    '',
+    `- Full page list: ${root}/sitemap.xml`,
+    `- Crawling rules: ${root}/robots.txt`,
+    '- This file is a convention for AI assistants. It is not read by search',
+    '  engines and is not a ranking signal.',
+    '',
+  ].join('\n');
+}
+
 export function robots({ base }) {
   return [
     'User-agent: *',
@@ -811,6 +974,27 @@ export function robots({ base }) {
     'Disallow: /reset',
     // The signed-in billing screen, which 302s to login for everyone else.
     // The PUBLIC pricing page is /pricing and is deliberately crawlable.
+    'Disallow: /plans',
+    '',
+    // The AI-search crawlers are named rather than left to the wildcard, and
+    // they are given the SAME rules as everyone else. That is deliberate: this
+    // site shows a crawler exactly what it shows a person, and naming them
+    // makes that a stated position rather than an accident of `*`. Serving
+    // bots different claims than humans is cloaking, and it is the one thing
+    // that would put the whole domain at risk.
+    'User-agent: OAI-SearchBot',
+    'User-agent: ChatGPT-User',
+    'User-agent: PerplexityBot',
+    'User-agent: Google-Extended',
+    'User-agent: Applebot-Extended',
+    'Disallow: /app$',
+    'Disallow: /app/',
+    'Disallow: /app?',
+    'Disallow: /owner',
+    'Disallow: /api/',
+    'Disallow: /auth/',
+    'Disallow: /login',
+    'Disallow: /reset',
     'Disallow: /plans',
     '',
     `Sitemap: ${String(base || '').replace(/\/+$/, '')}/sitemap.xml`,

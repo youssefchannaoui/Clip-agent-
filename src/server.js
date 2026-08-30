@@ -875,6 +875,12 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/marketing.css') {
     return streamFile(req, res, marketingCssPage, { contentType: 'text/css; charset=utf-8', cacheControl: 'public, max-age=3600' });
   }
+  if (method === 'GET' && pathname === '/tool-widgets.js') {
+    // The free tools' behaviour. A file, not an inline block: the CSP hashes
+    // inline scripts from index.html only.
+    return streamFile(req, res, path.join(config.root, 'src', 'public', 'tool-widgets.js'),
+      { contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=3600' });
+  }
   if (method === 'GET' && pathname === '/marketing.js') {
     return streamFile(req, res, marketingJsPage, { contentType: 'text/javascript; charset=utf-8', cacheControl: 'public, max-age=3600' });
   }
@@ -1054,6 +1060,11 @@ async function route(req, res, url) {
 
   if (method === 'GET' && pathname === '/robots.txt') {
     const body = Buffer.from(marketing.robots({ base: publicBase(req) }));
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'public, max-age=86400' });
+    return res.end(body);
+  }
+  if (method === 'GET' && pathname === '/llms.txt') {
+    const body = Buffer.from(marketing.llmsTxt({ base: publicBase(req) }));
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'public, max-age=86400' });
     return res.end(body);
   }

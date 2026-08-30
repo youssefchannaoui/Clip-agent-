@@ -344,3 +344,104 @@ svg{width:1em;height:1em;display:block;stroke:currentColor;stroke-width:1.8;stro
      typographic device into a row of shouting. They carry two or three words,
      never a sentence. */
 }
+
+/* ── Free tools ─────────────────────────────────────────────────────────────
+   Both widgets do their work in the browser. Styled to sit with the rest of
+   the site rather than looking like a utility bolted onto a marketing page —
+   a free tool that looks cheap makes the product look cheap. */
+.tool-widget {
+  max-width: var(--wrap, 1120px);
+  margin: 8px auto 0;
+  padding: 24px;
+  border: 1px solid var(--line, rgba(255,255,255,.09));
+  border-radius: 22px;
+  background: rgba(255,255,255,.018);
+}
+.tool-widget-body { display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: start; }
+.sz-stage { display: flex; justify-content: center; }
+.sz-stage canvas {
+  border-radius: 14px;
+  border: 1px solid var(--line, rgba(255,255,255,.09));
+  background: #141416;
+  max-width: 100%;
+  height: auto;
+}
+.tool-controls { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.sz-drop {
+  display: block; padding: 18px; border-radius: 14px; cursor: pointer;
+  border: 1px dashed rgba(217,180,120,.4); background: rgba(217,180,120,.04);
+  transition: border-color .16s ease, background .16s ease;
+}
+.sz-drop.is-over, .sz-drop:hover { border-color: rgba(217,180,120,.8); background: rgba(217,180,120,.08); }
+.sz-drop strong { display: block; color: var(--text, #f2f2f4); font-size: 14px; margin-bottom: 4px; }
+.sz-drop span { color: var(--muted, #8b8b93); font-size: 12.5px; line-height: 1.55; }
+.sz-toggles { display: flex; flex-wrap: wrap; gap: 8px; }
+.sz-toggle {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  padding: 8px 12px; min-height: 34px; border-radius: 999px;
+  border: 1px solid var(--line, rgba(255,255,255,.09));
+  color: #c9c4bd; font-size: 12.5px;
+}
+.sz-toggle:hover { border-color: rgba(217,180,120,.45); }
+.tool-status { margin: 0; color: var(--muted, #8b8b93); font-size: 12.5px; min-height: 1.2em; }
+.tool-foot { margin: 4px 0 0; color: #6f6b65; font-size: 12px; line-height: 1.6; }
+.cc-inputs { gap: 18px; }
+.cc-field { display: block; }
+.cc-field > span { display: block; color: #c9c4bd; font-size: 13px; margin-bottom: 8px; }
+.cc-field b { color: var(--gold, #d9b478); font-weight: 700; }
+.cc-field em { color: var(--muted, #8b8b93); font-size: 12.5px; font-style: normal; margin-left: 6px; }
+.cc-field input[type="number"] {
+  width: 110px; padding: 9px 11px; border-radius: 10px; font: inherit; font-size: 14px;
+  border: 1px solid var(--line, rgba(255,255,255,.09));
+  background: rgba(255,255,255,.03); color: var(--text, #f2f2f4);
+}
+.cc-field input[type="range"] { width: 100%; accent-color: var(--gold, #d9b478); min-height: 24px; }
+.cc-output {
+  align-self: stretch; padding: 20px; border-radius: 16px;
+  border: 1px solid var(--line, rgba(255,255,255,.09)); background: rgba(255,255,255,.02);
+}
+.cc-row {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 14px;
+  padding: 11px 0; border-top: 1px solid var(--line, rgba(255,255,255,.09));
+}
+.cc-row:first-child { border-top: 0; padding-top: 0; }
+.cc-row span { color: var(--muted, #8b8b93); font-size: 13px; }
+.cc-row strong { color: var(--gold, #d9b478); font-size: 25px; font-variant-numeric: tabular-nums; letter-spacing: -.03em; }
+.cc-note { margin: 14px 0 0; padding-top: 13px; border-top: 1px solid var(--line, rgba(255,255,255,.09)); color: #c9c4bd; font-size: 12.5px; line-height: 1.6; }
+@media (max-width: 860px) {
+  .tool-widget { padding: 18px; border-radius: 18px; }
+  .tool-widget-body { grid-template-columns: 1fr; gap: 20px; }
+  .sz-stage canvas { width: 100%; max-width: 300px; }
+}
+@media (prefers-reduced-motion: reduce) { .sz-drop { transition: none; } }
+.sz-legend { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.sz-legend th, .sz-legend td { padding: 8px 6px; text-align: right; border-top: 1px solid var(--line, rgba(255,255,255,.09)); }
+.sz-legend th:first-child, .sz-legend td:first-child { text-align: left; color: #c9c4bd; }
+.sz-legend th { color: var(--muted, #8b8b93); font-weight: 600; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; border-top: 0; }
+.sz-legend td { color: var(--muted, #8b8b93); }
+.sz-legend-safe td { color: var(--gold, #d9b478); }
+.sz-legend-safe td:first-child { color: var(--gold, #d9b478); }
+
+/* The guides hub index. One row per page in the cluster, derived rather than
+   typed, so a new guide appears here without anyone remembering. */
+.guide-index { max-width: var(--wrap, 1120px); margin: 10px auto 0; display: grid; gap: 0; }
+.guide-row {
+  display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr) auto;
+  gap: 12px 28px; align-items: baseline; padding: 22px 4px; text-decoration: none;
+  border-top: 1px solid var(--line, rgba(255,255,255,.09));
+  transition: background .16s ease, padding-left .16s ease;
+}
+.guide-row:first-child { border-top: 0; }
+.guide-row:hover { background: rgba(255,255,255,.02); padding-left: 12px; }
+.guide-row strong { color: var(--text, #f2f2f4); font-size: 17px; letter-spacing: -.02em; }
+.guide-row span { color: var(--muted, #8b8b93); font-size: 13.5px; line-height: 1.6; }
+.guide-row em {
+  font-style: normal; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--gold, #d9b478); white-space: nowrap;
+}
+@media (max-width: 860px) {
+  .guide-row { grid-template-columns: 1fr; gap: 7px; padding: 18px 4px; }
+  .guide-row:hover { padding-left: 4px; }
+  .guide-row em { order: -1; }
+}
+@media (prefers-reduced-motion: reduce) { .guide-row { transition: none; } }
