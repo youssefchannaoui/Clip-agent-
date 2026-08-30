@@ -79,7 +79,7 @@ svg{width:1em;height:1em;display:block;stroke:currentColor;stroke-width:1.8;stro
 .hero-main{width:100%;transform:perspective(1800px) rotateX(1deg);transform-origin:center bottom}
 
 .reel-card{position:relative;margin:0;padding:6px;border-radius:25px;background:#111114;border:1px solid rgba(255,255,255,.16);box-shadow:0 28px 70px rgba(0,0,0,.62);overflow:hidden;will-change:transform}
-.reel-card img{display:block;width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:19px;background:#000}
+.reel-card img{display:block;width:100%;height:auto;aspect-ratio:9/16;object-fit:cover;border-radius:19px;background:#000}
 .reel-badge{position:absolute;left:13px;bottom:13px;padding:4px 7px;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(7,7,8,.76);backdrop-filter:blur(8px);color:#ddd7ce;font-size:8px;font-weight:800;letter-spacing:.04em}
 .hero-reel{position:absolute;width:146px;z-index:4}
 .hero-reel-a{left:-5px;top:7%;transform:rotate(-7deg)}

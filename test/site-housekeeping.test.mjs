@@ -193,9 +193,10 @@ test('the public feature catalogue covers every shipped clip template', async ()
 });
 
 test('public imagery stays on the established realistic asset library', async () => {
-  const [home, features] = await Promise.all([
+  const [home, features, css] = await Promise.all([
     fetch(`${base}/`, { headers: { accept: 'text/html' } }).then(r => r.text()),
     fetch(`${base}/features`, { headers: { accept: 'text/html' } }).then(r => r.text()),
+    fetch(`${base}/marketing.css`).then(r => r.text()),
   ]);
   for (const draft of ['review-first-v2.png', 'deenai-private-v2.png']) {
     assert.ok(!home.includes(draft), `${draft} was a rejected draft and must not ship`);
@@ -204,6 +205,8 @@ test('public imagery stays on the established realistic asset library', async ()
   for (const asset of ['reel-halal.webp', 'reel-dua.webp', 'reel-dunya.webp', 'reel-beneficial.webp', 'reel-quran.webp']) {
     assert.ok(home.includes(asset), `${asset} should represent a real template example`);
   }
+  assert.match(css, /\.reel-card img\{[^}]*width:100%;height:auto;aspect-ratio:9\/16;/,
+    'floating reel images must size their height from the card width instead of their intrinsic pixel height');
 });
 
 test('the homepage keeps a labelled source-video entry point', async () => {
