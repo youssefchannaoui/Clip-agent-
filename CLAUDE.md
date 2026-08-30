@@ -1272,12 +1272,47 @@ the English translation beneath it perfectly fine.
 7. **A stranger test** — someone who has never seen the product signs up and
    uses it. Claude cannot create an account, so this one needs a real person.
 
+### Agreed for Studio, not yet built (30 Aug 2026, Youssef)
+
+Two features, both Studio-only, in the order he asked for them.
+
+1. **Up to 3 accounts per platform.** Free and Pro keep one; Studio gets three.
+   `publishingSettings[provider].accountId` is a single id today, so this is a
+   shape change: the field becomes a list, `enabledTargetsForClip` fans out
+   over it, and the cap is enforced by TIER rather than by the UI, or a
+   downgrade silently keeps posting to three. A clip going to three channels
+   is three targets, so the schedule row (which already lists every
+   destination with its own state) needs no change -- but the publish retry,
+   the "posted anywhere counts as posted" rule and the token cost per clip all
+   have to be checked against a fan-out they have never seen.
+
+2. **Fetch-and-approve, a BETA feature.** The worker finds YouTube videos on
+   its own; a Studio customer reviews what it found and approves the ones
+   worth clipping, or turns on auto-approve and the whole pipeline runs
+   unattended.
+
+   Design questions that must be answered before this is built, because each
+   changes the shape:
+   - **Where do candidate videos come from?** A channel the customer names,
+     their own channel, a playlist, or a search. Unresolved -- ask before
+     building.
+   - **Auto-approve spends tokens with nobody watching.** A 90-minute lecture
+     is 90 tokens; a channel posting daily would drain a Studio month in under
+     a fortnight. It needs a per-period ceiling the customer sets, and the
+     existing `assertCanSpend` refusal has to read as "your automation paused"
+     rather than as a failure.
+   - **Every fetched video is a THIRD PARTY's content.** The existing import
+     path is a customer pasting their own link. Fetching on their behalf makes
+     the product the one choosing, which is a different posture for both the
+     YouTube compliance review and the scripture review gate (invariant 1).
+     `QUOTE_RISK` must still force human review even under auto-approve.
+
 ### Known gaps in the product
 
 - **One account per platform.** `publishingSettings[provider].accountId` is a
   single id, so a clip cannot go to two YouTube channels. Posting to several
   accounts needs the settings shape to become a list and the target builder to
-  fan out over it.
+  fan out over it. Superseded by item 1 above once that ships.
 
 - **YouTube API compliance review** (project 881648803263) is at its last open
   question, drafted in Gmail and unsent; deadline ~8 Sept 2026 (7 business days
