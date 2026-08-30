@@ -1286,26 +1286,35 @@ Two features, both Studio-only, in the order he asked for them.
    the "posted anywhere counts as posted" rule and the token cost per clip all
    have to be checked against a fan-out they have never seen.
 
-2. **Fetch-and-approve, a BETA feature.** The worker finds YouTube videos on
-   its own; a Studio customer reviews what it found and approves the ones
-   worth clipping, or turns on auto-approve and the whole pipeline runs
-   unattended.
+2. **DeenAI finds the lectures itself. A BETA feature.** Not a channel to
+   watch -- Youssef, 30 Aug: "it will learn how to go onto YouTube itself and
+   find its own videos", and the feature sits around DeenAI. A Studio customer
+   reviews what it found and approves what is worth clipping, or turns on
+   auto-approve and the pipeline runs unattended.
 
-   Design questions that must be answered before this is built, because each
-   changes the shape:
-   - **Where do candidate videos come from?** A channel the customer names,
-     their own channel, a playlist, or a search. Unresolved -- ask before
-     building.
+   **The name stays DeenAI** (his call, 30 Aug, over Rawi / Muntaqa / Daleel):
+   it already ships, is documented throughout this file and carries a STUDIO
+   tag in the rail, and renaming would touch the tab, the header pill, the
+   footer marker, the routes and several tests for a cosmetic gain.
+
+   Four things settled or flagged before anyone builds it:
+   - **Search through yt-dlp, NOT the YouTube API.** `search.list` costs 100
+     units against a 10,000/day budget -- 100 searches a day -- and adding it
+     reopens the exact quota conversation the compliance review is trying to
+     close. The box already runs yt-dlp behind the proxy pool and can search
+     without touching Google's API at all. Ollama then ranks the candidates,
+     which is work the box already does for scoring.
+   - **Close the compliance review FIRST.** Today a customer pastes their own
+     link, so the choice is theirs. Searching on their behalf makes the
+     PRODUCT the one choosing third-party content, which is a different use
+     than the open submission describes. Changing the shape of the API usage
+     mid-review is how a review that is nearly closed reopens.
    - **Auto-approve spends tokens with nobody watching.** A 90-minute lecture
-     is 90 tokens; a channel posting daily would drain a Studio month in under
-     a fortnight. It needs a per-period ceiling the customer sets, and the
-     existing `assertCanSpend` refusal has to read as "your automation paused"
-     rather than as a failure.
-   - **Every fetched video is a THIRD PARTY's content.** The existing import
-     path is a customer pasting their own link. Fetching on their behalf makes
-     the product the one choosing, which is a different posture for both the
-     YouTube compliance review and the scripture review gate (invariant 1).
-     `QUOTE_RISK` must still force human review even under auto-approve.
+     is 90 tokens; a daily channel drains a Studio month in under a fortnight.
+     It needs a per-period ceiling the customer sets, and `assertCanSpend`'s
+     refusal has to read as "your automation paused" rather than as a failure.
+   - **`QUOTE_RISK` does not bend for automation** (invariant 1). A clip
+     containing scripture still forces human review, auto-approve or not.
 
 ### Known gaps in the product
 
