@@ -360,3 +360,132 @@ test('suspicious pairs are flagged for a person, never auto-blocked', () => {
   assert.ok(invited.referredBy, 'the link still stands; a human decides');
   for (const flag of flags) assert.ok(flag.detail);
 });
+
+// ── the invite discount ─────────────────────────────────────────────────────
+//
+// Youssef, 31 Aug 2026: "attach 30% off for this invite link max 3 people and
+// also it doesnt overlap other codes". Three rules, each with a way it leaks.
+
+test('only an invited account gets the discount', async () => {
+  const { config } = await import('../src/config.js');
+  reset();
+  const stranger = user('stranger');
+  store.state.authUsers = [stranger];
+  assert.equal(referrals.discountEligible(store.state, stranger, 3).eligible, false,
+    'a discount for someone nobody referred is just a lower price');
+});
+
+test('the discount is spent once, not on every renewal', () => {
+  reset();
+  const referrer = user('ref');
+  const invited = user('new');
+  store.state.authUsers = [referrer, invited];
+  referrals.attachReferral(store.state, invited, referrals.codeFor(store.state, referrer));
+
+  assert.equal(referrals.discountEligible(store.state, invited, 3).eligible, true);
+  assert.equal(referrals.markDiscountUsed(invited), true);
+  // Second call is the renewal, or a replayed webhook.
+  assert.equal(referrals.markDiscountUsed(invited), false);
+  assert.equal(referrals.discountEligible(store.state, invited, 3).eligible, false,
+    'the discount is for a first subscription, not for every future one');
+});
+
+test('a referrer can discount three people and no more', () => {
+  reset();
+  const referrer = user('ref');
+  store.state.authUsers = [referrer];
+  const code = referrals.codeFor(store.state, referrer);
+
+  // Three invited accounts subscribe.
+  for (let i = 0; i < 3; i += 1) {
+    const invited = user(`invited${i}`);
+    store.state.authUsers.push(invited);
+    referrals.attachReferral(store.state, invited, code);
+    assert.equal(referrals.discountEligible(store.state, invited, 3).eligible, true, `invite ${i + 1} should qualify`);
+    referrals.markDiscountUsed(invited);
+  }
+
+  const fourth = user('invited3');
+  store.state.authUsers.push(fourth);
+  referrals.attachReferral(store.state, fourth, code);
+  const verdict = referrals.discountEligible(store.state, fourth, 3);
+  assert.equal(verdict.eligible, false, 'the fourth invite must not be discounted');
+  assert.equal(verdict.reason, 'referrer-cap-reached');
+  // The link still WORKS — it just stops carrying the discount.
+  assert.ok(fourth.referredBy, 'the referral itself still counts');
+});
+
+test('the cap counts payments, not opened checkouts', () => {
+  // Counting at checkout would let anyone burn a referrer's three by opening
+  // three checkout pages and closing them.
+  reset();
+  const referrer = user('ref');
+  store.state.authUsers = [referrer];
+  const code = referrals.codeFor(store.state, referrer);
+  for (let i = 0; i < 5; i += 1) {
+    const invited = user(`browsing${i}`);
+    store.state.authUsers.push(invited);
+    referrals.attachReferral(store.state, invited, code);
+    // They look at checkout and leave: no markDiscountUsed.
+  }
+  const real = user('real');
+  store.state.authUsers.push(real);
+  referrals.attachReferral(store.state, real, code);
+  assert.equal(referrals.discountEligible(store.state, real, 3).eligible, true,
+    'five abandoned checkouts must not exhaust the allowance');
+});
+
+test('a cap of zero switches the discount off entirely', () => {
+  reset();
+  const referrer = user('ref');
+  const invited = user('new');
+  store.state.authUsers = [referrer, invited];
+  referrals.attachReferral(store.state, invited, referrals.codeFor(store.state, referrer));
+  assert.equal(referrals.discountEligible(store.state, invited, 0).eligible, false);
+});
+
+test('the referrer can see how many discounts they have left', () => {
+  reset();
+  const referrer = user('ref');
+  store.state.authUsers = [referrer];
+  const code = referrals.codeFor(store.state, referrer);
+  const invited = user('a');
+  store.state.authUsers.push(invited);
+  referrals.attachReferral(store.state, invited, code);
+  referrals.markDiscountUsed(invited);
+  assert.deepEqual(referrals.discountsLeft(store.state, referrer, 3), { used: 1, cap: 3, remaining: 2 });
+});
+
+test('the discount and a typed promo code can never both apply', () => {
+  // Stripe rejects a session carrying both `discounts` and
+  // `allow_promotion_codes`, so the no-stacking rule is enforced by Stripe
+  // rather than by anyone remembering. This checks the code makes the CHOICE.
+  //
+  // Tested by CALLING it. The first version of this test read billing.js and
+  // matched on text, and failed against a comment that happened to contain
+  // the words it was looking for — which is the whole argument against
+  // asserting on source strings.
+  const cases = [
+    ['an eligible invite', { eligible: true }, 'coupon_30off'],
+    ['a cap that is spent', { eligible: false, reason: 'referrer-cap-reached' }, 'coupon_30off'],
+    ['nobody referred them', { eligible: false, reason: 'not-referred' }, 'coupon_30off'],
+    ['no coupon configured', { eligible: true }, ''],
+  ];
+  for (const [name, discount, coupon] of cases) {
+    const params = billing.checkoutDiscountParams(discount, coupon);
+    const hasCoupon = 'discounts[0][coupon]' in params;
+    const hasPromoBox = 'allow_promotion_codes' in params;
+    assert.ok(hasCoupon !== hasPromoBox, `${name}: exactly one of the two, never both and never neither`);
+  }
+  // And the eligible case really does carry the coupon rather than silently
+  // falling through to the promo box.
+  assert.equal(billing.checkoutDiscountParams({ eligible: true }, 'coupon_30off')['discounts[0][coupon]'], 'coupon_30off');
+});
+
+test('no coupon configured means no promise of one', async () => {
+  const billing = await import('../src/billing.js');
+  const { config } = await import('../src/config.js');
+  assert.equal(config.stripeReferralCoupon, '', 'off by default');
+  assert.equal(await billing.referralCouponSummary(), null,
+    'without a coupon the panel must not name a percentage');
+});

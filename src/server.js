@@ -1397,6 +1397,12 @@ async function route(req, res, url) {
         activatedMinutes: config.referralBonusActivated,
         paidMinutes: config.referralBonusPaid,
       },
+      // The discount is only real if a Stripe coupon is configured. Without
+      // one the panel must not promise a percentage nobody will receive.
+      discount: config.stripeReferralCoupon
+        ? { ...referrals.discountsLeft(state, currentUser, config.referralDiscountMaxUses),
+            ...(await billing.referralCouponSummary() || { label: '' }) }
+        : null,
     });
   }
   if (method === 'GET' && pathname === '/api/owner/growth') {

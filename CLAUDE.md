@@ -1924,3 +1924,38 @@ anything", used by the paywall AND the sanitiser — two different notions of
 empty is exactly how the gap opened. Blocked at the gate and at storage, because
 a subscription can lapse between saving a template and rendering with it. The
 regression test was proven red against the old check before being kept.
+
+## The invite discount (v3.52.0, 31 Aug 2026)
+
+Youssef: "attach 30% off for this invite link max 3 people and also it doesnt
+overlap other codes."
+
+- **The percentage is NOT in this repo.** It lives on a Stripe coupon, along
+  with its duration, and `STRIPE_REFERRAL_COUPON` holds only the id. A
+  `REFERRAL_DISCOUNT_LABEL=30% off` sitting beside a coupon somebody later
+  edited to 20% would have the product promising one number while charging
+  another — the same "two places that can disagree" fault this codebase has now
+  fixed three times. `billing.referralCouponSummary()` asks Stripe and caches
+  for an hour; on any failure it returns null and the panel says "a discount"
+  without a figure, which is worse copy and true.
+- **It cannot stack, and Stripe is what enforces that.** A checkout session may
+  carry `discounts` OR `allow_promotion_codes`, never both — Stripe rejects the
+  session outright. `checkoutDiscountParams()` makes the choice: an eligible
+  invite gets the coupon and NO promo box; everyone else gets the promo box.
+  Split into a pure function so the rule is tested by CALLING it. The first
+  version of that test read billing.js and matched on text, and failed against
+  a comment containing the words it was looking for.
+- **The cap counts PAYMENTS, not opened checkouts.** Counting at checkout would
+  let anyone burn a referrer's three by opening three checkout pages and
+  closing them. The honest cost of counting at payment: three invited people at
+  checkout simultaneously are all under the cap, so a fourth discount is
+  possible in a race. That is the right way round — a rare extra discount costs
+  a few pounds; burning a real referrer's allowance costs the programme.
+- `discountUsedAt` is stamped once per invited account, so a renewal or a
+  replayed webhook cannot re-spend it.
+- **A spent cap does not break the link.** The referral still counts and still
+  credits the referrer; it just stops carrying the discount, and the panel says
+  so.
+- **Nothing is on until the coupon exists.** `STRIPE_REFERRAL_COUPON` is empty
+  by default, and with it empty the panel says there is no reward rather than
+  promising one nobody will receive.

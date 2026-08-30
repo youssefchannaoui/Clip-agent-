@@ -5459,15 +5459,26 @@ StudioAdapter.onProbeSource=async url=>{try{
           const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
           /* Rewards are config-driven and default to zero. The panel must not
              imply one that is switched off. */
-          const rw=r.rewards||{};
-          const promise=rw.activatedMinutes>0
-            ? 'You get '+esc(rw.activatedMinutes)+' source minutes when someone you invite processes a lecture and keeps a clip.'
-            : 'No reward is attached to this yet — it is simply a clean link to share.';
+          /* The copy follows what is actually switched on. Three states, and
+             the panel must never describe one it is not in — a promise of a
+             discount nobody receives is worse than no promise. */
+          const rw=r.rewards||{}, dc=r.discount||null;
+          const left=dc?Number(dc.remaining||0):0;
+          const promise=dc&&dc.label&&left>0
+            ? 'They get <b style="color:#F2F2F4">'+esc(dc.label)+'</b> when they subscribe. '
+              +esc(left)+' of '+esc(dc.cap)+' left on your link.'
+            : dc&&dc.label
+              ? 'All '+esc(dc.cap)+' of your discounted invites have been used. The link still works — it just no longer carries the discount.'
+              : rw.activatedMinutes>0
+                ? 'You get '+esc(rw.activatedMinutes)+' source minutes when someone you invite processes a lecture and keeps a clip.'
+                : 'No reward is attached to this yet — it is simply a clean link to share.';
           box.style.cssText='flex:none;margin-top:22px;padding:22px;border-radius:18px;'
             +'border:1px solid rgba(217,180,120,.28);background:rgba(217,180,120,.045)';
           box.innerHTML='<div style="font:600 11px/1 Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#D9B478">Invite a creator</div>'
             +'<h3 style="margin:10px 0 6px;font:600 20px/1.2 Outfit,Inter,sans-serif;letter-spacing:-.02em">Know another creator sitting on hours of lectures?</h3>'
-            +'<p style="margin:0 0 16px;color:#A5A0A8;font-size:13.5px;line-height:1.6;max-width:62ch">'+esc(promise)+'</p>'
+            /* promise is built from escaped pieces above and carries its own
+               <b>, so it is inserted rather than escaped a second time. */
+            +'<p style="margin:0 0 16px;color:#A5A0A8;font-size:13.5px;line-height:1.6;max-width:62ch">'+promise+'</p>'
             +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">'
             +'<input id="dcInviteUrl" readonly value="'+esc(r.url)+'" '
             +'style="flex:1;min-width:240px;padding:11px 13px;border-radius:10px;border:1px solid rgba(255,255,255,.12);'

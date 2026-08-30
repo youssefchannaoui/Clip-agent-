@@ -64,6 +64,21 @@ export const config = {
   // A further grant when the invited account first subscribes. Once, ever.
   referralBonusPaid: Math.max(0, number(process.env.REFERRAL_BONUS_PAID, 0)),
 
+  /*
+   * The invite discount.
+   *
+   * The percentage lives in STRIPE, not here: a Stripe coupon carries the
+   * amount, the duration and whether it applies once or for several months,
+   * and duplicating any of that in this file would let the two disagree about
+   * what a customer was promised. This holds only the coupon's ID and the cap.
+   *
+   * Empty by default, which switches the whole thing off.
+   */
+  stripeReferralCoupon: String(process.env.STRIPE_REFERRAL_COUPON || '').trim(),
+  // How many invited people one referrer's link can discount. Youssef,
+  // 31 Aug 2026: "max 3 people".
+  referralDiscountMaxUses: Math.max(0, number(process.env.REFERRAL_DISCOUNT_MAX_USES, 3)),
+
   // Affiliates are an application, not an open door: nobody is approved
   // automatically and no payout runs without a person deciding.
   affiliatesEnabled: boolean(process.env.AFFILIATES_ENABLED, false),

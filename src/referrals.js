@@ -246,3 +246,61 @@ export function suspicious(state) {
   }
   return flags;
 }
+
+/**
+ * May this account's checkout carry the invite discount?
+ *
+ * Three conditions, and each is a way the discount could otherwise leak:
+ *
+ *   1. They were invited. A discount for someone nobody referred is just a
+ *      lower price.
+ *   2. They have not already used it. The discount is for a first
+ *      subscription, not for every future one.
+ *   3. Their referrer has room. The cap counts referred accounts that have
+ *      ACTUALLY SUBSCRIBED with the discount, not accounts that opened a
+ *      checkout — otherwise anyone could burn a referrer's allowance by
+ *      opening three checkout pages and closing them.
+ *
+ * The honest limit of counting at payment: three invited people could sit at
+ * checkout simultaneously and all be under the cap, so a fourth discount is
+ * possible in a race. That is the right way round — a rare extra discount
+ * costs a few pounds, and burning a real referrer's allowance on abandoned
+ * checkouts costs the referral programme.
+ */
+export function discountEligible(state, user, maxUses) {
+  const link = user?.referredBy;
+  if (!link) return { eligible: false, reason: 'not-referred' };
+  if (link.discountUsedAt) return { eligible: false, reason: 'already-used' };
+
+  const cap = Math.max(0, Number(maxUses) || 0);
+  if (!cap) return { eligible: false, reason: 'disabled' };
+
+  const used = (state.authUsers || []).filter(other =>
+    String(other?.referredBy?.referrerId || '') === String(link.referrerId)
+    && other.referredBy.discountUsedAt).length;
+
+  if (used >= cap) return { eligible: false, reason: 'referrer-cap-reached', used, cap };
+  return { eligible: true, used, cap, remaining: cap - used };
+}
+
+/**
+ * Record that the discount has been spent. Once, ever, per invited account.
+ *
+ * Called when a subscription is actually PAID rather than when a checkout is
+ * created, so an abandoned checkout costs the referrer nothing.
+ */
+export function markDiscountUsed(user) {
+  const link = user?.referredBy;
+  if (!link || link.discountUsedAt) return false;
+  link.discountUsedAt = Date.now();
+  return true;
+}
+
+/** How many of a referrer's discounted invites are left, for their own panel. */
+export function discountsLeft(state, user, maxUses) {
+  const cap = Math.max(0, Number(maxUses) || 0);
+  const used = (state.authUsers || []).filter(other =>
+    String(other?.referredBy?.referrerId || '') === String(user?.id)
+    && other.referredBy.discountUsedAt).length;
+  return { used, cap, remaining: Math.max(0, cap - used) };
+}
