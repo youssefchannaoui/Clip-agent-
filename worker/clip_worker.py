@@ -27,6 +27,7 @@ import random
 import re
 import shutil
 import subprocess
+import tempfile
 import sys
 import time
 import threading
@@ -1083,6 +1084,64 @@ def installed_families() -> set[str]:
     return _INSTALLED_FAMILIES
 
 
+_FACE_DRAWS_ARABIC: dict[str, bool] = {}
+# One Arabic word, four joined letters. Short enough to render in a moment and
+# long enough that a face which only manages isolated forms still fails it.
+_ARABIC_PROBE = "قلم"  # qaf lam mim -- "pen"
+
+
+def face_draws_arabic(family: str) -> bool:
+    """True unless this face is PROVEN unable to draw Arabic letterforms.
+
+    Coverage is not the question, and that is the whole point of rendering
+    instead of asking. The KFGQPC HAFS file this image bundles lists every
+    Arabic codepoint in its cmap and carries real outlines behind them -- 1572
+    glyphs, ordinary contours, sane bounding boxes -- and libass still drew an
+    ayah as floating tashkeel with no letters underneath it. Amiri rendered the
+    same string correctly through the same libass in the same container, which
+    is what makes it the face and not the pipeline.
+
+    So this asks the only question that has ever settled a caption: what came
+    out on the frame. It renders the probe word over black and counts lit
+    pixels.
+
+    Fails OPEN. If ffmpeg is missing, slow, or unhappy for any reason, the
+    answer is True and the preference order behaves exactly as it did before --
+    this may only ever DEMOTE a face it has positively watched fail to draw.
+    """
+    cached = _FACE_DRAWS_ARABIC.get(family)
+    if cached is not None:
+        return cached
+    drew = True
+    try:
+        with tempfile.TemporaryDirectory() as work:
+            folder = Path(work)
+            ass = folder / "probe.ass"
+            ass.write_text(
+                "[Script Info]\nScriptType: v4.00+\nPlayResX: 400\nPlayResY: 200\nWrapStyle: 2\n\n"
+                "[V4+ Styles]\nFormat: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,"
+                "OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,"
+                "Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding\n"
+                f"Style: P,{family},96,&H00FFFFFF,&H00FFFFFF,&H00000000,&HFF000000,"
+                "0,0,0,0,100,100,0,0,1,0,0,5,10,10,10,1\n\n"
+                "[Events]\nFormat: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text\n"
+                f"Dialogue: 0,0:00:00.00,0:00:04.00,P,,0,0,0,,{_ARABIC_PROBE}\n",
+                encoding="utf-8")
+            raw = subprocess.run([
+                "ffmpeg", "-v", "error", "-f", "lavfi",
+                "-i", "color=c=black:s=400x200:d=2",
+                "-vf", f"subtitles={ass}", "-ss", "1", "-frames:v", "1",
+                "-f", "rawvideo", "-pix_fmt", "gray", "-",
+            ], capture_output=True, timeout=30, check=True).stdout
+            # A face that draws nothing gives a black frame. The threshold is
+            # far below one letter and far above dithering noise.
+            drew = sum(1 for value in raw if value > 24) >= 200
+    except Exception:  # pragma: no cover - probing must never break a render
+        drew = True
+    _FACE_DRAWS_ARABIC[family] = drew
+    return drew
+
+
 def quran_font(fallback: str) -> str:
     """The face an ayah is set in.
 
@@ -1097,18 +1156,22 @@ def quran_font(fallback: str) -> str:
     having libass silently substitute something with no Arabic at all.
     """
     families = installed_families()
-    # Amiri first, deliberately. It is a revival of the naskh the mushaf is
-    # printed in, draws U+06DD as the ornamented circle with the digits inside,
-    # and renders at sane metrics. Amiri Quran, despite the name, reserves so
-    # much vertical room for stacked marks that rendered frames came out at a
-    # quarter of the expected size.
     # KFGQPC HAFS first: it is the Madinah mushaf's own digital face, the one
     # the reference clips are set in, and its U+06DD is the full ornamented
     # medallion with the verse number inside. It cannot attach ten of the
     # Uthmani marks in this corpus (see UNATTACHABLE_IN_KFGQPC); those are
     # dropped at render time rather than drawn as detached blobs.
+    #
+    # Then Amiri, a revival of the naskh the mushaf is printed in, which also
+    # draws U+06DD as the ornamented circle and renders at sane metrics. Amiri
+    # Quran, despite the name, reserves so much vertical room for stacked marks
+    # that rendered frames came out at a quarter of the expected size, so it is
+    # deliberately not in this list.
+    #
+    # Each candidate has to PROVE it can draw, because being installed is not
+    # the same as being drawable -- see face_draws_arabic.
     for candidate in ("KFGQPC HAFS Uthmanic Script", "Amiri", "Scheherazade New", "Scheherazade"):
-        if candidate in families:
+        if candidate in families and face_draws_arabic(candidate):
             return candidate
     return fallback
 

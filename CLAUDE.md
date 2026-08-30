@@ -150,7 +150,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **859 JS + 409 Python**
+- `npm test` and `npm run check` must pass. Currently **859 JS + 416 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -202,8 +202,9 @@ These were each a real bug and each has a test named after it.
 
 - **libass sizes text by win ascent+descent, not em** (VSFilter compat). Amiri
   reserves ~3.3x its em vertically for tashkeel, so at a nominal font size its
-  glyphs render at ~30% of what DejaVu renders. `AYAH_SIZE_SCALE = 3.0` in
-  clip_worker.py compensates; it looked like "the multiplier does nothing"
+  glyphs render at ~30% of what DejaVu renders. `AYAH_SIZE_SCALE` in
+  clip_worker.py compensates (3.54 today; the nominal size is now computed per
+  face from `AYAH_FONT_CELL`, so each face lands on the same VISUAL size); it looked like "the multiplier does nothing"
   until measured on a real frame, because 1.25x of 30% is still tiny.
 - **"Amiri Quran" is worse, not better** — even taller metrics; frames came
   out at a quarter size. quran_font() deliberately prefers plain Amiri, which
@@ -1210,6 +1211,44 @@ the diesgn". Three devices came across, and nothing else:
 
 Subtle is the whole point: the mark, the two-tone wordmark and the gold were
 already shared, and nothing about a screen's content or layout changed.
+
+## The ayah was rendering as floating tashkeel with no letters (v3.40.0, 30 Aug)
+
+Nobody had ever looked at a frame from the Arabic path. Asked to prove the
+render quality, the first frame rendered showed it: the ayah drawn as a row of
+disconnected vowel marks hanging in space, with no letterforms underneath, and
+the English translation beneath it perfectly fine.
+
+- **The cause was the face, not the code.** `quran_font()` prefers
+  `KFGQPC HAFS Uthmanic Script`, which the image bundles from `worker/fonts`.
+  Rendered through libass 0.17.1 + HarfBuzz 8.3, that file draws marks and the
+  U+06DD medallion and NOTHING for base letters. Amiri renders the identical
+  string correctly through the identical libass in the identical container,
+  which is what makes it the font rather than the pipeline.
+- **Every cheap check said the font was fine, and that is the lesson.** Its
+  cmap covers all of 0600-06FF; the glyphs behind those codepoints are real --
+  1572 of them, ordinary contours, sane bounding boxes (qaf is 3 contours,
+  284 bytes, 70..1045 x); fontconfig resolves the family straight to the right
+  file; only 4% of the glyphs are empty and they are scattered, so the
+  positional forms are not blanked either. Coverage, resolution and outlines
+  all pass. The frame still comes out with no letters.
+- **So the guard renders.** `face_draws_arabic()` draws one joined Arabic word
+  over black and counts lit pixels, cached per family, and `quran_font()` skips
+  any face it has WATCHED fail. It **fails open**: ffmpeg missing, slow or
+  unhappy answers True, so a probe that cannot run never costs a render its
+  mushaf face. It may only ever demote a face proven blank.
+- **Two contradictory comments were sitting in that function** -- "Amiri first,
+  deliberately" immediately above "KFGQPC HAFS first" -- which is what a change
+  made without rendering a frame looks like in the diff.
+- Measured after the fix, same three ayat, real `write_ass`, real matcher:
+  lit rows 76 -> 190, 149 -> 177, 82 -> 187, and **zero rows touching either
+  edge in all three**, so invariant 8 holds on this path too.
+- **Not yet confirmed on the box.** This is a stock Debian ffmpeg/libass and
+  the same bundled font file, so the box is very likely identical -- but the
+  worker image is not this container, and the honest statement is that the
+  frame has been proven here and not there. Render one Quran clip after the
+  deploy and look at it.
+
 
 ## Open items
 

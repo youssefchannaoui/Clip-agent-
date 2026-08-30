@@ -3,7 +3,9 @@ import pathlib
 import re
 import tempfile
 import sys
+import types
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 # So `import quran` inside the module under test resolves when this file runs
@@ -941,6 +943,37 @@ class QuranFontTests(unittest.TestCase):
     rendered ayah look like plain Arabic with a number after it.
     """
 
+    def setUp(self):
+        # Answer the drawability probe from memory so these stay unit tests:
+        # the real one renders a frame, which needs ffmpeg and the actual font
+        # files, and neither is present on a CI runner.
+        worker._FACE_DRAWS_ARABIC.clear()
+        for face in ("KFGQPC HAFS Uthmanic Script", "Amiri", "Amiri Quran",
+                     "Scheherazade New", "Scheherazade", "DejaVu Sans"):
+            worker._FACE_DRAWS_ARABIC[face] = True
+
+    def test_the_mushaf_face_is_preferred_when_it_can_actually_draw(self):
+        worker._INSTALLED_FAMILIES = {"DejaVu Sans", "KFGQPC HAFS Uthmanic Script", "Amiri"}
+        self.assertEqual(worker.quran_font("DejaVu Sans"), "KFGQPC HAFS Uthmanic Script")
+
+    def test_a_face_that_draws_nothing_is_skipped_for_the_next_one(self):
+        """The bug this guard exists for, found by rendering a frame.
+
+        The bundled KFGQPC HAFS file lists every Arabic codepoint in its cmap
+        and carries real outlines behind them, and libass still drew an ayah as
+        floating tashkeel with no letters underneath. Being installed is not
+        being drawable, and only the frame could tell them apart.
+        """
+        worker._INSTALLED_FAMILIES = {"DejaVu Sans", "KFGQPC HAFS Uthmanic Script", "Amiri"}
+        worker._FACE_DRAWS_ARABIC["KFGQPC HAFS Uthmanic Script"] = False
+        self.assertEqual(worker.quran_font("DejaVu Sans"), "Amiri")
+
+    def test_every_candidate_failing_leaves_the_template_choice(self):
+        worker._INSTALLED_FAMILIES = {"DejaVu Sans", "KFGQPC HAFS Uthmanic Script", "Amiri"}
+        for face in ("KFGQPC HAFS Uthmanic Script", "Amiri"):
+            worker._FACE_DRAWS_ARABIC[face] = False
+        self.assertEqual(worker.quran_font("Scheherazade"), "Scheherazade")
+
     def test_amiri_is_preferred_even_when_amiri_quran_is_installed(self):
         # Amiri Quran, despite the name, reserves so much vertical room for
         # stacked marks that rendered ayahs came out at a quarter of the
@@ -962,6 +995,48 @@ class QuranFontTests(unittest.TestCase):
 
     def tearDown(self):
         worker._INSTALLED_FAMILIES = None
+        worker._FACE_DRAWS_ARABIC.clear()
+
+
+class FaceDrawabilityProbeTests(unittest.TestCase):
+    """The probe itself: it may only ever demote a face it WATCHED fail.
+
+    Fail-open is the whole safety property. If ffmpeg is missing, slow or
+    unhappy, the preference order has to behave exactly as it did before --
+    a probe that cannot run must never cost the render its mushaf face.
+    """
+
+    def setUp(self):
+        worker._FACE_DRAWS_ARABIC.clear()
+
+    def tearDown(self):
+        worker._FACE_DRAWS_ARABIC.clear()
+
+    def test_a_blank_frame_means_the_face_cannot_draw(self):
+        with mock.patch.object(worker.subprocess, "run",
+                               return_value=types.SimpleNamespace(stdout=bytes(4000))):
+            self.assertFalse(worker.face_draws_arabic("Blank Face"))
+
+    def test_ink_on_the_frame_means_it_can(self):
+        with mock.patch.object(worker.subprocess, "run",
+                               return_value=types.SimpleNamespace(stdout=bytes([255]) * 4000)):
+            self.assertTrue(worker.face_draws_arabic("Inky Face"))
+
+    def test_a_probe_that_cannot_run_answers_yes(self):
+        with mock.patch.object(worker.subprocess, "run", side_effect=FileNotFoundError("ffmpeg")):
+            self.assertTrue(worker.face_draws_arabic("Unprobeable"))
+
+    def test_the_answer_is_cached_so_a_render_probes_once(self):
+        calls = []
+
+        def once(*args, **kwargs):
+            calls.append(args)
+            return types.SimpleNamespace(stdout=bytes([255]) * 4000)
+
+        with mock.patch.object(worker.subprocess, "run", side_effect=once):
+            worker.face_draws_arabic("Cached Face")
+            worker.face_draws_arabic("Cached Face")
+        self.assertEqual(len(calls), 1)
 
 
 class ClipAIPromptTests(unittest.TestCase):
