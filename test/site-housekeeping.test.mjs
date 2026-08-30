@@ -178,3 +178,34 @@ test('pages that are not the product pitch carry the base schemas only', async (
   assert.deepEqual(types, ['Organization', 'WebSite'],
     'no FAQ or offers claimed on pages that do not show them');
 });
+
+test('the public feature catalogue covers every shipped clip template', async () => {
+  const page = await fetch(`${base}/features`, { headers: { accept: 'text/html' } }).then(r => r.text());
+  for (const template of ['Clean Line', 'Bold Stack', 'Headline', 'Mono Minimal', 'Quran Recitation']) {
+    assert.ok(page.includes(template), `${template} must be visible in the public catalogue`);
+  }
+  assert.match(page, /Templates, audio and editor preview/);
+  assert.match(page, /coming soon/i);
+});
+
+test('public imagery stays on the established realistic asset library', async () => {
+  const [home, features] = await Promise.all([
+    fetch(`${base}/`, { headers: { accept: 'text/html' } }).then(r => r.text()),
+    fetch(`${base}/features`, { headers: { accept: 'text/html' } }).then(r => r.text()),
+  ]);
+  for (const draft of ['review-first-v2.png', 'deenai-private-v2.png']) {
+    assert.ok(!home.includes(draft), `${draft} was a rejected draft and must not ship`);
+    assert.ok(!features.includes(draft), `${draft} was a rejected draft and must not ship`);
+  }
+  for (const asset of ['reel-halal.webp', 'reel-dua.webp', 'reel-dunya.webp', 'reel-beneficial.webp', 'reel-quran.webp']) {
+    assert.ok(home.includes(asset), `${asset} should represent a real template example`);
+  }
+});
+
+test('privacy copy names current import and DeenAI processing without stale vendors', async () => {
+  const page = await fetch(`${base}/privacy`, { headers: { accept: 'text/html' } }).then(r => r.text());
+  assert.match(page, /yt-dlp/);
+  assert.match(page, /Webshare/);
+  assert.match(page, /Ask DeenAI/);
+  assert.doesNotMatch(page, /SocialKit|Vizard/);
+});

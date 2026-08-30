@@ -8,7 +8,8 @@ test('login page uses the public-site brand system and real product assets', () 
 
   assert.match(html, /DeenClipped/);
   assert.match(html, /Turn long lectures into/);
-  assert.match(html, /powerful short clips/);
+  assert.match(html, /review-ready short clips/);
+  assert.match(html, /Human approval first/);
   assert.match(html, /\/marketing-assets\/hero-premium\.webp/);
   assert.match(html, /\/marketing-assets\/reel-beneficial\.webp/);
   assert.match(html, /Back to website/);
