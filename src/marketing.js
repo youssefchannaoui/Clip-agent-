@@ -394,9 +394,9 @@ function homepageFeatureMap() {
 
 function faithWorkflow() {
   const lectureClips = [
-    ['how-lecture-clip-one.webp', '00:12', 'A clear opening'],
-    ['how-lecture-clip-two.webp', '14:38', 'One complete point'],
-    ['how-lecture-clip-three.webp', '31:06', 'A useful closing thought'],
+    ['faith-bilal-clip-one.webp', '00:12', 'A clear opening'],
+    ['faith-bilal-clip-two.webp', '14:38', 'One complete point'],
+    ['faith-bilal-clip-three.webp', '31:06', 'A useful closing thought'],
   ];
   return `<div class="faith-workflow reveal" data-faith-workflow>
     <div class="faith-workflow-tabs" role="tablist" aria-label="Choose a DeenClipped workflow">
@@ -406,7 +406,7 @@ function faithWorkflow() {
     <article class="faith-workflow-panel active" id="faith-workflow-lecture" role="tabpanel" data-faith-panel="lecture">
       <div class="faith-input-card"><span>${icon('link')}</span><small>1 · Start with the source</small><strong>Paste a lecture or upload your file.</strong><p>Choose the exact useful range before tokens are used.</p><b>18:04 — 42:10</b></div>
       <div class="faith-arrow" aria-hidden="true">${icon('arrow')}</div>
-      <div class="faith-source-stage"><div class="faith-stage-bar"><span><i></i>Lecture selected</span><small>24 source minutes</small></div><img src="/marketing-assets/how-lecture-source.webp" alt="A selected Islamic lecture source" loading="lazy"><div class="faith-detection"><span>${icon('spark')}</span><div><b>Finding complete moments</b><small>Hook · complete idea · clean ending</small></div></div><div class="faith-source-track" aria-hidden="true"><i></i><b></b><b></b><b></b></div></div>
+      <div class="faith-source-stage"><div class="faith-stage-bar"><span><i></i>Lecture selected</span><small>24 source minutes</small></div><img src="/marketing-assets/speaker-bilal-assaad.webp" alt="A selected Islamic lecture source" loading="lazy"><div class="faith-detection"><span>${icon('spark')}</span><div><b>Finding complete moments</b><small>Hook · complete idea · clean ending</small></div></div><div class="faith-source-track" aria-hidden="true"><i></i><b></b><b></b><b></b></div></div>
       <div class="faith-arrow" aria-hidden="true">${icon('arrow')}</div>
       <div class="faith-review-stage"><div class="faith-review-head"><span>${icon('clips')} Review-ready clips</span><small>3 found</small></div><div class="faith-clip-row">${lectureClips.map(([src, time, label]) => `<figure><img src="/marketing-assets/${src}" alt="A short clip from the selected lecture" loading="lazy"><span>${escapeHtml(time)}</span><figcaption>${escapeHtml(label)}</figcaption><i aria-hidden="true"></i></figure>`).join('')}</div><div class="faith-review-lock"><span>${icon('shield')}</span><p><b>You review the finished render.</b><small>Nothing publishes without approval.</small></p></div></div>
     </article>
@@ -418,6 +418,42 @@ function faithWorkflow() {
       <div class="faith-review-stage faith-quran-review"><div class="faith-review-head"><span>${icon('captions')} Review before publishing</span><small>Required</small></div><div class="faith-quran-preview"><span>Arabic line</span><strong>Translation beneath</strong><i></i><i></i><i></i></div><div class="faith-review-lock"><span>${icon('shield')}</span><p><b>A person has the final say.</b><small>Approve only when the ayah and treatment are right.</small></p></div></div>
     </article>
     <div class="faith-workflow-benefits"><div><span>${icon('clips')}</span><b>Complete moments</b><p>Candidate clips are selected for a clear hook, one full idea and a clean ending.</p></div><div><span>${icon('language')}</span><b>Faith-aware treatment</b><p>Spoken Arabic, English and Quran recitation follow different caption and review paths.</p></div><div><span>${icon('calendar')}</span><b>Approval before publishing</b><p>Post now, download or schedule only the clips you decide are ready.</p></div></div>
+  </div>`;
+}
+
+function heroWorkflowDemo() {
+  const clips = [
+    ['how-lecture-clip-one.webp', '12:08', 'A clear opening'],
+    ['how-lecture-clip-two.webp', '24:16', 'One complete point'],
+    ['how-lecture-clip-three.webp', '38:41', 'A useful close'],
+  ];
+  return `<div class="hero-live-demo reveal" aria-label="DeenClipped source-to-clip workflow demonstration">
+    <div class="hero-demo-window">
+      <div class="hero-demo-topbar"><span><i></i>DeenClipped AI</span><b>Long-form source → review-ready clips</b><em>Review-first workflow</em></div>
+      <div class="hero-demo-workspace">
+        <div class="hero-source-photo"><span><i></i>Long-form lecture · 48:26</span><img src="/marketing-assets/how-lecture-source.webp" alt="A long Islamic lecture selected as a source video"><i class="hero-scan-beam" aria-hidden="true"></i><div class="hero-moment-markers" aria-hidden="true"><i></i><i></i><i></i></div></div>
+        <div class="hero-output-rail"><div class="hero-output-heading"><span>${icon('clips')} Review-ready clips</span><small>3 complete moments found</small></div><div class="hero-results">${clips.map(([src, time, caption]) => `<figure class="clip-preview hero-result"><img src="/marketing-assets/${src}" alt="A vertical clip created from the selected lecture"><span class="clip-preview-badge">${escapeHtml(time)}</span><figcaption>${escapeHtml(caption)}</figcaption><i class="clip-progress" aria-hidden="true"><b></b></i></figure>`).join('')}</div></div>
+        <div class="hero-approved">${icon('shield')} Review before publishing</div>
+      </div>
+      <div class="hero-demo-footer"><span class="hero-demo-step"><i>1</i>Select source</span><span class="hero-demo-arrow" aria-hidden="true">${icon('arrow')}</span><span class="hero-demo-step"><i>2</i>AI finds moments</span><span class="hero-demo-arrow" aria-hidden="true">${icon('arrow')}</span><span class="hero-demo-step is-scheduled"><i>3</i>You approve</span><span class="hero-schedule-chip">${icon('calendar')} Ready to schedule</span></div>
+    </div>
+  </div>`;
+}
+
+function editorWorkflowPreview() {
+  const transcript = [
+    ['00:00', 'A small deed becomes consistent when the intention is clear.'],
+    ['00:06', 'Start with what you can return to tomorrow.'],
+    ['00:13', 'That is how a reminder becomes a habit.'],
+  ];
+  return `<div class="editor-workbench" aria-label="DeenClipped editor preview">
+    <div class="editor-workbench-top"><span>${icon('edit')} Editor preview</span><small>Full timeline in verification</small><b>9:16</b></div>
+    <div class="editor-workbench-main">
+      <div class="editor-transcript"><span>Transcript</span>${transcript.map(([time, line], index) => `<p class="${index === 1 ? 'active' : ''}"><i>${escapeHtml(time)}</i>${escapeHtml(line)}</p>`).join('')}</div>
+      <div class="editor-canvas"><div class="editor-canvas-frame code-clip"><span class="clip-preview-badge">Clean Line</span><div class="code-clip-title"><small>Caption preview</small><strong>Start with what you can return to tomorrow.</strong></div><i class="clip-progress" aria-hidden="true"><b></b></i></div><span class="editor-safe-zone">Safe caption area</span></div>
+      <div class="editor-controls"><span>Clip style</span><label>Template<b>Clean Line</b></label><label>Captions<i><b></b><b class="active"></b><b></b></i></label><label>Framing<b>Keep speaker centred</b></label><p>${icon('shield')} Final editing controls are coming soon. Rendered review, templates and re-renders are available now.</p></div>
+    </div>
+    <div class="editor-timeline"><div class="editor-timeline-top"><span>00:00</span><span>00:12</span><span>00:24</span><span>00:36</span><span>00:48</span></div><div class="editor-timeline-track"><i></i><i></i><i></i><b></b></div></div>
   </div>`;
 }
 
@@ -639,7 +675,7 @@ function faqSchema() {
 export function home({ base, currentUser }) {
   const body = `
   <main>
-    <section class="hero homepage-hero-simple wrap">
+    <section class="hero homepage-hero-product wrap">
       <div class="homepage-hero-copy">
         <span class="eyebrow"><i></i>Short-form content for Islamic creators</span>
         <h1>Turn one lecture into <span>clips you want to publish.</span></h1>
@@ -648,6 +684,7 @@ export function home({ base, currentUser }) {
         <div class="hero-actions"><a class="button primary" href="/login?returnTo=/app">Start clipping free ${icon('arrow')}</a><a class="button secondary" href="#how-it-works">See how it works</a></div>
         <p class="purpose-line"><strong>${escapeHtml(Number(config.tokensFree).toLocaleString())} source minutes included for ${escapeHtml(String(config.stripeTrialDays))} days.</strong> No card required.</p>
       </div>
+      ${heroWorkflowDemo()}
     </section>
 
     <section class="homepage-assurance" aria-label="DeenClipped product assurances"><div class="wrap"><span>${icon('shield')} Review-first by design</span><span>${icon('language')} English, Arabic and Quran-aware</span><span>${icon('calendar')} Scheduling built in</span><span>${icon('brain')} Private DeenAI on Studio</span></div></section>
@@ -684,7 +721,7 @@ export function home({ base, currentUser }) {
     <section class="section editor-section">
       <div class="wrap">
         <div class="section-head reveal"><span class="section-label">Style now. Full editor next.</span><h2>Keep clips consistent without pretending a feature has launched.</h2><p>Templates, clip-local style changes and re-renders are available today. The complete timeline editor is visibly marked coming soon while its visual checks finish.</p></div>
-        <div class="editor-showcase editor-code-showcase reveal">${productVisual('style')}<span class="availability-badge">Full editor preview · coming soon</span></div>
+        <div class="editor-showcase editor-code-showcase reveal">${editorWorkflowPreview()}<span class="availability-badge">Full editor preview · coming soon</span></div>
         <div class="feature-row reveal"><div><span>${icon('template')}</span><b>Reusable caption templates</b><p>Save style changes for future clips or keep a one-clip adjustment local to that render.</p></div><div><span>${icon('music')}</span><b>Nasheed controls</b><p>Upload and rotate vocal-only tracks. Quran recitation is deliberately left without a track underneath it.</p></div><div><span>${icon('edit')}</span><b>Editor held for verification</b><p>Timeline, caption and framing controls are not advertised as launched while the gate is active.</p></div></div>
       </div>
     </section>
@@ -723,7 +760,7 @@ export function features({ base, currentUser }) {
 
       <section class="template-feature-section" id="templates"><div class="section-head reveal"><span class="section-label">Template catalogue</span><h2>Five distinct looks, shown with realistic Islamic content.</h2><p>Clean Line is included with Basic. Pro and Studio unlock the complete catalogue, including the Quran-specific treatment.</p></div>${templateCatalogue({ visual: false })}</section>
 
-      <section class="feature-deep-dive reveal" id="editor"><div class="feature-deep-copy"><span class="section-label">Templates, audio and editor preview</span><h2>Style changes work today. The full editor stays clearly marked as coming soon.</h2><p>Templates can be adjusted and re-rendered now, including clip-local caption and visual changes. The complete timeline, framing and drag controls are visible behind a launch gate until their visual verification is finished.</p><div class="detail-list">${checkItem('Clip-local or reusable','Keep one clip’s adjustment local, or save the look back to the shared template for future waiting clips.')}${checkItem('Full-quality review remains available','The editor gate does not remove rendered review, templates, re-renders, downloads, scheduling or publishing.')}${checkItem('Vocal-only track control','Upload, select and rotate nasheed tracks while respecting the Quran template’s music-off rule.')}</div></div><div class="editor-feature-visual">${productVisual('style')}<span class="availability-badge">Full editor preview · coming soon</span></div></section>
+      <section class="feature-deep-dive reveal" id="editor"><div class="feature-deep-copy"><span class="section-label">Templates, audio and editor preview</span><h2>Style changes work today. The full editor stays clearly marked as coming soon.</h2><p>Templates can be adjusted and re-rendered now, including clip-local caption and visual changes. The complete timeline, framing and drag controls are visible behind a launch gate until their visual verification is finished.</p><div class="detail-list">${checkItem('Clip-local or reusable','Keep one clip’s adjustment local, or save the look back to the shared template for future waiting clips.')}${checkItem('Full-quality review remains available','The editor gate does not remove rendered review, templates, re-renders, downloads, scheduling or publishing.')}${checkItem('Vocal-only track control','Upload, select and rotate nasheed tracks while respecting the Quran template’s music-off rule.')}</div></div><div class="editor-feature-visual">${editorWorkflowPreview()}<span class="availability-badge">Full editor preview · coming soon</span></div></section>
 
       <section class="feature-deep-dive reverse reveal" id="operations"><div class="feature-deep-copy"><span class="section-label">Projects, operations and performance</span><h2>See the lecture, every clip and the next action without manufactured analytics.</h2><p>The library keeps each source and its clips together, while operational status shows what is queued, processing, waiting for review, scheduled, posted or blocked. Performance reports what DeenClipped can prove from its own records instead of pretending to know social view counts it never fetched.</p><div class="detail-list">${checkItem('Honest workflow metrics','Made, kept, scheduled, posted and failed are counted from real account records.')}${checkItem('Clear recovery state','A cancelled job gives the worker slot back, and a restart does not silently revive work the account cancelled.')}${checkItem('DeenAI by tier','Pro receives calculated insights; Studio adds Ask DeenAI on the private processing server and priority rendering.')}</div></div><div class="feature-scene-stack">${productVisual('performance')}${productVisual('deenai')}</div></section>
 

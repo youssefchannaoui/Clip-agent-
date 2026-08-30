@@ -211,18 +211,18 @@ test('public imagery uses a distinct, male-only source library without repeated 
   }
 });
 
-test('the homepage keeps its first decision focused on one centred source bar', async () => {
+test('the homepage makes the source-to-review workflow visible in the hero', async () => {
   const home = await fetch(`${base}/`, { headers: { accept: 'text/html' } }).then(r => r.text());
-  for (const detail of ['homepage-hero-simple', 'Paste a YouTube link to begin', 'Start with this video', 'Turn one lecture into']) {
+  for (const detail of ['homepage-hero-product', 'Paste a YouTube link to begin', 'Start with this video', 'Turn one lecture into', 'hero-demo-window', 'Long-form source → review-ready clips', 'Review before publishing']) {
     assert.ok(home.includes(detail), `the product demonstration must show ${detail}`);
   }
   for (const detail of ['data-faith-workflow', 'Islamic lecture', 'Quran recitation', 'Matched ayah', 'Nothing publishes without approval.']) {
     assert.ok(home.includes(detail), `the faith-aware walkthrough must show ${detail}`);
   }
-  assert.ok(!home.includes('data-workflow-film'), 'the hero should not require a decorative source-to-clips animation');
+  assert.ok(!home.includes('data-workflow-film'), 'the hero should not rely on the rejected decorative source-to-clips animation');
   assert.ok(!home.includes('92 · Review'), 'a decorative review score must not be presented as a real product result');
   const css = await fetch(`${base}/marketing.css`).then(r => r.text());
-  assert.match(css, /\.homepage-hero-simple/, 'the single-column homepage hero needs a dedicated layout');
+  assert.match(css, /\.homepage-hero-product/, 'the product-led homepage hero needs a dedicated layout');
   assert.match(css, /\.faith-workflow/, 'the walkthrough needs a dedicated visual system');
 });
 
