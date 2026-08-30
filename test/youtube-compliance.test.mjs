@@ -20,7 +20,11 @@ const store = await import('../src/store.js');
 const marketing = fs.readFileSync(path.join(process.cwd(), 'src/marketing.js'), 'utf8');
 const engine = fs.readFileSync(path.join(process.cwd(), 'src/local-engine.js'), 'utf8');
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
+test.after(() => {
+  // Guarded: a leftover temp directory on a CI runner is harmless; a red
+  // branch from a cleanup race is not. See admin-page.test.mjs for the race.
+  try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); } catch { /* nothing to do */ }
+});
 
 const DAY = 24 * 60 * 60 * 1000;
 

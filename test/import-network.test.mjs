@@ -11,7 +11,11 @@ process.env.APP_SESSION_SECRET = 'import-network-test-secret-long-enough';
 const store = await import('../src/store.js');
 const engine = await import('../src/local-engine.js');
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
+test.after(() => {
+  // Guarded: a leftover temp directory on a CI runner is harmless; a red
+  // branch from a cleanup race is not. See admin-page.test.mjs for the race.
+  try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); } catch { /* nothing to do */ }
+});
 
 test('a partial update keeps the credential it does not mention', () => {
   // The admin form never echoes saved values back, so an update that only

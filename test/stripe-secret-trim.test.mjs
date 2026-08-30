@@ -43,7 +43,7 @@ for (let attempt = 0; attempt < 50; attempt += 1) {
 test.after(async () => {
   globalThis.fetch = realFetch;
   await new Promise(resolve => server.close(resolve));
-  fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+  try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); } catch { /* cleanup must not fail a run */ }
 });
 
 function signed(body, secret) {

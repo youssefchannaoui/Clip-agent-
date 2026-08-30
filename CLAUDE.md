@@ -1031,6 +1031,16 @@ with no laptop, no local state and no earlier conversation.
   a clean checkout runs the whole suite anywhere — that is what makes a phone
   session viable at all. Keep it that way; a dependency added carelessly
   removes it.
+- **A cleanup race turned a green suite red, in CI only.** `test.after` removed
+  the temp DATA_DIR while the server's state saver was still writing
+  `state.json.tmp` into it: rmSync retried, the saver re-created the file, and
+  the run failed with ENOTEMPTY after every assertion had passed. `maxRetries`
+  does not help when something is actively re-creating files. Two fixes, both
+  needed -- the server is closed AND AWAITED before the directory goes, and the
+  removal is wrapped in try/catch, because a leftover temp directory on a
+  runner is harmless and failing a green suite over one is not. 34 files.
+  This is the worst shape a red branch can have: it almost never reproduces
+  locally, so a phone session cannot diagnose it and cannot trust the tick.
 - **A Mac cannot see a case-only path mistake.** `DESIGN/…` opened fine locally
   and threw ENOENT on Linux CI, so the suite was green here and red there —
   the worst failure to hit from a phone, because it cannot be reproduced on the

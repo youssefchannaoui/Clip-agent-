@@ -13,7 +13,11 @@ process.env.APP_SESSION_SECRET = 'editor-save-scope-secret-long-enough';
 
 const templates = await import('../src/templates.js');
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
+test.after(() => {
+  // Guarded: a leftover temp directory on a CI runner is harmless; a red
+  // branch from a cleanup race is not. See admin-page.test.mjs for the race.
+  try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); } catch { /* nothing to do */ }
+});
 
 test('the framing fields are the whole Framing tab, not just the crop offsets', () => {
   // cropPositionX/Y alone were protected; fitMode, zoom and the face toggle were

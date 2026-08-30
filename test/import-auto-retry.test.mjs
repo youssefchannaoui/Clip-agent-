@@ -11,7 +11,11 @@ process.env.APP_SESSION_SECRET = 'auto-retry-test-secret-long-enough';
 const { state } = await import('../src/store.js');
 const engine = await import('../src/local-engine.js');
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
+test.after(() => {
+  // Guarded: a leftover temp directory on a CI runner is harmless; a red
+  // branch from a cleanup race is not. See admin-page.test.mjs for the race.
+  try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); } catch { /* nothing to do */ }
+});
 
 // Measured 26 Aug 2026: the import service takes 30+ minutes on a long
 // lecture's first fetch, keeps fetching after our budget runs out, and then
