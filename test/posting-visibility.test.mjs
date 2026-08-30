@@ -22,14 +22,17 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deenclipped-posting-'));
-const port = 42100 + Math.floor(Math.random() * 400);
 process.env.DATA_DIR = dataDir;
-process.env.PORT = String(port);
+// Let the OS allocate a free port. Random ranges still collide when the test
+// runner starts several HTTP fixtures at once.
+process.env.PORT = '0';
 process.env.AUTH_REQUIRED = 'false';
 process.env.APP_SESSION_SECRET = 'posting-visibility-secret-long-enough';
 
-const base = `http://127.0.0.1:${port}`;
 const { server } = await import('../src/server.js');
+const address = server.address();
+assert.ok(address && typeof address === 'object', 'test server selected a port');
+const base = `http://127.0.0.1:${address.port}`;
 const social = await import('../src/social.js');
 
 for (let attempt = 0; attempt < 60; attempt += 1) {

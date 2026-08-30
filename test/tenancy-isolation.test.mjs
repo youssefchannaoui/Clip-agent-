@@ -12,19 +12,19 @@ import test from 'node:test';
  */
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deenclipped-isolation-'));
-const port = 34000 + Math.floor(Math.random() * 4000);
-
 process.env.DATA_DIR = dataDir;
-process.env.PORT = String(port);
+// Let the OS allocate a free port; randomized ranges can overlap in parallel CI.
+process.env.PORT = '0';
 process.env.AUTH_REQUIRED = 'true';
 process.env.EMAIL_SIGNIN_ENABLED = 'true';
 process.env.ADMIN_EMAIL = 'operator@deenclipped.test';
 process.env.SOCIAL_TOKEN_KEY = 'isolation-test-social-key-over-32-characters';
 
-const base = `http://127.0.0.1:${port}`;
-
 // Importing server.js starts it listening as a side effect.
 const { server } = await import('../src/server.js');
+const address = server.address();
+assert.ok(address && typeof address === 'object', 'test server selected a port');
+const base = `http://127.0.0.1:${address.port}`;
 const store = await import('../src/store.js');
 const auth = await import('../src/auth.js');
 
