@@ -217,15 +217,36 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
   <header class="site-header">
     <div class="wrap nav">
       <a class="brand" href="/" aria-label="DeenClipped home">${logoMark()}<span class="brand-copy"><strong>DeenClipped</strong><small>AI clip workspace</small></span></a>
-      <button class="menu-button" type="button" data-menu aria-label="Open navigation"><span></span><span></span><span></span></button>
-      <nav class="nav-links" aria-label="Main navigation">
+      <button class="menu-button" type="button" data-menu aria-expanded="false" aria-controls="marketing-nav" aria-label="Open navigation"><span></span><span></span><span></span></button>
+      <nav class="nav-links" id="marketing-nav" aria-label="Main navigation">
         <a href="/how-it-works">How it works</a>
-        <a href="/features">Features</a>
-        <a href="/tools/ai-video-clipper">Tools</a>
-        <a href="/guides">Guides</a>
-        <a href="/islamic-video-clipper">For Islamic creators</a>
+        <div class="nav-group" data-nav-group>
+          <button type="button" class="nav-group-trigger" aria-expanded="false" aria-controls="nav-product-menu">Product <span aria-hidden="true">⌄</span></button>
+          <div class="nav-flyout nav-flyout-product" id="nav-product-menu" aria-label="Product links">
+            <a href="/features"><b>All features</b><small>See the complete workflow</small></a>
+            <a href="/tools/ai-video-clipper"><b>AI clipping</b><small>Find moments worth reviewing</small></a>
+            <a href="/tools/ai-caption-generator"><b>Captions &amp; reframing</b><small>Prepare a clear vertical render</small></a>
+            <a href="/review-safety"><b>Review &amp; safety</b><small>You decide what moves forward</small></a>
+          </div>
+        </div>
+        <div class="nav-group" data-nav-group>
+          <button type="button" class="nav-group-trigger" aria-expanded="false" aria-controls="nav-solutions-menu">For creators <span aria-hidden="true">⌄</span></button>
+          <div class="nav-flyout nav-flyout-solutions" id="nav-solutions-menu" aria-label="Creator solutions">
+            <a href="/islamic-video-clipper"><b>Islamic creators</b><small>Built for lectures, reminders and Quran</small></a>
+            <a href="/islamic-lecture-clipper"><b>Islamic lectures</b><small>Keep each useful point complete</small></a>
+            <a href="/tools/podcast-clip-generator"><b>Podcasters</b><small>Turn episodes into review-ready shorts</small></a>
+            <a href="/tools/youtube-to-shorts"><b>YouTube creators</b><small>Make Shorts from your own videos</small></a>
+          </div>
+        </div>
+        <div class="nav-group" data-nav-group>
+          <button type="button" class="nav-group-trigger" aria-expanded="false" aria-controls="nav-resources-menu">Resources <span aria-hidden="true">⌄</span></button>
+          <div class="nav-flyout nav-flyout-resources" id="nav-resources-menu" aria-label="Resources">
+            <a href="/guides"><b>Guides</b><small>Practical short-form guidance</small></a>
+            <a href="/tools/safe-zone-checker"><b>Free tools</b><small>Check safe zones and clip output</small></a>
+            <a href="/alternatives"><b>How it compares</b><small>An honest fit check</small></a>
+          </div>
+        </div>
         <a href="/pricing">Pricing</a>
-        <a href="/review-safety">Review & safety</a>
       </nav>
       ${navActions(currentUser)}
     </div>

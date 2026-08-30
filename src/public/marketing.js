@@ -13,6 +13,34 @@ navLinks?.addEventListener('click', event => {
   }
 });
 
+const navGroups = [...document.querySelectorAll('[data-nav-group]')];
+const closeNavGroups = (except = null) => {
+  navGroups.forEach(group => {
+    if (group === except) return;
+    group.classList.remove('open');
+    group.querySelector('.nav-group-trigger')?.setAttribute('aria-expanded', 'false');
+  });
+};
+
+navGroups.forEach(group => {
+  const trigger = group.querySelector('.nav-group-trigger');
+  trigger?.addEventListener('click', () => {
+    const open = !group.classList.contains('open');
+    closeNavGroups(group);
+    group.classList.toggle('open', open);
+    trigger.setAttribute('aria-expanded', String(open));
+  });
+  group.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    closeNavGroups();
+    trigger?.focus();
+  });
+});
+
+document.addEventListener('click', event => {
+  if (!event.target.closest('[data-nav-group]')) closeNavGroups();
+});
+
 for (const form of document.querySelectorAll('[data-source-form]')) {
   form.addEventListener('submit', event => {
     event.preventDefault();
