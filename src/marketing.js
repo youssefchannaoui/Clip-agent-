@@ -356,38 +356,6 @@ function journey() {
   return `<div class="journey-shell reveal" data-journey><div class="journey-tabs" role="tablist" aria-label="DeenClipped workflow">${tabs}</div><div class="journey-panels">${panels}</div><div class="journey-progress" aria-hidden="true"><i></i></div></div>`;
 }
 
-/**
- * The homepage should prove one thing at a glance: the three short clips came
- * from the long video directly above them.  These are four different frames
- * from the same public Bilal Assaad lecture, exported as individual assets so
- * that the page never repeats a photograph or pretends unrelated clips share
- * a source.
- */
-function linkedSourceToClips() {
-  const clips = [
-    ['bilal-clip-one.webp', '00:12', 'A clear opening that stands alone'],
-    ['bilal-clip-two.webp', '14:38', 'One complete, useful point'],
-    ['bilal-clip-three.webp', '31:06', 'A closing thought worth saving'],
-  ];
-  return `<div class="source-to-clips" data-workflow-film aria-label="A single lecture becoming three review-ready short clips">
-    <div class="film-source">
-      <div class="film-label"><span><i></i>Long-form source</span><small>48:26 lecture</small></div>
-      <img src="/marketing-assets/bilal-source-wide.webp" alt="A long-form lecture source" fetchpriority="high">
-      <div class="film-timeline" aria-hidden="true"><i></i><b></b><b></b><b></b></div>
-      <div class="film-source-copy"><strong>One source. Every clip stays connected to it.</strong><small>Choose the exact range before processing.</small></div>
-    </div>
-    <div class="film-connector" aria-hidden="true"><span>${icon('spark')}</span><i></i><small>find complete moments</small></div>
-    <div class="film-clips">
-      <div class="film-clips-head"><span>${icon('clips')} Review-ready clips</span><small>3 candidates found</small></div>
-      <div class="film-clip-grid">${clips.map(([src, time, title], index) => `<article class="film-clip film-clip-${index + 1}">
-        <img src="/marketing-assets/${src}" alt="A vertical clip from the same source lecture" loading="${index ? 'lazy' : 'eager'}">
-        <span>${escapeHtml(time)}</span><strong>${escapeHtml(title)}</strong><i aria-hidden="true"></i>
-      </article>`).join('')}</div>
-      <div class="film-decision"><span>${icon('shield')}</span><p><b>You approve what moves forward.</b><small>Nothing publishes until you do.</small></p><em>Review</em></div>
-    </div>
-  </div>`;
-}
-
 function homepageFeatureMap() {
   const features = [
     ['import', '01', 'Choose the source range', 'Paste a supported link or upload a file, then process only the minutes you selected.'],
@@ -621,7 +589,7 @@ function faqSchema() {
 export function home({ base, currentUser }) {
   const body = `
   <main>
-    <section class="homepage-hero wrap">
+    <section class="hero homepage-hero-simple wrap">
       <div class="homepage-hero-copy">
         <span class="eyebrow"><i></i>Short-form content for Islamic creators</span>
         <h1>Turn one lecture into <span>clips you want to publish.</span></h1>
@@ -630,7 +598,6 @@ export function home({ base, currentUser }) {
         <div class="hero-actions"><a class="button primary" href="/login?returnTo=/app">Start clipping free ${icon('arrow')}</a><a class="button secondary" href="#how-it-works">See how it works</a></div>
         <p class="purpose-line"><strong>${escapeHtml(Number(config.tokensFree).toLocaleString())} source minutes included for ${escapeHtml(String(config.stripeTrialDays))} days.</strong> No card required.</p>
       </div>
-      <div class="homepage-hero-film reveal">${linkedSourceToClips()}</div>
     </section>
 
     <section class="homepage-assurance" aria-label="DeenClipped product assurances"><div class="wrap"><span>${icon('shield')} Review-first by design</span><span>${icon('language')} English, Arabic and Quran-aware</span><span>${icon('calendar')} Scheduling built in</span><span>${icon('brain')} Private DeenAI on Studio</span></div></section>

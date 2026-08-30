@@ -206,20 +206,20 @@ test('public imagery uses a distinct, male-only source library without repeated 
   const images = [...home.matchAll(/\/marketing-assets\/([^"?]+)/g), ...features.matchAll(/\/marketing-assets\/([^"?]+)/g)];
   const assets = images.map(match => match[1]);
   assert.equal(new Set(assets).size, assets.length, 'a marketing source image must never repeat across the public home or features pages');
-  for (const asset of ['bilal-source-wide.webp', 'bilal-clip-one.webp', 'bilal-clip-two.webp', 'bilal-clip-three.webp', 'reel-beneficial.webp', 'reel-quran.webp']) {
+  for (const asset of ['reel-beneficial.webp', 'reel-deeds.webp', 'reel-dua.webp', 'reel-dunya.webp', 'reel-quran.webp', 'reel-halal.webp']) {
     assert.ok(assets.includes(asset), `${asset} should represent a distinct public source example`);
   }
 });
 
-test('the homepage keeps each short clip visibly connected to one source lecture', async () => {
+test('the homepage keeps its first decision focused on one centred source bar', async () => {
   const home = await fetch(`${base}/`, { headers: { accept: 'text/html' } }).then(r => r.text());
-  for (const detail of ['data-workflow-film', 'bilal-source-wide.webp', 'bilal-clip-one.webp', 'bilal-clip-two.webp', 'bilal-clip-three.webp', 'You approve what moves forward.', 'Nothing publishes until you do.']) {
+  for (const detail of ['homepage-hero-simple', 'Paste a YouTube link to begin', 'Start with this video', 'Turn one lecture into']) {
     assert.ok(home.includes(detail), `the product demonstration must show ${detail}`);
   }
+  assert.ok(!home.includes('data-workflow-film'), 'the hero should not require a decorative source-to-clips animation');
   assert.ok(!home.includes('92 · Review'), 'a decorative review score must not be presented as a real product result');
   const css = await fetch(`${base}/marketing.css`).then(r => r.text());
-  assert.match(css, /@keyframes filmGlow/, 'the homepage source-to-clips relationship has a subtle visual emphasis');
-  assert.match(css, /@media\(prefers-reduced-motion:reduce\)/, 'homepage motion needs a reduced-motion fallback');
+  assert.match(css, /\.homepage-hero-simple/, 'the single-column homepage hero needs a dedicated layout');
 });
 
 test('privacy copy names current import and DeenAI processing without stale vendors', async () => {
