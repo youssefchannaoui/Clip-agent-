@@ -5589,6 +5589,32 @@ StudioAdapter.onProbeSource=async url=>{try{
           }
         }catch(e){/* a control must never take the screen down */}
       };
+      /* Re-attached on the ANIMATION FRAME, and that is the whole fix.
+         The panel beside this row is re-rendered through innerHTML on every
+         template change, which takes the injected row with it. Repainting from
+         a setTimeout DOES land after the render -- but only after the browser
+         has already painted a frame with no row in it, and the row carries
+         ~66px of height, so the column below jumps out and back on every
+         change. Moving the caption repeatedly reads as the whole panel
+         lagging, which is exactly how it was reported.
+         requestAnimationFrame runs after the render and BEFORE the paint, so
+         no frame is ever shown without it.
+         Doing it synchronously from the observer instead does NOT work, and is
+         worth writing down because it looks like the obvious answer: the
+         observer is delivered part-way through the render, so the row is
+         inserted and then wiped by the innerHTML write that follows -- measured,
+         host.parentNode ended up with two children and neither was ours, and
+         the row never came back at all.
+         rAF is throttled in a hidden tab, so a timeout races it; whichever
+         lands first wins and paintWatermark is idempotent. */
+      let wmQueued=false;
+      const queueWatermark=()=>{
+        if(wmQueued) return;
+        wmQueued=true;
+        const run=()=>{ if(!wmQueued) return; wmQueued=false; try{ paintWatermark(); }catch(e){} };
+        requestAnimationFrame(run);
+        setTimeout(run,0);
+      };
       window.dcPaintWatermark=paintWatermark;
 
       window.dcPaintInvite=paintInvite;
@@ -5619,7 +5645,7 @@ StudioAdapter.onProbeSource=async url=>{try{
           // Same shape for the watermark control on the Templates screen.
           const styleBtn=document.getElementById('dcSaveAsStyle');
           const wm=document.getElementById('dcWatermark');
-          if((styleBtn&&!wm)||(!styleBtn&&wm)) setTimeout(()=>{try{paintWatermark()}catch(e){}},0);
+          if((styleBtn&&!wm)||(!styleBtn&&wm)) queueWatermark();
         }).observe(document.body,{childList:true,subtree:true});
         // The observer reacts to CHANGE. If the plan grid is already on the
         // page when it is installed — a reload straight onto Tokens & billing

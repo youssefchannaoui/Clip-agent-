@@ -2037,3 +2037,35 @@ glued into an English sentence and rendering as scrambled bidi.
 **No assertion about the data could have caught this** -- the cards were
 correct and the screen was wrong. Found by screenshotting, which is the rule
 this file has been repeating since August.
+
+## The watermark row flickered, and the obvious fix made it vanish (v3.53.3)
+
+Youssef: "the captions when moving is lagging cause the watermark option is
+disapearing and coming back."
+
+- **A host-rendered row is destroyed by the render it sits beside.** The panel
+  next to it is rewritten through innerHTML on every template change, which
+  takes the injected row with it. Measured: one click on Caption position and
+  the row came back as a DIFFERENT node (`sameNode: false`). The row carries
+  ~66px, so the column under it jumped out and back on every change -- moving
+  the caption repeatedly reads as the whole panel lagging.
+- **The bug was WHEN it was put back, not that it was.** The observer repainted
+  from `setTimeout(...,0)`, which lands after the render but only after the
+  browser has already PAINTED a frame with no row in it.
+  `requestAnimationFrame` runs after the render and BEFORE the paint, so no
+  frame is ever shown without it. rAF is throttled in a hidden tab, so a
+  timeout races it and whichever lands first wins; paintWatermark is
+  idempotent.
+- **Repainting SYNCHRONOUSLY from the observer looks like the obvious answer
+  and is worse than the bug.** A MutationObserver is delivered part-way through
+  the render, so the row is inserted and then wiped by the innerHTML write that
+  follows -- `host.parentNode` ended up with two children and neither was ours,
+  and the row then never came back AT ALL. Nearly half a session went on this;
+  it is written down so the next person does not try it.
+- **The "keep one node and re-attach it" optimisation was also tried and
+  reverted.** It is not needed once the timing is right, and it introduced a
+  signature gate that stopped the row ever being re-inserted. The fix that
+  shipped changes one scheduling call and nothing else.
+- Proven the way it was found, on the same control: row present 4/4 changes,
+  the SAME node each time, and 0px of movement -- against rebuilt-every-time
+  before.
