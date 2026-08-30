@@ -211,6 +211,25 @@ export function report(state = {}, webSummary = {}) {
       return Object.entries(counts).map(([step, n]) => ({ step, users: n })).sort((a, b) => b.users - a.users);
     })(),
 
+    // What the import statuses actually ARE, for the accounts in this funnel.
+    //
+    // Added because the funnel said "0 processed" while the health endpoint
+    // said 6 completed, and the two could not both be right. They were
+    // measuring different things -- health looks at 7 days and all accounts,
+    // this looks at all time and excludes the operator -- but the only way to
+    // tell that from a guess is to show the raw statuses. A funnel stage that
+    // cannot be reconciled with the records behind it is not a measurement.
+    importStatuses: (() => {
+      const ids = new Set(users.map(u => idOf(u.id)));
+      const counts = {};
+      for (const project of asArray(state.projects)) {
+        if (!ids.has(idOf(project.userId))) continue;
+        const status = String(project.status || 'unknown');
+        counts[status] = (counts[status] || 0) + 1;
+      }
+      return counts;
+    })(),
+
     // Said in the payload, not only on the screen, so no reader can mistake
     // an absent number for a measured zero.
     unavailable: [
