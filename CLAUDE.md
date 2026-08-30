@@ -181,7 +181,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **955 JS + 427 Python**
+- `npm test` and `npm run check` must pass. Currently **966 JS + 427 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1976,3 +1976,42 @@ at boot.
 
 Both only showed up on production, because locally the panel was always reached
 by navigating INTO the screen with a warm session.
+
+## DeenAI learned to read your decisions (v3.53.0, 31 Aug 2026)
+
+Everything DeenAI said before this was a pattern anyone could have told you.
+Four new cards read the account's OWN judgements, which is the part no
+competitor can copy — it is not about short-form video, it is about this
+person's taste.
+
+- **The next action comes first.** An account with twelve clips sitting
+  unreviewed was being told its approved hooks average nine words. True, and
+  useless. `nextActionCard` uses `referrals.nextStep` — the SAME definition of
+  "stuck" the owner's growth funnel uses, deliberately, because two definitions
+  would eventually have the dashboard and the customer's advice telling
+  different stories about one account.
+- **What you keep vs what you throw away.** A person watching a clip and saying
+  no is the strongest signal in the product and nothing was reading it. Speaks
+  only with six of each and a gap over eight seconds: below that a "pattern" is
+  one clip's accident wearing a percentage sign.
+- **Does the score agree with you?** The worker scores, a human decides, and
+  nobody compared them. Reports only when they DISAGREE — "the score broadly
+  matches your judgement" is not worth a card. Where three or more clips rated
+  85+ were rejected it says plainly that auto-approve would have published
+  them.
+- **Minutes per keeper**, because the product charges by the source minute and
+  that is the question a customer actually has.
+
+**Two bugs found while testing, both of the same kind — a number that makes the
+reader distrust every other number beside it:**
+
+1. Untitled clips were averaged into the hook figure, producing "your approved
+   hooks average **0** words".
+2. The next-action card told a PAYING customer to subscribe, because "paid" is
+   derived from revenue events and an account can hold a plan without one
+   (granted, comped, migrated).
+
+**Cards are now ranked by how specific they are to the account**, not by the
+order they were written. Only five are shown, and the two most specific things
+the product can say were falling off the end behind generic advice about hook
+length.
