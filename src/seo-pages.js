@@ -372,6 +372,25 @@ export const SEO_PAGES = [
     links: ['/pricing', '/guides/long-video-to-shorts', '/tools/long-video-to-shorts'],
   },
 
+  // ── Comparison ───────────────────────────────────────────────────────────
+  // ONE page, not one per competitor. A page per rival means a page per rival
+  // to keep true, and a comparison that has gone stale is worse for the reader
+  // than none -- they check, they find it wrong, and they stop believing the
+  // rest of the site. No price is quoted anywhere on it for the same reason:
+  // pricing moves, and a wrong number about someone else's product is both a
+  // credibility problem and a legal one.
+  {
+    path: '/alternatives',
+    kind: KIND.TRUST,
+    title: 'DeenClipped vs General AI Clip Tools | DeenClipped',
+    description: 'An honest comparison: what general AI clipping tools do better, what DeenClipped does that they do not, and how to tell which one fits your videos.',
+    intent: 'ai clip tool alternative comparison',
+    breadcrumb: 'How it compares',
+    cluster: 'trust',
+    lastmod: '2026-08-30',
+    links: ['/islamic-video-clipper', '/pricing', '/how-it-works'],
+  },
+
   // ── Existing pages that stay exactly as they are ─────────────────────────
   {
     path: '/contact',

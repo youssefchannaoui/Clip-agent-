@@ -6903,7 +6903,14 @@
       anaReferrersEmpty: topPairs(DATA.webmetrics && DATA.webmetrics.referrers).length === 0,
       anaUtm: topPairs(DATA.webmetrics && DATA.webmetrics.utm),
       anaUtmEmpty: topPairs(DATA.webmetrics && DATA.webmetrics.utm).length === 0,
-      anaFootnote: 'Visitors are one daily-rotating hash each \u2014 no addresses stored, nothing sent anywhere.',
+      // Search-visibility data is NOT here, and the note says so rather than
+      // leaving a gap that reads as zero traffic. Impressions, queries and
+      // average position live in Google Search Console; nothing in this app
+      // has an API connection to it, and inventing those numbers would make
+      // every other figure on this screen suspect.
+      anaFootnote: 'Visitors are one daily-rotating hash each \u2014 no addresses stored, nothing sent anywhere. '
+        + 'Search impressions, queries and ranking positions are not here: they come from Google Search Console, '
+        + 'which this app is not connected to. Public pages in the sitemap: ' + (DATA.webmetrics && DATA.webmetrics.publicPages || '\u2014') + '.',
 
       // ── Tokens & billing ──
       // The period tabs filter the real plan list by its own `interval`, so the

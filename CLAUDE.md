@@ -150,7 +150,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **894 JS + 427 Python**
+- `npm test` and `npm run check` must pass. Currently **901 JS + 427 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1556,3 +1556,46 @@ launched, both found by MEASURING a rendered page rather than by reading CSS.
 - **GitHub metadata set** (description, homepage, 8 topics) after scanning the
   tracked tree AND the history for credential shapes — it is a public repo. The
   README opening was stale and named an import provider removed in August.
+
+## The comparison page, the proof band, and research that refuses (v3.47.0)
+
+- **One comparison page, not one per competitor.** A page per rival is a page
+  per rival to keep true, and a stale comparison is worse for the reader than
+  none: they check, find it wrong, and stop believing the rest of the site.
+  `/alternatives` **quotes no competitor price anywhere**, deliberately --
+  pricing moves and a wrong number about someone else's product is both a
+  credibility and a legal problem. It compares on capability, says outright
+  that a general tool is likely the better buy for English podcasts, and lists
+  what DeenClipped does NOT have.
+  Research found the real niche fact worth having: the existing Islamic tools
+  (Quran Caption, QuranClip, Quran Clip Helper) BUILD a recitation video from a
+  reciter's audio. DeenClipped goes the other way and cuts an existing lecture.
+  Different job, and that is the honest differentiator.
+- **The landing pages had no picture of the product.** Fifteen pages of prose
+  and a visitor who has read four paragraphs still had not seen a clip.
+  `proofBand()` puts the next action and two real product images under the
+  hero, on commercial pages only -- a guide should answer before it asks for
+  anything, and a free tool already has its own control. The form is the
+  homepage's, so a pasted URL survives sign-in and lands in the importer;
+  verified by submitting it and reading the resulting
+  `/login?returnTo=/app?source=...`.
+- **`src/research.js` refuses before it invents.** It exists so that when there
+  IS enough data to publish something about what happens to long lectures, the
+  analysis is already written and privacy-checked rather than improvised under
+  the pressure of wanting something to publish -- which is exactly when eleven
+  clips become "a study". `MIN_SAMPLE` 500 clips AND `MIN_ACCOUNTS` 20, because
+  a big sample from three accounts describes three workflows and publishing it
+  as the practice is a lie of framing rather than of arithmetic. Buckets under
+  25 records are dropped and the dropped count travels with the result. It
+  reads no titles, transcripts or ids, and a test asserts that by planting them
+  in the fixtures. **It is deliberately not wired to a route, and a test fails
+  if it ever is** without someone thinking about it.
+- **`videoObjectFor()` refuses without a real public video** -- no https URL,
+  no thumbnail, no duration, or a signed/private path, and it returns null. A
+  page with no VideoObject ranks worse than one with a true VideoObject and
+  infinitely better than one with a false one, and the penalty for a false one
+  lands on the domain rather than the page.
+- **The Owner screen now says what it does NOT know.** Impressions, queries and
+  ranking positions come from Search Console, which this app has no connection
+  to; the note says so rather than leaving a gap that reads as zero traffic,
+  and shows the sitemap's public page count beside it.

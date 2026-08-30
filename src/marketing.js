@@ -235,7 +235,7 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
     <div class="wrap">
       <div class="footer-grid">
         <div class="footer-brand"><a class="brand" href="/">${logoMark()}<span class="brand-copy"><strong>DeenClipped</strong><small>AI clip workspace</small></span></a><p>Turn long lectures and videos into review-ready short clips, refine every detail, then publish to your own connected channels.</p></div>
-        <div class="footer-col"><h4>Product</h4><a href="/features">All features</a><a href="/how-it-works">How it works</a><a href="/pricing">Plans & tokens</a><a href="/review-safety">Review & safety</a><a href="/app">Dashboard</a></div>
+        <div class="footer-col"><h4>Product</h4><a href="/features">All features</a><a href="/how-it-works">How it works</a><a href="/alternatives">How it compares</a><a href="/pricing">Plans & tokens</a><a href="/review-safety">Review & safety</a><a href="/app">Dashboard</a></div>
         <div class="footer-col"><h4>Clip long video</h4><a href="/tools/ai-video-clipper">AI video clipper</a><a href="/tools/long-video-to-shorts">Long video to Shorts</a><a href="/tools/podcast-clip-generator">Podcast clip generator</a><a href="/tools/lecture-clip-generator">Lecture clip generator</a><a href="/tools/ai-caption-generator">AI caption generator</a></div>
         <div class="footer-col"><h4>Publish to</h4><a href="/tools/youtube-to-shorts">YouTube to Shorts</a><a href="/tools/youtube-to-tiktok">YouTube to TikTok</a><a href="/tools/youtube-to-reels">YouTube to Reels</a></div>
         <div class="footer-col"><h4>Islamic creators</h4><a href="/islamic-video-clipper">Islamic video clipper</a><a href="/islamic-lecture-clipper">Islamic lecture clipper</a><a href="/tools/arabic-english-captions">Arabic &amp; English captions</a><a href="/for/islamic-creators">Built for dawah content</a></div>
@@ -821,6 +821,85 @@ function toolWidget(path) {
 }
 
 /**
+ * The next action, and proof that the thing exists.
+ *
+ * Fifteen landing pages of prose with no picture of the product is a
+ * conversion problem, not a design preference: a visitor who has read four
+ * paragraphs still has not seen a clip, and "paste a link" is a much smaller
+ * ask than "create an account". The form is the same one the homepage uses --
+ * it carries the pasted URL through sign-in and into the importer, so the
+ * click is not thrown away.
+ *
+ * Commercial pages only. A guide should answer the question before it asks for
+ * anything, and a free tool already has its own control on the page.
+ */
+function proofBand(page) {
+  const commercial = [KIND.TOOL, KIND.AUDIENCE, KIND.USE_CASE].includes(page.kind);
+  if (!commercial) return '';
+  return `<section class="seo-proof wrap">
+      <div class="seo-proof-copy">
+        <span class="section-label">Start here</span>
+        <h2>Paste a link and see what it finds.</h2>
+        <p>Free to try with 40 tokens, no card. You choose the minutes worth clipping, and every clip waits for your approval before anything publishes.</p>
+        ${sourceForm()}
+      </div>
+      <div class="seo-proof-media">
+        <div class="product-frame"><img src="/marketing-assets/clip-discovery-premium.webp" alt="Candidate clips scored and waiting in the DeenClipped review queue" loading="lazy"></div>
+        <figure class="reel-card seo-proof-reel"><img src="/marketing-assets/reel-quran.webp" alt="A finished vertical clip with an ayah and its translation" loading="lazy"><span class="reel-badge">9:16</span></figure>
+      </div>
+    </section>`;
+}
+
+/**
+ * VideoObject for an example page.
+ *
+ * REFUSES unless there is a real, publicly reachable video. That refusal is
+ * the whole reason this function exists rather than a template: schema
+ * describing a video that cannot be played is a fabrication, Google treats it
+ * as one, and the penalty lands on the whole domain rather than the page.
+ *
+ * `example` must carry: contentUrl (a public media URL), thumbnailUrl,
+ * uploadDate (ISO date), durationSec, name and description. Anything missing
+ * and this returns null and the page renders without schema, which is the
+ * correct outcome -- a page with no VideoObject ranks worse than one with a
+ * true VideoObject and infinitely better than one with a false one.
+ *
+ * Nothing is registered under KIND.EXAMPLE yet: there is no repo-owned public
+ * demo clip, and a customer's clip is theirs and must never be published here.
+ */
+export function videoObjectFor(base, page, example) {
+  if (!page || !example) return null;
+  const root = siteBase(base);
+  const url = String(example.contentUrl || '');
+  // A public https URL, and not one of the app's own signed or private paths.
+  if (!/^https:\/\//.test(url)) return null;
+  if (/\/api\/|token=|signature=/.test(url)) return null;
+  if (!example.thumbnailUrl || !example.uploadDate || !example.name) return null;
+  const duration = Number(example.durationSec);
+  if (!Number.isFinite(duration) || duration <= 0) return null;
+
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'VideoObject',
+    name: example.name,
+    description: example.description || page.description,
+    thumbnailUrl: [example.thumbnailUrl],
+    uploadDate: example.uploadDate,
+    // ISO 8601 duration, which is what schema.org expects and what people
+    // most often get wrong by writing seconds.
+    duration: `PT${Math.floor(duration / 60)}M${Math.round(duration % 60)}S`,
+    contentUrl: url,
+    embedUrl: example.embedUrl || undefined,
+    isFamilyFriendly: true,
+    publisher: {
+      '@type': 'Organization',
+      name: 'DeenClipped',
+      url: root,
+    },
+  };
+}
+
+/**
  * A hub page lists everything in its cluster, computed rather than typed.
  *
  * The first version listed three guides by hand in the registry's `links`, and
@@ -871,6 +950,7 @@ export function seoPage({ base, currentUser, page, copy }) {
     </section>
     ${toolWidget(page.path)}
     ${clusterIndex(page)}
+    ${proofBand(page)}
     <section class="page-content"><div class="wrap">
       <div class="seo-body">${sections}</div>
       ${faqs ? `<section class="faq-section"><h2>Questions</h2><div class="faq-list">${faqs}</div></section>` : ''}

@@ -25,7 +25,7 @@
 
 import crypto from 'node:crypto';
 import { state, save } from './store.js';
-import { trackedPaths } from './seo-pages.js';
+import { trackedPaths, indexablePages } from './seo-pages.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RETENTION_DAYS = 90;
@@ -438,6 +438,11 @@ export function summary({ days = 30 } = {}) {
     missing: missingPages, botHits,
     liveNow: liveNow(),
     signupsByDay,
+    // How many public pages exist to be found at all. A crawl problem shows up
+    // as this number and the indexed count diverging -- and the indexed count
+    // is the half only Search Console knows, which is why the screen says so
+    // rather than showing a gap.
+    publicPages: indexablePages().length,
     // Landing pages ranked by what they EARN, not by what they attract.
     //
     // The join happens here rather than on the screen because the screen would

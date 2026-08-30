@@ -646,4 +646,39 @@ export const SEO_COPY = {
     ctaLabel: "Start with 40 free tokens",
   },
 
+  // ── Comparison ─────────────────────────────────────────────────────────
+  // Names competitors, quotes no prices, and states what DeenClipped does
+  // NOT have. The paragraph that sends podcast creators to a competitor is
+  // deliberate: they would find out in a week, and being told first is the
+  // only version where they come back when their content changes.
+  "/alternatives": {
+    h1: "DeenClipped compared to general AI clip tools",
+    lede: "There are good general-purpose clippers and you should consider them. This page says plainly what they do better, what DeenClipped does that they do not, and how to tell which one your videos need — because the wrong answer here wastes your month, not ours.",
+    sections: [
+      { heading: "What the general tools do better",
+        body: "Opus Clip, Vizard, Klap and the rest of that category are more mature products with far more people behind them, and it shows in places that matter. They have deeper editing surfaces, more caption templates and brand kits, team workspaces and shared review, virality scoring trained on a lot more data than we have, and integrations we do not have. If your content is English-language podcasts, interviews or webinars, and what you want is volume and polish, one of those is very probably a better buy than this. That sentence stays on this page even though it costs us signups, because you will find out in a week anyway." },
+      { heading: "What DeenClipped does that they do not",
+        body: "The difference is what happens when the audio is not plain English. Recited Quran is matched against the full corpus of 6,236 ayat and rendered as the verse with its translation, set in Amiri — not as the phonetic approximation a transcriber produces, which is what a general tool will burn into your frame. Arabic that is not scripture is captioned in Arabic with an English line beneath it, from a second translation pass. Language detection switches per segment, so an English lecture with two minutes of recitation in the middle is handled as two languages rather than having one forced across the whole file. And any clip containing scripture is held for a person to see on the finished frame before it can publish, whatever automation is switched on. None of that is a setting in a general clipper; it is a different pipeline." },
+      { heading: "The Islamic tools that already exist do a different job",
+        body: "If you have searched this space you will have found Quran Caption, QuranClip, Quran Clip Helper and others. They are good at what they do, several are free, and one is open source — but the job is not the same one. They BUILD a recitation video: you pick a surah, a reciter and a translation, and it assembles a video around that audio. DeenClipped goes the other way: it takes a lecture that already exists, finds the moments inside it worth posting, and cuts them out. If what you want is a beautiful ayah video from a reciter’s audio, use one of those. If what you have is a ninety-minute khutbah and no time to watch it back, that is this." },
+      { heading: "How to tell which one you need",
+        body: "Three questions settle it. Does your audio contain Arabic or recitation? If no, a general tool is likely a better fit and you should not pay a niche premium for handling you will never use. Do you need a person to see every clip before it publishes, and do you want that enforced rather than suggested? DeenClipped makes review mandatory and cannot be configured out of it, which is a feature to some people and friction to others. And are you starting from long recordings, or from audio you want a video built around? Long recordings are what this cuts." },
+      { heading: "What DeenClipped does not have",
+        body: "Said plainly so you can rule it out quickly: the full clip editor is behind a \"coming soon\" gate, so what you can change today is the template and the source range, not individual frames. There is no mobile app. No connected platform sends audience data back, so there are no view counts or watch-time figures anywhere in the product — the numbers you get are about your own workflow, not your reach. And posting to more than one account on the same platform is not built yet. If any of those is a requirement, this is not your tool this month." },
+      { heading: "Check their current details yourself",
+        body: "Nothing on this page quotes anyone else’s price or feature list, deliberately. Those move, and a stale comparison is worse for you than no comparison — you would check, find it wrong, and reasonably stop believing the rest of this site. Go to their sites, look at what they charge today, and try the free tier where there is one. Ours is 40 tokens and needs no card." },
+    ],
+    faqs: [
+      { q: "Is DeenClipped a replacement for Opus Clip or Vizard?",
+        a: "For English podcasts and interviews, honestly no — those are more mature products with more behind them, and for that content they are likely the better buy. DeenClipped is the better fit when the audio contains Arabic or recitation, or when you need review before publishing to be enforced rather than optional." },
+      { q: "Why not just use a general tool and fix the Arabic afterwards?",
+        a: "Because by the time it reaches you there is nothing to fix. Transcription that decided the file was English renders Arabic as Latin approximations, and once that has happened nothing downstream can tell it was Arabic — no Arabic face, no ayah match, no translation line. It has to be handled at the transcription step or not at all." },
+      { q: "Do you compare on price?",
+        a: "No, and not out of coyness: quoting a competitor’s price on a page that will sit here for a year is how you end up publishing something untrue about someone else’s product. Our own pricing is on the pricing page. Theirs is on theirs." },
+      { q: "Can I use both?",
+        a: "Plenty of people would be sensible to. A general tool for English content and DeenClipped for lectures with recitation in them is a perfectly reasonable setup, and nothing here tries to stop it." },
+    ],
+    ctaLabel: "Try it on one lecture",
+  },
+
 };
