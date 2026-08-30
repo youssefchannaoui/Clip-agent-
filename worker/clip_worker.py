@@ -3994,6 +3994,53 @@ def process(job_file: Path) -> None:
     emit("result", resultPath=str(result_file))
 
 
+def dominant_subject_track(
+    raw: list[tuple[float, float, float]], src_w: int,
+) -> list[tuple[float, float, float]]:
+    """Collapse a two-subject track onto the subject who is actually present.
+
+    Returns `raw` untouched unless the horizontal positions are BIMODAL: two
+    tight groups with a clear gap between them. A speaker who genuinely walks
+    across the stage sweeps continuously and has no such gap, so they are left
+    alone -- the crop must still follow them.
+
+    Where two groups do exist the larger one wins, and the minority samples are
+    replaced by the last majority position rather than dropped, so the crop
+    holds still instead of lurching to the other side and back.
+    """
+    if len(raw) < 4 or src_w <= 0:
+        return raw
+    xs = sorted(item[1] for item in raw)
+    # The widest step between neighbouring positions. Two people sitting apart
+    # leave one big step; one person moving leaves many small ones.
+    gap, split_at = 0.0, 0.0
+    for earlier, later in zip(xs, xs[1:]):
+        if later - earlier > gap:
+            gap, split_at = later - earlier, (earlier + later) / 2.0
+    if gap < src_w * 0.15:
+        return raw
+
+    left = [item for item in raw if item[1] <= split_at]
+    right = [item for item in raw if item[1] > split_at]
+    minority_share = min(len(left), len(right)) / float(len(raw))
+    # A handful of stray detections is the existing scoring doing its job, not a
+    # second subject. Only a genuine second presence is worth collapsing.
+    if minority_share < 0.2:
+        return raw
+
+    keep = left if len(left) >= len(right) else right
+    kept = {id(item) for item in keep}
+    resolved: list[tuple[float, float, float]] = []
+    held = keep[0]
+    for item in raw:
+        if id(item) in kept:
+            held = item
+            resolved.append(item)
+        else:
+            resolved.append((item[0], held[1], held[2]))
+    return resolved
+
+
 def track_speaker_keyframes(
     source: Path,
     ffprobe: str,
@@ -4146,6 +4193,21 @@ def track_speaker_keyframes(
 
     if not raw:
         return {"available": False, "reason": "No face or speaker could be detected in this clip."}
+
+    # One subject, not the midpoint between two.
+    #
+    # The smoothing below averages every sample it is given. When a second face
+    # is in shot -- an audience member, a co-host -- detection alternates
+    # between them and the crop settles BETWEEN the two, framing neither. Seen
+    # on a real render 30 Aug 2026: a lecture with a seated listener at the left
+    # produced a clip whose opening had the speaker's face cut off at the right
+    # edge, on blank wall, because the window sat halfway to her.
+    #
+    # Continuity scoring above cannot prevent it: on the FIRST sample there is
+    # no previous centre and no previous frame, so neither the continuity bonus
+    # nor the mouth-movement term exists, and the biggest face wins whoever it
+    # belongs to.
+    raw = dominant_subject_track(raw, src_w)
 
     # Exponential smoothing so the crop glides instead of snapping.
     alpha = 1.0 - max(0.0, min(0.98, smoothing))
