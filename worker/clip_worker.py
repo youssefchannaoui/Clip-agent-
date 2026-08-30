@@ -2664,7 +2664,20 @@ def crop_origin_from_center(
     # rather than dragged across and sliced. 0 leaves the framing untouched,
     # which is every template that does not ask.
     if abs(subject_bias) > 0.0005:
-        desired_ratio = max(0.15, min(0.85, desired_ratio + subject_bias))
+        # The clamp has to leave room for the SUBJECT, not just for their
+        # centre point. At 0.85 the face's midpoint sits 85% across the crop,
+        # which on a 1214px window leaves ~180px to the edge -- narrower than a
+        # face, so it is sliced. Measured on a real render 30 Aug 2026: a
+        # speaker already right of centre in the source scored 0.762 from the
+        # placement above, Bold Stack's bias of 0.16 took that to 0.92, and the
+        # clamp let it settle at 0.85 with his face cut off at the frame edge.
+        #
+        # 0.75 keeps a quarter of the crop beyond the subject's centre on
+        # either side -- 300px on that same window, comfortably more than half
+        # a face. Templates that ask for a bias still get one: this only binds
+        # when the placement was already near an edge before the bias, which is
+        # exactly the case the old clamp mishandled.
+        desired_ratio = max(0.25, min(0.75, desired_ratio + subject_bias))
     x = int(max(0, min(src_w - crop_w, round(center_x - crop_w * desired_ratio))))
 
     if center_y is None:
