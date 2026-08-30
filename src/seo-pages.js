@@ -41,7 +41,7 @@ export const SEO_PAGES = [
     path: '/',
     breadcrumb: 'Home',
     kind: KIND.HOME,
-    title: 'AI Video Clipper for Lectures & Long Videos | DeenClipped',
+    title: 'DeenClipped — Turn Long Lectures Into Reviewed Clips',
     description:
       'Turn long lectures into review-ready vertical clips. DeenClipped finds complete moments, captions them in English and Arabic, and waits for your approval.',
     intent: 'ai video clipper',

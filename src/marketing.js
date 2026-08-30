@@ -116,7 +116,9 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <link rel="canonical" href="${canonical}">
+  <link rel="canonical" href="${canonical}">${config.googleSiteVerification ? `
+  <meta name="google-site-verification" content="${escapeHtml(config.googleSiteVerification)}">` : ''}${config.bingSiteVerification ? `
+  <meta name="msvalidate.01" content="${escapeHtml(config.bingSiteVerification)}">` : ''}
   ${schemaBlocks}
   <link rel="stylesheet" href="/marketing.css?v=${CSS_VERSION}">
 </head>

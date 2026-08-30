@@ -38,6 +38,14 @@ export const config = {
   port: number(process.env.PORT, 3000),
   password: process.env.APP_PASSWORD || '',
   publicBaseUrl: (process.env.APP_BASE_URL || process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/+$/, ''),
+  // Search Console / Bing verification, as env vars rather than a code change.
+  // Both consoles accept a meta tag as proof of ownership, and doing it this
+  // way means claiming the property is a variable on Render and a restart --
+  // not a commit, a review and a deploy for a string that is not a secret.
+  // Trimmed: a token pasted into a hosting panel picks up whitespace routinely,
+  // and the resulting failure looks identical to the wrong token entirely.
+  googleSiteVerification: String(process.env.GOOGLE_SITE_VERIFICATION || '').trim(),
+  bingSiteVerification: String(process.env.BING_SITE_VERIFICATION || '').trim(),
   timezone: process.env.TIMEZONE || 'Australia/Perth',
   postTimes: (process.env.POST_TIMES || '07:00,12:00,17:00,20:30')
     .split(',').map(value => value.trim()).filter(Boolean),

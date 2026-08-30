@@ -150,7 +150,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **888 JS + 427 Python**
+- `npm test` and `npm run check` must pass. Currently **890 JS + 427 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1271,6 +1271,16 @@ the English translation beneath it perfectly fine.
    their slots.
 7. **A stranger test** — someone who has never seen the product signs up and
    uses it. Claude cannot create an account, so this one needs a real person.
+8. **Verify the site in Google Search Console** — `SEO-LAUNCH.md`, step 1.
+   Fifteen new landing pages are live and there is no impression or query data
+   for any of them until this is done. It is one env var on Render
+   (`GOOGLE_SITE_VERIFICATION`) and a restart; the meta tag renders itself.
+   Then submit `sitemap.xml` and request indexing on the six pages listed
+   there. Bing takes two more minutes (`BING_SITE_VERIFICATION`).
+9. **Links.** Rankings for anything competitive come from other sites linking
+   here, and nothing in this repo can produce one. The DeenClipped YouTube
+   channel description pointing at `/islamic-video-clipper` is free, in your
+   control, and the highest-value link you own.
 
 ### Agreed for Studio, not yet built (30 Aug 2026, Youssef)
 

@@ -98,6 +98,22 @@ test('no two pages compete with the same title', async () => {
   }
 });
 
+test('no two pages lead with the same phrase', async () => {
+  // Distinct full titles are not enough. Two pages both OPENING with
+  // "AI Video Clipper" are one search term split across two pages, and Google
+  // then picks one of them for you -- usually the weaker one. The homepage
+  // led with the same phrase as /tools/ai-video-clipper until this caught it.
+  const lead = title => String(title).split(/[—|:]/)[0].trim().toLowerCase();
+  const seen = new Map();
+  for (const page of seo.indexablePages()) {
+    const key = lead(page.title);
+    const previous = seen.get(key);
+    assert.equal(previous, undefined,
+      `${page.path} and ${previous} both lead with "${key}" and will compete`);
+    seen.set(key, page.path);
+  }
+});
+
 test('every page has exactly one H1', async () => {
   for (const page of seo.SEO_PAGES) {
     const { body } = await get(page.path);
@@ -261,6 +277,17 @@ test('no public page invents numbers about customers or results', async () => {
     const hit = main.match(invented);
     assert.equal(hit, null, `${page.path} contains an unverifiable claim: "${hit && hit[0]}"`);
   }
+});
+
+test('search-console verification renders only when it is configured', async () => {
+  // Claiming the property should be a variable on Render and a restart, not a
+  // commit and a deploy for a string that is not a secret. An empty variable
+  // must emit nothing rather than an empty tag, which reads to a verifier as a
+  // wrong token rather than as an absent one.
+  const marketing = await import('../src/marketing.js');
+  const page = marketing.home({ base: 'https://deenclipped.online' });
+  assert.ok(!page.includes('google-site-verification'),
+    'nothing should be claimed while the variable is unset');
 });
 
 test('a missing page is still a 404 and is never in the sitemap', async () => {
