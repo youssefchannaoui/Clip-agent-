@@ -206,19 +206,19 @@ test('public imagery uses a distinct, male-only source library without repeated 
   const images = [...home.matchAll(/\/marketing-assets\/([^"?]+)/g), ...features.matchAll(/\/marketing-assets\/([^"?]+)/g)];
   const assets = images.map(match => match[1]);
   assert.equal(new Set(assets).size, assets.length, 'a marketing source image must never repeat across the public home or features pages');
-  for (const asset of ['speaker-bilal-assaad.webp', 'speaker-omar-suleiman.webp', 'speaker-abu-taymiyyah.webp', 'speaker-mufti-menk.webp', 'reel-beneficial.webp', 'reel-quran.webp']) {
+  for (const asset of ['bilal-source-wide.webp', 'bilal-clip-one.webp', 'bilal-clip-two.webp', 'bilal-clip-three.webp', 'reel-beneficial.webp', 'reel-quran.webp']) {
     assert.ok(assets.includes(asset), `${asset} should represent a distinct public source example`);
   }
 });
 
-test('the homepage demonstrates the actual review-first workflow with purposeful motion', async () => {
+test('the homepage keeps each short clip visibly connected to one source lecture', async () => {
   const home = await fetch(`${base}/`, { headers: { accept: 'text/html' } }).then(r => r.text());
-  for (const detail of ['data-hero-demo', 'Finding complete moments', 'Ready for your review', 'You approve', 'Nothing publishes without your approval']) {
+  for (const detail of ['data-workflow-film', 'bilal-source-wide.webp', 'bilal-clip-one.webp', 'bilal-clip-two.webp', 'bilal-clip-three.webp', 'You approve what moves forward.', 'Nothing publishes until you do.']) {
     assert.ok(home.includes(detail), `the product demonstration must show ${detail}`);
   }
   assert.ok(!home.includes('92 · Review'), 'a decorative review score must not be presented as a real product result');
   const css = await fetch(`${base}/marketing.css`).then(r => r.text());
-  assert.match(css, /@keyframes heroScan/, 'the homepage workflow needs a visible source-analysis state');
+  assert.match(css, /@keyframes filmGlow/, 'the homepage source-to-clips relationship has a subtle visual emphasis');
   assert.match(css, /@media\(prefers-reduced-motion:reduce\)/, 'homepage motion needs a reduced-motion fallback');
 });
 

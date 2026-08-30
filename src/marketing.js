@@ -357,6 +357,53 @@ function journey() {
 }
 
 /**
+ * The homepage should prove one thing at a glance: the three short clips came
+ * from the long video directly above them.  These are four different frames
+ * from the same public Bilal Assaad lecture, exported as individual assets so
+ * that the page never repeats a photograph or pretends unrelated clips share
+ * a source.
+ */
+function linkedSourceToClips() {
+  const clips = [
+    ['bilal-clip-one.webp', '00:12', 'A clear opening that stands alone'],
+    ['bilal-clip-two.webp', '14:38', 'One complete, useful point'],
+    ['bilal-clip-three.webp', '31:06', 'A closing thought worth saving'],
+  ];
+  return `<div class="source-to-clips" data-workflow-film aria-label="A single lecture becoming three review-ready short clips">
+    <div class="film-source">
+      <div class="film-label"><span><i></i>Long-form source</span><small>48:26 lecture</small></div>
+      <img src="/marketing-assets/bilal-source-wide.webp" alt="A long-form lecture source" fetchpriority="high">
+      <div class="film-timeline" aria-hidden="true"><i></i><b></b><b></b><b></b></div>
+      <div class="film-source-copy"><strong>One source. Every clip stays connected to it.</strong><small>Choose the exact range before processing.</small></div>
+    </div>
+    <div class="film-connector" aria-hidden="true"><span>${icon('spark')}</span><i></i><small>find complete moments</small></div>
+    <div class="film-clips">
+      <div class="film-clips-head"><span>${icon('clips')} Review-ready clips</span><small>3 candidates found</small></div>
+      <div class="film-clip-grid">${clips.map(([src, time, title], index) => `<article class="film-clip film-clip-${index + 1}">
+        <img src="/marketing-assets/${src}" alt="A vertical clip from the same source lecture" loading="${index ? 'lazy' : 'eager'}">
+        <span>${escapeHtml(time)}</span><strong>${escapeHtml(title)}</strong><i aria-hidden="true"></i>
+      </article>`).join('')}</div>
+      <div class="film-decision"><span>${icon('shield')}</span><p><b>You approve what moves forward.</b><small>Nothing publishes until you do.</small></p><em>Review</em></div>
+    </div>
+  </div>`;
+}
+
+function homepageFeatureMap() {
+  const features = [
+    ['import', '01', 'Choose the source range', 'Paste a supported link or upload a file, then process only the minutes you selected.'],
+    ['discover', '02', 'Find clips worth reviewing', 'Candidates arrive with a reason, a finished render and the context you need to decide.'],
+    ['review', '03', 'Approve the real render', 'The review deck is the decision point. Approve, reject or skip before a clip can publish.'],
+    ['style', '04', 'Apply a clear house style', 'Templates and clip-local adjustments are available now. The full timeline editor remains clearly marked coming soon.'],
+    ['schedule', '05', 'Schedule to your channels', 'Choose a destination, post now, download or queue an approved clip in your own calendar.'],
+    ['deenai', '06', 'Know the next useful action', 'DeenAI uses your workspace state to surface what needs attention; Studio adds private Ask DeenAI.'],
+  ];
+  return `<div class="homepage-feature-grid">${features.map(([kind, number, title, copy]) => `<article class="homepage-feature-card reveal">
+    <div class="homepage-feature-copy"><span>${escapeHtml(number)}</span><h3>${escapeHtml(title)}</h3><p>${escapeHtml(copy)}</p><a href="/features#${kind === 'discover' || kind === 'review' ? 'source-and-review' : kind === 'style' ? 'editor' : kind === 'schedule' ? 'publishing' : kind === 'deenai' ? 'operations' : 'feature-map'}">Explore ${icon('arrow')}</a></div>
+    <div class="homepage-feature-visual">${productVisual(kind)}</div>
+  </article>`).join('')}</div>`;
+}
+
+/**
  * The shipped template catalogue paired with the existing photographic reel
  * that best demonstrates each look. These are not invented marketing styles:
  * every name and description comes from src/templates/*.json.
@@ -574,70 +621,48 @@ function faqSchema() {
 export function home({ base, currentUser }) {
   const body = `
   <main>
-    <section class="hero hero-redesign wrap">
-      <div class="hero-copy-column">
-        <span class="eyebrow"><i></i>AI clipping, with you in control</span>
-        <h1>One lecture.<br><span>A week of clips.</span></h1>
-        <p class="hero-copy">Paste a video. DeenClipped finds complete moments, captions and renders them, then waits for your approval before anything reaches your channels.</p>
+    <section class="homepage-hero wrap">
+      <div class="homepage-hero-copy">
+        <span class="eyebrow"><i></i>Short-form content for Islamic creators</span>
+        <h1>Turn one lecture into <span>clips you want to publish.</span></h1>
+        <p>Bring in a lecture, select the useful range and let DeenClipped prepare complete short clips. You still see the finished render and make every publishing decision.</p>
         ${sourceForm()}
-        <div class="hero-actions"><a class="button primary" href="/login?returnTo=/app">Start clipping free ${icon('arrow')}</a><a class="button secondary" href="#how-it-works">Watch the workflow</a></div>
-        <p class="purpose-line"><strong>${escapeHtml(Number(config.tokensFree).toLocaleString())} source minutes included for ${escapeHtml(String(config.stripeTrialDays))} days.</strong> No card required to begin.</p>
+        <div class="hero-actions"><a class="button primary" href="/login?returnTo=/app">Start clipping free ${icon('arrow')}</a><a class="button secondary" href="#how-it-works">See how it works</a></div>
+        <p class="purpose-line"><strong>${escapeHtml(Number(config.tokensFree).toLocaleString())} source minutes included for ${escapeHtml(String(config.stripeTrialDays))} days.</strong> No card required.</p>
       </div>
-      <div class="hero-live-demo" data-hero-demo aria-label="An animated DeenClipped workflow from a source lecture to a scheduled, review-approved clip">
-        <div class="hero-demo-window">
-          <div class="hero-demo-topbar"><span><i></i>Source lecture</span><b>48:26</b><em>Finding complete moments</em></div>
-          <div class="hero-demo-workspace">
-            <div class="hero-source-photo">${sourceImage('lecture', 'fetchpriority="high"')}<span><i></i>Long-form source</span><div class="hero-scan-beam" aria-hidden="true"></div><div class="hero-moment-markers" aria-hidden="true"><i></i><i></i><i></i></div></div>
-            <div class="hero-output-rail" aria-label="Review-ready clips">
-              <div class="hero-output-heading"><span>${icon('spark')} Clips found</span><small>Ready for your review</small></div>
-              <div class="hero-results">
-                ${clipPreview('scholar', 'Small steps become a steady practice.', 'hero-result result-one', 'Review')}
-                ${clipPreview('courtyard', 'Make the next step clear enough to act on.', 'hero-result result-two', 'Review')}
-                ${clipPreview('valley', 'Keep returning to what matters.', 'hero-result result-three', 'Review')}
-              </div>
-            </div>
-          </div>
-          <div class="hero-demo-footer"><span class="hero-demo-step"><i>1</i> Find moments</span><span class="hero-demo-arrow">${icon('arrow')}</span><span class="hero-demo-step"><i>2</i> You approve</span><span class="hero-demo-arrow">${icon('arrow')}</span><span class="hero-demo-step is-scheduled"><i>3</i> Schedule</span><b class="hero-schedule-chip">${icon('calendar')} Ready when you are</b></div>
-        </div>
-        <div class="hero-approved">${icon('shield')} Nothing publishes without your approval</div>
-      </div>
-      <div class="trust-strip" aria-label="DeenClipped product assurances"><span>${icon('shield')} Review-first by design</span><span>${icon('language')} English, Arabic and Quran-aware</span><span>${icon('calendar')} Scheduling built in</span><span>${icon('brain')} Private DeenAI on Studio</span></div>
+      <div class="homepage-hero-film reveal">${linkedSourceToClips()}</div>
     </section>
 
-    <section class="outcome-strip" aria-label="The DeenClipped workflow"><div class="wrap"><span>Paste or upload</span><i>${icon('arrow')}</i><span>AI finds clips</span><i>${icon('arrow')}</i><span>You approve</span><i>${icon('arrow')}</i><span>Style &amp; schedule</span><i>${icon('arrow')}</i><span>Learn what to do next</span></div></section>
+    <section class="homepage-assurance" aria-label="DeenClipped product assurances"><div class="wrap"><span>${icon('shield')} Review-first by design</span><span>${icon('language')} English, Arabic and Quran-aware</span><span>${icon('calendar')} Scheduling built in</span><span>${icon('brain')} Private DeenAI on Studio</span></div></section>
 
-    <section class="section workflow-section" id="how-it-works">
+    <section class="section homepage-workflow" id="how-it-works">
       <div class="wrap">
-        <div class="section-head reveal"><span class="section-label">The whole product, in order</span><h2>From pasted link to published clip—without jumping between tools.</h2><p>Every tab has one job. Move from source selection to review, styling, scheduling, honest performance and private guidance in one connected flow.</p></div>
-        ${journey()}
-      </div>
-    </section>
-
-    <section class="section difference-section" id="safety">
-      <div class="wrap">
-        <div class="section-head reveal"><span class="section-label">Built for careful creators</span><h2>Fast enough for growth. Deliberate enough for the message.</h2><p>DeenClipped handles the repetitive work while keeping the final decision, the exact rendered video and every connected destination visible to you.</p></div>
-        <div class="difference-grid">
-          <article class="difference-card difference-large reveal"><div class="difference-copy"><span>${icon('shield')}</span><small>Review-first</small><h3>The AI suggests. You decide.</h3><p>Every candidate waits in Review with its score, reason and finished render. Scripture carries an additional human-review gate.</p><a href="/review-safety">See the safeguards ${icon('arrow')}</a></div><div class="difference-visual">${productVisual('review')}</div></article>
-          <article class="difference-card reveal"><div class="difference-copy"><span>${icon('language')}</span><small>Language-aware</small><h3>English, Arabic and recitation are treated differently.</h3><p>Auto-detect can switch by segment. Recited ayat use a matched Quran treatment with translation beneath.</p></div>${clipPreview('podium', 'Matched ayah · translation beneath', 'difference-clip', 'Quran review required')}</article>
-          <article class="difference-card reveal"><div class="difference-copy"><span>${icon('publish')}</span><small>Destination control</small><h3>One failed post does not hide the successful ones.</h3><p>Each connected destination keeps its own publish, refusal and retry state.</p></div><div class="destination-state"><span><i class="platform youtube">YT</i><b>YouTube</b><em>Posted</em></span><span><i class="platform tiktok">TT</i><b>TikTok</b><em class="attention">Needs attention</em></span><span><i class="platform instagram">IG</i><b>Instagram</b><em>Scheduled</em></span></div></article>
+        <div class="section-head reveal"><span class="section-label">How it works</span><h2>A complete workflow, in the order you actually need it.</h2><p>Every step has a clear purpose: source selection, clip discovery, human review and then publishing. Nothing is hidden behind a fake dashboard or a claim you cannot check.</p></div>
+        <div class="homepage-workflow-steps reveal">
+          <article><span>01</span><div>${icon('link')}</div><h3>Paste or upload</h3><p>Start with a supported video link or your own file. Choose the specific source minutes to process.</p></article><i aria-hidden="true">${icon('arrow')}</i>
+          <article><span>02</span><div>${icon('spark')}</div><h3>Review the finished clips</h3><p>See the actual rendered video, why it was selected and whether its captions and treatment are right.</p></article><i aria-hidden="true">${icon('arrow')}</i>
+          <article><span>03</span><div>${icon('calendar')}</div><h3>Publish on your terms</h3><p>Approve, download, post now or schedule to your own connected destinations when you are ready.</p></article>
         </div>
       </div>
     </section>
 
-    <section class="section operations-section">
+    <section class="section homepage-features" id="features">
       <div class="wrap">
-        <div class="section-head reveal"><span class="section-label">After approval</span><h2>Your content operation stays in one place.</h2><p>Approved clips move naturally into the calendar, measurable workflow reports and DeenAI—without pretending DeenClipped has social metrics it never fetched.</p></div>
-        <div class="operations-grid">
-          <article class="operation-card reveal"><div><span>${icon('calendar')}</span><small>Schedule</small><h3>Keep the next posting window full.</h3><p>Post now, download, choose a date or fill the next available slots.</p></div>${productVisual('schedule')}</article>
-          <article class="operation-card reveal"><div><span>${icon('chart')}</span><small>Performance</small><h3>See the workflow numbers you can trust.</h3><p>Made, kept, scheduled, posted and failed—drawn from your own records.</p></div>${productVisual('performance')}</article>
-          <article class="operation-card reveal"><div><span>${icon('brain')}</span><small>DeenAI</small><h3>Ask what deserves attention next.</h3><p>Studio guidance runs on the private processing server and points back to real product actions.</p></div>${productVisual('deenai')}</article>
-        </div>
+        <div class="section-head reveal"><span class="section-label">Everything after the clip</span><h2>One place for the work around publishing, too.</h2><p>DeenClipped is more than clip detection: keep styles consistent, schedule approved work, check honest workflow activity and see the next step through DeenAI.</p></div>
+        ${homepageFeatureMap()}
+      </div>
+    </section>
+
+    <section class="section homepage-review" id="safety">
+      <div class="wrap homepage-review-grid reveal">
+        <div><span class="section-label">Review is the control centre</span><h2>The AI can suggest. You decide what represents you.</h2><p>Each candidate waits with its reason and its finished render. Approve, reject or skip it. Quran and recitation treatments carry an additional human-review gate.</p><div class="homepage-review-points"><span>${icon('check')} Watch the exact video that can publish</span><span>${icon('check')} Keep captions and templates in context</span><span>${icon('check')} See each destination’s result separately</span></div><a class="button secondary" href="/review-safety">Read the safeguards ${icon('arrow')}</a></div>
+        ${productVisual('review')}
       </div>
     </section>
 
     <section class="section templates-section" id="templates">
       <div class="wrap">
-        <div class="section-head reveal"><span class="section-label">Five real template styles</span><h2>One message. Five clear visual treatments.</h2><p>Each treatment is shown with a different Islamic lecture source. Basic starts with Clean Line; Pro unlocks the complete catalogue.</p></div>
+        <div class="section-head reveal"><span class="section-label">Five real template styles</span><h2>Give each message a clear, restrained treatment.</h2><p>Basic starts with Clean Line. Pro unlocks the complete template catalogue, including the Quran-specific treatment designed for recitation and translation.</p></div>
         ${templateCatalogue()}
         <div class="template-safety reveal"><span>${icon('shield')}</span><p><strong>Quran Recitation is deliberately different.</strong> It matches recitation to the Quran corpus, shows the ayah and translation, keeps nasheed off and always requires human review.</p></div>
       </div>
@@ -645,7 +670,7 @@ export function home({ base, currentUser }) {
 
     <section class="section editor-section">
       <div class="wrap">
-        <div class="section-head reveal"><span class="section-label">Style now. Full editor next.</span><h2>Keep clips consistent without overstating what has launched.</h2><p>Templates, clip-local style changes and re-renders are available today. The complete timeline editor stays visibly marked coming soon while its visual checks finish.</p></div>
+        <div class="section-head reveal"><span class="section-label">Style now. Full editor next.</span><h2>Keep clips consistent without pretending a feature has launched.</h2><p>Templates, clip-local style changes and re-renders are available today. The complete timeline editor is visibly marked coming soon while its visual checks finish.</p></div>
         <div class="editor-showcase editor-code-showcase reveal">${productVisual('style')}<span class="availability-badge">Full editor preview · coming soon</span></div>
         <div class="feature-row reveal"><div><span>${icon('template')}</span><b>Reusable caption templates</b><p>Save style changes for future clips or keep a one-clip adjustment local to that render.</p></div><div><span>${icon('music')}</span><b>Nasheed controls</b><p>Upload and rotate vocal-only tracks. Quran recitation is deliberately left without a track underneath it.</p></div><div><span>${icon('edit')}</span><b>Editor held for verification</b><p>Timeline, caption and framing controls are not advertised as launched while the gate is active.</p></div></div>
       </div>
