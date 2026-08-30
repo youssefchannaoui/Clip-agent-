@@ -192,17 +192,18 @@ test('the public feature catalogue covers every shipped clip template', async ()
   assert.match(page, /coming soon/i);
 });
 
-test('public imagery stays on the established realistic asset library', async () => {
+test('public imagery uses the approved high-resolution source-photo library', async () => {
   const [home, features] = await Promise.all([
     fetch(`${base}/`, { headers: { accept: 'text/html' } }).then(r => r.text()),
     fetch(`${base}/features`, { headers: { accept: 'text/html' } }).then(r => r.text()),
   ]);
-  for (const draft of ['review-first-v2.png', 'deenai-private-v2.png']) {
+  for (const draft of ['review-first-v2.png', 'deenai-private-v2.png', 'hero-premium.webp', 'workflow-premium.webp']) {
     assert.ok(!home.includes(draft), `${draft} was a rejected draft and must not ship`);
     assert.ok(!features.includes(draft), `${draft} was a rejected draft and must not ship`);
   }
-  for (const asset of ['reel-halal.webp', 'reel-dua.webp', 'reel-dunya.webp', 'reel-beneficial.webp', 'reel-quran.webp']) {
-    assert.ok(home.includes(asset), `${asset} should represent a real template example`);
+  for (const asset of ['source-hero.webp', 'source-creator-woman.webp', 'source-creator-man.webp', 'source-mountains.webp', 'source-mosque.webp']) {
+    assert.ok(home.includes(asset), `${asset} should represent a real source or template example`);
+    assert.ok(features.includes(asset), `${asset} should carry the same visual system onto the feature page`);
   }
 });
 

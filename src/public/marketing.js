@@ -38,6 +38,66 @@ if (reducedMotion || !('IntersectionObserver' in window)) {
   revealItems.forEach(item => revealObserver.observe(item));
 }
 
+for (const journey of document.querySelectorAll('[data-journey]')) {
+  const tabs = [...journey.querySelectorAll('[data-journey-tab]')];
+  const panels = [...journey.querySelectorAll('[data-journey-panel]')];
+  const progress = journey.querySelector('.journey-progress i');
+  let index = 0;
+  let timer = null;
+  let paused = false;
+
+  const restartProgress = () => {
+    if (!progress || reducedMotion) return;
+    progress.style.animation = 'none';
+    void progress.offsetWidth;
+    progress.style.animation = '';
+  };
+
+  const show = nextIndex => {
+    index = (nextIndex + tabs.length) % tabs.length;
+    tabs.forEach((tab, tabIndex) => {
+      const active = tabIndex === index;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', String(active));
+      tab.tabIndex = active ? 0 : -1;
+    });
+    panels.forEach((panel, panelIndex) => {
+      const active = panelIndex === index;
+      panel.classList.toggle('active', active);
+      panel.hidden = !active;
+    });
+    restartProgress();
+  };
+
+  const start = () => {
+    window.clearInterval(timer);
+    if (reducedMotion) return;
+    timer = window.setInterval(() => {
+      const bounds = journey.getBoundingClientRect();
+      const visible = bounds.bottom > 0 && bounds.top < window.innerHeight;
+      if (!paused && visible) show(index + 1);
+    }, 6200);
+  };
+
+  tabs.forEach((tab, tabIndex) => {
+    tab.addEventListener('click', () => { show(tabIndex); start(); });
+    tab.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : tabIndex + (event.key === 'ArrowRight' ? 1 : -1);
+      show(next);
+      tabs[index].focus();
+      start();
+    });
+  });
+  journey.addEventListener('mouseenter', () => { paused = true; });
+  journey.addEventListener('mouseleave', () => { paused = false; });
+  journey.addEventListener('focusin', () => { paused = true; });
+  journey.addEventListener('focusout', () => { paused = false; });
+  show(0);
+  start();
+}
+
 for (const gallery of document.querySelectorAll('[data-gallery]')) {
   const slides = [...gallery.querySelectorAll('.gallery-slide')];
   const dotsRoot = gallery.querySelector('[data-gallery-dots]');
