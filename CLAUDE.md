@@ -190,7 +190,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **991 JS + 451 Python**
+- `npm test` and `npm run check` must pass. Currently **991 JS + 456 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -2452,3 +2452,30 @@ Two failures, both real, both fixed in `scripts/check-version-bump.mjs`:
    both called 3.54.1. The version must now be new across the last 60 commits.
    That number is what the worker deploy compares the running container against,
    so a duplicate makes "3.54.1 is live" mean nothing.
+
+### The batching fix had two defects of its own (v3.58.1)
+
+Both found by adversarially reviewing the change rather than by using it, and
+both reproduced by running the code. Written down because the first is a trap
+anyone tuning this will fall into again.
+
+- **Shrinking the shortlist below the deliverable count inverts the ranking.**
+  Only shortlisted candidates get the blended `0.45*heuristic + 0.55*ai`;
+  everything outside keeps its RAW heuristic. The blend can only LOWER a
+  candidate the model scored below its heuristic, so with a shortlist of 12 and
+  20 deliverable, all twelve blended scores fell beneath the eight the model
+  never read -- and **0 of 8 delivered clips carried an AI title**, which is the
+  exact symptom the change existed to fix. Silent, too: the partial-scoring
+  warning compares `len(applied)` against `len(shortlist)`, and 12 of 12 reads
+  as complete. `AI_SHORTLIST` is 24 now and `MAX_DELIVERABLE_CLIPS` records why
+  it may never drop below 20. The "8 of 8 titled" measurement missed this
+  because all 8 fitted inside the shortlist.
+- **The attribution guard failed OPEN on Arabic name particles.** It required
+  every token to begin with an ASCII capital, so "ibn Uthaymeen", "Sheikh ibn
+  Baz", "Abdullah al-Andalusi" -- and "Ismail ibn Musa Menk", Mufti Menk's own
+  full name -- were all read as "not a credit" and kept. An invented one would
+  have shipped. The test is now at most four words with at least one capital,
+  which errs towards stripping: losing a title's tail costs a few words, keeping
+  a false attribution puts words in a scholar's mouth. A hyphen inside the name
+  also stopped the pattern matching at all, so it splits on the last spaced
+  separator now.

@@ -889,36 +889,75 @@ def strip_unbacked_attribution(title: str, lecture_title: str) -> str:
     differently from the lecture title is stripped rather than trusted.
     """
     text = str(title or "").strip()
-    match = re.search(r"\s+[-|\u2013\u2014]\s+([^-|\u2013\u2014]{2,40})$", text)
+    # Greedy prefix, so this splits on the LAST spaced separator, and the name
+    # itself may contain hyphens -- "Abdullah al-Andalusi" was slipping through
+    # because the old character class excluded "-" from the captured name and so
+    # never matched at all.
+    match = re.match(r"^(.*\S)\s+[-|\u2013\u2014]\s+(\S.{0,39})$", text)
     if not match:
         return text
-    name = match.group(1).strip().strip(".")
+    name = match.group(2).strip().strip(".")
     if not name:
         return text
-    # Only a trailing fragment that actually looks like a name is treated as a
-    # credit; "Repentance - why it never stops" must survive untouched.
-    if not re.fullmatch(r"[A-Z][\w.'\u2019-]*(?:\s+[A-Z][\w.'\u2019-]*){0,3}", name):
+    # Which trailing fragments count as a credit.
+    #
+    # This used to require EVERY token to start with an ASCII capital, which
+    # fails OPEN on exactly the name shapes this content is full of: "ibn
+    # Uthaymeen", "Sheikh ibn Baz", "Abdullah al-Andalusi" -- and "Ismail ibn
+    # Musa Menk", which is Mufti Menk's own full name -- all sailed through
+    # unstripped, so an invented one would have shipped. A model typo
+    # ("Mufti ismail Menk") did too.
+    #
+    # The test is now: at most four words, and at least one of them
+    # capitalised. That deliberately errs towards stripping. Amputating the tail
+    # of a title costs a few words; keeping an invented attribution puts words in
+    # a scholar's mouth, and CLAUDE.md is unambiguous about which of those is
+    # worse. An all-lowercase tail ("Repentance - why it never stops") has no
+    # capital and is still left alone.
+    parts = name.split()
+    if not parts or len(parts) > 4:
+        return text
+    if not any(re.match(r"[A-Z]", part) for part in parts):
         return text
     if name.casefold() in str(lecture_title or "").casefold():
         return text
-    return text[: match.start()].strip(" -|\u2013\u2014")
+    return match.group(1).strip(" -|\u2013\u2014")
 
 
-AI_SHORTLIST = 12
+# The most clips a job can ever ask for: `requested` is capped at 20 where the
+# job is read. AI_SHORTLIST must not fall below it -- see the note there.
+MAX_DELIVERABLE_CLIPS = 20
+
+AI_SHORTLIST = 24
 """How many candidates are shown to the local model at all.
 
-It was 24. On this box the model can only answer a handful per request, so 24
-meant twenty clips silently kept heuristic scores and transcript-head titles.
-Twelve, asked in complete batches, gives better ranking AND a real title for
-every clip that can plausibly be selected -- clipsPerVideo defaults to 8.
+MUST stay >= MAX_DELIVERABLE_CLIPS, and it is a correctness rule, not a
+preference.
+
+Only shortlisted candidates get the blended score `0.45*heuristic +
+0.55*ai`; every candidate outside the shortlist keeps its RAW heuristic. The
+blend can only LOWER a candidate the model scored below its heuristic, so the
+moment the shortlist is smaller than what a job can deliver, the clips the model
+actually read sink beneath clips it never saw -- and the delivered clips carry no
+AI title at all. Cutting this to 12 to save wall-clock did exactly that: measured
+with 20 candidates and a model answering every row, all twelve blended scores
+fell below the eight unshortlisted ones and 0 of 8 delivered clips had an AI
+title, with no warning, because the warning compares against the shortlist and
+12 of 12 had been applied.
+
+So the shortlist covers everything that could ship. Batching (AI_BATCH) is what
+makes that affordable; before it, a 24-row ask came back with four rows.
 """
 
 AI_BATCH = 4
 """Candidates per request.
 
-qwen3:1.7b returns a prefix and stops (see refine_with_ollama). Small batches
-are the difference between four titled clips and twelve. Each request costs
-about 30s on this box, so this trades wall-clock for coverage deliberately.
+qwen3:1.7b returns a prefix and stops (see refine_with_ollama), so a 24-row ask
+came back with four rows. Small batches are the difference between four titled
+clips and all of them. Each request costs about 30s on this box, so a full
+shortlist is roughly three minutes of a job that already takes many -- paid
+deliberately, because the alternative is most clips shipping with a
+transcript-head title.
 """
 
 
@@ -1206,6 +1245,10 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any], le
                 failures.append(str(batch_error))
         # Ranking a half-scored shortlist compares two different measures, so
         # say when that happened rather than quietly shipping the mixture.
+        # Against the shortlist, which now covers everything deliverable. When the
+        # shortlist was cut below the deliverable count this comparison went
+        # permanently silent -- 12 of 12 applied reads as complete while the
+        # eight clips that actually shipped had never been scored at all.
         if applied and len(applied) < len(shortlist):
             emit(
                 "warning",

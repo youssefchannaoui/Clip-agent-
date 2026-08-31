@@ -221,9 +221,13 @@ class BatchingTests(unittest.TestCase):
         self.assertEqual(batch[0].score, round(70 * 0.45 + 100 * 0.55))
 
     def test_the_batch_size_stays_small_enough_to_complete(self):
-        # 24 was the measured failure. Anything near it silently drops clips.
+        # The measured failure was the BATCH, not the shortlist: a 24-row ask
+        # came back with four rows whatever the shortlist was. This asserted
+        # AI_SHORTLIST <= 16 as well, which was the wrong lesson drawn from the
+        # same measurement -- shrinking the shortlist below the deliverable
+        # count is what made the delivered clips carry no AI title at all.
+        # See ShortlistCoversWhatShipsTests.
         self.assertLessEqual(clip_worker.AI_BATCH, 6)
-        self.assertLessEqual(clip_worker.AI_SHORTLIST, 16)
 
 
 class CopiedTitleTests(unittest.TestCase):
@@ -253,3 +257,72 @@ class CopiedTitleTests(unittest.TestCase):
 
     def test_an_empty_clip_text_cannot_match(self):
         self.assertFalse(clip_worker.looks_copied("Some title with five words", ""))
+
+
+class ShortlistCoversWhatShipsTests(unittest.TestCase):
+    """The shortlist must cover everything a job can deliver.
+
+    Only shortlisted candidates get the blended score 0.45*heuristic +
+    0.55*ai; everything outside keeps its RAW heuristic. The blend can only
+    LOWER a candidate the model scored below its heuristic, so a shortlist
+    smaller than the deliverable count makes the clips the model actually read
+    sink beneath clips it never saw -- and the delivered clips carry no AI title.
+
+    Found by adversarial review of the batching change, reproduced by running
+    the real code: with AI_SHORTLIST=12 and 20 candidates, 0 of 8 delivered
+    clips had an AI title and no warning fired, because the warning compares
+    against the shortlist and 12 of 12 had been applied.
+    """
+
+    def test_the_shortlist_is_never_smaller_than_what_can_ship(self):
+        self.assertGreaterEqual(clip_worker.AI_SHORTLIST, clip_worker.MAX_DELIVERABLE_CLIPS)
+
+    def test_a_shortlisted_clip_cannot_be_out_ranked_by_an_unseen_one(self):
+        # The arithmetic behind the rule: a candidate the model scored badly
+        # must still be comparable with the ones it never read. With the
+        # shortlist covering the deliverable count there ARE no unread
+        # deliverable candidates, so the mixture cannot decide the selection.
+        deliverable = clip_worker.MAX_DELIVERABLE_CLIPS
+        cands = [Candidate(start=i * 60.0, end=i * 60.0 + 40.0, text=f"clip {i}",
+                           score=100 - i, segments=[], reasons=[], quote_risk=False)
+                 for i in range(deliverable)]
+        shortlisted = sorted(cands, key=lambda c: -c.score)[:clip_worker.AI_SHORTLIST]
+        self.assertEqual(len(shortlisted), deliverable,
+                         "every deliverable candidate must be inside the shortlist")
+
+
+class ParticleNameTests(unittest.TestCase):
+    """The attribution guard must not fail open on Arabic name particles.
+
+    It required every token to start with an ASCII capital, so "ibn Uthaymeen",
+    "Sheikh ibn Baz", "Abdullah al-Andalusi" -- and "Ismail ibn Musa Menk",
+    Mufti Menk's own full name -- were all treated as "not a credit" and kept.
+    An invented one would have shipped. These are the commonest name shapes in
+    this content, and none of the original tests used one.
+    """
+
+    NO_SPEAKER = "Friday Khutbah Recording 14 March"
+
+    def test_lowercase_particles_are_still_stripped(self):
+        for title in ("The mercy you keep forgetting - ibn Uthaymeen",
+                      "A reminder about patience - Sheikh ibn Baz",
+                      "A reminder about patience - Abdullah al-Andalusi",
+                      "A reminder about patience - bin Baz",
+                      "A reminder about patience - Mufti ismail Menk"):
+            stripped = clip_worker.strip_unbacked_attribution(title, self.NO_SPEAKER)
+            self.assertNotIn(" - ", stripped, f"{title!r} kept an unbacked credit")
+
+    def test_a_hyphenated_name_the_lecture_does_name_is_kept(self):
+        # The separator splits on the last spaced dash, so a hyphen INSIDE the
+        # name no longer stops the guard matching at all.
+        self.assertEqual(
+            clip_worker.strip_unbacked_attribution(
+                "On free will - Abdullah al-Andalusi", "Debate - Abdullah al-Andalusi"),
+            "On free will - Abdullah al-Andalusi")
+
+    def test_an_all_lowercase_tail_is_not_a_credit(self):
+        # Erring towards stripping is right, but a tail with no capital at all
+        # is prose, not a name, and must survive.
+        for title in ("Repentance - why it never stops",
+                      "The trials of the believer - and what they mean"):
+            self.assertEqual(clip_worker.strip_unbacked_attribution(title, self.NO_SPEAKER), title)
