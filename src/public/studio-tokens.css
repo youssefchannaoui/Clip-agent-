@@ -145,6 +145,68 @@
   background: #17171A !important;
 }
 
+/* The subscription, under the wordmark in the rail's brand block.
+ *
+ * The brand row is a flex ROW, so the badge is given the full width and the
+ * row is allowed to wrap -- that puts it on its own line beneath the wordmark
+ * rather than squeezed beside it, where "Studio · monthly" has nowhere to go.
+ * The collapse control is absolutely positioned and out of flow, so wrapping
+ * cannot disturb it.
+ */
+#dcRailBrand { flex-wrap: wrap; }
+#dcPlanBadge {
+  width: 100%;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background .16s ease, border-color .16s ease, color .16s ease;
+}
+#dcPlanBadge span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The caret says it goes somewhere. It sits at the end whatever the name's
+   length, and never squeezes the name it belongs to. */
+#dcPlanBadge i {
+  margin-left: auto;
+  flex: none;
+  font-size: 11px;
+  opacity: .75;
+}
+/* Gold is what every paid tier wears across this app; a free account gets the
+   quiet treatment and an invitation rather than a badge pretending to be one. */
+#dcPlanBadge.dc-plan-paid {
+  border: 1px solid rgba(217,180,120,.34);
+  background: rgba(217,180,120,.09);
+  color: #F0D6A6;
+}
+#dcPlanBadge.dc-plan-paid:hover {
+  border-color: rgba(217,180,120,.6);
+  background: rgba(217,180,120,.16);
+}
+#dcPlanBadge.dc-plan-free {
+  border: 1px solid #26262A;
+  background: rgba(255,255,255,.02);
+  color: #9A9AA3;
+}
+#dcPlanBadge.dc-plan-free:hover {
+  border-color: rgba(217,180,120,.4);
+  color: #F0D6A6;
+}
+@media (prefers-reduced-motion: reduce) {
+  #dcPlanBadge { transition: none; }
+}
+
 /* The rail's bottom cluster.
  *
  * Measured at 1440x900 before this: the last nav item ended at y=560 in a

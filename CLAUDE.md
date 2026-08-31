@@ -1487,6 +1487,43 @@ contact us for any additional helps or referring a bug."
   approval, no platform sending audience numbers back. Help is behind sign-in
   and behind NO plan gate: a free account is exactly who needs it.
 
+### The subscription sits beside the logo (v3.60.1, 31 Aug 2026)
+
+Youssef: "on top left corner next to logo show users subscription". Asked
+twice now -- v3.57.0 put the plan name in the header chip, and that was not
+where anyone looks.
+
+- **The wordmark's second line is the literal string "Studio" inside the
+  generated template** -- the PRODUCT's name, not the customer's plan -- so it
+  could not be rewritten to carry the subscription without a design re-import,
+  which regenerates every hashed class name in the app. The plan is therefore
+  ADDED under the wordmark (`paintPlanBadge`, host-rendered) rather than
+  written over the branding.
+- **The brand row is a flex ROW**, so the badge takes the full width and the
+  row is allowed to wrap -- that puts it on its own line beneath the wordmark
+  instead of squeezed beside it, where "Studio · yearly" has nowhere to go.
+  The collapse control is absolutely positioned and out of flow, so wrapping
+  cannot disturb it. Measured: 191px wide, no ellipsis at any of the four plan
+  names.
+- **It is a button, not a label.** Knowing which plan you are on and having no
+  way through to it is the worse half of the same question; it opens Tokens &
+  billing. Verified by clicking it.
+- **Basic does not wear the gold.** Gold is what every paid tier wears across
+  this app, so a free account gets the quiet border and an invitation. The
+  first measurement said Basic was gold and the CODE was right -- the probe
+  spread the override onto the OPERATOR's billing row and left `unlimited:
+  true` set. Clear the field being tested, not just the ones you are setting.
+- **Collapsed, it goes with the wordmark.** There is no wordmark to sit under
+  at 68px and no room for the words. Verified collapsing and reopening with a
+  real click.
+- **The header chip stays, deliberately.** `#dcRailBrand` is
+  `display: none` on a phone, so the badge is desktop-only; the header is where
+  a phone reads its plan. This is the one place duplication earns its keep.
+- `paintPlanBadge` is in `paintStudio()`'s list, like every other host panel.
+- A Studio subscriber sees "STUDIO" under the wordmark (the product) AND
+  "STUDIO · YEARLY" in the badge (the plan). Redundant-looking but honest;
+  removing the brand subtitle needs the re-import above.
+
 ### Help does not load, and the rail has a bottom (v3.59.2)
 
 Youssef: "why does help need to load? ... organize the left hand tabs to look
