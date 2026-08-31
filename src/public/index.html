@@ -5553,23 +5553,29 @@ StudioAdapter.onProbeSource=async url=>{try{
           if(box.parentNode!==mount||box.previousElementSibling){ mount.insertBefore(box,mount.firstElementChild); }
           const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
           const on=Boolean(String(saved.watermark||'').trim())&&Number(saved.watermarkOpacity)>0;
-          /* flex:none matters -- the column is a flex container with its own
-             scroll, so a child that does not say so is shrinkable and gets
-             squeezed to nothing by the cards below it. */
-          box.style.cssText='flex:none;margin:0 0 12px;padding:14px 16px;border-radius:14px;'
-            +'display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;'
-            +'border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.02)';
-          box.innerHTML='<div><div style="font:600 10.5px/1 Inter,sans-serif;letter-spacing:.16em;'
-            +'text-transform:uppercase;color:#D9B478">Watermark</div>'
-            +'<div style="margin-top:6px;font-size:13.5px;color:#A5A0A8">'
-            +(on?('Every clip carries <b style="color:#F2F2F4">'+esc(saved.watermark)+'</b>. Position is in Brand below.')
-                :'<b style="color:#F2F2F4">Off</b> — clips export clean.')
-            +(paid?'':' Removing it is on the paid plans.')+'</div></div>'
-            +'<label style="display:inline-flex;align-items:center;gap:9px;flex:none;min-height:34px;'
-            +'cursor:'+(paid?'pointer':'not-allowed')+'">'
+          /* No border and no background: inside the left column this was the
+             only BOXED thing, against Style and Brand which carry 0px border
+             and a transparent ground. Measured before changing it -- the row
+             was 112px tall next to their single-line rows, which is what made
+             it read as bolted on rather than part of the panel.
+             flex:none still matters -- the column is a flex container with its
+             own scroll, so a child that does not say so is shrinkable and gets
+             squeezed by the cards below it. */
+          box.style.cssText='flex:none;margin:0 0 16px;padding:0;'
+            +'display:block;border:0;background:none';
+          /* Same shape as the Style and Brand groups above it: a grey
+             letter-spaced section label, then rows whose value sits right. */
+          box.innerHTML='<div style="font:600 10.5px/1 Inter,sans-serif;letter-spacing:.16em;'
+            +'text-transform:uppercase;color:#7E7A82;margin:0 0 10px">Watermark</div>'
+            +'<label style="display:flex;align-items:center;justify-content:space-between;gap:12px;'
+            +'min-height:34px;padding:0 2px;cursor:'+(paid?'pointer':'not-allowed')+'">'
+            +'<span style="font-size:13px;color:'+(paid?'#C9C4BD':'#75717b')+'">Show watermark</span>'
             +'<input type="checkbox" id="dcWmOn"'+(on?' checked':'')+(paid?'':' disabled')
-            +' style="width:17px;height:17px;accent-color:#D9B478">'
-            +'<span style="font-size:13px;color:'+(paid?'#C9C4BD':'#75717b')+'">Show watermark</span></label>';
+            +' style="width:17px;height:17px;flex:none;accent-color:#D9B478"></label>'
+            +'<div style="margin-top:2px;padding:0 2px;font-size:11.5px;line-height:1.5;color:#75717b">'
+            +(on?('Every clip carries <b style="color:#A5A0A8">'+esc(saved.watermark)+'</b>. Position is in Brand below.')
+                :'Clips export clean.')
+            +(paid?'':' Removing it is on the paid plans.')+'</div>';
 
           const toggle=document.getElementById('dcWmOn');
           if(toggle&&!toggle.dataset.wired){

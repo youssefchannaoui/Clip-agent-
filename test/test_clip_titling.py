@@ -82,6 +82,23 @@ class TitlingPromptTests(unittest.TestCase):
         self.assertIn("NO TWO TITLES IN YOUR ANSWER MAY OPEN WITH THE SAME CONSTRUCTION",
                       body["prompt"])
 
+    def test_the_example_shapes_cannot_be_copied_as_wording(self):
+        # Found by running the real prompt against the box's qwen3:1.7b on
+        # 31 Aug 2026: the example title "Why does my dua feel unanswered?"
+        # came back verbatim on a clip about honouring your mother. A small
+        # model treats a concrete example as a template, so the shapes are
+        # described rather than demonstrated.
+        prompt = capture_prompt("A lecture - Someone")["prompt"]
+        self.assertNotIn("dua feel unanswered", prompt)
+        self.assertNotIn("Never lose hope in the mercy of Allah", prompt)
+        self.assertIn("These are SHAPES, not wording", prompt)
+        # A real scholar's name in the instructions is copyable too, and a model
+        # that lifts an example phrase would attribute one scholar's words to
+        # another. There are no real names anywhere in the guidance.
+        for scholar in ("Mufti Menk", "Omar Suleiman", "Belal Assaad"):
+            self.assertNotIn(scholar, prompt.split("BEGIN LECTURE TITLE")[0])
+        self.assertIn("honouring your mother", prompt)
+
     def test_engagement_bait_is_still_banned(self):
         prompt = capture_prompt("A lecture")["prompt"]
         for banned in ("you won't believe", "wait for it", "dignity outperforms hype"):

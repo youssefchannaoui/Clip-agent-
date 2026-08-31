@@ -2190,3 +2190,25 @@ Omar Suleiman" (34k). In this niche the scholar IS the search term.
   names; the new file does not have it.
 - **NOT YET LIVE.** This is `worker/` and the box is manual. Titles do not change
   until someone deploys it.
+
+## The watermark row looked bolted on, and that was measurable (v3.54.1)
+
+Youssef, after the move: "try again".
+
+- The position was right and the drag held; what was wrong was the LOOK, and it
+  did not need an opinion to find. Measured against its neighbours: the row
+  carried a 1px border and a background while the Style and Brand groups below
+  it have `0px` border and a transparent ground, and it stood 112px tall next
+  to their single-line rows. It was the only boxed thing inside the panel.
+- It is now the same shape as those groups -- a grey letter-spaced section
+  label, then a row whose control sits right, then one muted line of
+  explanation. 112px -> 74px, border and background gone.
+- **The label is grey, not gold.** Gold is the accent the panel spends on
+  values and the brand mark; a gold section label made this one group shout
+  over STYLE, BRAND and CAPTION TEXT beside it.
+- Rewriting the innerHTML rebuilds the checkbox, so the save path was re-proven
+  rather than assumed: toggling wrote `watermark: DEENCLIPPED` and
+  `watermarkOpacity: 100`, the label repainted to match, and the template was
+  still called "Clean Line" -- the rename bug from v3.51.0 stays fixed.
+- Re-checked after the restyle: 12 drag renders, 0 ending with no row, 0 where
+  it moved, still the column's first child.
