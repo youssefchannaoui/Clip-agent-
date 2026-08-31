@@ -669,39 +669,6 @@ export function home({ base, currentUser }) {
       </div>
     </section>
 
-    <section class="paper-scene" id="content-types" aria-labelledby="paths-heading" data-scene>
-      <div class="wrap">
-        <div class="paper-head">
-          <span class="kicker"><i></i>Two kinds of source</span>
-          <h2 id="paths-heading">A lecture is not a recitation, and <em>neither is treated like the other.</em></h2>
-          <p>Choose how the source should be handled before processing. The pipeline that captions a khutbah is the wrong pipeline for scripture, so DeenClipped runs a different one.</p>
-        </div>
-        <div class="path-grid">
-          <a class="path-card" href="/islamic-lecture-clipper" aria-label="Explore DeenClipped's Islamic Lecture workflow">
-            <span class="path-media crop-left"><img src="/marketing-assets/content-types-lecture-quran-v1.webp" alt="An Islamic lecturer recording at a microphone in a warm library" loading="lazy"></span>
-            <span class="path-copy">
-              <span class="kicker">Spoken reminders and khutbahs</span>
-              <h3>Islamic Lecture</h3>
-              <p>Clipping finds complete ideas and captions what is actually said, in the language it was said in.</p>
-              <span class="path-points"><span><i>${icon('check')}</i>Cuts on the whole thought, never mid-sentence</span><span><i>${icon('check')}</i>Speaker-aware 9:16 framing</span><span><i>${icon('check')}</i>Nasheed mixed under the speech, ducked beneath it</span></span>
-              <b class="path-cta">See the lecture workflow ${icon('arrow')}</b>
-            </span>
-          </a>
-          <a class="path-card" href="/features#captions" aria-label="Explore DeenClipped's Quran Recitation safeguards">
-            <span class="path-media crop-right"><img src="/marketing-assets/content-types-lecture-quran-v1.webp" alt="An open mushaf on a rehl before a lamp-lit mosque arcade" loading="lazy"></span>
-            <span class="path-copy">
-              <span class="kicker">Scripture-first treatment</span>
-              <h3>Quran Recitation</h3>
-              <p>Recited ayat are matched to the Qur'an itself — not transcribed by ear — and set with their translation.</p>
-              <span class="path-points"><span><i>${icon('check')}</i>Ayah matching with the translation beneath</span><span><i>${icon('check')}</i>No nasheed underneath recitation, ever</span><span><i>${icon('check')}</i>Human review required, whatever the automation</span></span>
-              <b class="path-cta">See the Quran safeguards ${icon('arrow')}</b>
-            </span>
-          </a>
-        </div>
-        <div class="paper-foot"><span><b>Auto-detect means both.</b> An English talk with recitation inside it switches treatment per segment.</span><span><b>Arabic set in an Arabic face.</b> The renderer checks a face actually draws Arabic before trusting it.</span></div>
-      </div>
-    </section>
-
     <section class="chapters-scene" id="chapters" aria-labelledby="chapters-heading">
       <div class="wrap">
         <div class="chapters-head">
