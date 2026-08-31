@@ -2069,3 +2069,31 @@ disapearing and coming back."
 - Proven the way it was found, on the same control: row present 4/4 changes,
   the SAME node each time, and 0px of movement -- against rebuilt-every-time
   before.
+
+## Dragging a caption re-rendered the whole studio per mouse event (v3.53.4)
+
+Youssef: "it glitches a lot ... like the page is jumping when moving captions."
+The v3.53.3 rAF fix was for the row FLICKER; this is the other half, and it is
+the one that was actually making the page jump.
+
+- **`makeDrag`'s `move()` called `paintNow()` on every mousemove.** That
+  re-renders the entire studio -- rail, header, panels, preview. A mouse
+  reports far faster than the screen draws (125Hz is ordinary, 1000Hz exists),
+  so the full render ran up to sixteen times per displayed frame and all but
+  the last was thrown away. Every one of them also tore out and rebuilt the
+  host-injected panels beside it.
+- **Measured, on the identical two-move harness drag: FOUR watermark-row
+  rebuilds before, TWO after.** Two moves cannot show the real win -- the
+  coalescing caps repaints at one per FRAME, so the saving scales with how many
+  moves a drag actually generates, which for a human drag is hundreds.
+- The drag STATE is still written synchronously on every event; only the render
+  is coalesced. So the frame that paints always draws the newest position --
+  redundant renders are dropped, never the latest one.
+- **`global.requestAnimationFrame` does not exist in the test context.** The
+  suite drives `move()` directly and reads the preview immediately after, so
+  the coalesced path fell over with nine failures. It falls back to painting
+  synchronously when rAF is absent, which is exactly the old behaviour.
+- The harness's `left_click_drag` emits only TWO mousemove events, so it cannot
+  reproduce the density of a real drag. It is enough to compare before against
+  after; it is not enough to measure smoothness. Say which of the two a number
+  is.

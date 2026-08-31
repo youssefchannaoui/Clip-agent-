@@ -2978,6 +2978,7 @@
 
         UI.dragKind = kind;
         var lastX = null; var lastY = null;
+        var dragPaint = 0;
         function move(ev) {
           var y = Math.max(0, Math.min(1, (ev.clientY - box.top) / box.height));
           var x = Math.max(0, Math.min(1, (ev.clientX - box.left) / box.width));
@@ -2997,9 +2998,32 @@
           // drag is exactly what release commits, so letting go never moves
           // the caption. The raw position still drives the guides.
           UI.dragPreview = { kind: kind, x: x, y: (kind === 'caption' && hit) ? hit.at : UI.dragAt };
-          paintNow();
+          // One repaint per FRAME, not one per mouse event.
+          //
+          // paintNow() re-renders the whole studio -- rail, header, panels and
+          // preview -- and a mouse reports far faster than the screen draws
+          // (125Hz is ordinary, 1000Hz exists), so this was running the entire
+          // render up to sixteen times per displayed frame and throwing all but
+          // the last away. Every one of those also tore out and rebuilt the
+          // host-injected panels beside it: measured FOUR watermark-row rebuilds
+          // in a two-move drag, so a real drag of a few hundred moves rebuilds
+          // it a few hundred times. That is what made dragging a caption feel
+          // like the page was jumping.
+          //
+          // The state above is still written synchronously, so the frame that
+          // does paint always draws the newest position -- coalescing drops
+          // redundant renders, never the latest one.
+          // Outside a browser there are no frames to coalesce into -- the
+          // tests drive move() directly and read the preview straight after --
+          // so fall back to painting synchronously there.
+          if (typeof global.requestAnimationFrame !== 'function') { paintNow(); }
+          else if (!dragPaint) {
+            dragPaint = global.requestAnimationFrame(function () { dragPaint = 0; paintNow(); });
+          }
         }
         function up() {
+          if (dragPaint && typeof global.cancelAnimationFrame === 'function') { global.cancelAnimationFrame(dragPaint); }
+          dragPaint = 0;
           var x = lastX; var y = lastY;
           UI.dragKind = null;
           UI.dragAt = null;
