@@ -2212,3 +2212,36 @@ Youssef, after the move: "try again".
   still called "Clean Line" -- the rename bug from v3.51.0 stays fixed.
 - Re-checked after the restyle: 12 drag renders, 0 ending with no row, 0 where
   it moved, still the column's first child.
+
+## The titling model invented a Companion of the Prophet (v3.54.1, 31 Aug 2026)
+
+The v3.54.0 prompt was tested against the box's real qwen3:1.7b rather than
+only unit-tested, and two things it did on real transcripts could not have been
+found any other way.
+
+- **It copied an example title verbatim onto an unrelated clip.** The prompt
+  offered "Why does my dua feel unanswered?" as a good SHAPE; the model put it
+  on the clip about honouring your mother. A 1.7B model treats a concrete
+  example as a template. The four shapes are now DESCRIBED, never demonstrated,
+  and the prompt says outright that every word must come from this clip.
+- **With no speaker in the lecture title it invented one: "Abu Huraira",** a
+  Companion of the Prophet, credited on a modern khutbah, on all three clips.
+  The prompt forbids inventing a speaker in plain words. **A small model does
+  not reliably obey a negative instruction**, so the rule is enforced in code:
+  `strip_unbacked_attribution()` drops a trailing "- Name" the lecture title
+  does not actually contain. It fails towards dropping the credit -- a name
+  spelled differently from the lecture title is stripped rather than trusted --
+  and an ordinary dash ("Repentance - why it never stops") is left alone
+  because the trailing fragment must look like a name before it is treated as
+  a credit.
+- **No real scholar's name appears anywhere in the prompt now**, for the same
+  reason the example titles went: a model that lifts an example phrase would
+  attach one scholar's name to another's lecture. A test asserts the guidance
+  contains none.
+- Measured after both fixes, same four transcripts, real model: with a speaker
+  in the lecture title all four titles carried it and each described its own
+  clip; with none, no name was invented.
+- **The production model is `qwen3:1.7b`, not 4b** (`OLLAMA_MODEL` on the box).
+  It also drops roughly one candidate in four -- `ollama_partial_scoring` fired
+  on most runs -- so those clips keep heuristic scores and transcript-head
+  titles. Worth revisiting; 4b is already pulled on the box.
