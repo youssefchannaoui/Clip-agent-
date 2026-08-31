@@ -322,6 +322,38 @@ h3{font-size:21px;line-height:1.25}
 .strip-note{text-align:center;font-size:13px;color:var(--muted-2)}
 .strip-note b{color:var(--gold-2);font-weight:600}
 
+/* ═══════════════════ HOME: STUDIO WALKTHROUGH ═══════════════════════════
+   A pinned pass through the real product: four steps light up in turn while
+   the matching capture crossfades into one frame. --ps counts 0→4 across
+   the scrub; at the CSS default (--p:1) every step is lit and the final
+   screen shows, so no-JS and reduced-motion read it as a finished story. */
+.walk-scene{background:var(--bg0)}
+.walk-scene .sc-stage{align-content:center;padding:calc(68px + 2vh) 0 3vh;--ps:calc(var(--p,1) * 4.4)}
+.walk-grid{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:clamp(26px,4vw,64px);align-items:center}
+.walk-copy{display:grid;gap:20px}
+.walk-copy h2{font-size:clamp(28px,3.4vw,46px)}
+.walk-steps{list-style:none;display:grid;gap:4px;margin-top:4px}
+.walk-steps li{
+  position:relative;display:flex;gap:14px;align-items:baseline;padding:13px 14px 13px 18px;border-radius:12px;
+  opacity:calc(.34 + .66 * clamp(0,calc((var(--ps) - var(--i)) / .3),1));
+}
+.walk-steps li::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:2px;border-radius:2px;background:var(--gold);
+  opacity:calc(clamp(0,calc(var(--ps) - var(--i)),1) * (1 - clamp(0,calc(var(--ps) - var(--i) - 1.1),1)))}
+.walk-steps li > i{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;letter-spacing:.14em;color:var(--gold);flex:none}
+.walk-step-body b{display:block;font-family:var(--font-display);font-weight:480;font-size:18px;letter-spacing:-.01em}
+.walk-step-body > span{display:block;font-size:13px;color:var(--muted);margin-top:3px;max-width:40ch}
+.walk-stage{position:relative}
+.walk-frame{position:relative;overflow:hidden}
+.walk-frame img{width:100%;height:auto;display:block}
+.walk-shot{position:absolute;inset:0;
+  opacity:clamp(0,calc((var(--ps) - var(--i)) / .22),1);
+  transform:translateY(calc((1 - clamp(0,calc((var(--ps) - var(--i)) / .22),1)) * 14px));
+  will-change:opacity,transform}
+.walk-shot[style*="--i:0"]{position:relative;opacity:1;transform:none}
+.walk-tag{position:absolute;left:14px;top:14px;z-index:2;padding:4px 10px;border-radius:8px;background:rgba(7,6,7,.78);border:1px solid rgba(245,241,232,.16);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--green)}
+.walk-bar{position:absolute;right:-16px;top:8%;bottom:8%;width:2px;border-radius:2px;background:rgba(245,241,232,.1)}
+.walk-bar b{display:block;width:100%;height:calc(clamp(0,var(--p,1),1) * 100%);background:linear-gradient(var(--gold),var(--gold-2));border-radius:2px}
+
 /* ═══════════════════ HOME: THE DIFFERENCE IS ONE FRAME ══════════════════ */
 .frame-scene{background:var(--bg1)}
 .frame-scene .sc-stage{align-content:center;padding:calc(68px + 1.5vh) 0 1.5vh}
@@ -843,7 +875,8 @@ main{display:block}
   .menu-button{display:flex}
   .nav-actions .text-button{display:none}
   .deenai-grid,.pricing-explainer,.contact-layout,.seo-proof,.tool-widget-body,
-  .feature-deep-dive,.feature-deep-dive.reverse{grid-template-columns:1fr}
+  .feature-deep-dive,.feature-deep-dive.reverse,.walk-grid{grid-template-columns:1fr}
+  .walk-bar{display:none}
   .feature-deep-dive.reverse .feature-deep-copy{order:0}
   .seo-section{grid-template-columns:1fr;gap:12px}
   .seo-section p{max-width:none}

@@ -610,6 +610,33 @@ export function home({ base, currentUser }) {
       </div>
     </section>
 
+    <section class="sc sc-tall walk-scene" data-scene id="studio-steps" aria-labelledby="walk-heading">
+      <div class="sc-stage">
+        <div class="wrap walk-grid">
+          <div class="walk-copy">
+            <span class="section-label"><i></i>Inside the studio</span>
+            <h2 id="walk-heading">Watch a lecture move <em>through the studio.</em></h2>
+            <ol class="walk-steps">
+              <li style="--i:0"><i>01</i><span class="walk-step-body"><b>Import the lecture</b><span>Paste a supported link or upload a file, then choose the exact minutes worth processing.</span></span></li>
+              <li style="--i:1"><i>02</i><span class="walk-step-body"><b>Review the real renders</b><span>Every candidate arrives as the file that would post, with its score and reasons beside it.</span></span></li>
+              <li style="--i:2"><i>03</i><span class="walk-step-body"><b>Set the look once</b><span>Five caption templates — a change re-renders only clips still waiting for review.</span></span></li>
+              <li style="--i:3"><i>04</i><span class="walk-step-body"><b>Schedule and publish</b><span>Approved clips fill your posting windows, and each destination reports its own state.</span></span></li>
+            </ol>
+          </div>
+          <div class="walk-stage">
+            <div class="walk-frame product-frame">
+              <img src="/marketing-assets/studio-home.webp" alt="The DeenClipped studio home screen where a lecture link is pasted" class="walk-shot" style="--i:0" loading="lazy">
+              <img src="/marketing-assets/studio-queue.webp" alt="The review queue playing a rendered clip with scores and reasons" class="walk-shot" style="--i:1" loading="lazy">
+              <img src="/marketing-assets/studio-templates.webp" alt="The template screen with caption style controls" class="walk-shot" style="--i:2" loading="lazy">
+              <img src="/marketing-assets/studio-schedule.webp" alt="The schedule with per-destination publishing state" class="walk-shot" style="--i:3" loading="lazy">
+            </div>
+            <span class="walk-tag">Real product captures</span>
+            <i class="walk-bar" aria-hidden="true"><b></b></i>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section class="sc sc-tall frame-scene" data-scene id="the-difference" aria-labelledby="the-difference-heading">
       <div class="sc-stage">
         <div class="wrap frame-wrap">
