@@ -222,13 +222,40 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
       <a class="brand" href="/" aria-label="DeenClipped home">${logoMark()}<span class="brand-copy"><strong>DeenClipped</strong><small>AI clip workspace</small></span></a>
       <button class="menu-button" type="button" data-menu aria-label="Open navigation"><span></span><span></span><span></span></button>
       <nav class="nav-links" aria-label="Main navigation">
-        <a href="/how-it-works">How it works</a>
-        <a href="/features">Features</a>
-        <a href="/tools/ai-video-clipper">Tools</a>
+        <div class="nav-group">
+          <a class="nav-top" href="/features">Product<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9.5 6 6 6-6"/></svg></a>
+          <div class="nav-drop"><div class="nav-drop-card">
+            <a href="/how-it-works">How it works</a>
+            <a href="/features">Features</a>
+            <a href="/review-safety">Review &amp; safety</a>
+            <a href="/alternatives">How it compares</a>
+          </div></div>
+        </div>
+        <div class="nav-group">
+          <a class="nav-top" href="/tools/ai-video-clipper">Tools<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9.5 6 6 6-6"/></svg></a>
+          <div class="nav-drop"><div class="nav-drop-card nav-drop-wide">
+            <a href="/tools/ai-video-clipper">AI video clipper</a>
+            <a href="/tools/podcast-clip-generator">Podcast clips</a>
+            <a href="/tools/lecture-clip-generator">Lecture clips</a>
+            <a href="/tools/ai-caption-generator">AI captions</a>
+            <a href="/tools/youtube-to-shorts">YouTube to Shorts</a>
+            <a href="/tools/youtube-to-tiktok">YouTube to TikTok</a>
+            <a href="/tools/youtube-to-reels">YouTube to Reels</a>
+            <span class="nav-drop-rule" aria-hidden="true"></span>
+            <a href="/tools/safe-zone-checker">Safe zone checker <em>Free</em></a>
+            <a href="/tools/clip-calculator">Clip calculator <em>Free</em></a>
+          </div></div>
+        </div>
+        <div class="nav-group">
+          <a class="nav-top" href="/islamic-video-clipper">For Islamic creators<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9.5 6 6 6-6"/></svg></a>
+          <div class="nav-drop"><div class="nav-drop-card">
+            <a href="/islamic-video-clipper">Islamic video clipper</a>
+            <a href="/islamic-lecture-clipper">Islamic lecture clipper</a>
+            <a href="/tools/arabic-english-captions">Arabic &amp; English captions</a>
+          </div></div>
+        </div>
         <a href="/guides">Guides</a>
-        <a href="/islamic-video-clipper">For Islamic creators</a>
         <a href="/pricing">Pricing</a>
-        <a href="/review-safety">Review & safety</a>
       </nav>
       ${navActions(currentUser)}
     </div>

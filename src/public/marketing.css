@@ -117,6 +117,21 @@ h3{font-size:21px;line-height:1.25}
 .nav-links{display:flex;align-items:center;gap:4px;margin-left:auto}
 .nav-links a{font-size:13.5px;font-weight:500;color:var(--muted);padding:9px 12px;border-radius:9px;transition:color .18s,background .18s}
 .nav-links a:hover{color:var(--text);background:rgba(245,241,232,.06)}
+/* Dropdowns: CSS-only (hover + focus-within), never <details> — the FAQ
+   schema test requires the homepage's only <summary> elements to be the
+   FAQ's. Links are real <a>s in the HTML, so the crawl test still walks
+   them. The .nav-drop outer carries the hover bridge padding. */
+.nav-group{position:relative}
+.nav-top{display:inline-flex;align-items:center;gap:5px}
+.nav-top svg{width:13px;height:13px;opacity:.55;transition:transform .2s var(--ease)}
+.nav-group:hover .nav-top svg,.nav-group:focus-within .nav-top svg{transform:rotate(180deg);opacity:1}
+.nav-drop{position:absolute;top:100%;left:-8px;padding-top:10px;opacity:0;visibility:hidden;transform:translateY(6px);transition:opacity .2s var(--ease),transform .2s var(--ease),visibility 0s .2s;z-index:70}
+.nav-group:hover .nav-drop,.nav-group:focus-within .nav-drop{opacity:1;visibility:visible;transform:none;transition:opacity .2s var(--ease),transform .2s var(--ease)}
+.nav-drop-card{display:grid;gap:2px;min-width:230px;padding:10px;border-radius:16px;background:rgba(13,12,14,.97);border:1px solid var(--line-strong);box-shadow:0 26px 70px rgba(0,0,0,.6)}
+.nav-drop-card a{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:9px 12px;font-size:13.5px;white-space:nowrap}
+.nav-drop-card a em{font-style:normal;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--green)}
+.nav-drop-wide{min-width:250px}
+.nav-drop-rule{height:1px;background:var(--line);margin:6px 4px}
 .nav-actions{display:flex;align-items:center;gap:8px}
 .menu-button{display:none;background:none;border:1px solid var(--line-strong);border-radius:10px;width:42px;height:42px;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;margin-left:auto}
 .menu-button span{display:block;width:17px;height:1.6px;background:var(--text);transition:transform .2s,opacity .2s}
@@ -700,14 +715,25 @@ main{display:block}
   .feature-page-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media (max-width:960px){
+  /* Positioned absolute against the fixed header, NOT fixed: the header's
+     backdrop-filter makes it the containing block for fixed descendants, so
+     a fixed drawer sizes against the 68px bar instead of the viewport. */
   .nav-links{
-    position:fixed;inset:68px 0 auto 0;z-index:59;
+    position:absolute;top:68px;left:0;right:0;height:calc(100vh - 68px);z-index:59;
     display:none;flex-direction:column;align-items:stretch;gap:2px;
-    background:rgba(7,6,7,.98);border-bottom:1px solid var(--line-strong);
-    padding:14px 22px 22px;margin:0;
+    background:#070607;border-bottom:1px solid var(--line-strong);
+    padding:14px 22px 30px;margin:0;overflow-y:auto;
   }
   .nav-links.open{display:flex}
   .nav-links a{padding:13px 12px;font-size:15px;border-radius:10px}
+  /* In the drawer the dropdowns are always open: groups become labelled
+     sections with their links indented, nothing hidden behind a hover. */
+  .nav-group{position:static}
+  .nav-top svg{display:none}
+  .nav-drop{position:static;opacity:1;visibility:visible;transform:none;padding-top:0;transition:none}
+  .nav-drop-card{min-width:0;padding:0 0 6px;border:0;background:none;box-shadow:none;border-radius:0}
+  .nav-drop-card a{padding:10px 12px 10px 26px;font-size:14px;color:var(--muted);white-space:normal}
+  .nav-drop-rule{margin:4px 26px}
   .menu-button{display:flex}
   .nav-actions .text-button{display:none}
   .deenai-grid,.pricing-explainer,.contact-layout,.seo-proof,.tool-widget-body,
