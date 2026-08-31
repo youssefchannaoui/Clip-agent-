@@ -211,6 +211,9 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
   <meta name="google-site-verification" content="${escapeHtml(config.googleSiteVerification)}">` : ''}${config.bingSiteVerification ? `
   <meta name="msvalidate.01" content="${escapeHtml(config.bingSiteVerification)}">` : ''}
   ${schemaBlocks}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Outfit:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/marketing.css?v=${CSS_VERSION}">
 </head>
 <body>
@@ -355,7 +358,7 @@ function pricingCards(currentUser = null) {
       <h3>${escapeHtml(tierNames[tier])}</h3>
       ${rows}
       <p>${escapeHtml(billing.TIERS[tier].tagline)}</p>
-      <ul><li>Everything in ${tier === 'studio' ? 'Pro' : 'Basic'}, plus:</li>${adds.map(line => `<li>${escapeHtml(line)}</li>`).join('')}</ul>
+      <ul><li class="plan-adds-head">Everything in ${tier === 'studio' ? 'Pro' : 'Basic'}, plus:</li>${adds.map(line => `<li>${escapeHtml(line)}</li>`).join('')}</ul>
       ${anyLive
         ? `<a class="button ${tier === 'pro' ? 'primary' : 'secondary'} full" href="${accountUrl}">Choose ${escapeHtml(tierNames[tier])}</a>`
         : '<span class="button secondary full disabled" aria-disabled="true">Opening soon</span>'}
@@ -494,184 +497,217 @@ function faqSchema() {
 }
 
 export function home({ base, currentUser }) {
+  // Filmstrip cells: real reel frames standing in for a source timeline. The
+  // moment scores match the shape the review queue actually shows.
+  const stripCells = [
+    ['reel-landscape.webp', '', ''],
+    ['reel-depart.webp', '86', 'is-moment'],
+    ['reel-winter.webp', '', ''],
+    ['reel-deeds.webp', '', ''],
+    ['reel-halal-way.webp', '79', 'is-moment'],
+    ['reel-kaaba-a.webp', '', ''],
+    ['reel-dua.webp', '74', 'is-moment'],
+    ['reel-kaaba-b.webp', '', ''],
+    ['reel-depart.webp', '', ''],
+    ['reel-winter.webp', '68', 'is-moment'],
+    ['reel-landscape.webp', '', ''],
+    ['reel-deeds.webp', '', ''],
+  ];
+  const stripTrack = stripCells.map(([src, score, cls]) =>
+    `<span class="strip-cell ${cls}"${score ? ` data-score="${score}"` : ''}><img src="/marketing-assets/${src}" alt="" loading="lazy"></span>`).join('');
+
+  const chapter = (i, title, copy, factTitle, factCopy, media) => `
+      <article class="chapter" style="--i:${i}">
+        <div class="chapter-copy">
+          <span class="chapter-index">Chapter 0${i + 1}</span>
+          <h3>${title}</h3>
+          <p>${copy}</p>
+          <span class="chapter-fact"><i>${icon('check')}</i><span><b>${factTitle}</b> ${factCopy}</span></span>
+        </div>
+        <div class="chapter-media">${media}</div>
+      </article>`;
+
   const body = `
   <main>
-    <section class="hero wrap hero-split">
-      <div class="hero-copy-col">
-      <span class="eyebrow"><i></i>Review-first clipping for Islamic creators</span>
-      <h1>Turn long lectures into <span>review-ready short clips.</span></h1>
-      <p class="hero-copy">Find the strongest moments, render vertical clips with English, Arabic or ayah-and-translation captions, then review and publish from one focused workspace.</p>
-      <p class="purpose-line"><strong>Start with ${escapeHtml(Number(config.tokensFree).toLocaleString())} source minutes for ${escapeHtml(String(config.stripeTrialDays))} days.</strong> No card details are stored by DeenClipped.</p>
-      ${sourceForm()}
-      <div class="hero-actions"><a class="button primary" href="/login?returnTo=/app">Start Basic free ${icon('arrow')}</a><a class="button secondary" href="#how-it-works">See how it works</a><a class="button text-link" href="/pricing">Compare plans</a></div>
-      <div class="trust-strip" aria-label="DeenClipped product assurances"><span>${icon('shield')} Human review before publishing</span><span>${icon('language')} Multilingual and Quran-aware captions</span><span>${icon('brain')} Private DeenAI on our own server</span></div>
-      </div>
-
-      <div class="hero-product reveal">
-        <div class="hero-glow"></div>
-        <div class="product-frame sd-open hero-main"><img src="/marketing-assets/hero-premium.webp" alt="Concept illustration of the DeenClipped lecture-to-clip workspace" fetchpriority="high"></div>
-        ${reelCard(reels[0], 'hero-reel hero-reel-a float-one')}
-        ${reelCard(reels[1], 'hero-reel hero-reel-b float-two')}
-        ${reelCard(reels[2], 'hero-reel hero-reel-c float-three')}
-        ${reelCard(reels[3], 'hero-reel hero-reel-d float-four')}
-        <div class="status-float status-left"><span>${icon('spark')}</span><div><b>Strong moments found</b><small>Review the best clips first</small></div></div>
-        <div class="status-float status-right"><span>${icon('calendar')}</span><div><b>Schedule ready</b><small>Post to your channels</small></div></div>
-      </div>
-      <div class="capability-rail reveal"><span>${icon('link')} Choose a source range</span><i>${icon('arrow')}</i><span>${icon('clips')} Find strong moments</span><i>${icon('arrow')}</i><span>${icon('shield')} Review the real render</span><i>${icon('arrow')}</i><span>${icon('publish')} Publish or schedule</span></div>
-    </section>
-
-    <section class="reel-showcase" aria-label="Examples of vertical clips created with DeenClipped">
-      <div class="reel-marquee">
-        <div class="reel-marquee-track">
-          ${reels.map((reel, index) => reelCard(reel, `marquee-reel float-${(index % 4) + 1}`)).join('')}
-          ${reels.map((reel, index) => reelCard(reel, `marquee-reel float-${(index % 4) + 1}`)).join('')}
-        </div>
-      </div>
-    </section>
-
-    <section class="section frame-section" id="the-difference" aria-labelledby="the-difference-heading">
-      <div class="wrap">
-        <div class="section-head reveal sd-rise">
-          <span class="section-label">The difference</span>
-          <h2 id="the-difference-heading">The difference is one frame.</h2>
-          <p>Every clipper can find a moment in a lecture. What separates them is what happens when the speaker begins to recite.</p>
-        </div>
-        <div class="frame-duo">
-          <figure class="frame-panel is-generic reveal">
-            <div class="frame-head">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M6.5 10.5h11"/><path d="M6.5 14h5"/><path d="M14 14h3.5"/></svg>
-              <b>A general AI clipper</b>
-              <span class="frame-tag">Illustration</span>
-            </div>
-            <div class="frame-stage sd-open">
-              <img src="/marketing-assets/reel-quran.webp" alt="Illustration of a recitation frame captioned with the verse written out in Latin letters" width="564" height="1002" loading="lazy">
-              <div class="frame-scrim"></div>
-              <p class="frame-cap">Inna a'taynaka al kawthar</p>
-            </div>
-            <figcaption>The recitation is heard as ordinary speech, spelled out phonetically in Latin letters and burned in like any other caption. Nothing in that pipeline knows a verse was being read.</figcaption>
-          </figure>
-          <figure class="frame-panel is-deen reveal">
-            <div class="frame-head">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5.5 20.5V11a6.5 6.5 0 0 1 13 0v9.5"/><path d="M3 20.5h18"/><path d="M9.5 20.5v-9a2.5 2.5 0 0 1 5 0v9"/></svg>
-              <b>DeenClipped</b>
-              <span class="frame-tag">Illustration</span>
-            </div>
-            <div class="frame-stage sd-open">
-              <img src="/marketing-assets/reel-quran.webp" alt="Illustration of the DeenClipped treatment: the recited verse in mushaf naskh with its English translation beneath it" width="564" height="1002" loading="lazy">
-            </div>
-            <p class="frame-ref"><i></i>Al-Kawthar &middot; 108:1</p>
-            <figcaption>The verse is matched to the Qur'an itself and set in mushaf naskh with its translation underneath. A clip containing scripture is <b>never published automatically</b> &mdash; it waits for a person, whatever the automation is set to.</figcaption>
-          </figure>
-        </div>
-        <p class="frame-note">Inside a single clip the treatment <b>changes per segment</b>: recited scripture becomes the ayah and its translation, other Arabic is captioned in Arabic with an English line beneath it, and English is captioned as English.</p>
-      </div>
-    </section>
-
-    <section class="section deen-section" id="built-for" aria-labelledby="built-for-heading">
-      <div class="wrap">
-        <div class="section-head reveal sd-rise">
-          <span class="section-label">Built for this content</span>
-          <h2 id="built-for-heading">Six things a general clipper has no reason to do.</h2>
-          <p>None of this is a setting bolted onto a generic pipeline. It is why the pipeline was written.</p>
-        </div>
-        <div class="deen-grid sd-seq">
-          <article class="deen-tile deen-tile-wide">
-            <div class="deen-tile-copy">
-              <span class="deen-icon"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5.5h16v13H4z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7.5 9.5h9M7.5 12.8h9M7.5 16h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
-              <h3>Recitation becomes the verse</h3>
-              <p>When a speaker recites, the words are matched against the Qur’an and set as the ayah itself in mushaf naskh, with its translation beneath. Not a transcription of the sound — the text.</p>
-            </div>
-            <div class="deen-tile-media sd-open">
-              <img src="/marketing-assets/reel-quran.webp" alt="Illustration of a clip showing an ayah in mushaf naskh with an English translation" width="564" height="1002" loading="lazy">
-            </div>
-          </article>
-          <article class="deen-tile">
-            <span class="deen-icon"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h9M8.5 7v10M13 17h7M16.5 10.5 20 17M16.5 10.5 13 17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-            <h3>Three scripts, switching mid-clip</h3>
-            <p>Recited scripture becomes ayah and translation, other Arabic is captioned in Arabic with an English line under it, English is captioned as English — and it can change from one segment to the next inside a single clip.</p>
-          </article>
-          <article class="deen-tile deen-tile-accent">
-            <span class="deen-icon"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.5 19.5 7v5.2c0 4.2-3 7-7.5 8.3-4.5-1.3-7.5-4.1-7.5-8.3V7z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m9.2 12 2 2 3.6-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-            <h3>Scripture never posts by itself</h3>
-            <p>A clip containing Qur’an or hadith is held for a person to approve, whatever the automation is set to. That gate is in the render pipeline, not a preference someone can forget.</p>
-          </article>
-          <article class="deen-tile">
-            <span class="deen-icon"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 18V6.5l9-2v11" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="6.8" cy="18" r="2.4" stroke="currentColor" stroke-width="1.6"/><circle cx="15.8" cy="15.5" r="2.4" stroke="currentColor" stroke-width="1.6"/></svg></span>
-            <h3>The Quran template keeps quiet</h3>
-            <p>A nasheed is mixed under ordinary lectures and ducked beneath the speech. Under recitation it is switched off, and the template drops the branding treatments with it.</p>
-          </article>
-          <article class="deen-tile">
-            <span class="deen-icon"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 19V8.5a7 7 0 0 1 14 0V19" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3 19h18M10 19v-7a2 2 0 0 1 4 0v7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
-            <h3>Arabic set in an Arabic face</h3>
-            <p>Amiri and Uthmani faces render the verse the way a mushaf does, including the medallion around the verse number. The renderer checks a face actually draws Arabic before it trusts it.</p>
-          </article>
-          <article class="deen-tile">
-            <span class="deen-icon"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.6" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 9.5h17" stroke="currentColor" stroke-width="1.6"/><path d="m10 13.2 4 2.3-4 2.3z" fill="currentColor"/></svg></span>
-            <h3>Your lecture stays on our server</h3>
-            <p>Transcription and the model that picks moments both run on hardware DeenClipped operates. Your lectures are not sent to a third-party AI provider.</p>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <section class="section content-types-section" id="content-types" aria-labelledby="content-types-heading">
-      <div class="wrap">
-        <div class="section-head reveal sd-rise"><span class="section-label">Content-aware clipping</span><h2 id="content-types-heading">Lectures and recitation need different treatment.</h2><p>Choose how the source should be handled before processing. Islamic Lecture finds complete moments and captions what is said. Quran Recitation matches the ayah itself, keeps nasheed off and always waits for human review.</p></div>
-        <div class="content-types-stage reveal">
-          <img src="/marketing-assets/content-types-lecture-quran-v1.webp" alt="An Islamic lecturer recording beside a Quran recitation setup, representing DeenClipped's two source treatments" loading="lazy">
-          <div class="content-types-options sd-seq">
-            <a class="content-type-link" href="/islamic-lecture-clipper" aria-label="Explore DeenClipped's Islamic Lecture workflow">
-              <span class="content-type-icon">${icon('clips')}</span>
-              <span class="content-type-copy"><span class="content-type-kicker">Spoken reminders and khutbahs <em>Basic</em></span><h3>Islamic Lecture</h3><small>Complete ideas, clean captions and speaker-aware framing.</small><b>See the lecture workflow ${icon('arrow')}</b></span>
-            </a>
-            <a class="content-type-link quran" href="/features#captions" aria-label="Explore DeenClipped's Quran Recitation safeguards">
-              <span class="content-type-icon">${icon('language')}</span>
-              <span class="content-type-copy"><span class="content-type-kicker">Scripture-first treatment <em>Pro</em></span><h3>Quran Recitation</h3><small>Ayah matching, translation, no nasheed and required review.</small><b>See the Quran safeguards ${icon('arrow')}</b></span>
-            </a>
+    <section class="sc hero-scene" data-scene>
+      <div class="sc-stage">
+        <div class="hero-backdrop"><img src="/marketing-assets/hero-hall.webp" alt="An empty mosque hall at night, a single microphone lit beside the minbar"></div>
+        <div class="hero-scrim"></div>
+        <div class="wrap hero-grid">
+          <div class="hero-copy-col">
+            <span class="eyebrow"><i></i>Review-first clipping for Islamic creators</span>
+            <h1>One lecture. <em>A week of clips.</em></h1>
+            <p class="hero-lede">DeenClipped finds the strongest complete moments in a long lecture, renders vertical clips with English, Arabic or ayah-and-translation captions, and holds every one for your approval before anything publishes.</p>
+            <p class="purpose-line"><strong>Start with ${escapeHtml(Number(config.tokensFree).toLocaleString())} source minutes for ${escapeHtml(String(config.stripeTrialDays))} days.</strong> No card details are stored by DeenClipped.</p>
+            ${sourceForm()}
+            <div class="hero-actions"><a class="button primary" href="/login?returnTo=/app">Start Basic free ${icon('arrow')}</a><a class="button secondary" href="#chapters">See how it works</a><a class="button text-link" href="/pricing">Compare plans</a></div>
+            <div class="hero-assure" aria-label="DeenClipped product assurances"><span>${icon('shield')} Human review before publishing</span><span>${icon('language')} Multilingual and Quran-aware captions</span><span>${icon('brain')} Private DeenAI on our own server</span></div>
+          </div>
+          <div class="hero-reels" aria-hidden="true">
+            ${reelCard(reels[0], '')}
+            ${reelCard(reels[4], '')}
+            ${reelCard(reels[10], '')}
           </div>
         </div>
+        <div class="hero-cue" aria-hidden="true"><i></i>Scroll</div>
       </div>
     </section>
-    <section class="section workflow-section" id="how-it-works">
-      <div class="wrap">
-        <div class="section-head align-left reveal"><span class="section-label">One connected workflow</span><h2>From the right section of a lecture to the final post.</h2><p>Select only the source range you want to process. DeenClipped transcribes it, finds complete moments, renders full-quality clips and keeps every decision in one place.</p></div>
-        <div class="workflow-visual reveal"><div class="product-frame"><img src="/marketing-assets/workflow-premium.webp" alt="DeenClipped workflow from source import to publish-ready clips" loading="lazy"></div></div>
-        <div class="workflow-steps reveal">
-          <article><span>01</span><h3>Choose the minutes that matter</h3><p>Paste a supported link or upload a file, then set the exact start and end. Tokens follow the selected source time.</p></article>
-          <article><span>02</span><h3>Review finished clips</h3><p>Watch the same full-quality render that will be posted, with scores, reasons, captions and keyboard decisions.</p></article>
-          <article><span>03</span><h3>Publish with control</h3><p>Download, post now or fill the schedule for your own connected destinations. A failed destination can be retried on its own.</p></article>
+
+    <section class="sc sc-tall strip-scene" data-scene aria-labelledby="strip-heading">
+      <div class="sc-stage">
+        <div class="wrap">
+          <div class="strip-head">
+            <span class="section-label">From one source</span>
+            <h2 id="strip-heading">The strongest moments <em>separate themselves.</em></h2>
+            <p>The whole lecture is transcribed, then searched for complete thoughts — a point with its ending still attached, a question with its answer. Each candidate is scored, and the reasons travel with it into review.</p>
+          </div>
+        </div>
+        <div class="strip-rail" aria-hidden="true">
+          <div class="strip-track">${stripTrack}${stripTrack}</div>
+        </div>
+        <div class="wrap">
+          <div class="strip-time" aria-hidden="true"><span>00:00</span><span>Illustration — how discovery works</span><span>53:40</span></div>
+        </div>
+        <div class="strip-out" aria-hidden="true">
+          ${reelCard(reels[3], '')}
+          ${reelCard(reels[7], '')}
+          ${reelCard(reels[8], '')}
+        </div>
+        <p class="strip-note wrap">Cuts land on a <b>complete idea</b>, never on a timer — and every candidate still waits for your decision.</p>
+      </div>
+    </section>
+
+    <section class="sc sc-tall frame-scene" data-scene id="the-difference" aria-labelledby="the-difference-heading">
+      <div class="sc-stage">
+        <div class="wrap frame-wrap">
+          <div class="frame-head-block">
+            <span class="section-label">The difference</span>
+            <h2 id="the-difference-heading">The difference is <em>one frame.</em></h2>
+            <p>Every clipper can find a moment in a lecture. What separates them is what happens when the speaker begins to recite.</p>
+          </div>
+          <div class="frame-duo">
+            <figure class="frame-panel is-generic">
+              <span class="frame-tagline">A general AI clipper <span class="frame-tag">Illustration</span></span>
+              <div class="frame-stage">
+                <img src="/marketing-assets/reel-quran.webp" alt="Illustration of a recitation frame captioned with the verse written out in Latin letters" width="564" height="1002" loading="lazy">
+                <div class="frame-scrim"></div>
+                <p class="frame-cap">Inna a'taynaka al kawthar</p>
+              </div>
+              <figcaption>The recitation is heard as ordinary speech, spelled out phonetically in Latin letters and burned in like any other caption. Nothing in that pipeline knows a verse was being read.</figcaption>
+            </figure>
+            <figure class="frame-panel is-deen">
+              <span class="frame-tagline">DeenClipped <span class="frame-tag">Illustration</span></span>
+              <div class="frame-stage">
+                <img src="/marketing-assets/reel-quran.webp" alt="Illustration of the DeenClipped treatment: the recited verse in mushaf naskh with its English translation beneath it" width="564" height="1002" loading="lazy">
+              </div>
+              <p class="frame-ref"><i></i>Al-Kawthar &middot; 108:1</p>
+              <figcaption>The verse is matched to the Qur'an itself and set in mushaf naskh with its translation underneath. A clip containing scripture is <b>never published automatically</b> &mdash; it waits for a person, whatever the automation is set to.</figcaption>
+            </figure>
+          </div>
+          <p class="frame-note">Inside a single clip the treatment <b>changes per segment</b>: recited scripture becomes the ayah and its translation, other Arabic is captioned in Arabic with an English line beneath it, and English is captioned as English.</p>
         </div>
       </div>
     </section>
-    <section class="section clips-section" id="safety">
-      <div class="wrap split-layout">
-        <div class="media-stack reveal">
-          <div class="product-frame sd-open media-main"><img src="/marketing-assets/clip-discovery-premium.webp" alt="DeenClipped review queue surrounded by realistic Islamic lecture clips" loading="lazy"></div>
-          ${reelCard(reels[4], 'stack-card stack-one float-one')}
-          ${reelCard(reels[5], 'stack-card stack-two float-two')}
-          ${reelCard(reels[6], 'stack-card stack-three float-three')}
-          ${reelCard(reels[7], 'stack-card stack-four float-four')}
+
+    <section class="paper-scene" id="content-types" aria-labelledby="paths-heading">
+      <div class="wrap">
+        <div class="paper-head">
+          <span class="kicker"><i></i>Two kinds of source</span>
+          <h2 id="paths-heading">A lecture is not a recitation, and <em>neither is treated like the other.</em></h2>
+          <p>Choose how the source should be handled before processing. The pipeline that captions a khutbah is the wrong pipeline for scripture, so DeenClipped runs a different one.</p>
         </div>
-        <div class="feature-copy reveal sd-rise"><span class="section-label">Review and faith-sensitive safeguards</span><h2>The AI can find the moment. A person still decides what leaves.</h2><p>Every generated clip lands in a review queue. Scripture is treated more carefully: recitation is matched to an ayah-and-translation treatment and forced through a human review gate.</p><div class="detail-list sd-seq">${checkItem('Rendered-video review','Watch the exact captioned file that will be posted, not a browser imitation.')}${checkItem('English, Arabic and recitation','Auto-detect can switch language by segment instead of forcing one language across the lecture.')}${checkItem('Nothing approximate for scripture','Quran clips never use the editor’s approximate caption echo and never bypass approval.')}</div><a class="button primary" href="/features#captions">See caption and review features ${icon('arrow')}</a></div>
+        <div class="path-grid">
+          <a class="path-card" href="/islamic-lecture-clipper" aria-label="Explore DeenClipped's Islamic Lecture workflow">
+            <span class="path-media crop-left"><img src="/marketing-assets/content-types-lecture-quran-v1.webp" alt="An Islamic lecturer recording at a microphone in a warm library" loading="lazy"></span>
+            <span class="path-copy">
+              <span class="kicker">Spoken reminders and khutbahs</span>
+              <h3>Islamic Lecture</h3>
+              <p>Clipping finds complete ideas and captions what is actually said, in the language it was said in.</p>
+              <span class="path-points"><span><i>${icon('check')}</i>Cuts on the whole thought, never mid-sentence</span><span><i>${icon('check')}</i>Speaker-aware 9:16 framing</span><span><i>${icon('check')}</i>Nasheed mixed under the speech, ducked beneath it</span></span>
+              <b class="path-cta">See the lecture workflow ${icon('arrow')}</b>
+            </span>
+          </a>
+          <a class="path-card" href="/features#captions" aria-label="Explore DeenClipped's Quran Recitation safeguards">
+            <span class="path-media crop-right"><img src="/marketing-assets/content-types-lecture-quran-v1.webp" alt="An open mushaf on a rehl before a lamp-lit mosque arcade" loading="lazy"></span>
+            <span class="path-copy">
+              <span class="kicker">Scripture-first treatment</span>
+              <h3>Quran Recitation</h3>
+              <p>Recited ayat are matched to the Qur'an itself — not transcribed by ear — and set with their translation.</p>
+              <span class="path-points"><span><i>${icon('check')}</i>Ayah matching with the translation beneath</span><span><i>${icon('check')}</i>No nasheed underneath recitation, ever</span><span><i>${icon('check')}</i>Human review required, whatever the automation</span></span>
+              <b class="path-cta">See the Quran safeguards ${icon('arrow')}</b>
+            </span>
+          </a>
+        </div>
+        <div class="paper-foot"><span><b>Auto-detect means both.</b> An English talk with recitation inside it switches treatment per segment.</span><span><b>Arabic set in an Arabic face.</b> The renderer checks a face actually draws Arabic before trusting it.</span></div>
       </div>
     </section>
-    <section class="section templates-section" id="templates">
+
+    <section class="chapters-scene" id="chapters" aria-labelledby="chapters-heading">
       <div class="wrap">
-        <div class="section-head reveal sd-rise"><span class="section-label">Five real template styles</span><h2>Choose the treatment that suits the reminder.</h2><p>Every preview uses the existing photographic Islamic reel library. Basic starts with Clean Line; Pro unlocks the complete catalogue.</p></div>
+        <div class="chapters-head">
+          <span class="section-label">One connected workflow</span>
+          <h2 id="chapters-heading">From the right minutes to the final post, <em>in chapters.</em></h2>
+          <p>Every screen below is the real product. Where something is a concept, it says so on the image.</p>
+        </div>
+        ${chapter(0, 'Choose the minutes that matter',
+    'Paste a supported link or upload a file, then set the exact start and end. The duration is read before anything is charged, and tokens follow the selected source time.',
+    'Only the chosen stretch is processed.', 'Reviewing and cutting more clips from the same processed source does not charge those minutes again.',
+    `<figure class="chapter-shot"><img src="/marketing-assets/studio-home.webp" alt="The DeenClipped studio home screen with a link field for a new lecture" loading="lazy"><figcaption class="is-real">Real product capture</figcaption></figure>`)}
+        ${chapter(1, 'Review the real render',
+    'Every candidate lands in the review queue as the exact captioned file that would post — not a browser imitation. Scores and the reasons behind them sit beside each clip, and A, X and S decide from the keyboard.',
+    'Nothing publishes without an approval.', 'Scripture clips carry a further human-review gate that automation cannot bypass.',
+    `<figure class="chapter-shot"><img src="/marketing-assets/studio-queue.webp" alt="The DeenClipped review queue playing a rendered clip with scores and reasons" loading="lazy"><figcaption class="is-real">Real product capture</figcaption></figure>`)}
+        ${chapter(2, 'Set the look once',
+    'Five caption templates cover a clean single line to the full Quran treatment. A style change can stay local to one clip or be saved back to the template for everything still waiting.',
+    'Re-renders stay fair.', 'Changing a template re-renders only clips still waiting for review — approved and posted clips keep the render you signed off.',
+    `<figure class="chapter-shot"><img src="/marketing-assets/studio-templates.webp" alt="The DeenClipped template screen with caption style controls" loading="lazy"><figcaption class="is-real">Real product capture</figcaption></figure>`)}
+        ${chapter(3, 'Publish with control',
+    'Download an approved clip, post it now, or let it fill the next free posting windows on your own connected channels. Each destination keeps its own outcome, so one refusal never hides a success.',
+    'Retry targets only the failed leg.', 'A clip live on YouTube is never re-posted there because TikTok said no.',
+    `<figure class="chapter-shot"><img src="/marketing-assets/studio-schedule.webp" alt="The DeenClipped schedule with per-destination publishing state" loading="lazy"><figcaption class="is-real">Real product capture</figcaption></figure>`)}
+        ${chapter(4, 'The editor, honestly',
+    'Templates, style changes and re-renders work today. The full timeline editor opens as a preview behind a coming-soon gate while its visual verification is completed — it is not sold as launched.',
+    'What you can rely on now.', 'Rendered review, templates, re-renders, downloads, scheduling and publishing are all available on every plan.',
+    `<figure class="chapter-shot"><img src="/marketing-assets/editor-premium.webp" alt="Concept preview of the planned DeenClipped clip editor" loading="lazy"><figcaption>Concept preview</figcaption></figure><span class="availability-badge">Editor preview &middot; coming soon</span>`)}
+      </div>
+    </section>
+
+    <section class="gallery-section" id="templates" aria-labelledby="gallery-heading">
+      <div class="wrap">
+        <div class="gallery-head">
+          <div>
+            <span class="section-label">Five real template styles</span>
+            <h2 id="gallery-heading">Choose the treatment <em>that suits the reminder.</em></h2>
+          </div>
+          <p>Every preview below uses the existing photographic Islamic reel library. Basic starts with Clean Line; Pro unlocks the complete catalogue.</p>
+        </div>
         ${templateCatalogue()}
-        <div class="template-safety reveal"><span>${icon('shield')}</span><p><strong>Quran Recitation is deliberately different.</strong> It matches recitation to the Quran corpus, shows the ayah and translation, keeps nasheed off and always requires human review.</p></div>
+        <div class="template-safety"><span>${icon('shield')}</span><p><strong>Quran Recitation is deliberately different.</strong> It matches recitation to the Quran corpus, shows the ayah and translation, keeps nasheed off and always requires human review.</p></div>
       </div>
     </section>
-    <section class="section publishing-section">
-      <div class="wrap">
-        <div class="section-head reveal sd-rise"><span class="section-label">Library, performance and publishing</span><h2>Know what needs attention, then keep the schedule moving.</h2><p>The library groups clips by lecture, Performance reports only what DeenClipped can actually measure, and the calendar shows each destination’s real state.</p></div>
-        <div class="publishing-canvas reveal"><div class="product-frame"><img src="/marketing-assets/publishing-premium.webp" alt="Clean DeenClipped publishing schedule and connected platform controls" loading="lazy"></div></div>
-        <div class="publishing-points reveal"><div><span>${icon('chart')}</span><b>Honest performance</b><small>Made, kept, scheduled, posted and failed — no invented social view counts.</small></div><div><span>${icon('calendar')}</span><b>Post now or schedule</b><small>Approved clips can fill the next free posting windows automatically.</small></div><div><span>${icon('account')}</span><b>Destination-level status</b><small>A YouTube success and TikTok refusal stay separate, with the failed leg retried alone.</small></div></div>
+
+    <section class="review-scene" id="safety" aria-labelledby="review-heading">
+      <div class="wrap review-inner">
+        <span class="section-label"><i></i>Review and faith-sensitive safeguards</span>
+        <h2 class="review-statement" id="review-heading">The AI can find the moment.<br><em>A person still decides what leaves.</em></h2>
+        <div class="review-rows">
+          <div class="review-row"><i>01</i><b>You watch the file that posts</b><p>The review deck plays the exact rendered clip — same bytes, same captions — never a browser imitation with its own drift.</p></div>
+          <div class="review-row is-gate"><i>02</i><b>Scripture is force-held</b><p>A clip containing recited Qur'an cannot pass automatic publishing. It waits for a person, whatever the automation settings say.</p></div>
+          <div class="review-row"><i>03</i><b>Destinations answer separately</b><p>A success on one platform and a refusal on another stay separate, and the failed leg is retried on its own.</p></div>
+          <div class="review-row"><i>04</i><b>Rejecting costs nothing</b><p>Turning a clip down spends no tokens. The source minutes were paid once, and more candidates can be cut from them.</p></div>
+        </div>
       </div>
     </section>
-    <section class="section organise-section deenai-section">
-      <div class="wrap split-layout reverse">
-        <div class="feature-copy reveal sd-rise"><span class="section-label">DeenAI</span><h2>Advice grounded in your clips, not generic creator tips.</h2><p>Pro turns your own approvals, projects and posting history into countable insights. Studio adds Ask DeenAI, answered on the private model running on the DeenClipped processing server.</p><div class="detail-list sd-seq">${checkItem('Numbers stay checkable','Insight cards show the arithmetic behind every recommendation.')}${checkItem('No transcript sent to Ask','The model receives compact account figures and kept titles, never the transcript.')}${checkItem('Actions point back to the product','Answers name the Review queue, Schedule or Connections screen when that is the next move.')}</div><a class="button secondary" href="/pricing">Compare Pro and Studio ${icon('arrow')}</a></div>
+
+    <section class="deenai-section" id="deenai" aria-labelledby="deenai-heading">
+      <div class="wrap deenai-grid">
+        <div class="deenai-copy">
+          <span class="section-label"><i></i>DeenAI &middot; private by construction</span>
+          <h2 id="deenai-heading">Advice grounded in your clips, <em>not generic creator tips.</em></h2>
+          <p>Pro turns your own approvals, projects and posting history into countable insights. Studio adds Ask DeenAI, answered by the private model on the DeenClipped processing server — transcription and moment-picking already run there, so your lectures never leave it for a third-party AI provider.</p>
+          <div class="detail-list">${checkItem('Numbers stay checkable', 'Insight cards show the arithmetic behind every recommendation.')}${checkItem('No transcript sent to Ask', 'The model receives compact account figures and kept titles, never the transcript.')}${checkItem('Actions point back to the product', 'Answers name the Review queue, Schedule or Connections screen when that is the next move.')}</div>
+          <a class="button secondary" href="/pricing">Compare Pro and Studio ${icon('arrow')}</a>
+        </div>
         <div class="deenai-preview reveal" aria-label="DeenAI feature preview">
           <div class="deenai-preview-head"><span>${icon('brain')}</span><div><b>DeenAI</b><small>Insights from your own workflow</small></div><em>STUDIO</em></div>
           <div class="deenai-question"><small>Ask DeenAI</small><strong>What should I focus on before the next post?</strong></div>
@@ -681,29 +717,38 @@ export function home({ base, currentUser }) {
         </div>
       </div>
     </section>
-    <section class="section editor-section">
+
+    <section class="pricing-section" id="pricing" aria-labelledby="pricing-heading">
       <div class="wrap">
-        <div class="section-head reveal sd-rise"><span class="section-label">Templates, audio and editor preview</span><h2>Keep the look consistent now. Fine-grained editing is coming next.</h2><p>Templates and re-renders are available today. The full clip editor can be opened as a preview, but remains behind a coming-soon gate until its visual checks are complete.</p></div>
-        <div class="editor-showcase reveal">
-          <div class="product-frame sd-open editor-main"><img src="/marketing-assets/editor-premium.webp" alt="Concept preview of the planned DeenClipped clip editor" loading="lazy"></div>
-          <span class="availability-badge">Editor preview · coming soon</span>
+        <div class="pricing-section-head">
+          <span class="section-label"><i></i>Basic, Pro and Studio</span>
+          <h2 id="pricing-heading">Pay for source minutes. <em>Keep the workflow.</em></h2>
+          <p>One token represents one selected source-video minute. Reviewing, ordinary re-renders and cutting more clips from the processed source do not spend that source time again.</p>
         </div>
-        <div class="feature-row reveal"><div><span>${icon('template')}</span><b>Reusable caption templates</b><p>Save style changes for future clips or keep a one-clip adjustment local to that render.</p></div><div><span>${icon('music')}</span><b>Nasheed controls</b><p>Upload and rotate vocal-only tracks. Quran recitation is deliberately left without a track underneath it.</p></div><div><span>${icon('edit')}</span><b>Editor held for verification</b><p>Timeline, caption and framing controls are not advertised as launched while the gate is active.</p></div></div>
+        ${pricingCards()}
       </div>
     </section>
 
-    <section class="section pricing-section">
-      <div class="wrap"><div class="section-head reveal sd-rise"><span class="section-label">Basic, Pro and Studio</span><h2>Pay for source minutes. Keep the workflow.</h2><p>One token represents one selected source-video minute. Reviewing, ordinary re-renders and cutting more clips from the processed source do not spend that source time again.</p></div>${pricingCards()}</div>
+    <section class="faq-section-home" id="faq" aria-labelledby="faq-heading">
+      <div class="wrap">
+        <div class="section-head"><span class="section-label"><i></i>Questions</span><h2 id="faq-heading">Know how the workflow works <em>before you start.</em></h2></div>
+        ${faqBlock()}
+      </div>
     </section>
 
-    <section class="section faq-section" id="faq"><div class="wrap"><div class="section-head reveal sd-rise"><span class="section-label">Questions</span><h2>Know how the workflow works before you start.</h2></div>${faqBlock()}</div></section>
-
-    <section class="section final-section"><div class="wrap final-cta reveal"><div><span class="section-label">Start with the next lecture</span><h2>${escapeHtml(Number(config.tokensFree).toLocaleString())} source minutes. ${escapeHtml(String(config.stripeTrialDays))} days. A real review queue.</h2><p>Choose a range, generate the clips and decide what is worth publishing before anything reaches your channels.</p></div><a class="button primary" href="/login?returnTo=/app">Start Basic free ${icon('arrow')}</a></div></section>
+    <section class="final-scene" aria-labelledby="final-heading">
+      <div class="final-backdrop" aria-hidden="true"><img src="/marketing-assets/final-hall.webp" alt="" loading="lazy"></div>
+      <div class="wrap final-inner">
+        <span class="section-label"><i></i>Start with the next lecture</span>
+        <h2 id="final-heading">${escapeHtml(Number(config.tokensFree).toLocaleString())} source minutes. ${escapeHtml(String(config.stripeTrialDays))} days. <em>A real review queue.</em></h2>
+        <p>Choose a range, generate the clips and decide what is worth publishing before anything reaches your channels.</p>
+        <div class="hero-actions"><a class="button primary" href="/login?returnTo=/app">Start Basic free ${icon('arrow')}</a><a class="button secondary" href="/pricing">Compare plans</a></div>
+      </div>
+    </section>
   </main>`;
   return layout({ base, currentUser, ...meta('/'), body,
     jsonLd: [organizationSchema(base), webSiteSchema(base), softwareSchema(base), faqSchema()] });
 }
-
 export function features({ base, currentUser }) {
   const body = `<main>
     <section class="page-hero wrap"><span class="eyebrow"><i></i>Every part of the workflow</span><h1>From a long Islamic lecture to clips you are ready to publish.</h1><p>Choose the source minutes, find complete moments, render the real clips, review every decision and publish to your own connected destinations.</p><div class="hero-actions"><a class="button primary" href="/login?returnTo=/app">Start Basic free ${icon('arrow')}</a><a class="button secondary" href="#feature-map">Explore every feature</a></div></section>
@@ -1037,7 +1082,7 @@ function proofBand(page) {
         ${sourceForm()}
       </div>
       <div class="seo-proof-media">
-        <div class="product-frame"><img src="/marketing-assets/clip-discovery-premium.webp" alt="Candidate clips scored and waiting in the DeenClipped review queue" loading="lazy"></div>
+        <div class="product-frame"><img src="/marketing-assets/studio-queue.webp" alt="The real DeenClipped review queue with candidate clips scored and waiting" loading="lazy"></div>
         <figure class="reel-card seo-proof-reel"><img src="/marketing-assets/reel-quran.webp" alt="A finished vertical clip with an ayah and its translation" loading="lazy"><span class="reel-badge">9:16</span></figure>
       </div>
     </section>`;

@@ -1,6 +1,15 @@
 # DeenClipped — working agreement
 
-## Ownership (split again 31 Aug 2026, by Youssef)
+## Ownership (split again 31 Aug 2026, by Youssef — then overridden same day)
+
+**OVERRIDDEN for the public-site rebuild, 31 Aug 2026, by Youssef's direct
+instruction:** "my direct instruction overrides only the public-site ownership
+restriction … ChatGPT/Codex is stood down from the marketing website and will
+not touch src/marketing.js, src/public/marketing.css, associated marketing
+assets, public routes, or the shared visual system while you work." Claude
+rebuilt the entire public visual system at v3.63.0 (see *The public site was
+rebuilt as a cinematic scroll story* below). Until Youssef says otherwise,
+Claude owns the marketing surfaces too; the split below is kept as history.
 
 **ChatGPT is working on the MAIN WEBSITE. Claude owns the dashboard and
 everything else.** Youssef, 31 Aug: "i have chat gpt working on the design for
@@ -1275,6 +1284,66 @@ the diesgn". Three devices came across, and nothing else:
 
 Subtle is the whole point: the mark, the two-tone wordmark and the gold were
 already shared, and nothing about a screen's content or layout changed.
+
+## The public site was rebuilt as a cinematic scroll story (v3.63.0, 31 Aug 2026)
+
+Youssef's brief: scrap the whole website's LOOK — "an Awwwards-calibre,
+cinematic product story" — while the dashboard stays visually immutable and
+every feature, SEO structure and test contract survives. Delivered in one
+pass; 1003 JS + 456 Python green; dashboard baselines byte-identical on
+desktop (mobile 98dB PSNR, zero studio files in the diff).
+
+- **The design system lives in a rewritten `marketing.css`**: near-black stage,
+  a warm-paper interlude scene, gold as ink, emerald only for "verified/safe".
+  Display face is **Fraunces**, UI face **Outfit** (the dashboard's own), both
+  loaded from Google Fonts in `layout()` — before this the marketing site
+  loaded NO webfont and rendered entirely on system fallbacks.
+- **The motion contract, and why it is safe.** `src/public/marketing.js` adds
+  `mjs` to `<html>` and stamps `--p` (0→1) on every `[data-scene]` wrapper from
+  one rAF-coalesced scroll handler; ALL motion is CSS reading `var(--p, 1)`.
+  The default of **1 is the final, legible pose**, `.reveal` hides only under
+  `.mjs`, and the tall pinned-scene heights exist only under `.mjs` and are
+  removed again under `prefers-reduced-motion` — so no JS, old browsers and
+  reduced-motion all get a complete static page. Content is never delivered BY
+  an animation.
+- **A pinned stage must compose inside 100svh.** Every `.sc-tall` scene's
+  content is sized in vh-clamps because the stage is a fixed viewport — the
+  first version overflowed two scenes and clipped its own headline off-screen.
+- **`grid-template-columns:minmax(0,100%)` on `.sc-stage` is load-bearing.**
+  The filmstrip track is `width:max-content` (~4600px); without that line it
+  inflates the stage's auto grid column and every margin-centred sibling is
+  pushed ~1600px off-screen right — the page MEASURES fine (rects, opacity)
+  and paints black, which cost a real bisect to find. overflow-x:clip hides
+  the evidence.
+- **Real captures replaced invented UI where it matters.** Four help-centre
+  screenshots were copied to `marketing-assets/studio-{home,queue,schedule,
+  templates}.webp` and drive the homepage workflow chapters, each tagged
+  "Real product capture"; the review-queue capture also replaced the stylised
+  render in `proofBand()`. `editor-premium.webp` is kept ONLY as the editor
+  chapter's image, tagged "Concept preview" beside the coming-soon badge —
+  it draws features that do not exist, so it must never be shown untagged.
+- **Two Higgsfield images and their provenance** (model
+  `cinematic_studio_2_5`, 21:9, 2k, 31 Aug 2026): `hero-hall.webp` (empty
+  mosque hall, lone lit microphone by the minbar — the homepage hero backdrop)
+  and `final-hall.webp` (stone-arch hall, dimmed to .34 behind the final CTA).
+  Prompt shape: empty mosque hall at night, warm lantern light, no people, "no
+  visible text, no calligraphy" — generated imagery must NEVER contain
+  Arabic-like markings, faces of real scholars, or fabricated product UI.
+  Masters live outside the repo; the served WebPs are ~35KB each.
+- **The Arabic on the page is never synthesised.** The "difference is one
+  frame" scene and the template gallery show `reel-quran.webp` — a real
+  render's own burned-in ayah — and the surah reference is plain HTML. No new
+  Arabic text was typeset or generated anywhere.
+- **What the tests pin, so a restyle does not trip them**: the minified
+  `.reel-card img{...}` rule, `.footer-col a` min-height 30px and
+  `.faq-item > summary` padding-top 14px in the 620px block, the exact
+  source-bar form markup, the five reels on `/`, FAQ `<summary>` parity with
+  the schema (and NO other `<details>` on `/`), four JSON-LD blocks exactly,
+  first `/marketing-assets/` img = the hero backdrop (stampImages gives it
+  fetchpriority), and every compliance string in privacy/terms untouched.
+  `seoPage()` itself was left structurally unchanged — the whole 22-page SEO
+  cluster restyled through the shared classes alone.
+- The old look survives on branch `site-backup-before-rebuild` (v3.61.0).
 
 ## The ayah was rendering as floating tashkeel with no letters (v3.40.0, 30 Aug)
 

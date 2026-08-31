@@ -1,3 +1,12 @@
+/* DeenClipped public site behaviour.
+ *
+ * `mjs` on <html> is the gate for every scripted visual: .reveal only hides
+ * when this file actually ran, and the pinned-scene heights in the CSS only
+ * exist under it — so with no JavaScript the page renders complete and
+ * static, in its final pose. Content is never delivered BY an animation.
+ */
+document.documentElement.classList.add('mjs');
+
 const menuButton = document.querySelector('[data-menu]');
 const navLinks = document.querySelector('.nav-links');
 
@@ -29,11 +38,6 @@ if (reducedMotion || !('IntersectionObserver' in window)) {
   revealItems.forEach(item => item.classList.add('is-visible'));
 } else {
   const revealObserver = new IntersectionObserver(entries => {
-    // Children of one group enter together, a beat apart, instead of every
-    // element on the page fading independently. A uniform fade on everything is
-    // what makes a page read as generated; a short stagger reads as composed.
-    // The delay is set here rather than in CSS so a section added later needs no
-    // matching nth-child rules.
     for (const entry of entries) {
       if (!entry.isIntersecting) continue;
       const group = entry.target.hasAttribute('data-stagger')
@@ -49,66 +53,39 @@ if (reducedMotion || !('IntersectionObserver' in window)) {
   }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
   revealItems.forEach(item => revealObserver.observe(item));
   document.querySelectorAll('[data-stagger]').forEach(node => revealObserver.observe(node));
-
-  /* The scroll-driven stepper: the active step lights as it passes the middle of
-     the screen and a progress line grows to match. Driven by one observer rather
-     than a scroll handler, so it costs nothing per frame. */
-  const steps = [...document.querySelectorAll('[data-step]')];
-  if (steps.length) {
-    const line = document.querySelector('[data-step-line]');
-    const stepObserver = new IntersectionObserver(entries => {
-      for (const entry of entries) {
-        entry.target.classList.toggle('step-active', entry.isIntersecting);
-      }
-      const active = steps.filter(s => s.classList.contains('step-active'));
-      if (line && active.length) {
-        const last = steps.indexOf(active[active.length - 1]);
-        line.style.setProperty('--step-progress', `${((last + 1) / steps.length) * 100}%`);
-      }
-    }, { threshold: 0.55, rootMargin: '-20% 0px -20% 0px' });
-    steps.forEach(step => stepObserver.observe(step));
-  }
 }
 
-for (const gallery of document.querySelectorAll('[data-gallery]')) {
-  const slides = [...gallery.querySelectorAll('.gallery-slide')];
-  const dotsRoot = gallery.querySelector('[data-gallery-dots]');
-  const previous = gallery.querySelector('[data-gallery-prev]');
-  const next = gallery.querySelector('[data-gallery-next]');
-  if (!slides.length || !dotsRoot) continue;
-
-  let index = Math.max(0, slides.findIndex(slide => slide.classList.contains('active')));
-  let timer = null;
-
-  const dots = slides.map((_, dotIndex) => {
-    const dot = document.createElement('button');
-    dot.type = 'button';
-    dot.setAttribute('aria-label', `Show product image ${dotIndex + 1}`);
-    dot.addEventListener('click', () => show(dotIndex, true));
-    dotsRoot.append(dot);
-    return dot;
-  });
-
-  function show(nextIndex, restart = false) {
-    index = (nextIndex + slides.length) % slides.length;
-    slides.forEach((slide, slideIndex) => slide.classList.toggle('active', slideIndex === index));
-    dots.forEach((dot, dotIndex) => dot.classList.toggle('active', dotIndex === index));
-    if (restart) start();
+/* The scroll-scene engine. Each [data-scene] wrapper gets a `--p` custom
+ * property running 0 → 1 across its scroll span; the CSS turns that into
+ * transforms and opacity on the compositor. One rAF-coalesced handler, one
+ * getBoundingClientRect per on-screen scene per frame, no layout writes —
+ * reading rects and writing a custom property does not thrash layout.
+ * Under reduced motion the engine never starts and `--p` stays at its CSS
+ * default of 1: the final, legible pose. */
+if (!reducedMotion) {
+  const scenes = [...document.querySelectorAll('[data-scene]')];
+  if (scenes.length) {
+    let ticking = false;
+    const update = () => {
+      ticking = false;
+      const vh = window.innerHeight;
+      for (const scene of scenes) {
+        const rect = scene.getBoundingClientRect();
+        if (rect.bottom < -300 || rect.top > vh + 300) continue;
+        const span = rect.height - vh;
+        const raw = span > 60
+          ? -rect.top / span
+          : (vh - rect.top) / (vh + rect.height);
+        const p = Math.min(1, Math.max(0, raw));
+        scene.style.setProperty('--p', p.toFixed(4));
+      }
+    };
+    const request = () => {
+      if (!ticking) { ticking = true; requestAnimationFrame(update); }
+    };
+    window.addEventListener('scroll', request, { passive: true });
+    window.addEventListener('resize', request);
+    update();
+    window.addEventListener('load', update);
   }
-
-  function start() {
-    window.clearInterval(timer);
-    if (reducedMotion) return;
-    timer = window.setInterval(() => show(index + 1), 6500);
-  }
-
-  previous?.addEventListener('click', () => show(index - 1, true));
-  next?.addEventListener('click', () => show(index + 1, true));
-  gallery.addEventListener('mouseenter', () => window.clearInterval(timer));
-  gallery.addEventListener('mouseleave', start);
-  gallery.addEventListener('focusin', () => window.clearInterval(timer));
-  gallery.addEventListener('focusout', start);
-
-  show(index);
-  start();
 }
