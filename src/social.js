@@ -1028,10 +1028,12 @@ async function uploadYouTube(clip, target, file, userId) {
       status: {
         // Always public. There is no privacy control in the app and no stored
         // value is consulted: a clip the person approved is a clip they meant
-        // to publish. (Google can still hold an upload private on its own --
-        // an API project that has not passed the compliance audit cannot
-        // publish publicly, whatever this asks for. That is Google's gate, not
-        // a setting anyone here can change.)
+        // to publish. (Google can still hold an upload private on its own,
+        // whatever this asks for -- that is Google's gate, not a setting
+        // anyone here can change. The compliance review that was forcing it
+        // CLOSED on 28 Aug 2026, "no further actions required", so the reason
+        // it used to happen is gone; nobody has posted a clip since to confirm
+        // uploads now arrive public, so the copy stops short of promising it.)
         privacyStatus: 'public',
         selfDeclaredMadeForKids: Boolean(target.settings.madeForKids),
       },

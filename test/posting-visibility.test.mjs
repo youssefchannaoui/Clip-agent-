@@ -112,8 +112,18 @@ test('the connections dialog offers no YouTube privacy control at all', () => {
   const host = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
   assert.doesNotMatch(host, /data-yt="privacy"/, 'the picker is gone');
   assert.doesNotMatch(host, /paintYouTubeOptions/, 'and so is the panel that held it');
-  assert.match(host, /compliance audit/i,
-    'but the dialog still says Google can hold uploads private on its own, or a private video reads as the app ignoring this');
+  // The warning has to stay: without it a video that lands private reads as
+  // the app ignoring the instruction. What it must NOT do is name the
+  // compliance review as the reason -- that review CLOSED on 28 Aug 2026
+  // ("no further actions required"), and copy that explains a live limitation
+  // by a finished process is the kind of stale claim this repo keeps paying
+  // for. The remedy is asserted too, because naming the problem without the
+  // one-click fix is worse than saying nothing.
+  assert.match(host, /hold an upload private on its own/i,
+    'the dialog must still say Google can override, or a private video reads as the app ignoring this');
+  assert.match(host, /YouTube Studio/i, 'and must say where to flip it');
+  assert.doesNotMatch(host, /compliance audit/i,
+    'but must not still blame a review that is closed');
 });
 
 // ── the schedule names every destination ────────────────────────────────────

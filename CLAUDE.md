@@ -402,20 +402,28 @@ Habits the tests now enforce, and why:
   way this file has always demanded: it reads `package.json` out of the RUNNING
   container (`docker exec … worker-deenclipped-worker-1`) and fails the run if
   that version is not this commit's.
-  **It is NOT ARMED YET, and until it is, nothing about it has run on the box.**
-  It needs one repository secret, once — Settings → Secrets and variables →
-  Actions — and either of two will do:
-  **`WORKER_SSH_KEY`** = the whole of `~/.ssh/deenclipped_worker`, which lives
-  on the Mac; or **`WORKER_SSH_PASSWORD`** = the box's root password, which is
-  the one a PHONE session can arm, since the key file is out of reach there.
-  The key is preferred and wins when both are set; adding it later leaves the
-  password unused. **The password path is unverified** — nothing in this
-  container can reach port 22 to test it, and a key-provisioned box usually
-  ships `PasswordAuthentication no`, in which case only the key works. Use the
-  key when the Mac is at hand. (`WORKER_HOST`/`WORKER_USER` optional.) Without either, the
-  run fails at the first step and prints exactly this, rather than reporting
-  green having done nothing — dispatched twice on 29 Aug 2026 to confirm that
-  is precisely what happens.
+  **IT IS ARMED, AND THE WORKER DEPLOY IS NO LONGER MANUAL** (verified against
+  the run history on 31 Aug 2026 — this section said the opposite for two days
+  after it stopped being true, and a stale "not live" note is exactly what made
+  the box sit on old code for weeks in the first place).
+  Runs 1–6 failed at the credential step, which is the unarmed behaviour
+  described below; **runs 7–21 all succeeded**, and every one since run 9 was
+  triggered by a `push` rather than a dispatch. So a `worker/**` change now
+  deploys itself, and nobody has to remember.
+  The credential is one repository secret — Settings → Secrets and variables →
+  Actions — either **`WORKER_SSH_KEY`** (the whole of `~/.ssh/deenclipped_worker`
+  from the Mac, preferred and wins when both are set) or
+  **`WORKER_SSH_PASSWORD`**, the one a PHONE session can arm.
+  (`WORKER_HOST`/`WORKER_USER` optional.) With neither, the run fails at the
+  first step and says so rather than reporting green having done nothing.
+  **A green run is real proof**: step 6, "Prove the running container holds
+  this commit", reads `package.json` out of the RUNNING container over SSH and
+  fails the run unless it equals the commit's version. Run 21 printed
+  *"Deployed and verified: the running worker is v3.59.1."*
+  **So "is the box behind?" is answered by two commands, not by guessing:**
+  the newest successful `deploy-worker.yml` run names the commit on the box,
+  and `git log --oneline <that sha>..HEAD -- worker/` says whether anything has
+  changed since. Empty means the box is current, whatever the app version is.
   The push trigger watches `worker/**` only, deliberately: editing the deploy
   script changes how a deploy runs, not what is running on the box, so it must
   not manufacture a red run of its own.
@@ -585,10 +593,16 @@ platform rule each. Keep them apart when triaging the next report.
   instruction ("IT MUST BE PUBLIC STRAIGHAWAY no settings to chnage"). The
   upload now names `privacyStatus: 'public'` itself, `publishingSettings()`
   rewrites any stored value to `public` on read, and the connections dialog has
-  no privacy control at all. **But Google also locks uploads from an API
-  project that has not passed the compliance audit to private**, whatever the
-  request asks for — the dialog says so in one line, because without it a
-  private video reads as the app ignoring the instruction. **TikTok is the one
+  no privacy control at all. **Google can still file an upload as private on its
+  own**, whatever the request asks for — the dialog still says so in one line
+  and names YouTube Studio as the fix, because without it a private video reads
+  as the app ignoring the instruction. It no longer blames the COMPLIANCE
+  AUDIT, which closed on 28 Aug 2026 (open item 1): copy that explains a live
+  limitation by a finished process is the stale-claim failure this file keeps
+  paying for. Whether uploads now actually arrive public is UNVERIFIED — one
+  real post settles it, and the copy promises nothing until then.
+  `test/posting-visibility.test.mjs` pins both halves: the warning must stay,
+  and it must not name the closed review. **TikTok is the one
   exception and must stay one:** its content-sharing guidelines require the
   creator to choose a privacy level themselves with nothing preselected, so
   that panel remains, and removing it would fail the very review that is
@@ -1594,15 +1608,36 @@ branch WITHOUT the help changes.
 
 ### Waiting on Youssef (nothing in the repo unblocks these)
 
-1. **Send the YouTube compliance reply** — drafted in Gmail, unsent, deadline
-   ~8 Sept 2026. Details below; the short version is that it withdraws the
-   quota request rather than repeating it. The AUDIT, not the quota, is what
-   forces uploads private.
+1. ~~**Send the YouTube compliance reply.**~~ **SENT, AND THE REVIEW IS
+   CLOSED.** Verified in Gmail on 31 Aug 2026 by reading the thread rather
+   than this file: the withdrawal went out 28 Aug 07:12, and Google replied
+   28 Aug 19:33 — *"We have completed your review and don't require any
+   further actions from you at this time."* There is no 8 Sept deadline and
+   nothing is drafted-and-unsent. This entry said the opposite for three days,
+   which is why it is corrected here rather than deleted.
+   **One thing left in the mailbox:** the stale 25 Aug draft is still there,
+   in a DETACHED thread (`1a039b45…`, not the review thread `19fd1e1f…`), and
+   it says "please find attached screenshots" while carrying no attachments.
+   It re-answers a question already answered on 26 Aug. Sending it into a
+   closed review would be an unforced error — delete it, do not send it.
+   **What this does NOT prove:** that uploads now arrive public. The audit was
+   the reason Google forced them private, and that reason is gone, but nobody
+   has posted a clip since (the stored token is expired — open item 6). The
+   product copy was corrected to stop naming a closed review as the cause
+   while still warning that Google can override; it deliberately stops short
+   of promising public. **One real upload settles it.**
 2. **TikTok app review** — record the demo and submit (`TIKTOK-SUBMISSION.md`).
    Until then an unreviewed app may only post to a TikTok account that is
    itself private; setting the account private is the way to post today.
-3. **Worker deploy on Hetzner** — the section-download saving (v3.12.0) is not
-   live until it runs.
+3. ~~**Worker deploy on Hetzner.**~~ **DONE, and it deploys itself now.**
+   Kept rather than deleted because this entry was stale for two days and a
+   session acting on it would waste an hour arming a workflow that is already
+   armed. `deploy-worker.yml` has succeeded on every run since run 7 and fires
+   on any push touching `worker/**`; run 21 verified **v3.59.1 running in the
+   container** on 31 Aug 2026. Nothing is waiting on a deploy. To check rather
+   than assume, see **Deploys** above — the newest successful run names the
+   commit on the box, and `git log <sha>..HEAD -- worker/` says whether
+   anything has changed since.
 4. **Stripe identity document — this is the most urgent open item.** Checked
    in the dashboard on 31 Aug 2026 rather than assumed, and the earlier note
    here ("payments work; payouts are paused") was WRONG and had been for weeks.
@@ -1681,9 +1716,10 @@ Two features, both Studio-only, in the order he asked for them.
 - **Multi-account is complete on all four platforms**, including per-account
   TikTok audience and interaction options (v3.57.0).
 
-- **YouTube API compliance review** (project 881648803263) is at its last open
-  question, drafted in Gmail and unsent; deadline ~8 Sept 2026 (7 business days
-  from Google's 27 Aug message).
+- **YouTube API compliance review** (project 881648803263) is **CLOSED** —
+  Google, 28 Aug 2026 19:33: "We have completed your review and don't require
+  any further actions from you at this time." It may be re-reviewed at any
+  time, so everything below stays true as the record of what was answered.
   **The answer is that we need no extra quota at all.** The quota methodology
   changed in 2026: `videos.insert` costs 1 unit against a dedicated **100
   calls/day** bucket, not 1,600 units out of the general pool. Our 11 Aug reply

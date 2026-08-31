@@ -371,7 +371,7 @@ export const CATEGORIES = Object.freeze([
           'Nothing to change here — the app names public on every upload and there is no setting that says otherwise.',
         ],
         notes: [
-          'Google locks uploads from an API project that has not passed its compliance audit to private, whatever the request asks for. That audit is ours to clear, not something you can change.',
+          'Google can still file an upload as private whatever the request asks for. If that happens, flip the video to public in YouTube Studio — it is Google\'s decision, not a setting in this app. The compliance review that used to force it closed in August 2026.',
         ],
       },
       {
