@@ -874,6 +874,36 @@ def ollama_clip_rows(inner: Any) -> list | None:
     return None
 
 
+def strip_unbacked_attribution(title: str, lecture_title: str) -> str:
+    """Drop a trailing "- Someone" the lecture title does not actually name.
+
+    The prompt tells the model in plain words never to invent a speaker. Watched
+    against the box's qwen3:1.7b on 31 Aug 2026 with a lecture titled "Friday
+    Khutbah Recording 14 March", it credited all three clips to **Abu Huraira** --
+    a Companion of the Prophet, attributed to a modern khutbah. A small model
+    does not reliably obey a negative instruction, so the rule is enforced here
+    instead: a title may only credit a name the lecture title really contains.
+
+    Falsely attributing words to a scholar is the worst failure this product can
+    produce, so this fails towards dropping the credit. A name the model spelled
+    differently from the lecture title is stripped rather than trusted.
+    """
+    text = str(title or "").strip()
+    match = re.search(r"\s+[-|\u2013\u2014]\s+([^-|\u2013\u2014]{2,40})$", text)
+    if not match:
+        return text
+    name = match.group(1).strip().strip(".")
+    if not name:
+        return text
+    # Only a trailing fragment that actually looks like a name is treated as a
+    # credit; "Repentance - why it never stops" must survive untouched.
+    if not re.fullmatch(r"[A-Z][\w.'\u2019-]*(?:\s+[A-Z][\w.'\u2019-]*){0,3}", name):
+        return text
+    if name.casefold() in str(lecture_title or "").casefold():
+        return text
+    return text[: match.start()].strip(" -|\u2013\u2014")
+
+
 def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any], lecture_title: str = "") -> list[Candidate]:
     # The worker's own sidecar is the default. The URL used to come only from
     # the web service's config, which was never set -- so the Ollama container
@@ -1060,7 +1090,9 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any], le
                 continue
             applied.add(index)
             candidate.score = int(round(candidate.score * 0.45 + ai_score * 0.55))
-            candidate.ai_title = str(row.get("title") or "").strip()[:90]
+            candidate.ai_title = strip_unbacked_attribution(
+                str(row.get("title") or "").strip(), lecture_line
+            )[:90]
             candidate.ai_description = str(row.get("description") or "").strip()[:480]
             candidate.ai_reason = str(row.get("reason") or "").strip()[:180]
             if candidate.ai_reason:

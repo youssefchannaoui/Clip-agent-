@@ -122,3 +122,54 @@ class TitlingPromptTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AttributionGuardTests(unittest.TestCase):
+    """A title may only credit a speaker the lecture title actually names.
+
+    Watched happening on the box, 31 Aug 2026: given a lecture titled "Friday
+    Khutbah Recording 14 March" -- no speaker in it -- qwen3:1.7b credited three
+    clips to "Abu Huraira", a Companion of the Prophet, on a modern khutbah. The
+    prompt forbids exactly that in plain words. A 1.7B model does not reliably
+    follow a negative instruction, so this is enforced in code.
+    """
+
+    def test_an_invented_speaker_is_stripped(self):
+        self.assertEqual(
+            clip_worker.strip_unbacked_attribution(
+                "Trust in Allah for Financial Security - Abu Huraira",
+                "Friday Khutbah Recording 14 March"),
+            "Trust in Allah for Financial Security")
+
+    def test_a_real_speaker_from_the_lecture_title_is_kept(self):
+        self.assertEqual(
+            clip_worker.strip_unbacked_attribution(
+                "Four Conditions for Repentance - Belal Assaad",
+                "Four Conditions of Repentance - Belal Assaad | Islamic Lectures"),
+            "Four Conditions for Repentance - Belal Assaad")
+
+    def test_a_pipe_credit_works_the_same_way(self):
+        self.assertEqual(
+            clip_worker.strip_unbacked_attribution(
+                "The trials never stop | Omar Suleiman", "A khutbah with no name"),
+            "The trials never stop")
+
+    def test_a_misspelled_name_is_dropped_rather_than_trusted(self):
+        # Fails towards dropping the credit: a name spelled differently from the
+        # lecture title is not evidence that person said it.
+        self.assertEqual(
+            clip_worker.strip_unbacked_attribution(
+                "Patience in hardship - Bilal Assad",
+                "Patience in hardship - Belal Assaad"),
+            "Patience in hardship")
+
+    def test_an_ordinary_dash_in_a_title_survives(self):
+        # "- why they never stop" is not a credit and must not be amputated.
+        for title in ("Repentance - why it never stops",
+                      "The trials of the believer - and what they mean"):
+            self.assertEqual(clip_worker.strip_unbacked_attribution(title, "A lecture"), title)
+
+    def test_a_title_with_no_dash_is_untouched(self):
+        self.assertEqual(
+            clip_worker.strip_unbacked_attribution("The Most Deserving of Good Company", ""),
+            "The Most Deserving of Good Company")
