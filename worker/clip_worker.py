@@ -1138,6 +1138,35 @@ def build_clip_prompt(items: list[dict[str, Any]], lecture_title: str) -> str:
     return prompt
 
 
+def title_selected_clips(
+    selected: list[Candidate],
+    settings: dict[str, Any],
+    lecture_title: str,
+) -> list[Candidate]:
+    """Give an AI title to every clip that actually ships.
+
+    Scoring a shortlist BEFORE selection cannot do this, and a real lecture
+    proved it: "The Tawbah Allah Never Rejects" (Omar Suleiman, 8 minutes)
+    built 2,044 candidates. The shortlist is 24 of those, and select_candidates
+    then picks 8 from all 2,044 with overlap dedup -- so the clips that ship are
+    mostly ones the model never read. Measured end to end: 2 of 8 delivered
+    clips had an AI title and six fell back to a transcript head
+    ("At the difference", "You wrote this upon me").
+
+    Widening the shortlist cannot fix that: the top of the ranking is thousands
+    of overlapping windows over the same few moments, and dedup removes almost
+    all of them. So this runs AFTER selection, over the handful of clips that
+    are really going out, and it is the only pass that can guarantee coverage.
+
+    Cheap, because there are at most MAX_DELIVERABLE_CLIPS of them.
+    """
+    missing = [clip for clip in selected if not clip.ai_title]
+    if not missing:
+        return selected
+    refine_with_ollama(missing, settings, lecture_title)
+    return selected
+
+
 def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any], lecture_title: str = "") -> list[Candidate]:
     # The worker's own sidecar is the default. The URL used to come only from
     # the web service's config, which was never set -- so the Ollama container
@@ -3995,6 +4024,8 @@ def process_more_clips(job: dict[str, Any], job_file: Path) -> None:
     progress("Scoring unused moments", 40, candidateCount=len(candidates), requestedClips=requested)
     candidates = refine_with_ollama(candidates, settings, str(job.get("title") or ""))
     selected = select_candidates(candidates, requested)
+    # The shortlist is a guess at what will ship; this is what actually ships.
+    selected = title_selected_clips(selected, settings, str(job.get("title") or ""))
     if not selected:
         raise RuntimeError("No unused moments remain within the selected clip-duration range. Try a different duration range.")
 
@@ -4155,6 +4186,7 @@ def process(job_file: Path) -> None:
     progress("Finding and scoring clips", 69, candidateCount=len(candidates), etaSec=None)
     candidates = refine_with_ollama(candidates, settings, str(job.get("title") or ""))
     selected = select_candidates(candidates, int(settings.get("clipsPerVideo", 8)))
+    selected = title_selected_clips(selected, settings, str(job.get("title") or ""))
     if not selected:
         raise RuntimeError("No complete clip candidates fit the selected duration range.")
 
