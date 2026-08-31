@@ -190,7 +190,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **991 JS + 456 Python**
+- `npm test` and `npm run check` must pass. Currently **998 JS + 456 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1434,6 +1434,78 @@ subscrition they have and lable and show things if locked".
   sub-option arriving true with its parent disclosure off would post a
   declaration nobody made, which is the rule TikTok's review is strictest about.
 
+
+## The help centre, inside the dashboard (v3.59.0, 31 Aug 2026)
+
+Youssef: "a help tab ... it's like learning modules ... splits up everything
+into categories ... and it comes with screenshots ... there'll be also a
+contact us for any additional helps or referring a bug."
+
+- **The words are in `src/help.js`, apart from the machinery** -- the same
+  arrangement as `seo-copy.js` beside `seo-pages.js`, and pure data with NO
+  imports so the server, the tests and anything added later can read it without
+  an import cycle. Eight categories, twenty articles, every one ending in steps
+  somebody can go and do rather than a description.
+- **Every screenshot is a real capture of this app**, taken by driving the
+  running product with Playwright, not drawn and not a mockup. The capture
+  script seeds a plausible account first: an empty app photographs as empty
+  states, which teaches nothing.
+- **A capture can teach the OPPOSITE of the truth, and nearly did.** The
+  connections dialog shot came out reading "UNAVAILABLE -- not set up on the
+  server yet" on all four platforms, because the local instance had no OAuth
+  app configured. A customer reading the article on connecting would have
+  concluded the product cannot connect anything. Placeholder `*_CLIENT_ID`
+  values (never real credentials) make the dialog render its true first-run
+  state: NOT CONNECTED, with a live Connect. **Look at what a screenshot
+  actually says before shipping it, not just that one was taken.**
+- **Every screen arms its OWN tour, keyed `dcTour:<screen>`**, and each lays a
+  fixed veil over the viewport. The first eight captures came out as a grey
+  wash over dimmed content -- the trap this file already warns about, hit
+  again. Set `dcTour:<screen>` for every screen before loading. Removing
+  visible fixed overlays as a backstop is fine; removing them blindly is not,
+  because the connections DIALOG is one, and doing that deleted it and the next
+  shot failed on a null node.
+- **`$('#id')` is the form `check-ui.mjs` asserts against real markup**, so a
+  host-CREATED node must be found with `getElementById` -- which is what every
+  other host panel here already does. The screen is mounted into `<main>`
+  beside `#dcRail`: an id and a tag name, neither of which the design export
+  controls, so this cost no re-import and no regenerated class names.
+- **`paintHelp` is in `paintStudio()`'s list**, not on a MutationObserver --
+  the lesson v3.53.5 paid three attempts for. Verified across a state poll:
+  8 cards before, 8 after, still mounted.
+- **The screenshots enlarge on click.** At 320px in the column the text inside
+  a capture is unreadable, and that text is the entire reason the capture is
+  there. Escape and the backdrop both close it; both were tested rather than
+  assumed.
+- Two glyphs (`ph-flag-banner`, `ph-plugs`) were **not** among those seen
+  rendering in the live app, so they were swapped for ones that are -- the
+  `ph-seedling` rule, applied before it cost a release this time.
+- The test asserts what fails SILENTLY: a referenced screenshot that is not on
+  disk (a broken image in front of a customer, no error anywhere), an image on
+  disk nothing references, an article with no steps, and the claims that must
+  move if the product does -- the editor being gated, nothing posting without
+  approval, no platform sending audience numbers back. Help is behind sign-in
+  and behind NO plan gate: a free account is exactly who needs it.
+
+### The suite had a 1-in-6 abort and it was invisible (v3.59.0)
+
+Found while verifying the above, and it predates it -- reproduced on the base
+branch WITHOUT the help changes.
+
+- **Twenty-one test files picked a random port inside 37000-43900. Linux's
+  ephemeral range is 32768-60999**, so the kernel could hand the same port to
+  an outgoing socket between the choice and the `listen`. The file died with
+  EADDRINUSE and the run reported **fewer tests** -- 958 or 993 instead of 998
+  -- rather than a failure anyone would read. Four files also shared one
+  window and could collide with each other.
+- Measured: **2 aborts in 16 runs before, 0 in 14 after.** Fourteen runs cannot
+  prove zero; they can show the shape is gone.
+- Every file now has its OWN window below 32768 (17000-20250, 100 wide). The
+  four files that already use `PORT = '0'` and read `server.address().port`
+  back are the better pattern for anything new.
+- This is the worst shape a red branch can have -- it almost never reproduces
+  on the run you are looking at, and a phone session that cannot trust the
+  tick has no way to check anything.
 
 ## Open items
 

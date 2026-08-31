@@ -44,6 +44,7 @@
 <link rel="stylesheet" href="/studio-tokens.css">
 <!-- Motion and hover on the Owner screen. -->
 <link rel="stylesheet" href="/studio-owner.css">
+<link rel="stylesheet" href="/studio-help.css">
 <!-- The clip editor is held back for launch: it opens, blurred, behind a
      "coming soon" notice. Deleting these two lines and the two files they name
      turns it back on. -->
@@ -6026,6 +6027,127 @@ function paintEditorBetaNotice(){
     if(btn)btn.onclick=()=>{try{localStorage.setItem('deenEditorBetaSeen','1')}catch(e){};pop.remove()};
   }catch(e){}
 }
+/* ── the in-app help centre ─────────────────────────────────────────────
+   Host-rendered rather than added to the design export, which would
+   regenerate every hashed class name in the app for one screen. It mounts
+   into <main> beside #dcRail -- an id and a tag, neither of which the
+   export controls -- and only when UI.screen is 'help', which no template
+   screen claims, so the content area is empty and ours to fill. */
+let helpData=null,helpLoading=null,helpCat='',helpQuery='';
+StudioAdapter.onLoadHelp=()=>{
+  if(helpData||helpLoading)return helpLoading||Promise.resolve(helpData);
+  /* Latches on SUCCESS only, and shares one in-flight promise -- the exact
+     two mistakes that left the invite panel permanently blank on
+     production when an early call cached a null. */
+  helpLoading=api('/api/help').then(r=>{helpData=r;helpLoading=null;paintStudio();return r})
+    .catch(()=>{helpLoading=null;return null});
+  return helpLoading;
+};
+function helpMount(){
+  const rail=$('#dcRail');
+  return rail&&rail.parentElement?rail.parentElement.querySelector('main'):null;
+}
+function helpSteps(list){
+  /* **bold** is the only markup the content uses, and it names a screen. */
+  return (list||[]).map(t=>`<li>${esc(t).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')}</li>`).join('');
+}
+function helpArticle(a,base){
+  return `<article class="dch-art">
+    <h3>${esc(a.title)}</h3>
+    <p class="dch-sum">${esc(a.summary||'')}</p>
+    <div class="dch-body">
+      <div>
+        <ol class="dch-steps">${helpSteps(a.steps)}</ol>
+        ${(a.notes||[]).length?`<div class="dch-notes">${a.notes.map(n=>`<p>${esc(n)}</p>`).join('')}</div>`:''}
+      </div>
+      ${a.image?`<figure class="dch-shot">
+        <button type="button" data-help-zoom="${esc(base)}${esc(a.image)}" aria-label="Enlarge screenshot">
+          <img src="${esc(base)}${esc(a.image)}" alt="${esc(a.imageAlt||a.title)}" loading="lazy">
+        </button>
+        <figcaption>${esc(a.imageAlt||'')}</figcaption></figure>`:''}
+    </div>
+  </article>`;
+}
+function helpZoom(src,img){
+  const old=document.getElementById('dcHelpZoom');
+  if(old)old.remove();
+  const box=document.createElement('div');
+  box.id='dcHelpZoom';
+  box.innerHTML=`<img src="${src}" alt="${img?img.getAttribute('alt')||'':''}"><button type="button" aria-label="Close">&#215;</button>`;
+  const shut=()=>{document.removeEventListener('keydown',key);box.remove()};
+  const key=e=>{if(e.key==='Escape')shut()};
+  document.addEventListener('keydown',key);
+  /* The backdrop and the close button shut it; a click that lands on the
+     picture itself does not. */
+  box.addEventListener('click',e=>{if(e.target===box||e.target.tagName==='BUTTON')shut()});
+  document.body.appendChild(box);
+  const close=box.querySelector('button');
+  if(close)close.focus();
+}
+function paintHelp(){
+  const main=helpMount();
+  if(!main)return;
+  const on=StudioAdapter.ui.screen==='help';
+  let el=document.getElementById('dcHelp');
+  if(!on){if(el)el.remove();return}
+  if(!el){el=document.createElement('section');el.id='dcHelp';main.appendChild(el)}
+  else if(el.parentElement!==main)main.appendChild(el);
+  if(!helpData){
+    el.innerHTML='<p class="dch-empty">Loading help…</p>';
+    StudioAdapter.onLoadHelp();
+    return;
+  }
+  const base=helpData.imageBase||'/help-assets/';
+  const cats=helpData.categories||[];
+  const contact=`<div class="dch-contact">
+    <div><b>Still stuck, or found a bug?</b>
+    <span>Tell us what you were doing and what happened. Bugs get read by a person.</span></div>
+    ${helpData.supportEmail?`<a href="mailto:${esc(helpData.supportEmail)}?subject=${encodeURIComponent('DeenClipped help')}">Contact us</a>
+    <a href="mailto:${esc(helpData.supportEmail)}?subject=${encodeURIComponent('DeenClipped bug report')}">Report a bug</a>`
+    :'<span>No support address is configured on this deployment.</span>'}
+  </div>`;
+
+  /* Searching flattens every article, because someone who types "retry"
+     does not know which chapter it lives in. */
+  if(helpQuery.trim()){
+    const q=helpQuery.trim().toLowerCase();
+    const hits=cats.flatMap(c=>(c.articles||[]).map(a=>({...a,cat:c.title})))
+      .filter(a=>(a.title+' '+(a.summary||'')+' '+(a.steps||[]).join(' ')+' '+(a.notes||[]).join(' ')+' '+a.cat).toLowerCase().includes(q));
+    el.innerHTML=`<div class="dch-head"><h2>Help</h2><p>${hits.length} result${hits.length===1?'':'s'} for “${esc(helpQuery.trim())}”.</p></div>
+      <div class="dch-find"><i class="ph ph-magnifying-glass"></i><input type="search" placeholder="Search help" value="${esc(helpQuery)}" data-help-q></div>
+      ${hits.length?hits.map(a=>helpArticle(a,base)).join(''):'<p class="dch-empty">Nothing matched. Try a word you would see on the screen.</p>'}
+      ${contact}`;
+  } else if(helpCat){
+    const cat=cats.find(c=>c.id===helpCat);
+    if(!cat){helpCat='';paintHelp();return}
+    el.innerHTML=`<button type="button" class="dch-back" data-help-back><i class="ph ph-arrow-left"></i>All topics</button>
+      <div class="dch-head"><h2>${esc(cat.title)}</h2><p>${esc(cat.blurb||'')}</p></div>
+      ${(cat.articles||[]).map(a=>helpArticle(a,base)).join('')}
+      ${contact}`;
+  } else {
+    el.innerHTML=`<div class="dch-head"><h2>Help</h2><p>How to use DeenClipped, one thing at a time. Every screenshot is the real app.</p></div>
+      <div class="dch-find"><i class="ph ph-magnifying-glass"></i><input type="search" placeholder="Search help" value="" data-help-q></div>
+      <div class="dch-grid">${cats.map(c=>`<button type="button" class="dch-cat" data-help-cat="${esc(c.id)}">
+        <i class="${esc(c.icon||'ph ph-book-open')}"></i>
+        <b>${esc(c.title)}</b>
+        <span>${esc(c.blurb||'')}</span>
+        <em>${(c.articles||[]).length} article${(c.articles||[]).length===1?'':'s'}</em>
+      </button>`).join('')}</div>
+      ${contact}`;
+  }
+  /* A screenshot at 320px teaches nothing -- the text inside it is the point.
+     The full 1280px capture opens over the screen on click. */
+  $$('[data-help-zoom]',el).forEach(b=>b.onclick=()=>helpZoom(b.dataset.helpZoom,b.querySelector('img')));
+  $$('[data-help-cat]',el).forEach(b=>b.onclick=()=>{helpCat=b.dataset.helpCat;helpQuery='';paintHelp();el.scrollTop=0});
+  const back=el.querySelector('[data-help-back]');
+  if(back)back.onclick=()=>{helpCat='';paintHelp();el.scrollTop=0};
+  const q=el.querySelector('[data-help-q]');
+  if(q){
+    q.oninput=()=>{helpQuery=q.value;const at=q.selectionStart;paintHelp();
+      const again=document.getElementById('dcHelp')&&document.getElementById('dcHelp').querySelector('[data-help-q]');
+      if(again){again.focus();try{again.setSelectionRange(at,at)}catch{}}};
+  }
+}
 function paintStudio(){
   if(!DATA||!STUDIO)return;
   const vals=StudioAdapter.bindings(DATA);
@@ -6057,6 +6179,7 @@ function paintStudio(){
   paintJobBackground(vals);
   paintJobMusic(vals);
   paintTemplatesLayout();
+  paintHelp();
   /* The watermark row is restored HERE, with every other host-rendered panel,
      because STUDIO.render() above has just replaced the DOM it was injected
      into. It was the only one of these left to a MutationObserver instead, and

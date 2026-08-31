@@ -27,6 +27,7 @@ import { formatLocal } from './slots.js';
 import { checkFfmpeg } from './ffmpeg.js';
 import * as auth from './auth.js';
 import * as billing from './billing.js';
+import * as help from './help.js';
 import * as marketing from './marketing.js';
 import * as seoPages from './seo-pages.js';
 import * as financeAudit from './finance-audit.js';
@@ -62,6 +63,9 @@ const STUDIO_ASSETS = {
   // Motion and hover for the Owner screen, same arrangement for the same
   // reason: its dcow- hooks are hand-authored, not the export's hashed classes.
   '/studio-owner.css': { file: studioAsset('studio-owner.css'), type: 'text/css; charset=utf-8' },
+  // The in-app help centre, same arrangement again: its dch- hooks are
+  // hand-authored, so a design re-import cannot take the screen with it.
+  '/studio-help.css': { file: studioAsset('studio-help.css'), type: 'text/css; charset=utf-8' },
   // The editor's "coming soon" gate. Two files and one <link> so that turning
   // the editor on again is a deletion rather than an untangling.
   '/studio-editor-gate.css': { file: studioAsset('studio-editor-gate.css'), type: 'text/css; charset=utf-8' },
@@ -1068,6 +1072,20 @@ async function route(req, res, url) {
     }
     return streamFile(req, res, file, { contentType: 'font/ttf', cacheControl: 'public, max-age=604800, immutable' });
   }
+  // Help centre screenshots. Their own route rather than the marketing one:
+  // these are captures of the signed-in app, and keeping the two apart means a
+  // marketing image can never be renamed into a help article by accident.
+  if (method === 'GET' && pathname.startsWith('/help-assets/')) {
+    const name = path.basename(decodeURIComponent(pathname));
+    const dir = path.resolve(config.root, 'src', 'public', 'help-assets');
+    const candidate = path.resolve(dir, name);
+    if (!candidate.startsWith(dir + path.sep)) return json(res, 404, { error: 'Help asset not found.' });
+    if (!fs.existsSync(candidate) || !fs.statSync(candidate).isFile()) return json(res, 404, { error: 'Help asset not found.' });
+    const extension = path.extname(candidate).toLowerCase();
+    const contentType = extension === '.webp' ? 'image/webp' : extension === '.png' ? 'image/png'
+      : extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
+    return streamFile(req, res, candidate, { contentType, cacheControl: 'public, max-age=86400' });
+  }
   if (method === 'GET' && pathname.startsWith('/marketing-assets/')) {
     const name = path.basename(decodeURIComponent(pathname));
     let file = null;
@@ -1963,6 +1981,14 @@ async function route(req, res, url) {
   // gets demo cards marked as such -- the shape of the feature with none of
   // its access -- and the ask endpoint refuses outright. The gate lives here,
   // server-side: a client flag would be a suggestion, not a gate.
+  // The help centre. Signed in only -- it describes the signed-in app, and the
+  // public site has its own guides -- but no plan gate: someone who cannot work
+  // out how to use what they bought is the last person to put a paywall in
+  // front of.
+  if (method === 'GET' && pathname === '/api/help') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
+    return json(res, 200, help.helpPayload({ supportEmail: config.supportEmail }));
+  }
   if (method === 'GET' && pathname === '/api/deenai') {
     if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
     if (!deenai.deenaiAccess(currentUser)) {

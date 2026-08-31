@@ -17,16 +17,23 @@ import path from 'node:path';
 import test from 'node:test';
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deenclipped-growth-'));
-const port = 43300 + Math.floor(Math.random() * 200);
 process.env.DATA_DIR = dataDir;
-process.env.PORT = String(port);
+// Port 0, so the OS assigns a free one and hands it back. A port picked at
+// random out of 43300-43500 sits INSIDE Linux's ephemeral range
+// (32768-60999), so the kernel can hand the same number to an outgoing
+// socket between the choice and the listen -- EADDRINUSE, the file aborts,
+// and the run reports fewer tests rather than a failure anyone can read.
+// Measured before this change: 1 abort in 6 full runs.
+process.env.PORT = '0';
 process.env.AUTH_REQUIRED = 'true';
 process.env.EMAIL_SIGNIN_ENABLED = 'true';
 process.env.APP_SESSION_SECRET = 'referral-growth-test-secret-long-enough';
 process.env.PUBLIC_BASE_URL = 'https://deenclipped.online';
 
-const base = `http://127.0.0.1:${port}`;
 const { server } = await import('../src/server.js');
+const address = server.address();
+assert.ok(address && typeof address === 'object', 'test server selected a port');
+const base = `http://127.0.0.1:${address.port}`;
 const store = await import('../src/store.js');
 const referrals = await import('../src/referrals.js');
 const growth = await import('../src/growth.js');

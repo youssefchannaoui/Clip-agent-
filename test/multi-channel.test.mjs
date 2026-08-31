@@ -37,7 +37,13 @@ process.env.CLIP_MAX_SECONDS = '60';
 process.env.APP_SESSION_SECRET = 'multi-channel-session-secret-long-enough';
 // Before the first import of anything that pulls in config.js, which reads the
 // port once.
-const port = 37100 + Math.floor(Math.random() * 300);
+// Ports 32768-60999 are Linux's EPHEMERAL range: the kernel hands them out
+// to outgoing sockets, so a port chosen there can be taken between the
+// choice and the listen. The file then dies with EADDRINUSE and the run
+// reports FEWER TESTS rather than a failure anyone can read -- measured at
+// 1 abort in 6 full runs. This window is below the range, and every test
+// file gets its own so two cannot collide with each other either.
+const port = 18500 + Math.floor(Math.random() * 100);
 process.env.PORT = String(port);
 const base = `http://127.0.0.1:${port}`;
 // providerConfigured needs a public base URL -- without one every provider

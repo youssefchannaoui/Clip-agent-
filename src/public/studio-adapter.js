@@ -1721,6 +1721,24 @@
     return item;
   }
 
+  /**
+   * Help sits in the rail like any other screen.
+   *
+   * No gate of any kind: someone who cannot work out how to use what they have
+   * bought is the last person to put a paywall in front of. The screen itself
+   * is host-rendered (see paintHelp in index.html), because adding a screen to
+   * the design export regenerates every hashed class name in the app.
+   */
+  function helpNavItem() {
+    var item = navItem('help', 'Help', 'ph ph-lifebuoy', '');
+    var inner = item.click;
+    item.click = function (e) {
+      inner(e);
+      global.StudioAdapter.onLoadHelp();
+    };
+    return item;
+  }
+
   function deenaiNavItem() {
     // Everyone sees the tab — the demo is the shop window — so it is not
     // gated here. What IS gated is the data: the host fetch behind
@@ -1970,7 +1988,7 @@
     home: 'Home', queue: 'Review queue', library: 'Lecture library', schedule: 'Schedule',
     templates: 'Templates', music: 'Nasheed library', language: 'Arabic & terms',
     performance: 'Performance', editor: 'Clip editor \u00b7 BETA', tokens: 'Tokens & billing',
-    owner: 'Owner', deenai: 'DeenAI',
+    owner: 'Owner', deenai: 'DeenAI', help: 'Help',
   };
 
   function sublineFor(screen, ctx) {
@@ -1992,6 +2010,7 @@
       case 'schedule': return 'Up to four posts a day · every clip is checked before it goes out';
       case 'music': return plural(ctx.tracks.length, 'nasheed') + ' · shuffled automatically';
       case 'deenai': return 'Growth advice from your own numbers — nothing leaves this server';
+      case 'help': return 'How every part of DeenClipped works, with screenshots of the real app';
       case 'tokens': return ctx.planLabel;
       default: return '';
     }
@@ -4049,6 +4068,7 @@
         navItem('music', 'Nasheed library', 'ph ph-music-notes', ''),
         navItem('performance', 'Performance', 'ph ph-chart-line-up', ''),
         deenaiNavItem(),
+        helpNavItem(),
       ].concat(isOperator(DATA) ? [ownerNavItem()] : []),
 
       workerCardStyle: 'margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding: ' + (open ? '11px' : '9px 6px') + '; border: 1px solid #1E1E22; border-radius: 10px; background: #121214;',
@@ -4169,6 +4189,7 @@
       isEditor: UI.screen === 'editor',
       isTokens: UI.screen === 'tokens',
       isDeenai: UI.screen === 'deenai',
+      isHelp: UI.screen === 'help',
       isEmptyStudio: projects.length === 0,
 
       // ── DeenAI ──

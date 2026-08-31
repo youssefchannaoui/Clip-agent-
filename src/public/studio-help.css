@@ -1,0 +1,134 @@
+/*
+ * The in-app help centre.
+ *
+ * Hand-written and served on its own, the same arrangement as studio-owner.css
+ * and studio-tokens.css and for the same reason: every hook here is an id or a
+ * dch- class this file owns, not one of the design export's hashed names, so a
+ * design re-import cannot silently delete the screen.
+ */
+
+#dcHelp {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 22px 26px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Every direct child of a scrolling flex column has to say this, or the cards
+   below squeeze the header to nothing while it still reads correctly in
+   innerText -- the trap the Performance and Owner screens both hit. */
+#dcHelp > * { flex: none; }
+
+.dch-head h2 { margin: 0 0 4px; font-size: 20px; letter-spacing: -0.01em; color: #F5F5F7; }
+.dch-head p { margin: 0; font-size: 12.5px; color: #8A8A93; max-width: 62ch; }
+
+/* ── search ─────────────────────────────────────────────────────────────── */
+.dch-find {
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid rgba(255,255,255,.1); border-radius: 10px;
+  padding: 9px 12px; background: rgba(255,255,255,.03); max-width: 420px;
+}
+.dch-find i { color: #6E6E76; }
+.dch-find input {
+  flex: 1; border: 0; background: transparent; color: #E9E9EE;
+  font: inherit; font-size: 13px; outline: none;
+}
+.dch-find input::placeholder { color: #6E6E76; }
+
+/* ── category grid ──────────────────────────────────────────────────────── */
+.dch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.dch-cat {
+  text-align: left; cursor: pointer;
+  border: 1px solid rgba(255,255,255,.09); border-radius: 12px;
+  background: rgba(255,255,255,.02); padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 6px;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+.dch-cat:hover { border-color: rgba(217,180,120,.45); background: rgba(217,180,120,.06); transform: translateY(-2px); }
+.dch-cat i { font-size: 20px; color: #D9B478; }
+.dch-cat b { font-size: 14px; color: #F5F5F7; font-weight: 600; }
+.dch-cat span { font-size: 12px; color: #8A8A93; line-height: 1.45; }
+.dch-cat em { font-style: normal; font-size: 11px; color: #6E6E76; letter-spacing: .04em; text-transform: uppercase; }
+
+/* ── article list and body ──────────────────────────────────────────────── */
+.dch-back {
+  align-self: flex-start; border: 0; background: transparent; color: #8A8A93;
+  cursor: pointer; font: inherit; font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px;
+  padding: 0;
+}
+.dch-back:hover { color: #D9B478; }
+
+.dch-art { border-top: 1px solid rgba(255,255,255,.07); padding: 18px 0 4px; }
+.dch-art:first-of-type { border-top: 0; }
+.dch-art h3 { margin: 0 0 4px; font-size: 15px; color: #F5F5F7; }
+.dch-art .dch-sum { margin: 0 0 12px; font-size: 12.5px; color: #9A9AA3; max-width: 66ch; line-height: 1.5; }
+
+.dch-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 320px); gap: 20px; align-items: start; }
+@media (max-width: 900px) { .dch-body { grid-template-columns: minmax(0, 1fr); } }
+
+.dch-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 7px; }
+.dch-steps li { font-size: 12.5px; color: #C9C9D1; line-height: 1.55; }
+.dch-steps strong { color: #F0D6A6; font-weight: 600; }
+
+.dch-notes { margin: 12px 0 0; padding: 10px 12px; border-left: 2px solid rgba(217,180,120,.5);
+  background: rgba(217,180,120,.05); border-radius: 0 8px 8px 0; display: flex; flex-direction: column; gap: 6px; }
+.dch-notes p { margin: 0; font-size: 12px; color: #A9A9B2; line-height: 1.5; }
+
+/* A real capture of this app, so it is shown at its own proportions rather
+   than cropped into a decorative band. */
+.dch-shot { margin: 0; }
+.dch-shot button {
+  display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in;
+  border-radius: 10px;
+}
+.dch-shot img {
+  width: 100%; height: auto; display: block;
+  border: 1px solid rgba(255,255,255,.1); border-radius: 10px; background: #0C0C0E;
+  transition: border-color .16s ease;
+}
+.dch-shot button:hover img, .dch-shot button:focus-visible img { border-color: rgba(217,180,120,.55); }
+.dch-shot figcaption { margin-top: 6px; font-size: 11px; color: #6E6E76; }
+
+/* ── the enlarged screenshot ────────────────────────────────────────────── */
+/* At 320px in the column the text inside a capture is unreadable, and the text
+   is the reason the capture is there at all. */
+#dcHelpZoom {
+  position: fixed; inset: 0; z-index: 420; display: grid; place-items: center;
+  background: rgba(8,8,10,.82); padding: 28px; cursor: zoom-out;
+}
+#dcHelpZoom img {
+  max-width: min(1280px, 96vw); max-height: 92vh; width: auto; height: auto;
+  border: 1px solid rgba(255,255,255,.14); border-radius: 12px;
+  box-shadow: 0 40px 100px rgba(0,0,0,.6); cursor: default;
+}
+#dcHelpZoom button {
+  position: absolute; top: 18px; right: 22px; width: 34px; height: 34px;
+  border-radius: 999px; border: 1px solid rgba(255,255,255,.18);
+  background: rgba(20,20,22,.9); color: #E9E9EE; font-size: 18px; line-height: 1;
+  cursor: pointer;
+}
+#dcHelpZoom button:hover { border-color: rgba(217,180,120,.5); color: #D9B478; }
+
+/* ── contact ────────────────────────────────────────────────────────────── */
+.dch-contact {
+  border: 1px solid rgba(255,255,255,.09); border-radius: 12px; padding: 16px 18px;
+  background: rgba(255,255,255,.02); display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+}
+.dch-contact div { flex: 1 1 260px; }
+.dch-contact b { display: block; font-size: 13.5px; color: #F5F5F7; margin-bottom: 3px; }
+.dch-contact span { font-size: 12px; color: #8A8A93; }
+.dch-contact a {
+  border: 1px solid rgba(217,180,120,.45); color: #D9B478; text-decoration: none;
+  border-radius: 999px; padding: 7px 14px; font-size: 12px; white-space: nowrap;
+}
+.dch-contact a:hover { background: rgba(217,180,120,.12); }
+
+.dch-empty { font-size: 12.5px; color: #8A8A93; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dch-cat { transition: none; }
+  .dch-cat:hover { transform: none; }
+}

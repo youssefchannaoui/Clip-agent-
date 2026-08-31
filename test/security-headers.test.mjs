@@ -11,7 +11,13 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deenclipped-headers-'));
-const port = 39900 + Math.floor(Math.random() * 90);
+// Ports 32768-60999 are Linux's EPHEMERAL range: the kernel hands them out
+// to outgoing sockets, so a port chosen there can be taken between the
+// choice and the listen. The file then dies with EADDRINUSE and the run
+// reports FEWER TESTS rather than a failure anyone can read -- measured at
+// 1 abort in 6 full runs. This window is below the range, and every test
+// file gets its own so two cannot collide with each other either.
+const port = 19400 + Math.floor(Math.random() * 100);
 process.env.DATA_DIR = dataDir;
 process.env.PORT = String(port);
 // A public https base URL is what makes HSTS apply -- and the server now

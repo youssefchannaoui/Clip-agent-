@@ -25,7 +25,13 @@ process.env.STRIPE_WEBHOOK_SECRET = 'whsec_deenclipped';
 process.env.STRIPE_PRICE_MONTHLY = 'price_monthly';
 process.env.STRIPE_PRICE_TOPUP_100 = 'price_topup_100';
 // Set before anything imports config.js, which reads the port once at import.
-const port = 38200 + Math.floor(Math.random() * 300);
+// Ports 32768-60999 are Linux's EPHEMERAL range: the kernel hands them out
+// to outgoing sockets, so a port chosen there can be taken between the
+// choice and the listen. The file then dies with EADDRINUSE and the run
+// reports FEWER TESTS rather than a failure anyone can read -- measured at
+// 1 abort in 6 full runs. This window is below the range, and every test
+// file gets its own so two cannot collide with each other either.
+const port = 17150 + Math.floor(Math.random() * 100);
 process.env.PORT = String(port);
 
 const billing = await import('../src/billing.js');
