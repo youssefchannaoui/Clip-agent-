@@ -1345,6 +1345,48 @@ desktop (mobile 98dB PSNR, zero studio files in the diff).
   cluster restyled through the shared classes alone.
 - The old look survives on branch `site-backup-before-rebuild` (v3.61.0).
 
+### The motion system that grew on top of it (v3.64.0–v3.69.0, 31 Aug 2026)
+
+All of it rides the same engine and the same guarantees; a new scene should
+join it, not invent a sibling.
+
+- **One rAF scroll handler** in `src/public/marketing.js` stamps `--p` (0→1)
+  on every `[data-scene]`, plus `--scroll` and the `condensed` class on
+  `<html>`. Derived counters live in CSS: the walkthrough's `--ps` (step
+  index, `--p * 4.4`) and each step's window `--w`. **Every formula resolves
+  to the finished pose at the default `--p:1`**, `html:not(.mjs)` forces the
+  windows open, and the reduced-motion block un-pins every tall scene — that
+  triple guarantee is what makes the scroll story safe to extend.
+- **Homepage scene order**: hero (pins, idle drift, clip stack sinks to hand
+  off) → moments rail (scan beam; each moment's ring/score arrives at its own
+  inline `--mt`) → three-move flow band (`.flow-scene`, Restream-shaped,
+  stages+arrows draw in by `--f` thresholds) → studio walkthrough
+  (`.walk-scene`, real captures crossfading by `--ps`, ONE step lit at a time
+  by `--w`) → one-frame comparison (arch-mask reveal; generic panel zoom-crops
+  past the burned-in ayah) → content-type chooser → chapters stack → template
+  gallery → review beats → DeenAI → pricing → FAQ → final arch + seal
+  resolution.
+- **The chooser (`.sc-choose`) is CSS radios driven two ways**: clicks, and
+  the engine setting `checked` from scene progress (first half Lecture,
+  second half Quran) on wide viewports only. If its panels change, keep both
+  paths working.
+- **The brand seal** (`.brand-seal` in `layout()`) wraps `logoMark()` —
+  logoMark itself is [SRC]-test-pinned and must stay untouched; the ring is a
+  separate 28s-rotation svg, condensing via `condensed` and resolving back to
+  the full wordmark at `--scroll ≥ .965`.
+- **Route veil**: 170ms `.leaving` fade on plain same-origin link clicks,
+  cleared by `pageshow` (bfcache-safe); modified clicks/anchors/mailto pass
+  through. Skipped under reduced motion.
+- **Traps already paid for**: the header's `backdrop-filter` makes it the
+  containing block for `fixed` descendants (the drawer is `absolute` with
+  explicit height for that reason); dropdown items carry a hidden/staggered
+  base on desktop that the ≤960 block must keep force-visible; and a
+  `max-content` child inflates a stage's auto grid column
+  (`grid-template-columns:minmax(0,100%)` on `.sc-stage` is load-bearing).
+- Two sections were built and then removed at Youssef's call: the paper
+  two-paths cards ("kinda useless") — its meaning now lives in the one-frame
+  scene and the chooser. Check with him before resurrecting anything like it.
+
 ## The ayah was rendering as floating tashkeel with no letters (v3.40.0, 30 Aug)
 
 Nobody had ever looked at a frame from the Arabic path. Asked to prove the
