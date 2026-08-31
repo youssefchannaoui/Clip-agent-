@@ -529,15 +529,41 @@ export function home({ base, currentUser }) {
       </div>
     </section>
 
-    <section class="section workflow-section" id="how-it-works">
+    <section class="section frame-section" id="the-difference" aria-labelledby="the-difference-heading">
       <div class="wrap">
-        <div class="section-head align-left reveal"><span class="section-label">One connected workflow</span><h2>From the right section of a lecture to the final post.</h2><p>Select only the source range you want to process. DeenClipped transcribes it, finds complete moments, renders full-quality clips and keeps every decision in one place.</p></div>
-        <div class="workflow-visual reveal"><div class="product-frame"><img src="/marketing-assets/workflow-premium.webp" alt="DeenClipped workflow from source import to publish-ready clips" loading="lazy"></div></div>
-        <div class="workflow-steps reveal">
-          <article><span>01</span><h3>Choose the minutes that matter</h3><p>Paste a supported link or upload a file, then set the exact start and end. Tokens follow the selected source time.</p></article>
-          <article><span>02</span><h3>Review finished clips</h3><p>Watch the same full-quality render that will be posted, with scores, reasons, captions and keyboard decisions.</p></article>
-          <article><span>03</span><h3>Publish with control</h3><p>Download, post now or fill the schedule for your own connected destinations. A failed destination can be retried on its own.</p></article>
+        <div class="section-head reveal">
+          <span class="section-label">The difference</span>
+          <h2 id="the-difference-heading">The difference is one frame.</h2>
+          <p>Every clipper can find a moment in a lecture. What separates them is what happens when the speaker begins to recite.</p>
         </div>
+        <div class="frame-duo">
+          <figure class="frame-panel is-generic reveal">
+            <div class="frame-head">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M6.5 10.5h11"/><path d="M6.5 14h5"/><path d="M14 14h3.5"/></svg>
+              <b>A general AI clipper</b>
+              <span class="frame-tag">Illustration</span>
+            </div>
+            <div class="frame-stage">
+              <img src="/marketing-assets/reel-quran.webp" alt="Illustration of a recitation frame captioned with the verse written out in Latin letters" width="564" height="1002" loading="lazy">
+              <div class="frame-scrim"></div>
+              <p class="frame-cap">Inna a'taynaka al kawthar</p>
+            </div>
+            <figcaption>The recitation is heard as ordinary speech, spelled out phonetically in Latin letters and burned in like any other caption. Nothing in that pipeline knows a verse was being read.</figcaption>
+          </figure>
+          <figure class="frame-panel is-deen reveal">
+            <div class="frame-head">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5.5 20.5V11a6.5 6.5 0 0 1 13 0v9.5"/><path d="M3 20.5h18"/><path d="M9.5 20.5v-9a2.5 2.5 0 0 1 5 0v9"/></svg>
+              <b>DeenClipped</b>
+              <span class="frame-tag">Illustration</span>
+            </div>
+            <div class="frame-stage">
+              <img src="/marketing-assets/reel-quran.webp" alt="Illustration of the DeenClipped treatment: the recited verse in mushaf naskh with its English translation beneath it" width="564" height="1002" loading="lazy">
+            </div>
+            <p class="frame-ref"><i></i>Al-Kawthar &middot; 108:1</p>
+            <figcaption>The verse is matched to the Qur'an itself and set in mushaf naskh with its translation underneath. A clip containing scripture is <b>never published automatically</b> &mdash; it waits for a person, whatever the automation is set to.</figcaption>
+          </figure>
+        </div>
+        <p class="frame-note">Inside a single clip the treatment <b>changes per segment</b>: recited scripture becomes the ayah and its translation, other Arabic is captioned in Arabic with an English line beneath it, and English is captioned as English.</p>
       </div>
     </section>
 
@@ -559,7 +585,17 @@ export function home({ base, currentUser }) {
         </div>
       </div>
     </section>
-
+    <section class="section workflow-section" id="how-it-works">
+      <div class="wrap">
+        <div class="section-head align-left reveal"><span class="section-label">One connected workflow</span><h2>From the right section of a lecture to the final post.</h2><p>Select only the source range you want to process. DeenClipped transcribes it, finds complete moments, renders full-quality clips and keeps every decision in one place.</p></div>
+        <div class="workflow-visual reveal"><div class="product-frame"><img src="/marketing-assets/workflow-premium.webp" alt="DeenClipped workflow from source import to publish-ready clips" loading="lazy"></div></div>
+        <div class="workflow-steps reveal">
+          <article><span>01</span><h3>Choose the minutes that matter</h3><p>Paste a supported link or upload a file, then set the exact start and end. Tokens follow the selected source time.</p></article>
+          <article><span>02</span><h3>Review finished clips</h3><p>Watch the same full-quality render that will be posted, with scores, reasons, captions and keyboard decisions.</p></article>
+          <article><span>03</span><h3>Publish with control</h3><p>Download, post now or fill the schedule for your own connected destinations. A failed destination can be retried on its own.</p></article>
+        </div>
+      </div>
+    </section>
     <section class="section clips-section" id="safety">
       <div class="wrap split-layout">
         <div class="media-stack reveal">
@@ -572,7 +608,20 @@ export function home({ base, currentUser }) {
         <div class="feature-copy reveal"><span class="section-label">Review and faith-sensitive safeguards</span><h2>The AI can find the moment. A person still decides what leaves.</h2><p>Every generated clip lands in a review queue. Scripture is treated more carefully: recitation is matched to an ayah-and-translation treatment and forced through a human review gate.</p><div class="detail-list">${checkItem('Rendered-video review','Watch the exact captioned file that will be posted, not a browser imitation.')}${checkItem('English, Arabic and recitation','Auto-detect can switch language by segment instead of forcing one language across the lecture.')}${checkItem('Nothing approximate for scripture','Quran clips never use the editor’s approximate caption echo and never bypass approval.')}</div><a class="button primary" href="/features#captions">See caption and review features ${icon('arrow')}</a></div>
       </div>
     </section>
-
+    <section class="section templates-section" id="templates">
+      <div class="wrap">
+        <div class="section-head reveal"><span class="section-label">Five real template styles</span><h2>Choose the treatment that suits the reminder.</h2><p>Every preview uses the existing photographic Islamic reel library. Basic starts with Clean Line; Pro unlocks the complete catalogue.</p></div>
+        ${templateCatalogue()}
+        <div class="template-safety reveal"><span>${icon('shield')}</span><p><strong>Quran Recitation is deliberately different.</strong> It matches recitation to the Quran corpus, shows the ayah and translation, keeps nasheed off and always requires human review.</p></div>
+      </div>
+    </section>
+    <section class="section publishing-section">
+      <div class="wrap">
+        <div class="section-head reveal"><span class="section-label">Library, performance and publishing</span><h2>Know what needs attention, then keep the schedule moving.</h2><p>The library groups clips by lecture, Performance reports only what DeenClipped can actually measure, and the calendar shows each destination’s real state.</p></div>
+        <div class="publishing-canvas reveal"><div class="product-frame"><img src="/marketing-assets/publishing-premium.webp" alt="Clean DeenClipped publishing schedule and connected platform controls" loading="lazy"></div></div>
+        <div class="publishing-points reveal"><div><span>${icon('chart')}</span><b>Honest performance</b><small>Made, kept, scheduled, posted and failed — no invented social view counts.</small></div><div><span>${icon('calendar')}</span><b>Post now or schedule</b><small>Approved clips can fill the next free posting windows automatically.</small></div><div><span>${icon('account')}</span><b>Destination-level status</b><small>A YouTube success and TikTok refusal stay separate, with the failed leg retried alone.</small></div></div>
+      </div>
+    </section>
     <section class="section organise-section deenai-section">
       <div class="wrap split-layout reverse">
         <div class="feature-copy reveal"><span class="section-label">DeenAI</span><h2>Advice grounded in your clips, not generic creator tips.</h2><p>Pro turns your own approvals, projects and posting history into countable insights. Studio adds Ask DeenAI, answered on the private model running on the DeenClipped processing server.</p><div class="detail-list">${checkItem('Numbers stay checkable','Insight cards show the arithmetic behind every recommendation.')}${checkItem('No transcript sent to Ask','The model receives compact account figures and kept titles, never the transcript.')}${checkItem('Actions point back to the product','Answers name the Review queue, Schedule or Connections screen when that is the next move.')}</div><a class="button secondary" href="/pricing">Compare Pro and Studio ${icon('arrow')}</a></div>
@@ -585,15 +634,6 @@ export function home({ base, currentUser }) {
         </div>
       </div>
     </section>
-
-    <section class="section templates-section" id="templates">
-      <div class="wrap">
-        <div class="section-head reveal"><span class="section-label">Five real template styles</span><h2>Choose the treatment that suits the reminder.</h2><p>Every preview uses the existing photographic Islamic reel library. Basic starts with Clean Line; Pro unlocks the complete catalogue.</p></div>
-        ${templateCatalogue()}
-        <div class="template-safety reveal"><span>${icon('shield')}</span><p><strong>Quran Recitation is deliberately different.</strong> It matches recitation to the Quran corpus, shows the ayah and translation, keeps nasheed off and always requires human review.</p></div>
-      </div>
-    </section>
-
     <section class="section editor-section">
       <div class="wrap">
         <div class="section-head reveal"><span class="section-label">Templates, audio and editor preview</span><h2>Keep the look consistent now. Fine-grained editing is coming next.</h2><p>Templates and re-renders are available today. The full clip editor can be opened as a preview, but remains behind a coming-soon gate until its visual checks are complete.</p></div>
@@ -602,14 +642,6 @@ export function home({ base, currentUser }) {
           <span class="availability-badge">Editor preview · coming soon</span>
         </div>
         <div class="feature-row reveal"><div><span>${icon('template')}</span><b>Reusable caption templates</b><p>Save style changes for future clips or keep a one-clip adjustment local to that render.</p></div><div><span>${icon('music')}</span><b>Nasheed controls</b><p>Upload and rotate vocal-only tracks. Quran recitation is deliberately left without a track underneath it.</p></div><div><span>${icon('edit')}</span><b>Editor held for verification</b><p>Timeline, caption and framing controls are not advertised as launched while the gate is active.</p></div></div>
-      </div>
-    </section>
-
-    <section class="section publishing-section">
-      <div class="wrap">
-        <div class="section-head reveal"><span class="section-label">Library, performance and publishing</span><h2>Know what needs attention, then keep the schedule moving.</h2><p>The library groups clips by lecture, Performance reports only what DeenClipped can actually measure, and the calendar shows each destination’s real state.</p></div>
-        <div class="publishing-canvas reveal"><div class="product-frame"><img src="/marketing-assets/publishing-premium.webp" alt="Clean DeenClipped publishing schedule and connected platform controls" loading="lazy"></div></div>
-        <div class="publishing-points reveal"><div><span>${icon('chart')}</span><b>Honest performance</b><small>Made, kept, scheduled, posted and failed — no invented social view counts.</small></div><div><span>${icon('calendar')}</span><b>Post now or schedule</b><small>Approved clips can fill the next free posting windows automatically.</small></div><div><span>${icon('account')}</span><b>Destination-level status</b><small>A YouTube success and TikTok refusal stay separate, with the failed leg retried alone.</small></div></div>
       </div>
     </section>
 

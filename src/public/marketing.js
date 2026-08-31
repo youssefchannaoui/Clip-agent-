@@ -29,13 +29,45 @@ if (reducedMotion || !('IntersectionObserver' in window)) {
   revealItems.forEach(item => item.classList.add('is-visible'));
 } else {
   const revealObserver = new IntersectionObserver(entries => {
+    // Children of one group enter together, a beat apart, instead of every
+    // element on the page fading independently. A uniform fade on everything is
+    // what makes a page read as generated; a short stagger reads as composed.
+    // The delay is set here rather than in CSS so a section added later needs no
+    // matching nth-child rules.
     for (const entry of entries) {
       if (!entry.isIntersecting) continue;
+      const group = entry.target.hasAttribute('data-stagger')
+        ? [...entry.target.children]
+        : [entry.target];
+      group.forEach((node, index) => {
+        node.style.transitionDelay = index ? `${Math.min(index * 70, 420)}ms` : '';
+        node.classList.add('is-visible');
+      });
       entry.target.classList.add('is-visible');
       revealObserver.unobserve(entry.target);
     }
   }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
   revealItems.forEach(item => revealObserver.observe(item));
+  document.querySelectorAll('[data-stagger]').forEach(node => revealObserver.observe(node));
+
+  /* The scroll-driven stepper: the active step lights as it passes the middle of
+     the screen and a progress line grows to match. Driven by one observer rather
+     than a scroll handler, so it costs nothing per frame. */
+  const steps = [...document.querySelectorAll('[data-step]')];
+  if (steps.length) {
+    const line = document.querySelector('[data-step-line]');
+    const stepObserver = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        entry.target.classList.toggle('step-active', entry.isIntersecting);
+      }
+      const active = steps.filter(s => s.classList.contains('step-active'));
+      if (line && active.length) {
+        const last = steps.indexOf(active[active.length - 1]);
+        line.style.setProperty('--step-progress', `${((last + 1) / steps.length) * 100}%`);
+      }
+    }, { threshold: 0.55, rootMargin: '-20% 0px -20% 0px' });
+    steps.forEach(step => stepObserver.observe(step));
+  }
 }
 
 for (const gallery of document.querySelectorAll('[data-gallery]')) {
