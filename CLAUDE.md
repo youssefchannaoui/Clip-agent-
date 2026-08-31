@@ -1780,7 +1780,20 @@ branch WITHOUT the help changes.
 
 ### Agreed for Studio, not yet built (30 Aug 2026, Youssef)
 
-Two features, both Studio-only, in the order he asked for them.
+Two features, both Studio-only, in the order he asked for them. (Item 1
+has since shipped — multi-account landed v3.41.0–v3.57.0; kept here as the
+record of the original ask.)
+
+**Idea backlog for Studio** (not yet scoped, noted so they are not lost):
+- **Custom templates** (31 Aug 2026, Youssef: "add to ideas for studio,
+  custom templates") — a Studio subscriber designs their own caption
+  template rather than choosing from the shipped five. Whatever shape this
+  takes, it must respect the existing template laws: applying a style writes
+  only `CLIP_STYLE_FIELDS` (invariant 3), any line that can overflow carries
+  `{\q0}` (invariant 8), the Quran template's rules are not overridable
+  (no nasheed, ayah treatment, forced review), and `visibleText()` still
+  gates the watermark. A custom template is user input reaching the
+  renderer — treat every field as untrusted.
 
 1. **Up to 3 accounts per platform.** Free and Pro keep one; Studio gets three.
    `publishingSettings[provider].accountId` is a single id today, so this is a
