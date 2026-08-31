@@ -24,7 +24,7 @@ globalThis.fetch = async (url, options = {}) => {
   }
   return new Response('{}', { status: 200 });
 };
-test.after(() => { globalThis.fetch = realFetch; fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); });
+test.after(() => { globalThis.fetch = realFetch; try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); } catch { /* cleanup must not fail a run */ } });
 
 test.beforeEach(() => { pushed.length = 0; feed.reset(); config.activityNtfyTopic = 'biz-topic'; });
 

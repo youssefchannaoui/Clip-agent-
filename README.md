@@ -1,31 +1,53 @@
-# DeenClipped AI 3.0 — Web app + external processing worker
+# DeenClipped
 
-DeenClipped AI keeps the polished editor and publishing workspace while moving video import, Whisper, FFmpeg, rendering, and media storage off the lightweight Render web service.
+**AI video clipper that turns long videos and Islamic lectures into
+review-ready short-form clips.** Live at
+**[deenclipped.online](https://deenclipped.online)**.
 
-## Exact classic interface
+Paste a YouTube link or upload an MP4, mark the minutes worth clipping, and get
+back vertical clips with burned-in captions — each one waiting in a review queue
+for a person to approve or reject before anything publishes.
 
-The dashboard uses the original uploaded interface's:
+## What it does
 
-- animated DeenClipped splash and arch/play logo,
-- Inter and Outfit typography,
-- original dark/gold palette and spacing,
-- queue cards with 9:16 thumbnails and inline caption editing,
-- lecture-library cards and selectable clip previews,
-- schedule board with vertical thumbnails and posting windows,
-- analytics cards, music library, side control centre and activity rail,
-- original button motion, hover states and panel transitions.
+- **Clips on meaning, not on a timer.** The selected stretch is transcribed with
+  word-level timings, then a self-hosted model scores the moments inside it and
+  says why: complete ending, question hook, stands alone.
+- **Captions in the language actually spoken.** English, Arabic or Urdu, or
+  auto-detect that switches per segment — so an English lecture containing
+  recitation is handled as both rather than mangled into one.
+- **Quran-aware.** Recited scripture is matched against all 6,236 ayat and
+  rendered as the verse with its translation in Amiri, not as a phonetic guess.
+  Any clip carrying scripture is forced through human review, and that gate
+  cannot be switched off.
+- **Vertical and framed.** Face detection crops 16:9 to 9:16 and keeps the
+  speaker in frame. A nasheed is mixed under the speech and ducked beneath it.
+- **You approve, then it publishes.** Approved clips fill posting windows and go
+  to your own connected YouTube, TikTok, Instagram and Facebook accounts. Each
+  destination reports its own state, so one platform refusing does not mark the
+  whole clip failed.
 
-Three matching tabs were added without replacing the classic screens:
+## How this repository relates to production
 
-- **Templates** — caption styles, hook card, filters, crop, watermark and saved presets.
-- **Publishing** — YouTube, Instagram, Facebook and TikTok OAuth and destination controls.
-- **Automation** — AI thresholds, clip limits and dependency diagnostics.
+Two halves, deployed separately:
+
+| Part | What it is | Deploy |
+|---|---|---|
+| `src/` | The web app — accounts, billing, review queue, scheduling, publishing, the public site | Pushing `deenclipped-v2-2` deploys it to Render automatically |
+| `worker/` | Video import, Whisper, scoring, FFmpeg/libass rendering, object storage | **Manual.** A push does not deploy it; see `.claude/skills/deploy-worker` |
+
+No npm dependencies, and the Python tests use only the standard library — a
+clean checkout runs the whole suite (`npm run check && npm test`) anywhere.
+
+Working conventions, invariants and the reasoning behind them live in
+[`CLAUDE.md`](CLAUDE.md); it is the handover between sessions and the most
+useful file here for understanding why the code looks the way it does.
 
 ## Automated workflow
 
 1. Upload an original video directly to object storage, or paste an authorised YouTube URL.
 2. Render validates the request, creates persistent metadata, and signs a job for the external worker. It never downloads the full source video.
-3. The worker obtains YouTube MP4s from the configured managed provider and runs Faster-Whisper in CPU INT8 mode.
+3. The worker downloads only the selected stretch with its own yt-dlp, behind a rotating pool of static residential proxies, then runs Faster-Whisper in CPU INT8 mode.
 4. Candidate moments are segmented and scored.
 5. The selected saved template is rendered into every clip.
 6. A shuffled nasheed is physically mixed into every final MP4.

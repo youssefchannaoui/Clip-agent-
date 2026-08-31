@@ -22,7 +22,11 @@ const storage = await import('../src/object-storage.js');
 const originalFetch = global.fetch;
 
 test.afterEach(() => { global.fetch = originalFetch; });
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
+test.after(() => {
+  // Guarded: a leftover temp directory on a CI runner is harmless; a red
+  // branch from a cleanup race is not. See admin-page.test.mjs for the race.
+  try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); } catch { /* nothing to do */ }
+});
 
 test('YouTube validation accepts individual videos and rejects playlists and lookalikes', () => {
   assert.equal(videoImport.parseYouTubeUrl('https://youtu.be/Abc_123-xyZ').videoId, 'Abc_123-xyZ');

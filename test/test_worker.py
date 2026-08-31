@@ -1065,7 +1065,18 @@ class ClipAIPromptTests(unittest.TestCase):
         source = self._source()
         self.assertIn("not a summary", source)
         self.assertIn("you won't believe", source, "the worn bait is named so it can be banned")
-        self.assertIn("never promise anything the clip does not", source)
+        # Reworded 31 Aug 2026 when the titling guidance was rewritten around
+        # what actually ranks for these lectures. The rule is unchanged; only
+        # the sentence moved. test_clip_titling.py checks the same ban by
+        # BUILDING the prompt rather than reading this file, which is the
+        # stronger test -- this one survives because it is cheap, not because
+        # it proves much.
+        # A fragment that does not straddle a source line break. The full
+        # sentence is split across two string literals here, which is exactly
+        # why a source-string test is the weaker one: it can fail on
+        # formatting alone. test_clip_titling.py asserts the same ban against
+        # the BUILT prompt, where wrapping cannot affect the result.
+        self.assertIn("promise what the clip does not contain", source)
         self.assertIn("dignity outperforms hype", source)
 
     def test_descriptions_ask_for_a_standalone_first_line_and_mixed_hashtags(self):

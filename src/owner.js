@@ -32,6 +32,43 @@ import * as billing from './billing.js';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const now = () => Date.now();
 
+/**
+ * Which landing pages produced PAYING customers, and what those customers paid.
+ *
+ * metrics.js counts arrivals and conversions; it cannot see money, because
+ * revenue lives on the account and in the ledger rather than in the analytics
+ * buckets. This joins the two.
+ *
+ * The distinction that matters and is easy to lose: **new customer
+ * acquisition is not subscription revenue.** `initialRevenue` is the FIRST
+ * payment each customer made, counted once, which is what tells you whether a
+ * page is worth writing more like. A renewal is real money and belongs in the
+ * finance figures, but counting it here would make the oldest page look like
+ * it wins a new customer every month.
+ */
+export function landingPerformance(state = {}, rows = []) {
+  const users = Array.isArray(state.authUsers) ? state.authUsers : [];
+  const byLanding = new Map();
+  for (const user of users) {
+    const landing = String(user?.signupLanding || '');
+    if (!landing || !user.landingCredited) continue;
+    if (!byLanding.has(landing)) byLanding.set(landing, []);
+    byLanding.get(landing).push(user);
+  }
+
+  return rows.map(row => {
+    const converted = byLanding.get(row.path) || [];
+    const initialRevenueMinor = converted.reduce((sum, u) => sum + (Number(u.firstPaidAmountMinor) || 0), 0);
+    const currency = converted.find(u => u.firstPaidCurrency)?.firstPaidCurrency || '';
+    const planMix = {};
+    for (const u of converted) {
+      const plan = String(u.firstPaidPlan || 'unknown');
+      planMix[plan] = (planMix[plan] || 0) + 1;
+    }
+    return { ...row, initialRevenueMinor, currency, planMix };
+  });
+}
+
 export const CADENCES = Object.freeze(['weekly', 'monthly', 'quarterly', 'yearly', 'once']);
 export const COST_CATEGORIES = Object.freeze(['hosting', 'storage', 'domain', 'ai', 'tooling', 'marketing', 'other']);
 

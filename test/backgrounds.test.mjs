@@ -14,7 +14,11 @@ process.env.APP_SESSION_SECRET = 'backgrounds-test-secret-long-enough';
 const backgrounds = await import('../src/backgrounds.js');
 const backgroundsDir = path.join(dataDir, 'backgrounds');
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
+test.after(() => {
+  // Guarded: a leftover temp directory on a CI runner is harmless; a red
+  // branch from a cleanup race is not. See admin-page.test.mjs for the race.
+  try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); } catch { /* nothing to do */ }
+});
 
 function seed(entries) {
   fs.mkdirSync(backgroundsDir, { recursive: true });

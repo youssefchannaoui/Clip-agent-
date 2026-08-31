@@ -1,14 +1,54 @@
 # DeenClipped — working agreement
 
-## Ownership (set 16 Aug 2026, by Youssef)
+## Ownership (split again 31 Aug 2026, by Youssef)
 
-**Claude owns everything, layout included.** The 12 Aug split that reserved
-layout, CSS and visual design for ChatGPT was removed on 16 Aug: "you are now
-doing everything ChatGPT does — it's all Claude."
+**ChatGPT is working on the MAIN WEBSITE. Claude owns the dashboard and
+everything else.** Youssef, 31 Aug: "i have chat gpt working on the design for
+my main website".
 
 | Area | Owner |
 |---|---|
-| Everything in this repo | **Claude** |
+| The public marketing site — the look of `deenclipped.online` | **ChatGPT** |
+| The dashboard / app (`/app`, the studio, the Owner screen) | **Claude** |
+| Everything else — worker, billing, auth, SEO structure, tests | **Claude** |
+
+This is a split by SURFACE, not by file, and the two overlap: `src/marketing.js`
+and `src/public/marketing.css` render the public site AND carry SEO structure
+Claude owns. Both agents edit them. That is workable and has been worked —
+three times on 30–31 Aug — but only because of the rule below.
+
+**What each side must not do:**
+
+- ChatGPT redesigning a page must not remove a registered page, orphan one,
+  drop a canonical, or invent a testimonial. It will not get that far: the
+  tests fail first. Its 30 Aug redesign (v3.50.0) was checked against the SEO
+  work afterwards and broke nothing — schema clean, no orphans, contextual
+  links intact, and its three new images inherited the width/height stamp
+  automatically because that is computed from the files rather than typed.
+- Claude must not restyle the public site. Structure, copy and metadata are
+  Claude's; how it LOOKS is not.
+
+**Whoever edits `src/` bumps `package.json` in the SAME commit.** Not a style
+preference -- `scripts/check-version-bump.mjs` fails the run otherwise, and on
+30 Aug two consecutive ChatGPT commits (`b31a510`, `02acde9`) left the branch
+RED for forty minutes on exactly this. Nothing was wrong with the code; the
+tests passed. It cleared only because the next Claude commit bumped the version
+on top of it. A phone session that cannot trust the tick has no way to check
+anything, so a red branch is worse than no branch -- and a red run whose cause
+is a missing bump looks identical, at a glance, to a real failure.
+
+**Do not run both agents in the same minute.** Not a policy, a mechanical
+constraint: on 30–31 Aug Claude twice went to push and found ChatGPT's work
+already on the branch, and had to rebase and resolve by hand. Each hand-merge
+is a chance to silently undo the other side's change, which has happened on
+this repo before (see below). Nothing was lost this time; that was checking,
+not luck, and it does not scale.
+
+### The earlier history, kept because the failure mode has not changed
+
+The 12 Aug split reserved layout, CSS and visual design for ChatGPT. It was
+removed on 16 Aug — "you are now doing everything ChatGPT does — it's all
+Claude" — and has now returned in the narrower form above.
 
 ### The history that split existed for
 
@@ -150,7 +190,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **868 JS + 416 Python**
+- `npm test` and `npm run check` must pass. Currently **977 JS + 442 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1031,6 +1071,16 @@ with no laptop, no local state and no earlier conversation.
   a clean checkout runs the whole suite anywhere — that is what makes a phone
   session viable at all. Keep it that way; a dependency added carelessly
   removes it.
+- **A cleanup race turned a green suite red, in CI only.** `test.after` removed
+  the temp DATA_DIR while the server's state saver was still writing
+  `state.json.tmp` into it: rmSync retried, the saver re-created the file, and
+  the run failed with ENOTEMPTY after every assertion had passed. `maxRetries`
+  does not help when something is actively re-creating files. Two fixes, both
+  needed -- the server is closed AND AWAITED before the directory goes, and the
+  removal is wrapped in try/catch, because a leftover temp directory on a
+  runner is harmless and failing a green suite over one is not. 34 files.
+  This is the worst shape a red branch can have: it almost never reproduces
+  locally, so a phone session cannot diagnose it and cannot trust the tick.
 - **A Mac cannot see a case-only path mistake.** `DESIGN/…` opened fine locally
   and threw ENOENT on Linux CI, so the suite was green here and red there —
   the worst failure to hit from a phone, because it cannot be reproduced on the
@@ -1310,14 +1360,78 @@ built (v3.34.0); this is the other half. **Studio 3 / Pro 1 / Basic 1.**
    itself private; setting the account private is the way to post today.
 3. **Worker deploy on Hetzner** — the section-download saving (v3.12.0) is not
    live until it runs.
-4. **Stripe identity document**, task `astask_1U94FLKKpFy0S4hepCXWS9HY`.
-   Payments work; payouts are paused until it is uploaded.
+4. **Stripe identity document — this is the most urgent open item.** Checked
+   in the dashboard on 31 Aug 2026 rather than assumed, and the earlier note
+   here ("payments work; payouts are paused") was WRONG and had been for weeks.
+   Stripe → Settings → Business → Account status shows:
+   *"Provide an identity document for an account representative (Youssef
+   Channaoui)" — **Overdue**, paused on 7 Aug 2026, **impacts payments and
+   payouts**.* Capabilities read **Paused: Cartes Bancaires**, and
+   **Paused soon: Payments**.
+   "Payments paused" is not a delayed withdrawal — it is the checkout refusing
+   money. Every piece of growth work in this repo assumes a customer can pay,
+   and that assumption has an expiry date on it. Two minutes with a passport
+   or licence at
+   `dashboard.stripe.com/acct_1U1p3tKKpFy0S4he/account/status`.
 5. **Hetzner CPX41 rescale.** Once done: worker retune (4 jobs, whisper medium,
    `qwen3:4b`), ETA recalibration, an end-to-end run with before/after numbers.
 6. **Reconnect YouTube** — the stored token is expired and posts are missing
    their slots.
 7. **A stranger test** — someone who has never seen the product signs up and
    uses it. Claude cannot create an account, so this one needs a real person.
+8. **Bing Webmaster Tools** (`BING_SITE_VERIFICATION` on Render, ~2 min). Once
+   Google is verified Bing will offer to import everything, which is faster
+   than doing it twice.
+   **Google Search Console is DONE and was already verified** — see the note
+   below; the old wording here claimed otherwise and was wrong.
+9. **Links.** Rankings for anything competitive come from other sites linking
+   here, and nothing in this repo can produce one. The DeenClipped YouTube
+   channel description pointing at `/islamic-video-clipper` is free, in your
+   control, and the highest-value link you own.
+
+### Agreed for Studio, not yet built (30 Aug 2026, Youssef)
+
+Two features, both Studio-only, in the order he asked for them.
+
+1. **Up to 3 accounts per platform.** Free and Pro keep one; Studio gets three.
+   `publishingSettings[provider].accountId` is a single id today, so this is a
+   shape change: the field becomes a list, `enabledTargetsForClip` fans out
+   over it, and the cap is enforced by TIER rather than by the UI, or a
+   downgrade silently keeps posting to three. A clip going to three channels
+   is three targets, so the schedule row (which already lists every
+   destination with its own state) needs no change -- but the publish retry,
+   the "posted anywhere counts as posted" rule and the token cost per clip all
+   have to be checked against a fan-out they have never seen.
+
+2. **DeenAI finds the lectures itself. A BETA feature.** Not a channel to
+   watch -- Youssef, 30 Aug: "it will learn how to go onto YouTube itself and
+   find its own videos", and the feature sits around DeenAI. A Studio customer
+   reviews what it found and approves what is worth clipping, or turns on
+   auto-approve and the pipeline runs unattended.
+
+   **The name stays DeenAI** (his call, 30 Aug, over Rawi / Muntaqa / Daleel):
+   it already ships, is documented throughout this file and carries a STUDIO
+   tag in the rail, and renaming would touch the tab, the header pill, the
+   footer marker, the routes and several tests for a cosmetic gain.
+
+   Four things settled or flagged before anyone builds it:
+   - **Search through yt-dlp, NOT the YouTube API.** `search.list` costs 100
+     units against a 10,000/day budget -- 100 searches a day -- and adding it
+     reopens the exact quota conversation the compliance review is trying to
+     close. The box already runs yt-dlp behind the proxy pool and can search
+     without touching Google's API at all. Ollama then ranks the candidates,
+     which is work the box already does for scoring.
+   - **Close the compliance review FIRST.** Today a customer pastes their own
+     link, so the choice is theirs. Searching on their behalf makes the
+     PRODUCT the one choosing third-party content, which is a different use
+     than the open submission describes. Changing the shape of the API usage
+     mid-review is how a review that is nearly closed reopens.
+   - **Auto-approve spends tokens with nobody watching.** A 90-minute lecture
+     is 90 tokens; a daily channel drains a Studio month in under a fortnight.
+     It needs a per-period ceiling the customer sets, and `assertCanSpend`'s
+     refusal has to read as "your automation paused" rather than as a failure.
+   - **`QUOTE_RISK` does not bend for automation** (invariant 1). A clip
+     containing scripture still forces human review, auto-approve or not.
 
 ### Known gaps in the product
 
@@ -1367,3 +1481,820 @@ built (v3.34.0); this is the other half. **Studio 3 / Pro 1 / Basic 1.**
   centre crop. It is pinned `<5.0.0` now and `verify-deploy.sh` fails on it.
   Nothing has yet confirmed framing works *with* a 4.x image; that still needs
   a real job and a look at the frame.
+
+## Organic search: one registry, fifteen new pages (v3.43.0, 30 Aug 2026)
+
+Youssef asked for an SEO implementation, not an SEO report, aimed at BOTH the
+generic AI-clipper searches and the Islamic-creator niche. The overriding KPI
+he named is paid subscriptions, not traffic.
+
+- **Three lists described the public site and none knew about the others**: the
+  route table in server.js, `PUBLIC_PAGES` for the sitemap, and `TRACKED_PATHS`
+  for analytics. Adding a page meant three edits, and missing one failed
+  SILENTLY — a page that served fine, never appeared in the sitemap and
+  recorded no visits. `src/seo-pages.js` is now the single list (21 pages) and
+  all three are derived from it. It is pure data with no imports, deliberately:
+  metrics.js and marketing.js both need it and would otherwise import in a
+  circle.
+- **The words live in `src/seo-copy.js`, apart from the machinery.** Every
+  claim is checkable against the code. Where a page says what DeenClipped does
+  NOT do — the editor is gated, there is no mobile app, no platform sends
+  audience data back — that sentence is load-bearing, not modesty: a visitor
+  who finds it out after paying is a refund and a bad review.
+- **`.feature-deep-dive` is a TWO-column grid** built for copy beside a product
+  shot. The first version of these pages borrowed it with one child, so every
+  paragraph was crammed into the left .92fr with the other half empty. It
+  rendered as a plainly broken page and no test could have caught it — this is
+  the "green suite is not verification" rule again, found by screenshotting.
+  Landing pages use `.seo-section` now: heading left, prose right, hairline
+  between.
+- **The CSS cache-buster is a content hash now, not a hand-typed date.**
+  `?v=20260830` meant a second edit on the same day served stale CSS to
+  everyone who had already loaded the page — which looks exactly like a layout
+  bug that will not reproduce for you. It cost half an hour here before it was
+  recognised. `CSS_VERSION` reads the bytes of marketing.css at import.
+- **`Disallow: /app` is a PREFIX and it also blocked `/apple-touch-icon.png`.**
+  Robots rules are literal prefixes: `$` anchors the end, `*` is the only
+  wildcard, and `?` is an ordinary character. Written as `/app$`, `/app/`,
+  `/app?` now, and a test walks every rule against every public path and asset.
+- **Metadata was typed twice and drifted.** `/contact`'s registry entry
+  described the page properly while the page itself served "Contact
+  DeenClipped support." — 28 characters, which is what Google shows under the
+  link. `meta(path)` reads the registry, so both halves cannot disagree again.
+  Titles are capped at 62 characters and descriptions at 160, because past
+  those Google truncates mid-sentence.
+- **`lastmod` is written by hand, never stamped.** A sitemap claiming all 21
+  pages changed today teaches Google to ignore the one field it actually reads.
+  A test fails if every page carries today's date.
+- `test/seo-architecture.test.mjs` (16 tests) asserts the contract end to end
+  over HTTP: every registered page resolves, is in the sitemap, is crawlable,
+  is counted by analytics, has one H1 and a unique title, is REACHABLE BY PLAIN
+  LINK from the homepage (an orphan page is indexed late or never, whatever the
+  sitemap says), and invents no statistic or rating in its schema.
+
+## Landing pages are ranked by what they EARN (v3.43.1, 30 Aug 2026)
+
+Youssef named the KPI for the SEO work himself: paid subscriptions, not
+traffic. Every other number in metrics.js counts visits, and a page with a
+thousand visits and no subscription is a page to rewrite -- views alone cannot
+say which.
+
+- **The loop is: arrive -> cookie -> sign up -> account stamped -> webhook.**
+  `dc_land` holds A PATH AND NOTHING ELSE (no identifier, HttpOnly, SameSite,
+  90 days) and is written ONCE, never overwritten -- otherwise the last page
+  before checkout takes the credit that belongs to the page that brought them.
+  `metrics.attribute()` checks the value against the page registry before using
+  it as a key, so a hand-edited cookie cannot mint state.
+- **The Stripe webhook carries no cookie.** That is why `user.signupLanding` is
+  stamped on the ACCOUNT at sign-up: it is the only road back from a payment to
+  the page that earned it. Counted once per account (`landingCredited`), or a
+  monthly renewal would look like the oldest page winning a new customer every
+  month.
+- **`userBySubscription(undefined)` matched a stranger.** Found while testing
+  this, and worse than the bug being looked for: it compared undefined against
+  every account's `stripeSubscriptionId`, ALSO undefined for anyone with a
+  billing record and no subscription, so the first such account matched and an
+  invoice with no subscription id had its money recorded against them. Both
+  lookups refuse an empty id now, and the money is filed against no account
+  rather than an arbitrary one.
+- **The table's key set is entries UNION everything attributed.** Built from
+  entry views alone, a page whose visit fell outside the window but whose
+  signup landed inside it vanished entirely -- dropping exactly the row worth
+  reading.
+- The Owner screen's "Pages that earn subscriptions" table is built by the HOST
+  (`dcPaintLandingTable` in index.html), reusing the export's own classes --
+  the same device as the chart tooltip, because putting it in the design export
+  would regenerate every hashed class name in the app for one table.
+
+### Every HEAD request answered 404, the homepage included (v3.44.0)
+
+Found by running `curl -I` against the live site while measuring page weight.
+Every route in server.js matches on `method === 'GET'`, so a HEAD request fell
+through all of them to the 404 handler -- `HEAD /` returned 404 on
+deenclipped.online. Link validators, uptime monitors, social-card scrapers and
+some CDNs ask with HEAD first, and every one of them was being told the site
+does not exist. Nothing went red, because nothing in the suite had ever asked
+that way.
+
+HEAD is now routed as a GET with the body dropped on the way out, keeping the
+Content-Length GET would report (RFC 9110). `res.write` and `res.end` are
+wrapped rather than the routes being changed, so a streamed file behaves too.
+`curl -I` was also what made `marketing.css` look like it was served `no-store`
+-- it is not; the GET carries `public, max-age=3600`.
+
+## Images reserved no space, and phones got 13px targets (v3.45.0, 30 Aug 2026)
+
+Two Core Web Vitals faults that had been served on every page since the site
+launched, both found by MEASURING a rendered page rather than by reading CSS.
+
+- **All 62 images were served with no width or height.** The browser reserves
+  no box, so every page jumped as the files arrived. Proven both ways in a real
+  browser: strip the attributes and 9 of 11 markers move with a worst shift of
+  114px; with them, ZERO move. A measurement that cannot fail proves nothing,
+  so it was run against the broken state first.
+  The sizes are read out of the WebP headers at import (`IMAGE_SIZES`) and
+  stamped onto the finished HTML in `layout()` (`stampImages`) -- one place, so
+  a page added tomorrow gets it, and a re-exported asset cannot make a
+  hand-typed number a lie. The first image also gets `fetchpriority="high"` and
+  loses `loading="lazy"`: lazy-loading the LCP element is the classic way to
+  make a fast page score badly.
+- **21 tap targets under 24px and 63 strings under 12px, on every page**,
+  because both live in the shared footer and hero. Footer links were 144x13.
+  Fixed with PADDING, not font size, so nothing reflowed. Sentences now have a
+  12px floor on phones; the letter-spaced uppercase micro-labels deliberately
+  do NOT -- tracking is what makes those legible, and enlarging them turns a
+  quiet typographic device into a row of shouting. Inline links inside a
+  paragraph are left alone: WCAG 2.5.8 exempts them and padding would break the
+  line box.
+  **Two rules lost on specificity and had to be matched, not out-ordered:**
+  `.price-card li` and `.compare-row > span:first-child` both beat a plain
+  descendant selector, which is why 13 plan features and 9 comparison rows
+  stayed at 10-11px after the first pass -- the two lists a customer reads to
+  decide what to pay for.
+- **There was no horizontal overflow, and an early measurement said there was.**
+  An iframe has no viewport meta, so a page written into one at 375px reports
+  the desktop layout's width. Measured in the real viewport: 0 of 21 pages
+  overflow. Check the real thing before fixing a phantom.
+- **CI has no browser and must not get one** -- this repo has no npm
+  dependencies on purpose, which is what lets a phone session run the suite. So
+  the image test asserts served HTML (real executed output) and the tap-target
+  test only catches the CSS block being deleted wholesale. It says so in the
+  test.
+
+## Guides, two real free tools, and the crawlers named (v3.46.0, 30 Aug 2026)
+
+- **Six guides and a hub, not sixty.** The brief asked for enough to establish
+  the cluster and explicitly not for a hundred generic articles. Each answers
+  one question and stops; DeenClipped is mentioned only where it genuinely
+  does the thing being described, because a guide that turns into a sales page
+  halfway through is not one, and nobody trusts the next.
+- **The hub lists its cluster, computed.** The first version named three guides
+  by hand in the registry's `links` and the other two were reachable from
+  NOWHERE. `test/seo-architecture.test.mjs` caught it — that is exactly why the
+  crawl test walks links instead of trusting the sitemap. `clusterIndex()`
+  derives the list, so a guide added tomorrow appears without anyone
+  remembering.
+- **Both free tools actually work, and that was verified by driving them.**
+  The safe-zone checker draws each platform's covered area over a frame the
+  visitor supplies; the clip calculator does arithmetic against
+  `config.tokensPerMinute` and `config.tokensFree`, read from data attributes,
+  so it cannot drift from billing. Measured in the browser: zones present
+  47,364 lit pixels and 887 with every zone off, a dropped frame paints
+  123,732, and the tool issues **zero network requests** — which is what makes
+  "nothing is uploaded" a statement of fact rather than a promise.
+- **The calculator called its own assumption "conservative" and it was not.**
+  Two thirds of selected time becoming clips is a CEILING, not a forecast. Both
+  the footnote and the page copy now say so. A tool that flatters its own
+  numbers is worse than no tool.
+- Behaviour lives in `src/public/tool-widgets.js`, loaded only by the two pages
+  that have a widget — the CSP hashes inline scripts from index.html only, so a
+  marketing page cannot carry one.
+- **The AI-search crawlers are named in robots.txt and given the IDENTICAL
+  rules.** Naming them makes "this site shows a crawler what it shows a person"
+  a stated position rather than an accident of `*`. Serving bots different
+  claims is cloaking and would put the whole domain at risk.
+- **`/llms.txt` is served and says what it is IN THE FILE**: a convention some
+  AI tools follow, not read by search engines and not a ranking signal. Built
+  from the registry, so it cannot describe a page that does not exist.
+- **Arabic is prepared, not published.** `alternatesFor`, `langOf` and `isRtl`
+  exist; hreflang, `lang` and `dir` follow automatically from a page carrying
+  `lang: 'ar'` and `translationOf`. Nothing is registered, so no hreflang is
+  emitted — which is correct: a set pointing at a page that does not exist
+  makes Google drop the whole cluster. A machine-translated religious product
+  is worse than an English one.
+- **`/examples` and VideoObject are NOT built, deliberately.** There is no
+  repo-owned public demo clip, and the brief forbids a VideoObject without a
+  real accessible video. `KIND.EXAMPLE` is reserved and the page stays
+  unregistered until Youssef publishes one clip publicly.
+- **GitHub metadata set** (description, homepage, 8 topics) after scanning the
+  tracked tree AND the history for credential shapes — it is a public repo. The
+  README opening was stale and named an import provider removed in August.
+
+## The comparison page, the proof band, and research that refuses (v3.47.0)
+
+- **One comparison page, not one per competitor.** A page per rival is a page
+  per rival to keep true, and a stale comparison is worse for the reader than
+  none: they check, find it wrong, and stop believing the rest of the site.
+  `/alternatives` **quotes no competitor price anywhere**, deliberately --
+  pricing moves and a wrong number about someone else's product is both a
+  credibility and a legal problem. It compares on capability, says outright
+  that a general tool is likely the better buy for English podcasts, and lists
+  what DeenClipped does NOT have.
+  Research found the real niche fact worth having: the existing Islamic tools
+  (Quran Caption, QuranClip, Quran Clip Helper) BUILD a recitation video from a
+  reciter's audio. DeenClipped goes the other way and cuts an existing lecture.
+  Different job, and that is the honest differentiator.
+- **The landing pages had no picture of the product.** Fifteen pages of prose
+  and a visitor who has read four paragraphs still had not seen a clip.
+  `proofBand()` puts the next action and two real product images under the
+  hero, on commercial pages only -- a guide should answer before it asks for
+  anything, and a free tool already has its own control. The form is the
+  homepage's, so a pasted URL survives sign-in and lands in the importer;
+  verified by submitting it and reading the resulting
+  `/login?returnTo=/app?source=...`.
+- **`src/research.js` refuses before it invents.** It exists so that when there
+  IS enough data to publish something about what happens to long lectures, the
+  analysis is already written and privacy-checked rather than improvised under
+  the pressure of wanting something to publish -- which is exactly when eleven
+  clips become "a study". `MIN_SAMPLE` 500 clips AND `MIN_ACCOUNTS` 20, because
+  a big sample from three accounts describes three workflows and publishing it
+  as the practice is a lie of framing rather than of arithmetic. Buckets under
+  25 records are dropped and the dropped count travels with the result. It
+  reads no titles, transcripts or ids, and a test asserts that by planting them
+  in the fixtures. **It is deliberately not wired to a route, and a test fails
+  if it ever is** without someone thinking about it.
+- **`videoObjectFor()` refuses without a real public video** -- no https URL,
+  no thumbnail, no duration, or a signed/private path, and it returns null. A
+  page with no VideoObject ranks worse than one with a true VideoObject and
+  infinitely better than one with a false one, and the penalty for a false one
+  lands on the domain rather than the page.
+- **The Owner screen now says what it does NOT know.** Impressions, queries and
+  ranking positions come from Search Console, which this app has no connection
+  to; the note says so rather than leaving a gap that reads as zero traffic,
+  and shows the sitemap's public page count beside it.
+
+## The SEO brief is finished (v3.47.0, 30 Aug 2026)
+
+All 51 sections of Youssef's implementation brief are done. The final report is
+an artifact; what matters for the next session is here.
+
+**The self-audit is 20/20 against PRODUCTION, not against localhost** — the
+brief's own twenty questions, scripted and re-runnable
+(`scratchpad/final-audit.mjs` pattern: fetch the live sitemap, fetch every
+page, assert). Worth re-running after any marketing change. It measures
+titles DECODED: `&amp;` is five characters on the wire and one in a search
+result, and counting the escape called two fine titles too long.
+
+**Deliberately NOT built, each for a stated reason.** Do not "finish" these
+without reading why:
+- **No `/examples` page and no VideoObject.** No repo-owned public clip exists.
+  `videoObjectFor()` is written and refuses without a real https URL, a
+  thumbnail and a duration -- a page with no VideoObject beats one with a false
+  one, and the penalty lands on the domain rather than the page.
+- **No Arabic pages.** `alternatesFor`/`langOf`/`isRtl` are built and hreflang
+  follows automatically; nothing is registered, so nothing is emitted. Correct:
+  hreflang pointing at a page that does not exist makes Google drop the cluster.
+- **No competitor price comparisons anywhere.** Prices move and a wrong number
+  about someone else's product is a legal problem as well as a credibility one.
+- **No fabricated proof.** A test fails the build on customer counts, ratings,
+  "trusted by", "go viral" or "guaranteed".
+- **`research.js` is not wired to a route**, and a test fails if it ever is
+  without someone thinking about it.
+
+**FAQ schema is kept on purpose.** Google stopped showing ordinary FAQ rich
+results, so it earns nothing in search. It stays because it is accurate,
+built from the same array that renders the visible questions, and is
+machine-readable for AI answers -- NOT as a ranking tactic. If that stops being
+true, delete it.
+
+**The crawl test earned its keep three times in one session** -- two orphan
+guides and the comparison page, each linked from nowhere. It walks links from
+the homepage rather than trusting the sitemap, which is the only way to catch
+that. Any new page must be linked from somewhere a crawler can walk to.
+
+## Search Console: verified all along, and the sitemap was never submitted
+
+Checked in the browser on 30 Aug 2026 rather than assumed, and the assumption
+was wrong in both directions.
+
+- **The property already existed** as `sc-domain:deenclipped.online`, a DOMAIN
+  property, which is DNS-verified and covers every subdomain. So
+  `GOOGLE_SITE_VERIFICATION` on Render is **not needed** and never was. The
+  config and the meta tag stay because they cost nothing and a URL-prefix
+  property may be wanted later, but nothing is blocked on them.
+- **No sitemap had ever been submitted** — the Sitemaps page read 0 of 0. That,
+  not verification, is why only **2 pages were indexed** against 3 clicks in 28
+  days. Submitted; Google read it immediately and reported **30 discovered
+  pages, status Success**.
+- **Seven pages requested for indexing** through URL Inspection, each confirmed
+  "Indexing requested · added to a priority crawl queue": the two clipper
+  pages, long-video-to-shorts, islamic-lecture-clipper, youtube-to-shorts,
+  how-it-works and guides. Every one reported "URL is unknown to Google"
+  beforehand, which is the honest baseline to measure the next few weeks
+  against. The daily quota is roughly 10-12, so the rest arrive via the sitemap.
+- **A link now exists**, added to the DeenClipped YouTube channel's Links
+  section (not the description, which is well written and was left alone):
+  "Clip your lectures" → `/islamic-video-clipper`. Live on the public channel.
+  Channel links are nofollow, so this is worth REFERRAL traffic from 80
+  subscribers and 13.4K views a month rather than ranking signal — say that
+  plainly rather than counting it as the backlink problem being solved.
+
+**The trap for the next session:** a Search Console toast covers the URL
+inspection box for several seconds after each request. Clicking Dismiss, then
+waiting, then clicking the box, then typing is the sequence that works; typing
+straight after a request silently goes nowhere and looks like the page ignored
+you.
+
+## The SEO audit that challenged the SEO work (v3.48.0, 30 Aug 2026)
+
+Youssef asked for a rigorous audit rather than more pages, and explicitly for
+folklore to be removed rather than protected. Several things below reverse an
+earlier decision made in this repo.
+
+### Rules that were myths, now gone
+
+- **"No two pages may lead with the same phrase" is deleted.** Google does not
+  penalise a shared opening word, and enforcing it pushed titles away from the
+  words people type. Distinct TITLES are still asserted; the replacement test
+  checks whether two commercial pages make the same ARGUMENT, which is what a
+  doorway page actually is.
+- **Titles over 62 characters and descriptions over 160 no longer hard-fail.**
+  They are truncation thresholds for a SERP snippet, not ranking rules.
+- **"No CDN" was described as a performance virtue and is both wrong and
+  backwards.** Production sits behind Cloudflare in front of Render, serving
+  brotli. Measured: `cf-cache: DYNAMIC`, so HTML is not edge-cached — because
+  marketing pages vary by auth state in the header. That is a deliberate
+  correctness trade, not an absence of a CDN, and it is the thing to revisit if
+  geographic latency ever matters.
+
+### The doorway problem was real and shingles could not see it
+
+Verbatim overlap between the tool pages was low (max 12.8% five-word shingle
+Jaccard) because the sentences were rewritten. The ARGUMENTS were not: "you
+pick the minutes" appeared on 7 pages, "cuts land on a complete thought" on 7,
+"nothing publishes until you approve" on 10.
+
+- **Two pages merged away with 301s** (`RETIRED_PAGES`):
+  `/tools/long-video-to-shorts` -> `/tools/ai-video-clipper` (44% argument
+  overlap with youtube-to-shorts) and `/for/islamic-creators` ->
+  `/islamic-video-clipper`. 30 pages -> 28.
+- **Four pages rewritten to earn their existence**: the three YouTube-to-X
+  pages now carry genuinely platform-specific substance (TikTok's
+  nothing-preselected privacy rule and unaudited-app restriction; Reels' Meta
+  connection and its larger covered area; Shorts' under-three-minutes
+  classification and the compliance caveat that uploads currently arrive
+  private), and lecture-clip-generator is genuinely generic rather than a
+  second Islamic page.
+- Worst commercial-vs-commercial overlap after: **29%**, down from 44%. The
+  test threshold is 32% and compares WITHIN a kind — `/about` restating the
+  product is not a doorway page.
+
+### robots.txt is not an indexing control
+
+`/login` and `/reset` were `Disallow`ed and served indexable HTML. Blocking a
+page from crawling does NOT keep it out of the index — Google can list it as a
+bare URL, and /login is linked from the header of every public page. They are
+now CRAWLABLE and answer `X-Robots-Tag: noindex, follow`, which is the
+combination that works, because a crawler has to fetch a page to see the
+header.
+
+### Other measured findings
+
+- **Not one internal link lived inside body prose.** 22 of 28 pages had no
+  contextual inbound link at all. `CONTEXTUAL_LINKS` links phrases that were
+  ALREADY in the copy, first occurrence only, one per target, three per page.
+  The per-target cap was initially per-SECTION and a page linked one target
+  twice — caught by test, not by reading.
+- **`/pricing` looked like it had no call to action and does not.** Local has
+  no `STRIPE_PRICE_*` variables, so every paid card renders "Opening soon".
+  Production serves "Choose Pro" as a primary button. **Check production before
+  reporting a conversion bug found locally.**
+- Hashed `marketing.css` is now `immutable, max-age=31536000` when the request
+  names the current hash; icons and the social card get a week instead of a
+  conditional request per page load.
+- Structured data: 0 problems across 28 pages. Every FAQPage question is
+  visible on its page, breadcrumbs match, no ratings, no VideoObject.
+- Claims audit: **0 unproven claims**. Nothing advertises the gated editor,
+  multi-account, or a mobile app.
+
+### Money integrity
+
+`src/finance-audit.js` finds what the `userBySubscription(undefined)` bug left
+behind — the comparison was fixed, the rows it wrote were not. It **reports and
+never writes**: a misattributed payment is a question about a real person's
+money and the correction needs the invoice open in Stripe. Owner-only at
+`/api/owner/integrity`. `test/finance-integrity.test.mjs` reproduces the bug
+exactly, and was **proven to fail against the old comparison** before being
+kept.
+
+## Growth: referrals, and what counts as one (v3.49.0, 30 Aug 2026)
+
+Aimed at the first 100 paid subscribers rather than at pageviews.
+
+- **An account is not a referral.** Signing up costs nothing, so paying for one
+  buys fake accounts. A referral counts when the invited person has ACTIVATED
+  -- processed a video AND approved a clip -- which is the first moment they
+  have seen what the product does and is expensive enough that faking it is not
+  worth doing. `referrals.isActivated()`.
+- **The funnel is DERIVED, not a new event stream.** `growth.js` reads
+  projects, clips, revenueEvents and accounts, all of which already exist. A
+  parallel "user did X" log would be a second source of truth that drifts from
+  the first, and the first is the one the customer can see. Nothing here
+  fingerprints or records a journey.
+- **Every reward defaults to ZERO** (`config.referralBonus*`,
+  `config.affiliate*`). The economics are not approved, and code that pays out
+  by default pays out before anybody decided to. The panel says "No reward is
+  attached to this yet" rather than implying one that is switched off.
+- **`billing.grantBonusTokens` refuses to run without a key** and refuses a key
+  it has already honoured. The settle pass runs on every owner growth read, so
+  without that it would top somebody up on every read.
+- **Renewals are excluded everywhere.** `activatedAt`/`convertedAt` are stamped
+  once and never rewritten, so a renewal, a replayed webhook or a second
+  approved clip cannot pay twice. A yearly plan is divided by 12 for MRR rather
+  than counted as twelve monthly customers.
+- **Everything ranks by PAID, never by traffic.** A channel with a thousand
+  visits and no customers is a channel to stop working on, and sorting by
+  visits hides exactly that. A test asserts one paying campaign outranks twenty
+  free signups.
+- **Abuse is FLAGGED, never auto-blocked.** One person with two accounts and
+  two colleagues on one email domain look identical, and telling them apart
+  properly means fingerprinting. `referrals.suspicious()` surfaces pairs; a
+  person decides, and nothing pays automatically.
+
+### The host-panel lifecycle trap, for the third time
+
+The invite panel is host-rendered (the same device as the chart tooltip and the
+landing table). Hooking a render function was wrong TWICE: the hook fires at
+the START of a render, so it inspects the PREVIOUS DOM and finds nothing, and
+the studio coalesces its paint into a frame that neither `setTimeout(0)` nor a
+double `requestAnimationFrame` reliably landed after. A **MutationObserver
+watching for `#dcPlanGrid`** does not need to know any of that. Use that shape
+for the next host-rendered panel rather than rediscovering this.
+
+Also: the panel is keyed off the plan grid EXISTING rather than off
+`UI.screen`, so there is one source of truth instead of two that disagree after
+a re-render.
+
+### The funnel found the thing that actually matters (30 Aug 2026)
+
+The First 100 screen was built and immediately reported something worth more
+than the screen itself:
+
+**No customer has ever completed an import.** Eight accounts, four imported,
+`importStatuses: {"failed": 5}` — every non-owner import has failed, and the
+eleven completed projects on the box are all Youssef's own.
+
+**The failures are HISTORICAL, and that distinction is the whole story.** All
+five are dated 4–18 August, and every one names a cause that has since been
+fixed: two YouTube bot walls, one "You are not subscribed to this API" from
+SocialKit, and two 403s. SocialKit was removed and the Webshare proxy pool set
+up on **26 August**. Nothing has failed since — because nobody has tried.
+
+So the honest position is not "the product is broken". It is:
+
+- the four or five people who tried it in early August met a genuinely broken
+  importer and are unlikely to come back;
+- the fix has never been proven by a real customer, only by the owner;
+- four more accounts signed up and never imported anything at all.
+
+**One real person taken end to end is worth more than any further growth
+work.** That is the next action, and no amount of SEO or referral machinery
+substitutes for it.
+
+**The deploy note was crying wolf.** Owner → Health compared the worker version
+against the APP version and said "Worker changes since then are not live" — on
+30 Aug that read v3.42.0 against v3.49.1 while the box was completely current,
+because no `worker/` change had shipped in between. It now says how to check
+(`git log v<worker>..HEAD -- worker/`) instead of asserting staleness it cannot
+know. The test that required the words "not live" was corrected with it.
+
+## The watermark switch had nowhere to live (v3.51.0, 31 Aug 2026)
+
+Pro sells "Remove the DeenClipped watermark". The only control that could do it
+was `edWm*` — **in the clip editor, which is behind the coming-soon gate**. So
+the feature was sold and could not be used by anyone who bought it.
+
+- The switch is now on the **Templates** screen, host-rendered against the
+  export's own classes (no design re-import). Position was ALREADY there in the
+  BRAND list; a second position control was built first, immediately disagreed
+  with the existing one, and was deleted. **Two controls for one setting is
+  worse than none.**
+- **Three bugs found by driving it rather than by reading it:**
+  1. `PUT /api/templates/:id` refused, because the draft on that screen can
+     carry the id `new-template` and has never been saved. `POST /api/templates`
+     resolves a draft onto the template it came from and carries the same
+     paywall.
+  2. Basing the save on `templateDraft` wrote every unsaved draft field onto
+     the saved template and **renamed "Clean Line" to "New Template"**. It
+     patches `selectedTemplate` now — display may follow the draft, saving
+     never does.
+  3. The label did not repaint after saving, so it read "Off" beside a switch
+     that was on. The MutationObserver only fires when the panel is MISSING.
+
+### A zero-width space was removing the watermark for free
+
+`assertWatermarkAllowed` asked `trim() === ''`, and **JS `trim()` removes
+whitespace and line terminators and nothing else.** A watermark of one
+zero-width space is not empty by that test, survived the sanitiser, and rendered
+as nothing — the paid feature, taken for free. Verified, not reasoned about:
+U+200B, U+2060 (word joiner), U+00AD (soft hyphen) and **U+2800 (blank braille,
+a real glyph that draws nothing)** all walked through. U+00A0 and U+FEFF did
+not, which is why a partial fix would have looked like it worked.
+
+`templates.visibleText()` is now the single answer to "would a viewer see
+anything", used by the paywall AND the sanitiser — two different notions of
+empty is exactly how the gap opened. Blocked at the gate and at storage, because
+a subscription can lapse between saving a template and rendering with it. The
+regression test was proven red against the old check before being kept.
+
+## The invite discount (v3.52.0, 31 Aug 2026)
+
+Youssef: "attach 30% off for this invite link max 3 people and also it doesnt
+overlap other codes."
+
+- **The percentage is NOT in this repo.** It lives on a Stripe coupon, along
+  with its duration, and `STRIPE_REFERRAL_COUPON` holds only the id. A
+  `REFERRAL_DISCOUNT_LABEL=30% off` sitting beside a coupon somebody later
+  edited to 20% would have the product promising one number while charging
+  another — the same "two places that can disagree" fault this codebase has now
+  fixed three times. `billing.referralCouponSummary()` asks Stripe and caches
+  for an hour; on any failure it returns null and the panel says "a discount"
+  without a figure, which is worse copy and true.
+- **It cannot stack, and Stripe is what enforces that.** A checkout session may
+  carry `discounts` OR `allow_promotion_codes`, never both — Stripe rejects the
+  session outright. `checkoutDiscountParams()` makes the choice: an eligible
+  invite gets the coupon and NO promo box; everyone else gets the promo box.
+  Split into a pure function so the rule is tested by CALLING it. The first
+  version of that test read billing.js and matched on text, and failed against
+  a comment containing the words it was looking for.
+- **The cap counts PAYMENTS, not opened checkouts.** Counting at checkout would
+  let anyone burn a referrer's three by opening three checkout pages and
+  closing them. The honest cost of counting at payment: three invited people at
+  checkout simultaneously are all under the cap, so a fourth discount is
+  possible in a race. That is the right way round — a rare extra discount costs
+  a few pounds; burning a real referrer's allowance costs the programme.
+- `discountUsedAt` is stamped once per invited account, so a renewal or a
+  replayed webhook cannot re-spend it.
+- **A spent cap does not break the link.** The referral still counts and still
+  credits the referrer; it just stops carrying the discount, and the panel says
+  so.
+- **Nothing is on until the coupon exists.** `STRIPE_REFERRAL_COUPON` is empty
+  by default, and with it empty the panel says there is no reward rather than
+  promising one nobody will receive.
+
+### The invite panel latched on failure (v3.52.1)
+
+Live on production: `/api/referral` answered perfectly and the panel never
+drew. `loadReferral()` set its "already loaded" flag BEFORE the request and
+left it set whatever happened, so a single early call — before the session had
+settled — cached `null` and no later repaint could ever recover. It now latches
+only on SUCCESS, and shares one in-flight promise so a burst of repaints does
+not become a burst of requests.
+
+Second half of the same bug: a MutationObserver reacts to CHANGE. Landing
+straight on Tokens & billing means the plan grid is already there when the
+observer is installed and no mutation ever fires, so the panel also paints once
+at boot.
+
+Both only showed up on production, because locally the panel was always reached
+by navigating INTO the screen with a warm session.
+
+## DeenAI learned to read your decisions (v3.53.0, 31 Aug 2026)
+
+Everything DeenAI said before this was a pattern anyone could have told you.
+Four new cards read the account's OWN judgements, which is the part no
+competitor can copy — it is not about short-form video, it is about this
+person's taste.
+
+- **The next action comes first.** An account with twelve clips sitting
+  unreviewed was being told its approved hooks average nine words. True, and
+  useless. `nextActionCard` uses `referrals.nextStep` — the SAME definition of
+  "stuck" the owner's growth funnel uses, deliberately, because two definitions
+  would eventually have the dashboard and the customer's advice telling
+  different stories about one account.
+- **What you keep vs what you throw away.** A person watching a clip and saying
+  no is the strongest signal in the product and nothing was reading it. Speaks
+  only with six of each and a gap over eight seconds: below that a "pattern" is
+  one clip's accident wearing a percentage sign.
+- **Does the score agree with you?** The worker scores, a human decides, and
+  nobody compared them. Reports only when they DISAGREE — "the score broadly
+  matches your judgement" is not worth a card. Where three or more clips rated
+  85+ were rejected it says plainly that auto-approve would have published
+  them.
+- **Minutes per keeper**, because the product charges by the source minute and
+  that is the question a customer actually has.
+
+**Two bugs found while testing, both of the same kind — a number that makes the
+reader distrust every other number beside it:**
+
+1. Untitled clips were averaged into the hook figure, producing "your approved
+   hooks average **0** words".
+2. The next-action card told a PAYING customer to subscribe, because "paid" is
+   derived from revenue events and an account can hold a plan without one
+   (granted, comped, migrated).
+
+**Cards are now ranked by how specific they are to the account**, not by the
+order they were written. Only five are shown, and the two most specific things
+the product can say were falling off the end behind generic advice about hook
+length.
+
+**Only the FIRST card gets a kicker slot; every other one is a row with the
+title alone** (v3.53.1) -- so "You keep the" / "shorter ones" reached the screen
+as a heading reading "shorter ones", and "24 source minutes" beside it. A card
+now carries a `line`, the complete statement, which the row uses and the hero
+ignores. Adding a kicker slot to the row template would have meant a design
+re-import and every hashed class name in the app regenerating, for one span.
+The lecture card is the deliberate exception: its title is the lecture's OWN
+name and may be Arabic, so its `line` stays the bare name rather than being
+glued into an English sentence and rendering as scrambled bidi.
+**No assertion about the data could have caught this** -- the cards were
+correct and the screen was wrong. Found by screenshotting, which is the rule
+this file has been repeating since August.
+
+## The watermark row flickered, and the obvious fix made it vanish (v3.53.3)
+
+Youssef: "the captions when moving is lagging cause the watermark option is
+disapearing and coming back."
+
+- **A host-rendered row is destroyed by the render it sits beside.** The panel
+  next to it is rewritten through innerHTML on every template change, which
+  takes the injected row with it. Measured: one click on Caption position and
+  the row came back as a DIFFERENT node (`sameNode: false`). The row carries
+  ~66px, so the column under it jumped out and back on every change -- moving
+  the caption repeatedly reads as the whole panel lagging.
+- **The bug was WHEN it was put back, not that it was.** The observer repainted
+  from `setTimeout(...,0)`, which lands after the render but only after the
+  browser has already PAINTED a frame with no row in it.
+  `requestAnimationFrame` runs after the render and BEFORE the paint, so no
+  frame is ever shown without it. rAF is throttled in a hidden tab, so a
+  timeout races it and whichever lands first wins; paintWatermark is
+  idempotent.
+- **Repainting SYNCHRONOUSLY from the observer looks like the obvious answer
+  and is worse than the bug.** A MutationObserver is delivered part-way through
+  the render, so the row is inserted and then wiped by the innerHTML write that
+  follows -- `host.parentNode` ended up with two children and neither was ours,
+  and the row then never came back AT ALL. Nearly half a session went on this;
+  it is written down so the next person does not try it.
+- **The "keep one node and re-attach it" optimisation was also tried and
+  reverted.** It is not needed once the timing is right, and it introduced a
+  signature gate that stopped the row ever being re-inserted. The fix that
+  shipped changes one scheduling call and nothing else.
+- Proven the way it was found, on the same control: row present 4/4 changes,
+  the SAME node each time, and 0px of movement -- against rebuilt-every-time
+  before.
+
+## Dragging a caption re-rendered the whole studio per mouse event (v3.53.4)
+
+Youssef: "it glitches a lot ... like the page is jumping when moving captions."
+The v3.53.3 rAF fix was for the row FLICKER; this is the other half, and it is
+the one that was actually making the page jump.
+
+- **`makeDrag`'s `move()` called `paintNow()` on every mousemove.** That
+  re-renders the entire studio -- rail, header, panels, preview. A mouse
+  reports far faster than the screen draws (125Hz is ordinary, 1000Hz exists),
+  so the full render ran up to sixteen times per displayed frame and all but
+  the last was thrown away. Every one of them also tore out and rebuilt the
+  host-injected panels beside it.
+- **Measured, on the identical two-move harness drag: FOUR watermark-row
+  rebuilds before, TWO after.** Two moves cannot show the real win -- the
+  coalescing caps repaints at one per FRAME, so the saving scales with how many
+  moves a drag actually generates, which for a human drag is hundreds.
+- The drag STATE is still written synchronously on every event; only the render
+  is coalesced. So the frame that paints always draws the newest position --
+  redundant renders are dropped, never the latest one.
+- **`global.requestAnimationFrame` does not exist in the test context.** The
+  suite drives `move()` directly and reads the preview immediately after, so
+  the coalesced path fell over with nine failures. It falls back to painting
+  synchronously when rAF is absent, which is exactly the old behaviour.
+- The harness's `left_click_drag` emits only TWO mousemove events, so it cannot
+  reproduce the density of a real drag. It is enough to compare before against
+  after; it is not enough to measure smoothness. Say which of the two a number
+  is.
+
+## The watermark row was the one host panel left out of the render (v3.53.5)
+
+Youssef: "its laggying cause the watermark shows then goes away only when
+dragging captions." Third attempt at this, and the first two treated the
+symptom.
+
+- **`paintStudio()` restores every host-rendered panel synchronously right
+  after `STUDIO.render()`** -- paintTemplatesLayout, paintDeckVideo,
+  paintEditorLayout, twenty of them. The watermark row was the ONLY one left to
+  a MutationObserver instead, which is why it was the only one that flickered.
+  It is in the list now.
+- **Reacting to the removal cannot win during a drag, and this is the general
+  lesson.** The drag repaints once per frame; an observer's re-attach is
+  scheduled from inside that frame's callback, so it lands in the NEXT frame --
+  and that frame's drag repaint removes it again. The row alternates
+  present/absent for as long as the drag lasts. Measured: **12 of 12 drag
+  renders ended with no row** before, **0 of 12** after.
+- **Only a DRAG reproduces it.** A bare `paintStudio()` leaves the row alone --
+  0/5 either way -- because the subtree is only replaced when the render output
+  actually differs, and it is the drag state (`dragKind`, `dragPreview`, the
+  grabbing cursor and outline) that changes it. An earlier measurement that
+  called paintStudio without drag state said the bug was fixed when it was not.
+  Set `StudioAdapter.ui.dragKind`/`dragPreview` to reproduce.
+- Calling it at the END of the render is safe; calling it FROM the observer is
+  not. The observer is delivered part-way through the render, so a row inserted
+  there is wiped by the innerHTML write that follows and never returns at all
+  (v3.53.3 notes). The end of paintStudio is after the render has finished.
+- **Any future host-injected panel belongs in paintStudio's list**, not on an
+  observer. The observer stays as a backstop for renders that do not go through
+  paintStudio.
+
+## The watermark row sits in the left column, not across the screen (v3.53.6)
+
+Youssef: "move the water mark on the top of the left side box not the top of
+the screen."
+
+- It was injected as a sibling of the toolbar, so it spanned the full 1052px
+  content width above BOTH columns. It is now the first child of the left
+  column, directly above Style, where the setting it changes actually lives.
+- **The mount is `container.querySelector('section')`, not a class.** The left
+  column is the first `<section>` under the screen container and the toolbar
+  has none, so this finds it without naming a generated class -- the design
+  export regenerates every hashed class name on re-import, which is the whole
+  reason this row is host-rendered in the first place.
+- **`flex:none` is load-bearing here.** The column is a flex container with its
+  own scroll, so a child that does not declare it is shrinkable and gets
+  squeezed by the cards below -- the same trap the Performance screen hit
+  (every direct child of a scrolling flex column needs it).
+- Re-seating is idempotent and self-correcting: a render that replaced the
+  column leaves the old node orphaned, so the paint checks parent AND position
+  rather than trusting the node is still where it was put.
+- Verified at 1440x900 and through 12 simulated drag renders: first child every
+  time, 0 renders ending with no row, 0 renders where it moved.
+
+## AI titling: the model was never told who was speaking (v3.54.0, 31 Aug 2026)
+
+Youssef: "ai titleing, its not good at all use youtube if you want to learn how
+to title". Looking at what actually ranks for "islamic lecture" on YouTube, the
+titles that travel almost all carry the SPEAKER'S NAME -- "Never lose hope in
+the Mercy of Allah - Muhammad Hoblos" (836k views), "Prophet's Vision: The
+Future of The Ummah - Belal Assaad" (114k), "Life's Trials Are Like Pinches ... -
+Omar Suleiman" (34k). In this niche the scholar IS the search term.
+
+- **`refine_with_ollama` was given the clip transcripts and NOTHING else.** The
+  lecture's own title -- the only field in the entire job that contains the
+  speaker's name -- was never passed in, so the model could not have named them
+  if it wanted to. It is passed now, fenced as data (invariant 2: it comes from
+  a YouTube title a stranger wrote).
+- **It must never invent a speaker.** With no lecture title the prompt says so
+  explicitly. Attributing words to a scholar who did not say them is the worst
+  failure available on this product -- worse than a dull title -- and a model
+  asked to "name the speaker" will happily guess one.
+- **`temperature: 0.1` was writing the ranking AND the prose.** Near-greedy
+  decoding is right for a ranking and wrong for writing: it makes every title in
+  a batch come out the same shape, which is what "the titles are not good"
+  actually looks like across a finished lecture. Now 0.6. The ranking can afford
+  it -- the AI score is blended 45/55 with the heuristic, so it stays anchored.
+- **The prompt now bans batch sameness outright**: no two titles may open with
+  the same construction. Four shapes are offered instead of one register, with
+  the plain warm promise named as the strongest -- it is what the 836k title is,
+  and it is not clever.
+- **"The verse that stops the scroll" was offered as a GOOD example and is
+  gone.** Referencing scrolling, watching or the algorithm is a register this
+  content should not borrow.
+- **The new tests build the real prompt and read the bytes that would go to
+  Ollama**, rather than grepping the source. Proven red against the old prompt
+  before being kept. The existing source-string test broke on this change twice
+  -- once on rewording, once because the sentence straddles two string literals
+  and is not contiguous in the file. That is the weakness CLAUDE.md already
+  names; the new file does not have it.
+- **NOT YET LIVE.** This is `worker/` and the box is manual. Titles do not change
+  until someone deploys it.
+
+## The watermark row looked bolted on, and that was measurable (v3.54.1)
+
+Youssef, after the move: "try again".
+
+- The position was right and the drag held; what was wrong was the LOOK, and it
+  did not need an opinion to find. Measured against its neighbours: the row
+  carried a 1px border and a background while the Style and Brand groups below
+  it have `0px` border and a transparent ground, and it stood 112px tall next
+  to their single-line rows. It was the only boxed thing inside the panel.
+- It is now the same shape as those groups -- a grey letter-spaced section
+  label, then a row whose control sits right, then one muted line of
+  explanation. 112px -> 74px, border and background gone.
+- **The label is grey, not gold.** Gold is the accent the panel spends on
+  values and the brand mark; a gold section label made this one group shout
+  over STYLE, BRAND and CAPTION TEXT beside it.
+- Rewriting the innerHTML rebuilds the checkbox, so the save path was re-proven
+  rather than assumed: toggling wrote `watermark: DEENCLIPPED` and
+  `watermarkOpacity: 100`, the label repainted to match, and the template was
+  still called "Clean Line" -- the rename bug from v3.51.0 stays fixed.
+- Re-checked after the restyle: 12 drag renders, 0 ending with no row, 0 where
+  it moved, still the column's first child.
+
+## The titling model invented a Companion of the Prophet (v3.54.2, 31 Aug 2026)
+
+The v3.54.0 prompt was tested against the box's real qwen3:1.7b rather than
+only unit-tested, and two things it did on real transcripts could not have been
+found any other way.
+
+- **It copied an example title verbatim onto an unrelated clip.** The prompt
+  offered "Why does my dua feel unanswered?" as a good SHAPE; the model put it
+  on the clip about honouring your mother. A 1.7B model treats a concrete
+  example as a template. The four shapes are now DESCRIBED, never demonstrated,
+  and the prompt says outright that every word must come from this clip.
+- **With no speaker in the lecture title it invented one: "Abu Huraira",** a
+  Companion of the Prophet, credited on a modern khutbah, on all three clips.
+  The prompt forbids inventing a speaker in plain words. **A small model does
+  not reliably obey a negative instruction**, so the rule is enforced in code:
+  `strip_unbacked_attribution()` drops a trailing "- Name" the lecture title
+  does not actually contain. It fails towards dropping the credit -- a name
+  spelled differently from the lecture title is stripped rather than trusted --
+  and an ordinary dash ("Repentance - why it never stops") is left alone
+  because the trailing fragment must look like a name before it is treated as
+  a credit.
+- **No real scholar's name appears anywhere in the prompt now**, for the same
+  reason the example titles went: a model that lifts an example phrase would
+  attach one scholar's name to another's lecture. A test asserts the guidance
+  contains none.
+- Measured after both fixes, same four transcripts, real model: with a speaker
+  in the lecture title all four titles carried it and each described its own
+  clip; with none, no name was invented.
+- **The production model is `qwen3:1.7b`, not 4b** (`OLLAMA_MODEL` on the box).
+  It also drops roughly one candidate in four -- `ollama_partial_scoring` fired
+  on most runs -- so those clips keep heuristic scores and transcript-head
+  titles. Worth revisiting; 4b is already pulled on the box.

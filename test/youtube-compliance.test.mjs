@@ -20,7 +20,11 @@ const store = await import('../src/store.js');
 const marketing = fs.readFileSync(path.join(process.cwd(), 'src/marketing.js'), 'utf8');
 const engine = fs.readFileSync(path.join(process.cwd(), 'src/local-engine.js'), 'utf8');
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
+test.after(() => {
+  // Guarded: a leftover temp directory on a CI runner is harmless; a red
+  // branch from a cleanup race is not. See admin-page.test.mjs for the race.
+  try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); } catch { /* nothing to do */ }
+});
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -146,18 +150,14 @@ test('the privacy policy names the API calls, the retention and the way out', as
 test('the URL-processing section describes production, not the local-mode path', async () => {
   // This section goes to Google as part of a ToS response, so it must match
   // the running configuration: WORKER_BASE_URL is set in production, which
-  // makes processingMode "remote", and the worker's verified provider chain
-  // is socialkit -> ytdlp. Vizard is only reachable in local mode.
+  // makes processingMode "remote". Since 26 Aug 2026 the production worker
+  // downloads through yt-dlp and the configured Webshare residential pool.
   const marketing = await import('../src/marketing.js');
   const html = marketing.privacy({ base: 'https://deenclipped.online', currentUser: null });
   const section = html.slice(html.indexOf('YouTube URL processing'), html.indexOf('Security and storage'));
-  assert.match(section, /SocialKit/, 'names the provider production actually calls');
-  assert.match(section, /api\.socialkit\.dev/, 'and the endpoint');
+  assert.match(section, /yt-dlp/, 'names the downloader production actually calls');
+  assert.match(section, /Webshare/, 'names the proxy network production may call');
   assert.match(section, /No Google credentials are sent/i);
-  // Vizard may be mentioned only as the non-production path.
-  const vizardAt = section.indexOf('Vizard');
-  assert.ok(vizardAt === -1 || /self-hosted copy[\s\S]*Vizard/.test(section),
-    'Vizard may only appear framed as the self-hosted/local path');
-  assert.ok(section.indexOf('SocialKit') < (vizardAt === -1 ? Infinity : vizardAt),
-    'production path is described first');
+  assert.doesNotMatch(section, /SocialKit|Vizard/,
+    'retired providers must not be presented as the current production path');
 });

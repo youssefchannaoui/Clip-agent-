@@ -45,7 +45,7 @@ for (let attempt = 0; attempt < 60; attempt += 1) {
 test.after(async () => {
   globalThis.fetch = realFetch;
   await new Promise(resolve => server.close(resolve));
-  fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+  try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); } catch { /* cleanup must not fail a run */ }
 });
 
 const deploy = async () => (await (await fetch(`${base}/api/owner/health?days=7`)).json()).deploy;
@@ -64,7 +64,12 @@ test('a box running an older release is named as behind, with both versions', as
   assert.equal(state.behind, true);
   assert.match(state.note, /3\.12\.0/, 'says what the box is on');
   assert.match(state.note, new RegExp(config.appVersion.replace(/\./g, '\\.')), 'and what it should be on');
-  assert.match(state.note, /not live/i, 'and what that means');
+  // Not "not live" any more, and that wording was the problem: most releases
+  // touch src/ only, so a version gap usually means nothing. On 30 Aug the box
+  // read v3.42.0 against an app on v3.49.1 and was completely current. The
+  // note must tell the reader how to CHECK rather than assert a stale box.
+  assert.match(state.note, /git log/i, 'says how to check whether it actually matters');
+  assert.ok(!/not live/i.test(state.note), 'must not assert staleness it cannot know');
 });
 
 test('a box too old to report a version is still caught', async () => {

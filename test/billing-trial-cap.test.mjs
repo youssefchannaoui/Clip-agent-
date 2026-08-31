@@ -16,7 +16,11 @@ process.env.STRIPE_PRICE_MONTHLY = 'price_test_monthly';
 const billing = await import('../src/billing.js');
 const { state } = await import('../src/store.js');
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
+test.after(() => {
+  // Guarded: a leftover temp directory on a CI runner is harmless; a red
+  // branch from a cleanup race is not. See admin-page.test.mjs for the race.
+  try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); } catch { /* nothing to do */ }
+});
 
 const DAY = 24 * 60 * 60 * 1000;
 

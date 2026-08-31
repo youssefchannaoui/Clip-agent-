@@ -2989,6 +2989,7 @@
 
         UI.dragKind = kind;
         var lastX = null; var lastY = null;
+        var dragPaint = 0;
         function move(ev) {
           var y = Math.max(0, Math.min(1, (ev.clientY - box.top) / box.height));
           var x = Math.max(0, Math.min(1, (ev.clientX - box.left) / box.width));
@@ -3008,9 +3009,32 @@
           // drag is exactly what release commits, so letting go never moves
           // the caption. The raw position still drives the guides.
           UI.dragPreview = { kind: kind, x: x, y: (kind === 'caption' && hit) ? hit.at : UI.dragAt };
-          paintNow();
+          // One repaint per FRAME, not one per mouse event.
+          //
+          // paintNow() re-renders the whole studio -- rail, header, panels and
+          // preview -- and a mouse reports far faster than the screen draws
+          // (125Hz is ordinary, 1000Hz exists), so this was running the entire
+          // render up to sixteen times per displayed frame and throwing all but
+          // the last away. Every one of those also tore out and rebuilt the
+          // host-injected panels beside it: measured FOUR watermark-row rebuilds
+          // in a two-move drag, so a real drag of a few hundred moves rebuilds
+          // it a few hundred times. That is what made dragging a caption feel
+          // like the page was jumping.
+          //
+          // The state above is still written synchronously, so the frame that
+          // does paint always draws the newest position -- coalescing drops
+          // redundant renders, never the latest one.
+          // Outside a browser there are no frames to coalesce into -- the
+          // tests drive move() directly and read the preview straight after --
+          // so fall back to painting synchronously there.
+          if (typeof global.requestAnimationFrame !== 'function') { paintNow(); }
+          else if (!dragPaint) {
+            dragPaint = global.requestAnimationFrame(function () { dragPaint = 0; paintNow(); });
+          }
         }
         function up() {
+          if (dragPaint && typeof global.cancelAnimationFrame === 'function') { global.cancelAnimationFrame(dragPaint); }
+          dragPaint = 0;
           var x = lastX; var y = lastY;
           UI.dragKind = null;
           UI.dragAt = null;
@@ -4203,7 +4227,11 @@
           iconWrapStyle: 'flex: none; display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid '
             + tone.border + '; border-radius: 10px; background: ' + (card.tone === 'gold' ? 'rgba(217,180,120,.07)' : '#121214') + ';',
           iconStyle: 'font-size: 15px; color: ' + tone.icon + ';',
-          title: String(card.title || ''),
+          // A row has no kicker slot, so the card supplies the whole line where
+          // its kicker began a sentence. Without this, "You keep the" /
+          // "shorter ones" arrived on screen as a heading reading "shorter
+          // ones", which means nothing on its own.
+          title: String(card.line || card.title || ''),
           titleStyle: 'font-size: 13.5px; font-weight: 600; color: ' + (card.tone === 'warn' ? '#E6B770' : '#F2F2F4') + '; text-wrap: pretty;',
           demoStyle: aiDemoChip(card.demo),
           body: String(card.body || ''),
@@ -6914,7 +6942,14 @@
       anaReferrersEmpty: topPairs(DATA.webmetrics && DATA.webmetrics.referrers).length === 0,
       anaUtm: topPairs(DATA.webmetrics && DATA.webmetrics.utm),
       anaUtmEmpty: topPairs(DATA.webmetrics && DATA.webmetrics.utm).length === 0,
-      anaFootnote: 'Visitors are one daily-rotating hash each \u2014 no addresses stored, nothing sent anywhere.',
+      // Search-visibility data is NOT here, and the note says so rather than
+      // leaving a gap that reads as zero traffic. Impressions, queries and
+      // average position live in Google Search Console; nothing in this app
+      // has an API connection to it, and inventing those numbers would make
+      // every other figure on this screen suspect.
+      anaFootnote: 'Visitors are one daily-rotating hash each \u2014 no addresses stored, nothing sent anywhere. '
+        + 'Search impressions, queries and ranking positions are not here: they come from Google Search Console, '
+        + 'which this app is not connected to. Public pages in the sitemap: ' + (DATA.webmetrics && DATA.webmetrics.publicPages || '\u2014') + '.',
 
       // ── Tokens & billing ──
       // The period tabs filter the real plan list by its own `interval`, so the

@@ -11,7 +11,11 @@ process.env.APP_SESSION_SECRET = 'reservation-test-secret-long-enough';
 const billing = await import('../src/billing.js');
 const { state } = await import('../src/store.js');
 
-test.after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }));
+test.after(() => {
+  // Guarded: a leftover temp directory on a CI runner is harmless; a red
+  // branch from a cleanup race is not. See admin-page.test.mjs for the race.
+  try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); } catch { /* nothing to do */ }
+});
 
 function makeUser(id, plan = 'free') {
   const user = { id, email: `${id}@test`, name: id, role: 'creator', providers: {}, createdAt: Date.now(), billing: { plan, status: 'free', plansSeenAt: Date.now() } };

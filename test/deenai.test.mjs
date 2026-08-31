@@ -12,19 +12,19 @@ import test from 'node:test';
  */
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deenclipped-deenai-'));
-const port = 34000 + Math.floor(Math.random() * 4000);
-
 process.env.DATA_DIR = dataDir;
-process.env.PORT = String(port);
+// Let the OS allocate a free port; randomized ranges can overlap in parallel CI.
+process.env.PORT = '0';
 process.env.AUTH_REQUIRED = 'true';
 process.env.EMAIL_SIGNIN_ENABLED = 'true';
 process.env.ADMIN_EMAIL = 'operator@deenclipped.test';
 process.env.SOCIAL_TOKEN_KEY = 'deenai-test-social-key-over-32-characters!!';
 delete process.env.WORKER_BASE_URL; // local mode: ask must refuse honestly, not hang
 
-const base = `http://127.0.0.1:${port}`;
-
 const { server } = await import('../src/server.js');
+const address = server.address();
+assert.ok(address && typeof address === 'object', 'test server selected a port');
+const base = `http://127.0.0.1:${address.port}`;
 const store = await import('../src/store.js');
 const deenai = await import('../src/deenai.js');
 
@@ -212,4 +212,177 @@ test('insight cards stay honest when the data is too thin to say anything', () =
   const cards = deenai.insights(thin);
   assert.ok(!cards.some(card => /Clip more from/.test(card.title)), 'one clip is not a keep rate');
   assert.ok(!cards.some(card => /Your bar is around/.test(card.title)), 'no approval bar from zero approvals');
+});
+
+/*
+ * The cards that are about THIS account rather than about video in general.
+ *
+ * Everything DeenAI said before these was a pattern anyone could have told
+ * you. These four read the customer's own decisions — which clips they kept,
+ * which they threw away, and whether the score agreed — and that is the part
+ * a competitor cannot copy, because it is not about short-form video, it is
+ * about this person's taste.
+ *
+ * Every one of them refuses to speak on a small sample. A "pattern" across
+ * three clips is one clip's accident wearing a percentage sign, and advice
+ * built on it sends somebody off in the wrong direction with confidence.
+ */
+
+const seedAccount = ({ kept = 0, rejected = 0, keptLen = 30, rejectedLen = 30,
+                       keptScore = 70, rejectedScore = 70, titles = true, paid = false } = {}) => {
+  const user = { id: 'insight_user', email: 'insight@example.com', billing: { plan: 'pro' } };
+  store.state.authUsers = [user];
+  store.state.revenueEvents = paid ? [{ userId: user.id, kind: 'subscription', amountMinor: 2900 }] : [];
+  store.state.projects = [
+    { id: 'p1', userId: user.id, status: 'complete', title: 'Patience in Hardship',
+      sourceDurationSec: 5400, sourceStartSec: 0, sourceEndSec: 2400 },
+    { id: 'p2', userId: user.id, status: 'complete', title: 'Sabr',
+      sourceDurationSec: 3600, sourceStartSec: 0, sourceEndSec: 1800 },
+  ];
+  store.state.clips = [
+    ...Array.from({ length: kept }, (_, i) => ({
+      id: `k${i}`, userId: user.id, projectId: 'p1', status: 'approved', score: keptScore,
+      startSec: 0, endSec: keptLen, postedAt: Date.now(),
+      title: titles ? 'Why patience is the harder path' : '' })),
+    ...Array.from({ length: rejected }, (_, i) => ({
+      id: `r${i}`, userId: user.id, projectId: 'p1', status: 'rejected', score: rejectedScore,
+      startSec: 0, endSec: rejectedLen, title: titles ? 'A long rambling section' : '' })),
+  ];
+  return user;
+};
+const cardBy = (cards, kicker) => cards.find(c => c.kicker === kicker);
+
+test('a stuck account is told what to do, not what its hooks look like', () => {
+  // The failure this fixes: twelve clips sitting unreviewed, and the advice on
+  // screen was about average hook length. True, and useless.
+  const user = seedAccount({});
+  store.state.clips = Array.from({ length: 12 }, (_, i) => ({
+    id: `w${i}`, userId: user.id, projectId: 'p1', status: 'waiting', score: 80, startSec: 0, endSec: 40 }));
+  const cards = deenai.insights(user);
+  assert.equal(cards[0].kicker, 'Do this next');
+  assert.match(cards[0].title, /clips are waiting/i);
+});
+
+test('a paying customer is never told to subscribe', () => {
+  // "Subscribe" is derived from revenue events, and an account can hold a paid
+  // plan without one. Telling a paying customer to subscribe makes them doubt
+  // every other number on the screen.
+  const user = seedAccount({ kept: 8, rejected: 2, paid: true });
+  const cards = deenai.insights(user);
+  const next = cardBy(cards, 'Do this next');
+  assert.ok(!next || !/subscrib|plan gives you/i.test(next.body), 'must not sell to an existing customer');
+});
+
+test('it notices which clips you keep, and says so with the working', () => {
+  const user = seedAccount({ kept: 8, rejected: 8, keptLen: 25, rejectedLen: 75 });
+  const card = cardBy(deenai.insights(user), 'You keep the');
+  assert.ok(card, 'eight kept against eight rejected is enough to compare');
+  assert.equal(card.title, 'shorter ones');
+  // Advice that cannot say where its numbers came from is noise with
+  // confidence, so the body carries both counts and both lengths.
+  assert.match(card.body, /8 clips you kept/);
+  assert.match(card.body, /25s against 75s/);
+});
+
+test('it stays quiet when the difference is noise', () => {
+  // 30s against 34s is not a preference.
+  const user = seedAccount({ kept: 8, rejected: 8, keptLen: 30, rejectedLen: 34 });
+  assert.equal(cardBy(deenai.insights(user), 'You keep the'), undefined);
+});
+
+test('it stays quiet until there is enough of both to compare', () => {
+  // Plenty kept, almost nothing rejected: there is no comparison to make.
+  const user = seedAccount({ kept: 20, rejected: 2, keptLen: 20, rejectedLen: 90 });
+  assert.equal(cardBy(deenai.insights(user), 'You keep the'), undefined,
+    'a pattern across two rejections is one clip’s accident');
+});
+
+test('it reports when the score disagrees with the person', () => {
+  // The case that matters: high-scoring clips a human threw away. Auto-approve
+  // on a threshold would have published them.
+  const user = seedAccount({ kept: 8, rejected: 8, keptScore: 70, rejectedScore: 92 });
+  const card = cardBy(deenai.insights(user), 'The score and you');
+  assert.ok(card);
+  assert.match(card.title, /rejected 8 clips the model rated 85\+/);
+  assert.match(card.body, /Keep reviewing by hand/);
+});
+
+test('it says nothing when the score is doing its job', () => {
+  // Keepers score well above rejects and no high scorer was thrown away:
+  // "the score broadly agrees with you" is not worth a card.
+  const user = seedAccount({ kept: 8, rejected: 8, keptScore: 90, rejectedScore: 60 });
+  assert.equal(cardBy(deenai.insights(user), 'The score and you'), undefined);
+});
+
+test('it prices a keeper in source minutes, which is what the product charges', () => {
+  const user = seedAccount({ kept: 8, rejected: 8 });
+  const card = cardBy(deenai.insights(user), 'Every keeper costs you');
+  assert.ok(card);
+  assert.match(card.title, /source minutes/);
+  assert.match(card.body, /70 minutes across 2 lectures/);
+});
+
+test('advice anyone could give is ranked below advice only this data supports', () => {
+  // Five cards are shown, so the ordering decides what a customer reads. The
+  // two most specific things the product can say used to fall off the end
+  // behind generic advice about hook length.
+  const user = seedAccount({ kept: 8, rejected: 8, keptLen: 25, rejectedLen: 75,
+    keptScore: 70, rejectedScore: 92, paid: true });
+  const cards = deenai.insights(user);
+  const kickers = cards.map(c => c.kicker || '');
+  assert.equal(kickers[0], 'The score and you');
+  assert.equal(kickers[1], 'You keep the');
+  const generic = cards.findIndex(c => /hooks average/.test(c.title || ''));
+  assert.ok(generic === -1 || generic >= 3, 'generic advice must not outrank account-specific advice');
+});
+
+test('a card never shows a zero it computed from missing data', () => {
+  // Untitled clips averaged into the hook figure produced "your approved hooks
+  // average 0 words" — a card that makes the reader distrust every number
+  // beside it.
+  const user = seedAccount({ kept: 8, rejected: 8, titles: false });
+  for (const card of deenai.insights(user)) {
+    assert.ok(!/average 0 words/.test(card.title || ''), `"${card.title}" is a broken card`);
+  }
+});
+
+test('the new cards reach Ask, so spoken advice matches the screen', () => {
+  // askContext maps insights(), so anything added above travels to the model
+  // without being wired separately. If it ever stops, the answer and the cards
+  // start contradicting each other.
+  const user = seedAccount({ kept: 8, rejected: 8, keptLen: 25, rejectedLen: 75, keptScore: 70, rejectedScore: 92 });
+  const context = deenai.askContext(user);
+  const joined = context.insights.join(' | ');
+  assert.match(joined, /score/i);
+  assert.match(joined, /keep the/i);
+});
+
+test('a card rendered as a row still says something on its own', () => {
+  // Only the first card gets a kicker slot above its title. Every other card is
+  // a row with the title alone, so "You keep the" + "shorter ones" reached the
+  // screen as a heading reading "shorter ones". Found by screenshotting; no
+  // assertion about the data could have caught it.
+  const user = seedAccount({ kept: 8, rejected: 8, keptLen: 25, rejectedLen: 75 });
+  for (const card of deenai.insights(user)) {
+    const row = card.line || card.title || '';
+    assert.ok(row.trim().split(/\s+/).length >= 3, `"${row}" does not stand alone as a row`);
+    // A prefix kicker must not be lost AND duplicated: the row line carries it,
+    // the hero renders it separately.
+    if (card.line && card.kicker && /^(You keep|Every keeper|Clip more)/.test(card.kicker)) {
+      assert.ok(card.line.startsWith(card.kicker.split(' ')[0]), `"${card.line}" dropped its opening`);
+    }
+  }
+});
+
+test('an Arabic lecture name is never glued into an English sentence', () => {
+  // The bidi trap the card comment already warned about: a right-to-left title
+  // wrapped in English renders as a scrambled string. The row shows the bare
+  // lecture name instead, which reads correctly on its own.
+  const user = seedAccount({ kept: 8, rejected: 2 });
+  store.state.projects[0].title = 'الصبر عند الشدائد';
+  const card = deenai.insights(user).find(c => c.kicker === 'Clip more from');
+  if (card) {
+    assert.equal(card.rtl, true);
+    assert.ok(!/Clip more from/.test(card.line || ''), 'must not prefix a right-to-left title');
+  }
 });

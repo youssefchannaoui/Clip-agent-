@@ -3,6 +3,7 @@ import * as auth from './auth.js';
 import { config } from './config.js';
 import * as ownerFeed from './owner-feed.js';
 import * as metrics from './metrics.js';
+import * as referrals from './referrals.js';
 import { state, save, log } from './store.js';
 
 const now = () => Date.now();
@@ -835,6 +836,24 @@ async function switchSubscriptionPlan(user, subscription, plan) {
   return { switched: true, plan: plan.id, planName: plan.name };
 }
 
+/**
+ * One or the other. Never both.
+ *
+ * Split out as a pure function so the no-stacking rule can be TESTED by
+ * calling it, rather than by a test reading the source and matching on text —
+ * the first version of that test failed against a comment that happened to
+ * contain the words it was looking for.
+ *
+ * Returns the checkout parameters for exactly one of two worlds: an automatic
+ * invite discount with no promo box, or a promo box with no automatic
+ * discount. Stripe rejects a session carrying both, which is what makes this
+ * rule enforceable rather than remembered.
+ */
+export function checkoutDiscountParams(discount, coupon) {
+  if (discount?.eligible && coupon) return { 'discounts[0][coupon]': coupon };
+  return { allow_promotion_codes: 'true' };
+}
+
 export async function createCheckoutSession(user, planId) {
   metrics.event('checkout_started');
   ensureBillingState();
@@ -870,8 +889,34 @@ export async function createCheckoutSession(user, planId) {
     'metadata[plan]': plan.id,
     'subscription_data[metadata][userId]': user.id,
     'subscription_data[metadata][plan]': plan.id,
-    allow_promotion_codes: 'true',
   };
+
+  /*
+   * The invite discount, and why it cannot stack.
+   *
+   * Stripe refuses a session that carries BOTH `discounts` and
+   * `allow_promotion_codes` — you may have an automatic discount or a box to
+   * type a code into, never both. That is not a limitation to work around; it
+   * is exactly the rule Youssef asked for ("it doesn't overlap other codes"),
+   * enforced by Stripe rather than by us remembering to.
+   *
+   * So the choice is made here, once: an eligible invited customer gets the
+   * referral coupon applied automatically and NO promo box. Everyone else gets
+   * the promo box as before. A referred customer who would rather use a
+   * different code can still do it — from the pricing page, without the invite
+   * link's cookie — which is a trade worth making for a rule that cannot be
+   * got round.
+   *
+   * The percentage is not here. It lives on the Stripe coupon, along with how
+   * long it lasts, because duplicating it would let the two disagree about
+   * what a customer was promised.
+   */
+  Object.assign(params, checkoutDiscountParams(
+    config.stripeReferralCoupon
+      ? referrals.discountEligible(state, user, config.referralDiscountMaxUses)
+      : { eligible: false, reason: 'no-coupon-configured' },
+    config.stripeReferralCoupon,
+  ));
   // One trial per account, ever. This used to be applied on every checkout, so
   // cancelling and re-subscribing -- or upgrading, before switching existed --
   // handed out another free week each time.
@@ -905,6 +950,85 @@ export async function createTopupCheckoutSession(user, packageId) {
     allow_promotion_codes: 'true',
   });
   return { id: session.id, url: session.url };
+}
+
+/**
+ * Grant bonus tokens for a reason that is not a purchase.
+ *
+ * Referral rewards need the same balance a top-up writes to -- a separate
+ * "referral minutes" pool would be a second currency the allowance code does
+ * not know about, and the customer would see a number that did not spend.
+ *
+ * Idempotency is the CALLER's job here and deliberately so: this function is
+ * given a reason key, refuses a key it has already honoured, and records it.
+ * Doing it any other way means a re-run of a settle pass tops somebody up
+ * every time it runs.
+ */
+/**
+ * What the invite coupon is actually worth, asked of Stripe.
+ *
+ * NOT a configured string. A `REFERRAL_DISCOUNT_LABEL=30% off` sitting beside
+ * a coupon somebody later edited to 20% would have the product promising one
+ * number while charging another -- the exact "two places that can disagree"
+ * problem this codebase keeps having to fix. Stripe holds the coupon, so
+ * Stripe is asked.
+ *
+ * Cached for an hour: it is read on every load of the invite panel and it
+ * changes approximately never. On any failure this returns null and the panel
+ * says there is a discount without naming a figure -- worse copy and true,
+ * rather than better copy and possibly false.
+ */
+let couponCache = { at: 0, value: null };
+export async function referralCouponSummary() {
+  if (!config.stripeReferralCoupon || !config.stripeSecretKey) return null;
+  if (couponCache.at && Date.now() - couponCache.at < 3_600_000) return couponCache.value;
+  try {
+    const coupon = await stripeGet(`/coupons/${encodeURIComponent(config.stripeReferralCoupon)}`);
+    const percent = Number(coupon?.percent_off) || 0;
+    const amount = Number(coupon?.amount_off) || 0;
+    const value = {
+      label: percent ? `${percent}% off`
+        : amount ? `${(amount / 100).toFixed(2)} ${String(coupon.currency || '').toUpperCase()} off`
+          : 'a discount',
+      duration: String(coupon?.duration || ''),
+      months: Number(coupon?.duration_in_months) || 0,
+      valid: coupon?.valid !== false,
+    };
+    couponCache = { at: Date.now(), value };
+    return value;
+  } catch {
+    // A coupon that cannot be read is not a coupon that can be described.
+    couponCache = { at: Date.now(), value: null };
+    return null;
+  }
+}
+
+export function grantBonusTokens(user, tokens, reason, key) {
+  ensureBillingState();
+  const amount = Math.max(0, Math.round(Number(tokens) || 0));
+  if (!user || !amount) return { granted: 0 };
+  if (isUnlimited(user)) return { granted: 0, unlimited: true };
+  const billing = ensureUserBilling(user);
+  const grantKey = String(key || reason || '');
+  if (!grantKey) throw new Error('A bonus grant needs a key, or it will be granted again.');
+  billing.processedBonusGrants ||= [];
+  if (billing.processedBonusGrants.includes(grantKey)) {
+    return { granted: 0, duplicate: true, balance: billing.bonusTokens };
+  }
+  billing.bonusTokens = Math.max(0, Number(billing.bonusTokens || 0)) + amount;
+  billing.processedBonusGrants.unshift(grantKey);
+  billing.processedBonusGrants = billing.processedBonusGrants.slice(0, 200);
+  state.billingEvents.unshift({
+    id: `bill_${now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`,
+    userId: user.id,
+    amount,
+    reason: String(reason || 'bonus'),
+    meta: { key: grantKey },
+    createdAt: now(),
+  });
+  state.billingEvents = state.billingEvents.slice(0, 5000);
+  save();
+  return { granted: amount, balance: billing.bonusTokens };
 }
 
 export function grantTopup(user, packageId, references = {}) {
@@ -1137,11 +1261,26 @@ export function verifyStripeSignature(rawBody, signatureHeader) {
   return JSON.parse(rawBody || '{}');
 }
 
+/*
+ * Both of these refuse an empty id, and that guard is the whole point.
+ *
+ * Without it, `userBySubscription(undefined)` compares undefined against
+ * `user.billing?.stripeSubscriptionId`, which is ALSO undefined for every
+ * account that has a billing record but no subscription -- so the first such
+ * account matched, and an invoice carrying no subscription id had its money
+ * recorded against a stranger. Found while testing landing-page attribution:
+ * the payment was credited to the wrong person entirely, which is a worse bug
+ * than the one being looked for.
+ */
 function userByCustomer(customerId) {
-  return (state.authUsers || []).find(user => user.billing?.stripeCustomerId === customerId) || null;
+  const id = String(customerId || '');
+  if (!id) return null;
+  return (state.authUsers || []).find(user => user.billing?.stripeCustomerId === id) || null;
 }
 function userBySubscription(subscriptionId) {
-  return (state.authUsers || []).find(user => user.billing?.stripeSubscriptionId === subscriptionId) || null;
+  const id = String(subscriptionId || '');
+  if (!id) return null;
+  return (state.authUsers || []).find(user => user.billing?.stripeSubscriptionId === id) || null;
 }
 
 function subscriptionPlan(subscription = {}) {
@@ -1232,6 +1371,36 @@ function recordRevenue({ kind, userId = '', amountMinor = 0, currency = '', desc
     description, stripeId, eventId, createdAt: now(),
   });
   state.revenueEvents = state.revenueEvents.slice(0, 5000);
+
+  // Credit the page that earned it.
+  //
+  // A Stripe webhook carries no cookie, so the landing path cannot come from
+  // the request -- it comes off the account, where it was stamped at sign-up.
+  // That is the whole reason the field exists rather than the cookie alone.
+  //
+  // Counted once per account: a subscription renewing every month is not the
+  // landing page earning a new customer every month, and counting it that way
+  // would make the oldest page look like the best one.
+  try {
+    const user = (state.authUsers || []).find(item => item?.id === userId);
+    if (user?.signupLanding && !user.landingCredited) {
+      user.landingCredited = true;
+      // The conversion itself, recorded once, so "which page produced paying
+      // customers" can be answered with the plan and the first amount rather
+      // than a bare count. Renewals do NOT reach here -- landingCredited is
+      // already true -- which is what keeps new-customer acquisition separate
+      // from recurring revenue.
+      user.convertedAt = now();
+      // The invite discount is spent HERE, on a real payment — not when the
+      // checkout page was opened. Otherwise anyone could burn a referrer's
+      // three by opening three checkouts and closing them.
+      if (referrals.markDiscountUsed(user)) metrics.event('referral_discount_used');
+      user.firstPaidAmountMinor = Math.round(Number(amountMinor) || 0);
+      user.firstPaidCurrency = String(currency || '').toLowerCase();
+      user.firstPaidPlan = String(user.billing?.plan || '');
+      metrics.attribute('paid', user.signupLanding);
+    }
+  } catch { /* attribution must never fail a payment */ }
 }
 
 // Comfortably past Stripe's retry schedule, which runs for about three days.

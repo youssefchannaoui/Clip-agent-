@@ -28,7 +28,7 @@ for (let attempt = 0; attempt < 60; attempt += 1) {
 
 test.after(async () => {
   await new Promise(resolve => server.close(resolve));
-  fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+  try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); } catch { /* cleanup must not fail a run */ }
 });
 
 test('a wrong address gets a page, not raw JSON', async () => {
@@ -50,7 +50,11 @@ test('robots.txt exists and keeps crawlers out of the signed-in product', async 
   const res = await fetch(`${base}/robots.txt`);
   assert.equal(res.status, 200);
   const body = await res.text();
-  for (const guarded of ['/app', '/owner', '/api/', '/auth/', '/login']) {
+  // /login is deliberately absent: it is linked from every public page, and a
+  // robots.txt block would let Google list it as a bare URL rather than keep
+  // it out. It carries `X-Robots-Tag: noindex` instead, which is the actual
+  // indexing control -- asserted in test/seo-architecture.test.mjs.
+  for (const guarded of ['/app', '/owner', '/api/', '/auth/']) {
     assert.ok(body.includes(`Disallow: ${guarded}`), `${guarded} must not be crawled`);
   }
   assert.match(body, /Sitemap: https:\/\/deenclipped\.online\/sitemap\.xml/);
@@ -177,4 +181,45 @@ test('pages that are not the product pitch carry the base schemas only', async (
   const types = ldBlocks(contact).map(schema => schema['@type']).sort();
   assert.deepEqual(types, ['Organization', 'WebSite'],
     'no FAQ or offers claimed on pages that do not show them');
+});
+
+test('the public feature catalogue covers every shipped clip template', async () => {
+  const page = await fetch(`${base}/features`, { headers: { accept: 'text/html' } }).then(r => r.text());
+  for (const template of ['Clean Line', 'Bold Stack', 'Headline', 'Mono Minimal', 'Quran Recitation']) {
+    assert.ok(page.includes(template), `${template} must be visible in the public catalogue`);
+  }
+  assert.match(page, /Templates, audio and editor preview/);
+  assert.match(page, /coming soon/i);
+});
+
+test('public imagery stays on the established realistic asset library', async () => {
+  const [home, features, css] = await Promise.all([
+    fetch(`${base}/`, { headers: { accept: 'text/html' } }).then(r => r.text()),
+    fetch(`${base}/features`, { headers: { accept: 'text/html' } }).then(r => r.text()),
+    fetch(`${base}/marketing.css`).then(r => r.text()),
+  ]);
+  for (const draft of ['review-first-v2.png', 'deenai-private-v2.png']) {
+    assert.ok(!home.includes(draft), `${draft} was a rejected draft and must not ship`);
+    assert.ok(!features.includes(draft), `${draft} was a rejected draft and must not ship`);
+  }
+  for (const asset of ['reel-halal.webp', 'reel-dua.webp', 'reel-dunya.webp', 'reel-beneficial.webp', 'reel-quran.webp']) {
+    assert.ok(home.includes(asset), `${asset} should represent a real template example`);
+  }
+  assert.match(css, /\.reel-card img\{[^}]*width:100%;height:auto;aspect-ratio:9\/16;/,
+    'floating reel images must size their height from the card width instead of their intrinsic pixel height');
+});
+
+test('the homepage keeps a labelled source-video entry point', async () => {
+  const home = await fetch(`${base}/`, { headers: { accept: 'text/html' } }).then(r => r.text());
+  assert.match(home, /<form class="source-bar" data-source-form>/);
+  assert.match(home, /<label class="sr-only" for="source-url">Video URL<\/label>/);
+  assert.match(home, /<input id="source-url" name="source"/);
+});
+
+test('privacy copy names current import and DeenAI processing without stale vendors', async () => {
+  const page = await fetch(`${base}/privacy`, { headers: { accept: 'text/html' } }).then(r => r.text());
+  assert.match(page, /yt-dlp/);
+  assert.match(page, /Webshare/);
+  assert.match(page, /Ask DeenAI/);
+  assert.doesNotMatch(page, /SocialKit|Vizard/);
 });
