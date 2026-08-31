@@ -44,19 +44,23 @@ export function settingDefaults() {
     },
     publishingSettings: {
       enabled: false,
+      // Each provider carries accountIds -- the destinations a clip goes to on
+      // that platform -- with accountId kept as its first entry so every reader
+      // written before multi-account keeps working. See withAccountList and
+      // mergeAccountList below.
       // Public, and not a setting. Youssef, 28 Aug 2026: "publishing to all
       // should be AUTOMATICLY Public no settings needed IT MUST BE PUBLIC
       // STRAIGHAWAY". The field stays in the shape so old records still load;
       // nothing writes anything else to it.
-      youtube: { enabled: false, accountId: '', privacy: 'public', categoryId: '22', notifySubscribers: true, madeForKids: false },
-      instagram: { enabled: false, accountId: '', shareToFeed: true },
-      facebook: { enabled: false, accountId: '' },
+      youtube: { enabled: false, accountId: '', accountIds: [], privacy: 'public', categoryId: '22', notifySubscribers: true, madeForKids: false },
+      instagram: { enabled: false, accountId: '', accountIds: [], shareToFeed: true },
+      facebook: { enabled: false, accountId: '', accountIds: [] },
       // privacy starts EMPTY on purpose. TikTok's content-sharing guidelines
       // require the creator to select a privacy status themselves, with no
       // default -- a pre-filled 'SELF_ONLY' is a choice the product made for
       // them. Enabling TikTok without choosing one is refused in
       // validatePublishingSettings.
-      tiktok: { enabled: false, accountId: '', privacy: '', allowComments: true, allowDuet: false, allowStitch: false,
+      tiktok: { enabled: false, accountId: '', accountIds: [], privacy: '', allowComments: true, allowDuet: false, allowStitch: false,
         // Commercial content disclosure. Off by default, as the guidelines
         // require; the two sub-options only mean anything when it is on.
         commercialContent: false, yourBrand: false, brandedContent: false },
@@ -315,6 +319,55 @@ export function setAutomationSettings(user, next) {
   return automationSettings(user);
 }
 
+/**
+ * One destination provider's settings, with its account list normalised.
+ *
+ * `accountId` was a single string for the app's whole life, and every record on
+ * disk still holds one. Rather than a migration pass, the list is DERIVED at
+ * read time -- the same device the youtube privacy correction below uses -- and
+ * `accountId` is kept in step as the first entry of the list.
+ *
+ * Keeping both is what makes this safe to ship in one release: every existing
+ * reader of `item.accountId` (the publish path, the connection test, the UI)
+ * carries on working untouched, while anything that wants every destination
+ * reads `accountIds`.
+ */
+function withAccountList(fresh, current) {
+  const merged = { ...fresh, ...(current || {}) };
+  const stored = Array.isArray(merged.accountIds) ? merged.accountIds : [];
+  const ids = stored.length ? stored : [merged.accountId];
+  // Deduped: the same account chosen twice would post the same clip twice to
+  // the same place, which reads as the app double-posting.
+  const accountIds = [...new Set(ids.map(id => String(id || '')).filter(Boolean))];
+  return { ...merged, accountIds, accountId: accountIds[0] || '' };
+}
+
+/**
+ * The write side of the same idea, and it is NOT the read side reused.
+ *
+ * On write, whichever key the caller actually supplied WINS. A caller that
+ * names `accountId` alone -- which is every caller written before this release,
+ * including the connections dialog -- is choosing one destination and means to
+ * replace the list, not to have the stored list quietly outvote it. Reusing the
+ * read-side merge here did exactly that: setting accountId to 'X' against a
+ * stored ['A','B'] left the account posting to A.
+ */
+function mergeAccountList(current = {}, next) {
+  const merged = { ...current, ...(next || {}) };
+  const clean = list => [...new Set((list || []).map(id => String(id || '')).filter(Boolean))];
+  if (next && Array.isArray(next.accountIds)) {
+    const accountIds = clean(next.accountIds);
+    return { ...merged, accountIds, accountId: accountIds[0] || '' };
+  }
+  if (next && Object.hasOwn(next, 'accountId')) {
+    const accountIds = clean([next.accountId]);
+    return { ...merged, accountIds, accountId: accountIds[0] || '' };
+  }
+  const stored = Array.isArray(merged.accountIds) ? merged.accountIds : [];
+  const accountIds = clean(stored.length ? stored : [merged.accountId]);
+  return { ...merged, accountIds, accountId: accountIds[0] || '' };
+}
+
 export function publishingSettings(user) {
   const fresh = settingDefaults().publishingSettings;
   const current = readSetting(user, 'publishingSettings') || {};
@@ -323,10 +376,10 @@ export function publishingSettings(user) {
     // Read-time correction rather than a migration pass: an account that stored
     // `private` back when the app had a control for it publishes publicly from
     // the next upload, without anyone having to go and find the setting.
-    youtube: { ...fresh.youtube, ...(current.youtube || {}), privacy: 'public' },
-    instagram: { ...fresh.instagram, ...(current.instagram || {}) },
-    facebook: { ...fresh.facebook, ...(current.facebook || {}) },
-    tiktok: { ...fresh.tiktok, ...(current.tiktok || {}) },
+    youtube: { ...withAccountList(fresh.youtube, current.youtube), privacy: 'public' },
+    instagram: withAccountList(fresh.instagram, current.instagram),
+    facebook: withAccountList(fresh.facebook, current.facebook),
+    tiktok: withAccountList(fresh.tiktok, current.tiktok),
   };
 }
 export function setPublishingSettings(user, next) {
@@ -335,10 +388,10 @@ export function setPublishingSettings(user, next) {
   const current = publishingSettings(user);
   writeUserSetting(state, id, 'publishingSettings', {
     ...current, ...next,
-    youtube: { ...current.youtube, ...(next.youtube || {}) },
-    instagram: { ...current.instagram, ...(next.instagram || {}) },
-    facebook: { ...current.facebook, ...(next.facebook || {}) },
-    tiktok: { ...current.tiktok, ...(next.tiktok || {}) },
+    youtube: mergeAccountList(current.youtube, next.youtube),
+    instagram: mergeAccountList(current.instagram, next.instagram),
+    facebook: mergeAccountList(current.facebook, next.facebook),
+    tiktok: mergeAccountList(current.tiktok, next.tiktok),
   });
   save();
   return publishingSettings(user);

@@ -150,7 +150,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **859 JS + 416 Python**
+- `npm test` and `npm run check` must pass. Currently **868 JS + 416 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1250,6 +1250,53 @@ the English translation beneath it perfectly fine.
   deploy and look at it.
 
 
+## One clip, several accounts on a platform (v3.41.0, 31 Aug 2026)
+
+Youssef: "studio permission subscriptions where they can post up to 8 clips a
+day with up to 3 channels for each social media". The 8 a day was already
+built (v3.34.0); this is the other half. **Studio 3 / Pro 1 / Basic 1.**
+
+- **The cap is two limits multiplied, and only one of them is about money.**
+  `billing.accountsPerPlatform(user, provider)` returns 1 unless the account is
+  Studio AND the platform's credentials can actually hold more than one. Meta
+  stores `{ provider: 'meta', accounts: [...] }` -- one Facebook login carrying
+  many Pages -- so Facebook and Instagram fan out today. YouTube and TikTok
+  store ONE connection each, so their answer is 1 whatever the plan, and no
+  picker is drawn for them: a second YouTube slot would be a control that
+  cannot reach an export (invariant 9).
+- **`atLeast`, not `paysForAtLeast`.** This is feature access, so the operator
+  is not locked out of their own product. The money-based check stays for queue
+  position and posting slots, where counting the owner as Studio would let a
+  test import preempt a paying customer.
+- **The list is derived at read time, not migrated.** Every record on disk holds
+  a single `accountId`; `withAccountList` builds `accountIds` from it and keeps
+  `accountId` as the first entry, so every reader written before this release
+  works untouched. The WRITE side is a different function on purpose:
+  `mergeAccountList` lets whichever key the caller supplied win, because reusing
+  the read-side merge meant a caller naming `accountId` alone -- every caller
+  written before this release -- was outvoted by the stored list and kept
+  posting to the old account.
+- **A target has an `id` now** (`provider:accountId`). Retry used to select by
+  provider, so with three Pages on a clip one Retry re-armed all three and wiped
+  their error text, and no button could address a single Page. The old string
+  signature still means "the whole platform" for callers that pass one.
+- **The cap is applied at the route AND at target-build time.** A settings
+  record outlives the plan that wrote it: three ids stay on disk when Studio
+  lapses to Pro, and the render path must not keep posting to all three because
+  a past subscription once permitted it.
+- **The route derives `accountId` from the list before validating.** Found by
+  the HTTP test: `validatePublishingSettings` runs on the route's object before
+  the store normalises it, so a save carrying only `accountIds` -- which is what
+  the picker sends -- was refused with "Choose a connected account" for accounts
+  that were connected all along.
+- Every destination is named `platform (Account)` in the activity log, the
+  stage text, the error text and the summary email. Three Pages otherwise read
+  as "facebook, facebook, facebook", and "facebook failed" three times over.
+- The picker lives in `#studioConn` in index.html, which is hand-written rather
+  than generated, so this cost **no design re-import** and no regenerated class
+  names.
+
+
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)
@@ -1274,10 +1321,16 @@ the English translation beneath it perfectly fine.
 
 ### Known gaps in the product
 
-- **One account per platform.** `publishingSettings[provider].accountId` is a
-  single id, so a clip cannot go to two YouTube channels. Posting to several
-  accounts needs the settings shape to become a list and the target builder to
-  fan out over it.
+- **Multi-account is done for Meta, not for YouTube or TikTok (v3.41.0).** The
+  settings hold a list, the target builder fans out and the cap is sold and
+  enforced -- but `setConnection` in tenancy.js writes
+  `socialConnections[userId][provider] = connection`, ONE object, overwritten.
+  So a second YouTube channel would destroy the first one's refresh token, and
+  `billing.MULTI_ACCOUNT_PROVIDERS` lists only facebook and instagram. Stage 2
+  is teaching the store to hold several connections per provider: the connect
+  handlers, token refresh, disconnect/revoke, YouTube's 30-day retention sweep,
+  and per-account TikTok consent and privacy (one clip to three TikToks is
+  three posts, and their guidelines make consent per post).
 
 - **YouTube API compliance review** (project 881648803263) is at its last open
   question, drafted in Gmail and unsent; deadline ~8 Sept 2026 (7 business days

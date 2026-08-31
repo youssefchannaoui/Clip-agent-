@@ -1593,6 +1593,15 @@
     var account = null;
     for (var i = 0; i < accounts.length; i++) if (accounts[i].id === setting.accountId) account = accounts[i];
     if (!account) account = accounts[0] || null;
+    // The chosen list, falling back to the single id every record held before
+    // multi-account. Filtered against what is actually connected, so an id left
+    // behind by a disconnected Page does not render as a ticked box for an
+    // account that is no longer there.
+    var live = {};
+    for (var a = 0; a < accounts.length; a++) live[accounts[a].id] = 1;
+    var chosen = (setting.accountIds && setting.accountIds.length ? setting.accountIds : [setting.accountId])
+      .filter(function (id) { return id && live[id]; });
+    var limit = ((DATA.publishingLimits || {})[key]) || 1;
     return {
       key: key,
       title: PLATFORM_TITLES[key] || key,
@@ -1601,6 +1610,8 @@
         : key === 'tiktok' ? 'ph ph-tiktok-logo' : 'ph ph-facebook-logo',
       status: status,
       accounts: accounts,
+      accountIds: chosen,
+      maxAccounts: limit,
       account: account,
       connected: Boolean(status.connected),
       // An absent provider counts as configured, matching the server's shape.
@@ -7093,6 +7104,14 @@
             : 'Active',
           icon: p.icon,
           key: p.key,
+          // Everything the account picker needs. `accounts` is what the
+          // connection actually holds (one Facebook login can carry several
+          // Pages), `accountIds` is what has been chosen, and `maxAccounts` is
+          // what this plan allows on THIS platform -- 1 for YouTube and TikTok
+          // whatever the plan, because their credentials can only hold one.
+          accounts: p.accounts,
+          accountIds: p.accountIds,
+          maxAccounts: p.maxAccounts,
           // Opens the combined dialog rather than a per-platform one: seeing all
           // four at once is what makes the publishing picture legible.
           open: function (e) { stop(e); global.StudioAdapter.onOpenConnections(p.key); },

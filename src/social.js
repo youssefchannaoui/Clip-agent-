@@ -4,6 +4,7 @@ import path from 'node:path';
 import { config } from './config.js';
 import { state, save, log, publishingSettings, setPublishingSettings, ownerOfRecord } from './store.js';
 import { connectionFor, setConnection, removeConnection, ownerOf } from './tenancy.js';
+import * as billing from './billing.js';
 
 const PROVIDERS = ['youtube', 'instagram', 'facebook', 'tiktok'];
 const META_SCOPES = 'pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish,business_management';
@@ -657,21 +658,43 @@ export function enabledTargetsForClip(clip) {
   // is skipped and named in the log; the others carry on.
   const settings = publishingSettings(ownerOfRecord(clip));
   if (!settings.enabled || !config.socialPublishEnabled) return [];
+  const owner = ownerOfRecord(clip);
   const targets = [];
   for (const provider of PROVIDERS) {
     const item = settings[provider];
     if (!item?.enabled) continue;
     if (provider === 'tiktok' && (clip.approvedBy !== 'manual' || !clip.tiktokConsentAt)) continue; // TikTok requires explicit consent for each post.
-    const account = selectedAccount(provider, item.accountId, userId);
-    if (!account) {
-      log(`${provider} is switched on but has no account selected, so "${clip.title || clip.id}" will not post there. Pick the account in Connections.`, 'warn', userId);
-      continue;
+    // The cap is applied HERE as well as at the route, deliberately. A settings
+    // record can outlive the plan that was allowed to write it -- a Studio
+    // account that lapses to Pro still has three ids on disk -- and the render
+    // path must not keep posting to all three because a past subscription once
+    // permitted it. Truncating at build time means the extra destinations stop
+    // the moment the plan does, and come back if it resumes.
+    const allowed = billing.accountsPerPlatform(owner, provider);
+    const chosen = (item.accountIds?.length ? item.accountIds : [item.accountId]).slice(0, allowed);
+    if (item.accountIds?.length > allowed) {
+      log(`${provider} has ${item.accountIds.length} accounts selected but this plan allows ${allowed}; posting to the first ${allowed}.`, 'warn', userId);
     }
-    targets.push({
-      userId,
-      provider, accountId: item.accountId, accountName: provider === 'facebook' ? account.pageName : provider === 'instagram' ? account.instagramName : account.name,
-      status: 'scheduled', attempts: 0, nextTryAt: clip.scheduledAt || Date.now(), settings: structuredClone(item), createdAt: Date.now(), updatedAt: Date.now(),
-    });
+    for (const accountId of chosen) {
+      const account = selectedAccount(provider, accountId, userId);
+      if (!account) {
+        log(`${provider} is switched on but has no account selected, so "${clip.title || clip.id}" will not post there. Pick the account in Connections.`, 'warn', userId);
+        continue;
+      }
+      targets.push({
+        // A stable handle for ONE destination. Targets used to be identified by
+        // provider alone, which was fine while a clip could only have one of
+        // each -- but with three Facebook Pages on a clip, "Retry facebook"
+        // re-armed all three and wiped their error text, and no button could
+        // address a single Page. accountId is part of the id because the same
+        // provider now repeats; `|| 'default'` covers YouTube and TikTok, whose
+        // selectedAccount accepts an empty id and means "the one connection".
+        id: `${provider}:${accountId || 'default'}`,
+        userId,
+        provider, accountId, accountName: provider === 'facebook' ? account.pageName : provider === 'instagram' ? account.instagramName : account.name,
+        status: 'scheduled', attempts: 0, nextTryAt: clip.scheduledAt || Date.now(), settings: structuredClone({ ...item, accountId }), createdAt: Date.now(), updatedAt: Date.now(),
+      });
+    }
   }
   return targets;
 }

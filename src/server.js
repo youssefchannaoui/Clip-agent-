@@ -540,6 +540,13 @@ function appState(user = null) {
     postTimes: config.postTimes, timezone: config.timezone, activeJobs: agent.engine.activeJobCount(),
     log: logFor(user, 60), directPublishingEnabled: config.socialPublishEnabled,
     publishingSettings: publishingSettings(user), social: social.connectionStatus(user), billing: billing.publicBilling(user),
+    // How many accounts this plan may post to on each platform, computed by the
+    // same function the route enforces with. The browser needs it to know how
+    // many boxes to let someone tick -- and it is per platform, because the
+    // OAuth store can hold several Meta accounts and only one YouTube channel,
+    // so a single number would offer a choice that cannot be honoured.
+    publishingLimits: Object.fromEntries(['youtube', 'instagram', 'facebook', 'tiktok']
+      .map(provider => [provider, billing.accountsPerPlatform(user, provider)])),
   };
 }
 
@@ -1186,13 +1193,39 @@ async function route(req, res, url) {
     const body = await readBody(req);
     try {
       const current = publishingSettings(currentUser);
+      // How many accounts this plan may publish to on one platform. Enforced
+      // here, at the HTTP boundary, because a limiter the route does not cross
+      // protects nothing -- and refused rather than silently truncated, so
+      // someone who picks four Pages is told why instead of quietly losing one.
+      const capAccounts = (provider, supplied) => {
+        if (!Array.isArray(supplied)) return undefined;
+        const ids = [...new Set(supplied.map(value => String(value || '')).filter(Boolean))];
+        const allowed = billing.accountsPerPlatform(currentUser, provider);
+        if (ids.length > allowed) {
+          throw new Error(allowed === 1
+            ? `Your plan can post to one ${provider} account. Studio can post to ${config.accountsPerPlatformStudio} on the platforms that support it.`
+            : `Your plan can post to ${allowed} ${provider} accounts at once.`);
+        }
+        return ids;
+      };
+      const withCap = (provider, incoming) => {
+        const ids = capAccounts(provider, incoming?.accountIds);
+        if (ids === undefined) return incoming;
+        // accountId is derived here, not left to the store's normalisation:
+        // validatePublishingSettings runs on THIS object, before it is saved,
+        // and reads accountId to check the destination is connected. A save
+        // carrying only the list -- which is what the account picker sends --
+        // was refused with "Choose a connected account" for accounts that were
+        // connected all along.
+        return { ...incoming, accountIds: ids, accountId: ids[0] || '' };
+      };
       const next = {
         enabled: Boolean(body.enabled),
-        youtube: { ...current.youtube, ...(body.youtube || {}), enabled: Boolean(body.youtube?.enabled) },
-        instagram: { ...current.instagram, ...(body.instagram || {}), enabled: Boolean(body.instagram?.enabled), shareToFeed: body.instagram?.shareToFeed !== false },
-        facebook: { ...current.facebook, ...(body.facebook || {}), enabled: Boolean(body.facebook?.enabled) },
+        youtube: { ...current.youtube, ...withCap('youtube', body.youtube || {}), enabled: Boolean(body.youtube?.enabled) },
+        instagram: { ...current.instagram, ...withCap('instagram', body.instagram || {}), enabled: Boolean(body.instagram?.enabled), shareToFeed: body.instagram?.shareToFeed !== false },
+        facebook: { ...current.facebook, ...withCap('facebook', body.facebook || {}), enabled: Boolean(body.facebook?.enabled) },
         tiktok: {
-          ...current.tiktok, ...(body.tiktok || {}), enabled: Boolean(body.tiktok?.enabled),
+          ...current.tiktok, ...withCap('tiktok', body.tiktok || {}), enabled: Boolean(body.tiktok?.enabled),
           allowComments: body.tiktok?.allowComments !== false,
           allowDuet: Boolean(body.tiktok?.allowDuet), allowStitch: Boolean(body.tiktok?.allowStitch),
           // Coerced rather than spread through: a sub-option arriving true with
@@ -1808,7 +1841,13 @@ async function route(req, res, url) {
   const clipRetryPublish = pathname.match(/^\/api\/clips\/([^/]+)\/retry-publish$/);
   if (method === 'POST' && clipRetryPublish) {
     const body = await readBody(req);
-    try { const id = decodeURIComponent(clipRetryPublish[1]); assertCanAccessClip(currentUser, id); return json(res, 200, { ok: true, clip: publicClip(agent.retryPublishing(id, String(body.provider || ''))) }); }
+    try {
+      const id = decodeURIComponent(clipRetryPublish[1]); assertCanAccessClip(currentUser, id);
+      // targetId addresses ONE destination; provider stays for older clients
+      // and for "retry everything on this platform".
+      const selector = { targetId: String(body.targetId || ''), provider: String(body.provider || '') };
+      return json(res, 200, { ok: true, clip: publicClip(agent.retryPublishing(id, selector)) });
+    }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
   const clipReady = pathname.match(/^\/api\/clips\/([^/]+)\/ready$/);

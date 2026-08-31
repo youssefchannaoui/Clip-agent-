@@ -152,6 +152,41 @@ export function atLeast(user, tier) {
   return TIER_RANK[tierOf(user)] >= (TIER_RANK[tier] ?? 99);
 }
 
+/**
+ * Platforms whose credentials can currently hold more than one account.
+ *
+ * This is a fact about the OAuth STORE, not about what is sold.
+ * `setConnection` in tenancy.js writes `socialConnections[userId][provider] =
+ * connection` -- one object, overwritten -- so a second YouTube channel would
+ * destroy the first one's refresh token. Meta is different by construction:
+ * one Facebook login stores `{ provider: 'meta', accounts: [...] }`, a LIST of
+ * Pages and Instagram accounts, which `selectedAccount` already picks from by
+ * id.
+ *
+ * So Facebook and Instagram can genuinely fan out today and YouTube and TikTok
+ * cannot, and offering a second YouTube slot would be a control that cannot
+ * reach an export -- invariant 9. When the store learns to hold several
+ * connections per provider, add them here; nothing else in the cap changes.
+ */
+export const MULTI_ACCOUNT_PROVIDERS = Object.freeze(['facebook', 'instagram']);
+
+/**
+ * How many accounts on ONE platform this account may publish a clip to.
+ *
+ * Per platform, never a total: Studio is three YouTube channels AND three
+ * TikToks, not three destinations shared out between them.
+ *
+ * Deliberately `atLeast`, not `paysForAtLeast`. This is feature access, and the
+ * operator must not be locked out of their own product -- the money-based check
+ * is for queue position and posting slots, where counting the owner as Studio
+ * would let a test import preempt a paying customer.
+ */
+export function accountsPerPlatform(user, provider = '') {
+  if (!atLeast(user, 'studio')) return 1;
+  if (provider && !MULTI_ACCOUNT_PROVIDERS.includes(provider)) return 1;
+  return Math.max(1, config.accountsPerPlatformStudio);
+}
+
 export function topups() {
   return {
     boost100: {
@@ -346,6 +381,7 @@ export const FEATURES = Object.freeze({
   // than selling something new.
   priorityRender: Object.freeze({ tier: 'studio', label: 'Your lectures jump the render queue' }),
   extraSlots: Object.freeze({ tier: 'studio', label: `Post up to ${config.postSlotsStudio} times a day, not four` }),
+  multiChannel: Object.freeze({ tier: 'studio', label: `Send one clip to up to ${config.accountsPerPlatformStudio} accounts on a platform` }),
 });
 
 /** Kept as a name because the marketing pages and tests speak in these terms. */

@@ -97,17 +97,24 @@ const PLATFORM_LABELS = { youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Inst
 
 export function postSummaryMessage({ clipTitle, targets, scheduleUrl }) {
   const label = key => PLATFORM_LABELS[key] || key;
+  // Named per DESTINATION, not per platform: a clip going to three Facebook
+  // Pages otherwise reads "Facebook, Facebook, Facebook" in the subject line
+  // and gives no way to tell which one refused.
+  const named = target => `${label(target.provider)}${target.accountName ? ` (${target.accountName})` : ''}`;
+  // The subject stays platform-level and deduped -- "live on Facebook" reads
+  // better than the same word three times -- while the body names each one.
+  const platforms = list => [...new Set(list.map(target => label(target.provider)))].join(', ');
   const posted = (targets || []).filter(target => target.status === 'posted');
   const missed = (targets || []).filter(target => target.status !== 'posted');
-  const lines = posted.map(target => `- ${label(target.provider)}: ${target.postUrl || 'live'}`);
-  if (missed.length) lines.push(`Did not go out: ${missed.map(target => label(target.provider)).join(', ')} — open your schedule to retry.`);
-  const where = posted.map(target => label(target.provider)).join(', ');
+  const lines = posted.map(target => `- ${named(target)}: ${target.postUrl || 'live'}`);
+  if (missed.length) lines.push(`Did not go out: ${missed.map(named).join(', ')} — open your schedule to retry.`);
+  const where = platforms(posted);
   return {
     subject: `Your clip is live on ${where || 'your channels'} — ${String(clipTitle || 'Untitled').slice(0, 60)}`,
     text: `"${clipTitle}" has been published.\n\n${lines.join('\n')}\n\nSee everything you have posted: ${scheduleUrl}`,
     html: shell(
       `Your clip is live on ${where || 'your channels'}`,
-      `"${String(clipTitle || 'Untitled')}" has been published.<br><br>${posted.map(target => `${label(target.provider)}: <a href="${target.postUrl || scheduleUrl}" style="color:#D9B478">${target.postUrl || 'view'}</a>`).join('<br>')}${missed.length ? `<br><br>Did not go out: ${missed.map(target => label(target.provider)).join(', ')} — you can retry from your schedule.` : ''}`,
+      `"${String(clipTitle || 'Untitled')}" has been published.<br><br>${posted.map(target => `${named(target)}: <a href="${target.postUrl || scheduleUrl}" style="color:#D9B478">${target.postUrl || 'view'}</a>`).join('<br>')}${missed.length ? `<br><br>Did not go out: ${missed.map(named).join(', ')} — you can retry from your schedule.` : ''}`,
       'Open your schedule',
       scheduleUrl,
     ),

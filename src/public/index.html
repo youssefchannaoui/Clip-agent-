@@ -287,6 +287,21 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 .studio-conn-public { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 10px 12px; border: 1px solid rgba(127,209,166,.22); border-radius: 11px; background: rgba(127,209,166,.05); font-size: 11.5px; line-height: 1.5; color: #A9CBB8; }
 .studio-conn-public i { font-size: 14px; color: #7FD1A6; flex: none; margin-top: 1px; }
 #studioConnList { display: flex; flex-direction: column; gap: 9px; }
+/* The multi-account picker. Its own row under the platform line so three Pages
+   wrap onto their own line at 375px instead of squeezing the switch off the
+   right edge. */
+#studioConnList .studio-conn-accounts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center;
+  gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.07); }
+#studioConnList .studio-conn-accounts-h { width: 100%; font-size: 11px; letter-spacing: .04em;
+  text-transform: uppercase; color: #8A8A93; margin-bottom: 2px; }
+#studioConnList .studio-conn-account { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: 12px; padding: 5px 9px; border-radius: 999px; border: 1px solid rgba(255,255,255,.12);
+  color: #C9C9D1; transition: background .15s ease, border-color .15s ease, color .15s ease; }
+#studioConnList .studio-conn-account:hover { border-color: rgba(217,180,120,.5); }
+#studioConnList .studio-conn-account.is-on { border-color: #D9B478; color: #F2E4C9; background: rgba(217,180,120,.12); }
+#studioConnList .studio-conn-account input:disabled { cursor: not-allowed; }
+#studioConnList .studio-conn-account:has(input:disabled) { opacity: .45; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) { #studioConnList .studio-conn-account { transition: none; } }
 /* Connecting an account does not switch it on — publishingSettings.<key>.enabled
    is a separate flag that defaults to false. Without this switch the modal said
    "Connected — not switched on" and offered no way to change it. */
@@ -4779,6 +4794,27 @@ function renderStudio(){
     const closeConn=()=>{connEls.root.classList.add('hide');StudioAdapter.ui.connProvider=null};
     $$('[data-conn-close]').forEach(el=>el.onclick=closeConn);
     document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!connEls.root.classList.contains('hide'))closeConn()});
+
+    /* One clip, several accounts on the same platform -- Studio only, and only
+       where the credentials can actually hold more than one. Meta stores a LIST
+       of Pages behind one login, so Facebook and Instagram can fan out today;
+       YouTube and TikTok keep a single connection per user, so their limit
+       comes back as 1 and no picker is drawn. Showing boxes that cannot be
+       ticked would be a control that reaches nothing. */
+    function accountPicker(r,i){
+      const accounts=r.accounts||[],max=Number(r.maxAccounts||1);
+      if(accounts.length<2||max<2)return '';
+      const chosen=r.accountIds&&r.accountIds.length?r.accountIds:[];
+      const atCap=chosen.length>=max;
+      return `<div class="studio-conn-accounts">
+        <span class="studio-conn-accounts-h">Posting to ${chosen.length} of ${max} allowed</span>
+        ${accounts.map(a=>{
+          const on=chosen.indexOf(a.id)>-1;
+          return `<label class="studio-conn-account${on?' is-on':''}">
+            <input type="checkbox" data-conn-account="${i}" value="${esc(a.id)}" ${on?'checked':''} ${!on&&atCap?'disabled':''}>
+            <span>${esc(a.name||a.id)}</span></label>`}).join('')}
+      </div>`;
+    }
     function paintConnections(){
       if(!DATA)return;
       const rows=StudioAdapter.bindings(DATA).connections;
@@ -4807,7 +4843,7 @@ function renderStudio(){
           <span class="studio-conn-actions">
             <button type="button" class="primary" data-conn-connect="${i}" ${off?'disabled':''}>${linked?'Reconnect':'Connect'}</button>
             <button type="button" class="danger" data-conn-disconnect="${i}" ${linked?'':'disabled'}>Disconnect</button>
-          </span></div>`}).join('');
+          </span>${accountPicker(r,i)}</div>`}).join('');
       $$('[data-conn-toggle]').forEach(b=>b.onclick=async()=>{
         const p=rows[Number(b.dataset.connToggle)];
         await StudioAdapter.onPublishingToggle(p.key,b.getAttribute('aria-checked')!=='true');
@@ -4818,6 +4854,11 @@ function renderStudio(){
       $$('[data-conn-disconnect]').forEach(b=>b.onclick=()=>{
         const p=rows[Number(b.dataset.connDisconnect)];StudioAdapter.ui.connProvider=p.key;
         StudioAdapter.bindings(DATA).disconnect({preventDefault(){}})});
+      $$('[data-conn-account]').forEach(box=>box.onchange=async()=>{
+        const p=rows[Number(box.dataset.connAccount)];
+        const picked=$$(`[data-conn-account="${box.dataset.connAccount}"]`).filter(x=>x.checked).map(x=>x.value);
+        await StudioAdapter.onPublishingAccounts(p.key,picked);
+        paintConnections();});
       paintTikTokOptions();
     }
     StudioAdapter.onOpenConnections=()=>{paintConnections();connEls.root.classList.remove('hide')};
@@ -4998,6 +5039,13 @@ function renderStudio(){
       const next={...cur,[key]:{...(cur[key]||{}),enabled:on}};
       next.enabled=['youtube','instagram','facebook','tiktok'].some(p=>next[p]&&next[p].enabled);
       return api('/api/publishing-settings',{method:'POST',body:JSON.stringify(next)})},'Publishing updated');
+    /* Sends the whole settings object, like onPublishingToggle: the route
+       rebuilds every provider from what it is given, so a patch carrying one
+       key would switch the other three off. */
+    StudioAdapter.onPublishingAccounts=(key,ids)=>studioDo(()=>{
+      const cur=DATA?.publishingSettings||{};
+      const next={...cur,[key]:{...(cur[key]||{}),accountIds:ids}};
+      return api('/api/publishing-settings',{method:'POST',body:JSON.stringify(next)})},'Destinations updated');
     StudioAdapter.onTestConnection=name=>studioDo(()=>api(`/api/social/${encodeURIComponent(name)}/test`,{method:'POST',body:JSON.stringify({})}),'Connection looks healthy');
     /* Resolve the pasted link first, so the range picker and the token estimate
        are based on the real source duration rather than a guess. */
@@ -5814,8 +5862,8 @@ function providerCard(name){
   const help={youtube:'Long-form uploads and Shorts workflow',instagram:'Reels through Meta connection',facebook:'Facebook Reels/page publishing',tiktok:'Direct Post requires latest creator options'}[name]||'Publishing destination';
   return `<div class="platform-card ${esc(name)}"><div class="platform-head">${platformIcon(name)}<div class="platform-title"><strong>${esc(name)}</strong><span>${esc(help)}</span></div><span class="spacer"></span><span class="side-pill ${state}"><i class="connection-dot ${state}"></i> ${esc(stateText)}</span></div><div class="platform-body">${selected?`<div class="account-pick">${selected.avatar?`<img src="${esc(selected.avatar)}" alt="">`:platformIcon(name,'side-account-icon')}<div><strong>${esc(selected.name)}</strong><div class="code">${esc(selected.id)}</div></div></div>`:`<div class="platform-empty"><span class="connection-dot ${state}"></span><span>No connected account yet. Use Connect when the app credentials are configured.</span></div>`}<label class="editor-toggle"><input type="checkbox" data-publish-enabled="${name}" ${setting.enabled?'checked':''} ${!provider.connected?'disabled':''}>Publish automatically to ${esc(name)}</label>${accounts.length?`<div class="editor-row"><label>Account</label><select data-publish-account="${name}">${accounts.map(a=>`<option value="${esc(a.id)}" ${a.id===setting.accountId?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div>`:''}${name==='youtube'?`<div class="editor-row"><label>Privacy</label><select id="youtubePrivacy"><option value="private" ${setting.privacy==='private'?'selected':''}>Private</option><option value="unlisted" ${setting.privacy==='unlisted'?'selected':''}>Unlisted</option><option value="public" ${setting.privacy==='public'?'selected':''}>Public</option></select></div>`:''}${name==='tiktok'?`<div class="editor-row"><label>Privacy</label><select id="tiktokPrivacy"><option value="SELF_ONLY" ${setting.privacy==='SELF_ONLY'?'selected':''}>Only me</option><option value="MUTUAL_FOLLOW_FRIENDS" ${setting.privacy==='MUTUAL_FOLLOW_FRIENDS'?'selected':''}>Friends</option><option value="FOLLOWER_OF_CREATOR" ${setting.privacy==='FOLLOWER_OF_CREATOR'?'selected':''}>Followers</option><option value="PUBLIC_TO_EVERYONE" ${setting.privacy==='PUBLIC_TO_EVERYONE'?'selected':''}>Public</option></select></div><div class="style-note">Run Test after connecting TikTok so the latest privacy and interaction options are displayed before scheduling.</div>`:''}<div class="platform-actions">${provider.connected?`<button class="btn btn-ghost btn-sm" data-social-test="${name}">${icon('check')} Test connection</button><button class="btn btn-ghost btn-sm btn-danger" data-social-disconnect="${oauth}">Disconnect</button>`:`<button class="btn btn-sm" data-social-connect="${oauth}" ${!provider.configured?'disabled':''}>${icon(name==='instagram'||name==='facebook'?'instagram':name)} Connect ${oauth==='meta'?'Meta':name}</button>`}</div>${provider.lastTestError?`<div class="style-note status-bad">${esc(provider.lastTestError)}</div>`:''}</div></div>`
 }
-function renderPublishing(){if(!DATA||!$('#platformGrid'))return;const p=DATA.publishingSettings||{},social=DATA.social||{};$('#publishingEnabled').checked=Boolean(p.enabled);$('#platformGrid').innerHTML=['youtube','instagram','facebook','tiktok'].map(providerCard).join('');const targets=DATA.clips.flatMap(c=>(c.targets||[]).map(t=>({...t,title:c.title,clipId:c.id}))).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));$('#publishHistory').innerHTML=targets.length?targets.slice(0,30).map(t=>{const pct=Number.isFinite(t.progressPercent)?t.progressPercent:null;const detail=t.error||t.platformStatus||t.stage||t.status;return `<div class="target-line" style="align-items:flex-start"><span class="target-dot ${esc(t.status)}" style="margin-top:7px"></span><strong>${esc(t.provider)}</strong><span>${esc(t.title)}</span><span class="spacer ${t.status==='failed'?'status-bad':t.status==='posted'?'status-good':'code'}"><b>${esc(t.stage||t.status)}</b>${pct!==null?` · ${pct}%`:''}<br><small>${esc(detail)}${t.attempts?` · attempt ${t.attempts}`:''}${t.updatedAt?` · updated ${age(t.updatedAt)}`:''}</small>${pct!==null&&t.status!=='posted'?`<div class="stage-bar" style="margin-top:6px;min-width:220px"><div class="stage-fill" style="width:${pct}%"></div></div>`:''}</span>${t.postUrl?`<a href="${esc(t.postUrl)}" target="_blank" rel="noopener">Open post</a>`:''}${t.status==='failed'?`<button class="btn btn-ghost btn-sm" data-retry-target="${esc(t.clipId)}" data-provider="${esc(t.provider)}">Retry</button>`:''}</div>`}).join(''):'<span class="note">No platform transfers yet. Press Post now on a scheduled clip to begin.</span>';if($('#publishingIssues'))$('#publishingIssues').innerHTML=(social.issues||[]).length?(social.issues||[]).map(x=>`<div class="lec-warn">${esc(x)}</div>`).join(''):'<div class="style-note status-good">Publishing security and public URL checks passed.</div>';bindPublishingActions()}
-function bindPublishingActions(){$$('[data-social-connect]').forEach(b=>b.onclick=async()=>{setBusy(b,true,'Opening…');try{const r=await api(`/api/social/${b.dataset.socialConnect}/connect`,{method:'POST'});location.href=r.url}catch(e){toast(e.message,'bad');setBusy(b,false)}});$$('[data-social-disconnect]').forEach(b=>b.onclick=async()=>{if(!confirm('Disconnect this account and disable future uploads?'))return;try{await api(`/api/social/${b.dataset.socialDisconnect}/disconnect`,{method:'POST'});toast('Account disconnected');await refresh()}catch(e){toast(e.message,'bad')}});$$('[data-social-test]').forEach(b=>b.onclick=async()=>{const name=b.dataset.socialTest,account=$(`[data-publish-account="${name}"]`)?.value||'';setBusy(b,true,'Testing…');try{await api(`/api/social/${name}/test`,{method:'POST',body:JSON.stringify({accountId:account})});toast(`${name} connection works`,'good');await refresh()}catch(e){toast(e.message,'bad')}setBusy(b,false)});$$('[data-retry-target]').forEach(b=>b.onclick=async()=>{try{await api(`/api/clips/${encodeURIComponent(b.dataset.retryTarget)}/retry-publish`,{method:'POST',body:JSON.stringify({provider:b.dataset.provider})});toast('Publishing retry queued','good');await refresh()}catch(e){toast(e.message,'bad')}})}
+function renderPublishing(){if(!DATA||!$('#platformGrid'))return;const p=DATA.publishingSettings||{},social=DATA.social||{};$('#publishingEnabled').checked=Boolean(p.enabled);$('#platformGrid').innerHTML=['youtube','instagram','facebook','tiktok'].map(providerCard).join('');const targets=DATA.clips.flatMap(c=>(c.targets||[]).map(t=>({...t,title:c.title,clipId:c.id}))).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));$('#publishHistory').innerHTML=targets.length?targets.slice(0,30).map(t=>{const pct=Number.isFinite(t.progressPercent)?t.progressPercent:null;const detail=t.error||t.platformStatus||t.stage||t.status;return `<div class="target-line" style="align-items:flex-start"><span class="target-dot ${esc(t.status)}" style="margin-top:7px"></span><strong>${esc(t.provider)}${t.accountName?` · ${esc(t.accountName)}`:''}</strong><span>${esc(t.title)}</span><span class="spacer ${t.status==='failed'?'status-bad':t.status==='posted'?'status-good':'code'}"><b>${esc(t.stage||t.status)}</b>${pct!==null?` · ${pct}%`:''}<br><small>${esc(detail)}${t.attempts?` · attempt ${t.attempts}`:''}${t.updatedAt?` · updated ${age(t.updatedAt)}`:''}</small>${pct!==null&&t.status!=='posted'?`<div class="stage-bar" style="margin-top:6px;min-width:220px"><div class="stage-fill" style="width:${pct}%"></div></div>`:''}</span>${t.postUrl?`<a href="${esc(t.postUrl)}" target="_blank" rel="noopener">Open post</a>`:''}${t.status==='failed'?`<button class="btn btn-ghost btn-sm" data-retry-target="${esc(t.clipId)}" data-provider="${esc(t.provider)}" data-target-id="${esc(t.id||'')}">Retry</button>`:''}</div>`}).join(''):'<span class="note">No platform transfers yet. Press Post now on a scheduled clip to begin.</span>';if($('#publishingIssues'))$('#publishingIssues').innerHTML=(social.issues||[]).length?(social.issues||[]).map(x=>`<div class="lec-warn">${esc(x)}</div>`).join(''):'<div class="style-note status-good">Publishing security and public URL checks passed.</div>';bindPublishingActions()}
+function bindPublishingActions(){$$('[data-social-connect]').forEach(b=>b.onclick=async()=>{setBusy(b,true,'Opening…');try{const r=await api(`/api/social/${b.dataset.socialConnect}/connect`,{method:'POST'});location.href=r.url}catch(e){toast(e.message,'bad');setBusy(b,false)}});$$('[data-social-disconnect]').forEach(b=>b.onclick=async()=>{if(!confirm('Disconnect this account and disable future uploads?'))return;try{await api(`/api/social/${b.dataset.socialDisconnect}/disconnect`,{method:'POST'});toast('Account disconnected');await refresh()}catch(e){toast(e.message,'bad')}});$$('[data-social-test]').forEach(b=>b.onclick=async()=>{const name=b.dataset.socialTest,account=$(`[data-publish-account="${name}"]`)?.value||'';setBusy(b,true,'Testing…');try{await api(`/api/social/${name}/test`,{method:'POST',body:JSON.stringify({accountId:account})});toast(`${name} connection works`,'good');await refresh()}catch(e){toast(e.message,'bad')}setBusy(b,false)});$$('[data-retry-target]').forEach(b=>b.onclick=async()=>{try{await api(`/api/clips/${encodeURIComponent(b.dataset.retryTarget)}/retry-publish`,{method:'POST',body:JSON.stringify({targetId:b.dataset.targetId||'',provider:b.dataset.provider})});toast('Publishing retry queued','good');await refresh()}catch(e){toast(e.message,'bad')}})}
 
 function renderAutomation(){if(!DATA||!$('#autoEnabled'))return;const a=DATA.automationSettings||{},c=DATA.clipSettings||{};$('#autoEnabled').checked=Boolean(a.enabled);$('#skipQuotes').checked=Boolean(a.skipReviewRequired);$('#minimumScore').value=a.minimumScore;$('#minimumQuality').value=a.minimumQuality;$('#maxPerProject').value=a.maxPerProject;$('#clipCount').value=c.clipsPerVideo;$('#clipMin').value=c.clipMinSeconds;$('#clipMax').value=c.clipMaxSeconds;$('#automationSummary').innerHTML=`<div class="figs">${metric('AI model',DATA.readiness?.model||'—','Local transcription')}${metric('Active jobs',DATA.activeJobs,'Processing workers')}${metric('Auto score',`${a.minimumScore}+`,'Content threshold')}${metric('Quality',`${a.minimumQuality}+`,'Render threshold')}</div>`}
 

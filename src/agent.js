@@ -334,7 +334,7 @@ export function scheduleApprovedClip(clip, { at = null, day = null } = {}) {
   setTargets(clip);
   for (const target of clip.targets || []) target.nextTryAt = clip.scheduledAt;
   clip.status = 'scheduled'; clip.scheduleError = null; clip.scheduleErrorAt = null; save();
-  const destinationText = clip.targets?.length ? ` to ${clip.targets.map(target => target.provider).join(', ')}` : ' for local export';
+  const destinationText = clip.targets?.length ? ` to ${clip.targets.map(whereText).join(', ')}` : ' for local export';
   log(`Scheduled "${clip.title}"${destinationText}${clip.approvedBy === 'automation' ? ' automatically' : ''}.`, 'info', ownerOf(clip));
   return clip;
 }
@@ -432,7 +432,7 @@ export function refreshPublishingStatus(clip) {
     // the target, where the schedule and the activity feed both read it.
     const firstCompletion = clip.status !== 'posted';
     clip.status = 'posted'; clip.postedAt = clip.postedAt || Date.now(); clip.scheduledAt = null;
-    if (firstCompletion) log(`"${clip.title}" posted to ${posted.map(target => target.provider).join(', ')}.`, 'info', ownerOf(clip));
+    if (firstCompletion) log(`"${clip.title}" posted to ${posted.map(whereText).join(', ')}.`, 'info', ownerOf(clip));
     return;
   }
   clip.status = targets.some(target => target.status === 'failed') ? 'publish_failed' : 'ready';
@@ -493,7 +493,7 @@ async function processTarget(clip, target) {
   const now = Date.now();
   if (target.nextTryAt && target.nextTryAt > now) return;
   if (target.processingStartedAt && now - target.processingStartedAt > config.socialProcessingTimeoutMs) {
-    target.status = 'failed'; target.stage = `${target.provider} processing timed out`; target.error = `${target.provider} did not finish processing within the allowed time.`; target.nextTryAt = null;
+    target.status = 'failed'; target.stage = `${whereText(target)} processing timed out`; target.error = `${whereText(target)} did not finish processing within the allowed time.`; target.nextTryAt = null;
     maybeEmailPostSummary(clip);
     forgetDeadUpload(target);
     refreshPublishingStatus(clip); save(); return;
@@ -503,15 +503,15 @@ async function processTarget(clip, target) {
     let result;
     const canResumeProcessing = target.status === 'processing' || (target.externalId && ['instagram', 'tiktok'].includes(target.provider) && target.providerState?.stage !== 'uploading');
     if (canResumeProcessing) {
-      target.stage = `Checking ${target.provider} processing status`;
+      target.stage = `Checking ${whereText(target)} processing status`;
       result = await social.pollTarget(clip, target);
     } else {
-      target.status = 'publishing'; target.stage = `Preparing ${target.provider} upload`; target.error = null; target.updatedAt = Date.now(); save();
-      log(`Preparing "${clip.title}" for ${target.provider}.`, 'info', ownerOf(clip));
+      target.status = 'publishing'; target.stage = `Preparing ${whereText(target)} upload`; target.error = null; target.updatedAt = Date.now(); save();
+      log(`Preparing "${clip.title}" for ${whereText(target)}.`, 'info', ownerOf(clip));
       const file = await engine.socialPublishFile(clip.id, target.provider);
       try {
-        target.stage = `Uploading video to ${target.provider}`; target.updatedAt = Date.now(); save();
-        log(`Uploading "${clip.title}" to ${target.provider}.`, 'info', ownerOf(clip));
+        target.stage = `Uploading video to ${whereText(target)}`; target.updatedAt = Date.now(); save();
+        log(`Uploading "${clip.title}" to ${whereText(target)}.`, 'info', ownerOf(clip));
         result = await social.publishTarget(clip, target, file);
       } finally {
         engine.releaseSocialPublishFile(file);
@@ -528,7 +528,7 @@ async function processTarget(clip, target) {
       ownerFeed.clipPosted(clip.title, target.provider, ownerOfRecord(clip)?.email).catch(() => {});
       target.postUrl = result?.postUrl || ''; target.stage = 'Published'; target.nextTryAt = null; target.updatedAt = Date.now(); target.error = null; delete target.processingStartedAt;
       maybeEmailPostSummary(clip);
-      log(`Published "${clip.title}" to ${target.provider}${target.accountName ? ` (${target.accountName})` : ''}.`, 'info', ownerOf(clip));
+      log(`Published "${clip.title}" to ${whereText(target)}.`, 'info', ownerOf(clip));
     }
   } catch (error) {
     target.attempts = Number(target.attempts || 0) + 1;
@@ -548,13 +548,13 @@ async function processTarget(clip, target) {
     // surprise, and a surprise should be surfaced rather than slept on.
     const retryable = error.retryable === true && target.attempts < config.socialMaxAttempts;
     if (retryable) {
-      target.status = 'retrying'; target.stage = `Retrying ${target.provider}`; target.nextTryAt = Date.now() + social.retryDelay(target.attempts);
-      log(`${target.provider} publishing will retry for "${clip.title}" (${target.attempts}/${config.socialMaxAttempts}): ${error.message}`, 'warn', ownerOf(clip));
+      target.status = 'retrying'; target.stage = `Retrying ${whereText(target)}`; target.nextTryAt = Date.now() + social.retryDelay(target.attempts);
+      log(`${whereText(target)} publishing will retry for "${clip.title}" (${target.attempts}/${config.socialMaxAttempts}): ${error.message}`, 'warn', ownerOf(clip));
     } else {
-      target.status = 'failed'; target.stage = `${target.provider} failed`; target.nextTryAt = null; delete target.processingStartedAt;
+      target.status = 'failed'; target.stage = `${whereText(target)} failed`; target.nextTryAt = null; delete target.processingStartedAt;
       maybeEmailPostSummary(clip);
       forgetDeadUpload(target);
-      log(`${target.provider} publishing failed for "${clip.title}": ${error.message}`, 'error', ownerOf(clip));
+      log(`${whereText(target)} publishing failed for "${clip.title}": ${error.message}`, 'error', ownerOf(clip));
     }
   }
   refreshPublishingStatus(clip); save();
@@ -627,18 +627,47 @@ export async function publishNow(id) {
     for (const target of clip.targets || []) target.nextTryAt = Date.now();
     clip.status = 'scheduled'; save();
   }
-  const providers = (clip.targets || []).filter(target => target.status !== 'posted').map(target => target.provider);
-  log(`Publishing started for "${clip.title}"${providers.length ? ` to ${providers.join(', ')}` : ''}.`, 'info', ownerOf(clip));
+  const pending = (clip.targets || []).filter(target => target.status !== 'posted').map(whereText);
+  log(`Publishing started for "${clip.title}"${pending.length ? ` to ${pending.join(', ')}` : ''}.`, 'info', ownerOf(clip));
   publishClip(clip).catch(error => {
     log(`Publishing crashed for "${clip.title}": ${error.message}`, 'error', ownerOf(clip));
   });
   return clip;
 }
 
-export function retryPublishing(id, provider = '') {
+/**
+ * Re-arm a clip's failed destinations.
+ *
+ * `selector` takes a target id, a provider, or nothing (everything). The string
+ * form is the old signature and still means a provider, because saved UI and
+ * any caller written before multi-account passes one.
+ *
+ * The id form is what multi-account needs: with three Facebook Pages on a clip,
+ * selecting by provider re-armed ALL of them and cleared their error text, so
+ * retrying the rate-limited Page also re-ran the one that had been refused
+ * outright and destroyed the reason it gave.
+ */
+/**
+ * One destination, named the way a person reading the activity feed would name
+ * it: the platform, and which account on it.
+ *
+ * Line 531 already did this for the success message; everything else said only
+ * the provider. That was harmless while a clip could hold one target per
+ * platform, and became actively misleading the moment it could hold three --
+ * "facebook failed" three times over, with no way to tell which Page.
+ */
+function whereText(target) {
+  return `${target.provider}${target.accountName ? ` (${target.accountName})` : ''}`;
+}
+
+export function retryPublishing(id, selector = '') {
   const clip = clipById(id);
   if (!clip) throw new Error('That clip no longer exists.');
-  const targets = (clip.targets || []).filter(target => !provider || target.provider === provider);
+  const { targetId = '', provider = '' } = typeof selector === 'string' ? { provider: selector } : (selector || {});
+  const targets = (clip.targets || []).filter(target => {
+    if (targetId) return target.id === targetId;
+    return !provider || target.provider === provider;
+  });
   if (!targets.length) throw new Error('No matching publishing destination exists for this clip.');
   for (const target of targets) {
     if (target.status === 'posted') continue;
