@@ -5539,12 +5539,25 @@ StudioAdapter.onProbeSource=async url=>{try{
           const paid=Boolean(DATA&&DATA.billing&&DATA.billing.current&&DATA.billing.current.features&&DATA.billing.current.features.watermark);
           const host=anchorBtn.closest('section,div[class]')||anchorBtn.parentNode;
           if(!host||!host.parentNode) return;
+          /* Top of the LEFT COLUMN, above Style -- not a full-width bar across
+             the whole screen. The column is the first <section> under the
+             screen container; the toolbar this button sits in has none, so
+             that finds it without depending on a generated class name, which
+             the design export regenerates on every re-import. */
+          const mount=host.parentNode.querySelector('section')||host.parentNode;
           let box=document.getElementById('dcWatermark');
-          if(!box){ box=document.createElement('div'); box.id='dcWatermark'; host.parentNode.insertBefore(box,host.nextSibling); }
+          if(!box){ box=document.createElement('div'); box.id='dcWatermark'; }
+          // Idempotent and self-correcting: a render that replaced the column
+          // leaves the old node orphaned, so re-seat it rather than trusting
+          // that it is still in the right place.
+          if(box.parentNode!==mount||box.previousElementSibling){ mount.insertBefore(box,mount.firstElementChild); }
           const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
           const on=Boolean(String(saved.watermark||'').trim())&&Number(saved.watermarkOpacity)>0;
-          box.style.cssText='flex:none;margin-top:14px;padding:16px 18px;border-radius:14px;'
-            +'display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;'
+          /* flex:none matters -- the column is a flex container with its own
+             scroll, so a child that does not say so is shrinkable and gets
+             squeezed to nothing by the cards below it. */
+          box.style.cssText='flex:none;margin:0 0 12px;padding:14px 16px;border-radius:14px;'
+            +'display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;'
             +'border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.02)';
           box.innerHTML='<div><div style="font:600 10.5px/1 Inter,sans-serif;letter-spacing:.16em;'
             +'text-transform:uppercase;color:#D9B478">Watermark</div>'

@@ -2128,3 +2128,26 @@ symptom.
 - **Any future host-injected panel belongs in paintStudio's list**, not on an
   observer. The observer stays as a backstop for renders that do not go through
   paintStudio.
+
+## The watermark row sits in the left column, not across the screen (v3.53.6)
+
+Youssef: "move the water mark on the top of the left side box not the top of
+the screen."
+
+- It was injected as a sibling of the toolbar, so it spanned the full 1052px
+  content width above BOTH columns. It is now the first child of the left
+  column, directly above Style, where the setting it changes actually lives.
+- **The mount is `container.querySelector('section')`, not a class.** The left
+  column is the first `<section>` under the screen container and the toolbar
+  has none, so this finds it without naming a generated class -- the design
+  export regenerates every hashed class name on re-import, which is the whole
+  reason this row is host-rendered in the first place.
+- **`flex:none` is load-bearing here.** The column is a flex container with its
+  own scroll, so a child that does not declare it is shrinkable and gets
+  squeezed by the cards below -- the same trap the Performance screen hit
+  (every direct child of a scrolling flex column needs it).
+- Re-seating is idempotent and self-correcting: a render that replaced the
+  column leaves the old node orphaned, so the paint checks parent AND position
+  rather than trusting the node is still where it was put.
+- Verified at 1440x900 and through 12 simulated drag renders: first child every
+  time, 0 renders ending with no row, 0 renders where it moved.
