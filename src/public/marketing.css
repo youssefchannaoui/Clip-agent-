@@ -486,3 +486,44 @@ svg{width:1em;height:1em;display:block;stroke:currentColor;stroke-width:1.8;stro
 .tool-followup span { color: var(--muted, #8b8b93); font-size: 13px; line-height: 1.6; max-width: 60ch; display: block; }
 .tool-followup .button { flex: none; }
 @media (max-width: 620px) { .tool-followup { padding: 16px; } .tool-followup .button { width: 100%; justify-content: center; } }
+
+/* ── Hero: side by side, so the product is in the first screen ──────────────
+   The stacked hero was 1462px tall with the product imagery at the bottom, so
+   on a 900px screen a visitor saw a wall of type and none of the nineteen
+   images. Measured, not guessed. Both competitors solve this the same way:
+   copy on one side, the product on the other, both above the fold.
+   Below 1080px it falls back to the original centred stack. */
+@media (min-width: 1080px){
+  .hero-split{
+    display:grid;
+    grid-template-columns:minmax(0,1.02fr) minmax(0,1fr);
+    align-items:center;
+    gap:48px;
+    text-align:left;
+    padding-top:64px;
+    padding-bottom:56px;
+  }
+  .hero-split .hero-copy-col{max-width:640px}
+  .hero-split h1{margin:18px 0 16px;font-size:clamp(44px,3.9vw,60px);max-width:none}
+  .hero-split .hero-copy{margin:0;max-width:560px;font-size:17px}
+  .hero-split .purpose-line{margin:12px 0 0;max-width:520px}
+  .hero-split .source-bar{margin:24px 0 0;width:100%}
+  .hero-split .hero-actions{justify-content:flex-start;flex-wrap:wrap;margin-top:14px}
+  .hero-split .trust-strip{justify-content:flex-start;flex-wrap:wrap}
+  /* The product column carries its own height; the old 76px top margin and
+     650px floor were sized for a full-width block underneath the copy. */
+  .hero-split .hero-product{margin:0;padding:0;min-height:0;grid-column:2}
+  .hero-split .hero-copy-col{grid-column:1}
+  .hero-split .capability-rail{grid-column:1 / -1;margin-top:26px}
+  .hero-split .hero-reel{width:118px}
+}
+
+/* An entry animation must not be able to scroll the page sideways.
+   The price cards slide in from translateX(34px) with a backwards fill, so on a
+   375px screen they sat 34px right of where they land and the document was
+   18px wider than the viewport for the length of the animation -- a real
+   sideways scroll on a phone, on the section that converts. Measured: 393px
+   against a 375px viewport before the animation finished, 375px after.
+   `clip` rather than `hidden` so this never becomes a scroll container. */
+.pricing-section,
+.token-shop{overflow-x:clip}

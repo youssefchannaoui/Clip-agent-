@@ -496,7 +496,8 @@ function faqSchema() {
 export function home({ base, currentUser }) {
   const body = `
   <main>
-    <section class="hero wrap">
+    <section class="hero wrap hero-split">
+      <div class="hero-copy-col">
       <span class="eyebrow"><i></i>Review-first clipping for Islamic creators</span>
       <h1>Turn long lectures into <span>review-ready short clips.</span></h1>
       <p class="hero-copy">Find the strongest moments, render vertical clips with English, Arabic or ayah-and-translation captions, then review and publish from one focused workspace.</p>
@@ -504,6 +505,7 @@ export function home({ base, currentUser }) {
       ${sourceForm()}
       <div class="hero-actions"><a class="button primary" href="/login?returnTo=/app">Start Basic free ${icon('arrow')}</a><a class="button secondary" href="#how-it-works">See how it works</a><a class="button text-link" href="/pricing">Compare plans</a></div>
       <div class="trust-strip" aria-label="DeenClipped product assurances"><span>${icon('shield')} Human review before publishing</span><span>${icon('language')} Multilingual and Quran-aware captions</span><span>${icon('brain')} Private DeenAI on our own server</span></div>
+      </div>
 
       <div class="hero-product reveal">
         <div class="hero-glow"></div>
