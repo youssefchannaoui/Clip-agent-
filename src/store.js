@@ -60,7 +60,11 @@ export function settingDefaults() {
       // default -- a pre-filled 'SELF_ONLY' is a choice the product made for
       // them. Enabling TikTok without choosing one is refused in
       // validatePublishingSettings.
-      tiktok: { enabled: false, accountId: '', accountIds: [], privacy: '', allowComments: true, allowDuet: false, allowStitch: false,
+      // accountOptions holds one set of posting choices per TikTok account:
+      // their guidelines make the audience a per-post decision, and one clip to
+      // three TikToks is three posts. The flat fields below stay as the
+      // fallback for every record written before that existed.
+      tiktok: { enabled: false, accountId: '', accountIds: [], accountOptions: {}, privacy: '', allowComments: true, allowDuet: false, allowStitch: false,
         // Commercial content disclosure. Off by default, as the guidelines
         // require; the two sub-options only mean anything when it is on.
         commercialContent: false, yourBrand: false, brandedContent: false },

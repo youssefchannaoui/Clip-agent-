@@ -167,6 +167,16 @@ export function atLeast(user, tier) {
  * record which platforms the STORE can serve -- if a provider ever needs a
  * single credential again, removing it here is the whole change.
  */
+/** How a billing period is said to a customer, rather than spelled as an id. */
+const PERIOD_LABELS = Object.freeze({ weekly: 'weekly', monthly: 'monthly', yearly: 'yearly' });
+
+/** The period half of a plan id, tolerating the three legacy ids. */
+function periodOf(planId) {
+  const id = normalisePlanId(planId);
+  const period = String(id || '').split('_')[1] || '';
+  return PERIOD_LABELS[period] ? period : '';
+}
+
 export const MULTI_ACCOUNT_PROVIDERS = Object.freeze(['facebook', 'instagram', 'youtube', 'tiktok']);
 
 /**
@@ -524,6 +534,23 @@ export function publicBilling(user) {
     freeIncludes: FREE_INCLUDES,
     current: {
       plan: currentPlan,
+      // What the customer should SEE. The raw id carries the billing period
+      // (`studio_monthly`), and the header was capitalising it straight into
+      // "Studio_monthly" -- which is the app failing to say plainly which
+      // subscription somebody is paying for. Built here so the header, the
+      // tokens screen and anything added later cannot disagree.
+      tier: tierOf(user),
+      tierName: TIERS[tierOf(user)]?.name || 'Basic',
+      periodLabel: PERIOD_LABELS[periodOf(currentPlan)] || '',
+      planName: unlimited ? 'Unlimited'
+        : tierOf(user) === 'basic' ? 'Basic'
+        : `${TIERS[tierOf(user)]?.name || ''}${PERIOD_LABELS[periodOf(currentPlan)] ? ` · ${PERIOD_LABELS[periodOf(currentPlan)]}` : ''}`.trim(),
+      // The features this plan does NOT include, with the tier that would.
+      // A locked thing should say what unlocks it rather than simply not being
+      // there -- silence reads as a broken app, not as an upsell.
+      locked: Object.fromEntries(Object.entries(FEATURES)
+        .filter(([key]) => !planFeatures(user)[key])
+        .map(([key, feature]) => [key, { label: feature.label, tier: feature.tier, tierName: TIERS[feature.tier]?.name || feature.tier }])),
       features: planFeatures(user),
       status: billing.status || 'free',
       unlimited,

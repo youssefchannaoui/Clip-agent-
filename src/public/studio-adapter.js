@@ -2065,8 +2065,14 @@
       .sort(function (a, b) { return new Date(a.scheduledAt) - new Date(b.scheduledAt); });
     var recent4 = clips.slice(-4).reverse();
 
-    var planLabel = current.unlimited ? 'Unlimited'
-      : (current.plan ? current.plan.charAt(0).toUpperCase() + current.plan.slice(1) : 'Free');
+    // The server names the plan, because the raw id carries the billing period
+    // and capitalising it produced "Studio_monthly" in the header -- the app
+    // failing to say plainly which subscription somebody pays for. The old
+    // spelling stays as the fallback for a browser holding a payload from
+    // before planName existed.
+    var planLabel = current.planName
+      || (current.unlimited ? 'Unlimited'
+        : (current.plan ? current.plan.charAt(0).toUpperCase() + current.plan.slice(1) : 'Free'));
     var ctx = { projects: projects, clips: clips, tracks: tracks, needsCount: needsCount, planLabel: planLabel };
 
     var providers = PLATFORMS.map(function (k) { return providerInfo(DATA, k); });

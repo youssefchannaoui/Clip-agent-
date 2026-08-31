@@ -725,6 +725,32 @@ function runDoctor() {
   });
 }
 
+/**
+ * One set of TikTok posting choices per account, sanitised.
+ *
+ * The same coercions the flat fields get below: a sub-option arriving true with
+ * its parent disclosure off would post a declaration the creator never made,
+ * and that is the rule TikTok's review is strictest about.
+ */
+function tiktokAccountOptions(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [accountId, value] of Object.entries(raw).slice(0, 10)) {
+    if (!accountId || !value || typeof value !== 'object') continue;
+    const commercial = Boolean(value.commercialContent);
+    out[String(accountId).slice(0, 128)] = {
+      privacy: String(value.privacy || ''),
+      allowComments: value.allowComments !== false,
+      allowDuet: Boolean(value.allowDuet),
+      allowStitch: Boolean(value.allowStitch),
+      commercialContent: commercial,
+      yourBrand: commercial && Boolean(value.yourBrand),
+      brandedContent: commercial && Boolean(value.brandedContent),
+    };
+  }
+  return out;
+}
+
 async function route(req, res, url) {
   const { pathname } = url; const method = req.method || 'GET';
   if (pathname === '/healthz') return json(res, 200, { ok: true, engine: config.processingMode === 'remote' ? 'remote-worker' : 'self-hosted' });
@@ -1567,6 +1593,11 @@ async function route(req, res, url) {
         facebook: { ...current.facebook, ...withCap('facebook', body.facebook || {}), enabled: Boolean(body.facebook?.enabled) },
         tiktok: {
           ...current.tiktok, ...withCap('tiktok', body.tiktok || {}), enabled: Boolean(body.tiktok?.enabled),
+          // Rebuilt key by key rather than spread through. This arrives from a
+          // customer's browser and lands in stored settings that the publish
+          // path reads, so an unknown key or a truthy string must not survive
+          // into a TikTok declaration nobody made.
+          accountOptions: tiktokAccountOptions(body.tiktok?.accountOptions),
           allowComments: body.tiktok?.allowComments !== false,
           allowDuet: Boolean(body.tiktok?.allowDuet), allowStitch: Boolean(body.tiktok?.allowStitch),
           // Coerced rather than spread through: a sub-option arriving true with

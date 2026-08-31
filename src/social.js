@@ -658,6 +658,32 @@ export function validatePublishingSettings(next, user) {
   return validateFor(settings, userId);
 }
 
+/**
+ * The posting options for ONE TikTok account.
+ *
+ * TikTok's content-sharing guidelines make the audience a per-POST choice, and
+ * one clip going to three TikToks is three posts. A single platform-level
+ * privacy therefore carried one creator's choice onto two other accounts --
+ * and each account has its own allowed options anyway, so the shared value
+ * could be one the second account does not even offer.
+ *
+ * Per-account values win; the platform-level fields remain the fallback,
+ * because every record written before this release holds its choice there and
+ * must keep posting exactly as it does today.
+ */
+const TIKTOK_OPTION_KEYS = ['privacy', 'allowComments', 'allowDuet', 'allowStitch',
+  'commercialContent', 'yourBrand', 'brandedContent'];
+
+export function tiktokOptionsFor(tiktok = {}, accountId = '') {
+  const base = {};
+  for (const key of TIKTOK_OPTION_KEYS) base[key] = tiktok[key];
+  const per = (tiktok.accountOptions || {})[String(accountId || '')] || {};
+  for (const key of TIKTOK_OPTION_KEYS) {
+    if (per[key] !== undefined) base[key] = per[key];
+  }
+  return base;
+}
+
 function validateFor(next, userId) {
   const status = connectionStatus(userId);
   if (next.enabled && !config.socialPublishEnabled) throw new SocialError('Automatic social publishing is disabled by SOCIAL_PUBLISH_ENABLED.');
@@ -683,34 +709,53 @@ function validateFor(next, userId) {
   if (next.youtube) next.youtube.privacy = 'public';
   // Required only once TikTok is switched on. Demanding it unconditionally
   // would make every unrelated save fail, because nothing is pre-selected.
-  const tiktokPrivacy = String(next.tiktok?.privacy || '');
-  if (tiktokPrivacy && !['SELF_ONLY', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'PUBLIC_TO_EVERYONE'].includes(tiktokPrivacy)) {
-    throw new SocialError('Choose a valid TikTok privacy setting.');
-  }
-  if (next.tiktok?.enabled && !tiktokPrivacy) {
-    throw new SocialError('Choose who can see your TikTok posts before enabling it.');
-  }
-  // A sub-option without the disclosure it belongs to would send a declaration
-  // the creator never made.
-  if (!next.tiktok?.commercialContent && (next.tiktok?.yourBrand || next.tiktok?.brandedContent)) {
-    throw new SocialError('Turn on the commercial content disclosure before choosing what it promotes.');
-  }
-  if (next.tiktok?.commercialContent && !next.tiktok?.yourBrand && !next.tiktok?.brandedContent) {
-    throw new SocialError('Say whether the content promotes your own brand, a third party, or both.');
-  }
-  // TikTok refuses branded content on a private post, so the two settings
-  // cannot be chosen independently.
-  if (next.tiktok?.brandedContent && tiktokPrivacy === 'SELF_ONLY') {
-    throw new SocialError('Branded content cannot be posted to "Only me". Choose a wider audience, or turn branded content off.');
-  }
-  const tiktokConnection = connection(userId, 'tiktok');
-  const creatorInfo = tiktokConnection?.creatorInfo;
-  const creatorOptions = creatorInfo?.privacy_level_options;
-  if (next.tiktok?.enabled && (!creatorInfo || Date.now() - Number(tiktokConnection?.lastTestAt || 0) > 24 * 60 * 60_000)) {
-    throw new SocialError('Run TikTok Test connection before enabling it. TikTok requires the latest creator privacy and interaction options to be displayed.');
-  }
-  if (next.tiktok?.enabled && Array.isArray(creatorOptions) && creatorOptions.length && !creatorOptions.includes(next.tiktok.privacy)) {
-    throw new SocialError(`The connected TikTok account does not currently allow ${next.tiktok.privacy}. Run Test connection and choose one of the available privacy options.`);
+  //
+  // Checked per ACCOUNT: each TikTok has its own audience choice and its own
+  // allowed options, so one shared answer could be an option the second
+  // account does not offer.
+  if (next.tiktok?.enabled) {
+    const chosen = next.tiktok.accountIds?.length
+      ? next.tiktok.accountIds
+      : [next.tiktok.accountId || ''];
+    for (const accountId of chosen) {
+      const options = tiktokOptionsFor(next.tiktok, accountId);
+      const conn = connectionFo(userId, 'tiktok', accountId);
+      // Named only when there is more than one, so a single-account account
+      // reads exactly as it always did.
+      const whose = chosen.length > 1 ? ` for ${conn?.name || accountId || 'this account'}` : '';
+      const privacy = String(options.privacy || '');
+      if (privacy && !['SELF_ONLY', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'PUBLIC_TO_EVERYONE'].includes(privacy)) {
+        throw new SocialError(`Choose a valid TikTok privacy setting${whose}.`);
+      }
+      if (!privacy) throw new SocialError(`Choose who can see your TikTok posts${whose} before enabling it.`);
+      // A sub-option without the disclosure it belongs to would send a
+      // declaration the creator never made.
+      if (!options.commercialContent && (options.yourBrand || options.brandedContent)) {
+        throw new SocialError(`Turn on the commercial content disclosure${whose} before choosing what it promotes.`);
+      }
+      if (options.commercialContent && !options.yourBrand && !options.brandedContent) {
+        throw new SocialError(`Say whether the content${whose} promotes your own brand, a third party, or both.`);
+      }
+      // TikTok refuses branded content on a private post, so the two settings
+      // cannot be chosen independently.
+      if (options.brandedContent && privacy === 'SELF_ONLY') {
+        throw new SocialError(`Branded content cannot be posted to "Only me"${whose}. Choose a wider audience, or turn branded content off.`);
+      }
+      const creatorInfo = conn?.creatorInfo;
+      if (!creatorInfo || Date.now() - Number(conn?.lastTestAt || 0) > 24 * 60 * 60_000) {
+        throw new SocialError(`Run TikTok Test connection${whose} before enabling it. TikTok requires the latest creator privacy and interaction options to be displayed.`);
+      }
+      const creatorOptions = creatorInfo?.privacy_level_options;
+      if (Array.isArray(creatorOptions) && creatorOptions.length && !creatorOptions.includes(privacy)) {
+        throw new SocialError(`That TikTok account does not currently allow ${privacy}${whose}. Run Test connection and choose one of the available privacy options.`);
+      }
+    }
+  } else {
+    // Switched off: only the shape of a stored value is worth refusing.
+    const privacy = String(next.tiktok?.privacy || '');
+    if (privacy && !['SELF_ONLY', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'PUBLIC_TO_EVERYONE'].includes(privacy)) {
+      throw new SocialError('Choose a valid TikTok privacy setting.');
+    }
   }
   return next;
 }
@@ -773,7 +818,12 @@ export function enabledTargetsForClip(clip) {
         id: `${provider}:${accountId || 'default'}`,
         userId,
         provider, accountId, accountName: provider === 'facebook' ? account.pageName : provider === 'instagram' ? account.instagramName : account.name,
-        status: 'scheduled', attempts: 0, nextTryAt: clip.scheduledAt || Date.now(), settings: structuredClone({ ...item, accountId }), createdAt: Date.now(), updatedAt: Date.now(),
+        status: 'scheduled', attempts: 0, nextTryAt: clip.scheduledAt || Date.now(), // A TikTok target carries ITS OWN audience and interaction choices; every
+        // other platform has nothing per-account to carry.
+        settings: structuredClone(provider === 'tiktok'
+          ? { ...item, accountId, ...tiktokOptionsFor(item, accountId) }
+          : { ...item, accountId }),
+        createdAt: Date.now(), updatedAt: Date.now(),
       });
     }
   }

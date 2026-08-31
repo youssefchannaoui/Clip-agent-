@@ -303,6 +303,12 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 #studioConnList .studio-conn-drop { border: 0; background: transparent; color: #8A8A93; cursor: pointer;
   font-size: 14px; line-height: 1; padding: 0 0 0 2px; }
 #studioConnList .studio-conn-drop:hover { color: #E3928C; }
+#studioConnList .studio-conn-locked { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  font-size: 11.5px; color: #8A8A93; }
+#studioConnList .studio-conn-locked i { color: #D9B478; }
+#studioConnList .studio-conn-up { border: 1px solid rgba(217,180,120,.45); background: transparent; color: #D9B478;
+  border-radius: 999px; padding: 3px 10px; font-size: 11px; cursor: pointer; }
+#studioConnList .studio-conn-up:hover { background: rgba(217,180,120,.12); }
 #studioConnList .studio-conn-account:has(input:disabled) { opacity: .45; cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) { #studioConnList .studio-conn-account { transition: none; } }
 /* Connecting an account does not switch it on — publishingSettings.<key>.enabled
@@ -4543,6 +4549,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         ? "By posting, you agree to TikTok's Branded Content Policy and Music Usage Confirmation."
         : "By posting, you agree to TikTok's Music Usage Confirmation.";
     }
+    let tkAccount='';
     function paintTikTokOptions(){
       /* Attached to the connections dialog, which is the one users can actually
          open. It was originally hung off the per-provider modal that
@@ -4564,15 +4571,26 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(!open){if(tkEl)tkEl.remove();tkEl=null;return}
 
       const provider=((DATA&&DATA.social&&DATA.social.providers)||{}).tiktok||{};
-      const account=(provider.accounts||[])[0]||{};
+      const accounts=provider.accounts||[];
+      /* Per ACCOUNT. TikTok's guidelines make the audience a per-post choice and
+         one clip to three TikToks is three posts, so a shared answer would carry
+         one creator's decision onto two other accounts -- and each account has
+         its own allowed options, so it might not even be offered there. One
+         switcher rather than three copies of the panel: same controls, and the
+         values follow whichever account is selected. */
+      if(!accounts.some(a=>a.id===tkAccount))tkAccount=(accounts[0]||{}).id||'';
+      const account=accounts.find(a=>a.id===tkAccount)||accounts[0]||{};
       const info=account.creatorInfo||null;
-      const set=((DATA&&DATA.publishingSettings)||{}).tiktok||{};
+      const tk=((DATA&&DATA.publishingSettings)||{}).tiktok||{};
+      /* Per-account values win; the flat fields stay the fallback so an account
+         that chose before this existed keeps exactly what it chose. */
+      const set={...tk,...(((tk.accountOptions)||{})[account.id||'']||{})};
       const LABELS={SELF_ONLY:'Only me',MUTUAL_FOLLOW_FRIENDS:'Friends',FOLLOWER_OF_CREATOR:'Followers',PUBLIC_TO_EVERYONE:'Everyone'};
       /* Only what this account actually offers. Anything else is refused by the
          API anyway, and offering it invites a failure at post time. */
       const options=(info&&Array.isArray(info.privacy_level_options)&&info.privacy_level_options.length)
         ? info.privacy_level_options : [];
-      const shape=[account.id||'',options.join(','),info?'i':'n',
+      const shape=[account.id||'',accounts.length,options.join(','),info?'i':'n',
         info&&info.comment_disabled?1:0,info&&info.duet_disabled?1:0,info&&info.stitch_disabled?1:0].join('|');
 
       if(!tkEl||tkEl.dataset.shape!==shape){
@@ -4583,6 +4601,9 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         const off=(flag,label)=>flag?` disabled title="${esc(account.name||'This account')} has turned ${label} off for new posts"`:'';
         tkEl.innerHTML=`<h4>Posting options</h4>
           <p class="dctk-sub">TikTok asks that you choose these yourself. Nothing is preselected.</p>
+          ${accounts.length>1?`<label class="dctk-field"><span>These options are for</span>
+            <select data-tk-account>${accounts.map(a=>`<option value="${esc(a.id)}" ${a.id===account.id?'selected':''}>${esc(a.name||a.id)}</option>`).join('')}</select></label>
+          <p class="dctk-sub">Each account is a separate post, so each one has its own audience.</p>`:''}
           ${info?'':'<p class="dctk-err">Run Test connection first — TikTok requires the latest options for this account before anything can be scheduled.</p>'}
           <label class="dctk-field"><span>Who can see your posts</span>
             <select data-tk="privacy"${info?'':' disabled'}>
@@ -4627,20 +4648,28 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           err.hidden=!clash;
           if(clash)err.textContent='Branded content cannot be posted to "Only me". Choose a wider audience.';
         };
+        const picker=tkEl.querySelector('[data-tk-account]');
+        if(picker)picker.onchange=()=>{tkAccount=picker.value;paintTikTokOptions()};
         tkEl.addEventListener('change',sync);
         sync();
 
         tkEl.querySelector('.dctk-save').onclick=()=>{
           if(tkBusy)return;
           const current=(DATA&&DATA.publishingSettings)||{};
-          const next={...current,tiktok:{...(current.tiktok||{}),
+          const chosen={
             privacy:q('privacy').value,
             allowComments:q('allowComments').checked,
             allowDuet:q('allowDuet').checked,
             allowStitch:q('allowStitch').checked,
             commercialContent:q('commercialContent').checked,
             yourBrand:q('yourBrand').checked,
-            brandedContent:q('brandedContent').checked}};
+            brandedContent:q('brandedContent').checked};
+          /* Written to this account's slot AND to the flat fields. The flat
+             ones are what a single-account save has always set and what the
+             fallback reads, so keeping them in step means nothing changes for
+             an account with one TikTok. */
+          const next={...current,tiktok:{...(current.tiktok||{}),...chosen,
+            accountOptions:{...((current.tiktok||{}).accountOptions||{}),[account.id||'']:chosen}}};
           tkBusy=true;
           const btn=tkEl.querySelector('.dctk-save');
           btn.disabled=true;btn.textContent='Saving…';
@@ -4810,7 +4839,19 @@ function renderStudio(){
        ticked would be a control that reaches nothing. */
     function accountPicker(r,i){
       const accounts=r.accounts||[],max=Number(r.maxAccounts||1);
-      if(accounts.length<2||max<2)return '';
+      if(accounts.length<2)return '';
+      /* Locked rather than absent. With several accounts connected and a plan
+         that allows one, the picker simply not being drawn reads as the app
+         losing the other accounts -- so say which plan posts to them and where
+         to get it. It is a statement and a link, not a control that does
+         nothing. */
+      if(max<2){
+        const locked=(((DATA||{}).billing||{}).current||{}).locked||{};
+        const needs=(locked.multiChannel||{}).tierName||'Studio';
+        return `<div class="studio-conn-accounts"><span class="studio-conn-locked">
+          <i class="ph ph-lock-simple"></i>${needs} posts one clip to 3 accounts here. You are on ${esc((((DATA||{}).billing||{}).current||{}).planName||'Basic')}.
+          <button type="button" class="studio-conn-up" data-conn-upgrade>See plans</button></span></div>`;
+      }
       /* Only YouTube and TikTok hold a credential per account. Facebook and
          Instagram are Pages inside ONE Meta login, so a per-account disconnect
          there would tear out that whole login and take the other platform with
@@ -4869,6 +4910,8 @@ function renderStudio(){
       $$('[data-conn-disconnect]').forEach(b=>b.onclick=()=>{
         const p=rows[Number(b.dataset.connDisconnect)];StudioAdapter.ui.connProvider=p.key;
         StudioAdapter.bindings(DATA).disconnect({preventDefault(){}})});
+      $$('[data-conn-upgrade]').forEach(b=>b.onclick=()=>{
+        closeConn();StudioAdapter.ui.screen='tokens';StudioAdapter.ui.tokensAnimAt=Date.now();renderAll();});
       $$('[data-conn-drop]').forEach(b=>b.onclick=async e=>{
         e.preventDefault();e.stopPropagation();
         const p=rows[Number(b.dataset.connDrop)];

@@ -248,3 +248,31 @@ test('the cap is refused over HTTP, not merely hidden in the interface', async (
   assert.equal(fourChannels.status, 400);
   assert.match((await fourChannels.json()).error, /3 youtube accounts/);
 });
+
+test('the plan is named the way a customer would say it', () => {
+  // The header capitalised the raw id straight into "Studio_monthly", which is
+  // the app failing to answer "what am I paying for?". The period is part of
+  // the answer, so it is said rather than spelled.
+  const named = plan => billing.publicBilling({ id: 'n', billing: { plan, status: plan === 'free' ? 'free' : 'active' } }).current;
+  assert.equal(named('studio_monthly').planName, 'Studio · monthly');
+  assert.equal(named('pro_yearly').planName, 'Pro · yearly');
+  assert.equal(named('free').planName, 'Basic');
+  // The three original ids are still on paying subscribers' records.
+  assert.equal(named('weekly').planName, 'Pro · weekly');
+  assert.equal(named('studio_monthly').tierName, 'Studio');
+});
+
+test('what a plan does NOT include is named, with the tier that would', () => {
+  // A locked thing that is simply absent reads as a broken app. Each one says
+  // what it is and what unlocks it.
+  const pro = billing.publicBilling({ id: 'p', billing: { plan: 'pro_monthly', status: 'active' } }).current;
+  assert.equal(pro.locked.multiChannel.tierName, 'Studio');
+  assert.ok(pro.locked.multiChannel.label.length, 'and says what the feature is');
+  assert.ok(!pro.locked.templates, 'what the plan DOES include is not listed as locked');
+
+  const studio = billing.publicBilling({ id: 's', billing: { plan: 'studio_monthly', status: 'active' } }).current;
+  assert.deepEqual(studio.locked, {}, 'Studio has nothing locked');
+
+  const basic = billing.publicBilling({ id: 'b', billing: { plan: 'free', status: 'free' } }).current;
+  assert.equal(Object.keys(basic.locked).length, Object.keys(billing.FEATURES).length, 'Basic is sold nothing');
+});

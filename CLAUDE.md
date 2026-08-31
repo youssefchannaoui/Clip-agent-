@@ -190,7 +190,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **987 JS + 442 Python**
+- `npm test` and `npm run check` must pass. Currently **991 JS + 442 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1394,6 +1394,47 @@ YouTube and TikTok join Facebook and Instagram.
   before it shipped; unticking is the right gesture for a Page.
 
 
+## Saying which plan you are on, and what it does not include (v3.57.0, 31 Aug)
+
+Youssef: "show users there subscription on the top how would they know wahat
+subscrition they have and lable and show things if locked".
+
+- **The header said `Studio_monthly`.** `planLabel` capitalised the raw plan id,
+  and the id carries the billing period now, so the one place the app names the
+  subscription was spelling an internal identifier at the customer. The server
+  names it (`current.planName` -> "Studio · monthly", "Pro · weekly", "Basic")
+  so the header, the tokens screen and anything added later cannot disagree.
+  The three legacy ids normalise, so a `weekly` subscriber reads "Pro · weekly".
+- **`current.locked` names what the plan does NOT include**, each with the tier
+  that would -- derived from the same FEATURES table the gates read, so a
+  feature cannot be locked without being explainable.
+- **A locked thing is labelled, not absent.** The connections dialog drew no
+  account picker at all for a non-Studio account with two Pages connected,
+  which reads as the app having lost them. It now says which plan posts to
+  three and offers the plans screen. A statement and a link is not a dead
+  control; silence is worse than either.
+
+## Each TikTok chooses its own audience (v3.57.0, 31 Aug 2026)
+
+- **`settings.tiktok.accountOptions[accountId]`** holds privacy, the three
+  interaction toggles and the commercial-content disclosure per account. One
+  clip to three TikToks is three posts, and their guidelines make the audience
+  a per-post decision -- a shared value carried one creator's choice onto two
+  other accounts, and each account has its own allowed options, so it might be
+  one the second account does not offer at all.
+- **The flat fields remain the fallback**, so every record written before this
+  keeps posting exactly as it does today. `tiktokOptionsFor` is the one reader.
+- **Validation is per account** and names the account only when there is more
+  than one, so a single-account save reads exactly as it always did.
+- **The dialog switches rather than triplicating.** One account selector above
+  the same controls; the values follow the selection, and a save writes that
+  account's slot AND the flat fields so the two stay in step.
+- The route rebuilds `accountOptions` key by key (`tiktokAccountOptions` in
+  server.js) rather than spreading a customer's object into stored settings: a
+  sub-option arriving true with its parent disclosure off would post a
+  declaration nobody made, which is the rule TikTok's review is strictest about.
+
+
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)
@@ -1482,10 +1523,8 @@ Two features, both Studio-only, in the order he asked for them.
 
 ### Known gaps in the product
 
-- **Multi-account is done on all four platforms (v3.56.0).** Still open: the
-  connections dialog has no way to name WHICH TikTok a per-account privacy level
-  belongs to, so a second TikTok inherits the first's audience choice until the
-  picker carries one control per account.
+- **Multi-account is complete on all four platforms**, including per-account
+  TikTok audience and interaction options (v3.57.0).
 
 - **YouTube API compliance review** (project 881648803263) is at its last open
   question, drafted in Gmail and unsent; deadline ~8 Sept 2026 (7 business days

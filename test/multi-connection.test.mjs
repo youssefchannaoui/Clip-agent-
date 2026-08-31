@@ -176,3 +176,24 @@ test('the retention sweep still scrubs channel data when the slot is a list', as
     assert.ok(entry.accountId, 'the address it publishes to is kept');
   }
 });
+
+test('each TikTok carries its OWN audience, not the first one\'s', async () => {
+  // TikTok's guidelines make the audience a per-post choice, and one clip to
+  // three TikToks is three posts. A shared value carried one creator's
+  // decision onto accounts that may not even offer it.
+  const opts = social.tiktokOptionsFor({
+    privacy: 'PUBLIC_TO_EVERYONE', allowComments: true, allowDuet: false,
+    accountOptions: { 'tt-2': { privacy: 'SELF_ONLY', allowDuet: true } },
+  }, 'tt-2');
+  assert.equal(opts.privacy, 'SELF_ONLY', 'the account\'s own choice wins');
+  assert.equal(opts.allowDuet, true);
+  assert.equal(opts.allowComments, true, 'and it inherits what it did not set');
+});
+
+test('an account that chose before per-account options existed keeps its choice', () => {
+  // Every record on disk holds its answer in the flat fields. Losing that would
+  // silently change what a live account posts as.
+  const opts = social.tiktokOptionsFor({ privacy: 'FOLLOWER_OF_CREATOR', allowStitch: true }, 'tt-1');
+  assert.equal(opts.privacy, 'FOLLOWER_OF_CREATOR');
+  assert.equal(opts.allowStitch, true);
+});
