@@ -539,6 +539,25 @@ export function home({ base, currentUser }) {
       </div>
     </section>
 
+    <section class="section content-types-section" id="content-types" aria-labelledby="content-types-heading">
+      <div class="wrap">
+        <div class="section-head reveal"><span class="section-label">Content-aware clipping</span><h2 id="content-types-heading">Lectures and recitation need different treatment.</h2><p>Choose how the source should be handled before processing. Islamic Lecture finds complete moments and captions what is said. Quran Recitation matches the ayah itself, keeps nasheed off and always waits for human review.</p></div>
+        <div class="content-types-stage reveal">
+          <img src="/marketing-assets/content-types-lecture-quran-v1.webp" alt="An Islamic lecturer recording beside a Quran recitation setup, representing DeenClipped's two source treatments" loading="lazy">
+          <div class="content-types-options">
+            <a class="content-type-link" href="/islamic-lecture-clipper" aria-label="Explore DeenClipped's Islamic Lecture workflow">
+              <span class="content-type-icon">${icon('clips')}</span>
+              <span class="content-type-copy"><span class="content-type-kicker">Spoken reminders and khutbahs <em>Basic</em></span><h3>Islamic Lecture</h3><small>Complete ideas, clean captions and speaker-aware framing.</small><b>See the lecture workflow ${icon('arrow')}</b></span>
+            </a>
+            <a class="content-type-link quran" href="/features#captions" aria-label="Explore DeenClipped's Quran Recitation safeguards">
+              <span class="content-type-icon">${icon('language')}</span>
+              <span class="content-type-copy"><span class="content-type-kicker">Scripture-first treatment <em>Pro</em></span><h3>Quran Recitation</h3><small>Ayah matching, translation, no nasheed and required review.</small><b>See the Quran safeguards ${icon('arrow')}</b></span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section class="section clips-section" id="safety">
       <div class="wrap split-layout">
         <div class="media-stack reveal">
