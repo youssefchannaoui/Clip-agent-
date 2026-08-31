@@ -158,15 +158,29 @@ esac
 # untouched: clips are picked by the built-in scoring and titled from raw
 # transcript fragments. That is a supported mode, so this reports which mode the
 # box is actually in rather than failing — but it must never be a silent guess.
-ai=$(docker exec "$CONTAINER" sh -c 'curl -s -m 5 http://ollama:11434/api/tags' 2>/dev/null)
-if printf '%s' "$ai" | grep -q '"models"'; then
-  if printf '%s' "$ai" | grep -q "${OLLAMA_MODEL:-qwen3:4b}"; then
-    ok "clip AI: ${OLLAMA_MODEL:-qwen3:4b} loaded"
-  else
-    bad "clip AI: model missing" "Ollama is up but ${OLLAMA_MODEL:-qwen3:4b} is not pulled. Run: docker compose -f worker/docker-compose.yml exec ollama ollama pull ${OLLAMA_MODEL:-qwen3:4b}"
-  fi
+# The model is read out of the RUNNING WORKER, not from this shell.
+#
+# This used to say ${OLLAMA_MODEL:-qwen3:4b}. OLLAMA_MODEL is set inside
+# docker-compose.yml, for the container -- it is not in the deploy shell's
+# environment, so the default always won and this checked qwen3:4b. The box
+# actually runs qwen3:1.7b, and 4b happens to be pulled as well, so the check
+# printed a confident "clip AI: qwen3:4b loaded OK" while telling us nothing
+# about the model that titles the clips. It would not have caught the real one
+# missing, which is the entire point of the check.
+model=$(docker exec "$CONTAINER" printenv OLLAMA_MODEL 2>/dev/null | tr -d '\r')
+if [ -z "$model" ]; then
+  bad "clip AI: model not configured" "OLLAMA_MODEL is unset in $CONTAINER, so refine_with_ollama falls back to its built-in default. Set it in worker/docker-compose.yml."
 else
-  bad "clip AI: unreachable" "no Ollama on http://ollama:11434 — clips will be scored and titled without the AI"
+  ai=$(docker exec "$CONTAINER" sh -c 'curl -s -m 5 http://ollama:11434/api/tags' 2>/dev/null)
+  if printf '%s' "$ai" | grep -q '"models"'; then
+    if printf '%s' "$ai" | grep -q "\"$model\""; then
+      ok "clip AI: $model loaded (the model the worker is configured to use)"
+    else
+      bad "clip AI: model missing" "Ollama is up but $model -- the model this worker is configured to use -- is not pulled. Run: docker compose -f worker/docker-compose.yml exec ollama ollama pull $model"
+    fi
+  else
+    bad "clip AI: unreachable" "no Ollama on http://ollama:11434 — clips will be scored and titled without the AI"
+  fi
 fi
 
 # ── what the running build reports about itself ───────────────────────────────

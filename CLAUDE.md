@@ -190,7 +190,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **991 JS + 442 Python**
+- `npm test` and `npm run check` must pass. Currently **991 JS + 451 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -2378,3 +2378,77 @@ found any other way.
   It also drops roughly one candidate in four -- `ollama_partial_scoring` fired
   on most runs -- so those clips keep heuristic scores and transcript-head
   titles. Worth revisiting; 4b is already pulled on the box.
+
+## qwen3:4b is refused, and the titling bug was never the model (31 Aug 2026)
+
+Asked to decide between qwen3:1.7b and qwen3:4b for titling. The answer is
+**stay on 1.7b**, and the reason is memory, not quality:
+
+- The box has **3.7G total**, and `worker/docker-compose.yml` caps the Ollama
+  container at **2G**. qwen3:4b is **2.5G** and cannot fit.
+- This is not theoretical. `dmesg` still holds **five llama-server OOM kills**
+  from 22-23 Aug, resident **2.4-3.0G** each -- exactly the 4b footprint. The
+  compose comment records forty-two more before the caps existed, "some of them
+  mid-job". A 4b call from this session simply timed out.
+- Open item 5 (the CPX41 rescale) is what unlocks 4b. Until then it is not a
+  preference, it is a job-killing OOM.
+
+**But the model was never the main problem.** Measured on the box:
+
+- Ask 1.7b for 24 rows and it returns **4**. Ask for 12, still 4. Ask for 6, it
+  returns 5. Ask for 2, it returns 1. `done_reason` is "stop" and `eval_count`
+  ~490 against a 4096 budget, so nothing is truncated -- **it closes the array
+  early**, and what comes back is always a PREFIX, never a gap in the middle.
+- The shortlist was 24. So **twenty of twenty-four clips kept heuristic scores
+  and transcript-head titles**. "The AI titles are not good" was mostly "there
+  was no AI title": five clips in six never got one.
+- Fixed by asking in **batches of 4 over a shortlist of 12** (`AI_BATCH`,
+  `AI_SHORTLIST`) and merging. Indexes are LOCAL to each batch and mapped back
+  through an offset -- asking a 1.7B model to answer with index 17 of 24 is the
+  bookkeeping it is worst at. Measured after: **8 of 8 titled, no partial
+  warning, 75s** for three requests, against 4 of 24 before.
+- A failure is caught **per batch**, not per run. Previously a third-request
+  failure abandoned the function while the first two batches had already
+  written blended scores -- leaving the ranking a silent mix of blended and raw
+  heuristic numbers, which are not the same measure.
+
+**Two things the prompt could not fix, now enforced in code.** Both were found
+by running the real model, not by reading:
+
+1. Told the title must be "a full phrase of at least five words", it returned
+   the clip's **own first sentence verbatim**. Told nothing, it returned bare
+   topic names ("Repentance"). `looks_copied()` rejects a title whose first six
+   words appear in the transcript, and the clip falls back to the transcript
+   titler, which at least strips filler openers and trims on a word boundary.
+2. With no speaker in the lecture title it **invented "Abu Huraira"** -- a
+   Companion of the Prophet -- and credited a modern khutbah to him, on every
+   clip. `strip_unbacked_attribution()` drops a trailing "- Name" the lecture
+   title does not contain.
+
+**A 1.7B model does not reliably obey a negative instruction.** Anything that
+must not happen belongs in code. Titles from it are clean and correctly
+attributed but terse; that is its ceiling, and the rescale is what raises it.
+
+### The deploy check was verifying a model nothing uses
+
+`worker/verify-deploy.sh` said `${OLLAMA_MODEL:-qwen3:4b}`. `OLLAMA_MODEL` is
+set inside docker-compose.yml **for the container**, not in the deploy shell, so
+the default always won -- and because 4b happens to be pulled, every deploy
+printed a confident "clip AI: qwen3:4b loaded OK" while saying nothing about
+the model that actually titles clips. It reads `OLLAMA_MODEL` out of the running
+worker now, so it checks what runs.
+
+### The version guard had been passing without looking
+
+Two failures, both real, both fixed in `scripts/check-version-bump.mjs`:
+
+1. **It ran blind on a shallow checkout.** CI used `fetch-depth: 2`, so on a
+   merge or a multi-commit push `HEAD^` is not the change's logical parent --
+   a commit that rewrote `worker/clip_worker.py` was reported as "no src/ or
+   worker/ changes" and sailed through. Depth is 60 now, and the script REFUSES
+   rather than passing when the clone is shallow and the diff looks empty.
+2. **It only looked one commit back**, so two commits could each bump from
+   their own parent and both claim the same number -- which happened, two trees
+   both called 3.54.1. The version must now be new across the last 60 commits.
+   That number is what the worker deploy compares the running container against,
+   so a duplicate makes "3.54.1 is live" mean nothing.

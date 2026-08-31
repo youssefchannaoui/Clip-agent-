@@ -173,3 +173,83 @@ class AttributionGuardTests(unittest.TestCase):
         self.assertEqual(
             clip_worker.strip_unbacked_attribution("The Most Deserving of Good Company", ""),
             "The Most Deserving of Good Company")
+
+
+class BatchingTests(unittest.TestCase):
+    """Asked for 24 rows, qwen3:1.7b answers four.
+
+    Measured on the box 31 Aug 2026, not inferred: 24->4, 12->4, 6->5, 2->1,
+    with done_reason "stop" and eval_count ~490 against a 4096 budget. Nothing
+    is truncated; the model closes the array early, and what comes back is
+    always a PREFIX. So twenty of twenty-four clips kept heuristic scores and
+    transcript-head titles -- which is most of what "the AI titles are not good"
+    actually was. Small batches fix it and cost no memory, and memory is the
+    binding constraint (2G cap on the Ollama container, five llama-server OOM
+    kills already in the kernel log at 2.4-3.0G).
+    """
+
+    def test_local_indexes_are_mapped_back_through_the_offset(self):
+        # The model counts 0..n-1 in every batch; asking a 1.7B model to answer
+        # with index 17 of 24 is the bookkeeping it is worst at.
+        batch = [Candidate(start=0.0, end=30.0, text="a clip about patience", score=70,
+                           segments=[], reasons=[], quote_risk=False) for _ in range(3)]
+        applied: set[int] = set()
+        clip_worker.apply_clip_rows(
+            [{"index": 1, "score": 90, "title": "A real title here now", "description": "d", "reason": "r"}],
+            batch, 8, applied, "")
+        self.assertEqual(applied, {9}, "local index 1 of the batch starting at 8 is global 9")
+        self.assertEqual(batch[1].ai_title, "A real title here now")
+        self.assertEqual(batch[0].ai_title, "")
+
+    def test_a_row_outside_the_batch_is_skipped_not_applied_elsewhere(self):
+        batch = [Candidate(start=0.0, end=30.0, text="t", score=70,
+                           segments=[], reasons=[], quote_risk=False)]
+        applied: set[int] = set()
+        skipped = clip_worker.apply_clip_rows(
+            [{"index": 5, "score": 90, "title": "x", "description": "", "reason": ""}],
+            batch, 0, applied, "")
+        self.assertEqual(applied, set())
+        self.assertEqual(skipped, 1)
+
+    def test_the_same_candidate_is_never_blended_twice(self):
+        # The blend is not idempotent; a repeated index dragged the score again.
+        batch = [Candidate(start=0.0, end=30.0, text="t", score=70,
+                           segments=[], reasons=[], quote_risk=False)]
+        applied: set[int] = set()
+        rows = [{"index": 0, "score": 100, "title": "a", "description": "", "reason": ""}] * 3
+        clip_worker.apply_clip_rows(rows, batch, 0, applied, "")
+        self.assertEqual(batch[0].score, round(70 * 0.45 + 100 * 0.55))
+
+    def test_the_batch_size_stays_small_enough_to_complete(self):
+        # 24 was the measured failure. Anything near it silently drops clips.
+        self.assertLessEqual(clip_worker.AI_BATCH, 6)
+        self.assertLessEqual(clip_worker.AI_SHORTLIST, 16)
+
+
+class CopiedTitleTests(unittest.TestCase):
+    """A title echoed out of the transcript is worse than the fallback titler."""
+
+    BODY = ("The night prayer is where you say the things you cannot say to anyone "
+            "else, and nobody sees you do it.")
+
+    def test_an_echoed_opening_is_caught(self):
+        self.assertTrue(clip_worker.looks_copied(
+            "The night prayer is where you say the things you cannot say", self.BODY))
+
+    def test_an_echo_from_the_middle_is_caught_too(self):
+        self.assertTrue(clip_worker.looks_copied(
+            "you say the things you cannot say to anyone else", self.BODY))
+
+    def test_a_written_title_survives(self):
+        for title in ("Why the night prayer changes you - Belal Assaad",
+                      "The prayer nobody sees you make",
+                      "Four conditions of repentance - Belal Assaad"):
+            self.assertFalse(clip_worker.looks_copied(title, self.BODY), title)
+
+    def test_a_short_title_is_never_treated_as_a_copy(self):
+        # Under five words there is not enough overlap to be sure, and a real
+        # short title must not be thrown away on a guess.
+        self.assertFalse(clip_worker.looks_copied("The night prayer", self.BODY))
+
+    def test_an_empty_clip_text_cannot_match(self):
+        self.assertFalse(clip_worker.looks_copied("Some title with five words", ""))

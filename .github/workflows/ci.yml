@@ -18,7 +18,14 @@ jobs:
           # The version guard compares this commit against its parent, and the
           # default shallow clone has no parent -- which made the guard exit
           # "nothing to check" on every run while still reporting green.
-          fetch-depth: 2
+          #
+          # Two was not enough either. On a merge, or on a push carrying several
+          # commits, HEAD^ is not the change's logical parent: a commit that
+          # rewrote worker/clip_worker.py was reported as "no src/ or worker/
+          # changes" on 31 Aug 2026 and sailed through. The guard also has to
+          # look further back than one commit now, to catch two commits claiming
+          # the same version, which needs real history rather than a stub.
+          fetch-depth: 60
       - uses: actions/setup-node@v4
         with:
           node-version: 22
