@@ -2213,7 +2213,7 @@ Youssef, after the move: "try again".
 - Re-checked after the restyle: 12 drag renders, 0 ending with no row, 0 where
   it moved, still the column's first child.
 
-## The titling model invented a Companion of the Prophet (v3.54.1, 31 Aug 2026)
+## The titling model invented a Companion of the Prophet (v3.54.2, 31 Aug 2026)
 
 The v3.54.0 prompt was tested against the box's real qwen3:1.7b rather than
 only unit-tested, and two things it did on real transcripts could not have been
