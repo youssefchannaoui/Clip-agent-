@@ -596,3 +596,122 @@ svg{width:1em;height:1em;display:block;stroke:currentColor;stroke-width:1.8;stro
 @media (prefers-reduced-motion:reduce){
   .frame-duo .frame-panel.reveal:nth-child(2){transition-delay:0s}
 }
+/* ══════════════════════════════════════════════════════════════════════════
+   SCROLL-DRIVEN MOTION
+   The scroll position drives the animation directly, like scrubbing a video,
+   rather than a class being toggled once when an element crosses a threshold.
+   Native CSS: animation-timeline: view() ties an animation to an element's own
+   progress through the viewport. No library, no scroll listener, no dependency
+   — it runs on the compositor, so it stays smooth while the page scrolls.
+
+   Everything is inside @supports. A browser without scroll timelines (Safari,
+   older Firefox) never sees these rules and keeps the IntersectionObserver
+   reveal that already exists, so the page is complete either way — the motion
+   is the enhancement, never the delivery mechanism.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+
+    /* A block rises and resolves out of blur as it enters. Tied to the element's
+       own entry, so it tracks the scroll instead of firing on a timer. */
+    .sd-rise{
+      animation:sdRise linear both;
+      animation-timeline:view();
+      animation-range:entry 4% cover 26%;
+    }
+    @keyframes sdRise{
+      from{opacity:0;transform:translateY(46px);filter:blur(9px)}
+      to{opacity:1;transform:none;filter:none}
+    }
+
+    /* "Opens up like a video": the frame unmasks from the centre outward and
+       settles its scale as you scroll through it. clip-path is composited, so
+       this is cheap even on a large image. */
+    .sd-open{
+      animation:sdOpen linear both;
+      animation-timeline:view();
+      animation-range:entry 0% cover 42%;
+    }
+    @keyframes sdOpen{
+      from{clip-path:inset(14% 22% 14% 22% round 34px);transform:scale(1.1);opacity:.55}
+      to{clip-path:inset(0 0 0 0 round var(--radius));transform:none;opacity:1}
+    }
+
+    /* A quiet parallax drift for a secondary layer, so a stack has depth
+       without anything sliding far enough to read as a gimmick. */
+    .sd-drift{
+      animation:sdDrift linear both;
+      animation-timeline:view();
+      animation-range:cover 0% cover 100%;
+    }
+    @keyframes sdDrift{ from{transform:translateY(26px)} to{transform:translateY(-26px)} }
+
+    /* A rule or progress bar that draws itself across the section. */
+    .sd-draw{
+      animation:sdDraw linear both;
+      animation-timeline:view();
+      animation-range:entry 20% cover 60%;
+      transform-origin:left center;
+    }
+    @keyframes sdDraw{ from{transform:scaleX(0)} to{transform:scaleX(1)} }
+
+    /* Children of a group arrive one after another as the group crosses the
+       viewport, each on its own range - a real stagger tied to scroll rather
+       than to setTimeout. */
+    .sd-seq>*{animation:sdRise linear both;animation-timeline:view();}
+    .sd-seq>*:nth-child(1){animation-range:entry 2% cover 20%}
+    .sd-seq>*:nth-child(2){animation-range:entry 6% cover 24%}
+    .sd-seq>*:nth-child(3){animation-range:entry 10% cover 28%}
+    .sd-seq>*:nth-child(4){animation-range:entry 14% cover 32%}
+    .sd-seq>*:nth-child(5){animation-range:entry 18% cover 36%}
+    .sd-seq>*:nth-child(6){animation-range:entry 22% cover 40%}
+
+    /* A pinned stage: the media holds still while the copy beside it scrolls
+       past, which is what makes a feature feel demonstrated rather than listed. */
+    .sd-pin{position:sticky;top:calc(50vh - 240px)}
+  }
+}
+
+/* Scroll-driven animation must never be the only thing making content visible.
+   Without @supports the IntersectionObserver reveal still runs; with reduced
+   motion everything is simply present. */
+@media (prefers-reduced-motion:reduce){
+  .sd-rise,.sd-open,.sd-drift,.sd-draw,.sd-seq>*{animation:none!important;opacity:1;transform:none;filter:none;clip-path:none}
+  .sd-pin{position:static}
+}
+
+/* ── Built for this content: the capability bento ──────────────────────────
+   Deliberately NOT a uniform grid of identical cards. A 3x2 of equal boxes is
+   the shape a generated page takes; varying the tiles gives the section a
+   focal point and lets the strongest claim carry an image. */
+.deen-section{overflow-x:clip}
+.deen-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.deen-tile{display:flex;flex-direction:column;gap:11px;padding:26px;border:1px solid var(--line);border-radius:var(--radius);
+  background:linear-gradient(158deg,rgba(255,255,255,.036),rgba(255,255,255,.008));transition:border-color .22s ease,transform .22s ease}
+.deen-tile:hover{border-color:rgba(217,182,111,.32);transform:translateY(-3px)}
+.deen-tile h3{margin:0;font-family:Outfit,ui-sans-serif,sans-serif;font-size:18px;font-weight:750;letter-spacing:-.02em;line-height:1.24}
+.deen-tile p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.66}
+.deen-icon{display:grid;place-items:center;width:38px;height:38px;flex:none;border:1px solid rgba(217,182,111,.26);border-radius:12px;
+  background:rgba(217,182,111,.07);color:var(--gold-bright)}
+.deen-icon svg{width:19px;height:19px}
+
+/* The lead tile spans two columns and pairs the claim with the frame that
+   proves it. */
+.deen-tile-wide{grid-column:span 2;flex-direction:row;align-items:center;gap:26px}
+.deen-tile-wide .deen-tile-copy{display:flex;flex-direction:column;gap:11px;flex:1 1 auto}
+.deen-tile-wide .deen-tile-media{flex:0 0 148px;border-radius:18px;overflow:hidden;border:1px solid rgba(217,182,111,.3);
+  box-shadow:0 18px 46px rgba(0,0,0,.5)}
+.deen-tile-wide .deen-tile-media img{display:block;width:100%;height:auto}
+.deen-tile-accent{border-color:rgba(217,182,111,.3);
+  background:radial-gradient(circle at 50% -20%,rgba(217,182,111,.12),transparent 60%),linear-gradient(158deg,rgba(255,255,255,.045),rgba(255,255,255,.01))}
+
+@media (max-width:1080px){ .deen-grid{grid-template-columns:repeat(2,1fr)} .deen-tile-wide{grid-column:span 2} }
+@media (max-width:720px){
+  .deen-grid{grid-template-columns:1fr;gap:12px}
+  .deen-tile{padding:20px;border-radius:20px}
+  .deen-tile-wide{flex-direction:column;align-items:flex-start;gap:16px}
+  .deen-tile-wide .deen-tile-media{flex:none;width:126px;align-self:center}
+  .deen-tile p{font-size:12.5px}
+}
+@media (prefers-reduced-motion:reduce){ .deen-tile{transition:none} .deen-tile:hover{transform:none} }
