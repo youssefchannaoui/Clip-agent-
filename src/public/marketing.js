@@ -22,6 +22,18 @@ navLinks?.addEventListener('click', event => {
   }
 });
 
+// Escape closes whichever navigation surface is open: the mobile drawer, or
+// a dropdown held open by focus (blurring releases :focus-within).
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  if (document.activeElement?.closest('.nav-group')) document.activeElement.blur();
+  if (navLinks?.classList.contains('open')) {
+    navLinks.classList.remove('open');
+    menuButton?.setAttribute('aria-expanded', 'false');
+    menuButton?.focus();
+  }
+});
+
 for (const form of document.querySelectorAll('[data-source-form]')) {
   form.addEventListener('submit', event => {
     event.preventDefault();
@@ -82,8 +94,11 @@ if (!reducedMotion) {
     // Whole-page progress for the orientation hairline, and the point where
     // the header wordmark condenses into the rotating seal.
     const max = rootEl.scrollHeight - vh;
-    rootEl.style.setProperty('--scroll', max > 0 ? Math.min(1, window.scrollY / max).toFixed(4) : '0');
-    rootEl.classList.toggle('condensed', window.scrollY > vh * 0.55);
+    const frac = max > 0 ? Math.min(1, window.scrollY / max) : 0;
+    rootEl.style.setProperty('--scroll', frac.toFixed(4));
+    // Condense after the hero; resolve back into the full wordmark at the
+    // foot of the page, closing the loop the seal opened.
+    rootEl.classList.toggle('condensed', window.scrollY > vh * 0.55 && frac < 0.965);
   };
   const request = () => {
     if (!ticking) { ticking = true; requestAnimationFrame(update); }
@@ -92,4 +107,23 @@ if (!reducedMotion) {
   window.addEventListener('resize', request);
   update();
   window.addEventListener('load', update);
+
+  /* A 170ms stage-black veil between public routes. Plain navigations only:
+     modified clicks, new-tab targets and same-page anchors pass through
+     untouched, and pageshow clears the veil so back/forward (including the
+     bfcache) never restores a dark page. Skipped entirely under reduced
+     motion — the listener is inside the same guard. */
+  document.addEventListener('click', event => {
+    if (event.defaultPrevented || event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target.closest('a[href]');
+    if (!link || (link.target && link.target !== '_self') || link.hasAttribute('download')) return;
+    const url = new URL(link.href, window.location.href);
+    if (url.origin !== window.location.origin) return;
+    if (url.pathname === window.location.pathname && url.hash) return;
+    event.preventDefault();
+    document.documentElement.classList.add('leaving');
+    window.setTimeout(() => window.location.assign(link.href), 170);
+  });
+  window.addEventListener('pageshow', () => document.documentElement.classList.remove('leaving'));
 }

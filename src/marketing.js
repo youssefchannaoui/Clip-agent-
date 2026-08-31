@@ -261,6 +261,7 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
     </div>
   </header>
   <div class="page-progress" aria-hidden="true"><i></i></div>
+  <div class="route-veil" aria-hidden="true"></div>
   ${body}
   <footer class="site-footer">
     <div class="wrap">
@@ -527,22 +528,25 @@ function faqSchema() {
 export function home({ base, currentUser }) {
   // Filmstrip cells: real reel frames standing in for a source timeline. The
   // moment scores match the shape the review queue actually shows.
+  // Each moment carries its own detection threshold (--mt): the gold ring and
+  // score fade in AT that point of the scene's scrub, so scores arrive as a
+  // consequence of the search instead of sitting there as decoration.
   const stripCells = [
-    ['reel-landscape.webp', '', ''],
-    ['reel-depart.webp', '86', 'is-moment'],
-    ['reel-winter.webp', '', ''],
-    ['reel-deeds.webp', '', ''],
-    ['reel-halal-way.webp', '79', 'is-moment'],
-    ['reel-kaaba-a.webp', '', ''],
-    ['reel-dua.webp', '74', 'is-moment'],
-    ['reel-kaaba-b.webp', '', ''],
-    ['reel-depart.webp', '', ''],
-    ['reel-winter.webp', '68', 'is-moment'],
-    ['reel-landscape.webp', '', ''],
-    ['reel-deeds.webp', '', ''],
+    ['reel-landscape.webp', '', '', ''],
+    ['reel-depart.webp', '86', 'is-moment', '.16'],
+    ['reel-winter.webp', '', '', ''],
+    ['reel-deeds.webp', '', '', ''],
+    ['reel-halal-way.webp', '79', 'is-moment', '.3'],
+    ['reel-kaaba-a.webp', '', '', ''],
+    ['reel-dua.webp', '74', 'is-moment', '.44'],
+    ['reel-kaaba-b.webp', '', '', ''],
+    ['reel-depart.webp', '', '', ''],
+    ['reel-winter.webp', '68', 'is-moment', '.56'],
+    ['reel-landscape.webp', '', '', ''],
+    ['reel-deeds.webp', '', '', ''],
   ];
-  const stripTrack = stripCells.map(([src, score, cls]) =>
-    `<span class="strip-cell ${cls}"${score ? ` data-score="${score}"` : ''}><img src="/marketing-assets/${src}" alt="" loading="lazy"></span>`).join('');
+  const stripTrack = stripCells.map(([src, score, cls, mt]) =>
+    `<span class="strip-cell ${cls}"${score ? ` data-score="${score}"` : ''}${mt ? ` style="--mt:${mt}"` : ''}><img src="/marketing-assets/${src}" alt="" loading="lazy"></span>`).join('');
 
   const chapter = (i, title, copy, factTitle, factCopy, media) => `
       <article class="chapter" style="--i:${i}">
@@ -592,6 +596,7 @@ export function home({ base, currentUser }) {
         </div>
         <div class="strip-rail" aria-hidden="true">
           <div class="strip-track">${stripTrack}${stripTrack}</div>
+          <i class="strip-scan"></i>
         </div>
         <div class="wrap">
           <div class="strip-time" aria-hidden="true"><span>00:00</span><span>Illustration — how discovery works</span><span>53:40</span></div>
@@ -637,7 +642,7 @@ export function home({ base, currentUser }) {
       </div>
     </section>
 
-    <section class="paper-scene" id="content-types" aria-labelledby="paths-heading">
+    <section class="paper-scene" id="content-types" aria-labelledby="paths-heading" data-scene>
       <div class="wrap">
         <div class="paper-head">
           <span class="kicker"><i></i>Two kinds of source</span>
@@ -764,7 +769,7 @@ export function home({ base, currentUser }) {
       </div>
     </section>
 
-    <section class="final-scene" aria-labelledby="final-heading">
+    <section class="final-scene" aria-labelledby="final-heading" data-scene>
       <div class="final-backdrop" aria-hidden="true"><img src="/marketing-assets/final-hall.webp" alt="" loading="lazy"></div>
       <div class="wrap final-inner">
         <span class="section-label"><i></i>Start with the next lecture</span>
