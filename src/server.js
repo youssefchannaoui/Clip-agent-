@@ -1517,7 +1517,11 @@ async function route(req, res, url) {
   }
   const socialDisconnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok)\/disconnect$/);
   if (method === 'POST' && socialDisconnect) {
-    try { await social.disconnect(socialDisconnect[1], currentUser); return json(res, 200, { ok: true }); }
+    try {
+      const body = await readBody(req).catch(() => ({}));
+      await social.disconnect(socialDisconnect[1], currentUser, String(body?.accountId || ''));
+      return json(res, 200, { ok: true });
+    }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
   const socialTest = pathname.match(/^\/api\/social\/(youtube|meta|tiktok)\/test$/);

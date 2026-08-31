@@ -185,7 +185,10 @@ test('connecting loads the creator options, so linking is not followed by a chor
   assert.ok(seen.some(u => u.includes('/creator_info/query/')),
     'the creator options are fetched as part of connecting');
 
-  const conn = store.state.socialConnections[USER].tiktok;
+  // A provider slot holds a LIST of connections now (several TikToks), so the
+  // stored shape is an array; a bare object is still read as a list of one.
+  const slot = store.state.socialConnections[USER].tiktok;
+  const conn = Array.isArray(slot) ? slot[0] : slot;
   assert.ok(conn.creatorInfo, 'and stored on the connection');
   assert.deepEqual(conn.creatorInfo.privacy_level_options, ['SELF_ONLY', 'PUBLIC_TO_EVERYONE']);
   assert.ok(Number(conn.lastTestAt) > 0, 'with a test timestamp, so the enable gate is already satisfied');

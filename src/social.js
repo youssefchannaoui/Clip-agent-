@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 import { state, save, log, publishingSettings, setPublishingSettings, ownerOfRecord } from './store.js';
-import { connectionFor, setConnection, removeConnection, ownerOf } from './tenancy.js';
+import { connectionFor, connectionListFor, connectionByAccount, addConnection, setConnection, removeConnection, ownerOf } from './tenancy.js';
 import * as billing from './billing.js';
 
 const PROVIDERS = ['youtube', 'instagram', 'facebook', 'tiktok'];
@@ -312,7 +312,11 @@ async function connectYouTube(code, userId) {
       youtubeDataAt: Date.now(),
     token: encrypt({ ...token, expiresAt: Date.now() + Number(token.expires_in || 3600) * 1000 }), connectedAt: Date.now(),
   };
-  setConnection(state.socialConnections, userId, 'youtube', connection);
+  // Added alongside, not over the top. A straight assignment here destroyed the
+  // previous channel's refresh token, which is why multi-account could not be a
+  // settings flag. Reconnecting the SAME channel still replaces it in place.
+  addConnection(state.socialConnections, userId, 'youtube', connection,
+    { max: billing.accountsPerPlatform(userById(userId), 'youtube') });
   enableOnConnect(userId, ['youtube']);
   save(); log(`Connected YouTube channel "${connection.name}" and switched it on.`, 'info', userId);
 }
@@ -424,7 +428,8 @@ async function connectTikTok(code, userId) {
     provider: 'tiktok', accountId: token.open_id || user.open_id || '', name: user.display_name || 'TikTok account', avatar: user.avatar_url || '',
     scopes: token.scope || '', token: encrypt({ ...token, expiresAt: Date.now() + Number(token.expires_in || 86400) * 1000 }), connectedAt: Date.now(), creatorInfo: null,
   };
-  setConnection(state.socialConnections, userId, 'tiktok', entry);
+  addConnection(state.socialConnections, userId, 'tiktok', entry,
+    { max: billing.accountsPerPlatform(userById(userId), 'tiktok') });
   save();
 
   /*
@@ -444,13 +449,13 @@ async function connectTikTok(code, userId) {
    * test. The reason is recorded so it is visible rather than mysterious.
    */
   try {
-    await queryTikTokCreator(token.access_token, userId);
-    const fresh = connection(userId, 'tiktok');
+    await queryTikTokCreator(token.access_token, userId, entry.accountId);
+    const fresh = connectionFo(userId, 'tiktok', entry.accountId);
     if (fresh) { fresh.lastTestAt = Date.now(); fresh.lastTestError = null; save(); }
     enableOnConnect(userId, ['tiktok']);
     log(`Connected TikTok account "${entry.name}" and loaded its posting options.`, 'info', userId);
   } catch (error) {
-    const fresh = connection(userId, 'tiktok');
+    const fresh = connectionFo(userId, 'tiktok', entry.accountId);
     if (fresh) { fresh.lastTestError = error.message; save(); }
     log(`Connected TikTok account "${entry.name}", but its posting options could not be read: ${error.message}`, 'warn', userId);
   }
@@ -470,11 +475,22 @@ export async function completeOAuth(provider, callbackUrl) {
   return { userId };
 }
 
-export async function disconnect(provider, user) {
+/**
+ * Disconnect one account, or the whole platform when none is named.
+ *
+ * Naming one matters now: with three YouTube channels linked, Disconnect on the
+ * third must not take the other two with it -- and the Google grant revoked
+ * must be that channel's, not whichever was stored first.
+ */
+export async function disconnect(provider, user, accountId = '') {
   const userId = user?.id || user;
   if (!userId) throw new SocialError('Sign in to disconnect an account.');
   const affected = provider === 'meta' ? ['instagram', 'facebook'] : [provider];
   if (!['youtube', 'meta', 'tiktok'].includes(provider)) throw new SocialError('Unknown provider.');
+  // Meta is one login carrying its Pages inside it, so there is no per-account
+  // credential to remove -- disconnecting it is all or nothing, and an account
+  // id here would silently match nothing and remove nothing.
+  if (provider === 'meta') accountId = '';
 
   // Remove the local credential first so a slow or unavailable provider can
   // never prevent the customer taking access away from DeenClipped. For
@@ -482,19 +498,31 @@ export async function disconnect(provider, user) {
   let googleCredential = '';
   if (provider === 'youtube') {
     try {
-      const token = decrypt(connection(userId, 'youtube')?.token);
+      const token = decrypt(connectionFo(userId, 'youtube', accountId)?.token);
       googleCredential = token?.refresh_token || token?.access_token || '';
     } catch (error) {
       log(`The stored YouTube grant could not be read during disconnect; the local credential will still be removed. ${error.message}`, 'warn', userId);
     }
   }
-  removeConnection(state.socialConnections, userId, provider);
+  removeConnection(state.socialConnections, userId, provider, accountId);
 
   // Only this account's publishing settings are touched. Disconnecting used to
   // switch off the single global publishing config for everybody.
   const settings = publishingSettings(user);
   const next = { ...settings };
-  for (const name of affected) next[name] = { ...(settings[name] || {}), enabled: false };
+  // Only drop the destination that went, and only switch the platform off when
+  // nothing is left connected on it. Disconnecting one of three channels used
+  // to switch YouTube off entirely for the other two.
+  for (const name of affected) {
+    const item = settings[name] || {};
+    const left = (item.accountIds || []).filter(id => accountId ? String(id) !== String(accountId) : false);
+    const stillConnected = connectionListFor(state.socialConnections, userId, provider).length > 0;
+    next[name] = {
+      ...item,
+      accountIds: left, accountId: left[0] || '',
+      enabled: Boolean(accountId && left.length && stillConnected),
+    };
+  }
   const anyEnabled = ['youtube', 'instagram', 'facebook', 'tiktok'].some(name => next[name]?.enabled);
   if (!anyEnabled) next.enabled = false;
   setPublishingSettings(user, next);
@@ -519,12 +547,41 @@ export async function disconnect(provider, user) {
 }
 
 /** One account's connection for a provider, or null. */
+/**
+ * The account record, for a tier question.
+ *
+ * Falls back to a bare id rather than throwing: an unknown user resolves to the
+ * free tier, which is one connection -- the safe answer, not a crash in the
+ * middle of an OAuth callback.
+ */
+function userById(userId) {
+  return (state.authUsers || []).find(item => item.id === userId) || { id: userId };
+}
+
 function connection(userId, provider) {
   return connectionFor(state.socialConnections, userId, provider);
 }
+/** Every connection on a platform -- what the summaries and the sweep need. */
+function connections(userId, provider) {
+  return connectionListFor(state.socialConnections, userId, provider);
+}
+/**
+ * The connection that owns ONE account.
+ *
+ * Everything that publishes, refreshes a token, or reads creator options must
+ * go through this. Reading "the user's YouTube" instead posts a clip aimed at
+ * the second channel with the first channel's credentials, which is the exact
+ * failure multi-account exists to avoid and would be invisible until someone
+ * noticed the video on the wrong channel.
+ */
+function connectionFo(userId, provider, accountId) {
+  return connectionByAccount(state.socialConnections, userId, provider, accountId);
+}
 
 function youtubeSummary(userId) {
-  const c = connection(userId, 'youtube');
+  return connections(userId, 'youtube').flatMap(c => youtubeEntry(c));
+}
+function youtubeEntry(c) {
   return c ? [{ id: c.accountId, name: c.name, avatar: c.avatar || '' }] : [];
 }
 function metaSummaries(kind, userId) {
@@ -533,8 +590,9 @@ function metaSummaries(kind, userId) {
     : { id: item.instagramId, name: item.instagramName || `${item.pageName} Instagram`, avatar: item.instagramAvatar || '', pageId: item.pageId });
 }
 function tiktokSummary(userId) {
-  const c = connection(userId, 'tiktok');
-  return c ? [{ id: c.accountId, name: c.name, avatar: c.avatar || '', creatorInfo: c.creatorInfo || null }] : [];
+  return connections(userId, 'tiktok').map(c => ({
+    id: c.accountId, name: c.name, avatar: c.avatar || '', creatorInfo: c.creatorInfo || null,
+  }));
 }
 
 export function connectionStatus(user) {
@@ -566,18 +624,30 @@ export function connectionStatus(user) {
  * Scoping by user id here is what stops one customer naming another customer's
  * page id in their publishing settings and uploading to it.
  */
+/**
+ * Resolve one YouTube or TikTok destination.
+ *
+ * A blank account id used to match unconditionally, which was harmless while
+ * only one connection could exist. With several stored it silently resolves to
+ * whichever happens to be first -- the post-to-the-wrong-channel failure, and
+ * invisible until someone notices the video on the wrong channel.
+ *
+ * So a blank id is honoured ONLY when there is exactly one connection, which is
+ * every account written before this release and must keep publishing untouched.
+ * Ambiguous means nothing, not "guess".
+ */
+function oneOf(provider, accountId, userId) {
+  const list = connections(userId, provider);
+  if (!accountId) return list.length === 1 ? list[0] : null;
+  return list.find(item => String(item?.accountId || '') === String(accountId)) || null;
+}
+
 function selectedAccount(provider, accountId, userId) {
   if (!userId) return null;
-  if (provider === 'youtube') {
-    const c = connection(userId, 'youtube');
-    return c && (!accountId || c.accountId === accountId) ? c : null;
-  }
+  if (provider === 'youtube') return oneOf('youtube', accountId, userId);
   if (provider === 'facebook') return (connection(userId, 'meta')?.accounts || []).find(item => item.pageId === accountId) || null;
   if (provider === 'instagram') return (connection(userId, 'meta')?.accounts || []).find(item => item.instagramId === accountId) || null;
-  if (provider === 'tiktok') {
-    const c = connection(userId, 'tiktok');
-    return c && (!accountId || c.accountId === accountId) ? c : null;
-  }
+  if (provider === 'tiktok') return oneOf('tiktok', accountId, userId);
   return null;
 }
 
@@ -663,7 +733,14 @@ export function enabledTargetsForClip(clip) {
   for (const provider of PROVIDERS) {
     const item = settings[provider];
     if (!item?.enabled) continue;
-    if (provider === 'tiktok' && (clip.approvedBy !== 'manual' || !clip.tiktokConsentAt)) continue; // TikTok requires explicit consent for each post.
+    // TikTok requires explicit consent for each post, and three TikToks is
+    // three posts. A clip approved before per-account consent existed carries
+    // only the clip-level stamp, which still counts -- refusing those would
+    // strand every clip already approved and waiting in the schedule.
+    const consented = accountId => clip.tiktokConsent
+      ? Boolean(clip.tiktokConsent[String(accountId || 'default')] || clip.tiktokConsent.default)
+      : Boolean(clip.tiktokConsentAt);
+    if (provider === 'tiktok' && clip.approvedBy !== 'manual') continue;
     // The cap is applied HERE as well as at the route, deliberately. A settings
     // record can outlive the plan that was allowed to write it -- a Studio
     // account that lapses to Pro still has three ids on disk -- and the render
@@ -676,6 +753,10 @@ export function enabledTargetsForClip(clip) {
       log(`${provider} has ${item.accountIds.length} accounts selected but this plan allows ${allowed}; posting to the first ${allowed}.`, 'warn', userId);
     }
     for (const accountId of chosen) {
+      if (provider === 'tiktok' && !consented(accountId)) {
+        log(`"${clip.title || clip.id}" was not approved for this TikTok account, so it will not post there.`, 'warn', userId);
+        continue;
+      }
       const account = selectedAccount(provider, accountId, userId);
       if (!account) {
         log(`${provider} is switched on but has no account selected, so "${clip.title || clip.id}" will not post there. Pick the account in Connections.`, 'warn', userId);
@@ -746,8 +827,12 @@ function mergeRefreshedToken(previous, refreshed, provider, defaultLifetimeSec) 
   };
 }
 
-async function youtubeToken(userId) {
-  const conn = connection(userId, 'youtube');
+async function youtubeToken(userId, accountId = '') {
+  // Per ACCOUNT. Reading the user's first YouTube here would upload a clip
+  // aimed at the second channel using the first channel's bearer token -- three
+  // targets would all post to one channel, all report success, and hand back
+  // three post URLs pointing at the same place.
+  const conn = connectionFo(userId, 'youtube', accountId);
   if (!conn?.token) throw new SocialError('YouTube is not connected.');
   let token = decrypt(conn.token);
   if (Number(token.expiresAt || 0) > Date.now() + 5 * 60_000) return token.access_token;
@@ -763,8 +848,8 @@ async function youtubeToken(userId) {
   return token.access_token;
 }
 
-async function tiktokToken(userId) {
-  const conn = connection(userId, 'tiktok');
+async function tiktokToken(userId, accountId = '') {
+  const conn = connectionFo(userId, 'tiktok', accountId);
   if (!conn?.token) throw new SocialError('TikTok is not connected.');
   let token = decrypt(conn.token);
   if (Number(token.expiresAt || 0) > Date.now() + 5 * 60_000) return token.access_token;
@@ -787,12 +872,15 @@ export async function testConnection(provider, accountId = '', user) {
   try {
     let result;
     if (provider === 'youtube') {
-      const accessToken = await youtubeToken(userId);
+      const accessToken = await youtubeToken(userId, accountId);
       const profile = await jsonRequest(`${config.youtubeApiBase}/youtube/v3/channels?part=id,snippet&mine=true`, { headers: { Authorization: `Bearer ${accessToken}` } }, 'YouTube');
       const channel = profile?.items?.[0];
       if (!channel?.id) throw new SocialError('YouTube is connected, but no channel is available.');
       result = { provider, accountId: channel.id, name: channel.snippet?.title || 'YouTube channel' };
-      Object.assign(connection(userId, 'youtube'), { lastTestAt: testedAt, lastTestError: null });
+      // Recorded on the channel that was tested. Writing it to the platform's
+      // first connection would mark a healthy channel tested because a
+      // different one answered.
+      Object.assign(connectionFo(userId, 'youtube', accountId) || {}, { lastTestAt: testedAt, lastTestError: null });
     } else if (provider === 'meta') {
       const accounts = connection(userId, 'meta')?.accounts || [];
       if (!accounts.length) throw new SocialError('Meta is not connected.');
@@ -806,17 +894,19 @@ export async function testConnection(provider, accountId = '', user) {
       result = { provider, accounts: checks };
       Object.assign(connection(userId, 'meta'), { lastTestAt: testedAt, lastTestError: null });
     } else if (provider === 'tiktok') {
-      const accessToken = await tiktokToken(userId);
+      const accessToken = await tiktokToken(userId, accountId);
       const profile = await jsonRequest(`${config.tiktokApiBase}/v2/user/info/?fields=open_id,avatar_url,display_name`, { headers: { Authorization: `Bearer ${accessToken}` } }, 'TikTok');
-      const creator = await queryTikTokCreator(accessToken, userId);
-      const tiktokConnection = connection(userId, 'tiktok');
+      const creator = await queryTikTokCreator(accessToken, userId, accountId);
+      const tiktokConnection = connectionFo(userId, 'tiktok', accountId) || {};
       result = { provider, accountId: profile?.data?.user?.open_id || tiktokConnection?.accountId || '', name: profile?.data?.user?.display_name || tiktokConnection?.name || 'TikTok account', creatorInfo: creator };
       Object.assign(tiktokConnection, { lastTestAt: testedAt, lastTestError: null, creatorInfo: creator });
     } else throw new SocialError('Unknown social provider.');
     save();
     return result;
   } catch (error) {
-    const failed = connection(userId, provider);
+    const failed = provider === 'meta'
+      ? connection(userId, 'meta')
+      : connectionFo(userId, provider, accountId);
     if (failed) Object.assign(failed, { lastTestAt: testedAt, lastTestError: error.message });
     save();
     throw error;
@@ -849,7 +939,7 @@ async function youtubeUploadStatus(uploadUrl, accessToken, totalSize) {
 }
 
 async function uploadYouTube(clip, target, file, userId) {
-  const accessToken = await youtubeToken(userId);
+  const accessToken = await youtubeToken(userId, target.accountId);
   const stat = fs.statSync(file);
   const bytes = fs.readFileSync(file);
   target.providerState ||= {};
@@ -1103,12 +1193,16 @@ async function pollInstagram(target, userId) {
   return { postId: publishedId, postUrl };
 }
 
-async function queryTikTokCreator(accessToken, userId) {
+async function queryTikTokCreator(accessToken, userId, accountId = '') {
   const result = await jsonRequest(`${config.tiktokApiBase}/v2/post/publish/creator_info/query/`, {
     method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json; charset=UTF-8' }, body: '{}',
   }, 'TikTok');
   const info = result?.data || {};
-  const conn = connection(userId, 'tiktok');
+  // Cached on the account it describes: each TikTok has its own privacy
+  // options and its own maximum post duration, so storing one account's info
+  // against the platform would validate account B's post against account A's
+  // limits -- refusing a legal post, or sending one and being rejected.
+  const conn = connectionFo(userId, 'tiktok', accountId);
   if (conn) { conn.creatorInfo = info; save(); }
   return info;
 }
@@ -1142,8 +1236,8 @@ function chunkBoundaries(lengths) {
 }
 
 async function startTikTok(clip, target, file, userId) {
-  const accessToken = await tiktokToken(userId);
-  const creator = await queryTikTokCreator(accessToken, userId);
+  const accessToken = await tiktokToken(userId, target.accountId);
+  const creator = await queryTikTokCreator(accessToken, userId, target.accountId);
   const duration = Number(clip.durationMs || 0) / 1000;
   if (creator.max_video_post_duration_sec && duration > creator.max_video_post_duration_sec) {
     throw new SocialError(`TikTok allows up to ${creator.max_video_post_duration_sec}s for this account, but this clip is ${Math.ceil(duration)}s.`, { provider: 'tiktok' });
@@ -1265,7 +1359,10 @@ async function startTikTok(clip, target, file, userId) {
 }
 
 async function pollTikTok(target, userId) {
-  const accessToken = await tiktokToken(userId);
+  // The publish_id belongs to the account that started the upload. Polling it
+  // with another account's token is a query about somebody else's post: it
+  // never reaches PUBLISH_COMPLETE, so the target sits in moderation for ever.
+  const accessToken = await tiktokToken(userId, target.accountId);
   const result = await jsonRequest(`${config.tiktokApiBase}/v2/post/publish/status/fetch/`, {
     method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json; charset=UTF-8' },
     body: JSON.stringify({ publish_id: target.externalId }),

@@ -104,10 +104,45 @@ export function connectionsFor(socialConnections, userId) {
   return own && typeof own === 'object' ? own : {};
 }
 
-export function connectionFor(socialConnections, userId, provider) {
-  return connectionsFor(socialConnections, userId)[provider] || null;
+/**
+ * Every connection a user holds on one platform.
+ *
+ * The slot was a single object for the app's whole life, and every record on
+ * disk still holds one. It may now hold an ARRAY instead -- several YouTube
+ * channels, several TikToks -- and the shape is normalised here on read rather
+ * than by a migration pass, so a bare object is simply a list of one.
+ *
+ * Meta is the exception and stays a single object: one Facebook login already
+ * carries its Pages in `accounts`, so wrapping it in a list would give the same
+ * credential two levels of plurality.
+ */
+export function connectionListFor(socialConnections, userId, provider) {
+  const value = connectionsFor(socialConnections, userId)[provider];
+  if (!value) return [];
+  return (Array.isArray(value) ? value : [value]).filter(Boolean);
 }
 
+/**
+ * The PRIMARY connection -- the first one.
+ *
+ * Deliberately kept, and deliberately still the first: about twenty call sites
+ * read "the user's YouTube" for things that are not per-destination (is
+ * anything connected at all, when was this platform last tested). Anything that
+ * publishes must use connectionByAccount instead, or it will happily post a
+ * clip aimed at the second channel using the first channel's token.
+ */
+export function connectionFor(socialConnections, userId, provider) {
+  return connectionListFor(socialConnections, userId, provider)[0] || null;
+}
+
+/** The connection for ONE account, which is what a publish must resolve. */
+export function connectionByAccount(socialConnections, userId, provider, accountId = '') {
+  const list = connectionListFor(socialConnections, userId, provider);
+  if (!accountId) return list[0] || null;
+  return list.find(item => String(item?.accountId || '') === String(accountId)) || null;
+}
+
+/** Replaces everything stored for this platform with one connection. */
 export function setConnection(socialConnections, userId, provider, connection) {
   if (!userId) throw new Error('A social connection needs an owner.');
   if (!socialConnections[userId] || typeof socialConnections[userId] !== 'object') {
@@ -117,10 +152,57 @@ export function setConnection(socialConnections, userId, provider, connection) {
   return socialConnections;
 }
 
-export function removeConnection(socialConnections, userId, provider) {
+/**
+ * Add a connection alongside the ones already there.
+ *
+ * Reconnecting the SAME account replaces it in place, keeping its position --
+ * that is what "Reconnect" means, and appending instead would leave a dead
+ * credential for the same channel sitting in the list.
+ *
+ * `max` is the caller's tier limit. Beyond it this throws rather than dropping
+ * the oldest: silently evicting a channel someone is publishing to, because
+ * they connected a fourth, is not a decision this function gets to make. The
+ * one exception is a limit of ONE, where connecting is how an account has
+ * always switched channels and there is no second slot to preserve.
+ */
+export function addConnection(socialConnections, userId, provider, connection, { max = 1 } = {}) {
+  if (!userId) throw new Error('A social connection needs an owner.');
+  if (!socialConnections[userId] || typeof socialConnections[userId] !== 'object') {
+    socialConnections[userId] = {};
+  }
+  const list = connectionListFor(socialConnections, userId, provider);
+  const limit = Math.max(1, max);
+  const id = String(connection?.accountId || '');
+  const at = id ? list.findIndex(item => String(item?.accountId || '') === id) : (list.length ? 0 : -1);
+  if (at > -1) list[at] = connection;
+  // At a limit of one, connecting has always MEANT switching: there is no
+  // second slot to keep the old credential in, and refusing here would leave a
+  // Pro account unable to change channel without finding Disconnect first.
+  // Accumulation, and the refusal that goes with it, only applies where the
+  // plan actually permits more than one.
+  else if (limit === 1) list.splice(0, list.length, connection);
+  else if (list.length >= limit) {
+    throw new Error(`This plan connects ${limit} ${provider} accounts. Disconnect one first.`);
+  } else list.push(connection);
+  socialConnections[userId][provider] = list;
+  return socialConnections;
+}
+
+/**
+ * Remove one account's connection, or the whole platform when none is named.
+ *
+ * Naming an account matters now: "Disconnect" on the third YouTube channel must
+ * not take the other two with it.
+ */
+export function removeConnection(socialConnections, userId, provider, accountId = '') {
   const own = socialConnections?.[userId];
   if (!own || !own[provider]) return false;
-  delete own[provider];
+  if (!accountId) { delete own[provider]; return true; }
+  const list = connectionListFor(socialConnections, userId, provider);
+  const left = list.filter(item => String(item?.accountId || '') !== String(accountId));
+  if (left.length === list.length) return false;
+  if (left.length) own[provider] = left;
+  else delete own[provider];
   return true;
 }
 

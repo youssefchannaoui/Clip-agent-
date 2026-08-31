@@ -156,20 +156,18 @@ export function atLeast(user, tier) {
 /**
  * Platforms whose credentials can currently hold more than one account.
  *
- * This is a fact about the OAuth STORE, not about what is sold.
- * `setConnection` in tenancy.js writes `socialConnections[userId][provider] =
- * connection` -- one object, overwritten -- so a second YouTube channel would
- * destroy the first one's refresh token. Meta is different by construction:
- * one Facebook login stores `{ provider: 'meta', accounts: [...] }`, a LIST of
- * Pages and Instagram accounts, which `selectedAccount` already picks from by
- * id.
+ * This is a fact about the OAuth STORE, not about what is sold. It was
+ * facebook and instagram only: a provider slot held ONE connection object and
+ * `setConnection` overwrote it, so a second YouTube channel destroyed the
+ * first one's refresh token, while Meta already kept its Pages in a list.
  *
- * So Facebook and Instagram can genuinely fan out today and YouTube and TikTok
- * cannot, and offering a second YouTube slot would be a control that cannot
- * reach an export -- invariant 9. When the store learns to hold several
- * connections per provider, add them here; nothing else in the cap changes.
+ * The slot holds a list for every provider now (`addConnection`,
+ * `connectionListFor`), and each credential path resolves by account id, so
+ * all four fan out. The constant stays because it is the honest place to
+ * record which platforms the STORE can serve -- if a provider ever needs a
+ * single credential again, removing it here is the whole change.
  */
-export const MULTI_ACCOUNT_PROVIDERS = Object.freeze(['facebook', 'instagram']);
+export const MULTI_ACCOUNT_PROVIDERS = Object.freeze(['facebook', 'instagram', 'youtube', 'tiktok']);
 
 /**
  * How many accounts on ONE platform this account may publish a clip to.

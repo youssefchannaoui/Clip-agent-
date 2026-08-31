@@ -56,6 +56,25 @@ export async function sourceInfo(url) { return engine.sourceInfo(url); }
 // the state it had -- so it answers yes, not an error message.
 const DECIDED = ['approved', 'scheduled', 'publishing', 'retrying', 'ready', 'posted'];
 
+/**
+ * Record the reviewer's consent to post this clip to TikTok -- per ACCOUNT.
+ *
+ * One clip going to three TikToks is three posts, and TikTok's content-sharing
+ * guidelines make consent a per-post act. A single timestamp on the clip said
+ * "they agreed to TikTok" and would have carried one approval onto three
+ * separate posts. `tiktokConsentAt` stays as well, because every clip already
+ * on disk has one and the publish path still reads it.
+ */
+function stampTikTokConsent(clip, publishing) {
+  const at = Date.now();
+  clip.tiktokConsentAt = at;
+  const ids = publishing.tiktok?.accountIds?.length
+    ? publishing.tiktok.accountIds
+    : [publishing.tiktok?.accountId || ''];
+  clip.tiktokConsent = { ...(clip.tiktokConsent || {}) };
+  for (const id of ids) clip.tiktokConsent[String(id || 'default')] = at;
+}
+
 export function approveClip(id) {
   const clip = clipById(id);
   if (!clip) throw new Error('That clip no longer exists.');
@@ -66,7 +85,7 @@ export function approveClip(id) {
   clip.status = 'approved'; clip.approvedAt = Date.now(); clip.approvedBy = 'manual';
   clip.scheduleError = null;
   const publishing = publishingSettings(ownerOfRecord(clip));
-  if (publishing.enabled && publishing.tiktok?.enabled) clip.tiktokConsentAt = Date.now();
+  if (publishing.enabled && publishing.tiktok?.enabled) stampTikTokConsent(clip, publishing);
   save();
   // Legacy only. Clips are rendered at full quality from the start now, so
   // approving one queues nothing -- that churn ("why is it re-rendering when I
@@ -149,7 +168,7 @@ export function scheduleSelected(ids = [], { at = null, day = null } = {}) {
         clip.approvedAt = Date.now();
         clip.approvedBy = 'manual';
         const publishing = publishingSettings(ownerOfRecord(clip));
-  if (publishing.enabled && publishing.tiktok?.enabled) clip.tiktokConsentAt = Date.now();
+  if (publishing.enabled && publishing.tiktok?.enabled) stampTikTokConsent(clip, publishing);
       }
       if (clip.status !== 'approved') throw new Error(`This clip cannot be scheduled from its current ${clip.status} state.`);
 
@@ -604,7 +623,7 @@ export async function publishNow(id) {
   if (clip.status === 'waiting') {
     clip.status = 'approved'; clip.approvedAt = Date.now(); clip.approvedBy = 'manual';
     const publishing = publishingSettings(ownerOfRecord(clip));
-  if (publishing.enabled && publishing.tiktok?.enabled) clip.tiktokConsentAt = Date.now();
+  if (publishing.enabled && publishing.tiktok?.enabled) stampTikTokConsent(clip, publishing);
   }
   if (clip.status === 'approved') {
     clip.scheduledAt = Date.now();
@@ -622,7 +641,7 @@ export async function publishNow(id) {
   } else if (clip.status === 'ready') {
     clip.approvedBy = 'manual';
     const publishing = publishingSettings(ownerOfRecord(clip));
-  if (publishing.enabled && publishing.tiktok?.enabled) clip.tiktokConsentAt = Date.now();
+  if (publishing.enabled && publishing.tiktok?.enabled) stampTikTokConsent(clip, publishing);
     clip.scheduledAt = Date.now(); setTargets(clip);
     for (const target of clip.targets || []) target.nextTryAt = Date.now();
     clip.status = 'scheduled'; save();

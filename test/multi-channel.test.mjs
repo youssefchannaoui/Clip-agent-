@@ -94,12 +94,12 @@ connectMeta(studio.id);
 connectMeta(pro.id);
 
 test('the cap is per platform, and bounded by what the credentials can hold', () => {
-  assert.equal(billing.accountsPerPlatform(studio, 'facebook'), 3);
-  assert.equal(billing.accountsPerPlatform(studio, 'instagram'), 3);
-  // Not a pricing decision: the OAuth store keeps ONE connection per provider,
-  // so a second YouTube channel would overwrite the first one's refresh token.
-  assert.equal(billing.accountsPerPlatform(studio, 'youtube'), 1);
-  assert.equal(billing.accountsPerPlatform(studio, 'tiktok'), 1);
+  // All four now: the provider slot holds a LIST of connections and every
+  // credential path resolves by account id, so YouTube and TikTok are no longer
+  // limited to the one connection their slot used to hold.
+  for (const provider of ['facebook', 'instagram', 'youtube', 'tiktok']) {
+    assert.equal(billing.accountsPerPlatform(studio, provider), 3, provider);
+  }
 
   assert.equal(billing.accountsPerPlatform(pro, 'facebook'), 1, 'Pro is one account per platform');
   assert.equal(billing.accountsPerPlatform({ id: 'nobody' }, 'facebook'), 1, 'Basic is one');
@@ -243,9 +243,8 @@ test('the cap is refused over HTTP, not merely hidden in the interface', async (
   assert.equal(allowed.status, 200, 'three is allowed');
   assert.deepEqual(store.publishingSettings(account).facebook.accountIds, ['page-1', 'page-2', 'page-3']);
 
-  // YouTube's limit is 1 whatever the plan, because its credentials hold one
-  // connection -- so this is refused for a Studio account too.
-  const twoChannels = await save({ enabled: true, youtube: { enabled: true, accountIds: ['chan-a', 'chan-b'] } });
-  assert.equal(twoChannels.status, 400);
-  assert.match((await twoChannels.json()).error, /one youtube account/);
+  // YouTube accepts three now too; the fourth is what the cap refuses.
+  const fourChannels = await save({ enabled: true, youtube: { enabled: true, accountIds: ['a', 'b', 'c', 'd'] } });
+  assert.equal(fourChannels.status, 400);
+  assert.match((await fourChannels.json()).error, /3 youtube accounts/);
 });

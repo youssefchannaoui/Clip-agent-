@@ -300,6 +300,9 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 #studioConnList .studio-conn-account:hover { border-color: rgba(217,180,120,.5); }
 #studioConnList .studio-conn-account.is-on { border-color: #D9B478; color: #F2E4C9; background: rgba(217,180,120,.12); }
 #studioConnList .studio-conn-account input:disabled { cursor: not-allowed; }
+#studioConnList .studio-conn-drop { border: 0; background: transparent; color: #8A8A93; cursor: pointer;
+  font-size: 14px; line-height: 1; padding: 0 0 0 2px; }
+#studioConnList .studio-conn-drop:hover { color: #E3928C; }
 #studioConnList .studio-conn-account:has(input:disabled) { opacity: .45; cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) { #studioConnList .studio-conn-account { transition: none; } }
 /* Connecting an account does not switch it on — publishingSettings.<key>.enabled
@@ -4808,6 +4811,11 @@ function renderStudio(){
     function accountPicker(r,i){
       const accounts=r.accounts||[],max=Number(r.maxAccounts||1);
       if(accounts.length<2||max<2)return '';
+      /* Only YouTube and TikTok hold a credential per account. Facebook and
+         Instagram are Pages inside ONE Meta login, so a per-account disconnect
+         there would tear out that whole login and take the other platform with
+         it. Unticking is the right gesture for a Page; the credential stays. */
+      const ownCredential=r.key==='youtube'||r.key==='tiktok';
       const chosen=r.accountIds&&r.accountIds.length?r.accountIds:[];
       const atCap=chosen.length>=max;
       return `<div class="studio-conn-accounts">
@@ -4816,7 +4824,10 @@ function renderStudio(){
           const on=chosen.indexOf(a.id)>-1;
           return `<label class="studio-conn-account${on?' is-on':''}">
             <input type="checkbox" data-conn-account="${i}" value="${esc(a.id)}" ${on?'checked':''} ${!on&&atCap?'disabled':''}>
-            <span>${esc(a.name||a.id)}</span></label>`}).join('')}
+            <span>${esc(a.name||a.id)}</span>
+            ${ownCredential?`<button type="button" class="studio-conn-drop" data-conn-drop="${i}" data-account="${esc(a.id)}"
+              title="Disconnect ${esc(a.name||a.id)}" aria-label="Disconnect ${esc(a.name||a.id)}">&times;</button>`:''}
+          </label>`}).join('')}
       </div>`;
     }
     function paintConnections(){
@@ -4845,7 +4856,7 @@ function renderStudio(){
             aria-label="Publish to ${esc(r.name)}" title="${linked?(on?'Switched on — approved clips can post here':'Switched off — connected, but nothing will post'):'Connect an account first'}"
             data-conn-toggle="${i}" ${linked?'':'disabled'}><i></i></button>
           <span class="studio-conn-actions">
-            <button type="button" class="primary" data-conn-connect="${i}" ${off?'disabled':''}>${linked?'Reconnect':'Connect'}</button>
+            <button type="button" class="primary" data-conn-connect="${i}" ${off?'disabled':''}>${linked?((r.accounts||[]).length<Number(r.maxAccounts||1)?'Add another':'Reconnect'):'Connect'}</button>
             <button type="button" class="danger" data-conn-disconnect="${i}" ${linked?'':'disabled'}>Disconnect</button>
           </span>${accountPicker(r,i)}</div>`}).join('');
       $$('[data-conn-toggle]').forEach(b=>b.onclick=async()=>{
@@ -4858,6 +4869,14 @@ function renderStudio(){
       $$('[data-conn-disconnect]').forEach(b=>b.onclick=()=>{
         const p=rows[Number(b.dataset.connDisconnect)];StudioAdapter.ui.connProvider=p.key;
         StudioAdapter.bindings(DATA).disconnect({preventDefault(){}})});
+      $$('[data-conn-drop]').forEach(b=>b.onclick=async e=>{
+        e.preventDefault();e.stopPropagation();
+        const p=rows[Number(b.dataset.connDrop)];
+        if(!confirm(`Disconnect ${b.dataset.account} from ${p.name}? The other accounts on this platform stay connected.`))return;
+        try{
+          await api(`/api/social/${encodeURIComponent(p.oauth||p.key)}/disconnect`,{method:'POST',body:JSON.stringify({accountId:b.dataset.account})});
+          toast('Account disconnected','good');await refresh();paintConnections();
+        }catch(err){toast(err.message,'bad')}});
       $$('[data-conn-account]').forEach(box=>box.onchange=async()=>{
         const p=rows[Number(box.dataset.connAccount)];
         const picked=$$(`[data-conn-account="${box.dataset.connAccount}"]`).filter(x=>x.checked).map(x=>x.value);

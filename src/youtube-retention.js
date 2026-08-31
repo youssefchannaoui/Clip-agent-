@@ -80,9 +80,13 @@ export function sweepYouTubeData({ now = Date.now(), retentionMs = RETENTION_MS 
 
   const byUser = state.socialConnections && typeof state.socialConnections === 'object' ? state.socialConnections : {};
   for (const accounts of Object.values(byUser)) {
-    // tenancy.setConnection stores one object per provider under each user;
-    // an array is the older shape and is still read.
-    const list = Array.isArray(accounts) ? accounts : Object.values(accounts && typeof accounts === 'object' ? accounts : {});
+    // A provider slot may hold one connection object or a LIST of them (several
+    // YouTube channels). Flattened, because an array has no `.provider` and the
+    // check below would skip it silently -- which would stop this sweep
+    // scrubbing YouTube channel data altogether, and that is a policy III.E.4
+    // obligation rather than a nicety.
+    const slots = Array.isArray(accounts) ? accounts : Object.values(accounts && typeof accounts === 'object' ? accounts : {});
+    const list = slots.flatMap(slot => (Array.isArray(slot) ? slot : [slot]));
     for (const account of list) {
       if (account?.provider !== 'youtube') continue;
       if (!expired(account, now, retentionMs)) continue;

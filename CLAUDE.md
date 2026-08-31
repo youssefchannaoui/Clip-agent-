@@ -190,7 +190,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **977 JS + 442 Python**
+- `npm test` and `npm run check` must pass. Currently **987 JS + 442 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1347,6 +1347,53 @@ built (v3.34.0); this is the other half. **Studio 3 / Pro 1 / Basic 1.**
   names.
 
 
+## A platform slot holds several credentials (v3.56.0, 31 Aug 2026)
+
+Stage 2 of "3 channels for each social media". Stage 1 let the SETTINGS name
+three accounts; this is the store learning to hold three CREDENTIALS, so
+YouTube and TikTok join Facebook and Instagram.
+
+- **`socialConnections[userId][provider]` may be a LIST now.** Normalised on
+  read (`connectionListFor`), so a bare object written by any earlier build is
+  a list of one and nothing had to be migrated. `setConnection` still assigns
+  the slot and is what Meta uses; `addConnection` adds alongside.
+- **Connecting at a limit of ONE still switches**, deliberately. Pro and Basic
+  have a single slot, and refusing there would leave them unable to change
+  channel without finding Disconnect first. Accumulation, and the refusal past
+  the cap, apply only where the plan permits more than one. Past the cap it
+  throws rather than evicting the oldest: silently dropping a channel someone
+  publishes to is not a decision that function gets to make.
+- **Every credential path resolves by account id.** `youtubeToken`,
+  `tiktokToken`, `queryTikTokCreator`, `uploadYouTube`, `startTikTok`,
+  `pollTikTok` and `testConnection` all take one. Reading "the user's YouTube"
+  instead uploads a clip aimed at channel B with channel A's bearer token --
+  three targets, three reported successes, three post URLs, one channel. The
+  TikTok half is worse than wrong: polling account B's publish_id with account
+  A's token never reaches PUBLISH_COMPLETE, so the target sits in moderation
+  for ever.
+- **A blank account id is honoured only when exactly one connection exists.**
+  It used to match unconditionally, which was harmless with one connection and
+  is the wrong-channel bug with several. Every record written before this
+  release has a blank id and must keep publishing, so ambiguity refuses rather
+  than guessing.
+- **The YouTube retention sweep had to be taught the list.** It read each
+  provider slot as a connection and checked `.provider`; an array has none, so
+  every channel would have been skipped SILENTLY -- and policy III.E.4 is an
+  obligation, not a nicety. A compliance job failing quietly is worse than one
+  failing loudly.
+- **TikTok consent is per account** (`clip.tiktokConsent`), because one clip to
+  three TikToks is three posts and their guidelines make consent a per-post
+  act. `tiktokConsentAt` stays and still counts, or every clip already approved
+  and waiting in the schedule would be stranded.
+- **Disconnect names an account**, and only switches the platform off when
+  nothing is left on it. Disconnecting one of three channels used to switch
+  YouTube off for the other two.
+- **The dialog's per-account × is drawn for YouTube and TikTok only.** Facebook
+  and Instagram are Pages inside ONE Meta login, so a per-account disconnect
+  there would tear out that login and take the other platform with it. Caught
+  before it shipped; unticking is the right gesture for a Page.
+
+
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)
@@ -1435,16 +1482,10 @@ Two features, both Studio-only, in the order he asked for them.
 
 ### Known gaps in the product
 
-- **Multi-account is done for Meta, not for YouTube or TikTok (v3.41.0).** The
-  settings hold a list, the target builder fans out and the cap is sold and
-  enforced -- but `setConnection` in tenancy.js writes
-  `socialConnections[userId][provider] = connection`, ONE object, overwritten.
-  So a second YouTube channel would destroy the first one's refresh token, and
-  `billing.MULTI_ACCOUNT_PROVIDERS` lists only facebook and instagram. Stage 2
-  is teaching the store to hold several connections per provider: the connect
-  handlers, token refresh, disconnect/revoke, YouTube's 30-day retention sweep,
-  and per-account TikTok consent and privacy (one clip to three TikToks is
-  three posts, and their guidelines make consent per post).
+- **Multi-account is done on all four platforms (v3.56.0).** Still open: the
+  connections dialog has no way to name WHICH TikTok a per-account privacy level
+  belongs to, so a second TikTok inherits the first's audience choice until the
+  picker carries one control per account.
 
 - **YouTube API compliance review** (project 881648803263) is at its last open
   question, drafted in Gmail and unsent; deadline ~8 Sept 2026 (7 business days
