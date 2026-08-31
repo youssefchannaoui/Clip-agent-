@@ -246,6 +246,10 @@ h3{font-size:21px;line-height:1.25}
 .frame-stage{position:relative;width:clamp(150px,32vh,215px);border-radius:18px;overflow:hidden;border:1px solid var(--line-strong);box-shadow:var(--shadow)}
 .frame-stage img{width:100%;height:auto;aspect-ratio:9/16;object-fit:cover;display:block}
 .frame-scrim{position:absolute;inset:0;background:linear-gradient(transparent 40%,rgba(7,6,7,.88))}
+/* The generic panel must NOT show the frame's burned-in ayah — a general
+   clipper never renders one. Zoom past it so only the speaker remains and
+   the phonetic Latin caption is the only text on the panel. */
+.frame-panel.is-generic .frame-stage img{transform:scale(1.72);transform-origin:50% 12%}
 .frame-cap{position:absolute;left:12px;right:12px;bottom:16px;text-align:center;font-size:13.5px;font-weight:600;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.8)}
 .frame-tagline{display:inline-flex;align-items:center;gap:8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted-2)}
 .frame-tagline .frame-tag{padding:2px 7px;border:1px solid var(--line-strong);border-radius:6px;font-size:9px;letter-spacing:.14em}
