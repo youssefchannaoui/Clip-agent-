@@ -5928,6 +5928,21 @@ function paintStudio(){
   paintJobBackground(vals);
   paintJobMusic(vals);
   paintTemplatesLayout();
+  /* The watermark row is restored HERE, with every other host-rendered panel,
+     because STUDIO.render() above has just replaced the DOM it was injected
+     into. It was the only one of these left to a MutationObserver instead, and
+     that is why it was the only one that flickered.
+     Reacting to the removal cannot win during a drag. The drag repaints once
+     per frame; the observer's re-attach is scheduled from inside that frame's
+     callback, so it lands in the NEXT frame -- and that frame's drag repaint
+     removes it again. The row alternates present/absent for as long as the
+     drag lasts, which is exactly "the watermark shows then goes away only when
+     dragging captions".
+     Calling it at the END of the render is safe; calling it FROM the observer
+     is not, and the difference matters: the observer is delivered part-way
+     through the render, so a row inserted there is wiped by the innerHTML
+     write that follows and never comes back. Here the render has finished. */
+  try{ window.dcPaintWatermark && window.dcPaintWatermark(); }catch(e){}
   /* No unread activity -> hide the dot the design hardcoded on. */
   document.body.classList.toggle('studio-read',!vals.activityUnread);
 }

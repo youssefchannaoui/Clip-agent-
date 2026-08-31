@@ -2097,3 +2097,34 @@ the one that was actually making the page jump.
   reproduce the density of a real drag. It is enough to compare before against
   after; it is not enough to measure smoothness. Say which of the two a number
   is.
+
+## The watermark row was the one host panel left out of the render (v3.53.5)
+
+Youssef: "its laggying cause the watermark shows then goes away only when
+dragging captions." Third attempt at this, and the first two treated the
+symptom.
+
+- **`paintStudio()` restores every host-rendered panel synchronously right
+  after `STUDIO.render()`** -- paintTemplatesLayout, paintDeckVideo,
+  paintEditorLayout, twenty of them. The watermark row was the ONLY one left to
+  a MutationObserver instead, which is why it was the only one that flickered.
+  It is in the list now.
+- **Reacting to the removal cannot win during a drag, and this is the general
+  lesson.** The drag repaints once per frame; an observer's re-attach is
+  scheduled from inside that frame's callback, so it lands in the NEXT frame --
+  and that frame's drag repaint removes it again. The row alternates
+  present/absent for as long as the drag lasts. Measured: **12 of 12 drag
+  renders ended with no row** before, **0 of 12** after.
+- **Only a DRAG reproduces it.** A bare `paintStudio()` leaves the row alone --
+  0/5 either way -- because the subtree is only replaced when the render output
+  actually differs, and it is the drag state (`dragKind`, `dragPreview`, the
+  grabbing cursor and outline) that changes it. An earlier measurement that
+  called paintStudio without drag state said the bug was fixed when it was not.
+  Set `StudioAdapter.ui.dragKind`/`dragPreview` to reproduce.
+- Calling it at the END of the render is safe; calling it FROM the observer is
+  not. The observer is delivered part-way through the render, so a row inserted
+  there is wiped by the innerHTML write that follows and never returns at all
+  (v3.53.3 notes). The end of paintStudio is after the render has finished.
+- **Any future host-injected panel belongs in paintStudio's list**, not on an
+  observer. The observer stays as a backstop for renders that do not go through
+  paintStudio.
