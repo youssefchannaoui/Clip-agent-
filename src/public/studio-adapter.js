@@ -1745,6 +1745,11 @@
     // onLoadDeenai returns demo cards for a free account, and the server
     // refuses /api/deenai/ask outright. Presentation never guards anything.
     var item = navItem('deenai', 'DeenAI', 'ph ph-sparkle', 'STUDIO');
+    // First of the rail's bottom cluster. The class attribute is already bound
+    // to mobileClass, so marking it here costs no template change; the phone
+    // hides every dc-nav-secondary item anyway, and the CSS that acts on this
+    // is inside a desktop-only media query.
+    item.mobileClass = item.mobileClass + ' dc-nav-tail';
     // The count slot is a pill already; this one is a word, so it loses the
     // number styling and takes the gold the tier uses everywhere else.
     var railOpen = UI.railOpen && (global.innerWidth || 1280) > 820;
@@ -4058,15 +4063,28 @@
       toggleRail: function (e) { stop(e); setUI({ railOpen: !UI.railOpen }); },
 
       navHome: [navItem('home', 'Home', 'ph-fill ph-house', '')],
+      // The two group headings are literal strings inside the generated
+      // template, so what each group MEANS has to be earned by what is put in
+      // it rather than by renaming the label -- renaming would need a design
+      // re-import, and that regenerates every hashed class name in the app.
+      //
+      // Produce is the working loop end to end: bring a lecture in, decide on
+      // the clips, give them slots, then see how they did. Performance sat
+      // under "Set up", which it has never been -- nobody configures it.
       navProduce: [
         navItem('library', 'Lecture library', 'ph ph-film-script', ''),
         navItem('queue', 'Review queue', 'ph-fill ph-stack', needsCount || ''),
         navItem('schedule', 'Schedule', 'ph ph-calendar-dots', scheduled.length || ''),
+        navItem('performance', 'Performance', 'ph ph-chart-line-up', ''),
       ],
+      // Set up is now only the two things an account configures once, and then
+      // the tail: the assistant, help and the operator's own door, which are
+      // not steps in anybody's workflow. The tail is pushed to the foot of the
+      // rail by CSS (dc-nav-tail in studio-tokens.css) -- the items were
+      // ending 340px short of the bottom, which reads as an unfinished column.
       navSetup: [
         navItem('templates', 'Templates', 'ph ph-text-aa', ''),
         navItem('music', 'Nasheed library', 'ph ph-music-notes', ''),
-        navItem('performance', 'Performance', 'ph ph-chart-line-up', ''),
         deenaiNavItem(),
         helpNavItem(),
       ].concat(isOperator(DATA) ? [ownerNavItem()] : []),

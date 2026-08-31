@@ -190,7 +190,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **998 JS + 456 Python**
+- `npm test` and `npm run check` must pass. Currently **1003 JS + 456 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1486,6 +1486,52 @@ contact us for any additional helps or referring a bug."
   move if the product does -- the editor being gated, nothing posting without
   approval, no platform sending audience numbers back. Help is behind sign-in
   and behind NO plan gate: a free account is exactly who needs it.
+
+### Help does not load, and the rail has a bottom (v3.59.2)
+
+Youssef: "why does help need to load? ... organize the left hand tabs to look
+just a lot neater and a bit nicer."
+
+- **The help content is the same bytes for every account and changes only when
+  someone deploys, so there was no reason to make anyone watch it arrive.** It
+  is fetched once in `boot()`, in the background and never awaited, so it is
+  already in hand before anyone clicks Help. Measured: the "Loading help…"
+  state is now painted **0 times** on a click, with all 8 cards present
+  immediately. The fetch is still swallowed on failure -- help failing must
+  never stop the app booting -- and `json()` keeps its `no-store`, so a deploy
+  cannot leave a customer reading last week's instructions.
+- **The rail ended 340px short of its own bottom.** Measured at 1440x900: the
+  last item finished at y=560 in a 900px column, which reads as a list that ran
+  out rather than a column that was designed.
+- **The group headings are literal strings in the generated template**, so what
+  "Produce" and "Set up" MEAN can only be earned by what goes in them --
+  renaming needs a design re-import, which regenerates every hashed class name
+  in the app. Produce is now the working loop end to end (library, queue,
+  schedule, **performance** -- which had been filed under Set up, though nobody
+  configures it); Set up is only the two configure-once screens.
+- **DeenAI, Help and Owner are the rail's tail**, anchored at the foot above
+  the collapse row with a hairline over them -- the assistant, support and the
+  operator's door are not steps in anybody's workflow. `dc-nav-tail` rides on
+  `mobileClass`, which the template ALREADY binds as the class attribute, so
+  this cost no re-import.
+- **The CSS is inside `@media (min-width: 821px)` deliberately.** The same nav
+  element becomes a bottom TAB BAR on a phone, laid out in a row, where a
+  vertical `margin-top: auto` pushes a tab out of line. Every tail item is
+  `dc-nav-secondary` and therefore already hidden there -- scoping the rule
+  means that stops being something anyone has to remember, and a test asserts
+  no tail item is ever promoted to primary.
+- Verified by measurement at **900, 768 and 700px tall**: no overlap with the
+  collapse row, no nav overflow, an even 18px under the last item at all three;
+  collapsed to 68px and back with a real click; phone still five tabs on one
+  row with no horizontal overflow.
+- **`dc-nav-tail` is the only thing holding the cluster down**, and losing it
+  fails silently -- the app renders, the suite stays green, the sidebar just
+  goes back to being top-heavy. `test/rail-nav.test.mjs` was proven RED against
+  the hook's removal before being kept.
+- **An adapter test must copy values out of the vm realm.** `bindings()` runs
+  in a `vm` context, so the arrays it returns are that realm's `Array` and
+  strict `deepEqual` rejects them on the prototype -- "same structure but not
+  reference-equal". `Array.from` is the host's and fixes it.
 
 ### The suite had a 1-in-6 abort and it was invisible (v3.59.0)
 

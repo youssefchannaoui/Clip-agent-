@@ -145,6 +145,53 @@
   background: #17171A !important;
 }
 
+/* The rail's bottom cluster.
+ *
+ * Measured at 1440x900 before this: the last nav item ended at y=560 in a
+ * 900px column, so 340px of the rail was empty and the list read as an
+ * unfinished top-heavy stack. DeenAI, Help and Owner are not steps in
+ * anybody's workflow -- they are the assistant, support, and the operator's
+ * own door -- so they sit at the foot of the rail, which is where every
+ * application of this shape puts them.
+ *
+ * Desktop only, deliberately. On a phone the same nav element becomes a
+ * bottom TAB BAR laid out in a row (studio-responsive.css), where a vertical
+ * auto margin would push a tab out of line. Every item this rule touches is
+ * dc-nav-secondary and therefore hidden on the phone anyway; scoping it here
+ * means that stops being something anyone has to remember.
+ */
+@media (min-width: 821px) {
+  /* The nav has to fill the column before anything inside it can be pushed to
+     the bottom of one. */
+  #dcRailNav {
+    flex: 1 1 auto;
+    min-height: 0;
+    /* Room for the collapse row, which is absolutely positioned against the
+       rail -- without this the Owner item slides underneath it. */
+    padding-bottom: 46px;
+  }
+  #dcRailNav > div:last-of-type {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+  }
+  #dcRailNav a.dc-nav-tail {
+    margin-top: auto;
+    position: relative;
+  }
+  /* The same hairline device as the collapse row above, drawn as a
+     pseudo-element rather than another node in the design export. */
+  #dcRailNav a.dc-nav-tail::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -9px;
+    height: 1px;
+    background: #1E1E22;
+  }
+}
+
 /* The review deck's keyboard hints are for machines that have a keyboard.
    On the phone sheet they are noise under the filmstrip, so they go. */
 @media (max-width: 820px) {

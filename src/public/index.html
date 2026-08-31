@@ -2200,7 +2200,7 @@ function clipCaption(c){return [c.description,c.hashtags].filter(Boolean).join('
 function downloadClip(id){location.href=withPw(`/api/clips/${encodeURIComponent(id)}/download`)}
 async function copyText(text){await navigator.clipboard.writeText(text);toast('Copied','good')}
 
-async function boot(){try{DATA=await api('/api/state');localStorage.setItem('deenPw',PW);$('#gate')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#app')?.classList.remove('hide');renderAll();handleOAuthResult();return true}catch(e){$('#app')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#gate')?.classList.remove('hide');if($('#gateErr'))$('#gateErr').textContent=e.message;return false}}
+async function boot(){try{DATA=await api('/api/state');localStorage.setItem('deenPw',PW);$('#gate')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#app')?.classList.remove('hide');renderAll();handleOAuthResult();/* The help content is the same bytes for everybody and never changes between deploys, so there is no reason to make someone watch it load when they open the tab. Fetched once here, in the background and never awaited, so it is already in hand by the time anyone clicks Help -- and a failure is swallowed, because help failing must never stop the app booting. */StudioAdapter.onLoadHelp();return true}catch(e){$('#app')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#gate')?.classList.remove('hide');if($('#gateErr'))$('#gateErr').textContent=e.message;return false}}
 /* The open editor clip needs its heavy fields (caption timings, ayahs),
    which the list payload deliberately omits. Fetched once per clip version
    and merged back in after every poll. */
