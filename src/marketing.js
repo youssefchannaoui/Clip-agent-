@@ -617,10 +617,10 @@ export function home({ base, currentUser }) {
             <span class="section-label"><i></i>Inside the studio</span>
             <h2 id="walk-heading">Watch a lecture move <em>through the studio.</em></h2>
             <ol class="walk-steps">
-              <li style="--i:0"><i>01</i><span class="walk-step-body"><b>Import the lecture</b><span>Paste a supported link or upload a file, then choose the exact minutes worth processing.</span></span></li>
-              <li style="--i:1"><i>02</i><span class="walk-step-body"><b>Review the real renders</b><span>Every candidate arrives as the file that would post, with its score and reasons beside it.</span></span></li>
-              <li style="--i:2"><i>03</i><span class="walk-step-body"><b>Set the look once</b><span>Five caption templates — a change re-renders only clips still waiting for review.</span></span></li>
-              <li style="--i:3"><i>04</i><span class="walk-step-body"><b>Schedule and publish</b><span>Approved clips fill your posting windows, and each destination reports its own state.</span></span></li>
+              <li style="--i:0"><i>01</i><span class="walk-step-body"><b>Import only the minutes that matter</b><span>Paste a link and pick the stretch. Only that stretch is downloaded and charged &mdash; three minutes of a ninety-minute lecture costs three tokens, not ninety.</span><em class="walk-chip">3 min = 3 tokens</em></span></li>
+              <li style="--i:1"><i>02</i><span class="walk-step-body"><b>Review the file that will post</b><span>The queue plays the rendered clip itself &mdash; the same bytes that publish &mdash; with the score and the model&rsquo;s own reasons beside it. Decide from the keyboard.</span><em class="walk-chip">Scripture is force-held for a person</em></span></li>
+              <li style="--i:2"><i>03</i><span class="walk-step-body"><b>Set a look that knows what it captions</b><span>Five templates &mdash; and the Quran treatment sets the matched ayah in a mushaf face, switches the nasheed off and strips the branding. Changes re-render only clips still waiting.</span><em class="walk-chip">No nasheed under recitation</em></span></li>
+              <li style="--i:3"><i>04</i><span class="walk-step-body"><b>Publish to your own channels</b><span>Approved clips fill your posting windows. Every destination answers separately &mdash; a TikTok refusal never touches a YouTube success.</span><em class="walk-chip">Retry only the failed leg</em></span></li>
             </ol>
           </div>
           <div class="walk-stage">
@@ -665,6 +665,45 @@ export function home({ base, currentUser }) {
             </figure>
           </div>
           <p class="frame-note">Inside a single clip the treatment <b>changes per segment</b>: recited scripture becomes the ayah and its translation, other Arabic is captioned in Arabic with an English line beneath it, and English is captioned as English.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="choose-scene" id="content-types" aria-labelledby="choose-heading">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="section-label"><i></i>Two pipelines, one switch</span>
+          <h2 id="choose-heading">Tell it what it is hearing. <em>Everything downstream changes.</em></h2>
+          <p>The source type is chosen before processing &mdash; because the pipeline that captions a khutbah is the wrong pipeline for scripture.</p>
+        </div>
+        <input type="radio" name="ctype" id="ct-lecture" class="ctradio" checked>
+        <input type="radio" name="ctype" id="ct-quran" class="ctradio">
+        <div class="choose-switch"><label for="ct-lecture">Islamic Lecture</label><label for="ct-quran">Quran Recitation</label></div>
+        <div class="choose-stage">
+          <div class="choose-panel is-lecture">
+            <div class="choose-facts">
+              <h3>Complete thoughts, captioned as spoken.</h3>
+              <div class="detail-list">${checkItem('Cuts land on the whole idea', 'A point keeps its ending, a question keeps its answer — never a cut on a timer.')}${checkItem('Three scripts, switching per segment', 'English as English, Arabic in Arabic with an English line beneath — inside one clip.')}${checkItem('Nasheed under the speech, ducked beneath it', 'A vocal-only track is mixed under lectures and lowered while the speaker talks.')}${checkItem('Speaker-aware 9:16 framing', 'The crop follows the person talking, not the centre of the old frame.')}</div>
+              <a class="button secondary" href="/islamic-lecture-clipper">See the lecture workflow ${icon('arrow')}</a>
+            </div>
+            <div class="choose-media" aria-label="Lecture caption templates on real frames">
+              ${reelCard(['reel-dua.webp', 'Lecture clip in the Bold Stack template'], 'choose-reel')}
+              ${reelCard(['reel-dunya.webp', 'Lecture clip in the Headline template'], 'choose-reel choose-reel-mid')}
+              ${reelCard(['reel-halal.webp', 'Lecture clip in the Clean Line template'], 'choose-reel')}
+              <span class="choose-note">Five templates apply here — Clean Line, Bold Stack, Headline and Mono Minimal shown on real output.</span>
+            </div>
+          </div>
+          <div class="choose-panel is-quran">
+            <div class="choose-facts">
+              <h3>The ayah itself, not a guess at the sound.</h3>
+              <div class="detail-list">${checkItem('Matched to the Qur’an, not transcribed', 'Recitation is matched against the full corpus and set as the verse itself, in a mushaf face.')}${checkItem('The translation rides beneath it', 'Every ayah carries its English line, with the surah and verse number beside the clip.')}${checkItem('No nasheed, no branding treatments', 'The Quran template deliberately silences the track and strips the decoration.')}${checkItem('A person approves every one', 'Scripture cannot pass automatic publishing — it waits for you, whatever the settings say.')}</div>
+              <a class="button secondary" href="/tools/arabic-english-captions">See the Arabic treatment ${icon('arrow')}</a>
+            </div>
+            <div class="choose-media is-single" aria-label="The Quran Recitation treatment on a real frame">
+              ${reelCard(['reel-quran.webp', 'Quran recitation clip with the matched ayah and its translation'], 'choose-reel choose-reel-big')}
+              <span class="choose-note">One template applies here, deliberately — the others are switched off for scripture.</span>
+            </div>
+          </div>
         </div>
       </div>
     </section>

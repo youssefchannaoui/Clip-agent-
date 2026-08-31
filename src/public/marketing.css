@@ -341,7 +341,10 @@ h3{font-size:21px;line-height:1.25}
   opacity:calc(clamp(0,calc(var(--ps) - var(--i)),1) * (1 - clamp(0,calc(var(--ps) - var(--i) - 1.1),1)))}
 .walk-steps li > i{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;letter-spacing:.14em;color:var(--gold);flex:none}
 .walk-step-body b{display:block;font-family:var(--font-display);font-weight:480;font-size:18px;letter-spacing:-.01em}
-.walk-step-body > span{display:block;font-size:13px;color:var(--muted);margin-top:3px;max-width:40ch}
+.walk-step-body > span{display:block;font-size:13px;color:var(--muted);margin-top:3px;max-width:44ch}
+.walk-chip{display:inline-block;margin-top:9px;padding:4px 10px;border-radius:8px;font-style:normal;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--gold-2);border:1px solid rgba(217,182,111,.35);background:rgba(217,182,111,.06)}
 .walk-stage{position:relative}
 .walk-frame{position:relative;overflow:hidden}
 .walk-frame img{width:100%;height:auto;display:block}
@@ -398,6 +401,45 @@ h3{font-size:21px;line-height:1.25}
 }
 .frame-note{text-align:center;font-size:14px;color:var(--muted);max-width:66ch;margin-inline:auto}
 .frame-note b{color:var(--text)}
+
+/* ═══════════════════ HOME: CONTENT-TYPE CHOOSER ═════════════════════════
+   The product's own control, demonstrated: flip the switch and the facts,
+   the frames and the template rules all change. CSS radios — the same
+   no-script device as the pricing period switch. */
+.choose-scene{padding:clamp(80px,11vh,140px) 0;background:var(--bg1)}
+.ctradio{position:absolute;opacity:0;pointer-events:none}
+.choose-switch{
+  position:relative;display:grid;grid-template-columns:repeat(2,190px);
+  margin:0 auto clamp(30px,4vh,44px);padding:4px;border-radius:14px;
+  background:var(--bg2);border:1px solid var(--line-strong);width:max-content;
+}
+.choose-switch::before{
+  content:"";position:absolute;top:4px;left:4px;width:190px;height:calc(100% - 8px);
+  border-radius:11px;background:linear-gradient(120deg,var(--gold),var(--gold-2));
+  transition:transform .32s var(--ease);
+}
+#ct-quran:checked ~ .choose-switch::before{transform:translateX(190px)}
+.choose-switch label{position:relative;z-index:1;text-align:center;padding:11px 0;font-size:14px;font-weight:650;color:var(--muted);cursor:pointer;transition:color .2s}
+#ct-lecture:checked ~ .choose-switch label[for="ct-lecture"],
+#ct-quran:checked ~ .choose-switch label[for="ct-quran"]{color:#191204}
+.choose-panel{display:none}
+#ct-lecture:checked ~ .choose-stage .is-lecture,
+#ct-quran:checked ~ .choose-stage .is-quran{display:grid;animation:chooseIn .45s var(--ease) backwards}
+@keyframes chooseIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.choose-panel{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(28px,4.5vw,70px);align-items:center}
+.choose-facts{display:grid;gap:18px;justify-items:start}
+.choose-facts h3{font-size:clamp(22px,2.4vw,32px);font-weight:460;letter-spacing:-.015em}
+.choose-media{position:relative;display:flex;justify-content:center;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.choose-reel{width:clamp(120px,11vw,158px);box-shadow:var(--shadow)}
+.choose-reel:first-child{transform:rotate(-3deg) translateY(6px)}
+.choose-reel-mid{width:clamp(140px,13vw,182px);z-index:1}
+.choose-reel:nth-of-type(3){transform:rotate(3deg) translateY(6px)}
+.choose-reel-big{width:clamp(190px,17vw,250px);transform:none}
+.choose-note{flex-basis:100%;text-align:center;font-size:12.5px;color:var(--muted-2);max-width:52ch;margin:14px auto 0}
+@media (prefers-reduced-motion:reduce){
+  #ct-lecture:checked ~ .choose-stage .is-lecture,
+  #ct-quran:checked ~ .choose-stage .is-quran{animation:none}
+}
 
 /* ═══════════════════ HOME: WORKFLOW CHAPTERS (sticky stack) ═════════════ */
 .chapters-scene{position:relative;z-index:5;background:var(--bg0);border-radius:34px 34px 0 0;margin-top:-34px;padding:clamp(84px,10vh,140px) 0 40px;box-shadow:0 -30px 80px rgba(0,0,0,.6)}
@@ -832,8 +874,13 @@ main{display:block}
   .menu-button{display:flex}
   .nav-actions .text-button{display:none}
   .deenai-grid,.pricing-explainer,.contact-layout,.seo-proof,.tool-widget-body,
-  .feature-deep-dive,.feature-deep-dive.reverse,.walk-grid{grid-template-columns:1fr}
+  .feature-deep-dive,.feature-deep-dive.reverse,.walk-grid,.choose-panel,
+  #ct-lecture:checked ~ .choose-stage .is-lecture,
+  #ct-quran:checked ~ .choose-stage .is-quran{grid-template-columns:1fr}
   .walk-bar{display:none}
+  .choose-switch{grid-template-columns:repeat(2,150px)}
+  .choose-switch::before{width:150px}
+  #ct-quran:checked ~ .choose-switch::before{transform:translateX(150px)}
   .feature-deep-dive.reverse .feature-deep-copy{order:0}
   .seo-section{grid-template-columns:1fr;gap:12px}
   .seo-section p{max-width:none}
