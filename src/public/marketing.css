@@ -190,12 +190,21 @@ h3{font-size:21px;line-height:1.25}
      ERA-style wipe, done with plain flow order and a rounded lip. */
   .mjs .sc-hero{height:136vh}
   .mjs .sc-hero .sc-stage{position:sticky;top:0;height:100svh;min-height:0}
+  /* The chooser pins too: the first half of its scrub shows the Lecture
+     pipeline, then the engine flips the switch to Quran Recitation. */
+  .mjs .sc-choose{height:210vh;padding:0}
+  .mjs .sc-choose .sc-stage{position:sticky;top:0;height:100svh;min-height:0;align-content:center;padding-top:60px}
+  .mjs .sc-choose .section-head{margin-bottom:clamp(16px,2.5vh,30px)}
   .mjs .strip-scene{border-radius:34px 34px 0 0;box-shadow:0 -30px 80px rgba(0,0,0,.55);z-index:4}
   .mjs .frame-scene{border-radius:34px 34px 0 0;margin-top:-34px;box-shadow:0 -30px 80px rgba(0,0,0,.55);z-index:4}
 }
 @media (prefers-reduced-motion:reduce){
-  .mjs .sc-tall,.mjs .sc-hero{height:auto}
-  .mjs .sc-tall .sc-stage,.mjs .sc-hero .sc-stage{position:relative;top:auto;height:auto;min-height:100svh}
+  .mjs .sc-tall,.mjs .sc-hero,.mjs .sc-choose{height:auto}
+  .mjs .sc-choose{padding:clamp(80px,11vh,140px) 0}
+  .mjs .sc-tall .sc-stage,.mjs .sc-hero .sc-stage,.mjs .sc-choose .sc-stage{position:relative;top:auto;height:auto;min-height:0}
+  .walk-steps li,.walk-steps li:last-child{--w:1}
+  .flow-stage{opacity:1;transform:none}
+  .flow-arrow{transform:none}
   .mjs .strip-scene,.mjs .frame-scene{border-radius:0;margin-top:0;box-shadow:none}
 }
 
@@ -322,6 +331,41 @@ h3{font-size:21px;line-height:1.25}
 .strip-note{text-align:center;font-size:13px;color:var(--muted-2)}
 .strip-note b{color:var(--gold-2);font-weight:600}
 
+/* ═══════════════════ HOME: THREE-MOVE FLOW BAND ═════════════════════════
+   The at-a-glance version: three staged compositions joined by arrows that
+   draw in as the band crosses the viewport. Everything resolves visible at
+   the default --p of 1. */
+.flow-scene{padding:clamp(70px,9vh,110px) 0 clamp(50px,6vh,80px);background:var(--bg0)}
+.flow-band{display:grid;grid-template-columns:minmax(0,1fr) 60px minmax(0,1fr) 60px minmax(0,1fr);gap:18px;align-items:start}
+.flow-stage{display:grid;gap:8px;justify-items:center;text-align:center;
+  opacity:clamp(0,calc((var(--p,1) - calc(.06 + var(--f,0) * .16)) / .14),1);
+  transform:translateY(calc((1 - clamp(0,calc((var(--p,1) - calc(.06 + var(--f,0) * .16)) / .14),1)) * 22px))}
+.flow-media{position:relative;display:grid;gap:10px;justify-items:center;min-height:238px;align-content:center}
+.flow-frame{position:relative;display:block;width:112px;border-radius:12px;overflow:hidden;border:1px solid var(--line-strong);box-shadow:var(--shadow)}
+.flow-frame img{width:100%;height:auto;aspect-ratio:9/16;object-fit:cover;display:block}
+.flow-frame.is-wide{width:min(300px,100%)}
+.flow-frame.is-wide img{aspect-ratio:16/9}
+.flow-strip{display:flex;gap:5px}
+.flow-strip i{width:26px;height:15px;border-radius:3px;background:rgba(245,241,232,.12)}
+.flow-strip i:nth-child(3){background:rgba(217,182,111,.55)}
+.flow-brackets{position:absolute;inset:8px;pointer-events:none}
+.flow-brackets::before,.flow-brackets::after{content:"";position:absolute;width:20px;height:20px;border:1.5px solid var(--gold)}
+.flow-brackets::before{top:0;left:0;border-right:0;border-bottom:0}
+.flow-brackets::after{bottom:0;right:0;border-left:0;border-top:0}
+.flow-score{position:absolute;top:8px;right:8px;padding:2px 7px;border-radius:6px;background:rgba(7,6,7,.8);color:var(--gold-2);font-style:normal;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;letter-spacing:.08em}
+.flow-sched{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);white-space:nowrap;padding:3px 9px;border-radius:7px;background:rgba(7,6,7,.85);border:1px solid rgba(111,206,158,.4);color:var(--green);font-style:normal;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:9.5px;letter-spacing:.1em}
+.flow-platforms{display:grid;gap:5px;text-align:left}
+.flow-platforms span{position:relative;padding-left:14px;font-size:11.5px;color:var(--muted)}
+.flow-platforms span::before{content:"";position:absolute;left:0;top:6px;width:5px;height:5px;border-radius:50%;background:var(--gold)}
+.flow-caption{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;letter-spacing:.14em;color:var(--muted-2)}
+.flow-stage b{font-family:var(--font-display);font-weight:490;font-size:18px;letter-spacing:-.01em;margin-top:4px}
+.flow-stage p{font-size:12.5px;color:var(--muted);max-width:30ch}
+.flow-arrow{position:relative;align-self:center;height:2px;margin-top:110px;
+  background-image:linear-gradient(90deg,var(--gold) 55%,transparent 55%);background-size:9px 1.5px;background-repeat:repeat-x;background-position:0 50%;
+  transform:scaleX(clamp(0,calc((var(--p,1) - calc(.02 + var(--f,1) * .16)) / .12),1));transform-origin:left;
+  opacity:.75}
+.flow-arrow::after{content:"";position:absolute;right:-1px;top:-4px;border:5px solid transparent;border-left-color:var(--gold)}
+
 /* ═══════════════════ HOME: STUDIO WALKTHROUGH ═══════════════════════════
    A pinned pass through the real product: four steps light up in turn while
    the matching capture crossfades into one frame. --ps counts 0→4 across
@@ -333,12 +377,19 @@ h3{font-size:21px;line-height:1.25}
 .walk-copy{display:grid;gap:20px}
 .walk-copy h2{font-size:clamp(28px,3.4vw,46px)}
 .walk-steps{list-style:none;display:grid;gap:4px;margin-top:4px}
+/* --w is "how active is this step": a window that opens as the scrub enters
+   the step and closes as it leaves, so ONE step reads at a time. The last
+   step never closes, and static contexts force every window open. */
 .walk-steps li{
   position:relative;display:flex;gap:14px;align-items:baseline;padding:13px 14px 13px 18px;border-radius:12px;
-  opacity:calc(.34 + .66 * clamp(0,calc((var(--ps) - var(--i)) / .3),1));
+  --w:calc(clamp(0,calc((var(--ps) - var(--i)) / .3),1) * (1 - clamp(0,calc(var(--ps) - var(--i) - 1.12),1)));
+  opacity:calc(.32 + .68 * var(--w));
 }
+.walk-steps li:last-child{--w:clamp(0,calc((var(--ps) - var(--i)) / .3),1)}
+html:not(.mjs) .walk-steps li{--w:1}
 .walk-steps li::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:2px;border-radius:2px;background:var(--gold);
-  opacity:calc(clamp(0,calc(var(--ps) - var(--i)),1) * (1 - clamp(0,calc(var(--ps) - var(--i) - 1.1),1)))}
+  opacity:var(--w)}
+.walk-step-body > span,.walk-chip{opacity:calc(.14 + .86 * var(--w))}
 .walk-steps li > i{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;letter-spacing:.14em;color:var(--gold);flex:none}
 .walk-step-body b{display:block;font-family:var(--font-display);font-weight:480;font-size:18px;letter-spacing:-.01em}
 .walk-step-body > span{display:block;font-size:13px;color:var(--muted);margin-top:3px;max-width:44ch}
@@ -878,6 +929,9 @@ main{display:block}
   #ct-lecture:checked ~ .choose-stage .is-lecture,
   #ct-quran:checked ~ .choose-stage .is-quran{grid-template-columns:1fr}
   .walk-bar{display:none}
+  .flow-band{grid-template-columns:1fr;gap:34px}
+  .flow-arrow{display:none}
+  .flow-media{min-height:0}
   .choose-switch{grid-template-columns:repeat(2,150px)}
   .choose-switch::before{width:150px}
   #ct-quran:checked ~ .choose-switch::before{transform:translateX(150px)}

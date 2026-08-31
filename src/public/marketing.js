@@ -77,6 +77,7 @@ if (reducedMotion || !('IntersectionObserver' in window)) {
 if (!reducedMotion) {
   const scenes = [...document.querySelectorAll('[data-scene]')];
   const rootEl = document.documentElement;
+  const wide = window.matchMedia('(min-width: 961px)');
   let ticking = false;
   const update = () => {
     ticking = false;
@@ -90,6 +91,13 @@ if (!reducedMotion) {
         : (vh - rect.top) / (vh + rect.height);
       const p = Math.min(1, Math.max(0, raw));
       scene.style.setProperty('--p', p.toFixed(4));
+      // The pinned chooser advances itself: first half Lecture, second half
+      // Quran Recitation. Clicking still works while the page is at rest.
+      if (wide.matches && scene.classList.contains('sc-choose')) {
+        const quran = document.getElementById('ct-quran');
+        const lecture = document.getElementById('ct-lecture');
+        if (quran && lecture) (p > 0.52 ? quran : lecture).checked = true;
+      }
     }
     // Whole-page progress for the orientation hairline, and the point where
     // the header wordmark condenses into the rotating seal.

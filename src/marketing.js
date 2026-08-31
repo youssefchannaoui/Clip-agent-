@@ -610,6 +610,43 @@ export function home({ base, currentUser }) {
       </div>
     </section>
 
+    <section class="flow-scene" data-scene id="how-it-flows" aria-labelledby="flow-heading">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="section-label"><i></i>How it works</span>
+          <h2 id="flow-heading">Three moves, <em>start to posted.</em></h2>
+        </div>
+        <div class="flow-band">
+          <div class="flow-stage" style="--f:0">
+            <div class="flow-media">
+              <span class="flow-frame is-wide"><img src="/marketing-assets/reel-landscape.webp" alt="A long lecture source frame" loading="lazy"></span>
+              <span class="flow-strip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            </div>
+            <b>The lecture arrives</b>
+            <p>A link or an upload — and only the minutes you choose are charged.</p>
+          </div>
+          <i class="flow-arrow" style="--f:1" aria-hidden="true"></i>
+          <div class="flow-stage" style="--f:1">
+            <div class="flow-media">
+              <span class="flow-frame"><img src="/marketing-assets/reel-depart.webp" alt="A detected moment with its score" loading="lazy"><i class="flow-brackets"></i><em class="flow-score">86</em></span>
+            </div>
+            <span class="flow-caption">Finding complete thoughts&hellip;</span>
+            <b>Moments are detected</b>
+            <p>Scored and explained, cut on the whole idea — never on a timer.</p>
+          </div>
+          <i class="flow-arrow" style="--f:2" aria-hidden="true"></i>
+          <div class="flow-stage" style="--f:2">
+            <div class="flow-media">
+              <span class="flow-frame"><img src="/marketing-assets/reel-halal-way.webp" alt="An approved clip ready on the schedule" loading="lazy"><em class="flow-sched">Scheduled &middot; 17:00</em></span>
+              <span class="flow-platforms"><span>YouTube</span><span>TikTok</span><span>Instagram</span><span>Facebook</span></span>
+            </div>
+            <b>Posted on your channels</b>
+            <p>Approved by you first, then into your own posting windows.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section class="sc sc-tall walk-scene" data-scene id="studio-steps" aria-labelledby="walk-heading">
       <div class="sc-stage">
         <div class="wrap walk-grid">
@@ -669,7 +706,8 @@ export function home({ base, currentUser }) {
       </div>
     </section>
 
-    <section class="choose-scene" id="content-types" aria-labelledby="choose-heading">
+    <section class="sc sc-choose choose-scene" data-scene id="content-types" aria-labelledby="choose-heading">
+      <div class="sc-stage">
       <div class="wrap">
         <div class="section-head">
           <span class="section-label"><i></i>Two pipelines, one switch</span>
@@ -705,6 +743,7 @@ export function home({ base, currentUser }) {
             </div>
           </div>
         </div>
+      </div>
       </div>
     </section>
 
