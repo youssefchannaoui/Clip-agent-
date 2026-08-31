@@ -190,7 +190,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **968 JS + 427 Python**
+- `npm test` and `npm run check` must pass. Currently **968 JS + 435 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -2151,3 +2151,42 @@ the screen."
   rather than trusting the node is still where it was put.
 - Verified at 1440x900 and through 12 simulated drag renders: first child every
   time, 0 renders ending with no row, 0 renders where it moved.
+
+## AI titling: the model was never told who was speaking (v3.54.0, 31 Aug 2026)
+
+Youssef: "ai titleing, its not good at all use youtube if you want to learn how
+to title". Looking at what actually ranks for "islamic lecture" on YouTube, the
+titles that travel almost all carry the SPEAKER'S NAME -- "Never lose hope in
+the Mercy of Allah - Muhammad Hoblos" (836k views), "Prophet's Vision: The
+Future of The Ummah - Belal Assaad" (114k), "Life's Trials Are Like Pinches ... -
+Omar Suleiman" (34k). In this niche the scholar IS the search term.
+
+- **`refine_with_ollama` was given the clip transcripts and NOTHING else.** The
+  lecture's own title -- the only field in the entire job that contains the
+  speaker's name -- was never passed in, so the model could not have named them
+  if it wanted to. It is passed now, fenced as data (invariant 2: it comes from
+  a YouTube title a stranger wrote).
+- **It must never invent a speaker.** With no lecture title the prompt says so
+  explicitly. Attributing words to a scholar who did not say them is the worst
+  failure available on this product -- worse than a dull title -- and a model
+  asked to "name the speaker" will happily guess one.
+- **`temperature: 0.1` was writing the ranking AND the prose.** Near-greedy
+  decoding is right for a ranking and wrong for writing: it makes every title in
+  a batch come out the same shape, which is what "the titles are not good"
+  actually looks like across a finished lecture. Now 0.6. The ranking can afford
+  it -- the AI score is blended 45/55 with the heuristic, so it stays anchored.
+- **The prompt now bans batch sameness outright**: no two titles may open with
+  the same construction. Four shapes are offered instead of one register, with
+  the plain warm promise named as the strongest -- it is what the 836k title is,
+  and it is not clever.
+- **"The verse that stops the scroll" was offered as a GOOD example and is
+  gone.** Referencing scrolling, watching or the algorithm is a register this
+  content should not borrow.
+- **The new tests build the real prompt and read the bytes that would go to
+  Ollama**, rather than grepping the source. Proven red against the old prompt
+  before being kept. The existing source-string test broke on this change twice
+  -- once on rewording, once because the sentence straddles two string literals
+  and is not contiguous in the file. That is the weakness CLAUDE.md already
+  names; the new file does not have it.
+- **NOT YET LIVE.** This is `worker/` and the box is manual. Titles do not change
+  until someone deploys it.
