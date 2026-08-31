@@ -111,6 +111,27 @@ h3{font-size:21px;line-height:1.25}
 .brand{display:inline-flex;align-items:center;gap:11px}
 .brand-mark{width:30px;height:30px;display:grid;place-items:center;color:var(--gold)}
 .brand-mark svg{width:24px;height:24px;stroke-width:2}
+/* The brand seal: the arch stays still, a circular wordmark turns around it —
+   one slow rotation every 28s. The ring is hidden while the full wordmark
+   shows in the hero; when the visitor leaves the hero the wordmark condenses
+   into the seal (html.condensed, stamped by the scroll engine). */
+.brand-seal{position:relative;width:46px;height:46px;display:grid;place-items:center;flex:none}
+.brand-seal .brand-mark{position:relative;z-index:1}
+.seal-ring{position:absolute;inset:0;width:46px;height:46px;color:var(--gold);opacity:0;transform:scale(.72);transition:opacity .5s var(--ease),transform .5s var(--ease)}
+.seal-ring text{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:7.4px;letter-spacing:.12em;fill:currentColor;stroke:none}
+.condensed .seal-ring{opacity:.85;transform:none}
+@media (prefers-reduced-motion:no-preference){
+  .mjs.condensed .seal-ring{animation:dcSealSpin 28s linear infinite}
+  @keyframes dcSealSpin{to{transform:rotate(360deg)}}
+}
+.brand:hover .seal-ring{animation-play-state:paused;opacity:1}
+.brand-copy{transition:opacity .45s var(--ease),transform .45s var(--ease)}
+.condensed .brand-copy{opacity:0;transform:translateX(-8px);pointer-events:none}
+/* Orientation: a hairline of progress at the right edge. Marker, not chrome. */
+.page-progress{position:fixed;top:50%;right:14px;transform:translateY(-50%);z-index:58;width:2px;height:180px;background:rgba(245,241,232,.1);border-radius:2px;display:none}
+.page-progress i{display:block;width:100%;height:calc(var(--scroll,0) * 100%);background:linear-gradient(var(--gold),var(--gold-2));border-radius:2px;transition:height .15s linear}
+@media (min-width:1080px){.mjs .page-progress{display:block}}
+@media (prefers-reduced-motion:reduce){.page-progress{display:none !important}}
 .brand-copy{display:flex;flex-direction:column;line-height:1.05}
 .brand-copy strong{font-family:var(--font-display);font-weight:520;font-size:17.5px;letter-spacing:-.01em}
 .brand-copy small{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:9px;letter-spacing:.3em;text-transform:uppercase;color:var(--muted-2);margin-top:3px}
@@ -153,16 +174,31 @@ h3{font-size:21px;line-height:1.25}
 @media (min-width:961px){
   .mjs .sc-tall{height:260vh}
   .mjs .sc-tall .sc-stage{position:sticky;top:0;height:100svh;min-height:0}
+  /* The hero pins for an extra beat so the next scene covers it — the
+     ERA-style wipe, done with plain flow order and a rounded lip. */
+  .mjs .sc-hero{height:136vh}
+  .mjs .sc-hero .sc-stage{position:sticky;top:0;height:100svh;min-height:0}
+  .mjs .strip-scene{border-radius:34px 34px 0 0;box-shadow:0 -30px 80px rgba(0,0,0,.55);z-index:4}
+  .mjs .frame-scene{border-radius:34px 34px 0 0;margin-top:-34px;box-shadow:0 -30px 80px rgba(0,0,0,.55);z-index:4}
 }
 @media (prefers-reduced-motion:reduce){
-  .mjs .sc-tall{height:auto}
-  .mjs .sc-tall .sc-stage{position:relative;top:auto;height:auto;min-height:100svh}
+  .mjs .sc-tall,.mjs .sc-hero{height:auto}
+  .mjs .sc-tall .sc-stage,.mjs .sc-hero .sc-stage{position:relative;top:auto;height:auto;min-height:100svh}
+  .mjs .strip-scene,.mjs .frame-scene{border-radius:0;margin-top:0;box-shadow:none}
 }
 
 /* ═══════════════════════════ HOME: HERO ═════════════════════════════════ */
 .hero-scene .sc-stage{align-items:end}
-.hero-backdrop{position:absolute;inset:0;z-index:0}
+.hero-backdrop{position:absolute;inset:0;z-index:0;overflow:clip}
 .hero-backdrop img{width:100%;height:100%;object-fit:cover;object-position:center 38%}
+/* The hero slowly pushes forward as scrolling begins, and dims as the next
+   scene arrives to cover it. Both only under the running engine AND full
+   motion — static contexts see the plain frame. */
+@media (prefers-reduced-motion:no-preference){
+  .mjs .hero-backdrop img{transform:scale(calc(1 + var(--p,0) * .09));transform-origin:50% 42%;will-change:transform}
+  .mjs .hero-scene .hero-grid{transform:translateY(calc(var(--p,0) * -3.5vh));will-change:transform}
+  .mjs .hero-scene .sc-stage::after{content:"";position:absolute;inset:0;z-index:4;pointer-events:none;background:#070607;opacity:calc(clamp(0,calc((var(--p,0) - .5) / .5),1) * .66)}
+}
 .hero-scrim{position:absolute;inset:0;z-index:1;background:
   linear-gradient(100deg,rgba(7,6,7,.94) 8%,rgba(7,6,7,.55) 46%,rgba(7,6,7,.25) 72%),
   linear-gradient(rgba(7,6,7,.55),transparent 30%,transparent 62%,rgba(7,6,7,.97) 96%)}
@@ -218,7 +254,9 @@ h3{font-size:21px;line-height:1.25}
 /* ═══════════════════ HOME: FILMSTRIP TRANSFORMATION ═════════════════════ */
 .strip-scene{background:var(--bg0)}
 .strip-scene .sc-stage{align-content:center;row-gap:clamp(14px,2.6vh,30px);padding:calc(68px + 2vh) 0 2.5vh}
-.strip-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.85fr);gap:10px 40px;align-items:end;max-width:none}
+.strip-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.85fr);gap:10px 40px;align-items:end;max-width:none;
+  opacity:clamp(0,calc(.1 + var(--p,1) * 3),1);
+  transform:translateY(calc((1 - clamp(0,calc(var(--p,1) * 2.6),1)) * 28px))}
 .strip-head .section-label{grid-column:1 / -1}
 .strip-head h2{font-size:clamp(28px,3.4vw,46px)}
 .strip-head p{color:var(--muted);max-width:52ch;font-size:14px}
@@ -251,6 +289,10 @@ h3{font-size:21px;line-height:1.25}
 /* ═══════════════════ HOME: THE DIFFERENCE IS ONE FRAME ══════════════════ */
 .frame-scene{background:var(--bg1)}
 .frame-scene .sc-stage{align-content:center;padding:calc(68px + 1.5vh) 0 1.5vh}
+/* The scene's light shifts toward the DeenClipped panel as it takes the
+   emphasis — a soft gold key rising over the second half of the scrub. */
+.frame-scene .sc-stage::before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(46% 62% at 66% 46%,rgba(217,182,111,.1),transparent 72%);opacity:clamp(0,calc((var(--p,1) - .45) / .3),1)}
+.frame-head-block{opacity:clamp(0,calc(.1 + var(--p,1) * 3),1);transform:translateY(calc((1 - clamp(0,calc(var(--p,1) * 2.6),1)) * 24px))}
 .frame-wrap{display:grid;row-gap:clamp(12px,2.4vh,26px);align-content:center}
 .frame-head-block{display:grid;gap:10px;justify-items:center;text-align:center}
 .frame-head-block h2{font-size:clamp(26px,3.3vw,46px)}
@@ -389,6 +431,14 @@ h3{font-size:21px;line-height:1.25}
 .review-inner .section-label{justify-self:center}
 .review-statement{font-size:clamp(30px,4.4vw,58px);text-align:center;font-weight:420;letter-spacing:-.024em;line-height:1.12}
 .review-statement em{color:var(--gold-2)}
+/* The page slows down here on purpose: the statement lands first, then the
+   rows arrive one beat apart, all scrubbed from the scene's own progress.
+   At the CSS default of --p:1 everything is simply visible. */
+.review-scene .review-statement{opacity:clamp(0,calc(var(--p,1) * 4),1);transform:translateY(calc((1 - clamp(0,calc(var(--p,1) * 3),1)) * 26px))}
+.review-row{opacity:clamp(0,calc((var(--p,1) - .08) / .14),1);transform:translateY(calc((1 - clamp(0,calc((var(--p,1) - .08) / .14),1)) * 18px))}
+.review-row:nth-child(2){opacity:clamp(0,calc((var(--p,1) - .15) / .14),1);transform:translateY(calc((1 - clamp(0,calc((var(--p,1) - .15) / .14),1)) * 18px))}
+.review-row:nth-child(3){opacity:clamp(0,calc((var(--p,1) - .22) / .14),1);transform:translateY(calc((1 - clamp(0,calc((var(--p,1) - .22) / .14),1)) * 18px))}
+.review-row:nth-child(4){opacity:clamp(0,calc((var(--p,1) - .29) / .14),1);transform:translateY(calc((1 - clamp(0,calc((var(--p,1) - .29) / .14),1)) * 18px))}
 .review-rows{display:grid;gap:0;border-top:1px solid var(--line)}
 .review-row{display:grid;grid-template-columns:52px minmax(0,.85fr) minmax(0,1.15fr);gap:18px;align-items:baseline;padding:24px 6px;border-bottom:1px solid var(--line)}
 .review-row i{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;letter-spacing:.14em;color:var(--muted-2)}
@@ -757,6 +807,7 @@ main{display:block}
   .hero-copy-col h1{font-size:clamp(38px,11.5vw,52px)}
   .hero-reels .reel-card{width:96px}
   .hero-reels{gap:10px}
+  .brand-seal,.seal-ring{width:38px;height:38px}
   .source-bar{grid-template-columns:auto minmax(0,1fr)}
   .source-bar button{grid-column:1 / -1;justify-content:center}
   .hero-assure{gap:8px 18px}

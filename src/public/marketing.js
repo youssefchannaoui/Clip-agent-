@@ -64,28 +64,32 @@ if (reducedMotion || !('IntersectionObserver' in window)) {
  * default of 1: the final, legible pose. */
 if (!reducedMotion) {
   const scenes = [...document.querySelectorAll('[data-scene]')];
-  if (scenes.length) {
-    let ticking = false;
-    const update = () => {
-      ticking = false;
-      const vh = window.innerHeight;
-      for (const scene of scenes) {
-        const rect = scene.getBoundingClientRect();
-        if (rect.bottom < -300 || rect.top > vh + 300) continue;
-        const span = rect.height - vh;
-        const raw = span > 60
-          ? -rect.top / span
-          : (vh - rect.top) / (vh + rect.height);
-        const p = Math.min(1, Math.max(0, raw));
-        scene.style.setProperty('--p', p.toFixed(4));
-      }
-    };
-    const request = () => {
-      if (!ticking) { ticking = true; requestAnimationFrame(update); }
-    };
-    window.addEventListener('scroll', request, { passive: true });
-    window.addEventListener('resize', request);
-    update();
-    window.addEventListener('load', update);
-  }
+  const rootEl = document.documentElement;
+  let ticking = false;
+  const update = () => {
+    ticking = false;
+    const vh = window.innerHeight;
+    for (const scene of scenes) {
+      const rect = scene.getBoundingClientRect();
+      if (rect.bottom < -300 || rect.top > vh + 300) continue;
+      const span = rect.height - vh;
+      const raw = span > 60
+        ? -rect.top / span
+        : (vh - rect.top) / (vh + rect.height);
+      const p = Math.min(1, Math.max(0, raw));
+      scene.style.setProperty('--p', p.toFixed(4));
+    }
+    // Whole-page progress for the orientation hairline, and the point where
+    // the header wordmark condenses into the rotating seal.
+    const max = rootEl.scrollHeight - vh;
+    rootEl.style.setProperty('--scroll', max > 0 ? Math.min(1, window.scrollY / max).toFixed(4) : '0');
+    rootEl.classList.toggle('condensed', window.scrollY > vh * 0.55);
+  };
+  const request = () => {
+    if (!ticking) { ticking = true; requestAnimationFrame(update); }
+  };
+  window.addEventListener('scroll', request, { passive: true });
+  window.addEventListener('resize', request);
+  update();
+  window.addEventListener('load', update);
 }

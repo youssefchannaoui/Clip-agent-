@@ -219,7 +219,7 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
 <body>
   <header class="site-header">
     <div class="wrap nav">
-      <a class="brand" href="/" aria-label="DeenClipped home">${logoMark()}<span class="brand-copy"><strong>DeenClipped</strong><small>AI clip workspace</small></span></a>
+      <a class="brand" href="/" aria-label="DeenClipped home"><span class="brand-seal">${logoMark()}<svg class="seal-ring" viewBox="0 0 64 64" aria-hidden="true"><defs><path id="dcSealPath" fill="none" d="M32,32 m-25,0 a25,25 0 1,1 50,0 a25,25 0 1,1 -50,0"/></defs><text textLength="156" lengthAdjust="spacingAndGlyphs"><textPath href="#dcSealPath">IMPORT · FIND · REVIEW · PUBLISH ·</textPath></text></svg></span><span class="brand-copy"><strong>DeenClipped</strong><small>AI clip workspace</small></span></a>
       <button class="menu-button" type="button" data-menu aria-label="Open navigation"><span></span><span></span><span></span></button>
       <nav class="nav-links" aria-label="Main navigation">
         <div class="nav-group">
@@ -260,6 +260,7 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
       ${navActions(currentUser)}
     </div>
   </header>
+  <div class="page-progress" aria-hidden="true"><i></i></div>
   ${body}
   <footer class="site-footer">
     <div class="wrap">
@@ -556,7 +557,7 @@ export function home({ base, currentUser }) {
 
   const body = `
   <main>
-    <section class="sc hero-scene" data-scene>
+    <section class="sc sc-hero hero-scene" data-scene>
       <div class="sc-stage">
         <div class="hero-backdrop"><img src="/marketing-assets/hero-hall.webp" alt="An empty mosque hall at night, a single microphone lit beside the minbar"></div>
         <div class="hero-scrim"></div>
@@ -713,7 +714,7 @@ export function home({ base, currentUser }) {
       </div>
     </section>
 
-    <section class="review-scene" id="safety" aria-labelledby="review-heading">
+    <section class="review-scene" id="safety" aria-labelledby="review-heading" data-scene>
       <div class="wrap review-inner">
         <span class="section-label"><i></i>Review and faith-sensitive safeguards</span>
         <h2 class="review-statement" id="review-heading">The AI can find the moment.<br><em>A person still decides what leaves.</em></h2>
