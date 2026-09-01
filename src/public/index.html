@@ -45,6 +45,9 @@
 <!-- Motion and hover on the Owner screen. -->
 <link rel="stylesheet" href="/studio-owner.css">
 <link rel="stylesheet" href="/studio-help.css">
+<!-- The dashboard's motion language: screen-change restarts, the rail trace,
+     idle brand light, live-work shine, dialog fades, the arrival veil. -->
+<link rel="stylesheet" href="/studio-motion.css">
 <!-- The clip editor is held back for launch: it opens, blurred, behind a
      "coming soon" notice. Deleting these two lines and the two files they name
      turns it back on. -->
@@ -2112,6 +2115,25 @@ select:focus{outline:none;border-color:var(--blue)}
 
 <script>
 'use strict';
+/* Ambient-motion housekeeping for studio-motion.css: pause idle animation
+   while the tab is hidden, and play the one-per-session arrival veil when
+   the visitor came from the public site — never for warm sessions, deep
+   links from elsewhere, or reduced motion. */
+document.addEventListener('visibilitychange',()=>document.body.classList.toggle('dc-page-hidden',document.hidden));
+(function(){try{
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  if(sessionStorage.getItem('dcArrived'))return;
+  sessionStorage.setItem('dcArrived','1');
+  if(!document.referrer)return;
+  const from=new URL(document.referrer);
+  if(from.origin!==location.origin||from.pathname.startsWith('/app'))return;
+  const veil=document.createElement('div');
+  veil.className='dc-arrive';veil.setAttribute('aria-hidden','true');
+  veil.innerHTML='<svg viewBox="0 0 32 32"><path d="M16 3.5c-5.8 0-10.5 4.7-10.5 10.5v14.5h21V14c0-5.8-4.7-10.5-10.5-10.5Z"/></svg>';
+  document.body.appendChild(veil);
+  setTimeout(()=>veil.classList.add('out'),120);
+  setTimeout(()=>veil.remove(),650);
+}catch{}})();
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 let PW=localStorage.getItem('deenPw')||'', DATA=null, ACTIVE_VIEW='queue', SCHED_DAYS=5, LIB_FILTER='all', LIB_SORT='newest', MUSIC_FILE=null, TEMPLATE_DRAFT=null, EDITING_TEMPLATE_ID='', POSTING_IDS=new Set(), LIBRARY_PROJECT_ID='', LIBRARY_SELECTED=new Set();
@@ -6095,44 +6117,6 @@ function helpArticle(a,base){
     </div>
   </article>`;
 }
-/* ── the subscription, beside the logo ───────────────────────────────────
-   Youssef: "on top left corner next to logo show users subscription". Asking
-   twice for this is the sign that the header chip was not where anyone looks.
-
-   Host-rendered, because the wordmark's second line is the literal string
-   "Studio" inside the generated template -- the product's name, not the
-   customer's plan -- and changing it would mean a design re-import, which
-   regenerates every hashed class name in the app. So the plan is ADDED under
-   the wordmark rather than written over the branding.
-
-   It is a button, not a label: knowing the plan and being unable to reach it
-   from there is the worse half of the same question. */
-function paintPlanBadge(){
-  const host=document.getElementById('dcRailBrand');
-  if(!host)return;
-  const cur=((DATA||{}).billing||{}).current||{};
-  const open=StudioAdapter.ui.railOpen&&window.innerWidth>820;
-  let box=document.getElementById('dcPlanBadge');
-  /* Collapsed there is no wordmark to sit under and no room for the words, so
-     it goes with the wordmark rather than being squeezed into 68px. */
-  if(!open||!cur.planName&&!cur.tierName){if(box)box.remove();return}
-  if(!box){box=document.createElement('button');box.id='dcPlanBadge';box.type='button'}
-  if(box.parentNode!==host)host.appendChild(box);
-  const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  const name=cur.planName||cur.tierName||'Basic';
-  /* Basic is not a purchase, so it does not wear the gold every paid tier
-     uses; it says what it is and offers the way up. */
-  const paid=Boolean(cur.unlimited)||(cur.tier&&cur.tier!=='basic');
-  box.className=paid?'dc-plan-paid':'dc-plan-free';
-  box.title=paid?`You are on ${name} — open Tokens & billing`:'You are on the free plan — see what the paid plans include';
-  box.innerHTML=`<span>${esc(name)}</span><i class="ph ph-caret-right"></i>`;
-  box.onclick=e=>{
-    e.preventDefault();e.stopPropagation();
-    StudioAdapter.ui.screen='tokens';
-    StudioAdapter.ui.tokensAnimAt=Date.now();
-    renderAll();
-  };
-}
 function paintBrandSeal(){
   /* The marketing site's rotating seal, on the rail's arch mark. Youssef,
      1 Sept 2026: "that cool, like, animated top left logo on the main website
@@ -6282,8 +6266,26 @@ function paintStudio(){
   paintJobMusic(vals);
   paintTemplatesLayout();
   paintHelp();
-  paintPlanBadge();
   paintBrandSeal();
+  /* Screen-change restart for the motion layer (studio-motion.css): the
+     generated dcScreen animation cannot restart when two screens share a
+     wrapper class (Home and Library both render the same one), so the body
+     class is re-toggled on every ui.screen change — the reflow between
+     remove and add forces a clean restart. Skipped while the tour is up:
+     its spotlight measures live rects every paint, and a screen mid-slide
+     would desync the ring. */
+  const dcScr=StudioAdapter.ui.screen;
+  if(window.__dcScr!==dcScr){
+    const tourUp=Number(StudioAdapter.ui.tourStep)>=0;
+    window.__dcScr=dcScr;
+    if(!tourUp){
+      document.body.classList.remove('dc-screen-anim');
+      void document.body.offsetWidth;
+      document.body.classList.add('dc-screen-anim');
+      clearTimeout(window.__dcScrT);
+      window.__dcScrT=setTimeout(()=>document.body.classList.remove('dc-screen-anim'),340);
+    }
+  }
   /* The watermark row is restored HERE, with every other host-rendered panel,
      because STUDIO.render() above has just replaced the DOM it was injected
      into. It was the only one of these left to a MutationObserver instead, and
