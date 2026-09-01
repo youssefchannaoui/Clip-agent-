@@ -431,8 +431,6 @@ function tokenShop(currentUser = null) {
 export const FAQ_ITEMS = [
   { q: 'What does DeenClipped do?',
     a: 'DeenClipped turns long lectures and videos into short-form clips, gives you a review queue, captions and templates, then helps publish or schedule the clips you approve.' },
-  { q: 'Can I paste a YouTube link?',
-    a: 'Yes. You can begin with a supported video link or upload a video directly. DeenClipped then reads the source and lets you choose the processing range.' },
   { q: 'How does DeenClipped handle Arabic and Quran recitation?',
     a: 'Auto-detect can switch between English and Arabic by segment. Recited scripture is matched for an ayah-and-translation treatment and is always held for human review before publishing.' },
   { q: 'Is the clip editor available now?',
@@ -441,8 +439,6 @@ export const FAQ_ITEMS = [
     a: 'Pro includes insights calculated from your own projects and clips. Studio adds Ask DeenAI, answered by the private model on the DeenClipped processing server rather than a hosted consumer chatbot.' },
   { q: 'Does publishing go to my own channel?',
     a: "Yes. Each DeenClipped user connects their own supported accounts. Platform and app-review rules still determine which destinations and visibility options are available." },
-  { q: 'Can I review clips before posting?',
-    a: 'Yes. The workflow is review-first. Nothing is scheduled or posted until it has an approval, and scripture clips carry an additional human-review gate.' },
   { q: 'How are tokens calculated?',
     a: 'One token represents one selected source-video minute. You see the estimate before confirming; review, ordinary re-renders and making more clips from the same processed source do not charge that source time again.' },
 ];
@@ -548,17 +544,6 @@ export function home({ base, currentUser }) {
   const stripTrack = stripCells.map(([src, score, cls, mt]) =>
     `<span class="strip-cell ${cls}"${score ? ` data-score="${score}"` : ''}${mt ? ` style="--mt:${mt}"` : ''}><img src="/marketing-assets/${src}" alt="" loading="lazy"></span>`).join('');
 
-  const chapter = (i, title, copy, factTitle, factCopy, media) => `
-      <article class="chapter" style="--i:${i}">
-        <div class="chapter-copy">
-          <span class="chapter-index">Chapter 0${i + 1}</span>
-          <h3>${title}</h3>
-          <p>${copy}</p>
-          <span class="chapter-fact"><i>${icon('check')}</i><span><b>${factTitle}</b> ${factCopy}</span></span>
-        </div>
-        <div class="chapter-media">${media}</div>
-      </article>`;
-
   const body = `
   <main>
     <section class="sc sc-hero hero-scene" data-scene>
@@ -572,7 +557,7 @@ export function home({ base, currentUser }) {
             <p class="hero-lede">DeenClipped finds the strongest complete moments in a long lecture, renders vertical clips with English, Arabic or ayah-and-translation captions, and holds every one for your approval before anything publishes.</p>
             <p class="purpose-line"><strong>Start with ${escapeHtml(Number(config.tokensFree).toLocaleString())} source minutes for ${escapeHtml(String(config.stripeTrialDays))} days.</strong> No card details are stored by DeenClipped.</p>
             ${sourceForm()}
-            <div class="hero-actions"><a class="button primary" href="/login?returnTo=/app">Start Basic free ${icon('arrow')}</a><a class="button secondary" href="#chapters">See how it works</a><a class="button text-link" href="/pricing">Compare plans</a></div>
+            <div class="hero-actions"><a class="button primary" href="/login?returnTo=/app">Start Basic free ${icon('arrow')}</a><a class="button secondary" href="#journey">See how it works</a></div>
             <div class="hero-assure" aria-label="DeenClipped product assurances"><span>${icon('shield')} Human review before publishing</span><span>${icon('language')} Multilingual and Quran-aware captions</span><span>${icon('brain')} Private DeenAI on our own server</span></div>
           </div>
           <div class="hero-reels" aria-hidden="true">
@@ -603,72 +588,120 @@ export function home({ base, currentUser }) {
         </div>
         <div class="strip-out" aria-hidden="true">
           ${reelCard(reels[3], '')}
-          ${reelCard(reels[7], '')}
+          <span class="strip-pick">${reelCard(reels[4], '')}<em>Selected &middot; 86</em></span>
           ${reelCard(reels[8], '')}
         </div>
-        <p class="strip-note wrap">Cuts land on a <b>complete idea</b>, never on a timer — and every candidate still waits for your decision.</p>
+        <p class="strip-note wrap">Cuts land on a <b>complete idea</b>, never on a timer — and the strongest one continues below.</p>
       </div>
     </section>
 
-    <section class="flow-scene" data-scene id="how-it-flows" aria-labelledby="flow-heading">
-      <div class="wrap">
-        <div class="section-head">
-          <span class="section-label"><i></i>How it works</span>
-          <h2 id="flow-heading">Three moves, <em>start to posted.</em></h2>
-        </div>
-        <div class="flow-band">
-          <div class="flow-stage" style="--f:0">
-            <div class="flow-media">
-              <span class="flow-frame is-wide"><img src="/marketing-assets/reel-landscape.webp" alt="A long lecture source frame" loading="lazy"></span>
-              <span class="flow-strip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
-            </div>
-            <b>The lecture arrives</b>
-            <p>A link or an upload — and only the minutes you choose are charged.</p>
-          </div>
-          <i class="flow-arrow" style="--f:1" aria-hidden="true"></i>
-          <div class="flow-stage" style="--f:1">
-            <div class="flow-media">
-              <span class="flow-frame"><img src="/marketing-assets/reel-depart.webp" alt="A detected moment with its score" loading="lazy"><i class="flow-brackets"></i><em class="flow-score">86</em></span>
-            </div>
-            <span class="flow-caption">Finding complete thoughts&hellip;</span>
-            <b>Moments are detected</b>
-            <p>Scored and explained, cut on the whole idea — never on a timer.</p>
-          </div>
-          <i class="flow-arrow" style="--f:2" aria-hidden="true"></i>
-          <div class="flow-stage" style="--f:2">
-            <div class="flow-media">
-              <span class="flow-frame"><img src="/marketing-assets/reel-halal-way.webp" alt="An approved clip ready on the schedule" loading="lazy"><em class="flow-sched">Scheduled &middot; 17:00</em></span>
-              <span class="flow-platforms"><span>YouTube</span><span>TikTok</span><span>Instagram</span><span>Facebook</span></span>
-            </div>
-            <b>Posted on your channels</b>
-            <p>Approved by you first, then into your own posting windows.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="sc sc-tall walk-scene" data-scene id="studio-steps" aria-labelledby="walk-heading">
+    <section class="sc sc-journey journey-scene" data-scene id="journey" aria-labelledby="journey-heading">
       <div class="sc-stage">
-        <div class="wrap walk-grid">
-          <div class="walk-copy">
-            <span class="section-label"><i></i>Inside the studio</span>
-            <h2 id="walk-heading">Watch a lecture move <em>through the studio.</em></h2>
-            <ol class="walk-steps">
-              <li style="--i:0"><i>01</i><span class="walk-step-body"><b>Import only the minutes that matter</b><span>Paste a link and pick the stretch. Only that stretch is downloaded and charged &mdash; three minutes of a ninety-minute lecture costs three tokens, not ninety.</span><em class="walk-chip">3 min = 3 tokens</em></span></li>
-              <li style="--i:1"><i>02</i><span class="walk-step-body"><b>Review the file that will post</b><span>The queue plays the rendered clip itself &mdash; the same bytes that publish &mdash; with the score and the model&rsquo;s own reasons beside it. Decide from the keyboard.</span><em class="walk-chip">Scripture is force-held for a person</em></span></li>
-              <li style="--i:2"><i>03</i><span class="walk-step-body"><b>Set a look that knows what it captions</b><span>Five templates &mdash; and the Quran treatment sets the matched ayah in a mushaf face, switches the nasheed off and strips the branding. Changes re-render only clips still waiting.</span><em class="walk-chip">No nasheed under recitation</em></span></li>
-              <li style="--i:3"><i>04</i><span class="walk-step-body"><b>Publish to your own channels</b><span>Approved clips fill your posting windows. Every destination answers separately &mdash; a TikTok refusal never touches a YouTube success.</span><em class="walk-chip">Retry only the failed leg</em></span></li>
-            </ol>
+        <div class="wrap journey-grid">
+          <div class="journey-rail" aria-hidden="true">
+            <i class="journey-line"></i>
+            <i class="journey-tip"></i>
+            <span class="journey-node" style="--jn:0"><b></b>Source</span>
+            <span class="journey-node" style="--jn:1"><b></b>Hearing</span>
+            <span class="journey-node" style="--jn:2"><b></b>Minutes</span>
+            <span class="journey-node" style="--jn:3"><b></b>Moments</span>
+            <span class="journey-node" style="--jn:4"><b></b>Review</span>
+            <span class="journey-node" style="--jn:5"><b></b>Look</span>
+            <span class="journey-node" style="--jn:6"><b></b>Publish</span>
           </div>
-          <div class="walk-stage">
-            <div class="walk-frame product-frame">
-              <img src="/marketing-assets/studio-home.webp" alt="The DeenClipped studio home screen where a lecture link is pasted" class="walk-shot" style="--i:0" loading="lazy">
-              <img src="/marketing-assets/studio-queue.webp" alt="The review queue playing a rendered clip with scores and reasons" class="walk-shot" style="--i:1" loading="lazy">
-              <img src="/marketing-assets/studio-templates.webp" alt="The template screen with caption style controls" class="walk-shot" style="--i:2" loading="lazy">
-              <img src="/marketing-assets/studio-schedule.webp" alt="The schedule with per-destination publishing state" class="walk-shot" style="--i:3" loading="lazy">
+          <div class="journey-main">
+            <header class="journey-header">
+              <span class="section-label"><i></i>The whole path</span>
+              <h2 id="journey-heading">One source. <em>One path to the clip you approve.</em></h2>
+            </header>
+            <div class="journey-stages">
+
+              <div class="journey-stage" style="--i:0">
+                <span class="journey-kicker">Step 01</span>
+                <h3>Paste a link or upload the source</h3>
+                <p>A supported video link, or an MP4/MOV you have the rights to. Nothing else is asked for yet.</p>
+                <div class="journey-visual">
+                  <span class="journey-urlbar" aria-hidden="true"><i>${icon('link')}</i>youtube.com/watch?v=&hellip;friday-khutbah<b>Start</b></span>
+                  <span class="journey-drop" aria-hidden="true"></span>
+                </div>
+              </div>
+
+              <div class="journey-stage" style="--i:1">
+                <span class="journey-kicker">Step 02</span>
+                <h3>Tell it what it is hearing</h3>
+                <p>The choice that changes the whole pipeline &mdash; a khutbah and scripture are not processed the same way.</p>
+                <div class="journey-visual journey-modes">
+                  <input type="radio" name="ctype" id="ct-lecture" class="ctradio" checked>
+                  <input type="radio" name="ctype" id="ct-quran" class="ctradio">
+                  <div class="choose-switch"><label for="ct-lecture">Islamic Lecture</label><label for="ct-quran">Quran Recitation</label></div>
+                  <div class="journey-mode-facts">
+                    <div class="jm-facts jm-lecture"><span><i>${icon('check')}</i>Complete thoughts, never a cut on a timer</span><span><i>${icon('check')}</i>English and Arabic captions, switching per segment</span><span><i>${icon('check')}</i>Speaker-aware 9:16 framing, nasheed ducked under speech</span></div>
+                    <div class="jm-facts jm-quran"><span><i>${icon('check')}</i>Recitation matched to the Qur&rsquo;an itself, set in a mushaf face</span><span><i>${icon('check')}</i>The translation beneath every ayah</span><span><i>${icon('check')}</i>No nasheed &mdash; and human review is mandatory</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="journey-stage" style="--i:2">
+                <span class="journey-kicker">Step 03</span>
+                <h3>Choose the part worth processing</h3>
+                <p>Only the stretch you select is downloaded and charged.</p>
+                <div class="journey-visual">
+                  <div class="journey-timeline" aria-hidden="true">
+                    <i class="jt-track"></i>
+                    <i class="jt-span"></i>
+                    <b class="jt-handle jt-in"></b>
+                    <b class="jt-handle jt-out"></b>
+                    <span class="jt-time jt-t0">00:00</span><span class="jt-time jt-t1">53:40</span>
+                  </div>
+                  <span class="journey-chip">12:40 &rarr; 15:40 &middot; 3 minutes = ${escapeHtml(String(3 * Number(config.tokensPerMinute || 1)))} tokens</span>
+                </div>
+              </div>
+
+              <div class="journey-stage" style="--i:3">
+                <span class="journey-kicker">Step 04</span>
+                <h3>Complete moments separate themselves</h3>
+                <p>The stretch is transcribed and searched for whole ideas &mdash; each candidate scored and explained.</p>
+                <div class="journey-visual journey-cands" aria-hidden="true">
+                  ${[['reel-winter.webp', ''], ['reel-depart.webp', '86'], ['reel-kaaba-a.webp', ''], ['reel-dua.webp', '74'], ['reel-deeds.webp', '']].map(([src, score], i) => `<span class="jc-cell ${score ? 'jc-moment' : ''}" style="--jc:${i}"${score ? ` data-score="${score}"` : ''}><img src="/marketing-assets/${src}" alt="" loading="lazy"></span>`).join('')}
+                </div>
+              </div>
+
+              <div class="journey-stage" style="--i:4">
+                <span class="journey-kicker">Step 05</span>
+                <h3>You decide what leaves</h3>
+                <p>The queue plays the exact rendered file. Scripture is force-held for a person, whatever the automation says.</p>
+                <div class="journey-visual journey-review">
+                  <figure class="journey-clip"><img src="/marketing-assets/reel-depart.webp" alt="The selected clip, rendered and waiting for review" loading="lazy"><span class="journey-score">86 &middot; complete ending</span><em class="journey-approved">Approved</em></figure>
+                  <div class="journey-keys" aria-hidden="true"><span><b>A</b>Approve</span><span><b>X</b>Reject</span><span><b>S</b>Skip</span></div>
+                </div>
+              </div>
+
+              <div class="journey-stage" style="--i:5">
+                <span class="journey-kicker">Step 06</span>
+                <h3>Set the look once</h3>
+                <p>Five templates. A change re-renders only clips still waiting &mdash; approved renders are never touched.</p>
+                <div class="journey-visual journey-look">
+                  <figure class="journey-clip"><img class="jl-a" src="/marketing-assets/reel-halal.webp" alt="The clip in the Clean Line template" loading="lazy"><img class="jl-b" src="/marketing-assets/reel-dua.webp" alt="The clip in the Bold Stack template" loading="lazy"></figure>
+                  <span class="journey-chip jl-chip-a">Clean Line</span>
+                  <span class="journey-chip jl-chip-b">Bold Stack</span>
+                </div>
+              </div>
+
+              <div class="journey-stage" style="--i:6">
+                <span class="journey-kicker">Step 07</span>
+                <h3>Schedule it for your channels</h3>
+                <p>Approved clips fill your posting windows. Every destination answers separately.</p>
+                <div class="journey-visual">
+                  <div class="journey-sched">
+                    <div class="js-row" style="--jr:0"><i></i><b>YouTube</b><span>Scheduled &middot; 17:00</span><em class="ok">ready</em></div>
+                    <div class="js-row" style="--jr:1"><i></i><b>Instagram</b><span>Scheduled &middot; 20:30</span><em class="ok">ready</em></div>
+                    <div class="js-row" style="--jr:2"><i></i><b>TikTok</b><span>Waiting on your privacy choice</span><em>held</em></div>
+                  </div>
+                  <span class="journey-out">Approved by you. Posted as you. <b>That is the whole machine.</b></span>
+                </div>
+              </div>
+
             </div>
-            <span class="walk-tag">Real product captures</span>
-            <i class="walk-bar" aria-hidden="true"><b></b></i>
           </div>
         </div>
       </div>
@@ -706,78 +739,7 @@ export function home({ base, currentUser }) {
       </div>
     </section>
 
-    <section class="sc sc-choose choose-scene" data-scene id="content-types" aria-labelledby="choose-heading">
-      <div class="sc-stage">
-      <div class="wrap">
-        <div class="section-head">
-          <span class="section-label"><i></i>Two pipelines, one switch</span>
-          <h2 id="choose-heading">Tell it what it is hearing. <em>Everything downstream changes.</em></h2>
-          <p>The source type is chosen before processing &mdash; because the pipeline that captions a khutbah is the wrong pipeline for scripture.</p>
-        </div>
-        <input type="radio" name="ctype" id="ct-lecture" class="ctradio" checked>
-        <input type="radio" name="ctype" id="ct-quran" class="ctradio">
-        <div class="choose-switch"><label for="ct-lecture">Islamic Lecture</label><label for="ct-quran">Quran Recitation</label></div>
-        <div class="choose-stage">
-          <div class="choose-panel is-lecture">
-            <div class="choose-facts">
-              <h3>Complete thoughts, captioned as spoken.</h3>
-              <div class="detail-list">${checkItem('Cuts land on the whole idea', 'A point keeps its ending, a question keeps its answer — never a cut on a timer.')}${checkItem('Three scripts, switching per segment', 'English as English, Arabic in Arabic with an English line beneath — inside one clip.')}${checkItem('Nasheed under the speech, ducked beneath it', 'A vocal-only track is mixed under lectures and lowered while the speaker talks.')}${checkItem('Speaker-aware 9:16 framing', 'The crop follows the person talking, not the centre of the old frame.')}</div>
-              <a class="button secondary" href="/islamic-lecture-clipper">See the lecture workflow ${icon('arrow')}</a>
-            </div>
-            <div class="choose-media" aria-label="Lecture caption templates on real frames">
-              ${reelCard(['reel-dua.webp', 'Lecture clip in the Bold Stack template'], 'choose-reel')}
-              ${reelCard(['reel-dunya.webp', 'Lecture clip in the Headline template'], 'choose-reel choose-reel-mid')}
-              ${reelCard(['reel-halal.webp', 'Lecture clip in the Clean Line template'], 'choose-reel')}
-              <span class="choose-note">Five templates apply here — Clean Line, Bold Stack, Headline and Mono Minimal shown on real output.</span>
-            </div>
-          </div>
-          <div class="choose-panel is-quran">
-            <div class="choose-facts">
-              <h3>The ayah itself, not a guess at the sound.</h3>
-              <div class="detail-list">${checkItem('Matched to the Qur’an, not transcribed', 'Recitation is matched against the full corpus and set as the verse itself, in a mushaf face.')}${checkItem('The translation rides beneath it', 'Every ayah carries its English line, with the surah and verse number beside the clip.')}${checkItem('No nasheed, no branding treatments', 'The Quran template deliberately silences the track and strips the decoration.')}${checkItem('A person approves every one', 'Scripture cannot pass automatic publishing — it waits for you, whatever the settings say.')}</div>
-              <a class="button secondary" href="/tools/arabic-english-captions">See the Arabic treatment ${icon('arrow')}</a>
-            </div>
-            <div class="choose-media is-single" aria-label="The Quran Recitation treatment on a real frame">
-              ${reelCard(['reel-quran.webp', 'Quran recitation clip with the matched ayah and its translation'], 'choose-reel choose-reel-big')}
-              <span class="choose-note">One template applies here, deliberately — the others are switched off for scripture.</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      </div>
-    </section>
-
-    <section class="chapters-scene" id="chapters" aria-labelledby="chapters-heading">
-      <div class="wrap">
-        <div class="chapters-head">
-          <span class="section-label">One connected workflow</span>
-          <h2 id="chapters-heading">From the right minutes to the final post, <em>in chapters.</em></h2>
-          <p>Every screen below is the real product. Where something is a concept, it says so on the image.</p>
-        </div>
-        ${chapter(0, 'Choose the minutes that matter',
-    'Paste a supported link or upload a file, then set the exact start and end. The duration is read before anything is charged, and tokens follow the selected source time.',
-    'Only the chosen stretch is processed.', 'Reviewing and cutting more clips from the same processed source does not charge those minutes again.',
-    `<figure class="chapter-shot"><img src="/marketing-assets/studio-home.webp" alt="The DeenClipped studio home screen with a link field for a new lecture" loading="lazy"><figcaption class="is-real">Real product capture</figcaption></figure>`)}
-        ${chapter(1, 'Review the real render',
-    'Every candidate lands in the review queue as the exact captioned file that would post — not a browser imitation. Scores and the reasons behind them sit beside each clip, and A, X and S decide from the keyboard.',
-    'Nothing publishes without an approval.', 'Scripture clips carry a further human-review gate that automation cannot bypass.',
-    `<figure class="chapter-shot"><img src="/marketing-assets/studio-queue.webp" alt="The DeenClipped review queue playing a rendered clip with scores and reasons" loading="lazy"><figcaption class="is-real">Real product capture</figcaption></figure>`)}
-        ${chapter(2, 'Set the look once',
-    'Five caption templates cover a clean single line to the full Quran treatment. A style change can stay local to one clip or be saved back to the template for everything still waiting.',
-    'Re-renders stay fair.', 'Changing a template re-renders only clips still waiting for review — approved and posted clips keep the render you signed off.',
-    `<figure class="chapter-shot"><img src="/marketing-assets/studio-templates.webp" alt="The DeenClipped template screen with caption style controls" loading="lazy"><figcaption class="is-real">Real product capture</figcaption></figure>`)}
-        ${chapter(3, 'Publish with control',
-    'Download an approved clip, post it now, or let it fill the next free posting windows on your own connected channels. Each destination keeps its own outcome, so one refusal never hides a success.',
-    'Retry targets only the failed leg.', 'A clip live on YouTube is never re-posted there because TikTok said no.',
-    `<figure class="chapter-shot"><img src="/marketing-assets/studio-schedule.webp" alt="The DeenClipped schedule with per-destination publishing state" loading="lazy"><figcaption class="is-real">Real product capture</figcaption></figure>`)}
-        ${chapter(4, 'The editor, honestly',
-    'Templates, style changes and re-renders work today. The full timeline editor opens as a preview behind a coming-soon gate while its visual verification is completed — it is not sold as launched.',
-    'What you can rely on now.', 'Rendered review, templates, re-renders, downloads, scheduling and publishing are all available on every plan.',
-    `<figure class="chapter-shot"><img src="/marketing-assets/editor-premium.webp" alt="Concept preview of the planned DeenClipped clip editor" loading="lazy"><figcaption>Concept preview</figcaption></figure><span class="availability-badge">Editor preview &middot; coming soon</span>`)}
-      </div>
-    </section>
-
-    <section class="gallery-section" id="templates" aria-labelledby="gallery-heading">
+    <section class="gallery-section" id="templates" aria-labelledby="gallery-heading" data-scene>
       <div class="wrap">
         <div class="gallery-head">
           <div>
@@ -796,22 +758,20 @@ export function home({ base, currentUser }) {
         <span class="section-label"><i></i>Review and faith-sensitive safeguards</span>
         <h2 class="review-statement" id="review-heading">The AI can find the moment.<br><em>A person still decides what leaves.</em></h2>
         <div class="review-rows">
-          <div class="review-row"><i>01</i><b>You watch the file that posts</b><p>The review deck plays the exact rendered clip — same bytes, same captions — never a browser imitation with its own drift.</p></div>
-          <div class="review-row is-gate"><i>02</i><b>Scripture is force-held</b><p>A clip containing recited Qur'an cannot pass automatic publishing. It waits for a person, whatever the automation settings say.</p></div>
-          <div class="review-row"><i>03</i><b>Destinations answer separately</b><p>A success on one platform and a refusal on another stay separate, and the failed leg is retried on its own.</p></div>
-          <div class="review-row"><i>04</i><b>Rejecting costs nothing</b><p>Turning a clip down spends no tokens. The source minutes were paid once, and more candidates can be cut from them.</p></div>
+          <div class="review-row is-gate"><i>01</i><b>Scripture is force-held</b><p>A clip containing recited Qur'an cannot pass automatic publishing. It waits for a person, whatever the automation settings say.</p></div>
+          <div class="review-row"><i>02</i><b>Destinations answer separately</b><p>A success on one platform and a refusal on another stay separate, and the failed leg is retried on its own.</p></div>
+          <div class="review-row"><i>03</i><b>Rejecting costs nothing</b><p>Turning a clip down spends no tokens. The source minutes were paid once, and more candidates can be cut from them.</p></div>
         </div>
       </div>
     </section>
 
-    <section class="deenai-section" id="deenai" aria-labelledby="deenai-heading">
+    <section class="deenai-section" id="deenai" aria-labelledby="deenai-heading" data-scene>
       <div class="wrap deenai-grid">
         <div class="deenai-copy">
           <span class="section-label"><i></i>DeenAI &middot; private by construction</span>
           <h2 id="deenai-heading">Advice grounded in your clips, <em>not generic creator tips.</em></h2>
           <p>Pro turns your own approvals, projects and posting history into countable insights. Studio adds Ask DeenAI, answered by the private model on the DeenClipped processing server — transcription and moment-picking already run there, so your lectures never leave it for a third-party AI provider.</p>
           <div class="detail-list">${checkItem('Numbers stay checkable', 'Insight cards show the arithmetic behind every recommendation.')}${checkItem('No transcript sent to Ask', 'The model receives compact account figures and kept titles, never the transcript.')}${checkItem('Actions point back to the product', 'Answers name the Review queue, Schedule or Connections screen when that is the next move.')}</div>
-          <a class="button secondary" href="/pricing">Compare Pro and Studio ${icon('arrow')}</a>
         </div>
         <div class="deenai-preview reveal" aria-label="DeenAI feature preview">
           <div class="deenai-preview-head"><span>${icon('brain')}</span><div><b>DeenAI</b><small>Insights from your own workflow</small></div><em>STUDIO</em></div>
@@ -823,7 +783,7 @@ export function home({ base, currentUser }) {
       </div>
     </section>
 
-    <section class="pricing-section" id="pricing" aria-labelledby="pricing-heading">
+    <section class="pricing-section" id="pricing" aria-labelledby="pricing-heading" data-scene>
       <div class="wrap">
         <div class="pricing-section-head">
           <span class="section-label"><i></i>Basic, Pro and Studio</span>
@@ -834,7 +794,7 @@ export function home({ base, currentUser }) {
       </div>
     </section>
 
-    <section class="faq-section-home" id="faq" aria-labelledby="faq-heading">
+    <section class="faq-section-home" id="faq" aria-labelledby="faq-heading" data-scene>
       <div class="wrap">
         <div class="section-head"><span class="section-label"><i></i>Questions</span><h2 id="faq-heading">Know how the workflow works <em>before you start.</em></h2></div>
         ${faqBlock()}
@@ -847,7 +807,7 @@ export function home({ base, currentUser }) {
         <span class="section-label"><i></i>Start with the next lecture</span>
         <h2 id="final-heading">${escapeHtml(Number(config.tokensFree).toLocaleString())} source minutes. ${escapeHtml(String(config.stripeTrialDays))} days. <em>A real review queue.</em></h2>
         <p>Choose a range, generate the clips and decide what is worth publishing before anything reaches your channels.</p>
-        <div class="hero-actions"><a class="button primary" href="/login?returnTo=/app">Start Basic free ${icon('arrow')}</a><a class="button secondary" href="/pricing">Compare plans</a></div>
+        <div class="hero-actions"><a class="button primary" href="/login?returnTo=/app">Start Basic free ${icon('arrow')}</a></div>
       </div>
     </section>
   </main>`;

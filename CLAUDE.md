@@ -1357,15 +1357,19 @@ join it, not invent a sibling.
   to the finished pose at the default `--p:1`**, `html:not(.mjs)` forces the
   windows open, and the reduced-motion block un-pins every tall scene — that
   triple guarantee is what makes the scroll story safe to extend.
-- **Homepage scene order**: hero (pins, idle drift, clip stack sinks to hand
-  off) → moments rail (scan beam; each moment's ring/score arrives at its own
-  inline `--mt`) → three-move flow band (`.flow-scene`, Restream-shaped,
-  stages+arrows draw in by `--f` thresholds) → studio walkthrough
-  (`.walk-scene`, real captures crossfading by `--ps`, ONE step lit at a time
-  by `--w`) → one-frame comparison (arch-mask reveal; generic panel zoom-crops
-  past the burned-in ayah) → content-type chooser → chapters stack → template
-  gallery → review beats → DeenAI → pricing → FAQ → final arch + seal
-  resolution.
+- **Homepage scene order (v3.72.0, after the de-duplication pass)**: hero →
+  moments rail (ends by SELECTING one clip, `.strip-pick`) → THE JOURNEY
+  (`.sc-journey`, 520vh: the ONE canonical workflow — seven stages stacked in
+  one grid cell, windowed by `--js` = `--p * 7.7`; a rail line fills with
+  progress, nodes light as passed, the engine stamps `.on` on the active
+  stage to gate visibility/interactivity; the Lecture/Quran radios live in
+  stage 2 and auto-flip across it) → one-frame comparison → template gallery →
+  review beats (safety only) → DeenAI → pricing → FAQ → final. The flow band,
+  studio walkthrough, standalone chooser and chapters stack were DELETED at
+  Youssef's instruction — the workflow may be explained ONCE. Do not add a
+  second telling. Proof sections carry one ambient scrubbed property each so
+  no default-motion scroll interval over ~25vh is passive (audited by
+  stepping 25vh and checking each scene's `--p` advanced).
 - **The chooser (`.sc-choose`) is CSS radios driven two ways**: clicks, and
   the engine setting `checked` from scene progress (first half Lecture,
   second half Quran) on wide viewports only. If its panels change, keep both
