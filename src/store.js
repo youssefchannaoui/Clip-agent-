@@ -15,6 +15,16 @@ const stateFile = path.join(config.dataDir, 'state.json');
  * held per account under `state.userSettings[userId]`; these are the starting
  * values a brand new account gets.
  */
+/**
+ * Product emails (clips ready, clip posted, lecture failed) are ON until the
+ * account turns them off — they were unconditional before this existed, so
+ * the default must preserve that behaviour. Absence of the key means on.
+ */
+export function emailNotifsOff(userId) {
+  const bucket = state.userSettings[String(userId || '')];
+  return Boolean(bucket && bucket.emailNotifs === false);
+}
+
 export function settingDefaults() {
   return {
     clipSettings: {

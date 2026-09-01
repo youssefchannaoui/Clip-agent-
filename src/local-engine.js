@@ -8,7 +8,7 @@ import { config } from './config.js';
 import * as alerts from './alerts.js';
 import * as mailer from './mailer.js';
 import * as ownerFeed from './owner-feed.js';
-import { state, save, log, clipSettings, musicSettings, ownerOfRecord, musicSatisfied, importNetworkSettings } from './store.js';
+import { state, save, log, clipSettings, musicSettings, ownerOfRecord, musicSatisfied, importNetworkSettings, emailNotifsOff } from './store.js';
 import { sanitiseTemplate, selectedTemplate, templateById, templateForClip } from './templates.js';
 import { withOwner, ownerOf } from './tenancy.js';
 import { workerMusicTracks } from './audio.js';
@@ -997,7 +997,7 @@ export function acceptRemoteUpdate(projectId, update) {
     // do not come back, and clips nobody reviews are clips nobody posts.
     // Silently inert until email is configured, like everything mailer sends.
     const owner = ownerOfRecord(project);
-    if (owner?.email) {
+    if (owner?.email && !emailNotifsOff(owner.id)) {
       const clipCount = state.clips.filter(item => item.projectId === project.id).length;
       mailer.send({
         to: owner.email,
@@ -1050,7 +1050,7 @@ export function acceptRemoteUpdate(projectId, update) {
     // much as success -- silence reads as "still working" until they give up.
     // After classification, so the email carries the customer-safe message.
     const failOwner = ownerOfRecord(project);
-    if (failOwner?.email) {
+    if (failOwner?.email && !emailNotifsOff(failOwner.id)) {
       mailer.send({
         to: failOwner.email,
         ...mailer.lectureFailedMessage({

@@ -6080,7 +6080,9 @@
       ownerMenuStyle: isOperator(DATA)
         ? 'display: none; align-items: center; gap: 9px; padding: 8px 9px; border-radius: 8px; color: #E9E9ED; font-size: 12.5px;'
         : 'display: none !important;',
-      helpGuides: function (e) { stop(e); global.StudioAdapter.onContactSupport(); },
+      // Straight to the in-app Help screen — it exists now, and a support
+      // dialog for "help & guides" answered a different question.
+      helpGuides: function (e) { stop(e); setUI({ screen: 'help', menuOpen: false }); },
       signOut: function (e) { stop(e); global.StudioAdapter.onSignOut(); },
 
       // ── Connections modal ──
