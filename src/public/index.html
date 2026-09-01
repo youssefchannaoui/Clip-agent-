@@ -6154,6 +6154,118 @@ function paintBrandSeal(){
     +'<textPath href="#dcRailSealPath">IMPORT \u00b7 FIND \u00b7 REVIEW \u00b7 PUBLISH \u00b7</textPath></text>';
   seal.insertBefore(ring,seal.firstChild);
 }
+function paintLibraryAside(vals){
+  /* The Lecture library's sidebar used to end in "Before you import" -- three
+     warnings, in the most valuable column on the screen, that nobody reads
+     twice. Youssef, 1 Sept 2026: "they're not very informational or helpful."
+
+     Replaced by four blocks that answer questions the account can act on, all
+     counted in the adapter (vals.libStats) from the same projects and clips the
+     Performance screen counts, so the two cannot disagree about one lecture.
+
+     Mounted off data-tour="lib-add" -- an attribute the design export does not
+     control -- rather than a hashed class name a re-import would regenerate. */
+  const add=document.querySelector('[data-tour="lib-add"]');
+  const aside=add&&add.parentElement;
+  if(!aside)return;
+  /* The warnings card is a literal section in the design, so it cannot be
+     removed there without a re-import. Found by its own heading text. */
+  for(const sec of aside.querySelectorAll('section')){
+    if(/^Before you import/.test(sec.textContent||''))sec.remove();
+  }
+  const st=(vals||{}).libStats;
+  if(!st)return;
+  let box=document.getElementById('dcLibStats');
+  if(!box){box=document.createElement('section');box.id='dcLibStats'}
+  if(box.parentNode!==aside)aside.appendChild(box);
+
+  const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const pct=r=>Math.round(r*100)+'%';
+  const out=[];
+
+  /* 1. Which lecture is worth clipping. The single most useful thing this
+     screen can say, and nothing else on it said anything like it. */
+  if(st.best){
+    out.push('<span class="dc-libx-h">Worth clipping</span>');
+    out.push('<button type="button" class="dc-libx-row" data-go="'+esc(st.best.id)+'">'
+      +'<span class="dc-libx-fig">'+pct(st.best.rate)+'</span>'
+      +'<span class="dc-libx-body"><strong>'+esc(st.best.name)+'</strong>'
+      +'<span>'+st.best.kept+' of '+st.best.decided+' kept — your best</span></span></button>');
+    if(st.worst){
+      out.push('<button type="button" class="dc-libx-row dc-libx-dim" data-go="'+esc(st.worst.id)+'">'
+        +'<span class="dc-libx-fig">'+pct(st.worst.rate)+'</span>'
+        +'<span class="dc-libx-body"><strong>'+esc(st.worst.name)+'</strong>'
+        +'<span>'+st.worst.kept+' of '+st.worst.decided+' kept — your weakest</span></span></button>');
+    }
+  }
+
+  /* 2. What a source minute buys. The product charges by the minute, so this
+     is the rate the account is getting rather than a bill. */
+  if(st.minutes||st.made){
+    out.push('<span class="dc-libx-h">What a minute buys</span>');
+    out.push('<div class="dc-libx-flow">'
+      +'<span><strong>'+st.minutes+'</strong>minutes in</span>'
+      +'<i class="ph ph-caret-right"></i>'
+      +'<span><strong>'+st.made+'</strong>clips</span>'
+      +'<i class="ph ph-caret-right"></i>'
+      +'<span><strong>'+st.kept+'</strong>kept</span>'
+      +'<i class="ph ph-caret-right"></i>'
+      +'<span class="dc-libx-end"><strong>'+st.posted+'</strong>posted</span></div>');
+    if(st.sourceBytes||st.settled){
+      out.push('<span class="dc-libx-note">'
+        +(st.settled?st.settled+' lecture'+(st.settled===1?'':'s')+' fully reviewed. ':'')
+        +'Sources are kept so a lecture can be re-cut without importing again.</span>');
+    }
+  }
+
+  /* 3. Where the queue is stuck. Every number goes somewhere. */
+  const q=[];
+  if(st.waiting)q.push({n:st.waiting,label:'waiting on you',screen:'queue',tone:'go'});
+  if(st.working)q.push({n:st.working,label:st.working===1?'still processing':'still processing',screen:'library',filter:'processing',tone:''});
+  if(st.failed)q.push({n:st.failed,label:st.failed===1?'failed import':'failed imports',screen:'library',filter:'archived',tone:'bad'});
+  if(q.length){
+    out.push('<span class="dc-libx-h">Needs you</span>');
+    out.push('<div class="dc-libx-q">'+q.map(r=>'<button type="button" class="dc-libx-chip'
+      +(r.tone==='bad'?' dc-libx-bad':r.tone==='go'?' dc-libx-go':'')
+      +'" data-screen="'+r.screen+'"'+(r.filter?' data-filter="'+r.filter+'"':'')+'>'
+      +'<strong>'+r.n+'</strong> '+r.label+'</button>').join('')+'</div>');
+  }
+
+  /* 4. Import again. A URL the box has already fetched is cached by URL AND
+     window, so a different stretch of the same lecture costs minutes rather
+     than bandwidth -- the cheapest good clips available to this account. */
+  if(st.again&&st.again.length){
+    out.push('<span class="dc-libx-h">Cut another part</span>');
+    out.push('<span class="dc-libx-note">Already imported, so a different stretch costs minutes, not bandwidth.</span>');
+    out.push(st.again.map(r=>'<button type="button" class="dc-libx-again" data-url="'+esc(r.url)+'">'
+      +'<i class="ph ph-arrow-counter-clockwise"></i>'
+      +'<span><strong>'+esc(r.name)+'</strong><span>'+esc(r.length)+'</span></span></button>').join(''));
+  }
+
+  if(!out.length){box.remove();return}
+  box.innerHTML=out.join('');
+  box.onclick=e=>{
+    const go=e.target.closest('[data-go]');
+    const scr=e.target.closest('[data-screen]');
+    const again=e.target.closest('[data-url]');
+    if(go){StudioAdapter.ui.screen='detail';StudioAdapter.ui.openProject=go.getAttribute('data-go');renderAll();return}
+    if(scr){
+      StudioAdapter.ui.screen=scr.getAttribute('data-screen');
+      const f=scr.getAttribute('data-filter');
+      if(f)StudioAdapter.ui.libFilter=f;
+      renderAll();return;
+    }
+    if(again){
+      /* Fills the field this sidebar already owns rather than starting a job
+         behind the customer's back: the range, template and clip count are
+         still theirs to set before Import. */
+      StudioAdapter.ui.jobUrl=again.getAttribute('data-url');
+      renderAll();
+      const field=add.querySelector('input');
+      if(field)field.focus();
+    }
+  };
+}
 function helpZoom(src,img){
   const old=document.getElementById('dcHelpZoom');
   if(old)old.remove();
@@ -6267,6 +6379,7 @@ function paintStudio(){
   paintTemplatesLayout();
   paintHelp();
   paintBrandSeal();
+  paintLibraryAside(vals);
   /* Screen-change restart for the motion layer (studio-motion.css): the
      generated dcScreen animation cannot restart when two screens share a
      wrapper class (Home and Library both render the same one), so the body

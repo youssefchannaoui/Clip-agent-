@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1010 JS + 462 Python**
+- `npm test` and `npm run check` must pass. Currently **1019 JS + 462 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -2019,6 +2019,57 @@ be for the template at all times."
   (`jobUrlVal` changes) -- and typing means focus, where the animation is
   switched off anyway. Any other infinite animation added to the studio should
   be checked the same way instead of being assumed safe OR assumed broken.
+
+## The Lecture library's sidebar answers questions now (v3.73.4, 1 Sept 2026)
+
+Youssef: "before you import, to be honest, all of them are pretty useless ...
+tell me any good ideas to put in the lecture library on the side ... they're
+not very informational or helpful." He then approved all five.
+
+- **"Before you import" is gone.** Three warnings, in the most valuable column
+  on the screen, that nobody reads twice. It is a literal `<section>` in the
+  design export, so the host removes it -- found by its own heading text, since
+  a re-import regenerates every hashed class name.
+- **The arithmetic lives in the adapter (`libStats`), the DOM work in the host
+  (`paintLibraryAside`).** Same split as every other host panel, and it means
+  the figures are testable by CALLING `bindings()` rather than by reading
+  markup. They are counted from the same projects and clips the Performance
+  screen counts, so the two screens cannot tell different stories about one
+  lecture, and no new route was added.
+- **Mounted off `data-tour="lib-add"`**, an attribute the design export does
+  not control. Registered in paintStudio's list, never on a MutationObserver.
+- **A keep rate needs FOUR decided clips before it is shown.** With two, "50%"
+  is one person's shrug wearing a percentage sign. Lectures under the floor are
+  left out rather than ranked on noise.
+- **The weakest lecture is named only when it is a different answer** -- one
+  lecture is not a comparison, and printing the same lecture as both best and
+  worst reads as broken. It also keeps the quiet grey rather than the red that
+  means something failed: a low keep rate is information, not an alarm.
+- **Minutes are counted on the SELECTED range**, not the lecture's full length
+  (`sourceEndSec - sourceStartSec`, falling back to the duration). A 5-minute
+  section of a 38-minute talk costs five minutes, and the section download is
+  the whole reason that distinction exists.
+- **Every block is null when it has nothing true to say, and an empty account
+  gets no panel at all.** Verified in the browser: `#dcLibStats` is not drawn
+  for an account with no lectures. A card padded out with "0 of 0" teaches less
+  than no card.
+- **Re-import offers only lectures with a URL that are not still working.** An
+  upload has nothing to re-fetch and a lecture mid-import cannot be asked for a
+  second range. Clicking fills the sidebar's own paste field rather than
+  starting a job -- the range, template and clip count are still the
+  customer's to set. Proven by clicking: the field took the URL.
+- **No delete button was built, deliberately.** `DELETE /api/projects/:id`
+  removes the whole project including its clips; there is no "free the source,
+  keep the clips" operation, and inventing one under a storage tile is not a
+  decision a sidebar gets to make. Storage states what it holds instead.
+- Storage's three rows now carry a count AND a size. They used to read
+  "0 / 0 / 0" beside a heading that already said "0 lectures - 0 clips".
+- Every control was clicked rather than assumed: best -> that lecture's detail
+  screen, a queue chip -> the review queue, re-import -> the paste field filled.
+- **Seeding trap, cost two runs:** the state poll REASSIGNS `DATA`, so neither
+  a plain seed nor an `Object.defineProperty` getter on the old object survives
+  it. Clear the timers first (`for (let i = 1; i < 20000; i++) clearInterval(i)`)
+  and then seed.
 
 ## Open items
 

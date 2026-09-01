@@ -5736,9 +5736,112 @@
       // These tiles used to dress record counts up as a storage figure.
       storageSummary: plural(projects.length, 'lecture') + ' · ' + plural(clips.length, 'clip')
         + (storageTotal ? ' · ' + fmtBytes(storageTotal) : ''),
-      storageSources: storage.sourceBytes ? fmtBytes(storage.sourceBytes) : String(projects.length),
-      storageClips: storage.clipBytes ? fmtBytes(storage.clipBytes) : String(clips.length),
-      storageTranscripts: String(projects.filter(function (p) { return lecState(p) === 'ready'; }).length),
+      // Counts AND size on one line. The three rows used to read "0 / 0 / 0"
+      // beside a heading that already said "0 lectures - 0 clips", so the card
+      // repeated itself and answered nothing.
+      storageSources: plural(projects.length, 'lecture')
+        + (storage.sourceBytes ? ' \u00b7 ' + fmtBytes(storage.sourceBytes) : ''),
+      storageClips: plural(clips.length, 'clip')
+        + (storage.clipBytes ? ' \u00b7 ' + fmtBytes(storage.clipBytes) : ''),
+      storageTranscripts: plural(projects.filter(function (p) { return lecState(p) === 'ready'; }).length, 'lecture') + ' transcribed',
+
+      /**
+       * The Lecture library's sidebar, which used to end in three warnings.
+       *
+       * Youssef, 1 Sept 2026: "before you import, to be honest, all of them are
+       * pretty useless ... they're not very informational or helpful."
+       *
+       * Every figure here is counted from this account's own projects and
+       * clips -- the same rows the Performance screen counts -- so the two
+       * screens cannot tell different stories about one lecture. Nothing is
+       * fetched and no new route exists for this.
+       *
+       * Each block is null when it has nothing true to say. A card that pads
+       * itself out with "0 of 0" teaches less than no card at all, and the
+       * host draws only what it is given.
+       */
+      libStats: (function () {
+        var ready = projects.filter(function (p) { return lecState(p) === 'ready'; });
+
+        // ── which lecture is worth clipping ──
+        // Keep rate needs a decided sample: with two clips reviewed, "50%" is
+        // one person's shrug wearing a percentage sign. Four is the floor.
+        var MIN_DECIDED = 4;
+        var rated = ready.map(function (p) {
+          var mine = clipsOf(p.id);
+          var decided = mine.filter(function (c) { return decision(c) !== null; });
+          var kept = decided.filter(function (c) { return decision(c) === 'approved'; }).length;
+          return {
+            id: p.id,
+            name: projectTitle[p.id] || 'Lecture',
+            clips: mine.length,
+            decided: decided.length,
+            kept: kept,
+            rate: decided.length ? kept / decided.length : 0,
+          };
+        }).filter(function (r) { return r.decided >= MIN_DECIDED; })
+          .sort(function (a, b) { return b.rate - a.rate; });
+
+        var best = rated.length ? rated[0] : null;
+        // The worst is only worth naming when it is genuinely a different
+        // answer. One lecture, or two that agree, is not a comparison.
+        var worst = rated.length > 1 && rated[rated.length - 1].rate < rated[0].rate
+          ? rated[rated.length - 1] : null;
+
+        // ── what a source minute actually buys ──
+        // Minutes are what a token pays for, so this is the rate the account is
+        // getting -- charged on the range selected, not the whole lecture.
+        var minutes = 0;
+        projects.forEach(function (p) {
+          var span = Number(p.sourceEndSec || 0) - Number(p.sourceStartSec || 0);
+          if (!(span > 0)) span = Number(p.sourceDurationSec || 0);
+          minutes += Math.max(0, span) / 60;
+        });
+        minutes = Math.round(minutes);
+        var kept = clips.filter(function (c) { return decision(c) === 'approved'; }).length;
+        var posted = clips.filter(function (c) { return c.postedAt; }).length;
+
+        // ── where the queue is stuck ──
+        var waiting = clips.filter(function (c) { return decision(c) === null && c.status !== 'rendering'; }).length;
+        var working = projects.filter(function (p) { return lecState(p) === 'processing'; }).length;
+        var failed = projects.filter(function (p) { return p.status === 'failed'; }).length;
+
+        // ── import again ──
+        // A URL this account has already imported is cheap to cut again: the
+        // box caches the source by URL AND window, so a different stretch of a
+        // lecture already fetched costs minutes rather than bandwidth.
+        var again = projects.filter(function (p) { return p.url && lecState(p) !== 'processing'; })
+          .slice(0, 3)
+          .map(function (p) {
+            return {
+              id: p.id,
+              name: projectTitle[p.id] || 'Lecture',
+              url: String(p.url),
+              length: humanDuration(p.sourceDurationSec || p.durationSec || 0),
+            };
+          });
+
+        return {
+          best: best,
+          worst: worst,
+          minutes: minutes,
+          made: clips.length,
+          kept: kept,
+          posted: posted,
+          waiting: waiting,
+          working: working,
+          failed: failed,
+          // Fully reviewed lectures are the ones whose source is dead weight:
+          // every clip decided, nothing left to re-cut from the original.
+          settled: ready.filter(function (p) {
+            var mine = clipsOf(p.id);
+            return mine.length > 0 && mine.every(function (c) { return decision(c) !== null; });
+          }).length,
+          sourceBytes: Number(storage.sourceBytes || 0),
+          again: again,
+          empty: !projects.length,
+        };
+      })(),
       jobTitle: active ? projectTitle[active.id] : 'Nothing processing',
       jobMeta: active
         ? humanDuration(active.durationSec || active.sourceDurationSec) + ' source · ' + plural(active.clipCount || 0, 'clip') + ' requested'

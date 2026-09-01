@@ -346,10 +346,10 @@
 #studio [data-tour="paste"] {
   flex: 1 1 340px;
   min-width: 240px;
-  border-color: rgba(217,180,120,.42) !important;
-  box-shadow: 0 0 0 3px rgba(217,180,120,.05), 0 0 16px rgba(217,180,120,.10);
+  border-color: rgba(217,180,120,.5) !important;
+  box-shadow: 0 0 0 3px rgba(217,180,120,.09), 0 0 20px rgba(217,180,120,.16);
   transition: border-color .16s ease, box-shadow .16s ease;
-  animation: dcPasteBreathe 4.5s ease-in-out infinite;
+  animation: dcPasteBreathe 3.2s ease-in-out infinite;
 }
 #studio [data-tour="paste"]:hover,
 #studio [data-tour="paste"]:focus-within {
@@ -365,9 +365,20 @@
   border-color: rgba(217,180,120,.85) !important;
   box-shadow: 0 0 0 3px rgba(217,180,120,.14), 0 0 30px rgba(217,180,120,.24);
 }
+/* The border travels with the halo. A first pass moved only the glow and was
+   reported as "isn't noticable much" -- on a near-black ground a 16px shadow at
+   10% alpha is close to invisible, and the lit edge is the part the eye
+   actually catches. This is the whole ring brightening, not a control changing
+   state, which is why the border is in the same breath rather than switching. */
 @keyframes dcPasteBreathe {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(217,180,120,.05), 0 0 16px rgba(217,180,120,.10); }
-  50%      { box-shadow: 0 0 0 3px rgba(217,180,120,.11), 0 0 28px rgba(217,180,120,.21); }
+  0%, 100% {
+    border-color: rgba(217,180,120,.38);
+    box-shadow: 0 0 0 3px rgba(217,180,120,.07), 0 0 18px rgba(217,180,120,.12);
+  }
+  50% {
+    border-color: rgba(217,180,120,.95);
+    box-shadow: 0 0 0 5px rgba(217,180,120,.16), 0 0 38px rgba(217,180,120,.36);
+  }
 }
 /* The row it sits in caps itself at 520px, which is what made the field look
    cramped. `:has` addresses the row through the child rather than through a
@@ -379,6 +390,91 @@
   /* Still lit, just not moving -- the point of the glow is to be noticed. */
   #studio [data-tour="paste"] {
     animation: none;
-    box-shadow: 0 0 0 3px rgba(217,180,120,.09), 0 0 24px rgba(217,180,120,.18);
+    border-color: rgba(217,180,120,.7) !important;
+    box-shadow: 0 0 0 4px rgba(217,180,120,.13), 0 0 28px rgba(217,180,120,.26);
   }
 }
+
+
+/* ── The Lecture library's sidebar (host-rendered, #dcLibStats) ─────────────
+   It replaces the "Before you import" warnings card. Styled here rather than
+   in the design export because the whole panel is host-rendered -- see
+   paintLibraryAside in index.html -- and because putting it in the export
+   would regenerate every hashed class name in the app. */
+#dcLibStats {
+  display: flex; flex-direction: column; gap: 9px;
+  padding: 16px; border: 1px solid #26262A; border-radius: 12px; background: #121214;
+}
+#dcLibStats .dc-libx-h {
+  font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+  color: #8B8B93;
+}
+#dcLibStats .dc-libx-h:not(:first-child) { margin-top: 7px; }
+#dcLibStats .dc-libx-note { font-size: 11.5px; line-height: 1.5; color: #6E6E76; }
+
+/* A lecture worth clipping, and the one that is not. */
+#dcLibStats .dc-libx-row {
+  display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+  padding: 9px 10px; border: 1px solid #26262A; border-radius: 9px;
+  background: #17171A; color: inherit; font-family: inherit; cursor: pointer;
+  transition: border-color .14s ease, background .14s ease;
+}
+#dcLibStats .dc-libx-row:hover { border-color: rgba(217,180,120,.45); background: #1B1B1F; }
+#dcLibStats .dc-libx-fig {
+  flex: none; font-family: Outfit, Inter, sans-serif; font-size: 19px; font-weight: 600;
+  letter-spacing: -.02em; color: #F0D6A6;
+}
+/* The weakest lecture is information, not an alarm: it keeps the quiet grey
+   rather than borrowing the red that means something failed. */
+#dcLibStats .dc-libx-dim .dc-libx-fig { color: #8B8B93; }
+#dcLibStats .dc-libx-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+#dcLibStats .dc-libx-body strong {
+  font-size: 12.5px; font-weight: 600; color: #F2F2F4;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#dcLibStats .dc-libx-body span { font-size: 11px; color: #8B8B93; }
+
+/* minutes -> clips -> kept -> posted */
+#dcLibStats .dc-libx-flow {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 10px; border: 1px solid #26262A; border-radius: 9px; background: #17171A;
+}
+#dcLibStats .dc-libx-flow > span {
+  display: flex; flex-direction: column; gap: 1px; font-size: 10px; color: #8B8B93;
+}
+#dcLibStats .dc-libx-flow strong {
+  font-family: Outfit, Inter, sans-serif; font-size: 16px; font-weight: 600;
+  letter-spacing: -.02em; color: #F2F2F4;
+}
+#dcLibStats .dc-libx-flow .dc-libx-end strong { color: #F0D6A6; }
+#dcLibStats .dc-libx-flow i { font-size: 11px; color: #3A3A42; }
+
+/* what still needs a person */
+#dcLibStats .dc-libx-q { display: flex; flex-wrap: wrap; gap: 6px; }
+#dcLibStats .dc-libx-chip {
+  padding: 5px 9px; border: 1px solid #26262A; border-radius: 20px; background: #17171A;
+  color: #A2A2AA; font-family: inherit; font-size: 11px; cursor: pointer;
+  transition: border-color .14s ease, color .14s ease;
+}
+#dcLibStats .dc-libx-chip strong { color: #F2F2F4; font-weight: 600; }
+#dcLibStats .dc-libx-chip:hover { border-color: rgba(217,180,120,.45); color: #F0D6A6; }
+#dcLibStats .dc-libx-go { border-color: rgba(217,180,120,.32); }
+#dcLibStats .dc-libx-go strong { color: #F0D6A6; }
+#dcLibStats .dc-libx-bad { border-color: rgba(199,126,110,.4); }
+#dcLibStats .dc-libx-bad strong { color: #E29C8C; }
+
+/* import another stretch of a lecture already on the box */
+#dcLibStats .dc-libx-again {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  padding: 8px 10px; border: 1px dashed #2C2C32; border-radius: 9px; background: transparent;
+  color: inherit; font-family: inherit; cursor: pointer;
+  transition: border-color .14s ease, background .14s ease;
+}
+#dcLibStats .dc-libx-again:hover { border-color: rgba(217,180,120,.45); background: #17171A; }
+#dcLibStats .dc-libx-again > i { flex: none; font-size: 13px; color: #8B8B93; }
+#dcLibStats .dc-libx-again > span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+#dcLibStats .dc-libx-again strong {
+  font-size: 12px; font-weight: 600; color: #F2F2F4;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#dcLibStats .dc-libx-again > span > span { font-size: 10.5px; color: #6E6E76; }
