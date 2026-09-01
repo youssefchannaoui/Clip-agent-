@@ -1835,6 +1835,34 @@ channel that reads as the same video uploaded twice.
   affects lectures processed from now on. The duplicate titles already on the
   channel stay until those clips are renamed by hand.
 
+## The watermark is on by default, top centre, and Basic cannot remove it (v3.72.8)
+
+Youssef, 1 Sept 2026: "The Show watermark should be ticked on for all basic
+accounts and actually should be a default for all of them. And the watermark
+should be in the middle top for all accounts whenever they post... basic cannot
+turn it off."
+
+- **The defaults in `templates.js` already said exactly that** -- `watermark:
+  'DEENCLIPPED'`, `watermarkOpacity: 100`, `watermarkPosition: 'top-center'`.
+  What was overriding them is the five shipped built-ins in `src/templates/`,
+  every one of which carried `watermark: ''`, `opacity: 0` and a bottom
+  corner. That is why the switch read as off on a fresh account. Four of them
+  now carry the real default.
+- **The paywall needed nothing.** `assertWatermarkAllowed` already refuses a
+  save that empties the text OR zeroes the opacity for a non-paid account, and
+  the Templates row already renders the switch `disabled` for them. Measured
+  after the change: Basic sees it CHECKED and LOCKED, with "Removing it is on
+  Pro and Studio"; a paid account sees it checked and free to change.
+- **Quran Recitation is the one exemption**, and it is deliberate: nothing is
+  drawn over the top of scripture -- no watermark, no brand line, no hook, no
+  caption box -- which has its own test in `pricing.test.mjs` and is why the
+  first pass went red. Top-centre would have put the mark straight over the
+  ayah. It opens no free-plan hole, because that template is Pro-only: a Basic
+  account cannot select it, and a paid account may remove a watermark anyway.
+- `test/pricing.test.mjs` now pins the default across every built-in and
+  skips that one by id, so the exemption is stated rather than looking like an
+  oversight.
+
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)
@@ -2399,13 +2427,12 @@ Aimed at the first 100 paid subscribers rather than at pageviews.
 - **Every reward defaulted to ZERO** (`config.referralBonus*`,
   `config.affiliate*`) because the economics were not approved, and code that
   pays out by default pays out before anybody decided to.
-  **`referralBonusPaid` is 100 as of 1 Sept 2026** -- Youssef asked for a
+  **`referralBonusPaid` is 50 as of 1 Sept 2026** -- Youssef asked for a
   reward on the inviter's side to sit beside the invited person's 30% off, and
-  that is the decision the zero was waiting for. 100 rather than 50 because it
-  has to be worth telling someone about: Pro monthly is A$29 for 650 tokens, so
-  50 is 7.7% of a month, while 100 is ~15% and is exactly the Quick Boost pack
-  (A$8.99) a customer can already picture. Capped at three invites a link, the
-  whole exposure is 300 tokens per referrer against A$29/month recurring.
+  that is the decision the zero was waiting for. 50 is his call over the 100
+  first proposed here: Pro monthly is A$29 for 650 tokens, so it is about 7.7%
+  of a month, roughly one more lecture. Capped at three invites a link, the
+  whole exposure is 150 tokens per referrer against A$29/month recurring.
   The other two stay at zero: rewarding a mere SIGN-UP is the one that buys
   fake accounts. The env var still wins, so it can be turned down without a
   deploy, and the test now asserts the DECISION rather than "everything is
@@ -2415,7 +2442,7 @@ Aimed at the first 100 paid subscribers rather than at pageviews.
   `converted:<userId>`, and it lands in the same balance a purchased top-up
   writes to -- so the number the customer sees is the number that spends. The
   panel now says both halves of the deal ("They get 30% off when they
-  subscribe. You get 100 tokens when they subscribe to a plan."), each written
+  subscribe. You get 50 tokens when they subscribe to a plan."), each written
   only when it is actually configured.
 - **`billing.grantBonusTokens` refuses to run without a key** and refuses a key
   it has already honoured. The settle pass runs on every owner growth read, so

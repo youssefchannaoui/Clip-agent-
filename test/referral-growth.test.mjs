@@ -256,9 +256,9 @@ test('nothing pays out that has not actually been decided', async () => {
   const { config } = await import('../src/config.js');
 
   // Decided 1 Sept 2026 by Youssef: a reward for the INVITER, paid only when
-  // the invited account subscribes. 100 tokens -- ~15% of a Pro month (650)
-  // and exactly the Quick Boost pack, so it is worth telling someone about.
-  assert.equal(config.referralBonusPaid, 100);
+  // the invited account subscribes. 50 tokens -- about 7.7% of a Pro month
+  // (650), roughly one more lecture.
+  assert.equal(config.referralBonusPaid, 50);
 
   // Still undecided, and therefore still off. Rewarding a mere SIGN-UP is the
   // one that buys fake accounts, so it stays at zero until somebody says

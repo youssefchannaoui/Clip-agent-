@@ -84,6 +84,26 @@ test('the Quran template does not mix a nasheed under the recitation by default'
   assert.match(adapter, /UI\.jobMusicTouched/);
 });
 
+test('every built-in ships with the watermark on, top centre', () => {
+  // Youssef, 1 Sept 2026: the watermark is a DEFAULT for all accounts, sits
+  // middle-top on every post, and Basic cannot turn it off. The defaults in
+  // templates.js already said so; the shipped built-ins were overriding them
+  // with watermark:'' and opacity 0, which is why the switch read as off.
+  const dir = path.join(process.cwd(), 'src/templates');
+  const builtins = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+  assert.ok(builtins.length >= 4);
+  for (const file of builtins) {
+    const t = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
+    // Scripture is the one exemption, and it has its own test below. It is
+    // Pro-only, so exempting it opens no free-plan hole: a Basic account
+    // cannot select it, and a paid account may remove a watermark anyway.
+    if (t.id === 'quran-recitation') continue;
+    assert.equal(t.watermark, 'DEENCLIPPED', `${file} ships without a watermark`);
+    assert.equal(t.watermarkOpacity, 100, `${file} ships with an invisible watermark`);
+    assert.equal(t.watermarkPosition, 'top-center', `${file} does not put it middle-top`);
+  }
+});
+
 test('nothing is drawn over the top of scripture', () => {
   const template = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'src/templates/quran-recitation.json'), 'utf8'));
   assert.equal(template.watermarkOpacity, 0, 'no watermark over an ayah');
