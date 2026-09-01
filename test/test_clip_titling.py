@@ -574,3 +574,44 @@ class SinglesRetryTests(unittest.TestCase):
         singles = [size for size in asks[4:]]
         self.assertEqual(len(singles), clip_worker.AI_RETRY_SINGLES)
         self.assertTrue(all(size == 1 for size in singles))
+
+
+class ReasonFieldTests(unittest.TestCase):
+    """The reason explains the MOMENT, never the packaging.
+
+    Watched in production, 1 Sept 2026: with no definition of the field, the
+    model filled "reason" with commentary on the title it had just written --
+    "The title is concise, uses the hook..." -- and since the reason is
+    prepended, the review deck led with babble about packaging while the real
+    heuristic reasons sat behind it.
+    """
+
+    @staticmethod
+    def apply(reason):
+        batch = [Candidate(start=0.0, end=40.0, text="a talk about patience", score=70,
+                           segments=[], reasons=["question opening"], quote_risk=False)]
+        clip_worker.apply_clip_rows(
+            [{"index": 0, "score": 90, "title": "A written title about patience",
+              "description": "d", "reason": reason}],
+            batch, 0, set(), "")
+        return batch[0]
+
+    def test_packaging_commentary_is_dropped(self):
+        clip = self.apply("The title is concise, uses the hook and ends with the speaker's name.")
+        self.assertEqual(clip.ai_reason, "")
+        self.assertEqual(clip.reasons, ["question opening"], "the heuristic reasons stand alone")
+
+    def test_description_commentary_is_dropped_too(self):
+        clip = self.apply("The description highlights the message and includes relevant hashtags.")
+        self.assertEqual(clip.ai_reason, "")
+
+    def test_a_real_reason_still_leads(self):
+        clip = self.apply("a complete story with a payoff")
+        self.assertEqual(clip.ai_reason, "a complete story with a payoff")
+        self.assertEqual(clip.reasons[0], "a complete story with a payoff")
+
+    def test_the_prompt_defines_the_field(self):
+        prompt = clip_worker.build_clip_prompt(
+            [{"index": 0, "duration": 40.0, "heuristicScore": 70, "text": "x"}], "")
+        self.assertIn("REASON.", prompt)
+        self.assertIn("never your own title or description", prompt)

@@ -3521,6 +3521,14 @@
     // the current stage plus every stage still ahead. The number can only
     // fall between stage changes.
     var STAGE_BANDS = { import: [3, 8], transcribe: [8, 65], score: [65, 75], render: [75, 98] };
+    // 0 Import · 1 Transcribe · 2 Score · 3 Render · 4 Upload. The first four
+    // come from the worker's own phase; upload has no phase of its own, so the
+    // global percentage past the render band is what names it.
+    function liveStageIdx(j) {
+      var name = phaseOf(j.project || {});
+      if (!name) return Number(j.progress) >= STAGE_BANDS.render[1] ? 4 : 0;
+      return ['import', 'transcribe', 'score', 'render'].indexOf(name);
+    }
     function phaseOf(pr) {
       var phase = String(pr.phase || '').toLowerCase();
       if (phase.indexOf('import') === 0) return 'import';
@@ -3613,7 +3621,13 @@
         }
       });
     });
-    jobsLive.sort(function (a, b) { return Number(b.at || 0) - Number(a.at || 0); });
+    // Working before waiting, newest first within each. Sorting by time alone
+    // let a queued job submitted a minute ago take the floating bar's headline
+    // off the lecture actually rendering.
+    jobsLive.sort(function (a, b) {
+      if (Boolean(a.queued) !== Boolean(b.queued)) return a.queued ? 1 : -1;
+      return Number(b.at || 0) - Number(a.at || 0);
+    });
 
     // Binary units, matching what a download manager and the OS both report, so
     // the number does not disagree with the file on disk.
@@ -3625,13 +3639,13 @@
       if (n < 1073741824) return Math.round(n / 1048576) + ' MB';
       return (n / 1073741824).toFixed(1) + ' GB';
     }
-    // "142 MB of 380 MB" while the total is known, "142 MB" while it is not --
+    // "142 MB / 380 MB" while the total is known, "142 MB" while it is not --
     // a server that sends no Content-Length is common and must not print "of 0".
     function transferLabel(done, total) {
       var a = sizeLabel(done);
       if (!a) return '';
       var b = sizeLabel(total);
-      return b ? a + ' of ' + b : a;
+      return b ? a + ' / ' + b : a;
     }
 
     function etaLabel(seconds) {
@@ -3724,7 +3738,9 @@
         clipsLabel: clips.length ? clips.filter(function (c) { return c.done; }).length + ' of ' + clips.length + ' done' : '',
         // Above this the list scrolls instead of pushing the page around.
         clipsScroll: clips.length > 6,
-        percent: pct === null ? '' : pct + '%',
+        // A queued job has not started; "0%" on it reads as stuck rather than
+        // waiting, so it says nothing until the worker takes it.
+        percent: pct === null || j.queued ? '' : pct + '%',
         eta: eta,
         transfer: transfer,
         // The dock binds text/textStyle; supplying only label left every row of
@@ -3735,6 +3751,14 @@
         barStyle: 'height: 3px; border-radius: 3px; width: ' + (pct === null ? 100 : pct) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
         icon: j.kind === 'publish' ? 'ph ph-paper-plane-tilt' : j.kind === 'render' ? 'ph ph-film-strip' : 'ph ph-circle-notch',
         iconStyle: 'font-size: 14px; color: #F0D6A6;' + (j.kind === 'project' ? ' animation: dcSpin 1.1s linear infinite;' : ''),
+        // Where the job stands in the pipeline, for the stage strip both live
+        // surfaces draw. Only a full lecture job walks the pipeline; edits,
+        // more-clips and publishes are single-stage and get no strip (null).
+        // A queued lecture is -1: the strip shows with nothing lit, which is
+        // the honest picture of a job that has not started. Past the render
+        // band the worker is uploading -- phaseOf answers '' there, and the
+        // global percentage is what says so.
+        stageIdx: j.kind === 'project' ? (j.queued ? -1 : liveStageIdx(j)) : null,
       };
     }
 

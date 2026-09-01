@@ -199,7 +199,11 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1024 JS + 477 Python**
+<<<<<<< HEAD
+- `npm test` and `npm run check` must pass. Currently **1024 JS + 488 Python**
+=======
+- `npm test` and `npm run check` must pass. Currently **1023 JS + 488 Python**
+>>>>>>> f0c251b6b027c42b6ada6a56c505b879ba9e7597
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3384,3 +3388,78 @@ hook -> body -> payoff), then measured against the box's real model.
 - **A source-reading trap, hit twice in one session**: AyahFaceTests locates
   quran_font's fallback list by splitting on the file's first candidate-loop
   literal. A new loop OR A COMMENT containing that literal upstream breaks it.
+
+## The import says how many MB have landed (v3.75.4, 1 Sept 2026)
+
+Youssef, watching a job sit on "importing · 0% of this step" while ffmpeg had
+741MB of it on disk: "can you show the mb for example xx / xx so people know
+and put it next to the ETA."
+
+- **Everything downstream existed already and had never been fed.** The
+  service's pulse turns byte counts into `bytesDone`/`bytesTotal` and a real
+  step percentage; local-engine copies them; /api/state sends them; the
+  adapter renders them beside the ETA. But the yt-dlp `progress_hook` called
+  the bare `cancelled()` and threw its own byte counts away -- so the entire
+  chain sat dark on the one path production takes.
+- **A section download has NO hook to fix.** yt-dlp hands ranged downloads to
+  ffmpeg, which runs as a black box firing no per-byte hooks -- verified live
+  on the box: pid 2551 was ffmpeg writing source.mp4.part with the job's
+  progress at 0. A watcher thread now reports the on-disk size (summing every
+  stem-sibling: .part, per-format .fNNN.part, the merged file) every 2s, with
+  NO invented total -- the app prints a bare "623 MB", which is honest, and
+  its transferLabel supported exactly that all along.
+- **The watcher yields to the hook.** Both feed one pulse; alternating the
+  hook's per-file figure with the watcher's on-disk sum makes the number jump
+  around. The hook stamps `hook_spoke` whenever it carries bytes and the
+  watcher stays quiet for 6s after. It also never acts on cancellation -- the
+  main thread owns raising out of yt-dlp, and two owners of one cancel race.
+- **The label is "412 MB / 806 MB"** (his wording), was "of". One test pinned
+  the old join and moved with it.
+- The watcher is stopped in a `finally`, or an import that raises would leave
+  a daemon thread statting a deleted directory for the life of the container.
+
+## The live surfaces show the pipeline, not a percentage in the dark (v3.76.0)
+
+Youssef: "make a massive improvements, looks, layout and more for happening
+now bar on home page AND the happening bar in other tabs when floating".
+
+- **Both surfaces now draw the pipeline itself**: Import · Transcribe · Score
+  · Render · Upload as a station strip -- done stations hold their gold, the
+  current one pulses, the rest wait unlit. On Home the stations carry labels;
+  the floating bar's head shows the same strip as dots alone
+  (`stageStripHtml(idx, compact)`, labels in `<em>` so one builder serves
+  both). `stageIdx` comes from the adapter (`liveStageIdx`): the worker's own
+  phase for the first four, and the global percentage past the render band
+  for upload, which has no phase. A queued job is -1 -- strip drawn, nothing
+  lit -- and single-stage jobs (edits, more-clips, publishes) get null and no
+  strip.
+- **stageIdx is part of liveKey**, so a stage handover repaints the strip --
+  four rebuilds a job, nothing. The in-place update path is untouched, and
+  the meta selector grew `:not(.slh-stages)` in BOTH the CSS and paintRows,
+  because the strip is also a span inside `.what`.
+- **Running before waiting.** jobsLive sorted by time alone, so a queued job
+  submitted a minute ago took the floating bar's headline off the lecture
+  actually rendering. Running jobs lead now, newest first within each group.
+- **A queued job says nothing instead of "0%"** -- a percentage on a job that
+  has not started reads as stuck.
+- **The looks**: the Home card wears a quiet gold ring and warm ground while
+  anything runs and settles to the plain site card when idle (both states
+  pinned by test); the header is small-caps with the count as a gold chip;
+  rows lead with a 32px warm icon tile; the track is 4px. The floating bar
+  gets the gold hairline, a slide-up entry (`slbIn`, killed under reduced
+  motion), a 3px fill, and collapses into a fully-rounded pill. The idle card
+  carries a clock and "Paste a lecture above and the pipeline lights up
+  here." All states screenshotted at desktop before shipping; the tour veil
+  and the timer-reseed traps both bit again and are already documented above.
+
+### The reason field was babble about the packaging (v3.76.1)
+
+First real lecture through the v3.75.0 scorer surfaced it: the prompt never
+said what "reason" was FOR, so qwen3 filled it with commentary on the title it
+had just written -- "The title is concise, uses the hook..." -- and since the
+reason is prepended to the clip's reasons, the review deck led with that while
+the genuine heuristic reasons ("question opening") sat behind it. The prompt
+now defines the field (about the MOMENT, never the packaging), and because a
+negative instruction is a suggestion to this model, packaging words
+(title/description/hashtags) are dropped in apply_clip_rows -- the heuristic
+reasons underneath always remain.

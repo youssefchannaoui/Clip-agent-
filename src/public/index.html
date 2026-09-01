@@ -75,14 +75,20 @@ body.studio-read #studio button:has(> i.ph-bell) > span { display: none; }
    which is where the two overlapped. */
 body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: none; align-items: flex-end; }
 
-/* Live work — the compact bar, on every screen but Home. */
+/* Live work — the compact bar, on every screen but Home. A window onto the
+   worker, so it wears the working gold: hairline ring, warm glow, and it
+   arrives from below rather than blinking into place. */
 #studioLiveBar {
   position: fixed; left: 50%; translate: -50% 0; bottom: 18px; z-index: 150;
-  width: min(560px, calc(100vw - 300px));
-  border: 1px solid #26262A; border-radius: 13px; background: rgba(14,14,17,.97);
-  box-shadow: 0 20px 50px rgba(0,0,0,.6); backdrop-filter: blur(9px);
+  width: min(600px, calc(100vw - 300px));
+  border: 1px solid rgba(217,180,120,.26); border-radius: 14px;
+  background: linear-gradient(180deg, rgba(22,20,17,.97), rgba(13,13,16,.97));
+  box-shadow: 0 22px 54px rgba(0,0,0,.62), 0 0 0 1px rgba(0,0,0,.4), 0 4px 24px rgba(217,180,120,.07);
+  backdrop-filter: blur(10px);
   font-family: Inter, system-ui, sans-serif; color: #F2F2F4; overflow: hidden;
+  animation: slbIn .3s cubic-bezier(.22,.6,.18,1) backwards;
 }
+@keyframes slbIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 #studioLiveBar.hide, #studioLiveHome.hide { display: none; }
 /* The width above reserves room for the desktop rail (100vw - 300px). On a
    phone that arithmetic leaves an 84px sliver -- the bar was unreadable at
@@ -91,11 +97,11 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
   #studioLiveBar { width: calc(100vw - 24px); bottom: 12px; }
   #studioLiveBar.slb-min { max-width: calc(100vw - 24px); right: 12px; }
 }
-.slb-head { display: flex; align-items: center; gap: 10px; padding: 10px 13px; }
-.slb-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: #7FD1A6; animation: dcPulse 1.8s ease-in-out infinite; }
+.slb-head { display: flex; align-items: center; gap: 10px; padding: 11px 14px; }
+.slb-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: #7FD1A6; box-shadow: 0 0 0 3px rgba(127,209,166,.14); animation: dcPulse 1.8s ease-in-out infinite; }
 .slb-title { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.slb-pct { flex: none; font-size: 11.5px; color: #F0D6A6; font-variant-numeric: tabular-nums; }
-.slb-eta, .slb-size { flex: none; font-size: 11px; color: #8B8B93; }
+.slb-pct { flex: none; font-size: 12.5px; font-weight: 700; color: #F0D6A6; font-variant-numeric: tabular-nums; }
+.slb-eta, .slb-size { flex: none; font-size: 11px; color: #8B8B93; font-variant-numeric: tabular-nums; }
 /* Empty when there is nothing to say, so the gap collapses instead of leaving
    a stray separator's worth of space in the row. */
 .slb-eta:empty, .slb-size:empty, .slb-pct:empty { display: none; }
@@ -105,22 +111,30 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 .slb-icon:hover { color: #F2F2F4; border-color: #34343A; }
 /* Collapsed: a small pill that still reports progress, so minimising the
    bar never means losing sight of the work. */
-#studioLiveBar.slb-min { width: auto; max-width: min(320px, calc(100vw - 40px)); left: auto; right: 18px; translate: none; }
-#studioLiveBar.slb-min .slb-list, #studioLiveBar.slb-min .slb-size, #studioLiveBar.slb-min .slb-eta, #studioLiveBar.slb-min #slbToggle, #studioLiveBar.slb-min #slbHome { display: none; }
-#studioLiveBar.slb-min .slb-head { padding: 7px 9px 7px 11px; gap: 8px; }
+#studioLiveBar.slb-min { width: auto; max-width: min(320px, calc(100vw - 40px)); left: auto; right: 18px; translate: none; border-radius: 999px; }
+#studioLiveBar.slb-min .slb-list, #studioLiveBar.slb-min .slb-size, #studioLiveBar.slb-min .slb-eta, #studioLiveBar.slb-min .slb-stages, #studioLiveBar.slb-min #slbToggle, #studioLiveBar.slb-min #slbHome { display: none; }
+#studioLiveBar.slb-min .slb-head { padding: 7px 10px 7px 13px; gap: 8px; }
 #studioLiveBar.slb-min .slb-title { font-size: 11.5px; font-weight: 500; color: #BCBCC3; }
-.slb-bar { height: 2px; background: #1E1E22; }
-.slb-bar i { display: block; height: 100%; background: linear-gradient(90deg, #D9B478, #F0D6A6); transition: width .4s ease; }
-.slb-list { border-top: 1px solid #1E1E22; max-height: 210px; overflow: auto; }
+.slb-bar { height: 3px; background: #1E1E22; }
+.slb-bar i { display: block; height: 100%; background: linear-gradient(90deg, #D9B478, #F0D6A6); border-radius: 0 3px 3px 0; transition: width .4s ease; }
+.slb-list { border-top: 1px solid #1E1E22; max-height: 230px; overflow: auto; }
+/* The compact pipeline in the floating bar's head: dots only, no labels. */
+.slb-stages { flex: none; }
+.slb-stages .st em { display: none; }
+.slb-stages .st-line { min-width: 8px; margin: 0 4px; }
 
 /* Live work — the stable Home section, at the top of the library column.
    Docked it is an ordinary card in the page flow and takes the column's width,
    so it stops where My library stops instead of running to the page edge. */
 #studioLiveHome.slh-docked {
   position: static; translate: none; width: auto; margin: 0 0 16px; z-index: auto;
-  /* The site's own card treatment, so it reads as part of the page. */
-  border-color: #1E1E22; background: #121214; box-shadow: none;
+  /* A card of the page, but the one place live work shows — so it carries a
+     quiet gold ring and a warm ground while anything runs, and settles back
+     to the site's plain card when idle. */
+  border-color: rgba(217,180,120,.2); box-shadow: none;
+  background: linear-gradient(180deg, rgba(24,21,17,.9), #121214 62%);
 }
+#studioLiveHome.slh-docked.slh-idle { border-color: #1E1E22; background: #121214; }
 /* Undocked it falls back to floating, so a re-import that moves the heading
    costs the styling rather than the feature. */
 #studioLiveHome {
@@ -129,11 +143,23 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
   border: 1px solid rgba(217,180,120,.28); border-radius: 14px; background: rgba(14,14,17,.97);
   box-shadow: 0 20px 50px rgba(0,0,0,.6); font-family: Inter, system-ui, sans-serif; color: #F2F2F4; overflow: hidden;
 }
-#studioLiveHome .slb-head { border-bottom: 1px solid #1E1E22; }
+#studioLiveHome .slb-head { border-bottom: 1px solid rgba(217,180,120,.12); }
+#studioLiveHome.slh-idle .slb-head { border-bottom-color: #1E1E22; }
+/* The section reads as a header, not another row: small caps, and the count
+   worn as a chip on the right. */
+#studioLiveHome .slb-title { font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #A2A2AA; }
+#studioLiveHome .slb-eta {
+  font-size: 10.5px; font-weight: 600; color: #F0D6A6; padding: 3px 9px;
+  border: 1px solid rgba(217,180,120,.3); border-radius: 999px; background: rgba(217,180,120,.1);
+}
+#studioLiveHome.slh-idle .slb-eta { color: #8B8B93; border-color: #26262A; background: #17171A; }
 /* Idle: present and calm, not alarming. The dot stops pulsing, because a
    pulsing "live" dot with nothing live is a lie. */
-#studioLiveHome.slh-idle .slb-dot { background: #4A4A52; animation: none; }
-.slh-empty { padding: 13px; font-size: 11.5px; color: #6E6E76; }
+#studioLiveHome.slh-idle .slb-dot { background: #4A4A52; box-shadow: none; animation: none; }
+.slh-empty { display: flex; align-items: center; gap: 11px; padding: 15px 16px; font-size: 11.5px; color: #6E6E76; }
+.slh-empty > i { font-size: 16px; color: #4A4A52; flex: none; }
+.slh-empty b { display: block; font-size: 12px; font-weight: 600; color: #8B8B93; }
+.slh-empty span { display: block; margin-top: 2px; }
 
 /* Nasheed on/off, sitting with the job panel's own nasheed row. */
 #studioJobMusic { display: flex; align-items: center; gap: 9px; margin-top: 8px; }
@@ -227,18 +253,43 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 #studioLiveHome .ph-circle-notch, #studioLiveBar .ph-circle-notch {
   display: inline-block; animation: dcSpin 1.1s linear infinite;
 }
-.slh-row { display: flex; align-items: center; gap: 10px; padding: 9px 13px; border-bottom: 1px solid #16161A; }
+.slh-row { display: flex; align-items: center; gap: 12px; padding: 12px 15px; border-bottom: 1px solid #16161A; }
 .slh-row:last-child { border-bottom: 0; }
-.slh-row i { font-size: 14px; color: #F0D6A6; flex: none; }
+/* The job's mark sits in its own warm tile, so the row leads with something
+   other than a bare glyph floating in space. Direct child only — the strip
+   and the clip lines carry their own icons. */
+.slh-row > i { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border: 1px solid rgba(217,180,120,.24); border-radius: 9px; background: rgba(217,180,120,.08); font-size: 14px; color: #F0D6A6; align-self: flex-start; margin-top: 1px; }
 .slh-row .what { flex: 1; min-width: 0; }
-.slh-row .what b { display: block; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slh-row .what b { display: block; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* One line. A long stage plus an ETA wrapped to two and pushed the percentage
-   out of line with the title. Scoped past .slh-track, which is also a span. */
-.slh-row .what > span:not(.slh-track) { display: block; font-size: 11px; color: #8B8B93; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.slh-row .pct { flex: none; font-size: 11.5px; color: #F0D6A6; font-variant-numeric: tabular-nums; }
+   out of line with the title. Scoped past .slh-track and the stage strip,
+   which are also spans. */
+.slh-row .what > span:not(.slh-track):not(.slh-stages) { display: block; margin-top: 2px; font-size: 11px; color: #8B8B93; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.slh-row .pct { flex: none; font-size: 13px; font-weight: 700; color: #F0D6A6; font-variant-numeric: tabular-nums; }
 /* display:block matters — this is a <span>, and height does not apply inline. */
-.slh-track { display: block; height: 3px; margin-top: 5px; border-radius: 3px; background: #1E1E22; overflow: hidden; }
+.slh-track { display: block; height: 4px; margin-top: 7px; border-radius: 4px; background: #1E1E22; overflow: hidden; }
 .slh-track i { display: block; height: 100%; }
+
+/* The pipeline strip: five stations, gold as far as the work has reached.
+   Import · Transcribe · Score · Render · Upload — the current one pulses,
+   finished ones hold their gold, the rest wait unlit. */
+.slh-stages { display: flex; align-items: center; margin: 8px 0 1px; }
+.slh-stages .st { display: inline-flex; align-items: center; gap: 5px; flex: none; }
+.slh-stages .st i { width: 7px; height: 7px; border-radius: 50%; background: #202024; border: 1px solid #33333A; box-sizing: border-box; }
+.slh-stages .st em { font-style: normal; font-size: 9px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: #55555C; }
+.slh-stages .st.done i { background: #D9B478; border-color: #D9B478; }
+.slh-stages .st.done em { color: #8B8B93; }
+.slh-stages .st.now i { background: #F0D6A6; border-color: #F0D6A6; box-shadow: 0 0 0 3px rgba(217,180,120,.16); animation: dcPulse 1.8s ease-in-out infinite; }
+.slh-stages .st.now em { color: #F0D6A6; }
+.slh-stages .st-line { flex: 1; height: 1px; margin: 0 7px; min-width: 8px; background: #26262A; }
+.slh-stages .st-line.done { background: linear-gradient(90deg, #D9B478, rgba(217,180,120,.35)); }
+/* Labels give way before dots do: on a narrow card the words go and the five
+   stations stay readable. */
+@media (max-width: 640px) { .slh-stages .st em { display: none; } .slh-stages .st-line { margin: 0 4px; } }
+@media (prefers-reduced-motion: reduce) {
+  #studioLiveBar { animation: none; }
+  .slh-stages .st.now i { animation: none; }
+}
 
 /* Connections overlay — centred card over a blurred backdrop. */
 #studioConn { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
@@ -2401,6 +2452,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          the pair without walking siblings. */
       return `<div class="slh-item"><div class="slh-row"><i class="${esc(r.icon)}" style="${esc(r.iconStyle||'')}"></i>
         <span class="what"><b>${esc(r.title)}</b><span>${esc(r.meta)}</span>
+        ${onHome?stageStripHtml(r.stageIdx):''}
         <span class="slh-track"><i style="${esc(r.barStyle)}"></i></span></span>
         ${r.hasClips?`<button type="button" class="slc-toggle" data-clips="${esc(clipKey(r,onHome))}"
           aria-expanded="${open}" title="${open?'Hide the clips':'Show each clip'}"
@@ -2445,8 +2497,22 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        clips each has, and whether its list is open. Anything that is only a
        number is written into the existing nodes instead. */
     function liveKey(rows,onHome){
+      /* stageIdx is in the key so a stage handover repaints the strip — that
+         happens four times a job, so the rebuild it costs is nothing. */
       return rows.map(r=>[r.title,r.icon,r.clipCount||0,r.hasClips&&clipsAreOpen(r,onHome)?1:0,
-        r.canBoost?1:0,r.boosted?1:0].join('|')).join('~');
+        r.canBoost?1:0,r.boosted?1:0,r.stageIdx==null?'':r.stageIdx].join('|')).join('~');
+    }
+    /* The pipeline strip both live surfaces draw. Labels live in <em> so the
+       floating bar's compact form can drop the words and keep the stations. */
+    const SLH_STAGES=['Import','Transcribe','Score','Render','Upload'];
+    function stageStripHtml(idx,compact){
+      if(idx===null||idx===undefined)return'';
+      return `<span class="slh-stages${compact?' slb-stages':''}" aria-hidden="true">`
+        +SLH_STAGES.map((name,i)=>{
+          const cls=i<idx?' done':i===idx?' now':'';
+          return `${i?`<span class="st-line${i<=idx?' done':''}"></span>`:''}`
+            +`<span class="st${cls}"><i></i><em>${name}</em></span>`;
+        }).join('')+`</span>`;
     }
     function paintRows(host,rows,html,onHome){
       const key=liveKey(rows,onHome);
@@ -2455,7 +2521,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       rows.forEach((r,i)=>{
         const item=items[i];if(!item)return;
         const n=item.querySelector('.slh-row');if(!n)return;
-        const meta=n.querySelector('.what > span:not(.slh-track)');
+        const meta=n.querySelector('.what > span:not(.slh-track):not(.slh-stages)');
         if(meta&&meta.textContent!==r.meta)meta.textContent=r.meta;
         const bar=n.querySelector('.slh-track > i');
         if(bar)bar.setAttribute('style',r.barStyle);
@@ -4806,7 +4872,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         paintRows(liveEls.home,vals.liveAll,()=>`<div class="slb-head"><span class="slb-dot"></span>
           <span class="slb-title">Happening now</span>
           <span class="slb-eta"></span></div>
-          ${any?vals.liveAll.map(r=>liveRowHtml(r,true)).join(''):`<div class="slh-empty">${esc(vals.liveHeadline)}</div>`}`,true);
+          ${any?vals.liveAll.map(r=>liveRowHtml(r,true)).join(''):`<div class="slh-empty"><i class="ph ph-clock"></i><div><b>${esc(vals.liveHeadline)}</b><span>Paste a lecture above and the pipeline lights up here.</span></div></div>`}`,true);
         const n=liveEls.home.querySelector('.slb-eta'),want=any?`${vals.liveCount} running`:'Idle';
         if(n&&n.textContent!==want)n.textContent=want;
         return;
@@ -4826,6 +4892,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         liveEls.bar.dataset.liveKey=key;
         liveEls.bar.innerHTML=`<div class="slb-head"><span class="slb-dot"></span>
           <span class="slb-title">${esc(first.title)} · ${esc(first.stage)}</span>
+          ${stageStripHtml(first.stageIdx,true)}
           <span class="slb-pct"></span><span class="slb-size"></span><span class="slb-eta"></span>
           ${vals.liveMore?`<button type="button" class="slb-btn" id="slbToggle">${StudioAdapter.ui.liveOpen?'Hide':esc(vals.liveMoreLabel)}</button>`:''}
           <button type="button" class="slb-btn" id="slbHome">Open home</button>
