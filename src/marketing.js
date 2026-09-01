@@ -791,6 +791,7 @@ export function home({ base, currentUser }) {
           <p>One token represents one selected source-video minute. Reviewing, ordinary re-renders and cutting more clips from the processed source do not spend that source time again.</p>
         </div>
         ${pricingCards()}
+        <div class="pricing-trust" style="justify-content:center"><span>${escapeHtml(Number(config.tokensFree).toLocaleString())} starter tokens</span><span>No card to start Basic</span><span>Secure Stripe Checkout</span><span>Cancel from the Stripe portal</span></div>
       </div>
     </section>
 

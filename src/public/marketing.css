@@ -556,11 +556,29 @@ html:not(.mjs) .journey-node{--lit:1}
 .deenai-preview-head b{display:block;font-size:15px}
 .deenai-preview-head small{color:var(--muted-2);font-size:12px}
 .deenai-preview-head em{margin-left:auto;font-style:normal;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:9.5px;letter-spacing:.22em;color:var(--gold);border:1px solid rgba(217,182,111,.4);border-radius:6px;padding:3px 8px}
-.deenai-question{padding:14px 16px;border-radius:13px;background:rgba(245,241,232,.045);border:1px solid var(--line)}
+/* The Ask exchange plays out on scroll: question lands, the answer arrives
+   a beat later behind a brightening border, then the sources file in. At
+   the default --p of 1 the whole exchange is simply complete. */
+.deenai-question{padding:14px 16px;border-radius:13px;background:rgba(245,241,232,.045);border:1px solid var(--line);
+  opacity:clamp(0,calc((var(--p,1) - .1) / .14),1);
+  translate:0 calc((1 - clamp(0,calc((var(--p,1) - .1) / .14),1)) * 12px)}
 .deenai-question small{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-2);margin-bottom:4px}
 .deenai-question strong{font-size:14.5px;font-weight:600}
-.deenai-answer{display:flex;gap:11px;padding:14px 16px;border-radius:13px;background:rgba(217,182,111,.06);border:1px solid rgba(217,182,111,.22)}
+.deenai-answer{display:flex;gap:11px;padding:14px 16px;border-radius:13px;background:rgba(217,182,111,.06);
+  --arr:clamp(0,calc((var(--p,1) - .28) / .18),1);
+  border:1px solid rgb(217 182 111 / calc(.1 + .25 * var(--arr)));
+  opacity:var(--arr);translate:0 calc((1 - var(--arr)) * 14px)}
 .deenai-answer span{color:var(--gold);width:17px;height:17px;flex:none;margin-top:2px}
+@media (prefers-reduced-motion:no-preference){
+  .mjs .deenai-answer span{animation:dcSparkBreathe 3.2s ease-in-out infinite alternate}
+  @keyframes dcSparkBreathe{from{transform:scale(1);opacity:.75}to{transform:scale(1.18);opacity:1}}
+}
+.deenai-sources span{--src:1}
+.deenai-sources span:nth-child(1){--src:clamp(0,calc((var(--p,1) - .44) / .1),1)}
+.deenai-sources span:nth-child(2){--src:clamp(0,calc((var(--p,1) - .49) / .1),1)}
+.deenai-sources span:nth-child(3){--src:clamp(0,calc((var(--p,1) - .54) / .1),1)}
+.deenai-sources span:nth-child(4){--src:clamp(0,calc((var(--p,1) - .59) / .1),1)}
+.deenai-sources span{opacity:var(--src);translate:0 calc((1 - var(--src)) * 8px)}
 .deenai-answer p{font-size:13.5px;color:var(--text)}
 .deenai-sources{display:flex;flex-wrap:wrap;gap:7px}
 .deenai-sources span{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;letter-spacing:.1em;color:var(--muted);border:1px solid var(--line);border-radius:7px;padding:4px 9px}
