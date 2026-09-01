@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1007 JS + 462 Python**
+- `npm test` and `npm run check` must pass. Currently **1008 JS + 462 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -866,6 +866,37 @@ quicker responses".
 - DeenAI wears a **STUDIO** tag in the rail (reusing the nav's count slot, so
   no design re-import), in the header pill and in the footer marker. Pro still
   gets the insights -- the subline says so -- but the tab belongs to Studio.
+
+### Both buttons say STUDIO, and one of them was selling the wrong plan (v3.72.10)
+
+Youssef, 1 Sept 2026, looking at the live screen as a Basic account: "it should
+be unlock with studio."
+
+- **The screen has TWO gates and had ONE button label.** Insights are `deenai`
+  (Pro); asking is `deenaiAsk` (Studio). `aiGateCta` served both call-to-action
+  buttons, so the button inside the ASK box told a free account to buy **Pro** --
+  the one half of this screen Pro does not include. Somebody could have paid and
+  found Ask still locked. A billing button naming the wrong plan is the worst
+  copy fault this product can ship.
+- **The locked banner was making the same promise in prose**: "On Pro, DeenAI
+  reads your own clips ... **and answers your questions**". Pro does not answer
+  questions.
+- Both CTAs now read **Unlock with Studio** (Studio unlocks the whole screen),
+  the subline says "A Studio feature", and Pro is named in the NOTE beside each
+  button rather than on it -- "Pro turns the figures real without the asking".
+  Saying nothing about Pro would oversell Studio; saying it on the button sold
+  the wrong plan. The gates themselves are UNCHANGED: a Pro subscriber still
+  gets real insights and still sees "Upgrade to Studio".
+- **The banner's button and sentence were LITERALS in the design export**, which
+  is exactly how they drifted from the binding beside them. They are entries in
+  `design/text-overrides.json` now (`aiGateCta`, `aiDemoNote`), so the plan name
+  has one source. **Re-running `npm run design:import` was proven byte-stable
+  first** -- same input file, identical output -- so this cost no re-import
+  risk: the generated CSS did not change and no hashed class name moved. That is
+  the route for any other literal in the export that is really data.
+- The test renders the real template at all three tiers and asserts no button
+  offers Pro, plus that no `Unlock with Pro` literal survives in the export.
+  Proven RED against the old label before being kept.
 
 ### The screen was rebuilt out of its card grid (v3.33.0, 29 Aug 2026)
 

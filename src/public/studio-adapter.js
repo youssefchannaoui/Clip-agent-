@@ -4256,20 +4256,36 @@
       aiLocked: !aiOn,
       aiUnlocked: aiAskOn,
       aiAskGate: !aiAskOn,
-      aiGateCta: aiOn ? 'Upgrade to Studio' : 'Unlock with Pro',
+      // Both CTAs on this screen name STUDIO, never Pro. Youssef, 1 Sept 2026:
+      // "it should be unlock with studio."
+      //
+      // It is also the only truthful answer for the button under Ask. The two
+      // halves of DeenAI sit behind different gates -- insights are `deenai`
+      // (Pro), asking is `deenaiAsk` (Studio) -- and one binding was serving
+      // both buttons, so the Ask box told a free account to buy Pro for the one
+      // thing Pro does not include. Studio is the plan that unlocks the whole
+      // screen, so Studio is what both buttons say; the note below is where Pro
+      // is mentioned, rather than on a button that would be selling the wrong
+      // plan.
+      aiGateCta: aiOn ? 'Upgrade to Studio' : 'Unlock with Studio',
+      // Shown under the locked banner. Free accounts only -- `aiLocked` is
+      // !aiOn -- so it never has to speak to a Pro account.
+      aiDemoNote: 'These numbers are sample output. Studio reads your own clips, '
+        + 'scores and posting record and answers your questions. Pro turns the '
+        + 'figures real without the asking.',
       aiGateNote: aiOn
         ? 'Your insights above are real. Asking DeenAI questions runs on our own render box, and that is what Studio buys.'
-        : 'On Pro these become your own numbers. Studio adds asking DeenAI anything.',
+        : 'Studio answers your questions. Pro turns the figures above into your own numbers.',
       aiSub: aiAskOn
         ? 'Reads your own clips, scores and posting record — and answers back.'
         : aiOn
           ? 'Reads your own clips, scores and posting record. Asking is a Studio feature.'
-          : 'A Pro feature — free accounts can look, not use',
+          : 'A Studio feature — free accounts can look, not use',
       aiCount: aiData ? plural(aiAllCards.length, 'insight').toUpperCase() : '',
       aiNote: aiData ? (aiOn ? 'from your own records' : 'sample output') : '',
       aiFootnote: aiOn
         ? 'Every figure above is counted from your own clips — DeenAI never invents a number.'
-        : 'On Pro these are your own numbers, counted from your own clips.',
+        : 'On a paid plan these are your own numbers, counted from your own clips.',
       aiUpgrade: function (e) { stop(e); setUI({ screen: 'tokens', tokensAnimAt: Date.now() }); },
 
       // the headline insight
