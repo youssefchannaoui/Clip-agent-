@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1005 JS + 462 Python**
+- `npm test` and `npm run check` must pass. Currently **1006 JS + 462 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -2396,10 +2396,27 @@ Aimed at the first 100 paid subscribers rather than at pageviews.
   parallel "user did X" log would be a second source of truth that drifts from
   the first, and the first is the one the customer can see. Nothing here
   fingerprints or records a journey.
-- **Every reward defaults to ZERO** (`config.referralBonus*`,
-  `config.affiliate*`). The economics are not approved, and code that pays out
-  by default pays out before anybody decided to. The panel says "No reward is
-  attached to this yet" rather than implying one that is switched off.
+- **Every reward defaulted to ZERO** (`config.referralBonus*`,
+  `config.affiliate*`) because the economics were not approved, and code that
+  pays out by default pays out before anybody decided to.
+  **`referralBonusPaid` is 100 as of 1 Sept 2026** -- Youssef asked for a
+  reward on the inviter's side to sit beside the invited person's 30% off, and
+  that is the decision the zero was waiting for. 100 rather than 50 because it
+  has to be worth telling someone about: Pro monthly is A$29 for 650 tokens, so
+  50 is 7.7% of a month, while 100 is ~15% and is exactly the Quick Boost pack
+  (A$8.99) a customer can already picture. Capped at three invites a link, the
+  whole exposure is 300 tokens per referrer against A$29/month recurring.
+  The other two stay at zero: rewarding a mere SIGN-UP is the one that buys
+  fake accounts. The env var still wins, so it can be turned down without a
+  deploy, and the test now asserts the DECISION rather than "everything is
+  zero" -- a guard that blocks an approved price is not protecting anything.
+- **It pays on SUBSCRIPTION, never on signing up.** `settleReferrals` stamps
+  `convertedAt` only when `activationOf(...).paid`, the grant is idempotent on
+  `converted:<userId>`, and it lands in the same balance a purchased top-up
+  writes to -- so the number the customer sees is the number that spends. The
+  panel now says both halves of the deal ("They get 30% off when they
+  subscribe. You get 100 tokens when they subscribe to a plan."), each written
+  only when it is actually configured.
 - **`billing.grantBonusTokens` refuses to run without a key** and refuses a key
   it has already honoured. The settle pass runs on every owner growth read, so
   without that it would top somebody up on every read.

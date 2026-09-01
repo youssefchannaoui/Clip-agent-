@@ -5599,14 +5599,27 @@ StudioAdapter.onProbeSource=async url=>{try{
              discount nobody receives is worse than no promise. */
           const rw=r.rewards||{}, dc=r.discount||null;
           const left=dc?Number(dc.remaining||0):0;
-          const promise=dc&&dc.label&&left>0
+          /* Both sides of the deal, and only the halves that are real. What
+             they get is the Stripe coupon; what YOU get is the token grant
+             that lands when they subscribe. Either can be switched off
+             independently, so each is written only when it is configured. */
+          const theirs=dc&&dc.label&&left>0
             ? 'They get <b style="color:#F2F2F4">'+esc(dc.label)+'</b> when they subscribe. '
               +esc(left)+' of '+esc(dc.cap)+' left on your link.'
             : dc&&dc.label
               ? 'All '+esc(dc.cap)+' of your discounted invites have been used. The link still works — it just no longer carries the discount.'
-              : rw.activatedMinutes>0
-                ? 'You get '+esc(rw.activatedMinutes)+' source minutes when someone you invite processes a lecture and keeps a clip.'
-                : 'No reward is attached to this yet — it is simply a clean link to share.';
+              : '';
+          /* The paid bonus is the headline one: it only ever lands when the
+             person actually subscribes, so it is worth saying plainly. The
+             activation bonus is the quieter fallback for a deployment that
+             rewards a first kept clip instead. */
+          const yours=rw.paidMinutes>0
+            ? 'You get <b style="color:#F2F2F4">'+esc(rw.paidMinutes)+' tokens</b> when they subscribe to a plan.'
+            : rw.activatedMinutes>0
+              ? 'You get '+esc(rw.activatedMinutes)+' tokens when someone you invite processes a lecture and keeps a clip.'
+              : '';
+          const promise=[theirs,yours].filter(Boolean).join(' ')
+            || 'No reward is attached to this yet — it is simply a clean link to share.';
           box.style.cssText='flex:none;margin-top:22px;padding:22px;border-radius:18px;'
             +'border:1px solid rgba(217,180,120,.28);background:rgba(217,180,120,.045)';
           box.innerHTML='<div style="font:600 11px/1 Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#D9B478">Invite a creator</div>'

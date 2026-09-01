@@ -61,8 +61,27 @@ export const config = {
   // Source minutes granted to the INVITER, when the invited account activates
   // -- processes a video and approves a clip. Never merely for signing up.
   referralBonusActivated: Math.max(0, number(process.env.REFERRAL_BONUS_ACTIVATED, 0)),
-  // A further grant when the invited account first subscribes. Once, ever.
-  referralBonusPaid: Math.max(0, number(process.env.REFERRAL_BONUS_PAID, 0)),
+  /*
+   * A further grant when the invited account first SUBSCRIBES. Once, ever.
+   *
+   * Set to 100 on 1 Sept 2026 by Youssef, who asked for a reward on the
+   * inviter's side to sit beside the invited person's 30% off: "give me a
+   * reasonable amount of tokens that they also receive once they've
+   * subscribed to a plan."
+   *
+   * 100 rather than 50 because it has to be worth telling someone about.
+   * Pro monthly is A$29 for 650 tokens, so 50 is 7.7% of a month -- barely
+   * noticeable. 100 is ~15% of a month, roughly two more lectures, and it is
+   * exactly the Quick Boost pack (A$8.99), which makes it something a
+   * customer can already picture. Capped at three invites a link, the whole
+   * exposure is 300 tokens per referrer against A$29/month recurring per
+   * conversion.
+   *
+   * This is the one default in this block that is deliberately non-zero, and
+   * only because the decision was actually made. The env var still wins, so
+   * it can be turned down or off without a deploy.
+   */
+  referralBonusPaid: Math.max(0, number(process.env.REFERRAL_BONUS_PAID, 100)),
 
   /*
    * The invite discount.

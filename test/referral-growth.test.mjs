@@ -38,6 +38,7 @@ const store = await import('../src/store.js');
 const referrals = await import('../src/referrals.js');
 const growth = await import('../src/growth.js');
 const billing = await import('../src/billing.js');
+const { config } = await import('../src/config.js');
 
 for (let attempt = 0; attempt < 60; attempt += 1) {
   try { await fetch(`${base}/healthz`); break; }
@@ -197,6 +198,39 @@ test('activation and conversion are each stamped exactly once', () => {
 
 // ── the money ───────────────────────────────────────────────────────────────
 
+test('the inviter is paid only once the invited account subscribes', () => {
+  // The reward Youssef asked for on 1 Sept 2026: the invited person gets 30%
+  // off, and the INVITER gets tokens -- but only when a subscription actually
+  // happens. Signing up must never pay, because signing up costs nothing and
+  // a reward for it buys fake accounts.
+  reset();
+  const referrer = user('ref');
+  const invited = user('new');
+  store.state.authUsers = [referrer, invited];
+  referrals.attachReferral(store.state, invited, referrals.codeFor(store.state, referrer));
+
+  // Activated but not paying: nothing is converted yet.
+  activate('new');
+  let changes = referrals.settleReferrals(store.state);
+  assert.deepEqual(changes.map(c => c.kind), ['activated'],
+    'processing a lecture and keeping a clip is not a subscription');
+
+  // Now they subscribe.
+  store.state.revenueEvents.push({ userId: 'new', kind: 'subscription', amountMinor: 2900, stripeId: 'in_1' });
+  changes = referrals.settleReferrals(store.state);
+  assert.deepEqual(changes.map(c => c.kind), ['converted']);
+
+  // The grant is what the config says, into the same balance a purchased
+  // top-up writes to, and idempotent -- the settle pass runs on every owner
+  // growth read, so a second run must not pay again.
+  const key = `converted:${invited.id}`;
+  assert.equal(billing.grantBonusTokens(referrer, config.referralBonusPaid, 'Referral bonus (converted)', key).granted,
+    config.referralBonusPaid);
+  assert.equal(billing.grantBonusTokens(referrer, config.referralBonusPaid, 'Referral bonus (converted)', key).granted, 0,
+    'a replayed webhook or a second settle pass pays nothing');
+  assert.equal(referrer.billing.bonusTokens, config.referralBonusPaid);
+});
+
 test('a bonus grant with the same key never pays twice', () => {
   reset();
   const u = user('u');
@@ -215,13 +249,22 @@ test('a grant refuses to run without a key', () => {
   assert.throws(() => billing.grantBonusTokens(u, 30, '', ''), /needs a key/);
 });
 
-test('rewards are off unless configured', async () => {
-  // The economics are not approved. Code that pays by default pays before
-  // anybody decided to.
+test('nothing pays out that has not actually been decided', async () => {
+  // Code that pays by default pays before anybody decided to. The guard is
+  // not "every reward is zero" -- it is that a non-zero one corresponds to a
+  // real decision, and that the rest stay off until they do.
   const { config } = await import('../src/config.js');
+
+  // Decided 1 Sept 2026 by Youssef: a reward for the INVITER, paid only when
+  // the invited account subscribes. 100 tokens -- ~15% of a Pro month (650)
+  // and exactly the Quick Boost pack, so it is worth telling someone about.
+  assert.equal(config.referralBonusPaid, 100);
+
+  // Still undecided, and therefore still off. Rewarding a mere SIGN-UP is the
+  // one that buys fake accounts, so it stays at zero until somebody says
+  // otherwise in as many words.
   assert.equal(config.referralBonusInvited, 0);
   assert.equal(config.referralBonusActivated, 0);
-  assert.equal(config.referralBonusPaid, 0);
   assert.equal(config.affiliatesEnabled, false);
   assert.equal(config.affiliateCommissionPercent, 0);
 });
