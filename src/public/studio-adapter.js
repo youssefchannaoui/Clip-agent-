@@ -3611,13 +3611,13 @@
       if (n < 1073741824) return Math.round(n / 1048576) + ' MB';
       return (n / 1073741824).toFixed(1) + ' GB';
     }
-    // "142 MB of 380 MB" while the total is known, "142 MB" while it is not --
+    // "142 MB / 380 MB" while the total is known, "142 MB" while it is not --
     // a server that sends no Content-Length is common and must not print "of 0".
     function transferLabel(done, total) {
       var a = sizeLabel(done);
       if (!a) return '';
       var b = sizeLabel(total);
-      return b ? a + ' of ' + b : a;
+      return b ? a + ' / ' + b : a;
     }
 
     function etaLabel(seconds) {

@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1023 JS + 477 Python**
+- `npm test` and `npm run check` must pass. Currently **1023 JS + 484 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3337,3 +3337,32 @@ hook -> body -> payoff), then measured against the box's real model.
 - **A source-reading trap, hit twice in one session**: AyahFaceTests locates
   quran_font's fallback list by splitting on the file's first candidate-loop
   literal. A new loop OR A COMMENT containing that literal upstream breaks it.
+
+## The import says how many MB have landed (v3.75.4, 1 Sept 2026)
+
+Youssef, watching a job sit on "importing · 0% of this step" while ffmpeg had
+741MB of it on disk: "can you show the mb for example xx / xx so people know
+and put it next to the ETA."
+
+- **Everything downstream existed already and had never been fed.** The
+  service's pulse turns byte counts into `bytesDone`/`bytesTotal` and a real
+  step percentage; local-engine copies them; /api/state sends them; the
+  adapter renders them beside the ETA. But the yt-dlp `progress_hook` called
+  the bare `cancelled()` and threw its own byte counts away -- so the entire
+  chain sat dark on the one path production takes.
+- **A section download has NO hook to fix.** yt-dlp hands ranged downloads to
+  ffmpeg, which runs as a black box firing no per-byte hooks -- verified live
+  on the box: pid 2551 was ffmpeg writing source.mp4.part with the job's
+  progress at 0. A watcher thread now reports the on-disk size (summing every
+  stem-sibling: .part, per-format .fNNN.part, the merged file) every 2s, with
+  NO invented total -- the app prints a bare "623 MB", which is honest, and
+  its transferLabel supported exactly that all along.
+- **The watcher yields to the hook.** Both feed one pulse; alternating the
+  hook's per-file figure with the watcher's on-disk sum makes the number jump
+  around. The hook stamps `hook_spoke` whenever it carries bytes and the
+  watcher stays quiet for 6s after. It also never acts on cancellation -- the
+  main thread owns raising out of yt-dlp, and two owners of one cancel race.
+- **The label is "412 MB / 806 MB"** (his wording), was "of". One test pinned
+  the old join and moved with it.
+- The watcher is stopped in a `finally`, or an import that raises would leave
+  a daemon thread statting a deleted directory for the life of the container.

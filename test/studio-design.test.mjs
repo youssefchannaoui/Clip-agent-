@@ -953,8 +953,8 @@ test('the import reports how much has actually downloaded', () => {
     projects: [{ id: 'p', title: 'Talk', status: 'processing', stage: 'Importing', progress: 5, bytesDone, bytesTotal, submittedAt: Date.now() }],
     clips: [], tracks: [],
   }).liveAll[0];
-  assert.equal(row(149_000_000, 398_000_000).transfer, '142 MB of 380 MB');
-  assert.match(row(149_000_000, 398_000_000).meta, /Importing · 142 MB of 380 MB/);
+  assert.equal(row(149_000_000, 398_000_000).transfer, '142 MB / 380 MB');
+  assert.match(row(149_000_000, 398_000_000).meta, /Importing · 142 MB \/ 380 MB/);
   // A server that sends no Content-Length is common; it must not print "of 0".
   assert.equal(row(149_000_000, null).transfer, '142 MB');
   assert.equal(row(149_000_000, 0).transfer, '142 MB');

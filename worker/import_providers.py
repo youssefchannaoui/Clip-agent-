@@ -86,6 +86,71 @@ def _poll(cancelled, done_bytes, total_bytes):
         return bool(cancelled())
 
 
+def _hook_progress(status: dict) -> tuple[int, int]:
+    """The byte counts a yt-dlp progress hook carries, as plain ints.
+
+    `total_bytes` is exact when the server sent a length; the estimate is
+    yt-dlp's own and is honestly labelled an estimate, but a close total beats
+    no total -- without one the app can only print "623 MB" with no sense of
+    how much is left.
+    """
+    try:
+        downloaded = int(status.get("downloaded_bytes") or 0)
+    except (TypeError, ValueError):
+        downloaded = 0
+    try:
+        total = int(status.get("total_bytes") or status.get("total_bytes_estimate") or 0)
+    except (TypeError, ValueError):
+        total = 0
+    return max(0, downloaded), max(0, total)
+
+
+def _download_bytes_on_disk(destination: Path) -> int:
+    """How much the downloader has actually written for this destination.
+
+    Sums every sibling sharing the destination's stem -- "source.mp4.part",
+    "source.f616.mp4.part", the merged "source.mp4" -- because yt-dlp names its
+    intermediates that way whichever downloader runs. This is the ONLY progress
+    available on a section download: yt-dlp hands those to ffmpeg, and ffmpeg
+    runs as a black box that fires no per-byte progress hooks, which is exactly
+    the path production takes for every ranged import.
+    """
+    stem = destination.with_suffix("").name + "."
+    total = 0
+    try:
+        for entry in destination.parent.iterdir():
+            if entry.name.startswith(stem):
+                try:
+                    total += entry.stat().st_size
+                except OSError:
+                    continue
+    except OSError:
+        return 0
+    return total
+
+
+def _watch_download_bytes(destination: Path, poll, stop: threading.Event,
+                          hook_spoke: dict, interval: float = 2.0) -> None:
+    """Report the growing file while ffmpeg downloads it silently.
+
+    Defers to the progress hook whenever it has spoken recently -- the hook's
+    numbers are exact and carry a total; this thread's on-disk sum has no total
+    and exists for the downloader that says nothing. The pulse it calls is
+    throttled by the service, so a 2s interval here does not thrash the status
+    file. Cancellation is deliberately NOT acted on from this thread: the main
+    thread owns raising out of yt-dlp, and two owners of one cancel is a race.
+    """
+    while not stop.wait(interval):
+        if time.monotonic() - float(hook_spoke.get("at") or 0.0) < 6:
+            continue
+        size = _download_bytes_on_disk(destination)
+        if size:
+            try:
+                _poll(poll, size, 0)
+            except Exception:  # noqa: BLE001 - reporting must never kill a download
+                pass
+
+
 def download_https(
     url: str, destination: Path, max_bytes: int, timeout_seconds: int,
     cancelled: Callable[[], bool] = lambda: False,
@@ -423,11 +488,22 @@ class YtDlpImportProvider(ManagedImportProvider):
 
         outtmpl = str(destination.with_suffix(""))
         info_holder: dict = {}
+        # When the hook last carried a byte count, so the file watcher below
+        # only speaks when the hook is silent. Both report through the same
+        # pulse; alternating between the hook's per-file figure and the
+        # watcher's on-disk sum would make the number jump around.
+        hook_spoke = {"at": 0.0}
 
         def progress_hook(status: dict) -> None:
-            if cancelled():
+            # The service's pulse takes byte counts and turns them into the
+            # "412 MB / 806 MB" the customer sees beside the ETA. This hook had
+            # them all along and never passed them on, which is why every
+            # import sat at "0% of this step" however well it was going.
+            downloaded, total = _hook_progress(status)
+            if downloaded:
+                hook_spoke["at"] = time.monotonic()
+            if _poll(cancelled, downloaded, total):
                 raise yt_dlp.utils.DownloadError("Job cancelled.")
-            downloaded = status.get("downloaded_bytes") or 0
             if downloaded and downloaded > self.max_bytes:
                 raise yt_dlp.utils.DownloadError("The imported video exceeds the configured download limit.")
 
@@ -489,53 +565,68 @@ class YtDlpImportProvider(ManagedImportProvider):
         produced = None
         windowed = False
         failures: list[str] = []
-        for plan in plans:
-            section_pass = bool(plan)
-            for attempt, client in enumerate(YOUTUBE_CLIENTS):
-                if cancelled():
-                    raise ImportProviderError("Job cancelled.")
-                options = dict(ydl_opts)
-                options.update(plan)
-                options.update(job_network_options(source, destination.parent))
-                if client:
-                    # Merged, not assigned: youtube_network_options() may already
-                    # carry the PO-token server in extractor_args, and replacing
-                    # the dict wholesale would silently drop it -- the exact
-                    # rotation that runs when the box is blocked is the one that
-                    # needs the token most.
-                    extractor = dict(options.get("extractor_args") or {})
-                    extractor["youtube"] = {"player_client": [client]}
-                    options["extractor_args"] = extractor
-                try:
-                    with yt_dlp.YoutubeDL(options) as ydl:
-                        info = ydl.extract_info(youtube_url, download=True)
-                        info_holder["title"] = info.get("title", "") if isinstance(info, dict) else ""
-                        produced = Path(ydl.prepare_filename(info))
-                        if produced.suffix != ".mp4":
-                            produced = produced.with_suffix(".mp4")
-                        # Claimed only when a range was actually requested on
-                        # this attempt. It is still a claim, not a measurement:
-                        # an extractor that ignores ranges returns the whole
-                        # lecture and looks identical from here, so the caller
-                        # checks the file's real duration against the window
-                        # before trusting it (process() in clip_worker.py).
-                        windowed = bool(section_pass and learned.get("asked"))
+        # The section path downloads through ffmpeg, which fires no per-byte
+        # hooks -- so a watcher thread reports the on-disk size instead. It
+        # yields to the hook whenever the hook is speaking (plain downloads).
+        # Stopped in the finally below even when the download raises, or the
+        # thread would outlive the job statting a directory that no longer
+        # exists.
+        watch_stop = threading.Event()
+        threading.Thread(
+            target=_watch_download_bytes,
+            args=(destination, cancelled, watch_stop, hook_spoke),
+            daemon=True,
+        ).start()
+        try:
+            for plan in plans:
+                section_pass = bool(plan)
+                for attempt, client in enumerate(YOUTUBE_CLIENTS):
+                    if cancelled():
+                        raise ImportProviderError("Job cancelled.")
+                    options = dict(ydl_opts)
+                    options.update(plan)
+                    options.update(job_network_options(source, destination.parent))
+                    if client:
+                        # Merged, not assigned: youtube_network_options() may already
+                        # carry the PO-token server in extractor_args, and replacing
+                        # the dict wholesale would silently drop it -- the exact
+                        # rotation that runs when the box is blocked is the one that
+                        # needs the token most.
+                        extractor = dict(options.get("extractor_args") or {})
+                        extractor["youtube"] = {"player_client": [client]}
+                        options["extractor_args"] = extractor
+                    try:
+                        with yt_dlp.YoutubeDL(options) as ydl:
+                            info = ydl.extract_info(youtube_url, download=True)
+                            info_holder["title"] = info.get("title", "") if isinstance(info, dict) else ""
+                            produced = Path(ydl.prepare_filename(info))
+                            if produced.suffix != ".mp4":
+                                produced = produced.with_suffix(".mp4")
+                            # Claimed only when a range was actually requested on
+                            # this attempt. It is still a claim, not a measurement:
+                            # an extractor that ignores ranges returns the whole
+                            # lecture and looks identical from here, so the caller
+                            # checks the file's real duration against the window
+                            # before trusting it (process() in clip_worker.py).
+                            windowed = bool(section_pass and learned.get("asked"))
+                        break
+                    except yt_dlp.utils.DownloadError as exc:
+                        message = str(exc)
+                        if "cancelled" in message.lower():
+                            raise ImportProviderError("Job cancelled.") from exc
+                        failures.append(f"{'section' if section_pass else 'full'}/{client or 'default'}: {message[:200]}")
+                        # Only a block is worth trying another client for. A private or
+                        # deleted video fails the same way on every one of them, and
+                        # walking the whole list just makes the user wait longer for the
+                        # same answer.
+                        if not _looks_blocked(message) or attempt == len(YOUTUBE_CLIENTS) - 1:
+                            if section_pass:
+                                break  # give the plain full download its turn
+                            raise ImportProviderError(_download_failure(failures)) from exc
+                if produced is not None:
                     break
-                except yt_dlp.utils.DownloadError as exc:
-                    message = str(exc)
-                    if "cancelled" in message.lower():
-                        raise ImportProviderError("Job cancelled.") from exc
-                    failures.append(f"{'section' if section_pass else 'full'}/{client or 'default'}: {message[:200]}")
-                    # Only a block is worth trying another client for. A private or
-                    # deleted video fails the same way on every one of them, and
-                    # walking the whole list just makes the user wait longer for the
-                    # same answer.
-                    if not _looks_blocked(message) or attempt == len(YOUTUBE_CLIENTS) - 1:
-                        if section_pass:
-                            break  # give the plain full download its turn
-                        raise ImportProviderError(_download_failure(failures)) from exc
-            if produced is not None:
-                break
+        finally:
+            watch_stop.set()
 
         if produced is None or not produced.is_file():
             raise ImportProviderError("yt-dlp did not produce an output file.")
