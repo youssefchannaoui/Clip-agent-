@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1006 JS + 462 Python**
+- `npm test` and `npm run check` must pass. Currently **1007 JS + 462 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1862,6 +1862,38 @@ turn it off."
 - `test/pricing.test.mjs` now pins the default across every built-in and
   skips that one by id, so the exemption is stated rather than looking like an
   oversight.
+
+## The template preview shows one photograph now (v3.72.9, 1 Sept 2026)
+
+Youssef sent a picture of a speaker at a microphone: "that's the photo going to
+be for the template at all times."
+
+- **It used to be two different pictures.** The newest lecture's own
+  `sourceThumbUrl` when the account had imported anything, and a grey SVG
+  illustration when it had not. So the screen that teaches what a template does
+  looked different on every account -- and was emptiest on the brand-new one
+  that most needs to see it. It is `/preview-sample.webp` for everyone now,
+  served from this origin (so the studio's CSP covers it and a deploy cannot
+  break it, neither of which was true of a remote YouTube thumbnail).
+- **The photo is 9:16 -- the frame's own shape -- and that is the one real cost
+  of the change.** Clip layout's three modes exist to show what happens to an
+  imported 16:9 lecture: Fill crops the sides, Fit letterboxes onto the frame
+  colour, Blur letterboxes over a blurred blow-up. Against a picture that is
+  already vertical there is nothing to letterbox, so all three land within
+  about a pixel of each other. Measured, not reasoned about: three captures of
+  the frame, three different hashes, and the CSS genuinely differs
+  (`cover` / `contain` + frame colour / `contain` + a visible `.pv-back`).
+  **They are not dead controls** -- they still reach the export and still frame
+  a real lecture -- but the preview no longer demonstrates them.
+- **A 16:9 crop of the photo was built and rejected by looking at it.** Cropping
+  720x1280 to 720x404 and letting `cover` put it back into the 9:16 frame shows
+  the central 31.6% of the width: half a face. The alternative -- padding the
+  portrait photo onto a 16:9 canvas -- is baked-in letterboxing pretending to be
+  a source. Neither is worth the demonstration.
+- **No note was added to the Templates screen.** The row template
+  (`tplRow`) has icon/label/value/open and no note slot, so one would have to be
+  host-rendered, and Youssef's instruction in the same message was "I love the
+  template. Don't mess around with the template at all."
 
 ## Open items
 

@@ -78,6 +78,10 @@ const STUDIO_ASSETS = {
   '/favicon.svg': { file: studioAsset('favicon.svg'), type: 'image/svg+xml' },
   '/favicon.ico': { file: studioAsset('apple-touch-icon.png'), type: 'image/png' },
   '/apple-touch-icon.png': { file: studioAsset('apple-touch-icon.png'), type: 'image/png' },
+  // The Templates preview frame. A real photograph rather than the grey
+  // illustration that used to stand in, at Youssef's instruction (1 Sept
+  // 2026) and supplied by him.
+  '/preview-sample.webp': { file: studioAsset('preview-sample.webp'), type: 'image/webp' },
   '/og-image.jpg': { file: studioAsset('og-image.jpg'), type: 'image/jpeg' },
 };
 const marketingJsPage = path.join(config.root, 'src', 'public', 'marketing.js');

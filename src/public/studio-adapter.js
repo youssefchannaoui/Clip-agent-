@@ -1166,22 +1166,6 @@
       + (warm ? ' sepia(' + Math.max(0, warm * 0.35).toFixed(3) + ')' : '') + ';';
   }
 
-  // A 16:9 stand-in for the source, so Fit and Blur have letterboxing to show.
-  // Deliberately an illustration rather than a photograph: it is a placeholder,
-  // and dressing it up as a real frame from the customer's lecture would be a
-  // lie about what is being previewed.
-  var PREVIEW_FALLBACK = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540">'
-    + '<defs><linearGradient id="b" x1="0" y1="0" x2="0" y2="1">'
-    + '<stop offset="0" stop-color="#26242A"/><stop offset="1" stop-color="#141317"/></linearGradient></defs>'
-    + '<rect width="960" height="540" fill="url(#b)"/>'
-    + '<circle cx="480" cy="214" r="66" fill="#3A3740"/>'
-    + '<path d="M366 540c0-74 51-124 114-124s114 50 114 124z" fill="#3A3740"/>'
-    + '<rect x="470" y="300" width="20" height="150" rx="10" fill="#4A4650"/>'
-    + '<circle cx="480" cy="300" r="26" fill="#565060"/>'
-    + '<text x="480" y="512" fill="#6E6A78" font-family="Inter,sans-serif" font-size="26"'
-    + ' text-anchor="middle">Sample 16:9 source</text></svg>');
-
   // The caption families the worker image actually installs (worker/Dockerfile).
   // Offering one it does not have means fontconfig quietly substitutes another
   // and the clip renders in a font nobody chose -- which is what happened with
@@ -3409,14 +3393,18 @@
       return p.configured && !p.connected;
     }).map(function (p) { return PLATFORM_NAMES[p.key] || p.key; });
 
-    // The newest lecture's own thumbnail is a real 16:9 frame from the
-    // customer's footage, which is exactly the shape the layout modes act on.
-    var previewSource = (function () {
-      for (var i = 0; i < projects.length; i++) {
-        if (projects[i].sourceThumbUrl) return projects[i].sourceThumbUrl;
-      }
-      return PREVIEW_FALLBACK;
-    }());
+    // One picture, always, at Youssef's instruction (1 Sept 2026): "that's the
+    // photo going to be for the template at all times."
+    //
+    // It used to be the newest lecture's own thumbnail, falling back to a grey
+    // illustration when the account had imported nothing. Two shapes for one
+    // frame meant the Templates screen looked different from account to
+    // account, and a brand-new account -- the one most in need of seeing what
+    // a template does -- got the emptiest version of it.
+    //
+    // The photo is 9:16, the same shape as the frame, so it fills under
+    // `cover` and shows whole under `contain` without distorting either way.
+    var previewSource = '/preview-sample.webp';
 
     // Where the sample caption is up to. Parked at 1.2s when idle, which lands
     // mid-first-line so the preview shows a caption rather than an empty frame.
@@ -6222,12 +6210,15 @@
         : 'display: none;',
 
       // ── Preview picture ──
-      // A real lecture's own 16:9 thumbnail when the account has one, so what is
-      // previewed is the customer's own footage; the illustration otherwise.
+      // One photograph for every account (see previewSource above).
       pvSrc: previewSource,
       // Fill crops to the frame. Fit letterboxes onto the template's frame
       // colour. Blur letterboxes the same way over a blown-up blurred copy,
       // which is what the renderer's overlay does.
+      //
+      // The sample is 9:16 -- the frame's own shape -- so all three land on the
+      // same picture here. They are not dead: they act on the imported 16:9
+      // lecture, which is not what this frame is showing.
       pvBackStyle: tpl.fitMode === 'blur'
         ? 'position: absolute; inset: 0; z-index: 0; background-image: url("' + cssUrl(previewSource) + '");'
           + ' background-size: cover; background-position: center; filter: blur(18px) saturate(1.2); transform: scale(1.15);'

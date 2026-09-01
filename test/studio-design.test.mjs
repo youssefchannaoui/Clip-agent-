@@ -2445,16 +2445,25 @@ test('the preview grades itself with the numbers the renderer uses', () => {
   assert.match(look('crisp'), /contrast\(1\.090\)/);
 });
 
-test('the preview uses the account\'s own footage when there is any', () => {
+test('the preview shows the same picture to every account', () => {
+  // Youssef, 1 Sept 2026: "that's the photo going to be for the template at all
+  // times." It used to be the newest lecture's own thumbnail when there was
+  // one and a grey illustration when there was not, so the screen that teaches
+  // what a template does looked different on every account -- and emptiest on
+  // the brand-new one that most needs to see it.
   Object.assign(StudioAdapter.ui, { screen: 'templates', tplDraft: null, edClipId: null });
   const t = { id: 'x', name: 'X', height: 1920 };
   const withLecture = StudioAdapter.bindings({
     projects: [{ id: 'p', sourceThumbUrl: 'https://i.ytimg.com/vi/abc/hqdefault.jpg' }],
     clips: [], tracks: [], templates: [t], selectedTemplate: t,
   });
-  assert.match(withLecture.pvSrc, /i\.ytimg\.com/, 'a real 16:9 frame from their own lecture');
   const empty = StudioAdapter.bindings({ projects: [], clips: [], tracks: [], templates: [t], selectedTemplate: t });
-  assert.match(empty.pvSrc, /^data:image\/svg\+xml/, 'an illustration, not a stock photo passed off as theirs');
+  assert.equal(withLecture.pvSrc, '/preview-sample.webp');
+  assert.equal(empty.pvSrc, withLecture.pvSrc, 'an imported lecture no longer changes the picture');
+  // Served from this origin, so the studio's CSP covers it and it survives a
+  // deploy -- a remote thumbnail did neither.
+  assert.ok(fs.existsSync(path.join(ROOT, 'src/public/preview-sample.webp')), 'the file is in the repo');
+  assert.match(empty.pvImgStyle, /preview-sample\.webp/, 'the frame paints it');
 });
 
 test('the adapter\'s own refresh repaints the host layers too', () => {
