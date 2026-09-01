@@ -478,3 +478,35 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 #dcLibStats .dc-libx-again > span > span { font-size: 10.5px; color: #6E6E76; }
+
+
+/* ── Studio's week does not squeeze, it scrolls ─────────────────────────────
+   Youssef, 1 Sept 2026: "FOR studio make it the same as a pro or basic account
+   where you get 4 clips and it looks more spacious ... do the same sizing for
+   the clips per day and make it scrollable for the 8 clips for studio ONLY."
+
+   The week grid divides its height between the posting windows, so eight
+   windows halved every cell -- the plan that buys MORE turned the screen into
+   a worse one. Past four rows the grid stops dividing: each row takes the
+   height four rows would have had, and the week scrolls.
+
+   `--dc-week-row` is measured by the host (paintScheduleWeek in index.html)
+   from this container's own box, so it is the real four-row height at whatever
+   size the window is, not a guess in vh. Without the variable and the class
+   nothing changes at all, which is what keeps Pro and Basic exactly as they
+   were. */
+[data-dc-week] { overflow-y: auto; overscroll-behavior: contain; }
+/* flex: 1 on the grid means flex-basis 0, which beats any height set on it --
+   without this the explicit height the host measures is simply ignored. */
+[data-dc-week].dc-week-tall { flex: none; }
+[data-dc-week].dc-week-tall > div:nth-child(n + 2) {
+  flex: none;
+  height: var(--dc-week-row, 150px);
+}
+/* The day names stay put while the windows scroll under them -- a column of
+   cells with no weekday above it is unreadable. */
+[data-dc-week].dc-week-tall > div:first-child {
+  position: sticky; top: 0; z-index: 2;
+  padding-bottom: 6px; margin-bottom: -6px;
+  background: linear-gradient(#0E0E11 78%, rgba(14,14,17,0));
+}

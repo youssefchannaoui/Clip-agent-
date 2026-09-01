@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1023 JS + 477 Python**
+- `npm test` and `npm run check` must pass. Currently **1024 JS + 477 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -2192,6 +2192,53 @@ account owns were both behind a typed digit in an OS dialog.
   because the plan pill took the width. The sub-line wraps now.
 - Deleting keeps BOTH gates -- a confirm and a typed DELETE -- and still warns
   that a subscription is not cancelled by deleting the account.
+
+## Studio's week scrolls, and its extra dots are their own colour (v3.75.4)
+
+Youssef, 1 Sept 2026: "FOR studio make it the same as a pro or basic account
+where you get 4 clips and it looks more spacious ... make it scrollable for the
+8 clips for studio ONLY ... also the 8 dots on monthly the 4 new dots should be
+different color to show the subscrition i have."
+
+### The week grid was punishing the plan that buys more
+
+It divides its height between the posting windows, so at eight every row
+collapsed to its **62px minimum** while Pro's sat at **106px**. Past four
+windows the rows now take the height four would have had and the grid scrolls
+inside the space it already occupies. Measured at 1440x1000: **62px -> 139px**,
+grid capped at 625 with 1354 of content, and Pro untouched at 106 with no class
+and no scroll.
+
+**Three traps, each found by measuring rather than reasoning:**
+
+1. **The grid is NOT capped by its parent** -- it grows and the whole SCREEN
+   scrolls. So reading its own `clientHeight` after fixing the row heights fed
+   itself: **1055 -> 1543 -> 40711px** across four repaints. The space is read
+   from the nearest SCROLLING ancestor and the grid's offset inside it, neither
+   of which moves when the grid gets taller.
+2. **`flex: 1` on the grid means flex-basis 0, which beats any `height` set on
+   it.** `.dc-week-tall` declares `flex: none` for that reason -- without it the
+   measured height is silently ignored and nothing changes.
+3. **A week holding a clip scheduled off the account's posting times grows an
+   extra "Other" row.** Counting it made a four-window Pro account look like
+   five and switched this on for them.
+
+The weekday header is `position: sticky` inside the scroller: a column of cells
+with no weekday above it is unreadable.
+
+**The hook is `data-dc-week`, added to `design/studio-dashboard.dc.html`.**
+Re-running `npm run design:import` was proven byte-stable first -- the generated
+CSS came back identical and no hashed class name moved -- so an attribute is now
+a safe thing to add when the host needs to find something the export owns.
+
+### The four extra pips are a different colour from the base four
+
+The base four are exactly what Pro and Basic draw: solid gold `#D9B478` filled,
+quiet grey `#212127` empty. The four Studio ADDS are gold in BOTH states --
+`#F0D6A6` filled, `rgba(217,180,120,.34)` empty. That second row is the only
+pair of dots on the screen that never goes grey, which is what makes it read as
+capacity this subscription bought rather than more of the same. Everyone else's
+row is unchanged.
 
 ## Open items
 

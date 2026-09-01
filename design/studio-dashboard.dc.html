@@ -1106,7 +1106,7 @@
 
           <!-- Week: seven days beside each other, so a gap is visible as a gap. -->
           <sc-if value="{{ schedIsWeek }}" hint-placeholder-val="{{ false }}">
-            <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 7px;">
+            <div data-dc-week style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 7px;">
               <div style="flex: none; display: flex; gap: 7px; padding-left: 54px;">
                 <sc-for list="{{ schedWeekDays }}" as="d" hint-placeholder-count="7">
                   <span style="{{ d.style }}">

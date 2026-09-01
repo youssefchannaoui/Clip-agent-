@@ -6512,6 +6512,67 @@ function paintLibraryAside(vals){
     }
   };
 }
+function paintScheduleWeek(){
+  /* Studio gets eight posting windows, and the week grid divides its height
+     between them -- so at eight every row collapsed to its 62px minimum while
+     Pro's sat at 106. The plan that buys MORE made the screen worse. Youssef,
+     1 Sept 2026: "make it the same as a pro or basic account where you get 4
+     clips and it looks more spacious ... make it scrollable for the 8."
+
+     Past four windows the rows take the height four would have had, and the
+     grid scrolls inside the space it already occupies.
+
+     Hooked on data-dc-week, an attribute added to the design source (the
+     re-import was proven byte-stable first: no hashed class name moved).
+
+     THREE traps, each found by measuring rather than reasoning:
+
+     1. The grid is NOT capped by its parent -- it grows and the whole screen
+        scrolls. Reading its own clientHeight after fixing the rows therefore
+        fed itself: 1055 -> 1543 -> 40711px across four repaints. The space
+        available is read from the nearest SCROLLING ancestor and the grid's
+        offset inside it, neither of which moves when the grid gets taller.
+     2. `flex: 1` on the grid means flex-basis 0, which beats any height set on
+        it. .dc-week-tall declares `flex: none` for that reason -- without it
+        the explicit height is simply ignored.
+     3. A week holding a clip scheduled off the account's posting times grows
+        an extra "Other" row. Counting it made a four-window Pro account look
+        like five and switched this on for them. */
+  const grid=document.querySelector('[data-dc-week]');
+  if(!grid)return;
+  const windows=[...grid.children].slice(1).filter(row=>{
+    const label=(row.firstElementChild||{}).textContent||'';
+    return !/^\s*Other\s*$/.test(label);
+  }).length;
+  const clear=()=>{
+    grid.classList.remove('dc-week-tall');
+    grid.style.removeProperty('height');
+    grid.style.removeProperty('--dc-week-row');
+  };
+  if(windows<=4){clear();return}
+
+  let root=grid.parentElement;
+  while(root){
+    const o=getComputedStyle(root).overflowY;
+    if(o==='auto'||o==='scroll')break;
+    root=root.parentElement;
+  }
+  if(!root){clear();return}
+  /* Distance from the top of the scrolling area to the top of the grid, taken
+     through scrollTop so it is the same number whether or not the screen is
+     scrolled. */
+  const offset=grid.getBoundingClientRect().top-root.getBoundingClientRect().top+root.scrollTop;
+  const avail=Math.round(root.clientHeight-offset);
+  if(avail<240)return;
+  const GAP=7;
+  const header=grid.firstElementChild?Math.round(grid.firstElementChild.getBoundingClientRect().height):0;
+  /* Four rows, three gaps between them and one under the weekday header. */
+  const rowH=Math.max(110,Math.round((avail-header-GAP*4)/4));
+  if(grid.style.height!==avail+'px')grid.style.height=avail+'px';
+  if(grid.style.getPropertyValue('--dc-week-row')!==rowH+'px')grid.style.setProperty('--dc-week-row',rowH+'px');
+  grid.classList.add('dc-week-tall');
+}
+addEventListener('resize',()=>{try{paintScheduleWeek()}catch(e){}});
 function helpZoom(src,img){
   const old=document.getElementById('dcHelpZoom');
   if(old)old.remove();
@@ -6629,6 +6690,7 @@ function paintStudio(){
   /* Cheap when shut -- it returns immediately -- and this is what keeps the
      plan, the token count and the email switch honest while it is open. */
   if(window.paintAccount)window.paintAccount();
+  paintScheduleWeek();
   if(window.paintEmailNotifRow)window.paintEmailNotifRow(DATA);
   /* The watermark row is restored HERE, with every other host-rendered panel,
      because STUDIO.render() above has just replaced the DOM it was injected

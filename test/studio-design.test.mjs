@@ -1457,8 +1457,18 @@ test('the calendar shows a day\'s whole capacity, and whose plan gave it', () =>
   // is depended on -- a design re-import must not be able to flatten them.
   const tops = new Set(sCell.pips.map(p => (p.style.match(/top: (\d+)px/) || [])[1]));
   assert.equal(tops.size, 2, 'in two rows');
-  assert.equal(sCell.pips.filter(p => /background: #D9B478/.test(p.style)).length, 2, 'two scheduled, two solid gold');
-  assert.equal(sCell.pips.filter(p => /rgba\(217,180,120,\.26\)/.test(p.style)).length, 6, 'the rest faint gold, not grey');
+  // The BASE four are exactly what Pro and Basic draw -- solid gold filled,
+  // quiet grey empty -- and the four Studio ADDS are gold in both states.
+  // Youssef, 1 Sept 2026: "the 4 new dots should be different color to show the
+  // subscrition i have." That second row is the only pair of dots on the screen
+  // that never goes grey, and that is what makes it read as bought.
+  const rowOf = top => sCell.pips.filter(p => p.style.includes('top: ' + top + 'px'))
+    .map(p => (p.style.match(/background: ([^;]+)/) || [])[1]);
+  assert.deepEqual(rowOf(7), ['#D9B478', '#D9B478', '#212127', '#212127'],
+    'the base four behave exactly as they do on every other plan');
+  assert.deepEqual(rowOf(15), ['rgba(217,180,120,.34)', 'rgba(217,180,120,.34)',
+    'rgba(217,180,120,.34)', 'rgba(217,180,120,.34)'],
+    'and the four Studio adds are a different colour entirely');
 
   // Everyone else keeps the quiet grey, or the gold stops meaning anything.
   const pro = StudioAdapter.bindings({
@@ -3894,4 +3904,40 @@ test('account settings is a screen, not a prompt asking for a number', () => {
   // switch stay honest across a state poll while it is open.
   const paint = /function paintStudio\(\)\{[\s\S]*?\n\}/.exec(html)[0];
   assert.match(paint, /paintAccount\(\)/);
+});
+
+test('Studio\'s week scrolls rather than squeezing every cell', () => {
+  // The week grid divides its height between the posting windows, so at eight
+  // every row collapsed to its 62px minimum while Pro's sat at 106 -- the plan
+  // that buys MORE made the screen worse. Youssef, 1 Sept 2026: "make it the
+  // same as a pro or basic account where you get 4 clips and it looks more
+  // spacious ... make it scrollable for the 8 clips for studio ONLY."
+  //
+  // Measured in a browser at 1440x1000: Studio's rows went 62px -> 139px and
+  // the grid scrolls (625 visible, 1354 of content); Pro is untouched at 106
+  // with no scroll and no class applied.
+  const css = fs.readFileSync(path.join(ROOT, 'src/public/studio-tokens.css'), 'utf8');
+  assert.match(css, /\[data-dc-week\] \{ overflow-y: auto;/, 'the grid can scroll');
+  // flex:1 on the grid means flex-basis 0, which beats any height set on it --
+  // without this the measured height is silently ignored.
+  assert.match(css, /\[data-dc-week\]\.dc-week-tall \{ flex: none; \}/);
+  assert.match(css, /--dc-week-row/, 'and the rows take a measured height');
+
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const fn = /function paintScheduleWeek\(\)\{[\s\S]*?\n\}/.exec(html)[0];
+  // Four or fewer windows must come out exactly as before: no class, no height,
+  // no variable. This is what keeps Pro and Basic untouched.
+  assert.match(fn, /windows<=4/);
+  assert.match(fn, /classList\.remove\('dc-week-tall'\)/);
+  // A stray clip scheduled off the posting times adds an "Other" row; counting
+  // it made a four-window Pro account look like five.
+  assert.match(fn, /Other/, 'the stray row is not counted as a posting window');
+  // The available space is read from the nearest SCROLLING ancestor, never the
+  // grid's own height -- the grid grows with its content, so measuring itself
+  // fed back (1055 -> 1543 -> 40711px over four repaints).
+  assert.match(fn, /overflowY/);
+  assert.match(fn, /root\.clientHeight-offset/);
+
+  const paint = /function paintStudio\(\)\{[\s\S]*?\n\}/.exec(html)[0];
+  assert.match(paint, /paintScheduleWeek\(\)/, 'it runs on every paint');
 });

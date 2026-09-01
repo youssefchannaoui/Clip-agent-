@@ -2571,13 +2571,27 @@
                 var col = n % 4;
                 var perRow = Math.min(4, daySlots);
                 var filled = n < items.length;
+                // The EXTRA windows -- the ones past the four every plan gets
+                // -- are a different colour from the base four, so the second
+                // row reads as the capacity this subscription added rather
+                // than as more of the same. Youssef, 1 Sept 2026: "the 4 new
+                // dots should be different color to show the subscrition i
+                // have."
+                //
+                // The base four keep exactly what Pro and Basic draw: solid
+                // gold when filled, quiet grey when not. The extras are gold
+                // in BOTH states -- bright when filled, faint when empty --
+                // which is the only pair of dots on the screen that never goes
+                // grey, and that is the point.
+                // Four is the base every plan gets and also the row width
+                // above, so the extras are exactly the second row.
+                var extra = studioSlots && n >= 4;
+                var colour = extra
+                  ? (filled ? '#F0D6A6' : 'rgba(217,180,120,.34)')
+                  : (filled ? '#D9B478' : '#212127');
                 return { style: 'position: absolute; display: block; width: 5px; height: 5px; border-radius: 50%;'
                   + ' top: ' + (7 + row * 8) + 'px; right: ' + (7 + (perRow - 1 - col) * 8) + 'px;'
-                  // Faint gold rather than grey for an empty slot on Studio:
-                  // the extra capacity should read as something the plan gave
-                  // you even before anything fills it. Everyone else keeps the
-                  // quiet grey, so the gold stays worth something.
-                  + ' background: ' + (filled ? '#D9B478' : studioSlots ? 'rgba(217,180,120,.26)' : '#212127') + ';' };
+                  + ' background: ' + colour + ';' };
               }) : [],
               // Two chips once there is a "+N more" to show, three when there
               // is not. Measured at 1440x950: the cell is 101px and three
