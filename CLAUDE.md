@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1005 JS + 456 Python**
+- `npm test` and `npm run check` must pass. Currently **1005 JS + 461 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1793,6 +1793,42 @@ a faint gold, and once it's filled in, a more obvious gold."
   answer to "how do I know I get eight?".
 - Both new tests were proven RED against four hardcoded pips and three chips
   before being kept.
+
+## Two clips shipped under one title (v3.72.2, 1 Sept 2026)
+
+Found by reading the mailbox rather than the code: the "your clip is live"
+emails show two different clips both posted as **"I might find myself in this
+situation"** on 31 Aug, and "It's meant to be deceiving" twice. On a public
+channel that reads as the same video uploaded twice.
+
+- **It arrives from BOTH directions.** `refine_with_ollama` titles in batches
+  of four that cannot see each other, so a small model repeats itself across
+  them; and where no AI title survives, `title_from_text` takes the clip's
+  FIRST sentence -- which for two clips over the same moment is the same
+  sentence. Fixing only the prompt would have left the fallback path repeating.
+- **`dedupe_clip_titles` runs in `title_selected_clips`**, which already runs
+  after selection over exactly the clips that ship -- the only place that sees
+  the whole set that can collide, and at most `MAX_DELIVERABLE_CLIPS` of them.
+  Line 3616 (`candidate.ai_title or title_from_text(...)`) is unchanged; the
+  resolved title simply lands on `ai_title` first.
+- **A duplicate is resolved from the clip's OWN later sentences, never by
+  suffixing a number.** "Regret is Repentance (2)" on a public channel is worse
+  than the repeat it fixes. `title_candidates()` was split out of
+  `title_from_text` for this; `title_from_text` is now its first entry and its
+  behaviour is unchanged (its existing tests pass untouched).
+- **`normalise_title` decides what "the same" means**: case, a trailing
+  ellipsis and punctuation are not differences a viewer would call a different
+  title.
+- **A clip with nothing else to offer keeps its title.** Keeping a real title
+  beats inventing a bad one, and that is the honest limit of this pass.
+- **Per LECTURE, not per channel.** Two clips from two different lectures can
+  still collide; that would need the app's stored clips rather than the
+  worker's in-memory set. The observed duplicates were consecutive slots from
+  one lecture, which is what this covers.
+- Proven RED against the pass being disabled (3 of 34 titling tests fail).
+  **Worker change, so `deploy-worker.yml` deploys it on push** -- and it only
+  affects lectures processed from now on. The duplicate titles already on the
+  channel stay until those clips are renamed by hand.
 
 ## Open items
 

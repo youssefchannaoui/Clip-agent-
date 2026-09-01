@@ -326,3 +326,82 @@ class ParticleNameTests(unittest.TestCase):
         for title in ("Repentance - why it never stops",
                       "The trials of the believer - and what they mean"):
             self.assertEqual(clip_worker.strip_unbacked_attribution(title, self.NO_SPEAKER), title)
+
+
+class TitleDedupTests(unittest.TestCase):
+    """No two clips from one lecture ship under the same title.
+
+    Seen in production on the DeenClipped channel: two different clips both
+    posted as "I might find myself in this situation", and "It's meant to be
+    deceiving" twice on consecutive days. It arrives from both directions -- a
+    small model repeating itself across batches that cannot see each other, and
+    the transcript fallback taking the first sentence, which for two clips over
+    the same moment is the same sentence.
+    """
+
+    @staticmethod
+    def clip(text, ai_title=""):
+        c = Candidate(start=0.0, end=30.0, text=text, score=70,
+                      segments=[], reasons=[], quote_risk=False)
+        c.ai_title = ai_title
+        return c
+
+    def test_two_clips_cannot_ship_the_same_model_title(self):
+        clips = [
+            self.clip("I might find myself in this situation one day. Allah is closer than you think.",
+                      "I might find myself in this situation"),
+            self.clip("Whoever holds his tongue is safe. The reward for silence is enormous.",
+                      "I might find myself in this situation"),
+        ]
+        out = clip_worker.dedupe_clip_titles(clips)
+        self.assertNotEqual(
+            clip_worker.normalise_title(out[0].ai_title),
+            clip_worker.normalise_title(out[1].ai_title),
+            "the second clip must not repeat the first clip's title",
+        )
+        self.assertEqual(out[0].ai_title, "I might find myself in this situation",
+                         "the first one keeps what it was given")
+        # Resolved from the clip's OWN words, never by suffixing a number.
+        self.assertNotIn("(2)", out[1].ai_title)
+        self.assertIn(clip_worker.normalise_title(out[1].ai_title),
+                      [clip_worker.normalise_title(t) for t in clip_worker.title_candidates(clips[1].text)],
+                      "the replacement comes from the clip's own sentences")
+
+    def test_case_and_ellipsis_are_not_a_difference(self):
+        # "Regret is repentance" and "Regret is Repentance…" are the same line
+        # twice on a channel.
+        self.assertEqual(clip_worker.normalise_title("Regret is Repentance…"),
+                         clip_worker.normalise_title("regret is repentance"))
+        clips = [
+            self.clip("Regret is repentance in itself. The door does not close on anyone.",
+                      "Regret is Repentance"),
+            self.clip("Regret is repentance in itself, said the Prophet. Hope is never gone.",
+                      "regret is repentance…"),
+        ]
+        out = clip_worker.dedupe_clip_titles(clips)
+        self.assertNotEqual(clip_worker.normalise_title(out[0].ai_title),
+                            clip_worker.normalise_title(out[1].ai_title))
+
+    def test_the_transcript_fallback_is_deduped_too(self):
+        # No ai_title at all: both fall back to the first sentence, which for
+        # two clips over the same moment is the same sentence.
+        same = "The hour is coming and nobody knows when. Prepare for it with your deeds today."
+        clips = [self.clip(same), self.clip(same + " And that is the whole reminder for us.")]
+        out = clip_worker.dedupe_clip_titles(clips)
+        self.assertTrue(out[0].ai_title and out[1].ai_title, "every delivered clip ends with a title")
+        self.assertNotEqual(clip_worker.normalise_title(out[0].ai_title),
+                            clip_worker.normalise_title(out[1].ai_title))
+
+    def test_a_clip_with_nothing_else_to_offer_keeps_its_title(self):
+        # Keeping a real title beats inventing a bad one; this is the honest
+        # limit of what the pass can do, and it must not crash or blank it.
+        clips = [self.clip("Patience is a light.", "Patience is a light"),
+                 self.clip("Patience is a light.", "Patience is a light")]
+        out = clip_worker.dedupe_clip_titles(clips)
+        self.assertEqual(out[1].ai_title, "Patience is a light")
+
+    def test_distinct_titles_are_left_completely_alone(self):
+        clips = [self.clip("One thing. Another thing entirely here.", "Never lose hope"),
+                 self.clip("A different clip. With its own separate words.", "Hold your tongue")]
+        out = clip_worker.dedupe_clip_titles(clips)
+        self.assertEqual([c.ai_title for c in out], ["Never lose hope", "Hold your tongue"])

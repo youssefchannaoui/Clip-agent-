@@ -1161,9 +1161,49 @@ def title_selected_clips(
     Cheap, because there are at most MAX_DELIVERABLE_CLIPS of them.
     """
     missing = [clip for clip in selected if not clip.ai_title]
-    if not missing:
-        return selected
-    refine_with_ollama(missing, settings, lecture_title)
+    if missing:
+        refine_with_ollama(missing, settings, lecture_title)
+    return dedupe_clip_titles(selected)
+
+
+def dedupe_clip_titles(selected: list[Candidate]) -> list[Candidate]:
+    """No two clips from one lecture ship under the same title.
+
+    Seen in production on the DeenClipped channel: two different clips both
+    posted as "I might find myself in this situation", and "It's meant to be
+    deceiving" twice. It happens from both directions -- a small model repeats
+    itself across batches that cannot see each other, and the transcript
+    fallback takes the first sentence, which for two clips over the same moment
+    is the same sentence.
+
+    A duplicate is resolved from the clip's OWN later sentences, never by
+    suffixing a number: "Regret is Repentance (2)" on a public channel is worse
+    than the repeat it fixes. If a clip has nothing else to offer, its title
+    stands -- keeping a real title beats inventing a bad one, and that is the
+    honest limit of what this pass can do.
+
+    Runs over the delivered clips only, which is the whole set that can collide
+    and at most MAX_DELIVERABLE_CLIPS of them.
+    """
+    taken: set[str] = set()
+    for index, clip in enumerate(selected):
+        current = clip.ai_title or title_from_text(clip.text, index)
+        key = normalise_title(current)
+        if key and key not in taken:
+            taken.add(key)
+            clip.ai_title = current
+            continue
+        for option in title_candidates(clip.text):
+            other = normalise_title(option)
+            if other and other not in taken:
+                taken.add(other)
+                clip.ai_title = option
+                break
+        else:
+            # Nothing distinct left in this clip's own words. Keep what it has.
+            if key:
+                taken.add(key)
+            clip.ai_title = current
     return selected
 
 
@@ -2783,6 +2823,19 @@ TITLE_OPENERS = (
 )
 
 
+def normalise_title(title: str) -> str:
+    """The form two titles are compared in.
+
+    Case, trailing ellipsis and punctuation are not differences a viewer would
+    call a different title: "Regret is repentance" and "Regret is Repentance…"
+    are the same line twice on a channel.
+    """
+    flat = re.sub(r"\s+", " ", str(title or "")).strip().lower()
+    flat = flat.replace("\u2026", "")
+    flat = re.sub(r"[^\w\s]", "", flat, flags=re.UNICODE)
+    return re.sub(r"\s+", " ", flat).strip()
+
+
 def title_from_text(text: str, number: int) -> str:
     """Best-effort title when no AI titling is available.
 
@@ -2791,6 +2844,19 @@ def title_from_text(text: str, number: int) -> str:
     "Alright guys, 2013 Mercedes Benz C250, really beautiful car," came from
     taking the first sentence verbatim and only stripping trailing punctuation
     when the sentence happened to be long enough to truncate.
+    """
+    for candidate in title_candidates(text):
+        return candidate
+    return f"Important reminder {number}"
+
+
+def title_candidates(text: str) -> list[str]:
+    """Every usable title this clip's own words could give, best first.
+
+    Split out of title_from_text so a duplicate can be resolved from the SAME
+    clip rather than by suffixing a number onto a public title. title_from_text
+    keeps its exact behaviour: it is the first of these, or the numbered
+    fallback when the clip yields none.
     """
     cleaned = re.sub(r"\s+", " ", text).strip()
     sentences = [s for s in re.split(r"(?<=[.!?])\s+", cleaned) if s.strip()]
@@ -2819,15 +2885,18 @@ def title_from_text(text: str, number: int) -> str:
             candidate = candidate[0].upper() + candidate[1:]
         return candidate
 
-    for sentence in sentences:
-        candidate = tidy(sentence)
-        if len(candidate) >= 12:
-            return candidate[:90]
-
-    fallback = tidy(cleaned)
-    if len(fallback) >= 12:
-        return fallback[:90]
-    return f"Important reminder {number}"
+    out: list[str] = []
+    seen: set[str] = set()
+    for sentence in list(sentences) + [cleaned]:
+        candidate = tidy(sentence)[:90]
+        if len(candidate) < 12:
+            continue
+        key = normalise_title(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(candidate)
+    return out
 
 
 def description_from_text(text: str) -> str:
