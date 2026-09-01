@@ -338,7 +338,10 @@ export function scheduleApprovedClip(clip, { at = null, day = null } = {}) {
   // POST_TIMES; Studio gets more, inserted between them rather than spread over
   // the clock, so the account keeps publishing in the part of the day it chose.
   const owner = ownerOfRecord(clip);
-  const windows = billing.paysForAtLeast(owner, 'studio') ? slotTimes(config.postSlotsStudio) : null;
+  // atLeast: the operator schedules on Studio's windows too. This widens one
+  // account's own day and takes nothing from anyone, which is why it does not
+  // use the paid tier that queuePriority does.
+  const windows = billing.atLeast(owner, 'studio') ? slotTimes(config.postSlotsStudio) : null;
   let opts;
   if (Number.isFinite(exact) && exact > 0) {
     // nextSlot keeps a 15-minute lead so nothing is scheduled a breath from

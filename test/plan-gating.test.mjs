@@ -100,12 +100,16 @@ test('the three original plan ids still mean Pro at that period', () => {
 
 test('a paid tier and the operator role are different questions', () => {
   // The operator has every feature and must never be locked out of their own
-  // product -- but their imports must not preempt a paying customer's on the
-  // one worker slot, which is what paidTierOf exists to separate.
+  // product. paidTierOf now separates exactly ONE thing: queue position on a
+  // single worker slot, which is zero-sum -- the operator's test import must
+  // not preempt a paying customer's lecture. Everything else the operator
+  // gets, including Studio's eight posting windows, because widening one
+  // account's own day takes nothing from anyone.
   const operator = { id: 'op', role: 'owner', billing: { plan: 'free' } };
   assert.equal(billing.tierOf(operator), 'studio');
+  assert.equal(billing.atLeast(operator, 'studio'), true, 'every Studio perk');
   assert.equal(billing.paidTierOf(operator), 'basic');
-  assert.equal(billing.paysForAtLeast(operator, 'studio'), false);
+  assert.equal(billing.paysForAtLeast(operator, 'studio'), false, 'except the queue');
   const customer = { id: 'c', role: 'creator', billing: { plan: 'studio_monthly' } };
   assert.equal(billing.paidTierOf(customer), 'studio');
   assert.equal(billing.paysForAtLeast(customer, 'studio'), true);
@@ -142,7 +146,7 @@ test('every plan gate in the app is one of the listed features', () => {
   // way: a new call site fails this until it is argued for here.
   const tierGates = new Map([
     ['src/deenai.js', ['deenaiAccess', 'deenaiAskAccess']],
-    ['src/agent.js', ['scheduleApprovedClip picks the tier\'s posting windows']],
+    ['src/agent.js', ['scheduleApprovedClip picks the tier\'s posting windows (feature tier: the operator gets Studio\'s eight)']],
     ['src/local-engine.js', ['queuePriority ranks the render queue']],
   ]);
   for (const [file, guards] of tierGates) {

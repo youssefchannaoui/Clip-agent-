@@ -259,7 +259,7 @@ test('the cap is refused over HTTP, not merely hidden in the interface', async (
   // than a second sign-up: eight posting windows a day.
   //
   // The scheduler has always honoured this -- agent.js asks slots.js for
-  // config.postSlotsStudio windows whenever the owner paysForAtLeast studio.
+  // config.postSlotsStudio windows whenever the owner is at least Studio.
   // What the state payload sent was config.postTimes, to everybody, so the
   // Schedule screen told a Studio customer FOUR while the app scheduled into
   // EIGHT. The feature they paid for was invisible and the app contradicted
@@ -284,6 +284,22 @@ test('the cap is refused over HTTP, not merely hidden in the interface', async (
   account.billing = { ...account.billing, plan: 'pro_monthly' };
   const asPro = await (await realFetch(`${base}/api/state`, { headers: { Cookie: cookie } })).json();
   assert.deepEqual(asPro.postTimes, config.postTimes, 'Pro sees the configured four, not a promise it did not buy');
+  account.billing = { ...account.billing, plan: 'studio_monthly' };
+
+  // The operator gets them without paying, because they get every Studio perk
+  // (Youssef, 1 Sept 2026: "for admin account should be like studio with all
+  // perks"). This is the FEATURE tier, so the free-plan billing record below
+  // is deliberate: role decides, not money.
+  //
+  // It is not a free-plan hole. isUnlimited reads the account ROLE, which only
+  // an operator has and no customer can set on themselves.
+  const wasRole = account.role;
+  account.role = 'owner';
+  account.billing = { ...account.billing, plan: 'free' };
+  const asOperator = await (await realFetch(`${base}/api/state`, { headers: { Cookie: cookie } })).json();
+  assert.deepEqual(asOperator.postTimes, expected,
+    'the operator schedules on Studio windows without a subscription');
+  account.role = wasRole;
   account.billing = { ...account.billing, plan: 'studio_monthly' };
 });
 

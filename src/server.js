@@ -719,7 +719,12 @@ function appState(user = null) {
     // while the app gave them eight. The display and the behaviour must come
     // from one function or they drift, which is the failure this codebase has
     // now paid for three times.
-    postTimes: billing.paysForAtLeast(user, 'studio') ? postTimesFor(config.postSlotsStudio) : config.postTimes,
+    // atLeast, not paysForAtLeast: the operator gets Studio's posting capacity
+    // like every other Studio perk (Youssef, 1 Sept 2026: "for admin account
+    // should be like studio with all perks"). Extra windows only widen the
+    // account's OWN schedule, so nothing is taken from a customer -- unlike
+    // queue position, which stays on the paid tier in local-engine.js.
+    postTimes: billing.atLeast(user, 'studio') ? postTimesFor(config.postSlotsStudio) : config.postTimes,
     timezone: config.timezone, activeJobs: agent.engine.activeJobCount(),
     log: logFor(user, 60), directPublishingEnabled: config.socialPublishEnabled,
     publishingSettings: publishingSettings(user), social: social.connectionStatus(user), billing: billing.publicBilling(user),

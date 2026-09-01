@@ -2123,6 +2123,37 @@ it's refreshing the screen ... it looks horrible."
   removed mentions it, and a grep for the word fails on the explanation. That
   is the third time this repo has hit that shape.
 
+## The operator is Studio everywhere except the queue (v3.75.2, 1 Sept 2026)
+
+Youssef: "for admin account should be like studio with all perks."
+
+- **The feature gates were already right** -- `tierOf` has counted the operator
+  as Studio since v3.34.0, so every entry in `features` is true and `locked` is
+  empty. What was NOT right was the posting capacity: `agent.js` and the
+  `/api/state` payload both asked `paysForAtLeast`, which reads the account's
+  MONEY and answers `basic` for an operator on a free billing record. So the
+  owner was scheduled into four windows a day while holding every Studio
+  feature -- and the Schedule screen drew four pips beside a plan that says
+  Unlimited, which is the app contradicting itself.
+- **Both now ask `atLeast`.** Measured after: 8 windows in the payload, "Up to
+  8 posts a day", 8 meter bars, 8 calendar pips, "8 windows a day on Studio",
+  and 3 accounts on all four platforms.
+- **`queuePriority` in local-engine.js deliberately still reads
+  `paysForAtLeast`, and that is the whole reason paidTierOf exists.** The
+  distinction is no longer "features vs money" but **zero-sum vs not**: extra
+  posting windows widen one account's own day and take nothing from anybody,
+  while there is ONE worker slot, so an operator jumping the queue costs a
+  paying customer their place. If that is ever changed it should be a
+  deliberate decision, not a tidy-up of the last remaining `paysForAtLeast`.
+- The gate-law tests were updated rather than deleted: `pro-and-blockers` now
+  asserts agent.js uses `atLeast` AND that the paid check is gone from it (not
+  merely joined by another), and `plan-gating` states which single thing
+  paidTierOf still decides.
+- **The operator check is a ROLE, not a plan** (`isUnlimited` reads
+  `user.role`), so none of this opens a free-plan hole: a customer cannot set
+  their own role. The HTTP test makes that explicit by flipping the role on a
+  free billing record and asserting the eight windows.
+
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)

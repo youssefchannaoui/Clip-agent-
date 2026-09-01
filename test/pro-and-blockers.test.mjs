@@ -29,10 +29,19 @@ test('every feature the table sells is enforced server-side, tier by tier', () =
   assert.match(server, /is a Pro template/);
   assert.match(server, /DeenAI is a Pro feature/);
   assert.match(server, /Asking DeenAI is a Studio feature/);
-  // The two Studio features that are not a route: both read the PAID tier, so
-  // the operator's own work never preempts a customer's.
+  // The two Studio features that are not a route read DIFFERENT tiers, and the
+  // difference is whether anyone else pays for it.
+  //
+  // The render queue reads the PAID tier: a single worker slot is zero-sum, so
+  // the operator jumping it costs a paying customer their place.
   assert.match(read('src/local-engine.js'), /paysForAtLeast\(owner, 'studio'\)/);
-  assert.match(read('src/agent.js'), /paysForAtLeast\(owner, 'studio'\)/);
+  // The posting windows read the FEATURE tier, so the operator gets Studio's
+  // eight like every other perk (Youssef, 1 Sept 2026: "for admin account
+  // should be like studio with all perks"). Extra windows widen one account's
+  // own day and take nothing from anybody.
+  assert.match(read('src/agent.js'), /atLeast\(owner, 'studio'\)/);
+  assert.ok(!/paysForAtLeast\(owner, 'studio'\)/.test(read('src/agent.js')),
+    'and the paid check is gone from the scheduler, not merely joined');
 });
 
 test('scheduling, publishing and automation stay free', () => {
