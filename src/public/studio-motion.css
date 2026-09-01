@@ -1,0 +1,124 @@
+/* ============================================================================
+   studio-motion.css — the dashboard's motion layer (v3.73.0)
+
+   One restrained language tying the workspace to the public site: gold
+   traces, short fades, status life on REAL work only. Hand-written, loaded
+   after studio-tokens.css so overrides win. Rules bind ONLY to re-import-
+   stable hooks: ids, literal dc-* classes, literal data attributes, and
+   host-owned .slb-/.slh-/.studio-conn-/.toast classes. Never .sNN — those
+   renumber on design re-import — and never a JS-added class on a generated
+   node, which the patcher strips.
+
+   Two house rules repeated from studio-tokens.css because they bit before:
+   fills are `backwards`, never `both` (a forwards fill pins the last frame
+   and silently kills hover transforms), and `animation:` is a shorthand
+   that resets animation-delay.
+   ========================================================================= */
+
+:root{
+  --dcm-fast:120ms;
+  --dcm-menu:160ms;
+  --dcm-view:220ms;
+  --dcm-ease:cubic-bezier(.22,.6,.18,1);
+}
+
+/* ── Screen changes ──────────────────────────────────────────────────────
+   The generated dcScreen animation cannot restart when two screens share a
+   wrapper class (Home and Library both render .s29), so switching between
+   them felt dead. paintStudio now re-toggles body.dc-screen-anim on every
+   ui.screen change, forcing a clean restart regardless of the wrapper. */
+body.dc-screen-anim #studio main > *{
+  animation:dcmScreenIn var(--dcm-view) var(--dcm-ease) backwards;
+}
+@keyframes dcmScreenIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+
+/* ── Rail: active trace + calm hover ─────────────────────────────────────
+   Active is baked into the inline style (border-left #D9B478), so the
+   attribute is the only stable hook. The trace draws in when an item
+   BECOMES active; hover stays CSS-only — JS hover once re-rendered under
+   the pointer and killed clicks. */
+#dcRailNav a{position:relative}
+#dcRailNav a[style*="#D9B478"]::before{
+  content:"";position:absolute;left:-2px;top:16%;bottom:16%;width:2px;border-radius:2px;
+  background:linear-gradient(#D9B478,#F0D6A6);
+  animation:dcmTrace .24s var(--dcm-ease) backwards;
+}
+@keyframes dcmTrace{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+#dcRailNav a > i{transition:transform var(--dcm-fast) var(--dcm-ease)}
+#dcRailNav a:hover > i{transform:translateX(2px)}
+
+/* ── Brand mark: a very slow idle light pass ─────────────────────────────
+   One pass of warm light across the rail brand roughly every 14s. Paused
+   whenever the tab is hidden (body.dc-page-hidden from the host). */
+#dcRailBrand{position:relative;overflow:hidden}
+#dcRailBrand::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(115deg,transparent 42%,rgba(217,180,120,.10) 50%,transparent 58%);
+  transform:translateX(-120%);
+  animation:dcmBrandPass 14s linear infinite;
+}
+@keyframes dcmBrandPass{0%,78%{transform:translateX(-120%)}92%,100%{transform:translateX(120%)}}
+body.dc-page-hidden #dcRailBrand::after{animation-play-state:paused}
+
+/* ── Live work: motion only while a real job runs ────────────────────────
+   The fills exist only while work is in flight, so the shine can loop —
+   it disappears with the job. */
+.slb-bar i,.slh-track i{
+  background-image:linear-gradient(90deg,transparent,rgba(255,255,255,.22),transparent);
+  background-size:44% 100%;background-repeat:no-repeat;
+  animation:dcmTrackShine 1.6s linear infinite;
+}
+@keyframes dcmTrackShine{from{background-position:-60% 0}to{background-position:160% 0}}
+body.dc-page-hidden .slb-bar i,body.dc-page-hidden .slh-track i{animation-play-state:paused}
+
+/* ── Host dialogs and schedule cards ─────────────────────────────────────
+   The connections card already pops; its scrim now fades with it, and
+   schedule cards (a literal design attribute, re-import-stable) get the
+   same lift the library cards have always had. */
+.studio-conn-backdrop{animation:dcmFadeIn .18s ease backwards}
+@keyframes dcmFadeIn{from{opacity:0}to{opacity:1}}
+[data-dc-sched-card]{transition:transform var(--dcm-fast) var(--dcm-ease),box-shadow var(--dcm-fast) ease}
+[data-dc-sched-card]:hover{transform:translateY(-2px);box-shadow:0 14px 32px rgba(0,0,0,.34)}
+
+/* ── Press feedback on chrome controls ───────────────────────────────────
+   Scoped to navigation and dialog chrome only — never editor precision
+   controls, where a press-scale moves the target under the pointer. */
+#dcTopbar button,.studio-conn-actions button,.slb-btn{transition:transform 100ms var(--dcm-ease)}
+#dcTopbar button:active,.studio-conn-actions button:active,.slb-btn:active{transform:scale(.97)}
+
+/* ── Focus visibility, everywhere in the studio ─────────────────────────── */
+#studio :focus-visible,#studioConn :focus-visible,#dcHelp :focus-visible{
+  outline:2px solid #D9B478;outline-offset:2px;border-radius:4px;
+}
+
+/* ── Arrival from the public site ────────────────────────────────────────
+   A one-per-session veil: the arch resolves and lifts as the shell paints.
+   The host skips it entirely for warm sessions, deep-link-only referrers
+   and reduced motion. */
+.dc-arrive{
+  position:fixed;inset:0;z-index:300;display:grid;place-items:center;
+  background:#070607;pointer-events:none;
+  transition:opacity .4s ease;
+}
+.dc-arrive svg{width:56px;height:56px;fill:none;stroke:#D9B478;stroke-width:2;transition:transform .45s var(--dcm-ease),opacity .3s ease}
+.dc-arrive.out{opacity:0}
+.dc-arrive.out svg{transform:scale(1.5);opacity:0}
+
+/* ── Reduced motion ──────────────────────────────────────────────────────
+   The document-wide reduced-motion rule in index.html already kills every
+   animation and transition — including, wrongly, the spinners and progress
+   fills that COMMUNICATE running work. A frozen spinner reads as a hang,
+   which is worse than its rotation. Restore exactly those, nothing else. */
+@media (prefers-reduced-motion: reduce){
+  /* The document-wide `*{animation:none}` rule never matches pseudo-elements,
+     so this layer's ::before/::after animations need their own kills. */
+  #dcRailBrand::after,
+  #dcRailNav a[style*="#D9B478"]::before{animation:none !important}
+  #dcRailNav a > i,#dcTopbar button,.studio-conn-actions button,.slb-btn,
+  [data-dc-sched-card]{transition:none !important;transform:none !important}
+  #studio .ph-circle-notch,
+  #studioLiveBar .ph-circle-notch,
+  #studioLiveHome .ph-circle-notch{animation:dcSpin 1.1s linear infinite !important}
+  .slb-bar i,.slh-track i{transition:width .4s ease !important;animation:none !important}
+  .dc-arrive{display:none}
+}

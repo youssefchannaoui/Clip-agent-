@@ -66,6 +66,7 @@ const STUDIO_ASSETS = {
   // The in-app help centre, same arrangement again: its dch- hooks are
   // hand-authored, so a design re-import cannot take the screen with it.
   '/studio-help.css': { file: studioAsset('studio-help.css'), type: 'text/css; charset=utf-8' },
+  '/studio-motion.css': { file: studioAsset('studio-motion.css'), type: 'text/css; charset=utf-8' },
   // The editor's "coming soon" gate. Two files and one <link> so that turning
   // the editor on again is a deletion rather than an untangling.
   '/studio-editor-gate.css': { file: studioAsset('studio-editor-gate.css'), type: 'text/css; charset=utf-8' },

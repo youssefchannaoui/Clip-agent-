@@ -45,6 +45,9 @@
 <!-- Motion and hover on the Owner screen. -->
 <link rel="stylesheet" href="/studio-owner.css">
 <link rel="stylesheet" href="/studio-help.css">
+<!-- The dashboard's motion language: screen-change restarts, the rail trace,
+     idle brand light, live-work shine, dialog fades, the arrival veil. -->
+<link rel="stylesheet" href="/studio-motion.css">
 <!-- The clip editor is held back for launch: it opens, blurred, behind a
      "coming soon" notice. Deleting these two lines and the two files they name
      turns it back on. -->
@@ -2112,6 +2115,25 @@ select:focus{outline:none;border-color:var(--blue)}
 
 <script>
 'use strict';
+/* Ambient-motion housekeeping for studio-motion.css: pause idle animation
+   while the tab is hidden, and play the one-per-session arrival veil when
+   the visitor came from the public site — never for warm sessions, deep
+   links from elsewhere, or reduced motion. */
+document.addEventListener('visibilitychange',()=>document.body.classList.toggle('dc-page-hidden',document.hidden));
+(function(){try{
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  if(sessionStorage.getItem('dcArrived'))return;
+  sessionStorage.setItem('dcArrived','1');
+  if(!document.referrer)return;
+  const from=new URL(document.referrer);
+  if(from.origin!==location.origin||from.pathname.startsWith('/app'))return;
+  const veil=document.createElement('div');
+  veil.className='dc-arrive';veil.setAttribute('aria-hidden','true');
+  veil.innerHTML='<svg viewBox="0 0 32 32"><path d="M16 3.5c-5.8 0-10.5 4.7-10.5 10.5v14.5h21V14c0-5.8-4.7-10.5-10.5-10.5Z"/></svg>';
+  document.body.appendChild(veil);
+  setTimeout(()=>veil.classList.add('out'),120);
+  setTimeout(()=>veil.remove(),650);
+}catch{}})();
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 let PW=localStorage.getItem('deenPw')||'', DATA=null, ACTIVE_VIEW='queue', SCHED_DAYS=5, LIB_FILTER='all', LIB_SORT='newest', MUSIC_FILE=null, TEMPLATE_DRAFT=null, EDITING_TEMPLATE_ID='', POSTING_IDS=new Set(), LIBRARY_PROJECT_ID='', LIBRARY_SELECTED=new Set();
@@ -6246,6 +6268,25 @@ function paintStudio(){
   paintTemplatesLayout();
   paintHelp();
   paintPlanBadge();
+  /* Screen-change restart for the motion layer (studio-motion.css): the
+     generated dcScreen animation cannot restart when two screens share a
+     wrapper class (Home and Library both render the same one), so the body
+     class is re-toggled on every ui.screen change — the reflow between
+     remove and add forces a clean restart. Skipped while the tour is up:
+     its spotlight measures live rects every paint, and a screen mid-slide
+     would desync the ring. */
+  const dcScr=StudioAdapter.ui.screen;
+  if(window.__dcScr!==dcScr){
+    const tourUp=Number(StudioAdapter.ui.tourStep)>=0;
+    window.__dcScr=dcScr;
+    if(!tourUp){
+      document.body.classList.remove('dc-screen-anim');
+      void document.body.offsetWidth;
+      document.body.classList.add('dc-screen-anim');
+      clearTimeout(window.__dcScrT);
+      window.__dcScrT=setTimeout(()=>document.body.classList.remove('dc-screen-anim'),340);
+    }
+  }
   /* The watermark row is restored HERE, with every other host-rendered panel,
      because STUDIO.render() above has just replaced the DOM it was injected
      into. It was the only one of these left to a MutationObserver instead, and

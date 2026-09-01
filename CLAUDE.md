@@ -1422,6 +1422,39 @@ join it, not invent a sibling.
   two-paths cards ("kinda useless") — its meaning now lives in the one-frame
   scene and the chooser. Check with him before resurrecting anything like it.
 
+## The dashboard gained a motion layer without a redesign (v3.73.0, 1 Sep 2026)
+
+Youssef authorised a refinement pass tying the studio to the rebuilt public
+site — explicitly NOT a redesign. Everything lives in the hand-written
+`src/public/studio-motion.css` (linked after studio-tokens.css, allowlisted
+in server.js) plus two small hooks in index.html; no generated file was
+touched and no design re-import happened.
+
+- **Selectors bind ONLY to re-import-stable hooks**: ids, literal dc-*
+  classes, literal data attributes, and host-owned .slb-/.slh-/.studio-conn-
+  classes. Never .sNN (renumbered on re-import) and never a JS-added class on
+  a generated node — the runtime patcher strips those.
+- **The patcher DIFFS, it does not rebuild per poll** (studio-runtime patch();
+  identical markup never touches the DOM). Several old comments still claim
+  wholesale innerHTML per poll — the gating advice stands, the mechanism
+  description is stale.
+- **Screen switches could not restart their animation between screens that
+  share a wrapper class** (Home and Library both render the same generated
+  class), which read as a dead switch. paintStudio now re-toggles
+  body.dc-screen-anim on every ui.screen change; skipped while the tour is
+  up because its spotlight measures live rects per paint.
+- **`*{animation:none}` under reduced motion never matches pseudo-elements**
+  — any ::before/::after animation needs its own reduce kill. Also restored
+  there deliberately: the processing spinners and progress-width transitions,
+  because a frozen spinner reads as a hang (status motion is essential).
+- The layer: rail active trace + icon nudge, 14s idle brand light pass
+  (paused via body.dc-page-hidden), shine on live progress fills only while
+  jobs run, connections-scrim fade, schedule-card lift ([data-dc-sched-card]),
+  press feedback on chrome buttons only (never editor precision controls),
+  studio-wide :focus-visible ring, and a one-per-session arch arrival veil
+  when coming from the public site (sessionStorage dcArrived; skipped warm,
+  deep-link and reduced-motion).
+
 ## The ayah was rendering as floating tashkeel with no letters (v3.40.0, 30 Aug)
 
 Nobody had ever looked at a frame from the Arabic path. Asked to prove the
