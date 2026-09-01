@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1023 JS + 484 Python**
+- `npm test` and `npm run check` must pass. Currently **1023 JS + 488 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3400,3 +3400,15 @@ now bar on home page AND the happening bar in other tabs when floating".
   carries a clock and "Paste a lecture above and the pipeline lights up
   here." All states screenshotted at desktop before shipping; the tour veil
   and the timer-reseed traps both bit again and are already documented above.
+
+### The reason field was babble about the packaging (v3.76.1)
+
+First real lecture through the v3.75.0 scorer surfaced it: the prompt never
+said what "reason" was FOR, so qwen3 filled it with commentary on the title it
+had just written -- "The title is concise, uses the hook..." -- and since the
+reason is prepended to the clip's reasons, the review deck led with that while
+the genuine heuristic reasons ("question opening") sat behind it. The prompt
+now defines the field (about the MOMENT, never the packaging), and because a
+negative instruction is a suggestion to this model, packaging words
+(title/description/hashtags) are dropped in apply_clip_rows -- the heuristic
+reasons underneath always remain.

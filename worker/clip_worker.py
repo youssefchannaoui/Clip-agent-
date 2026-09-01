@@ -1231,7 +1231,17 @@ def apply_clip_rows(
         # which at least strips filler openers and trims on a word boundary.
         candidate.ai_title = "" if looks_copied(proposed, candidate.text) else proposed
         candidate.ai_description = str(row.get("description") or "").strip()[:480]
-        candidate.ai_reason = str(row.get("reason") or "").strip()[:180]
+        reason = str(row.get("reason") or "").strip()[:180]
+        # Watched in production on 1 Sept 2026: given no definition of the
+        # field, qwen3 filled "reason" with commentary on the title it had just
+        # written -- "The title is concise, uses the hook..." -- and because
+        # the reason is PREPENDED, the review deck led with babble about the
+        # packaging. The prompt now defines the field, and since a negative
+        # instruction is a suggestion to this model, packaging words are also
+        # dropped here. The heuristic reasons underneath always remain.
+        if re.search(r"\b(title|description|hashtags?)\b", reason, re.I):
+            reason = ""
+        candidate.ai_reason = reason
         if candidate.ai_reason:
             candidate.reasons = ([candidate.ai_reason] + candidate.reasons)[:4]
     return skipped
@@ -1327,6 +1337,10 @@ def build_clip_prompt(items: list[dict[str, Any]], lecture_title: str) -> str:
         "  Value, 0-10: does it teach, comfort, or move -- something worth sharing?\n"
         "Penalize intros, promotions and filler wherever they appear. "
         "Never invent or rewrite Quran or hadith quotations, in any field.\n"
+        "\n"
+        "REASON. Three to eight words on why this MOMENT holds a viewer -- for example "
+        "'a complete story with a payoff' or 'opens on a question and answers it'. Judge "
+        "the SPEECH, never your own title or description.\n"
         "\n"
         # Restated immediately before the data because that is the last thing the
         # model reads, and on a 1.7B model a rule 1200 words up the prompt is a
