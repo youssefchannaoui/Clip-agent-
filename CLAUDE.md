@@ -2240,6 +2240,35 @@ pair of dots on the screen that never goes grey, which is what makes it read as
 capacity this subscription bought rather than more of the same. Everyone else's
 row is unchanged.
 
+## The version guard refused every docs-only commit in CI (v3.76.5, 1 Sept)
+
+Found by turning the branch red with a commit that changed only CLAUDE.md and
+package.json.
+
+- **`git rev-parse --is-shallow-repository` is TRUE for any depth-limited
+  clone**, including the `fetch-depth: 60` that `ci.yml` already sets. The
+  guard refused whenever that flag was true AND the `src/`+`worker/` diff was
+  empty -- which is exactly a genuine docs-only commit. So every docs-only
+  push failed CI, and the only reason nobody had noticed is that almost every
+  commit here touches `src/`.
+- The flag was never the question. What matters is whether enough commits are
+  actually present to trust an empty diff and to run the version-uniqueness
+  check, so the refusal now also requires `git rev-list --count HEAD` to be
+  below the 60 it looks back over. `LOOKBACK` is one constant feeding both.
+- **Proven both ways rather than reasoned about**: a `--depth 2` clone still
+  refuses ("holding 2 commit(s)"), and a `--depth 60` clone (73 commits, still
+  flagged shallow) passes with "no src/ or worker/ changes". A guard that
+  cannot come back red proves nothing, and one that cannot come back green
+  blocks the branch.
+
+### The merge trap that produced that commit in the first place
+
+`git merge` printed the conflicts, `tail -6` cut the list short, and the
+conflict-marker sweep afterwards named four files by hand -- so the markers left
+in CLAUDE.md were committed and pushed. They broke `check-handover`, whose
+test-count line is a tripwire on shape as well as numbers.
+**Sweep every file** (`grep -rln '^<<<<<<< '`), never a list you typed.
+
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)

@@ -45,17 +45,27 @@ if (!parent) {
 const changed = git('diff', '--name-only', parent, 'HEAD').split('\n').filter(Boolean);
 const shipping = changed.filter(file => file.startsWith('src/') || file.startsWith('worker/'));
 
-// A shallow clone cannot answer either question honestly. Saying "nothing
-// changed" from a truncated history is how this guard passed a commit that
-// rewrote the worker.
+// A truncated history cannot answer either question honestly. Saying "nothing
+// changed" from two commits of history is how this guard once passed a commit
+// that rewrote the worker.
+//
+// But `--is-shallow-repository` is TRUE for any depth-limited clone, including
+// the fetch-depth: 60 that CI already sets -- so testing it alone refused every
+// genuine docs-only commit in CI, which is what turned this branch red on
+// 1 Sept 2026 for a commit that changed only CLAUDE.md and package.json. What
+// matters is not the shallow FLAG but whether enough commits are actually
+// present to trust an empty diff and to do the uniqueness check below.
+const LOOKBACK = 60;
 const shallow = tryGit('rev-parse', '--is-shallow-repository') === 'true';
-if (shallow && !shipping.length) {
+const depth = Number(tryGit('rev-list', '--count', 'HEAD') || 0);
+if (shallow && !shipping.length && depth < LOOKBACK) {
   fail(
     'the history here is too shallow to tell whether this ships code.',
-    'git says this is a shallow clone, and the diff against HEAD^ came back empty.',
-    'That is exactly what a truncated checkout looks like, and it is indistinguishable',
-    'from a genuine docs-only commit — so this refuses rather than guessing.',
-    'In CI: set fetch-depth on actions/checkout deep enough to see the branch.',
+    `git says this is a shallow clone holding ${depth} commit(s), and the diff`,
+    'against HEAD^ came back empty. That is what a truncated checkout looks like,',
+    'and it is indistinguishable from a genuine docs-only commit — so this',
+    'refuses rather than guessing.',
+    `In CI: set fetch-depth on actions/checkout to at least ${LOOKBACK}.`,
   );
 }
 
@@ -87,7 +97,7 @@ if (before && after && before === after) {
 // The version must be NEW on this branch, not merely different from the parent.
 // Two commits can each bump from their own parent and still collide, which is
 // what happened when a concurrent push had already taken the number.
-const ancestors = (tryGit('rev-list', '--max-count=60', `${parent}`) || '').split('\n').filter(Boolean);
+const ancestors = (tryGit('rev-list', `--max-count=${LOOKBACK}`, `${parent}`) || '').split('\n').filter(Boolean);
 const clash = ancestors.find(sha => versionAt(sha) === after);
 if (clash) {
   fail(
