@@ -1994,15 +1994,31 @@ be for the template at all times."
   It finds the arch by `svg[viewBox="0 0 40 52"]`, never "the first svg in the
   row" -- once the ring is in, that finds the RING and wraps the wrapper on
   every paint. Measured: 1 seal and 1 ring after five consecutive paints.
+  **The RING is bigger than the box it sits in** (v3.73.3, "the circle around
+  the arch ... it's kinda overlapping a little bit"). At 42px its text circle
+  has a radius of 16.4px and the arch is 34px tall -- 17px from the centre --
+  so the words ran straight through the mark. `inset: -7px` makes the ring
+  56px without moving the mark or growing the row: text radius 21.9px against
+  the arch's 17, so 4.9px of clearance. It reaches 6px into the rail's 12px
+  padding and stays inside it -- measured at x 6..62 in a 0..68 rail, with the
+  rail `overflow: visible`.
 - **The paste field was the smallest thing on the screen it starts.** Now
   `flex: 1 1 340px` in a 640px row (was 220 in 520) with a gold ring and glow,
   hooked on `data-tour="paste"` -- an attribute the design export does not
   control. Measured 365px wide, up from ~220.
-  **The glow is STEADY, not breathing, and that is deliberate.** The studio
-  re-renders on every state poll, and an infinite animation on a node the
-  render can replace restarts from frame zero each time, which reads as a
-  stutter -- the trap this file has already paid for twice. A lit ring cannot
-  stutter.
+  **It breathes, slowly** (v3.73.3, Youssef: "subtly pulsating, not crazy"),
+  and only the outer halo moves -- a border that pulses reads as a control
+  changing state rather than as light.
+  **The replay trap this file warns about does not bite here, and that was
+  MEASURED rather than reasoned about.** studio-runtime's `patch()` diffs, so
+  markup that has not changed never touches the DOM and an ordinary state poll
+  leaves both the node and its running animation alone: across five
+  consecutive `paintStudio()` calls the animation kept its identity and its
+  `currentTime` went on climbing (2817 -> 3100 -> 4300ms), never resetting to
+  zero. The one thing that DOES rewrite this node is typing into it
+  (`jobUrlVal` changes) -- and typing means focus, where the animation is
+  switched off anyway. Any other infinite animation added to the studio should
+  be checked the same way instead of being assumed safe OR assumed broken.
 
 ## Open items
 

@@ -305,8 +305,14 @@
    padding, so 44px is all the room there is. */
 #dcRailBrand .dc-seal { position: relative; width: 42px; height: 42px; display: grid; place-items: center; flex: none; }
 #dcRailBrand .dc-seal > * { position: relative; z-index: 1; }
+/* The ring is LARGER than the box it sits in, deliberately. At 42px its text
+   circle has a radius of 16.4px and the arch is 34px tall -- 17px from the
+   centre -- so the words ran straight through the top and bottom of the mark.
+   Overflowing the 42px box clears it without moving the mark or growing the
+   row: the rail is 68px wide with 12px of padding, so a 56px ring reaches 6px
+   into that padding and never leaves the rail. */
 #dcRailBrand .dc-seal-ring {
-  position: absolute; inset: 0; z-index: 0; width: 42px; height: 42px;
+  position: absolute; inset: -7px; z-index: 0;
   color: #D9B478; opacity: .8; pointer-events: none;
   animation: dcSealSpin 28s linear infinite;
 }
@@ -326,16 +332,30 @@
    export does not control -- naming the hashed class beside it would tie this
    to the next re-import.
 
-   The glow is STEADY, not breathing. The studio re-renders on every state
-   poll, and an infinite animation on a node the render can replace restarts
-   from frame zero each time -- which reads as a stutter, and is the trap this
-   file has already paid for twice. A lit ring cannot stutter. */
+   The glow BREATHES, slowly (Youssef, 1 Sept 2026: "subtly pulsating, not
+   crazy") -- and only the outer halo moves. The border stays a fixed gold: a
+   border that pulses reads as a control changing state rather than as light.
+
+   The stutter this file warns about does not apply here, and that was checked
+   rather than assumed. studio-runtime's patch() DIFFS -- markup that has not
+   changed never touches the DOM -- so an ordinary state poll leaves this node,
+   and its running animation, alone. Measured across five repaints: the
+   animation kept its identity and its currentTime went on climbing. The one
+   thing that DOES rewrite this node is typing into it (jobUrlVal changes), and
+   typing means focus, where the animation is switched off anyway. */
 #studio [data-tour="paste"] {
   flex: 1 1 340px;
   min-width: 240px;
   border-color: rgba(217,180,120,.42) !important;
-  box-shadow: 0 0 0 3px rgba(217,180,120,.06), 0 0 22px rgba(217,180,120,.14);
+  box-shadow: 0 0 0 3px rgba(217,180,120,.05), 0 0 16px rgba(217,180,120,.10);
   transition: border-color .16s ease, box-shadow .16s ease;
+  animation: dcPasteBreathe 4.5s ease-in-out infinite;
+}
+#studio [data-tour="paste"]:hover,
+#studio [data-tour="paste"]:focus-within {
+  /* A pointer or a caret on it is a stronger signal than the breathing, so the
+     glow settles at its bright end rather than carrying on underneath. */
+  animation: none;
 }
 #studio [data-tour="paste"]:hover {
   border-color: rgba(217,180,120,.6) !important;
@@ -345,6 +365,10 @@
   border-color: rgba(217,180,120,.85) !important;
   box-shadow: 0 0 0 3px rgba(217,180,120,.14), 0 0 30px rgba(217,180,120,.24);
 }
+@keyframes dcPasteBreathe {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(217,180,120,.05), 0 0 16px rgba(217,180,120,.10); }
+  50%      { box-shadow: 0 0 0 3px rgba(217,180,120,.11), 0 0 28px rgba(217,180,120,.21); }
+}
 /* The row it sits in caps itself at 520px, which is what made the field look
    cramped. `:has` addresses the row through the child rather than through a
    hashed class name. */
@@ -352,4 +376,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   #dcRailBrand .dc-seal-ring { animation: none; }
+  /* Still lit, just not moving -- the point of the glow is to be noticed. */
+  #studio [data-tour="paste"] {
+    animation: none;
+    box-shadow: 0 0 0 3px rgba(217,180,120,.09), 0 0 24px rgba(217,180,120,.18);
+  }
 }
