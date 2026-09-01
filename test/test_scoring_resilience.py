@@ -76,10 +76,25 @@ class ScoringResilienceTests(unittest.TestCase):
         self.score(["not-a-dict", 42, None], cands)
         self.assertEqual([c.score for c in cands], [50, 60])
 
-    def test_a_partial_batch_is_announced(self):
+    def test_a_partial_batch_is_healed_by_a_single_retry(self):
+        # The gap the batch left is re-asked alone, and the answer lands on the
+        # RIGHT candidate: local index 0 of a one-item retry maps back to the
+        # global position, so candidate 1 gets scored, not candidate 0 again.
         cands = [candidate(0, 50), candidate(1, 50)]
         with mock.patch.object(cw.urllib.request, "urlopen",
                                return_value=FakeResponse({"clips": [{"index": 0, "score": 100}]})), \
+             mock.patch.object(cw, "emit") as emitted:
+            cw.refine_with_ollama(cands, {"ollamaUrl": "http://ollama:11434"})
+        codes = [c.kwargs.get("code") for c in emitted.call_args_list]
+        self.assertNotIn("ollama_partial_scoring", codes, "the retry filled the gap")
+        self.assertEqual([c.score for c in cands], [78, 78], "both blended, neither twice")
+
+    def test_a_partial_batch_is_announced_when_the_retry_also_fails(self):
+        cands = [candidate(0, 50), candidate(1, 50)]
+        answers = iter([FakeResponse({"clips": [{"index": 0, "score": 100}]})])
+        def urlopen(request, timeout=None):
+            return next(answers, FakeResponse({"clips": []}))
+        with mock.patch.object(cw.urllib.request, "urlopen", urlopen), \
              mock.patch.object(cw, "emit") as emitted:
             cw.refine_with_ollama(cands, {"ollamaUrl": "http://ollama:11434"})
         codes = [c.kwargs.get("code") for c in emitted.call_args_list]

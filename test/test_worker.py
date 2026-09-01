@@ -2275,3 +2275,68 @@ class StackAlignmentTests(unittest.TestCase):
 
     def test_lower_case_is_left_alone_when_not_asked_for(self):
         self.assertIn("never", " ".join(self._events("center", uppercase=False)))
+
+
+class ScoreRubricV2Tests(unittest.TestCase):
+    """The v2 scorer: hook-first, payoff-aware, context-dependency punished.
+
+    Each case pits two texts that the OLD scorer treated almost identically
+    and asserts the separation the rubric exists to create.
+    """
+
+    def segs(self, text, seconds=40.0):
+        return [{"start": 0.0, "end": seconds, "text": text}]
+
+    def test_context_dependent_opening_is_punished(self):
+        base = ("faith grows slowly through consistent worship and honest reflection, "
+                "and a believer keeps returning whatever happens in life around them. "
+                "Hold to the path with patience and hope in every season of struggle.")
+        standalone = "Why does a believer keep returning to worship? " + base
+        dependent = "As I said before, the second thing is that " + base
+        s1, _, _ = worker.score_candidate(0, 40, standalone, self.segs(standalone))
+        s2, reasons, _ = worker.score_candidate(0, 40, dependent, self.segs(dependent))
+        self.assertGreater(s1, s2 + 15, f"{s1} vs {s2}")
+        self.assertIn("leans on earlier context", reasons)
+
+    def test_story_opening_and_payoff_beat_flat_middle(self):
+        story = ("There was a man who came to the Prophet weeping over every sin he "
+                 "carried, certain that nothing remained for him except punishment. "
+                 "He was told mercy still reached him. Never forget that door stays open.")
+        flat = ("And the scholars discussed different opinions regarding the chains of "
+                "narration, and there were several views mentioned among them regarding "
+                "this, and each group presented evidence in the discussion they held.")
+        s_story, reasons, _ = worker.score_candidate(0, 45, story, self.segs(story, 45))
+        s_flat, _, _ = worker.score_candidate(0, 45, flat, self.segs(flat, 45))
+        self.assertGreater(s_story, s_flat + 12, f"{s_story} vs {s_flat}")
+        self.assertIn("opens on a story", reasons)
+        self.assertIn("lands on a takeaway", reasons)
+
+    def test_allah_alone_is_no_longer_a_hook(self):
+        # Ubiquitous vocabulary must contribute almost nothing on its own.
+        plain = ("and then we continued with the program and people were sitting in "
+                 "rows waiting for the talk to begin while others arrived quietly and "
+                 "found their places near the front entrance of the hall together.")
+        with_allah = plain.replace("the program", "the program by praising Allah")
+        s_plain, _, _ = worker.score_candidate(0, 40, plain, self.segs(plain))
+        s_allah, _, _ = worker.score_candidate(0, 40, with_allah, self.segs(with_allah))
+        self.assertLessEqual(s_allah - s_plain, 3, f"{s_allah} vs {s_plain}")
+
+    def test_distinctive_moment_outranks_wallpaper(self):
+        text = ("Consider the shepherd alone on the mountainside guarding what nobody "
+                "watches, because integrity means the watcher and the watched are one. "
+                "Keep your private conduct worthy of your public claims always.")
+        freq_wallpaper = {w: 9 for w in
+                          ["consider", "shepherd", "alone", "mountainside", "guarding",
+                           "nobody", "watches", "integrity", "watcher", "watched",
+                           "private", "conduct", "worthy", "public", "claims"]}
+        s_rare, reasons, _ = worker.score_candidate(0, 40, text, self.segs(text), lecture_freq={})
+        s_common, _, _ = worker.score_candidate(0, 40, text, self.segs(text), lecture_freq=freq_wallpaper)
+        self.assertGreaterEqual(s_rare, s_common + 4, f"{s_rare} vs {s_common}")
+        # The reason may be trimmed by the four-reason cap when stronger
+        # signals fire first; the score separation is the contract.
+
+    def test_signature_stays_compatible_without_frequency(self):
+        score, reasons, risk = worker.score_candidate(
+            0, 35, "The hadith says this wording must be reviewed.", self.segs("x", 35))
+        self.assertTrue(risk)
+        self.assertTrue(1 <= score <= 100)
