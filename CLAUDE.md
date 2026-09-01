@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1021 JS + 462 Python**
+- `npm test` and `npm run check` must pass. Currently **1021 JS + 477 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3186,3 +3186,52 @@ anyone tuning this will fall into again.
   a false attribution puts words in a scholar's mouth. A hyphen inside the name
   also stopped the pattern matching at all, so it splits on the last spaced
   separator now.
+
+## Clip selection scores the industry rubric, and the titling holes are plugged (v3.75.0, 1 Sept 2026)
+
+Youssef: "heavily improve clip selection ... twenty, thirty, forty, fifty,
+sixty times better ... has to be Islamic related content ... and then also the
+titling". Researched first (OpusClip's virality model -- hook/flow/value/trend
+-- and the retention literature: the first three seconds decide, the shape is
+hook -> body -> payoff), then measured against the box's real model.
+
+- **`score_candidate` is rebuilt around hook / payoff / standalone clarity /
+  value**, computed from the transcript and its timings -- nothing invented.
+  New signals, each with a reason string the review deck shows: question or
+  story openings, bold claims, direct address, a payoff ending (imperative or
+  takeaway marker), an asked-and-answered arc, a weighted pause before a heavy
+  word, and CONTEXT-DEPENDENT openings ("as I said", "the second thing")
+  penalised hard -- a clip leaning on words the viewer never heard cannot stand
+  alone, whatever its punctuation says.
+- **"Allah" is not a hook.** The old flat HOOKS list scored it as one, and it
+  appears in nearly every sentence of an Islamic lecture -- a signal that fires
+  everywhere ranks nothing. The vocabulary is TIERED now: ubiquitous words
+  (allah, quran, prophet...) are nearly free, capped +3 total; the stakes
+  vocabulary (death, jannah, repentance, mother, dunya...) carries the weight.
+- **Distinctiveness comes from the lecture itself**: `build_candidates` counts
+  every content word once across the lecture and passes `lecture_freq` in; a
+  window rich in words the lecture rarely says is that lecture's MOMENT, not
+  its wallpaper, and scores +8. Degrades gracefully to None.
+- **The prompt's SCORING section is an explicit rubric** (hook 0-40 from the
+  first sentence alone, payoff 0-30 from the ending, standalone clarity 0-20
+  with a hard cap of 45 when it leans on context, value 0-10) instead of
+  "score how good it is". The pinned scripture sentence stays in ONE literal --
+  splitting it across two broke the source test once already.
+- **A live A/B on the box found two more failures, both now code-enforced**
+  (the standing lesson: qwen3:1.7b does not obey negative instructions):
+  1. **It handed the lecture's own title back as a clip title** ("The Door
+     That Never Closes - Belal Assaad", verbatim from the lecture title it was
+     given). `echoes_lecture_title()` discards a title whose line -- judged
+     BEFORE the speaker credit, because naming the speaker is what the lecture
+     title is passed in for -- appears as a contiguous run of 3+ normalised
+     words inside the lecture title. Falls back to the transcript titler.
+  2. **Even a batch of four came back with ONE row** (the early-close, again).
+     `AI_RETRY_SINGLES` (8): rows the batches never answered are re-asked ONE
+     AT A TIME -- the one size never seen to truncate -- highest heuristic
+     first, only while the model is answering at all (a dead box must not
+     become a dozen more 180s timeouts), and capped so a bad day costs
+     minutes. `ollama_partial_scoring` now means "even the retry could not
+     fill it".
+- **A source-reading trap, hit twice in one session**: AyahFaceTests locates
+  quran_font's fallback list by splitting on the file's first candidate-loop
+  literal. A new loop OR A COMMENT containing that literal upstream breaks it.

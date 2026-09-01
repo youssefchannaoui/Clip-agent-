@@ -644,12 +644,64 @@ FILLER = {
     "um", "uh", "erm", "like", "basically", "literally", "you know", "i mean",
     "sort of", "kind of", "okay okay", "right right",
 }
-HOOKS = {
-    "allah", "quran", "prophet", "remember", "imagine", "never", "always", "why",
-    "what if", "the truth", "important", "biggest", "most", "brothers", "sisters",
-    "heart", "death", "jannah", "paradise", "dua", "prayer", "salah", "repent",
+# Hook words in two tiers, because the old flat list scored "allah" as a hook
+# and "allah" appears in nearly every sentence of an Islamic lecture -- a
+# signal that fires everywhere ranks nothing. UBIQUITOUS words are nearly
+# free; POWER words are the stakes-and-emotion vocabulary that actually
+# separates a reminder someone shares from a passage someone scrolls past.
+HOOKS_UBIQUITOUS = {
+    "allah", "quran", "prophet", "brothers", "sisters", "prayer", "salah",
 }
-WEAK_START = ("and ", "but ", "so ", "because ", "then ", "he ", "she ", "they ", "this ", "that ", "it ")
+HOOKS_POWER = {
+    "death", "grave", "jannah", "jahannam", "hellfire", "paradise", "mercy",
+    "forgiveness", "forgive", "repent", "repentance", "regret", "tears", "cry",
+    "mother", "father", "parents", "heart", "test", "hardship", "ease",
+    "shaytan", "sin", "dua", "sabr", "patience", "gratitude", "barakah",
+    "rizq", "halal", "haram", "marriage", "akhirah", "dunya", "judgment",
+    "accountability", "trial", "blessing", "reward", "intention", "sincerity",
+}
+# Kept for compatibility with anything that imports HOOKS.
+HOOKS = HOOKS_UBIQUITOUS | HOOKS_POWER
+WEAK_START = (
+    "and ", "but ", "so ", "because ", "then ", "he ", "she ", "they ",
+    "this ", "that ", "it ", "which ", "these ", "those ", "also ",
+    "similarly ", "again ",
+)
+# A clip that leans on what came before it cannot stand alone, whatever its
+# punctuation says. These fire on the OPENING words, where the damage is:
+# a viewer who arrives at "as I said" has not heard anyone say anything.
+CONTEXT_DEPENDENT = (
+    "as i said", "as we said", "as i mentioned", "like i said",
+    "like we said", "we talked about", "going back to", "back to the",
+    "the second thing", "the third thing", "the fourth thing",
+    "the next thing", "the next point", "another thing", "another point",
+    "the second one", "the third one", "moving on",
+)
+# Openings that promise a story. In this niche the repentance/companion story
+# is the single most-shared shape there is, and a window that opens on one
+# and closes it is close to the ideal clip.
+STORY_OPENERS = (
+    "there was", "there is a", "one day", "a man", "a woman", "imagine",
+    "i remember", "i met", "we had a", "once ", "let me tell you",
+)
+# Claim/stakes words that make a first sentence read as worth the next ten
+# seconds -- the bold-statement hook, in this register.
+CLAIM_HEAD = (
+    "never", "always", "nothing", "everything", "every single", "the only",
+    "no one", "nobody", "everyone", "most people", "the worst", "the best",
+    "the biggest", "the greatest", "the most",
+)
+# Endings that land a takeaway rather than trailing off. The research shape
+# is hook -> body -> payoff; punctuation alone cannot see the payoff.
+PAYOFF_TAIL = (
+    "that is why", "that's why", "this is why", "this is the", "so that",
+    "remember", "never forget", "ask allah", "make dua", "turn to allah",
+    "inshallah", "insha'allah", "ameen", "may allah",
+)
+PAYOFF_IMPERATIVE = (
+    "make ", "say ", "ask ", "keep ", "leave ", "remember ", "turn ",
+    "seek ", "hold ", "trust ", "thank ", "be ",
+)
 INTRO_WORDS = {"welcome", "subscribe", "channel", "podcast", "episode", "sponsor", "like and subscribe"}
 QUOTE_RISK = re.compile(r"\b(quran says|allah says|prophet said|hadith|verse|surah)\b", re.I)
 
@@ -681,45 +733,128 @@ def punctuation_boundary(text: str) -> bool:
     return bool(re.search(r"[.!?…]['\"]?$", text.strip()))
 
 
-def score_candidate(start: float, end: float, text: str, segments: list[dict[str, Any]]) -> tuple[int, list[str], bool]:
+def score_candidate(
+    start: float,
+    end: float,
+    text: str,
+    segments: list[dict[str, Any]],
+    lecture_freq: dict[str, int] | None = None,
+) -> tuple[int, list[str], bool]:
+    """Score one candidate window on the industry rubric, from the text alone.
+
+    The rubric is the one every serious clipper converged on -- hook, payoff,
+    standalone clarity, value -- weighted by what the retention research
+    actually shows: the first sentence decides whether anyone stays, and the
+    last sentence decides whether the watch felt rewarded. Everything here is
+    computable from the transcript and its timings; nothing is invented.
+
+    `lecture_freq` (word -> count across the whole lecture) is optional and
+    lets the scorer prefer the lecture's DISTINCTIVE moments over its wallpaper
+    -- without it, behaviour degrades gracefully to the other signals.
+    """
     duration = end - start
     lower = " ".join(text.lower().split())
     words = re.findall(r"[a-zA-Z']+", lower)
+    head = " ".join(words[:12])
+    head_raw = lower[:90]
+    tail_words = words[-15:]
+    tail = " ".join(tail_words)
     reasons: list[str] = []
-    score = 34.0
+    score = 30.0
 
+    # ── duration ──
     if 35 <= duration <= 70:
-        score += 18
+        score += 16
         reasons.append("strong short-form duration")
     elif 25 <= duration <= 85:
-        score += 12
-    else:
-        score += 4
-
-    if punctuation_boundary(text):
         score += 10
-        reasons.append("complete ending")
     else:
-        score -= 8
+        score += 3
+
+    # ── the opening: the three seconds that decide everything ──
+    hook_points = 0.0
+    if "?" in text[: max(40, len(head_raw))]:
+        hook_points += 10
+        reasons.append("question opening")
+    if any(head_raw.startswith(opener) or f" {opener}" in f" {head_raw}" for opener in STORY_OPENERS):
+        hook_points += 9
+        reasons.append("opens on a story")
+    if re.search(r"\b(you|your)\b", head):
+        hook_points += 6
+        reasons.append("speaks to the viewer")
+    if any(claim in head for claim in CLAIM_HEAD):
+        hook_points += 7
+        reasons.append("bold opening claim")
+    score += min(20, hook_points)
 
     if lower and not lower.startswith(WEAK_START):
+        score += 6
+    else:
+        score -= 12
+
+    # ── standalone clarity: no leaning on earlier context ──
+    opening = " ".join(words[:25])
+    if any(marker in opening for marker in CONTEXT_DEPENDENT):
+        score -= 14
+        reasons.append("leans on earlier context")
+
+    # ── the ending: a payoff, not a trail-off ──
+    if punctuation_boundary(text):
         score += 8
-        reasons.append("stands alone")
+        reasons.append("complete ending")
     else:
         score -= 10
+    last_sentence = re.split(r"[.!?…]", text.strip().rstrip(".!?…"))[-1].strip().lower()
+    if any(marker in tail for marker in PAYOFF_TAIL) or last_sentence.startswith(PAYOFF_IMPERATIVE):
+        score += 8
+        reasons.append("lands on a takeaway")
+    elif last_sentence.endswith("?") or (text.strip().endswith("?") and "?" not in text[:60]):
+        # A question raised at the end and never answered leaves the loop open.
+        score -= 5
 
-    hook_hits = [hook for hook in HOOKS if hook in lower]
-    if hook_hits:
-        score += min(15, 6 + len(hook_hits) * 2)
+    # ── the arc: a question asked early and answered late ──
+    third = max(1, len(text) // 3)
+    if "?" in text[:third] and re.search(r"\b(because|the answer|so |that is|that's)\b", text[-third:].lower()):
+        score += 7
+        reasons.append("asks and answers")
+
+    # ── stakes-and-emotion vocabulary, tiered ──
+    power_hits = [word for word in HOOKS_POWER if re.search(rf"\b{re.escape(word)}\b", lower)]
+    if power_hits:
+        bonus = min(12, 3 * len(power_hits))
+        if any(word in head for word in power_hits):
+            bonus = min(15, bonus + 3)
+        score += bonus
         reasons.append("strong reminder language")
+    ubiquitous_hits = sum(1 for word in HOOKS_UBIQUITOUS if word in lower)
+    score += min(3, ubiquitous_hits)
 
-    if "?" in text:
-        score += 5
-        reasons.append("question hook")
+    # ── distinctiveness: this lecture's moment, not its wallpaper ──
+    if lecture_freq is not None:
+        content = {w for w in words if len(w) > 4}
+        if content:
+            rare = sum(1 for w in content if lecture_freq.get(w, 0) <= 2)
+            ratio = rare / len(content)
+            if ratio >= 0.35:
+                score += 8
+                reasons.append("a distinctive moment")
+            elif ratio >= 0.2:
+                score += 4
 
+    # ── delivery: a weighted pause before a heavy word ──
+    for before, after in zip(segments, segments[1:]):
+        gap = float(after.get("start", 0)) - float(before.get("end", 0))
+        if 0.7 <= gap <= 2.0:
+            next_head = " ".join(str(after.get("text", "")).lower().split()[:4])
+            if any(word in next_head for word in HOOKS_POWER):
+                score += 4
+                reasons.append("a weighted pause")
+                break
+
+    # ── pace, filler, intros, size, silence: unchanged in spirit ──
     word_rate = len(words) / max(duration, 1) * 60
     if 95 <= word_rate <= 195:
-        score += 8
+        score += 7
         reasons.append("clear speaking pace")
     elif word_rate < 60 or word_rate > 235:
         score -= 8
@@ -735,7 +870,7 @@ def score_candidate(start: float, end: float, text: str, segments: list[dict[str
     if len(words) < 35:
         score -= 10
     elif len(words) > 75:
-        score += 4
+        score += 3
 
     gaps = [
         max(0.0, float(b["start"]) - float(a["end"]))
@@ -778,6 +913,13 @@ def filter_length_bands(candidates: list[Candidate], settings: dict[str, Any]) -
 def build_candidates(segments: list[dict[str, Any]], minimum: float, maximum: float) -> list[Candidate]:
     candidates: list[Candidate] = []
     count = len(segments)
+    # Word frequency across the WHOLE lecture, computed once, so the scorer
+    # can tell this lecture's distinctive moments from its wallpaper.
+    lecture_freq: dict[str, int] = {}
+    for seg in segments:
+        for word in re.findall(r"[a-zA-Z']+", str(seg.get("text", "")).lower()):
+            if len(word) > 4:
+                lecture_freq[word] = lecture_freq.get(word, 0) + 1
     for start_index in range(count):
         start = float(segments[start_index]["start"])
         group: list[dict[str, Any]] = []
@@ -798,7 +940,7 @@ def build_candidates(segments: list[dict[str, Any]], minimum: float, maximum: fl
                 continue
 
             text = " ".join(str(item["text"]).strip() for item in group).strip()
-            score, reasons, quote_risk = score_candidate(start, end, text, group.copy())
+            score, reasons, quote_risk = score_candidate(start, end, text, group.copy(), lecture_freq)
             candidates.append(Candidate(start, end, text, group.copy(), score, reasons, quote_risk))
 
             # Avoid creating dozens of almost-identical windows for one start.
@@ -960,6 +1102,18 @@ deliberately, because the alternative is most clips shipping with a
 transcript-head title.
 """
 
+AI_RETRY_SINGLES = 8
+"""How many unanswered rows are re-asked one at a time after the batches.
+
+Even a batch of four is not safe from the early close: watched live on 1 Sept
+2026, one returned a single row. The retry asks each missing candidate ALONE --
+the one size the model has never been seen to truncate -- highest heuristic
+score first, since those are the candidates most likely to ship. Eight singles
+at ~30s each caps the cost at about four minutes on a bad day; anything still
+missing after that keeps its heuristic score, and `title_selected_clips` gives
+any of them that actually ship one more titling pass after selection.
+"""
+
 
 def looks_copied(title: str, text: str) -> bool:
     """Is this title just the transcript's opening, echoed back?
@@ -984,6 +1138,43 @@ def looks_copied(title: str, text: str) -> bool:
     for start in range(0, max(1, len(body) - len(probe) + 1)):
         if body[start:start + len(probe)] == probe:
             return True
+    return False
+
+
+def echoes_lecture_title(title: str, lecture_title: str) -> bool:
+    """Is this "new" title just the lecture's own title handed back?
+
+    Live A/B on the box's qwen3:1.7b, 1 Sept 2026: given the lecture "The Door
+    That Never Closes | Powerful Reminder by Belal Assaad", the model titled a
+    clip "The Door That Never Closes - Belal Assaad" -- the exact copy the
+    prompt forbids in plain words. This is the same lesson as the invented
+    speaker: a small model does not reliably obey a negative instruction, so
+    the rule lives here. A lecture title on a clip is wrong twice over -- the
+    clip does not get its own hook, and eight clips from one lecture converge
+    on one public title.
+
+    The comparison is done on `normalise_title` words, and the credit is judged
+    separately from the line: the speaker's NAME is allowed to come from the
+    lecture title -- passing it in is the whole point -- so only the part
+    before the dash has to be the model's own. It counts as an echo when the
+    whole line (or the pre-credit part) appears as a contiguous run of at least
+    three words inside the lecture title. Fails towards discarding: the clip
+    falls back to the transcript titler, and a plain title from the clip's own
+    words beats the lecture's title repeated.
+    """
+    lecture_words = normalise_title(lecture_title).split()
+    if len(lecture_words) < 3:
+        return False
+    bare = re.split(r"\s+[-|–—]\s+", str(title or ""))[0]
+    # `probe`, not `candidate`: a source-reading test locates quran_font's
+    # fallback list by the first candidate-loop literal in this file.
+    for probe in (str(title or ""), bare):
+        words = normalise_title(probe).split()
+        if len(words) < 3:
+            continue
+        for start in range(0, len(lecture_words) - len(words) + 1):
+            if lecture_words[start:start + len(words)] == words:
+                return True
     return False
 
 
@@ -1031,6 +1222,11 @@ def apply_clip_rows(
         proposed = strip_unbacked_attribution(
             str(row.get("title") or "").strip(), lecture_title
         )[:90]
+        # A copy of the lecture's own title is not a clip title at all -- eight
+        # clips would converge on one public line. Discarded before the
+        # transcript check so both echoes fall back to the same titler.
+        if proposed and echoes_lecture_title(proposed, lecture_title):
+            proposed = ""
         # A title echoed out of the transcript is worse than the fallback titler,
         # which at least strips filler openers and trims on a word boundary.
         candidate.ai_title = "" if looks_copied(proposed, candidate.text) else proposed
@@ -1071,7 +1267,8 @@ def build_clip_prompt(items: list[dict[str, Any]], lecture_title: str) -> str:
         "-- one entry per candidate, the clips key and the list are both required.\n"
         "\n"
         "TITLES. A title is the hook that decides whether someone taps, not a summary. "
-        "5-12 words.\n"
+        "5-12 words, and aim under about 55 characters BEFORE the speaker's name -- "
+        "phone search results and Shorts shelves cut titles mid-word past that.\n"
         "\n"
         "NAME THE SPEAKER. If the lecture title above contains a person's name, that "
         "is the speaker, and EVERY title you write must end with it, after a dash: "
@@ -1115,10 +1312,21 @@ def build_clip_prompt(items: list[dict[str, Any]], lecture_title: str) -> str:
         "(#islam #islamicreminder #muslim) with this clip's specific topic (for example "
         "#dua #sabr #quranrecitation). No links, no 'follow for more'.\n"
         "\n"
-        "SCORING. Reward a strong standalone reminder, a clear opening, a complete ending, "
-        "useful meaning and low filler. Penalize intros, promotions, missing context and "
-        "sentences cut in half. Never invent or rewrite Quran or hadith quotations, in any "
-        "field.\n"
+        "SCORING. Build each score from four judgements and report the single total:\n"
+        "  Hook, 0-40: judge ONLY the first sentence. Would it stop a stranger who has "
+        "never heard this speaker? A question, a story opening, a bold claim, or a direct "
+        "address to the viewer scores high; a sentence that reads like the middle of a "
+        "paragraph scores low.\n"
+        "  Payoff, 0-30: judge ONLY the ending. Does the last sentence land a takeaway "
+        "the viewer can carry away -- an instruction, a resolution, a truth stated "
+        "plainly? A thought that trails off or a question left hanging scores low.\n"
+        "  Standalone clarity, 0-20: could this be the FIRST thing a viewer ever hears? "
+        "If it says 'as I said', 'the second thing', or uses a pronoun with no owner, "
+        "score this part near zero -- the whole clip cannot exceed 45 when it leans on "
+        "context the viewer does not have.\n"
+        "  Value, 0-10: does it teach, comfort, or move -- something worth sharing?\n"
+        "Penalize intros, promotions and filler wherever they appear. "
+        "Never invent or rewrite Quran or hadith quotations, in any field.\n"
         "\n"
         # Restated immediately before the data because that is the last thing the
         # model reads, and on a 1.7B model a rule 1200 words up the prompt is a
@@ -1273,60 +1481,78 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any], le
     applied: set[int] = set()
     skipped = 0
     failures: list[str] = []
+
+    def ask(batch: list[Candidate], offset: int) -> None:
+        nonlocal skipped
+        # Indexes are LOCAL to the batch, so the model counts 0..n-1 every
+        # time. Asking it to answer with index 17 of a 24-row list is the
+        # kind of bookkeeping a 1.7B model is worst at.
+        items = [
+            {
+                "index": local,
+                "duration": round(candidate.duration, 1),
+                "heuristicScore": candidate.score,
+                "text": candidate.text[:1400],
+            }
+            for local, candidate in enumerate(batch)
+        ]
+        request_body = json.dumps({
+            "model": model,
+            "prompt": build_clip_prompt(items, lecture_title),
+            "stream": False,
+            "format": "json",
+            # qwen3 is a thinking model: without this it spends its budget
+            # inside a think block that format=json then fights, and the
+            # production failure was a 194-token answer to a 24-candidate
+            # ask. Ollama has accepted the flag since 0.9; the box runs 0.32.
+            "think": False,
+            # 0.1 wrote the ranking and the titles with one setting, and it
+            # is the wrong setting for one of them: near-greedy decoding on a
+            # writing task makes every title in a batch come out the same
+            # shape. The score can afford the variance -- it is blended 45/55
+            # with the heuristic below, so the ranking stays anchored.
+            "options": {"temperature": 0.6, "num_predict": 1024},
+        }).encode("utf-8")
+        request = urllib.request.Request(
+            base_url + "/api/generate",
+            data=request_body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        # Per BATCH, not per run. A failure on the third request used to
+        # abandon the whole function -- while the first two batches had
+        # already written blended scores onto their candidates. The ranking
+        # was then a mix of blended and raw heuristic scores, which are not
+        # the same measure, and nothing said so. One bad batch now costs
+        # only that batch, and the count below reports it.
+        try:
+            with urllib.request.urlopen(request, timeout=180) as response:
+                outer = json.loads(response.read().decode("utf-8"))
+            inner = json.loads(str(outer.get("response") or "{}"))
+            rows = ollama_clip_rows(inner)
+            if rows is None:
+                raise ValueError(f"Local model did not return clip rows (got {type(inner).__name__})")
+            skipped += apply_clip_rows(rows, batch, offset, applied, lecture_title)
+        except Exception as batch_error:  # noqa: BLE001 - one batch, not the run
+            failures.append(str(batch_error))
+
     try:
         for offset in range(0, len(shortlist), AI_BATCH):
-            batch = shortlist[offset:offset + AI_BATCH]
-            # Indexes are LOCAL to the batch, so the model counts 0..n-1 every
-            # time. Asking it to answer with index 17 of a 24-row list is the
-            # kind of bookkeeping a 1.7B model is worst at.
-            items = [
-                {
-                    "index": local,
-                    "duration": round(candidate.duration, 1),
-                    "heuristicScore": candidate.score,
-                    "text": candidate.text[:1400],
-                }
-                for local, candidate in enumerate(batch)
-            ]
-            request_body = json.dumps({
-                "model": model,
-                "prompt": build_clip_prompt(items, lecture_title),
-                "stream": False,
-                "format": "json",
-                # qwen3 is a thinking model: without this it spends its budget
-                # inside a think block that format=json then fights, and the
-                # production failure was a 194-token answer to a 24-candidate
-                # ask. Ollama has accepted the flag since 0.9; the box runs 0.32.
-                "think": False,
-                # 0.1 wrote the ranking and the titles with one setting, and it
-                # is the wrong setting for one of them: near-greedy decoding on a
-                # writing task makes every title in a batch come out the same
-                # shape. The score can afford the variance -- it is blended 45/55
-                # with the heuristic below, so the ranking stays anchored.
-                "options": {"temperature": 0.6, "num_predict": 1024},
-            }).encode("utf-8")
-            request = urllib.request.Request(
-                base_url + "/api/generate",
-                data=request_body,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            # Per BATCH, not per run. A failure on the third request used to
-            # abandon the whole function -- while the first two batches had
-            # already written blended scores onto their candidates. The ranking
-            # was then a mix of blended and raw heuristic scores, which are not
-            # the same measure, and nothing said so. One bad batch now costs
-            # only that batch, and the count below reports it.
-            try:
-                with urllib.request.urlopen(request, timeout=180) as response:
-                    outer = json.loads(response.read().decode("utf-8"))
-                inner = json.loads(str(outer.get("response") or "{}"))
-                rows = ollama_clip_rows(inner)
-                if rows is None:
-                    raise ValueError(f"Local model did not return clip rows (got {type(inner).__name__})")
-                skipped += apply_clip_rows(rows, batch, offset, applied, lecture_title)
-            except Exception as batch_error:  # noqa: BLE001 - one batch, not the run
-                failures.append(str(batch_error))
+            ask(shortlist[offset:offset + AI_BATCH], offset)
+        # The early close leaves GAPS, not only short runs: a batch of four can
+        # come back with one row (watched live, 1 Sept 2026 -- the model closed
+        # the array after index 0 with done_reason "stop"). Rows the batches
+        # never answered are re-asked ONE AT A TIME, because a single-item ask
+        # is the one size this model has never been seen to truncate. Only when
+        # something applied -- if nothing did, the model is down, and singles
+        # would turn one unavailable box into a dozen more 180s timeouts.
+        # Highest heuristic first (shortlist order), because those are the
+        # candidates most likely to actually ship, and capped so a bad day
+        # costs minutes, not the job.
+        if applied:
+            missing = [i for i in range(len(shortlist)) if i not in applied]
+            for index in missing[:AI_RETRY_SINGLES]:
+                ask([shortlist[index]], index)
         # Ranking a half-scored shortlist compares two different measures, so
         # say when that happened rather than quietly shipping the mixture.
         # Against the shortlist, which now covers everything deliverable. When the

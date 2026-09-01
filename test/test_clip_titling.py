@@ -423,3 +423,154 @@ class TitleDedupTests(unittest.TestCase):
                  self.clip("A different clip. With its own separate words.", "Hold your tongue")]
         out = clip_worker.dedupe_clip_titles(clips)
         self.assertEqual([c.ai_title for c in out], ["Never lose hope", "Hold your tongue"])
+
+
+class LectureTitleEchoTests(unittest.TestCase):
+    """The model may not hand the lecture's own title back as a clip title.
+
+    Watched live against the box's qwen3:1.7b on 1 Sept 2026: given the lecture
+    "The Door That Never Closes | Powerful Reminder by Belal Assaad", it titled
+    a clip "The Door That Never Closes - Belal Assaad" -- the copy the prompt
+    forbids in plain words. Same lesson as the invented speaker: a negative
+    instruction is not enforcement, code is. The clip falls back to the
+    transcript titler, which at least writes from the clip's own words.
+    """
+
+    LECTURE = "The Door That Never Closes | Powerful Reminder by Belal Assaad"
+
+    def test_the_watched_copy_is_caught(self):
+        self.assertTrue(clip_worker.echoes_lecture_title(
+            "The Door That Never Closes - Belal Assaad", self.LECTURE))
+
+    def test_a_shortened_copy_is_still_a_copy(self):
+        # The model shortens; "Door That Never Closes" is the same line to
+        # anyone scrolling the channel.
+        self.assertTrue(clip_worker.echoes_lecture_title(
+            "Door That Never Closes - Belal Assaad", self.LECTURE))
+
+    def test_the_speaker_name_alone_is_not_an_echo(self):
+        # Naming the speaker is what the lecture title is passed in FOR; only
+        # the line before the credit has to be the model's own.
+        self.assertFalse(clip_worker.echoes_lecture_title(
+            "Why Tawbah is Always Accepted - Belal Assaad", self.LECTURE))
+
+    def test_a_genuine_title_sharing_a_word_or_two_survives(self):
+        self.assertFalse(clip_worker.echoes_lecture_title(
+            "The Door You Keep Walking Past", self.LECTURE))
+
+    def test_a_missing_lecture_title_never_fires(self):
+        self.assertFalse(clip_worker.echoes_lecture_title("Anything at all", ""))
+        self.assertFalse(clip_worker.echoes_lecture_title("Anything at all", "Khutbah"))
+
+    def test_apply_discards_the_echo_but_keeps_the_score(self):
+        # The score blend is still real information; only the title is a copy.
+        batch = [Candidate(start=0.0, end=40.0,
+                           text="Allah opens the door of tawbah for every single sinner. Turn back before it is too late.",
+                           score=70, segments=[], reasons=[], quote_risk=False)]
+        applied: set[int] = set()
+        clip_worker.apply_clip_rows(
+            [{"index": 0, "score": 90, "title": "The Door That Never Closes - Belal Assaad",
+              "description": "d", "reason": "r"}],
+            batch, 0, applied, self.LECTURE)
+        self.assertEqual(applied, {0})
+        self.assertEqual(batch[0].ai_title, "", "the echoed title must fall back to the transcript titler")
+        self.assertEqual(batch[0].score, round(70 * 0.45 + 90 * 0.55))
+
+
+class SinglesRetryTests(unittest.TestCase):
+    """Rows the batches never answered are re-asked one at a time.
+
+    Watched live on 1 Sept 2026: a batch of FOUR came back with one row --
+    done_reason "stop", the array closed after index 0. Batching shrank the
+    early-close problem; it did not end it. A single-item ask is the one size
+    this model has never been seen to truncate, so the gaps are re-asked as
+    singles -- only while the model is answering at all, and capped so a bad
+    day costs minutes rather than the job.
+    """
+
+    @staticmethod
+    def shortlist(n):
+        return [Candidate(start=0.0, end=40.0,
+                          text=f"Clip number {i} speaks about patience and gratitude at length.",
+                          score=90 - i, segments=[], reasons=[], quote_risk=False)
+                for i in range(n)]
+
+    @staticmethod
+    def run_with(candidates, answer):
+        """Drive refine_with_ollama against a scripted Ollama; returns the asks."""
+        asks = []
+
+        def fake_urlopen(request, timeout=None):
+            body = json.loads(request.data.decode("utf-8"))
+            items = json.loads(body["prompt"].split("BEGIN TRANSCRIPT DATA\n")[1]
+                               .split("\nEND TRANSCRIPT DATA")[0])
+            asks.append(len(items))
+            rows = answer(len(asks), items)
+
+            class FakeResponse:
+                def __enter__(self): return self
+                def __exit__(self, *a): return False
+                def read(self):
+                    return json.dumps({"response": json.dumps({"clips": rows})}).encode()
+            return FakeResponse()
+
+        with mock.patch.object(clip_worker.urllib.request, "urlopen", fake_urlopen):
+            refine_with_ollama(candidates, {"ollamaUrl": "http://x", "ollamaModel": "m"}, "")
+        return asks
+
+    def test_a_gapped_batch_is_healed_by_singles(self):
+        # The batch answers only its first row; the two gaps come back as
+        # two single-item asks, and every candidate ends up titled.
+        candidates = self.shortlist(3)
+
+        def answer(call, items):
+            if call == 1:
+                return [{"index": 0, "score": 88, "title": "Written for the first clip alone",
+                         "description": "d", "reason": "r"}]
+            return [{"index": 0, "score": 80, "title": f"A single answer for ask {call}",
+                     "description": "d", "reason": "r"}]
+
+        asks = self.run_with(candidates, answer)
+        self.assertEqual(asks, [3, 1, 1], "one batch, then one single per unanswered row")
+        for candidate in candidates:
+            self.assertTrue(candidate.ai_title, "every shortlisted clip ends up with an AI title")
+
+    def test_a_dead_model_is_not_asked_again_and_again(self):
+        # If nothing applied, the model is down -- singles would turn one
+        # unavailable box into a dozen more 180s timeouts.
+        candidates = self.shortlist(3)
+
+        def fake_urlopen(request, timeout=None):
+            fake_urlopen.calls += 1
+            raise OSError("connection refused")
+        fake_urlopen.calls = 0
+
+        with mock.patch.object(clip_worker.urllib.request, "urlopen", fake_urlopen):
+            refine_with_ollama(candidates, {"ollamaUrl": "http://x", "ollamaModel": "m"}, "")
+        self.assertEqual(fake_urlopen.calls, 1, "one failed batch, no retry storm")
+
+    def test_the_retry_pass_is_capped(self):
+        # Twenty gaps must not become twenty singles; the cap keeps a bad day
+        # to minutes. Highest-scored candidates are retried first.
+        candidates = self.shortlist(clip_worker.AI_BATCH * 4)
+
+        def answer(call, items):
+            if call <= 4:
+                return []  # every batch comes back empty except...
+            return [{"index": 0, "score": 80, "title": f"Single {call}",
+                     "description": "d", "reason": "r"}]
+
+        # Nothing applied at all -> no retries. Seed one applied row instead.
+        def answer_with_one(call, items):
+            if call == 1:
+                return [{"index": 0, "score": 88, "title": "The one row the batches gave",
+                         "description": "d", "reason": "r"}]
+            if call <= 4:
+                return []
+            return [{"index": 0, "score": 80, "title": f"Single answer {call}",
+                     "description": "d", "reason": "r"}]
+
+        asks = self.run_with(candidates, answer_with_one)
+        singles = [size for size in asks[4:]]
+        self.assertEqual(len(singles), clip_worker.AI_RETRY_SINGLES)
+        self.assertTrue(all(size == 1 for size in singles))
