@@ -1680,7 +1680,17 @@ contact us for any additional helps or referring a bug."
   approval, no platform sending audience numbers back. Help is behind sign-in
   and behind NO plan gate: a free account is exactly who needs it.
 
-### The subscription sits beside the logo (v3.60.1, 31 Aug 2026)
+### The subscription sits beside the logo (v3.60.1 — REMOVED v3.73.1, 1 Sept 2026)
+
+**Removed at Youssef's instruction** ("REMOVE PLAN FROM TOP LEFT"): the rail
+badge collided with the collapse control once the motion layer's brand sheen
+made #dcRailBrand position:relative — which also hijacked the collapse
+toggle's bottom:12px anchor (the toggle lives inside the brand row,
+positioned against the RAIL). The sheen is now an animated background on the
+brand block, needing no positioning; the toggle is back at the rail's foot;
+paintPlanBadge and its CSS are deleted. The HEADER chip remains the one
+place the plan is named. The section below stays as the record of why the
+badge existed.
 
 Youssef: "on top left corner next to logo show users subscription". Asked
 twice now -- v3.57.0 put the plan name in the header chip, and that was not

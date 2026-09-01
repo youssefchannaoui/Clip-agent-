@@ -49,16 +49,22 @@ body.dc-screen-anim #studio main > *{
 
 /* ── Brand mark: a very slow idle light pass ─────────────────────────────
    One pass of warm light across the rail brand roughly every 14s. Paused
-   whenever the tab is hidden (body.dc-page-hidden from the host). */
-#dcRailBrand{position:relative;overflow:hidden}
-#dcRailBrand::after{
-  content:"";position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(115deg,transparent 42%,rgba(217,180,120,.10) 50%,transparent 58%);
-  transform:translateX(-120%);
+   whenever the tab is hidden (body.dc-page-hidden from the host).
+
+   Done as an animated background, NOT a positioned ::after: the collapse
+   toggle lives inside the brand row in the template, absolutely positioned
+   with bottom:12px against the RAIL — making #dcRailBrand position:relative
+   turned the brand block into its containing block and the toggle rendered
+   at the top of the rail, tangled with the wordmark. The same containing-
+   block trap as the mobile drawer, one file over. */
+#dcRailBrand{
+  background-image:linear-gradient(115deg,transparent 42%,rgba(217,180,120,.10) 50%,transparent 58%);
+  background-size:280% 100%;
+  background-repeat:no-repeat;
   animation:dcmBrandPass 14s linear infinite;
 }
-@keyframes dcmBrandPass{0%,78%{transform:translateX(-120%)}92%,100%{transform:translateX(120%)}}
-body.dc-page-hidden #dcRailBrand::after{animation-play-state:paused}
+@keyframes dcmBrandPass{0%,78%{background-position:140% 0}92%,100%{background-position:-140% 0}}
+body.dc-page-hidden #dcRailBrand{animation-play-state:paused}
 
 /* ── Live work: motion only while a real job runs ────────────────────────
    The fills exist only while work is in flight, so the shine can loop —
@@ -112,7 +118,7 @@ body.dc-page-hidden .slb-bar i,body.dc-page-hidden .slh-track i{animation-play-s
 @media (prefers-reduced-motion: reduce){
   /* The document-wide `*{animation:none}` rule never matches pseudo-elements,
      so this layer's ::before/::after animations need their own kills. */
-  #dcRailBrand::after,
+  #dcRailBrand,
   #dcRailNav a[style*="#D9B478"]::before{animation:none !important}
   #dcRailNav a > i,#dcTopbar button,.studio-conn-actions button,.slb-btn,
   [data-dc-sched-card]{transition:none !important;transform:none !important}

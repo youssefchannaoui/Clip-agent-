@@ -6117,44 +6117,6 @@ function helpArticle(a,base){
     </div>
   </article>`;
 }
-/* ── the subscription, beside the logo ───────────────────────────────────
-   Youssef: "on top left corner next to logo show users subscription". Asking
-   twice for this is the sign that the header chip was not where anyone looks.
-
-   Host-rendered, because the wordmark's second line is the literal string
-   "Studio" inside the generated template -- the product's name, not the
-   customer's plan -- and changing it would mean a design re-import, which
-   regenerates every hashed class name in the app. So the plan is ADDED under
-   the wordmark rather than written over the branding.
-
-   It is a button, not a label: knowing the plan and being unable to reach it
-   from there is the worse half of the same question. */
-function paintPlanBadge(){
-  const host=document.getElementById('dcRailBrand');
-  if(!host)return;
-  const cur=((DATA||{}).billing||{}).current||{};
-  const open=StudioAdapter.ui.railOpen&&window.innerWidth>820;
-  let box=document.getElementById('dcPlanBadge');
-  /* Collapsed there is no wordmark to sit under and no room for the words, so
-     it goes with the wordmark rather than being squeezed into 68px. */
-  if(!open||!cur.planName&&!cur.tierName){if(box)box.remove();return}
-  if(!box){box=document.createElement('button');box.id='dcPlanBadge';box.type='button'}
-  if(box.parentNode!==host)host.appendChild(box);
-  const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  const name=cur.planName||cur.tierName||'Basic';
-  /* Basic is not a purchase, so it does not wear the gold every paid tier
-     uses; it says what it is and offers the way up. */
-  const paid=Boolean(cur.unlimited)||(cur.tier&&cur.tier!=='basic');
-  box.className=paid?'dc-plan-paid':'dc-plan-free';
-  box.title=paid?`You are on ${name} — open Tokens & billing`:'You are on the free plan — see what the paid plans include';
-  box.innerHTML=`<span>${esc(name)}</span><i class="ph ph-caret-right"></i>`;
-  box.onclick=e=>{
-    e.preventDefault();e.stopPropagation();
-    StudioAdapter.ui.screen='tokens';
-    StudioAdapter.ui.tokensAnimAt=Date.now();
-    renderAll();
-  };
-}
 function helpZoom(src,img){
   const old=document.getElementById('dcHelpZoom');
   if(old)old.remove();
@@ -6267,7 +6229,6 @@ function paintStudio(){
   paintJobMusic(vals);
   paintTemplatesLayout();
   paintHelp();
-  paintPlanBadge();
   /* Screen-change restart for the motion layer (studio-motion.css): the
      generated dcScreen animation cannot restart when two screens share a
      wrapper class (Home and Library both render the same one), so the body
