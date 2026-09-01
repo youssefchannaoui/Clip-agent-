@@ -1428,6 +1428,77 @@ test('the daily meter fills to the number of posts actually scheduled today', ()
   assert.match(studio.subline, /Up to 8 posts a day/, 'and so does the header');
 });
 
+test('the calendar shows a day\'s whole capacity, and whose plan gave it', () => {
+  // Youssef's own design: eight pips in two rows of four on Studio, and the
+  // EMPTY ones in faint gold rather than grey, so the capacity the plan buys
+  // reads as something you were given before anything fills it. Four grey
+  // pips on an eight-post plan was the same lie the header was telling.
+  Object.assign(StudioAdapter.ui, { screen: 'schedule', schedView: 'month', schedAnchor: null });
+  const at = h => { const d = new Date(); d.setHours(h, 0, 0, 0); return d.getTime(); };
+  const clip = (id, h) => ({
+    id, title: 'A clip', status: 'scheduled', scheduledAt: at(h),
+    targets: [{ provider: 'youtube' }], musicVerified: true, renderVerified: true,
+    templateId: 't', transcript: 'x',
+  });
+  const EIGHT = ['07:00', '08:15', '09:30', '12:00', '14:30', '17:00', '18:45', '20:30'];
+
+  const cellsOf = vals => vals.schedMonthWeeks.flatMap(w => Array.from(w.cells));
+  const today = cells => cells.find(c => /rgba\(217,180,120,\.05\)|240,214,166/.test(c.style));
+
+  const studio = StudioAdapter.bindings({
+    projects: [], tracks: [], postTimes: EIGHT,
+    billing: { current: { tier: 'studio', tierName: 'Studio', planName: 'Studio · monthly' } },
+    clips: [clip('a', 7), clip('b', 12)],
+  });
+  const sCell = today(cellsOf(studio));
+  assert.ok(sCell, 'the calendar draws today');
+  assert.equal(sCell.pips.length, 8, 'eight pips for eight posts a day');
+  // Two rows of four, positioned from their own styles so no generated class
+  // is depended on -- a design re-import must not be able to flatten them.
+  const tops = new Set(sCell.pips.map(p => (p.style.match(/top: (\d+)px/) || [])[1]));
+  assert.equal(tops.size, 2, 'in two rows');
+  assert.equal(sCell.pips.filter(p => /background: #D9B478/.test(p.style)).length, 2, 'two scheduled, two solid gold');
+  assert.equal(sCell.pips.filter(p => /rgba\(217,180,120,\.26\)/.test(p.style)).length, 6, 'the rest faint gold, not grey');
+
+  // Everyone else keeps the quiet grey, or the gold stops meaning anything.
+  const pro = StudioAdapter.bindings({
+    projects: [], tracks: [], postTimes: ['07:00', '12:00', '17:00', '20:30'],
+    billing: { current: { tier: 'pro', tierName: 'Pro', planName: 'Pro · monthly' } },
+    clips: [clip('a', 7)],
+  });
+  const pCell = today(cellsOf(pro));
+  assert.equal(pCell.pips.length, 4, 'four pips on Pro');
+  assert.equal(new Set(pCell.pips.map(p => (p.style.match(/top: (\d+)px/) || [])[1])).size, 1, 'in one row');
+  assert.equal(pCell.pips.filter(p => /background: #212127/.test(p.style)).length, 3, 'and the empties stay grey');
+});
+
+test('a busy day keeps its "+N more" inside the cell', () => {
+  // Measured at 1440x950: the cell is 101px and three chips plus the more-line
+  // came to 112, so the count was pushed through the bottom border. The fix is
+  // to show one chip fewer, not to clip -- clipping hides the number instead
+  // of fitting it, which is not the same thing.
+  Object.assign(StudioAdapter.ui, { screen: 'schedule', schedView: 'month', schedAnchor: null });
+  const at = h => { const d = new Date(); d.setHours(h, 0, 0, 0); return d.getTime(); };
+  const many = [7, 8, 9, 12, 14, 17, 18, 20].map((h, i) => ({
+    id: 'm' + i, title: 'A very long clip title that would run past the edge of its day',
+    status: 'scheduled', scheduledAt: at(h), targets: [{ provider: 'youtube' }],
+    musicVerified: true, renderVerified: true, templateId: 't', transcript: 'x',
+  }));
+  const vals = StudioAdapter.bindings({ projects: [], tracks: [], clips: many, postTimes: [] });
+  const cell = vals.schedMonthWeeks.flatMap(w => Array.from(w.cells))
+    .find(c => c.hasMore);
+  assert.ok(cell, 'a day with more clips than it can list');
+  assert.equal(cell.chips.length, 2, 'two chips once there is a count to show');
+  assert.equal(cell.moreLabel, '+6 more', 'and the count matches what is hidden');
+  assert.match(cell.style, /overflow: hidden/, 'with a backstop against anything else escaping');
+
+  // Three still fit when nothing has to be counted.
+  const three = StudioAdapter.bindings({ projects: [], tracks: [], clips: many.slice(0, 3), postTimes: [] });
+  const c3 = three.schedMonthWeeks.flatMap(w => Array.from(w.cells)).find(c => c.chips.length);
+  assert.equal(c3.chips.length, 3);
+  assert.equal(c3.moreLabel, '', 'and no count is drawn');
+});
+
 // A schedule with nowhere to post is a list of intentions, and every card can
 // read "No channel on" while the rail explains nothing.
 test('the rail says when nothing can post, and stops saying it once a channel is on', () => {

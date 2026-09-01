@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1003 JS + 456 Python**
+- `npm test` and `npm run check` must pass. Currently **1005 JS + 456 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1755,6 +1755,44 @@ a customer could see it.
   `state.publishingSettings[userId]`. Seeding the wrong shape renders as
   "POSTING TO 0 OF 3" with every box unticked, which reads exactly like a
   broken picker and is not one.
+
+## Studio's capacity is drawn, not just scheduled (v3.72.1)
+
+Youssef's own design, and the right one: "you see how it has four dots? You
+can make another four dots underneath... you don't make them a gray color...
+a faint gold, and once it's filled in, a more obvious gold."
+
+- **The month calendar drew four pips on an eight-post plan** -- the same lie
+  the header was telling before v3.71.3, in the one place a customer looks to
+  see how full a day is. Eight now, in two rows of four, and the EMPTY ones in
+  faint gold (`rgba(217,180,120,.26)`) rather than grey: the capacity the plan
+  buys reads as something you were given before anything fills it. Filled stays
+  solid `#D9B478`. **Everyone else keeps the grey**, or the gold stops meaning
+  anything.
+- **The pips are positioned from their OWN inline styles**, absolutely, inside
+  the cell (which was already `position: relative`). Their container is a
+  generated class -- `inline-flex`, no wrap -- so a second row would have
+  needed CSS hung on a hashed name that a design re-import silently
+  regenerates. This way the export cannot break it.
+- **`studioSlots` reads the TIER, not "more than four"**: the base window count
+  is a server setting and an operator could configure six tomorrow.
+- **"+N more" was falling through the bottom border.** Measured at 1440x950:
+  the cell is 101px and a header plus three chips plus the more-line came to
+  112. Fixed by showing one chip fewer whenever there is a count to show, not
+  by clipping -- `overflow: hidden` hides the number rather than fitting it,
+  which is not the same thing. It stays as a backstop. Measured after: 0 of 35
+  cells with anything escaping.
+- **The connections dialog answers "how do I know I can connect three?"** The
+  picker only ever appeared once a SECOND account existed, so a Studio member
+  with one channel was told nothing about the other two they pay for. With
+  headroom it now says "Studio · 1 of 3 channels connected — press Connect
+  again to add another"; with several it says "Posting to 3 of 3 allowed ·
+  Studio". The cap is attributed to the plan in both.
+- **The Posting windows card attributes them too**: "8 windows a day on Studio
+  · Set on the server · Australia/Perth". Counting the times yourself is not an
+  answer to "how do I know I get eight?".
+- Both new tests were proven RED against four hardcoded pips and three chips
+  before being kept.
 
 ## Open items
 

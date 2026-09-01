@@ -295,6 +295,9 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
   gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.07); }
 #studioConnList .studio-conn-accounts-h { width: 100%; font-size: 11px; letter-spacing: .04em;
   text-transform: uppercase; color: #8A8A93; margin-bottom: 2px; }
+/* The headroom line under a single connected channel: what the plan still
+   allows, in the place where somebody would go looking for it. */
+#studioConnList .studio-conn-headroom { width: 100%; font-size: 12px; color: #8A8A93; }
 #studioConnList .studio-conn-account { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
   font-size: 12px; padding: 5px 9px; border-radius: 999px; border: 1px solid rgba(255,255,255,.12);
   color: #C9C9D1; transition: background .15s ease, border-color .15s ease, color .15s ease; }
@@ -4840,7 +4843,18 @@ function renderStudio(){
        ticked would be a control that reaches nothing. */
     function accountPicker(r,i){
       const accounts=r.accounts||[],max=Number(r.maxAccounts||1);
-      if(accounts.length<2)return '';
+      const tier=(((DATA||{}).billing||{}).current||{}).tierName||'Studio';
+      /* Headroom, said out loud. The picker only appears once a second account
+         exists, so a Studio member with one channel connected was told nothing
+         about the other two they are paying for -- "how do I know I can
+         connect three?" had no answer on the screen that answers it. The
+         Connect button beside this already reads "Add another". */
+      if(accounts.length<2){
+        if(max<2||accounts.length===0)return '';
+        return `<div class="studio-conn-accounts"><span class="studio-conn-accounts-h">
+          ${esc(tier)} &middot; ${accounts.length} of ${max} channels connected</span>
+          <span class="studio-conn-headroom">Press Connect again to add another.</span></div>`;
+      }
       /* Locked rather than absent. With several accounts connected and a plan
          that allows one, the picker simply not being drawn reads as the app
          losing the other accounts -- so say which plan posts to them and where
@@ -4861,7 +4875,7 @@ function renderStudio(){
       const chosen=r.accountIds&&r.accountIds.length?r.accountIds:[];
       const atCap=chosen.length>=max;
       return `<div class="studio-conn-accounts">
-        <span class="studio-conn-accounts-h">Posting to ${chosen.length} of ${max} allowed</span>
+        <span class="studio-conn-accounts-h">Posting to ${chosen.length} of ${max} allowed &middot; ${esc(tier)}</span>
         ${accounts.map(a=>{
           const on=chosen.indexOf(a.id)>-1;
           return `<label class="studio-conn-account${on?' is-on':''}">

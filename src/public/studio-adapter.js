@@ -2109,6 +2109,17 @@
     // an older browser, or a misconfigured server -- rather than claiming the
     // day holds nothing and reading as "Today is full" beside empty days.
     var daySlots = (DATA.postTimes || []).length || 4;
+    // Whether the extra windows come from the PLAN. Read from the tier rather
+    // than inferred from "more than four", because the base window count is a
+    // server setting and an operator could configure six of them tomorrow.
+    var studioSlots = current.tier === 'studio' || Boolean(current.unlimited);
+    // Array.from is not in the browsers this file still supports; the rest of
+    // the adapter builds ranges the same way.
+    function countTo(n) {
+      var out = [];
+      for (var i = 0; i < n; i += 1) out.push(i);
+      return out;
+    }
     var ctx = { projects: projects, clips: clips, tracks: tracks, needsCount: needsCount, planLabel: planLabel, postSlots: daySlots };
 
     var providers = PLATFORMS.map(function (k) { return providerInfo(DATA, k); });
@@ -2546,7 +2557,12 @@
             var past = ds < today;
             cells.push({
               date: String(new Date(ds).getDate()),
+              // overflow:hidden because a busy day's chips and its "+N more"
+              // were spilling past the cell's own border. min-width:0 so the
+              // grid column may actually shrink -- without it a long chip sets
+              // the column's floor and the whole row grows instead of clipping.
               style: 'position: relative; display: flex; flex-direction: column; gap: 3px; height: 100%; min-height: 62px; padding: 5px 7px 6px;'
+                + ' overflow: hidden; min-width: 0;'
                 + ' border: 1px solid ' + (isToday ? 'rgba(240,214,166,.45)' : '#1C1C21') + '; border-radius: 10px;'
                 + ' background: ' + (isToday ? 'rgba(217,180,120,.05)' : inMonth ? '#141418' : '#0F0F12') + ';'
                 + ' text-align: left; font-family: inherit; cursor: pointer;'
@@ -2554,12 +2570,38 @@
               dateStyle: 'font-family: Outfit, Inter, sans-serif; font-size: 11.5px; font-weight: ' + (isToday ? '700' : '500') + ';'
                 + ' color: ' + (isToday ? '#F0D6A6' : past ? '#5E5E66' : '#9A9AA2') + '; font-variant-numeric: tabular-nums;',
               // One pip per post the day can hold, filled for each one taken:
-              // the day's load without a number to read.
-              pips: (items.length || (!past && inMonth)) ? [0, 1, 2, 3].map(function (n) {
-                return { style: 'display: block; width: 5px; height: 5px; border-radius: 50%;'
-                  + ' background: ' + (n < items.length ? '#D9B478' : '#212127') + ';' };
+              // the day's load without a number to read. EIGHT of them on
+              // Studio, in two rows of four -- Youssef's own idea, and the
+              // right one: the capacity the plan buys is the thing being
+              // shown, so showing four of them on an eight-post plan was the
+              // same lie the header was telling.
+              //
+              // They are positioned from their OWN inline styles rather than
+              // laid out by their container. The container is a generated
+              // class (inline-flex, no wrap), so a second row would need CSS
+              // hung on a hashed name that a design re-import regenerates
+              // silently. The cell is already position:relative, so absolute
+              // pips need nothing from the export and cannot be broken by it.
+              pips: (items.length || (!past && inMonth)) ? countTo(daySlots).map(function (n) {
+                var row = Math.floor(n / 4);
+                var col = n % 4;
+                var perRow = Math.min(4, daySlots);
+                var filled = n < items.length;
+                return { style: 'position: absolute; display: block; width: 5px; height: 5px; border-radius: 50%;'
+                  + ' top: ' + (7 + row * 8) + 'px; right: ' + (7 + (perRow - 1 - col) * 8) + 'px;'
+                  // Faint gold rather than grey for an empty slot on Studio:
+                  // the extra capacity should read as something the plan gave
+                  // you even before anything fills it. Everyone else keeps the
+                  // quiet grey, so the gold stays worth something.
+                  + ' background: ' + (filled ? '#D9B478' : studioSlots ? 'rgba(217,180,120,.26)' : '#212127') + ';' };
               }) : [],
-              chips: items.slice(0, 3).map(function (c) {
+              // Two chips once there is a "+N more" to show, three when there
+              // is not. Measured at 1440x950: the cell is 101px and three
+              // chips plus the more-line came to 112, so the line was pushed
+              // through the bottom border -- reported as "the plus-two-more
+              // wording goes out of the box". Clipping it would have hidden
+              // the count instead of fitting it, which is not the same thing.
+              chips: items.slice(0, items.length > 3 ? 2 : 3).map(function (c) {
                 return {
                   label: timeOf(c.scheduledAt) + '  ' + String(c.title || 'Clip'),
                   rowStyle: 'display: flex; align-items: center; gap: 5px; min-width: 0;',
@@ -2569,7 +2611,7 @@
                     + ' white-space: nowrap; overflow: hidden; text-overflow: ellipsis;',
                 };
               }),
-              moreLabel: items.length > 3 ? '+' + (items.length - 3) + ' more' : '',
+              moreLabel: items.length > 3 ? '+' + (items.length - 2) + ' more' : '',
               hasMore: items.length > 3,
               open: function (e) { stop(e); setUI({ schedView: 'day', schedAnchor: ds }); },
             });
@@ -4737,7 +4779,7 @@
       // The meter was four gold bars in the markup, full whatever the day held.
       // It sat directly above the sentence "2 of 4 scheduled today" and
       // contradicted it.
-      schedMeter: Array.apply(null, { length: daySlots }).map(function (_, n) {
+      schedMeter: countTo(daySlots).map(function (n) {
         return { style: 'flex: 1; height: 5px; border-radius: 20px; transition: background .2s ease; background: '
           + (n < schedTodayCount ? 'linear-gradient(90deg, #D9B478, #F0D6A6)' : '#26262C') + ';' };
       }),
@@ -5728,7 +5770,11 @@
       postWindowName1: windowName(postTimes[0]),
       postWindowName2: windowName(postTimes[1]),
       postWindowName3: postTimes.slice(2).map(windowName).join(' · ') || '—',
-      postWindowNote: 'Set on the server' + (DATA.timezone ? ' · ' + DATA.timezone : '') + '.',
+      // Says how many windows there are and, on Studio, WHY there are that
+      // many. "How do I know I get eight?" is not answered by counting the
+      // times yourself -- the card has to attribute them to the plan.
+      postWindowNote: (studioSlots ? daySlots + ' windows a day on Studio · ' : '')
+        + 'Set on the server' + (DATA.timezone ? ' · ' + DATA.timezone : '') + '.',
       postWindow1: postTimes[0] || '—',
       postWindow2: postTimes[1] || '—',
       postWindow3: postTimes.slice(2).join(' · ') || '—',
