@@ -3366,3 +3366,37 @@ and put it next to the ETA."
   the old join and moved with it.
 - The watcher is stopped in a `finally`, or an import that raises would leave
   a daemon thread statting a deleted directory for the life of the container.
+
+## The live surfaces show the pipeline, not a percentage in the dark (v3.76.0)
+
+Youssef: "make a massive improvements, looks, layout and more for happening
+now bar on home page AND the happening bar in other tabs when floating".
+
+- **Both surfaces now draw the pipeline itself**: Import · Transcribe · Score
+  · Render · Upload as a station strip -- done stations hold their gold, the
+  current one pulses, the rest wait unlit. On Home the stations carry labels;
+  the floating bar's head shows the same strip as dots alone
+  (`stageStripHtml(idx, compact)`, labels in `<em>` so one builder serves
+  both). `stageIdx` comes from the adapter (`liveStageIdx`): the worker's own
+  phase for the first four, and the global percentage past the render band
+  for upload, which has no phase. A queued job is -1 -- strip drawn, nothing
+  lit -- and single-stage jobs (edits, more-clips, publishes) get null and no
+  strip.
+- **stageIdx is part of liveKey**, so a stage handover repaints the strip --
+  four rebuilds a job, nothing. The in-place update path is untouched, and
+  the meta selector grew `:not(.slh-stages)` in BOTH the CSS and paintRows,
+  because the strip is also a span inside `.what`.
+- **Running before waiting.** jobsLive sorted by time alone, so a queued job
+  submitted a minute ago took the floating bar's headline off the lecture
+  actually rendering. Running jobs lead now, newest first within each group.
+- **A queued job says nothing instead of "0%"** -- a percentage on a job that
+  has not started reads as stuck.
+- **The looks**: the Home card wears a quiet gold ring and warm ground while
+  anything runs and settles to the plain site card when idle (both states
+  pinned by test); the header is small-caps with the count as a gold chip;
+  rows lead with a 32px warm icon tile; the track is 4px. The floating bar
+  gets the gold hairline, a slide-up entry (`slbIn`, killed under reduced
+  motion), a 3px fill, and collapses into a fully-rounded pill. The idle card
+  carries a clock and "Paste a lecture above and the pipeline lights up
+  here." All states screenshotted at desktop before shipping; the tour veil
+  and the timer-reseed traps both bit again and are already documented above.

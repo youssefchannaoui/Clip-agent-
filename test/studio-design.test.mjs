@@ -2570,7 +2570,7 @@ test('the Home section stays put when nothing is running', () => {
   assert.match(paint, /toggle\('hide',!any&&!docked\)/,
     'idle still shows, as long as there is a column to sit in');
   assert.match(paint, /toggle\('slh-idle',!any\)/);
-  assert.match(paint, /slh-empty">\$\{esc\(vals\.liveHeadline\)\}/, 'and it says so');
+  assert.match(paint, /slh-empty"><i[^>]*><\/i><div><b>\$\{esc\(vals\.liveHeadline\)\}/, 'and it says so');
   // A pulsing "live" dot with nothing live is a lie.
   assert.match(html, /#studioLiveHome\.slh-idle \.slb-dot \{[^}]*animation: none/);
 });
@@ -2610,8 +2610,12 @@ test('the docked section takes the column width and the site card treatment', ()
   const rule = /#studioLiveHome\.slh-docked \{[^}]*\}/.exec(html)[0];
   assert.match(rule, /position: static/, 'it is in the page flow, not floating over it');
   assert.match(rule, /width: auto/, 'so it stops where the library column stops');
-  assert.match(rule, /background: #121214/, "the site's own card background");
   assert.match(rule, /box-shadow: none/);
+  // Running it wears a quiet gold ring; idle it settles back to the site's
+  // plain card, so a still page never carries a warm glow with nothing live.
+  assert.match(rule, /rgba\(217,180,120/, 'the working gold while anything runs');
+  assert.match(html, /#studioLiveHome\.slh-docked\.slh-idle \{[^}]*background: #121214/,
+    "idle returns to the site's own card background");
 });
 
 test('the spinner actually spins outside #studio', () => {
