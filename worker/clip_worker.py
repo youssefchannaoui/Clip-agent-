@@ -1185,24 +1185,39 @@ def dedupe_clip_titles(selected: list[Candidate]) -> list[Candidate]:
     Runs over the delivered clips only, which is the whole set that can collide
     and at most MAX_DELIVERABLE_CLIPS of them.
     """
-    taken: set[str] = set()
+    taken: list[str] = []
+
+    def clashes(key: str) -> bool:
+        """Near enough to read as a repeat, not merely identical.
+
+        The first version compared exact strings and let "I might find myself
+        in this situation" sit beside "I might find myself in this situation
+        one day" -- distinct by the letter, the same line twice to anyone
+        scrolling the channel. It happens constantly, because the model
+        shortens a sentence the fallback titler then takes in full.
+        """
+        for seen in taken:
+            if key == seen or key.startswith(seen + " ") or seen.startswith(key + " "):
+                return True
+        return False
+
     for index, clip in enumerate(selected):
         current = clip.ai_title or title_from_text(clip.text, index)
         key = normalise_title(current)
-        if key and key not in taken:
-            taken.add(key)
+        if key and not clashes(key):
+            taken.append(key)
             clip.ai_title = current
             continue
         for option in title_candidates(clip.text):
             other = normalise_title(option)
-            if other and other not in taken:
-                taken.add(other)
+            if other and not clashes(other):
+                taken.append(other)
                 clip.ai_title = option
                 break
         else:
             # Nothing distinct left in this clip's own words. Keep what it has.
             if key:
-                taken.add(key)
+                taken.append(key)
             clip.ai_title = current
     return selected
 

@@ -400,6 +400,24 @@ class TitleDedupTests(unittest.TestCase):
         out = clip_worker.dedupe_clip_titles(clips)
         self.assertEqual(out[1].ai_title, "Patience is a light")
 
+    def test_a_longer_version_of_a_taken_title_is_also_a_repeat(self):
+        # "I might find myself in this situation" beside "I might find myself
+        # in this situation one day" is distinct by the letter and the same
+        # line twice to anyone scrolling the channel. It happens constantly:
+        # the model shortens a sentence the fallback titler then takes in full.
+        clips = [
+            self.clip("I might find myself in this situation one day. And Allah is nearer than you think.",
+                      "I might find myself in this situation"),
+            self.clip("I might find myself in this situation one day. Nobody is beyond His mercy at all.",
+                      ""),
+        ]
+        out = clip_worker.dedupe_clip_titles(clips)
+        second = clip_worker.normalise_title(out[1].ai_title)
+        first = clip_worker.normalise_title(out[0].ai_title)
+        self.assertFalse(second.startswith(first + " ") or first.startswith(second + " "),
+                         f"{out[1].ai_title!r} still reads as a repeat of {out[0].ai_title!r}")
+        self.assertEqual(out[1].ai_title, "Nobody is beyond His mercy at all")
+
     def test_distinct_titles_are_left_completely_alone(self):
         clips = [self.clip("One thing. Another thing entirely here.", "Never lose hope"),
                  self.clip("A different clip. With its own separate words.", "Hold your tongue")]

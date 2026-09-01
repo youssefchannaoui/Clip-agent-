@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1005 JS + 461 Python**
+- `npm test` and `npm run check` must pass. Currently **1005 JS + 462 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1818,7 +1818,12 @@ channel that reads as the same video uploaded twice.
   behaviour is unchanged (its existing tests pass untouched).
 - **`normalise_title` decides what "the same" means**: case, a trailing
   ellipsis and punctuation are not differences a viewer would call a different
-  title.
+  title. **A longer version of a taken title counts as a repeat too** -- the
+  first cut compared exact strings and happily shipped "I might find myself in
+  this situation" beside "I might find myself in this situation one day",
+  distinct by the letter and the same line twice to anyone scrolling. That
+  shape is the common one, because the model shortens a sentence the fallback
+  titler then takes in full.
 - **A clip with nothing else to offer keeps its title.** Keeping a real title
   beats inventing a bad one, and that is the honest limit of this pass.
 - **Per LECTURE, not per channel.** Two clips from two different lectures can
