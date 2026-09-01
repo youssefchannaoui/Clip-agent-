@@ -23,7 +23,7 @@ import * as alerts from './alerts.js';
 import * as ownerFeed from './owner-feed.js';
 import { fallbackThumb } from './local-engine.js';
 import * as social from './social.js';
-import { formatLocal } from './slots.js';
+import { formatLocal, postTimesFor } from './slots.js';
 import { checkFfmpeg } from './ffmpeg.js';
 import * as auth from './auth.js';
 import * as billing from './billing.js';
@@ -704,7 +704,15 @@ function appState(user = null) {
     })),
     clips: clipsForUser.map(publicClip),
     rerenderJobs: ownedBy(state.rerenderJobs, user.id).filter(job => clipsForUser.some(clip => clip.id === job.clipId)).slice(0, 30),
-    postTimes: config.postTimes, timezone: config.timezone, activeJobs: agent.engine.activeJobCount(),
+    // The windows THIS account actually gets, not the configured four.
+    // Studio buys eight a day, and the scheduler has always honoured that
+    // (agent.js asks slots.js for postSlotsStudio windows) -- but this payload
+    // sent config.postTimes to everybody, so a Studio customer was told four
+    // while the app gave them eight. The display and the behaviour must come
+    // from one function or they drift, which is the failure this codebase has
+    // now paid for three times.
+    postTimes: billing.paysForAtLeast(user, 'studio') ? postTimesFor(config.postSlotsStudio) : config.postTimes,
+    timezone: config.timezone, activeJobs: agent.engine.activeJobCount(),
     log: logFor(user, 60), directPublishingEnabled: config.socialPublishEnabled,
     publishingSettings: publishingSettings(user), social: social.connectionStatus(user), billing: billing.publicBilling(user),
     // How many accounts this plan may post to on each platform, computed by the

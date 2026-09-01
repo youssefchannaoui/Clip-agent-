@@ -1413,6 +1413,19 @@ test('the daily meter fills to the number of posts actually scheduled today', ()
 
   const none = StudioAdapter.bindings({ projects: [], tracks: [], clips: [] });
   assert.equal(filled(none), 0, 'an empty day fills nothing');
+
+  // A Studio account buys EIGHT windows a day. The meter, the sentence and the
+  // header subline were three separate literal fours, so they could not follow
+  // it -- the screen drew four bars and said "up to four posts a day" while
+  // the scheduler filled eight. One number drives all three now, and this is
+  // the assertion that keeps them together.
+  const studio = StudioAdapter.bindings({
+    projects: [], tracks: [], clips: [],
+    postTimes: ['07:00', '08:15', '09:30', '12:00', '14:30', '17:00', '18:45', '20:30'],
+  });
+  assert.equal(studio.schedMeter.length, 8, 'eight windows, eight bars');
+  assert.match(studio.dailyLimitNote, /^0 of 8 scheduled today/, 'and the sentence counts the same eight');
+  assert.match(studio.subline, /Up to 8 posts a day/, 'and so does the header');
 });
 
 // A schedule with nowhere to post is a list of intentions, and every card can

@@ -1715,6 +1715,43 @@ branch WITHOUT the help changes.
   on the run you are looking at, and a phone session that cannot trust the
   tick has no way to check anything.
 
+## The Schedule told a Studio customer "four" and gave them eight (v3.71.3)
+
+Found by answering Youssef's question — "show me how a studio plan can post 8
+times and connect 3 channels" — by actually driving it rather than describing
+it. The three-channel half was already right, end to end: three credentials in
+one platform slot, "POSTING TO 3 OF 3 ALLOWED", a tick and its own × per
+account. The eight-a-day half was right in the SCHEDULER and wrong everywhere
+a customer could see it.
+
+- **`/api/state` sent `config.postTimes` to everybody.** `agent.js` has always
+  asked `slots.js` for `config.postSlotsStudio` windows when the owner
+  `paysForAtLeast('studio')`, so a Studio account was scheduled into eight
+  windows while being shown four. The feature they pay for was invisible, and
+  the app contradicted itself. The payload now derives the account's own list
+  from the same function the scheduler uses — one source, so they cannot drift.
+- **Three separate literal `4`s on that screen**, which is how they were able
+  to disagree: the header subline ("Up to four posts a day"), the sentence
+  ("2 of 4 scheduled today") and the meter (`[0,1,2,3]`, four bars). All three
+  read one `daySlots` now. Measured after: subline "Up to 8", sentence "0 of 8",
+  eight bars, and all eight times in the Posting windows card.
+- **It falls back to four when the payload carries no `postTimes`** — an older
+  browser, or a misconfigured server. Counting an empty list honestly gives
+  zero, and `todayCount >= 0` is true, so the card read "Today is full" beside
+  an empty day. A test already existed for exactly that and caught it.
+- **"Nothing posts unless its four checks pass" is a DIFFERENT four** — nasheed,
+  captions, Clip Style, render — and does not move with the plan. Left alone.
+- The HTTP test extends the ONE sign-up that file already spends (the sign-in
+  throttle is real, and a suite that spends it reports a broken route when the
+  route is fine): it reads `/api/state` as Studio, asserts the eight, drops the
+  plan to Pro and asserts the four come back — a lapsed subscription must not
+  keep being shown what it no longer buys. Proven red against the old payload.
+- **Seeding trap, cost twenty minutes:** publishing settings live under
+  `state.userSettings[userId].publishingSettings`, not a top-level
+  `state.publishingSettings[userId]`. Seeding the wrong shape renders as
+  "POSTING TO 0 OF 3" with every box unticked, which reads exactly like a
+  broken picker and is not one.
+
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)

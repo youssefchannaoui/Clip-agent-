@@ -2012,7 +2012,7 @@
         return empty ? 'No lectures yet — paste a link on Home to make your first clips'
           : plural(ctx.projects.length, 'lecture') + ' · ' + plural(ctx.clips.length, 'clip') + ' generated';
       case 'templates': return 'Set once — every clip renders with it, still editable per clip';
-      case 'schedule': return 'Up to four posts a day · every clip is checked before it goes out';
+      case 'schedule': return 'Up to ' + (ctx.postSlots || 0) + ' posts a day · every clip is checked before it goes out';
       case 'music': return plural(ctx.tracks.length, 'nasheed') + ' · shuffled automatically';
       case 'deenai': return 'Growth advice from your own numbers — nothing leaves this server';
       case 'help': return 'How every part of DeenClipped works, with screenshots of the real app';
@@ -2097,7 +2097,19 @@
     var planLabel = current.planName
       || (current.unlimited ? 'Unlimited'
         : (current.plan ? current.plan.charAt(0).toUpperCase() + current.plan.slice(1) : 'Free'));
-    var ctx = { projects: projects, clips: clips, tracks: tracks, needsCount: needsCount, planLabel: planLabel };
+    // How many windows a day THIS account gets. The server sends the tiered
+    // list (Studio buys eight), so anything that wants to say "four" must count
+    // it rather than spell it -- the Schedule was telling a Studio customer
+    // "up to four posts a day" while scheduling into eight, and drawing four
+    // bars for a day that holds eight.
+    //
+    // ONE number drives the subline, the sentence and the meter. They were
+    // three separate literals, which is how they were able to disagree.
+    // Falls back to four for a payload that carries no postTimes at all --
+    // an older browser, or a misconfigured server -- rather than claiming the
+    // day holds nothing and reading as "Today is full" beside empty days.
+    var daySlots = (DATA.postTimes || []).length || 4;
+    var ctx = { projects: projects, clips: clips, tracks: tracks, needsCount: needsCount, planLabel: planLabel, postSlots: daySlots };
 
     var providers = PLATFORMS.map(function (k) { return providerInfo(DATA, k); });
     var byKey = {};
@@ -4725,7 +4737,7 @@
       // The meter was four gold bars in the markup, full whatever the day held.
       // It sat directly above the sentence "2 of 4 scheduled today" and
       // contradicted it.
-      schedMeter: [0, 1, 2, 3].map(function (n) {
+      schedMeter: Array.apply(null, { length: daySlots }).map(function (_, n) {
         return { style: 'flex: 1; height: 5px; border-radius: 20px; transition: background .2s ease; background: '
           + (n < schedTodayCount ? 'linear-gradient(90deg, #D9B478, #F0D6A6)' : '#26262C') + ';' };
       }),
@@ -5720,9 +5732,15 @@
       postWindow1: postTimes[0] || '—',
       postWindow2: postTimes[1] || '—',
       postWindow3: postTimes.slice(2).join(' · ') || '—',
-      dailyLimitNote: todayCount >= 4
-        ? 'Today is full — 4 of 4. Nothing posts unless its four checks pass.'
-        : todayCount + ' of 4 scheduled today. Nothing posts unless its four checks pass.',
+      dailyLimitNote: (function () {
+        // postTimes is the account's OWN list, so this counts what it can
+        // really fill. The "four checks" is a different four -- nasheed,
+        // captions, Clip Style, render -- and does not move with the plan.
+        var slots = daySlots;
+        return todayCount >= slots
+          ? 'Today is full — ' + slots + ' of ' + slots + '. Nothing posts unless its four checks pass.'
+          : todayCount + ' of ' + slots + ' scheduled today. Nothing posts unless its four checks pass.';
+      })(),
 
       // ── Editor readouts ──
       // The timeline named a nasheed the account has never uploaded. It names

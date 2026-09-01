@@ -52,6 +52,7 @@ const base = `http://127.0.0.1:${port}`;
 // address, because the sign-in route checks Origin against it.
 process.env.PUBLIC_BASE_URL = base;
 
+const { config } = await import('../src/config.js');
 const billing = await import('../src/billing.js');
 const store = await import('../src/store.js');
 const social = await import('../src/social.js');
@@ -253,6 +254,37 @@ test('the cap is refused over HTTP, not merely hidden in the interface', async (
   const fourChannels = await save({ enabled: true, youtube: { enabled: true, accountIds: ['a', 'b', 'c', 'd'] } });
   assert.equal(fourChannels.status, 400);
   assert.match((await fourChannels.json()).error, /3 youtube accounts/);
+
+  // The OTHER half of what Studio buys, on the same signed-in account rather
+  // than a second sign-up: eight posting windows a day.
+  //
+  // The scheduler has always honoured this -- agent.js asks slots.js for
+  // config.postSlotsStudio windows whenever the owner paysForAtLeast studio.
+  // What the state payload sent was config.postTimes, to everybody, so the
+  // Schedule screen told a Studio customer FOUR while the app scheduled into
+  // EIGHT. The feature they paid for was invisible and the app contradicted
+  // itself; both sides come from one function now.
+  const { postTimesFor } = await import('../src/slots.js');
+  const expected = postTimesFor(config.postSlotsStudio);
+  assert.equal(expected.length, config.postSlotsStudio, 'the helper really does expand the day');
+
+  const asStudio = await (await realFetch(`${base}/api/state`, { headers: { Cookie: cookie } })).json();
+  assert.deepEqual(asStudio.postTimes, expected, 'a Studio account is shown every window it can publish into');
+
+  // The extras are inserted BETWEEN the configured windows, never spread over
+  // the clock: the account chose which part of the day it publishes in, and
+  // eight a day must not mean posting at 3am.
+  assert.equal(asStudio.postTimes[0], config.postTimes[0], 'the day still opens where it was configured to');
+  assert.equal(asStudio.postTimes[asStudio.postTimes.length - 1], config.postTimes[config.postTimes.length - 1],
+    'and still closes there');
+  for (const t of config.postTimes) assert.ok(asStudio.postTimes.includes(t), `the configured window ${t} survives`);
+
+  // Drop the plan and the extra windows go with it -- a lapsed subscription
+  // must not keep being shown what it no longer buys.
+  account.billing = { ...account.billing, plan: 'pro_monthly' };
+  const asPro = await (await realFetch(`${base}/api/state`, { headers: { Cookie: cookie } })).json();
+  assert.deepEqual(asPro.postTimes, config.postTimes, 'Pro sees the configured four, not a promise it did not buy');
+  account.billing = { ...account.billing, plan: 'studio_monthly' };
 });
 
 test('the plan is named the way a customer would say it', () => {
