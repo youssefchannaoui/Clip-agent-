@@ -241,7 +241,7 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
             <a href="/tools/youtube-to-shorts">YouTube to Shorts</a>
             <a href="/tools/youtube-to-tiktok">YouTube to TikTok</a>
             <a href="/tools/youtube-to-reels">YouTube to Reels</a>
-            <span class="nav-drop-rule" aria-hidden="true"></span>
+            <span class="nav-drop-label" aria-hidden="true">Free tools</span>
             <a href="/tools/safe-zone-checker">Safe zone checker <em>Free</em></a>
             <a href="/tools/clip-calculator">Clip calculator <em>Free</em></a>
           </div></div>
