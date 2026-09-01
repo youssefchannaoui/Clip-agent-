@@ -290,6 +290,55 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
    -- including the one thing the app cannot deliver on its own. */
 .studio-conn-public { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 10px 12px; border: 1px solid rgba(127,209,166,.22); border-radius: 11px; background: rgba(127,209,166,.05); font-size: 11.5px; line-height: 1.5; color: #A9CBB8; }
 .studio-conn-public i { font-size: 14px; color: #7FD1A6; flex: none; margin-top: 1px; }
+/* ── Account ────────────────────────────────────────────────────────────
+   This screen was a browser prompt() asking the customer to "type a number:
+   1 2 3 4". Youssef, 1 Sept 2026: "improve on account settings inside
+   dashboard its so bad right now."
+
+   It reuses the connections dialog's card, backdrop and close button rather
+   than inventing a second dialog language, and it is host-rendered for the
+   usual reason -- adding a screen to the design export regenerates every
+   hashed class name in the app. */
+#studioAccount { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
+#studioAccount.hide { display: none; }
+.studio-acct-card { width: min(520px, 100%); }
+#studioAcctBody { display: flex; flex-direction: column; gap: 14px; }
+/* who you are */
+.studio-acct-me { display: flex; align-items: center; gap: 12px; padding: 13px; border: 1px solid #1E1E22; border-radius: 12px; background: #0E0E11; }
+.studio-acct-face { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 50%; overflow: hidden;
+  border: 1px solid rgba(217,180,120,.35); background: rgba(217,180,120,.1);
+  font-family: Outfit, Inter, sans-serif; font-size: 16px; font-weight: 600; color: #F0D6A6; }
+.studio-acct-face img { width: 100%; height: 100%; object-fit: cover; }
+.studio-acct-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.studio-acct-who b { font-family: Outfit, Inter, sans-serif; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Wraps rather than truncating. With the plan pill beside it, an ordinary
+   email plus a join date ran out of room and came out as "joined June 1…",
+   which is a date that says nothing. */
+.studio-acct-who span { font-size: 11.5px; color: #8B8B93; line-height: 1.45; }
+.studio-acct-plan { flex: none; padding: 3px 9px; border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  border: 1px solid rgba(217,180,120,.4); background: rgba(217,180,120,.1); color: #F0D6A6; white-space: nowrap; }
+.studio-acct-plan.free { border-color: #2C2C32; background: transparent; color: #8B8B93; }
+/* a titled group of rows */
+.studio-acct-h { font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #8B8B93; }
+.studio-acct-group { display: flex; flex-direction: column; gap: 7px; }
+.studio-acct-row { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border: 1px solid #1E1E22; border-radius: 11px; background: #0E0E11; }
+.studio-acct-row > i { flex: none; font-size: 16px; color: #8B8B93; }
+.studio-acct-row .t { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.studio-acct-row .t b { font-size: 12.5px; font-weight: 600; color: #E9E9ED; }
+.studio-acct-row .t span { font-size: 11px; color: #8B8B93; line-height: 1.45; }
+.studio-acct-act { flex: none; padding: 6px 11px; border: 1px solid #2C2C32; border-radius: 8px; background: #17171A;
+  font-family: inherit; font-size: 11.5px; font-weight: 600; color: #E9E9ED; cursor: pointer; white-space: nowrap;
+  transition: border-color .14s ease, color .14s ease, background .14s ease; }
+.studio-acct-act:hover { border-color: rgba(217,180,120,.5); color: #F0D6A6; }
+.studio-acct-act.primary { border-color: rgba(217,180,120,.45); color: #F0D6A6; }
+.studio-acct-act.primary:hover { background: rgba(217,180,120,.1); }
+.studio-acct-act.danger { border-color: rgba(199,126,110,.4); color: #E3928C; }
+.studio-acct-act.danger:hover { background: rgba(199,126,110,.1); border-color: rgba(199,126,110,.7); }
+/* a switch that matches the bell's */
+.studio-acct-switch { position: relative; width: 34px; height: 19px; flex: none; border-radius: 20px; cursor: pointer; transition: background .16s ease, border-color .16s ease; }
+.studio-acct-switch i { position: absolute; top: 2px; width: 13px; height: 13px; border-radius: 50%; transition: left .16s ease, background .16s ease; }
+/* the last section, and it looks like it */
+.studio-acct-danger { border-color: rgba(199,126,110,.26); background: rgba(199,126,110,.04); }
 #studioConnList { display: flex; flex-direction: column; gap: 9px; }
 /* The multi-account picker. Its own row under the platform line so three Pages
    wrap onto their own line at 375px instead of squeezing the switch off the
@@ -1580,6 +1629,20 @@ select:focus{outline:none;border-color:var(--blue)}
     <div id="studioConnList"></div>
     <p class="studio-conn-public"><i class="ph-fill ph-globe-hemisphere-west"></i><span>Every approved clip publishes publicly. There is nothing to choose &mdash; though YouTube can still hold an upload private on its own, whatever this app asks for. If one arrives private, flip it in YouTube Studio.</span></p>
     <p class="studio-conn-foot">Instagram and Facebook share one Meta connection &mdash; connecting or disconnecting either affects both.</p>
+  </div>
+</div>
+
+<div id="studioAccount" class="hide" role="dialog" aria-modal="true" aria-label="Account">
+  <div class="studio-conn-backdrop" data-acct-close></div>
+  <div class="studio-conn-card studio-acct-card">
+    <div class="studio-conn-head">
+      <div>
+        <strong>Account</strong>
+        <span id="studioAcctSub"></span>
+      </div>
+      <button type="button" class="studio-conn-x" data-acct-close aria-label="Close">&times;</button>
+    </div>
+    <div id="studioAcctBody"></div>
   </div>
 </div>
 
@@ -5354,27 +5417,170 @@ StudioAdapter.onProbeSource=async url=>{try{
       const body=encodeURIComponent(`\n\n---\nAccount: ${(DATA.user&&DATA.user.email)||'unknown'}\nVersion: ${(DATA.version)||''}\n(leave the lines above — they help us find your account)`);
       location.href=`mailto:${s}?subject=${encodeURIComponent('DeenClipped help')}&body=${body}`;
     };
+    /* ── Account ─────────────────────────────────────────────────────────
+       This was a browser prompt() -- "Type a number: 1 2 3 4" -- for managing
+       a subscription, signing out everywhere, contacting support and DELETING
+       the account. Youssef, 1 Sept 2026: "improve on account settings inside
+       dashboard its so bad right now."
+
+       It is a dialog now, reusing the connections dialog's card so the app has
+       one modal language rather than two. Host-rendered, because adding a
+       screen to the design export regenerates every hashed class name.
+
+       Every row here reaches something real. There is deliberately no "change
+       password" row: sign-in is a magic link or Google/Apple, so this account
+       has no password to change and a row offering one would be a control that
+       cannot do anything. */
+    const acctEls={root:$('#studioAccount'),body:$('#studioAcctBody'),sub:$('#studioAcctSub')};
+    function closeAcct(){acctEls.root.classList.add('hide')}
+    $$('[data-acct-close]').forEach(el=>el.onclick=closeAcct);
+    addEventListener('keydown',e=>{if(e.key==='Escape'&&!acctEls.root.classList.contains('hide'))closeAcct()});
+
+    function acctDate(v){
+      const n=typeof v==='number'?v:Date.parse(v||'');
+      if(!Number.isFinite(n)||!n)return '';
+      return new Date(n).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'});
+    }
+    const PROVIDER_NAMES={google:'Google',apple:'Apple',email:'a sign-in link',password:'a password'};
+
+    function paintAccount(){
+      if(acctEls.root.classList.contains('hide'))return;
+      const D=DATA||{};
+      const u=D.user||{};
+      const b=(D.billing&&D.billing.current)||{};
+      const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+      const name=u.name||u.email||'Your account';
+      const initials=String(name).trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()||'?';
+      const planName=b.planName||b.tierName||'Basic';
+      const paid=Boolean(b.unlimited)||(b.tier&&b.tier!=='basic');
+      /* An operator has no subscription to manage, and a free account has no
+         portal to open -- Stripe 404s without a customer. Both get "See plans"
+         instead of a button that goes nowhere. */
+      const hasSub=!b.unlimited&&Boolean(b.stripeCustomer||b.cancelAtPeriodEnd||(b.tier&&b.tier!=='basic'));
+      const providers=(u.providers||[]).map(k=>PROVIDER_NAMES[k]||k);
+      /* Not for an operator: their plan is already called "Unlimited", and
+         repeating it read as "Unlimited · Unlimited". */
+      const tokens=b.unlimited?'':(b.totalAvailable!=null?b.totalAvailable+' tokens left':'');
+      const renews=b.cancelAtPeriodEnd?('Ends '+acctDate(b.cancelAt||b.currentPeriodEnd)):
+        (b.currentPeriodEnd?('Renews '+acctDate(b.currentPeriodEnd)):'');
+      const emailOn=window.__dcEmailOn!==undefined?window.__dcEmailOn:D.emailNotifs!==false;
+
+      acctEls.sub.textContent=u.email||'';
+      acctEls.body.innerHTML=`
+        <div class="studio-acct-me">
+          <span class="studio-acct-face">${u.picture?`<img src="${esc(u.picture)}" alt="">`:esc(initials)}</span>
+          <span class="studio-acct-who">
+            <b>${esc(name)}</b>
+            <span>${esc(u.email||'')}${u.createdAt?' &middot; joined '+esc(acctDate(u.createdAt)):''}</span>
+          </span>
+          <span class="studio-acct-plan${paid?'':' free'}">${esc(planName)}</span>
+        </div>
+
+        <span class="studio-acct-h">Plan and billing</span>
+        <div class="studio-acct-group">
+          <div class="studio-acct-row">
+            <i class="ph ph-coins"></i>
+            <span class="t"><b>${esc(planName)}${tokens?' &middot; '+esc(tokens):''}</b>
+              <span>${esc(renews||(b.unlimited?'Every feature, no token limit — this is the operator account.'
+                :'Tokens are what a lecture costs, charged on the range you select.'))}</span></span>
+            <button type="button" class="studio-acct-act primary" data-acct="plans">See plans</button>
+          </div>
+          ${hasSub?`<div class="studio-acct-row">
+            <i class="ph ph-credit-card"></i>
+            <span class="t"><b>Payment and invoices</b>
+              <span>Card, receipts and cancellation are handled by Stripe.</span></span>
+            <button type="button" class="studio-acct-act" data-acct="portal">Open</button>
+          </div>`:''}
+        </div>
+
+        <span class="studio-acct-h">Notifications</span>
+        <div class="studio-acct-group">
+          <div class="studio-acct-row">
+            <i class="ph ph-envelope-simple"></i>
+            <span class="t"><b>Email notifications</b>
+              <span>${emailOn?'On — clips ready, posts sent, and failures that need you.':'Off — no product emails will be sent.'}</span></span>
+            <button type="button" class="studio-acct-switch" data-acct="emails"
+              aria-label="${emailOn?'Turn email notifications off':'Turn email notifications on'}"
+              style="border:1px solid ${emailOn?'rgba(127,209,166,.5);background:rgba(127,209,166,.16)':'#26262A;background:#17171A'}">
+              <i style="left:${emailOn?'17px':'2px'};background:${emailOn?'#7FD1A6':'#6E6E76'}"></i></button>
+          </div>
+        </div>
+
+        <span class="studio-acct-h">Signing in</span>
+        <div class="studio-acct-group">
+          <div class="studio-acct-row">
+            <i class="ph ph-shield-check"></i>
+            <span class="t"><b>${providers.length?'You sign in with '+esc(providers.join(' and ')):'How you sign in'}</b>
+              <span>${u.lastLoginAt?'Last sign-in '+esc(acctDate(u.lastLoginAt))+'.':''} Signing out everywhere ends every session on every device.</span></span>
+            <button type="button" class="studio-acct-act" data-acct="signout">Sign out</button>
+          </div>
+          <div class="studio-acct-row">
+            <i class="ph ph-devices"></i>
+            <span class="t"><b>Other devices</b>
+              <span>Use this if you signed in somewhere you no longer trust.</span></span>
+            <button type="button" class="studio-acct-act" data-acct="signout-all">Sign out everywhere</button>
+          </div>
+        </div>
+
+        <span class="studio-acct-h">Help</span>
+        <div class="studio-acct-group">
+          <div class="studio-acct-row">
+            <i class="ph ph-lifebuoy"></i>
+            <span class="t"><b>Guides and answers</b><span>Every screen explained, with real captures.</span></span>
+            <button type="button" class="studio-acct-act" data-acct="help">Open Help</button>
+          </div>
+          <div class="studio-acct-row">
+            <i class="ph ph-chat-circle-text"></i>
+            <span class="t"><b>Contact support</b><span>Report a bug or ask a question.</span></span>
+            <button type="button" class="studio-acct-act" data-acct="support">Contact</button>
+          </div>
+        </div>
+
+        <span class="studio-acct-h">Delete account</span>
+        <div class="studio-acct-group">
+          <div class="studio-acct-row studio-acct-danger">
+            <i class="ph ph-warning-octagon" style="color:#E3928C"></i>
+            <span class="t"><b>Delete everything, permanently</b>
+              <span>Every lecture, clip, transcript and connected channel is removed and cannot be recovered.${hasSub?' Cancel your subscription first — deleting the account does not stop the billing.':''}</span></span>
+            <button type="button" class="studio-acct-act danger" data-acct="delete">Delete</button>
+          </div>
+        </div>`;
+
+      acctEls.body.onclick=async e=>{
+        const el=e.target.closest('[data-acct]');
+        if(!el)return;
+        const go=screen=>{closeAcct();StudioAdapter.ui.screen=screen;StudioAdapter.ui.menuOpen=false;renderAll()};
+        switch(el.getAttribute('data-acct')){
+          case 'plans':closeAcct();StudioAdapter.ui.screen='tokens';StudioAdapter.ui.tokensAnimAt=Date.now();
+            StudioAdapter.ui.menuOpen=false;renderAll();break;
+          case 'portal':StudioAdapter.onBillingPortal();break;
+          case 'emails':await StudioAdapter.onToggleEmailNotifs();paintAccount();break;
+          case 'help':go('help');StudioAdapter.onLoadHelp();break;
+          case 'support':closeAcct();StudioAdapter.onContactSupport();break;
+          case 'signout':StudioAdapter.onSignOut();break;
+          case 'signout-all':
+            if(!confirm('Sign out on every device? You will need to sign in again here too.'))return;
+            studioDo(()=>api('/auth/logout-everywhere',{method:'POST',body:'{}'}),'Signed out everywhere')
+              .then(()=>setTimeout(()=>location.href='/login',900));
+            break;
+          case 'delete':{
+            /* Two gates, and the second one is typed. Deleting is the only
+               irreversible thing in this app. */
+            if(!confirm('Delete your account?\n\nEvery lecture, clip, transcript and connected account is removed permanently.\n\nThis cannot be undone.'))return;
+            const typed=prompt('Type DELETE to confirm.');
+            if(String(typed||'').trim().toUpperCase()!=='DELETE'){toast('Not deleted.');return}
+            studioDo(()=>api('/api/account',{method:'DELETE'}),'Account deleted')
+              .then(()=>setTimeout(()=>location.href='/',900));
+            break;
+          }
+        }
+      };
+    }
+    window.paintAccount=paintAccount;
     StudioAdapter.onAccountSettings=()=>{
-      const b=(DATA&&DATA.billing&&DATA.billing.current)||{};
-      const email=(DATA&&DATA.user&&DATA.user.email)||'your account';
-      const plan=b.unlimited?'Owner (unlimited)':(b.plan||'free');
-      const choice=prompt(
-        `Account — ${email}\nPlan: ${plan}\n\nType a number:\n`
-        +`1  Manage or cancel your subscription\n`
-        +`2  Sign out of every device\n`
-        +`3  Contact support\n`
-        +`4  Delete my account and all my data\n`,'1');
-      if(choice==='1')StudioAdapter.onBillingPortal();
-      else if(choice==='2')studioDo(()=>api('/auth/logout-everywhere',{method:'POST',body:'{}'}),'Signed out everywhere — sign in again to continue')
-        .then(()=>setTimeout(()=>location.href='/login',900));
-      else if(choice==='3')StudioAdapter.onContactSupport();
-      else if(choice==='4'){
-        if(!confirm('Delete your account?\n\nEvery lecture, clip, transcript and connected account is removed permanently. Subscriptions are NOT cancelled automatically — cancel first if you have one.\n\nThis cannot be undone.'))return;
-        const typed=prompt('Type DELETE to confirm.');
-        if(String(typed||'').trim().toUpperCase()!=='DELETE'){toast('Not deleted.');return}
-        studioDo(()=>api('/api/account',{method:'DELETE'}),'Account deleted')
-          .then(()=>setTimeout(()=>location.href='/',900));
-      }
+      StudioAdapter.ui.menuOpen=false;
+      acctEls.root.classList.remove('hide');
+      paintAccount();
     };
     /* Handing over the file. Downloads are triggered one at a time with a gap:
        browsers silently drop a burst of simultaneous downloads from one page,
@@ -6420,6 +6626,9 @@ function paintStudio(){
   paintHelp();
   paintBrandSeal();
   paintLibraryAside(vals);
+  /* Cheap when shut -- it returns immediately -- and this is what keeps the
+     plan, the token count and the email switch honest while it is open. */
+  if(window.paintAccount)window.paintAccount();
   if(window.paintEmailNotifRow)window.paintEmailNotifRow(DATA);
   /* The watermark row is restored HERE, with every other host-rendered panel,
      because STUDIO.render() above has just replaced the DOM it was injected

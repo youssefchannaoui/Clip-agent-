@@ -3860,3 +3860,38 @@ test('switching screens does not animate', () => {
   // flicker.
   assert.ok(!/#studio main \*\{ animation: none/.test(motion), 'not applied to every descendant');
 });
+
+test('account settings is a screen, not a prompt asking for a number', () => {
+  // It was a browser prompt(): "Account — email / Plan: free / Type a number:
+  // 1 Manage or cancel your subscription ... 4 Delete my account and all my
+  // data". Youssef, 1 Sept 2026: "improve on account settings inside dashboard
+  // its so bad right now."
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const open = /StudioAdapter\.onAccountSettings=\(\)=>\{[\s\S]*?\n    \};/.exec(html)[0];
+  assert.ok(!/prompt\(/.test(open), 'opening the account panel asks nothing of the keyboard');
+  assert.match(open, /acctEls\.root\.classList\.remove\('hide'\)/, 'it opens the dialog');
+  assert.match(html, /acctEls=\{root:\$\('#studioAccount'\)/, 'which is #studioAccount');
+
+  // Every row reaches something real. A row here that no route serves would be
+  // a dead control (invariant 9), so each action is named with its endpoint.
+  const panel = /function paintAccount\(\)\{[\s\S]*?\n    \}/.exec(html)[0];
+  for (const action of ['plans', 'portal', 'emails', 'signout', 'signout-all', 'help', 'support', 'delete']) {
+    assert.match(panel, new RegExp(`data-acct="${action}"`), `${action} is offered`);
+    assert.match(panel, new RegExp(`case '${action}'`), `${action} is handled`);
+  }
+
+  // There is deliberately NO change-password row: sign-in is a link or
+  // Google/Apple, and /auth/password is the operator's shared secret, not a
+  // per-customer credential. A row offering one could not do anything.
+  assert.ok(!/change password/i.test(panel), 'no password row for accounts that have no password');
+
+  // Deleting is the one irreversible thing in the app and keeps both gates.
+  assert.match(panel, /confirm\('Delete your account\?/);
+  assert.match(panel, /Type DELETE to confirm/);
+  assert.match(panel, /'\/api\/account',\{method:'DELETE'\}/);
+
+  // Painted with the other host panels, so the plan, the token count and the
+  // switch stay honest across a state poll while it is open.
+  const paint = /function paintStudio\(\)\{[\s\S]*?\n\}/.exec(html)[0];
+  assert.match(paint, /paintAccount\(\)/);
+});

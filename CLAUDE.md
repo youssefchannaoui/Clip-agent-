@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1022 JS + 477 Python**
+- `npm test` and `npm run check` must pass. Currently **1023 JS + 477 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -2153,6 +2153,45 @@ Youssef: "for admin account should be like studio with all perks."
   `user.role`), so none of this opens a free-plan hole: a customer cannot set
   their own role. The HTTP test makes that explicit by flipping the role on a
   free billing record and asserting the eight windows.
+
+## Account settings was a prompt() asking for a number (v3.75.3, 1 Sept 2026)
+
+Youssef: "improve on account settings inside dashboard its so bad right now."
+
+He was right, and it was worse than untidy. "Account settings" in the profile
+menu opened a **browser `prompt()`** reading *"Type a number: 1 Manage or cancel
+your subscription, 2 Sign out of every device, 3 Contact support, 4 Delete my
+account and all my data"*. Cancelling a subscription and deleting every clip an
+account owns were both behind a typed digit in an OS dialog.
+
+- **It is a dialog now (`#studioAccount`), reusing the connections dialog's
+  card, backdrop, close button and Escape handling** rather than inventing a
+  second modal language. Host-rendered for the usual reason: adding a screen to
+  the design export regenerates every hashed class name in the app.
+- Six groups: who you are (avatar or initials, name, email, join date, plan
+  pill), plan and billing, notifications, signing in, help, and delete.
+- **Every row reaches something that exists.** Payment and invoices is drawn
+  only when there IS a subscription -- the Stripe portal 404s without a
+  customer, so a free account gets "See plans" instead of a button that goes
+  nowhere.
+- **There is deliberately NO change-password row.** Sign-in is a link or
+  Google/Apple; `/auth/password` is the OPERATOR's shared secret, not a
+  per-customer credential. A password row would be a control that cannot do
+  anything (invariant 9). The panel says which provider you actually use
+  instead, read from `user.providers`.
+- **The email-notifications switch is the same one as the bell's**, calling the
+  same `onToggleEmailNotifs`, so the two cannot disagree. Verified by clicking:
+  the label flips and the write goes through.
+- `paintAccount` is in **paintStudio's list** like every other host panel, and
+  returns immediately when the dialog is shut -- that is what keeps the plan,
+  the token count and the switch honest across a state poll while it is open.
+  Verified: still open with all rows after three consecutive paints.
+- **Two copy faults found by looking at the render, not the code**: an operator
+  saw "Unlimited · Unlimited" (plan name and token line are the same word for
+  them), and the identity line truncated a real join date to "joined June 1…"
+  because the plan pill took the width. The sub-line wraps now.
+- Deleting keeps BOTH gates -- a confirm and a typed DELETE -- and still warns
+  that a subscription is not cancelled by deleting the account.
 
 ## Open items
 
