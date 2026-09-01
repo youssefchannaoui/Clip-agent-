@@ -1064,6 +1064,26 @@ Youssef: "now do the same with the website one".
   schema against what the page renders, so leaving it would have been a silent
   lie to search engines as well as a failing test.
 
+## Notifications: both kinds live in the bell, and both are real (v3.74.0)
+
+- **Email notifications joined desktop notifications in the bell dropdown**,
+  as a host-rendered row beside the generated desktop row (the paintStudio
+  pattern; the row and its knob are inline-styled, no hashed classes). The
+  pref is SERVER-side: `state.userSettings[uid].emailNotifs`, default ON,
+  exposed as `emailNotifs` on /api/state, toggled by
+  POST /api/notifications/email — and it GATES the three real senders (post
+  summary in agent.js, clips-ready and lecture-failed in local-engine.js),
+  so it is not a dead switch. `store.emailNotifsOff()` is the one gate.
+- **index.html has MULTIPLE inline script scopes** — the fireClipNotifs
+  comment was right and bit again: a function defined near the handlers is
+  invisible to paintStudio's scope, and `DATA` is invisible to the handler
+  scope. The painter is window-pinned and takes DATA as a parameter; the
+  toggle keeps an optimistic `__dcEmailPending` that the painter clears when
+  the polled payload agrees.
+- The bell rings on hover (studio-motion.css, reduced-motion off), and the
+  account menu's Help & guides now opens the in-app Help screen instead of
+  a support dialog.
+
 ## The notifications toggle was hidden behind having dismissed something
 
 The desktop-notifications switch lived INSIDE the `hasDismissed` branch of the

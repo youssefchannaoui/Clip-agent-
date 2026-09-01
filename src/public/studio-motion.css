@@ -92,6 +92,20 @@ body.dc-page-hidden .slb-bar i,body.dc-page-hidden .slh-track i{animation-play-s
 #dcTopbar button,.studio-conn-actions button,.slb-btn{transition:transform 100ms var(--dcm-ease)}
 #dcTopbar button:active,.studio-conn-actions button:active,.slb-btn:active{transform:scale(.97)}
 
+/* ── The bell rings when you reach for it ────────────────────────────────
+   A short side-to-side swing on hover — the classic bell shake, settling
+   quickly so repeated passes do not read as an alarm. */
+#studio button:has(> i.ph-bell) > i{display:inline-block;transform-origin:50% 10%}
+#studio button:has(> i.ph-bell):hover > i{animation:dcmBellRing .8s var(--dcm-ease)}
+@keyframes dcmBellRing{
+  0%,100%{transform:rotate(0)}
+  18%{transform:rotate(-16deg)}
+  36%{transform:rotate(13deg)}
+  54%{transform:rotate(-9deg)}
+  72%{transform:rotate(5deg)}
+  88%{transform:rotate(-2deg)}
+}
+
 /* ── Focus visibility, everywhere in the studio ─────────────────────────── */
 #studio :focus-visible,#studioConn :focus-visible,#dcHelp :focus-visible{
   outline:2px solid #D9B478;outline-offset:2px;border-radius:4px;
@@ -119,6 +133,7 @@ body.dc-page-hidden .slb-bar i,body.dc-page-hidden .slh-track i{animation-play-s
   /* The document-wide `*{animation:none}` rule never matches pseudo-elements,
      so this layer's ::before/::after animations need their own kills. */
   #dcRailBrand,
+  #studio button:has(> i.ph-bell):hover > i,
   #dcRailNav a[style*="#D9B478"]::before{animation:none !important}
   #dcRailNav a > i,#dcTopbar button,.studio-conn-actions button,.slb-btn,
   [data-dc-sched-card]{transition:none !important;transform:none !important}

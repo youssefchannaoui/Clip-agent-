@@ -9,7 +9,7 @@ import { config, productionConfigurationErrors, fatalConfigurationErrors } from 
 import {
   state, save, log, logFor, clipSettings, setClipSettings, musicSettings, setMusicSettings,
   automationSettings, setAutomationSettings, publishingSettings, setPublishingSettings,
-  importNetworkSettings, setImportNetworkSettings, stateRev,
+  importNetworkSettings, setImportNetworkSettings, stateRev, emailNotifsOff,
 } from './store.js';
 import { ownedBy, findOwned } from './tenancy.js';
 import * as audio from './audio.js';
@@ -673,6 +673,9 @@ function appState(user = null) {
     // now the app gave them no way to do that: the only support address lived
     // on the marketing site, behind a link out of the product.
     support: { email: config.supportEmail },
+    // Whether product emails (clips ready / posted / failed) go out for this
+    // account. Root-level so the bell dropdown reads it without a second fetch.
+    emailNotifs: !emailNotifsOff(user.id),
     selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(),
     backgrounds: backgrounds.listBackgrounds(user).map(entry => ({
       id: entry.id, name: entry.name, durationSec: entry.durationSec, shared: Boolean(entry.shared),
@@ -1370,6 +1373,14 @@ async function route(req, res, url) {
   }
   // The Privacy Policy has always promised erasure within 30 days by email --
   // a promise resting on one person's inbox. It is a button now.
+  if (method === 'POST' && pathname === '/api/notifications/email') {
+    if (!currentUser?.id) return json(res, 401, { error: 'Sign in first.' });
+    const body = await readBody(req);
+    state.userSettings[currentUser.id] = state.userSettings[currentUser.id] || {};
+    state.userSettings[currentUser.id].emailNotifs = Boolean(body.on);
+    save();
+    return json(res, 200, { ok: true, emailNotifs: Boolean(body.on) });
+  }
   if (method === 'DELETE' && pathname === '/api/account') {
     try {
       auth.deleteAccount(currentUser);

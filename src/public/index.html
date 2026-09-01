@@ -5166,6 +5166,46 @@ StudioAdapter.onToggleDesktopNotifs=async()=>{try{
   new Notification('DeenClipped',{body:'Notifications are on. You will hear when clips are ready, posted, or a lecture fails.'});
   renderAll();
 }catch(e){toast(e.message,'bad')}};
+/* Email notifications live beside the desktop toggle in the bell dropdown.
+   The desktop row is a generated node, so this row is HOST-RENDERED next to
+   it (the paintStudio-list pattern) with its own inline styles — nothing here
+   depends on a hashed class. The pref is server-side (it gates real sends in
+   agent.js and local-engine.js), read from DATA.emailNotifs. */
+StudioAdapter.onToggleEmailNotifs=async()=>{try{
+  const on=window.__dcEmailOn!==false;
+  const r=await fetch('/api/notifications/email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:!on})});
+  if(!r.ok)throw new Error((await r.json()).error||'Could not save that');
+  /* Optimistic until the next state poll confirms; the painter clears the
+     pending flag the moment the polled payload agrees with it. */
+  window.__dcEmailPending=!on;
+  window.__dcEmailOn=!on;
+  toast(!on?'Email notifications on':'Email notifications off');
+  if(window.paintEmailNotifRow)window.paintEmailNotifRow({emailNotifs:!on});
+}catch(e){toast(e.message,'bad')}};
+window.paintEmailNotifRow=function(data){
+  const bellIcon=document.querySelector('#studio i.ph-bell-ringing');
+  const old=document.getElementById('dcEmailNotifRow');
+  if(!bellIcon){if(old)old.remove();return}
+  const deskRow=bellIcon.parentElement;
+  const server=!(data&&data.emailNotifs===false);
+  if(window.__dcEmailPending!==undefined&&server===window.__dcEmailPending)delete window.__dcEmailPending;
+  const on=window.__dcEmailPending!==undefined?window.__dcEmailPending:server;
+  window.__dcEmailOn=on;
+  let row=old;
+  if(!row){row=document.createElement('div');row.id='dcEmailNotifRow'}
+  row.style.cssText='display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid #1E1E22;';
+  row.innerHTML=
+    '<i class="ph ph-envelope-simple" style="flex:none;font-size:16px;color:#8B8B93"></i>'
+    +'<span style="display:flex;flex-direction:column;min-width:0;flex:1">'
+    +'<span style="font-size:12.5px;font-weight:600;color:#E9E9ED">Email notifications</span>'
+    +'<span style="font-size:11px;color:#8B8B93">'+(on?'On — clip ready, posted and failure emails':'Off — no product emails will be sent')+'</span>'
+    +'</span>'
+    +'<button type="button" aria-label="'+(on?'Turn email notifications off':'Turn email notifications on')+'" style="position:relative;width:34px;height:19px;flex:none;border-radius:20px;cursor:pointer;border:1px solid '
+    +(on?'rgba(127,209,166,.5);background:rgba(127,209,166,.16);':'#26262A;background:#17171A;')+'">'
+    +'<i style="position:absolute;top:2px;left:'+(on?'17px':'2px')+';width:13px;height:13px;border-radius:50%;background:'+(on?'#7FD1A6':'#6E6E76')+'"></i></button>';
+  row.querySelector('button').onclick=e=>{e.preventDefault();e.stopPropagation();StudioAdapter.onToggleEmailNotifs()};
+  if(row.previousElementSibling!==deskRow)deskRow.insertAdjacentElement('afterend',row);
+};
 /* Pinned to window: this block and the refresh loop that calls it live in
    different script scopes, and a bare function declaration here is invisible
    there -- the call failed silently inside refresh's own try/catch. */
@@ -6267,6 +6307,7 @@ function paintStudio(){
   paintTemplatesLayout();
   paintHelp();
   paintBrandSeal();
+  if(window.paintEmailNotifRow)window.paintEmailNotifRow(DATA);
   /* Screen-change restart for the motion layer (studio-motion.css): the
      generated dcScreen animation cannot restart when two screens share a
      wrapper class (Home and Library both render the same one), so the body

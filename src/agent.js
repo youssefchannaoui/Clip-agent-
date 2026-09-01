@@ -4,7 +4,7 @@ import * as mailer from './mailer.js';
 import path from 'node:path';
 import { config } from './config.js';
 import * as billing from './billing.js';
-import { state, save, log, automationSettings, publishingSettings, ownerOfRecord, musicSatisfied, isAyahEcho } from './store.js';
+import { state, save, log, automationSettings, publishingSettings, ownerOfRecord, musicSatisfied, isAyahEcho, emailNotifsOff } from './store.js';
 import { ownedBy, ownerOf } from './tenancy.js';
 import { sanitiseClipStyle } from './templates.js';
 import { nextSlot, startOfZonedDay, postTimesFor as slotTimes } from './slots.js';
@@ -36,7 +36,7 @@ function maybeEmailPostSummary(clip) {
   if (!targets.some(target => target.status === 'posted')) return; // total failure is the schedule's story, not a celebration email
   clip.postSummaryEmailedAt = Date.now();
   const owner = ownerOfRecord(clip);
-  if (!owner?.email) return;
+  if (!owner?.email || emailNotifsOff(owner.id)) return;
   mailer.send({
     to: owner.email,
     ...mailer.postSummaryMessage({
