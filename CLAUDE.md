@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1021 JS + 462 Python**
+- `npm test` and `npm run check` must pass. Currently **1022 JS + 462 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -2090,6 +2090,38 @@ not very informational or helpful." He then approved all five.
   a plain seed nor an `Object.defineProperty` getter on the old object survives
   it. Clear the timers first (`for (let i = 1; i < 20000; i++) clearInterval(i)`)
   and then seed.
+
+## Switching screens does not animate (v3.74.2, 1 Sept 2026)
+
+Youssef, on the tabs: "it does a little glitch kinda thing where it looks like
+it's refreshing the screen ... it looks horrible."
+
+- **TWO animations were doing it**, and killing either alone leaves the other.
+  v3.73.0 added `dcmScreenIn` plus a `body.dc-screen-anim` re-toggle in
+  paintStudio to force a restart on every `ui.screen` change -- including
+  between screens that SHARE a wrapper class, where nothing had ever animated
+  before. Underneath it, the design export bakes
+  `animation: dcScreen .24s` into every screen wrapper (`.s29`, `.s4j`, `.s8m`
+  and seven more), which cannot be edited without a re-import regenerating
+  every hashed class name in the app.
+- **So the wrapper animation is CANCELLED rather than removed**:
+  `#studio main > *{ animation: none !important; }` in studio-motion.css. The
+  `!important` is needed because the generated rule is a class selector on the
+  same element.
+- **Scoped to main's DIRECT children, deliberately.** Every screen wrapper is
+  one; everything with motion worth keeping is nested deeper -- the processing
+  spinners (a frozen one reads as a hang), the progress fills, the rail seal
+  and the paste field's glow. All four were re-checked after the change and
+  still run.
+- **Measured, and the measurement was proven able to fail.** Clicking through
+  six screens: 0 running animations on main's children each time. Then the old
+  behaviour was re-injected at runtime and the same probe reported
+  `["dcmScreenIn","dcmScreenIn","dcmScreenIn"]` on every switch. A probe that
+  cannot come back red proves nothing.
+- The test matches the DECLARATION (`@keyframes dcmScreenIn`,
+  `animation: dcmScreenIn`), not the name -- the comment recording what was
+  removed mentions it, and a grep for the word fails on the explanation. That
+  is the third time this repo has hit that shape.
 
 ## Open items
 

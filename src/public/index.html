@@ -6421,25 +6421,6 @@ function paintStudio(){
   paintBrandSeal();
   paintLibraryAside(vals);
   if(window.paintEmailNotifRow)window.paintEmailNotifRow(DATA);
-  /* Screen-change restart for the motion layer (studio-motion.css): the
-     generated dcScreen animation cannot restart when two screens share a
-     wrapper class (Home and Library both render the same one), so the body
-     class is re-toggled on every ui.screen change — the reflow between
-     remove and add forces a clean restart. Skipped while the tour is up:
-     its spotlight measures live rects every paint, and a screen mid-slide
-     would desync the ring. */
-  const dcScr=StudioAdapter.ui.screen;
-  if(window.__dcScr!==dcScr){
-    const tourUp=Number(StudioAdapter.ui.tourStep)>=0;
-    window.__dcScr=dcScr;
-    if(!tourUp){
-      document.body.classList.remove('dc-screen-anim');
-      void document.body.offsetWidth;
-      document.body.classList.add('dc-screen-anim');
-      clearTimeout(window.__dcScrT);
-      window.__dcScrT=setTimeout(()=>document.body.classList.remove('dc-screen-anim'),340);
-    }
-  }
   /* The watermark row is restored HERE, with every other host-rendered panel,
      because STUDIO.render() above has just replaced the DOM it was injected
      into. It was the only one of these left to a MutationObserver instead, and

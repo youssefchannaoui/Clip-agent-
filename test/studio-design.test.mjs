@@ -3824,3 +3824,39 @@ test('the DeenAI screen never sells a plan that would not unlock it', () => {
   const tpl = fs.readFileSync(path.join(ROOT, 'src/public/studio-template.generated.js'), 'utf8');
   assert.ok(!tpl.includes('Unlock with Pro'), 'no hardcoded plan name survives in the export');
 });
+
+test('switching screens does not animate', () => {
+  // Youssef, 1 Sept 2026: "whenever you go through the tabs ... it does a
+  // little glitch kinda thing where it looks like it's refreshing the screen
+  // ... just remove that glitching effect because it looks horrible."
+  //
+  // TWO animations were doing it. v3.73.0 added `dcmScreenIn` plus a body-class
+  // re-toggle in paintStudio, which forced a restart on every ui.screen change
+  // -- including between screens that share a wrapper class, where nothing had
+  // animated before. And the design export bakes `animation: dcScreen` into
+  // every screen wrapper, which cannot be edited without a re-import
+  // regenerating every hashed class name in the app.
+  //
+  // Measured in a browser before this was kept: 3 running animations on main's
+  // children on every switch, and 0 after.
+  const motion = fs.readFileSync(path.join(ROOT, 'src/public/studio-motion.css'), 'utf8');
+  assert.match(motion, /#studio main > \*\{ animation: none !important; \}/,
+    'the wrapper animation is cancelled');
+  // Match the DECLARATION, not the name: the comment above the fix explains
+  // what was removed and mentions it, and a test that greps for the word fails
+  // on the explanation. This repo has paid for that mistake twice before.
+  assert.ok(!/@keyframes\s+dcmScreenIn/.test(motion), 'no screen-entry keyframes');
+  assert.ok(!/animation\s*:\s*dcmScreenIn/.test(motion), 'and nothing uses them');
+
+  // The forced restart is gone from the paint loop too. Either half alone
+  // leaves a glitch: the class without the CSS is inert, the CSS without the
+  // class still lets the generated wrapper animation run.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  assert.ok(!/classList\.(add|remove)\('dc-screen-anim'\)/.test(html),
+    'paintStudio no longer re-toggles a screen class');
+
+  // Scoped to main's DIRECT children, so motion nested inside a screen
+  // survives -- a frozen spinner reads as a hang, which is worse than a
+  // flicker.
+  assert.ok(!/#studio main \*\{ animation: none/.test(motion), 'not applied to every descendant');
+});
