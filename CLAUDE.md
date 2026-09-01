@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1008 JS + 462 Python**
+- `npm test` and `npm run check` must pass. Currently **1010 JS + 462 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -1925,6 +1925,41 @@ be for the template at all times."
   (`tplRow`) has icon/label/value/open and no note slot, so one would have to be
   host-rendered, and Youssef's instruction in the same message was "I love the
   template. Don't mess around with the template at all."
+
+## Three small things the rail and the hero were missing (v3.72.11, 1 Sept)
+
+- **The collapsed rail named nothing, and the fix was already built.** Every
+  nav item ends in a `<span>` carrying its label, positioned to the right of
+  the icon column and fully styled -- at `opacity: 0`, with nothing anywhere
+  turning it on. A control shipped and never wired. Two lines of CSS in
+  studio-tokens.css reveal it on `:hover` and `:focus-visible`.
+  Three things that rule leans on: the reveal must be `!important` (the opacity
+  is an INLINE style from `tipStyle`, which no stylesheet outranks); it cannot
+  leak into the open rail, because the same inline style is `display: none`
+  there and opacity does not un-hide anything; and it is behind
+  `(hover: hover)`, because below 821px this nav is the phone's bottom TAB BAR
+  where `:hover` sticks after a tap and a tip at `left: calc(100% + 10px)`
+  would land on the next tab. `test/rail-nav.test.mjs` asserts BOTH halves --
+  each is silent without the other.
+- **The marketing site's rotating seal is on the rail** (Youssef: "that cool,
+  like, animated top left logo on the main website ... Can we have that on the
+  dashboard?"). Same ring, same words, same 28s rotation as `.seal-ring` in
+  marketing.css -- deliberately not a second design. Host-injected
+  (`paintBrandSeal`, in paintStudio's list like every other host panel) because
+  the arch is drawn inside the generated template. **42px, not the site's 46:**
+  the collapsed rail is 68px wide with 12px padding, so 44px is all there is.
+  It finds the arch by `svg[viewBox="0 0 40 52"]`, never "the first svg in the
+  row" -- once the ring is in, that finds the RING and wraps the wrapper on
+  every paint. Measured: 1 seal and 1 ring after five consecutive paints.
+- **The paste field was the smallest thing on the screen it starts.** Now
+  `flex: 1 1 340px` in a 640px row (was 220 in 520) with a gold ring and glow,
+  hooked on `data-tour="paste"` -- an attribute the design export does not
+  control. Measured 365px wide, up from ~220.
+  **The glow is STEADY, not breathing, and that is deliberate.** The studio
+  re-renders on every state poll, and an infinite animation on a node the
+  render can replace restarts from frame zero each time, which reads as a
+  stutter -- the trap this file has already paid for twice. A lit ring cannot
+  stutter.
 
 ## Open items
 

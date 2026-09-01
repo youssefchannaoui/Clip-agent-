@@ -6133,6 +6133,43 @@ function paintPlanBadge(){
     renderAll();
   };
 }
+function paintBrandSeal(){
+  /* The marketing site's rotating seal, on the rail's arch mark. Youssef,
+     1 Sept 2026: "that cool, like, animated top left logo on the main website
+     ... Can we have that on the dashboard?"
+
+     Host-injected rather than added to the design, for the usual reason: the
+     mark is drawn inside the generated template, so a sibling there costs a
+     re-import and every hashed class name in the app. Rebuilt on every paint
+     like every other host panel -- the studio renders through innerHTML, so an
+     injected node does not survive on its own. */
+  const row=document.getElementById('dcRailBrand');
+  if(!row)return;
+  /* Find the arch itself, never "the first svg in the row" -- once the ring is
+     in, that would find the ring and wrap the wrapper on every paint. */
+  const mark=row.querySelector('svg[viewBox="0 0 40 52"]');
+  if(!mark)return;
+  const holder=mark.parentElement;
+  if(!holder||holder===row)return;
+  let seal=holder.parentElement;
+  if(!seal||!seal.classList.contains('dc-seal')){
+    seal=document.createElement('span');
+    seal.className='dc-seal';
+    holder.parentNode.insertBefore(seal,holder);
+    seal.appendChild(holder);
+  }
+  if(seal.querySelector('.dc-seal-ring'))return;
+  const ring=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  ring.setAttribute('class','dc-seal-ring');
+  ring.setAttribute('viewBox','0 0 64 64');
+  ring.setAttribute('aria-hidden','true');
+  /* Its own path id, not the marketing page's: two elements sharing an id is
+     how a textPath silently renders against the wrong circle. */
+  ring.innerHTML='<defs><path id="dcRailSealPath" fill="none" d="M32,32 m-25,0 a25,25 0 1,1 50,0 a25,25 0 1,1 -50,0"/></defs>'
+    +'<text textLength="156" lengthAdjust="spacingAndGlyphs">'
+    +'<textPath href="#dcRailSealPath">IMPORT \u00b7 FIND \u00b7 REVIEW \u00b7 PUBLISH \u00b7</textPath></text>';
+  seal.insertBefore(ring,seal.firstChild);
+}
 function helpZoom(src,img){
   const old=document.getElementById('dcHelpZoom');
   if(old)old.remove();
@@ -6246,6 +6283,7 @@ function paintStudio(){
   paintTemplatesLayout();
   paintHelp();
   paintPlanBadge();
+  paintBrandSeal();
   /* The watermark row is restored HERE, with every other host-rendered panel,
      because STUDIO.render() above has just replaced the DOM it was injected
      into. It was the only one of these left to a MutationObserver instead, and

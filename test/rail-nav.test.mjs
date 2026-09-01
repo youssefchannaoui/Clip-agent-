@@ -103,3 +103,52 @@ test('a creator sees the same rail without the operator door', () => {
   // top-heavy rail back.
   assert.ok(setup.includes('Help'));
 });
+
+test('a collapsed rail names its icons on hover', () => {
+  // The tooltip span has been in the template all along -- every nav item ends
+  // in one carrying the label -- positioned, styled, and at `opacity: 0` with
+  // nothing anywhere turning it on. So the collapsed rail was a column of
+  // unlabelled icons and the control meant to fix that had never been wired.
+  // Youssef, 1 Sept 2026: "Add on hover of mouse. It should come up with the
+  // tab name."
+  //
+  // Both halves are needed and each fails silently without the other, so both
+  // are asserted here.
+  A.ui.railOpen = false;
+  const collapsed = A.bindings(DATA);
+  const items = Array.from(collapsed.navProduce).concat(Array.from(collapsed.navSetup));
+  assert.ok(items.length >= 4, 'the rail has items to name');
+  for (const item of items) {
+    assert.ok(!/display:\s*none/.test(item.tipStyle), `${item.label} has a tooltip when collapsed`);
+    assert.match(item.tipStyle, /opacity: 0/, 'which starts hidden, to be revealed on hover');
+    assert.ok(item.label, 'and the tooltip renders item.label');
+  }
+
+  // Open, the label is already on screen, so the tooltip must stay away.
+  A.ui.railOpen = true;
+  for (const item of Array.from(A.bindings(DATA).navProduce)) {
+    assert.match(item.tipStyle, /display: none/, `${item.label} has no tooltip when the rail is open`);
+  }
+
+  // The reveal. It has to be !important (the opacity above is an INLINE style,
+  // which no stylesheet can outrank) and it must not fire on touch, where the
+  // same nav is the phone's bottom tab bar and :hover sticks after a tap.
+  const css = fs.readFileSync(path.join(root, 'src/public/studio-tokens.css'), 'utf8');
+  const rule = /@media \(min-width: 821px\) and \(hover: hover\) \{\s*#dcRailNav a:hover > span:last-child \{ opacity: 1 !important; \}/;
+  assert.match(css, rule, 'studio-tokens.css reveals the tooltip on hover');
+});
+
+test('the brand seal is painted with the other host panels, not on an observer', () => {
+  // The rotating seal is injected into the generated template's brand row, and
+  // the studio renders through innerHTML -- so it is destroyed on every paint
+  // and must be restored synchronously at the end of paintStudio. A
+  // MutationObserver loses that race during a drag; that lesson cost three
+  // attempts on the watermark row (v3.53.3-v3.53.5) and is not worth paying
+  // again.
+  const html = fs.readFileSync(path.join(root, 'src/public/index.html'), 'utf8');
+  const paint = /function paintStudio\(\)\{[\s\S]*?\n\}/.exec(html)[0];
+  assert.match(paint, /paintBrandSeal\(\)/, 'paintBrandSeal runs on every paint');
+  // It must find the arch by its own viewBox. "The first svg in the row" finds
+  // the ring once the ring is in, and wraps the wrapper on every paint.
+  assert.match(html, /querySelector\('svg\[viewBox="0 0 40 52"\]'\)/);
+});

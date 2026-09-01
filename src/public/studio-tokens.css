@@ -323,3 +323,95 @@
   /* Still say something is happening, without the motion. */
   .dcai-line { opacity: .5; }
 }
+
+
+/* ── The collapsed rail says what its icons are ─────────────────────────────
+   Youssef, 1 Sept 2026: "Add on hover of mouse. It should come up with the
+   tab name."
+
+   The tooltip has been in the template the whole time: every nav item ends in
+   a <span> carrying the label, already positioned to the right of the icon
+   column and already styled -- at `opacity: 0`, with nothing anywhere turning
+   it on. So a 68px column of icons named nothing, and the control that was
+   supposed to fix that had never been wired up.
+
+   Three things this rule leans on, each deliberate:
+   - The reveal must be !important. That opacity lives in an INLINE style
+     (`tipStyle` in the adapter, which is where the position and colours are
+     computed), and no stylesheet can outrank an inline declaration.
+   - It cannot leak into the OPEN rail. The same inline style is
+     `display: none` there, and turning up the opacity of a display:none
+     element shows nothing.
+   - `hover: hover` keeps it off touch. Below 821px this nav is the phone's
+     bottom TAB BAR, where :hover sticks after a tap and a tooltip pinned to
+     `left: calc(100% + 10px)` would land on top of the next tab. */
+@media (min-width: 821px) {
+  #dcRailNav a:focus-visible > span:last-child { opacity: 1 !important; }
+}
+@media (min-width: 821px) and (hover: hover) {
+  #dcRailNav a:hover > span:last-child { opacity: 1 !important; }
+}
+
+
+/* ── The channel's rotating seal, carried in from the marketing site ────────
+   Youssef, 1 Sept 2026: "that cool, like, animated top left logo on the main
+   website ... Can we have that on the dashboard?"
+
+   Same ring, same words and the same 28s rotation as `.seal-ring` in
+   marketing.css -- deliberately not a second design. It is HOST-injected
+   (paintBrandSeal in index.html) because the arch mark itself is drawn inside
+   the generated template, and adding a sibling there would mean a design
+   re-import and every hashed class name in the app regenerating.
+
+   42px, not the site's 46: the collapsed rail is 68px wide with 12px of
+   padding, so 44px is all the room there is. */
+#dcRailBrand .dc-seal { position: relative; width: 42px; height: 42px; display: grid; place-items: center; flex: none; }
+#dcRailBrand .dc-seal > * { position: relative; z-index: 1; }
+#dcRailBrand .dc-seal-ring {
+  position: absolute; inset: 0; z-index: 0; width: 42px; height: 42px;
+  color: #D9B478; opacity: .8; pointer-events: none;
+  animation: dcSealSpin 28s linear infinite;
+}
+#dcRailBrand .dc-seal-ring text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 7.4px; letter-spacing: .12em; fill: currentColor; stroke: none;
+}
+#dcRailBrand:hover .dc-seal-ring { opacity: 1; filter: drop-shadow(0 0 6px rgba(217,180,120,.35)); }
+@keyframes dcSealSpin { to { transform: rotate(360deg); } }
+
+
+/* ── The paste field is where the whole product starts ──────────────────────
+   Youssef, 1 Sept 2026: "add an elimination around the ... YouTube link ... it
+   looks just a bit small. Nobody can really see it much."
+
+   Wider and lit. The hook is `data-tour="paste"`, an attribute the design
+   export does not control -- naming the hashed class beside it would tie this
+   to the next re-import.
+
+   The glow is STEADY, not breathing. The studio re-renders on every state
+   poll, and an infinite animation on a node the render can replace restarts
+   from frame zero each time -- which reads as a stutter, and is the trap this
+   file has already paid for twice. A lit ring cannot stutter. */
+#studio [data-tour="paste"] {
+  flex: 1 1 340px;
+  min-width: 240px;
+  border-color: rgba(217,180,120,.42) !important;
+  box-shadow: 0 0 0 3px rgba(217,180,120,.06), 0 0 22px rgba(217,180,120,.14);
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+#studio [data-tour="paste"]:hover {
+  border-color: rgba(217,180,120,.6) !important;
+  box-shadow: 0 0 0 3px rgba(217,180,120,.1), 0 0 26px rgba(217,180,120,.2);
+}
+#studio [data-tour="paste"]:focus-within {
+  border-color: rgba(217,180,120,.85) !important;
+  box-shadow: 0 0 0 3px rgba(217,180,120,.14), 0 0 30px rgba(217,180,120,.24);
+}
+/* The row it sits in caps itself at 520px, which is what made the field look
+   cramped. `:has` addresses the row through the child rather than through a
+   hashed class name. */
+#studio div:has(> [data-tour="paste"]) { max-width: 640px; }
+
+@media (prefers-reduced-motion: reduce) {
+  #dcRailBrand .dc-seal-ring { animation: none; }
+}
