@@ -199,11 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-<<<<<<< HEAD
 - `npm test` and `npm run check` must pass. Currently **1024 JS + 488 Python**
-=======
-- `npm test` and `npm run check` must pass. Currently **1023 JS + 488 Python**
->>>>>>> f0c251b6b027c42b6ada6a56c505b879ba9e7597
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
