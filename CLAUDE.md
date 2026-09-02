@@ -2902,7 +2902,7 @@ gold arch, small in its tile, on flat black. "improve it."
   shortcut is created, and the file is served `max-age=604800`. Remove the
   shortcut and add it again to see the new one.
 
-## Owner: what the traffic words mean, and a screen that shows it (v3.85.0)
+## Owner: what the traffic words mean, and a screen that shows it (v3.86.0)
 
 Youssef, 2 Sept 2026: "for analytics for traffic unique should be ONLY NEW
 PEOPLE WHO HAVE NEVER CAME ON THE WEBSITE and visits is anything and revisits",
