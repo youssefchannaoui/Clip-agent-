@@ -27,6 +27,7 @@ import { formatLocal, postTimesFor } from './slots.js';
 import { checkFfmpeg } from './ffmpeg.js';
 import * as auth from './auth.js';
 import * as billing from './billing.js';
+import * as geo from './geo.js';
 import * as help from './help.js';
 import * as marketing from './marketing.js';
 import * as seoPages from './seo-pages.js';
@@ -925,7 +926,7 @@ async function route(req, res, url) {
     catch (error) { return redirect(res, `/plans?error=${encodeURIComponent(error.message)}`); }
   }
   if (method === 'POST' && pathname === '/billing/checkout') {
-    try { const body = await formBody(req); const session = await billing.createCheckoutSession(currentUser, String(body.plan || '')); return redirect(res, session.url); }
+    try { const body = await formBody(req); const session = await billing.createCheckoutSession(currentUser, String(body.plan || ''), geo.currencyOf(req)); return redirect(res, session.url); }
     catch (error) { return redirect(res, `/plans?error=${encodeURIComponent(error.message)}`); }
   }
   if (method === 'POST' && pathname === '/billing/topup') {
@@ -1384,7 +1385,24 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/api/state') {
     const rev = stateRev();
     if (url.searchParams.get('rev') === rev) return json(res, 200, { unchanged: true, rev });
-    return json(res, 200, { ...appState(currentUser), rev });
+    {
+      const payload = { ...appState(currentUser), rev };
+      /*
+       * Prices in the visitor's own currency, and only when Stripe really
+       * holds them. plansInCurrency reads Stripe's currency_options and falls
+       * back to the configured labels on any failure, so the worst case is
+       * the Australian price -- never a converted guess, and never a number
+       * the checkout will not honour. The currency travels too, because the
+       * screen says which one it is charging in.
+       */
+      const currency = geo.currencyOf(req);
+      if (currency !== geo.DEFAULT_CURRENCY && payload.billing) {
+        try { payload.billing = { ...payload.billing, plans: await billing.plansInCurrency(currency) }; }
+        catch { /* the configured labels stand */ }
+      }
+      if (payload.billing) payload.billing.currency = currency;
+      return json(res, 200, payload);
+    }
   }
   // The Privacy Policy has always promised erasure within 30 days by email --
   // a promise resting on one person's inbox. It is a button now.
@@ -1412,7 +1430,7 @@ async function route(req, res, url) {
   }
   if (method === 'POST' && pathname === '/api/billing/checkout') {
     const body = await readBody(req);
-    try { return json(res, 200, await billing.createCheckoutSession(currentUser, String(body.plan || ''))); }
+    try { return json(res, 200, await billing.createCheckoutSession(currentUser, String(body.plan || ''), geo.currencyOf(req))); }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
   if (method === 'POST' && pathname === '/api/billing/topup-checkout') {

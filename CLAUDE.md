@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1063 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1076 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -4361,3 +4361,51 @@ make more sense towards the clip."
   dev server is running silently blocks the whole script -- the app renders its
   shell and never boots, with no console error. Restart the preview server
   after any index.html edit.
+
+
+## Prices in the visitor's own currency, and never a converted one (v3.85.0)
+
+Youssef, 2 Sept 2026: "fix currency for all countries auto detect", and when
+asked what a UK visitor should SEE he chose real local currency over an
+approximation.
+
+- **Nothing here converts money.** A Stripe Price has one base currency and
+  optionally `currency_options` holding a REAL amount in others. A price is
+  shown in a visitor's currency only when Stripe holds an amount in it, and
+  the checkout session is then told to charge that same currency -- so the
+  number on the card and the number on the receipt cannot disagree. The
+  alternative, converting at some rate of our own, is the exact fault the note
+  above the price labels in config.js has always warned about: advertising one
+  price and charging another.
+- **The country comes from the edge, not from the visitor.** `cf-ipcountry` is
+  added by Cloudflare, which sits in front of Render for this domain, and
+  cannot be forged by a caller. Cloudflare's "unknown" answers -- `XX` and the
+  Tor `T1` -- are treated as no country at all, because guessing from them
+  would be worse than the default.
+- **Accept-Language is deliberately NOT used.** A browser set to en-GB in
+  Sydney is ordinary; charging that person in pounds because of a display
+  preference would be a billing error made on the strength of a setting that
+  says nothing about where they are.
+- **`currencyDisplay: 'symbol'`, never `'narrowSymbol'`.** Narrow strips the
+  country prefix, so the Australian dollar comes out as a bare "$" and is
+  indistinguishable from the American one -- two products at "$29" in
+  different dollars is how a chargeback starts. This keeps A$, CA$, NZ$.
+- **Zero-decimal currencies are not divided by a hundred.** Stripe quotes every
+  amount in the smallest unit, and for the yen that IS the whole unit;
+  dividing would advertise a price a hundred times too small, and somebody
+  would buy it.
+- **The public pages never wait on Stripe.** They render synchronously and are
+  the most visited thing here, so `plansInCurrencyCached` reads only what is
+  already cached and warms the rest behind the render. The first visitor from
+  a new country sees AUD; nobody waits on a network call to see a price.
+  Every failure path -- no key, unknown price, Stripe down -- leaves the
+  configured labels standing.
+- **It shows AUD everywhere until Stripe holds another currency.** That is a
+  dashboard action on the account (Adaptive Pricing, or currency_options on
+  each Price), and it is the whole point of reading the amounts from Stripe:
+  the moment they exist, this works with no further code.
+- **The marketing pages and their JSON-LD are deliberately still AUD.**
+  Structured data has to match visible content, so localising the cards means
+  localising the offers, which changes what Google indexes; that is an SEO
+  decision worth making on purpose rather than as a side effect, and it would
+  show nothing different today anyway.

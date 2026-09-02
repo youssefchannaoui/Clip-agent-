@@ -4,6 +4,7 @@ import { config } from './config.js';
 import * as ownerFeed from './owner-feed.js';
 import * as metrics from './metrics.js';
 import * as referrals from './referrals.js';
+import * as geo from './geo.js';
 import { state, save, log } from './store.js';
 
 const now = () => Date.now();
@@ -88,6 +89,112 @@ const PLAN_GRID = {
 };
 
 const PERIOD_NAMES = { weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' };
+
+/**
+ * What each Stripe Price can be charged in, keyed by price id.
+ *
+ * A Stripe Price has ONE base currency, and optionally `currency_options`
+ * holding a real amount in others. That distinction is the whole design here:
+ * we never convert money ourselves, because a converted number on a pricing
+ * page is a promise the checkout does not keep. A price is shown in a
+ * visitor's currency only when Stripe holds an amount in it AND will charge
+ * that amount -- otherwise they see the base currency, which is always true.
+ *
+ * Cached, because this is read on every marketing page render and the answer
+ * changes only when somebody edits the price in Stripe.
+ */
+const PRICE_CACHE = new Map();
+const PRICE_CACHE_MS = 10 * 60 * 1000;
+
+/** Wipe the cache. Used by the tests, and by anything that edits a price. */
+export function forgetPriceCurrencies() {
+  PRICE_CACHE.clear();
+}
+
+/**
+ * Amounts for one price, as { currency: amountMinor }, including its base.
+ *
+ * Answers {} on any failure -- no key, an unknown price, Stripe down -- and
+ * every caller then falls back to the configured label. A pricing page must
+ * never depend on a network call succeeding.
+ */
+export async function priceCurrencies(priceId) {
+  const id = String(priceId || '');
+  if (!id || !config.stripeSecretKey) return {};
+  const hit = PRICE_CACHE.get(id);
+  if (hit && Date.now() - hit.at < PRICE_CACHE_MS) return hit.amounts;
+  let amounts = {};
+  try {
+    // currency_options is not returned unless it is expanded.
+    const price = await stripeGet(`/prices/${encodeURIComponent(id)}`, { 'expand[]': ['currency_options'] });
+    if (price && price.currency) {
+      amounts[String(price.currency).toLowerCase()] = Number(price.unit_amount || 0);
+      for (const [code, option] of Object.entries(price.currency_options || {})) {
+        const minor = Number(option?.unit_amount);
+        if (Number.isFinite(minor)) amounts[String(code).toLowerCase()] = minor;
+      }
+    }
+  } catch {
+    amounts = {};
+  }
+  PRICE_CACHE.set(id, { at: Date.now(), amounts });
+  return amounts;
+}
+
+/**
+ * The plan grid priced from what is ALREADY cached, never waiting on Stripe.
+ *
+ * The public pages render synchronously and are the most visited thing this
+ * product has; putting a Stripe round trip in front of them would trade a
+ * pricing nicety for the homepage's reliability. So this reads the cache and,
+ * when a currency has not been looked up yet, warms it in the background and
+ * returns the Australian labels this time. The first visitor from a new
+ * country sees AUD; everyone after them sees their own money, and nobody ever
+ * waits on Stripe to see a price at all.
+ */
+export function plansInCurrencyCached(currency) {
+  const wanted = String(currency || '').toLowerCase();
+  const grid = plans();
+  if (!wanted || wanted === geo.DEFAULT_CURRENCY) return grid;
+  let missing = false;
+  for (const plan of Object.values(grid)) {
+    if (!plan.priceId) continue;
+    const hit = PRICE_CACHE.get(plan.priceId);
+    if (!hit || Date.now() - hit.at >= PRICE_CACHE_MS) { missing = true; continue; }
+    const minor = hit.amounts[wanted];
+    if (!Number.isFinite(minor)) continue;
+    plan.localCurrency = wanted;
+    plan.localPrice = minor;
+    plan.priceLabel = geo.formatMoney(minor, wanted);
+  }
+  if (missing) plansInCurrency(wanted).catch(() => {});
+  return grid;
+}
+
+/**
+ * The plan grid priced for one visitor's currency.
+ *
+ * Each plan keeps its configured label as `priceLabel` and gains
+ * `localPrice`/`localCurrency` ONLY when Stripe really holds that currency for
+ * that price. `currency` on the result says what the customer will actually be
+ * charged in, which is what the checkout is then told to use -- so the number
+ * on the card and the number on the receipt cannot disagree.
+ */
+export async function plansInCurrency(currency) {
+  const wanted = String(currency || '').toLowerCase();
+  const grid = plans();
+  if (!wanted || wanted === geo.DEFAULT_CURRENCY) return grid;
+  await Promise.all(Object.values(grid).map(async (plan) => {
+    if (!plan.priceId) return;
+    const amounts = await priceCurrencies(plan.priceId);
+    const minor = amounts[wanted];
+    if (!Number.isFinite(minor)) return;
+    plan.localCurrency = wanted;
+    plan.localPrice = minor;
+    plan.priceLabel = geo.formatMoney(minor, wanted);
+  }));
+  return grid;
+}
 
 export function plans() {
   const out = {
@@ -879,7 +986,7 @@ export function checkoutDiscountParams(discount, coupon) {
   return { allow_promotion_codes: 'true' };
 }
 
-export async function createCheckoutSession(user, planId) {
+export async function createCheckoutSession(user, planId, currency = '') {
   metrics.event('checkout_started');
   ensureBillingState();
   if (!user) throw new Error('Sign in to continue.');
@@ -915,6 +1022,22 @@ export async function createCheckoutSession(user, planId) {
     'subscription_data[metadata][userId]': user.id,
     'subscription_data[metadata][plan]': plan.id,
   };
+
+  /*
+   * Charge in the currency the visitor was SHOWN.
+   *
+   * The pricing page reads the amount out of Stripe's own currency_options and
+   * displays it; this is the other half of that promise. Sent only when Stripe
+   * really holds an amount for this price in that currency -- asking for a
+   * currency a price does not have makes Stripe reject the whole session, so a
+   * missing currency has to mean "charge the base one", never "fail". The
+   * check is the same lookup the page used, off the same cache.
+   */
+  const wanted = String(currency || '').toLowerCase();
+  if (wanted && wanted !== geo.DEFAULT_CURRENCY) {
+    const amounts = await priceCurrencies(plan.priceId);
+    if (Number.isFinite(amounts[wanted])) params.currency = wanted;
+  }
 
   /*
    * The invite discount, and why it cannot stack.
