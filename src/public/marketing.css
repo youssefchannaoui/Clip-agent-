@@ -200,6 +200,19 @@ h3{font-size:21px;line-height:1.25}
   .mjs .strip-scene{border-radius:34px 34px 0 0;box-shadow:0 -30px 80px rgba(0,0,0,.55);z-index:4}
   .mjs .frame-scene{border-radius:34px 34px 0 0;margin-top:-34px;box-shadow:0 -30px 80px rgba(0,0,0,.55);z-index:4}
 }
+/* The journey pins on a PHONE as well, and only the journey. Youssef: "on
+   mobile it doesn't have that cool journey one by one effect, I could see all
+   of the seven steps at one go". It is the one tall scene whose content fits a
+   phone once its column is allowed to be narrow (see the minmax fix below):
+   a single stage measures 260-490px against 844 of screen, where the hero's
+   own column is 1116px and the one-frame scene 1306px and both must stay
+   unpinned. Shorter than the desktop's 520vh because a phone reads a stage
+   sooner and a thumb travels less. Deliberately outside the 961px block and
+   ahead of the reduced-motion one, which still un-pins every scene. */
+@media (max-width:960px){
+  .mjs .sc-journey{height:430vh}
+  .mjs .sc-journey .sc-stage{position:sticky;top:0;height:100svh;min-height:0}
+}
 @media (prefers-reduced-motion:reduce){
   .mjs .sc-tall,.mjs .sc-hero,.mjs .sc-journey{height:auto}
   
@@ -918,12 +931,34 @@ main{display:block}
   .choose-switch{grid-template-columns:repeat(2,150px)}
   .choose-switch::before{width:150px}
   #ct-quran:checked ~ .choose-switch::before{transform:translateX(150px)}
-  .journey-grid{grid-template-columns:26px 1fr;height:auto}
+  /* `1fr` has an automatic minimum of min-content, so the filmstrip and the
+     URL chip inflated this column to 449px inside a 390px viewport and
+     overflow:clip cut the copy off at the right edge. minmax(0,…) is the same
+     fix .sc-stage already carries, and it is what makes one-stage-at-a-time
+     legible here at all. */
+  .journey-grid{grid-template-columns:22px minmax(0,1fr);gap:14px;height:min(62svh,540px)}
+  /* The same automatic-minimum trap one level down: .journey-main is a flex
+     item and .journey-stages a grid, and both default to min-content, so a
+     wide child pushed the stages back out to 433px inside a 320px column. */
+  .journey-main{min-width:0}
+  .journey-stages{grid-template-columns:minmax(0,1fr)}
+  /* And once more inside the stage itself, whose implicit grid column is
+     auto: one wide descendant in step three took its own kicker, heading and
+     paragraph out to 433px. */
+  .journey-stage{min-width:0;grid-template-columns:minmax(0,1fr)}
   .journey-node{display:none}
-  .journey-stages{display:block}
-  .journey-stage{visibility:visible;pointer-events:auto;opacity:1;transform:none;margin-bottom:52px;--w:1;--a:1;--m:1;--ap:1;--jr-w:1}
-  .journey-clip{height:min(58vw,360px)}
-  .journey-review{grid-template-columns:1fr;justify-items:center}
+  .journey-header{margin-bottom:12px}
+  .journey-header h2{font-size:clamp(23px,7vw,30px)}
+  .journey-stage h3{font-size:clamp(20px,6vw,26px)}
+  .journey-stage > p{font-size:13.5px}
+  .journey-clip{height:min(42vw,200px)}
+  .journey-visual{gap:10px}
+  .journey-urlbar{width:100%;padding:9px 10px 9px 12px;font-size:11.5px;gap:8px}
+  .journey-urlbar b{padding:7px 11px;font-size:11.5px}
+  .journey-mode-facts,.journey-timeline{width:100%}
+  .jm-facts span{font-size:12.5px}
+  .journey-cands{gap:8px}
+  .journey-review{grid-template-columns:1fr;justify-items:center;gap:14px}
   .feature-deep-dive.reverse .feature-deep-copy{order:0}
   .seo-section{grid-template-columns:1fr;gap:12px}
   .seo-section p{max-width:none}

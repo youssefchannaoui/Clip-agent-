@@ -1440,13 +1440,47 @@ works the moblie is very weird."
   empty.
 - **The desktop is untouched**: only marketing.js changed, and the `--p` sweep
   at 1440x900 steps through the four scenes exactly as before.
-- **FOUND AND DELIBERATELY NOT FIXED:** at 390px the journey scene's content
-  overflows its own stage to the right and `overflow:clip` cuts it -- copy,
-  the URL chip and the Lecture/Quran switch all run off the edge. **This
-  predates this release** (measured at HEAD: 141 elements past the right edge,
-  the same 125 after), it is a LAYOUT fault rather than an animation one, and
-  Youssef's instruction was to touch nothing but the animations. It is the
-  next thing to do on that page.
+- The right-edge clipping this release found and left alone was fixed in
+  v3.84.0 below, together with the journey itself.
+
+### The journey pins on a phone too (v3.84.0, 2 Sept 2026)
+
+Youssef: "the animations when you scroll down on desktop is very different to
+mobile. On mobile it doesn't have that cool journey one by one effect, it's
+just I could see all of the seven steps at one go."
+
+- **Below 961px the journey was explicitly unstacked**: `.journey-stages`
+  became `display:block` and every stage was forced `visibility:visible;
+  opacity:1; --w:1`, so all seven sat in a list. That was the right call while
+  the scene could not be pinned, and the reason it could not be pinned was a
+  bug, not the phone.
+- **`1fr` has an automatic minimum of min-content.** The mobile override read
+  `grid-template-columns:26px 1fr`, so the filmstrip and the URL chip inflated
+  the column to **449px inside a 390px viewport** and `overflow:clip` cut the
+  copy off at the right edge. The same trap bit at three nested levels --
+  `.journey-main` is a flex item, `.journey-stages` a grid, and
+  `.journey-stage` a grid with an implicit auto column; each needed
+  `min-width:0` or `minmax(0,1fr)` before a stage would sit inside 320px.
+  Measured after: **0 elements past the right edge in the whole scene**, from
+  125 before.
+- With the column honest, a stage fits: 428px against 844 of screen. So
+  `.sc-journey` pins at every width (430vh on a phone against the desktop's
+  520 -- a phone reads a stage sooner and a thumb travels less) and the
+  engine's active-stage stamp no longer asks whether the viewport is wide.
+  **Measured at 390, 375 and 430: seven distinct one-stage-at-a-time states,
+  the same count desktop produces, and the desktop walk is unchanged.**
+- **The hero and the one-frame scene stay unpinned on a phone** -- their
+  content is 1116px and 1306px against 844 of screen (v3.83.1). Only the
+  journey fits, and only the journey is pinned.
+- **The v3.83.1 reveal seeding had to drop `.journey-stage`.** `.mjs .reveal`
+  is two classes and `.journey-stage` is one, so the reveal's `opacity:1`
+  outranked the windowing and left all seven drawn on top of each other --
+  the very symptom being fixed, reintroduced by the fix before it. Found by
+  reading the computed `--w` rather than by looking.
+- **A scene out of range now gets `--p` stamped to the end it is past** (0
+  below, 1 above) instead of being skipped. Unstamped means the CSS default
+  of 1 -- the FINISHED pose -- so the journey flashed its seventh stage before
+  the engine first reached it.
 
 ### The motion system that grew on top of it (v3.64.0–v3.69.0, 31 Aug 2026)
 

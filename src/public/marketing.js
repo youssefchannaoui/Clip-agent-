@@ -60,8 +60,12 @@ const wideScenes = window.matchMedia('(min-width: 961px)');
  * entrance instead, the same observer the rest of the page has always used.
  */
 if (!wideScenes.matches) {
+  /* NOT the journey: it is pinned and windowed at this width too, and
+   * `.mjs .reveal` outranks `.journey-stage` on specificity, so seeding it
+   * here replaced the one-stage-at-a-time opacity with a plain fade-in and
+   * left all seven drawn on top of each other. */
   const seed = ['.sc-hero .hero-copy-col > *', '.sc-hero .hero-reels',
-    '.strip-scene .sc-stage > *', '.frame-scene .sc-stage > *', '.journey-stage'];
+    '.strip-scene .sc-stage > *', '.frame-scene .sc-stage > *'];
   for (const selector of seed) {
     for (const node of document.querySelectorAll(selector)) node.classList.add('reveal');
   }
@@ -109,7 +113,6 @@ if (!reducedMotion) {
    * and the list shrinks as blocks reveal, so this costs one rect per
    * still-pending block per frame and nothing once they are all in. */
   let pendingReveals = revealItems.filter(node => !node.classList.contains('is-visible'));
-  const wide = wideScenes;
   let ticking = false;
   const update = () => {
     ticking = false;
@@ -124,7 +127,12 @@ if (!reducedMotion) {
         continue;
       }
       const rect = scene.getBoundingClientRect();
-      if (rect.bottom < -300 || rect.top > vh + 300) continue;
+      // Out of range still gets a value, clamped to the end it is past. An
+      // unstamped scene falls back to the CSS default of 1 -- the FINISHED
+      // pose -- so the journey briefly showed its seventh stage before the
+      // engine first reached it. Cheap: one property write, no layout.
+      if (rect.bottom < -300) { scene.style.setProperty('--p', '1'); continue; }
+      if (rect.top > vh + 300) { scene.style.setProperty('--p', '0'); continue; }
       const span = rect.height - vh;
       const raw = span > 60
         ? -rect.top / span
@@ -134,7 +142,10 @@ if (!reducedMotion) {
       // The journey: stamp the active stage (gates visibility and which
       // stage is interactive), and let stage two demonstrate both hearing
       // modes — clicking still wins whenever the page is at rest.
-      if (wide.matches && scene.classList.contains('sc-journey')) {
+      // The journey is pinned at every width now (marketing.css), so the
+      // active-stage stamp and the hearing-mode demonstration run on a phone
+      // too -- without them a phone would pin the scene and never advance it.
+      if (scene.classList.contains('sc-journey')) {
         const js = p * 7.7;
         if (!scene._stages) scene._stages = [...scene.querySelectorAll('.journey-stage')];
         const active = Math.max(0, Math.min(6, Math.floor(js - 0.15)));
