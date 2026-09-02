@@ -2841,6 +2841,33 @@ page close the more selection page."
   state and open in front of you. Verified by tapping all seven: each one
   navigates and the sheet is gone from the DOM.
 
+## The home-screen icon (v3.83.2, 2 Sept 2026)
+
+Youssef added the site to his phone's home screen and sent the result: a hairline
+gold arch, small in its tile, on flat black. "improve it."
+
+- **What was wrong was scale and weight, not the mark.** The arch occupied half
+  the tile's width with a 2.6/64 stroke, so at 60px on a home screen it read as
+  a faint outline. It is 56% wide with a 4.4/64 stroke now, the play glyph is
+  larger and optically centred in the arch's INTERIOR (not the tile), the gold
+  is a gradient rather than a flat fill, and a soft radial gold glow behind the
+  arch gives the tile depth.
+- **The apple-touch PNG is FULL-BLEED and the favicon is not.** iOS applies its
+  own squircle mask, so a tile that carries its own `rx` is rounded twice and
+  reads as a smaller icon inset in a box -- which is exactly what the
+  screenshot showed. The SVG favicon keeps its rounded tile, because a browser
+  draws it unmasked.
+- **Rasterised with the Chromium that is already here**, not with an image
+  library: this repo has no npm dependencies on purpose, and that is what lets
+  a phone session run the suite. `scratchpad/rasterise.mjs` renders an SVG at
+  any size through a headless page.
+- Checked at 120, 60, 32 and 16px, and at 16px in a light browser tab, before
+  being kept. The 180x180 grew 3.1KB -> 20KB, which is the gradients; it is
+  cached for a week and is not worth flattening for.
+- **A home-screen icon already added does NOT update.** iOS copies it when the
+  shortcut is created, and the file is served `max-age=604800`. Remove the
+  shortcut and add it again to see the new one.
+
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)

@@ -1,7 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#0E0E11"/>
-  <g transform="translate(12,6)">
-    <path d="M20 2C11.2 2 4 9.2 4 18v32h32V18C36 9.2 28.8 2 20 2Z" stroke="#D9B478" stroke-width="2.6" fill="none" stroke-linejoin="round"/>
-    <path d="M16.6 20.4 25.4 26l-8.8 5.6V20.4Z" fill="#D9B478"/>
+  <defs>
+    <clipPath id="r"><rect width="64" height="64" rx="14"/></clipPath>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#17161A"/><stop offset="1" stop-color="#08080A"/></linearGradient>
+    <radialGradient id="glow" cx="50%" cy="42%" r="52%"><stop offset="0" stop-color="#D9B478" stop-opacity=".22"/><stop offset="1" stop-color="#D9B478" stop-opacity="0"/></radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F4DCAE"/><stop offset="1" stop-color="#C9A164"/></linearGradient>
+  </defs>
+  <g clip-path="url(#r)">
+    <rect width="64" height="64" fill="url(#g)"/>
+    <rect width="64" height="64" fill="url(#glow)"/>
+    <path d="M14 55V27a18 18 0 0 1 36 0v28Z" fill="none" stroke="url(#gold)" stroke-width="4.4" stroke-linejoin="round"/>
+    <path d="M27.6 24.6 41.2 31.7 27.6 38.8Z" fill="url(#gold)" stroke="url(#gold)" stroke-width="2.2" stroke-linejoin="round"/>
   </g>
 </svg>
