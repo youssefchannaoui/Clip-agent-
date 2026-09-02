@@ -4440,3 +4440,26 @@ defaults in config.js still read A$9 / A$29 / A$290 while Stripe holds A$9.99
 and A$29.99 -- production overrides every label through `PLAN_PRICE_*` env
 vars, and the live page and Stripe agree. Do not "fix" the config defaults
 against Stripe without checking the env first; they are two different things.
+
+
+### Setting the per-price currency amounts (scripts/stripe-currency-options.mjs)
+
+Adaptive Pricing converts at the LIVE rate and needs no maintenance;
+`currency_options` are FIXED amounts that drift and are yours to revisit. That
+trade is why the script covers five major currencies (USD, GBP, EUR, CAD, NZD)
+and lets Stripe keep converting everything else automatically. Adding fifty
+currencies would be fifty amounts per price to maintain for ever.
+
+- **Dry run by default.** It reads every price and prints what it would write;
+  only `--apply` writes anything.
+- **The key is read from the environment and never printed**, so it stays on
+  the machine that runs it and out of any transcript.
+- **It refuses when Stripe's base amount does not match its table.** Every
+  converted figure is derived from the Australian price, so a price that has
+  since changed makes all five wrong -- better to stop and say so than to write
+  a set of numbers built on a stale one.
+- Amounts were converted on 2 Sept 2026 and rounded UP to the local .99
+  convention, so no currency ends up cheaper than the Australian price.
+- The pricing pages pick the new amounts up within ten minutes (the price
+  cache in billing.js), and the checkout then charges the same currency it
+  showed.
