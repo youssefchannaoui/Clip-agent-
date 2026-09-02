@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1077 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1078 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -4502,3 +4502,32 @@ currencies would be fifty amounts per price to maintain for ever.
 - The pricing pages pick the new amounts up within ten minutes (the price
   cache in billing.js), and the checkout then charges the same currency it
   showed.
+
+
+### The currency amounts are set, and the public pages show them (v3.87.1)
+
+Run on 3 Sept 2026 from the Render shell: `node scripts/stripe-currency-options.mjs`
+then `--apply`. **Wrote 9 prices, 0 skipped, 0 failed**, and verified in the
+Stripe dashboard rather than trusted from the exit code -- the monthly price
+now lists CAD CA$29.99, EUR EUR18.99, GBP GBP15.99, NZD NZ$36.99 and USD
+US$21.99 beside its A$29.99 base.
+
+With real amounts in Stripe the public pages stopped needing the "prices are
+Australian" note and started showing the money itself:
+
+- **`pricingCards` reads `plansInCurrencyCached`**, so every card is Stripe's
+  own amount for that currency and falls back to the configured label where a
+  currency is not configured. The note is suppressed once the cards are
+  localised, because it would then be false.
+- **The JSON-LD offers read the SAME source.** Structured data has to describe
+  what the page shows; a visitor served GBP15.99 with an offer claiming 29.99 AUD
+  is a mismatch Google is entitled to distrust the whole page over. A crawler
+  arrives from somewhere like everybody else, and now sees a page and a schema
+  that agree.
+- The test drives a stubbed Stripe through the real page and asserts the card,
+  the note's absence and the schema offer all agree on GBP15.99.
+
+**Five currencies are configured; every other country is still converted by
+Adaptive Pricing at Checkout.** So the pages show AUD to, say, an Indonesian
+visitor and Stripe charges IDR -- which is why `currencyNote` stays for the
+un-localised case rather than being deleted.

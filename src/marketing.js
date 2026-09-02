@@ -383,8 +383,28 @@ function currencyNote(currency) {
 function pricingCards(currentUser = null, currency = '') {
   const accountUrl = currentUser ? '/plans' : '/login?returnTo=/plans';
   const tierNames = { pro: 'Pro', studio: 'Studio' };
-  const money = { pro: [config.planPriceWeeklyLabel, config.planPriceMonthlyLabel, config.planPriceYearlyLabel],
-    studio: [config.planPriceStudioWeeklyLabel, config.planPriceStudioMonthlyLabel, config.planPriceStudioYearlyLabel] };
+  // Real amounts out of Stripe when that currency is configured on the price,
+  // and the Australian labels when it is not. Never a conversion of our own:
+  // the figure on this card is the figure Stripe will charge, because the
+  // checkout is handed the same currency. plansInCurrencyCached reads only
+  // what is already cached and warms the rest behind the render, so the
+  // homepage never waits on Stripe to draw a price.
+  const priced = billing.plansInCurrencyCached(currency);
+  const localised = plan => {
+    const cell = priced[plan];
+    return cell && cell.localCurrency ? cell.priceLabel : null;
+  };
+  const money = {
+    pro: [localised('pro_weekly') || config.planPriceWeeklyLabel,
+      localised('pro_monthly') || config.planPriceMonthlyLabel,
+      localised('pro_yearly') || config.planPriceYearlyLabel],
+    studio: [localised('studio_weekly') || config.planPriceStudioWeeklyLabel,
+      localised('studio_monthly') || config.planPriceStudioMonthlyLabel,
+      localised('studio_yearly') || config.planPriceStudioYearlyLabel],
+  };
+  // Every card localised means the prices ARE this visitor's money, and the
+  // note explaining that they are Australian would then be false.
+  const showingLocal = Boolean(localised('pro_monthly'));
   const allowance = { pro: [config.tokensWeekly, config.tokensMonthly, config.tokensYearly],
     studio: [config.tokensStudioWeekly, config.tokensStudioMonthly, config.tokensStudioYearly] };
   const configured = { pro: [config.stripePriceWeekly, config.stripePriceMonthly, config.stripePriceYearly],
@@ -436,7 +456,7 @@ function pricingCards(currentUser = null, currency = '') {
     // does charge in their own money; this says so WITHOUT inventing a
     // converted number, because the rate is Stripe's and we do not know it
     // until the customer is standing in the checkout.
-    + currencyNote(currency)
+    + (showingLocal ? '' : currencyNote(currency))
     + `<div class="pricing-grid">${basic}${paidCard('pro')}${paidCard('studio')}</div>`;
 }
 
@@ -511,19 +531,39 @@ function webSiteSchema(base) {
   return { '@context': 'https://schema.org', '@type': 'WebSite', name: 'DeenClipped', url: siteBase(base) };
 }
 
-function softwareSchema(base) {
-  const monthly = parsePriceLabel(config.planPriceMonthlyLabel);
+const ZERO_DECIMAL_SCHEMA = new Set(['bif', 'clp', 'djf', 'gnf', 'jpy', 'kmf', 'krw',
+  'mga', 'pyg', 'rwf', 'ugx', 'vnd', 'vuv', 'xaf', 'xof', 'xpf']);
+
+function softwareSchema(base, currency = '') {
+  /*
+   * The schema quotes whatever the CARDS quote.
+   *
+   * Structured data has to describe what the page shows: a visitor served
+   * £15.99 with an offer claiming 29.99 AUD is a mismatch Google is entitled
+   * to distrust the whole page over. So both read the same Stripe amounts,
+   * and a crawler -- which arrives from somewhere, like everybody else --
+   * sees a page and a schema that agree with each other.
+   */
+  const priced = billing.plansInCurrencyCached(currency);
+  const stripePrice = (plan) => {
+    const cell = priced[plan];
+    if (!cell || !cell.localCurrency) return null;
+    const zero = ZERO_DECIMAL_SCHEMA.has(cell.localCurrency);
+    const amount = Number(cell.localPrice || 0) / (zero ? 1 : 100);
+    return { price: zero ? String(amount) : amount.toFixed(2), currency: cell.localCurrency.toUpperCase() };
+  };
+  const monthly = stripePrice('pro_monthly') || parsePriceLabel(config.planPriceMonthlyLabel);
   // One offer per price the page actually shows: six paid, plus the free tier.
   // Listing three when the grid renders six is the kind of drift the tests
   // comparing schema against the rendered page exist to catch.
   const offers = [
     { name: 'Basic', parsed: monthly ? { price: '0', currency: monthly.currency } : null },
-    { name: 'Pro weekly', parsed: parsePriceLabel(config.planPriceWeeklyLabel) },
+    { name: 'Pro weekly', parsed: stripePrice('pro_weekly') || parsePriceLabel(config.planPriceWeeklyLabel) },
     { name: 'Pro monthly', parsed: monthly },
-    { name: 'Pro yearly', parsed: parsePriceLabel(config.planPriceYearlyLabel) },
-    { name: 'Studio weekly', parsed: parsePriceLabel(config.planPriceStudioWeeklyLabel) },
-    { name: 'Studio monthly', parsed: parsePriceLabel(config.planPriceStudioMonthlyLabel) },
-    { name: 'Studio yearly', parsed: parsePriceLabel(config.planPriceStudioYearlyLabel) },
+    { name: 'Pro yearly', parsed: stripePrice('pro_yearly') || parsePriceLabel(config.planPriceYearlyLabel) },
+    { name: 'Studio weekly', parsed: stripePrice('studio_weekly') || parsePriceLabel(config.planPriceStudioWeeklyLabel) },
+    { name: 'Studio monthly', parsed: stripePrice('studio_monthly') || parsePriceLabel(config.planPriceStudioMonthlyLabel) },
+    { name: 'Studio yearly', parsed: stripePrice('studio_yearly') || parsePriceLabel(config.planPriceStudioYearlyLabel) },
   ].filter(item => item.parsed).map(item => ({
     '@type': 'Offer', name: `${item.name} plan`,
     price: item.parsed.price, priceCurrency: item.parsed.currency,
@@ -841,7 +881,7 @@ export function home({ base, currentUser, currency = '' }) {
     </section>
   </main>`;
   return layout({ base, currentUser, ...meta('/'), body,
-    jsonLd: [organizationSchema(base), webSiteSchema(base), softwareSchema(base), faqSchema()] });
+    jsonLd: [organizationSchema(base), webSiteSchema(base), softwareSchema(base, currency), faqSchema()] });
 }
 export function features({ base, currentUser }) {
   const body = `<main>
@@ -882,7 +922,7 @@ export function features({ base, currentUser }) {
 export function pricing({ base, currentUser, currency = '' }) {
   const body = `<main><section class="page-hero pricing-hero wrap"><span class="eyebrow"><i></i>Three tiers · one clear token model</span><h1>Start with the whole workflow. Upgrade for scale.</h1><p>One token represents one selected source-video minute. Subscription allowances refresh normally, while one-time top-up tokens stay in your wallet until used.</p><div class="hero-actions" style="justify-content:center"><a class="button primary" href="/login?returnTo=/app">Start Basic free ${icon('arrow')}</a><a class="button secondary" href="#token-shop">See the token shop</a></div><div class="pricing-trust"><span>${escapeHtml(config.tokensFree)} starter tokens</span><span>${escapeHtml(config.stripeTrialDays)} days of Basic access</span><span>Secure Stripe Checkout</span><span>No raw card storage</span></div></section><section class="page-content"><div class="wrap"><div class="pricing-section-head"><span class="section-label">Basic, Pro and Studio</span><h2>Choose the capability level, then the billing period.</h2><p>Basic includes the real workflow. Pro adds every template, watermark removal and calculated DeenAI insights. Studio adds private Ask, priority rendering and more posting windows.</p></div>${pricingCards(currentUser, currency)}<section class="comparison-section"><div class="pricing-section-head"><span class="section-label">Plan comparison</span><h2>See exactly what changes.</h2><p>Core creation, review, automation and supported publishing are not hidden behind a paid tier.</p></div>${planComparison()}</section>${tokenShop(currentUser)}<div class="pricing-explainer"><div><span class="section-label">How tokens work</span><h2>Clear before you render.</h2><p>DeenClipped reads the source duration, lets you select a start and end time, then estimates usage from that selected range. Subscription allowance is used before purchased top-ups.</p>${checkItem(`${config.tokensPerMinute} token per source minute`,'Usage follows the selected source window.')}${checkItem('More clips do not repeat the source charge','Cutting more candidates from an already processed source does not spend the source minutes again.')}${checkItem('Ordinary re-renders stay fair','Review, template changes and ordinary re-renders do not unnecessarily consume tokens.')}${checkItem('Top-ups persist','Purchased tokens do not disappear when a subscription renews or is cancelled.')}</div><div class="product-frame"><img src="/marketing-assets/workflow-premium.webp" alt="DeenClipped source-minute and workflow overview"></div></div></div></section></main>`;
   return layout({ base, currentUser, ...meta('/pricing'), body,
-    jsonLd: [organizationSchema(base), webSiteSchema(base), softwareSchema(base)] });
+    jsonLd: [organizationSchema(base), webSiteSchema(base), softwareSchema(base, currency)] });
 }
 
 export function contact({ base, currentUser }) {

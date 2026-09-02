@@ -232,3 +232,51 @@ test('a foreign visitor is told which money the prices are in', async () => {
   assert.doesNotMatch(page('gbp'), /£\d/, 'no converted figure appears');
   assert.doesNotMatch(page('usd'), /US\$\d/);
 });
+
+test('the cards and the schema quote the same money', async () => {
+  // Structured data has to describe what the page shows. A visitor served
+  // £15.99 with an offer claiming 29.99 AUD is a mismatch Google is entitled
+  // to distrust the whole page over -- so both read the same Stripe amounts.
+  const marketing = await import('../src/marketing.js');
+  const ids = {
+    [config.stripePriceWeekly]: 999, [config.stripePriceMonthly]: 2999,
+    [config.stripePriceYearly]: 24900, [config.stripePriceStudioWeekly]: 1999,
+    [config.stripePriceStudioMonthly]: 5999, [config.stripePriceStudioYearly]: 49900,
+  };
+  if (!config.stripePriceMonthly) return; // nothing configured in this environment
+
+  const gbp = { 999: 599, 2999: 1599, 24900: 13200, 1999: 1099, 5999: 3199, 49900: 26400 };
+  const key = config.stripeSecretKey;
+  const realFetch = globalThis.fetch;
+  config.stripeSecretKey = 'sk_test_currency';
+  globalThis.fetch = async (url) => {
+    const id = decodeURIComponent(String(url).split('/v1/prices/')[1] || '').split('?')[0];
+    const aud = ids[id];
+    if (aud === undefined) return { ok: false, status: 404, json: async () => ({ error: { message: 'no price' } }) };
+    return { ok: true, status: 200, json: async () => ({
+      id, currency: 'aud', unit_amount: aud, currency_options: { gbp: { unit_amount: gbp[aud] } },
+    }) };
+  };
+  billing.forgetPriceCurrencies();
+  try {
+    await billing.plansInCurrency('gbp');           // warm the cache the pages read
+    const page = marketing.pricing({ base: 'https://x.test', currentUser: null, currency: 'gbp' });
+
+    assert.match(page, /£15\.99/, 'the card shows the amount Stripe holds');
+    assert.doesNotMatch(page, /Stripe charges you in GBP/,
+      'and the "prices are Australian" note is gone, because they are not');
+
+    const blocks = [...page.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]
+      .map(m => JSON.parse(m[1]));
+    const app = blocks.find(b => b['@type'] === 'SoftwareApplication');
+    const monthly = app.offers.find(o => o.name === 'Pro monthly plan');
+    assert.equal(monthly.priceCurrency, 'GBP', 'the schema follows the card');
+    assert.equal(monthly.price, '15.99');
+    assert.ok(page.includes(`>£${monthly.price}<`) || page.includes(`£${monthly.price}`),
+      'and that exact figure is on the page');
+  } finally {
+    config.stripeSecretKey = key;
+    globalThis.fetch = realFetch;
+    billing.forgetPriceCurrencies();
+  }
+});
