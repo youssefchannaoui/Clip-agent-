@@ -200,6 +200,52 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
   color: var(--dc-ink, #F2F2F4); font: 600 11.5px/1.3 Inter, system-ui, sans-serif;
   box-shadow: 0 14px 34px rgba(0,0,0,.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* THE TOPBAR, measured before it was touched (1440x950, Home).
+   Five controls sat in a row at five different heights -- search 33, setup
+   chip 26, tokens 29, bell 32, account 35 -- so nothing shared a rhythm and
+   the row read as things placed rather than a row. The title block was
+   flex:1 and the search flex:0 1 220px, so the search had no anchor: it
+   floated wherever the title's text left it, and moved between screens as the
+   heading changed length.
+
+   Everything below is scoped to #dcTopbar and hangs on ids and element types,
+   never a hashed .sNN class -- a design re-import renumbers those. */
+#dcTopbar { gap: 10px; }
+/* One height for the whole row. */
+#dcTopbar > label, #dcTopbar > button, #dcTopbar > div > button { height: 34px; box-sizing: border-box; }
+/* The search was ANCHORED TO THE HEADING, so it moved as you navigated:
+   measured across eight screens it started at x=379 on Performance and x=597
+   on Help -- 218px of travel for a control that never changes. It hangs off
+   the right-hand cluster now (margin-left:auto), which does not change between
+   screens, so it holds one position. The heading keeps the slack and its
+   subtitle ellipsizes rather than pushing anything. */
+#dcTopbar > div:first-child { flex: 0 1 auto; min-width: 0; }
+#dcTopbar > div:first-child > span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#dcSearchBox { flex: 0 0 300px; margin-left: auto; }
+/* The heading is the only thing allowed to give way. Without this the chips
+   shrank instead and "2 of 5 done" wrapped onto two lines inside its pill. */
+#dcTopbar > button, #dcTopbar > div:not(:first-child) { flex: none; white-space: nowrap; }
+/* The bell and the account are a cluster: who you are and what wants you.
+   A hairline says so without adding an element to the export. */
+#dcTopbar > div:has(> button > i.ph-bell) { padding-left: 12px; border-left: 1px solid var(--dc-n-1e1e22, #1E1E22); }
+/* The plan, named in the one place a phone and a desktop both read it. The
+   rail badge that used to carry it was removed in v3.73.1; this is where it
+   lives now. Basic wears the quiet border -- gold is what a paid tier wears
+   across this app, and spending it on the free plan spends its meaning. */
+#dcPlanChip {
+  display: inline-flex; align-items: center; height: 34px; box-sizing: border-box;
+  padding: 0 12px; border-radius: 20px; cursor: pointer; font-family: inherit;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .085em; text-transform: uppercase;
+  border: 1px solid var(--dc-n-26262a, #26262A); background: var(--dc-bg-raised, #17171A);
+  color: var(--dc-ink-soft, #BCBCC3); transition: border-color .14s ease, background .14s ease;
+}
+#dcPlanChip[data-paid="1"] {
+  border-color: rgba(217,180,120,.34); background: rgba(217,180,120,.08);
+  color: var(--dc-gold-lit, #F0D6A6);
+}
+#dcPlanChip:hover { border-color: var(--dc-ink-faint, #34343A); }
+#dcPlanChip[data-paid="1"]:hover { border-color: rgba(217,180,120,.6); }
+@media (max-width: 1180px) { #dcPlanChip { display: none; } }
 /* A card you can pick up says so. Six dots is the grip every list-reordering
    UI has settled on, and it is drawn as a real element rather than a
    background so it can carry touch-action:none -- on a phone, a drag that
@@ -7098,6 +7144,46 @@ function paintClipWaveforms(vals){
     }).join('');
   });
 }
+function paintPlanChip(cur){
+  /* The plan, named in the topbar. It had NO home on this screen: the rail
+     badge that carried it was removed in v3.73.1 and the token chip counts
+     tokens, which is a different question -- so the one thing a customer most
+     wants confirmed after paying was written nowhere in the app's chrome.
+
+     Host-injected rather than added to the design export: a new element there
+     regenerates every hashed class name in the app for one pill. Rebuilt on
+     every paint like every other host panel, and registered in paintStudio's
+     list rather than on a MutationObserver (the lesson v3.53.5 paid three
+     attempts for). */
+  const bar=document.getElementById('dcTopbar');
+  const tokens=document.getElementById('dcTokenChip');
+  if(!bar||!tokens)return;
+  cur=cur||{};
+  let name=String(cur.planName||'').trim();
+  /* An operator's plan name IS "Unlimited", and the token chip beside it
+     already says "tokens · Unlimited" -- the Account panel shipped exactly
+     that duplication once (v3.75.3) and it read as broken. Say the true
+     thing instead: they are the owner. */
+  if(cur.unlimited)name='Owner';
+  if(!name){const old=document.getElementById('dcPlanChip');if(old)old.remove();return}
+
+  let chip=document.getElementById('dcPlanChip');
+  if(!chip){
+    chip=document.createElement('button');
+    chip.id='dcPlanChip';
+    chip.type='button';
+    chip.addEventListener('click',()=>{StudioAdapter.ui.screen='tokens';paintStudio()});
+  }
+  if(chip.textContent!==name)chip.textContent=name;
+  /* Basic does not wear the gold: gold is what every paid tier wears across
+     this app, and spending it on the free plan spends its meaning. */
+  const paid=cur.unlimited||(cur.plan&&cur.plan!=='free'&&cur.plan!=='basic')?'1':'0';
+  if(chip.dataset.paid!==paid)chip.dataset.paid=paid;
+  const title=cur.unlimited?'You are the operator':('You are on '+name);
+  if(chip.title!==title)chip.title=title;
+  if(chip.nextSibling!==tokens)bar.insertBefore(chip,tokens);
+}
+
 function paintBrandSeal(){
   /* The marketing site's rotating seal, on the rail's arch mark. Youssef,
      1 Sept 2026: "that cool, like, animated top left logo on the main website
@@ -7741,6 +7827,7 @@ function paintStudio(){
   paintTemplatesLayout();
   paintHelp();
   paintBrandSeal();
+  paintPlanChip((DATA.billing&&DATA.billing.current)||{});
   paintClipWaveforms(vals);
   paintLibraryAside(vals);
   /* Cheap when shut -- it returns immediately -- and this is what keeps the

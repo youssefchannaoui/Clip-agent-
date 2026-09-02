@@ -17,7 +17,6 @@
     "styleOverrides does the same for a literal `style` attribute that hardcodes data rather than appearance -- the new-job poster baked in a marketing image, so every lecture previewed with the same picture instead of its own thumbnail."
   ],
   "overrides": {
-    "Youssef Channaoui": "accountName",
     "Studio · Salām, Youssef": "greeting",
     "3 connected · TikTok needs reconnecting": "connSummary",
     "Visa ending 4242 · expires 04/29": "cardLabel",

@@ -2099,6 +2099,24 @@
   // outside a paint (openJob needs the template list to pick a default).
   var LAST_DATA = null;
 
+  function accountName(u) {
+    u = u || {};
+    var name = String(u.name || '').trim();
+    if (name) return name;
+    // No name on the record: the local part of the email is still a person's
+    // handle, and it fits. A bare "Account" is the last resort.
+    var email = String(u.email || '').trim();
+    return email ? email.split('@')[0] : 'Account';
+  }
+
+  function accountInitials(u) {
+    var parts = accountName(u).split(/[\s._-]+/).filter(Boolean);
+    if (!parts.length) return '?';
+    var first = parts[0].charAt(0);
+    var second = parts.length > 1 ? parts[parts.length - 1].charAt(0) : '';
+    return (first + second).toUpperCase();
+  }
+
   function bindings(DATA) {
     DATA = DATA || {};
     LAST_DATA = DATA;
@@ -4453,6 +4471,9 @@
       caretIcon: UI.menuOpen ? 'ph ph-caret-up' : 'ph ph-caret-down',
       toggleMenu: function (e) { stop(e); setUI({ menuOpen: !UI.menuOpen, bellOpen: false }); },
       accountEmail: (DATA.user && DATA.user.email) || '',
+      // The AVATAR was a literal "YC" in the design export, so every customer
+      // wore the operator's initials on their own account.
+      accountInitials: accountInitials(DATA.user),
 
       // ── screen flags ──
       isHome: UI.screen === 'home',
@@ -5998,7 +6019,10 @@
       // them into bindings at import time so they can carry the account's own
       // data; without that a customer sees the designer's placeholders, including
       // a payment card and a connection status that were never real.
-      accountName: (DATA.user && (DATA.user.name || DATA.user.email)) || '',
+      // Falling back to the whole email is what rendered the account button as
+      // "youssefchannaoui05@gm..." -- width spent saying nothing. The local
+      // part is still a handle, and it fits.
+      accountName: accountName(DATA.user),
       greeting: 'Studio' + (firstName ? ' · Salām, ' + firstName : ''),
       connSummary: connectedCount
         ? plural(connectedCount, 'account') + ' connected'

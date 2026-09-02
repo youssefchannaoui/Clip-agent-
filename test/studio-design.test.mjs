@@ -268,7 +268,11 @@ test('Home shows real lectures, clips and account details', () => {
   const { html } = renderScreen('home');
   assert.match(html, /The Night Prayer/);
   assert.match(html, /Whoever wakes safe/);
-  assert.match(html, /youssef@deenclipped\.online/);
+  // The topbar names the ACCOUNT, not its email address: the fixture user has
+  // no name, so the email's local part is the handle. The full address is
+  // still bound, in the dropdown, where there is room for it (v3.94.0 -- the
+  // button used to render "youssefchannaoui05@gm..." and say nothing).
+  assert.match(html, /"dcAccountEmail" class="[^"]*">youssef</);
   assert.match(html, /412/, 'token balance');
 });
 

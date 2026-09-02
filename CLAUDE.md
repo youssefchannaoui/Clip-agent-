@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1136 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **COUNT JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3280,6 +3280,44 @@ Youssef's request**, which postdates the account-menu instruction this session
 built to. The restoration was reverted and their placement kept. **Read the
 other side's TESTS before concluding a merge lost something** -- the test
 carried the reason, and the diff alone did not.
+## The topbar, and the identity it was showing everybody (v3.94.0, 3 Sept)
+
+Youssef, looking at the live header: "rearrange make it look cleaner idk
+somethings missing." Three faults, and two of them were silent.
+
+- **Every customer wore the operator's identity.** The avatar initials "YC"
+  were a LITERAL in the design export -- in the button AND in the dropdown --
+  so a stranger's account showed YC. (The NAME beside it was already patched
+  through `text-overrides.json`; the avatar never was.) Both avatars bind
+  `{{ accountInitials }}` now, the name is a real binding in the export rather
+  than an override, and that override entry is retired -- which is exactly the
+  lifecycle its own readme describes.
+- **The button rendered the email**, truncated to "youssefchannaoui05@gm...":
+  the widest thing in the row, saying nothing. It shows the account's NAME,
+  falling back to the email's local part and then to "Account". The full
+  address is still in the dropdown, where there is room.
+- **The plan was named NOWHERE in the chrome.** The rail badge that carried it
+  was removed in v3.73.1 and the token chip counts TOKENS, which is a different
+  question -- so the one thing a customer most wants confirmed after paying was
+  written nowhere. `#dcPlanChip` sits before the token chip and opens Tokens &
+  billing. Basic wears the quiet border; gold is what a paid tier wears across
+  this app, and spending it on the free plan spends its meaning. An operator
+  reads **Owner**, not "Unlimited" -- the token chip beside it already says
+  Unlimited, and the Account panel shipped exactly that duplication once.
+- **The row had no rhythm, measured rather than felt**: five controls at five
+  heights (search 33, setup 26, tokens 29, bell 32, account 35). All 34 now.
+- **The search was anchored to the HEADING**, so it moved as you navigated:
+  x=379 on Performance, x=597 on Help -- 218px of travel for a control that
+  never changes. It hangs off the right-hand cluster (`margin-left: auto`) and
+  does not shrink; the heading is the only thing allowed to give way, and its
+  subtitle ellipsizes. Measured after: **26px of travel across ten screens**,
+  five of them identical, no page overflow at 1440/1280/1100/900.
+- Two of the tokens the chip first used (`--dc-n-121214`, `--dc-n-34343a`) are
+  **not defined anywhere**, so in daylight it would have fallen back to its
+  dark hex. Check a token exists before leaning on it -- a `var()` with a
+  fallback fails silently and only in the other theme.
+- Host-rendered and in paintStudio's list, like every other host panel. Both
+  design edits were proven byte-stable through `npm run design:import`.
 
 ## Open items
 
