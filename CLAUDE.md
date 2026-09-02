@@ -3860,6 +3860,15 @@ make more sense towards the clip."
   break the next time anyone touched the design. `npm run design:import` was
   proven byte-stable first -- CSS identical, no hashed class name moved -- which
   is the same route v3.75.4 established for `data-dc-week`.
+- **Matched by clip ID, never by position** -- and the first cut got this
+  wrong. The same card, and the same strip, is rendered by TWO lists: the
+  review queue (`queueClips`) and a lecture's own clips (`detailClips`).
+  Keying off one list's order meant the lecture screen drew the queue's
+  waveforms onto its cards -- the wrong clip's audio under the wrong
+  thumbnail, which is the very fault this replaced. Youssef spotted it as "the
+  gold line isnt really there?" on the lecture screen. The card now carries
+  `data-clip="{{ clip.id }}"`, bound in the design export (byte-stable
+  re-import again, CSS identical), and the painter looks the clip up by id.
 - **Clips rendered before this show the baseline**, and there is no backfill:
   the peaks come from the rendered file, which lives on R2, and the web service
   has no ffmpeg. New clips carry it from their first render.

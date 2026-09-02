@@ -646,7 +646,7 @@
         <sc-if value="{{ gridMode }}" hint-placeholder-val="{{ true }}">
         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; align-content: start;">
           <sc-for list="{{ queueClips }}" as="clip" hint-placeholder-count="8">
-            <article style="{{ clip.cardStyle }}">
+            <article data-clip="{{ clip.id }}" style="{{ clip.cardStyle }}">
               <div style="{{ clip.thumbStyle }}">
                 <span style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(9,9,10,.5), transparent 32%, transparent 58%, rgba(9,9,10,.86));"></span>
                 <span style="position: absolute; top: 8px; left: 8px; display: flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 20px; border: 1px solid rgba(217,180,120,.36); background: rgba(10,10,12,.78); color: #F0D6A6; font-size: 10.5px; font-weight: 700;"><i class="ph-fill ph-lightning" style="font-size: 11px;"></i>{{ clip.score }}</span>
@@ -879,7 +879,7 @@
 
       <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; margin-top: 16px;">
         <sc-for list="{{ detailClips }}" as="clip" hint-placeholder-count="6">
-          <article style="{{ clip.cardStyle }}">
+          <article data-clip="{{ clip.id }}" style="{{ clip.cardStyle }}">
             <div style="{{ clip.thumbStyle }}">
               <span style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(9,9,10,.5), transparent 32%, transparent 58%, rgba(9,9,10,.86));"></span>
               <span style="position: absolute; top: 8px; left: 8px; display: flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 20px; border: 1px solid rgba(217,180,120,.36); background: rgba(10,10,12,.78); color: #F0D6A6; font-size: 10.5px; font-weight: 700;"><i class="ph-fill ph-lightning" style="font-size: 11px;"></i>{{ clip.score }}</span>

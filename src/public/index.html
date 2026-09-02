@@ -6588,23 +6588,20 @@ function helpArticle(a,base){
    baseline. Drawing an invented shape for it would be the same lie the
    gradient was. */
 function paintClipWaveforms(vals){
-  /* Matched by POSITION, not by id: the card carries no clip id, and the grid
-     is rendered straight from this list in this order. Scoped to one grid at a
-     time (the strips' shared parent), so a second grid on screen cannot shift
-     the count. */
-  const rows=(vals&&vals.queueClips)||[];
-  const strips=[...document.querySelectorAll('#studio [data-dc-wave]')];
-  const grids=new Map();
-  for(const s of strips){
-    const grid=(s.closest('article')||s).parentElement;
-    if(!grids.has(grid)) grids.set(grid,[]);
-    grids.get(grid).push(s);
-  }
-  for(const group of grids.values()) group.forEach((strip,index)=>{
-    const clip=rows[index];
+  /* Matched by CLIP ID, never by position. The same card -- and the same strip
+     -- is rendered by two different lists: the review queue (queueClips) and a
+     lecture's own clips (detailClips). Keying off one list's order drew the
+     queue's clips onto the lecture screen's cards, which is the wrong clip's
+     audio under the wrong thumbnail: the exact fault this replaced. The card
+     carries data-clip for this reason. */
+  const rows=[].concat((vals&&vals.queueClips)||[],(vals&&vals.detailClips)||[]);
+  const byId={};
+  for(const row of rows) if(row&&row.id&&!byId[row.id]) byId[row.id]=row;
+  document.querySelectorAll('#studio [data-dc-wave]').forEach(strip=>{
+    const card=strip.closest('[data-clip]');
+    const clip=card?byId[card.dataset.clip]:null;
     const peaks=clip&&Array.isArray(clip.waveform)&&clip.waveform.length?clip.waveform:null;
-    const id=(clip&&clip.id)||('#'+index);
-    const signature=peaks?id+':'+peaks.length+':'+peaks[0]+':'+peaks[peaks.length-1]:'flat';
+    const signature=peaks?card.dataset.clip+':'+peaks.length+':'+peaks[0]+':'+peaks[peaks.length-1]:'flat';
     if(strip.dataset.wave===signature)return;
     strip.dataset.wave=signature;
     if(!peaks){

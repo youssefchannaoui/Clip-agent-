@@ -4119,7 +4119,16 @@ test('the bars under a review card are that clip\'s own audio', () => {
 
   const paint = /function paintClipWaveforms\(vals\)\{[\s\S]*?\n\}/.exec(html);
   assert.ok(paint, 'the painter exists');
-  assert.match(paint[0], /queueClips/, 'it reads the rendered card list');
+  // By ID, never by position. The same strip is rendered by TWO lists -- the
+  // review queue and a lecture's own clips -- so keying off one list's order
+  // drew the queue's waveforms onto the lecture screen's cards: the wrong
+  // clip's audio under the wrong thumbnail, which is the fault this replaced.
+  assert.match(paint[0], /queueClips/);
+  assert.match(paint[0], /detailClips/, 'the lecture screen renders these cards too');
+  assert.match(paint[0], /closest\('\[data-clip\]'\)/, 'matched by clip id');
+  assert.doesNotMatch(paint[0], /forEach\(\(strip,index\)/, 'never by position');
+  const tplCard = fs.readFileSync(path.join(ROOT, 'src/public/studio-template.generated.js'), 'utf8');
+  assert.ok(tplCard.includes('data-clip'), 'and the card carries its id for that lookup');
   // Both branches must clear the decorative gradient. Leaving it on the
   // fallback would put invented bars back on exactly the clips we know
   // nothing about.
