@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1103 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1105 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -4778,3 +4778,31 @@ the deliberate stage and a marker that is faint on purpose in both themes.
 Dark was re-checked after every step and is unchanged -- every literal is kept
 as the var() fallback, so a browser that never loads the token sheet renders
 exactly what it rendered before.
+
+
+### The Daylight switch rendered and did nothing (v3.91.1)
+
+Youssef, on the live app: "cant click". He was right, and it was not a UI
+fault: `case 'theme'` sat inside a hunk that a rebase conflict resolved to
+UPSTREAM, so the Appearance ROW survived and the one line that handles its
+click did not. The switch was real, the handler was gone. This is exactly the
+failure this file has warned about since August -- "each hand-merge is a chance
+to silently undo the other side's change" -- and it reached production because
+nothing asserted the wiring. A test now pins the whole path: the row renders,
+the dialog dispatches `theme`, and the handler exists.
+
+**Verification trap, worth writing down:** the browser-automation click stopped
+reaching the page entirely -- a real `left_click` produced ZERO click events at
+a document-level capture listener, while the element was topmost at those exact
+coordinates. Do not read that as "the control is broken". Dispatching a real
+bubbling MouseEvent on the element exercises the same path a user's click takes
+through the DOM (target -> delegated handler on the dialog body) and settled it
+in one call.
+
+**Report a bug moved out of the account menu and into Help**, at his request.
+It opens the DIALOG rather than a mailto, because the dialog carries the
+release, screen, account and browser and a report without the version cannot
+be acted on. `openBug` had to be window-pinned: paintHelp lives in a DIFFERENT
+inline script scope in index.html, so the scoped function threw at click time
+rather than at load -- the third feature in this file to hit that trap. The
+now-unreachable menu injector was deleted rather than left as dead code.

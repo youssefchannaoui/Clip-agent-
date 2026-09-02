@@ -4178,3 +4178,28 @@ test('a clip carries its waveform to the card, and null when unmeasured', () => 
   assert.equal(card([]).waveform, null);
   assert.equal(card(undefined).waveform, null);
 });
+
+test('the Daylight switch is actually wired to something', () => {
+  // It rendered and did nothing for a release: the `case 'theme'` line was
+  // inside a hunk resolved to upstream during a rebase, so the row survived
+  // and its handler did not. A switch that moves nothing is worse than no
+  // switch — this asserts the whole path exists, not just the button.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  assert.match(html, /data-acct="theme"/, 'the switch is rendered');
+  assert.match(html, /case 'theme':\s*StudioAdapter\.onToggleTheme\(\)/,
+    'and the account dialog dispatches it');
+  assert.match(html, /StudioAdapter\.onToggleTheme\s*=/, 'and the handler exists');
+});
+
+test('reporting a bug lives in Help, and carries the release', () => {
+  // Moved out of the account menu at Youssef's request. It opens the DIALOG
+  // rather than a mailto, because the dialog carries the release, screen and
+  // browser — a report without the version cannot be acted on.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  assert.match(html, /data-help-bug/, 'Help offers it');
+  assert.match(html, /\[data-help-bug\][\s\S]{0,120}window\.openBug/, 'and it opens the dialog');
+  // openBug is defined in a different inline script scope from paintHelp, so
+  // it has to be window-pinned or the click throws at click time, not at load.
+  assert.match(html, /window\.openBug\s*=\s*openBug/, 'pinned across script scopes');
+  assert.doesNotMatch(html, /dcBugRow/, 'and no longer injected into the account menu');
+});

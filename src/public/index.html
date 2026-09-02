@@ -5935,6 +5935,10 @@ StudioAdapter.onProbeSource=async url=>{try{
         ['When', new Date().toISOString()],
       ];
     }
+    /* Window-pinned: the Help screen opens this, and paintHelp lives in a
+       DIFFERENT inline script scope in this file — the trap that has now bitten
+       three separate features here. A scoped function is invisible across
+       scopes and fails at click time, not at load. */
     function openBug(){
       const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
       const to=((DATA&&DATA.support&&DATA.support.email)||'');
@@ -5974,36 +5978,7 @@ StudioAdapter.onProbeSource=async url=>{try{
       const box=document.getElementById('studioBugText');
       if(box)box.focus();
     }
-    /* Rebuilt on every paint like every other host panel: the studio renders
-       through innerHTML, so an injected row does not survive on its own. */
-    window.paintBugRow=paintBugRow;
-    function paintBugRow(){
-      const email=document.getElementById('dcAccountEmail');
-      const trigger=email&&email.closest('button');
-      const menu=trigger&&trigger.nextElementSibling;
-      if(!menu)return;
-      if(menu.querySelector('#dcBugRow'))return;
-      const rows=Array.from(menu.querySelectorAll('a'));
-      const help=rows.filter(a=>/help\s*&\s*guides/i.test(a.textContent||''))[0];
-      if(!help)return;
-      const row=document.createElement('a');
-      row.id='dcBugRow';
-      row.href='#';
-      /* These rows are styled by a HASHED CLASS, not by an inline style --
-         getAttribute('style') comes back empty on every visible one, and a row
-         built without the class fell back to the bare anchor default: gold,
-         flush left, no padding, beside neighbours that are muted, indented and
-         12.5px. Measured, not guessed. Copying the neighbour's className at
-         runtime survives a design re-import (which renumbers those names)
-         precisely BECAUSE it never names one -- it takes whatever the row
-         beside it is actually wearing. The style copy stays for the rows that
-         do carry one. */
-      row.className=help.className||'';
-      row.setAttribute('style',help.getAttribute('style')||'');
-      row.innerHTML='<i class="ph ph-bug" style="font-size: 15px; color: var(--dc-n-8b8b93, #8B8B93);"></i>Report a bug';
-      row.onclick=e=>{e.preventDefault();StudioAdapter.ui.menuOpen=false;paintStudio();openBug()};
-      help.parentNode.insertBefore(row,help.nextSibling);
-    }
+    window.openBug=openBug;
 
     function paintAccount(){
       if(acctEls.root.classList.contains('hide'))return;
@@ -6166,6 +6141,7 @@ StudioAdapter.onProbeSource=async url=>{try{
             StudioAdapter.ui.menuOpen=false;renderAll();break;
           case 'portal':StudioAdapter.onBillingPortal();break;
           case 'emails':await StudioAdapter.onToggleEmailNotifs();paintAccount();break;
+          case 'theme':StudioAdapter.onToggleTheme();paintAccount();break;
           /* The permission prompt must ride a real click, which is why the ask
              lives in the handler rather than in a painter. Repaint after it so
              the row reflects what the browser actually answered -- including a
@@ -7349,9 +7325,9 @@ function paintHelp(){
   const contact=`<div class="dch-contact">
     <div><b>Still stuck, or found a bug?</b>
     <span>Tell us what you were doing and what happened. Bugs get read by a person.</span></div>
-    ${helpData.supportEmail?`<a href="mailto:${esc(helpData.supportEmail)}?subject=${encodeURIComponent('DeenClipped help')}">Contact us</a>
-    <a href="mailto:${esc(helpData.supportEmail)}?subject=${encodeURIComponent('DeenClipped bug report')}">Report a bug</a>`
-    :'<span>No support address is configured on this deployment.</span>'}
+    ${helpData.supportEmail?`<a href="mailto:${esc(helpData.supportEmail)}?subject=${encodeURIComponent('DeenClipped help')}">Contact us</a>`:''}
+    <a href="#" data-help-bug>Report a bug</a>
+    ${helpData.supportEmail?'':'<span>No support address is configured, so a report is copied for you to send.</span>'}
   </div>`;
 
   /* Searching flattens every article, because someone who types "retry"
@@ -7386,6 +7362,10 @@ function paintHelp(){
      The full 1280px capture opens over the screen on click. */
   $$('[data-help-zoom]',el).forEach(b=>b.onclick=()=>helpZoom(b.dataset.helpZoom,b.querySelector('img')));
   $$('[data-help-cat]',el).forEach(b=>b.onclick=()=>{helpCat=b.dataset.helpCat;helpQuery='';paintHelp();el.scrollTop=0});
+  /* The bug report lives here now rather than in the account menu, and it
+     opens the DIALOG, not a mailto: the dialog carries the release, the screen
+     and the browser, and a report without the version cannot be acted on. */
+  $$('[data-help-bug]',el).forEach(b=>b.onclick=e=>{e.preventDefault();window.openBug&&window.openBug()});
   const back=el.querySelector('[data-help-back]');
   if(back)back.onclick=()=>{helpCat='';paintHelp();el.scrollTop=0};
   const q=el.querySelector('[data-help-q]');
@@ -7434,7 +7414,6 @@ function paintStudio(){
   /* Cheap when shut -- it returns immediately -- and this is what keeps the
      plan, the token count and the email switch honest while it is open. */
   if(window.paintAccount)window.paintAccount();
-  if(window.paintBugRow)window.paintBugRow();
   paintScheduleWeek();
   if(window.paintEmailNotifRow)window.paintEmailNotifRow(DATA);
   /* The watermark row is restored HERE, with every other host-rendered panel,

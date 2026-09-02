@@ -2278,6 +2278,19 @@ async function route(req, res, url) {
     } catch (error) { return json(res, 400, { error: error.message }); }
   }
 
+  // Dragging a card in the Schedule. Separate from schedule-selected, which
+  // finds a clip its first free slot: this one is told EXACTLY where the card
+  // was dropped, and swaps with whatever was already there rather than
+  // shuffling the clip somewhere else the person did not choose.
+  if (method === 'POST' && pathname === '/api/clips/move-slot') {
+    const body = await readBody(req);
+    try {
+      const id = String(body.id || '');
+      assertCanAccessClip(currentUser, id);
+      return json(res, 200, agent.moveClipToSlot(id, Number(body.at)));
+    } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+  }
+
   const sourcePreview = pathname.match(/^\/api\/clips\/([^/]+)\/source-preview$/);
   if (method === 'GET' && sourcePreview) {
     let clip; try { clip = assertCanAccessClip(currentUser, decodeURIComponent(sourcePreview[1])); } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }

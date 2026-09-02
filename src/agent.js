@@ -212,6 +212,54 @@ export function scheduleSelected(ids = [], { at = null, day = null } = {}) {
   return { scheduled, alreadyScheduled, failed, results };
 }
 
+/**
+ * Move one scheduled clip onto an exact slot, swapping with whatever is there.
+ *
+ * Dragging a card in the Schedule is the only way this is reached, and the two
+ * halves of a swap have to happen together or the drag can strand a clip: move
+ * A onto B's slot first and B is homeless; free B first and A's old slot is
+ * open for the scheduler to hand to somebody else. So both writes happen here,
+ * after every check, with nothing between them.
+ *
+ * `at` is an exact instant, never a day — the caller dropped the card on one
+ * specific square, and quietly putting the clip somewhere else would make the
+ * grid disagree with what the person just did.
+ */
+export function moveClipToSlot(clipId, at) {
+  const when = Number(at);
+  if (!Number.isFinite(when) || when <= 0) throw new Error('That is not a posting slot.');
+  const clip = clipById(String(clipId || ''));
+  if (!clip) throw new Error('That clip no longer exists.');
+  if (!clip.scheduledAt) throw new Error('That clip is not on the schedule.');
+
+  // A slot that has passed cannot receive anything: the poster has already
+  // walked over it, so a clip dropped there would simply never go out.
+  if (when < Date.now()) throw new Error('That slot has already passed.');
+
+  const settled = (item) => item.status === 'posted'
+    || (item.targets || []).some(target => ['posted', 'publishing', 'processing'].includes(target.status));
+  if (settled(clip)) throw new Error('This clip has already gone out.');
+
+  const from = Number(clip.scheduledAt);
+  if (from === when) return { moved: false, swapped: false, scheduledAt: when };
+  if (from < Date.now()) throw new Error('This clip is already on its way out.');
+
+  // Only ever this account's own clips, so a drag cannot reach across owners.
+  const held = ownedBy(state.clips, ownerOf(clip))
+    .find(item => item.id !== clip.id && Number(item.scheduledAt) === when);
+  if (held && settled(held)) throw new Error('The clip in that slot has already gone out.');
+
+  // scheduledAt is the only stored truth; the label beside it is computed at
+  // read time in server.js, so there is nothing else to keep in step.
+  clip.scheduledAt = when;
+  if (held) held.scheduledAt = from;
+  save();
+  log(held
+    ? `Swapped two scheduled clips on the calendar.`
+    : `Moved a scheduled clip to a different slot.`);
+  return { moved: true, swapped: Boolean(held), scheduledAt: when, swappedWith: held ? held.id : null };
+}
+
 export function updateClip(id, fields = {}) {
   const clip = clipById(id);
   if (!clip) throw new Error('That clip no longer exists.');
