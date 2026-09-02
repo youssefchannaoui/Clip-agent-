@@ -933,17 +933,52 @@ test('the clip list is remembered per surface, not per lecture', () => {
   assert.match(html, /data-clips="\$\{esc\(clipKey\(r,onHome\)\)\}"/);
 });
 
-test('opening a clip list does not restart the spinners', () => {
-  // Expansion changes the structure, so it has to be in the key — but the
-  // running clip's percentage must not be, or every update rebuilds the list.
+test('opening a clip list slides, and does not restart the spinners', () => {
+  // Two rules, and one of them REVERSED on 2 Sept 2026. A moving number must
+  // never be in the key, or every update rebuilds the list and restarts the
+  // spinners inside it -- that half stands. But the open state must not be in
+  // it either, and that is the opposite of what this test used to demand: while
+  // expansion changed the structure the row was rebuilt on every toggle, so the
+  // list appeared and vanished with nothing to transition. The list is always
+  // rendered now and only data-open switches, so the node survives the toggle
+  // and the grid-rows transition has a previous state to move from.
   const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
   const key = /function liveKey\(rows,onHome\)\{[\s\S]*?\n    \}/.exec(html)[0];
   assert.match(key, /r\.clipCount\|\|0/);
-  assert.match(key, /clipsAreOpen\(r,onHome\)\?1:0/);
+  assert.doesNotMatch(key, /clipsAreOpen/, 'open state in the key rebuilds the row and kills the slide');
   assert.doesNotMatch(key, /clipPercent|percent/, 'a moving number must not rebuild the list');
-  // And the open list is updated in place.
+  // So the open state has to be driven by the in-place path instead.
   const paint = /function paintRows\([\s\S]*?\n    \}\n/.exec(html)[0];
   assert.match(paint, /querySelectorAll\('\.slc-row'\)/);
+  assert.match(paint, /\.slc-wrap/, 'the wrapper is switched rather than rebuilt');
+  assert.match(paint, /aria-expanded/, 'and the caret follows it');
+  // Both halves of the transition: a height nobody measured, and the two
+  // properties without which 0fr silently holds the row open.
+  assert.match(html, /\.slc-wrap \{[^}]*grid-template-rows: 0fr;[^}]*transition: grid-template-rows/);
+  assert.match(html, /\.slc-wrap\[data-open="true"\] \{ grid-template-rows: 1fr; \}/);
+  assert.match(html, /\.slc-wrap > \.slc-clip \{[^}]*overflow: hidden; min-height: 0;/);
+});
+
+test('the pipeline connectors show the work travelling', () => {
+  // Youssef, 2 Sept 2026: "those little lines in between each stage they should
+  // have a swipe or fill up moving right animation in between each stage."
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const strip = /function stageStripHtml\([\s\S]*?\n    \}/.exec(html)[0];
+  // line[i] sits between station i-1 and i, so line[idx] is the one just
+  // travelled and line[idx+1] is the one being travelled now.
+  assert.match(strip, /i===idx\?' done fill'/, 'the connector just crossed fills in');
+  assert.match(strip, /i===idx\+1\?' live'/, 'the next one sweeps');
+  // The gold is an ::after over a dim track — that is what lets the fill scale
+  // in from the left rather than just appearing.
+  assert.match(html, /\.slh-stages \.st-line\.done::after \{/);
+  assert.match(html, /@keyframes dcStFill \{ from \{ transform: scaleX\(0\)/);
+  assert.match(html, /@keyframes dcStFlow \{ from \{ background-position: -70% 0/);
+  assert.match(html, /\.st-line\.done\.fill::after \{[^}]*animation: dcStFill[^}]*backwards/,
+    'backwards, never both — a forwards fill pins the last frame for good');
+  // A pseudo-element is never matched by the document-wide `*{animation:none}`.
+  const reduce = /@media \(prefers-reduced-motion: reduce\) \{\n  #studioLiveBar[\s\S]*?\n\}/.exec(html)[0];
+  assert.match(reduce, /\.slh-stages \.st-line\.live::after/);
+  assert.match(reduce, /\.slc-wrap/, 'and the slide stops too');
 });
 
 test('the import reports how much has actually downloaded', () => {

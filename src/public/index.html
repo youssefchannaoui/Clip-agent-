@@ -245,6 +245,18 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 .slc-toggle:hover { color: #F2F2F4; border-color: #34343A; }
 .slc-toggle i { font-size: 11px; transition: rotate .16s ease; }
 .slc-toggle[aria-expanded="true"] i { rotate: 180deg; }
+/* Opening and closing the breakdown slides, both ways.
+   grid-template-rows 0fr -> 1fr is the one way to transition to a height
+   nobody has measured, and it works in BOTH directions -- which a max-height
+   guess and an insert-time animation do not. It only runs because the list is
+   always rendered and the toggle merely switches data-open (see liveKey): a
+   node created by the toggle has no previous state to move from. */
+.slc-wrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .28s cubic-bezier(.22,.6,.18,1); }
+.slc-wrap[data-open="true"] { grid-template-rows: 1fr; }
+/* min-height:0 matters as much as the overflow: a grid item's automatic
+   minimum size is its content, which would hold the row open at 0fr. */
+.slc-wrap > .slc-clip { overflow: hidden; min-height: 0; opacity: 0; transition: opacity .18s ease; }
+.slc-wrap[data-open="true"] > .slc-clip { opacity: 1; }
 /* Indented and on a slightly recessed ground, so the clips read as belonging to
    the lecture above them rather than as more lectures. */
 .slc-list { padding: 2px 0 6px 34px; background: #0E0E11; }
@@ -305,14 +317,39 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 .slh-stages .st.done em { color: #8B8B93; }
 .slh-stages .st.now i { background: #F0D6A6; border-color: #F0D6A6; box-shadow: 0 0 0 3px rgba(217,180,120,.16); animation: dcPulse 1.8s ease-in-out infinite; }
 .slh-stages .st.now em { color: #F0D6A6; }
-.slh-stages .st-line { flex: 1; height: 1px; margin: 0 7px; min-width: 8px; background: #26262A; }
-.slh-stages .st-line.done { background: linear-gradient(90deg, #D9B478, rgba(217,180,120,.35)); }
+/* The connectors carry the movement, so the strip reads as work travelling
+   rather than as five lamps. The gold is painted by ::after over a dim track:
+   that is what lets the just-completed connector scale in from the left
+   (`fill`) while the one being travelled runs a sweep (`live`). */
+.slh-stages .st-line { position: relative; flex: 1; height: 2px; margin: 0 7px; min-width: 8px; border-radius: 2px; background: #26262A; overflow: hidden; }
+.slh-stages .st-line.done::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, #D9B478, rgba(217,180,120,.55)); }
+/* backwards, never both: a forwards fill pins the last frame for the node's
+   life and silently beats every ordinary declaration after it. */
+.slh-stages .st-line.done.fill::after { transform-origin: left center; animation: dcStFill .45s cubic-bezier(.22,.6,.18,1) backwards; }
+@keyframes dcStFill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.slh-stages .st-line.live::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, #F0D6A6, transparent);
+  background-size: 60% 100%; background-repeat: no-repeat;
+  animation: dcStFlow 1.5s linear infinite;
+}
+@keyframes dcStFlow { from { background-position: -70% 0; } to { background-position: 170% 0; } }
+body.dc-page-hidden .slh-stages .st-line.live::after { animation-play-state: paused; }
 /* Labels give way before dots do: on a narrow card the words go and the five
    stations stay readable. */
 @media (max-width: 640px) { .slh-stages .st em { display: none; } .slh-stages .st-line { margin: 0 4px; } }
+/* The bar's connectors are 8px wide. A 1.5s sweep across that reads as a
+   blinking dot rather than travel, so the compact strip keeps the states and
+   drops the motion — the pulsing current station already says it is live. */
+.slb-stages .st-line.live::after, .slb-stages .st-line.done.fill::after { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   #studioLiveBar { animation: none; }
-  .slh-stages .st.now i { animation: none; }
+  /* `*{animation:none}` in the document sheet never matches a pseudo-element,
+     so every ::after here needs its own kill. */
+  .slh-stages .st.now i,
+  .slh-stages .st-line.live::after,
+  .slh-stages .st-line.done.fill::after { animation: none !important; }
+  .slc-wrap, .slc-wrap > .slc-clip { transition: none !important; }
 }
 
 /* Connections overlay — centred card over a blurred backdrop. */
@@ -2485,7 +2522,8 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         ${r.boosted?`<span class="slh-act on" title="Runs next"><i class="ph ph-arrow-line-up"></i></span>`:''}
         ${r.canCancel?`<button type="button" class="slh-act" data-live-cancel="${esc(r.kind)}:${esc(r.id)}" title="Cancel and remove"><i class="ph ph-x"></i></button>`:''}
         <span class="pct">${esc(pct)}</span></div>
-        ${open?`<div class="slc-list${r.clipsScroll?' scroll':''}">${r.clips.map(clipLineHtml).join('')}</div>`:''}</div>`;
+        ${r.hasClips?`<div class="slc-wrap" data-open="${open}"><div class="slc-clip"
+          ><div class="slc-list${r.clipsScroll?' scroll':''}">${r.clips.map(clipLineHtml).join('')}</div></div></div>`:''}</div>`;
     }
     /* On Home the section sits at the top of the library column, above "My
        library" — not in the right-hand aside, which is the activity column. It
@@ -2522,8 +2560,16 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        number is written into the existing nodes instead. */
     function liveKey(rows,onHome){
       /* stageIdx is in the key so a stage handover repaints the strip — that
-         happens four times a job, so the rebuild it costs is nothing. */
-      return rows.map(r=>[r.title,r.icon,r.clipCount||0,r.hasClips&&clipsAreOpen(r,onHome)?1:0,
+         happens four times a job, so the rebuild it costs is nothing.
+
+         Open/shut is deliberately NOT in the key any more, and that is what
+         makes the expand animate. The clip list is always rendered and only
+         its data-open switches, so the node SURVIVES the toggle and a CSS
+         transition has a previous state to move from. While expansion changed
+         the structure, the row was rebuilt on every toggle and there was
+         nothing to transition — the list simply appeared and vanished.
+         onHome is still taken because three call sites pass it. */
+      return rows.map(r=>[r.title,r.icon,r.clipCount||0,
         r.canBoost?1:0,r.boosted?1:0,r.stageIdx==null?'':r.stageIdx].join('|')).join('~');
     }
     /* The pipeline strip both live surfaces draw. Labels live in <em> so the
@@ -2534,7 +2580,14 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       return `<span class="slh-stages${compact?' slb-stages':''}" aria-hidden="true">`
         +SLH_STAGES.map((name,i)=>{
           const cls=i<idx?' done':i===idx?' now':'';
-          return `${i?`<span class="st-line${i<=idx?' done':''}"></span>`:''}`
+          /* The connectors carry the movement. line[i] sits between station
+             i-1 and station i, so line[idx] is the one just travelled (it
+             fills in as the stage lands) and line[idx+1] is the one being
+             travelled now (a gold sweep running right, toward the next
+             stage). A queued job is idx -1, where neither exists — nothing
+             lit and nothing moving, which is the honest picture. */
+          const line=i<idx?' done':i===idx?' done fill':i===idx+1?' live':'';
+          return `${i?`<span class="st-line${line}"></span>`:''}`
             +`<span class="st${cls}"><i></i><em>${name}</em></span>`;
         }).join('')+`</span>`;
     }
@@ -2553,6 +2606,18 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         if(pct&&pct.textContent!==want)pct.textContent=want;
         const label=n.querySelector('.slc-toggle span');
         if(label&&label.textContent!==r.clipsLabel)label.textContent=r.clipsLabel;
+        /* Open/shut is driven here now rather than by a rebuild, which is what
+           lets the list slide instead of blinking in and out. The caret's own
+           rotate transition rides along for the same reason: the button is no
+           longer replaced on every toggle. */
+        const wantOpen=String(Boolean(r.hasClips&&clipsAreOpen(r,onHome)));
+        const wrap=item.querySelector('.slc-wrap');
+        if(wrap&&wrap.dataset.open!==wantOpen)wrap.dataset.open=wantOpen;
+        const tog=n.querySelector('.slc-toggle');
+        if(tog&&tog.getAttribute('aria-expanded')!==wantOpen){
+          tog.setAttribute('aria-expanded',wantOpen);
+          tog.title=wantOpen==='true'?'Hide the clips':'Show each clip';
+        }
         /* The clip being rendered moves while the list is open, so its line is
            updated too — otherwise the breakdown freezes at whatever it said when
            it was opened. */
