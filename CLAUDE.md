@@ -4557,3 +4557,36 @@ it happened to fetch -- a bad rate would otherwise rewrite every price in the
 account. The mail names the drift and the two commands, and a test asserts the
 timer carries no Stripe write and calls nothing but the read-only report.
 A rates lookup that fails produces no alert rather than a false one.
+
+
+## Light mode beyond the phone: measured, not yet built (3 Sept 2026)
+
+Youssef: "make the light mode for desktop and other devices as well not just
+mobile". Measured before starting, because the shape of this decides whether it
+is an afternoon or a project:
+
+- **The phone's light mode does not generalise.** It lives entirely inside one
+  `@media` block in studio-mobile.css and reskins the PHONE SHELL -- host-drawn
+  `dcm-*` classes that studio-mobile.js writes. The desktop has no such shell:
+  it is the generated design export.
+- **The generated CSS has no CSS variables at all.** 91KB of literal hex, and
+  it must never be hand-edited -- a design re-import regenerates it. So a
+  desktop light theme cannot be a few overrides; it needs a light sheet
+  GENERATED from the same source at import time, mapping each dark neutral to
+  its paper counterpart under a `body.dc-light` prefix.
+- **13% of the elements on Home carry an inline colour** (35 of 272, measured
+  in the browser), and a stylesheet cannot reach an inline style. Those come
+  from ~850 hex literals across studio-adapter.js and index.html. They have to
+  become `var(--dc-…)`, which works fine in an inline style, or every dynamic
+  chip, bar and pill stays dark on paper.
+- **The palette that has to move is small**: twelve neutrals
+  (#0E0E11 #101013 #121214 #17171A #1E1E22 #26262A #34343A #6E6E76 #8B8B93
+  #BCBCC3 #E9E9ED #F2F2F4). The gold and the semantic colours stay -- the phone
+  proves gold reads as ink on paper.
+
+So the work is: a token layer, a generator for the light sheet, a mechanical
+var-isation of the twelve neutrals, a toggle beside the account menu honouring
+`prefers-color-scheme` on first visit, and screenshots of every screen in both
+themes. **Not started.** Half of it shipped is the half-lit screen
+studio-mobile.css was written to avoid, which is why this is a note rather than
+a commit.
