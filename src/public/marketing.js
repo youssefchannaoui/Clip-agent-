@@ -44,6 +44,28 @@ for (const form of document.querySelectorAll('[data-source-form]')) {
 }
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const wideScenes = window.matchMedia('(min-width: 961px)');
+
+/* Below 961px the scroll-scenes are NOT pinned — marketing.css only makes
+ * .sc-hero and .sc-tall tall-and-sticky at that width, because their content
+ * is taller than a phone viewport (measured at 390x844: the hero's own column
+ * is 1116px and the one-frame scene 1306px, against 844 of screen) and a
+ * pinned stage that cannot hold its content clips its own headline off.
+ *
+ * Scrubbing them anyway is what made a phone feel wrong: the scene scrolls
+ * while its contents are ALSO being moved by `--p`, so every formula sized in
+ * vh half-finishes somewhere off the top. Unpinned scenes therefore keep the
+ * CSS default — the complete, legible pose, the same one a browser with no
+ * JavaScript gets — and their blocks are given the ordinary `.reveal`
+ * entrance instead, the same observer the rest of the page has always used.
+ */
+if (!wideScenes.matches) {
+  const seed = ['.sc-hero .hero-copy-col > *', '.sc-hero .hero-reels',
+    '.strip-scene .sc-stage > *', '.frame-scene .sc-stage > *', '.journey-stage'];
+  for (const selector of seed) {
+    for (const node of document.querySelectorAll(selector)) node.classList.add('reveal');
+  }
+}
 const revealItems = [...document.querySelectorAll('.reveal')];
 
 if (reducedMotion || !('IntersectionObserver' in window)) {
@@ -77,12 +99,30 @@ if (reducedMotion || !('IntersectionObserver' in window)) {
 if (!reducedMotion) {
   const scenes = [...document.querySelectorAll('[data-scene]')];
   const rootEl = document.documentElement;
-  const wide = window.matchMedia('(min-width: 961px)');
+  /* Backstop, and it is not optional now that a phone's scenes rely on
+   * `.reveal` for their entrance: an IntersectionObserver callback can be
+   * missed on a fast fling, and a block that stays at opacity 0 is content
+   * delivered BY an animation -- the one thing this page may never do.
+   * Anything still hidden once its top has climbed past the middle of the
+   * viewport is shown outright. Half a screen later than the observer would
+   * have fired, so the staggered entrance still wins in the ordinary case,
+   * and the list shrinks as blocks reveal, so this costs one rect per
+   * still-pending block per frame and nothing once they are all in. */
+  let pendingReveals = revealItems.filter(node => !node.classList.contains('is-visible'));
+  const wide = wideScenes;
   let ticking = false;
   const update = () => {
     ticking = false;
     const vh = window.innerHeight;
     for (const scene of scenes) {
+      // A scene that is not pinned at this width is not scrubbed: see the note
+      // above the reveal seeding. Removing the property rather than leaving a
+      // stale one matters on a rotate, where a phone crosses the breakpoint
+      // and would otherwise keep whatever value the wide layout last wrote.
+      if (!wideScenes.matches && (scene.classList.contains('sc-hero') || scene.classList.contains('sc-tall'))) {
+        scene.style.removeProperty('--p');
+        continue;
+      }
       const rect = scene.getBoundingClientRect();
       if (rect.bottom < -300 || rect.top > vh + 300) continue;
       const span = rect.height - vh;
@@ -103,6 +143,18 @@ if (!reducedMotion) {
         const lecture = document.getElementById('ct-lecture');
         if (quran && lecture && js > 1.15 && js < 2.05) (js > 1.62 ? quran : lecture).checked = true;
       }
+    }
+    if (pendingReveals.length) {
+      pendingReveals = pendingReveals.filter(node => {
+        const box = node.getBoundingClientRect();
+        // Halfway up the viewport, or already sitting complete inside it --
+        // the second case is what catches a block at the very foot of the
+        // page, whose top never climbs past the middle because the page runs
+        // out of scroll first.
+        if (box.top > vh * 0.5 && box.bottom > vh) return true;
+        node.classList.add('is-visible');
+        return false;
+      });
     }
     // Whole-page progress for the orientation hairline, and the point where
     // the header wordmark condenses into the rotating seal.

@@ -1404,6 +1404,50 @@ desktop (mobile 98dB PSNR, zero studio files in the diff).
   cluster restyled through the shared classes alone.
 - The old look survives on branch `site-backup-before-rebuild` (v3.61.0).
 
+### The public site's motion on a phone (v3.83.1, 2 Sept 2026)
+
+Youssef: "animations on normal website main website doesnt work like desktop
+works the moblie is very weird."
+
+- **The scenes were being SCRUBBED at a width where they are not PINNED.**
+  marketing.css only makes `.sc-hero` and `.sc-tall` tall-and-sticky at
+  `min-width: 961px`; below that they are ordinary blocks. The engine did not
+  know that and went on stamping `--p` across them, so a scene scrolled up the
+  screen while its own contents were ALSO being moved by `--p` -- two
+  movements at once, and every formula sized in vh (the hero reels travel
+  11-15vh, the filmstrip -34%) half-finished somewhere off the top. That is
+  the whole of "very weird".
+- **They cannot simply be pinned on a phone.** Measured at 390x844: the hero's
+  own column is **1116px** and the one-frame scene **1306px**, against 844 of
+  screen. A pinned stage that cannot hold its content clips its own headline
+  off, which is the trap the original rebuild already recorded.
+- So below 961px those scenes keep the CSS default -- the complete, legible
+  pose, the same one a browser with no JavaScript gets -- and their blocks are
+  given the ordinary `.reveal` entrance instead, seeded in JS before the
+  observer is built. **Measured: 3 reveal blocks on a phone before, 24 after**,
+  revealing progressively down the page. The journey scene is still scrubbed,
+  because at that width it is a stacked list and its rail filling as you read
+  is the one scrubbed effect that still makes sense.
+- **`.reveal` now has a backstop, and it is not optional once a phone depends
+  on it for its entrances.** An IntersectionObserver callback can be missed on
+  a fast fling, and a block left at opacity 0 is content delivered BY an
+  animation -- the one thing this page may never do. Anything still hidden
+  once its top has climbed past the middle of the viewport, or that is sitting
+  complete inside the viewport (the foot-of-page case, where the top never
+  climbs that far because the page runs out of scroll), is shown outright.
+  Half a screen later than the observer, so the staggered entrance still wins
+  normally; the pending list shrinks as blocks reveal and costs nothing once
+  empty.
+- **The desktop is untouched**: only marketing.js changed, and the `--p` sweep
+  at 1440x900 steps through the four scenes exactly as before.
+- **FOUND AND DELIBERATELY NOT FIXED:** at 390px the journey scene's content
+  overflows its own stage to the right and `overflow:clip` cuts it -- copy,
+  the URL chip and the Lecture/Quran switch all run off the edge. **This
+  predates this release** (measured at HEAD: 141 elements past the right edge,
+  the same 125 after), it is a LAYOUT fault rather than an animation one, and
+  Youssef's instruction was to touch nothing but the animations. It is the
+  next thing to do on that page.
+
 ### The motion system that grew on top of it (v3.64.0–v3.69.0, 31 Aug 2026)
 
 All of it rides the same engine and the same guarantees; a new scene should
