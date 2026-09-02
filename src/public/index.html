@@ -194,11 +194,30 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
    cell being aimed at, and pointer-events:none so elementFromPoint reports
    the calendar underneath rather than the ghost itself. */
 .dc-sched-ghost {
-  position: fixed; z-index: 400; pointer-events: none; transform: translate(12px, 10px);
-  max-width: 210px; padding: 7px 10px; border-radius: 9px;
-  border: 1px solid var(--dc-gold, #D9B478); background: var(--dc-bg-raised, #17171A);
-  color: var(--dc-ink, #F2F2F4); font: 600 11.5px/1.3 Inter, system-ui, sans-serif;
-  box-shadow: 0 14px 34px rgba(0,0,0,.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  /* THE CARD ITSELF, lifted -- a clone of the cell rather than a pill with its
+     title in it. Youssef, 3 Sept 2026: "make dragging the whole box not the
+     title." What you are holding should look like what you picked up:
+     thumbnail, caption and all, tilted and shadowed so it reads as off the
+     surface rather than as a second card that has appeared on it. */
+  position: fixed; z-index: 400; pointer-events: none;
+  /* Down and right of the pointer, never under it: the cell being aimed at is
+     the one at the pointer, and it wears the gold ring that says so. A ghost
+     centred on the cursor covers exactly the thing you are trying to see. */
+  transform: translate(16px, 14px) rotate(-2deg);
+  border-radius: 10px; opacity: .93;
+  box-shadow: 0 20px 46px rgba(0,0,0,.55), 0 0 0 1px var(--dc-gold, #D9B478);
+  overflow: hidden;
+}
+.dc-sched-ghost > * { margin: 0 !important; }
+/* The grabbing fist, and it must be on BODY: pointer capture keeps the events
+   on the cell, but the cursor is drawn from whatever is under the pointer --
+   which, mid-drag, is a different cell each time. */
+body.dc-dragging, body.dc-dragging * { cursor: grabbing !important; }
+/* A card that is only a caption (no render yet) would clone as a bare word on
+   the ground. Give the clone the surface it had. */
+.dc-sched-ghost:not(:has(img)):not(:has(video)) {
+  padding: 7px 10px; background: var(--dc-bg-raised, #17171A); color: var(--dc-ink, #F2F2F4);
+  font: 600 11.5px/1.3 Inter, system-ui, sans-serif;
 }
 /* THE TOPBAR, measured before it was touched (1440x950, Home).
    Five controls sat in a row at five different heights -- search 33, setup
@@ -7616,6 +7635,7 @@ function wireScheduleDrag(grid){
   const clear=()=>{
     if(ghost&&ghost.parentNode)ghost.parentNode.removeChild(ghost);
     if(over)over.style.outline='';
+    document.body.classList.remove('dc-dragging');
     document.body.style.userSelect='';
     if(from)from.style.opacity='';
     from=null; ghost=null; over=null; moved=false;
@@ -7641,11 +7661,33 @@ function wireScheduleDrag(grid){
       from.style.opacity='.35';
       ghost=document.createElement('div');
       ghost.className='dc-sched-ghost';
-      /* A week cell holds only the title; a Day card also holds its time and
-         every destination's state, which reads as noise on a ghost. The card
-         names its clip explicitly for that reason. */
-      ghost.textContent=(from.dataset.slotTitle||from.textContent||'Clip').trim().slice(0,42);
+      /* The cell, cloned at the size it is on screen. Cloning keeps the
+         thumbnail and the inline styles the export wrote; the grip comes out,
+         because a handle on something already in the air means nothing. A Day
+         card is capped -- it is as wide as the screen, and a full-width slab
+         following the pointer hides what you are aiming at. */
+      const r=from.getBoundingClientRect();
+      const copy=from.cloneNode(true);
+      copy.querySelectorAll('.dc-grip').forEach(g=>g.remove());
+      copy.style.width=r.width+'px';
+      copy.style.height=r.height+'px';
+      copy.style.margin='0';
+      /* A Day row is as wide as the screen, and a full-width slab following
+         the pointer hides what you are aiming at. It is SCALED rather than
+         narrowed: setting a smaller width makes the row re-wrap, and what
+         lands under the cursor is then a jumbled block rather than the card
+         that was picked up. */
+      const scale=Math.min(1,400/r.width);
+      if(scale<1){
+        copy.style.transformOrigin='top left';
+        copy.style.transform='scale('+scale+')';
+        ghost.style.width=Math.round(r.width*scale)+'px';
+        ghost.style.height=Math.round(r.height*scale)+'px';
+      }
+      ghost.appendChild(copy);
+      ghost.setAttribute('aria-hidden','true');
       document.body.appendChild(ghost);
+      document.body.classList.add('dc-dragging');
       try{from.setPointerCapture(e.pointerId)}catch(err){}
     }
     ghost.style.left=e.clientX+'px';

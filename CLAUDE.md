@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1150 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1151 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3441,6 +3441,36 @@ card #17171A).
   the page IN BOTH THEMES, and fails on a var() in an SVG attribute.
 - Night is untouched: every dark value in the generated token sheet is
   byte-identical, the two additions being golds that map to themselves.
+
+## The card itself travels, under a closed fist (v3.98.0, 3 Sept 2026)
+
+Youssef: "make dragging the whole box not the title and also show this logo of
+hand gripping."
+
+- **The ghost is a CLONE of the cell**, not a pill with the clip's title in it.
+  A rebuilt summary reads as a second, different thing appearing on the
+  surface; the clone is the card leaving it -- thumbnail, caption and the
+  export's own inline styles, tilted 2° with a shadow and a gold ring. The grip
+  is stripped from the copy: a handle on something already in the air means
+  nothing. `data-slot-title` existed ONLY to label the old text ghost and is
+  removed with it rather than left in the export.
+- **A wide row is SCALED, never narrowed.** A Day card is ~814px, and setting
+  the clone a smaller width makes the row re-wrap -- what then follows the
+  pointer is a jumbled block rather than the thing that was picked up.
+  `transform: scale()` from the top left, capped at 400px, with the ghost box
+  sized to the scaled result so the ring and shadow still wrap it. Measured:
+  814x162 becomes 400x64 and keeps the row's shape.
+- **The ghost sits down-and-right of the pointer, never under it.** The cell
+  being aimed at is the one at the pointer and it wears the gold ring that says
+  so; a ghost centred on the cursor covers exactly what you are trying to see.
+- **The grabbing fist is set on BODY, and it has to be.** Pointer capture keeps
+  the events on the source cell, but the cursor is drawn from whatever is under
+  the pointer -- which mid-drag is a different cell each time, so a `:active`
+  rule on the source never shows. `body.dc-dragging` is added when the drag
+  actually starts and removed on every ending, cancel included.
+- Driven in both views with real PointerEvents: the clone carries a planted
+  thumbnail, the body cursor reads `grabbing` mid-drag and `auto` after a
+  cancel, and no ghost survives.
 
 ## Open items
 

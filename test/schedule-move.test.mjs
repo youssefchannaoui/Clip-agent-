@@ -142,7 +142,7 @@ test('the Day view carries the same drag hooks as the Week grid', () => {
   const draggable = cards.filter(l => l.includes('data-slot='));
   assert.equal(draggable.length, 1, 'only the schedule Day card may be draggable');
   const day = draggable[0];
-  for (const attr of ['data-slot="{{ post.at }}"', 'data-slot-clip="{{ post.clipId }}"', 'data-slot-title="{{ post.caption }}"']) {
+  for (const attr of ['data-slot="{{ post.at }}"', 'data-slot-clip="{{ post.clipId }}"']) {
     assert.ok(day.includes(attr), `the Day card must carry ${attr}`);
   }
 });
@@ -177,4 +177,31 @@ test('the click that follows a drag is swallowed, once and at capture', () => {
     'capture, so it lands before the studio’s delegated handler; once, so it eats one click');
   assert.ok(/removeEventListener\('click',swallow,true\)/.test(near),
     'a drop that produces no click must not leave the listener armed');
+});
+
+/**
+ * What you are holding should look like what you picked up.
+ *
+ * Youssef, 3 Sept 2026: "make dragging the whole box not the title and also
+ * show this logo of hand gripping." The ghost used to be a pill with the
+ * clip's title in it, which reads as a second, different thing appearing
+ * rather than as the card leaving the surface.
+ */
+test('the drag ghost is the card itself, and the cursor is a closed fist', () => {
+  const host = fs.readFileSync(new URL('../src/public/index.html', import.meta.url), 'utf8');
+  assert.ok(host.includes('const copy=from.cloneNode(true)'),
+    'the ghost is a clone of the cell, not a rebuilt summary of it');
+  assert.ok(host.includes("copy.querySelectorAll('.dc-grip').forEach(g=>g.remove())"),
+    'a handle on something already in the air means nothing');
+  assert.ok(/Math\.min\(1,\s*400\/r\.width\)/.test(host),
+    'a Day card is as wide as the screen — a full-width slab would hide the target');
+  assert.ok(host.includes("copy.style.transformOrigin='top left'"),
+    'it is SCALED, not narrowed: narrowing makes the row re-wrap into a different thing');
+  // The fist must be on BODY: pointer capture keeps events on the source cell,
+  // but the cursor is drawn from whatever is under the pointer, which mid-drag
+  // is a different cell each time.
+  assert.ok(/body\.dc-dragging[^{]*\{[^}]*cursor:\s*grabbing/.test(host),
+    'the grabbing cursor is set on the body for the whole drag');
+  assert.ok(host.includes("document.body.classList.remove('dc-dragging')"),
+    'and cleared when the drag ends, however it ends');
 });
