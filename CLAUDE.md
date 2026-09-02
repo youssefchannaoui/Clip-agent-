@@ -2750,6 +2750,38 @@ smaller. The layout was never the complaint.
   That is the same signature a second capture of an UNCHANGED baseline
   produced last release.
 
+### The phone moves now (v3.83.0)
+
+Youssef: "animations in terms of moving tabs opening and closing etc for
+mobile doesnt have it, it just goes quickly."
+
+- **A screen arrives from the side it came from.** The tab order decides the
+  direction (`dcm-in-next` / `dcm-in-prev`), the sections stagger 30ms apart,
+  and the newly current tab's marker draws itself in with its icon popping --
+  keyed off the SAME gated class on `.dcm-body` rather than a class of its
+  own, so there is one thing to gate rather than three.
+- **The gate is the rule this file keeps restating.** The studio repaints on
+  every state poll, so a class that is always present replays the entry every
+  few seconds and reads as a flicker. It is stamped only on the paint where
+  `ui.screen` actually changed and falls away on the next one. Measured both
+  ways: six `dcmScreenNext` plus `dcmDot` and `dcmPop` running right after a
+  tab press, and **zero** after three consecutive `paintStudio()` calls.
+- **A sheet could not animate OUT, because there was nothing left to
+  animate.** Every close set `M.sheet = null` and the patcher removed the node
+  in the same frame. Closing is two steps now: the flag moves to
+  `M.sheetClosing`, which keeps the sheet rendered with `is-closing` and no
+  pointer events, and a 200ms timer drops it for real. Every close path in
+  studio-mobile.js goes through one `closeSheet()`, so the behaviour cannot
+  vary by which button was pressed. Measured mid-close: the node is still
+  there carrying `dcmFadeOut,dcmDown`, and gone 470ms later.
+- `backwards`, never `both` -- a forwards fill leaves the last keyframe
+  beating ordinary declarations for the element's life, which is how this repo
+  has killed a hover three times.
+- **Under `prefers-reduced-motion` the exit still runs**, shortened to a plain
+  fade: tearing a sheet out mid-animation blinks, which is worse than the
+  motion someone asked to reduce. Every new animation has its own kill in that
+  block, because a bare `*` rule never matches a pseudo-element.
+
 ### Every row in the More sheet closes it (v3.81.0)
 
 Youssef: "with the button saying more when I click ANY tab it should open the

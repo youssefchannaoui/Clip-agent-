@@ -603,12 +603,67 @@
   body.dcm-on #studioLiveBar { bottom: calc(var(--dcm-tab) + 4px) !important; width: calc(100vw - 28px) !important; }
   body.dcm-on .toasts { bottom: calc(var(--dcm-tab) + 8px) !important; left: 18px !important; right: 18px !important; width: auto !important; max-width: none; }
 
+  /* ── motion ────────────────────────────────────────────────────────── */
+  /* A screen arrives from the side it came from: the tab order decides, so
+     moving right slides in from the right. The class is stamped ONLY on the
+     paint where the screen changed (see mobileVals) -- the studio repaints on
+     every state poll and an ungated entry would replay every few seconds and
+     read as a flicker. `backwards`, never `both`: a forwards fill leaves the
+     last keyframe beating ordinary declarations for the element's life, which
+     is how this repo has killed a hover three times now. */
+  .dcm-body.dcm-in-next > *, .dcm-body.dcm-in-prev > * { animation: dcmScreenNext .32s cubic-bezier(.22, .9, .28, 1) backwards; }
+  .dcm-body.dcm-in-prev > * { animation-name: dcmScreenPrev; }
+  .dcm-body.dcm-in-next > *:nth-child(2), .dcm-body.dcm-in-prev > *:nth-child(2) { animation-delay: .03s; }
+  .dcm-body.dcm-in-next > *:nth-child(3), .dcm-body.dcm-in-prev > *:nth-child(3) { animation-delay: .06s; }
+  .dcm-body.dcm-in-next > *:nth-child(4), .dcm-body.dcm-in-prev > *:nth-child(4) { animation-delay: .09s; }
+  .dcm-body.dcm-in-next > *:nth-child(n + 5), .dcm-body.dcm-in-prev > *:nth-child(n + 5) { animation-delay: .12s; }
+  @keyframes dcmScreenNext { from { opacity: 0; transform: translate3d(16px, 4px, 0); } to { opacity: 1; transform: none; } }
+  @keyframes dcmScreenPrev { from { opacity: 0; transform: translate3d(-16px, 4px, 0); } to { opacity: 1; transform: none; } }
+
+  /* The tab that just became current: its marker draws itself in, keyed off
+     the same gated class on the body above it rather than on a class of its
+     own, so it cannot replay on an ordinary repaint either. */
+  .dcm-body.dcm-in-next ~ .dcm-tabs .dcm-tab.on::after,
+  .dcm-body.dcm-in-prev ~ .dcm-tabs .dcm-tab.on::after { animation: dcmDot .34s cubic-bezier(.22, .9, .28, 1) backwards; }
+  .dcm-body.dcm-in-next ~ .dcm-tabs .dcm-tab.on .dcm-svg,
+  .dcm-body.dcm-in-prev ~ .dcm-tabs .dcm-tab.on .dcm-svg { animation: dcmPop .34s cubic-bezier(.22, 1.5, .4, 1) backwards; }
+  @keyframes dcmDot { from { width: 0; opacity: 0; } to { width: 14px; opacity: 1; } }
+  @keyframes dcmPop { from { transform: translateY(2px) scale(.86); } to { transform: none; } }
+  .dcm-tab:active .dcm-svg, .dcm-hbtn:active .dcm-svg { transform: scale(.88); }
+  .dcm-tab .dcm-svg, .dcm-hbtn .dcm-svg { transition: transform .12s ease; }
+  .dcm-row:active, .dcm-clip-th:active, .dcm-mini:active, .dcm-lcard:active { transform: scale(.985); }
+  .dcm-row, .dcm-clip-th, .dcm-mini, .dcm-lcard { transition: transform .12s ease, background .14s ease; }
+
+  /* Closing. The flag moves to `sheetClosing` so the node survives long enough
+     to animate; 200ms later it goes for real. Without that there is nothing
+     left on screen to animate and a sheet simply blinks out. */
+  .dcm-sheet.is-closing { pointer-events: none; }
+  .dcm-sheet.is-closing .dcm-sheet-card { animation: dcmDown .2s cubic-bezier(.4, 0, .9, .4) forwards; }
+  .dcm-sheet.is-closing .dcm-sheet-back { animation: dcmFadeOut .2s ease forwards; }
+  .dcm-sheet-full.is-closing .dcm-sheet-card { animation: dcmOut .2s cubic-bezier(.4, 0, .9, .4) forwards; }
+  @keyframes dcmDown { from { transform: none; opacity: 1; } to { transform: translateY(30px); opacity: 0; } }
+  @keyframes dcmOut { from { transform: none; opacity: 1; } to { transform: translateX(26px); opacity: 0; } }
+  @keyframes dcmFadeOut { from { opacity: 1; } to { opacity: 0; } }
+
   @keyframes dcmUp { from { transform: translateY(26px); opacity: 0; } to { transform: none; opacity: 1; } }
   @keyframes dcmIn { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
   @keyframes dcmFade { from { opacity: 0; } to { opacity: 1; } }
   @media (prefers-reduced-motion: reduce) {
     .dcm-sheet-card, .dcm-sheet-back, .dcm-sheet-full .dcm-sheet-card { animation: none; }
-    .dcm-btn, .dcm-switch::before, .dcm-switch::after, .dcm-tab, .dcm-tab-l { transition: none; }
+    /* Pseudo-elements are never matched by a bare `*` rule, so each animation
+       added above needs its own kill here -- the lesson studio-motion.css
+       already paid for. */
+    .dcm-body.dcm-in-next > *, .dcm-body.dcm-in-prev > *,
+    .dcm-body.dcm-in-next ~ .dcm-tabs .dcm-tab.on::after,
+    .dcm-body.dcm-in-prev ~ .dcm-tabs .dcm-tab.on::after,
+    .dcm-body.dcm-in-next ~ .dcm-tabs .dcm-tab.on .dcm-svg,
+    .dcm-body.dcm-in-prev ~ .dcm-tabs .dcm-tab.on .dcm-svg { animation: none; }
+    /* The exit still runs: without it a sheet is torn out mid-fade and blinks,
+       which is worse than the motion someone asked to reduce. It is shortened
+       to a plain fade instead. */
+    .dcm-sheet.is-closing .dcm-sheet-card, .dcm-sheet-full.is-closing .dcm-sheet-card { animation: dcmFadeOut .18s linear forwards; }
+    .dcm-btn, .dcm-switch::before, .dcm-switch::after, .dcm-tab, .dcm-tab-l,
+    .dcm-row, .dcm-clip-th, .dcm-mini, .dcm-lcard, .dcm-tab .dcm-svg, .dcm-hbtn .dcm-svg { transition: none; }
   }
   /* Between 360 and 389 (iPhone SE/mini) the two-up clip grid leaves a card
      column of 163px, and three side-by-side actions in it measure 40px wide --

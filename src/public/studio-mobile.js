@@ -58,7 +58,7 @@
 
   // Mobile-only UI state. Deliberately tiny: which sheet is open, and which
   // clip the focused review is on. Everything else is the adapter's UI.
-  var M = { sheet: null, review: null, theme: null };
+  var M = { sheet: null, sheetClosing: null, review: null, theme: null, lastScreen: '', screenCls: '', screenAt: 0 };
   // Night is the default and the product's own look; paper is a choice, kept
   // in this browser only (a per-viewer convenience, so no route and no server
   // state). Reading storage can THROW in a private window, so it is guarded
@@ -186,7 +186,7 @@
     var head = [h('strong', {}, typeof title === 'string' ? title : [title])];
     if (opts.headExtra) head = head.concat(opts.headExtra);
     head.push(h('button', { type: 'button', class: 'dcm-x', on: { click: 'm.closeSheet' }, 'aria-label': 'Close' }, [svg(I.x)]));
-    return iff(flag, [h('div', { class: 'dcm-sheet' + (opts.tall ? ' dcm-sheet-tall' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': typeof title === 'string' ? title : 'Sheet' }, [
+    return iff(flag, [h('div', { class: cat('dcm-sheet' + (opts.tall ? ' dcm-sheet-tall' : '') + ' ', b('m.sheetCls')), role: 'dialog', 'aria-modal': 'true', 'aria-label': typeof title === 'string' ? title : 'Sheet' }, [
       h('div', { class: 'dcm-sheet-back', on: { click: 'm.closeSheet' } }),
       h('div', { class: 'dcm-sheet-card' }, [
         h('div', { class: 'dcm-grip', 'aria-hidden': 'true' }),
@@ -904,7 +904,7 @@
   function buildTemplate() {
     return [
       header(),
-      h('div', { class: 'dcm-body', id: 'dcmScreen' }, [iff('m.own', [
+      h('div', { class: cat('dcm-body ', b('m.screenCls')), id: 'dcmScreen' }, [iff('m.own', [
         blocker(),
         iff('isHome', homeScreen()),
         iff('isQueue', queueScreen()),
@@ -925,7 +925,35 @@
   // ── the mobile bindings: the adapter's, plus what the shell needs ────────
   function act(fn) { return function (e) { if (e && e.preventDefault) e.preventDefault(); fn(e); }; }
   function repaint() { if (typeof global.paintStudio === 'function') global.paintStudio(); }
-  function openSheet(name) { return act(function () { M.sheet = M.sheet === name ? null : name; repaint(); }); }
+  /*
+   * Closing is not instantaneous any more. A sheet removed from the tree the
+   * moment its handler runs cannot animate out -- there is no node left to
+   * animate -- so the close is two steps: the flag moves to `sheetClosing`,
+   * which keeps the sheet rendered with an exit class and no pointer events,
+   * and a 200ms timer then drops it for real. Every close path in this file
+   * goes through closeSheet() so the behaviour cannot vary by which button
+   * was pressed.
+   */
+  var closeTimer = null;
+  function dropClosing() {
+    if (closeTimer) { global.clearTimeout(closeTimer); closeTimer = null; }
+    M.sheetClosing = null;
+  }
+  function closeSheet() {
+    if (!M.sheet) return;
+    dropClosing();
+    M.sheetClosing = M.sheet;
+    M.sheet = null;
+    closeTimer = global.setTimeout(function () { closeTimer = null; M.sheetClosing = null; repaint(); }, 200);
+  }
+  function openSheet(name) {
+    return act(function () {
+      if (M.sheet === name) { closeSheet(); repaint(); return; }
+      dropClosing();
+      M.sheet = name;
+      repaint();
+    });
+  }
   function initialsOf(name) {
     var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
     if (!parts.length) return 'DC';
@@ -975,13 +1003,13 @@
         icon: 'ph ph-film-strip', title: c.title || 'Clip', sub: (titles[c.projectId] || '') + (c.score ? ' · score ' + c.score : ''),
         open: act(function () {
           ui.filter = 'all'; ui.query = ''; ui.screen = 'queue'; ui.deckMode = false;
-          M.sheet = null; M.review = { id: c.id, from: 'queue', idx: 0 }; repaint();
+          closeSheet(); M.review = { id: c.id, from: 'queue', idx: 0 }; repaint();
         }),
       };
     }).concat(lectures.map(function (p) {
       return {
         icon: 'ph ph-film-script', title: p.title || 'Lecture', sub: p.url ? 'Lecture · YouTube import' : 'Lecture · uploaded',
-        open: act(function () { ui.query = ''; ui.screen = 'detail'; ui.openProject = p.id; M.sheet = null; repaint(); }),
+        open: act(function () { ui.query = ''; ui.screen = 'detail'; ui.openProject = p.id; closeSheet(); repaint(); }),
       };
     }));
   }
@@ -1008,21 +1036,41 @@
     m.tabClips = CLIPS.indexOf(screen) !== -1 ? 'on' : '';
     m.tabSchedule = screen === 'schedule' ? 'on' : '';
     m.tabMore = (!own) ? 'on' : '';
-    m.goHome = act(function (e) { M.sheet = null; M.review = null; vals.goHome(e); });
-    m.goClips = act(function (e) { M.sheet = null; if (CLIPS.indexOf(ui.screen) === -1) vals.goQueue(e); else repaint(); });
-    m.goSchedule = act(function (e) { M.sheet = null; M.review = null; vals.goSchedule(e); });
+    m.goHome = act(function (e) { closeSheet(); M.review = null; vals.goHome(e); });
+    m.goClips = act(function (e) { closeSheet(); if (CLIPS.indexOf(ui.screen) === -1) vals.goQueue(e); else repaint(); });
+    m.goSchedule = act(function (e) { closeSheet(); M.review = null; vals.goSchedule(e); });
     m.openMore = openSheet('more'); m.openSearch = openSheet('search'); m.openActivity = openSheet('activity');
     m.openAccount = openSheet('account'); m.openCreate = openSheet('create');
-    m.closeSheet = act(function () { M.sheet = null; repaint(); });
+    m.closeSheet = act(function () { closeSheet(); repaint(); });
     var theme = themeNow();
     m.themeDarkCls = theme === 'dark' ? 'on' : '';
     m.themeLightCls = theme === 'light' ? 'on' : '';
     m.themeNote = theme === 'light' ? 'Paper — light, for daylight' : 'Night — the default';
     m.themeDark = act(function () { setTheme('dark'); repaint(); });
     m.themeLight = act(function () { setTheme('light'); repaint(); });
-    m.openConnections = act(function () { M.sheet = null; global.StudioAdapter.onOpenConnections(); });
-    m.sheetMore = M.sheet === 'more'; m.sheetSearch = M.sheet === 'search'; m.sheetActivity = M.sheet === 'activity';
-    m.sheetAccount = M.sheet === 'account'; m.sheetCreate = M.sheet === 'create';
+    m.openConnections = act(function () { closeSheet(); global.StudioAdapter.onOpenConnections(); });
+    var shown = function (name) { return M.sheet === name || M.sheetClosing === name; };
+    m.sheetMore = shown('more'); m.sheetSearch = shown('search'); m.sheetActivity = shown('activity');
+    m.sheetAccount = shown('account'); m.sheetCreate = shown('create');
+    m.sheetCls = M.sheetClosing ? 'is-closing' : '';
+    /*
+     * The screen transition, gated the way every animation in this app has to
+     * be: the studio repaints on every state poll, so a class that is always
+     * present would replay the entry every few seconds and read as a flicker.
+     * It is stamped only on the paint where the screen actually changed and
+     * falls away on the next one -- and it names the DIRECTION, from the tab
+     * order, so moving right slides in from the right.
+     */
+    var order = ['home', 'queue', 'library', 'detail', 'schedule'];
+    var rank = function (name) { var i = order.indexOf(name); return i === -1 ? order.length : i; };
+    if (M.lastScreen !== screen) {
+      m.screenCls = 'dcm-in-' + (rank(screen) < rank(M.lastScreen) ? 'prev' : 'next');
+      M.lastScreen = screen;
+      M.screenCls = m.screenCls;
+      M.screenAt = Date.now();
+    } else {
+      m.screenCls = (Date.now() - (M.screenAt || 0) < 420) ? (M.screenCls || '') : '';
+    }
     m.jobKey = function (e) { if (e && e.key === 'Enter') vals.startJob(e); };
     // The create sheet's own file input, routed straight to the lecture
     // uploader: the shared onFile routes by screen, and from the Nasheed
@@ -1113,7 +1161,7 @@
       // opens a host DIALOG rather than changing the screen (Account settings)
       // never triggers a studio paint of its own, so the sheet stayed on
       // screen with M.sheet already null -- shut in state and open on screen.
-      return act(function (e) { M.sheet = null; if (typeof fn === 'function') fn(e); repaint(); });
+      return act(function (e) { closeSheet(); if (typeof fn === 'function') fn(e); repaint(); });
     };
     m.nav = m.nav.map(function (it) { return Object.assign({}, it, { go: closeThen(it.click) }); });
     m.goTokens = closeThen(vals.goTokens);
@@ -1222,7 +1270,7 @@
       listening = true;
       doc.addEventListener('keydown', function (e) {
         if (e.key !== 'Escape' || !root || !root.isConnected) return;
-        if (M.review) { M.review = null; repaint(); } else if (M.sheet) { M.sheet = null; repaint(); }
+        if (M.review) { M.review = null; repaint(); } else if (M.sheet) { closeSheet(); repaint(); }
       });
       if (global.matchMedia) {
         var mq = global.matchMedia(MQ);
