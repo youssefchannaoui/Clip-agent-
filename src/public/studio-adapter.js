@@ -2188,6 +2188,10 @@
       return {
         id: c.id,
         caption: c.title || '',
+        // This clip's own loudness, for the bars under the thumbnail. Null for
+        // anything rendered before the worker measured it -- the card then
+        // draws a flat baseline rather than inventing a shape.
+        waveform: Array.isArray(c.waveform) && c.waveform.length ? c.waveform : null,
         duration: secsToClock((c.durationMs || 0) / 1000),
         style: (c.templateName || '') + (c.renderQuality === 'draft' ? ((c.templateName ? ' \u00b7 ' : '') + 'draft') : ''),
         lecTitle: projectTitle[c.projectId] || '',

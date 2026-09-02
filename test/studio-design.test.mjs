@@ -4102,3 +4102,49 @@ test('all four platform marks are the real logos, at one size, out of their tile
   assert.match(page, /:has\(> i\.ph-youtube-logo:first-child\)\{/,
     'YouTube is on the same footing, and its rows keep their dividers too');
 });
+
+test('the bars under a review card are that clip\'s own audio', () => {
+  // Youssef, 2 Sept 2026: "those gold lines it looks cool make it acc make
+  // more sense towards the clip". They were a CSS gradient -- identical evenly
+  // spaced bars on every card, measured in the live DOM at 184x16 with the
+  // same background on all nine. The worker now measures the finished clip's
+  // loudness and the card draws it.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const tpl = fs.readFileSync(path.join(ROOT, 'src/public/studio-template.generated.js'), 'utf8');
+
+  // The hook is an attribute, not the generated class: class names renumber on
+  // every design re-import. Re-running design:import was proven byte-stable
+  // before this was added -- no hashed class name moved.
+  assert.ok(tpl.includes('data-dc-wave'), 'the strip is findable without naming a generated class');
+
+  const paint = /function paintClipWaveforms\(vals\)\{[\s\S]*?\n\}/.exec(html);
+  assert.ok(paint, 'the painter exists');
+  assert.match(paint[0], /queueClips/, 'it reads the rendered card list');
+  // Both branches must clear the decorative gradient. Leaving it on the
+  // fallback would put invented bars back on exactly the clips we know
+  // nothing about.
+  const branches = paint[0].match(/strip\.style\.background='none'/g) || [];
+  assert.equal(branches.length, 2, 'the gradient is removed whether or not the clip was measured');
+  assert.match(paint[0], /Array\.isArray\(clip\.waveform\)/, 'and it only draws real peaks');
+
+  // Registered in paintStudio like every other host panel, never on an
+  // observer -- the lesson v3.53.5 paid three attempts for.
+  const studio = /function paintStudio\([\s\S]*?\n\}/.exec(html)[0];
+  assert.match(studio, /paintClipWaveforms\(vals\)/);
+});
+
+test('a clip carries its waveform to the card, and null when unmeasured', () => {
+  const card = wave => StudioAdapter.bindings({
+    ...SAMPLE_STATE,
+    clips: [{ id: 'c1', projectId: 'p', title: 'T', status: 'waiting', score: 90,
+              durationMs: 55000, templateName: 'Bold Stack', renderVerified: true,
+              addedAt: Date.now(), targets: [], waveform: wave }],
+    projects: [{ id: 'p', title: 'L', status: 'done' }],
+  }).queueClips[0];
+  assert.deepEqual(card([12, 90, 40]).waveform, [12, 90, 40]);
+  // Anything rendered before the worker measured it draws a flat baseline
+  // rather than an invented shape.
+  assert.equal(card(null).waveform, null);
+  assert.equal(card([]).waveform, null);
+  assert.equal(card(undefined).waveform, null);
+});

@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1033 JS + 527 Python**
+- `npm test` and `npm run check` must pass. Currently **1035 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3828,3 +3828,43 @@ transcribed as "وسيق الذين كفروا بجها لمذمرا حتى جا
 The fix for it is to caption from the LECTURE-wide ayah map rather than
 re-matching per clip at render time: the lecture walk does find verses across
 that clip's window. That is the next step and it is not done.
+
+
+## The bars under a review card are that clip's own audio (v3.78.1, 2 Sept 2026)
+
+Youssef, on the review queue: "see those gold lines it looks cool make it acc
+make more sense towards the clip."
+
+- **They were a CSS gradient.** Measured in the live DOM: nine cards, every one
+  a 184x16 span with the identical `repeating-linear-gradient` -- evenly spaced
+  bars that looked like a waveform and were not about anything. That is the
+  invented-data fault the dashboard brief forbids, sitting on the one screen
+  where a person decides what to publish.
+- **The worker measures the finished clip** (`audio_peaks`): ffmpeg decodes the
+  rendered file to mono 1kHz s16le, and 56 buckets take the PEAK of each. Peak
+  rather than mean, because a mean over a bucket this wide flattens speech into
+  a straight line. Scaled against the clip's OWN loudest moment, so a quietly
+  recorded lecture still shows where its speech is. Proven on the box against
+  two real clips: 56 bars in 0.1s, visibly different shapes, silence correctly
+  returning nothing.
+- **A decoration must never cost a render.** Every failure path -- no audio
+  track, ffmpeg missing, a short file, a bad decode -- returns `[]`, and the
+  card then draws a quiet baseline. `-map a:0?` is what keeps a clip with no
+  audio from failing the probe at all.
+- **The un-measured fallback REMOVES the gradient too.** The first cut left it
+  in place, which put the invented evenly spaced bars straight back onto
+  exactly the clips nothing is known about -- caught by looking at the render,
+  not the code.
+- **The hook is `data-dc-wave`, added to `design/studio-dashboard.dc.html`.**
+  The strip's class is generated and renumbers on re-import, so naming it would
+  break the next time anyone touched the design. `npm run design:import` was
+  proven byte-stable first -- CSS identical, no hashed class name moved -- which
+  is the same route v3.75.4 established for `data-dc-week`.
+- **Clips rendered before this show the baseline**, and there is no backfill:
+  the peaks come from the rendered file, which lives on R2, and the web service
+  has no ffmpeg. New clips carry it from their first render.
+- **Dev trap, hit twice in one session:** the CSP allows the page's inline
+  script by a sha256 computed AT SERVER STARTUP, so editing index.html while a
+  dev server is running silently blocks the whole script -- the app renders its
+  shell and never boots, with no console error. Restart the preview server
+  after any index.html edit.

@@ -648,6 +648,10 @@ function publicClip(clip, { detail = false } = {}) {
     stylePending: Boolean(clip.stylePending),
     renderVersion: clip.renderVersion || 1, renderVerified: Boolean(clip.renderVerified), renderQuality: clip.renderQuality || null,
     renderedWidth: clip.renderedWidth || null, renderedHeight: clip.renderedHeight || null,
+    // The clip's own loudness, drawn as the bars on its review card. Absent for
+    // anything rendered before the worker measured it, and the card then draws
+    // a quiet baseline rather than inventing a shape.
+    waveform: Array.isArray(clip.waveform) && clip.waveform.length ? clip.waveform : null,
     variantOf: clip.variantOf || null, addedAt: clip.addedAt,
     targets: (clip.targets || []).map(social.targetPublic),
     rerender: rerender ? { id: rerender.id, status: rerender.status, stage: rerender.stage, progress: rerender.progress, error: rerender.error || null, asVariant: rerender.asVariant, preview: Boolean(rerender.preview) } : null,

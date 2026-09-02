@@ -26,6 +26,7 @@ import pathlib
 import random
 import re
 import shutil
+import array
 import subprocess
 import tempfile
 import sys
@@ -238,6 +239,59 @@ def run(command: list[str], timeout: int | None = None) -> subprocess.CompletedP
         detail = (result.stderr or result.stdout)[-1800:]
         raise RuntimeError(f"Command failed ({result.returncode}): {' '.join(command[:4])}\n{detail}")
     return result
+
+
+# How many bars the review card draws. Enough to show the shape of a minute of
+# speech, few enough that the array costs nothing to store or send.
+WAVEFORM_BUCKETS = 56
+
+
+def audio_peaks(path: Path, buckets: int = WAVEFORM_BUCKETS) -> list[int]:
+    """The loudness of the finished clip, bucketed, 0-100.
+
+    The review card has always drawn a row of gold bars under the thumbnail and
+    they were a CSS gradient -- the same evenly spaced bars on every clip,
+    saying nothing about any of them. Youssef, 2 Sept 2026: "those gold lines
+    ... make it acc make more sense towards the clip." These are that clip's
+    own audio, so a reviewer can see where the speech is and where the pauses
+    are before pressing play.
+
+    Decoded at 1kHz mono, which is far below speech but exactly right for an
+    envelope: a minute of clip is 60k samples, and the whole measurement costs
+    well under a second. Peak rather than mean per bucket, because a mean over
+    a bucket this wide flattens speech into a straight line.
+
+    Returns [] on any failure. A decoration must never cost a render: a clip
+    with no peaks draws a quiet baseline and says nothing, which is honest.
+    """
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-v", "quiet", "-i", str(path),
+             "-map", "a:0?", "-ac", "1", "-ar", "1000", "-f", "s16le", "-"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=90, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    raw = result.stdout or b""
+    total = len(raw) // 2
+    if result.returncode != 0 or total < buckets:
+        return []
+    samples = array.array("h")
+    samples.frombytes(raw[:total * 2])
+    size = total / buckets
+    peaks: list[int] = []
+    for index in range(buckets):
+        lo = int(index * size)
+        hi = max(lo + 1, int((index + 1) * size))
+        window = samples[lo:hi]
+        peaks.append(max(abs(value) for value in window) if window else 0)
+    ceiling = max(peaks)
+    if ceiling <= 0:
+        return []
+    # Scaled against this clip's OWN loudest moment, not an absolute level: the
+    # bars answer "where is the speech in this clip", and a quietly recorded
+    # lecture must not draw a flat line for that.
+    return [max(2, min(100, round(value * 100 / ceiling))) for value in peaks]
 
 
 def run_with_progress(
@@ -4392,6 +4446,8 @@ def render_clip(
         "templateVersion": int(template.get("version", 1)),
         "templateSnapshot": template,
         "renderVerified": True,
+        # The clip's own loudness, for the bars on the review card.
+        "waveform": audio_peaks(clip_file),
         "renderedWidth": expected_width,
         "renderedHeight": expected_height,
         "createdAt": int(time.time() * 1000),

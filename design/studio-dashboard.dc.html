@@ -654,7 +654,7 @@
                 <sc-if value="{{ clip.flagged }}" hint-placeholder-val="{{ false }}">
                   <span style="position: absolute; top: 34px; left: 8px; display: flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 20px; border: 1px solid rgba(240,214,166,.3); background: rgba(10,10,12,.78); color: #E7DCC8; font-size: 10px; font-weight: 600;"><i class="ph ph-book-open-text" style="font-size: 11px;"></i>Quote review</span>
                 </sc-if>
-                <span style="position: absolute; left: 8px; right: 8px; bottom: 26px; height: 16px; background: repeating-linear-gradient(90deg, rgba(240,214,166,.55) 0 2px, transparent 2px 5px); mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); opacity: .5;"></span>
+                <span data-dc-wave style="position: absolute; left: 8px; right: 8px; bottom: 26px; height: 16px; background: repeating-linear-gradient(90deg, rgba(240,214,166,.55) 0 2px, transparent 2px 5px); mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); opacity: .5;"></span>
                 <button onClick="{{ clip.toggleSel }}" title="Select" style="{{ clip.selStyle }}"><i class="ph-bold ph-check" style="font-size: 12px;"></i></button>
                 <span style="position: absolute; left: 8px; bottom: 7px; font-size: 10.5px; font-weight: 600; color: #E9E9ED;">{{ clip.duration }}</span>
                 <span style="position: absolute; right: 8px; bottom: 7px; font-size: 10px; color: #BCBCC3;">{{ clip.style }}</span>
@@ -887,7 +887,7 @@
               <sc-if value="{{ clip.flagged }}" hint-placeholder-val="{{ false }}">
                 <span style="position: absolute; top: 34px; left: 8px; display: flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 20px; border: 1px solid rgba(240,214,166,.3); background: rgba(10,10,12,.78); color: #E7DCC8; font-size: 10px; font-weight: 600;"><i class="ph ph-book-open-text" style="font-size: 11px;"></i>Quote review</span>
               </sc-if>
-              <span style="position: absolute; left: 8px; right: 8px; bottom: 26px; height: 16px; background: repeating-linear-gradient(90deg, rgba(240,214,166,.55) 0 2px, transparent 2px 5px); mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); opacity: .5;"></span>
+              <span data-dc-wave style="position: absolute; left: 8px; right: 8px; bottom: 26px; height: 16px; background: repeating-linear-gradient(90deg, rgba(240,214,166,.55) 0 2px, transparent 2px 5px); mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); opacity: .5;"></span>
               <span style="position: absolute; left: 8px; bottom: 7px; font-size: 10.5px; font-weight: 600; color: #E9E9ED;">{{ clip.duration }}</span>
               <span style="position: absolute; right: 8px; bottom: 7px; font-size: 10px; color: #BCBCC3;">{{ clip.style }}</span>
             </div>

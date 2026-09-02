@@ -2428,3 +2428,69 @@ class AyahSnapTests(unittest.TestCase):
         self.assertEqual([w for w, _, _ in timeline], ["one", "two", "three", "four"])
         self.assertAlmostEqual(timeline[0][1], 0.0, places=2)
         self.assertAlmostEqual(timeline[-1][2], 4.0, places=2)
+
+
+class AudioPeaksTests(unittest.TestCase):
+    """The bars under a review card are that clip's own loudness.
+
+    They were a CSS gradient -- the same evenly spaced bars on every card,
+    saying nothing about any clip. Youssef, 2 Sept 2026: "those gold lines ...
+    make it acc make more sense towards the clip."
+
+    ffmpeg is not on the CI runner, so the decode is stubbed and what is tested
+    is the arithmetic that turns samples into bars. The real decode was proven
+    on the box against two real clips: 56 bars in 0.1s, visibly different
+    shapes, and silence correctly yielding nothing.
+    """
+
+    @staticmethod
+    def pcm(values):
+        import array as _array
+        return _array.array("h", values).tobytes()
+
+    def stub(self, stdout, returncode=0):
+        return mock.patch.object(
+            worker.subprocess, "run",
+            return_value=types.SimpleNamespace(stdout=stdout, returncode=returncode))
+
+    def test_the_bars_are_scaled_against_the_clip_s_own_loudest_moment(self):
+        # A quietly recorded lecture must not draw a flat line: the bars answer
+        # "where is the speech in THIS clip", not "how loud is it absolutely".
+        quiet = [0] * 50 + [500] * 50 + [0] * 50 + [250] * 50
+        with self.stub(self.pcm(quiet)):
+            peaks = worker.audio_peaks(pathlib.Path("/tmp/x.mp4"), buckets=4)
+        self.assertEqual(len(peaks), 4)
+        self.assertEqual(max(peaks), 100, "the loudest bucket reaches full height")
+        self.assertGreater(peaks[1], peaks[3], "and the quieter passage is visibly lower")
+
+    def test_every_bar_is_drawable(self):
+        # A zero-height bar renders as nothing and reads as a broken strip.
+        with self.stub(self.pcm([0] * 200 + [3000] * 200)):
+            peaks = worker.audio_peaks(pathlib.Path("/tmp/x.mp4"), buckets=8)
+        self.assertTrue(all(2 <= value <= 100 for value in peaks), peaks)
+
+    def test_silence_measures_nothing_rather_than_a_shape(self):
+        with self.stub(self.pcm([0] * 400)):
+            self.assertEqual(worker.audio_peaks(pathlib.Path("/tmp/x.mp4")), [])
+
+    def test_a_clip_with_no_audio_track_measures_nothing(self):
+        with self.stub(b"", returncode=1):
+            self.assertEqual(worker.audio_peaks(pathlib.Path("/tmp/x.mp4")), [])
+
+    def test_too_few_samples_to_fill_the_bars_measures_nothing(self):
+        with self.stub(self.pcm([900] * 3)):
+            self.assertEqual(worker.audio_peaks(pathlib.Path("/tmp/x.mp4"), buckets=56), [])
+
+    def test_a_missing_file_never_costs_a_render(self):
+        # A decoration must never raise: whatever ffmpeg does, the clip ships.
+        self.assertEqual(worker.audio_peaks(pathlib.Path("/tmp/definitely-not-here.mp4")), [])
+
+    def test_ffmpeg_is_asked_for_mono_audio_only(self):
+        with self.stub(self.pcm([1000] * 400)) as run:
+            worker.audio_peaks(pathlib.Path("/tmp/x.mp4"), buckets=4)
+        command = run.call_args[0][0]
+        self.assertIn("-ac", command)
+        self.assertIn("1", command)
+        self.assertIn("s16le", command)
+        # a:0? -- the question mark is what stops a clip with no audio failing.
+        self.assertIn("a:0?", command)
