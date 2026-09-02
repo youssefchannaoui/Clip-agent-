@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1117 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1136 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3191,6 +3191,95 @@ work or use any logo or icon that makes sense to show you can drag it."
 - Driven with real bubbling PointerEvents in both views: grip -> ghost -> gold
   outline on the target -> the two clips swap on the server. Both new tests
   were proven RED against the missing attributes and a renamed grip class.
+
+## First run: Create -> Review -> Publish, and the moment (v3.94.0, 2 Sept 2026)
+
+Youssef named five gaps: no obvious Step 1 Create -> Step 2 Review -> Step 3
+Publish state, no first-clip success moment, no automatic handoff from
+processing to the first review, no onboarding that disappears after
+activation, and no tracking of signup -> first source -> first clip -> first
+approval -> first publish.
+
+- **There is ONE definition of where an account is, and it is
+  `referrals.activationOf`.** The owner's growth funnel, the lifecycle nudge
+  emails and DeenAI's next-action card already read it; `src/onboarding.js` is
+  derived from it and adds no second answer. A second definition would
+  eventually have the dashboard, the email and the operator's funnel each
+  telling a different story about one person.
+- **Nothing is stamped.** Every milestone time is read off the record that
+  already carries it -- the project's `submittedAt`, the clip's `addedAt`,
+  `approvedAt`, `postedAt`. So it works RETROACTIVELY for the accounts that
+  predate it (the only real data this product has), needs no migration, and
+  cannot drift from what happened the way an observation-time stamp does.
+- **It disappears because the server stops sending it**, not because anything
+  was dismissed. `journey()` returns `show: false` once a clip has published,
+  so there is no flag to clear, nothing to wave away early, and nothing that
+  can come back on another device.
+- **Create is done only when CLIPS came back**, never when the project status
+  says done: a lecture can finish and produce nothing, and calling that step
+  complete sends someone to an empty queue.
+- **The moment IS the handoff, and that was a deliberate reading.** "Automatic
+  handoff" taken literally is a silent screen change, which can land on
+  somebody mid-sentence and reads as a bug. The overlay appears by itself the
+  instant the first clips land -- nobody has to go looking, which is the
+  automatic half -- and its primary button lands them in the review queue.
+- **Two bugs found by looking at the render, not the code:**
+  1. The overlay was created and then **removed by the very next repaint**:
+     the spent-flag guard ran before the already-up check, so it appeared and
+     vanished inside a frame and measured as never having fired. An overlay
+     that is up is now left alone; spent means "do not raise another".
+  2. It fired at an account that had **already approved a clip** -- a nag, not
+     a moment. It now also requires `!a.reviewed`.
+- **Ink sitting ON the gold must never be a theme token.** The light theme
+  flips `--dc-n-0e0e11` to `#F4EFE4`, and the gold underneath does NOT flip:
+  measured at **1.7:1** for the step number and **1.18:1** for the button --
+  invisible in daylight. Both are literal `#0E0E11` on a solid `#D9B478` fill
+  now: **9.87:1 in both themes**. Every neutral around them IS tokenised.
+- The steps row is capped at 520px. Unpinned, the flex connectors ate the whole
+  1212px and "Create ——— Review ——— Publish" spanned the screen, reading as
+  three unrelated words; measured, the last step sat at x=1338.
+- Verified at every state by seeding an account at each: create, importing,
+  review (+ the moment), publish, and done (nothing drawn). The lifecycle was
+  driven end to end -- moment survives repaints, the button lands on
+  queue/decide, the strip is Home-only, and neither returns after a reload.
+- The phone renders the same three steps from the same bindings, inside the
+  820px query (the test that fails on a rule escaping it caught the first cut).
+
+### The status constant that had never matched the engine
+
+Found while checking why the owner funnel said "Processing finished: 0" beside
+"Imported a video: 4".
+
+`IMPORT_DONE` in referrals.js was `['complete','completed','ready']`. The
+engine has always written **`'done'`**. So `activationOf().processed` was false
+for every project this product has ever run, and three things quietly hung off
+it:
+
+- **`isActivated` is `processed && approved`, so NOBODY has ever counted as
+  activated** -- and that is what gates a referral payout.
+- **`nextStep` returns "your lecture is being processed" the moment it sees
+  `!processed`**, so every account that had ever imported was told that for
+  ever, in DeenAI's next-action card and in the lifecycle nudge emails.
+- The owner's funnel reported the 0 above. That WAS noticed once and read as a
+  reason to show raw statuses rather than as a wrong constant.
+
+Fixed by adding `'done'`; the other three stay, since an older record may carry
+one. The test pins it against `local-engine.js`'s own assignment rather than
+against the list -- a test that greps the constant passes against a wrong one.
+**It changed DeenAI's card order**, correctly: an account that has approved a
+clip and connected nothing now leads with "connect a channel", which is the
+documented rule ("the next action comes first"). The DeenAI test that assumed
+the lecture card was first now finds it by its kicker.
+
+### Two sessions, one file, and a feature that nearly came back from the dead
+
+The merge conflicted in index.html and `paintBugRow` was absent upstream, which
+read exactly like the hand-merge loss this file warns about. It was not:
+`test/studio-design.test.mjs` says Report a bug was **moved into Help at
+Youssef's request**, which postdates the account-menu instruction this session
+built to. The restoration was reverted and their placement kept. **Read the
+other side's TESTS before concluding a merge lost something** -- the test
+carried the reason, and the diff alone did not.
 
 ## Open items
 

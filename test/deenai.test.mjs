@@ -128,7 +128,14 @@ test('an Arabic lecture title is flagged for right-to-left, in its own name', as
   for (let i = 0; i < 3; i++) seedClip(pro.id, { projectId: 'proj-ar', status: 'approved', score: 80 });
 
   const view = await (await fetch(`${base}/api/deenai`, { headers: { Cookie: pro.cookie } })).json();
-  const head = view.insights[0];
+  // Found by its kicker, not by being first. This account has approved a clip
+  // and connected nothing, so the NEXT-ACTION card legitimately leads -- which
+  // is the documented rule ("the next action comes first") and only started
+  // happening once IMPORT_DONE was corrected to the status the engine actually
+  // writes. What this test is about is the direction of an Arabic name, not
+  // which card wins the hero slot.
+  const head = view.insights.find(card => card.kicker === 'Clip more from');
+  assert.ok(head, 'the lecture card must still be there');
   assert.equal(head.rtl, true, 'an Arabic title must render RTL in Amiri, not left-to-right in Inter');
   assert.equal(head.figure, '3/3');
   assert.ok(!/Clip more from/.test(head.title), 'the kicker is separate so the name can carry its own direction');

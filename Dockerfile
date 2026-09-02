@@ -16,7 +16,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY package.json ./
+# ONLY requirements.txt above the Python install, deliberately.
+#
+# `COPY package.json ./` used to sit here, and there is no npm step anywhere in
+# this file -- the repo has no dependencies on purpose. So it did nothing
+# except invalidate the layer below it, and package.json changes on EVERY
+# release because CI requires a version bump. That meant the expensive install
+# (faster-whisper, ctranslate2, OpenCV and its Debian fallback) could never be
+# reused between deploys. `COPY . .` further down brings package.json in.
+#
+# This only pays off with the build cache ON: the Render service is currently
+# set to `no-cache`, which rebuilds everything from scratch regardless.
 COPY worker/requirements.txt ./worker/requirements.txt
 RUN python3 -m pip install --break-system-packages --upgrade pip setuptools wheel \
     && python3 -m pip install --break-system-packages -r worker/requirements.txt \

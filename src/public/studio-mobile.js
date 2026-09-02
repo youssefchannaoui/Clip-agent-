@@ -248,6 +248,21 @@
   function homeScreen() {
     return [
       h('section', { class: 'dcm-greet' }, [h('h1', {}, [tx('m.hello')]), h('p', {}, [tx('m.today')])]),
+      // First run: Step 1 Create -> Step 2 Review -> Step 3 Publish. Same
+      // bindings the desktop strip reads, so the phone cannot say a different
+      // thing about where this account is; it stops rendering the moment the
+      // server stops sending it (a clip published).
+      iff('onboarding.show', [h('section', { class: 'dcm-card dcm-onb' }, [
+        h('span', { class: 'dcm-onb-k' }, 'Getting started'),
+        h('div', { class: 'dcm-onb-steps' }, [each('onboarding.steps', 'ob', [
+          h('span', { class: cat('dcm-onb-step is-', b('ob.state')) }, [
+            h('span', { class: 'dcm-onb-n' }, [tx('ob.num')]),
+            h('span', { class: 'dcm-onb-l' }, [tx('ob.label')]),
+          ]),
+        ])]),
+        h('p', { class: 'dcm-onb-hint' }, [tx('onboarding.hint')]),
+        h('button', { type: 'button', class: 'dcm-btn dcm-btn-p', on: { click: 'onboarding.action' } }, [tx('onboarding.actionLabel')]),
+      ])]),
       iff('startListOn', [h('section', { class: 'dcm-card dcm-setup' }, [
         h('div', { class: 'dcm-card-h' }, [h('strong', {}, 'Getting set up'), h('span', { class: 'dcm-pill' }, [tx('startDoneLabel')])]),
         each('startSteps', 's', [row({ class: cat('dcm-step ', b('s.doneCls')), on: { click: 's.open' } }, [

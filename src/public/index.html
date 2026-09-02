@@ -6400,6 +6400,46 @@ StudioAdapter.onProbeSource=async url=>{try{
                 +'<td class="sgm">'+esc(cash(r.initialRevenueMinor,g.currency))+'</td></tr>').join('')
               +'</table></div></div>';
           };
+          /* Activation: the five moments, with HOW LONG each took.
+             The stage COUNTS are the table above; this is the timing and the
+             who-is-stuck-right-now, which is what says who to go and talk to.
+             Built from g.activation (src/onboarding.js), derived from the same
+             referrals.activationOf every other surface reads. */
+          const dur=ms=>{
+            if(ms==null)return '—';
+            const m=Math.round(ms/60000);
+            if(m<60)return m+'m';
+            const h=m/60; if(h<48)return (h<10?h.toFixed(1):Math.round(h))+'h';
+            return Math.round(h/24)+'d';
+          };
+          const activationBlock=a=>{
+            if(!a||!a.accounts)return '';
+            const row=(s,i)=>'<tr class="dcow-hov"><td class="sgl">'+esc(s.label)+'</td>'
+              +'<td class="sgm">'+esc(s.count)+'</td>'
+              +'<td class="sgm">'+esc(a.accounts?Math.round((s.count/a.accounts)*100)+'%':'—')+'</td>'
+              +'<td class="sgm">'+esc(i===0?'—':dur(s.sinceSignup))+'</td></tr>';
+            const stuck='<div class="sgw" style="margin-bottom:14px"><div class="scl"><span class="s97">Sitting here right now</span></div>'
+              +'<div class="sdk"><table class="sh1">'
+              +'<tr><th class="sgh">Step</th><th class="sgi">Accounts</th></tr>'
+              +'<tr class="dcow-hov"><td class="sgl">1 Create</td><td class="sgm">'+esc(a.stuckNow.create)+'</td></tr>'
+              +'<tr class="dcow-hov"><td class="sgl">2 Review</td><td class="sgm">'+esc(a.stuckNow.review)+'</td></tr>'
+              +'<tr class="dcow-hov"><td class="sgl">3 Publish</td><td class="sgm">'+esc(a.stuckNow.publish)+'</td></tr>'
+              +'<tr class="dcow-hov"><td class="sgl">Through the whole run</td><td class="sgm">'+esc(a.stuckNow.done)+'</td></tr>'
+              +'</table></div></div>';
+            const stalled=(a.stalled||[]).length
+              ? '<div class="sgw" style="margin-bottom:14px"><div class="scl"><span class="s97">Stalled over a day</span></div>'
+                +'<div class="sdk"><table class="sh1">'
+                +'<tr><th class="sgh">Account</th><th class="sgi">Stuck at</th><th class="sgi">Waiting</th></tr>'
+                +a.stalled.map(r=>'<tr class="dcow-hov"><td class="sgl">'+esc(r.email)+'</td>'
+                  +'<td class="sgm">'+esc(r.at)+'</td><td class="sgm">'+esc(dur(r.waitingMs))+'</td></tr>').join('')
+                +'</table></div></div>'
+              : '';
+            return '<div class="sgw" style="margin-bottom:14px"><div class="scl"><span class="s97">Activation, and how long it takes</span></div>'
+              +'<div class="sdk"><table class="sh1">'
+              +'<tr><th class="sgh">Moment</th><th class="sgi">Reached</th><th class="sgi">Of accounts</th><th class="sgi">Median from signup</th></tr>'
+              +(a.steps||[]).map(row).join('')
+              +'</table></div></div>'+stuck+stalled;
+          };
           const drop=g.biggestDropOff;
           box.className='dcow-s';
           box.style.cssText='flex-shrink:0;margin-bottom:20px';
@@ -6417,6 +6457,7 @@ StudioAdapter.onProbeSource=async url=>{try{
             +'<td class="sgm">'+esc(pct(g.rates&&g.rates.signupToActivated))+'</td>'
             +'<td class="sgm">'+esc(pct(g.rates&&g.rates.activatedToPaid))+'</td></tr>'
             +'</table></div></div>'
+            +activationBlock(g.activation)
             +'<div class="sgw" style="margin-bottom:14px"><div class="scl"><span class="s97">Where people stop</span></div>'
             +'<div class="sdk"><table class="sh1">'
             +'<tr><th class="sgh">Stage</th><th class="sgi">Reached</th><th class="sgi">Of signups</th></tr>'
@@ -7141,6 +7182,151 @@ function paintTrimTools(vals){
   }
 }
 
+/* Its own escaper, like paintAccount's: the top-of-file `esc` is in a
+   DIFFERENT inline script scope and is not reachable from here. */
+const obEsc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+/* ── First run ────────────────────────────────────────────────────────────
+   Step 1 Create -> Step 2 Review -> Step 3 Publish, above everything on Home.
+
+   Host-rendered against the export's own structure, never a hashed class: the
+   Home screen root is the paste field's third ancestor, and the design export
+   regenerates every class name on re-import. `flex: none` is load-bearing --
+   the screen root is a scrolling flex column, so a child that does not declare
+   it is shrinkable and gets squeezed to a height of ZERO while still reading
+   correctly in innerText (the trap the Performance screen and the watermark
+   row both paid for).
+
+   It disappears the moment a clip publishes, because the SERVER stops sending
+   it (onboarding.journey), not because anything here was dismissed. */
+function paintOnboarding(vals){
+  const ob=vals&&vals.onboarding;
+  const paste=document.querySelector('#studio [data-tour="paste"]');
+  const screen=paste&&paste.parentElement&&paste.parentElement.parentElement&&paste.parentElement.parentElement.parentElement
+    ? paste.parentElement.parentElement.parentElement.parentElement : null;
+  const old=document.getElementById('dcOnboard');
+  /* Home only: it is about the run as a whole, and a banner following someone
+     into the editor or the Owner screen is clutter, not guidance. */
+  if(!ob||!ob.show||!screen||StudioAdapter.ui.screen!=='home'){if(old)old.remove();return}
+  const row=old||document.createElement('div');
+  if(!old){row.id='dcOnboard'}
+  row.setAttribute('style','flex:none;display:flex;flex-direction:column;gap:12px;margin:0 0 16px;padding:16px 18px;'
+    +'border:1px solid rgba(217,180,120,.34);border-radius:14px;'
+    +'background:linear-gradient(180deg,rgba(217,180,120,.075),rgba(217,180,120,.022));');
+  const step=s=>{
+    const done=s.isDone,now=s.isNow;
+    const ring=done?'#D9B478':now?'#D9B478':'var(--dc-n-2a2a2f, #2A2A2F)';
+    const fill=done?'#D9B478':'transparent';
+    /* Literal, never a token: this ink sits ON the gold, and the gold is the
+       same colour in both themes. Tokenising it flipped the number to cream
+       on gold in daylight -- measured at 1.7:1. */
+    const ink=done?'#0E0E11':now?'#F0D6A6':'var(--dc-n-6e6e76, #6E6E76)';
+    const label=done?'var(--dc-n-8b8b93, #8B8B93)':now?'var(--dc-n-f2f2f4, #F2F2F4)':'var(--dc-n-6e6e76, #6E6E76)';
+    return '<span style="display:flex;align-items:center;gap:9px;min-width:0">'
+      +'<span style="flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;'
+      +'border:1.5px solid '+ring+';background:'+fill+';color:'+ink+';font-size:11px;font-weight:700">'
+      /* The NUMBER stays on a finished step, on a filled circle, rather than
+         becoming a tick: the ask was literally "Step 1 / Step 2 / Step 3", and
+         the phone renders the same three numbers -- a tick here and a number
+         there would be one control described two ways. */
+      +obEsc(s.num)+'</span>'
+      +'<span style="font-size:12.5px;font-weight:'+(now?'700':'600')+';color:'+label+';white-space:nowrap">'+obEsc(s.label)+'</span>'
+      +'</span>';
+  };
+  const bar='<span style="flex:1 1 18px;min-width:14px;height:1px;background:var(--dc-n-2a2a2f, #2A2A2F)"></span>';
+  row.innerHTML=
+    '<span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+      +'<span style="font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#D9B478">Getting started</span>'
+      +'<span style="flex:1"></span>'
+      +'</span>'
+    +'<span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;max-width:520px">'
+      +ob.steps.map(step).join(bar)
+    +'</span>'
+    +'<span style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">'
+      +'<span style="flex:1 1 260px;min-width:0;font-size:12.5px;line-height:1.5;color:var(--dc-n-c9c9d0, #C9C9D0)">'+obEsc(ob.hint)+'</span>'
+      +(ob.actionLabel?'<button type="button" id="dcOnboardGo" style="flex:none;padding:9px 16px;border-radius:9px;cursor:pointer;'
+        +'border:1px solid #D9B478;background:#D9B478;color:#0E0E11;font-size:12.5px;font-weight:600">'
+        +obEsc(ob.actionLabel)+'</button>':'')
+    +'</span>';
+  const go=row.querySelector('#dcOnboardGo');
+  if(go)go.onclick=e=>{e.preventDefault();ob.action(e)};
+  if(row.parentNode!==screen||screen.firstElementChild!==row)screen.insertBefore(row,screen.firstElementChild);
+  /* "Paste a lecture" has to reach the field, and the field is drawn by the
+     template -- so the focus happens after the paint, here, rather than in the
+     adapter where it does not exist yet. */
+  if(StudioAdapter.ui.focusPaste&&Date.now()-StudioAdapter.ui.focusPaste<4000){
+    StudioAdapter.ui.focusPaste=0;
+    const field=document.querySelector('#studio [data-tour="paste"] input');
+    if(field){field.focus();field.scrollIntoView({block:'center',behavior:'smooth'})}
+  }
+}
+
+/* The first-clip moment, and the handoff into review -- one thing, on purpose.
+
+   Youssef asked for both a success moment and "a clear automatic handoff from
+   processing -> first review". A SILENT jump would be the literal reading and
+   the worse product: it can land on somebody mid-sentence in another screen,
+   and a screen that changes by itself reads as a bug. This appears by itself
+   the instant the first clips land (that is the automatic half -- nobody has
+   to go looking) and its primary button is the handoff.
+
+   It fires ONCE PER ACCOUNT, not once per browser: the flag lives on the
+   account (POST /api/onboarding/seen), because a first clip happens once to a
+   person and firing again on their phone turns a moment into a nag. */
+function paintFirstClip(vals){
+  const ob=(DATA&&DATA.onboarding)||null;
+  const old=document.getElementById('dcFirstClip');
+  /* An overlay that is already up is LEFT ALONE, and that ordering is the
+     whole of it. The first cut checked the spent flag first, so the paint
+     immediately after the one that raised the moment tore it down again --
+     it appeared and vanished inside a frame, which measured as "the moment
+     never fired". Spent means "do not raise another", never "remove the one
+     on screen"; the only things that close it are its own two buttons and
+     the backdrop. */
+  if(old)return;
+  if(!ob||!ob.firstClip||window.__dcFirstClipSpent)return;
+  const n=Number(ob.firstClipCount||0);
+  const wrap=document.createElement('div');
+  wrap.id='dcFirstClip';
+  wrap.setAttribute('style','position:fixed;inset:0;z-index:240;display:grid;place-items:center;padding:20px;'
+    +'background:rgba(6,6,8,.72);backdrop-filter:blur(3px)');
+  wrap.innerHTML='<div role="dialog" aria-modal="true" aria-label="Your first clips are ready" style="width:min(420px,100%);'
+    +'display:flex;flex-direction:column;align-items:center;gap:14px;padding:30px 26px 24px;text-align:center;'
+    +'border:1px solid rgba(217,180,120,.4);border-radius:18px;background:var(--dc-n-121215, #121215);'
+    +'box-shadow:0 30px 80px rgba(0,0,0,.62)">'
+    +'<svg viewBox="0 0 40 52" width="40" height="52" fill="none" aria-hidden="true">'
+      +'<path d="M20 2C11.2 2 4 9.2 4 18v32h32V18C36 9.2 28.8 2 20 2Z" stroke="#D9B478" stroke-width="2.6" stroke-linejoin="round"/>'
+      +'<path d="M16.6 20.4 25.4 26l-8.8 5.6V20.4Z" fill="#D9B478"/></svg>'
+    +'<strong style="font-family:Outfit,Inter,sans-serif;font-size:19px;font-weight:600;color:var(--dc-n-f2f2f4, #F2F2F4)">'
+      +(n===1?'Your first clip is ready':'Your first clips are ready')+'</strong>'
+    +'<span style="font-size:13px;line-height:1.6;color:var(--dc-n-8b8b93, #8B8B93)">'
+      +(n===1?'One clip came back from that lecture.':obEsc(String(n))+' clips came back from that lecture.')
+      +' Watch them and keep the ones worth posting \u2014 nothing publishes until you approve it.</span>'
+    +'<button type="button" id="dcFirstClipGo" style="width:100%;padding:11px 16px;border-radius:10px;cursor:pointer;'
+      +'border:1px solid #D9B478;background:#D9B478;color:#0E0E11;font-size:13px;font-weight:600">'
+      +'Review '+(n===1?'it':'them')+'</button>'
+    +'<button type="button" id="dcFirstClipLater" style="padding:4px 8px;border:0;background:none;cursor:pointer;'
+      +'color:var(--dc-n-6e6e76, #6E6E76);font-size:12px">Not now</button>'
+    +'</div>';
+  document.body.appendChild(wrap);
+  /* Spent the moment it is SHOWN, not when it is answered: a reload with the
+     flag unspent would show it again, which is the nag this exists to avoid.
+     Optimistic locally so the next paint (which can beat the response) does
+     not draw a second one. */
+  window.__dcFirstClipSpent=true;
+  const spend=what=>fetch('/api/onboarding/seen',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({what})}).catch(()=>{});
+  spend('firstClip');
+  const close=()=>{wrap.remove()};
+  wrap.querySelector('#dcFirstClipGo').onclick=()=>{
+    spend('handoff');
+    close();
+    StudioAdapter.ui.screen='queue';StudioAdapter.ui.queueTab='decide';
+    renderAll();
+  };
+  wrap.querySelector('#dcFirstClipLater').onclick=close;
+  wrap.onclick=e=>{if(e.target===wrap)close()};
+}
+
 function paintLibraryAside(vals){
   /* The Lecture library's sidebar used to end in "Before you import" -- three
      warnings, in the most valuable column on the screen, that nobody reads
@@ -7560,6 +7746,8 @@ function paintStudio(){
   /* Cheap when shut -- it returns immediately -- and this is what keeps the
      plan, the token count and the email switch honest while it is open. */
   if(window.paintAccount)window.paintAccount();
+  paintOnboarding(vals);
+  paintFirstClip(vals);
   paintScheduleWeek();
   paintScheduleDrag();
   if(window.paintEmailNotifRow)window.paintEmailNotifRow(DATA);

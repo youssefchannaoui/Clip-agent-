@@ -82,7 +82,27 @@ export function userByCode(state, code) {
  * would un-activate a user the moment their clip published.
  */
 const APPROVED_OR_BEYOND = new Set(['approved', 'scheduled', 'publishing', 'posted']);
-const IMPORT_DONE = new Set(['complete', 'completed', 'ready']);
+/*
+ * The statuses that mean an import FINISHED.
+ *
+ * This said ['complete','completed','ready'] and the engine has always written
+ * 'done' (local-engine.js). So `processed` was false for every project this
+ * product has ever run, and three things quietly depended on it:
+ *
+ *  - `isActivated` is `processed && approved`, so NOBODY has ever counted as
+ *    activated -- which is what gates a referral payout.
+ *  - `nextStep` returns "your lecture is being processed" the moment it sees
+ *    !processed, so every account that had ever imported was told that for
+ *    ever, in DeenAI's next-action card and in the lifecycle nudge emails.
+ *  - the owner's funnel reported "Processing finished: 0" beside "Imported: 4".
+ *    That WAS noticed, and read as a reason to show raw statuses rather than
+ *    as a wrong constant.
+ *
+ * The other three are kept: they cost nothing and an older record may carry
+ * one. `done` is what the engine actually writes, and the test pins it against
+ * the engine's own assignment rather than against this list.
+ */
+const IMPORT_DONE = new Set(['done', 'complete', 'completed', 'ready']);
 
 export function activationOf(state, userId) {
   const id = String(userId || '');

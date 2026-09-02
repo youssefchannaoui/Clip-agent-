@@ -6052,6 +6052,41 @@
        * itself out with "0 of 0" teaches less than no card at all, and the
        * host draws only what it is given.
        */
+      /*
+       * First run: Step 1 Create -> Step 2 Review -> Step 3 Publish.
+       *
+       * The SERVER decides where the account is (src/onboarding.js, itself
+       * derived from referrals.activationOf -- the one definition the growth
+       * funnel, the nudge emails and DeenAI's next-action card already read).
+       * This only shapes it for drawing, so the strip cannot say a different
+       * thing from the operator's funnel about the same person.
+       *
+       * `show` goes false the moment a clip publishes, which is the whole of
+       * "disappears after activation": it is DERIVED, not dismissed, so it
+       * cannot be waved away before it is true or come back on another device.
+       */
+      onboarding: (function () {
+        var ob = DATA.onboarding || null;
+        if (!ob || !ob.show) return { show: false, steps: [], hint: '', at: '' };
+        var action = {
+          // Home is where the paste field is; the host focuses it after the
+          // paint (paintOnboarding), because the field is drawn by the
+          // template and does not exist yet at this point.
+          create: { label: 'Paste a lecture', go: function (e) { stop(e); setUI({ screen: 'home', focusPaste: Date.now() }); } },
+          review: { label: 'Open the review queue', go: function (e) { stop(e); setUI({ screen: 'queue', queueTab: 'decide' }); } },
+          publish: { label: 'Connect a channel', go: function (e) { stop(e); global.StudioAdapter.onOpenConnections(); } },
+        }[ob.at] || { label: '', go: function () {} };
+        return {
+          show: true, at: ob.at, hint: ob.hint || '',
+          // The numbers are the design's, not ours: "Step 1 / 2 / 3" is how
+          // the ask was phrased and how the strip reads out loud.
+          steps: (ob.steps || []).map(function (step, i) {
+            return { key: step.key, label: step.label, num: String(i + 1), state: step.state,
+              isDone: step.state === 'done', isNow: step.state === 'now' };
+          }),
+          actionLabel: action.label, action: action.go,
+        };
+      })(),
       libStats: (function () {
         var ready = projects.filter(function (p) { return lecState(p) === 'ready'; });
 

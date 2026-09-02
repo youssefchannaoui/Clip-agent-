@@ -26,6 +26,7 @@
  * is a channel to stop working on, and sorting by visits hides exactly that.
  */
 import { activationOf, isActivated } from './referrals.js';
+import { activationReport } from './onboarding.js';
 import { stats as nudgeStats } from './nudges.js';
 
 const asArray = v => (Array.isArray(v) ? v : []);
@@ -177,6 +178,15 @@ export function report(state = {}, webSummary = {}) {
     nudges: nudgeStats(state),
 
     funnel: stages,
+    /*
+     * The five moments Youssef named -- signup, first source, first clip,
+     * first approval, first publish -- with HOW LONG each took, and who is
+     * sitting at each one right now. The counts above already existed; the
+     * time is the actionable half. A step everybody eventually passes but
+     * takes four days to pass is a different problem from one half of them
+     * never pass, and a count cannot tell those apart.
+     */
+    activation: activationReport(state, users),
     rates: {
       visitorToSignup: rate(stages.signedUp, webSummary.uniques || 0),
       signupToActivated: rate(users.filter(u => isActivated(state, u.id)).length, stages.signedUp),

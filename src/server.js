@@ -35,6 +35,7 @@ import * as financeAudit from './finance-audit.js';
 import * as referrals from './referrals.js';
 import * as growth from './growth.js';
 import * as push from './push.js';
+import * as onboarding from './onboarding.js';
 import * as admin from './admin.js';
 import * as owner from './owner.js';
 import * as deenai from './deenai.js';
@@ -734,6 +735,10 @@ function appState(user = null) {
     // offering a control that cannot work.
     pushKey: push.publicKey(),
     pushDevices: push.subscriptionsFor(user.id).length,
+    // Where this account is in Create -> Review -> Publish, and the two
+    // one-time moments. Derived, never stored, so it is right for the accounts
+    // that predate it and cannot drift from what actually happened.
+    onboarding: onboarding.journey(state, user.id),
     selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(),
     backgrounds: backgrounds.listBackgrounds(user).map(entry => ({
       id: entry.id, name: entry.name, durationSec: entry.durationSec, shared: Boolean(entry.shared),
@@ -1486,6 +1491,21 @@ async function route(req, res, url) {
     const body = await readBody(req);
     const removed = push.unsubscribe(currentUser.id, body.endpoint);
     return json(res, 200, { ok: true, removed, devices: push.subscriptionsFor(currentUser.id).length });
+  }
+  /*
+   * Spending a one-time moment. Two of them: the first-clip celebration and
+   * the automatic handoff into the review queue. Held on the ACCOUNT rather
+   * than in the browser, because a first clip happens once to a person -- in
+   * localStorage it would fire again on their phone, which turns a moment
+   * into a nag.
+   */
+  if (method === 'POST' && pathname === '/api/onboarding/seen') {
+    if (!currentUser?.id) return json(res, 401, { error: 'Sign in first.' });
+    const body = await readBody(req);
+    const what = String(body.what || '');
+    if (!['firstClip', 'handoff'].includes(what)) return json(res, 400, { error: 'Unknown moment.' });
+    if (onboarding.markSeen(state, currentUser.id, what)) save();
+    return json(res, 200, { ok: true, onboarding: onboarding.journey(state, currentUser.id) });
   }
   if (method === 'DELETE' && pathname === '/api/account') {
     try {
