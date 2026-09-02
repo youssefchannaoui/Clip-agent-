@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1027 JS + 488 Python**
+- `npm test` and `npm run check` must pass. Currently **1028 JS + 488 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3553,3 +3553,44 @@ Youssef, 2 Sept 2026, looking at Quran Recitation with the switch already off:
   screen, re-ticked -> back, and the template still called "Clean Line" (the
   v3.51.0 rename bug stays fixed). Quran Recitation selected with the real
   dropdown shows no mark over the ayah.
+
+### The connectors travel, and the clip list slides (v3.76.9, 2 Sept 2026)
+
+Youssef: "those little lines in between each stage they should have a swipe or
+fill up moving right animation in between each stage. also when opening for
+example 4 of 5 clips and closing should have an animation too."
+
+- **Two connector states, both derived from one index.** line[i] sits between
+  station i-1 and station i, so line[idx] is the one just travelled (`fill` --
+  a gold ::after scaling in from the left as the stage lands) and line[idx+1]
+  is the one being travelled now (`live` -- a gold sweep running rightwards,
+  `dcStFlow`, infinite). A queued job is idx -1 and gets neither: nothing lit
+  and nothing moving, which is the honest picture of a job that has not begun.
+- **The gold is an ::after over a dim track, and that is load-bearing.** A
+  `.done` line painted directly could not scale its fill in from the left
+  without also scaling the track. Also: `backwards`, never `both` -- the house
+  rule this file has now paid for three times.
+- **The compact strip in the floating bar keeps the states and drops the
+  motion.** Its connectors are 8px; a 1.5s sweep across that reads as a
+  blinking dot rather than travel. The pulsing current station already says
+  the job is live.
+- **The expand/collapse animates only because the list stopped being
+  conditional.** `clipsAreOpen` was in `liveKey`, so every toggle REBUILT the
+  row -- the list appeared and vanished with no previous state for a
+  transition to move from. The list is always rendered now and only
+  `data-open` switches, driven from paintRows' in-place path; the node
+  survives, so `grid-template-rows: 0fr -> 1fr` transitions in BOTH
+  directions. That is the one way to animate to a height nobody measured, and
+  it needs `min-height: 0` as much as `overflow: hidden` on the grid child --
+  a grid item's automatic minimum size is its content, which would hold the
+  row open at 0fr. The test that demanded the opposite was rewritten rather
+  than deleted; its "no moving number in the key" half still stands.
+- **Verification trap, and it is the rAF one from a new angle:** a hidden
+  Browser pane does not composite, so a running CSS transition FREEZES at its
+  start value. Sampling heights across the toggle read a flat 244px seven
+  times and looked exactly like a transition that never ran. Proven instead by
+  disabling the transition and measuring the two end states (0 and 244), then
+  reading `document.getAnimations()` for a real CSSTransition on
+  `grid-template-rows` -- and finally by pausing that transition at 45% and
+  measuring 28px. Do not trust a wall-clock animation measurement taken
+  against a pane that is not on screen.
