@@ -7300,12 +7300,12 @@ function paintOnboarding(vals){
     +'background:linear-gradient(180deg,rgba(217,180,120,.075),rgba(217,180,120,.022));');
   const step=s=>{
     const done=s.isDone,now=s.isNow;
-    const ring=done?'#D9B478':now?'#D9B478':'var(--dc-n-2a2a2f, #2A2A2F)';
-    const fill=done?'#D9B478':'transparent';
+    const ring=done?'var(--dc-n-d9b478, #D9B478)':now?'var(--dc-n-d9b478, #D9B478)':'var(--dc-n-2a2a2f, #2A2A2F)';
+    const fill=done?'var(--dc-n-d9b478, #D9B478)':'transparent';
     /* Literal, never a token: this ink sits ON the gold, and the gold is the
        same colour in both themes. Tokenising it flipped the number to cream
        on gold in daylight -- measured at 1.7:1. */
-    const ink=done?'#0E0E11':now?'#F0D6A6':'var(--dc-n-6e6e76, #6E6E76)';
+    const ink=done?'var(--dc-n-0e0e11, #0E0E11)':now?'var(--dc-n-f0d6a6, #F0D6A6)':'var(--dc-n-6e6e76, #6E6E76)';
     const label=done?'var(--dc-n-8b8b93, #8B8B93)':now?'var(--dc-n-f2f2f4, #F2F2F4)':'var(--dc-n-6e6e76, #6E6E76)';
     return '<span style="display:flex;align-items:center;gap:9px;min-width:0">'
       +'<span style="flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;'
@@ -7321,7 +7321,7 @@ function paintOnboarding(vals){
   const bar='<span style="flex:1 1 18px;min-width:14px;height:1px;background:var(--dc-n-2a2a2f, #2A2A2F)"></span>';
   row.innerHTML=
     '<span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
-      +'<span style="font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#D9B478">Getting started</span>'
+      +'<span style="font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--dc-n-d9b478, #D9B478)">Getting started</span>'
       +'<span style="flex:1"></span>'
       +'</span>'
     +'<span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;max-width:520px">'
@@ -7330,7 +7330,7 @@ function paintOnboarding(vals){
     +'<span style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">'
       +'<span style="flex:1 1 260px;min-width:0;font-size:12.5px;line-height:1.5;color:var(--dc-n-c9c9d0, #C9C9D0)">'+obEsc(ob.hint)+'</span>'
       +(ob.actionLabel?'<button type="button" id="dcOnboardGo" style="flex:none;padding:9px 16px;border-radius:9px;cursor:pointer;'
-        +'border:1px solid #D9B478;background:#D9B478;color:#0E0E11;font-size:12.5px;font-weight:600">'
+        +'border:1px solid var(--dc-n-d9b478, #D9B478);background:var(--dc-n-d9b478, #D9B478);color:var(--dc-n-0e0e11, #0E0E11);font-size:12.5px;font-weight:600">'
         +obEsc(ob.actionLabel)+'</button>':'')
     +'</span>';
   const go=row.querySelector('#dcOnboardGo');
@@ -7388,7 +7388,7 @@ function paintFirstClip(vals){
       +(n===1?'One clip came back from that lecture.':obEsc(String(n))+' clips came back from that lecture.')
       +' Watch them and keep the ones worth posting \u2014 nothing publishes until you approve it.</span>'
     +'<button type="button" id="dcFirstClipGo" style="width:100%;padding:11px 16px;border-radius:10px;cursor:pointer;'
-      +'border:1px solid #D9B478;background:#D9B478;color:#0E0E11;font-size:13px;font-weight:600">'
+      +'border:1px solid var(--dc-n-d9b478, #D9B478);background:var(--dc-n-d9b478, #D9B478);color:var(--dc-n-0e0e11, #0E0E11);font-size:13px;font-weight:600">'
       +'Review '+(n===1?'it':'them')+'</button>'
     +'<button type="button" id="dcFirstClipLater" style="padding:4px 8px;border:0;background:none;cursor:pointer;'
       +'color:var(--dc-n-6e6e76, #6E6E76);font-size:12px">Not now</button>'
@@ -7635,6 +7635,18 @@ function wireScheduleDrag(grid){
     const source=from, target=over, didMove=moved;
     const id=source.dataset.slotClip;
     clear();
+    if(didMove){
+      /* A pointerup is followed by a CLICK, and a schedule cell's own click
+         opens that day -- so a drag in the Week view ended in the Day view,
+         every time. The drag has already said what it meant; the click after
+         it means nothing. Swallowed once, at the capture phase, before the
+         studio's delegated handler ever sees it. The timeout is the case where
+         no click follows at all (a drop outside the window), or the listener
+         would sit there and eat somebody's next real click. */
+      const swallow=ev=>{ev.stopPropagation();ev.preventDefault()};
+      document.addEventListener('click',swallow,{capture:true,once:true});
+      setTimeout(()=>document.removeEventListener('click',swallow,true),400);
+    }
     if(!didMove||!target)return;
     const at=Number(target.dataset.slot);
     if(!Number.isFinite(at))return;

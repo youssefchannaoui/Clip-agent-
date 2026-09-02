@@ -61,6 +61,14 @@ for (const rel of FILES) {
     const line = text.slice(text.lastIndexOf('\n', match.index) + 1,
       (text.indexOf('\n', match.index) + 1 || text.length));
     if (/<meta\b/i.test(line) || /setAttribute\(\s*['"]content['"]/.test(line)) continue;
+    /*
+     * An SVG PRESENTATION ATTRIBUTE is not a style value either. `stroke=
+     * "var(--x, #D9B478)"` does not resolve, and the path then draws with the
+     * default — a black fill and no stroke. It reached the arch mark in the
+     * onboarding strip before it was caught. The gold does not need theming
+     * anyway: it is the brand colour in both themes.
+     */
+    if (/(?:stroke|fill|stop-color|flood-color|lighting-color)\s*=\s*["'][^"']*$/.test(before)) continue;
     // Anything the palette has an answer for, not only the greys: the status
     // colours are named there too, and an inline #7FD1A6 stat number stayed a
     // pastel on paper while the same green in the stylesheet had darkened.

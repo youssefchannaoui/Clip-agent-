@@ -63,26 +63,34 @@
    while everything else lit. The class is set on both elements. */
 :root.dc-light,
 body.dc-light {
-  --dc-bg-deepest: #EFE7D8;
-  --dc-bg-deep:    #E8DECB;
-  --dc-bg:         #FFFDF7;
-  --dc-bg-raised:  #F6F0E2;
-  --dc-line-soft:  #E4DAC5;
-  --dc-line:       #D5C8AC;
-  --dc-line-hover: #C2B291;
-  --dc-ink-faint:  #8A7F6A;
-  --dc-ink-dim:    #635B4B;
-  --dc-ink-body:   #332D24;
-  --dc-ink-bright: #221D16;
-  --dc-ink:        #181510;
-  --dc-page:       #EBE2D0;
-  --dc-page-2:     #E2D8C3;
-  --dc-bg-alt:     #F8F3E7;
-  --dc-ink-soft:   #544C3D;
-  --dc-ink-muted:  #726855;
+  /* White, gold and black. Every value here has a twin in
+     scripts/theme-palette.mjs -- a colour that moved in one and not the other
+     is a seam down the middle of the screen -- and the two are compared by
+     test/light-theme.test.mjs.
+
+     The page is a light neutral and A CARD IS WHITE, which is what gives a box
+     an edge the way night does (page #09090A, card #17171A). The first version
+     made both cream and the boxes disappeared into the page. */
+  --dc-bg-deepest: #ECECEE;
+  --dc-bg-deep:    #E7E7EA;
+  --dc-bg:         #FFFFFF;
+  --dc-bg-raised:  #FFFFFF;
+  --dc-line-soft:  #E2E2E6;
+  --dc-line:       #D4D4DA;
+  --dc-line-hover: #BCBCC4;
+  --dc-ink-faint:  #86868F;
+  --dc-ink-dim:    #62626B;
+  --dc-ink-body:   #33333A;
+  --dc-ink-bright: #1D1D22;
+  --dc-ink:        #141418;
+  --dc-page:       #ECECEE;
+  --dc-page-2:     #E7E7EA;
+  --dc-bg-alt:     #F7F7F9;
+  --dc-ink-soft:   #55555E;
+  --dc-ink-muted:  #75757E;
   --dc-gold:       #A2762C;
   --dc-gold-lit:   #7E5B18;
-  --dc-well:       rgba(58, 44, 20, .07);
+  --dc-well:       rgba(20, 20, 24, .05);
 }
 
 /*
