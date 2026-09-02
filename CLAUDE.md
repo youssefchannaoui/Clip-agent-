@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1028 JS + 488 Python**
+- `npm test` and `npm run check` must pass. Currently **1029 JS + 488 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -2306,6 +2306,42 @@ animation when moving to right side or when moving back."
 - Measured at 1440x1000: open x=420 w=600, mid-slide x=780 w=438, collapsed
   x=1102 w=320 with its right edge exactly 18px from the viewport; and back
   again through x=673. Reduced motion keeps the move and drops the travel.
+
+## The other three platform marks are the real logos (v3.76.10, 2 Sept 2026)
+
+Youssef: "remmebre when we changed the yt logo cause they told us too now the
+others look off, fix the other 3 to look better same look like original yt."
+
+- **Fixing one platform is what broke the other three.** The YouTube
+  substitution was a compliance obligation (Policy III.F.2a,b), and once it
+  landed the "Posting to" row was a full-colour, uncontained YouTube mark
+  beside three Phosphor glyphs -- redrawn monochrome shapes, tinted with the
+  dashboard's gold, each in a bordered tile. They read as placeholders for
+  logos rather than as the logos. TikTok, Instagram and Facebook are now drawn
+  exactly the way YouTube is: `::before{content:""}` suppresses the glyph and
+  the official mark is drawn as a data-URI SVG background at the same 22px,
+  page-wide, so no call site has to know.
+- **TikTok is its on-dark form** -- the white note with the cyan (#25F4EE) and
+  magenta (#FE2C55) offsets -- because the black-square version would be
+  invisible on this background. Nothing is recoloured or reshaped.
+- **":first-child" is what tells a tile from a row**, and adding it fixed a
+  fault that had been shipping since the YouTube change. `:has(> i.ph-…)`
+  alone also matched Home's "Posting today" rows, whose 1px top hairline is a
+  DIVIDER between rows rather than a box around a logo -- so the YouTube row
+  was the one row in that panel drawn without one. A tile holds the mark and
+  nothing before it (the 34px box in "Posting to", the connections dialog's
+  mark); a row ENDS with the mark, after a time, a thumbnail and a title.
+  Measured after: tiles `rgba(0,0,0,0)`, rows back to `rgb(30,30,34)`.
+  The discriminator is deliberately structural -- naming `.s48` would have
+  hung the fix on a hashed class that a design re-import regenerates.
+- **The YouTube rule is kept as its own declaration**, not folded into a comma
+  list with the other three, so an edit aimed at them cannot take its half with
+  it. Its compliance test moved with the selector and still pins the same
+  property.
+- Both new assertions were proven RED first: against a mark recoloured to the
+  dashboard's gold, against a deleted mark, and against the tile-strip without
+  `:first-child`. Every screen was swept for these icons afterwards -- only two
+  container shapes exist in the running app, and both were measured.
 
 ## Open items
 
