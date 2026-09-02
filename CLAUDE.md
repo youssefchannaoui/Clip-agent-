@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1081 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1085 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3005,6 +3005,62 @@ things on the Happening-now row.
   42px the words were nearly as bright as the mark and read as clutter beside
   the wordmark. Opacity .42 at rest, full on hover, where it is being looked
   at.
+
+## Desktop notifications were on the wrong screen and dropping posts (v3.89.0)
+
+Youssef, 2 Sept 2026, on the Account settings dialog: "add desktop notifcations
+as well here, also i dont think desktop notifcations work."
+
+Two things were true, and only the second was a code fault.
+
+- **The only switch was inside the BELL dropdown**, so nobody had ever turned
+  them on -- which is indistinguishable from them not working. It is a row in
+  Account settings now, above Email notifications, and both surfaces plus the
+  phone's Activity sheet read ONE state function (`desktopNotifsState` in
+  studio-adapter.js, exposed on `StudioAdapter` for the host-rendered dialog).
+  Four derivations of one switch is how two screens end up disagreeing.
+- **A clip posted to three Pages notified ONCE, at most.** `fireClipNotifs`
+  keyed the already-posted set on `clip.id + provider`, and since v3.56.0 a
+  Studio account has three targets sharing one provider -- so once the first
+  Page posted, the other two could never fire. Proven by running it: the old
+  key returned ZERO notifications for two Pages going live, the new one
+  (`clip.id + provider + accountId`, both fields the payload already exposes)
+  returns two, each naming its account. `targetPublic` does NOT expose the
+  target's `id`, so the key is built from the two fields that are there --
+  reading `t.id` would have silently fallen back to the broken behaviour.
+- **FOUR states, not a boolean, and that is the whole point.** `denied` and
+  `unsupported` cannot be fixed by pressing the switch, so a surface that only
+  knows on/off draws a control that silently refuses -- exactly the symptom
+  being reported. Blocked shows "How to allow" and NO switch; a browser with no
+  `Notification` gets a sentence and no control at all (invariant 9). Switched
+  on and then revoked in the browser reads as blocked, never as on.
+- The permission prompt must ride a real click, so the ask stays in the handler
+  and the dialog repaints AFTER it -- including when the browser refuses, which
+  is what turns the row into its "How to allow" state.
+- Driven in a browser rather than read: ten checks, all four states rendered,
+  the switch pressed for real, the bell dropdown agreeing, the fire path
+  notifying for clips-ready / lecture-failed / two of three Pages, and zero
+  fired while off. Both new assertions were **proven RED** first -- against the
+  provider-only key, and against `denied` collapsed into `off`.
+- **What this does NOT fix**: a pop-up needs a tab open. There is no service
+  worker and no push subscription, so nothing arrives with the app closed --
+  the copy says "while this tab is open, even in the background" rather than
+  implying otherwise. Real push is a separate piece of work.
+
+## Report a bug sits in the account menu (v3.89.0)
+
+Youssef, pointing at the account dropdown: "add reoort a bug here."
+
+- **Host-rendered, inserted after Help & guides**, found by that row's own text
+  and copying its inline style -- the menu is generated markup, so naming a
+  hashed class would break on the next design re-import. `paintBugRow` is in
+  paintStudio's list like every other host panel, and is idempotent (one row
+  after five repaints).
+- **The report carries the facts nobody thinks to include**: release, the
+  screen they were on, the account, browser, window size and the time. A bug
+  report without the version is a bug report that cannot be acted on.
+- Two ways out, because a mailto is not reliable everywhere: "Open email" and
+  "Copy details".
 
 ## Open items
 

@@ -440,8 +440,12 @@ body.dc-page-hidden .slh-stages .st-line.live::after { animation-play-state: pau
    than inventing a second dialog language, and it is host-rendered for the
    usual reason -- adding a screen to the design export regenerates every
    hashed class name in the app. */
-#studioAccount { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
-#studioAccount.hide { display: none; }
+/* Every dialog on one selector, deliberately. #studioBug shipped without a
+   positioning rule of its own and rendered flush at the top-left with no
+   backdrop -- it looked like part of the page. Each dialog declaring its own
+   copy is how the fourth one gets missed. */
+#studioAccount, #studioBug { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
+#studioAccount.hide, #studioBug.hide { display: none; }
 .studio-acct-card { width: min(520px, 100%); }
 #studioAcctBody { display: flex; flex-direction: column; gap: 14px; }
 /* who you are */
@@ -467,6 +471,21 @@ body.dc-page-hidden .slh-stages .st-line.live::after { animation-play-state: pau
 .studio-acct-row .t { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .studio-acct-row .t b { font-size: 12.5px; font-weight: 600; color: #E9E9ED; }
 .studio-acct-row .t span { font-size: 11px; color: #8B8B93; line-height: 1.45; }
+/* Report a bug. Same card shell and the same action buttons as the account
+   dialog, so this is one dialog language rather than two. */
+.studio-bug-wrap { display: flex; flex-direction: column; gap: 9px; }
+.studio-bug-l { font-size: 12px; font-weight: 600; color: #C9C9D0; }
+.studio-bug-t { width: 100%; padding: 11px 12px; border: 1px solid #2C2C32; border-radius: 10px; background: #0E0E11;
+  font-family: inherit; font-size: 13px; line-height: 1.5; color: #F2F2F4; resize: vertical; outline: none; }
+.studio-bug-t:focus { border-color: rgba(217,180,120,.5); }
+.studio-bug-k { margin-top: 4px; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6E6E76; }
+.studio-bug-facts { display: flex; flex-direction: column; gap: 4px; padding: 11px 12px; border: 1px solid #1E1E22; border-radius: 10px; background: #0E0E11; }
+.studio-bug-facts span { display: flex; gap: 10px; font-size: 11.5px; line-height: 1.45; }
+.studio-bug-facts b { flex: none; width: 68px; color: #8B8B93; font-weight: 600; }
+.studio-bug-facts i { font-style: normal; min-width: 0; color: #C9C9D0; overflow-wrap: anywhere; }
+.studio-bug-note { margin: 0; font-size: 11.5px; line-height: 1.5; color: #8B8B93; }
+.studio-bug-acts { display: flex; gap: 8px; margin-top: 2px; }
+.studio-bug-acts .studio-acct-act { padding: 9px 14px; font-size: 12.5px; }
 .studio-acct-act { flex: none; padding: 6px 11px; border: 1px solid #2C2C32; border-radius: 8px; background: #17171A;
   font-family: inherit; font-size: 11.5px; font-weight: 600; color: #E9E9ED; cursor: pointer; white-space: nowrap;
   transition: border-color .14s ease, color .14s ease, background .14s ease; }
@@ -1826,6 +1845,19 @@ select:focus{outline:none;border-color:var(--blue)}
   </div>
 </div>
 
+<div id="studioBug" class="hide" role="dialog" aria-modal="true" aria-label="Report a bug">
+  <div class="studio-conn-backdrop" data-bug-close></div>
+  <div class="studio-conn-card studio-acct-card">
+    <div class="studio-conn-head">
+      <div>
+        <strong>Report a bug</strong>
+        <span id="studioBugSub"></span>
+      </div>
+      <button type="button" class="studio-conn-x" data-bug-close aria-label="Close">&times;</button>
+    </div>
+    <div id="studioBugBody"></div>
+  </div>
+</div>
 <div id="studioAccount" class="hide" role="dialog" aria-modal="true" aria-label="Account">
   <div class="studio-conn-backdrop" data-acct-close></div>
   <div class="studio-conn-card studio-acct-card">
@@ -5534,9 +5566,14 @@ window.fireClipNotifs=function(prev,next){try{
     if(was&&was!==p.status&&p.status==='done')show('Your clips are ready',`"${p.title||'Your lecture'}" finished — ${p.clipCount||''} clips are waiting for review.`);
     if(was&&was!==p.status&&p.status==='failed')show('A lecture could not be processed',`"${p.title||'Your lecture'}" hit a problem — open DeenClipped to see the fix.`);
   }
-  const prevPosted=new Set((prev.clips||[]).flatMap(c=>(c.targets||[]).filter(t=>t.status==='posted').map(t=>c.id+':'+t.provider)));
+  /* Keyed on the target's own id (provider:accountId), NOT on the provider.
+     A Studio account posts one clip to three Facebook Pages -- three targets
+     sharing one provider -- so a provider key collapsed them into one, and
+     once the first Page posted the other two could never notify. */
+  const tkey=(c,t)=>c.id+':'+t.provider+':'+(t.accountId||'');
+  const prevPosted=new Set((prev.clips||[]).flatMap(c=>(c.targets||[]).filter(t=>t.status==='posted').map(t=>tkey(c,t))));
   for(const c of next.clips||[]){for(const t of c.targets||[]){
-    if(t.status==='posted'&&!prevPosted.has(c.id+':'+t.provider))show('Clip published',`"${c.title||'Your clip'}" is live on ${t.provider}.`);
+    if(t.status==='posted'&&!prevPosted.has(tkey(c,t)))show('Clip published',`"${c.title||'Your clip'}" is live on ${t.accountName?t.provider+' ('+t.accountName+')':t.provider}.`);
   }}
 }catch(e){}};
 StudioAdapter.onProbeSource=async url=>{try{
@@ -5695,6 +5732,111 @@ StudioAdapter.onProbeSource=async url=>{try{
     }
     const PROVIDER_NAMES={google:'Google',apple:'Apple',email:'a sign-in link',password:'a password'};
 
+    /* ── Report a bug ────────────────────────────────────────────────────
+       Youssef, 3 Sept 2026: "add report a bug here" -- pointing at the account
+       menu. The menu itself is drawn by the design export, so the row is
+       HOST-injected rather than added there: a new element in the export costs
+       a re-import and every hashed class name in the app.
+
+       It is anchored on #dcAccountEmail, an id the export carries and a
+       re-import keeps, then the menu is that button's next sibling. The Help &
+       guides row is found by its TEXT for the same reason -- the anchors have
+       no classes of their own, only inline styles.
+
+       The dialog collects the details support always has to ask for (release,
+       screen, browser, account) and shows them BEFORE anything is sent, so
+       nothing leaves the machine behind the reporter's back. Two ways out:
+       an email with it all prefilled, or a copy button for when no mail client
+       is configured -- a bare mailto silently does nothing there. */
+    const bugEls={root:$('#studioBug'),body:$('#studioBugBody'),sub:$('#studioBugSub')};
+    function closeBug(){bugEls.root.classList.add('hide')}
+    $$('[data-bug-close]',bugEls.root).forEach(n=>n.onclick=closeBug);
+    addEventListener('keydown',e=>{if(e.key==='Escape'&&!bugEls.root.classList.contains('hide'))closeBug()});
+    function bugFacts(){
+      const D=DATA||{};
+      const u=D.user||{};
+      const screens={home:'Home',library:'Lecture library',queue:'Review queue',schedule:'Schedule',
+        performance:'Performance',templates:'Templates',music:'Nasheed library',tokens:'Tokens & billing',
+        deenai:'DeenAI',help:'Help',owner:'Owner',editor:'Editor',detail:'Lecture',language:'Arabic & terms'};
+      return [
+        ['Release', 'v'+(D.version||'unknown')],
+        ['Screen', screens[StudioAdapter.ui.screen]||StudioAdapter.ui.screen||'unknown'],
+        ['Account', u.email||'not signed in'],
+        ['Browser', navigator.userAgent],
+        ['Window', innerWidth+' x '+innerHeight],
+        ['When', new Date().toISOString()],
+      ];
+    }
+    function openBug(){
+      const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+      const to=((DATA&&DATA.support&&DATA.support.email)||'');
+      const facts=bugFacts();
+      bugEls.sub.textContent=to?('Goes to '+to):'No support address is configured on this deployment';
+      bugEls.body.innerHTML=`
+        <div class="studio-bug-wrap">
+          <label class="studio-bug-l" for="studioBugText">What happened?</label>
+          <textarea id="studioBugText" class="studio-bug-t" rows="5"
+            placeholder="What you were doing, what you expected, and what happened instead. If a lecture or clip was involved, name it."></textarea>
+          <span class="studio-bug-k">Sent with your report</span>
+          <div class="studio-bug-facts">${facts.map(([k,v])=>
+            `<span><b>${esc(k)}</b><i>${esc(v)}</i></span>`).join('')}</div>
+          <p class="studio-bug-note">Never include a password, a card number or a platform token \u2014 support never needs one.</p>
+          <div class="studio-bug-acts">
+            ${to?'<button type="button" class="studio-acct-act primary" data-bug-send>Open email</button>':''}
+            <button type="button" class="studio-acct-act" data-bug-copy>Copy details</button>
+          </div>
+        </div>`;
+      const details=()=>{
+        const text=(document.getElementById('studioBugText')||{}).value||'';
+        return (text.trim()?text.trim()+'\n\n':'')+facts.map(([k,v])=>k+': '+v).join('\n');
+      };
+      const send=bugEls.body.querySelector('[data-bug-send]');
+      if(send)send.onclick=()=>{
+        location.href='mailto:'+encodeURIComponent(to)
+          +'?subject='+encodeURIComponent('DeenClipped bug report')
+          +'&body='+encodeURIComponent(details());
+      };
+      bugEls.body.querySelector('[data-bug-copy]').onclick=async btn=>{
+        const b=btn.currentTarget||btn.target;
+        try{await navigator.clipboard.writeText(details());b.textContent='Copied'}
+        catch(err){b.textContent='Select and copy the details above'}
+        setTimeout(()=>{b.textContent='Copy details'},2200);
+      };
+      bugEls.root.classList.remove('hide');
+      const box=document.getElementById('studioBugText');
+      if(box)box.focus();
+    }
+    /* Rebuilt on every paint like every other host panel: the studio renders
+       through innerHTML, so an injected row does not survive on its own. */
+    window.paintBugRow=paintBugRow;
+    function paintBugRow(){
+      const email=document.getElementById('dcAccountEmail');
+      const trigger=email&&email.closest('button');
+      const menu=trigger&&trigger.nextElementSibling;
+      if(!menu)return;
+      if(menu.querySelector('#dcBugRow'))return;
+      const rows=Array.from(menu.querySelectorAll('a'));
+      const help=rows.filter(a=>/help\s*&\s*guides/i.test(a.textContent||''))[0];
+      if(!help)return;
+      const row=document.createElement('a');
+      row.id='dcBugRow';
+      row.href='#';
+      /* These rows are styled by a HASHED CLASS, not by an inline style --
+         getAttribute('style') comes back empty on every visible one, and a row
+         built without the class fell back to the bare anchor default: gold,
+         flush left, no padding, beside neighbours that are muted, indented and
+         12.5px. Measured, not guessed. Copying the neighbour's className at
+         runtime survives a design re-import (which renumbers those names)
+         precisely BECAUSE it never names one -- it takes whatever the row
+         beside it is actually wearing. The style copy stays for the rows that
+         do carry one. */
+      row.className=help.className||'';
+      row.setAttribute('style',help.getAttribute('style')||'');
+      row.innerHTML='<i class="ph ph-bug" style="font-size: 15px; color: #8B8B93;"></i>Report a bug';
+      row.onclick=e=>{e.preventDefault();StudioAdapter.ui.menuOpen=false;paintStudio();openBug()};
+      help.parentNode.insertBefore(row,help.nextSibling);
+    }
+
     function paintAccount(){
       if(acctEls.root.classList.contains('hide'))return;
       const D=DATA||{};
@@ -5716,6 +5858,18 @@ StudioAdapter.onProbeSource=async url=>{try{
       const renews=b.cancelAtPeriodEnd?('Ends '+acctDate(b.cancelAt||b.currentPeriodEnd)):
         (b.currentPeriodEnd?('Renews '+acctDate(b.currentPeriodEnd)):'');
       const emailOn=window.__dcEmailOn!==undefined?window.__dcEmailOn:D.emailNotifs!==false;
+      /* Read from the adapter so the bell dropdown, the phone's Activity sheet
+         and this dialog cannot disagree about one switch. Four states, and two
+         of them cannot be fixed by pressing anything -- 'denied' needs the
+         browser's own site settings and 'unsupported' needs another browser --
+         so those get a sentence and no switch rather than a control that
+         silently refuses, which is what "I don't think they work" looks like. */
+      const deskState=StudioAdapter.desktopNotifsState?StudioAdapter.desktopNotifsState():'off';
+      const deskOn=deskState==='on';
+      const deskLine=deskState==='on'?'On — a pop-up when clips are ready, a clip posts, or a lecture fails.'
+        :deskState==='denied'?'Blocked by your browser. Allow notifications for this site in your browser settings, then turn this on.'
+        :deskState==='unsupported'?'This browser cannot show pop-ups. Email notifications still reach you.'
+        :'Off — turn on to get a pop-up while this tab is open, even in the background.';
 
       acctEls.sub.textContent=u.email||'';
       acctEls.body.innerHTML=`
@@ -5747,6 +5901,17 @@ StudioAdapter.onProbeSource=async url=>{try{
 
         <span class="studio-acct-h">Notifications</span>
         <div class="studio-acct-group">
+          <div class="studio-acct-row">
+            <i class="ph ph-bell-ringing"></i>
+            <span class="t"><b>Desktop notifications</b>
+              <span>${deskLine}</span></span>
+            ${deskState==='unsupported'?'':deskState==='denied'
+              ?`<button type="button" class="studio-acct-act" data-acct="desktop-help">How to allow</button>`
+              :`<button type="button" class="studio-acct-switch" data-acct="desktop"
+              aria-label="${deskOn?'Turn desktop notifications off':'Turn desktop notifications on'}"
+              style="border:1px solid ${deskOn?'rgba(127,209,166,.5);background:rgba(127,209,166,.16)':'#26262A;background:#17171A'}">
+              <i style="left:${deskOn?'17px':'2px'};background:${deskOn?'#7FD1A6':'#6E6E76'}"></i></button>`}
+          </div>
           <div class="studio-acct-row">
             <i class="ph ph-envelope-simple"></i>
             <span class="t"><b>Email notifications</b>
@@ -5807,6 +5972,12 @@ StudioAdapter.onProbeSource=async url=>{try{
             StudioAdapter.ui.menuOpen=false;renderAll();break;
           case 'portal':StudioAdapter.onBillingPortal();break;
           case 'emails':await StudioAdapter.onToggleEmailNotifs();paintAccount();break;
+          /* The permission prompt must ride a real click, which is why the ask
+             lives in the handler rather than in a painter. Repaint after it so
+             the row reflects what the browser actually answered -- including a
+             refusal, which turns this into the "How to allow" state. */
+          case 'desktop':await StudioAdapter.onToggleDesktopNotifs();paintAccount();break;
+          case 'desktop-help':toast('Open your browser\u2019s site settings for this page and set Notifications to Allow, then turn the switch on.');break;
           case 'help':go('help');StudioAdapter.onLoadHelp();break;
           case 'support':closeAcct();StudioAdapter.onContactSupport();break;
           case 'signout':StudioAdapter.onSignOut();break;
@@ -7069,6 +7240,7 @@ function paintStudio(){
   /* Cheap when shut -- it returns immediately -- and this is what keeps the
      plan, the token count and the email switch honest while it is open. */
   if(window.paintAccount)window.paintAccount();
+  if(window.paintBugRow)window.paintBugRow();
   paintScheduleWeek();
   if(window.paintEmailNotifRow)window.paintEmailNotifRow(DATA);
   /* The watermark row is restored HERE, with every other host-rendered panel,

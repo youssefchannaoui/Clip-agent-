@@ -163,6 +163,30 @@
   }
   function stop(e) { if (e && e.preventDefault) e.preventDefault(); }
 
+  // ── desktop notifications ────────────────────────────────────────────────
+  // FOUR states, and they need four different things said, which is why this
+  // is a state rather than a boolean: 'unsupported' and 'denied' cannot be
+  // fixed by pressing the switch, so a surface that only knows on/off shows a
+  // control that silently refuses -- exactly the "I don't think they work"
+  // report this was written for. The preference is per BROWSER (it decides
+  // whether THIS browser pops up while a tab is open), so it lives in
+  // localStorage rather than on the account, and the browser's own permission
+  // is the other half: either one being off means no pop-up.
+  function desktopNotifsState() {
+    try {
+      if (typeof Notification === 'undefined') return 'unsupported';
+      if (Notification.permission === 'denied') return 'denied';
+      if (Notification.permission !== 'granted') return 'off';
+      return localStorage.getItem('deenDesktopNotifs') === 'on' ? 'on' : 'off';
+    } catch (e) { return 'off'; }
+  }
+  var DESKTOP_NOTIF_NOTE = {
+    unsupported: 'Not available in this browser',
+    denied: 'Blocked in your browser settings',
+    on: 'On — you will be told when clips are ready',
+    off: 'Off — turn on to hear when clips are ready',
+  };
+
   // ── the editor's <video> ──────────────────────────────────────────────────
   // The design exports a still frame for the editor preview, so the real video
   // is a host-owned element the host layer docks inside that frame (the same
@@ -4329,31 +4353,26 @@
       // must ride a click, so the actual request lives in the page handler;
       // this only reports state and forwards the click.
       desktopNotifsStyle: (function () {
-        var on = false;
-        try { on = localStorage.getItem('deenDesktopNotifs') === 'on' && typeof Notification !== 'undefined' && Notification.permission === 'granted'; } catch (e) {}
+        var on = desktopNotifsState() === 'on';
         return 'position: relative; width: 34px; height: 19px; flex: none; border-radius: 20px; cursor: pointer; border: 1px solid '
           + (on ? 'rgba(127,209,166,.5); background: rgba(127,209,166,.16);' : '#26262A; background: #17171A;');
       })(),
       desktopNotifsKnobStyle: (function () {
-        var on = false;
-        try { on = localStorage.getItem('deenDesktopNotifs') === 'on' && typeof Notification !== 'undefined' && Notification.permission === 'granted'; } catch (e) {}
+        var on = desktopNotifsState() === 'on';
         return 'position: absolute; top: 2px; left: ' + (on ? '17px' : '2px') + '; width: 13px; height: 13px; border-radius: 50%; background: ' + (on ? '#7FD1A6' : '#6E6E76') + ';';
       })(),
+      // The phone's Activity sheet reads these two; the desktop template reads
+      // the inline styles above. All four come from ONE state function, so no
+      // surface can say a different thing about the same switch.
+      desktopNotifsOn: desktopNotifsState() === 'on',
+      desktopNotifsCls: desktopNotifsState() === 'on' ? 'on' : '',
       toggleDesktopNotifs: function (e) { stop(e); global.StudioAdapter.onToggleDesktopNotifs(); },
       // The row sits at the TOP of the dropdown now and outside the
       // dismissed-items branch it used to be nested in -- the one control that
       // turns notifications on was only shown to someone who had already
       // dismissed a notification. This line says which of the three states it
       // is in, because "off" and "the browser refused" need different actions.
-      desktopNotifsNote: (function () {
-        try {
-          if (typeof Notification === 'undefined') return 'Not available in this browser';
-          if (Notification.permission === 'denied') return 'Blocked in your browser settings';
-          return localStorage.getItem('deenDesktopNotifs') === 'on' && Notification.permission === 'granted'
-            ? 'On — you will be told when clips are ready'
-            : 'Off — turn on to hear when clips are ready';
-        } catch (e) { return 'Off — turn on to hear when clips are ready'; }
-      })(),
+      desktopNotifsNote: DESKTOP_NOTIF_NOTE[desktopNotifsState()],
 
       // ── the detail view ──
       // A row in a dropdown can only ever say what happened. This says why it
@@ -7701,6 +7720,9 @@
     onSignOut: function () {},
     onProbeSource: function () {},
     onToggleDesktopNotifs: function () {},
+    // Exposed so the host-rendered Account dialog reads the SAME answer the
+    // bell dropdown and the phone read, rather than deriving a fifth one.
+    desktopNotifsState: desktopNotifsState,
     onGenerate: function () {},
     onUploadNasheedPrompt: function () {},
     onApplyTemplateToClip: function () {},
