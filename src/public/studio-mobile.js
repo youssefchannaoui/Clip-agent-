@@ -253,7 +253,10 @@
       // thing about where this account is; it stops rendering the moment the
       // server stops sending it (a clip published).
       iff('onboarding.show', [h('section', { class: 'dcm-card dcm-onb' }, [
-        h('span', { class: 'dcm-onb-k' }, 'Getting started'),
+        h('div', { class: 'dcm-onb-top' }, [
+          h('span', { class: 'dcm-onb-k' }, 'Getting started'),
+          h('span', { class: 'dcm-onb-p' }, [tx('onboarding.progress')]),
+        ]),
         h('div', { class: 'dcm-onb-steps' }, [each('onboarding.steps', 'ob', [
           h('span', { class: cat('dcm-onb-step is-', b('ob.state')) }, [
             h('span', { class: 'dcm-onb-n' }, [tx('ob.num')]),
@@ -263,14 +266,10 @@
         h('p', { class: 'dcm-onb-hint' }, [tx('onboarding.hint')]),
         h('button', { type: 'button', class: 'dcm-btn dcm-btn-p', on: { click: 'onboarding.action' } }, [tx('onboarding.actionLabel')]),
       ])]),
-      iff('startListOn', [h('section', { class: 'dcm-card dcm-setup' }, [
-        h('div', { class: 'dcm-card-h' }, [h('strong', {}, 'Getting set up'), h('span', { class: 'dcm-pill' }, [tx('startDoneLabel')])]),
-        each('startSteps', 's', [row({ class: cat('dcm-step ', b('s.doneCls')), on: { click: 's.open' } }, [
-          h('span', { class: 'dcm-step-n' }, [tx('s.num')]),
-          h('span', { class: 'dcm-step-t' }, [h('b', {}, [tx('s.title')]), h('i', {}, [tx('s.note')])]),
-          svg(I.next, { width: '16', height: '16' }),
-        ])]),
-      ])]),
+      // The five-step "Getting set up" card was here and is retired (v3.95.0):
+      // it stood directly above the Create -> Review -> Publish strip, telling
+      // one person two different things about where they are. Everything it
+      // checked lives in the strip's copy now.
       h('section', { class: 'dcm-card dcm-create' }, [
         h('div', { class: 'dcm-card-h' }, [h('strong', {}, 'Create clips'), h('span', { class: 'dcm-muted' }, 'One lecture in, a week of reels out')]),
       ].concat(createForm(false))),
@@ -1106,7 +1105,6 @@
     m.homeActivity = (vals.activity || []).slice(0, 4);
     m.hasActivity = m.homeActivity.length > 0; m.noActivity = !m.hasActivity;
     (vals.slots || []).forEach(function (s) { s.nextCls = s.next ? 'is-next' : ''; });
-    (vals.startSteps || []).forEach(function (s) { s.doneCls = s.done ? 'is-done' : ''; });
 
     // Clips
     m.segQueue = screen === 'queue' ? 'on' : ''; m.segLibrary = screen === 'library' ? 'on' : '';

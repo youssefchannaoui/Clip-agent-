@@ -4070,6 +4070,20 @@
       blockerOpensConnections = true;
     }
 
+    /*
+     * Whether the blocker banner is actually ON SCREEN, hoisted so the banner
+     * and the Getting-started strip read ONE answer. The strip defers to this
+     * rather than repeating a line the banner is already showing with its own
+     * button (v3.95.0) -- two controls for one thing is the fault that release
+     * exists to remove.
+     */
+    var blockerShowing = Boolean(blocker) && (moneyNotice && moneyNotice.blocking ? true : !UI.blockerDismissed && (function () {
+      // Dismissal outlives the tab, keyed by the message: the nasheed nag came
+      // back on every page load however many times it was dismissed. A
+      // DIFFERENT blocker (new gap, new wording) still shows.
+      try { return global.localStorage.getItem('deenBlockerDismissed') !== blocker; } catch (e) { return true; }
+    }()));
+
     var open = UI.railOpen && (global.innerWidth || 1280) > 820;
 
     // The Performance range tabs stored a label nothing read, so all three
@@ -4870,12 +4884,7 @@
       // A blocking money notice cannot be dismissed away. The nasheed nag is
       // advice; "your free trial has ended" is the reason nothing works, and
       // hiding it would leave the account silently unable to do anything.
-      blockersOn: Boolean(blocker) && (moneyNotice && moneyNotice.blocking ? true : !UI.blockerDismissed && (function () {
-        // Dismissal outlives the tab, keyed by the message: the nasheed nag
-        // came back on every page load however many times it was dismissed.
-        // A DIFFERENT blocker (new gap, new wording) still shows.
-        try { return global.localStorage.getItem('deenBlockerDismissed') !== blocker; } catch (e) { return true; }
-      }())),
+      blockersOn: blockerShowing,
       blockerText: blocker || '',
       blockerCta: blockerCta,
       resolveBlocker: function (e) {
@@ -4983,8 +4992,25 @@
       openSetup: function (e) { stop(e); setUI({ screen: 'home' }); },
 
       startDoneLabel: setupDoneCount + ' of ' + setupSteps.length + ' done',
-      // It disappears when it is finished, rather than becoming furniture.
-      startListOn: !setupAllDone,
+      /*
+       * RETIRED (v3.95.0). Youssef, looking at the live Home screen: "remove
+       * the getting start and improve this one cause i already had it" -- the
+       * Create -> Review -> Publish strip had been built beside a five-step
+       * checklist that was already there, which is two onboarding systems on
+       * one screen telling one person two different things about where they
+       * are.
+       *
+       * Held false rather than deleted: this one binding gates BOTH the Home
+       * card and the header's "1 of 5 done" chip (one `sc-if` in the design
+       * export wraps each), so switching it off removes both with no
+       * re-import -- and a re-import regenerates every hashed class name in
+       * the app. The steps themselves are still computed because the template
+       * names them and a missing binding is a render error, and because
+       * everything they checked was folded into the strip's copy
+       * (src/onboarding.js): the nasheed prerequisite into Create, connecting
+       * a channel and giving a clip a time into Publish.
+       */
+      startListOn: false,
 
       // The moment the fifth step lands. Derived from the same account data as
       // the list itself, so it cannot congratulate anyone for work they have
@@ -6092,23 +6118,64 @@
       onboarding: (function () {
         var ob = DATA.onboarding || null;
         if (!ob || !ob.show) return { show: false, steps: [], hint: '', at: '' };
-        var action = {
+        /*
+         * DEFER TO THE BANNER. The blocker notice sits directly above this
+         * strip and already carries the nasheed and the connection, each with
+         * its own button -- so a strip repeating them is the second control
+         * for one thing that this whole release exists to remove. It speaks
+         * the step's own meaning instead, and drops its button rather than
+         * offering a second one going to the same screen.
+         *
+         * Only while the banner is actually SHOWING: it is dismissible, and
+         * once it is gone the prerequisite would otherwise be unspoken
+         * anywhere. `blocker`/`blockerScreen`/`blockersOn` are computed above.
+         */
+        var bannerHas = blockerShowing && (
+          (ob.action === 'nasheed' && blockerScreen === 'music')
+          || (ob.action === 'connect' && blockerOpensConnections));
+        if (bannerHas) {
+          ob = Object.assign({}, ob, {
+            hint: ob.action === 'nasheed'
+              ? 'A nasheed has to be in place before a lecture can finish — the notice above will take you there.'
+              : 'Your clip is approved and waiting for somewhere to go — the notice above will connect one.',
+            action: '', actionLabel: '',
+          });
+        }
+        /*
+         * The server names the ACTION; this only knows how to perform it. Five
+         * of them, because the retired five-step checklist's destinations were
+         * folded into the three steps and every one of them still has to be
+         * reachable -- a step that names a prerequisite and cannot take you to
+         * it is worse than the list it replaced.
+         */
+        var go = {
           // Home is where the paste field is; the host focuses it after the
           // paint (paintOnboarding), because the field is drawn by the
           // template and does not exist yet at this point.
-          create: { label: 'Paste a lecture', go: function (e) { stop(e); setUI({ screen: 'home', focusPaste: Date.now() }); } },
-          review: { label: 'Open the review queue', go: function (e) { stop(e); setUI({ screen: 'queue', queueTab: 'decide' }); } },
-          publish: { label: 'Connect a channel', go: function (e) { stop(e); global.StudioAdapter.onOpenConnections(); } },
-        }[ob.at] || { label: '', go: function () {} };
+          paste: function (e) { stop(e); setUI({ screen: 'home', focusPaste: Date.now() }); },
+          nasheed: function (e) { stop(e); setUI({ screen: 'music' }); },
+          review: function (e) { stop(e); setUI({ screen: 'queue', queueTab: 'decide' }); },
+          connect: function (e) { stop(e); global.StudioAdapter.onOpenConnections(); },
+          schedule: function (e) { stop(e); setUI({ screen: 'schedule' }); },
+        }[ob.action] || function () {};
+        // A step that has been passed is still a place to go back to -- the
+        // retired checklist's rows were all buttons, and losing that would
+        // have made the replacement strictly less useful than the thing it
+        // replaced.
+        var jump = { create: 'home', review: 'queue', publish: 'schedule' };
         return {
           show: true, at: ob.at, hint: ob.hint || '',
+          progress: ob.progress || '',
           // The numbers are the design's, not ours: "Step 1 / 2 / 3" is how
           // the ask was phrased and how the strip reads out loud.
           steps: (ob.steps || []).map(function (step, i) {
             return { key: step.key, label: step.label, num: String(i + 1), state: step.state,
-              isDone: step.state === 'done', isNow: step.state === 'now' };
+              isDone: step.state === 'done', isNow: step.state === 'now',
+              open: (function (screen) {
+                return function (e) { stop(e); setUI({ screen: screen }); };
+              }(jump[step.key] || 'home')) };
           }),
-          actionLabel: action.label, action: action.go,
+          actionLabel: ob.actionLabel || '', action: go,
         };
       })(),
       libStats: (function () {

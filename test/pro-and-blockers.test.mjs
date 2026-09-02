@@ -194,23 +194,33 @@ test('a tour is remembered per screen, not once for the whole product', () => {
   assert.match(seen, /dcTourSeen/, 'the legacy flag still counts as seen');
 });
 
-// ── the starter list, and saying what Pro adds ─────────────────────────────
+// ── the retired starter list, and saying what Pro adds ─────────────────────
 
-test('the starter list is proved from account data, not a dismissed flag', () => {
+test('the five-step starter list is retired, and nothing it taught was lost', () => {
+  // Youssef, on the live Home screen: "remove the getting start and improve
+  // this one cause i already had it." The Create -> Review -> Publish strip
+  // had been built beside this checklist, which is two onboarding systems on
+  // one screen telling one person two different things about where they are.
+  //
+  // This test used to assert the list EXISTED, and it passed on a source
+  // string -- so it went on passing after the list stopped being shown. It
+  // asserts the retirement now, and the far more important half: that the
+  // prerequisites it carried still reach the customer somewhere.
   const adapter = read('src/public/studio-adapter.js');
-  assert.ok(adapter.indexOf('startSteps:') > 0, 'a new account gets a starter list');
-  // The five conditions live in setupSteps, worked out once, because spelling
-  // them out per-binding let them drift apart -- which is how the last step
-  // ended up disagreeing with the other four.
-  const at = adapter.indexOf('var setupSteps');
-  assert.ok(at > 0, 'the steps are derived in one place');
-  const body = adapter.slice(at, at + 2200);
-  // Each item must be answered by real state, so it cannot tick itself just
-  // because someone visited the screen.
-  for (const proof of ['tracks.length > 0', 'projects.length > 0', 'connectedCount > 0']) {
-    assert.ok(body.includes(proof), `an item is proved by ${proof}`);
-  }
-  assert.match(adapter, /startListOn:/, 'and it goes away once finished');
+  assert.match(adapter, /startListOn: false/,
+    'one binding gates BOTH the Home card and the header chip, so false removes both with no re-import');
+
+  // Everything the list checked, folded into the strip's copy. Each is the
+  // ONE thing whose absence stalls that step.
+  const onboarding = read('src/onboarding.js');
+  assert.match(onboarding, /nasheed/i, 'the nasheed prerequisite must survive — nothing finishes without one');
+  assert.match(onboarding, /Connect a channel/, 'and connecting somewhere to post');
+  assert.match(onboarding, /Give your approved clip a time/, 'and giving a clip a time');
+
+  // The phone carried its own copy of the card and must not still draw it.
+  const mobile = read('src/public/studio-mobile.js');
+  assert.ok(!/'Getting set up'/.test(mobile), 'the phone must not still render the retired card');
+  assert.ok(!/startSteps/.test(mobile), 'nor decorate a list nothing draws');
 });
 
 test('each tier card says what it adds, from the server\'s own lists', () => {

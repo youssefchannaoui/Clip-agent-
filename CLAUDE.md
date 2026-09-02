@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1140 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1144 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3318,6 +3318,69 @@ somethings missing." Three faults, and two of them were silent.
   fallback fails silently and only in the other theme.
 - Host-rendered and in paintStudio's list, like every other host panel. Both
   design edits were proven byte-stable through `npm run design:import`.
+
+## Two onboarding systems became one (v3.96.0, 3 Sept 2026)
+
+Youssef, on the live Home screen: "remove the getting start and improve this
+one cause i already had it." He was right and it was my miss: v3.94.0 built the
+Create -> Review -> Publish strip **directly above a five-step "Getting set up"
+checklist that had been there all along**, so one screen told one person two
+different things about where they were.
+
+- **The five-step list is retired, and one binding did it.** `startListOn`
+  gates BOTH the Home card and the header's "1 of 5 done" chip -- one `sc-if`
+  in the design export wraps each -- so holding it false removes both with no
+  re-import, and a re-import regenerates every hashed class name in the app.
+  The steps are still COMPUTED because the template names them and a missing
+  binding is a render error. The phone rendered its own copy of the card in
+  studio-mobile.js; that is deleted outright, along with a decorator loop that
+  was styling a list nothing draws.
+- **Nothing it taught was lost.** Its five items are three now: the nasheed
+  prerequisite folded into Create (the one item whose absence silently STALLS a
+  run -- a lecture cannot finish without one), connecting a channel and giving
+  a clip a time both into Publish. The old rows were all buttons, so the strip's
+  steps are buttons too: a passed step is still somewhere to go back to, and a
+  replacement that only moves forwards would be strictly less useful than the
+  thing it replaced.
+- **THE PREREQUISITES SHAPE THE COPY, NEVER THE STEP.** `journey()` takes an
+  optional context (`nasheeds`, `connected`) that changes only the hint and the
+  button. growth.js calls it with NO context for the operator's report, and
+  must get the same step back -- otherwise the owner's funnel and the
+  customer's dashboard would disagree about where one person is, which is the
+  law this module exists to hold. A test drives both and asserts the step and
+  every step-state are identical.
+- **Then I made the same mistake again, one layer down.** The blocker BANNER
+  sits directly above the strip and already carries the nasheed and the
+  connection, each with its own button -- so the first cut of this had the
+  screen saying "no nasheed" twice, with two buttons going to the same place.
+  The strip DEFERS now: while the banner is showing it states the step's
+  meaning and draws no button, and the moment the banner is dismissed (it is
+  dismissible) it picks the prerequisite back up with its own. Driven in a
+  browser both ways. `blockersOn` was an inline expression inside the bindings
+  object, so it was hoisted to `blockerShowing` and both surfaces read that one
+  answer.
+- **The completion dialog was repointed.** `paintSetupCelebration` fired on all
+  five old steps being done and its copy named them ("a nasheed, a lecture, an
+  approved clip, somewhere to post and a time to post it"). With the list gone
+  it would have congratulated somebody for finishing a checklist they never
+  saw. It keys on the journey reaching `done` -- the same moment the strip
+  disappears -- and speaks of the three steps.
+- **The current step's number was invisible in daylight**, and it is the same
+  trap as last release from the other side: `#F0D6A6` is light gold, which
+  reads on the night ground and vanishes on paper. Done sits ON the gold and
+  keeps a literal dark; the CURRENT one sits on a transparent fill, so it takes
+  the label's own ink token. Measured: **14.15:1 light, 17.8:1 dark**, from
+  invisible.
+- The strip carries "Step 1 of 3" where the header chip used to say "1 of 5
+  done" -- on the thing it counts rather than in the header away from it.
+
+**The test that asserted the retired feature passed for free.**
+`pro-and-blockers` asserted `startSteps:` and `startListOn:` appear in the
+adapter -- source strings, so it went on passing after the list stopped being
+shown. It asserts the retirement now, and the more important half: that every
+prerequisite the list carried still reaches the customer somewhere. That is the
+third time in this file a source-string test has passed against a behaviour
+that had changed underneath it.
 
 ## Open items
 

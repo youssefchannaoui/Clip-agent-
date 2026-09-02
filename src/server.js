@@ -738,7 +738,12 @@ function appState(user = null) {
     // Where this account is in Create -> Review -> Publish, and the two
     // one-time moments. Derived, never stored, so it is right for the accounts
     // that predate it and cannot drift from what actually happened.
-    onboarding: onboarding.journey(state, user.id),
+    onboarding: onboarding.journey(state, user.id, {
+      // The two prerequisites the retired "Getting set up" list carried. They
+      // shape the strip's copy only -- never which step the account is on.
+      nasheeds: audio.listNasheeds(user).length,
+      connected: Object.keys(state.socialConnections[user.id] || {}).length,
+    }),
     selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(),
     backgrounds: backgrounds.listBackgrounds(user).map(entry => ({
       id: entry.id, name: entry.name, durationSec: entry.durationSec, shared: Boolean(entry.shared),

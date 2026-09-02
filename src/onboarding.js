@@ -71,13 +71,24 @@ export const STEPS = [
  * A step is `done`, `now` (exactly one, ever) or `todo`. `now` is what the
  * strip highlights and what the copy speaks to.
  */
-export function journey(state, userId) {
+export function journey(state, userId, ctx = {}) {
   const a = activationOf(state, userId);
   const times = milestones(state, userId);
   const clips = ownedBy(state.clips || [], userId);
   const projects = ownedBy(state.projects || [], userId);
   const working = projects.some(p => ['queued', 'processing'].includes(String(p.status || '')));
   const waiting = clips.filter(c => String(c.status || '') === 'waiting').length;
+  /*
+   * The prerequisites the five-step "Getting set up" list used to carry, folded
+   * into the three steps it sat beside. They shape only the COPY and the
+   * button -- never which step this account is on, which stays purely
+   * activationOf's answer (the one-definition law at the top of this file).
+   * That matters because growth.js calls journey() with no context at all for
+   * the operator's report, and must get the same step back.
+   */
+  const nasheeds = Number(ctx.nasheeds || 0);
+  const connected = Number(ctx.connected || 0);
+  const scheduled = clips.some(c => c.scheduledAt || c.postedAt);
 
   // Create is only DONE once clips actually came back. A lecture that
   // processed and produced nothing has not finished this step, whatever its
@@ -94,22 +105,44 @@ export function journey(state, userId) {
     return mine < here ? 'done' : mine === here ? 'now' : 'todo';
   };
 
-  const hint = {
-    create: working ? 'Your lecture is being processed. Nothing to do while it runs.'
-      : a.imported && !created ? 'That import came back with no clips. Try a different stretch of the lecture.'
-      : 'Paste a YouTube link or upload a file, and choose the minutes worth clipping.',
-    review: waiting === 1 ? 'One clip is waiting. Keep the ones worth posting — nothing publishes until you approve it.'
-      : waiting > 1 ? `${waiting} clips are waiting. Keep the ones worth posting — nothing publishes until you approve it.`
-      : 'Watch your clips and keep the ones worth posting.',
-    publish: 'Connect a channel and your approved clip goes out in the next posting window.',
-  }[at] || '';
+  /*
+   * One line of guidance and ONE action per step, chosen by what is actually
+   * missing. A nasheed comes first inside Create because a lecture cannot
+   * finish without one -- that was the old list's first item and the only one
+   * whose absence silently stalls a run, so losing it would have been the real
+   * cost of removing that list.
+   */
+  const say = (hint, action, actionLabel) => ({ hint, action, actionLabel });
+  const step = {
+    create: working ? say('Your lecture is being processed. Nothing to do while it runs.', '', '')
+      : a.imported && !created ? say('That import came back with no clips. Try a different stretch of the lecture.', 'paste', 'Try another range')
+      : nasheeds === 0 ? say('Start with a nasheed — every clip mixes one in, so nothing finishes without it.', 'nasheed', 'Add a nasheed')
+      : say('Paste a YouTube link or upload a file, and choose the minutes worth clipping.', 'paste', 'Paste a lecture'),
+    review: waiting === 1 ? say('One clip is waiting. Keep the ones worth posting — nothing publishes until you approve it.', 'review', 'Open the review queue')
+      : waiting > 1 ? say(`${waiting} clips are waiting. Keep the ones worth posting — nothing publishes until you approve it.`, 'review', 'Open the review queue')
+      : say('Watch your clips and keep the ones worth posting.', 'review', 'Open the review queue'),
+    publish: connected === 0
+      ? say('Connect a channel and your approved clip goes out in the next posting window.', 'connect', 'Connect a channel')
+      : scheduled
+        ? say('Your clip has a slot and a channel. It posts itself when the time comes.', 'schedule', 'See the schedule')
+        : say('Give your approved clip a time — press a free slot in the week, or Slot it.', 'schedule', 'Open the schedule'),
+  }[at] || say('', '', '');
+  const hint = step.hint;
 
+  const stepIndex = ['create', 'review', 'publish'].indexOf(at);
   return {
     show: at !== 'done',
     at,
-    stepIndex: ['create', 'review', 'publish'].indexOf(at),
-    steps: STEPS.map(step => ({ ...step, state: stateOf(step.key) })),
+    stepIndex,
+    // Replaces the old list's "1 of 5 done" chip, which counted a different
+    // five things and lived in the header away from anything it described.
+    progress: at === 'done' ? 'Done' : `Step ${stepIndex + 1} of ${STEPS.length}`,
+    steps: STEPS.map(s => ({ ...s, state: stateOf(s.key) })),
     hint,
+    action: step.action,
+    actionLabel: step.actionLabel,
+    // What the old five-step list checked, kept so nothing it taught is lost.
+    nasheeds, connected, scheduled,
     working,
     waiting,
     // The first-clip moment. It is not "clips exist" -- that is true for ever

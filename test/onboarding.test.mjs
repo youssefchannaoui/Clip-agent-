@@ -56,12 +56,60 @@ const CLIP = { id: 'c1', status: 'waiting', addedAt: now - 2 * DAY + 900000 };
 
 test('a brand new account is on Step 1 Create', () => {
   const id = seed();
-  const j = onboarding.journey(state, id);
+  const j = onboarding.journey(state, id, { nasheeds: 1 });
   assert.equal(j.show, true);
   assert.equal(j.at, 'create');
+  assert.equal(j.progress, 'Step 1 of 3');
   assert.deepEqual(j.steps.map(s => s.state), ['now', 'todo', 'todo']);
   assert.deepEqual(j.steps.map(s => s.label), ['Create', 'Review', 'Publish']);
   assert.match(j.hint, /Paste a YouTube link/);
+  assert.equal(j.action, 'paste');
+});
+
+test('the nasheed prerequisite is spoken before the lecture is asked for', () => {
+  // The retired five-step checklist led with "Upload a nasheed — every clip
+  // mixes one in, so nothing finishes without it". It is the ONE item whose
+  // absence silently stalls a run, so losing it with the list would have been
+  // the real cost of removing it. Folded into Create rather than kept as a
+  // fourth step.
+  const id = seed();
+  const without = onboarding.journey(state, id, { nasheeds: 0 });
+  assert.match(without.hint, /nasheed/i);
+  assert.equal(without.action, 'nasheed', 'and the button must reach the library');
+  assert.equal(without.at, 'create', 'it changes the copy, never the step');
+
+  const with_ = onboarding.journey(state, id, { nasheeds: 2 });
+  assert.match(with_.hint, /Paste a YouTube link/);
+  assert.equal(with_.action, 'paste');
+});
+
+test('Publish asks for a channel first, then a time', () => {
+  // "Connect somewhere to post" and "Give a clip a time" were two of the
+  // retired list's five. Both are reachable from the one Publish step.
+  const id = seed({ projects: [PROJECT], clips: [{ ...CLIP, status: 'approved', approvedAt: now }] });
+  const unconnected = onboarding.journey(state, id, { connected: 0 });
+  assert.equal(unconnected.action, 'connect');
+  assert.match(unconnected.hint, /Connect a channel/);
+
+  const connected = onboarding.journey(state, id, { connected: 1 });
+  assert.equal(connected.action, 'schedule');
+  assert.match(connected.hint, /Give your approved clip a time/);
+
+  const slotted = seed({ projects: [PROJECT], clips: [{ ...CLIP, status: 'approved', approvedAt: now, scheduledAt: now + 3600000 }] });
+  assert.match(onboarding.journey(state, slotted, { connected: 1 }).hint, /posts itself/);
+});
+
+test('the step never depends on the context, only the copy does', () => {
+  // growth.js calls journey() with NO context for the operator's report. If a
+  // missing nasheed could move the step, the owner's funnel and the customer's
+  // dashboard would disagree about where one person is.
+  const id = seed({ projects: [PROJECT], clips: [CLIP] });
+  const bare = onboarding.journey(state, id);
+  for (const ctx of [{ nasheeds: 0 }, { nasheeds: 9, connected: 3 }]) {
+    const withCtx = onboarding.journey(state, id, ctx);
+    assert.equal(withCtx.at, bare.at);
+    assert.deepEqual(withCtx.steps.map(s => s.state), bare.steps.map(s => s.state));
+  }
 });
 
 test('an import in flight stays on Create and says there is nothing to do', () => {
@@ -243,7 +291,8 @@ test('there is one definition of where an account is, and this is not a second o
 
 test('the strip, the moment and the handoff all reach the client', () => {
   const server = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
-  assert.match(server, /onboarding: onboarding\.journey\(state, user\.id\)/, '/api/state must carry it');
+  assert.match(server, /onboarding: onboarding\.journey\(state, user\.id, \{/, '/api/state must carry it');
+  assert.match(server, /nasheeds: audio\.listNasheeds\(user\)\.length/, 'with the prerequisites the retired checklist used to carry');
   assert.match(server, /pathname === '\/api\/onboarding\/seen'/, 'and a moment must be spendable');
   assert.match(server, /\['firstClip', 'handoff'\]\.includes\(what\)/,
     'only the two known moments -- an open key would let a caller mint state');
@@ -294,4 +343,26 @@ test('"finished" means the status the engine actually writes', () => {
     const done = seed({ projects: [PROJECT], clips: [{ ...CLIP, status: 'approved', approvedAt: now }] });
     assert.equal(referrals.isActivated(state, done), true, 'processed + approved is what activation means');
   });
+});
+
+test('the strip never repeats a line the blocker banner is already showing', () => {
+  // The banner sits DIRECTLY above the strip and already carries the nasheed
+  // and the connection, each with its own button. A strip repeating them is
+  // the second control for one thing that removing the five-step checklist
+  // was meant to end -- so it states the step's meaning and drops its button
+  // while the banner is up, and picks the prerequisite back up the moment the
+  // banner is dismissed (it is dismissible; the guidance must not vanish with
+  // it). Driven in a browser both ways before this was kept.
+  const adapter = fs.readFileSync(new URL('../src/public/studio-adapter.js', import.meta.url), 'utf8');
+  const at = adapter.indexOf('var bannerHas =');
+  assert.ok(at > 0, 'the strip must know whether the banner is showing');
+  const block = adapter.slice(at, at + 700);
+  assert.match(block, /blockerShowing/, 'and read the SAME flag the banner renders from, not a second one');
+  assert.match(block, /action: '', actionLabel: ''/, 'dropping its button rather than offering a second one');
+
+  // One source for "is the banner up", or the two can disagree about it.
+  assert.match(adapter, /blockersOn: blockerShowing/,
+    'the banner and the strip must read one answer');
+  assert.equal((adapter.match(/deenBlockerDismissed/g) || []).length, 2,
+    'the dismissal is read in one place and written in one place');
 });
