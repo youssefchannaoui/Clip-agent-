@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1024 JS + 488 Python**
+- `npm test` and `npm run check` must pass. Currently **1025 JS + 488 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3488,3 +3488,30 @@ now defines the field (about the MOMENT, never the packaging), and because a
 negative instruction is a suggestion to this model, packaging words
 (title/description/hashtags) are dropped in apply_clip_rows -- the heuristic
 reasons underneath always remain.
+
+## The template preview drew a watermark the export did not carry (v3.76.6)
+
+Youssef, 2 Sept 2026, looking at Quran Recitation with the switch already off:
+"once water mark is unticked it should remove water mark of course."
+
+- **The exports were always clean.** `write_ass` draws the mark under
+  `if watermark:`, and the Quran template ships `watermark: ""` with opacity 0,
+  so nothing was ever burned in. This was the PREVIEW lying -- invariant 4 by
+  another door, and the more dangerous direction of the two: it teaches a
+  customer that a paid feature does not work, and it drew a mark over
+  scripture on the one template forbidden to carry one.
+- **The mark node is a LITERAL "DEENCLIPPED" in the design export** with
+  `markStyle` its only control, and markStyle set position, colour and size
+  and nothing else -- so the frame drew a watermark for every template
+  whatever was saved. The EDITOR's own preview (`edMarkStyle`) has carried
+  `display: none` on zero opacity since it was written; this frame never did.
+  Fixed in the binding, so it cost no design re-import.
+- **`markIsVisible` asks the same question `templates.visibleText()` asks**,
+  NO_INK regex included, because the two must agree: a watermark of one
+  zero-width space renders as nothing, and a preview drawing DEENCLIPPED for
+  it is the same lie the v3.51.0 paywall hole was, pointing the other way.
+- Proven RED against the old binding before being kept, then driven in a
+  browser: ticked -> mark visible, unticked -> `display: none` and 0 nodes on
+  screen, re-ticked -> back, and the template still called "Clean Line" (the
+  v3.51.0 rename bug stays fixed). Quran Recitation selected with the real
+  dropdown shows no mark over the ayah.
