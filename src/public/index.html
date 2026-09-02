@@ -10,6 +10,10 @@
 <meta name="apple-mobile-web-app-title" content="DeenClipped AI">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<!-- Needed for iOS: Safari delivers Web Push only to a site added to the home
+     screen, and only a site with a manifest can be added as an app. -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#09090A">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Outfit:wght@400;500;600;700&family=Amiri:wght@400;700&family=Scheherazade+New:wght@400;700&family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">
@@ -2530,7 +2534,16 @@ function clipCaption(c){return [c.description,c.hashtags].filter(Boolean).join('
 function downloadClip(id){location.href=withPw(`/api/clips/${encodeURIComponent(id)}/download`)}
 async function copyText(text){await navigator.clipboard.writeText(text);toast('Copied','good')}
 
-async function boot(){try{DATA=await api('/api/state');localStorage.setItem('deenPw',PW);$('#gate')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#app')?.classList.remove('hide');renderAll();handleOAuthResult();/* The help content is the same bytes for everybody and never changes between deploys, so there is no reason to make someone watch it load when they open the tab. Fetched once here, in the background and never awaited, so it is already in hand by the time anyone clicks Help -- and a failure is swallowed, because help failing must never stop the app booting. */StudioAdapter.onLoadHelp();return true}catch(e){$('#app')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#gate')?.classList.remove('hide');if($('#gateErr'))$('#gateErr').textContent=e.message;return false}}
+async function boot(){try{DATA=await api('/api/state');
+    /* Ask the BROWSER whether it is subscribed before the first paint: the
+       dedup and the Account row both read it, and a stale false means one
+       duplicate notification per event until somebody touches the switch.
+       Window-pinned and guarded because it is declared in a DIFFERENT inline
+       script scope from this one -- a bare call here threw ReferenceError
+       INSIDE boot's own catch, so the whole app fell back to the password
+       gate reading "refreshPushState is not defined". Same trap, and the same
+       fix, as fireClipNotifs and paintAccount below. */
+    if(window.refreshPushState)window.refreshPushState().then(()=>{if(window.paintAccount)window.paintAccount()});localStorage.setItem('deenPw',PW);$('#gate')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#app')?.classList.remove('hide');renderAll();handleOAuthResult();/* The help content is the same bytes for everybody and never changes between deploys, so there is no reason to make someone watch it load when they open the tab. Fetched once here, in the background and never awaited, so it is already in hand by the time anyone clicks Help -- and a failure is swallowed, because help failing must never stop the app booting. */StudioAdapter.onLoadHelp();return true}catch(e){$('#app')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#gate')?.classList.remove('hide');if($('#gateErr'))$('#gateErr').textContent=e.message;return false}}
 /* The open editor clip needs its heavy fields (caption timings, ayahs),
    which the list payload deliberately omits. Fetched once per clip version
    and merged back in after every poll. */
@@ -5518,15 +5531,88 @@ function renderStudio(){
    The permission prompt must ride a user click, so it lives here on the
    toggle. What fires: clips ready, clip posted, lecture failed -- the three
    moments a user who tabbed away actually wants back for. */
+/* ── Web Push: the same switch, but it now reaches a closed app ────────────
+   Turning notifications on registers the service worker and subscribes this
+   BROWSER to push, so the notification arrives whether or not a tab is open.
+   Everything degrades: no service worker, no push manager, no VAPID key on the
+   server, or a subscribe that throws -- each falls back to the in-tab
+   notification that was here before, which needs a tab but always worked. */
+const b64ToBytes=s=>{const p=(s+'='.repeat((4-s.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(p);const out=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);return out};
+const pushSupported=()=>typeof navigator!=='undefined'&&'serviceWorker'in navigator&&'PushManager'in window;
+async function pushRegistration(){
+  if(!pushSupported())return null;
+  try{return await navigator.serviceWorker.register('/sw.js',{scope:'/'})}catch(e){return null}
+}
+/* Whether THIS browser is subscribed. Read from the browser, never from a
+   stored flag: a subscription can be retired by the push service or dropped
+   with site data, and a flag saying otherwise would have the switch claim a
+   channel that no longer exists. */
+window.__dcPushOn=false;
+window.refreshPushState=refreshPushState;
+async function refreshPushState(){
+  if(!pushSupported()){window.__dcPushOn=false;return false}
+  try{
+    const reg=await navigator.serviceWorker.getRegistration('/');
+    const sub=reg?await reg.pushManager.getSubscription():null;
+    window.__dcPushOn=Boolean(sub);
+    return window.__dcPushOn;
+  }catch(e){window.__dcPushOn=false;return false}
+}
+async function pushSubscribe(){
+  const key=DATA&&DATA.pushKey;
+  if(!key||!pushSupported())return false;
+  const reg=await pushRegistration();
+  if(!reg)return false;
+  /* The worker has to be ACTIVE before it can hold a subscription. On a first
+     registration it is still installing, and subscribing against it throws --
+     which read as "push is not supported on this browser" on exactly the first
+     visit, the one that matters. */
+  await navigator.serviceWorker.ready;
+  const existing=await reg.pushManager.getSubscription();
+  const sub=existing||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToBytes(key)});
+  const r=await fetch('/api/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({subscription:sub.toJSON()})});
+  if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||'Could not register this device');
+  window.__dcPushOn=true;
+  return true;
+}
+async function pushUnsubscribe(){
+  if(!pushSupported())return;
+  try{
+    const reg=await navigator.serviceWorker.getRegistration('/');
+    const sub=reg?await reg.pushManager.getSubscription():null;
+    if(!sub)return;
+    /* Tell the server BEFORE unsubscribing: once the browser drops it, the
+       endpoint is gone from this page and the row would be stranded on the
+       account until eight sends failed against it. */
+    await fetch('/api/push/unsubscribe',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({endpoint:sub.endpoint})}).catch(()=>{});
+    await sub.unsubscribe();
+  }catch(e){/* the switch still goes off */}
+  window.__dcPushOn=false;
+}
 StudioAdapter.onToggleDesktopNotifs=async()=>{try{
   const on=localStorage.getItem('deenDesktopNotifs')==='on';
-  if(on){localStorage.setItem('deenDesktopNotifs','off');toast('Desktop notifications off');renderAll();return}
+  if(on){
+    localStorage.setItem('deenDesktopNotifs','off');
+    await pushUnsubscribe();
+    toast('Notifications off');renderAll();
+    if(window.paintAccount)window.paintAccount();
+    return;
+  }
   if(typeof Notification==='undefined'){toast('This browser does not support notifications','bad');return}
   const perm=await Notification.requestPermission();
-  if(perm!=='granted'){toast('The browser blocked notifications — allow them in site settings','bad');return}
+  if(perm!=='granted'){toast('The browser blocked notifications — allow them in site settings','bad');
+    if(window.paintAccount)window.paintAccount();return}
   localStorage.setItem('deenDesktopNotifs','on');
-  new Notification('DeenClipped',{body:'Notifications are on. You will hear when clips are ready, posted, or a lecture fails.'});
+  let closed=false;
+  try{closed=await pushSubscribe()}catch(e){closed=false}
+  new Notification('DeenClipped',{body:closed
+    ?'Notifications are on. You will hear when clips are ready, posted, or a lecture fails — even with DeenClipped closed.'
+    :'Notifications are on while DeenClipped is open. You will hear when clips are ready, posted, or a lecture fails.'});
   renderAll();
+  if(window.paintAccount)window.paintAccount();
 }catch(e){toast(e.message,'bad')}};
 /* Light or dark, for the desktop studio.
    The phone has had a paper theme since studio-mobile.css, but that reskins
@@ -5633,6 +5719,13 @@ window.paintEmailNotifRow=function(data){
    there -- the call failed silently inside refresh's own try/catch. */
 window.fireClipNotifs=function(prev,next){try{
   if(localStorage.getItem('deenDesktopNotifs')!=='on'||typeof Notification==='undefined'||Notification.permission!=='granted')return;
+  /* THE DEDUP. When this browser holds a push subscription the service worker
+     shows these same three events, and it does so whether or not a tab is
+     open -- so doing it here as well is every notification twice. Push wins
+     because it is the one that also works closed; this path stays as the
+     fallback for a browser that cannot subscribe (no service worker, an
+     unset VAPID key, a subscribe that threw). */
+  if(window.__dcPushOn)return;
   if(!prev){/* first load: baseline only, never replay history */return}
   const show=(title,body)=>{const n=new Notification(title,{body});n.onclick=()=>{window.focus();n.close()}};
   const prevP=Object.fromEntries((prev.projects||[]).map(p=>[p.id,p.status]));
@@ -5942,10 +6035,22 @@ StudioAdapter.onProbeSource=async url=>{try{
          silently refuses, which is what "I don't think they work" looks like. */
       const deskState=StudioAdapter.desktopNotifsState?StudioAdapter.desktopNotifsState():'off';
       const deskOn=deskState==='on';
-      const deskLine=deskState==='on'?'On — a pop-up when clips are ready, a clip posts, or a lecture fails.'
+      /* Two different promises, and the difference is the whole feature: with
+         a push subscription the notification arrives with DeenClipped closed;
+         without one it needs a tab. Saying the stronger thing when only the
+         weaker is true is how somebody closes the tab and misses the clip
+         they turned this on for. */
+      const deskClosed=StudioAdapter.pushArrivesClosed?StudioAdapter.pushArrivesClosed():false;
+      /* One name for one switch, from the adapter, so the bell dropdown, the
+         phone's Activity sheet and this row cannot call it three things. */
+      const deskLabel=StudioAdapter.notifsLabel||'Notifications on this device';
+      const deskLine=deskState==='on'
+        ?(deskClosed
+          ?'On — clips ready, posts sent and failures, even with DeenClipped closed.'
+          :'On while DeenClipped is open. This browser cannot receive them when it is closed.')
         :deskState==='denied'?'Blocked by your browser. Allow notifications for this site in your browser settings, then turn this on.'
-        :deskState==='unsupported'?'This browser cannot show pop-ups. Email notifications still reach you.'
-        :'Off — turn on to get a pop-up while this tab is open, even in the background.';
+        :deskState==='unsupported'?'This browser cannot show notifications. Email notifications still reach you.'
+        :'Off — turn on to be told when clips are ready, a post goes out, or a lecture fails.';
 
       acctEls.sub.textContent=u.email||'';
       acctEls.body.innerHTML=`
@@ -5979,7 +6084,7 @@ StudioAdapter.onProbeSource=async url=>{try{
         <div class="studio-acct-group">
           <div class="studio-acct-row">
             <i class="ph ph-bell-ringing"></i>
-            <span class="t"><b>Desktop notifications</b>
+            <span class="t"><b>${esc(deskLabel)}</b>
               <span>${deskLine}</span></span>
             ${deskState==='unsupported'?'':deskState==='denied'
               ?`<button type="button" class="studio-acct-act" data-acct="desktop-help">How to allow</button>`

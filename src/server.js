@@ -34,6 +34,7 @@ import * as seoPages from './seo-pages.js';
 import * as financeAudit from './finance-audit.js';
 import * as referrals from './referrals.js';
 import * as growth from './growth.js';
+import * as push from './push.js';
 import * as admin from './admin.js';
 import * as owner from './owner.js';
 import * as deenai from './deenai.js';
@@ -78,6 +79,18 @@ const STUDIO_ASSETS = {
   // same bindings; the sheet lives entirely inside the 820px query).
   '/studio-mobile.css': { file: studioAsset('studio-mobile.css'), type: 'text/css; charset=utf-8' },
   '/studio-mobile.js': { file: studioAsset('studio-mobile.js'), type: JS_TYPE },
+  /*
+   * The push service worker, and it must be served from THE ROOT. A worker's
+   * scope cannot rise above its own path, so at /studio-sw.js it could only
+   * ever control /studio-* -- and pushes would arrive with nothing registered
+   * to show them. The handler's default no-cache + ETag is right for it: a
+   * deploy takes effect on the next update check, and it is the one file whose
+   * staleness cannot be fixed from inside the app.
+   */
+  '/sw.js': { file: studioAsset('sw.js'), type: JS_TYPE },
+  // Needed for iOS: Safari only delivers Web Push to a site added to the home
+  // screen, and only a site with a manifest can be added as an app.
+  '/manifest.webmanifest': { file: studioAsset('manifest.webmanifest'), type: 'application/manifest+json; charset=utf-8' },
   // The editor's "coming soon" gate. Two files and one <link> so that turning
   // the editor on again is a deletion rather than an untangling.
   // Signed-out page enhancements. A file rather than an inline block because
@@ -561,6 +574,29 @@ function verifyWorkerRequest(req, pathname, rawBody) {
   return sameSecret(expected, supplied);
 }
 function authed(req, url) { return !config.password || sameSecret(req.headers['x-app-password'] || url.searchParams.get('pw') || '', config.password); }
+/*
+ * A name for a push subscription that a person could recognise in a device
+ * list -- "Chrome on Android", not the user agent string. Deliberately coarse:
+ * the full UA is a fingerprint, and this product's whole analytics posture is
+ * that it stores neither an address nor a user agent (src/metrics.js).
+ */
+function deviceLabel(req) {
+  const ua = String(req.headers['user-agent'] || '');
+  const browser = /Edg\//.test(ua) ? 'Edge'
+    : /OPR\//.test(ua) ? 'Opera'
+    : /Firefox\//.test(ua) ? 'Firefox'
+    : /Chrome\//.test(ua) ? 'Chrome'
+    : /Safari\//.test(ua) ? 'Safari'
+    : 'Browser';
+  const platform = /Android/.test(ua) ? 'Android'
+    : /iPhone|iPad|iPod/.test(ua) ? 'iOS'
+    : /Mac OS X/.test(ua) ? 'Mac'
+    : /Windows/.test(ua) ? 'Windows'
+    : /Linux/.test(ua) ? 'Linux'
+    : '';
+  return platform ? `${browser} on ${platform}` : browser;
+}
+
 function readBody(req, limit = 1_000_000) {
   return new Promise((resolve, reject) => {
     // A declared length over the cap is refused before a byte is buffered.
@@ -692,6 +728,12 @@ function appState(user = null) {
     // Whether product emails (clips ready / posted / failed) go out for this
     // account. Root-level so the bell dropdown reads it without a second fetch.
     emailNotifs: !emailNotifsOff(user.id),
+    // The browser needs the server's VAPID public key to subscribe, and the
+    // count is what lets the switch say "on this device" honestly. Null key
+    // means push is off on this server, and the switch says so rather than
+    // offering a control that cannot work.
+    pushKey: push.publicKey(),
+    pushDevices: push.subscriptionsFor(user.id).length,
     selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(),
     backgrounds: backgrounds.listBackgrounds(user).map(entry => ({
       id: entry.id, name: entry.name, durationSec: entry.durationSec, shared: Boolean(entry.shared),
@@ -1418,6 +1460,32 @@ async function route(req, res, url) {
     state.userSettings[currentUser.id].emailNotifs = Boolean(body.on);
     save();
     return json(res, 200, { ok: true, emailNotifs: Boolean(body.on) });
+  }
+  /*
+   * Web Push. The subscription is the preference: a browser that has one gets
+   * notified with the app closed, a browser that does not, does not. There is
+   * no separate stored flag to fall out of step with it.
+   */
+  if (method === 'POST' && pathname === '/api/push/subscribe') {
+    if (!currentUser?.id) return json(res, 401, { error: 'Sign in first.' });
+    if (!config.pushNotifsEnabled) return json(res, 503, { error: 'Push notifications are switched off on this server.' });
+    const body = await readBody(req);
+    try {
+      // A push service can retire a subscription and hand the worker a fresh
+      // one; without dropping the old endpoint the account keeps a row that
+      // can never be delivered to and burns a soft-failure budget for ever.
+      if (body.replaces) push.unsubscribe(currentUser.id, body.replaces);
+      push.subscribe(currentUser.id, body.subscription, { device: deviceLabel(req) });
+      return json(res, 200, { ok: true, devices: push.subscriptionsFor(currentUser.id).length });
+    } catch (error) {
+      return json(res, 400, { error: error.message });
+    }
+  }
+  if (method === 'POST' && pathname === '/api/push/unsubscribe') {
+    if (!currentUser?.id) return json(res, 401, { error: 'Sign in first.' });
+    const body = await readBody(req);
+    const removed = push.unsubscribe(currentUser.id, body.endpoint);
+    return json(res, 200, { ok: true, removed, devices: push.subscriptionsFor(currentUser.id).length });
   }
   if (method === 'DELETE' && pathname === '/api/account') {
     try {
@@ -2641,6 +2709,13 @@ function securityHeaders(res, { pathname }) {
     "img-src 'self' data: blob: https:",
     "media-src 'self' blob: https:",
     "connect-src 'self' https:",
+    // The push service worker. worker-src would fall back through child-src to
+    // script-src (which allows 'self'), but that fallback chain differs between
+    // browsers and a blocked worker fails SILENTLY -- registration rejects and
+    // push quietly never works. Stated outright instead. The hashes are not
+    // repeated: a worker is a file, never an inline block.
+    "worker-src 'self'",
+    "manifest-src 'self'",
     // Nothing here is ever framed, and nothing may be framed into it.
     "frame-ancestors 'none'",
     "frame-src https://js.stripe.com https://checkout.stripe.com",

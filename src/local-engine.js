@@ -9,6 +9,7 @@ import * as alerts from './alerts.js';
 import * as mailer from './mailer.js';
 import * as ownerFeed from './owner-feed.js';
 import { state, save, log, clipSettings, musicSettings, ownerOfRecord, musicSatisfied, importNetworkSettings, emailNotifsOff } from './store.js';
+import * as push from './push.js';
 import { sanitiseTemplate, selectedTemplate, templateById, templateForClip } from './templates.js';
 import { withOwner, ownerOf } from './tenancy.js';
 import { workerMusicTracks } from './audio.js';
@@ -997,8 +998,21 @@ export function acceptRemoteUpdate(projectId, update) {
     // do not come back, and clips nobody reviews are clips nobody posts.
     // Silently inert until email is configured, like everything mailer sends.
     const owner = ownerOfRecord(project);
+    const clipsMade = state.clips.filter(item => item.projectId === project.id).length;
+    // The one moment this whole feature exists for: the pipeline takes ~20
+    // minutes, so by the time it finishes the tab is usually closed. Push is
+    // NOT behind the email switch -- two channels, two decisions, and having a
+    // subscription is push's own way of saying yes.
+    if (owner?.id) {
+      push.notify(owner.id, {
+        title: 'Your clips are ready',
+        body: `"${project.title || project.sourceTitle || 'Your lecture'}" finished — ${clipsMade} ${clipsMade === 1 ? 'clip is' : 'clips are'} waiting for review.`,
+        url: `${config.publicBaseUrl || 'https://deenclipped.online'}/app#review`,
+        tag: `clips-ready-${project.id}`,
+      }).catch(() => {});
+    }
     if (owner?.email && !emailNotifsOff(owner.id)) {
-      const clipCount = state.clips.filter(item => item.projectId === project.id).length;
+      const clipCount = clipsMade;
       mailer.send({
         to: owner.email,
         ...mailer.clipsReadyMessage({
@@ -1050,6 +1064,14 @@ export function acceptRemoteUpdate(projectId, update) {
     // much as success -- silence reads as "still working" until they give up.
     // After classification, so the email carries the customer-safe message.
     const failOwner = ownerOfRecord(project);
+    if (failOwner?.id) {
+      push.notify(failOwner.id, {
+        title: 'A lecture could not be processed',
+        body: `"${project.title || project.sourceTitle || 'Your lecture'}" — ${classified.message}`,
+        url: `${config.publicBaseUrl || 'https://deenclipped.online'}/app`,
+        tag: `lecture-failed-${project.id}`,
+      }).catch(() => {});
+    }
     if (failOwner?.email && !emailNotifsOff(failOwner.id)) {
       mailer.send({
         to: failOwner.email,

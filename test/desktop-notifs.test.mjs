@@ -81,7 +81,10 @@ test('every surface reads the one state function', () => {
 test('the Account dialog draws the row, and never a switch that would refuse', () => {
   const html = src('src/public/index.html');
   // The row itself, beside the email one it was missing next to.
-  assert.match(html, /<b>Desktop notifications<\/b>/, 'Account settings must offer the switch');
+  // The label comes from the adapter, not a fourth literal: Web Push made
+  // "Desktop notifications" untrue (it reaches a phone, with the app closed).
+  assert.match(html, /<b>\$\{esc\(deskLabel\)\}<\/b>/, 'Account settings must offer the switch');
+  assert.match(html, /const deskLabel=StudioAdapter\.notifsLabel/, 'and name it the same as the bell and the phone do');
   assert.match(html, /data-acct="desktop"/, 'and it must be wired');
   assert.match(html, /case 'desktop':await StudioAdapter\.onToggleDesktopNotifs\(\)/,
     'through the same handler the bell dropdown uses, so the two cannot disagree');

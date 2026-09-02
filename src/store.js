@@ -97,6 +97,12 @@ function blankState() {
     authOAuthStates: {},
     authSettings: { onboardingComplete: false },
     userSettings: {},
+    // Web Push: one row per browser that asked for notifications, and the
+    // server's own VAPID identity. The identity is generated once and must
+    // then stay put -- every subscription is bound to the public key it was
+    // created with (src/push.js).
+    pushSubs: {},
+    pushKeys: null,
     log: [],
     legacyState: null,
   };
@@ -140,6 +146,8 @@ function migrate(parsed) {
       authOAuthStates: parsed.authOAuthStates && typeof parsed.authOAuthStates === 'object' ? parsed.authOAuthStates : {},
       authSettings: { ...fresh.authSettings, ...(parsed.authSettings || {}) },
       userSettings: parsed.userSettings && typeof parsed.userSettings === 'object' ? parsed.userSettings : {},
+      pushSubs: parsed.pushSubs && typeof parsed.pushSubs === 'object' ? parsed.pushSubs : {},
+      pushKeys: parsed.pushKeys && typeof parsed.pushKeys === 'object' ? parsed.pushKeys : null,
       // The old global settings are deliberately carried through untouched so
       // that migrateToMultiTenant can move them to the owner's account below.
     };

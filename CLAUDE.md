@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1085 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1103 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3061,6 +3061,105 @@ Youssef, pointing at the account dropdown: "add reoort a bug here."
   report without the version is a bug report that cannot be acted on.
 - Two ways out, because a mailto is not reliable everywhere: "Open email" and
   "Copy details".
+
+## Notifications arrive with the app closed (v3.91.0, 2 Sept 2026)
+
+Youssef: "add push notifcations when app is closed." The previous release's
+notification needed a tab open -- it is a `new Notification()` from the page --
+and said so. This is real Web Push: the server hands an encrypted message to
+the browser vendor's push service, which wakes a service worker on the device
+whether or not DeenClipped, or the browser, is running.
+
+- **It is hand-written, and that was the point.** `web-push` is the obvious
+  dependency and this repo deliberately has NONE -- that is what lets a clean
+  checkout run the whole suite on a phone or on CI. `src/push.js` is RFC 8291
+  (message encryption) and RFC 8292 (VAPID) on top of `node:crypto`, which has
+  every primitive both need: ECDH, HKDF via HMAC, AES-128-GCM, and ES256 with
+  `dsaEncoding: 'ieee-p1363'`.
+- **A wrong crypto implementation fails SILENTLY**: the push service accepts
+  the POST, answers 201, and the device shows nothing -- indistinguishable from
+  the feature not being built. So `encryptPayload` is pinned to the worked
+  example in **RFC 8291 §5**, from the RFC's own keys and salt, asserting the
+  whole base64url body. A round-trip test would pass against an implementation
+  that is merely self-consistent. Proven able to fail: one byte changed in the
+  HKDF info string (`WebPush: info` -> `WebPush: Info`) turns it red.
+- **Node signs ES256 as DER by default and every push service rejects that**
+  with a bare 401 that reads like a wrong key. `ieee-p1363` is the raw r||s
+  JWS wants; the test verifies our own signature with `crypto.verify` and
+  fails if the encoding regresses.
+- **`aud` is the endpoint's ORIGIN, never the full URL.** The endpoint path is
+  the secret half of a subscription and does not belong in a token that gets
+  logged on error.
+- **No setup, deliberately.** With no `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`
+  set, the server generates one pair and keeps it in `state.json`, so push
+  works on a fresh deployment with nobody having to run a key generator first.
+  **It must never be regenerated casually**: every subscription in the wild is
+  bound to the public key it was created with, and a new pair invalidates all
+  of them with nothing anywhere reporting it. Verified across a real restart:
+  same key, subscription intact.
+- **The subscription IS the preference.** A browser that holds one gets
+  notified; one that does not, does not. No second stored flag to fall out of
+  step with it, and `getSubscription()` is read from the BROWSER rather than a
+  cached boolean -- a push service can retire a subscription, and a flag saying
+  otherwise would have the switch claim a channel that no longer exists.
+- **THE DEDUP, and it is the thing most likely to be broken by a later
+  change.** The in-tab notifier (`fireClipNotifs`) and the service worker fire
+  on the same three moments, and the worker fires whether or not a tab is open
+  -- so with a subscription live, running both is every notification twice.
+  `fireClipNotifs` stands down on `window.__dcPushOn`. It stays as the fallback
+  for a browser that cannot subscribe, and that path was driven: with no push
+  service reachable the switch still turns on, the copy says "On while
+  DeenClipped is open", and the in-tab notifier fires exactly once.
+- **404/410 is the ONLY signal that unsubscribes a device.** That is the push
+  service saying the subscription is gone. A 500 is a bad ten minutes, and
+  dropping a row there loses a real subscriber who would never know; soft
+  failures are counted and only give up after eight.
+- **Push is NOT behind the email switch.** Two channels, two decisions:
+  turning product email off is not a request to stop being told a lecture
+  finished, it is a request to stop being mailed. A test reads the guard around
+  each `push.notify` call and fails if `emailNotifsOff` appears in it.
+- **The service worker does NOTHING else** -- no fetch handler, no caching. A
+  caching worker on an app that ships several times a day strands people on a
+  stale dashboard with no way to force a refresh. A test fails if a `fetch`
+  listener ever appears. It handles `pushsubscriptionchange`, because Chrome
+  retires subscriptions periodically and without that the device goes silent
+  for ever with nothing anywhere saying so.
+- **`userVisibleOnly` means the browser REQUIRES a notification per delivered
+  push** and penalises an app that stays silent, so the empty-payload path
+  shows a real message rather than returning. Verified by delivering an actual
+  push through CDP (`ServiceWorker.deliverPushMessage`) -- no push service
+  needed -- and reading `registration.getNotifications()` back: the right title
+  and URL, the empty push still showing something, and a repeated `tag`
+  replacing rather than stacking.
+- **`/sw.js` is served from THE ROOT and that is load-bearing.** A worker's
+  scope cannot rise above its own path, so at `/studio-sw.js` it could only
+  control `/studio-*` and pushes would arrive with nothing registered to show
+  them. `worker-src 'self'` is stated outright in the CSP rather than left to
+  the fallback chain through `child-src` -- a blocked worker fails silently.
+- **A manifest exists now** (`/manifest.webmanifest`), because iOS Safari
+  delivers Web Push only to a site added to the home screen, and only a site
+  with a manifest can be added as an app.
+- **The switch is called "Notifications on this device" now.** "Desktop
+  notifications" stopped being true: it reaches a phone, and reaches it closed.
+  The bell dropdown's label is a literal in the design export, so it is a
+  `design/text-overrides.json` entry rather than a re-import -- proven
+  byte-stable first, and the diff afterwards was the one label node plus its
+  name in the sorted binding list, with the CSS untouched.
+
+**The inline-script-scope trap bit again, and it cost the whole app.**
+`refreshPushState` was called from `boot()` while being declared in a DIFFERENT
+inline script scope, so the bare call threw ReferenceError INSIDE boot's own
+catch -- and the app fell back to the password gate reading "refreshPushState
+is not defined", with NO page error and a CSP hash that matched. It is
+window-pinned and guarded now, exactly like `fireClipNotifs` and `paintAccount`
+beside it. Anything a top-of-file function needs must be reached through
+`window`.
+
+**What is NOT done:** nothing has been delivered by a real push service. FCM,
+Mozilla's autopush and Apple's are not reachable from this container, so the
+proof stops at "the bytes are provably right and the worker provably shows
+them". The first real notification is the confirmation, and it costs one
+lecture: turn the switch on in Chrome, close the tab, and import something.
 
 ## Open items
 

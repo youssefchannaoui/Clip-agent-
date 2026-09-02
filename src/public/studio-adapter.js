@@ -180,12 +180,33 @@
       return localStorage.getItem('deenDesktopNotifs') === 'on' ? 'on' : 'off';
     } catch (e) { return 'off'; }
   }
+  /*
+   * "Desktop notifications" stopped being true when Web Push shipped: the same
+   * switch now reaches a phone, and reaches it with DeenClipped closed. The
+   * bell dropdown's copy is a literal in the design export, so it is a
+   * text-override (design/text-overrides.json) rather than a re-import, which
+   * would regenerate every hashed class name in the app for one label. One
+   * constant, read by all three surfaces, so they cannot call it three things.
+   */
+  var NOTIFS_LABEL = 'Notifications on this device';
   var DESKTOP_NOTIF_NOTE = {
     unsupported: 'Not available in this browser',
     denied: 'Blocked in your browser settings',
     on: 'On — you will be told when clips are ready',
     off: 'Off — turn on to hear when clips are ready',
   };
+  /*
+   * Whether THIS browser holds a Web Push subscription -- i.e. whether the
+   * notification arrives with DeenClipped closed, or only while a tab is open.
+   * The page owns the answer (only it can ask the PushManager) and writes it
+   * to one global; every surface reads it from here so none of them can make a
+   * different promise about the same switch. False is the safe default: it
+   * describes the weaker guarantee, and over-promising here is how someone
+   * closes the tab and misses the thing they turned this on for.
+   */
+  function pushArrivesClosed() {
+    try { return Boolean(global.__dcPushOn); } catch (e) { return false; }
+  }
 
   // ── the editor's <video> ──────────────────────────────────────────────────
   // The design exports a still frame for the editor preview, so the real video
@@ -4364,6 +4385,14 @@
       // The phone's Activity sheet reads these two; the desktop template reads
       // the inline styles above. All four come from ONE state function, so no
       // surface can say a different thing about the same switch.
+      /*
+       * "Desktop notifications" stopped being true when Web Push shipped: the
+       * same switch now reaches a phone, and reaches it with DeenClipped
+       * closed. The literal lives in the design export, so it is a
+       * text-override rather than a re-import (which would regenerate every
+       * hashed class name in the app for one label).
+       */
+      notifsLabel: NOTIFS_LABEL,
       desktopNotifsOn: desktopNotifsState() === 'on',
       desktopNotifsCls: desktopNotifsState() === 'on' ? 'on' : '',
       toggleDesktopNotifs: function (e) { stop(e); global.StudioAdapter.onToggleDesktopNotifs(); },
@@ -7723,6 +7752,8 @@
     // Exposed so the host-rendered Account dialog reads the SAME answer the
     // bell dropdown and the phone read, rather than deriving a fifth one.
     desktopNotifsState: desktopNotifsState,
+    pushArrivesClosed: pushArrivesClosed,
+    notifsLabel: NOTIFS_LABEL,
     onGenerate: function () {},
     onUploadNasheedPrompt: function () {},
     onApplyTemplateToClip: function () {},

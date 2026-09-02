@@ -1,0 +1,15 @@
+{
+  "name": "DeenClipped Studio",
+  "short_name": "DeenClipped",
+  "description": "One lecture. A week of reels.",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#09090A",
+  "theme_color": "#09090A",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -111,6 +111,25 @@ export const config = {
   nudgeEmailsEnabled: boolean(process.env.NUDGE_EMAILS, true),
   postCreditEnabled: boolean(process.env.POST_CREDIT, true),
 
+  /*
+   * Web Push -- notifications that arrive with the app closed (src/push.js).
+   *
+   * The keys are OPTIONAL on purpose. With none set the server generates a
+   * pair once and keeps it in state.json, so push works on a fresh deployment
+   * with nobody having to run a key generator first. Set them here only to pin
+   * the identity somewhere more durable than the data directory -- and then
+   * NEVER change them: every subscription in the wild is bound to the public
+   * key it was created with, and a new pair silently invalidates all of them.
+   *
+   * The subject is a contact for the push service operator, and it must be a
+   * mailto: or https: URL -- some services reject the request outright without
+   * one, with a 400 that says nothing about why.
+   */
+  pushNotifsEnabled: boolean(process.env.PUSH_NOTIFS, true),
+  vapidPublicKey: (process.env.VAPID_PUBLIC_KEY || '').trim(),
+  vapidPrivateKey: (process.env.VAPID_PRIVATE_KEY || '').trim(),
+  vapidSubject: (process.env.VAPID_SUBJECT || 'mailto:support@deenclipped.online').trim(),
+
   // Affiliates are an application, not an open door: nobody is approved
   // automatically and no payout runs without a person deciding.
   affiliatesEnabled: boolean(process.env.AFFILIATES_ENABLED, false),

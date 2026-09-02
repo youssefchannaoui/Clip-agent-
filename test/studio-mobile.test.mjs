@@ -279,7 +279,7 @@ test('the activity, account, search and create sheets carry the desktop dropdown
   const S = sandbox.StudioMobile.state;
   S.sheet = 'activity';
   let r = screenRender(sandbox, 'home');
-  for (const needle of ['Mark all read', 'Clear all', 'Desktop notifications', 'Email notifications', 'in total']) assert.ok(r.html.includes(needle), 'activity: ' + needle);
+  for (const needle of ['Mark all read', 'Clear all', 'Notifications on this device', 'Email notifications', 'in total']) assert.ok(r.html.includes(needle), 'activity: ' + needle);
   S.sheet = 'account';
   r = screenRender(sandbox, 'home');
   for (const needle of ['Yusuf Ali', 'y@x.com', 'Tokens &amp; billing', 'Account settings', 'Help &amp; guides', 'Sign out']) assert.ok(r.html.includes(needle), 'account: ' + needle);

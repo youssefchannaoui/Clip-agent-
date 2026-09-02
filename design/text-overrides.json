@@ -48,7 +48,8 @@
     "He has the whole of the dunya": "capPreviewText",
     "≈ 20 hours of lecture processing, or about 62 rendered clips at your current settings.": "balanceMeans",
     "These numbers are sample output. On Pro, DeenAI reads your own clips, scores and posting record, and answers your questions — nothing here acts until then.": "aiDemoNote",
-    "Unlock with Pro": "aiGateCta"
+    "Unlock with Pro": "aiGateCta",
+    "Desktop notifications": "notifsLabel"
   },
   "styleOverrides": {
     "position: relative; aspect-ratio: 16 / 9; border-radius: 11px; overflow: hidden; border: 1px solid #26262A; background: #17171A url('src/public/marketing-assets/reel-kaaba-a.webp') center/cover no-repeat;": "jobPosterStyle",

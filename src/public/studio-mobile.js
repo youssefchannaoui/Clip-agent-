@@ -606,7 +606,7 @@
         h('button', { type: 'button', class: 'dcm-btn dcm-btn-sm dcm-btn-ghost', on: { click: 'clearAllActivity' } }, 'Clear all'),
       ]),
       h('div', { class: 'dcm-notif' }, [
-        row({ on: { click: 'toggleDesktopNotifs' } }, [ph('ph ph-bell-ringing'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Desktop notifications'), h('i', {}, [tx('desktopNotifsNote')])]), h('span', { class: cat('dcm-switch ', b('desktopNotifsCls')), 'aria-hidden': 'true' })]),
+        row({ on: { click: 'toggleDesktopNotifs' } }, [ph('ph ph-bell-ringing'), h('span', { class: 'dcm-row-t' }, [h('b', {}, [tx('notifsLabel')]), h('i', {}, [tx('desktopNotifsNote')])]), h('span', { class: cat('dcm-switch ', b('desktopNotifsCls')), 'aria-hidden': 'true' })]),
         row({ on: { click: 'm.toggleEmail' } }, [ph('ph ph-envelope-simple'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Email notifications'), h('i', {}, [tx('m.emailNote')])]), h('span', { class: cat('dcm-switch ', b('m.emailCls')), 'aria-hidden': 'true' })]),
       ]),
       iff('activityHasRows', [h('div', { class: 'dcm-list' }, [each('activity', 'act', [activityRow()])])]),

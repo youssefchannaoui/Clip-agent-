@@ -5,6 +5,7 @@ import path from 'node:path';
 import { config } from './config.js';
 import * as billing from './billing.js';
 import { state, save, log, automationSettings, publishingSettings, ownerOfRecord, musicSatisfied, isAyahEcho, emailNotifsOff } from './store.js';
+import * as push from './push.js';
 import { ownedBy, ownerOf } from './tenancy.js';
 import { sanitiseClipStyle } from './templates.js';
 import { nextSlot, startOfZonedDay, postTimesFor as slotTimes } from './slots.js';
@@ -41,8 +42,21 @@ function maybeEmailPostSummary(clip) {
   if (!targets.some(target => target.status === 'posted')) return; // total failure is the schedule's story, not a celebration email
   clip.postSummaryEmailedAt = Date.now();
   const owner = ownerOfRecord(clip);
-  if (!owner?.email || emailNotifsOff(owner.id)) return;
+  if (!owner?.id) return;
   const base = config.publicBaseUrl || 'https://deenclipped.online';
+  /*
+   * Push first, and NOT behind the email switch. They are two channels, and
+   * somebody who turned product email off has not asked to stop being told
+   * their clip went live -- they asked to stop being mailed. The subscription
+   * is push's own preference: no subscription, no push (src/push.js).
+   */
+  const posted = targets.filter(target => target.status === 'posted');
+  push.notify(owner.id, {
+    title: posted.length === targets.length ? 'Clip published' : 'Clip published, with a problem',
+    body: `"${clip.title || 'Your clip'}" is live on ${posted.map(whereText).join(', ') || 'your channel'}.`,
+    url: `${base}/app#schedule`, tag: `clip-posted-${clip.id}`,
+  }).catch(() => {});
+  if (!owner.email || emailNotifsOff(owner.id)) return;
   mailer.send({
     to: owner.email,
     ...mailer.postSummaryMessage({
