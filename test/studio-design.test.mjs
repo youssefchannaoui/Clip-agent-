@@ -1508,7 +1508,11 @@ test('the calendar shows a day\'s whole capacity, and whose plan gave it', () =>
   // that never goes grey, and that is what makes it read as bought.
   const rowOf = top => sCell.pips.filter(p => p.style.includes('top: ' + top + 'px'))
     .map(p => (p.style.match(/background: ([^;]+)/) || [])[1]);
-  assert.deepEqual(rowOf(7), ['#D9B478', '#D9B478', '#212127', '#212127'],
+  // The colours became tokens when the studio learned to be lit as well as
+  // dark. The dark value behind each is unchanged and kept as the fallback,
+  // so what this pins is the same: gold, gold, quiet, quiet.
+  assert.deepEqual(rowOf(7), ['var(--dc-gold, #D9B478)', 'var(--dc-gold, #D9B478)',
+    'var(--dc-n-212127, #212127)', 'var(--dc-n-212127, #212127)'],
     'the base four behave exactly as they do on every other plan');
   assert.deepEqual(rowOf(15), ['rgba(217,180,120,.34)', 'rgba(217,180,120,.34)',
     'rgba(217,180,120,.34)', 'rgba(217,180,120,.34)'],
@@ -1523,7 +1527,8 @@ test('the calendar shows a day\'s whole capacity, and whose plan gave it', () =>
   const pCell = today(cellsOf(pro));
   assert.equal(pCell.pips.length, 4, 'four pips on Pro');
   assert.equal(new Set(pCell.pips.map(p => (p.style.match(/top: (\d+)px/) || [])[1])).size, 1, 'in one row');
-  assert.equal(pCell.pips.filter(p => /background: #212127/.test(p.style)).length, 3, 'and the empties stay grey');
+  assert.equal(pCell.pips.filter(p => /background: var\(--dc-n-212127, #212127\)/.test(p.style)).length, 3,
+    'and the empties stay grey');
 });
 
 test('a busy day keeps its "+N more" inside the cell', () => {
@@ -2668,7 +2673,10 @@ test('the docked section takes the column width and the site card treatment', ()
   // Running it wears a quiet gold ring; idle it settles back to the site's
   // plain card, so a still page never carries a warm glow with nothing live.
   assert.match(rule, /rgba\(217,180,120/, 'the working gold while anything runs');
-  assert.match(html, /#studioLiveHome\.slh-docked\.slh-idle \{[^}]*background: #121214/,
+  // The literal became a token when the studio learned to be lit as well as
+  // dark; the dark value behind it is unchanged, and it is kept as the
+  // fallback so a browser that never sees the token sheet renders as before.
+  assert.match(html, /#studioLiveHome\.slh-docked\.slh-idle \{[^}]*background: var\(--dc-bg, #121214\)/,
     "idle returns to the site's own card background");
 });
 

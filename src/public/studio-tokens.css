@@ -1,3 +1,90 @@
+/* ============================================================================
+   The neutral palette, as tokens — so the studio can be lit as well as dark.
+   ==========================================================================
+
+   The phone has had a paper theme since studio-mobile.css, but it reskins the
+   PHONE SHELL: host-drawn dcm-* classes. The desktop has no such shell — it is
+   the generated design export, 91KB of literal hex with no variables, which
+   must never be hand-edited because a re-import regenerates it.
+
+   So the desktop is lit in two halves that have to agree:
+     1. the generated sheet, remapped into studio-light.generated.css by
+        scripts/build-light-theme.mjs at design-import time, and
+     2. the hand-written inline styles, which a stylesheet cannot reach and
+        which therefore read these variables directly. `var()` works perfectly
+        well inside an inline style attribute; that is what makes the 13% of
+        elements carrying their own colour themeable at all.
+
+   EVERY dark value below is the exact hex it replaces, so dark renders byte
+   for byte as it did. Only `body.dc-light` moves.
+
+   The gold and the semantic colours are deliberately NOT here. Gold is ink on
+   paper as readily as it is light on black — the phone proves it — and green
+   still means posted whatever the ground is. Re-tinting those would be a
+   second design rather than the same one in daylight. */
+:root {
+  --dc-bg-deepest: #0E0E11;   /* page ground behind everything */
+  --dc-bg-deep:    #101013;   /* sunken wells, scroll troughs */
+  --dc-bg:         #121214;   /* panels and cards */
+  --dc-bg-raised:  #17171A;   /* controls, chips, inputs */
+  --dc-line-soft:  #1E1E22;   /* hairlines and empty tracks */
+  --dc-line:       #26262A;   /* ordinary borders */
+  --dc-line-hover: #34343A;   /* a border under the pointer */
+  --dc-ink-faint:  #6E6E76;   /* labels that must not compete */
+  --dc-ink-dim:    #8B8B93;   /* secondary text */
+  --dc-ink-body:   #BCBCC3;   /* body text */
+  --dc-ink-bright: #E9E9ED;   /* emphasised text */
+  --dc-ink:        #F2F2F4;   /* headings, the brightest text */
+  --dc-page:       #09090A;   /* the page behind the studio */
+  --dc-page-2:     #0B0B0D;   /* the darkest wells */
+  --dc-bg-alt:     #1A1A1E;   /* a panel a shade off the others */
+  --dc-ink-soft:   #A2A2AA;   /* the most common secondary ink */
+  --dc-ink-muted:  #75717B;   /* a label that has stepped back further */
+  /* Gold. On black it is light and glowing; on paper the SAME gold is a pale
+     smear you cannot read. The phone's paper theme worked this out first
+     (--dcm-gold #A2762C), and these follow it: the brand colour survives, its
+     luminance does not. */
+  --dc-gold:       #D9B478;   /* the channel's gold */
+  --dc-gold-lit:   #F0D6A6;   /* its lit form, for text on black */
+  /* A sunken well — the empty thumbnail an unrendered clip shows. It is an
+     rgba, not a hex, so the tokeniser that swept the inline colours could not
+     see it: on paper it was the last dark patch left on the screen. */
+  --dc-well:       rgba(18, 18, 20, .5);
+}
+
+/* Warm paper, taken from the phone's own light theme so the two surfaces are
+   one product in daylight rather than two. The ramp is inverted: what was the
+   deepest ground becomes the lightest paper, and the brightest ink becomes the
+   darkest. */
+/* On :root as well as body, and that is not belt-and-braces.
+   A variable that REFERENCES another (`--bg: var(--dc-page)` in index.html) is
+   substituted where it is DECLARED. Declared on :root, it resolves against
+   :root's tokens — so overriding them only on body left the page ground dark
+   while everything else lit. The class is set on both elements. */
+:root.dc-light,
+body.dc-light {
+  --dc-bg-deepest: #F4EFE4;
+  --dc-bg-deep:    #EDE6D8;
+  --dc-bg:         #FFFDF8;
+  --dc-bg-raised:  #F7F2E7;
+  --dc-line-soft:  #EBE3D3;
+  --dc-line:       #E0D6C1;
+  --dc-line-hover: #CFC2A6;
+  --dc-ink-faint:  #978C79;
+  --dc-ink-dim:    #6C6455;
+  --dc-ink-body:   #3A342A;
+  --dc-ink-bright: #262119;
+  --dc-ink:        #1D1A15;
+  --dc-page:       #F1EADC;
+  --dc-page-2:     #E7DFCE;
+  --dc-bg-alt:     #FAF6EC;
+  --dc-ink-soft:   #5B5446;
+  --dc-ink-muted:  #7B7263;
+  --dc-gold:       #A2762C;
+  --dc-gold-lit:   #7E5B18;
+  --dc-well:       rgba(58, 44, 20, .07);
+}
+
 /*
  * Tokens & billing — motion and depth.
  *
@@ -322,7 +409,7 @@
      were still nearly as bright as the mark and read as clutter beside the
      wordmark rather than as an engraved ring. It comes up to full on hover,
      where it is being looked at. */
-  color: #D9B478; opacity: .42; pointer-events: none;
+  color: var(--dc-gold, #D9B478); opacity: .42; pointer-events: none;
   animation: dcSealSpin 28s linear infinite;
 }
 #dcRailBrand .dc-seal-ring text {
@@ -518,4 +605,28 @@
   position: sticky; top: 0; z-index: 2;
   padding-bottom: 6px; margin-bottom: -6px;
   background: linear-gradient(#0E0E11 78%, rgba(14,14,17,0));
+}
+
+
+/* ── The stage stays night ────────────────────────────────────────────────
+   The phone's paper theme made this call first and it is right on every
+   surface: the WORKSPACE is paper, but the STAGE — the 9:16 frame where a
+   clip is previewed and judged — stays dark, because that is what a clip
+   actually looks like when it is posted. A caption is white text designed for
+   video; lighting the frame behind it leaves the caption invisible and, worse,
+   shows the customer a preview that is not what the renderer produces
+   (invariant 4).
+
+   Found by :has() rather than by a class: the frame is the design export's and
+   its class renumbers on every re-import, while the host-rendered preview
+   picture inside it has a stable id. */
+/* The caption sample is a stage too: it shows the caption in the colour the
+   RENDERER will burn in, which is white. On paper that is white on cream —
+   invisible, and a preview that disagrees with the export (invariant 4). */
+body.dc-light #studio .hl-sample,
+body.dc-light #studio *:has(> #studioPreviewPic),
+body.dc-light #studio *:has(> #studioEditorVideo),
+body.dc-light #studio *:has(> #studioPlayerVideo) {
+  background: #121214 !important;
+  border-color: #26262A;
 }

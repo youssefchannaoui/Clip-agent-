@@ -4640,9 +4640,42 @@ is an afternoon or a project:
   #BCBCC3 #E9E9ED #F2F2F4). The gold and the semantic colours stay -- the phone
   proves gold reads as ink on paper.
 
-So the work is: a token layer, a generator for the light sheet, a mechanical
-var-isation of the twelve neutrals, a toggle beside the account menu honouring
-`prefers-color-scheme` on first visit, and screenshots of every screen in both
-themes. **Not started.** Half of it shipped is the half-lit screen
-studio-mobile.css was written to avoid, which is why this is a note rather than
-a commit.
+**Built in v3.90.0.** Two generators and a token layer:
+
+- `scripts/theme-palette.mjs` is the ONE definition of what a colour becomes in
+  daylight, shared by both generators so the sheet and the tokens cannot drift
+  into two different tans and show a seam down the screen. Twenty-odd named
+  colours (taken from the phone's paper theme, so the surfaces are one product)
+  and an algorithm for the long tail: a neutral has its lightness inverted and
+  warmed; a WARM light tone keeps its hue and darkens; a saturated colour is
+  left alone, because red still means failed and green still means posted.
+- `scripts/build-light-theme.mjs` reads every studio sheet -- the export AND
+  the hand-written ones -- and re-emits each rule that sets a colour, prefixed
+  `body.dc-light`. Processing only the export left Help and Owner dark, since
+  those screens are drawn almost entirely by their own sheets.
+- `scripts/build-theme-tokens.mjs` rewrites the colours in INLINE styles to
+  `var(--dc-n-…, #hex)` and emits their two values. A stylesheet cannot reach
+  an inline style, and 13% of elements carry one. It is IDEMPOTENT: it counts
+  the var() references already in the files, because emitting only what it
+  found on a second run dropped every variable the first run had defined.
+- The theme class goes on `<html>` AND `<body>`. A variable that references
+  another (`--bg: var(--dc-page)`) is substituted where it is DECLARED, so
+  overriding tokens only on body left the page ground night while the app lit.
+- **The stage stays night**, the call studio-mobile.css made first: the 9:16
+  preview and the caption sample keep a dark ground, because a caption is white
+  text meant for video and lighting the frame behind it both hides it and shows
+  a preview that disagrees with the render (invariant 4). Found by `:has()` on
+  the host-rendered ids, never a hashed class.
+
+Traps paid for on the way: the theme-color META cannot take a `var()` -- the
+browser reads it as a colour name and paints nothing -- so the tokeniser now
+skips meta content and setAttribute('content'); and the CSP inline-script hash
+is computed at server start, so every index.html edit needs a preview restart
+or the app renders its shell and never boots.
+
+Verified by measurement, not by eye alone: a contrast sweep over eleven screens
+reports zero pale-text and zero dark-ground elements, the two exceptions being
+the deliberate stage and a marker that is faint on purpose in both themes.
+Dark was re-checked after every step and is unchanged -- every literal is kept
+as the var() fallback, so a browser that never loads the token sheet renders
+exactly what it rendered before.
