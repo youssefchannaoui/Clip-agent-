@@ -63,23 +63,23 @@
    while everything else lit. The class is set on both elements. */
 :root.dc-light,
 body.dc-light {
-  --dc-bg-deepest: #F4EFE4;
-  --dc-bg-deep:    #EDE6D8;
-  --dc-bg:         #FFFDF8;
-  --dc-bg-raised:  #F7F2E7;
-  --dc-line-soft:  #EBE3D3;
-  --dc-line:       #E0D6C1;
-  --dc-line-hover: #CFC2A6;
-  --dc-ink-faint:  #978C79;
-  --dc-ink-dim:    #6C6455;
-  --dc-ink-body:   #3A342A;
-  --dc-ink-bright: #262119;
-  --dc-ink:        #1D1A15;
-  --dc-page:       #F1EADC;
-  --dc-page-2:     #E7DFCE;
-  --dc-bg-alt:     #FAF6EC;
-  --dc-ink-soft:   #5B5446;
-  --dc-ink-muted:  #7B7263;
+  --dc-bg-deepest: #EFE7D8;
+  --dc-bg-deep:    #E8DECB;
+  --dc-bg:         #FFFDF7;
+  --dc-bg-raised:  #F6F0E2;
+  --dc-line-soft:  #E4DAC5;
+  --dc-line:       #D5C8AC;
+  --dc-line-hover: #C2B291;
+  --dc-ink-faint:  #8A7F6A;
+  --dc-ink-dim:    #635B4B;
+  --dc-ink-body:   #332D24;
+  --dc-ink-bright: #221D16;
+  --dc-ink:        #181510;
+  --dc-page:       #EBE2D0;
+  --dc-page-2:     #E2D8C3;
+  --dc-bg-alt:     #F8F3E7;
+  --dc-ink-soft:   #544C3D;
+  --dc-ink-muted:  #726855;
   --dc-gold:       #A2762C;
   --dc-gold-lit:   #7E5B18;
   --dc-well:       rgba(58, 44, 20, .07);

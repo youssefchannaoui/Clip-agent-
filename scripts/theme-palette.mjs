@@ -10,15 +10,19 @@
  *  theme so the two surfaces are one product in daylight. These win over the
  *  algorithm below; everything else is derived. */
 export const NAMED = new Map(Object.entries({
-  '#0e0e11': '#F4EFE4', '#101013': '#EDE6D8', '#121214': '#FFFDF8', '#17171a': '#F7F2E7',
-  '#1e1e22': '#EBE3D3', '#26262a': '#E0D6C1', '#34343a': '#CFC2A6', '#6e6e76': '#978C79',
-  '#8b8b93': '#6C6455', '#bcbcc3': '#3A342A', '#e9e9ed': '#262119', '#f2f2f4': '#1D1A15',
-  '#09090a': '#F1EADC', '#0b0b0d': '#E7DFCE', '#1a1a1e': '#FAF6EC', '#a2a2aa': '#5B5446',
-  '#75717b': '#7B7263', '#19191c': '#F3EDE0', '#37373d': '#D8CCB4', '#f8f8f9': '#1D1A15',
-  '#5e5e66': '#8A8172',
+  '#0e0e11': '#EFE7D8', '#101013': '#E8DECB', '#121214': '#FFFDF7', '#17171a': '#F6F0E2',
+  '#1e1e22': '#E4DAC5', '#26262a': '#D5C8AC', '#34343a': '#C2B291', '#6e6e76': '#8A7F6A',
+  '#8b8b93': '#635B4B', '#bcbcc3': '#332D24', '#e9e9ed': '#221D16', '#f2f2f4': '#181510',
+  '#09090a': '#EBE2D0', '#0b0b0d': '#E2D8C3', '#1a1a1e': '#F8F3E7', '#a2a2aa': '#544C3D',
+  '#75717b': '#726855', '#19191c': '#EFE8DA', '#37373d': '#CBBC9C', '#f8f8f9': '#181510',
+  '#5e5e66': '#7E7462',
   // Gold darkens rather than disappears: the brand colour at a luminance that
   // can be read on paper.
   '#d9b478': '#A2762C', '#f0d6a6': '#7E5B18', '#e6b770': '#8C6118',
+  // The "+" in an empty posting slot. A faithful inversion keeps it as faint
+  // on paper as it is on black, but it is an AFFORDANCE -- it says the square
+  // can be pressed — and paper has less to hide behind than a dark ground.
+  '#33333c': '#A2957C', '#33333a': '#A2957C',
   '#ffffff': '#1D1A15', '#fff': '#1D1A15', '#000000': '#3A2C14', '#000': '#3A2C14',
   // The status colours keep their MEANING and lose their glow. Green still
   // means posted and red still means failed, but #7FD1A6 on paper is a pastel

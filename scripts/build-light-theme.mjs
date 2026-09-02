@@ -34,6 +34,11 @@ const SOURCES = [
   'src/public/studio-help.css',
   'src/public/studio-owner.css',
   'src/public/studio-responsive.css',
+  // The hand-written token and motion sheets carry colour too -- the week
+  // grid's sticky weekday header is a gradient in studio-tokens.css, and
+  // leaving that file out kept a black strip across a lit calendar.
+  'src/public/studio-tokens.css',
+  'src/public/studio-motion.css',
 ].map(rel => path.join(ROOT, rel)).filter(file => fs.existsSync(file));
 const TARGET = path.join(ROOT, 'src/public/studio-light.generated.css');
 
@@ -64,6 +69,15 @@ let depth = 0;
 let buffer = '';
 
 const flushRule = (selector, body) => {
+  /*
+   * Skip what defines the theme rather than wearing it.
+   *
+   * studio-tokens.css holds the palette itself: :root and body.dc-light.
+   * Re-emitting those would remap the light values a second time, and scoping
+   * an already-scoped rule gives `body.dc-light body.dc-light …`, which
+   * matches nothing.
+   */
+  if (/(^|,)\s*:root/.test(selector) || selector.includes('dc-light')) return;
   const kept = [];
   for (const raw of body.split(';')) {
     const declaration = raw.trim();

@@ -4840,3 +4840,30 @@ should be for weekly and daily not monthly cause it doesnt make sense."
   ghost is cleaned up, and the request goes out as
   `{"id":"c-one","at":1788562800000}` -- the clip dragged and the slot dropped
   on.
+
+
+### Daylight, after looking at it on a real screen (v3.92.1)
+
+Youssef: "not fully chnaged, also it looks too white evrything like colors are
+way to light the combo might be a ltitle off."
+
+- **A black strip across the lit calendar**, and the cause was a gap in the
+  generator rather than a missed colour: `studio-tokens.css` was not in its
+  source list, so its rules were never remapped -- including the week grid's
+  sticky weekday header, which is a `linear-gradient(#0E0E11 …)` written by
+  hand. The token and motion sheets are now processed too, with a filter that
+  SKIPS `:root` and any selector already containing `dc-light`: those define
+  the palette rather than wear it, and re-emitting them would remap the light
+  values a second time and produce `body.dc-light body.dc-light …`, which
+  matches nothing.
+- **The paper was too pale to read against.** The first palette was the phone's,
+  and a 6-inch screen forgives a wash that a 27-inch one does not. Ground
+  deepened (#F4EFE4 -> #EFE7D8), borders strengthened (#E0D6C1 -> #D5C8AC), and
+  every ink darkened a step (body #3A342A -> #332D24). Changed in ONE place:
+  `theme-palette.mjs` and the token block are checked against each other by a
+  probe, because a colour that moved in one and not the other is a seam down
+  the middle of the screen.
+- **The "+" in an empty posting slot is deliberately NOT a faithful
+  inversion.** Inverted honestly it is as faint on paper as on black, but it
+  is an affordance -- it says the square can be pressed -- and paper has less
+  to hide behind. It is a named override rather than an algorithmic result.
