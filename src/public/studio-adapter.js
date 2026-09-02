@@ -1491,6 +1491,19 @@
   // preview and the export agree. Middle alignments ignore MarginV entirely, so
   // they stay centred. Without this the preview snapped between three fixed
   // spots and dragging looked broken even once the drag worked.
+  // Would a viewer see a watermark on the export? The same two-part question
+  // templates.js asks server-side, and it must stay the same question: a
+  // watermark of one zero-width space renders as nothing, and a preview that
+  // draws DEENCLIPPED for it is claiming a mark the export does not carry.
+  // NO_INK mirrors templates.js — trim() alone removes whitespace and line
+  // terminators and NOTHING else, which is exactly how the paid feature was
+  // once taken for free.
+  var NO_INK = /[\u0000-\u001F\u007F-\u009F\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u206A-\u206F\u2800\u3164\uFE00-\uFE0F\uFEFF\uFFA0\uFFF9-\uFFFB]/g;
+  function markIsVisible(tpl) {
+    return String(tpl && tpl.watermark || '').replace(NO_INK, '').trim() !== ''
+      && Number(tpl && tpl.watermarkOpacity) > 0;
+  }
+
   function overlayStyle(vertical, horizontal, colour, size, fromEdge, font, upper) {
     var v;
     if (fromEdge === null || fromEdge === undefined || vertical === 'middle') {
@@ -6424,9 +6437,18 @@
       capHandle: handleStyle(UI.tplLayer === 'caption'),
       headStyle: 'display: none;',
       headHandle: 'display: none;',
+      // Hidden when the export would carry no watermark. The mark node is a
+      // LITERAL "DEENCLIPPED" in the design export with markStyle its only
+      // control, so with no visibility rule this frame drew the watermark for
+      // every template whatever the switch said -- including Quran Recitation,
+      // which ships watermark:'' and is never allowed to draw over scripture.
+      // That is invariant 4 by another door: a preview claiming something the
+      // renderer does not do. The editor's own preview (edMarkStyle) has always
+      // had this rule; this frame never did.
       markStyle: overlayStyle(tpl.watermarkPosition.indexOf('top') === 0 ? 'top' : 'bottom',
         tpl.watermarkPosition.indexOf('left') > -1 ? 'left' : tpl.watermarkPosition.indexOf('right') > -1 ? 'right' : 'center',
         tpl.watermarkColor, tpl.watermarkFontSize)
+        + ' display: ' + (markIsVisible(tpl) ? 'block' : 'none') + ';'
         + grabStyle(UI.dragKind === 'mark')
         + (UI.dragKind === 'mark' ? ' outline: 1px dashed rgba(240,214,166,.85); outline-offset: 4px;' : ''),
       markHandle: handleStyle(UI.tplLayer === 'mark'),

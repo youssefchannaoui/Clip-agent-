@@ -3995,3 +3995,34 @@ test('the live bar points where it is going, and travels to get there', () => {
   assert.ok(!/#studioLiveBar\.slb-min \{[^}]*left: auto/.test(html),
     'no left:auto — that is what made it teleport');
 });
+
+test('the template preview draws no watermark when the export carries none', () => {
+  // Youssef, 2 Sept 2026, on the Quran Recitation template with the switch
+  // already off: "once water mark is unticked it should remove water mark of
+  // course". The mark node is a LITERAL "DEENCLIPPED" in the design export
+  // with markStyle its only control, and markStyle had no visibility rule --
+  // so this frame drew a watermark for every template whatever was saved.
+  // That is a preview claiming something the renderer does not do.
+  const mark = tpl => {
+    Object.assign(StudioAdapter.ui, { screen: 'templates', edClipId: null });
+    return StudioAdapter.bindings({
+      ...SAMPLE_STATE,
+      templates: [{ id: 'x', name: 'X', ...tpl }],
+      selectedTemplate: { id: 'x', name: 'X', ...tpl },
+    }).markStyle;
+  };
+  assert.match(mark({ watermark: 'DEENCLIPPED', watermarkOpacity: 100 }), /display: block/,
+    'a real watermark still draws');
+  assert.match(mark({ watermark: '', watermarkOpacity: 0 }), /display: none/,
+    'unticked means gone — this is what was reported');
+  // Quran Recitation ships exactly this, and nothing may ever be drawn over
+  // scripture; the preview said otherwise.
+  assert.match(mark({ watermark: '', watermarkOpacity: 0, captionMode: 'quran' }), /display: none/);
+  // Either half being off is enough, and "empty" means what templates.js means
+  // by it -- a lone zero-width space renders as nothing, so a preview drawing
+  // DEENCLIPPED for one would be the same lie the paywall hole once was.
+  assert.match(mark({ watermark: 'DEENCLIPPED', watermarkOpacity: 0 }), /display: none/);
+  assert.match(mark({ watermark: '', watermarkOpacity: 100 }), /display: none/);
+  assert.match(mark({ watermark: '​⠀', watermarkOpacity: 100 }), /display: none/,
+    'invisible characters are not a watermark');
+});
