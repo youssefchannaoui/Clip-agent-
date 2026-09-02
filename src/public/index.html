@@ -54,6 +54,10 @@
      removing this link, the script below, and the two server allowlist lines;
      the section-cut controls underneath are already built. -->
 <link rel="stylesheet" href="/studio-editor-gate.css">
+<!-- The phone dashboard: a second template over the same bindings, mounted
+     only under the 820px query. Every rule in the sheet sits inside that
+     query, so a desktop render is byte-for-byte unchanged. -->
+<link rel="stylesheet" href="/studio-mobile.css">
 <!-- The clip editor is held back for launch: it opens, blurred, behind a
      "coming soon" notice. Deleting these two lines and the two files they name
      turns it back on. -->
@@ -2345,6 +2349,7 @@ select:focus{outline:none;border-color:var(--blue)}
 <script src="/studio-runtime.js"></script>
 <script src="/studio-adapter.js"></script>
 <script src="/editor-gate.js"></script>
+<script src="/studio-mobile.js"></script>
 
 <script>
 'use strict';
@@ -2596,6 +2601,11 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        Note the column's parent is a two-item flex row (library | activity), so
        inserting a sibling there would add a third column. It goes *inside*. */
     function dockLiveHome(el){
+      /* On a phone the mobile shell owns Home and carries its own slot for
+         this section; the desktop column it would otherwise dock into is
+         hidden there. */
+      const mslot=document.getElementById('dcmLiveSlot');
+      if(mslot){if(el.parentElement!==mslot)mslot.appendChild(el);el.classList.add('slh-docked');return}
       const head=[...document.querySelectorAll('#studio h1,#studio h2,#studio h3')]
         .filter(n=>n!==el&&!el.contains(n)&&/^My library/.test((n.textContent||'').trim()))[0];
       let col=null;
@@ -3288,6 +3298,9 @@ function studioWanted(){return window.STUDIO_SHELL===true}
     });
     let searchEl=null;
     function paintGlobalSearch(vals){
+      /* The phone shell draws its own search sheet; the desktop dropdown
+         would otherwise open against the hidden desktop field, off-screen. */
+      if(document.body.classList.contains('dcm-on')){if(searchEl)searchEl.style.display='none';return}
       const input=[...document.querySelectorAll('#studio input')].find(n=>/search clips or lectures/i.test(n.placeholder||''));
       if(!input)return;
       const q=String(StudioAdapter.ui.query||'').trim().toLowerCase();
@@ -6748,7 +6761,9 @@ function paintLibraryAside(vals){
 
      Mounted off data-tour="lib-add" -- an attribute the design export does not
      control -- rather than a hashed class name a re-import would regenerate. */
-  const add=document.querySelector('[data-tour="lib-add"]');
+  /* Scoped to #studio: on a phone the mobile shell carries the same anchor
+     for the tour, and this panel belongs to the desktop aside alone. */
+  const add=document.querySelector('#studio [data-tour="lib-add"]');
   const aside=add&&add.parentElement;
   if(!aside)return;
   /* The warnings card is a literal section in the design, so it cannot be
@@ -7048,6 +7063,9 @@ function paintStudio(){
   try{ window.dcPaintWatermark && window.dcPaintWatermark(); }catch(e){}
   /* No unread activity -> hide the dot the design hardcoded on. */
   document.body.classList.toggle('studio-read',!vals.activityUnread);
+  /* The phone shell, last: it re-docks host panels the painters above
+     placed, and unmounts itself at any desktop width. */
+  try{ if(window.paintMobile)window.paintMobile(vals,DATA); }catch(e){ console.error('paintMobile',e); }
 }
 function renderAll(){try{window.dcQueueInvite&&window.dcQueueInvite()}catch(e){}if(renderStudio())return;renderHeader();decorateStaticIcons();renderQueue();renderSchedule();renderAnalytics();renderMusic();renderLibrary();renderTemplateSelect();renderPublishing();renderAutomation();renderSide();decorateStaticIcons();updateClock();if(LIBRARY_PROJECT_ID&&!$('#libraryBrowser')?.classList.contains('hide'))renderProjectClips()}
 function renderHeader(){if(!DATA)return;const ready=Boolean(DATA.readiness?.ready);$('#liveDot')?.classList.toggle('off',!ready);if($('#liveText'))$('#liveText').textContent=ready?'Self-hosted AI ready':'Setup required';if($('#tzLabel'))$('#tzLabel').textContent=DATA.timezone||'Australia/Perth';const q=(DATA.clips||[]).filter(c=>c.status==='waiting').length;const s=(DATA.clips||[]).filter(c=>['approved','scheduled','publishing','publish_failed'].includes(c.status)).length;if($('#cQueue')){$('#cQueue').textContent=q;$('#cQueue').classList.toggle('urgent',q>0)}if($('#cSched'))$('#cSched').textContent=s;const next=nextScheduledClip();if($('#cdNum'))$('#cdNum').textContent=next?countdown(next.scheduledAt):'—'}

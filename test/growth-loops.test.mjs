@@ -37,7 +37,11 @@ test.after(async () => {
 });
 
 const DAY = 24 * 60 * 60 * 1000;
-const T0 = Date.UTC(2026, 8, 1, 9, 0, 0);
+// The moment the file loads, not a fixed date: billing's free window measures
+// "days left" against the REAL clock, so a sign-up pinned to 1 Sept 2026 read
+// as "2 days left" once the calendar caught up with it and every "never
+// again" assertion started receiving an upgrade nudge instead of null.
+const T0 = Date.now();
 
 const reset = () => {
   state.authUsers = [];

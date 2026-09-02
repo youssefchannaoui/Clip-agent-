@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1048 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1062 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -2529,6 +2529,116 @@ nothing spoke to them: every product email fires AFTER a lecture is in.
   its reason, like every other gate.
 - Both loops default ON. No email goes out until EMAIL_API_KEY is set on
   Render; the post credit is live for free accounts from this deploy.
+
+## The phone dashboard: a second template over the same bindings (v3.80.0, 2 Sept 2026)
+
+Youssef's brief: a purpose-designed mobile dashboard that "feels like a native
+iOS creator app", every feature kept, and the desktop "pixel-for-pixel
+unchanged" -- "a successful mobile redesign with a damaged desktop interface is
+considered a FAILED implementation."
+
+**What was actually wrong on a phone, found before anything was built.** The
+old phone layer was `studio-responsive.css`: the desktop markup with CSS
+overrides hung on inline-style attribute selectors (`[style*="padding: 22px"]`)
+and ids, which is exactly the "desktop squeezed onto a phone" the brief
+describes. Measured at 390px on the eleven screens: no page overflow on ten of
+them, but 11-62 sub-40px targets and 17-72 sub-12px text runs per screen; the
+hero's marketing headline and four collage dots above the fold; five 9.5px tab
+labels; the library card's duration chip printed OVER its title; "Re-cut
+clips" wrapping mid-word; the Performance KPI band running 24 elements off the
+right edge; the month grid at 7 columns of 52px; the live bar floating on top
+of the tab bar.
+
+**How it is built, and why this shape.** `src/public/studio-mobile.js` is a
+SECOND TEMPLATE authored in the runtime's own AST, rendered by the SAME
+`StudioRuntime` (same patcher, same delegated events, same handler table) from
+the SAME `StudioAdapter.bindings()` object the desktop renders from. Every
+button on the phone calls the function the desktop button calls -- no copied
+logic, no new state, no new route. `paintMobile(vals, DATA)` runs last in
+`paintStudio()`; it mounts `#dcMobile` (before `#studio`, deliberately) only
+while `(max-width: 820px)` matches and the studio is up, and unmounts the
+moment it stops matching. `src/public/studio-mobile.css` sits ENTIRELY inside
+that one query. So a desktop render is byte-for-byte what it was -- and that
+was MEASURED, not reasoned about: 14 screens x 3 widths (1280/1440/1920)
+pixel-diffed before and after against a snapshot of the previous commit; every
+difference was within the noise a second capture of the unchanged baseline
+produced (a paused spinner, a breathing halo, under 30 pixels each).
+
+- **The seam is 820px, not the brief's 767.** It said to inspect the existing
+  breakpoints and use the safest. 820 is where the app has ALWAYS switched to
+  the phone regime, so no device changed regime; a new seam at 767 would have
+  left 768-820 in the old squeezed layout as a third state. One clause was
+  added beside it: `(pointer: coarse) and (max-height: 500px)` -- a rotated
+  PHONE (an iPhone 13 is 844px wide on its side and was falling back to the
+  desktop rail in a 390px-tall window). Desktops report a fine pointer and
+  every tablet is taller than 500px in landscape, so neither is caught.
+- **Five screens are rebuilt** (Home, Clips = the review queue, Lectures, a
+  lecture's detail, Schedule). While one is up, `body.dcm-own` hides the
+  desktop rendering of that screen -- the LAYOUT, never a feature:
+  `test/studio-mobile.test.mjs` renders the mobile template with the real
+  bindings and asserts every desktop control is there and every bound handler
+  resolves (the runtime's `missing` list, empty). **Every other screen keeps its
+  desktop DOM** (Templates, Nasheed, Language, Performance, Tokens, Owner,
+  DeenAI, Help, the gated editor), framed by the phone header and tab bar and
+  tidied where it broke (the Performance band wraps to two columns).
+- **The shell**: 56px header (arch mark, title, search, activity, account),
+  bottom tabs Home / Clips / + Create / Schedule / More with safe-area insets,
+  and sheets for More, search, activity, account, create and the focused
+  review. The More sheet is built FROM the rail's own nav arrays, so a rail
+  item cannot be added without appearing there.
+- **The design's own overlays become bottom sheets without being touched.**
+  They are root-level siblings of `<main>` with hashed classes; after every
+  paint the shell stamps `data-host-ov="job|sheet|detail|player|tour|boot|dock|
+  toast|conn"` on them in TEMPLATE ORDER (a test pins that order against the
+  export) and the stylesheet does the rest. `data-host-*` is the one attribute
+  family the patcher never strips. The Start-job panel is therefore the same
+  seven-step sequence on a phone, as a full-height sheet.
+- **The focused review** (tap any clip card) plays the RENDERED clip in a
+  host-owned `<video>` -- invariant 4 -- with the score's reasons, the
+  transcript, Reject / Edit / Approve, and prev/next through the list it was
+  opened from. A decided clip that leaves the list advances the review the
+  way the desktop deck does; an empty list closes it.
+- **Host panels that dock into desktop columns learned the mobile slot.**
+  `dockLiveHome` docks "Happening now" into `#dcmLiveSlot` when it exists;
+  `paintLibraryAside` is scoped to `#studio` -- its first cut mounted the
+  desktop stats panel INSIDE the phone's "Add a lecture" button, because the
+  button carries the same `data-tour="lib-add"` the tour needs; and
+  `paintGlobalSearch` stands down under `body.dcm-on`, because the desktop
+  dropdown otherwise opened against the hidden desktop field, off-screen.
+- **The tour works on the phone because `#dcMobile` precedes `#studio`.**
+  `tourAnchorEl` is a document-order `querySelector('[data-tour=...]')`, so
+  the shell's anchors (paste, start, rail, queue-tabs, queue-decide, lib-tabs,
+  lib-add, sched-views, sched-ready, sched-outlets) are found before the
+  hidden desktop ones.
+- **Icons are one `<path>` each.** The runtime writes SVG leaves as void tags,
+  and in foreign content a second sibling `<path>` NESTS inside the first and
+  never draws -- the search glass lost its handle and the More dots became one
+  dot. Every icon's `d` carries all its subpaths; dots are zero-length
+  round-capped strokes; the arch mark is two stacked svgs.
+- **`.dcm-body` is the flex spacer even when the shell owns nothing.** With
+  `display:none` there the tab bar rendered under the HEADER on Performance
+  and Templates -- measured, not reasoned. It is see-through and
+  `pointer-events:none` on those screens instead.
+- **The adapter gained fields, never markup**: `key`/`on` on tabs and view
+  options, `isToday/inMonth/past/count` on month cells, `filled/extra` on
+  pips, `videoUrl/hasRender` on clip cards, `id` on library items,
+  `isOperatorUser`. None is read by the desktop template, so the desktop
+  HTML is unchanged.
+- **Measured at 320 / 375 / 390 / 430 and landscape**: no page-level
+  horizontal overflow on any screen, zero sub-44px targets on the owned
+  screens, and the only text under 12px is badge numbers and letter-spaced
+  uppercase micro-labels (11px), which the brief's scale allows.
+- **Traps paid for, in order**: the CSP hash of index.html's inline script is
+  computed at server start, so editing that script mid-session silently
+  blocks the whole app (restart the dev server -- the third time this file
+  has recorded it); `pkill -f` with the server's command line in the same
+  Bash call kills the call's own shell; `Array.from` a vm-realm array before
+  `deepEqual`.
+- **Not done, and said so**: the phone cannot be driven by a real touch
+  device from here -- keyboard-over-sheet behaviour on iOS, the notch insets
+  and momentum scroll are what a real phone verifies. The editor stays gated
+  on every width (Youssef's call), and the phone shows the same coming-soon
+  notice.
 
 ## Open items
 

@@ -1651,6 +1651,7 @@
     var on = UI.screen === key;
     var open = UI.railOpen && (global.innerWidth || 1280) > 820;
     return {
+      key: key,
       label: label,
       short: NAV_SHORT[key] || label,
       // Read only by the phone stylesheet; on a wide screen every item shows.
@@ -2188,6 +2189,8 @@
       return {
         id: c.id,
         caption: c.title || '',
+        videoUrl: c.videoUrl || '',
+        hasRender: Boolean(c.videoUrl),
         // This clip's own loudness, for the bars under the thumbnail. Null for
         // anything rendered before the worker measured it -- the card then
         // draws a flat baseline rather than inventing a shape.
@@ -2326,6 +2329,7 @@
       var scores = mine.map(function (c) { return Number(c.score || 0); }).filter(Boolean).sort(function (a, b) { return a - b; });
       var median = scores.length ? scores[Math.floor(scores.length / 2)] : 0;
       return {
+        id: p.id,
         title: projectTitle[p.id],
         dur: humanDuration(p.durationSec || p.sourceDurationSec),
         when: since(p.submittedAt),
@@ -2564,6 +2568,7 @@
             var past = ds < today;
             cells.push({
               date: String(new Date(ds).getDate()),
+              isToday: isToday, inMonth: inMonth, past: past, count: items.length,
               // overflow:hidden because a busy day's chips and its "+N more"
               // were spilling past the cell's own border. min-width:0 so the
               // grid column may actually shrink -- without it a long chip sets
@@ -2612,7 +2617,7 @@
                 var colour = extra
                   ? (filled ? '#F0D6A6' : 'rgba(217,180,120,.34)')
                   : (filled ? '#D9B478' : '#212127');
-                return { style: 'position: absolute; display: block; width: 5px; height: 5px; border-radius: 50%;'
+                return { filled: filled, extra: extra, style: 'position: absolute; display: block; width: 5px; height: 5px; border-radius: 50%;'
                   + ' top: ' + (7 + row * 8) + 'px; right: ' + (7 + (perRow - 1 - col) * 8) + 'px;'
                   + ' background: ' + colour + ';' };
               }) : [],
@@ -4583,6 +4588,7 @@
         { key: 'all', label: 'All clips', n: clips.length },
       ].map(function (t) {
         return {
+          key: t.key, on: UI.filter === t.key,
           label: t.label, count: t.n,
           style: tabStyle(UI.filter === t.key),
           countStyle: pillStyle(UI.filter === t.key),
@@ -4782,6 +4788,7 @@
         { key: 'archived', label: 'Archived' },
       ].map(function (t) {
         return {
+          key: t.key, on: UI.libFilter === t.key,
           label: t.label,
           count: t.key === 'all' ? projects.length : projects.filter(function (p) { return lecState(p) === t.key; }).length,
           style: tabStyle(UI.libFilter === t.key),
@@ -4850,6 +4857,7 @@
         { id: 'month', label: 'Month' },
       ].map(function (v) {
         return {
+          key: v.id, on: schedView === v.id,
           label: v.label,
           style: wordOption(schedView === v.id, 13),
           select: function (e) { stop(e); setUI({ schedView: v.id }); },
@@ -6272,6 +6280,7 @@
         setUI({ screen: 'owner', menuOpen: false });
         global.StudioAdapter.onLoadOwner(UI.ownerDays || 180);
       },
+      isOperatorUser: isOperator(DATA),
       ownerMenuStyle: isOperator(DATA)
         ? 'display: none; align-items: center; gap: 9px; padding: 8px 9px; border-radius: 8px; color: #E9E9ED; font-size: 12.5px;'
         : 'display: none !important;',
