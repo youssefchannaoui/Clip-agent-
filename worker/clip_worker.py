@@ -1135,6 +1135,138 @@ def remove_existing_moments(candidates: list[Candidate], existing: list[dict[str
     ]
 
 
+def lecture_word_timeline(segments: list[dict[str, Any]]) -> list[tuple[str, float, float]]:
+    """Every transcribed word in the lecture with the time it was said.
+
+    Whisper gives per-word timings; a segment without them is spread evenly
+    across its own span, which is what the caption code already does and is
+    accurate enough to find a verse boundary within a syllable or two.
+    """
+    timeline: list[tuple[str, float, float]] = []
+    for segment in segments:
+        words = segment.get("words") or []
+        if words:
+            for word in words:
+                text = str(word.get("word") or "").strip()
+                if not text:
+                    continue
+                timeline.append((
+                    text,
+                    float(word.get("start", segment["start"])),
+                    float(word.get("end", segment["end"])),
+                ))
+            continue
+        parts = str(segment.get("text") or "").split()
+        if not parts:
+            continue
+        start, end = float(segment["start"]), float(segment["end"])
+        step = (end - start) / len(parts)
+        for position, text in enumerate(parts):
+            timeline.append((text, start + step * position, start + step * (position + 1)))
+    return timeline
+
+
+def ayah_spans(segments: list[dict[str, Any]], corpus: Any) -> list[tuple[float, float]]:
+    """When each recited ayah starts and ends, across the whole lecture.
+
+    Walked ONCE over the whole transcript rather than per clip. That is not
+    only cheaper -- it is more accurate, because the walk identifies verses by
+    continuing the recitation, and a clip handed to it in isolation has no
+    preceding verse to continue from. It is exactly why a clip that began
+    mid-verse used to caption nothing until several verses in.
+    """
+    timeline = lecture_word_timeline(segments)
+    if not timeline or corpus is None:
+        return []
+    transcript = " ".join(word for word, _, _ in timeline)
+    spans: list[tuple[float, float]] = []
+    for hit in corpus.match_sequence(transcript):
+        first = int(hit.get("wordStart", 0))
+        last = min(int(hit.get("wordEnd", 0)), len(timeline))
+        if 0 <= first < last:
+            spans.append((timeline[first][1], timeline[last - 1][2]))
+    return spans
+
+
+# How far a clip edge may be moved to land on a verse. Wide enough to reach the
+# verse it was cutting through, short enough that the clip is still the moment
+# the scorer chose.
+AYAH_SNAP_TOLERANCE = 12.0
+
+
+def snap_clips_to_ayat(
+    selected: list[Candidate],
+    segments: list[dict[str, Any]],
+    template: dict[str, Any],
+    settings: dict[str, Any],
+) -> list[Candidate]:
+    """Start a recitation clip at the start of an ayah, and end it at the end of one.
+
+    Youssef, 2 Sept 2026: "it must start on a aya to make it easy to detect and
+    smoother and cleaner to looking as it starts from the start of an aya not
+    mid way." Both halves of that are real. The look is the obvious one -- a
+    clip opening half way through a verse reads as a mistake. The detection is
+    the bigger one: an opening part-verse scores as a partial against the whole
+    ayah, which is under the floor, so the walk finds nothing until it reaches
+    a verse that happens to be complete. Measured on a real recitation, one
+    clip cut at 51s opened part way through 39:64 and captioned nothing at all
+    for its first fifteen words.
+
+    Only the Quran template, and only when the corpus is present. Anything that
+    cannot be snapped inside the configured duration band is left exactly where
+    the scorer put it: a clip in the wrong place is worse than one that starts
+    mid-verse.
+    """
+    if str(template.get("captionMode", "")) != "quran" or not selected:
+        return selected
+    corpus = quran.load() if quran else None
+    if corpus is None:
+        return selected
+    spans = ayah_spans(segments, corpus)
+    if not spans:
+        return selected
+    starts = sorted({span[0] for span in spans})
+    ends = sorted({span[1] for span in spans})
+    minimum = float(settings.get("clipMinSeconds", 20))
+    maximum = float(settings.get("clipMaxSeconds", 90))
+
+    def nearest(values: list[float], want: float) -> float | None:
+        best = None
+        for value in values:
+            if abs(value - want) > AYAH_SNAP_TOLERANCE:
+                continue
+            if best is None or abs(value - want) < abs(best - want):
+                best = value
+        return best
+
+    moved = 0
+    for candidate in selected:
+        start = nearest(starts, candidate.start)
+        end = nearest(ends, candidate.end)
+        if start is None and end is None:
+            continue
+        start = candidate.start if start is None else start
+        end = candidate.end if end is None else end
+        if end - start < minimum or end - start > maximum:
+            continue
+        group = [
+            segment for segment in segments
+            if float(segment["end"]) > start and float(segment["start"]) < end
+        ]
+        if not group:
+            continue
+        if abs(start - candidate.start) < 0.05 and abs(end - candidate.end) < 0.05:
+            continue
+        candidate.start = start
+        candidate.end = end
+        candidate.segments = group
+        candidate.text = " ".join(str(item["text"]).strip() for item in group).strip()
+        moved += 1
+    if moved:
+        emit("progress", stage=f"Aligning {moved} clip(s) to the start of an ayah", progress=72)
+    return selected
+
+
 def select_candidates(candidates: list[Candidate], limit: int) -> list[Candidate]:
     selected: list[Candidate] = []
     for candidate in sorted(candidates, key=lambda item: (-item.score, item.start)):
@@ -4643,6 +4775,9 @@ def process_more_clips(job: dict[str, Any], job_file: Path) -> None:
     progress("Scoring unused moments", 40, candidateCount=len(candidates), requestedClips=requested)
     candidates = refine_with_ollama(candidates, settings, str(job.get("title") or ""))
     selected = select_candidates(candidates, requested)
+    # Before titling, so a title is written from the words the clip will really
+    # contain rather than the ones it had before its edges moved.
+    selected = snap_clips_to_ayat(selected, segments, job.get("template") or {}, settings)
     # The shortlist is a guess at what will ship; this is what actually ships.
     selected = title_selected_clips(selected, settings, str(job.get("title") or ""))
     clock.lap("score")
@@ -4834,6 +4969,7 @@ def process(job_file: Path) -> None:
     progress("Finding and scoring clips", 69, candidateCount=len(candidates), etaSec=None)
     candidates = refine_with_ollama(candidates, settings, str(job.get("title") or ""))
     selected = select_candidates(candidates, int(settings.get("clipsPerVideo", 8)))
+    selected = snap_clips_to_ayat(selected, segments, job.get("template") or {}, settings)
     selected = title_selected_clips(selected, settings, str(job.get("title") or ""))
     clock.lap("score")
     if not selected:

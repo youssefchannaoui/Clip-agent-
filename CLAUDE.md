@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1029 JS + 515 Python**
+- `npm test` and `npm run check` must pass. Currently **1029 JS + 527 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3704,3 +3704,61 @@ example 4 of 5 clips and closing should have an animation too."
   `grid-template-rows` -- and finally by pausing that transition at 45% and
   measuring 28px. Do not trust a wall-clock animation measurement taken
   against a pane that is not on screen.
+
+
+## The Quran matcher walks the recitation instead of searching it (v3.77.1)
+
+Youssef, 2 Sept 2026: "it didnt be able to catch the quran only on like 2 out
+of 5 clips and sometimes it takes a long time then catchss on mid way. if
+possible also add where it the clip must start on a aya."
+
+Diagnosed against the five clips that actually shipped from one recitation of
+Az-Zumar and An-Naba, not against a fixture. **6 ayat captioned before, two of
+them the WRONG verse; 13 correct and none wrong after.** Four causes, each
+measured:
+
+- **A six-word smallest window cannot find a three-word verse.** 78:31-34 are
+  three or four words each and not one was ever captioned. Worse, `match()`
+  refuses outright when the query is more than 1.6x the verse it matched -- a
+  guard that is right for its own callers and fatal here, since the walk trims
+  the window to the verse's span afterwards anyway. The walk now searches
+  through `_best_position`, which has no such guard, and its smallest window
+  is three words.
+- **Word membership threw away every word Whisper damaged.** A word counted
+  towards a verse only if its normalised form appeared in that verse, and
+  Whisper is wrong INSIDE a word far more often than about the whole of it:
+  "للحبطا" for "ليحبطن", "بجها لمذمرا" for "إلى جهنم زمرا". The right verse
+  scored 0.37. `_fit` aligns CHARACTERS instead and scores the same verse at
+  0.70. That single change is most of the recovered ayat.
+- **The walk could only go forwards, and the missed verses are at the front.**
+  A clip opening mid-verse gives its first ayah a partial score, so nothing
+  matched until a complete verse came along -- exactly the reported "catches
+  on midway". `_fill_back` walks backwards from the first verse found. Two
+  adjacent verses share a boundary word, so a candidate reaching ONE word into
+  the verse already placed is trimmed rather than rejected: rejecting it threw
+  away 39:66 at 0.72 while keeping fragments at 0.44.
+- **Recitation is sequential, so the next verse is a hypothesis, not a
+  search.** After each ayah the walk tries the next few BY NAME (`LOOKAHEAD`
+  3, for a verse Whisper swallowed) at a looser floor (`CONTINUE_FLOOR` 0.5).
+  This is safe precisely because every position tried is a named verse in
+  order; blind search keeps the strict floor, raised to 0.70 because character
+  alignment lifted every score. Both wrong verses -- 23:10 for 39:63 and 27:87
+  for 39:68 -- came from blind search and are gone.
+
+**Clips now start where a verse starts** (`snap_clips_to_ayat`), which is the
+same fix wearing a different hat: the look, and the detection. The ayah map is
+walked ONCE over the whole lecture (`ayah_spans`) rather than per clip -- not
+only cheaper but more accurate, because a clip handed to the walk in isolation
+has no preceding verse to continue from. Edges move at most
+`AYAH_SNAP_TOLERANCE` (12s) and never outside the configured duration band: a
+clip in the wrong place is worse than one starting mid-verse. Measured on the
+real lecture, 15 ayat found across it, clips 01 and 03 snapped by +0.6s and
+-2.4s, and the two whose nearest verse was 22s and 37s away were correctly
+left alone.
+
+**One clip still captions nothing, and that is honest.** Its recitation was
+transcribed as "وسيق الذين كفروا بجها لمذمرا حتى جا اتحت بوابها" -- too far from
+39:71 for even a named hypothesis. A wrong ayah on screen is worse than none.
+The fix for it is to caption from the LECTURE-wide ayah map rather than
+re-matching per clip at render time: the lecture walk does find verses across
+that clip's window. That is the next step and it is not done.

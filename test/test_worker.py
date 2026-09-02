@@ -2340,3 +2340,91 @@ class ScoreRubricV2Tests(unittest.TestCase):
             0, 35, "The hadith says this wording must be reviewed.", self.segs("x", 35))
         self.assertTrue(risk)
         self.assertTrue(1 <= score <= 100)
+
+
+class AyahSnapTests(unittest.TestCase):
+    """A recitation clip starts where a verse starts.
+
+    Youssef, 2 Sept 2026: "it must start on a aya to make it easy to detect and
+    smoother and cleaner to looking as it starts from the start of an aya not
+    mid way." Both halves are real. The look is the obvious one. The detection
+    is the bigger one: a clip opening part way through a verse scores that
+    verse as a partial, which is under the floor, so nothing is captioned until
+    the walk reaches a verse that happens to be complete -- measured on a real
+    clip, fifteen words of silence before the first ayah appeared.
+    """
+
+    def segments(self):
+        # Two verses, cleanly separated, with word timings the way Whisper
+        # returns them.
+        first = ["إن", "للمتقين", "مفازا"]
+        second = ["حدائق", "وأعنابا"]
+        words, clock = [], 10.0
+        for text in first + second:
+            words.append({"word": text, "start": clock, "end": clock + 2.0})
+            clock += 2.0
+        return [{
+            "start": 10.0, "end": clock,
+            "text": " ".join(first + second),
+            "words": words,
+        }]
+
+    def candidate(self, start, end, segments):
+        return worker.Candidate(start=start, end=end, text=segments[0]["text"],
+                                segments=list(segments), score=80, reasons=[], quote_risk=True)
+
+    def fake_corpus(self, spans):
+        class Fake:
+            def match_sequence(self, transcript, minimum=0.70):
+                return spans
+        return Fake()
+
+    def test_the_start_moves_onto_the_verse_it_was_cutting_through(self):
+        segments = self.segments()
+        # The walk reports the first verse over words 0-2, the second over 3-4.
+        spans = [{"ayah": {}, "wordStart": 0, "wordEnd": 3, "score": 0.9},
+                 {"ayah": {}, "wordStart": 3, "wordEnd": 5, "score": 0.9}]
+        clip = self.candidate(12.5, 20.0, segments)   # starts mid first verse
+        with mock.patch.object(worker.quran, "load", return_value=self.fake_corpus(spans)):
+            worker.snap_clips_to_ayat([clip], segments, {"captionMode": "quran"},
+                                      {"clipMinSeconds": 5, "clipMaxSeconds": 90})
+        self.assertAlmostEqual(clip.start, 10.0, places=2,
+                               msg="pulled back to where the verse begins")
+
+    def test_a_snap_that_would_break_the_duration_band_is_refused(self):
+        segments = self.segments()
+        spans = [{"ayah": {}, "wordStart": 0, "wordEnd": 3, "score": 0.9}]
+        clip = self.candidate(12.5, 20.0, segments)
+        with mock.patch.object(worker.quran, "load", return_value=self.fake_corpus(spans)):
+            worker.snap_clips_to_ayat([clip], segments, {"captionMode": "quran"},
+                                      # 9s minimum: snapping to 10.0-16.0 would be 6s
+                                      {"clipMinSeconds": 9, "clipMaxSeconds": 90})
+        self.assertAlmostEqual(clip.start, 12.5, places=2,
+                               msg="a clip in the wrong place is worse than one starting mid-verse")
+
+    def test_every_other_template_is_left_completely_alone(self):
+        segments = self.segments()
+        spans = [{"ayah": {}, "wordStart": 0, "wordEnd": 3, "score": 0.9}]
+        clip = self.candidate(12.5, 20.0, segments)
+        with mock.patch.object(worker.quran, "load", return_value=self.fake_corpus(spans)):
+            worker.snap_clips_to_ayat([clip], segments, {"captionMode": "phrase"},
+                                      {"clipMinSeconds": 5, "clipMaxSeconds": 90})
+        self.assertAlmostEqual(clip.start, 12.5, places=2)
+
+    def test_a_worker_with_no_corpus_changes_nothing(self):
+        segments = self.segments()
+        clip = self.candidate(12.5, 20.0, segments)
+        with mock.patch.object(worker.quran, "load", return_value=None):
+            worker.snap_clips_to_ayat([clip], segments, {"captionMode": "quran"},
+                                      {"clipMinSeconds": 5, "clipMaxSeconds": 90})
+        self.assertAlmostEqual(clip.start, 12.5, places=2)
+
+    def test_the_word_timeline_spreads_a_segment_with_no_word_timings(self):
+        # Older transcripts carry no per-word times; a verse boundary found by
+        # spreading the segment evenly is still within a syllable or two.
+        timeline = worker.lecture_word_timeline([
+            {"start": 0.0, "end": 4.0, "text": "one two three four"},
+        ])
+        self.assertEqual([w for w, _, _ in timeline], ["one", "two", "three", "four"])
+        self.assertAlmostEqual(timeline[0][1], 0.0, places=2)
+        self.assertAlmostEqual(timeline[-1][2], 4.0, places=2)

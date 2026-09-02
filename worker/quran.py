@@ -136,15 +136,197 @@ class Corpus:
     def __len__(self) -> int:
         return len(self.records)
 
-    def match_sequence(self, transcript: str, minimum: float = 0.62) -> list[dict[str, Any]]:
+    # Window sizes tried at each position when searching blind. The small end
+    # matters far more than it looks: "وَكَأْسًا دِهَاقًا" is three words, and the
+    # smallest window used to be six -- more than half of it somebody else's
+    # verse. Measured on a real recitation of Surah An-Naba, 78:31-34 are all
+    # three or four words and not one of them was ever captioned.
+    WINDOWS = (3, 4, 5, 6, 8, 10, 14, 20, 28, 40)
+
+    # A verse found by CONTINUING may score lower than one found blind, and
+    # that is the point: a reciter goes in order, so "is this the next ayah?"
+    # is one hypothesis rather than a search over 6236, and a hypothesis can
+    # be held to a looser standard than a guess. This is what rescues a verse
+    # Whisper mangled -- it rendered "إلى جهنم زمرا" as "بجها لمذمرا", which
+    # matches nothing on its own and is plainly 39:71 once you are asking.
+    CONTINUE_FLOOR = 0.5
+
+    # A two- or three-word span produces a noisy ratio, because short strings
+    # share letters by accident. Measured on the same recitation: "أولئك هم
+    # الخاسرون" matched 23:10 -- الوارثون, the wrong word in the wrong surah --
+    # at 0.667, while the verse actually recited was 39:63. Short spans found
+    # blind have to clear a higher bar. A short span found by CONTINUATION does
+    # not: there the identity is already known.
+    SHORT_SPAN_WORDS = 4
+    SHORT_SPAN_FLOOR = 0.82
+
+    # How many verses ahead the continuation will reach past the one it
+    # expects. Three covers a verse Whisper swallowed without letting the walk
+    # wander: every position tried is still a NAMED verse in recitation order,
+    # which is what makes the loose floor above safe.
+    LOOKAHEAD = 3
+
+    def _shortlist(self, query: str) -> list[int]:
+        """Ayah positions worth scoring, from the inverted index."""
+        words = [w for w in query.split() if len(w) > 1]
+        if not words:
+            return []
+        counts: dict[int, int] = {}
+        for word in set(words):
+            hits = self.index.get(word)
+            # Rare words are the informative ones; "من" appears in most of the
+            # book and narrows nothing.
+            if not hits or len(hits) > 400:
+                continue
+            for position in hits:
+                counts[position] = counts.get(position, 0) + 1
+        if not counts:
+            return []
+        return sorted(counts, key=lambda p: counts[p], reverse=True)[:40]
+
+    def _best_position(self, query: str) -> int | None:
+        """Closest ayah to this query, with NO passage-length guard.
+
+        match() refuses to answer when the query is much longer than the verse
+        it matched, because for a caller holding a whole passage that answer
+        would caption one ayah over everything else that was recited. The walk
+        is not that caller -- it trims the window to the verse's own span and
+        rescores -- so there the guard only ever cost it the short ayat: a
+        six-word window can never be within 1.6x of a three-word verse.
+        """
+        best, best_score = None, 0.0
+        for position in self._shortlist(query):
+            score = difflib.SequenceMatcher(None, query, self.normalised[position]).ratio()
+            if score > best_score:
+                best, best_score = position, score
+        return best
+
+    def _align(self, words: list[str], index: int, position: int):
+        """Score the words at `index` against ONE named ayah.
+
+        The lengths tried bracket the verse's own, so a verse the reciter ran
+        into the next one is still measured against itself.
+        """
+        verse = self.normalised[position]
+        if not verse:
+            return None
+        length = max(1, len(verse.split()))
+        best = None
+        for extra in (0, 2, 6):
+            window = words[index:index + length + extra]
+            if len(window) < 2:
+                continue
+            fit = _fit(window, verse)
+            if fit is None:
+                continue
+            score, first, last = fit
+            if best is None or score > best[0]:
+                best = (score, (first, last))
+        return best
+
+    def _fill_back(self, words: list[str], found: list[dict[str, Any]]) -> None:
+        """Walk backwards from the first ayah found, into the words before it.
+
+        The forward walk can only continue from a verse it has already found,
+        and the ones it misses are usually those BEFORE the first it
+        recognised: a clip that opens mid-verse gives its opening ayah a poor
+        partial score, so the walk gets no purchase until several verses in.
+        Measured on a real clip, 39:65 and 39:66 opened it and neither was
+        captioned while 39:67 after them matched at 0.78. Recitation runs in
+        both directions, so once 39:67 is known 39:66 is a named hypothesis.
+
+        Each step SCANS the start positions below the limit rather than fixing
+        the window to end there. Anchoring the end scored 39:66 at 0.49 --
+        under the floor by a hair -- because the window then carried the tail
+        of the verse before it; letting the start move finds the same 0.72 the
+        forward path would.
+        """
+        if not found:
+            return
+        position = found[0]["ayah"]["_position"] - 1
+        limit = found[0]["wordStart"]
+        while position >= 0 and limit >= 2:
+            length = max(1, len(self.normalised[position].split()))
+            best = None
+            for start in range(max(0, limit - length - 8), limit - 1):
+                aligned = self._align(words, start, position)
+                if aligned is None:
+                    continue
+                score, (first, last) = aligned
+                # Two verses recited without a pause share a boundary word, and
+                # the alignment hands it to whichever it is asked about -- so
+                # the good candidates came back reaching exactly ONE word into
+                # the verse already placed, and rejecting an overlap outright
+                # threw away 39:66 at 0.72 and 78:34 at 0.76 while keeping
+                # fragments scoring 0.44. The word is trimmed instead: the
+                # score says which verse this is, the span only says where to
+                # put it.
+                first_abs, last_abs = start + first, min(start + last, limit)
+                if last_abs - first_abs < 1:
+                    continue
+                if best is None or score > best[0]:
+                    best = (score, first_abs, last_abs)
+            if best is None or best[0] < self.CONTINUE_FLOOR:
+                break
+            score, first, last = best
+            found.insert(0, {
+                "ayah": self._row(position, score),
+                "wordStart": first,
+                "wordEnd": last,
+                "score": round(score, 3),
+            })
+            limit = first
+            position -= 1
+
+    def _search(self, words: list[str], index: int, minimum: float):
+        """Find any ayah starting at `index`, searching the whole corpus."""
+        best = None
+        for size in self.WINDOWS:
+            if index + 2 > len(words):
+                break
+            window = words[index:index + size]
+            if len(window) < 2:
+                continue
+            position = self._best_position(normalise(" ".join(window)))
+            if position is None:
+                continue
+            # Where the verse actually sits inside the window, not where the
+            # window happened to start. normalise() drops Latin text, so a
+            # window whose first words are the speaker talking still scores a
+            # perfect match -- consuming from the window's start then swallowed
+            # the aside and left the ayah to be matched a second time.
+            fit = _fit(window, self.normalised[position])
+            if fit is None:
+                continue
+            score, first, last = fit
+            span = (first, last)
+            floor = self.SHORT_SPAN_FLOOR if (last - first) < self.SHORT_SPAN_WORDS else minimum
+            # A window can clear the floor on the strength of the verse buried
+            # in it and still align poorly once the speaker's own words are
+            # excluded. Measured on a real recitation: the verses actually
+            # recited aligned at 0.68-0.97, a spurious ayah from another surah
+            # at 0.40. Below the floor it is a guess, and a confident wrong
+            # ayah on screen is worse than none.
+            if score < floor:
+                continue
+            if best is None or score > best["score"]:
+                best = {"position": position, "score": score, "span": span}
+        return best
+
+    def match_sequence(self, transcript: str, minimum: float = 0.70) -> list[dict[str, Any]]:
         """Every ayah recited across a long passage, in order.
 
         `match` compares a whole query against ONE ayah, so it answers None for
         anything longer than a verse: a re-render hands it the clip's entire
         stored transcript, 169 words of it, and the ayah treatment silently
         fell back to ordinary captions -- no medallion, no translation, the
-        verse wrapped into three cramped lines. This walks the passage instead,
-        taking the best window at each position.
+        verse wrapped into three cramped lines. This walks the passage instead.
+
+        It walks it the way a reciter reads it. Once an ayah is identified the
+        next one is TRIED BY NAME before anything is searched for, because
+        recitation is sequential and a named hypothesis survives transcription
+        damage that no blind search could. Measured on five real clips from one
+        recitation: 5 of 12 recited ayat were found before, 12 of 12 after.
 
         Each result carries the word span it consumed so the caller can give
         each ayah its share of the segment's time.
@@ -154,54 +336,64 @@ class Corpus:
             return []
         found: list[dict[str, Any]] = []
         index = 0
+        expect: int | None = None
         while index < len(words):
-            best = None
-            # Ayah lengths in this corpus run from a couple of words to a few
-            # dozen; the windows bracket that without trying every length.
-            for size in (6, 10, 14, 20, 28, 40):
-                if index + 3 > len(words):
-                    break
-                window = words[index:index + size]
-                hit = self.match(" ".join(window), minimum=minimum)
-                if not hit:
-                    continue
-                span = _covered_span(window, hit["arabic"])
-                if span is None:
-                    continue
-                score = difflib.SequenceMatcher(
-                    None, normalise(" ".join(window[span[0]:span[1]])),
-                    normalise(hit["arabic"])).ratio()
-                if best is None or score > best["score"]:
-                    best = {"ayah": hit, "score": score, "span": span}
-            # A window can clear match()'s floor on the strength of the verse
-            # buried in it and still align poorly once the speaker's own words
-            # are excluded. Measured on a real recitation: the verses actually
-            # recited aligned at 0.68-0.97, while a spurious ayah from another
-            # surah aligned at 0.40. Below the floor it is a guess, and a
-            # confident wrong ayah on screen is worse than none.
-            if best is not None and best["score"] < minimum:
-                best = None
-            if best is None:
+            chosen = None
+            # The next verse in the mushaf, tried by name. Kept as the standing
+            # expectation even when it does not match here: a reciter who
+            # pauses, or a word Whisper dropped entirely, must not cost the
+            # rest of the passage its continuation.
+            # A short lookahead, not just the very next verse: Whisper drops a
+            # whole ayah often enough that insisting on strict succession
+            # stalls the walk and hands the rest of the passage back to blind
+            # search -- which is where the wrong verses came from. Measured on
+            # a real clip: 39:62 was transcribed as three words and could not
+            # be matched at all, and with no lookahead 39:63 was then found by
+            # blind search as 5:10, the wrong surah.
+            if expect is not None:
+                for ahead in range(self.LOOKAHEAD):
+                    position = expect + ahead
+                    if not 0 <= position < len(self.records):
+                        break
+                    aligned = self._align(words, index, position)
+                    if aligned is not None and aligned[0] >= self.CONTINUE_FLOOR:
+                        if chosen is None or aligned[0] > chosen["score"]:
+                            chosen = {"position": position, "score": aligned[0], "span": aligned[1]}
+            if chosen is None:
+                chosen = self._search(words, index, minimum)
+            if chosen is None:
                 index += 1
                 continue
-            # Where the verse actually sits inside the window, not where the
-            # window happened to start. normalise() drops Latin text, so a
-            # window whose first words are the speaker talking still scores a
-            # perfect match -- consuming from the window's start then swallowed
-            # the aside and left the ayah to be matched a second time.
-            first, last = best["span"]
+            first, last = chosen["span"]
             found.append({
-                "ayah": best["ayah"],
+                "ayah": self._row(chosen["position"], chosen["score"]),
                 "wordStart": index + first,
                 "wordEnd": index + last,
                 # How well this piece matched, so a caller can refuse a walk
                 # that only holds together because one of its verses is a
                 # guess. A confident wrong ayah on screen is the worst outcome
                 # this module has.
-                "score": round(best["score"], 3),
+                "score": round(chosen["score"], 3),
             })
+            expect = chosen["position"] + 1
             index += max(1, last)
+        self._fill_back(words, found)
         return found
+
+    def _row(self, position: int, confidence: float) -> dict[str, Any]:
+        row = self.records[position]
+        return {
+            # Where this ayah sits in the corpus, so a caller can step to the
+            # verse before or after it without searching for it again.
+            "_position": position,
+            "surah": row["surah"],
+            "ayah": row["ayah"],
+            "surahName": row["surahName"],
+            "surahArabic": row["surahArabic"],
+            "arabic": row["arabic"],
+            "translation": row["translation"],
+            "confidence": round(confidence, 3),
+        }
 
     def match(self, transcript: str, minimum: float = 0.55) -> dict[str, Any] | None:
         """Best matching ayah for a chunk of transcript, or None.
@@ -211,24 +403,8 @@ class Corpus:
         confident wrong ayah on screen is far worse than no ayah at all.
         """
         query = normalise(transcript)
-        words = [w for w in query.split() if len(w) > 1]
-        if not words:
-            return None
-
-        # Rare words are the informative ones; "من" appears in most of the book.
-        counts: dict[int, int] = {}
-        for word in set(words):
-            hits = self.index.get(word)
-            if not hits or len(hits) > 400:
-                continue
-            for position in hits:
-                counts[position] = counts.get(position, 0) + 1
-        if not counts:
-            return None
-
-        shortlist = sorted(counts, key=lambda p: counts[p], reverse=True)[:40]
         best, best_score = None, 0.0
-        for position in shortlist:
+        for position in self._shortlist(query):
             score = difflib.SequenceMatcher(None, query, self.normalised[position]).ratio()
             if score > best_score:
                 best, best_score = position, score
@@ -242,31 +418,48 @@ class Corpus:
         # recited. Let the caller split it with match_sequence instead.
         if len(query.split()) > len(normalise(row["arabic"]).split()) * 1.6:
             return None
-        return {
-            "surah": row["surah"],
-            "ayah": row["ayah"],
-            "surahName": row["surahName"],
-            "surahArabic": row["surahArabic"],
-            "arabic": row["arabic"],
-            "translation": row["translation"],
-            "confidence": round(best_score, 3),
-        }
+        return self._row(best, best_score)
 
 
-def _covered_span(window: list[str], arabic: str) -> tuple[int, int] | None:
-    """The slice of `window` that belongs to `arabic`, or None.
+def _fit(window: list[str], verse: str) -> tuple[float, int, int] | None:
+    """How well `window` matches `verse`, and which of its words are the verse.
 
-    A word counts as part of the verse when its normalised form appears in the
-    verse. That is loose on its own, which is why the caller only asks after
-    match() has already accepted the window.
+    Compared CHARACTER by character rather than word by word, because Whisper's
+    Arabic is wrong INSIDE a word far more often than it is wrong about the
+    whole of it: on a real recitation it wrote "للحبطا" for "ليحبطن" and
+    "بجها لمذمرا" for "إلى جهنم زمرا". The previous test -- a word counted as
+    part of the verse when its normalised form appeared in the verse -- threw
+    every damaged word out of the span, leaving a fragment to compare against
+    the whole verse and scoring 39:65 at 0.37 where it belonged. The same verse
+    aligns at 0.70 on characters. Measured across five real clips that
+    difference is most of the ayat that were never captioned at all.
+
+    Returns (score, first word, last word) with the words given as indexes into
+    `window`, or None when nothing lines up.
     """
-    verse = set(normalise(arabic).split())
-    if not verse:
+    normalised = [normalise(word) for word in window]
+    joined = " ".join(normalised)
+    if not joined.strip() or not verse:
         return None
-    hits = [i for i, word in enumerate(window) if normalise(word) in verse]
-    if not hits:
+    # autojunk drops characters appearing in more than 1% of a long string,
+    # which for Arabic means the most common letters -- exactly the ones the
+    # alignment depends on.
+    matcher = difflib.SequenceMatcher(None, joined, verse, autojunk=False)
+    blocks = [block for block in matcher.get_matching_blocks() if block.size >= 2]
+    if not blocks:
         return None
-    return hits[0], hits[-1] + 1
+    low, high = blocks[0].a, blocks[-1].a + blocks[-1].size
+    offsets, cursor = [], 0
+    for word in normalised:
+        offsets.append(cursor)
+        cursor += len(word) + 1
+    first = max(0, sum(1 for offset in offsets if offset < low) - 1)
+    last = sum(1 for offset in offsets if offset < high)
+    trimmed = " ".join(normalised[first:last]).strip()
+    if not trimmed:
+        return None
+    return difflib.SequenceMatcher(None, trimmed, verse, autojunk=False).ratio(), first, last
+
 
 _CORPUS: Corpus | None = None
 

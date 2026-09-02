@@ -230,3 +230,106 @@ class PassageMatchTests(unittest.TestCase):
 
     def test_ordinary_speech_still_matches_nothing(self):
         self.assertEqual(self.corpus.match_sequence("brothers and sisters let us talk about patience"), [])
+
+
+class SequentialRecitationTests(unittest.TestCase):
+    """Recitation runs in order, and the walk is allowed to use that.
+
+    Diagnosed on a real recitation of Surah Az-Zumar and Surah An-Naba,
+    2 Sept 2026, after Youssef reported the Quran being caught on only about
+    two clips in five and "sometimes it takes a long time then catches
+    midway". Measured against the five clips that shipped: 6 ayat captioned
+    with two of them the WRONG verse, against 13 correct and none wrong after.
+    """
+
+    def setUp(self):
+        # Four consecutive ayat, so the walk has a sequence to follow.
+        self.run = [
+            {"surah": 78, "ayah": 31, "surahName": "An-Naba", "surahArabic": "النبأ",
+             "arabic": "إِنَّ لِلْمُتَّقِينَ مَفَازًا", "translation": "Verily for the Righteous there will be a fulfilment"},
+            {"surah": 78, "ayah": 32, "surahName": "An-Naba", "surahArabic": "النبأ",
+             "arabic": "حَدَائِقَ وَأَعْنَابًا", "translation": "Gardens enclosed, and grapevines"},
+            {"surah": 78, "ayah": 33, "surahName": "An-Naba", "surahArabic": "النبأ",
+             "arabic": "وَكَوَاعِبَ أَتْرَابًا", "translation": "Companions of equal age"},
+            {"surah": 78, "ayah": 34, "surahName": "An-Naba", "surahArabic": "النبأ",
+             "arabic": "وَكَأْسًا دِهَاقًا", "translation": "And a cup full to the brim"},
+        ]
+        self.corpus = quran.Corpus(self.run)
+
+    def test_short_ayat_are_found_at_all(self):
+        """Three-word verses were invisible to a six-word smallest window.
+
+        Measured on a real clip: 78:31 to 78:34 are three or four words each
+        and not one of them was ever captioned -- the walk's smallest window
+        was six words, which against a three-word verse is more than half
+        somebody else's, and match() refused outright because the query was
+        further than 1.6x from the verse it matched.
+        """
+        passage = " ".join(a["arabic"] for a in self.run)
+        found = self.corpus.match_sequence(passage)
+        self.assertEqual([(f["ayah"]["surah"], f["ayah"]["ayah"]) for f in found],
+                         [(78, 31), (78, 32), (78, 33), (78, 34)])
+
+    def test_a_verse_the_transcript_mangled_is_still_recognised(self):
+        """A named hypothesis survives damage no blind search could.
+
+        Whisper writes recitation loosely -- on the clip that prompted this it
+        rendered "إلى جهنم زمرا" as "بجها لمذمرا". Once the verse before it is
+        known, the next one is one question rather than a search over 6236, so
+        it can be held to a looser standard and still be safe.
+        """
+        # Second verse damaged the way Whisper damages them: letters dropped
+        # and words run together.
+        passage = "إن للمتقين مفازا حداق وعنابا وكواعب أترابا"
+        found = self.corpus.match_sequence(passage)
+        numbers = [(f["ayah"]["surah"], f["ayah"]["ayah"]) for f in found]
+        self.assertIn((78, 32), numbers, "the damaged verse is still captioned")
+        self.assertEqual(numbers, sorted(numbers), "and the walk stays in order")
+
+    def test_verses_before_the_first_match_are_filled_in_backwards(self):
+        """The verses a clip opens on are the ones most often missed.
+
+        A clip that begins mid-verse gives its opening ayah a poor partial
+        score, so the walk gets no purchase until it reaches a verse that
+        happens to be complete -- which is exactly the "catches on midway"
+        that was reported. Recitation runs both ways: once a verse is known,
+        the one before it is a named hypothesis too.
+        """
+        # The opening verse is damaged; the later ones are clean, so the only
+        # way to reach it is backwards from them.
+        passage = "ان لمتقين مفاز حدائق وأعنابا وكواعب أترابا وكأسا دهاقا"
+        found = self.corpus.match_sequence(passage)
+        self.assertEqual(found[0]["ayah"]["ayah"], 31,
+                         "the damaged opening verse is recovered from the ones after it")
+
+    def test_a_named_continuation_never_invents_a_verse(self):
+        """The loose floor applies only to verses in recitation order.
+
+        A blind search keeps the strict floor, so ordinary speech cannot be
+        captioned as scripture just because the walk is mid-passage.
+        """
+        self.assertEqual(
+            self.corpus.match_sequence("brothers and sisters this is a talk about patience"), [])
+
+    def test_every_verse_kept_still_stands_on_its_own(self):
+        passage = " ".join(a["arabic"] for a in self.run)
+        for piece in self.corpus.match_sequence(passage):
+            self.assertGreaterEqual(piece["score"], self.corpus.CONTINUE_FLOOR)
+
+
+class CharacterAlignmentTests(unittest.TestCase):
+    """Whisper is wrong inside a word more often than about a whole one."""
+
+    def test_a_damaged_word_still_counts_towards_its_verse(self):
+        # "للحبطا" for "ليحبطن": the same letters, mangled in the middle. Word
+        # membership threw it out of the span entirely and scored the right
+        # verse at 0.37; character alignment puts it back.
+        fit = quran._fit(["لين", "شركت", "للحبطا", "عملك"],
+                         quran.normalise("لَئِنْ أَشْرَكْتَ لَيَحْبَطَنَّ عَمَلُكَ"))
+        self.assertIsNotNone(fit)
+        score, first, last = fit
+        self.assertGreater(score, 0.6, "the damaged word does not sink the verse")
+        self.assertEqual((first, last), (0, 4), "and the whole phrase is claimed")
+
+    def test_nothing_in_common_aligns_to_nothing(self):
+        self.assertIsNone(quran._fit(["hello", "world"], quran.normalise("قُلْ هُوَ ٱللَّهُ أَحَدٌ")))
