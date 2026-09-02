@@ -133,6 +133,10 @@ test('every plan gate in the app is one of the listed features', () => {
     // isPaid, so billing.js should hold NO plan gate of its own -- kept in the
     // map at zero so a new one there still fails this test.
     ['src/billing.js', []],
+    // The free-window-closing email must never reach an account that already
+    // pays -- a paid account still has a computed free window, so the plan is
+    // the only thing that can say so.
+    ['src/nudges.js', ['dueNudge: no "your free days end" email to a paying account']],
   ]);
   for (const [file, guards] of allowed) {
     const text = src(`../${file}`);

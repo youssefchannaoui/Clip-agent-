@@ -5,6 +5,9 @@ import { config } from './config.js';
 import { state, save, log, publishingSettings, setPublishingSettings, ownerOfRecord } from './store.js';
 import { connectionFor, connectionListFor, connectionByAccount, addConnection, setConnection, removeConnection, ownerOf } from './tenancy.js';
 import * as billing from './billing.js';
+import { codeFor as referralCodeForUser } from './referrals.js';
+
+const referralCodeFor = user => referralCodeForUser(state, user);
 
 const PROVIDERS = ['youtube', 'instagram', 'facebook', 'tiktok'];
 const META_SCOPES = 'pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish,business_management';
@@ -963,9 +966,41 @@ export async function testConnection(provider, accountId = '', user) {
   }
 }
 
-function captionText(clip, max = 2200) {
-  return [clip.description, clip.hashtags].filter(Boolean).join('\n\n').trim().slice(0, max);
+/**
+ * The credit line a free-plan post carries.
+ *
+ * The same policy as the watermark (Youssef, 1 Sept 2026: on for every Basic
+ * account, and Basic cannot turn it off), written in the caption where the
+ * platform shows text. It carries the ACCOUNT'S OWN invite link, so the person
+ * whose post it is has a reason to want it there -- fifty tokens when someone
+ * it brings in subscribes -- and a paid plan never carries it at all. Empty
+ * when POST_CREDIT=false, or when referrals are off (a bare brand line with
+ * nothing in it for the poster is an advert, and that is a different decision).
+ */
+export function postCredit(clip) {
+  if (!config.postCreditEnabled || !config.referralsEnabled) return '';
+  const owner = ownerOfRecord(clip);
+  // The credit is the watermark's own feature, read from the FEATURES table
+  // the watermark gate reads: whoever may remove the mark carries no credit.
+  // One table, so the two cannot drift -- and social.js stays free of any
+  // plan gate of its own, which the gate-law test enforces.
+  if (!owner || billing.planFeatures(owner).watermark) return '';
+  const base = (config.publicBaseUrl || 'https://deenclipped.online').replace(/^https?:\/\//, '');
+  return `Clipped with DeenClipped · ${base}/r/${referralCodeFor(owner)}`;
 }
+
+function captionText(clip, max = 2200) {
+  const body = [clip.description, clip.hashtags].filter(Boolean).join('\n\n').trim();
+  const credit = postCredit(clip);
+  if (!credit) return body.slice(0, max);
+  // The credit is the part that must survive: the description gives way to
+  // it, never the other way round, or the platforms with the tightest limit
+  // would silently drop the one line the free plan exists to carry.
+  const room = Math.max(0, max - credit.length - 2);
+  return [body.slice(0, room).trim(), credit].filter(Boolean).join('\n\n').slice(0, max);
+}
+/** The caption exactly as a platform receives it, for tests. */
+export const captionTextFor = captionText;
 
 async function youtubeUploadStatus(uploadUrl, accessToken, totalSize) {
   const res = await fetch(uploadUrl, {

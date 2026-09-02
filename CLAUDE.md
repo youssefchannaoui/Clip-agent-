@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1039 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1048 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -2480,6 +2480,55 @@ was missing.
   at eight accounts than eight hundred.
 - **Active-speaker framing.** Needs a real face on a real video to verify;
   wiring it in unseen is the failure this file exists to prevent.
+
+## Growth loops: nudges, the invite at the moment of delight, and the free-plan post credit (v3.79.0, 2 Sept 2026)
+
+Youssef: "improve on the growth part you said". The First 100 funnel had already
+named the number that matters -- accounts that sign up and never import -- and
+nothing spoke to them: every product email fires AFTER a lecture is in.
+
+- **Lifecycle nudges (`src/nudges.js`)**: one email at the one moment an account
+  is stuck. Never imported (24h after sign-up), clips back and none reviewed
+  (24h), approved and nothing connected (48h), and the free window closing
+  (from two days out). The step comes from `referrals.nextStep` -- the SAME
+  definition of "stuck" the owner's funnel and DeenAI's next-action card use,
+  so the three cannot disagree about what an account should do next.
+- **Every rule is a way this could become spam, and each has a test.** Once
+  per step, ever (`user.nudges[step]` is the timestamp it went); never two
+  inside a day; silenced by the bell's own email switch (`emailNotifsOff`, the
+  one gate); inert without EMAIL_API_KEY; capped at 20 a sweep, because the
+  first deploy sees every dormant account at once; `NUDGE_EMAILS=false` turns
+  it off outright. The sweep runs from `agent.tick()` every ten minutes and
+  marks the user BEFORE the send resolves, so a slow provider cannot let the
+  next sweep send the same email twice.
+- **The invite rides the "your clip is live" email.** The moment someone is
+  happiest with the product is the one moment to ask them to bring a friend.
+  `inviteParagraph` in mailer.js appears only when a reward is actually
+  configured, and never names a percentage -- the coupon lives in Stripe
+  (v3.52.0's rule), so the email cannot promise one number while checkout
+  charges another.
+- **A free-plan post carries a credit line with the poster's OWN invite link**
+  (`postCredit` in social.js): "Clipped with DeenClipped ·
+  deenclipped.online/r/CODE". The same policy as the watermark, and it is read
+  from the same FEATURES entry -- `planFeatures(owner).watermark` -- so whoever
+  may remove the mark carries no credit, and social.js holds no plan gate of
+  its own. The gate-law test forbids one there and the first cut failed it with
+  a bare `isPaid`; the table is the sanctioned route. The credit is the LAST
+  thing in the caption and survives the 2200-character limit: the description
+  gives way, never the credit. Empty when `POST_CREDIT=false` or when referrals
+  are off -- a brand line with nothing in it for the poster is an advert, which
+  is a different decision.
+- **The First 100 screen reports the nudges** (`growth.report().nudges`: sent
+  and moved, per step). "Moved" over-credits the email -- it counts anyone who
+  passed the step for any reason -- and the screen says so. Click tracking
+  would be the honest measure and is not something this product does to its
+  customers.
+- **A paying account still has a computed free window** (`freeWindow` reads
+  `createdAt`), so the closing-window email needs the PLAN to say no. That
+  `isPaid` call in nudges.js is allowlisted in `test/plan-gating.test.mjs` with
+  its reason, like every other gate.
+- Both loops default ON. No email goes out until EMAIL_API_KEY is set on
+  Render; the post credit is live for free accounts from this deploy.
 
 ## Open items
 

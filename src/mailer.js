@@ -95,7 +95,30 @@ export function clipsReadyMessage({ title, clipCount, reviewUrl }) {
 
 const PLATFORM_LABELS = { youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook' };
 
-export function postSummaryMessage({ clipTitle, targets, scheduleUrl }) {
+/**
+ * The invite, as one paragraph, only when there is something true to offer.
+ *
+ * Both halves are read from configuration at send time: the token figure from
+ * REFERRAL_BONUS_PAID, and "a discount" only when a Stripe coupon is armed --
+ * the percentage lives on the coupon, so this never names one. With neither
+ * configured the paragraph is empty rather than promising a reward nobody
+ * will receive.
+ */
+export function inviteParagraph(invite) {
+  if (!invite?.url) return { text: '', html: '' };
+  const theirs = invite.discount ? 'they get a discount on their first plan' : '';
+  const yours = invite.bonus > 0 ? `you get ${invite.bonus} tokens when they subscribe` : '';
+  const deal = [theirs, yours].filter(Boolean).join(', and ');
+  if (!deal) return { text: '', html: '' };
+  const lead = 'Know someone with lectures worth clipping? Send them your invite link';
+  return {
+    text: `\n\n${lead} — ${deal}:\n${invite.url}`,
+    html: `<br><br>${lead} — ${deal}:<br><a href="${invite.url}" style="color:#D9B478">${invite.url}</a>`,
+  };
+}
+
+export function postSummaryMessage({ clipTitle, targets, scheduleUrl, invite = null }) {
+  const extra = inviteParagraph(invite);
   const label = key => PLATFORM_LABELS[key] || key;
   // Named per DESTINATION, not per platform: a clip going to three Facebook
   // Pages otherwise reads "Facebook, Facebook, Facebook" in the subject line
@@ -111,13 +134,59 @@ export function postSummaryMessage({ clipTitle, targets, scheduleUrl }) {
   const where = platforms(posted);
   return {
     subject: `Your clip is live on ${where || 'your channels'} — ${String(clipTitle || 'Untitled').slice(0, 60)}`,
-    text: `"${clipTitle}" has been published.\n\n${lines.join('\n')}\n\nSee everything you have posted: ${scheduleUrl}`,
+    text: `"${clipTitle}" has been published.\n\n${lines.join('\n')}\n\nSee everything you have posted: ${scheduleUrl}${extra.text}`,
     html: shell(
       `Your clip is live on ${where || 'your channels'}`,
-      `"${String(clipTitle || 'Untitled')}" has been published.<br><br>${posted.map(target => `${named(target)}: <a href="${target.postUrl || scheduleUrl}" style="color:#D9B478">${target.postUrl || 'view'}</a>`).join('<br>')}${missed.length ? `<br><br>Did not go out: ${missed.map(named).join(', ')} — you can retry from your schedule.` : ''}`,
+      `"${String(clipTitle || 'Untitled')}" has been published.<br><br>${posted.map(target => `${named(target)}: <a href="${target.postUrl || scheduleUrl}" style="color:#D9B478">${target.postUrl || 'view'}</a>`).join('<br>')}${missed.length ? `<br><br>Did not go out: ${missed.map(named).join(', ')} — you can retry from your schedule.` : ''}${extra.html}`,
       'Open your schedule',
       scheduleUrl,
     ),
+  };
+}
+
+/**
+ * The lifecycle nudges (src/nudges.js). One per step, each saying the ONE
+ * thing to do next and nothing else -- a person staring at six things does
+ * none of them. The tone is the product's own: plain, no urgency theatre.
+ */
+export function nudgeMessage({ step, name = '', appUrl, freeDaysLeft = null, invite = null }) {
+  const hi = name ? `${name}, ` : '';
+  const extra = inviteParagraph(invite);
+  const messages = {
+    import: {
+      subject: 'One lecture is all it takes',
+      title: 'Your workspace is ready. It just needs a lecture.',
+      body: `${hi}paste a YouTube link, choose the minutes worth clipping, and the review queue fills up while you do something else. Only the stretch you select is charged, so a five-minute section costs five tokens.`,
+      action: 'Paste a lecture',
+      url: `${appUrl}#home`,
+    },
+    review: {
+      subject: 'Your clips are waiting for a yes',
+      title: 'Your clips came back. Nothing posts until you say so.',
+      body: `${hi}the review queue plays each clip exactly as it would post. Press A to keep one, X to drop it — a lecture's worth of clips takes about two minutes to go through.`,
+      action: 'Open the review queue',
+      url: `${appUrl}#review`,
+    },
+    publish: {
+      subject: 'One connection between you and your first post',
+      title: 'You approved a clip. Connect a channel and it goes out.',
+      body: `${hi}the clip is rendered and sitting in your schedule. Connect YouTube, TikTok, Instagram or Facebook once and it posts in your next window — every clip after it, too.`,
+      action: 'Connect a channel',
+      url: `${appUrl}#home`,
+    },
+    upgrade: {
+      subject: freeDaysLeft === 0 ? 'Your free days end today' : `Your free days end in ${freeDaysLeft} ${freeDaysLeft === 1 ? 'day' : 'days'}`,
+      title: 'The free window is closing.',
+      body: `${hi}your free days are nearly up. A plan keeps the source minutes coming so you can keep turning lectures into clips; nothing you have made is lost either way.`,
+      action: 'See plans',
+      url: `${appUrl}#tokens`,
+    },
+  };
+  const m = messages[step] || messages.import;
+  return {
+    subject: m.subject,
+    text: `${m.title}\n\n${m.body}\n\n${m.action}: ${m.url}${extra.text}\n\nYou can switch these emails off from the bell in your dashboard.`,
+    html: shell(m.title, `${m.body}${extra.html}`, m.action, m.url),
   };
 }
 

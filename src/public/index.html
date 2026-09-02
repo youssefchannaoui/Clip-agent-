@@ -5966,6 +5966,24 @@ StudioAdapter.onProbeSource=async url=>{try{
           const f=g.funnel||{};
           const stage=(label,n,of)=>'<tr class="dcow-hov"><td class="sgl">'+esc(label)+'</td>'
             +'<td class="sgm">'+esc(n||0)+'</td><td class="sgm">'+esc(pct(of?Math.round((n/of)*1000)/10:null))+'</td></tr>';
+          /* The lifecycle emails, per step. "Moved" is every nudged account
+             that has since passed the step, for any reason -- it over-credits
+             the email and the footnote says so. */
+          const nudgeTable=n=>{
+            if(!n) return '';
+            const steps=[['import','Never imported'],['review','Never reviewed'],['publish','Never connected'],['upgrade','Free days closing']];
+            const total=steps.reduce((s,[k])=>s+((n[k]&&n[k].sent)||0),0);
+            if(!total) return '';
+            return '<div class="sgw"><div class="scl"><span class="s97">Nudge emails</span></div>'
+              +'<div class="sdk"><table class="sh1">'
+              +'<tr><th class="sgh">Sent when</th><th class="sgi">Sent</th><th class="sgi">Moved on since</th></tr>'
+              +steps.map(([k,label])=>'<tr class="dcow-hov"><td class="sgl">'+esc(label)+'</td>'
+                +'<td class="sgm">'+esc((n[k]&&n[k].sent)||0)+'</td>'
+                +'<td class="sgm">'+esc((n[k]&&n[k].moved)||0)+'</td></tr>').join('')
+              +'</table></div>'
+              +'<p style="margin:10px 2px 0;font-size:11px;color:#75717b;line-height:1.5">'
+              +'One email per account per step, never two in a row, off with the bell. "Moved on" counts anyone who passed the step afterwards for any reason.</p></div>';
+          };
           const rank=(rows,label)=>{
             if(!rows||!rows.length) return '';
             return '<div class="sgw"><div class="scl"><span class="s97">'+esc(label)+'</span></div>'
@@ -6023,7 +6041,8 @@ StudioAdapter.onProbeSource=async url=>{try{
             +'</table></div>'
             +'<p style="margin:10px 2px 0;font-size:11px;color:#75717b;line-height:1.5">'
             +'An account is not a referral. A referral counts once the invited person has processed a video '
-            +'and approved a clip. '+esc((g.unavailable||[])[0]||'')+'</p></div>';
+            +'and approved a clip. '+esc((g.unavailable||[])[0]||'')+'</p></div>'
+            +nudgeTable(g.nudges);
         }catch(e){/* a reporting panel must never take the screen down */}
       };
 

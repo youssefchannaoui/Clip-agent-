@@ -26,6 +26,7 @@
  * is a channel to stop working on, and sorting by visits hides exactly that.
  */
 import { activationOf, isActivated } from './referrals.js';
+import { stats as nudgeStats } from './nudges.js';
 
 const asArray = v => (Array.isArray(v) ? v : []);
 const idOf = v => String(v || '');
@@ -167,6 +168,13 @@ export function report(state = {}, webSummary = {}) {
     mrrMinor: Math.round(monthlyEquivalent),
     currency,
     activatedUsers: users.filter(u => isActivated(state, u.id)).length,
+
+    // The lifecycle emails: how many went, and how many of those accounts
+    // have since passed the step they were nudged about. "Moved" over-credits
+    // the email -- it counts anyone who moved for any reason -- and the screen
+    // says so. Click tracking would be the honest measure and is not
+    // something this product does to its customers.
+    nudges: nudgeStats(state),
 
     funnel: stages,
     rates: {

@@ -10,8 +10,13 @@ import { sanitiseClipStyle } from './templates.js';
 import { nextSlot, startOfZonedDay, postTimesFor as slotTimes } from './slots.js';
 import * as engine from './local-engine.js';
 import * as social from './social.js';
+import * as nudges from './nudges.js';
+import { codeFor } from './referrals.js';
 
 let timer = null;
+// The nudge sweep walks every account; every fifteen seconds would be waste.
+let lastNudgeSweep = 0;
+const NUDGE_SWEEP_EVERY = 10 * 60 * 1000;
 let ticking = false;
 const publishing = new Set();
 
@@ -37,12 +42,18 @@ function maybeEmailPostSummary(clip) {
   clip.postSummaryEmailedAt = Date.now();
   const owner = ownerOfRecord(clip);
   if (!owner?.email || emailNotifsOff(owner.id)) return;
+  const base = config.publicBaseUrl || 'https://deenclipped.online';
   mailer.send({
     to: owner.email,
     ...mailer.postSummaryMessage({
       clipTitle: clip.title,
       targets,
-      scheduleUrl: `${config.publicBaseUrl || 'https://deenclipped.online'}/app#schedule`,
+      scheduleUrl: `${base}/app#schedule`,
+      // The invite rides on the one email that arrives at a moment of
+      // delight. The paragraph writes itself out when nothing is configured.
+      invite: config.referralsEnabled
+        ? { url: `${base}/r/${codeFor(state, owner)}`, bonus: config.referralBonusPaid, discount: Boolean(config.stripeReferralCoupon) }
+        : null,
     }),
   }).catch(() => {});
 }
@@ -735,6 +746,14 @@ export async function tick() {
       }
     }
     save();
+    if (Date.now() - lastNudgeSweep >= NUDGE_SWEEP_EVERY) {
+      lastNudgeSweep = Date.now();
+      // Off the clip loop's critical path and never allowed to fail it: a
+      // nudge that cannot go out is a warning, not a stalled schedule.
+      nudges.sweep().then(sent => {
+        for (const item of sent) log(`Sent the "${item.step}" nudge.`, 'info', item.userId);
+      }).catch(error => log(`Nudge sweep failed: ${error.message}`, 'warn'));
+    }
   } finally { ticking = false; }
 }
 

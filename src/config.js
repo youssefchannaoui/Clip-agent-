@@ -95,6 +95,22 @@ export const config = {
   // 31 Aug 2026: "max 3 people".
   referralDiscountMaxUses: Math.max(0, number(process.env.REFERRAL_DISCOUNT_MAX_USES, 3)),
 
+  /*
+   * The two growth loops added 2 Sept 2026 (src/nudges.js, social.postCredit).
+   *
+   * Lifecycle nudges: one email per account per step it is stuck on -- never
+   * imported, never reviewed, never connected, free days closing. Inert until
+   * EMAIL_API_KEY is set, silenced per account by the bell's own toggle.
+   *
+   * The post credit: a free-plan post carries "Clipped with DeenClipped" and
+   * the poster's OWN invite link in its caption, the watermark policy written
+   * where platforms show text. Paid plans never carry it. Both default on
+   * because both follow decisions already recorded; either flips off here
+   * without a deploy.
+   */
+  nudgeEmailsEnabled: boolean(process.env.NUDGE_EMAILS, true),
+  postCreditEnabled: boolean(process.env.POST_CREDIT, true),
+
   // Affiliates are an application, not an open door: nobody is approved
   // automatically and no payout runs without a person deciding.
   affiliatesEnabled: boolean(process.env.AFFILIATES_ENABLED, false),
