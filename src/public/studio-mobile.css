@@ -30,26 +30,30 @@
   :root {
     --dcm-head: calc(58px + env(safe-area-inset-top, 0px));
     --dcm-tab: calc(70px + env(safe-area-inset-bottom, 0px));
-    /* NIGHT — the default. Warm ink rather than the desktop's cold charcoal:
-       every ground here carries a brown cast, the radii are large and the
-       edges are shadows rather than hairlines. */
-    --dcm-paper: #100E0B; --dcm-paper2: #17140F; --dcm-card: #1B1712; --dcm-sunk: #241F18;
-    --dcm-edge: #2C261D; --dcm-edge2: #3D3427;
-    --dcm-ink: #F4EEE2; --dcm-ink2: #A99E8A; --dcm-ink3: #7E7464;
-    --dcm-gold: #D9B478; --dcm-gold2: #EFD3A0; --dcm-wash: #2A2115; --dcm-wash2: #3A2E1C;
-    --dcm-ok: #6FC79B; --dcm-ok-w: #1C2C24;
-    --dcm-warn: #DFAE63; --dcm-warn-w: #2C2315; --dcm-warn-t: #EBD9B4;
-    --dcm-bad: #E08A7C; --dcm-bad-w: #2E1C19;
-    --dcm-glass: rgba(27, 23, 18, .93); --dcm-glass-t: #F4EEE2;
-    --dcm-headbg: rgba(16, 14, 11, .86); --dcm-tabbg: rgba(27, 23, 18, .94);
-    --dcm-grad: linear-gradient(165deg, #241D14, #191510);
-    --dcm-accent: linear-gradient(155deg, #E7C68C, #C79A46); --dcm-accent-on: #17120A;
-    --dcm-scrim: rgba(0, 0, 0, .62);
-    --dcm-track: #3D3427; --dcm-knob: #F4EEE2; --dcm-pip: #2C261D;
-    --dcm-answer-t: #EFE0C0;
-    --dcm-sh1: 0 1px 2px rgba(0, 0, 0, .34);
-    --dcm-sh2: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 22px rgba(0, 0, 0, .34);
-    --dcm-sh3: 0 2px 6px rgba(0, 0, 0, .32), 0 18px 44px rgba(0, 0, 0, .46);
+    /* NIGHT — the default, and it is near-BLACK. An earlier cut of this gave
+       every ground a brown cast; Youssef, looking at it: "ew what the hell is
+       that, it used to be mostly black". The grounds are the neutral charcoal
+       the phone has always had; what makes this its own surface is the FORM --
+       Fraunces headings, large radii, shadows instead of hairlines and a
+       floating tab bar -- not a tinted ground. */
+    --dcm-paper: #09090A; --dcm-paper2: #0E0E11; --dcm-card: #121214; --dcm-sunk: #17171A;
+    --dcm-edge: #1E1E22; --dcm-edge2: #2A2A2F;
+    --dcm-ink: #F2F2F4; --dcm-ink2: #8B8B93; --dcm-ink3: #6E6E76;
+    --dcm-gold: #D9B478; --dcm-gold2: #F0D6A6;
+    --dcm-wash: rgba(217, 180, 120, .12); --dcm-wash2: rgba(217, 180, 120, .22);
+    --dcm-ok: #7FD1A6; --dcm-ok-w: rgba(127, 209, 166, .14);
+    --dcm-warn: #E6B770; --dcm-warn-w: rgba(230, 183, 112, .055); --dcm-warn-t: #E7DCC8;
+    --dcm-bad: #E3928C; --dcm-bad-w: rgba(227, 146, 140, .12);
+    --dcm-glass: rgba(10, 10, 12, .86); --dcm-glass-t: #F2F2F4;
+    --dcm-headbg: rgba(9, 9, 10, .9); --dcm-tabbg: rgba(18, 18, 20, .94);
+    --dcm-grad: linear-gradient(165deg, #17171A, #121214);
+    --dcm-accent: linear-gradient(155deg, #F0D6A6, #D9B478); --dcm-accent-on: #0E0E11;
+    --dcm-scrim: rgba(6, 6, 8, .7);
+    --dcm-track: #26262A; --dcm-knob: #E9E9ED; --dcm-pip: #212127;
+    --dcm-answer-t: #E7DCC8;
+    --dcm-sh1: 0 1px 2px rgba(0, 0, 0, .4);
+    --dcm-sh2: 0 1px 2px rgba(0, 0, 0, .34), 0 8px 22px rgba(0, 0, 0, .4);
+    --dcm-sh3: 0 2px 6px rgba(0, 0, 0, .36), 0 18px 44px rgba(0, 0, 0, .55);
     /* night — the stage, which is the same in both themes */
     --dcm-night: #14131A; --dcm-night2: #1D1B24; --dcm-night-l: #2A2833; --dcm-night-t: #F3F1EC;
     --dcm-ui: Outfit, Inter, system-ui, -apple-system, sans-serif;
@@ -184,7 +188,7 @@
     font: 600 11px var(--dcm-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--dcm-ink3); }
   .dcm-sec-h h2::after { content: ''; flex: 1; height: 1px; background: linear-gradient(to right, var(--dcm-edge), transparent); }
   .dcm-card { margin: 16px 0 0; padding: 16px; border-radius: 18px; background: var(--dcm-card); box-shadow: var(--dcm-sh2); }
-  .dcm-card-warn { background: var(--dcm-warn-w); box-shadow: var(--dcm-sh1); }
+  .dcm-card-warn { border: 1px solid var(--dcm-edge); background: var(--dcm-warn-w); box-shadow: var(--dcm-sh1); }
   .dcm-card-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
   .dcm-card-h strong { font: 600 17px var(--dcm-display); letter-spacing: -.015em; }
   .dcm-list { display: flex; flex-direction: column; gap: 10px; }
@@ -292,7 +296,7 @@
   .dcm-act-x { width: 44px; flex: none; border: 0; border-left: 1px solid var(--dcm-edge); background: none; color: var(--dcm-ink3); display: grid; place-items: center; }
 
   /* ── the blocker ───────────────────────────────────────────────────── */
-  .dcm-blocker { margin: 0 0 16px; padding: 14px 16px; border-radius: 18px; background: var(--dcm-warn-w); box-shadow: var(--dcm-sh1); }
+  .dcm-blocker { margin: 0 0 16px; padding: 14px 16px; border: 1px solid var(--dcm-edge); border-radius: 18px; background: var(--dcm-warn-w); box-shadow: var(--dcm-sh1); }
   .dcm-blocker-t { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.5; color: var(--dcm-warn-t); }
   .dcm-blocker-t .dcm-ph { color: var(--dcm-warn); margin-top: 2px; }
   .dcm-blocker-a { display: flex; gap: 8px; margin-top: 12px; }
@@ -306,9 +310,9 @@
   .dcm-chips { display: flex; gap: 8px; margin: 0 -18px 12px; padding: 0 18px 4px; overflow-x: auto; scrollbar-width: none; }
   .dcm-chips::-webkit-scrollbar { display: none; }
   .dcm-chip { flex: none; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; padding: 0 15px; border-radius: 22px; border: 1px solid var(--dcm-edge); background: var(--dcm-card); color: var(--dcm-ink2); font: 600 13px var(--dcm-ui); white-space: nowrap; }
-  .dcm-chip.on { border-color: transparent; background: var(--dcm-ink); color: var(--dcm-paper); }
+  .dcm-chip.on { border-color: transparent; background: var(--dcm-wash2); color: var(--dcm-gold2); }
   .dcm-chip-n { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 20px; background: var(--dcm-sunk); color: var(--dcm-ink2); font: 600 11px/20px var(--dcm-ui); text-align: center; }
-  .dcm-chip.on .dcm-chip-n { background: rgba(128, 128, 128, .28); color: var(--dcm-paper); }
+  .dcm-chip.on .dcm-chip-n { background: rgba(128, 128, 128, .26); color: var(--dcm-gold2); }
   .dcm-bulk { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 12px; padding: 10px 12px; border-radius: 15px; background: var(--dcm-wash); box-shadow: var(--dcm-sh1); }
   .dcm-bulk > span { flex: 1 1 100%; font-size: 12.5px; font-weight: 600; color: var(--dcm-gold2); }
   .dcm-toolrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 12px; }

@@ -2650,11 +2650,13 @@ default and the paper palette lives behind **Account > Appearance > Light**,
 remembered in that browser (`dcmTheme` in localStorage, guarded in try/catch --
 reading storage throws in a private window and must never take the app down).
 
-- **The night is not the desktop's night.** The desktop is cold charcoal
-  (#09090A/#121214) with hairline borders and small radii. The phone is warm
-  ink -- every ground carries a brown cast (#100E0B / #1B1712), the edges are
-  shadows rather than hairlines, the radii are large, and the headings are
-  Fraunces. It reads as a different product surface, which was the ask.
+- **The night is NEAR-BLACK, and a first cut got that wrong.** It tinted every
+  ground brown to make the phone feel like its own surface; Youssef, looking at
+  it: "ew what the hell is that, it used to be mostly black." Corrected in
+  v3.82.1 -- the grounds are the neutral charcoal this app has always used
+  (#09090A / #121214 / #17171A). **What makes the phone its own surface is the
+  FORM, not a tinted ground**: Fraunces headings, large radii, shadows instead
+  of hairlines, a floating tab bar. Reach for shape before colour.
 - **One class swaps the whole design and NOT ONE LAYOUT RULE MOVES.** Every
   colour in the sheet is a token; `:root` holds night and `body.dcm-light`
   redefines the same names. The test asserts exactly that: every token the

@@ -319,7 +319,7 @@ test('the phone is night by default and paper only behind body.dcm-light', () =>
   const css = src('src/public/studio-mobile.css');
   // The default palette is declared on :root, the paper one only on the class.
   const root = css.slice(css.indexOf('  :root {'), css.indexOf('  body.dcm-light {'));
-  assert.ok(/--dcm-paper:\s*#100E0B/i.test(root), 'the default ground is night');
+  assert.ok(/--dcm-paper:\s*#09090A/i.test(root), 'the default ground is near-black');
   const light = css.slice(css.indexOf('  body.dcm-light {'));
   assert.ok(/--dcm-paper:\s*#F4EFE4/i.test(light.slice(0, 2000)), 'the paper ground is behind the class');
   // Every token the light block redefines must already exist in the default,
