@@ -210,3 +210,25 @@ function fsReadBilling() {
 }
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
+
+test('a foreign visitor is told which money the prices are in', async () => {
+  // Adaptive Pricing is enabled on the Stripe account, so Checkout really does
+  // charge in the customer's own currency. The page says so WITHOUT inventing
+  // a converted figure: the rate belongs to Stripe and is applied when the
+  // customer reaches Checkout, so any number we printed here would be a
+  // promise we cannot keep.
+  const marketing = await import('../src/marketing.js');
+  const page = cur => marketing.pricing({ base: 'https://x.test', currentUser: null, currency: cur });
+
+  assert.match(page('gbp'), /Stripe charges you in GBP at checkout/);
+  assert.match(page('usd'), /Stripe charges you in USD at checkout/);
+  assert.match(page('gbp'), /Prices shown in Australian dollars/);
+
+  // Nothing is said to somebody who is not converting anything.
+  assert.doesNotMatch(page('aud'), /Stripe charges you in/);
+  assert.doesNotMatch(page(''), /Stripe charges you in/);
+
+  // And no exchange rate is ever printed, in any currency.
+  assert.doesNotMatch(page('gbp'), /£\d/, 'no converted figure appears');
+  assert.doesNotMatch(page('usd'), /US\$\d/);
+});

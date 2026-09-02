@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { config } from './config.js';
+import * as geo from './geo.js';
 import * as billing from './billing.js';
 
 import { SEO_PAGES, KIND, indexablePages, pageFor, breadcrumbFor, alternatesFor, langOf, isRtl } from './seo-pages.js';
@@ -359,7 +360,27 @@ function planComparison() {
  * these pages carry no script of their own and a radio needs none. The ids are
  * prefixed so they cannot collide with the switch on /plans.
  */
-function pricingCards(currentUser = null) {
+/**
+ * Told to a visitor whose money is not the money these prices are in.
+ *
+ * Deliberately carries no converted figure. We do not hold an exchange rate,
+ * and a number we invented on a pricing page is a promise the checkout does
+ * not keep -- the rate that decides the charge is Stripe's, applied when the
+ * customer reaches Checkout. So this states the two facts we do know: which
+ * currency is written here, and that they will pay in theirs.
+ *
+ * Nothing is said to an Australian visitor, or to one whose country we could
+ * not read: a note about currency conversion shown to somebody who is not
+ * converting anything is noise.
+ */
+function currencyNote(currency) {
+  const code = String(currency || '').toLowerCase();
+  if (!code || code === geo.DEFAULT_CURRENCY) return '';
+  return `<p class="period-note">Prices shown in Australian dollars. `
+    + `Stripe charges you in ${escapeHtml(String(code).toUpperCase())} at checkout, at its own rate.</p>`;
+}
+
+function pricingCards(currentUser = null, currency = '') {
   const accountUrl = currentUser ? '/plans' : '/login?returnTo=/plans';
   const tierNames = { pro: 'Pro', studio: 'Studio' };
   const money = { pro: [config.planPriceWeeklyLabel, config.planPriceMonthlyLabel, config.planPriceYearlyLabel],
@@ -409,6 +430,13 @@ function pricingCards(currentUser = null) {
     + `<input type="radio" name="mkperiod" id="mk-yearly" class="mkperiod">`
     + `<div class="period-switch"><label for="mk-weekly">Weekly</label><label for="mk-monthly">Monthly</label><label for="mk-yearly">Yearly</label></div>`
     + `<p class="period-note">Yearly pricing includes two months free</p>`
+    // Every price on this page is Australian, and a visitor somewhere else has
+    // no way of knowing that from a "$" -- nor that Stripe will convert it for
+    // them. Adaptive Pricing is enabled on the account, so Checkout really
+    // does charge in their own money; this says so WITHOUT inventing a
+    // converted number, because the rate is Stripe's and we do not know it
+    // until the customer is standing in the checkout.
+    + currencyNote(currency)
     + `<div class="pricing-grid">${basic}${paidCard('pro')}${paidCard('studio')}</div>`;
 }
 
@@ -521,7 +549,7 @@ function faqSchema() {
   };
 }
 
-export function home({ base, currentUser }) {
+export function home({ base, currentUser, currency = '' }) {
   // Filmstrip cells: real reel frames standing in for a source timeline. The
   // moment scores match the shape the review queue actually shows.
   // Each moment carries its own detection threshold (--mt): the gold ring and
@@ -790,7 +818,7 @@ export function home({ base, currentUser }) {
           <h2 id="pricing-heading">Pay for source minutes. <em>Keep the workflow.</em></h2>
           <p>One token represents one selected source-video minute. Reviewing, ordinary re-renders and cutting more clips from the processed source do not spend that source time again.</p>
         </div>
-        ${pricingCards()}
+        ${pricingCards(null, currency)}
         <div class="pricing-trust" style="justify-content:center"><span>${escapeHtml(Number(config.tokensFree).toLocaleString())} starter tokens</span><span>No card to start Basic</span><span>Secure Stripe Checkout</span><span>Cancel from the Stripe portal</span></div>
       </div>
     </section>
@@ -851,8 +879,8 @@ export function features({ base, currentUser }) {
     jsonLd: [organizationSchema(base), webSiteSchema(base)] });
 }
 
-export function pricing({ base, currentUser }) {
-  const body = `<main><section class="page-hero pricing-hero wrap"><span class="eyebrow"><i></i>Three tiers · one clear token model</span><h1>Start with the whole workflow. Upgrade for scale.</h1><p>One token represents one selected source-video minute. Subscription allowances refresh normally, while one-time top-up tokens stay in your wallet until used.</p><div class="hero-actions" style="justify-content:center"><a class="button primary" href="/login?returnTo=/app">Start Basic free ${icon('arrow')}</a><a class="button secondary" href="#token-shop">See the token shop</a></div><div class="pricing-trust"><span>${escapeHtml(config.tokensFree)} starter tokens</span><span>${escapeHtml(config.stripeTrialDays)} days of Basic access</span><span>Secure Stripe Checkout</span><span>No raw card storage</span></div></section><section class="page-content"><div class="wrap"><div class="pricing-section-head"><span class="section-label">Basic, Pro and Studio</span><h2>Choose the capability level, then the billing period.</h2><p>Basic includes the real workflow. Pro adds every template, watermark removal and calculated DeenAI insights. Studio adds private Ask, priority rendering and more posting windows.</p></div>${pricingCards(currentUser)}<section class="comparison-section"><div class="pricing-section-head"><span class="section-label">Plan comparison</span><h2>See exactly what changes.</h2><p>Core creation, review, automation and supported publishing are not hidden behind a paid tier.</p></div>${planComparison()}</section>${tokenShop(currentUser)}<div class="pricing-explainer"><div><span class="section-label">How tokens work</span><h2>Clear before you render.</h2><p>DeenClipped reads the source duration, lets you select a start and end time, then estimates usage from that selected range. Subscription allowance is used before purchased top-ups.</p>${checkItem(`${config.tokensPerMinute} token per source minute`,'Usage follows the selected source window.')}${checkItem('More clips do not repeat the source charge','Cutting more candidates from an already processed source does not spend the source minutes again.')}${checkItem('Ordinary re-renders stay fair','Review, template changes and ordinary re-renders do not unnecessarily consume tokens.')}${checkItem('Top-ups persist','Purchased tokens do not disappear when a subscription renews or is cancelled.')}</div><div class="product-frame"><img src="/marketing-assets/workflow-premium.webp" alt="DeenClipped source-minute and workflow overview"></div></div></div></section></main>`;
+export function pricing({ base, currentUser, currency = '' }) {
+  const body = `<main><section class="page-hero pricing-hero wrap"><span class="eyebrow"><i></i>Three tiers · one clear token model</span><h1>Start with the whole workflow. Upgrade for scale.</h1><p>One token represents one selected source-video minute. Subscription allowances refresh normally, while one-time top-up tokens stay in your wallet until used.</p><div class="hero-actions" style="justify-content:center"><a class="button primary" href="/login?returnTo=/app">Start Basic free ${icon('arrow')}</a><a class="button secondary" href="#token-shop">See the token shop</a></div><div class="pricing-trust"><span>${escapeHtml(config.tokensFree)} starter tokens</span><span>${escapeHtml(config.stripeTrialDays)} days of Basic access</span><span>Secure Stripe Checkout</span><span>No raw card storage</span></div></section><section class="page-content"><div class="wrap"><div class="pricing-section-head"><span class="section-label">Basic, Pro and Studio</span><h2>Choose the capability level, then the billing period.</h2><p>Basic includes the real workflow. Pro adds every template, watermark removal and calculated DeenAI insights. Studio adds private Ask, priority rendering and more posting windows.</p></div>${pricingCards(currentUser, currency)}<section class="comparison-section"><div class="pricing-section-head"><span class="section-label">Plan comparison</span><h2>See exactly what changes.</h2><p>Core creation, review, automation and supported publishing are not hidden behind a paid tier.</p></div>${planComparison()}</section>${tokenShop(currentUser)}<div class="pricing-explainer"><div><span class="section-label">How tokens work</span><h2>Clear before you render.</h2><p>DeenClipped reads the source duration, lets you select a start and end time, then estimates usage from that selected range. Subscription allowance is used before purchased top-ups.</p>${checkItem(`${config.tokensPerMinute} token per source minute`,'Usage follows the selected source window.')}${checkItem('More clips do not repeat the source charge','Cutting more candidates from an already processed source does not spend the source minutes again.')}${checkItem('Ordinary re-renders stay fair','Review, template changes and ordinary re-renders do not unnecessarily consume tokens.')}${checkItem('Top-ups persist','Purchased tokens do not disappear when a subscription renews or is cancelled.')}</div><div class="product-frame"><img src="/marketing-assets/workflow-premium.webp" alt="DeenClipped source-minute and workflow overview"></div></div></div></section></main>`;
   return layout({ base, currentUser, ...meta('/pricing'), body,
     jsonLd: [organizationSchema(base), webSiteSchema(base), softwareSchema(base)] });
 }

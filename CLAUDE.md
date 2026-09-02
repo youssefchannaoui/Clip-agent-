@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1076 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1077 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -4409,3 +4409,34 @@ approximation.
   localising the offers, which changes what Google indexes; that is an SEO
   decision worth making on purpose rather than as a side effect, and it would
   show nothing different today anyway.
+
+
+### Adaptive Pricing was already on, which changes what was left to do (v3.86.1)
+
+Checked in the Stripe dashboard on 2 Sept 2026 rather than assumed, and the
+assumption in the entry above was wrong in the useful direction: **Adaptive
+Pricing is already enabled** on the account (Settings -> Payments -> Adaptive
+Pricing; "Payment Links and Managed Payments: Always on", the Checkout toggle
+on, supported currencies listed for all six continents). So a customer in any
+country ALREADY sees and pays their own money at Stripe Checkout. There was
+never a toggle waiting to be flipped.
+
+What Adaptive Pricing does NOT do is populate `currency_options`, which is
+what the pricing pages read. So the gap was only ever the DISPLAYED price, and
+it is closed the honest way: a visitor whose currency is not AUD is told, in
+one line under the period switch, that prices are quoted in Australian dollars
+and that Stripe will charge them in their own currency at checkout. No figure
+is converted -- the rate belongs to Stripe and is applied at Checkout, so any
+number printed on a marketing page would be a promise the checkout does not
+keep. Nothing is said to an Australian visitor, or to one whose country could
+not be read.
+
+Exact local AMOUNTS on the page still need `currency_options` set per price in
+Stripe, which is per-price manual work rather than a toggle. The code for it
+shipped in v3.85.0 and activates itself the moment those amounts exist.
+
+**The config price labels are stale fallbacks, not what customers see.** The
+defaults in config.js still read A$9 / A$29 / A$290 while Stripe holds A$9.99
+and A$29.99 -- production overrides every label through `PLAN_PRICE_*` env
+vars, and the live page and Stripe agree. Do not "fix" the config defaults
+against Stripe without checking the env first; they are two different things.

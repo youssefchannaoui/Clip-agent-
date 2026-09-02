@@ -408,7 +408,10 @@ function publicBase(req) {
   return (config.publicBaseUrl || `${proto}://${host}`).replace(/\/+$/, '');
 }
 function marketingContext(req) {
-  return { base: publicBase(req), currentUser: auth.currentUser(req) };
+  // The visitor's currency travels with every marketing render so the pricing
+  // grid can say which money it is quoting. No price is converted here -- see
+  // currencyNote in marketing.js.
+  return { base: publicBase(req), currentUser: auth.currentUser(req), currency: geo.currencyOf(req) };
 }
 function marketingHome(req) { return marketing.home(marketingContext(req)); }
 function featuresPage(req) { return marketing.features(marketingContext(req)); }
