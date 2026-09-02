@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1024 JS + 488 Python**
+- `npm test` and `npm run check` must pass. Currently **1026 JS + 488 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -2268,6 +2268,44 @@ conflict-marker sweep afterwards named four files by hand -- so the markers left
 in CLAUDE.md were committed and pushed. They broke `check-handover`, whose
 test-count line is a tripwire on shape as well as numbers.
 **Sweep every file** (`grep -rln '^<<<<<<< '`), never a list you typed.
+
+## The live row's tile was spinning with its glyph (v3.76.6, 2 Sept 2026)
+
+Youssef: "that loading animation and the box behind are both rotating it looks
+so bad."
+
+- **The row's icon IS the tile.** `.slh-row > i` draws a 32px box -- border,
+  warm background, radius -- and the same element carries the `ph-circle-notch`
+  glyph, so animating it turned the box as well as the mark.
+- **The spin was an INLINE style** written by the adapter (`iconStyle` in the
+  live-jobs binding), which is the one thing a stylesheet cannot outrank -- the
+  same lesson the rail tooltips paid for in v3.72.11. Three CSS overrides were
+  written and measured as having no effect before the inline style was found;
+  the probe reported `inlineStyle: "... animation: dcSpin 1.1s linear
+  infinite;"` and settled it in one read. **When a CSS override provably does
+  not apply, look for an inline style before adding `!important`.**
+- It comes off the binding now, and the glyph's `::before` carries the rotation
+  in both containers (Home card and floating bar), including inside the
+  reduced-motion block -- without that the double rotation returns for anyone
+  who asks for less motion. Measured: element `animation-name: none`, `::before`
+  `dcSpin`, border and background intact.
+
+## The live bar slides to its corner, and says so (v3.76.6)
+
+Youssef: "arrow facing the right side cause it gets pushed to right side, ALSO
+animation when moving to right side or when moving back."
+
+- The caret read down/up while the bar travels sideways. It is **right** when
+  open (that is where it is going) and **left** when collapsed.
+- **`left: 50% -> auto` and `width: 600px -> auto` cannot be transitioned**,
+  which is why it used to teleport. Both states are lengths now and both are
+  positioned from the same anchor: the collapsed bar keeps `left: 50%` and is
+  pushed by `translate: calc(50vw - 100% - 18px)` -- half the viewport, less
+  its own width, less the margin. `100%` is the element's own width, so the
+  expression stays correct while the width animates alongside it.
+- Measured at 1440x1000: open x=420 w=600, mid-slide x=780 w=438, collapsed
+  x=1102 w=320 with its right edge exactly 18px from the viewport; and back
+  again through x=673. Reduced motion keeps the move and drops the travel.
 
 ## Open items
 

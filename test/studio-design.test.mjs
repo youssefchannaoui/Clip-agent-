@@ -3945,3 +3945,53 @@ test('Studio\'s week scrolls rather than squeezing every cell', () => {
   const paint = /function paintStudio\(\)\{[\s\S]*?\n\}/.exec(html)[0];
   assert.match(paint, /paintScheduleWeek\(\)/, 'it runs on every paint');
 });
+
+test('the live row spins its glyph, never the tile behind it', () => {
+  // On the Home card and in the floating bar the job's icon IS the 32px tile --
+  // its border, its warm background and the glyph are one element -- so an
+  // animation on the element turned the BOX as well as the mark. Youssef,
+  // 2 Sept 2026: "that loading animation and the box behind are both rotating
+  // it looks so bad."
+  //
+  // The spin was an INLINE style from the adapter, which is the one thing a
+  // stylesheet cannot outrank -- the same lesson the rail tooltips paid for.
+  // So it comes off the binding, and the glyph's ::before carries it.
+  Object.assign(StudioAdapter.ui, { screen: 'home' });
+  const vals = StudioAdapter.bindings({
+    ...SAMPLE_STATE,
+    projects: [{ id: 'p', title: 'Running import', status: 'processing', stage: 'importing',
+      progress: 3, startedAt: Date.now() - 40000 }],
+  });
+  const live = Array.from(vals.liveAll || []);
+  assert.ok(live.length, 'a processing project is live');
+  for (const row of live) {
+    assert.ok(!/animation/.test(String(row.iconStyle || '')),
+      'no inline animation on the row icon — it is also the tile');
+  }
+
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  assert.match(html, /#studioLiveHome \.slh-row > i\.ph-circle-notch,\s*\n#studioLiveBar \.slh-row > i\.ph-circle-notch \{ animation: none; \}/,
+    'the tile is held still');
+  assert.match(html, /#studioLiveBar \.slh-row > i\.ph-circle-notch::before \{\s*\n\s*display: inline-block; animation: dcSpin/,
+    'and the glyph carries the rotation');
+});
+
+test('the live bar points where it is going, and travels to get there', () => {
+  // It collapses to the RIGHT, and the caret said "down". Youssef, 2 Sept 2026:
+  // "arrow facing the right side cause it gets pushed to right side, ALSO
+  // animation when moving to right side or when moving back."
+  //
+  // Measured at 1440x1000: open at x=420 w=600, mid-slide x=780 w=438,
+  // collapsed x=1102 w=320 with its right edge exactly 18px from the viewport.
+  const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  assert.match(html, /ph-caret-\$\{liveMin\?'left':'right'\}/,
+    'right to send it away, left to bring it back');
+
+  // `left: 50% -> auto` and `width: ... -> auto` cannot be transitioned, so both
+  // states are lengths and the move is expressed as a translate distance.
+  assert.match(html, /transition: translate [^;]+,\s*\n\s*width /, 'the move is animated');
+  assert.match(html, /#studioLiveBar\.slb-min \{ width: min\(320px[^)]*\)[^;]*; translate: calc\(50vw - 100% - 18px\) 0;/,
+    'and both states are lengths, so there is something to animate between');
+  assert.ok(!/#studioLiveBar\.slb-min \{[^}]*left: auto/.test(html),
+    'no left:auto — that is what made it teleport');
+});

@@ -3750,7 +3750,14 @@
         meta: detail,
         barStyle: 'height: 3px; border-radius: 3px; width: ' + (pct === null ? 100 : pct) + '%; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
         icon: j.kind === 'publish' ? 'ph ph-paper-plane-tilt' : j.kind === 'render' ? 'ph ph-film-strip' : 'ph ph-circle-notch',
-        iconStyle: 'font-size: 14px; color: #F0D6A6;' + (j.kind === 'project' ? ' animation: dcSpin 1.1s linear infinite;' : ''),
+        // The spin is NOT set here. On the Home card this icon is also the
+        // 32px tile -- border, warm background and glyph in one element -- so
+        // an inline animation turned the BOX as well as the mark, and an
+        // inline style is the one thing a stylesheet cannot override. Youssef,
+        // 2 Sept 2026: "that loading animation and the box behind are both
+        // rotating it looks so bad." The glyph's ::before carries the rotation
+        // instead (index.html), which leaves the tile still.
+        iconStyle: 'font-size: 14px; color: #F0D6A6;',
         // Where the job stands in the pipeline, for the stage strip both live
         // surfaces draw. Only a full lecture job walks the pipeline; edits,
         // more-clips and publishes are single-stage and get no strip (null).

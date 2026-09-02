@@ -148,6 +148,16 @@ body.dc-page-hidden .slb-bar i,body.dc-page-hidden .slh-track i{animation-play-s
   #studio .ph-circle-notch,
   #studioLiveBar .ph-circle-notch,
   #studioLiveHome .ph-circle-notch{animation:dcSpin 1.1s linear infinite !important}
+  /* Except the Home row's icon, which is also the tile -- spinning it turns the
+     box too. Its glyph carries the motion instead, here as well, or reduced
+     motion would put the double rotation back. */
+  #studioLiveHome .slh-row > i.ph-circle-notch,
+  #studioLiveBar .slh-row > i.ph-circle-notch{animation:none !important}
+  #studioLiveHome .slh-row > i.ph-circle-notch::before,
+  #studioLiveBar .slh-row > i.ph-circle-notch::before{
+    display:inline-block;animation:dcSpin 1.1s linear infinite !important}
   .slb-bar i,.slh-track i{transition:width .4s ease !important;animation:none !important}
+  /* The bar still moves to its corner, it just arrives rather than travels. */
+  #studioLiveBar{transition:none !important}
   .dc-arrive{display:none}
 }
