@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1144 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1150 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3381,6 +3381,58 @@ shown. It asserts the retirement now, and the more important half: that every
 prerequisite the list carried still reaches the customer somewhere. That is the
 third time in this file a source-string test has passed against a behaviour
 that had changed underneath it.
+
+## A drag ended in the Day view, and daylight went white (v3.96.0, 3 Sept)
+
+Youssef: "when dragging on weekly it then works but then moves to daily also
+day scrap the cream make it white i think its better, white gold and black
+maybe? show boxes more like night shows."
+
+### The drag fell through into a click
+
+A `pointerup` is followed by a real `click`, and a schedule cell's own click
+opens that day -- so every successful Week drag ALSO threw you into the Day
+view. The move had already happened, which is what made it read as two things
+at once rather than as a broken drag. The click after a drag means nothing and
+is swallowed: one listener, at the CAPTURE phase so it lands before the
+studio's delegated handler, `once` so it eats exactly one, and removed on a
+timer for the drop that produces no click at all. Gated on `didMove`, and that
+half was proven by driving it -- a plain click on the same cell still opens the
+day.
+
+### Daylight is white, gold and black
+
+The cream was a wash: at 27 inches every ground read as paper and the cards
+had nothing to sit on. Grounds are cool neutral greys now and **a card is
+#FFFFFF**, which is what gives a box an edge the way night does (page #09090A,
+card #17171A).
+
+- **A plain inversion REVERSES the order among the near-blacks, and it did.**
+  The month cell is #151517 -- lighter than its page at night -- and inverting
+  put it at a grey DARKER than the page in daylight, so every cell read as a
+  hole rather than a card. Anything below .10 lightness is a GROUND now and is
+  mapped, in order, onto the band above the page's own lightness. Everything
+  above that still inverts, because ink and lines are lighter than their ground
+  at night and must be darker than it on white.
+- **The inversion multiplier is 0.88, not 0.97.** A night "faint marker"
+  (#4A4A52) came back at .68 lightness -- legible on black, a grey nobody reads
+  on white. Measured across ten screens: 4 elements too pale before, ONE after,
+  and that one (`#3A3A40`, the DeenAI kicker) is faint on purpose in both
+  themes -- it is quieter against black than it now is against white.
+- **The tokeniser was writing `var()` into SVG presentation attributes**
+  (`stroke="var(--dc-n-d9b478, #D9B478)"`), which does not resolve: the path
+  then draws with the default, a black fill and no stroke. It had reached the
+  arch mark in the onboarding strip. `stroke`/`fill`/`stop-color` are skipped
+  now, beside the existing `<meta>` skip -- and the gold needs no theming
+  anyway, being the brand colour in both.
+- **`test/light-theme.test.mjs` is the guard this theme never had**, and it
+  earned its place immediately by failing on two drifts I had just written:
+  `--dc-bg-alt` set to #F7F7F9 in the sheet and #FFFFFF by the generator, and a
+  page tinted far enough to still read as cream. It compares the hand-written
+  token block against `daylight()` colour for colour, asserts a card outranks
+  the page IN BOTH THEMES, and fails on a var() in an SVG attribute.
+- Night is untouched: every dark value in the generated token sheet is
+  byte-identical, the two additions being golds that map to themselves.
 
 ## Open items
 

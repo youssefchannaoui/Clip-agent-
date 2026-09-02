@@ -156,3 +156,25 @@ test('a draggable cell is given a grip, and only while it can move', () => {
   assert.ok(host.includes("Number(cell.dataset.slot)>=Date.now()"), 'the grip is gated on the slot still being ahead');
   assert.ok(host.includes("dayCard.parentElement"), 'the Day list is wired as well as the week grid');
 });
+
+/**
+ * A drag must not end in a click.
+ *
+ * Youssef, 3 Sept 2026: "when dragging on weekly it then works but then moves
+ * to daily also." A pointerup is followed by a real `click`, and a schedule
+ * cell's own click opens that day — so every successful Week drag threw you
+ * into the Day view. The move had already happened, which is what made it read
+ * as two things happening instead of one.
+ */
+test('the click that follows a drag is swallowed, once and at capture', () => {
+  const host = fs.readFileSync(new URL('../src/public/index.html', import.meta.url), 'utf8');
+  const at = host.indexOf('const swallow=');
+  assert.ok(at > -1, 'the click after a drag must be suppressed');
+  const near = host.slice(at - 900, at + 400);
+  assert.ok(/if\(didMove\)\{/.test(near),
+    'only a real drag suppresses a click — a plain click must still open the day');
+  assert.ok(/capture:true,once:true/.test(near),
+    'capture, so it lands before the studio’s delegated handler; once, so it eats one click');
+  assert.ok(/removeEventListener\('click',swallow,true\)/.test(near),
+    'a drop that produces no click must not leave the listener armed');
+});

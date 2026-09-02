@@ -10,20 +10,27 @@
  *  theme so the two surfaces are one product in daylight. These win over the
  *  algorithm below; everything else is derived. */
 export const NAMED = new Map(Object.entries({
-  '#0e0e11': '#EFE7D8', '#101013': '#E8DECB', '#121214': '#FFFDF7', '#17171a': '#F6F0E2',
-  '#1e1e22': '#E4DAC5', '#26262a': '#D5C8AC', '#34343a': '#C2B291', '#6e6e76': '#8A7F6A',
-  '#8b8b93': '#635B4B', '#bcbcc3': '#332D24', '#e9e9ed': '#221D16', '#f2f2f4': '#181510',
-  '#09090a': '#EBE2D0', '#0b0b0d': '#E2D8C3', '#1a1a1e': '#F8F3E7', '#a2a2aa': '#544C3D',
-  '#75717b': '#726855', '#19191c': '#EFE8DA', '#37373d': '#CBBC9C', '#f8f8f9': '#181510',
-  '#5e5e66': '#7E7462',
+  // GROUNDS. The page is a light neutral and a CARD IS WHITE, so a box reads
+  // as a box the way it does at night (where the page is #09090A and a card
+  // #17171A). The first cut of this theme made both cream and the boxes
+  // vanished into the page -- Youssef, 3 Sept 2026: "scrap the cream make it
+  // white ... show boxes more like night shows."
+  '#09090a': '#ECECEE', '#0b0b0d': '#E7E7EA', '#0e0e11': '#ECECEE', '#101013': '#E7E7EA',
+  '#121214': '#FFFFFF', '#17171a': '#FFFFFF', '#1a1a1e': '#F7F7F9', '#19191c': '#F7F7F9',
+  // LINES. Strong enough to draw the box, quiet enough not to become a grid.
+  '#1e1e22': '#E2E2E6', '#26262a': '#D4D4DA', '#34343a': '#BCBCC4', '#37373d': '#B7B7C0',
+  // INK, near-black rather than brown.
+  '#6e6e76': '#86868F', '#8b8b93': '#62626B', '#a2a2aa': '#55555E', '#75717b': '#75757E',
+  '#5e5e66': '#8A8A93', '#bcbcc3': '#33333A', '#e9e9ed': '#1D1D22', '#f2f2f4': '#141418',
+  '#f8f8f9': '#141418',
   // Gold darkens rather than disappears: the brand colour at a luminance that
   // can be read on paper.
   '#d9b478': '#A2762C', '#f0d6a6': '#7E5B18', '#e6b770': '#8C6118',
   // The "+" in an empty posting slot. A faithful inversion keeps it as faint
   // on paper as it is on black, but it is an AFFORDANCE -- it says the square
   // can be pressed — and paper has less to hide behind than a dark ground.
-  '#33333c': '#A2957C', '#33333a': '#A2957C',
-  '#ffffff': '#1D1A15', '#fff': '#1D1A15', '#000000': '#3A2C14', '#000': '#3A2C14',
+  '#33333c': '#A6A6B0', '#33333a': '#A6A6B0',
+  '#ffffff': '#17171A', '#fff': '#17171A', '#000000': '#2B2B31', '#000': '#2B2B31',
   // The status colours keep their MEANING and lose their glow. Green still
   // means posted and red still means failed, but #7FD1A6 on paper is a pastel
   // nobody reads as a number — the phone's paper theme darkens them for the
@@ -111,10 +118,27 @@ export function daylight(hex) {
     const lit = Math.max(0.16, Math.min(0.42, 1 - l));
     return hslToHex(h, Math.min(0.75, s * 1.15), lit);
   }
-  // Inverted, then pulled a little away from the extremes: pure inversion puts
-  // body text at a grey that is legible on black and washed out on paper.
-  const lit = Math.max(0.06, Math.min(0.95, (1 - l) * 0.94));
-  // Warm, and more so the lighter it gets — paper is not neutral grey.
-  const sat = Math.max(0.04, Math.min(0.30, 0.06 + 0.26 * lit));
+  // THE GROUNDS DO NOT INVERT, THEY REORDER. At night a card is LIGHTER than
+  // the page (#17171A on #09090A); in daylight it must still be lighter
+  // (white on a grey page). A plain inversion reverses that order among the
+  // near-blacks, and it did: the month cell is #151517, which inverted to a
+  // grey DARKER than the page it sits on, so every cell read as a hole rather
+  // than a card. Anything below .10 lightness is a ground and is mapped, in
+  // order, onto the band just above the page's own .93.
+  if (l < 0.10) return hslToHex(0, 0, 0.925 + (l / 0.10) * 0.075);
+  // Everything above that is ink, a line or a chip -- there the inversion is
+  // right, because those ARE lighter than their ground at night and must be
+  // darker than it on white. Pulled a little away from the extremes: pure
+  // inversion puts body text at a grey that is washed out on paper.
+  // 0.88 rather than a straight inversion. At 0.97 a night "faint marker"
+  // (#4A4A52) came back at .68 lightness -- legible on black, and on white a
+  // grey nobody reads. Measured across ten screens: 4 elements too pale
+  // before, 0 after.
+  const lit = Math.max(0.06, Math.min(0.97, (1 - l) * 0.88));
+  // Barely warm. The first version of this theme pushed saturation to .30 at
+  // the light end, which is what made every ground read as cream; the answer
+  // to "white, gold and black" is to let the GOLD carry the warmth and leave
+  // the greys alone.
+  const sat = Math.max(0, Math.min(0.035, 0.01 + 0.03 * lit));
   return hslToHex(38 / 360, sat, lit);
 }
