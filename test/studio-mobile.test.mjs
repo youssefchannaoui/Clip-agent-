@@ -303,6 +303,37 @@ test('the activity, account, search and create sheets carry the desktop dropdown
 test('the mobile template names every desktop screen flag it owns and no hashed class', () => {
   const sandbox = makeSandbox();
   const tpl = JSON.stringify(sandbox.StudioMobile.template());
-  for (const flag of ['isHome', 'isQueue', 'isLibrary', 'isDetail', 'isSchedule']) assert.ok(tpl.includes('"p":"' + flag + '"'), flag);
+  for (const flag of ['isHome', 'isQueue', 'isLibrary', 'isDetail', 'isSchedule', 'isTemplates', 'isMusic', 'isPerf', 'isTokens', 'isDeenai']) assert.ok(tpl.includes('"p":"' + flag + '"'), flag);
   assert.doesNotMatch(tpl, /"class":"s[0-9a-z]{1,3}"/, 'a hashed design class in the mobile template');
+});
+
+/*
+ * Night is the phone's own look and paper is a CHOICE. Youssef, 2 Sept 2026,
+ * on the first cut of the new look: "um why is it white??!?!?! if you want you
+ * can do dark mode on settings" -- so dark is the default, light lives behind
+ * one control, and every palette value is a token so that one class swaps the
+ * whole design without a single layout rule moving.
+ */
+test('the phone is night by default and paper only behind body.dcm-light', () => {
+  const sandbox = makeSandbox();
+  const css = src('src/public/studio-mobile.css');
+  // The default palette is declared on :root, the paper one only on the class.
+  const root = css.slice(css.indexOf('  :root {'), css.indexOf('  body.dcm-light {'));
+  assert.ok(/--dcm-paper:\s*#100E0B/i.test(root), 'the default ground is night');
+  const light = css.slice(css.indexOf('  body.dcm-light {'));
+  assert.ok(/--dcm-paper:\s*#F4EFE4/i.test(light.slice(0, 2000)), 'the paper ground is behind the class');
+  // Every token the light block redefines must already exist in the default,
+  // or a value would fall back to nothing in one theme and not the other.
+  const names = t => [...t.matchAll(/(--dcm-[a-z0-9-]+):/g)].map(m => m[1]);
+  const rootNames = new Set(names(root));
+  for (const n of names(light.slice(0, light.indexOf('\n  }')))) {
+    assert.ok(rootNames.has(n), n + ' is set for paper and never for night');
+  }
+  // The one setting, and its default.
+  const tpl = JSON.stringify(sandbox.StudioMobile.template());
+  assert.ok(tpl.includes('m.themeDark') && tpl.includes('m.themeLight'), 'the appearance control is in the account sheet');
+  const vals = sandbox.StudioAdapter.bindings(DATA());
+  const mv = sandbox.StudioMobile.vals(vals, DATA());
+  assert.equal(mv.m.themeDarkCls, 'on', 'night with nothing stored');
+  assert.equal(mv.m.themeLightCls, '');
 });

@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1062 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1063 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -2640,7 +2640,41 @@ produced (a paused spinner, a breathing halo, under 30 pixels each).
   on every width (Youssef's call), and the phone shows the same coming-soon
   notice.
 
-## The phone got its own look: paper and ink (v3.81.0, 2 Sept 2026)
+## The phone got its own look — night by default, paper on request (v3.82.0)
+
+**v3.81.0 shipped it PAPER and that was wrong.** Youssef, looking at it: "um
+why is it white??!?!?! if you want you can do dark mode on settings." The brief
+was "a new COMPLETE look for mobile only", and that was read as "get off the
+dark", which it never said. Corrected the same day: the phone is NIGHT by
+default and the paper palette lives behind **Account > Appearance > Light**,
+remembered in that browser (`dcmTheme` in localStorage, guarded in try/catch --
+reading storage throws in a private window and must never take the app down).
+
+- **The night is not the desktop's night.** The desktop is cold charcoal
+  (#09090A/#121214) with hairline borders and small radii. The phone is warm
+  ink -- every ground carries a brown cast (#100E0B / #1B1712), the edges are
+  shadows rather than hairlines, the radii are large, and the headings are
+  Fraunces. It reads as a different product surface, which was the ask.
+- **One class swaps the whole design and NOT ONE LAYOUT RULE MOVES.** Every
+  colour in the sheet is a token; `:root` holds night and `body.dcm-light`
+  redefines the same names. The test asserts exactly that: every token the
+  light block sets must already exist in the default, or a value would fall
+  back to nothing in one theme and not the other.
+- **The STAGE is night in both themes** -- the focused review, the video
+  player, the Start-job panel, the live bar and the design export's own
+  overlays. That is where a clip is watched and judged, and those surfaces
+  belong to the generated export, which this sheet may reskin but must not
+  rewrite.
+- **The dark chrome for the three framed screens is a LIGHT-theme rule only.**
+  Help, Owner and the gated editor are still the desktop's own dark rendering;
+  in paper the header and tab bar go dark with them
+  (`body.dcm-light.dcm-on:not(.dcm-own)`), because paper chrome around a night
+  screen looks broken. In night there is nothing to reconcile.
+
+The rest of this section is the release that introduced the look, kept because
+every trap in it is still live.
+
+## The phone look and what it cost to get right (v3.81.0, 2 Sept 2026)
 
 Youssef, on the v3.80.0 phone build: "Nah you need to figure out with a new
 COMPELTLE new look for mobile ONLY." He was right -- that release solved the
@@ -2648,7 +2682,7 @@ LAYOUT (a second template over the same bindings) and then dressed it in the
 desktop's dark charcoal and gold, so the phone read as the same app squeezed
 smaller. The layout was never the complaint.
 
-- **The phone is now paper.** Warm paper ground (#F4EFE4), white cards with
+- **The look itself.** Cards with
   soft shadows instead of hairline borders, **Fraunces** for every heading
   (loaded from Google Fonts with the stylesheet link MEDIA-SCOPED to the phone
   query, so a desktop pays nothing for it), gold as INK (#A2762C) rather than

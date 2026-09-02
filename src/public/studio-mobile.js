@@ -58,7 +58,22 @@
 
   // Mobile-only UI state. Deliberately tiny: which sheet is open, and which
   // clip the focused review is on. Everything else is the adapter's UI.
-  var M = { sheet: null, review: null };
+  var M = { sheet: null, review: null, theme: null };
+  // Night is the default and the product's own look; paper is a choice, kept
+  // in this browser only (a per-viewer convenience, so no route and no server
+  // state). Reading storage can THROW in a private window, so it is guarded
+  // and falls back to the default rather than taking the app down with it.
+  function themeNow() {
+    if (M.theme) return M.theme;
+    var saved = '';
+    try { saved = (global.localStorage && global.localStorage.getItem('dcmTheme')) || ''; } catch (e) { saved = ''; }
+    M.theme = saved === 'light' ? 'light' : 'dark';
+    return M.theme;
+  }
+  function setTheme(next) {
+    M.theme = next === 'light' ? 'light' : 'dark';
+    try { if (global.localStorage) global.localStorage.setItem('dcmTheme', M.theme); } catch (e) { /* private window */ }
+  }
   var root = null, studio = null, rvVideo = null, template = null, listening = false;
 
   // ── template helpers (the runtime's AST, without the JSON noise) ──────────
@@ -597,6 +612,13 @@
         h('span', { class: 'dcm-me-t' }, [h('b', {}, [tx('accountName')]), h('i', {}, [tx('accountEmail')]), h('em', {}, [tx('currentPlan'), ' · ', tx('tokenBalance'), ' tokens'])]),
       ]),
       h('div', { class: 'dcm-menu' }, [
+        h('div', { class: 'dcm-row dcm-theme' }, [
+          ph('ph ph-moon-stars'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Appearance'), h('i', {}, [tx('m.themeNote')])]),
+          h('div', { class: 'dcm-seg' }, [
+            h('button', { type: 'button', class: cat('dcm-seg-b ', b('m.themeDarkCls')), on: { click: 'm.themeDark' } }, 'Dark'),
+            h('button', { type: 'button', class: cat('dcm-seg-b ', b('m.themeLightCls')), on: { click: 'm.themeLight' } }, 'Light'),
+          ]),
+        ]),
         row({ on: { click: 'goTokens' } }, [ph('ph-fill ph-coins'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Tokens & billing')]), svg(I.next, { width: '15', height: '15' })]),
         row({ on: { click: 'accountSettings' } }, [ph('ph ph-user-circle'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Account settings')]), svg(I.next, { width: '15', height: '15' })]),
         row({ on: { click: 'helpGuides' } }, [ph('ph ph-lifebuoy'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Help & guides')]), svg(I.next, { width: '15', height: '15' })]),
@@ -985,6 +1007,12 @@
     m.openMore = openSheet('more'); m.openSearch = openSheet('search'); m.openActivity = openSheet('activity');
     m.openAccount = openSheet('account'); m.openCreate = openSheet('create');
     m.closeSheet = act(function () { M.sheet = null; repaint(); });
+    var theme = themeNow();
+    m.themeDarkCls = theme === 'dark' ? 'on' : '';
+    m.themeLightCls = theme === 'light' ? 'on' : '';
+    m.themeNote = theme === 'light' ? 'Paper — light, for daylight' : 'Night — the default';
+    m.themeDark = act(function () { setTheme('dark'); repaint(); });
+    m.themeLight = act(function () { setTheme('light'); repaint(); });
     m.openConnections = act(function () { M.sheet = null; global.StudioAdapter.onOpenConnections(); });
     m.sheetMore = M.sheet === 'more'; m.sheetSearch = M.sheet === 'search'; m.sheetActivity = M.sheet === 'activity';
     m.sheetAccount = M.sheet === 'account'; m.sheetCreate = M.sheet === 'create';
@@ -1201,7 +1229,7 @@
     if (root && root.parentNode) root.parentNode.removeChild(root);
     root = null; studio = null;
     if (rvVideo) { try { rvVideo.pause(); } catch (err) { /* nothing to pause */ } rvVideo = null; }
-    if (doc && doc.body) { doc.body.classList.remove('dcm-on', 'dcm-own', 'dcm-sheet'); }
+    if (doc && doc.body) { doc.body.classList.remove('dcm-on', 'dcm-own', 'dcm-sheet', 'dcm-light'); }
     stampOverlays(null);
   }
   // Stamp the design's open overlays so the stylesheet can turn each into a
@@ -1270,6 +1298,7 @@
     studio.render(mv);
     var body = global.document.body;
     body.classList.add('dcm-on');
+    body.classList.toggle('dcm-light', themeNow() === 'light');
     body.classList.toggle('dcm-own', Boolean(mv.m.own));
     body.classList.toggle('dcm-sheet', Boolean(M.sheet || M.review));
     stampOverlays(vals);
