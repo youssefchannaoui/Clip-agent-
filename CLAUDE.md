@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1035 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1039 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -456,13 +456,13 @@ Habits the tests now enforce, and why:
 
 ## The editor is gated for launch (27 Aug 2026, Youssef's call)
 
-**SHIPPED 2 Sept 2026 (v3.78.0)** at Youssef's "fix all" on the week-one gaps.
-The gate is unlinked from index.html, the server allowlist and the phone rule,
-and `test/editor-gate.test.mjs` now proves it is GONE. The two files
-`src/public/editor-gate.js` and `src/public/studio-editor-gate.css` are still
-on disk only because the cloud session could not delete files -- `git rm` them
-from the Mac; nothing links or serves them. The section below stays as the
-record of why the gate existed.
+**Un-gated in v3.78.0 and RE-GATED in v3.78.2, both on 2 Sept 2026.** The
+"fix all" pass on the week-one gaps shipped the editor with section cuts;
+Youssef then said "just keep editor as coming soon", so the gate is back
+exactly as it was -- link, script, allowlist, phone-rule exemption, the eight
+tests -- and every public sentence says coming soon again. The section-cut
+controls (v3.78.0, below) stay BUILT behind the blur: shipping the editor is
+still deleting the two files and their two lines, and the cuts come with it.
 
 It opens from the queue and draws itself, blurred, behind a "coming soon"
 notice. Youssef's words: "the editor for opening will be coming soon so they
@@ -2425,9 +2425,11 @@ the CPX41 rescale (open item 5), not by code. The schema format and the
 clipped translation are proven by test, not yet on the box -- watch the first
 deploy's log for a 400 fallback and read `timings` off the first real job.
 
-## The editor shipped, with section cuts (v3.78.0, 2 Sept 2026)
+## The editor gained section cuts, behind the gate (v3.78.0 / re-gated v3.78.2, 2 Sept 2026)
 
-Youssef, on the audit's "week one" list: "fix all". The editor was the one
+Youssef, on the audit's "week one" list: "fix all" -- then, an hour later,
+"just keep editor as coming soon". So the gate is back on (v3.78.2) and what
+follows is what was built and now waits behind it. The editor was the one
 gap that was code rather than a decision, and it was smaller than it looked:
 the render pipeline has cut on a LIST of keep ranges since 26 Aug
 (`cutsSec`, `retime_for_cuts`), `agent.updateClip` has clamped and stored
@@ -2452,16 +2454,12 @@ was missing.
   armed -> cut -> hatched -> "Keeping 0:34 of 0:42 in 2 sections" -> survives
   two repaints -> Restore. Screenshotted at 1440x950: 0 elements overflowing,
   no page scroll.
-- **The gate is gone, and every claim that it existed moved with it**: the
-  help article is now "Trim a clip, or cut a section out of the middle"; the
-  FAQ, the features chapter, the terms and three SEO pages say what the editor
-  does and does not do (trim, cuts, caption words -- no overlays, extra media
-  or keyframes). `seo-architecture` now fails a page that STILL calls the
-  editor gated, the reverse of what it asserted before; one page was caught by
-  it. The features chapter's image stays tagged "Concept preview" -- it draws
-  tools that do not exist.
-- **The editor's own beta popup is back** and true again: edits do save on
-  Save.
+- **The copy went out and came back.** v3.78.0 rewrote the help article, the
+  FAQ, the features chapter, the terms and four SEO pages to say what the
+  editor does; v3.78.2 restored every one of them to "coming soon" from git,
+  together with the three tests that pin that claim. When the editor ships
+  for real, commit `8a07833` holds the shipped wording and the reversed
+  `seo-architecture` assertion, ready to cherry-pick.
 
 **Declined from the same list, on purpose, and why:**
 - **View counts.** The privacy policy states, and `youtube-compliance` pins,

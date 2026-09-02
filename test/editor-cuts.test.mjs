@@ -133,13 +133,12 @@ test('"Use the whole clip" clears the sections as well as the trim', () => {
   assert.equal(v.edCutSections.length, 0);
 });
 
-test('the editor is no longer gated', () => {
+test('the section cuts are built, and wait behind the launch gate', () => {
+  // Youssef, 2 Sept 2026, an hour after the editor shipped: "just keep editor
+  // as coming soon". The controls stay built; the gate (test/editor-gate.test.mjs)
+  // keeps them unreachable until the editor ships for real.
   const host = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
-  const server = fs.readFileSync(path.join(ROOT, 'src/server.js'), 'utf8');
-  const phone = fs.readFileSync(path.join(ROOT, 'src/public/studio-responsive.css'), 'utf8');
-  assert.doesNotMatch(host, /editor-gate/, 'the gate script and sheet are not linked');
-  assert.doesNotMatch(server, /editor-gate/, 'and not served');
-  assert.doesNotMatch(phone, /dcEditorSoon/, 'the phone rule no longer exempts a notice that does not exist');
   assert.match(host, /function paintTrimTools\(vals\)/);
   assert.match(host, /\n  paintTrimTools\(vals\);\n/, 'registered in paintStudio, never on an observer');
+  assert.match(host, /editor-gate\.js/, 'and the gate is on');
 });

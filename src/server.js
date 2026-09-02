@@ -67,6 +67,10 @@ const STUDIO_ASSETS = {
   // hand-authored, so a design re-import cannot take the screen with it.
   '/studio-help.css': { file: studioAsset('studio-help.css'), type: 'text/css; charset=utf-8' },
   '/studio-motion.css': { file: studioAsset('studio-motion.css'), type: 'text/css; charset=utf-8' },
+  // The editor's launch gate (see index.html). Two files and these two lines;
+  // turning the editor on again is a deletion rather than an untangling.
+  '/studio-editor-gate.css': { file: studioAsset('studio-editor-gate.css'), type: 'text/css; charset=utf-8' },
+  '/editor-gate.js': { file: studioAsset('editor-gate.js'), type: JS_TYPE },
   // The editor's "coming soon" gate. Two files and one <link> so that turning
   // the editor on again is a deletion rather than an untangling.
   // Signed-out page enhancements. A file rather than an inline block because

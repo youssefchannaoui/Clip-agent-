@@ -48,6 +48,12 @@
 <!-- The dashboard's motion language: screen-change restarts, the rail trace,
      idle brand light, live-work shine, dialog fades, the arrival veil. -->
 <link rel="stylesheet" href="/studio-motion.css">
+<!-- The clip editor is held back for launch (Youssef, 27 Aug 2026, reaffirmed
+     2 Sept 2026: "just keep editor as coming soon"). This sheet blurs it and
+     editor-gate.js makes it inert under a notice. Shipping the editor is
+     removing this link, the script below, and the two server allowlist lines;
+     the section-cut controls underneath are already built. -->
+<link rel="stylesheet" href="/studio-editor-gate.css">
 <!-- The clip editor is held back for launch: it opens, blurred, behind a
      "coming soon" notice. Deleting these two lines and the two files they name
      turns it back on. -->
@@ -2338,6 +2344,7 @@ select:focus{outline:none;border-color:var(--blue)}
 <script src="/studio-template.generated.js"></script>
 <script src="/studio-runtime.js"></script>
 <script src="/studio-adapter.js"></script>
+<script src="/editor-gate.js"></script>
 
 <script>
 'use strict';
