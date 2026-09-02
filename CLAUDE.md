@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1105 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1115 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -4806,3 +4806,37 @@ be acted on. `openBug` had to be window-pinned: paintHelp lives in a DIFFERENT
 inline script scope in index.html, so the scoped function threw at click time
 rather than at load -- the third feature in this file to hit that trap. The
 now-unreachable menu injector was deleted rather than left as dead code.
+
+
+## A scheduled clip can be dragged to another slot (v3.92.0, 3 Sept 2026)
+
+Youssef: "on shedule add reagrangments so you can move things around, so you
+can hold the box then move it and it swaps or it moves to new location ...
+should be for weekly and daily not monthly cause it doesnt make sense."
+
+- **The swap is ONE server call**, `agent.moveClipToSlot`. As two -- free the
+  target, then move -- a drag can strand a clip: move A onto B's slot first and
+  B is homeless; free B first and A's old slot is open for the scheduler to
+  hand to somebody else. Both writes happen after every check with nothing in
+  between.
+- **Month is deliberately excluded**, as asked, and the reason is worth keeping:
+  a month cell is a whole DAY holding up to eight posts, so a card dropped on
+  one says nothing about which slot is meant. Inventing an answer would move a
+  clip to a time nobody chose.
+- **Refusals the server owns, not the browser**: a slot already passed, a clip
+  already posted or mid-publish (in EITHER direction -- it cannot be dragged,
+  and it cannot be displaced by something dropped on top of it), a clip with no
+  slot, and anything belonging to another account, which is not swapped but
+  simply left alone. Ten tests, each naming the case.
+- **Pointer events, not HTML5 drag-and-drop**, so the same code works for a
+  finger; and a 5px threshold means an ordinary click still opens the day. The
+  ghost is `pointer-events: none` or `elementFromPoint` returns the ghost
+  instead of the cell being aimed at.
+- **Bound to `[data-slot]`**, an attribute added to the design export (proven
+  byte-stable first, CSS identical), carrying the instant and the clip id. The
+  host never works a cell's identity out from its position in the grid -- the
+  mistake that once put one clip's waveform on another clip's card.
+- Driven in a browser rather than assumed: ghost appears, target rings gold,
+  ghost is cleaned up, and the request goes out as
+  `{"id":"c-one","at":1788562800000}` -- the clip dragged and the slot dropped
+  on.

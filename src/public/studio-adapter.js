@@ -2784,6 +2784,13 @@
           return {
             filled: Boolean(held),
             free: !held && !past,
+            // What the drag needs: which instant this square is, and which clip
+            // is sitting on it. Both are attributes on the button, so the host
+            // never has to work out a cell's identity from its position in the
+            // grid -- the mistake that put one clip's waveform on another
+            // clip's card.
+            at: at,
+            clipId: held ? String(held.id) : '',
             title: held ? String(held.title || 'Clip') : '',
             style: 'position: relative; display: flex; flex-direction: column; justify-content: flex-end; flex: 1 1 0; min-width: 0;'
               + ' height: 100%; min-height: 56px; padding: 6px 7px; border-radius: 9px; overflow: hidden; text-align: left; font-family: inherit; cursor: '

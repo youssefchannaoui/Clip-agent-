@@ -189,6 +189,19 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 /* Idle: present and calm, not alarming. The dot stops pulsing, because a
    pulsing "live" dot with nothing live is a lie. */
 #studioLiveHome.slh-idle .slb-dot { background: var(--dc-n-4a4a52, #4A4A52); box-shadow: none; animation: none; }
+/* The card that follows the pointer while a scheduled clip is being moved.
+   Offset from the cursor so it never sits under the pointer and hides the
+   cell being aimed at, and pointer-events:none so elementFromPoint reports
+   the calendar underneath rather than the ghost itself. */
+.dc-sched-ghost {
+  position: fixed; z-index: 400; pointer-events: none; transform: translate(12px, 10px);
+  max-width: 210px; padding: 7px 10px; border-radius: 9px;
+  border: 1px solid var(--dc-gold, #D9B478); background: var(--dc-bg-raised, #17171A);
+  color: var(--dc-ink, #F2F2F4); font: 600 11.5px/1.3 Inter, system-ui, sans-serif;
+  box-shadow: 0 14px 34px rgba(0,0,0,.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+[data-slot][data-slot-clip]:not([data-slot-clip=""]) { cursor: grab; }
+@media (prefers-reduced-motion: reduce) { .dc-sched-ghost { box-shadow: none; } }
 .slh-empty { display: flex; align-items: center; gap: 11px; padding: 15px 16px; font-size: 11.5px; color: var(--dc-ink-faint, #6E6E76); }
 .slh-empty > i { font-size: 16px; color: var(--dc-n-4a4a52, #4A4A52); flex: none; }
 .slh-empty b { display: block; font-size: 12px; font-weight: 600; color: var(--dc-ink-dim, #8B8B93); }
@@ -7230,6 +7243,97 @@ function paintLibraryAside(vals){
     }
   };
 }
+/* ── Dragging a clip to another slot ──────────────────────────────────────
+   Youssef: "so you can hold the box then move it and it swaps or it moves to
+   new location". Week and Day only, deliberately: a month cell is a whole day
+   holding up to eight posts, so dropping a card on one says nothing about
+   WHICH slot is meant, and inventing an answer would move a clip to a time
+   nobody chose.
+
+   POINTER events, not HTML5 drag-and-drop: the same code then works for a
+   finger on a tablet, and dragging a native ghost image of a button looks
+   like what it is. A short hold or a few pixels of travel starts the drag, so
+   an ordinary click still opens the day.
+
+   The swap itself is one server call. Doing it as two -- free the target, then
+   move -- can strand a clip: move A onto B's slot first and B is homeless;
+   free B first and A's old slot is open for the scheduler to hand to someone
+   else. moveClipToSlot in agent.js does both writes with nothing between them.
+
+   Bound to [data-slot], an attribute the design export carries, so no hashed
+   class is named and a re-import cannot break it. */
+const DRAG_START_PX = 5;
+function paintScheduleDrag(){
+  const grid=document.querySelector('[data-dc-week]');
+  if(!grid||grid.dataset.dragWired==='1')return;
+  grid.dataset.dragWired='1';
+
+  let from=null, ghost=null, over=null, moved=false, startX=0, startY=0;
+
+  const cellAt=(x,y)=>{
+    const el=document.elementFromPoint(x,y);
+    return el?el.closest('[data-slot]'):null;
+  };
+  const clear=()=>{
+    if(ghost&&ghost.parentNode)ghost.parentNode.removeChild(ghost);
+    if(over)over.style.outline='';
+    document.body.style.userSelect='';
+    if(from)from.style.opacity='';
+    from=null; ghost=null; over=null; moved=false;
+  };
+
+  grid.addEventListener('pointerdown',e=>{
+    if(e.button!==0&&e.pointerType==='mouse')return;
+    const cell=e.target.closest&&e.target.closest('[data-slot]');
+    /* Only a cell that HOLDS something can be picked up, and only one whose
+       slot is still ahead of us -- a posted clip cannot be rescheduled and the
+       server would refuse it anyway. */
+    if(!cell||!cell.dataset.slotClip||Number(cell.dataset.slot)<Date.now())return;
+    from=cell; startX=e.clientX; startY=e.clientY; moved=false;
+  });
+
+  grid.addEventListener('pointermove',e=>{
+    if(!from)return;
+    if(!moved){
+      if(Math.abs(e.clientX-startX)<DRAG_START_PX&&Math.abs(e.clientY-startY)<DRAG_START_PX)return;
+      moved=true;
+      /* Text selection while dragging turns the whole calendar blue. */
+      document.body.style.userSelect='none';
+      from.style.opacity='.35';
+      ghost=document.createElement('div');
+      ghost.className='dc-sched-ghost';
+      ghost.textContent=(from.textContent||'Clip').trim().slice(0,42);
+      document.body.appendChild(ghost);
+      try{from.setPointerCapture(e.pointerId)}catch(err){}
+    }
+    ghost.style.left=e.clientX+'px';
+    ghost.style.top=e.clientY+'px';
+    const cell=cellAt(e.clientX,e.clientY);
+    if(cell!==over){
+      if(over)over.style.outline='';
+      over=(cell&&cell!==from&&Number(cell.dataset.slot)>=Date.now())?cell:null;
+      if(over)over.style.outline='2px solid var(--dc-gold, #D9B478)';
+    }
+  });
+
+  const finish=e=>{
+    if(!from)return;
+    const source=from, target=over, didMove=moved;
+    const id=source.dataset.slotClip;
+    clear();
+    if(!didMove||!target)return;
+    const at=Number(target.dataset.slot);
+    if(!Number.isFinite(at))return;
+    studioDo(async()=>{
+      const r=await api('/api/clips/move-slot',{method:'POST',body:JSON.stringify({id,at})});
+      await refresh();
+      return r;
+    },'Moved');
+  };
+  grid.addEventListener('pointerup',finish);
+  grid.addEventListener('pointercancel',()=>clear());
+}
+
 function paintScheduleWeek(){
   /* Studio gets eight posting windows, and the week grid divides its height
      between them -- so at eight every row collapsed to its 62px minimum while
@@ -7415,6 +7519,7 @@ function paintStudio(){
      plan, the token count and the email switch honest while it is open. */
   if(window.paintAccount)window.paintAccount();
   paintScheduleWeek();
+  paintScheduleDrag();
   if(window.paintEmailNotifRow)window.paintEmailNotifRow(DATA);
   /* The watermark row is restored HERE, with every other host-rendered panel,
      because STUDIO.render() above has just replaced the DOM it was injected
