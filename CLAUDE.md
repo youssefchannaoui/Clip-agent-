@@ -456,7 +456,7 @@ Habits the tests now enforce, and why:
 
 ## The editor is gated for launch (27 Aug 2026, Youssef's call)
 
-**Un-gated in v3.78.0 and RE-GATED in v3.78.2, both on 2 Sept 2026.** The
+**Un-gated in v3.78.0 and RE-GATED in v3.78.3, both on 2 Sept 2026.** The
 "fix all" pass on the week-one gaps shipped the editor with section cuts;
 Youssef then said "just keep editor as coming soon", so the gate is back
 exactly as it was -- link, script, allowlist, phone-rule exemption, the eight
@@ -2425,10 +2425,10 @@ the CPX41 rescale (open item 5), not by code. The schema format and the
 clipped translation are proven by test, not yet on the box -- watch the first
 deploy's log for a 400 fallback and read `timings` off the first real job.
 
-## The editor gained section cuts, behind the gate (v3.78.0 / re-gated v3.78.2, 2 Sept 2026)
+## The editor gained section cuts, behind the gate (v3.78.0 / re-gated v3.78.3, 2 Sept 2026)
 
 Youssef, on the audit's "week one" list: "fix all" -- then, an hour later,
-"just keep editor as coming soon". So the gate is back on (v3.78.2) and what
+"just keep editor as coming soon". So the gate is back on (v3.78.3) and what
 follows is what was built and now waits behind it. The editor was the one
 gap that was code rather than a decision, and it was smaller than it looked:
 the render pipeline has cut on a LIST of keep ranges since 26 Aug
@@ -2456,7 +2456,7 @@ was missing.
   no page scroll.
 - **The copy went out and came back.** v3.78.0 rewrote the help article, the
   FAQ, the features chapter, the terms and four SEO pages to say what the
-  editor does; v3.78.2 restored every one of them to "coming soon" from git,
+  editor does; v3.78.3 restored every one of them to "coming soon" from git,
   together with the three tests that pin that claim. When the editor ships
   for real, commit `8a07833` holds the shipped wording and the reversed
   `seo-architecture` assertion, ready to cherry-pick.
