@@ -304,21 +304,26 @@
    42px, not the site's 46: the collapsed rail is 68px wide with 12px of
    padding, so 44px is all the room there is. */
 #dcRailBrand .dc-seal { position: relative; width: 42px; height: 42px; display: grid; place-items: center; flex: none; }
-#dcRailBrand .dc-seal > * { position: relative; z-index: 1; }
-/* The ring is LARGER than the box it sits in, deliberately. At 42px its text
-   circle has a radius of 16.4px and the arch is 34px tall -- 17px from the
-   centre -- so the words ran straight through the top and bottom of the mark.
-   Overflowing the 42px box clears it without moving the mark or growing the
-   row: the rail is 68px wide with 12px of padding, so a 56px ring reaches 6px
-   into that padding and never leaves the rail. */
+#dcRailBrand .dc-seal > * { position: relative; z-index: 1; transform: scale(.86); }
+/* The ring is LARGER than the box it sits in, deliberately, and the clearance
+   is measured to the arch's CORNERS rather than its height -- which is what
+   the first attempt got wrong. The mark is 26 wide by 34 tall, so its corners
+   sit 21.4px from the centre while its top sits 17px away; a text circle at
+   21.9px cleared the top and ran straight through the shoulders.
+   Now: the mark is scaled to .86 (corners at 18.4px) and the ring opened to
+   58px (a 22.7px text circle), so 4.3px of clear annulus separates them. The
+   svg is overflow:visible because the glyphs sit OUTSIDE their baseline
+   circle and were being clipped by the svg's own viewport -- which is what
+   made the words look bitten off at the top and bottom. Measured collapsed:
+   the ring spans x 1..66 inside a 0..68 rail, so it clears both edges. */
 #dcRailBrand .dc-seal-ring {
-  position: absolute; inset: -7px; z-index: 0;
-  color: #D9B478; opacity: .8; pointer-events: none;
+  position: absolute; inset: -8px; z-index: 0; transform: none; overflow: visible;
+  color: #D9B478; opacity: .72; pointer-events: none;
   animation: dcSealSpin 28s linear infinite;
 }
 #dcRailBrand .dc-seal-ring text {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 7.4px; letter-spacing: .12em; fill: currentColor; stroke: none;
+  font-size: 6.8px; letter-spacing: .12em; fill: currentColor; stroke: none;
 }
 #dcRailBrand:hover .dc-seal-ring { opacity: 1; filter: drop-shadow(0 0 6px rgba(217,180,120,.35)); }
 @keyframes dcSealSpin { to { transform: rotate(360deg); } }

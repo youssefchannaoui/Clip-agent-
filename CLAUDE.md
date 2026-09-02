@@ -2902,6 +2902,71 @@ gold arch, small in its tile, on flat black. "improve it."
   shortcut is created, and the file is served `max-age=604800`. Remove the
   shortcut and add it again to see the new one.
 
+## Owner: what the traffic words mean, and a screen that shows it (v3.85.0)
+
+Youssef, 2 Sept 2026: "for analytics for traffic unique should be ONLY NEW
+PEOPLE WHO HAVE NEVER CAME ON THE WEBSITE and visits is anything and revisits",
+and "fix the owner to make it look a lot better".
+
+### The words
+
+Four numbers, and the labels had drifted apart from them:
+
+- **Visits** -- every page opened, however many times (`views`).
+- **Visitors** -- devices seen, counted once a DAY (`uniques`).
+- **First-time** -- this browser had never opened the site (`newVisitors`).
+- **Returning** -- it had (`returningVisitors`).
+
+**"Unique visitors" was wrong twice over and is gone.** It summed a per-day
+count across the window, so somebody visiting on three days counted three
+times -- not unique in the window at all -- and the word "unique" read as "new
+people", which is a different number the app already had sitting beside it.
+The data never changed; only the labels, the default tile order (Visits,
+First-time, Returning, Visitors, Live now, Visit->signup) and the notes under
+each, which now define themselves in one line rather than assuming the reader
+knows.
+
+The footnote states all four in prose, because the Owner markup lives in the
+DESIGN EXPORT and a new element there costs a re-import and every hashed class
+name in the app. Folding a sentence into a binding that already renders is the
+cheap route, and the per-tile notes are where the confusion actually happens.
+
+### The look
+
+The KPI row was six identical text blocks divided by hairlines: no boundary, no
+hierarchy, nothing leading. They are CARDS now (`owKpis` in the adapter, so
+every tab's row moved together -- Overview, Traffic, Money in/out, Users,
+Health), with the first carrying a gold inset edge, 30px tabular figures, and
+the row's gap supplied from `studio-owner.css` because the row element itself
+belongs to the export.
+
+- **The tile's label and note are inline-styled literals in the export**, so
+  they are reached with an id-scoped `!important` -- the same route the
+  v3.76.6 live-row spin lesson establishes. A long label was being cut
+  mid-word ("FIRST-TIME VISITOI"), fixed by shortening it AND letting it wrap.
+- **No baseline rule was added under the charts, deliberately.** The columns
+  sit several levels down inside two different wrappers, and every selector
+  loose enough to catch both also catches sections that are not charts. Left
+  alone rather than shipped on a guess.
+- Tables get tabular figures and room to breathe; every `<strong>` on the
+  screen does too, so a number does not shuffle its digits as the 30s poll
+  refreshes it.
+
+### The rail seal was cutting through its own arch
+
+Youssef sent a screenshot: "look at the logo on the top left messed up".
+
+- **v3.73.3 measured the clearance against the arch's HEIGHT and it needed to
+  be the arch's CORNERS.** The mark is 26 wide by 34 tall, so its top is 17px
+  from the centre but its corners are 21.4px -- and the text circle sat at
+  21.9px. It cleared the top and ran straight through the shoulders.
+- The mark is scaled to .86 (corners at 18.4px) and the ring opened to 58px
+  (a 22.7px circle): 4.3px of clear annulus.
+- **The svg is `overflow: visible` now.** The glyphs sit OUTSIDE their baseline
+  circle and were being clipped by the svg's own viewport, which is what made
+  the words look bitten off at the top and bottom.
+- Measured collapsed: the ring spans x 1..66 inside a 0..68 rail.
+
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)

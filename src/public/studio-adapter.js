@@ -1807,13 +1807,28 @@
     { id: 'yearly', label: 'Yearly' },
   ];
 
+  /*
+   * Three words, and they had drifted. Youssef, 2 Sept 2026: "unique should be
+   * ONLY NEW PEOPLE WHO HAVE NEVER CAME ON THE WEBSITE and visits is anything
+   * and revisits."
+   *
+   *   Visits             every page opened, however many times.
+   *   Visitors           devices seen, counted once per day.
+   *   First-time         this browser had never opened the site before.
+   *   Returning          it had.
+   *
+   * "Unique visitors" was the worst label of the four: it summed a per-DAY
+   * count over the window, so one person visiting on three days counted three
+   * times -- not unique in the window at all -- and it read as "new people",
+   * which is a different number the app already has. The word is gone.
+   */
   var ANA_METRICS = [
-    { key: 'uniques', label: 'Unique visitors' },
-    { key: 'newVisitors', label: 'New visitors' },
-    { key: 'returningVisitors', label: 'Returning visitors' },
-    { key: 'returning', label: 'Returning rate' },
-    { key: 'viewsPerVisitor', label: 'Pages per visitor' },
-    { key: 'views', label: 'Page views' },
+    { key: 'views', label: 'Visits' },
+    { key: 'newVisitors', label: 'First-time' },
+    { key: 'returningVisitors', label: 'Returning' },
+    { key: 'uniques', label: 'Visitors' },
+    { key: 'returning', label: 'Returning share' },
+    { key: 'viewsPerVisitor', label: 'Visits per visitor' },
     { key: 'live', label: 'Live now' },
     { key: 'signups', label: 'New signups' },
     { key: 'checkouts', label: 'Started checkout' },
@@ -1825,7 +1840,7 @@
     { key: 'visitToPaid', label: 'Visit \u2192 paid' },
     { key: 'bots', label: 'Crawler hits' },
   ];
-  var ANA_DEFAULT_TILES = ['uniques', 'views', 'live', 'visitToSignup', 'revenue', 'posts'];
+  var ANA_DEFAULT_TILES = ['views', 'newVisitors', 'returningVisitors', 'uniques', 'live', 'visitToSignup'];
 
   /** The six chosen metrics, healed against anything stale or unknown. */
   function anaTilePicks() {
@@ -1862,16 +1877,16 @@
         : amount + (t.revenueCurrency === 'mixed' ? ' (mixed currencies)' : '');
     };
     var table = {
-      uniques: [String(t.uniques || 0), (t.uniques7 || 0) + ' in the last 7 days', ''],
+      uniques: [String(t.uniques || 0), 'devices seen, counted once a day', ''],
       // "People who never opened it before" -- the thing that could not be
       // answered until the seen-flag existed. Days captured before it read as
       // zero on both counters, so the note says when counting began rather
       // than letting an empty history look like nobody is new.
-      newVisitors: [String(t.newVisitors || 0), anaFirstSeenNote(ana, 'first visit ever'), 'pos'],
+      newVisitors: [String(t.newVisitors || 0), anaFirstSeenNote(ana, 'had never opened the site'), 'pos'],
       returningVisitors: [String(t.returningVisitors || 0), anaFirstSeenNote(ana, 'had been before'), ''],
-      returning: [pct(r.returning), 'of visitors we could classify', 'pos'],
+      returning: [pct(r.returning), 'of the visitors we could classify', 'pos'],
       viewsPerVisitor: [t.uniques ? (Math.round((t.views / t.uniques) * 10) / 10).toFixed(1) : '\u2014',
-        'pages read per unique visitor', ''],
+        'pages opened per visitor', ''],
       views: [String(t.views || 0), (t.views7 || 0) + ' in the last 7 days', ''],
       live: [String((ana && ana.liveNow) || 0), 'in the last 5 minutes', 'live'],
       signups: [String(t.signups || 0), 'accounts created in the window', ''],
@@ -1936,8 +1951,10 @@
   function owTile(label, value, note, tone) {
     var colour = tone === 'pos' ? '#7FD1A6' : tone === 'neg' ? '#E08770' : tone === 'unknown' ? '#E6B770' : tone === 'live' ? '#7FD1A6' : '#F2F2F4';
     return {
-      label: label, value: value, note: note || '',
-      valueStyle: 'font-family: Outfit, Inter, sans-serif; font-size: 27px; font-weight: 600; letter-spacing: -.035em; line-height: 1.05; color: ' + colour + ';',
+      label: label, value: value, note: note || '', tone: tone || '',
+      // Tabular figures, or a row of tiles jitters as the numbers refresh.
+      valueStyle: 'font-family: Outfit, Inter, sans-serif; font-size: 30px; font-weight: 600; letter-spacing: -.04em;'
+        + ' line-height: 1.02; font-variant-numeric: tabular-nums; color: ' + colour + ';',
     };
   }
 
@@ -1948,9 +1965,15 @@
    */
   function owKpis(tiles) {
     return tiles.map(function (tile, index) {
-      tile.cellStyle = (index ? 'border-left: 1px solid rgba(242,242,244,.07); ' : '') +
-        'flex: 1; min-width: 148px; display: flex; flex-direction: column; gap: 7px; padding: 2px 22px;' +
-        (index ? '' : ' padding-left: 2px;');
+      // Cards, not hairline-divided cells. Six numbers in a row of identical
+      // text blocks read as a list of figures with nothing leading; a card
+      // gives each one a boundary, and the first carries a gold edge so the
+      // eye has somewhere to start. The row's own gap is CSS (studio-owner),
+      // because the row element belongs to the design export.
+      tile.cellStyle = 'flex: 1 1 170px; min-width: 158px; display: flex; flex-direction: column; gap: 7px;'
+        + ' padding: 15px 17px; border-radius: 14px; border: 1px solid rgba(242,242,244,.055);'
+        + ' background: linear-gradient(180deg, rgba(242,242,244,.038), rgba(242,242,244,.012));'
+        + (index === 0 ? ' box-shadow: inset 2px 0 0 rgba(217,180,120,.55);' : '');
       return tile;
     });
   }
@@ -7321,7 +7344,7 @@
           return 'font-family: Outfit, Inter, sans-serif; font-size: 25px; font-weight: 600; letter-spacing: -.03em; line-height: 1.05; color: ' + colour + ';';
         };
         return [
-          { name: 'Visited', value: String(t.uniques || 0), rate: 'unique visitors', notFirst: false, valueStyle: vStyle('#F2F2F4') },
+          { name: 'Visited', value: String(t.uniques || 0), rate: 'visitors, counted once a day', notFirst: false, valueStyle: vStyle('#F2F2F4') },
           { name: 'Signed up', value: String(t.signups || 0), rate: step(r.visitToSignup, 'of visitors', 'more signups than visitors counted'), notFirst: true, valueStyle: vStyle('#F2F2F4') },
           { name: 'Started checkout', value: String(t.checkoutsStarted || 0), rate: step(r.signupToCheckout, 'of signups', 'more checkouts than signups this window'), notFirst: true, valueStyle: vStyle('#F2F2F4') },
           { name: 'Paid', value: String(t.paidConversions || 0), rate: step(r.visitToPaid, 'of visitors', 'more paid than visitors counted'), notFirst: true, valueStyle: vStyle('#F0D6A6') },
@@ -7386,7 +7409,15 @@
       // average position live in Google Search Console; nothing in this app
       // has an API connection to it, and inventing those numbers would make
       // every other figure on this screen suspect.
-      anaFootnote: 'Visitors are one daily-rotating hash each \u2014 no addresses stored, nothing sent anywhere. '
+      // The four words, stated in the note this screen already renders rather
+      // than in a new element -- the Owner markup lives in the design export,
+      // so a new node there would mean a re-import and every hashed class name
+      // in the app regenerating. Each tile also carries its own one-line
+      // definition, which is where the confusion actually happens.
+      anaFootnote: 'Visits are every page opened. Visitors are devices, counted once a day \u2014 so somebody here on three '
+        + 'days counts three times. First-time means this browser had never opened the site before; returning means it had. '
+        + 'Each visitor is one daily-rotating hash \u2014 no addresses stored, nothing sent anywhere \u2014 which is '
+        + 'why a visitor cannot be recognised across days and only the browser\u2019s own flag can tell first-time from returning. '
         + 'Search impressions, queries and ranking positions are not here: they come from Google Search Console, '
         + 'which this app is not connected to. Public pages in the sitemap: ' + (DATA.webmetrics && DATA.webmetrics.publicPages || '\u2014') + '.',
 

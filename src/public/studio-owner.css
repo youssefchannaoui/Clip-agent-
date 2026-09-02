@@ -171,3 +171,58 @@
   #dcOwnerScreen .dcow-col:hover,
   #dcOwnerScreen button:active:not(:disabled) { transform: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE LOOK, v3.85.0 (2 Sept 2026)
+
+   Youssef: "fix the owner to make it look a lot better". What was wrong was
+   not the data, it was that every section was flat text: six identical
+   numbers in a hairline-divided row with nothing leading, square bars with no
+   baseline, and section labels the same grey as the notes under them. The
+   KPI cells became cards in the adapter (owKpis); everything else is here,
+   bound only to classes the design export already emits.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* The KPI row: cards need air between them, and the row belongs to the export
+   so the gap has to come from outside it. `:has` picks exactly the rows that
+   hold tiles and leaves every other flex row alone. */
+#dcOwnerScreen .dcow-s:has(> .dcow-lift) { gap: 12px; padding-bottom: 2px; }
+#dcOwnerScreen .dcow-lift:hover { background-color: rgba(217, 180, 120, .045); }
+/* The tile's label and note are inline-styled literals in the export, so an
+   id-scoped rule with !important is the only way to reach them without a
+   re-import regenerating every hashed class name in the app. */
+#dcOwnerScreen .dcow-lift > span:first-child {
+  font-size: 10px !important; letter-spacing: .16em !important; color: #8B8B93 !important;
+  /* A long label was being cut mid-word ("FIRST-TIME VISITOI") -- letterspaced
+     caps are wide, and the tile is 158px. Let it wrap rather than truncate. */
+  white-space: normal !important; overflow-wrap: anywhere;
+}
+#dcOwnerScreen .dcow-lift > span:last-child {
+  font-size: 11.5px !important; color: #7C7C85 !important; line-height: 1.5 !important;
+}
+
+/* Bars. Square-ended 6px blocks in flat gold read as a bar CHART; rounding
+   them and letting the fill carry a gradient reads as a measurement. */
+#dcOwnerScreen .dcow-fill { border-radius: 20px !important; }
+#dcOwnerScreen .dcow-col { border-radius: 3px 3px 1px 1px; }
+
+/* No baseline rule under the chart: the columns sit several levels down and
+   inside two different wrappers (the traffic chart and the money one), so any
+   selector loose enough to catch both also catches sections that are not
+   charts. Left alone rather than shipped on a guess.
+
+*/
+
+/* Tables: figures line up under each other, rows breathe, and the header rule
+   is quieter than the rows it introduces. */
+#dcOwnerScreen table { font-variant-numeric: tabular-nums; }
+#dcOwnerScreen tbody td { padding-top: 9px !important; padding-bottom: 9px !important; }
+#dcOwnerScreen thead th { color: #6E6E76 !important; letter-spacing: .14em !important; }
+
+/* A number beside a label, anywhere: never let a proportional font shuffle the
+   digits as a poll refreshes them. */
+#dcOwnerScreen strong, #dcOwnerScreen b { font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  #dcOwnerScreen .dcow-col, #dcOwnerScreen .dcow-lift { transition: none; }
+}
