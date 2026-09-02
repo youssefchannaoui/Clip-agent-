@@ -318,7 +318,11 @@
    the ring spans x 1..66 inside a 0..68 rail, so it clears both edges. */
 #dcRailBrand .dc-seal-ring {
   position: absolute; inset: -8px; z-index: 0; transform: none; overflow: visible;
-  color: #D9B478; opacity: .72; pointer-events: none;
+  /* Quiet at rest. The geometry now clears the arch, but at 42px the words
+     were still nearly as bright as the mark and read as clutter beside the
+     wordmark rather than as an engraved ring. It comes up to full on hover,
+     where it is being looked at. */
+  color: #D9B478; opacity: .42; pointer-events: none;
   animation: dcSealSpin 28s linear infinite;
 }
 #dcRailBrand .dc-seal-ring text {

@@ -297,9 +297,15 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
    in a chip is supposed to look like. */
 #studioLiveHome .slh-row > i.ph-circle-notch,
 #studioLiveBar .slh-row > i.ph-circle-notch { animation: none; }
+/* An inline-block ::before rotates about the centre of its own LINE BOX, and
+   an icon-font glyph's line box carries the face's ascent and descent -- so
+   the ring turned about a point above its own middle and read as off-centre
+   in the tile. A square 1em box with line-height 1 puts the rotation centre
+   on the glyph itself. */
 #studioLiveHome .slh-row > i.ph-circle-notch::before,
 #studioLiveBar .slh-row > i.ph-circle-notch::before {
-  display: inline-block; animation: dcSpin 1.1s linear infinite;
+  display: grid; place-items: center; width: 1em; height: 1em; line-height: 1;
+  transform-origin: 50% 50%; animation: dcSpin 1.1s linear infinite;
 }
 .slh-row { display: flex; align-items: center; gap: 12px; padding: 12px 15px; border-bottom: 1px solid #16161A; }
 .slh-row:last-child { border-bottom: 0; }
@@ -343,9 +349,20 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
   content: ""; position: absolute; inset: 0;
   background: linear-gradient(90deg, transparent, #F0D6A6, transparent);
   background-size: 60% 100%; background-repeat: no-repeat;
-  animation: dcStFlow 1.5s linear infinite;
+  animation: dcStFlow 1.9s cubic-bezier(.42, 0, .58, 1) infinite;
 }
-@keyframes dcStFlow { from { background-position: -70% 0; } to { background-position: 170% 0; } }
+/* The sweep used to start and stop hard: a linear run from one edge to the
+   other, then an instant jump back to the beginning. It fades in as it enters
+   and out as it leaves, eases at both ends rather than travelling at a
+   constant rate, and holds dark for the last fifth of the cycle -- so the
+   restart happens while nothing is lit and the light reads as a pass rather
+   than a loop. */
+@keyframes dcStFlow {
+  0%        { background-position: -75% 0; opacity: 0; }
+  14%       { opacity: .95; }
+  66%       { opacity: .95; }
+  82%, 100% { background-position: 175% 0; opacity: 0; }
+}
 body.dc-page-hidden .slh-stages .st-line.live::after { animation-play-state: paused; }
 /* Labels give way before dots do: on a narrow card the words go and the five
    stations stay readable. */

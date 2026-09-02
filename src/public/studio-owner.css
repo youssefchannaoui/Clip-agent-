@@ -226,3 +226,34 @@
 @media (prefers-reduced-motion: reduce) {
   #dcOwnerScreen .dcow-col, #dcOwnerScreen .dcow-lift { transition: none; }
 }
+
+/* Every labelled table becomes a card. Youssef, 2 Sept 2026: "all pages look
+   so messy like idk what im looking at" -- and he was right: below the tiles
+   each tab was a stack of bare tables under 10px grey labels, with nothing
+   saying where one block ended and the next began.
+
+   `div:has(> div > table)` is exactly the labelled-table block in both places
+   it is built: the design export wraps its table in an overflow div, and the
+   host-rendered growth panels use the export's own `.sgw > .sdk > table`.
+   One rule, both, and no hashed class named -- so a re-import cannot break it.
+   Measured against every tab before being kept. */
+#dcOwnerScreen div:has(> div > table),
+/* The bar lists (Channels, Devices, Languages) are the same kind of block
+   without a table in them: label, then rows carrying a .dcow-fill. Keyed on
+   that stable dc- class rather than on the hashed wrapper a re-import
+   renumbers. Without this they sat bare beside two cards on Traffic. */
+#dcOwnerScreen div:has(> div > span > .dcow-fill) {
+  padding: 15px 17px;
+  border-radius: 14px;
+  border: 1px solid rgba(242, 242, 244, .055);
+  background: rgba(242, 242, 244, .018);
+}
+/* A block's own heading, brighter than the notes beneath it so the eye can
+   find the boundaries at a glance. */
+#dcOwnerScreen div:has(> div > table) > div:first-child > span:first-child,
+#dcOwnerScreen div:has(> div > span > .dcow-fill) > div:first-child > span:first-child {
+  color: #A8A8B0 !important; font-size: 10.5px !important;
+}
+/* The host-rendered growth blocks stack directly on each other; give them the
+   same rhythm the export's own sections have. */
+#dcOwnerScreen #dcowFirst100 { display: flex; flex-direction: column; gap: 20px; }

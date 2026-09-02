@@ -972,7 +972,16 @@ test('the pipeline connectors show the work travelling', () => {
   // in from the left rather than just appearing.
   assert.match(html, /\.slh-stages \.st-line\.done::after \{/);
   assert.match(html, /@keyframes dcStFill \{ from \{ transform: scaleX\(0\)/);
-  assert.match(html, /@keyframes dcStFlow \{ from \{ background-position: -70% 0/);
+  // v3.87.0: the sweep fades in as it enters and out as it leaves, and holds
+  // dark for the last fifth, so the restart happens while nothing is lit --
+  // "can end and start smoother if you get what i mean". A `from`/`to` pair
+  // cannot express that, so the keyframes are percentages now; what the test
+  // pins is the property that made it hard-edged, not the syntax.
+  const flow = /@keyframes dcStFlow \{[\s\S]*?\n\}/.exec(html)[0];
+  assert.match(flow, /0%\s*\{[^}]*opacity: 0;/, 'it starts dark');
+  assert.match(flow, /100%\s*\{[^}]*opacity: 0;/, 'and ends dark, so the loop point is invisible');
+  assert.match(flow, /background-position: -75% 0/);
+  assert.match(flow, /background-position: 175% 0/);
   assert.match(html, /\.st-line\.done\.fill::after \{[^}]*animation: dcStFill[^}]*backwards/,
     'backwards, never both — a forwards fill pins the last frame for good');
   // A pseudo-element is never matched by the document-wide `*{animation:none}`.
@@ -4007,7 +4016,11 @@ test('the live row spins its glyph, never the tile behind it', () => {
   const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
   assert.match(html, /#studioLiveHome \.slh-row > i\.ph-circle-notch,\s*\n#studioLiveBar \.slh-row > i\.ph-circle-notch \{ animation: none; \}/,
     'the tile is held still');
-  assert.match(html, /#studioLiveBar \.slh-row > i\.ph-circle-notch::before \{\s*\n\s*display: inline-block; animation: dcSpin/,
+  // v3.87.0: a square 1em box with line-height 1, because an inline-block
+  // ::before rotates about the centre of its LINE box -- which for an icon
+  // font carries the face's ascent and descent, so the ring turned about a
+  // point above its own middle and sat off-centre in the tile.
+  assert.match(html, /#studioLiveBar \.slh-row > i\.ph-circle-notch::before \{\s*\n\s*display: grid; place-items: center; width: 1em; height: 1em; line-height: 1;\s*\n\s*transform-origin: 50% 50%; animation: dcSpin/,
     'and the glyph carries the rotation');
 });
 

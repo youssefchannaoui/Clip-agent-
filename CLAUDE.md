@@ -2967,6 +2967,45 @@ Youssef sent a screenshot: "look at the logo on the top left messed up".
   the words look bitten off at the top and bottom.
 - Measured collapsed: the ring spans x 1..66 inside a 0..68 rail.
 
+## Owner reads as blocks now, and the live row moves properly (v3.87.0)
+
+Youssef, 2 Sept 2026: "owner is looking good but analytics are perfect other
+than that all pages look so messy like idk what im looking at", plus three
+things on the Happening-now row.
+
+- **Every labelled table is a card.** Below the tiles each tab was a stack of
+  bare tables under 10px grey labels with nothing marking where one block
+  ended and the next began. `div:has(> div > table)` is exactly that block in
+  BOTH places it is built -- the design export wraps its table in an overflow
+  div, and the host-rendered growth panels reuse the export's own
+  `.sgw > .sdk > table`. One rule covers both and names no hashed class, so a
+  re-import cannot break it. The bar lists (Channels, Devices, Languages) have
+  no table, so they are matched on `.dcow-fill` -- a stable dc- class -- and
+  card with them; without that they sat bare beside two cards on Traffic.
+- **The spinner's glyph now turns about its own middle.** An inline-block
+  `::before` rotates about the centre of its LINE box, and an icon font's line
+  box carries the face's ascent and descent -- so the ring turned about a
+  point above itself and sat high in the 32px tile. A square 1em box with
+  `line-height: 1` fixes both the centring and the rotation origin. Measured:
+  the `::before` is 14x14 with 9px on all four sides of the tile.
+- **The connector sweep starts and ends softly.** It ran linearly from one
+  edge to the other and jumped back -- "can end and start smoother if you get
+  what i mean". It fades in as it enters, fades out as it leaves, eases at
+  both ends and holds dark for the last fifth, so the loop point happens while
+  nothing is lit. Sampled across the cycle: opacity 0 at 0%, .95 from 14% to
+  66%, 0 by 82% and held to 100%.
+- **The MB figure was never broken.** `412 MB / 806 MB` renders the moment
+  bytes arrive; the screenshot was taken at 3% with the import at 0% of its
+  step, before anything had transferred. Checked rather than assumed: the box
+  is current (no `worker/` change since the v3.78.1 deploy) and byte reporting
+  has been in `service.py` since well before it. `sizeLabel` returns nothing
+  for zero on purpose -- "0 MB" reads as broken.
+- **The rail seal is quieter.** The geometry clears the arch (measured: a
+  22.7px text circle against the arch's furthest corner at 19.1px), but at
+  42px the words were nearly as bright as the mark and read as clutter beside
+  the wordmark. Opacity .42 at rest, full on hover, where it is being looked
+  at.
+
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)
