@@ -4026,3 +4026,44 @@ test('the template preview draws no watermark when the export carries none', () 
   assert.match(mark({ watermark: '​⠀', watermarkOpacity: 100 }), /display: none/,
     'invisible characters are not a watermark');
 });
+
+test('all four platform marks are the real logos, at one size, out of their tiles', () => {
+  // Youssef, 2 Sept 2026, on the "Posting to" row: "remmebre when we changed
+  // the yt logo cause they told us too now the others look off, fix the other
+  // 3 to look better same look like original yt."
+  //
+  // The YouTube substitution was a compliance obligation (see
+  // test/youtube-compliance.test.mjs, which pins its half). Doing it to one
+  // platform is what made the other three look wrong: a full-colour,
+  // uncontained mark beside three Phosphor glyphs -- redrawn monochrome
+  // shapes tinted with the dashboard's gold, each in a bordered tile.
+  const page = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+
+  for (const [platform, colour, why] of [
+    ['tiktok', '%2325F4EE', "TikTok's cyan"],
+    ['tiktok', '%23FE2C55', "TikTok's magenta"],
+    ['instagram', '%23D62976', "the Instagram gradient's magenta stop"],
+    ['facebook', '%231877F2', "Facebook's blue"],
+  ]) {
+    assert.match(page, new RegExp(`i\\.ph-${platform}-logo\\{background-image:url\\("data:image/svg\\+xml,[^"]*${colour}`),
+      `${platform} must be drawn as its own mark in ${why}, not as a tinted glyph`);
+  }
+
+  // The glyph underneath has to be suppressed, or Phosphor's shape prints
+  // through the background image.
+  assert.match(page, /i\.ph-tiktok-logo::before,\s*\n?i\.ph-instagram-logo::before,\s*\n?i\.ph-facebook-logo::before\{content:""/);
+
+  // One size across the row. YouTube's 22px is a stated minimum of theirs;
+  // the other three match it because a row of marks at four different sizes
+  // is the fault this exists to fix.
+  assert.match(page, /i\.ph-tiktok-logo,\s*\n?i\.ph-instagram-logo,\s*\n?i\.ph-facebook-logo\{[^}]*min-height:22px/);
+
+  // Out of the tile, exactly as YouTube is -- and only where the container is
+  // a tile. ":first-child" is the discriminator: a tile holds the mark and
+  // nothing before it, while a schedule row ENDS with the mark and its top
+  // hairline is a divider between rows, not a box around a logo. Without that
+  // the Home "Posting today" rows lost their dividers.
+  assert.match(page, /:has\(> i\.ph-tiktok-logo:first-child\),\s*\n?:has\(> i\.ph-instagram-logo:first-child\),\s*\n?:has\(> i\.ph-facebook-logo:first-child\)\{[^}]*border-color:transparent/);
+  assert.match(page, /:has\(> i\.ph-youtube-logo:first-child\)\{/,
+    'YouTube is on the same footing, and its rows keep their dividers too');
+});

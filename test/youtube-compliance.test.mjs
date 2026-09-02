@@ -129,7 +129,11 @@ test('the YouTube mark is unmodified, uncontained and at least 20px', () => {
   // Their stated 20px minimum, not 1em (which is 17px in the posting row).
   assert.match(page, /i\.ph-youtube-logo\{[^}]*min-height:22px/);
   // No tile chrome around the mark: a bordered rounded box restates its shape.
-  assert.match(page, /:has\(> i\.ph-youtube-logo\)\{[^}]*border-color:transparent/);
+  // ":first-child" is what separates a tile from a row -- a tile holds the
+  // mark and nothing before it, while a schedule row ENDS with the mark and
+  // its top hairline is a divider, not a box. Stripping that too was making
+  // the YouTube row the only row in "Next up" drawn without a divider.
+  assert.match(page, /:has\(> i\.ph-youtube-logo:first-child\)\{[^}]*border-color:transparent/);
 });
 
 test('the privacy policy names the API calls, the retention and the way out', async () => {

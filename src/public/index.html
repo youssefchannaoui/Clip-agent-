@@ -483,9 +483,62 @@ i.ph-youtube-logo{
    Policy III.F.2a: the icon's shape must not be modified. The dashboard drew
    every platform icon inside a bordered, rounded, filled tile -- which around
    the YouTube mark reads as a second, squarer YouTube button. The tile chrome
-   is removed wherever it directly wraps the mark; the other platforms keep
-   theirs, since only YouTube's guidelines are at stake here. */
-:has(> i.ph-youtube-logo){
+   is removed wherever a container wraps the mark as a tile.
+
+   ":first-child" is what tells a tile from a row. A tile holds the mark and
+   nothing before it -- the 34px box in the "Posting to" row, the connections
+   dialog's mark, the 26px box in the publishing list. A schedule row ends
+   WITH the mark, after a time, a thumbnail and a title, and its 1px top
+   hairline is a divider between rows rather than a box around a logo: without
+   this the YouTube row was the one row in "Next up" drawn with no divider.
+
+   Every platform is treated the same way now (see below); this rule is kept
+   separate from theirs so its half can never be lost to an edit aimed at the
+   others. */
+:has(> i.ph-youtube-logo:first-child){
+  background:transparent !important;
+  border-color:transparent !important;
+  box-shadow:none !important;
+}
+
+/* The other three marks, drawn the same way -- because the YouTube fix above
+   is what made them look wrong.
+
+   Substituting one official mark left the row mixed: a full-colour,
+   uncontained YouTube logo beside three Phosphor glyphs -- redrawn monochrome
+   shapes, tinted with the dashboard's gold, sitting in bordered tiles. They
+   read as placeholders for logos rather than as the logos. Each is its own
+   official mark now, at the same 22px, with the tile removed wherever it
+   directly wraps one, so the "Posting to" row is four brand marks instead of
+   one and three approximations.
+
+   TikTok is drawn in its on-dark form -- the white note with the cyan and
+   magenta offsets -- because the black-square version would be invisible on
+   this background. Nothing here recolours or reshapes a mark; the glyph is
+   suppressed and the real one drawn in its place, exactly as for YouTube, so
+   no call site has to know. */
+i.ph-tiktok-logo::before,
+i.ph-instagram-logo::before,
+i.ph-facebook-logo::before{content:"";}
+i.ph-tiktok-logo,
+i.ph-instagram-logo,
+i.ph-facebook-logo{
+  display:inline-block;
+  /* The same box as the YouTube mark. A row of marks at four different sizes
+     is the fault this block exists to fix. */
+  width:22px;height:22px;min-width:22px;min-height:22px;font-size:0;
+  color:transparent;
+  background-repeat:no-repeat;background-position:center;background-size:contain;
+}
+i.ph-tiktok-logo{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg transform='translate(1.4 1.4) scale(.88)'%3E%3Cpath fill='%2325F4EE' transform='translate(-1.15 .5)' d='M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z'/%3E%3Cpath fill='%23FE2C55' transform='translate(1.15 -.5)' d='M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z'/%3E%3Cpath fill='%23FFFFFF' d='M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z'/%3E%3C/g%3E%3C/svg%3E");}
+i.ph-instagram-logo{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='2' y1='22' x2='22' y2='2' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%23FEDA75'/%3E%3Cstop offset='.26' stop-color='%23FA7E1E'/%3E%3Cstop offset='.52' stop-color='%23D62976'/%3E%3Cstop offset='.76' stop-color='%23962FBF'/%3E%3Cstop offset='1' stop-color='%234F5BD5'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='24' height='24' rx='6.4' fill='url(%23g)'/%3E%3Crect x='4.9' y='4.9' width='14.2' height='14.2' rx='4.4' fill='none' stroke='%23FFFFFF' stroke-width='1.8'/%3E%3Ccircle cx='12' cy='12' r='3.5' fill='none' stroke='%23FFFFFF' stroke-width='1.8'/%3E%3Ccircle cx='17.25' cy='6.85' r='1.2' fill='%23FFFFFF'/%3E%3C/svg%3E");}
+i.ph-facebook-logo{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3CclipPath id='c'%3E%3Ccircle cx='12' cy='12' r='12'/%3E%3C/clipPath%3E%3C/defs%3E%3Ccircle cx='12' cy='12' r='12' fill='%231877F2'/%3E%3Cpath clip-path='url(%23c)' fill='%23FFFFFF' d='M10.125 23.927v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385z'/%3E%3C/svg%3E");}
+/* Deliberately a separate rule from the YouTube one above rather than a comma
+   added to it: that rule answers a compliance obligation and a test asserts
+   its exact shape. This one is a design decision and may be changed alone. */
+:has(> i.ph-tiktok-logo:first-child),
+:has(> i.ph-instagram-logo:first-child),
+:has(> i.ph-facebook-logo:first-child){
   background:transparent !important;
   border-color:transparent !important;
   box-shadow:none !important;
