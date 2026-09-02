@@ -280,3 +280,62 @@ test('the cards and the schema quote the same money', async () => {
     billing.forgetPriceCurrencies();
   }
 });
+
+test('drift is reported, never repriced', async () => {
+  // currency_options are fixed amounts and the exchange rate is not. This
+  // alerts a person; it must never rewrite a price on a timer, because a bad
+  // rate — or a rates endpoint returning nonsense — would then reprice the
+  // whole account at 3am with nobody watching.
+  const monthly = config.stripePriceMonthly;
+  if (!monthly) return;
+  await withStripe({
+    [monthly]: {
+      id: monthly, currency: 'aud', unit_amount: 2999,
+      // 15.99 GBP against an AUD price that is now worth ~19.50 GBP: 18% out.
+      currency_options: { gbp: { unit_amount: 1599 } },
+    },
+  }, async () => {
+    const drifted = await billing.currencyDrift({ gbp: 0.65 });
+    const row = drifted.find(item => item.plan === 'pro_monthly' && item.currency === 'gbp');
+    assert.ok(row, 'an 18% gap is reported');
+    assert.equal(row.charged, '£15.99');
+    assert.match(row.worth, /£19/);
+    assert.ok(row.percent < -10, `expected a double-digit shortfall, got ${row.percent}`);
+
+    // Within the threshold, nothing is said. An alert that fires on ordinary
+    // daily movement is one nobody reads.
+    assert.deepEqual(await billing.currencyDrift({ gbp: 0.53 }), []);
+  });
+});
+
+test('no rates means no alert, never a false one', async () => {
+  const monthly = config.stripePriceMonthly;
+  if (!monthly) return;
+  await withStripe({
+    [monthly]: { id: monthly, currency: 'aud', unit_amount: 2999, currency_options: { gbp: { unit_amount: 1 } } },
+  }, async () => {
+    // A currency the rates payload does not carry is skipped rather than
+    // reported as infinitely wrong.
+    assert.deepEqual(await billing.currencyDrift({ usd: 0.71 }), []);
+  });
+});
+
+test('the daily check alerts and does not reprice', () => {
+  const source = fsReadServer();
+  const fn = /const checkCurrencyDrift = async \(\) => \{[\s\S]*?\n    \};/.exec(source);
+  assert.ok(fn, 'the daily check exists');
+  assert.match(fn[0], /alerts\.report\('currency-drift'/);
+  // It may NAME the command in the mail -- that is the point of the mail --
+  // but it must not be able to write a price itself: no Stripe write form, and
+  // the only billing call it makes is the read-only drift report.
+  assert.doesNotMatch(fn[0], /currency_options\[/, 'the timer carries no Stripe write');
+  const billingCalls = [...fn[0].matchAll(/billing\.(\w+)/g)].map(m => m[1]);
+  assert.deepEqual([...new Set(billingCalls)], ['currencyDrift'],
+    'the timer reads drift and does nothing else');
+  assert.match(fn[0], /Nothing has been changed/, 'and the mail says so');
+  assert.match(source, /24 \* 60 \* 60_000/, 'once a day, not every tick');
+});
+
+function fsReadServer() {
+  return require('node:fs').readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+}

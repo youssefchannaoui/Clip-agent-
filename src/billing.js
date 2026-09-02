@@ -142,6 +142,81 @@ export async function priceCurrencies(priceId) {
 }
 
 /**
+ * How far each configured currency has drifted from the Australian price.
+ *
+ * `currency_options` are FIXED amounts. Unlike Adaptive Pricing -- which
+ * converts at the live rate for every other country and needs no maintenance
+ * -- these stay where they were set while the exchange rate moves under them.
+ * Left alone for a year that is how a plan quietly ends up a fifth cheaper in
+ * one currency than another.
+ *
+ * This REPORTS; it never reprices. Changing what a customer pays is a decision
+ * a person makes, not a job a timer does at 3am on a rate it happened to fetch
+ * -- and a bad rate, or a fetch returning nonsense, would rewrite every price
+ * in the account. The alert names the drift and a human runs the script.
+ *
+ * Returns [] when there is nothing to say: no key, no configured currencies,
+ * or no rate source. Silence is correct for all three.
+ */
+export async function currencyDrift(rates = null) {
+  const grid = plans();
+  const live = rates || await fetchRates();
+  if (!live) return [];
+  const drifted = [];
+  for (const plan of Object.values(grid)) {
+    if (!plan.priceId) continue;
+    const amounts = await priceCurrencies(plan.priceId);
+    const base = Number(amounts[geo.DEFAULT_CURRENCY]);
+    if (!Number.isFinite(base) || base <= 0) continue;
+    for (const [code, minor] of Object.entries(amounts)) {
+      if (code === geo.DEFAULT_CURRENCY) continue;
+      const rate = Number(live[code]);
+      if (!Number.isFinite(rate) || rate <= 0) continue;
+      const expected = base * rate;
+      if (expected <= 0) continue;
+      const off = (Number(minor) - expected) / expected;
+      if (Math.abs(off) >= DRIFT_THRESHOLD) {
+        drifted.push({
+          plan: plan.id, currency: code,
+          charged: geo.formatMoney(minor, code),
+          worth: geo.formatMoney(Math.round(expected), code),
+          percent: Math.round(off * 100),
+        });
+      }
+    }
+  }
+  return drifted;
+}
+
+/** Past this, a price is worth a person looking at. Ten per cent is roughly a
+ *  year of ordinary currency movement, and well beyond day-to-day noise. */
+const DRIFT_THRESHOLD = 0.10;
+
+/**
+ * Today's rates against the Australian dollar, or null.
+ *
+ * One request to a public rates endpoint, and null on any failure -- a missing
+ * rate must produce no alert rather than a false one. Nothing here writes a
+ * price, so a wrong rate can only ever cost a needless email.
+ */
+async function fetchRates() {
+  try {
+    const response = await fetch('https://open.er-api.com/v6/latest/AUD', { signal: AbortSignal.timeout(15_000) });
+    if (!response.ok) return null;
+    const payload = await response.json();
+    const rates = payload?.rates;
+    if (!rates || typeof rates !== 'object') return null;
+    const out = {};
+    for (const [code, value] of Object.entries(rates)) {
+      if (Number.isFinite(Number(value))) out[String(code).toLowerCase()] = Number(value);
+    }
+    return Object.keys(out).length ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The plan grid priced from what is ALREADY cached, never waiting on Stripe.
  *
  * The public pages render synchronously and are the most visited thing this

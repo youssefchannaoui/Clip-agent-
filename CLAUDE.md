@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1078 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1081 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -4531,3 +4531,29 @@ Australian" note and started showing the money itself:
 Adaptive Pricing at Checkout.** So the pages show AUD to, say, an Indonesian
 visitor and Stripe charges IDR -- which is why `currencyNote` stays for the
 un-localised case rather than being deleted.
+
+
+### Verified from overseas, and the drift now alerts itself (v3.88.0)
+
+**The spot check was done, not deferred.** Fetching production through one of
+the box's own Webshare residential proxies gives a genuine foreign IP, which is
+the only way to test this from Australia -- Cloudflare sets `cf-ipcountry` from
+the real address, so no header can fake it. Through a US exit,
+`/pricing` renders `<div class="plan-price-label">$21.99</div>` and its schema
+offer says `"price":"21.99","priceCurrency":"USD"`. The Australian figure
+appears zero times on that page. Page and schema agree, on production.
+
+The FIRST request from a new country still shows AUD -- that is
+`plansInCurrencyCached` warming behind the render, exactly as designed, and it
+was visible in this test as a first response carrying the note and the second
+carrying the prices.
+
+**Drift alerts instead of waiting to be remembered.** `currencyDrift` compares
+every configured `currency_option` against the live rate and reports anything
+more than 10% out; `server.js` runs it daily through the same `alerts.report`
+ledger the worker check uses. It REPORTS and never reprices: what a customer
+pays is a decision a person makes, not something a timer does at 3am on a rate
+it happened to fetch -- a bad rate would otherwise rewrite every price in the
+account. The mail names the drift and the two commands, and a test asserts the
+timer carries no Stripe write and calls nothing but the read-only report.
+A rates lookup that fails produces no alert rather than a false one.

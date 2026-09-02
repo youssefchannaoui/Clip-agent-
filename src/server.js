@@ -2748,6 +2748,34 @@ server.listen(config.port, () => {
     const workerTimer = setInterval(() => { checkWorker().catch(() => {}); }, 5 * 60_000);
     workerTimer.unref?.();
     checkWorker().catch(() => {});
+
+    /*
+     * The fixed currency prices, once a day.
+     *
+     * currency_options do not follow the exchange rate, so they drift while
+     * nobody is looking -- and the only reason anybody would notice is a plan
+     * quietly costing a fifth less in one currency than another. This alerts;
+     * it never reprices. What a customer pays is a decision a person makes,
+     * not something a timer does at 3am on a rate it happened to fetch.
+     */
+    const checkCurrencyDrift = async () => {
+      try {
+        const drifted = await billing.currencyDrift();
+        if (!drifted.length) { await alerts.report('currency-drift', false); return; }
+        const lines = drifted
+          .map(row => `  ${row.plan} ${row.currency.toUpperCase()}: charging ${row.charged}, `
+            + `worth about ${row.worth} at today's rate (${row.percent > 0 ? '+' : ''}${row.percent}%)`)
+          .join('\n');
+        await alerts.report('currency-drift', true,
+          'Fixed prices in Stripe have drifted from the Australian price:\n' + lines
+          + '\n\nNothing has been changed. To reprice, run from the Render shell:\n'
+          + '  node scripts/stripe-currency-options.mjs        (dry run)\n'
+          + '  node scripts/stripe-currency-options.mjs --apply');
+      } catch { /* a rates lookup that fails must never raise an alarm */ }
+    };
+    const driftTimer = setInterval(() => { checkCurrencyDrift().catch(() => {}); }, 24 * 60 * 60_000);
+    driftTimer.unref?.();
+    checkCurrencyDrift().catch(() => {});
   }
   // YouTube API Data is cleared after 30 days (policy III.E.4.a-g). Started
   // here rather than on import so a test that loads this module does not sweep
