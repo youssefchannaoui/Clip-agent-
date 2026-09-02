@@ -7293,6 +7293,148 @@ function paintTrimTools(vals){
 /* Its own escaper, like paintAccount's: the top-of-file `esc` is in a
    DIFFERENT inline script scope and is not reachable from here. */
 const obEsc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+/* ── The first screen a new account ever sees ─────────────────────────────
+   Measured before it was designed, on a genuinely empty account at 1440x950.
+   Three things were wrong and none of them was the strip:
+
+   1. THE ONE ACTION THAT MATTERS WAS THE SMALLEST THING ON SCREEN. The paste
+      field sat at y=566 in 13px type, under a 58px marketing headline and a
+      gold button pointing somewhere else. The loudest thing said "One lecture.
+      A week of reels." -- the PUBLIC SITE's headline, selling the product to
+      somebody who has already signed up. 118px of the most valuable space,
+      saying nothing anyone can act on.
+   2. NOTHING SET EXPECTATIONS. No mention that the pipeline takes ~20 minutes,
+      what it costs, how many clips come back, or that they would be told when
+      it finished. CLAUDE.md already records the consequence: "The pipeline
+      takes ~20 minutes and people leave."
+   3. NOTHING SHOWED WHAT A CLIP LOOKS LIKE. The right column was three empty
+      dashed rectangles under "Latest clips" -- the most persuasive thing this
+      product owns, rendered as an empty box, to the one person who has never
+      seen the output.
+
+   So this REPLACES the two marketing text nodes and fills the empty column,
+   and deliberately leaves the real paste row untouched in place: every handler
+   on it is the export's own, and reimplementing them is how a second control
+   for one thing gets born.
+
+   It absorbs the Getting-started strip rather than sitting beside it -- that
+   is the whole lesson of v3.96.0, and repeating it one release later would be
+   indefensible. */
+window.paintFirstRun=paintFirstRun;
+function paintFirstRun(vals){
+  const ob=vals&&vals.onboarding;
+  const paste=document.querySelector('#studio [data-tour="paste"]');
+  const left=paste&&paste.parentElement&&paste.parentElement.parentElement;
+  const hero=left&&left.parentElement;
+  /* Only before the first lecture is in. The moment anything has been
+     imported this whole panel goes and the slim strip takes over -- a guide
+     that outstays its usefulness becomes furniture. */
+  const first=Boolean(ob&&ob.show&&ob.at==='create'&&!ob.imported);
+  const kill=()=>{
+    document.querySelectorAll('#dcFirstRunHead, #dcFirstRunSteps, #dcFirstRunCost, #dcFirstRunShow').forEach(n=>n.remove());
+    document.querySelectorAll('[data-dcfr-hid]').forEach(n=>{n.style.display='';n.removeAttribute('data-dcfr-hid')});
+    document.querySelectorAll('[data-dcfr-was]').forEach(n=>{n.style.display=n.getAttribute('data-dcfr-was');n.removeAttribute('data-dcfr-was')});
+  };
+  if(!first||!left||StudioAdapter.ui.screen!=='home'){kill();document.body.classList.remove('dc-firstrun');return}
+  /* A body class rather than per-paint inline styles: the patcher resets an
+     inline style it owns on every render, and body is host territory it never
+     touches. */
+  document.body.classList.add('dc-firstrun');
+
+  /* Found by TAG and by "the node after it", never by a hashed class name --
+     a design re-import regenerates every one of those. */
+  const h1=left.querySelector('h1');
+  const para=h1&&h1.nextElementSibling&&h1.nextElementSibling.tagName==='P'?h1.nextElementSibling:null;
+  if(!h1)return;
+  for(const n of [h1,para]){ if(n&&n.style.display!=='none'){n.setAttribute('data-dcfr-hid','1');n.style.display='none'} }
+
+  /* An INSTRUCTION, not a slogan, and deliberately smaller than the marketing
+     headline it replaces: the paste field has to be the loudest thing on this
+     screen, and at 58px nothing else could be. */
+  let head=document.getElementById('dcFirstRunHead');
+  if(!head){head=document.createElement('div');head.id='dcFirstRunHead';h1.parentNode.insertBefore(head,h1)}
+  head.setAttribute('style','flex:none;display:flex;flex-direction:column;gap:9px;margin:2px 0 4px;max-width:620px');
+  head.innerHTML=
+    '<h2 style="margin:0;font-family:Outfit,Inter,sans-serif;font-size:34px;line-height:1.12;font-weight:600;'
+      +'letter-spacing:-.01em;color:var(--dc-n-f2f2f4, #F2F2F4)">Let\u2019s make your first clips.</h2>'
+    +'<p style="margin:0;font-size:14px;line-height:1.6;color:var(--dc-n-8b8b93, #8B8B93)">'
+      +'Paste a lecture below and pick the minutes worth clipping. You do not need the whole talk \u2014 '
+      +'a five-minute stretch is plenty for a first run.</p>';
+
+  /* WHAT HAPPENS AFTER YOU PRESS IT, with the real number in it. Somebody who
+     knows it takes twenty minutes comes back; somebody who does not, leaves. */
+  let steps=document.getElementById('dcFirstRunSteps');
+  if(!steps){steps=document.createElement('div');steps.id='dcFirstRunSteps'}
+  steps.setAttribute('style','flex:none;display:flex;gap:0;flex-wrap:wrap;margin:14px 0 2px;max-width:640px');
+  const beat=(n,t,note)=>'<span style="flex:1 1 180px;min-width:150px;display:flex;flex-direction:column;gap:4px;'
+    +'padding:0 14px 0 0">'
+    +'<span style="display:flex;align-items:center;gap:7px">'
+      +'<span style="display:grid;place-items:center;width:19px;height:19px;flex:none;border-radius:50%;'
+      +'border:1px solid rgba(217,180,120,.45);color:var(--dc-n-f0d6a6, #F0D6A6);font-size:10px;font-weight:700">'+n+'</span>'
+      +'<b style="font-size:12.5px;font-weight:600;color:var(--dc-n-e9e9ed, #E9E9ED)">'+t+'</b></span>'
+    +'<span style="font-size:11.5px;line-height:1.5;color:var(--dc-n-6e6e76, #6E6E76)">'+note+'</span></span>';
+  steps.innerHTML=beat('1','You pick the minutes','Paste a link, drag the range. Only that stretch is fetched.')
+    +beat('2','We do the work','Transcribed, scored, rendered with your Clip Style and a nasheed. About 20 minutes.')
+    +beat('3','You keep the good ones','They land in your review queue. Nothing posts until you approve it.');
+  const row=paste.parentElement;
+  if(row.previousElementSibling!==steps)row.parentNode.insertBefore(steps,row);
+
+  /* What it costs, beside the thing that spends it. */
+  let cost=document.getElementById('dcFirstRunCost');
+  if(!cost){cost=document.createElement('p');cost.id='dcFirstRunCost'}
+  cost.setAttribute('style','flex:none;margin:9px 0 0;font-size:11.5px;line-height:1.55;color:var(--dc-n-6e6e76, #6E6E76)');
+  cost.innerHTML='A lecture costs about one token a minute of the stretch you pick, so a five-minute run is '
+    +'roughly five tokens'+(ob.tokensLeft!=null?' of your '+obEsc(String(ob.tokensLeft)):'')+'. '
+    +'You can watch it run on this screen, and we will tell you when it is done.';
+  if(row.nextElementSibling!==cost)row.parentNode.insertBefore(cost,row.nextSibling);
+  paintFirstRunShowcase(hero,vals);
+}
+
+/* The empty column, and what it must NOT become.
+   It renders three dashed placeholder rectangles under "Latest clips" for an
+   account that has none -- wasted space in front of the one person who needs
+   the most help. The obvious fill was a strip of finished clips, and that was
+   built and then DELETED: the export already carries "Nothing in your library
+   yet -- this is what one lecture produces", with scored clip cards, one
+   scroll below. Two answers to "what comes back" is the same fault as two
+   onboarding systems, one release later.
+
+   So the column carries the thing genuinely missing instead. The tour walks
+   the four screens and existed all along as a 12px grey link -- the quietest
+   element on a beginner's screen. Here it is an offer. */
+function paintFirstRunShowcase(hero,vals){
+  const col=hero&&hero.children[1];
+  if(!col)return;
+  for(const kid of col.children){
+    if(kid.id==='dcFirstRunShow')continue;
+    if(kid.style.display!=='none'){kid.setAttribute('data-dcfr-was',kid.style.display||'');kid.style.display='none'}
+  }
+  let show=document.getElementById('dcFirstRunShow');
+  if(!show){show=document.createElement('div');show.id='dcFirstRunShow';col.appendChild(show)}
+  show.setAttribute('style','flex:none;display:flex;flex-direction:column;gap:13px;min-width:0;padding:17px 18px;'
+    +'border:1px solid rgba(217,180,120,.3);border-radius:14px;'
+    +'background:linear-gradient(180deg,rgba(217,180,120,.075),rgba(217,180,120,.02))');
+  const line=(icon,t)=>'<span style="display:flex;align-items:flex-start;gap:9px">'
+    +'<i class="ph '+icon+'" style="flex:none;margin-top:1px;font-size:14px;color:var(--dc-n-f0d6a6, #F0D6A6)"></i>'
+    +'<span style="font-size:12px;line-height:1.5;color:var(--dc-n-8b8b93, #8B8B93)">'+t+'</span></span>';
+  show.innerHTML=
+    '<span style="font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;'
+      +'color:var(--dc-n-f0d6a6, #F0D6A6)">New here?</span>'
+    +'<strong style="font-family:Outfit,Inter,sans-serif;font-size:15px;font-weight:600;line-height:1.35;'
+      +'color:var(--dc-n-f2f2f4, #F2F2F4)">Let us walk you through it.</strong>'
+    +line('ph-cursor-click','A short tour of the four screens you will use.')
+    +line('ph-hand-pointing','It points at the real controls, on your own account.')
+    +line('ph-x','Stop it whenever you like \u2014 press Escape.')
+    +'<button type="button" id="dcFirstRunTour" style="margin-top:2px;padding:10px 14px;border-radius:10px;cursor:pointer;'
+      +'border:1px solid rgba(217,180,120,.55);background:transparent;color:var(--dc-n-f0d6a6, #F0D6A6);'
+      +'font-family:inherit;font-size:12.5px;font-weight:600">Take the tour</button>';
+  /* The tour is a BINDING, not a method on StudioAdapter -- calling it off the
+     adapter throws at click time rather than at load, which is the trap this
+     file has now paid for three times. */
+  const go=show.querySelector('#dcFirstRunTour');
+  if(go)go.onclick=e=>{e.preventDefault();if(vals&&typeof vals.startTour==='function')vals.startTour(e)};
+}
+
 /* ── First run ────────────────────────────────────────────────────────────
    Step 1 Create -> Step 2 Review -> Step 3 Publish, above everything on Home.
 
@@ -7314,7 +7456,12 @@ function paintOnboarding(vals){
   const old=document.getElementById('dcOnboard');
   /* Home only: it is about the run as a whole, and a banner following someone
      into the editor or the Owner screen is clutter, not guidance. */
-  if(!ob||!ob.show||!screen||StudioAdapter.ui.screen!=='home'){if(old)old.remove();return}
+  /* Stands down while the FIRST-RUN PANEL is up: that panel carries the same
+     three beats in full, and showing both is the two-onboarding-systems fault
+     v3.96.0 existed to remove -- one release later would be indefensible. The
+     strip is what remains after the first lecture is in. */
+  const panelUp=Boolean(ob&&ob.at==='create'&&!ob.imported);
+  if(!ob||!ob.show||!screen||panelUp||StudioAdapter.ui.screen!=='home'){if(old)old.remove();return}
   const row=old||document.createElement('div');
   if(!old){row.id='dcOnboard'}
   row.setAttribute('style','flex:none;display:flex;flex-direction:column;gap:12px;margin:0 0 16px;padding:16px 18px;'
@@ -7915,6 +8062,7 @@ function paintStudio(){
   /* Cheap when shut -- it returns immediately -- and this is what keeps the
      plan, the token count and the email switch honest while it is open. */
   if(window.paintAccount)window.paintAccount();
+  paintFirstRun(vals);
   paintOnboarding(vals);
   paintFirstClip(vals);
   paintScheduleWeek();

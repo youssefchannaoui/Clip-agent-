@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1151 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1156 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3471,6 +3471,71 @@ hand gripping."
 - Driven in both views with real PointerEvents: the clone carries a planted
   thumbnail, the body cursor reads `grabbing` mid-drag and `auto` after a
   cancel, and no ghost survives.
+
+## The first screen a new account ever sees (v3.99.0, 3 Sept 2026)
+
+Youssef: "make it VERY OBVIOUS FOR NEW USERS TO HELP THEM." Measured on a
+genuinely empty account at 1440x950 before anything was designed, and three
+things were wrong -- none of them the Getting-started strip:
+
+1. **The one action that matters was the smallest thing on screen.** The paste
+   field sat at y=566 in 13px type, under a **58px marketing headline** and a
+   gold button pointing somewhere else. The loudest thing on a signed-in
+   beginner's screen was "One lecture. A week of reels." -- the PUBLIC SITE's
+   headline, selling the product to somebody who has already signed up. 118px
+   of the most valuable space, saying nothing anyone can act on.
+2. **Nothing set expectations.** No mention of the ~20 minutes, what it costs,
+   or that they would be told when it finished. This file already records the
+   consequence -- "The pipeline takes ~20 minutes and people leave" -- as the
+   reason the nudge emails exist. The screen never said it.
+3. **Nothing showed what a clip looks like.** The right column was three empty
+   dashed rectangles under "Latest clips", in front of the one person who has
+   never seen the output.
+
+- **It REPLACES the two marketing text nodes and leaves the real paste row
+  untouched in place.** Every handler on that row is the export's own;
+  reimplementing them is how a second control for one thing gets born. Found
+  by TAG and by "the node after it" (`left.querySelector('h1')`, then its
+  sibling `<p>`), never by a hashed class -- a test asserts no `.sNN` appears
+  anywhere in the painter.
+- **It absorbs the strip rather than sitting beside it.** The panel carries the
+  same three beats in full, so the strip stands down while it is up and takes
+  over the moment a lecture is in. That is the whole lesson of v3.96.0 and
+  repeating it one release later would have been indefensible.
+- **`imported` had to be carried through the adapter binding, and was not at
+  first.** Without it an account whose lecture came back EMPTY -- still on
+  Create -- would be shown the entire beginner's guide a second time. One flag
+  (`firstRun`) is read by the desktop panel and the phone card, so the two
+  surfaces cannot disagree about who is a beginner.
+- **A strip of finished clips was built for the empty column and DELETED.** The
+  export already carries "Nothing in your library yet -- this is what one
+  lecture produces", with scored clip cards, one scroll below. Two answers to
+  "what comes back" is the same fault as two onboarding systems. The column
+  carries the TOUR instead, which nothing else offers: it walks the four
+  screens and had shipped as a **12px grey link**, the quietest element on a
+  beginner's screen.
+- **The primary action had to LOOK primary.** `body.dc-firstrun` (a body class,
+  because the patcher resets an inline style it owns on every render and never
+  touches body) enlarges the paste field and makes Start job a SOLID gold
+  button. Measured after: field 357x48, Start job 114x48 solid, and the tour
+  demoted to an outline -- a gold tour button beside an outlined paste field
+  had made the secondary action the loudest thing on the screen.
+- **Everything it hides is restored**, marked with `data-dcfr-hid` /
+  `data-dcfr-was`, and the body class goes with it. Verified by driving both
+  accounts: brand new gets 4 panel parts, strip down, headline hidden, column
+  replaced; one that imported and got nothing gets 0 parts, strip back,
+  headline back, all 5 column children back.
+- **The phone got the same treatment.** The beats and the cost render from the
+  same binding, and the greeting plus today's date are hidden for a beginner --
+  on an 844px screen they were 90px of the fold above the one thing to do,
+  which pushed the paste field off it entirely.
+
+**Two of the three red-probes did not go red the first time**, which is the
+rule this file keeps restating earning its keep. The test asserted the
+adapter's `firstRun` flag but not the PAINTER's own gate, so deleting
+`!ob.imported` from the painter broke nothing; and the showcase probe replaced
+a string that no longer existed, so it silently tested the unchanged file. Both
+are pinned properly now and both were re-proven red.
 
 ## Open items
 

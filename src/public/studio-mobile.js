@@ -247,7 +247,10 @@
   // ── Home ─────────────────────────────────────────────────────────────────
   function homeScreen() {
     return [
-      h('section', { class: 'dcm-greet' }, [h('h1', {}, [tx('m.hello')]), h('p', {}, [tx('m.today')])]),
+      // The greeting and today's date take the top of a 844px screen, above
+      // the one thing a new person must do. Worth the room for somebody who
+      // uses this daily; not for somebody who has never imported anything.
+      iff('m.greetOn', [h('section', { class: 'dcm-greet' }, [h('h1', {}, [tx('m.hello')]), h('p', {}, [tx('m.today')])])]),
       // First run: Step 1 Create -> Step 2 Review -> Step 3 Publish. Same
       // bindings the desktop strip reads, so the phone cannot say a different
       // thing about where this account is; it stops rendering the moment the
@@ -264,7 +267,17 @@
           ]),
         ])]),
         h('p', { class: 'dcm-onb-hint' }, [tx('onboarding.hint')]),
+        // What happens after you press it, and what it costs — the same three
+        // beats the desktop panel carries, from the same binding. Only before
+        // the first lecture is in; after that the strip alone is right.
+        iff('onboarding.firstRun', [h('div', { class: 'dcm-onb-beats' }, [
+          each('onboarding.beats', 'bt', [h('div', { class: 'dcm-onb-beat' }, [
+            h('span', { class: 'dcm-onb-bn' }, [tx('bt.num')]),
+            h('span', { class: 'dcm-onb-bt' }, [h('b', {}, [tx('bt.title')]), h('i', {}, [tx('bt.note')])]),
+          ])]),
+        ])]),
         h('button', { type: 'button', class: 'dcm-btn dcm-btn-p', on: { click: 'onboarding.action' } }, [tx('onboarding.actionLabel')]),
+        iff('onboarding.firstRun', [h('p', { class: 'dcm-onb-cost' }, [tx('onboarding.cost')])]),
       ])]),
       // The five-step "Getting set up" card was here and is retired (v3.95.0):
       // it stood directly above the Create -> Review -> Publish strip, telling
@@ -1187,6 +1200,8 @@
     var emailServer = !(DATA && DATA.emailNotifs === false);
     if (global.__dcEmailPending !== undefined && emailServer === global.__dcEmailPending) delete global.__dcEmailPending;
     var emailOn = global.__dcEmailPending !== undefined ? global.__dcEmailPending : emailServer;
+    // Hidden for a beginner (see homeScreen), shown for everybody else.
+    m.greetOn = !(vals.onboarding && vals.onboarding.firstRun);
     m.emailNote = emailOn ? 'On — clip ready, posted and failure emails' : 'Off — no product emails will be sent';
     m.emailCls = emailOn ? 'on' : '';
     m.toggleEmail = act(function () { global.__dcEmailPending = !emailOn; global.StudioAdapter.onToggleEmailNotifs(); repaint(); });

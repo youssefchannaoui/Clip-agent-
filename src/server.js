@@ -743,6 +743,9 @@ function appState(user = null) {
       // shape the strip's copy only -- never which step the account is on.
       nasheeds: audio.listNasheeds(user).length,
       connected: Object.keys(state.socialConnections[user.id] || {}).length,
+      // Stated beside the field that spends it. Null for an operator, whose
+      // balance is unlimited and for whom a number would be a lie.
+      tokensLeft: billing.publicBilling(user)?.current?.totalAvailable ?? null,
     }),
     selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(),
     backgrounds: backgrounds.listBackgrounds(user).map(entry => ({

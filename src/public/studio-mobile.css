@@ -734,4 +734,16 @@
   #dcMobile .dcm-onb-step.is-now .dcm-onb-n { border-color: var(--dcm-gold); color: var(--dcm-gold2); }
   #dcMobile .dcm-onb-step.is-now .dcm-onb-l { color: var(--dcm-ink); font-weight: 700; }
   #dcMobile .dcm-onb-hint { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--dcm-ink2); }
+  /* First run: what happens after you press it, and what it costs. Same three
+     beats the desktop panel carries, from the same binding — the phone must
+     not tell a beginner a different story. */
+  #dcMobile .dcm-onb-beats { display: flex; flex-direction: column; gap: 11px; margin: 2px 0 2px; }
+  #dcMobile .dcm-onb-beat { display: flex; align-items: flex-start; gap: 10px; }
+  #dcMobile .dcm-onb-bn { flex: none; display: grid; place-items: center; width: 19px; height: 19px;
+    margin-top: 1px; border-radius: 50%; border: 1px solid rgba(217,180,120,.45);
+    color: var(--dcm-gold); font-size: 10px; font-weight: 700; }
+  #dcMobile .dcm-onb-bt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  #dcMobile .dcm-onb-bt b { font-size: 12.5px; font-weight: 600; color: var(--dcm-ink); }
+  #dcMobile .dcm-onb-bt i { font-style: normal; font-size: 11.5px; line-height: 1.5; color: var(--dcm-ink2); }
+  #dcMobile .dcm-onb-cost { margin: 0; font-size: 11px; line-height: 1.5; color: var(--dcm-ink3); }
 }

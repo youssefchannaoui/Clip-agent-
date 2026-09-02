@@ -161,3 +161,32 @@ body.dc-page-hidden .slb-bar i,body.dc-page-hidden .slh-track i{animation-play-s
   #studioLiveBar{transition:none !important}
   .dc-arrive{display:none}
 }
+
+/* ── First run: the primary action has to LOOK primary ────────────────────
+   Measured on a genuinely empty account: the one thing a new person must do
+   sat at 13px in a plain outlined box, under a 58px marketing headline, while
+   the loudest thing on screen pointed somewhere else. The panel fixed the
+   copy; this fixes the weight.
+
+   Scoped to body.dc-firstrun, which the first-run painter sets and clears, so
+   nothing here touches an account that has already imported. Bound to
+   data-tour="paste" and the row's own buttons — attributes and structure the
+   design export does not renumber on re-import. */
+body.dc-firstrun #studio [data-tour="paste"] {
+  padding: 14px 16px;
+  border-color: rgba(217,180,120,.55);
+  box-shadow: 0 0 0 4px rgba(217,180,120,.07);
+}
+body.dc-firstrun #studio [data-tour="paste"] input { font-size: 14px; }
+/* "Start job" is the row's first button after the field: solid, not outlined,
+   because an outline beside an outlined field reads as two equal choices. */
+body.dc-firstrun #studio [data-tour="paste"] ~ button:first-of-type {
+  padding: 14px 20px;
+  border-color: #D9B478;
+  background: #D9B478;
+  color: #0E0E11;
+  font-weight: 600;
+}
+@media (prefers-reduced-motion: reduce) {
+  body.dc-firstrun #studio [data-tour="paste"] { box-shadow: none; }
+}

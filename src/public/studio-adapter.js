@@ -6166,6 +6166,25 @@
         return {
           show: true, at: ob.at, hint: ob.hint || '',
           progress: ob.progress || '',
+          // The first-run panel needs both, and neither was carried through
+          // at first: `imported` decides whether the full panel or the slim
+          // strip is right, and without it an account whose lecture came back
+          // EMPTY (still on Create) would be shown the whole beginner's guide
+          // a second time. `tokensLeft` is stated beside the field that
+          // spends it.
+          imported: Boolean(ob.imported),
+          tokensLeft: ob.tokensLeft == null ? null : ob.tokensLeft,
+          // ONE flag for "this account has never imported anything", read by
+          // the desktop panel and the phone card alike, so the two surfaces
+          // cannot disagree about who is a beginner.
+          firstRun: ob.at === 'create' && !ob.imported,
+          beats: [
+            { num: '1', title: 'You pick the minutes', note: 'Paste a link, drag the range. Only that stretch is fetched.' },
+            { num: '2', title: 'We do the work', note: 'Transcribed, scored, rendered with your Clip Style and a nasheed. About 20 minutes.' },
+            { num: '3', title: 'You keep the good ones', note: 'They land in your review queue. Nothing posts until you approve it.' },
+          ],
+          cost: 'About one token a minute of the stretch you pick, so a five-minute run is roughly five tokens'
+            + (ob.tokensLeft != null ? ' of your ' + ob.tokensLeft : '') + '.',
           // The numbers are the design's, not ours: "Step 1 / 2 / 3" is how
           // the ask was phrased and how the strip reads out loud.
           steps: (ob.steps || []).map(function (step, i) {

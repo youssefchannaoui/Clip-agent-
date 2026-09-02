@@ -366,3 +366,90 @@ test('the strip never repeats a line the blocker banner is already showing', () 
   assert.equal((adapter.match(/deenBlockerDismissed/g) || []).length, 2,
     'the dismissal is read in one place and written in one place');
 });
+
+// ── the first screen a new account ever sees (v3.98.0) ─────────────────────
+
+test('the beginner panel is only for somebody who has never imported', () => {
+  // An account whose lecture came back EMPTY is still on Create. Showing it
+  // the whole beginner's guide a second time would be the app forgetting it
+  // had already met them — and `imported` was NOT carried through the adapter
+  // binding at first, so this was real rather than hypothetical.
+  const fresh = seed();
+  assert.equal(onboarding.journey(state, fresh, { nasheeds: 1 }).imported, false);
+
+  const tried = seed({ projects: [PROJECT] });   // done, produced no clips
+  const j = onboarding.journey(state, tried, { nasheeds: 1 });
+  assert.equal(j.at, 'create', 'still on Create, because nothing came back');
+  assert.equal(j.imported, true, 'but they have imported, so the guide has been earned once');
+
+  const adapter = fs.readFileSync(new URL('../src/public/studio-adapter.js', import.meta.url), 'utf8');
+  assert.match(adapter, /firstRun: ob\.at === 'create' && !ob\.imported/,
+    'ONE flag both surfaces read, or the phone and the desktop disagree about who is a beginner');
+
+  // And the PAINTER's own gate, not only the flag beside it — dropping
+  // `!ob.imported` there broke nothing until this line existed.
+  const html = fs.readFileSync(new URL('../src/public/index.html', import.meta.url), 'utf8');
+  const fn = html.slice(html.indexOf('function paintFirstRun'), html.indexOf('function paintFirstRunShowcase'));
+  assert.match(fn, /const first=Boolean\(ob&&ob\.show&&ob\.at==='create'&&!ob\.imported\)/,
+    'the panel itself must refuse an account that has already imported');
+});
+
+test('the panel replaces the marketing headline and stands the strip down', () => {
+  const html = fs.readFileSync(new URL('../src/public/index.html', import.meta.url), 'utf8');
+  assert.match(html, /paintFirstRun\(vals\);/, 'registered in paintStudio, never on a MutationObserver');
+
+  // Found by TAG and by "the node after it". A hashed class would break on the
+  // next design re-import, which is the whole reason this is host-rendered.
+  const fn = html.slice(html.indexOf('function paintFirstRun'), html.indexOf('function paintFirstRunShowcase'));
+  assert.match(fn, /left\.querySelector\('h1'\)/, 'the marketing headline is found structurally');
+  assert.ok(!/\.s[0-9a-z]{1,3}['"]/.test(fn), 'and no hashed class name is named anywhere in it');
+  assert.match(fn, /flex:none/, 'children of a scrolling flex column must declare it or they collapse to zero');
+
+  // ONE onboarding surface at a time — the whole lesson of v3.96.0, and
+  // repeating it one release later would be indefensible.
+  const strip = html.slice(html.indexOf('function paintOnboarding'), html.indexOf('function paintFirstClip'));
+  assert.match(strip, /const panelUp=Boolean\(ob&&ob\.at==='create'&&!ob\.imported\)/);
+  assert.match(strip, /\|\|panelUp\|\|/, 'the strip must stand down while the full panel is up');
+});
+
+test('it puts everything back the moment a lecture is in', () => {
+  // It hides two export nodes and a whole column. Anything hidden and not
+  // restored is a screen permanently missing a section, with nothing anywhere
+  // reporting it.
+  const html = fs.readFileSync(new URL('../src/public/index.html', import.meta.url), 'utf8');
+  const fn = html.slice(html.indexOf('function paintFirstRun'), html.indexOf('function paintFirstRunShowcase'));
+  assert.match(fn, /data-dcfr-hid/, 'what it hid is marked');
+  assert.match(fn, /data-dcfr-was/, 'and what it hid in the column remembers its own display value');
+  assert.match(fn, /const kill=\(\)=>/);
+  assert.match(fn, /classList\.remove\('dc-firstrun'\)/, 'and the body class goes with it');
+});
+
+test('it does not add a second answer to "what comes back"', () => {
+  // The export already carries "Nothing in your library yet — this is what one
+  // lecture produces", with scored clip cards, one scroll below. A strip of
+  // finished clips was built for the empty column and DELETED for exactly this
+  // reason: two answers to one question is the fault v3.96.0 removed.
+  const html = fs.readFileSync(new URL('../src/public/index.html', import.meta.url), 'utf8');
+  const show = html.slice(html.indexOf('function paintFirstRunShowcase'), html.indexOf('/* ── First run'));
+  assert.ok(!/marketing-assets\/reel-/.test(show), 'no second gallery of finished clips');
+  assert.match(show, /Take the tour/, 'the column carries the tour instead, which nothing else offers');
+  // The tour is a BINDING. Calling it off StudioAdapter throws at CLICK time,
+  // not at load — the trap this repo has now paid for three times.
+  assert.match(show, /vals\.startTour/);
+  assert.ok(!/StudioAdapter\.startTour/.test(show));
+});
+
+test('the panel states how long it takes, because that is why people leave', () => {
+  // "The pipeline takes ~20 minutes and people leave" is already recorded in
+  // CLAUDE.md as the reason the nudge emails exist. The screen never said it.
+  const adapter = fs.readFileSync(new URL('../src/public/studio-adapter.js', import.meta.url), 'utf8');
+  const at = adapter.indexOf('beats: [');
+  assert.ok(at > 0, 'the beats must exist');
+  // Searched FROM the beats, not from the start of the file — 'cost:' occurs
+  // earlier elsewhere and the slice came back empty, which read as the copy
+  // being missing when it was not.
+  const beats = adapter.slice(at, adapter.indexOf('cost:', at));
+  assert.match(beats, /About 20 minutes/, 'the wait is stated');
+  assert.match(beats, /Nothing posts until you approve it/, 'and so is the safety');
+  assert.match(adapter, /cost: 'About one token a minute/, 'and what it costs, beside the field that spends it');
+});

@@ -143,6 +143,10 @@ export function journey(state, userId, ctx = {}) {
     actionLabel: step.actionLabel,
     // What the old five-step list checked, kept so nothing it taught is lost.
     nasheeds, connected, scheduled,
+    // The first-run panel needs both: it only shows before anything has been
+    // imported, and it states the cost beside the field that spends it.
+    imported: Boolean(a.imported),
+    tokensLeft: ctx.tokensLeft == null ? null : Number(ctx.tokensLeft),
     working,
     waiting,
     // The first-clip moment. It is not "clips exist" -- that is true for ever
