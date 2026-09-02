@@ -2650,6 +2650,14 @@ default and the paper palette lives behind **Account > Appearance > Light**,
 remembered in that browser (`dcmTheme` in localStorage, guarded in try/catch --
 reading storage throws in a private window and must never take the app down).
 
+**It is the FIRST row of the More sheet as well as a row in Account** (v3.82.2).
+Under Account alone it could not be found -- "wheres color changing to light
+and dark mode? cant see it" -- and at the FOOT of More it was missed a second
+time. One `themeRow()` builder feeds both sheets, so the two can never disagree
+about which theme is on; the More copy carries a rule under it, or a setting
+sitting among navigation rows reads as another destination that happens to have
+two buttons on it.
+
 - **The night is NEAR-BLACK, and a first cut got that wrong.** It tinted every
   ground brown to make the phone feel like its own surface; Youssef, looking at
   it: "ew what the hell is that, it used to be mostly black." Corrected in

@@ -560,9 +560,22 @@
   }
 
   // ── sheets ───────────────────────────────────────────────────────────────
+  // Dark or light, in both sheets. Youssef could not find it under Account, and
+  // More is where a phone looks for a setting -- so it is in both, built once
+  // from one binding so the two can never disagree about which is on.
+  function themeRow() {
+    return h('div', { class: 'dcm-row dcm-theme' }, [
+      ph('ph ph-moon-stars'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Appearance'), h('i', {}, [tx('m.themeNote')])]),
+      h('div', { class: 'dcm-seg' }, [
+        h('button', { type: 'button', class: cat('dcm-seg-b ', b('m.themeDarkCls')), on: { click: 'm.themeDark' } }, 'Dark'),
+        h('button', { type: 'button', class: cat('dcm-seg-b ', b('m.themeLightCls')), on: { click: 'm.themeLight' } }, 'Light'),
+      ]),
+    ]);
+  }
   function moreSheet() {
     return sheet('m.sheetMore', 'More', [
       h('div', { class: 'dcm-menu' }, [
+        themeRow(),
         each('m.nav', 'it', [row({ on: { click: 'it.go' } }, [phb('it.icon'), h('span', { class: 'dcm-row-t' }, [h('b', {}, [tx('it.label')])]), iff('it.count', [h('span', { class: 'dcm-count' }, [tx('it.count')])]), svg(I.next, { width: '15', height: '15' })])]),
         row({ on: { click: 'm.openConnections' } }, [ph('ph ph-plugs-connected'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Publishing connections'), h('i', {}, [tx('connSummary')])]), svg(I.next, { width: '15', height: '15' })]),
         row({ on: { click: 'm.goTokens' } }, [ph('ph-fill ph-coins'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Tokens & billing'), h('i', {}, [tx('tokenBalance'), ' tokens · ', tx('currentPlan')])]), svg(I.next, { width: '15', height: '15' })]),
@@ -612,13 +625,7 @@
         h('span', { class: 'dcm-me-t' }, [h('b', {}, [tx('accountName')]), h('i', {}, [tx('accountEmail')]), h('em', {}, [tx('currentPlan'), ' · ', tx('tokenBalance'), ' tokens'])]),
       ]),
       h('div', { class: 'dcm-menu' }, [
-        h('div', { class: 'dcm-row dcm-theme' }, [
-          ph('ph ph-moon-stars'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Appearance'), h('i', {}, [tx('m.themeNote')])]),
-          h('div', { class: 'dcm-seg' }, [
-            h('button', { type: 'button', class: cat('dcm-seg-b ', b('m.themeDarkCls')), on: { click: 'm.themeDark' } }, 'Dark'),
-            h('button', { type: 'button', class: cat('dcm-seg-b ', b('m.themeLightCls')), on: { click: 'm.themeLight' } }, 'Light'),
-          ]),
-        ]),
+        themeRow(),
         row({ on: { click: 'goTokens' } }, [ph('ph-fill ph-coins'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Tokens & billing')]), svg(I.next, { width: '15', height: '15' })]),
         row({ on: { click: 'accountSettings' } }, [ph('ph ph-user-circle'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Account settings')]), svg(I.next, { width: '15', height: '15' })]),
         row({ on: { click: 'helpGuides' } }, [ph('ph ph-lifebuoy'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Help & guides')]), svg(I.next, { width: '15', height: '15' })]),
